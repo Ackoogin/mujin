@@ -38,6 +38,8 @@ Parse the PDDL domain/problem to determine which groundings are reachable (delet
 
 **My inclination:** Option A for Phase 1 (simple, correct, matches the LAPKT model), with a note that we may need to move to Option C for larger domains.
 
+**User reponse:** Option A with care about storage efficiency. 
+
 ---
 
 ## 2. PDDL Domain Specification
