@@ -76,6 +76,8 @@ Parse the `.pddl` file for the planning model (predicates, types, action schemas
 
 **Needs your input:** Is there an existing PDDL parser you'd prefer, or should we write a minimal one? Alternatively, is programmatic-only acceptable for the initial phases?
 
+**User Response:** Does lapkt not have a parser? Option C. Layers of this stack need to be replacable, e.g. use something other than BT for execution so mapping are inevitable.
+
 ---
 
 ## 3. WorldModel ↔ Blackboard Sync Direction
@@ -117,6 +119,8 @@ Instead of a separate WorldModel class, use BT.CPP's Blackboard as the single st
 
 **My inclination:** Option A — it's the cleanest for auditability and matches the concept's design. The overhead of `SetWorldPredicate` nodes is minimal since the compiler generates them automatically.
 
+
+**User response:** agree on A. 
 ---
 
 ## 4. Action Unit: ReactiveSequence vs. Sequence
