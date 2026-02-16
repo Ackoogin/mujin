@@ -392,17 +392,19 @@ Follow the 5-phase roadmap in concept.md exactly.
 
 ---
 
-## Summary of Decisions Needed
+## Summary of Decisions (Finalised)
 
-| # | Question | Recommended | Needs Input |
-|---|----------|-------------|-------------|
-| 1 | Fact storage | Eager grounding (A) | Confirm domain size |
-| 2 | Domain specification | Hybrid (C) or programmatic (A) | Parser preference |
-| 3 | Blackboard sync | WM authoritative (A) | Confirm |
-| 4 | ReactiveSequence | Configurable (C) | Action duration info |
-| 5 | Causal graph | Effect-precondition matching (A) | Confirm |
-| 6 | Singleton nodes | Blackboard flags (B) | Shared action frequency |
-| 7 | Error handling | All-or-nothing (A) initially | Perception pipeline? |
-| 8 | Code organisation | Component dirs (B) or library (C) | Consumption model |
-| 9 | Testing | Both (C) | Framework preference |
-| 10 | Phase 1 scope | Vertical slice (A) | Confirm |
+| # | Question | Decision | Notes |
+|---|----------|----------|-------|
+| 1 | Fact storage | **Eager grounding (A)** | Storage-efficient bitset, not `vector<bool>` |
+| 2 | Domain specification | **Hybrid (C)** | PDDL files for planning model; LAPKT has FF-parser (`ff_to_aptk`, C-based, no pybind11/Boost) |
+| 3 | Blackboard sync | **WM authoritative (A)** | Blackboard is read-only view; mutations via `SetWorldPredicate` |
+| 4 | Action unit | **Configurable per-action (C)** | ActionRegistry specifies reactive vs. non-reactive |
+| 5 | Causal graph | **Effect-precondition matching (A)** | Sequential fallback for debugging |
+| 6 | Singleton nodes | **Blackboard flags (B)** | Duplicate nodes guarded by done-flags |
+| 7 | Error handling | **Perception-corrected (C)** | Facts come from external systems; BT triggers but doesn't own completion |
+| 8 | Code organisation | **Component dirs (B)** | `include/mujin/` + `src/`; may extract library later |
+| 9 | Testing | **Both (C)** | Google Test for unit + integration tests |
+| 10 | Phase 1 scope | **Vertical slice (A)** | UAV example end-to-end |
+
+**Additional context:** Target deployment is ROS2 node(s). Core library is ROS-agnostic; ROS2 adapters wrap it. See `plan.md` for node decomposition options.

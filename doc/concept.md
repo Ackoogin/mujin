@@ -635,6 +635,18 @@ Use BT.CPP v4's global blackboard (`@` prefix) for world model state, and local 
 
 Before executing a compiled BT, validate that all referenced sub-trees are registered in the factory and all ports are satisfiable. BT.CPP's factory can introspect registered node models for this.
 
+### ROS2 Node Decomposition
+
+The core library is ROS-agnostic (pure C++). For ROS2 deployment, thin adapter nodes wrap the C++ API. The architecture supports both single-node (in-process) and multi-node (distributed) configurations:
+
+- **WorldModel Node** — owns authoritative state, exposes `get_fact`/`set_fact` as ROS2 services, publishes state changes on a topic. Perception nodes are independent clients that call `set_fact`.
+- **Planner Node** — stateless service or action server. Receives a STRIPS_Problem snapshot + goal, returns a plan. Easily swappable for a different planner.
+- **Executor Node** — owns the BT runtime (or alternative execution framework). Ticks the tree, calls WorldModel services for precondition checks and effect application.
+
+The WorldModel service boundary is the natural split point. For development and testing, all components run in a single process with direct C++ API calls. For production, the same `WorldModel` class is wrapped in a ROS2 service node, and executor/planner become separate nodes communicating via services and topics.
+
+This decomposition also supports the design goal that execution layers (BT or otherwise) are replaceable — the executor node can be swapped without touching the world model or planner nodes.
+
 ### Determinism and Auditability
 
 For defence/safety contexts: log every world model state change with timestamp and source (which BT node or external update). The world model version counter enables replay and post-hoc analysis. Consider making the causal graph and compiled BT XML part of the mission audit trail.
