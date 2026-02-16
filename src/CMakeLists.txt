@@ -6,6 +6,7 @@ add_library(mujin_core STATIC
     world_model.cpp
     action_registry.cpp
     plan_compiler.cpp
+    pddl_parser.cpp
     bt_nodes/check_world_predicate.cpp
     bt_nodes/set_world_predicate.cpp
 )
