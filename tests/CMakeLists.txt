@@ -1,7 +1,7 @@
 include(GoogleTest)
 
-# Make source dir available for file-based tests
-add_compile_definitions(PROJECT_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+# Make source dir available for file-based tests (only for parser test)
+set(MUJIN_SOURCE_DIR "${CMAKE_SOURCE_DIR}")
 
 # --- Unit tests ---
 add_executable(test_world_model test_world_model.cpp)
@@ -18,6 +18,7 @@ gtest_discover_tests(test_plan_compiler)
 
 add_executable(test_pddl_parser test_pddl_parser.cpp)
 target_link_libraries(test_pddl_parser PRIVATE mujin_core GTest::gtest_main)
+target_compile_definitions(test_pddl_parser PRIVATE "PROJECT_SOURCE_DIR=\"${MUJIN_SOURCE_DIR}\"")
 gtest_discover_tests(test_pddl_parser)
 
 # --- Integration test ---
