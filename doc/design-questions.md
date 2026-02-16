@@ -154,6 +154,8 @@ Allow the ActionRegistry to specify whether each action uses reactive or non-rea
 
 **Needs your input:** How long-running are your typical actions? If actions are fast relative to the world changing, Option B may be sufficient and simpler. If actions like `search_sector` run for extended periods, Option A or C makes more sense.
 
+
+**User Reponse:** Option C
 ---
 
 ## 5. Causal Graph Construction
@@ -186,6 +188,8 @@ Some planners (temporal planners, partial-order planners) output ordering constr
 
 **My inclination:** Option A for the compiler, with Option B available as a fallback/debug mode. Option C is worth noting for future temporal planning support.
 
+
+**User Reponse:** A 
 ---
 
 ## 6. Singleton Nodes for Shared Actions
@@ -219,6 +223,8 @@ Insert a custom synchronisation node that waits for all prerequisite flows to co
 
 **Needs your input:** How common are shared actions in your expected plans? If rare, Option B is simplest. If common (e.g., multi-agent assembly tasks), Option C may be worth the complexity.
 
+**User Reponse:** B
+
 ---
 
 ## 7. Error Handling and Partial Effects
@@ -251,6 +257,8 @@ On failure, ignore PDDL effects entirely. Instead, rely on a perception system t
 
 **Needs your input:** Do you have a perception pipeline that can independently verify world state? If so, Option C is most robust. Otherwise, Option A is safest to start with.
 
+
+**User Reponse:** C. noting that in all cases the grounded facts will come from external elements. The execution of BT will trigger actual actions but the real completion comes from other system elements 
 ---
 
 ## 8. Build and Code Organisation
@@ -314,6 +322,8 @@ src/
 
 **Needs your input:** How do you see this project being consumed — standalone executable, library integrated into a larger system, or both?
 
+
+**User Reponse:** B. May do lib later but assume direct src inclusion initially 
 ---
 
 ## 9. Testing Strategy
@@ -345,6 +355,8 @@ Unit tests for components, plus integration tests for the full pipeline.
 
 **Needs your input:** Do you have a preference for test framework? Google Test and Catch2 both work well with CMake FetchContent.
 
+
+**User Reponse:** C, use google test. 
 ---
 
 ## 10. Scope of Initial Implementation
@@ -375,6 +387,8 @@ Follow the 5-phase roadmap in concept.md exactly.
 - Con: Phase 1 doesn't produce an end-to-end demonstration
 
 **My inclination:** Option A — a minimal vertical slice gives the earliest signal that the architecture holds together. Components can be hardened in subsequent iterations.
+
+**User Reponse:** A. 
 
 ---
 
