@@ -1,4 +1,10 @@
 #include "mujin/world_model.h"
+
+#include <strips_prob.hxx>
+#include <fluent.hxx>
+#include <action.hxx>
+#include <strips_state.hxx>
+
 #include <algorithm>
 #include <stdexcept>
 
@@ -15,6 +21,25 @@ void WorldModel::addObject(const std::string& name, const std::string& type) {
     types_.addObject(name, type);
     // Eagerly ground: for every predicate, try to create new fluents involving this object
     groundNewObject(name, type);
+}
+
+void WorldModel::registerAction(const std::string& name,
+                                const std::vector<std::string>& param_names,
+                                const std::vector<std::string>& param_types,
+                                const std::vector<std::string>& precondition_templates,
+                                const std::vector<std::string>& add_templates,
+                                const std::vector<std::string>& del_templates) {
+    ActionSchemaInternal schema;
+    schema.schema.name = name;
+    schema.schema.param_names = param_names;
+    schema.schema.param_types = param_types;
+    schema.precondition_templates = precondition_templates;
+    schema.add_templates = add_templates;
+    schema.del_templates = del_templates;
+
+    unsigned idx = static_cast<unsigned>(action_schemas_.size());
+    action_schemas_.push_back(std::move(schema));
+    groundActionSchema(idx);
 }
 
 void WorldModel::setFact(const std::string& key, bool value) {
@@ -71,6 +96,17 @@ const std::string& WorldModel::fluentName(unsigned id) const {
     }
     return fluent_names_[id];
 }
+
+void WorldModel::setGoal(const std::vector<std::string>& goal_fluent_keys) {
+    goal_fluent_ids_.clear();
+    for (auto& key : goal_fluent_keys) {
+        goal_fluent_ids_.push_back(fluentIndex(key));
+    }
+}
+
+// =========================================================================
+// Grounding helpers
+// =========================================================================
 
 // Helper: generate all combinations of objects matching param_types
 static void generateCombinations(
@@ -135,6 +171,139 @@ void WorldModel::groundNewObject(const std::string& /*obj_name*/,
     for (auto& pred : predicates_) {
         groundPredicate(pred.name, pred.param_types);
     }
+    // Re-ground all action schemas
+    // Simple: clear and re-ground all (duplicates are avoided by signature check)
+    ground_actions_.clear();
+    for (unsigned i = 0; i < action_schemas_.size(); ++i) {
+        groundActionSchema(i);
+    }
+}
+
+// Substitute parameter names with actual object names in a template string
+// e.g. "(at ?r ?from)" with {?r->uav1, ?from->base} becomes "(at uav1 base)"
+static std::string substituteTemplate(
+    const std::string& tmpl,
+    const std::vector<std::string>& param_names,
+    const std::vector<std::string>& args)
+{
+    std::string result = tmpl;
+    for (size_t i = 0; i < param_names.size(); ++i) {
+        // Replace all occurrences of param_names[i] with args[i]
+        size_t pos = 0;
+        while ((pos = result.find(param_names[i], pos)) != std::string::npos) {
+            result.replace(pos, param_names[i].size(), args[i]);
+            pos += args[i].size();
+        }
+    }
+    return result;
+}
+
+void WorldModel::groundActionSchema(unsigned schema_index) {
+    auto& schema = action_schemas_[schema_index];
+    auto& param_types = schema.schema.param_types;
+
+    std::vector<std::string> current;
+    std::vector<std::vector<std::string>> combos;
+    generateCombinations(types_, param_types, 0, current, combos);
+
+    for (auto& args : combos) {
+        // Build signature
+        std::string sig = schema.schema.name + "(";
+        for (size_t i = 0; i < args.size(); ++i) {
+            if (i > 0) sig += ",";
+            sig += args[i];
+        }
+        sig += ")";
+
+        // Check for duplicate
+        bool duplicate = false;
+        for (auto& existing : ground_actions_) {
+            if (existing.signature == sig) { duplicate = true; break; }
+        }
+        if (duplicate) continue;
+
+        GroundAction ga;
+        ga.signature = sig;
+        ga.schema_index = schema_index;
+        ga.args = args;
+
+        // Resolve preconditions
+        for (auto& tmpl : schema.precondition_templates) {
+            std::string key = substituteTemplate(tmpl, schema.schema.param_names, args);
+            auto it = fluent_index_.find(key);
+            if (it != fluent_index_.end()) {
+                ga.preconditions.push_back(it->second);
+            }
+        }
+
+        // Resolve add effects
+        for (auto& tmpl : schema.add_templates) {
+            std::string key = substituteTemplate(tmpl, schema.schema.param_names, args);
+            auto it = fluent_index_.find(key);
+            if (it != fluent_index_.end()) {
+                ga.add_effects.push_back(it->second);
+            }
+        }
+
+        // Resolve delete effects
+        for (auto& tmpl : schema.del_templates) {
+            std::string key = substituteTemplate(tmpl, schema.schema.param_names, args);
+            auto it = fluent_index_.find(key);
+            if (it != fluent_index_.end()) {
+                ga.del_effects.push_back(it->second);
+            }
+        }
+
+        ground_actions_.push_back(std::move(ga));
+    }
+}
+
+// =========================================================================
+// LAPKT Projection
+// =========================================================================
+
+void WorldModel::projectToSTRIPS(aptk::STRIPS_Problem& prob) const {
+    // Add fluents
+    for (unsigned i = 0; i < fluent_names_.size(); ++i) {
+        aptk::STRIPS_Problem::add_fluent(prob, fluent_names_[i]);
+    }
+
+    // Add actions
+    aptk::Conditional_Effect_Vec no_ceffs;
+    for (auto& ga : ground_actions_) {
+        aptk::Fluent_Vec pre(ga.preconditions.begin(), ga.preconditions.end());
+        aptk::Fluent_Vec add(ga.add_effects.begin(), ga.add_effects.end());
+        aptk::Fluent_Vec del(ga.del_effects.begin(), ga.del_effects.end());
+
+        aptk::STRIPS_Problem::add_action(prob, ga.signature, pre, add, del, no_ceffs);
+    }
+
+    // Set initial state (all currently-true fluents)
+    aptk::Fluent_Vec init;
+    for (unsigned i = 0; i < fluent_names_.size(); ++i) {
+        if (getFact(i)) {
+            init.push_back(i);
+        }
+    }
+    aptk::STRIPS_Problem::set_init(prob, init);
+
+    // Set goal
+    aptk::Fluent_Vec goal(goal_fluent_ids_.begin(), goal_fluent_ids_.end());
+    aptk::STRIPS_Problem::set_goal(prob, goal);
+
+    // Finalize
+    prob.make_action_tables();
+}
+
+aptk::State* WorldModel::currentStateAsSTRIPS(const aptk::STRIPS_Problem& prob) const {
+    auto* state = new aptk::State(prob);
+    for (unsigned i = 0; i < fluent_names_.size(); ++i) {
+        if (getFact(i)) {
+            state->set(i);
+        }
+    }
+    state->update_hash();
+    return state;
 }
 
 } // namespace mujin
