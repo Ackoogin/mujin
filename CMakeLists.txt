@@ -21,8 +21,12 @@ set(BTCPP_EXAMPLES        OFF CACHE BOOL "" FORCE)
 set(BTCPP_UNIT_TESTS      OFF CACHE BOOL "" FORCE)
 set(BTCPP_GROOT_INTERFACE OFF CACHE BOOL "" FORCE)
 set(BTCPP_SQLITE_LOGGING  OFF CACHE BOOL "" FORCE)
+set(BTCPP_SHARED_LIBS     OFF CACHE BOOL "" FORCE)
 
+# Skip BT.CPP install rules to avoid the minitrace export-set error
+set(CMAKE_SKIP_INSTALL_RULES TRUE)
 FetchContent_MakeAvailable(behaviortree_cpp)
+set(CMAKE_SKIP_INSTALL_RULES FALSE)
 
 # --- LAPKT (core only — we build from source, bypassing its own CMake) ---
 FetchContent_Declare(
@@ -79,7 +83,7 @@ target_include_directories(lapkt_core PUBLIC
 # MSVC compatibility: provide shim headers for POSIX includes
 # (sys/time.h, unistd.h, sys/resource.h) that LAPKT expects
 if(MSVC)
-    target_include_directories(lapkt_core BEFORE PRIVATE
+    target_include_directories(lapkt_core BEFORE PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/cmake/compat
     )
     target_compile_definitions(lapkt_core PRIVATE WIN32)
