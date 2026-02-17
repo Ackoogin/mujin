@@ -21,7 +21,16 @@ target_link_libraries(test_pddl_parser PRIVATE mujin_core GTest::gtest_main)
 target_compile_definitions(test_pddl_parser PRIVATE "PROJECT_SOURCE_DIR=\"${MUJIN_SOURCE_DIR}\"")
 gtest_discover_tests(test_pddl_parser)
 
-# --- Integration test ---
+add_executable(test_planner test_planner.cpp)
+target_link_libraries(test_planner PRIVATE mujin_core GTest::gtest_main)
+gtest_discover_tests(test_planner)
+
+# --- Integration tests ---
 add_executable(test_integration test_integration.cpp)
 target_link_libraries(test_integration PRIVATE mujin_core GTest::gtest_main)
 gtest_discover_tests(test_integration)
+
+# --- End-to-end pipeline test ---
+add_executable(test_e2e_pipeline test_e2e_pipeline.cpp)
+target_link_libraries(test_e2e_pipeline PRIVATE mujin_core GTest::gtest_main)
+gtest_discover_tests(test_e2e_pipeline)
