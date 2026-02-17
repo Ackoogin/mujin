@@ -94,7 +94,24 @@ else()
     target_compile_options(lapkt_core PRIVATE -w)
 endif()
 
+# --- Google Test ---
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG        v1.14.0
+    GIT_SHALLOW    TRUE
+)
+set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
+set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(googletest)
+
 # ---------------------------------------------------------------------------
-# Application
+# Core library (ROS-agnostic)
 # ---------------------------------------------------------------------------
 add_subdirectory(src)
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+enable_testing()
+add_subdirectory(tests)
