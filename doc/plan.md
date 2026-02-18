@@ -219,6 +219,128 @@ Also wire up a MissionExecutor-style loop with basic replan-on-failure (inject a
 
 ---
 
+## Slice-to-Production Gap Analysis
+
+Steps 1–8 deliver a working vertical slice. This section itemises what each component provides in the slice vs. what a production deployment requires. Each gap references the extension that closes it (see `extensions.md`).
+
+### WorldModel
+
+| Aspect | Slice delivers | Production needs | Extension |
+|--------|---------------|------------------|-----------|
+| Threading | Single-threaded, no locking | Versioned snapshots: BT reads consistent snapshot, perception writes to pending buffer, swap between ticks | ext 5 (Thread Safety) |
+| Persistence | In-memory only, lost on exit | SQLite-backed state log; recoverable after restart | ext 1 Layer 3 |
+| Audit log | `version()` counter only | Every `setFact()` emits structured entry (fact, value, source, timestamp, wm_version) to SQLite/JSONL | ext 1 Layer 3 |
+| Numeric fluents | Boolean predicates only | PDDL 2.1 numeric fluents (fuel level, battery, distance) — requires extending bitset to typed value store | ext 7 (Temporal) |
+| Conditional effects | Not supported | Actions whose effects depend on state at execution time — requires effect evaluation at tick time, not compile time | ext 7 |
+| Object lifecycle | Objects added at init, never removed | Dynamic object creation/destruction mid-mission (e.g., discovered targets) — requires re-grounding without invalidating fluent indices | post-ext |
+
+### TypeSystem
+
+| Aspect | Slice delivers | Production needs | Extension |
+|--------|---------------|------------------|-----------|
+| Type hierarchy | Single inheritance (name → parent) | Sufficient for STRIPS. Multi-inheritance or interfaces needed only if domain complexity demands it | — |
+| Type checking | Validated at grounding time | Runtime type assertions on `setFact()` calls from perception (reject malformed updates) | ext 3 (Perception) |
+
+### PDDL Parser
+
+| Aspect | Slice delivers | Production needs | Extension |
+|--------|---------------|------------------|-----------|
+| Language level | STRIPS (`:typing`, `:strips`) | PDDL 2.1 (`:durative-actions`, `:fluents`) for temporal planning | ext 7 |
+| Parser backend | FF-parser via `libff_parser` | FF-parser handles STRIPS well. Temporal features may require PDDL4J or a custom parser | ext 7 |
+| Error reporting | Parser errors surfaced as-is from FF | Structured error messages with line/column and domain-specific hints | hardening |
+| Domain validation | Basic: parsed domain loads without crash | Schema validation: predicate arities, type consistency, unreachable goals detection | hardening |
+
+### Planner (LAPKT Integration)
+
+| Aspect | Slice delivers | Production needs | Extension |
+|--------|---------------|------------------|-----------|
+| Solver | Single solver: BFS(f) or SIW | Solver portfolio: try fast heuristic first, fall back to complete search. Configurable per domain | hardening |
+| Timeout | None — solver runs until done or crashes | Configurable time/node budget. On timeout, return best partial plan or signal replanning with relaxed goal | hardening |
+| Plan quality | First plan found (satisficing) | Optional plan optimisation pass (anytime search, plan improvement via LPG-style local search) | post-ext |
+| Heuristic selection | Hardcoded (whatever BFS(f)/SIW defaults to) | Domain-specific heuristic configuration. Landmark-based heuristics for larger domains | post-ext |
+| Multi-agent | Single-agent planning | MA-STRIPS or task allocation layer that decomposes goal among agents and plans per-agent | post-ext |
+| Temporal | Not supported | Durative actions with temporal constraints. STN-based scheduling post-planning | ext 7 |
+
+### ActionRegistry
+
+| Aspect | Slice delivers | Production needs | Extension |
+|--------|---------------|------------------|-----------|
+| Registration | Static, at startup, programmatic | Dynamic registration: load from config file (YAML/JSON mapping PDDL names → BT implementations) | hardening |
+| Parameter binding | String substitution (`{param0}`) | Type-checked binding: verify parameter types match PDDL schema at registration time | hardening |
+| Validation | None — resolve fails silently if action not registered | Startup validation: check all PDDL actions have registered implementations. Warn on unused registrations | hardening |
+| Service mapping | BT nodes only | `InvokeService` node type for PYRAMID SDK calls — maps PDDL actions to external service requests | ext 4 (PYRAMID) |
+
+### BT Node Types
+
+| Aspect | Slice delivers | Production needs | Extension |
+|--------|---------------|------------------|-----------|
+| Node set | `CheckWorldPredicate`, `SetWorldPredicate`, `ReplanOnFailure` | + `InvokeService` (PYRAMID), `WaitForFact` (perception-driven conditions), `Timeout` decorator, `RetryWithBackoff` | ext 4, hardening |
+| Action implementations | Stubs (log and succeed) | Real implementations: ROS2 action clients, PYRAMID service calls, hardware drivers | ext 2, ext 4 |
+| Error semantics | FAILURE = trigger replan | Failure taxonomy: TRANSIENT (retry), PERMANENT (replan with action blacklist), FATAL (abort mission) | hardening |
+| Blackboard | WorldModel pointer in root blackboard | Per-subtree blackboard scoping for hierarchical plans. Parameter remapping for reusable sub-trees | ext 6 (Hierarchical) |
+
+### Plan-to-BT Compiler
+
+| Aspect | Slice delivers | Production needs | Extension |
+|--------|---------------|------------------|-----------|
+| Causal graph | Effect-precondition edges + delete-conflict tracking | Correct for STRIPS. Temporal planning requires temporal causal links (start/end time points) | ext 7 |
+| Flow decomposition | Independent causal chains → Parallel | Correct for fully-independent flows. Resource contention (two actions needing same robot) requires resource-aware scheduling | post-ext |
+| Join points | Blackboard-flag guard pattern | Works for simple joins. Complex DAGs may need explicit synchronisation nodes or barrier patterns | hardening |
+| Compiled output | XML string | + serialise to file for offline inspection. + emit DOT graph of causal structure for debugging | ext 1 Layer 5 |
+| Temporal actions | Not supported | Durative actions → STN conversion → timed Parallel/Sequence with deadline decorators | ext 7 |
+| Plan audit | Not logged | Each compilation episode logged: init state, goal, solver, plan, causal graph, compiled XML | ext 1 Layer 5 |
+
+### MissionExecutor
+
+| Aspect | Slice delivers | Production needs | Extension |
+|--------|---------------|------------------|-----------|
+| Replan trigger | Any action FAILURE → replan | Failure classification: transient failures retry in-place; permanent failures replan with action blacklisting; fatal failures abort | hardening |
+| Replan strategy | Full replan from current state | Progressive: (1) retry failed action, (2) replan from current step, (3) full replan, (4) relax goal, (5) abort | hardening |
+| Goal management | Fixed goal set for entire mission | Dynamic goals: hierarchical goal decomposition, goal priority ordering, goal abandonment on timeout | ext 6 |
+| Concurrency | Single tree, sequential tick | Hierarchical: top-level mission BT ticks phase sub-trees, each with own planning episode | ext 6 |
+| Monitoring | Console output | Structured events to observability stack (BT transitions, replan episodes, world model changes) | ext 1 Layers 2–5 |
+| Safety | None | Pre-conditions on replan: verify world model consistency before re-solving. Replan budget (max N replans before abort) | hardening |
+
+### Observability
+
+| Aspect | Slice delivers | Production needs | Extension |
+|--------|---------------|------------------|-----------|
+| BT logging | `std::cout` prints | `SqliteLogger` + `MinitraceLogger` + custom `MujinBTLogger` (structured JSON events) | ext 1 Layers 1–2 |
+| WM logging | `version()` counter | Full audit log: every fact change with timestamp, source, old/new value | ext 1 Layer 3 |
+| Live monitoring | None | Web dashboard (D3.js tree view + WM state table) or Foxglove via ROS2 topics | ext 1 Layer 4 |
+| Plan audit | None | Per-episode log: init state, goal, solver config, plan, causal graph, compiled BT XML | ext 1 Layer 5 |
+| Performance profiling | None | Chrome Tracing / Perfetto via `MinitraceLogger`. Per-node tick counts and durations via `TreeObserver` | ext 1 Layer 1 |
+
+### Deployment
+
+| Aspect | Slice delivers | Production needs | Extension |
+|--------|---------------|------------------|-----------|
+| Runtime | Single-process CLI executable | ROS2 node graph: WorldModel node, Planner node, Executor node, Perception nodes | ext 2 (ROS2) |
+| Configuration | Hardcoded domain paths and solver | Config file (YAML): domain paths, solver selection, action registry mappings, logging sinks | hardening |
+| Lifecycle | Start → run → exit | ROS2 lifecycle management: configure → activate → deactivate. Graceful shutdown with state persistence | ext 2 |
+| Distribution | Monolithic | Single-node (in-process) and multi-node (distributed) from same code via ROS2 service abstraction | ext 2 |
+| Packaging | CMake build, no install target | Debian/colcon package. Docker image. CI/CD pipeline with test + package stages | hardening |
+
+### Testing
+
+| Aspect | Slice delivers | Production needs | Extension |
+|--------|---------------|------------------|-----------|
+| Unit tests | GTest: WorldModel, ActionRegistry, PlanCompiler, PDDLParser | Same, plus property-based tests (fuzz predicate/object registration ordering) | hardening |
+| Integration tests | Full pipeline with stubs | + tests with simulated perception (inject state changes during execution) | ext 3 |
+| Fault injection | Single injected failure in Step 8 | Systematic: random action failures, perception delays, stale state, planner timeouts | hardening |
+| Simulation | None | Gazebo/Isaac Sim integration: BT actions drive simulated robot, perception reads simulated sensors | post-ext |
+| Benchmarks | None | Planning time vs. domain size. Tick throughput. Replan latency | hardening |
+| CI | None | GitHub Actions: build matrix (GCC/Clang, Release/Debug), `ctest`, coverage report | hardening |
+
+### Legend
+
+- **ext N** — references extension N in `extensions.md`
+- **ext 1 Layer N** — references specific observability layer in extension 1
+- **hardening** — production-readiness work that doesn't require new architecture, just robustness improvements to existing components
+- **post-ext** — future work beyond the extension roadmap; not yet planned in detail
+
+---
+
 ## Dependencies
 
 | Dependency | Source | Purpose | Status |
