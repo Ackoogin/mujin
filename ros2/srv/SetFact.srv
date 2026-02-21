@@ -1,0 +1,7 @@
+# Write one fact
+string key
+bool   value
+string source      # caller identification for audit log
+---
+bool   success     # false if key is not a registered fluent
+uint64 wm_version  # version after the write

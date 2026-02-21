@@ -191,19 +191,56 @@ Layers 1–3 are pre-requisites for Layer 4 and have no external dependencies be
 
 ## 2. ROS2 Node Wrappers
 
+> **Status: IMPLEMENTED** — Three lifecycle nodes + lifecycle manager, in-process and distributed modes.
+>
+> **Implemented in:** `ros2/` — separate `ament_cmake` package consumed by colcon.
+> **ROS2:** Jazzy (`D:\Dev\ros2-windows`, pixi environment).
+
 Thin adapter nodes wrapping the core C++ library. The core remains ROS-agnostic.
 
 ### Nodes
 
-- **WorldModel Node** — wraps `WorldModel` with ROS2 services (`get_fact`, `set_fact`, `query_state`) and publishes `/world_state` topic on change. Perception nodes are independent clients.
-- **Planner Node** — stateless action server. Receives STRIPS_Problem snapshot + goal, returns plan.
-- **Executor Node** — owns BT runtime. Ticks tree, calls WorldModel services for precondition/effect operations.
+- **WorldModelNode** (`ros2/src/world_model_node.cpp`) — owns `WorldModel`, exposes via `get_fact` / `set_fact` / `query_state` services and publishes `/world_state` (reliable, transient_local) on every fact change (debounced). WmAuditLog wired in `on_configure`.
+- **PlannerNode** (`ros2/src/planner_node.cpp`) — stateless `rclcpp_action::Server` at `/mujin/plan`. Snapshots world state → BRFS solve on dedicated `std::thread` → returns compiled BT XML. PlanAuditLog records each episode.
+- **ExecutorNode** (`ros2/src/executor_node.cpp`) — owns BT factory + tree. Ticks via `rclcpp::Timer` at 50 Hz. MujinBTLogger publishes to `/executor/bt_events`. Supports direct `WorldModel*` (in-process) or `RosCheckWorldPredicate`/`RosSetWorldPredicate` service-backed BT nodes (distributed).
+- **MujinLifecycleManager** (`ros2/src/lifecycle_manager.cpp`) — configures then activates WorldModel → Planner → Executor in order.
+
+### Build
+
+```bat
+:: Step 1: install mujin_core
+cmake --preset default -DCMAKE_INSTALL_PREFIX=build/install
+cmake --build build --config Release -j%NUMBER_OF_PROCESSORS%
+cmake --install build --config Release
+
+:: Step 2: build ROS2 package
+call D:\Dev\ros2-windows\setup.bat
+colcon build --packages-select mujin_ros2 --base-paths ros2 ^
+  --cmake-args -DCMAKE_PREFIX_PATH="D:/Dev/ros2-windows;D:/Dev/repo/mujin/build/install"
+```
+
+### Run (in-process demo)
+
+```bat
+call install\setup.bat
+ros2 launch mujin_ros2 mujin_inprocess.launch.py ^
+  pddl_file:=domains/uav_search/domain.pddl ^
+  problem_file:=domains/uav_search/problem.pddl
+```
+
+Then send a plan goal:
+
+```bat
+ros2 action send_goal /mujin/plan mujin_ros2/action/Plan ^
+  "{goal_fluents: ['(searched sector_a)', '(classified sector_a)'], replan: false}"
+```
 
 ### Design constraints
 
-- All nodes share a lifecycle manager
-- Single-node (in-process) and multi-node (distributed) configurations from the same code
-- WorldModel is the natural service boundary — everything else is a client
+- All nodes are `rclcpp_lifecycle::LifecycleNode`, coordinated by `MujinLifecycleManager`
+- In-process mode (`mujin_combined`): `SingleThreadedExecutor` keeps WorldModel access serialized (no mutex needed)
+- Distributed mode: BT nodes use `RosCheckWorldPredicate`/`RosSetWorldPredicate` over services with 500ms timeout
+- `mujin_core` unchanged — completely ROS-agnostic
 
 ### Depends on
 
@@ -289,7 +326,7 @@ Core vertical slice + hierarchical planning. Requires a temporal planner backend
 ## Priority Order
 
 1. ~~**Observability Layers 1–3** — immediate, no blockers~~ **DONE**
-2. **ROS2 Node Wrappers** — after vertical slice
+2. ~~**ROS2 Node Wrappers** — after vertical slice~~ **DONE** (`ros2/` ament_cmake package, Jazzy)
 3. ~~**Observability Layers 4–5** — after Layer 2 + ROS2~~ **DONE** (Foxglove WebSocket, no ROS2 needed)
 4. **Perception Integration** — after ROS2
 5. **PYRAMID Service Nodes** — when SDK available

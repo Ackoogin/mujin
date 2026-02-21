@@ -71,6 +71,66 @@ if(MUJIN_FOXGLOVE)
     target_compile_definitions(mujin_test_app PRIVATE MUJIN_FOXGLOVE=1)
 endif()
 
+# ---------------------------------------------------------------------------
+# Install rules — allows ros2/ ament_cmake package to find_package(mujin_core)
+#
+# We avoid install(EXPORT) because lapkt_core and behaviortree_cpp are
+# FetchContent targets with absolute source/build-tree paths in their
+# INTERFACE_INCLUDE_DIRECTORIES, which CMake rejects at export time.
+# Instead we use a hand-written config file (find_library-based).
+#
+# behaviortree_cpp is installed via install(FILES $<TARGET_FILE:...>) rather
+# than install(TARGETS ...) to avoid triggering the cmake_install.cmake chain
+# for a target whose cmake_install.cmake was never generated
+# (CMAKE_SKIP_INSTALL_RULES was TRUE during FetchContent_MakeAvailable).
+#
+# For the same reason we create a stub cmake_install.cmake for behaviortree_cpp
+# so that cmake --install does not fail when the root cmake_install.cmake tries
+# to include the (otherwise absent) sub-directory script.
+# ---------------------------------------------------------------------------
+include(CMakePackageConfigHelpers)
+
+# Stub for behaviortree_cpp's cmake_install.cmake (not generated because
+# CMAKE_SKIP_INSTALL_RULES was TRUE during FetchContent_MakeAvailable).
+if(NOT EXISTS "${behaviortree_cpp_BINARY_DIR}/cmake_install.cmake")
+    file(WRITE "${behaviortree_cpp_BINARY_DIR}/cmake_install.cmake"
+         "# Stub: behaviortree_cpp install rules are handled by mujin install targets.\n")
+endif()
+
+# Static archives
+install(TARGETS mujin_core lapkt_core
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+)
+
+# behaviortree_cpp static archive — copy the built file directly
+install(FILES $<TARGET_FILE:behaviortree_cpp>
+    DESTINATION lib
+)
+
+# BT.CPP public headers (part of mujin_core's API surface via bt_logger.h etc.)
+install(DIRECTORY ${behaviortree_cpp_SOURCE_DIR}/include/
+    DESTINATION include
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
+)
+
+# mujin_core public headers
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/
+    DESTINATION include
+    FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
+)
+
+# Hand-written config file: creates mujin::mujin_core IMPORTED target
+configure_package_config_file(
+    ${CMAKE_SOURCE_DIR}/cmake/mujin_coreConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/mujin_coreConfig.cmake
+    INSTALL_DESTINATION lib/cmake/mujin_core
+)
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/mujin_coreConfig.cmake
+    DESTINATION lib/cmake/mujin_core
+)
+
 # Copy BT.CPP DLL next to the executable on Windows
 if(WIN32)
     add_custom_command(TARGET mujin_test_app POST_BUILD

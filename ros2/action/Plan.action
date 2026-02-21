@@ -1,0 +1,19 @@
+# Goal: request a new plan
+string[] goal_fluents    # PDDL fluent keys that must be true in goal state
+bool     replan          # force replan even if a cached plan exists
+---
+# Result
+bool     success
+string[] plan_actions    # ordered ground action signatures, e.g. "move(uav1,base,sector_a)"
+uint32[] action_indices  # indices into WorldModel::groundActions()
+string   bt_xml          # compiled BT XML ready to load into ExecutorNode
+float64  solve_time_ms
+uint32   expanded
+uint32   generated
+string   error_msg       # set on failure
+---
+# Feedback (streaming during solve)
+uint32   nodes_expanded
+uint32   nodes_generated
+float64  elapsed_ms
+string   status_msg

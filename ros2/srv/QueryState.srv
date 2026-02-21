@@ -1,0 +1,7 @@
+# Retrieve multiple facts at once.
+# If keys is empty, returns all fluents that are currently TRUE.
+string[] keys
+---
+mujin_ros2/WorldFact[] facts
+uint64                 wm_version
+bool                   success

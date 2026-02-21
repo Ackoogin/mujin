@@ -1,0 +1,6 @@
+# Look up one fact by string key
+string key
+---
+bool   found       # false if key is not a registered fluent
+bool   value
+uint64 wm_version
