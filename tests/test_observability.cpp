@@ -8,6 +8,7 @@
 #include "mujin/world_model.h"
 #include "mujin/bt_logger.h"
 #include "mujin/wm_audit_log.h"
+#include "mujin/plan_audit_log.h"
 #include "mujin/action_registry.h"
 #include "mujin/plan_compiler.h"
 #include "mujin/planner.h"
@@ -454,4 +455,105 @@ TEST(ObservabilityIntegration, AllLayersWorkTogether) {
     }
     EXPECT_TRUE(has_init) << "Should have planner_init source";
     EXPECT_TRUE(has_bt) << "Should have SetWorldPredicate source";
+}
+
+// =========================================================================
+// Layer 5: Plan Audit Trail
+// =========================================================================
+
+TEST(PlanAuditLog, RecordsEpisodeInMemory) {
+    auto wm = makeSimpleWorldModel();
+    wm.setFact("(at uav1 base)", true, "planner_init");
+    wm.setGoal({"(searched sector_a)", "(classified sector_a)"});
+
+    mujin::Planner planner;
+    auto plan = planner.solve(wm);
+    ASSERT_TRUE(plan.success);
+    EXPECT_GT(plan.solve_time_ms, 0.0);
+
+    mujin::ActionRegistry registry;
+    registry.registerAction("move", "StubAction");
+    registry.registerAction("search", "StubAction");
+    registry.registerAction("classify", "StubAction");
+
+    mujin::PlanCompiler compiler;
+    auto xml = compiler.compileSequential(plan.steps, wm, registry);
+
+    // Record episode
+    mujin::PlanAuditLog audit;
+
+    mujin::PlanAuditLog::Episode ep;
+    ep.ts_us = 12345;
+    for (unsigned i = 0; i < wm.numFluents(); ++i) {
+        if (wm.getFact(i)) ep.init_facts.push_back(wm.fluentName(i));
+    }
+    for (auto gid : wm.goalFluentIds()) {
+        ep.goal_fluents.push_back(wm.fluentName(gid));
+    }
+    ep.solver = "BRFS";
+    ep.solve_time_ms = plan.solve_time_ms;
+    ep.success = plan.success;
+    ep.expanded = plan.expanded;
+    ep.generated = plan.generated;
+    ep.cost = plan.cost;
+    for (auto& step : plan.steps) {
+        ep.plan_actions.push_back(wm.groundActions()[step.action_index].signature);
+    }
+    ep.bt_xml = xml;
+
+    audit.recordEpisode(ep);
+
+    ASSERT_EQ(audit.size(), 1u);
+    auto& recorded = audit.episodes()[0];
+    EXPECT_EQ(recorded.solver, "BRFS");
+    EXPECT_TRUE(recorded.success);
+    EXPECT_GT(recorded.plan_actions.size(), 0u);
+    EXPECT_FALSE(recorded.bt_xml.empty());
+    EXPECT_EQ(recorded.goal_fluents.size(), 2u);
+}
+
+TEST(PlanAuditLog, WritesToFile) {
+    std::string filepath = "test_plan_audit_output.jsonl";
+
+    {
+        mujin::PlanAuditLog audit(filepath);
+        mujin::PlanAuditLog::Episode ep;
+        ep.ts_us = 99999;
+        ep.solver = "BRFS";
+        ep.solve_time_ms = 1.5;
+        ep.success = true;
+        ep.expanded = 10;
+        ep.generated = 20;
+        ep.cost = 3.0f;
+        ep.init_facts = {"(at uav1 base)"};
+        ep.goal_fluents = {"(searched sector_a)"};
+        ep.plan_actions = {"move(uav1,base,sector_a)", "search(uav1,sector_a)"};
+        ep.bt_xml = "<root>...</root>";
+        audit.recordEpisode(ep);
+    }
+
+    std::ifstream in(filepath);
+    ASSERT_TRUE(in.is_open());
+    std::string line;
+    ASSERT_TRUE(std::getline(in, line));
+    EXPECT_NE(line.find("\"solver\":\"BRFS\""), std::string::npos);
+    EXPECT_NE(line.find("\"success\":true"), std::string::npos);
+    EXPECT_NE(line.find("\"plan_actions\":["), std::string::npos);
+    EXPECT_NE(line.find("\"bt_xml\":"), std::string::npos);
+    in.close();
+
+    std::remove(filepath.c_str());
+}
+
+TEST(PlanAuditLog, SolveTimeIsRecorded) {
+    auto wm = makeSimpleWorldModel();
+    wm.setFact("(at uav1 base)", true);
+    wm.setGoal({"(searched sector_a)", "(classified sector_a)"});
+
+    mujin::Planner planner;
+    auto plan = planner.solve(wm);
+
+    EXPECT_TRUE(plan.success);
+    // solve_time_ms should be > 0 (it took some time to solve)
+    EXPECT_GE(plan.solve_time_ms, 0.0);
 }

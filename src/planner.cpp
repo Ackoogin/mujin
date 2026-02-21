@@ -6,6 +6,7 @@
 #include <fwd_search_prob.hxx>
 #include <brfs.hxx>
 
+#include <chrono>
 #include <unordered_map>
 
 namespace mujin {
@@ -14,6 +15,7 @@ using BRFS_Engine = aptk::search::brfs::BRFS<aptk::agnostic::Fwd_Search_Problem>
 
 PlanResult Planner::solve(const WorldModel& wm) const {
     PlanResult result;
+    auto t0 = std::chrono::steady_clock::now();
 
     // Project world model to LAPKT STRIPS problem
     aptk::STRIPS_Problem strips;
@@ -56,6 +58,9 @@ PlanResult Planner::solve(const WorldModel& wm) const {
             }
         }
     }
+
+    auto t1 = std::chrono::steady_clock::now();
+    result.solve_time_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
 
     return result;
 }

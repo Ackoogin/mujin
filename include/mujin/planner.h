@@ -15,6 +15,7 @@ struct PlanResult {
     float cost = 0.0f;
     unsigned expanded = 0;
     unsigned generated = 0;
+    double solve_time_ms = 0.0;  // Wall-clock solve duration
 };
 
 class Planner {

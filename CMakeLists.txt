@@ -98,6 +98,35 @@ else()
     target_compile_options(lapkt_core PRIVATE -w)
 endif()
 
+# --- Foxglove WebSocket bridge (optional) ---
+option(MUJIN_FOXGLOVE "Enable Foxglove WebSocket bridge for live monitoring" ON)
+
+if(MUJIN_FOXGLOVE)
+    # websocketpp — header-only C++ WebSocket library
+    FetchContent_Declare(
+        websocketpp
+        GIT_REPOSITORY https://github.com/zaphoyd/websocketpp.git
+        GIT_TAG        0.8.2
+        GIT_SHALLOW    TRUE
+    )
+    FetchContent_GetProperties(websocketpp)
+    if(NOT websocketpp_POPULATED)
+        FetchContent_Populate(websocketpp)
+    endif()
+
+    # Standalone Asio — header-only async I/O (no Boost)
+    FetchContent_Declare(
+        asio
+        GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
+        GIT_TAG        asio-1-28-0
+        GIT_SHALLOW    TRUE
+    )
+    FetchContent_GetProperties(asio)
+    if(NOT asio_POPULATED)
+        FetchContent_Populate(asio)
+    endif()
+endif()
+
 # --- Google Test ---
 FetchContent_Declare(
     googletest
