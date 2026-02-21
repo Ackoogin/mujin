@@ -12,17 +12,26 @@ include/mujin/
     type_system.h
     action_registry.h
     plan_compiler.h
+    planner.h
     pddl_parser.h
+    bt_logger.h                    # Layer 2: structured BT event stream
+    wm_audit_log.h                 # Layer 3: world model audit log
+    plan_audit_log.h               # Layer 5: plan audit trail
+    foxglove_bridge.h              # Layer 4: Foxglove WebSocket bridge
     bt_nodes/
         check_world_predicate.h
         set_world_predicate.h
-        replan_on_failure.h
 src/
     world_model.cpp
     type_system.cpp
     action_registry.cpp
     plan_compiler.cpp
+    planner.cpp
     pddl_parser.cpp
+    bt_logger.cpp
+    wm_audit_log.cpp
+    plan_audit_log.cpp
+    foxglove_bridge.cpp
     bt_nodes/
         check_world_predicate.cpp
         set_world_predicate.cpp
@@ -33,11 +42,15 @@ tests/
     test_action_registry.cpp
     test_plan_compiler.cpp
     test_pddl_parser.cpp
+    test_planner.cpp
     test_integration.cpp
-domains/
-    uav_search/
-        domain.pddl
-        problem.pddl
+    test_e2e_pipeline.cpp
+    test_observability.cpp         # Layers 1-5 observability tests
+doc/
+    concept.md
+    extensions.md
+    plan.md
+    quickstart.md                  # Getting started + Foxglove integration
 ```
 
 ---
@@ -301,15 +314,15 @@ Steps 1–8 deliver a working vertical slice. This section itemises what each co
 | Monitoring | Console output | Structured events to observability stack (BT transitions, replan episodes, world model changes) | ext 1 Layers 2–5 |
 | Safety | None | Pre-conditions on replan: verify world model consistency before re-solving. Replan budget (max N replans before abort) | hardening |
 
-### Observability
+### Observability — IMPLEMENTED
 
-| Aspect | Slice delivers | Production needs | Extension |
-|--------|---------------|------------------|-----------|
-| BT logging | `std::cout` prints | `SqliteLogger` + `MinitraceLogger` + custom `MujinBTLogger` (structured JSON events) | ext 1 Layers 1–2 |
-| WM logging | `version()` counter | Full audit log: every fact change with timestamp, source, old/new value | ext 1 Layer 3 |
-| Live monitoring | None | Web dashboard (D3.js tree view + WM state table) or Foxglove via ROS2 topics | ext 1 Layer 4 |
-| Plan audit | None | Per-episode log: init state, goal, solver config, plan, causal graph, compiled BT XML | ext 1 Layer 5 |
-| Performance profiling | None | Chrome Tracing / Perfetto via `MinitraceLogger`. Per-node tick counts and durations via `TreeObserver` | ext 1 Layer 1 |
+| Aspect | Slice delivers | Current state | Extension |
+|--------|---------------|---------------|-----------|
+| BT logging | `std::cout` prints | **Done:** `SqliteLogger` enabled (Layer 1) + `MujinBTLogger` (Layer 2) with JSONL + callback sinks | ext 1 Layers 1–2 |
+| WM logging | `version()` counter | **Done:** `WmAuditLog` (Layer 3) with source-tagged fact changes, JSONL output | ext 1 Layer 3 |
+| Live monitoring | None | **Done:** `FoxgloveBridge` (Layer 4) — Foxglove WebSocket server on `ws://localhost:8765` with `/bt_events` + `/wm_audit` channels | ext 1 Layer 4 |
+| Plan audit | None | **Done:** `PlanAuditLog` (Layer 5) — JSONL with init state, goals, solver, timing, plan actions, compiled BT XML | ext 1 Layer 5 |
+| Performance profiling | None | **Done:** `TreeObserver` wired (Layer 1). Chrome Tracing via `MinitraceLogger` available | ext 1 Layer 1 |
 
 ### Deployment
 
@@ -345,7 +358,9 @@ Steps 1–8 deliver a working vertical slice. This section itemises what each co
 
 | Dependency | Source | Purpose | Status |
 |------------|--------|---------|--------|
-| BehaviorTree.CPP 4.6.2 | FetchContent | BT execution | Integrated |
-| LAPKT Devel2.0 (core) | FetchContent | STRIPS model, search | Integrated |
-| LAPKT FF-parser | FetchContent (libff_parser) | PDDL parsing | To add |
-| Google Test | FetchContent | Unit/integration testing | To add |
+| BehaviorTree.CPP 4.6.2 | FetchContent | BT execution + SQLite logging | Integrated |
+| LAPKT Devel2.0 (core) | FetchContent | STRIPS model, BRFS search | Integrated |
+| Google Test 1.14 | FetchContent | Unit/integration testing (73 tests) | Integrated |
+| SQLite3 | System | BT.CPP SQLite logging backend | Integrated |
+| websocketpp 0.8.2 | FetchContent | Foxglove WebSocket server | Integrated (optional: `MUJIN_FOXGLOVE`) |
+| Standalone Asio 1.28 | FetchContent | Async I/O for websocketpp | Integrated (optional: `MUJIN_FOXGLOVE`) |
