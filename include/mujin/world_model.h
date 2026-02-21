@@ -3,6 +3,7 @@
 #include "mujin/type_system.h"
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -55,11 +56,12 @@ public:
                         const std::vector<std::string>& del_templates);
 
     // Fact access by string key (e.g. "(at robot base)")
-    void setFact(const std::string& key, bool value);
+    // The optional source tag identifies the originator (e.g. "SetWorldPredicate:node_name").
+    void setFact(const std::string& key, bool value, const std::string& source = "");
     bool getFact(const std::string& key) const;
 
     // Fact access by fluent index
-    void setFact(unsigned id, bool value);
+    void setFact(unsigned id, bool value, const std::string& source = "");
     bool getFact(unsigned id) const;
 
     // Fluent index <-> string key mapping
@@ -73,6 +75,13 @@ public:
 
     // Version counter (incremented on any state change)
     uint64_t version() const { return version_; }
+
+    // Audit callback: fired on every fact state change.
+    // Parameters: (wm_version, timestamp_us, fact_name, value, source)
+    using AuditCallback = std::function<void(uint64_t, uint64_t,
+                                             const std::string&, bool,
+                                             const std::string&)>;
+    void setAuditCallback(AuditCallback cb);
 
     // LAPKT projection
     void projectToSTRIPS(aptk::STRIPS_Problem& prob) const;
@@ -115,6 +124,7 @@ private:
     std::vector<unsigned> goal_fluent_ids_;
 
     uint64_t version_ = 0;
+    AuditCallback audit_callback_;
 
 public:
     // Goal management

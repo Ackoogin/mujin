@@ -6,6 +6,7 @@
 #include <strips_state.hxx>
 
 #include <algorithm>
+#include <chrono>
 #include <stdexcept>
 
 namespace mujin {
@@ -42,12 +43,12 @@ void WorldModel::registerAction(const std::string& name,
     groundActionSchema(idx);
 }
 
-void WorldModel::setFact(const std::string& key, bool value) {
+void WorldModel::setFact(const std::string& key, bool value, const std::string& source) {
     auto it = fluent_index_.find(key);
     if (it == fluent_index_.end()) {
         throw std::runtime_error("WorldModel::setFact: unknown fluent '" + key + "'");
     }
-    setFact(it->second, value);
+    setFact(it->second, value, source);
 }
 
 bool WorldModel::getFact(const std::string& key) const {
@@ -58,7 +59,7 @@ bool WorldModel::getFact(const std::string& key) const {
     return getFact(it->second);
 }
 
-void WorldModel::setFact(unsigned id, bool value) {
+void WorldModel::setFact(unsigned id, bool value, const std::string& source) {
     unsigned word = id / 64;
     unsigned bit = id % 64;
     if (word >= state_bits_.size()) {
@@ -72,7 +73,17 @@ void WorldModel::setFact(unsigned id, bool value) {
             state_bits_[word] &= ~(uint64_t(1) << bit);
         }
         ++version_;
+        if (audit_callback_) {
+            auto ts = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            audit_callback_(version_, static_cast<uint64_t>(ts),
+                           fluent_names_[id], value, source);
+        }
     }
+}
+
+void WorldModel::setAuditCallback(AuditCallback cb) {
+    audit_callback_ = std::move(cb);
 }
 
 bool WorldModel::getFact(unsigned id) const {

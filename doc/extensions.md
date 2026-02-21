@@ -6,6 +6,8 @@ Post-vertical-slice features, ordered by priority and dependency.
 
 ## 1. Observability (Groot Monitoring Replacement)
 
+> **Status: IMPLEMENTED** — All 5 layers are complete and tested (73 tests passing).
+
 Groot2 is BehaviorTree.CPP's paid monitoring/visualization tool. We replace it with a layered observability stack built on BT.CPP's free logging infrastructure.
 
 ### What Groot2 provides (paid)
@@ -30,7 +32,9 @@ BT.CPP v4 ships several logger backends that are independent of Groot:
 
 ### Implementation plan
 
-#### Layer 1: Enable built-in loggers (zero custom code)
+#### Layer 1: Enable built-in loggers (zero custom code) — DONE
+
+> **Implemented in:** `CMakeLists.txt` (BTCPP_SQLITE_LOGGING=ON), `src/main.cpp` (TreeObserver wired)
 
 Turn on what already exists in BT.CPP:
 
@@ -42,7 +46,10 @@ Turn on what already exists in BT.CPP:
 
 These three give us logging, replay (via SQL queries), and performance profiling with no custom code.
 
-#### Layer 2: Structured event stream (custom `StatusChangeLogger`)
+#### Layer 2: Structured event stream (custom `StatusChangeLogger`) — DONE
+
+> **Implemented in:** `include/mujin/bt_logger.h`, `src/bt_logger.cpp`
+> **Tests:** `tests/test_observability.cpp` (MujinBTLogger.*)
 
 Write a `MujinBTLogger` subclass of `StatusChangeLogger` that emits structured JSON events:
 
@@ -81,7 +88,10 @@ Sinks (configurable, multiple simultaneously):
 
 This logger also captures world model version at each transition, linking BT execution to world model state history.
 
-#### Layer 3: World model audit log
+#### Layer 3: World model audit log — DONE
+
+> **Implemented in:** `include/mujin/wm_audit_log.h`, `src/wm_audit_log.cpp`, `src/world_model.cpp` (AuditCallback)
+> **Tests:** `tests/test_observability.cpp` (WmAuditLog.*)
 
 The `WorldModel::setFact()` path already increments a version counter. Extend it to emit a structured log entry on every state change:
 
@@ -104,7 +114,12 @@ Combined with the BT event stream from Layer 2, this gives full causal traceabil
 
 Storage: same SQLite database as Layer 1 (separate table), or JSONL file.
 
-#### Layer 4: Live dashboard
+#### Layer 4: Live dashboard — DONE (Foxglove WebSocket bridge)
+
+> **Implemented in:** `include/mujin/foxglove_bridge.h`, `src/foxglove_bridge.cpp`
+> **Dependencies:** websocketpp 0.8.2, standalone Asio 1.28 (both FetchContent, header-only)
+> **CMake option:** `MUJIN_FOXGLOVE` (ON by default)
+> **See also:** `doc/quickstart.md` for Foxglove Studio connection instructions
 
 A lightweight web UI for real-time monitoring. Two options depending on deployment context:
 
@@ -119,52 +134,58 @@ Embed a minimal WebSocket server (e.g., `uWebSockets` or `libwebsockets`) in the
 
 The dashboard is a static HTML file; no build toolchain needed. The WebSocket carries the same JSON events from Layer 2.
 
-**Option B: ROS2 / Foxglove (with ROS2 integration)**
+**Option B: Foxglove WebSocket protocol (chosen implementation)**
 
-Publish BT state transitions and world model changes as ROS2 topics. Use Foxglove Studio (free, open-source) as the visualization frontend:
+The `FoxgloveBridge` class implements the [Foxglove WebSocket protocol](https://github.com/foxglove/ws-protocol) directly, without requiring ROS2. It:
 
-- Custom Foxglove panel for BT tree rendering
-- Built-in timeline, log, and plot panels for world model state
-- Record/replay via `rosbag2`
+- Runs a WebSocket server on a configurable port (default 8765)
+- Advertises two channels: `/bt_events` (JSON Schema `mujin.BTEvent`) and `/wm_audit` (JSON Schema `mujin.WMFactChange`)
+- Streams live BT state transitions and WM fact changes as binary `MessageData` frames
+- Integrates as callback sinks for `MujinBTLogger` and `WmAuditLog`
+- Built as a separate `mujin_foxglove` static library to keep core dependency-free
 
-This is the preferred path once ROS2 integration lands, since Foxglove already handles the hard parts (WebSocket transport, time sync, recording).
+Foxglove Studio connects directly to `ws://localhost:8765` for real-time visualization using its built-in Raw Messages, Log, and Plot panels. When ROS2 integration lands, this bridge can be extended to publish ROS2 topics as additional channels.
 
-#### Layer 5: Plan audit trail
+#### Layer 5: Plan audit trail — DONE
+
+> **Implemented in:** `include/mujin/plan_audit_log.h`, `src/plan_audit_log.cpp`
+> **Also:** `include/mujin/planner.h` (`PlanResult::solve_time_ms`), `src/planner.cpp` (steady_clock timing)
+> **Tests:** `tests/test_observability.cpp` (PlanAuditLog.*)
 
 For each planning episode, log:
 - The world model snapshot (init state) that triggered planning
 - The goal fluents
 - The LAPKT solver used and solve time
 - The plan (ordered action list)
-- The causal graph (adjacency list)
 - The compiled BT XML
 
 This forms a mission audit trail: for any point in execution, you can reconstruct why the system chose the actions it did.
 
-Storage: SQLite (separate table) or structured log files alongside the BT logs.
+Storage: JSONL file (`mujin_plan_audit.jsonl`). Each line is a self-contained JSON object with all episode data, including the full BT XML.
 
 ### Summary: what replaces what
 
 | Groot2 feature | Our replacement | Layer |
 |----------------|-----------------|-------|
-| Live tree visualization | Web dashboard (D3.js) or Foxglove | 4 |
-| Real-time node status | `MujinBTLogger` → WebSocket stream | 2 |
-| Blackboard / state inspector | World model audit log + dashboard | 3, 4 |
-| Log replay | SQLite queries + Perfetto/Chrome tracing | 1 |
+| Live tree visualization | Foxglove Studio via `FoxgloveBridge` | 4 |
+| Real-time node status | `MujinBTLogger` → Foxglove `/bt_events` channel | 2, 4 |
+| Blackboard / state inspector | `WmAuditLog` → Foxglove `/wm_audit` channel | 3, 4 |
+| Log replay | SQLite queries + Perfetto/Chrome tracing + JSONL files | 1, 5 |
 | Node statistics | `TreeObserver` exposed via dashboard | 1, 4 |
+| Plan provenance | `PlanAuditLog` JSONL (init state, goals, solver, plan, BT XML) | 5 |
 | Tree editor | Not needed — trees are compiler-generated | — |
 
 ### Build order
 
 Layers 1–3 are pre-requisites for Layer 4 and have no external dependencies beyond what we already vendor. Layer 5 is independent and can be built in parallel.
 
-| Layer | Dependency | Effort |
-|-------|-----------|--------|
-| 1: Built-in loggers | None (BT.CPP already available) | CMake flag + wiring |
-| 2: MujinBTLogger | Layer 1 (for SQLite sink) | ~200 LOC |
-| 3: WM audit log | None | ~100 LOC in WorldModel |
-| 4: Dashboard | Layers 2 + 3 | HTML/JS page + WebSocket server |
-| 5: Plan audit trail | None | ~150 LOC in PlanToBTCompiler |
+| Layer | Dependency | Effort | Status |
+|-------|-----------|--------|--------|
+| 1: Built-in loggers | None (BT.CPP already available) | CMake flag + wiring | **Done** |
+| 2: MujinBTLogger | Layer 1 (for SQLite sink) | ~200 LOC | **Done** (`bt_logger.h/cpp`) |
+| 3: WM audit log | None | ~100 LOC in WorldModel | **Done** (`wm_audit_log.h/cpp`) |
+| 4: Foxglove bridge | Layers 2 + 3 | WebSocket server (~300 LOC) | **Done** (`foxglove_bridge.h/cpp`) |
+| 5: Plan audit trail | None | ~150 LOC | **Done** (`plan_audit_log.h/cpp`) |
 
 ---
 
@@ -267,9 +288,9 @@ Core vertical slice + hierarchical planning. Requires a temporal planner backend
 
 ## Priority Order
 
-1. **Observability Layers 1–3** — immediate, no blockers
+1. ~~**Observability Layers 1–3** — immediate, no blockers~~ **DONE**
 2. **ROS2 Node Wrappers** — after vertical slice
-3. **Observability Layers 4–5** — after Layer 2 + ROS2
+3. ~~**Observability Layers 4–5** — after Layer 2 + ROS2~~ **DONE** (Foxglove WebSocket, no ROS2 needed)
 4. **Perception Integration** — after ROS2
 5. **PYRAMID Service Nodes** — when SDK available
 6. **Thread Safety** — when multi-node deployment needed

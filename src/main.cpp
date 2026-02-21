@@ -17,10 +17,19 @@
 #include "mujin/plan_compiler.h"
 #include "mujin/bt_nodes/check_world_predicate.h"
 #include "mujin/bt_nodes/set_world_predicate.h"
+#include "mujin/bt_logger.h"
+#include "mujin/wm_audit_log.h"
+#include "mujin/plan_audit_log.h"
+
+#if defined(MUJIN_FOXGLOVE)
+#include "mujin/foxglove_bridge.h"
+#endif
 
 #include <behaviortree_cpp/bt_factory.h>
 #include <behaviortree_cpp/action_node.h>
+#include <behaviortree_cpp/loggers/bt_observer.h>
 
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -109,8 +118,37 @@ int main() {
         {"?r", "?s"}, {"robot", "sector"},
         {"(at ?r ?s)", "(searched ?s)"}, {"(classified ?s)"}, {});
 
+    // ---- Observability: attach WM audit log (Layer 3) ----
+    mujin::WmAuditLog wm_audit("mujin_wm_audit.jsonl");
+
+#if defined(MUJIN_FOXGLOVE)
+    // ---- Observability: start Foxglove bridge (Layer 4) ----
+    mujin::FoxgloveBridge foxglove({/*.port=*/8765, /*.server_name=*/"mujin"});
+    foxglove.start();
+    auto foxglove_wm_sink = foxglove.wmEventSink();
+#endif
+
+    wm.setAuditCallback([&wm_audit
+#if defined(MUJIN_FOXGLOVE)
+                          , &foxglove_wm_sink
+#endif
+                         ](uint64_t ver, uint64_t ts,
+                           const std::string& fact, bool val,
+                           const std::string& src) {
+        wm_audit.onFactChange(ver, ts, fact, val, src);
+#if defined(MUJIN_FOXGLOVE)
+        // Forward to Foxglove as a formatted JSON line
+        std::string json = std::string("{\"wm_version\":") + std::to_string(ver)
+            + ",\"ts_us\":" + std::to_string(ts)
+            + ",\"fact\":\"" + fact + "\""
+            + ",\"value\":" + (val ? "true" : "false")
+            + ",\"source\":\"" + src + "\"}";
+        foxglove_wm_sink(json);
+#endif
+    });
+
     // Set initial state
-    wm.setFact("(at uav1 base)", true);
+    wm.setFact("(at uav1 base)", true, "planner_init");
 
     // Set goal
     wm.setGoal({"(searched sector_a)", "(classified sector_a)"});
@@ -138,7 +176,8 @@ int main() {
     }
 
     std::cout << "  Plan found! " << plan_result.steps.size() << " steps, cost=" << plan_result.cost << "\n";
-    std::cout << "  Expanded: " << plan_result.expanded << ", Generated: " << plan_result.generated << "\n";
+    std::cout << "  Expanded: " << plan_result.expanded << ", Generated: " << plan_result.generated
+              << ", Solve time: " << plan_result.solve_time_ms << " ms\n";
     for (unsigned i = 0; i < plan_result.steps.size(); ++i) {
         auto& ga = wm.groundActions()[plan_result.steps[i].action_index];
         std::cout << "  " << (i + 1) << ". " << ga.signature << "\n";
@@ -149,6 +188,38 @@ int main() {
     mujin::PlanCompiler compiler;
     auto xml = compiler.compileSequential(plan_result.steps, wm, registry);
     std::cout << "  Generated BT XML (" << xml.size() << " bytes)\n";
+
+    // ---- Observability: record plan audit trail (Layer 5) ----
+    mujin::PlanAuditLog plan_audit("mujin_plan_audit.jsonl");
+    {
+        mujin::PlanAuditLog::Episode ep;
+        ep.ts_us = static_cast<uint64_t>(
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count());
+        // Snapshot init state: all true fluents
+        for (unsigned i = 0; i < wm.numFluents(); ++i) {
+            if (wm.getFact(i)) {
+                ep.init_facts.push_back(wm.fluentName(i));
+            }
+        }
+        // Goal fluents
+        for (auto gid : wm.goalFluentIds()) {
+            ep.goal_fluents.push_back(wm.fluentName(gid));
+        }
+        ep.solver = "BRFS";
+        ep.solve_time_ms = plan_result.solve_time_ms;
+        ep.success = plan_result.success;
+        ep.expanded = plan_result.expanded;
+        ep.generated = plan_result.generated;
+        ep.cost = plan_result.cost;
+        // Plan action signatures
+        for (auto& step : plan_result.steps) {
+            ep.plan_actions.push_back(wm.groundActions()[step.action_index].signature);
+        }
+        ep.bt_xml = xml;
+        plan_audit.recordEpisode(ep);
+        std::cout << "  Plan audit trail recorded\n";
+    }
 
     // ---- Step 5: Execute BT ----
     std::cout << "\n--- Step 5: Execute BT ---\n";
@@ -162,8 +233,31 @@ int main() {
     auto tree = factory.createTreeFromText(xml);
     tree.rootBlackboard()->set("world_model", &wm);
 
+    // ---- Observability: attach BT loggers (Layers 1 + 2) ----
+    BT::TreeObserver observer(tree);
+
+    mujin::MujinBTLogger bt_logger(tree, "MissionPlan", &wm);
+    bt_logger.addFileSink("mujin_bt_events.jsonl");
+#if defined(MUJIN_FOXGLOVE)
+    bt_logger.addCallbackSink(foxglove.btEventSink());
+#endif
+
     auto status = tree.tickWhileRunning();
     std::cout << "  Tree status: " << BT::toStr(status) << "\n";
+
+    // ---- Observability: report statistics ----
+    std::cout << "\n--- Observability Report ---\n";
+    std::cout << "  BT events logged:   " << bt_logger.events().size() << "\n";
+    std::cout << "  WM audit entries:    " << wm_audit.size() << "\n";
+    std::cout << "  Plan audit episodes: " << plan_audit.size() << "\n";
+    bt_logger.flush();
+    wm_audit.flush();
+    plan_audit.flush();
+    std::cout << "  Files: mujin_bt_events.jsonl, mujin_wm_audit.jsonl, mujin_plan_audit.jsonl\n";
+#if defined(MUJIN_FOXGLOVE)
+    std::cout << "  Foxglove bridge: ws://localhost:8765\n";
+    foxglove.stop();
+#endif
 
     // ---- Step 6: Verify goal state ----
     std::cout << "\n--- Step 6: Verify Goal State ---\n";
