@@ -1,0 +1,9 @@
+[requires]
+sqlite3/3.40.1
+
+[generators]
+CMakeDeps
+CMakeToolchain
+
+[options]
+sqlite3/*:shared=False
