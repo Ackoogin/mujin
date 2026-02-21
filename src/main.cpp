@@ -17,9 +17,12 @@
 #include "mujin/plan_compiler.h"
 #include "mujin/bt_nodes/check_world_predicate.h"
 #include "mujin/bt_nodes/set_world_predicate.h"
+#include "mujin/bt_logger.h"
+#include "mujin/wm_audit_log.h"
 
 #include <behaviortree_cpp/bt_factory.h>
 #include <behaviortree_cpp/action_node.h>
+#include <behaviortree_cpp/loggers/bt_observer.h>
 
 #include <cstdlib>
 #include <iostream>
@@ -109,8 +112,16 @@ int main() {
         {"?r", "?s"}, {"robot", "sector"},
         {"(at ?r ?s)", "(searched ?s)"}, {"(classified ?s)"}, {});
 
+    // ---- Observability: attach WM audit log (Layer 3) ----
+    mujin::WmAuditLog wm_audit("mujin_wm_audit.jsonl");
+    wm.setAuditCallback([&wm_audit](uint64_t ver, uint64_t ts,
+                                     const std::string& fact, bool val,
+                                     const std::string& src) {
+        wm_audit.onFactChange(ver, ts, fact, val, src);
+    });
+
     // Set initial state
-    wm.setFact("(at uav1 base)", true);
+    wm.setFact("(at uav1 base)", true, "planner_init");
 
     // Set goal
     wm.setGoal({"(searched sector_a)", "(classified sector_a)"});
@@ -162,8 +173,22 @@ int main() {
     auto tree = factory.createTreeFromText(xml);
     tree.rootBlackboard()->set("world_model", &wm);
 
+    // ---- Observability: attach BT loggers (Layers 1 + 2) ----
+    BT::TreeObserver observer(tree);
+
+    mujin::MujinBTLogger bt_logger(tree, "MissionPlan", &wm);
+    bt_logger.addFileSink("mujin_bt_events.jsonl");
+
     auto status = tree.tickWhileRunning();
     std::cout << "  Tree status: " << BT::toStr(status) << "\n";
+
+    // ---- Observability: report statistics ----
+    std::cout << "\n--- Observability Report ---\n";
+    std::cout << "  BT events logged: " << bt_logger.events().size() << "\n";
+    std::cout << "  WM audit entries:  " << wm_audit.size() << "\n";
+    bt_logger.flush();
+    wm_audit.flush();
+    std::cout << "  Files written: mujin_bt_events.jsonl, mujin_wm_audit.jsonl\n";
 
     // ---- Step 6: Verify goal state ----
     std::cout << "\n--- Step 6: Verify Goal State ---\n";

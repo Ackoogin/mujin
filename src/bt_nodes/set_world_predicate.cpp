@@ -22,7 +22,7 @@ BT::NodeStatus SetWorldPredicate::tick() {
     getInput("value", value);
 
     auto* wm = config().blackboard->get<WorldModel*>("world_model");
-    wm->setFact(pred.value(), value);
+    wm->setFact(pred.value(), value, std::string("SetWorldPredicate:") + name());
 
     return BT::NodeStatus::SUCCESS;
 }

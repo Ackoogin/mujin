@@ -10,6 +10,8 @@ add_library(mujin_core STATIC
     planner.cpp
     bt_nodes/check_world_predicate.cpp
     bt_nodes/set_world_predicate.cpp
+    bt_logger.cpp
+    wm_audit_log.cpp
 )
 
 target_include_directories(mujin_core PUBLIC
