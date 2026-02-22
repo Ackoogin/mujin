@@ -125,31 +125,49 @@ PlanAuditLog (Layer 5) — records each planning episode independently
 
 The `ros2/` directory is a separate `ament_cmake` package (ROS2 Jazzy, `D:\Dev\ros2-windows`). It wraps `mujin_core` with three lifecycle nodes without modifying the core.
 
-**Build sequence:**
+**Build sequence (use `build_ros2.bat`):**
 ```bat
-:: 1. Install mujin_core (adds cmake/mujin_coreConfig.cmake.in install rules)
+:: From the repo root (VS 2022 + pixi environment):
+build_ros2.bat
+```
+Or step by step (from a pixi shell at D:\Dev\ros2-windows):
+```bat
+:: Add pixi DLLs to PATH first (yaml.dll, spdlog.dll, etc.)
+set PATH=D:\Dev\ros2-windows\.pixi\envs\default\Library\bin;%PATH%
+
+:: 1. Install mujin_core
 cmake --preset default -DCMAKE_INSTALL_PREFIX=build/install
 cmake --build build --config Release -j%NUMBER_OF_PROCESSORS%
 cmake --install build --config Release
 
 :: 2. Build the ROS2 package
 call D:\Dev\ros2-windows\setup.bat
-colcon build --packages-select mujin_ros2 --base-paths ros2 ^
-  --cmake-args -DCMAKE_PREFIX_PATH="D:/Dev/ros2-windows;D:/Dev/repo/mujin/build/install"
+pixi run --manifest-path D:\Dev\ros2-windows\pixi.toml colcon build ^
+  --packages-select mujin_ros2 --base-paths ros2 ^
+  --cmake-args "-DCMAKE_PREFIX_PATH=D:/Dev/ros2-windows;D:/Dev/repo/mujin/build/install"
 ```
+
+**Run (use `run_ros2.bat`):**
+```bat
+:: From a pixi shell at D:\Dev\ros2-windows:
+call D:\Dev\repo\mujin\run_ros2.bat
+```
+The script adds pixi Library\bin to PATH, sources `setup.bat` + `install\setup.bat`, then launches `mujin_combined` with the UAV search domain.
 
 **Run tests:**
 ```bat
-colcon test --packages-select mujin_ros2
-colcon test-result --verbose
+pixi run --manifest-path D:\Dev\ros2-windows\pixi.toml colcon test --packages-select mujin_ros2
+pixi run --manifest-path D:\Dev\ros2-windows\pixi.toml colcon test-result --verbose
 ```
 
 **In-process demo (all nodes on one executor):**
 ```bat
-call install\setup.bat
+:: From a pixi shell:
+call D:\Dev\ros2-windows\setup.bat
+call D:\Dev\repo\mujin\install\setup.bat
 ros2 launch mujin_ros2 mujin_inprocess.launch.py ^
-  pddl_file:=domains/uav_search/domain.pddl ^
-  problem_file:=domains/uav_search/problem.pddl
+  pddl_file:=D:/Dev/repo/mujin/domains/uav_search/domain.pddl ^
+  problem_file:=D:/Dev/repo/mujin/domains/uav_search/problem.pddl
 ```
 
 **ROS2 node roles:**

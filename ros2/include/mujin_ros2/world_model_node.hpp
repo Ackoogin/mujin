@@ -13,6 +13,7 @@
 
 #include <atomic>
 #include <mutex>
+#include <optional>
 
 namespace mujin_ros2 {
 
@@ -50,7 +51,7 @@ public:
 
 private:
     mujin::WorldModel  wm_;
-    mujin::WmAuditLog  wm_audit_;
+    std::optional<mujin::WmAuditLog> wm_audit_;
 
     // Services
     rclcpp::Service<mujin_ros2::srv::GetFact>::SharedPtr    srv_get_fact_;

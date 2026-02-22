@@ -30,33 +30,43 @@ WorldModelNode::on_configure(const rclcpp_lifecycle::State&) {
 
     // Set up audit log
     if (get_parameter("audit_log.enabled").as_bool()) {
-        wm_audit_ = mujin::WmAuditLog(get_parameter("audit_log.path").as_string());
+        wm_audit_.emplace(get_parameter("audit_log.path").as_string());
     }
 
     // Wire audit callback
     wm_.setAuditCallback([this](uint64_t ver, uint64_t ts_us,
                                 const std::string& fact, bool val,
                                 const std::string& src) {
-        wm_audit_.onFactChange(ver, ts_us, fact, val, src);
+        if (wm_audit_) wm_audit_->onFactChange(ver, ts_us, fact, val, src);
         state_dirty_.store(true);
     });
 
     // Services are created in on_configure so they are available immediately
     // (other nodes may start querying before this node is activated)
-    using std::placeholders::_1;
-    using std::placeholders::_2;
+    using GetFact    = mujin_ros2::srv::GetFact;
+    using SetFact    = mujin_ros2::srv::SetFact;
+    using QueryState = mujin_ros2::srv::QueryState;
 
-    srv_get_fact_ = create_service<mujin_ros2::srv::GetFact>(
+    srv_get_fact_ = create_service<GetFact>(
         "~/get_fact",
-        [this](auto req, auto res) { handleGetFact(req, res); });
+        [this](std::shared_ptr<GetFact::Request>  req,
+               std::shared_ptr<GetFact::Response> res) {
+            handleGetFact(req, res);
+        });
 
-    srv_set_fact_ = create_service<mujin_ros2::srv::SetFact>(
+    srv_set_fact_ = create_service<SetFact>(
         "~/set_fact",
-        [this](auto req, auto res) { handleSetFact(req, res); });
+        [this](std::shared_ptr<SetFact::Request>  req,
+               std::shared_ptr<SetFact::Response> res) {
+            handleSetFact(req, res);
+        });
 
-    srv_query_state_ = create_service<mujin_ros2::srv::QueryState>(
+    srv_query_state_ = create_service<QueryState>(
         "~/query_state",
-        [this](auto req, auto res) { handleQueryState(req, res); });
+        [this](std::shared_ptr<QueryState::Request>  req,
+               std::shared_ptr<QueryState::Response> res) {
+            handleQueryState(req, res);
+        });
 
     RCLCPP_INFO(get_logger(), "WorldModelNode configured: %u fluents, %u ground actions",
                 wm_.numFluents(), wm_.numGroundActions());
@@ -99,14 +109,14 @@ WorldModelNode::on_cleanup(const rclcpp_lifecycle::State&) {
     srv_get_fact_.reset();
     srv_set_fact_.reset();
     srv_query_state_.reset();
-    wm_audit_.flush();
+    if (wm_audit_) wm_audit_->flush();
     RCLCPP_INFO(get_logger(), "WorldModelNode cleaned up");
     return CallbackReturn::SUCCESS;
 }
 
 WorldModelNode::CallbackReturn
 WorldModelNode::on_shutdown(const rclcpp_lifecycle::State&) {
-    wm_audit_.flush();
+    if (wm_audit_) wm_audit_->flush();
     return CallbackReturn::SUCCESS;
 }
 

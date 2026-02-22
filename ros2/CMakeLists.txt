@@ -52,6 +52,8 @@ add_library(mujin_ros2_lib SHARED
     src/ros_wm_bridge.cpp
     src/lifecycle_manager.cpp
 )
+# On Windows, export all symbols so the import library (.lib) is generated.
+set_target_properties(mujin_ros2_lib PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 target_include_directories(mujin_ros2_lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -102,6 +104,7 @@ target_link_libraries(lifecycle_manager mujin_ros2_lib)
 # Install
 # ---------------------------------------------------------------------------
 install(TARGETS mujin_ros2_lib world_model_node planner_node executor_node mujin_combined lifecycle_manager
+    EXPORT mujin_ros2_lib
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION lib/${PROJECT_NAME}

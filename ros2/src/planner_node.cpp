@@ -31,7 +31,7 @@ PlannerNode::on_configure(const rclcpp_lifecycle::State&) {
     }
 
     if (get_parameter("plan_audit.enabled").as_bool()) {
-        plan_audit_ = mujin::PlanAuditLog(get_parameter("plan_audit.path").as_string());
+        plan_audit_.emplace(get_parameter("plan_audit.path").as_string());
     }
 
     // QueryState client for distributed mode
@@ -66,13 +66,13 @@ PlannerNode::on_deactivate(const rclcpp_lifecycle::State&) {
 PlannerNode::CallbackReturn
 PlannerNode::on_cleanup(const rclcpp_lifecycle::State&) {
     client_query_state_.reset();
-    plan_audit_.flush();
+    if (plan_audit_) plan_audit_->flush();
     return CallbackReturn::SUCCESS;
 }
 
 PlannerNode::CallbackReturn
 PlannerNode::on_shutdown(const rclcpp_lifecycle::State&) {
-    plan_audit_.flush();
+    if (plan_audit_) plan_audit_->flush();
     return CallbackReturn::SUCCESS;
 }
 
@@ -187,8 +187,8 @@ void PlannerNode::executePlan(std::shared_ptr<GoalHandlePlan> goal_handle) {
         ep.cost          = plan_result.cost;
         for (const auto& sig : result->plan_actions) ep.plan_actions.push_back(sig);
         ep.bt_xml = result->bt_xml;
-        plan_audit_.recordEpisode(ep);
-        plan_audit_.flush();
+        if (plan_audit_) plan_audit_->recordEpisode(ep);
+        if (plan_audit_) plan_audit_->flush();
     }
 
     RCLCPP_INFO(get_logger(), "Plan found: %zu steps, %.1f ms",

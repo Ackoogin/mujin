@@ -15,6 +15,7 @@
 #include "mujin_ros2/srv/query_state.hpp"
 
 #include <memory>
+#include <optional>
 #include <thread>
 
 namespace mujin_ros2 {
@@ -60,7 +61,7 @@ private:
     mujin::Planner       planner_;
     mujin::PlanCompiler  compiler_;
     mujin::ActionRegistry registry_;
-    mujin::PlanAuditLog  plan_audit_;
+    std::optional<mujin::PlanAuditLog> plan_audit_;
 
     // In-process mode: direct WorldModel pointer (null = use service)
     mujin::WorldModel* inprocess_wm_ = nullptr;

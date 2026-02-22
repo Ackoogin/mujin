@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(cmake:*)",
-      "Bash(ctest:*)"
+      "Bash(ctest:*)",
+      "Bash(cmd /c \"call D:\\\\Dev\\\\ros2-windows\\\\setup.bat && colcon --version\")",
+      "Bash(cmd /c \"call D:\\\\Dev\\\\ros2-windows\\\\setup.bat && where colcon\")",
+      "Bash(where:*)",
+      "Bash(pixi run:*)",
+      "Bash(powershell.exe -NoProfile -Command \":*)",
+      "Bash(powershell.exe -NoProfile -Command:*)",
+      "Bash(*)"
     ]
   }
 }

@@ -45,3 +45,7 @@
 
 # CMake
 CMakeUserPresets.json
+
+# Log
+log/*
+install/*
