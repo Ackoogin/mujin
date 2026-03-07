@@ -50,6 +50,7 @@ The relationship between PDDL and GSN is one of **evidence generation to argumen
 | [12-e2e-example.md](12-e2e-example.md) | End-to-End SACE Stage Application Example (with runnable PDDL) |
 | [13-tooling-analysis.md](13-tooling-analysis.md) | Tooling Gap Analysis: Planners and Verifiers for SACE |
 | [14-review-report.md](14-review-report.md) | Review of the current SACE/PDDL approach in this repository |
+| [15-approach-validity-review.md](15-approach-validity-review.md) | Review of the documentation approach for methodological validity |
 
 ---
 
