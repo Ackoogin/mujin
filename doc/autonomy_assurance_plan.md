@@ -15,6 +15,26 @@ Structured around:
 
 ---
 
+## PDDL Formal Modelling — SACE/ISO 21448/ISO 34502 Detail
+
+A companion document set provides detailed PDDL contribution mapping for each SACE stage, including GSN argument patterns, ISO 21448 (SOTIF) and ISO 34502 impacts, inputs, outputs, and UAV examples:
+
+| Document | Contents |
+|----------|----------|
+| [`sace/00_standards_context.md`](sace/00_standards_context.md) | Standards overview, GSN element reference, ISO 21448 four-quadrant model, ISO 34502 risk factor mapping |
+| [`sace/01_stage1_operating_context.md`](sace/01_stage1_operating_context.md) | PDDL domain/problem files as formal ODM; GSN Pattern [G] |
+| [`sace/02_stage2_hazardous_scenarios.md`](sace/02_stage2_hazardous_scenarios.md) | Fault-injected variants; counterexample traces; GSN Pattern [I] |
+| [`sace/03_stage3_safe_operating_concept.md`](sace/03_stage3_safe_operating_concept.md) | Trajectory constraints; feasibility analysis; GSN Pattern [N] |
+| [`sace/04_stage4_safety_requirements.md`](sace/04_stage4_safety_requirements.md) | Sub-domain decomposition; completeness proofs; GSN Pattern [S] |
+| [`sace/05_stage5_design_assurance.md`](sace/05_stage5_design_assurance.md) | Architecture-mapped domain; degraded-mode plans; GSN Pattern [X] |
+| [`sace/06_stage6_hazardous_failures.md`](sace/06_stage6_hazardous_failures.md) | Failure-mode variants; AMLAS linkage; GSN Pattern [DD] |
+| [`sace/07_stage7_out_of_context.md`](sace/07_stage7_out_of_context.md) | Fallback plan library; reachability analysis; GSN Pattern [PP] |
+| [`sace/08_stage8_verification.md`](sace/08_stage8_verification.md) | Plan validity certificates; coverage reports; GSN Pattern [UU] |
+| [`sace/09_residual_risk.md`](sace/09_residual_risk.md) | Functional insufficiencies; triggering conditions; misuse analysis (ISO 21448 core activity) |
+| [`sace/10_cross_stage_summary.md`](sace/10_cross_stage_summary.md) | Full artefact register; three-layer argument structure; stage-by-stage quick reference |
+
+---
+
 ## 0. System Overview (Non-SACE — reference context)
 
 ### 0.1 Architecture Summary
@@ -54,6 +74,7 @@ This decomposes into:
 ## 1. Operating Context Assurance (SACE Stage 1)
 
 > *Define and validate the operational boundaries within which the AS is deemed safe to operate.*
+> *PDDL formal modelling detail: [sace/01_stage1_operating_context.md](sace/01_stage1_operating_context.md)*
 
 ### 1.1 Operational Domain Model (ODM)
 
@@ -113,6 +134,7 @@ Per the DSTL biscuit book *"Assurance of Requirements"* dimension:
 ## 2. AS Hazardous Scenarios Identification (SACE Stage 2)
 
 > *Identify potential hazards arising from autonomy interactions.*
+> *PDDL formal modelling detail: [sace/02_stage2_hazardous_scenarios.md](sace/02_stage2_hazardous_scenarios.md)*
 
 ### 2.1 Hazard Analysis Techniques
 
@@ -151,6 +173,7 @@ Per the DSTL biscuit book *"Assurance of Requirements"* dimension:
 ## 3. Safe Operating Concept Assurance (SACE Stage 3)
 
 > *Define the requirements and constraints for safe operation.*
+> *PDDL formal modelling detail: [sace/03_stage3_safe_operating_concept.md](sace/03_stage3_safe_operating_concept.md)*
 
 ### 3.1 Safe Operating Concept (SOC)
 
@@ -188,6 +211,7 @@ Mapped to UK MOD Joint Doctrine Note (JDN) autonomy levels:
 ## 4. AS Safety Requirements Assurance (SACE Stage 4)
 
 > *Derive traceable safety requirements that address identified hazards.*
+> *PDDL formal modelling detail: [sace/04_stage4_safety_requirements.md](sace/04_stage4_safety_requirements.md)*
 
 ### 4.1 Safety Requirements (derived from Stage 2 Hazard IL)
 
@@ -226,6 +250,7 @@ Per the DSTL biscuit book *"Assurance of Algorithms"* dimension:
 ## 5. AS Design Assurance (SACE Stage 5)
 
 > *Assure that the design adequately addresses safety requirements.*
+> *PDDL formal modelling detail: [sace/05_stage5_design_assurance.md](sace/05_stage5_design_assurance.md)*
 
 ### 5.1 Design Assurance Arguments
 
@@ -268,6 +293,7 @@ Per the DSTL biscuit book *"Assurance of Data"* dimension:
 ## 6. Hazardous Failures Management (SACE Stage 6)
 
 > *Manage the consequences of failures within the AS.*
+> *PDDL formal modelling detail: [sace/06_stage6_hazardous_failures.md](sace/06_stage6_hazardous_failures.md)*
 
 ### 6.1 Failure Detection Mechanisms
 
@@ -311,6 +337,7 @@ Per SACE guidance, identify potential common-cause failures:
 ## 7. Out-of-Context Operation Assurance (SACE Stage 7)
 
 > *Assure safety when the AS operates outside its defined operating context.*
+> *PDDL formal modelling detail: [sace/07_stage7_out_of_context.md](sace/07_stage7_out_of_context.md)*
 
 ### 7.1 Out-of-Context Detection
 
@@ -344,6 +371,7 @@ The system must detect when it is operating outside the bounds specified in Stag
 ## 8. AS Verification Assurance (SACE Stage 8)
 
 > *Verify through testing, analysis, and inspection that safety requirements are met.*
+> *PDDL formal modelling detail: [sace/08_stage8_verification.md](sace/08_stage8_verification.md)*
 
 ### 8.1 TEVV Strategy (DSTL Framework)
 
@@ -495,3 +523,6 @@ If ML components are introduced (e.g. learned heuristics for the planner, ML-bas
 4. **Defence Standard 00-56** — UK MOD. *Safety Management Requirements for Defence Systems.*
 5. **STPA Handbook** — MIT. *System-Theoretic Process Analysis.*
 6. **UK MOD JDN 3/22** — Joint Doctrine Note: Autonomy in Defence.
+7. **ISO 21448:2022** — *Road vehicles — Safety of the intended functionality (SOTIF).* Addresses hazards arising from functional insufficiencies and performance limitations.
+8. **ISO 34502:2022** — *Road vehicles — Test scenarios for automated driving systems — Scenario-based safety evaluation framework.* Provides risk factor categories (perception, judgement, control) and annex scenario templates.
+9. **GSN Community Standard v3** — The Assurance Case Working Group. *Goal Structuring Notation Community Standard.*
