@@ -47,6 +47,8 @@ The relationship between PDDL and GSN is one of **evidence generation to argumen
 | [09-stage8-verification.md](09-stage8-verification.md) | Stage 8: Verification Assurance |
 | [10-residual-risk.md](10-residual-risk.md) | Residual Risk Management (cross-cutting) |
 | [11-cross-stage-summary.md](11-cross-stage-summary.md) | Cross-Stage Summary and Key Relationships |
+| [12-e2e-example.md](12-e2e-example.md) | End-to-End SACE Stage Application Example (with runnable PDDL) |
+| [13-tooling-analysis.md](13-tooling-analysis.md) | Tooling Gap Analysis: Planners and Verifiers for SACE |
 
 ---
 
