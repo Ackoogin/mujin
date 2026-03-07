@@ -10,7 +10,7 @@ Decomposes system-level safety requirements to sub-system requirements and valid
 
 ## PDDL Contribution
 
-PDDL supports hierarchical decomposition via HTN extensions or multi-level domain modelling. Requirements at each tier are verified by checking that decomposed plans satisfy constraints from the tier above.
+PDDL supports hierarchical decomposition via multi-level domain modelling, where each sub-system gets its own domain file with localised constraints. Requirements at each tier are verified by checking that decomposed plans satisfy their local constraints. However, proving that sub-domain constraints *jointly imply* the system-level constraint requires additional tooling — a theorem prover or model checker (see [Tooling Analysis](13-tooling-analysis.md)). PDDL provides per-tier satisfaction evidence and traceability, not compositional correctness proofs.
 
 ## Inputs
 
@@ -27,7 +27,7 @@ PDDL supports hierarchical decomposition via HTN extensions or multi-level domai
 |--------|-------------|
 | **Decomposed PDDL sub-domains** | Per-subsystem domain files with localised constraints |
 | **Requirement satisfaction proofs** | Plan traces at each tier demonstrating constraint satisfaction |
-| **Completeness analysis** | Sub-domain constraints jointly imply system constraints |
+| **Completeness analysis** | Traceability evidence that all system constraints have corresponding sub-domain constraints. Formal proof of joint implication requires a theorem prover or model checker |
 | **Traceability matrix** | Links decomposed requirements to sub-domain predicates and constraints |
 
 ## GSN Mapping — Pattern [S]
@@ -39,7 +39,7 @@ Pattern [S] argues that safety requirements are correctly decomposed, complete, 
 | **Goal** | Safety requirements at tier *n* are correctly decomposed to tier *n+1* and the decomposition preserves safety intent |
 | **Strategy** | Argue that sub-domain constraints jointly imply system-level constraints. Decompose into sub-goals for completeness, consistency, and traceability |
 | **Context** | The system architecture defining decomposition boundaries. The PDDL sub-domain structure |
-| **Solution** | The completeness analysis provides formal evidence that no system-level constraint is lost in decomposition. Requirement satisfaction proofs demonstrate that plans at each tier satisfy their local constraints. The traceability matrix provides audit evidence |
+| **Solution** | The completeness analysis provides traceability evidence that each system-level constraint maps to sub-domain constraints (formal proof of joint implication requires a model checker). Requirement satisfaction proofs demonstrate that plans at each tier satisfy their local constraints. The traceability matrix provides audit evidence |
 | **Justification** | ISO 34502's three risk factor categories justify the decomposition structure, aligning sub-domains with perception, judgement, and control. ISO 21448 functional insufficiency tracing justifies the requirement to track which sub-system is responsible for each triggering condition |
 
 ## ISO 21448 (SOTIF) Impact

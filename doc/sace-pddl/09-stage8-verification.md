@@ -10,7 +10,7 @@ Determines the verification strategy, executes verification, and builds the argu
 
 ## PDDL Contribution
 
-PDDL plan traces are formal verification evidence. Each valid plan is a constructive proof. Counterexample plans from fault-injected domain variants are negative evidence. Exhaustive state-space exploration provides coverage metrics.
+PDDL plan traces are formal verification evidence. Each valid plan is a constructive proof of goal reachability *within the PDDL formalism* — it demonstrates that the goal is achievable from the specified initial state under the modelled constraints. This is genuine formal evidence, but its applicability to the real system depends on model fidelity (see Assumption nodes below). Counterexample plans from fault-injected domain variants are negative evidence. State-space exploration provides coverage metrics over the abstract model.
 
 ## Inputs
 
@@ -44,7 +44,7 @@ PDDL plan traces are formal verification evidence. Each valid plan is a construc
 
 ## ISO 21448 (SOTIF) Impact
 
-Constrained plan traces prove mitigation of known-unsafe scenarios. State-space coverage metrics provide evidence about the unknown-unsafe residual.
+Constrained plan traces demonstrate mitigation of known-unsafe scenarios within the model. State-space coverage metrics provide evidence about the *modelled* unknown-unsafe residual — they bound the unexplored region of the abstract state space, not the real-world exposure-weighted risk. The link between abstract coverage and operational risk requires a separate confidence argument (see Assumption nodes).
 
 ## ISO 34502 Impact
 

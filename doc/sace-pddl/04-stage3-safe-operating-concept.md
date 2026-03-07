@@ -10,7 +10,7 @@ Defines the Safe Operating Concept (SOC) — the system-level safety requirement
 
 ## PDDL Contribution
 
-Safety requirements are encoded as PDDL trajectory constraints (PDDL 3.0 and later) or goal-state invariants. The planner only produces plans satisfying these constraints, providing constructive proof that the SOC is achievable.
+Safety requirements are encoded as PDDL trajectory constraints (PDDL 3.0 and later) or goal-state invariants. The planner only produces plans satisfying these constraints, providing constructive evidence that the SOC is achievable within the model. This evidence is a proof of feasibility in the PDDL formalism, not a proof of real-world safety — the gap between model and reality is captured in the assumption nodes below.
 
 ## Inputs
 
@@ -40,7 +40,7 @@ Pattern [N] argues that the SOC sufficiently mitigates all identified hazardous 
 | **Strategy** | Argue over each hazardous scenario that its corresponding safety constraint is satisfiable and that constrained plans achieve mission goals. Decompose into a sub-goal per hazardous scenario |
 | **Context** | The set of identified hazardous scenarios from Stage 2. The definition of "sufficiently safe". The SOC-to-PDDL traceability mapping |
 | **Solution** | The feasibility analysis demonstrates that plans exist satisfying all constraints. The constraint conflict report (if any conflicts exist) provides evidence that specific requirement interactions have been resolved |
-| **Justification** | ISO 21448 requires mitigation of known-unsafe scenarios; PDDL constraint satisfaction constitutes formal mitigation evidence. ISO 34502 safety test objectives map to specific PDDL constraints |
+| **Justification** | ISO 21448 requires mitigation of known-unsafe scenarios; PDDL constraint satisfaction constitutes formal evidence of mitigation feasibility within the model. ISO 34502 safety test objectives map to specific PDDL constraints |
 | **Assumption** | The PDDL trajectory constraints faithfully encode the natural-language safety requirements. Must be validated through review of the SOC-to-PDDL traceability |
 
 ## ISO 21448 (SOTIF) Impact

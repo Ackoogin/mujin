@@ -258,13 +258,17 @@ The execution planner (LAPKT BRFS) and the analysis tools serve different purpos
 
 This separation is itself a safety argument: the execution planner's simplicity is an assurance property. The analysis tools verify the execution planner's domain, not replace it.
 
-### 2. Shared PDDL as Single Source of Truth
+### 2. Shared PDDL Domain with Formal Subsumption
 
-All tools consume the same PDDL domain files (or minimal extensions of them). This ensures that:
+All tools consume the same baseline PDDL domain files, though analysis tools may use richer extensions (trajectory constraints, durative actions, probabilistic effects). This design relies on a **formal subsumption argument**: the STRIPS execution domain is a *restriction* of the richer analysis domains, meaning properties proven on the analysis domain hold on the execution domain provided the analysis domain only adds constraints or expressiveness that the STRIPS domain implicitly satisfies.
 
-- The model being analysed is the model being executed
-- Traceability from evidence to execution is direct
-- Changes to the domain automatically trigger re-analysis
+This subsumption relationship must be explicitly argued for each analysis tool integration. It ensures that:
+
+- The model being analysed is traceable to the model being executed
+- Traceability from evidence to execution is maintained through the subsumption argument
+- Changes to the baseline domain automatically trigger re-analysis across all tool tiers
+
+Note: "single source of truth" is used informally — the execution and analysis domains are not identical, but are formally related through subsumption
 
 ### 3. Incremental Adoption
 
