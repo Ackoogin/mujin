@@ -10,162 +10,170 @@ The review was static and argument-focused. It did not assess runtime behavior, 
 
 ## Findings
 
-### 1. High: The docs often treat plan existence as proof of safety claims that are actually universal or adequacy claims
+### 1. High: Stage 7 overstates single-scenario planning evidence as proof of a universal reachability claim
+
+**Evidence**
+
+- `doc/sace-pddl/08-stage7-out-of-context.md:13-14` says planning from out-of-context states demonstrates whether safe fallback actions are always reachable.
+- `doc/sace-pddl/08-stage7-out-of-context.md:28-40` describes the out-of-context reachability analysis as a "formal proof of safe-state reachability".
+- `doc/sace-pddl/12-e2e-example.md:189-193` more carefully states the actual question for Stage 7 as universal reachability and notes that a model checker is needed for the "from every state" property.
+
+**Why this matters**
+
+This is the clearest place where the prose outruns the method. A planner run from one initial state can provide strong scenario-specific evidence that a safe state is reachable from that state in the model. It does not establish the universal claim that safe recovery exists from **all** relevant out-of-context states.
+
+That universal claim is a valid Stage 7 goal, but it needs a stronger analysis method than a collection of individual plan-existence checks.
+
+**Recommendation**
+
+Revise Stage 7 so that:
+
+- individual plans are described as fallback evidence for specific modeled states,
+- "formal proof" is reserved for model-checking style analyses,
+- and the universal claim is explicitly marked as requiring additional tooling beyond the current planner.
+
+### 2. Medium: Stage 3, Stage 5, and parts of Stage 8 use stronger prose than the GSN structure actually requires
 
 **Evidence**
 
 - `doc/sace-pddl/04-stage3-safe-operating-concept.md:13-14` says constrained planning provides a "constructive proof" that the SOC is achievable.
 - `doc/sace-pddl/06-stage5-design-assurance.md:13-14` says PDDL verifies that the architecture satisfies safety constraints under nominal and degraded configurations.
-- `doc/sace-pddl/08-stage7-out-of-context.md:13-14,28-40` says planning from out-of-context states demonstrates whether fallback actions are always reachable and calls the analysis a "formal proof".
-- `doc/sace-pddl/09-stage8-verification.md:13-14,47-47` says each valid plan is a constructive proof and that constrained plan traces prove mitigation of known-unsafe scenarios.
+- `doc/sace-pddl/09-stage8-verification.md:13-14` says each valid plan is a constructive proof.
+- `doc/sace-pddl/01-gsn-role.md:44-60` already explains that PDDL artefacts primarily populate **solution** nodes, while model fidelity and abstraction limits belong in **assumption** nodes.
 
 **Why this matters**
 
-A planner finding a plan demonstrates that at least one action sequence exists in the model for a given initial state and goal. That is much weaker than the kinds of SACE claims the stage documents are trying to support, such as:
+The core GSN structure is mostly sound here. The documentation generally treats plan traces as evidence items attached to solution nodes, not as the entire argument. Within the formalism, a valid plan is legitimately constructive evidence that the modeled goal is reachable from the modeled initial state.
 
-- all relevant degraded states are recoverable,
-- the SOC is sufficient across the hazardous scenario class,
-- mitigation is effective in general rather than for one modelled case,
-- the real system will behave consistently with the abstract plan.
+The issue is therefore mostly one of presentation, not argument structure:
 
-Existential feasibility evidence is useful, but it is not by itself proof of safety sufficiency, universal recoverability, or verification completeness.
+- Stage 3 and Stage 5 should speak more clearly in terms of modeled feasibility and scenario-specific evidence.
+- Stage 8 can retain the formal notion of constructive proof, but it should be qualified as proof **within the model**, with relevance to reality mediated by the existing assumption nodes on model fidelity and traceability.
 
 **Recommendation**
 
-Reword these sections so that planning traces are described as:
+Tighten the prose rather than redesigning the GSN mapping. The key fix is to distinguish:
 
-- feasibility evidence,
-- scenario-specific evidence,
-- or partial formal evidence within the modeled abstraction,
+- evidence that a plan exists in the formal model,
+- from stronger claims about sufficiency, adequacy, or real-world completeness.
 
-rather than as standalone proof of the stage-level safety claim. Reserve stronger language such as "proof" for cases where the documentation explicitly introduces model checking or another method that can justify the stronger property.
-
-### 2. High: The Stage 2 hazard-identification argument is circular about unknown-unsafe discovery and completeness
+### 3. Medium: Stage 2 should qualify its "unknown-unsafe" language, but the underlying argument is assumption-based rather than circular
 
 **Evidence**
 
-- `doc/sace-pddl/03-stage2-hazardous-scenarios.md:13-14` says PDDL exploration enables automated hazard discovery.
-- `doc/sace-pddl/03-stage2-hazardous-scenarios.md:35-44` frames the argument as showing that all hazardous scenarios have been identified and that the identification is complete and correct.
-- `doc/sace-pddl/03-stage2-hazardous-scenarios.md:48-48` says PDDL search addresses the unknown-unsafe quadrant.
-- `doc/sace-pddl/03-stage2-hazardous-scenarios.md:44-44` simultaneously assumes the hazard predicate set is complete.
+- `doc/sace-pddl/03-stage2-hazardous-scenarios.md:35-44` frames Pattern [I] as an argument that hazardous scenarios have been identified, while also explicitly stating the assumption that the hazard predicate set is complete.
+- `doc/sace-pddl/03-stage2-hazardous-scenarios.md:44-44` clearly identifies hazard-set completeness as an assumption requiring review against the preliminary hazard analysis.
+- `doc/sace-pddl/03-stage2-hazardous-scenarios.md:48-48` says PDDL state-space search addresses the unknown-unsafe quadrant.
 
 **Why this matters**
 
-The modeled state space can only reveal hazards that have already been represented through predicates, actions, abstractions, and fault injections. That makes PDDL exploration valuable for systematic analysis of the **modeled** scenario space, but it cannot by itself justify the stronger claim that:
+The earlier version of this review overstated the problem as circularity. The document does, in fact, use GSN in the intended way: completeness of the hazard encoding is an explicit assumption, not something proven from within the PDDL model.
 
-- all hazardous scenarios have been identified, or
-- the unknown-unsafe space has been covered in the broader SOTIF sense.
-
-As written, the argument risks using the model to prove the completeness of the very modeling choices that limit what the model can express.
+The real issue is narrower. The phrase "addresses the unknown-unsafe quadrant" risks sounding broader than the method actually supports. PDDL search can systematically explore the **modeled** unknown-unsafe space, but it does not by itself establish coverage of the broader real-world unknown-unsafe space.
 
 **Recommendation**
 
-Narrow the claim to something like:
+Keep the assumption-based structure, but qualify the prose so that Stage 2 says PDDL exploration addresses the modeled unknown-unsafe space and converts candidate hazards into explicit counterexamples or negative results.
 
-"PDDL provides systematic exploration of the modeled hazard space and can convert manually identified or systematically generated candidate scenarios into explicit counterexamples or negative results."
-
-Then keep completeness as an argued assumption supported by external hazard analysis, domain review, scenario derivation, and model-fidelity evidence.
-
-### 3. High: The residual-risk discussion overstates what PDDL coverage metrics can support
+### 4. Medium: The residual-risk prose overreaches beyond the caveats already present in the assumption nodes
 
 **Evidence**
 
-- `doc/sace-pddl/10-residual-risk.md:35-42` links residual-risk acceptance to exploring the unknown-unsafe space to a defined coverage threshold.
-- `doc/sace-pddl/10-residual-risk.md:107-118,141-145` says PDDL state-space coverage metrics can bound unknown-unsafe residual risk.
-- `doc/sace-pddl/10-residual-risk.md:171-171` gives an example based on "94% of reachable states".
-- `doc/sace-pddl/09-stage8-verification.md:29-29,43-47` makes the same move from state-space coverage to verification completeness and unknown-unsafe evidence.
+- `doc/sace-pddl/10-residual-risk.md:107-118,141-145` says PDDL coverage metrics can support or bound arguments about unknown-unsafe residual risk.
+- `doc/sace-pddl/10-residual-risk.md:171-171` gives an illustrative example based on "94% of reachable states".
+- `doc/sace-pddl/09-stage8-verification.md:43-47` similarly links state-space coverage to unknown-unsafe evidence.
+- `doc/sace-pddl/09-stage8-verification.md:43-43` already lists as an assumption that PDDL state-space coverage is a meaningful proxy for real-world scenario coverage.
 
 **Why this matters**
 
-Coverage over an abstract planner state space is not the same thing as:
+The structure of the argument is better than the body prose suggests. The assumptions section already acknowledges the key gap: abstract state-space coverage is not automatically the same thing as operational scenario coverage or exposure-weighted residual risk.
 
-- real-world operational scenario coverage,
-- exposure-weighted scenario coverage,
-- or a quantitative residual-risk bound in the ISO 21448 sense.
-
-Even if the state count is accurate, a percentage of reachable abstract states does not directly tell you the probability mass, operational significance, or representational adequacy of what remains unexplored.
+The problem is therefore one of consistency. Parts of the body read as if coverage metrics directly support residual-risk bounds, while the assumption nodes more carefully acknowledge that a confidence argument is still required.
 
 **Recommendation**
 
-Reframe coverage metrics as internal model-exploration indicators unless the documentation also introduces:
+Align the body text with the existing caveats. Describe coverage metrics as:
 
-- an explicit mapping from abstract states to scenario classes,
-- a defensible exposure model,
-- and a justified argument for why the metric correlates with residual risk.
+- model-exploration evidence,
+- confidence indicators for systematic analysis,
+- or inputs to a broader residual-risk argument,
 
-Without that bridge, the safer claim is that coverage metrics support confidence in systematic exploration of the model, not that they bound residual risk.
+unless and until the docs add an explicit bridge from abstract states to operational exposure.
 
-### 4. Medium: Stage 4 presents requirement decomposition as if PDDL structure itself can prove compositional correctness
+### 5. Medium: Stage 4 mixes direct PDDL contributions with stronger outputs that require additional tooling
 
 **Evidence**
 
-- `doc/sace-pddl/05-stage4-safety-requirements.md:13-13` says PDDL supports hierarchical decomposition via HTN extensions or multi-level modelling.
-- `doc/sace-pddl/05-stage4-safety-requirements.md:28-30,39-42` says the outputs and solution nodes include a completeness analysis showing sub-domain constraints jointly imply system constraints.
-- `doc/sace-pddl/05-stage4-safety-requirements.md:43-51` uses ISO 34502 categories to justify the decomposition structure.
-- `doc/sace-pddl/12-e2e-example.md:126-136` later concedes that proving joint implication requires a theorem prover or model checker.
+- `doc/sace-pddl/05-stage4-safety-requirements.md:13-13` references HTN extensions or multi-level modelling as if they establish requirement decomposition support.
+- `doc/sace-pddl/05-stage4-safety-requirements.md:28-30,39-42` lists a completeness analysis showing that sub-domain constraints jointly imply system constraints.
+- `doc/sace-pddl/12-e2e-example.md:126-136` later states more precisely that proving joint implication requires a theorem prover or model checker.
 
 **Why this matters**
 
-There is an important difference between:
+Stage 4 contains genuine PDDL value:
 
-- using PDDL to organise requirements and provide traceability, and
-- proving that the decomposition is complete, consistent, and semantically preserves the system-level safety requirement.
+- decomposition structure,
+- traceability,
+- and per-tier satisfaction evidence.
 
-HTN-style structure or multi-level domain modelling can help document decomposition, but it does not by itself prove joint implication. Also, ISO 34502 risk-factor categories are useful for scenario derivation, but they do not automatically justify the architectural decomposition of safety requirements.
+What it does not clearly separate is which outputs come directly from the PDDL/planning approach and which require a stronger formal method. The current text risks blurring "useful decomposition evidence" with "proof of compositional correctness".
 
 **Recommendation**
 
-Position Stage 4 PDDL artefacts primarily as decomposition and traceability aids unless a stronger formal method is added. Align the stage-level claims with the more cautious wording already used in the end-to-end example.
+Keep per-tier plan traces and traceability as legitimate Stage 4 evidence, but split the outputs into:
 
-### 5. Medium: The "single source of truth" argument is weaker than the docs claim once richer offline tools are introduced
+- evidence the current PDDL approach can provide directly, and
+- stronger compositional claims that require additional tooling.
+
+Also qualify or remove the HTN reference unless the documentation is explicitly discussing future or external methods rather than current repository capability.
+
+### 6. Medium: The "single source of truth" section oversells a point that the assumptions table already qualifies correctly
 
 **Evidence**
 
-- `doc/sace-pddl/13-tooling-analysis.md:254-259` explicitly separates STRIPS runtime execution from richer offline analysis tooling.
-- `doc/sace-pddl/13-tooling-analysis.md:263-267` then says all tools consume the same PDDL files "or minimal extensions", ensuring that the analyzed model is the executed model.
-- `doc/sace-pddl/13-tooling-analysis.md:279-281` acknowledges the key assumption: the STRIPS execution domain must be semantically compatible with the richer analysis domains.
+- `doc/sace-pddl/13-tooling-analysis.md:261-267` presents shared PDDL as a "single source of truth" ensuring the analyzed model is the executed model.
+- `doc/sace-pddl/13-tooling-analysis.md:279-281` more carefully states the actual requirement: the STRIPS execution domain must be semantically compatible with the richer analysis domains, supported by a formal subsumption argument.
 
 **Why this matters**
 
-Once the assurance case depends on constrained planners, model checkers, temporal planners, or probabilistic models, the argument is no longer simply "the same model was analyzed and executed". Instead, the validity of the approach depends on a further claim:
+The substance is mostly there. The documentation already identifies the need for a conformance or subsumption argument between the execution model and richer offline evidence models.
 
-- that the richer offline model is a conservative or otherwise sound extension of the execution model, and
-- that properties proven offline continue to apply to the restricted runtime semantics.
-
-That can be a valid approach, but only if it is treated as an explicit conformance or subsumption argument, not as a direct consequence of shared filenames or closely related PDDL sources.
+The problem is presentation and emphasis. The section heading creates a stronger impression than the main technical claim can justify on its own. Once richer offline tools are introduced, validity depends not just on shared PDDL artefacts, but on an explicit argument that properties proven offline still apply to the restricted runtime semantics.
 
 **Recommendation**
 
-Keep the separation-of-execution-and-analysis architecture, but soften the "single source of truth" claim. Replace it with a stronger requirement for:
-
-- model correspondence,
-- semantic compatibility,
-- and explicit traceability between offline evidence models and runtime execution models.
+Rename or soften the "single source of truth" framing and promote the subsumption/conformance argument into the main text, rather than leaving it primarily in the assumptions table.
 
 ## Overall assessment
 
-The overall direction is credible as a **documentation and evidence-generation framework** for a SACE-oriented planning system. The strongest part of the approach is the recognition, especially in `13-tooling-analysis.md` and `12-e2e-example.md`, that different assurance questions require different tools.
+The overall documentation approach is more valid than this review's earlier draft implied. The GSN structure generally does the right thing:
 
-The weakest part is that several stage documents still overstate what planning artefacts can prove. In particular, they blur the distinction between:
+- plan traces are treated as solution-node evidence,
+- abstraction and model-fidelity gaps are represented as assumptions,
+- and the tooling analysis correctly recognizes when stronger methods are needed.
 
-- existential plan feasibility,
-- universal safety properties,
-- completeness arguments,
-- and residual-risk arguments.
+The main issue is not that the argument structure is fundamentally wrong. It is that some of the prose, especially in the stage documents, sometimes overstates what the evidence shows and does not always stay aligned with the more careful caveats already present elsewhere in the documentation set.
 
-As currently written, the documentation is strongest when read as:
+The approach is strongest when read as:
 
 - a structured way to model scenarios,
-- generate formal scenario-specific evidence,
-- organise assumptions,
-- and connect offline analysis artefacts into a GSN safety case.
+- generate formal evidence within the modeled abstraction,
+- organize assumptions explicitly,
+- and connect offline analysis artefacts into a GSN-based safety argument.
 
-It is much less convincing when read as claiming that PDDL planning alone can close the SACE argument for hazard completeness, mitigation sufficiency, out-of-context recoverability, or residual-risk acceptability.
+It is weakest where the prose appears to collapse the distinction between:
+
+- modeled feasibility,
+- universal properties,
+- residual-risk justification,
+- and real-world adequacy.
 
 ## Recommended next steps
 
-1. Replace "proof" language in the stage documents with more precise terms such as "scenario-specific evidence", "feasibility evidence", or "partial formal evidence".
-2. Explicitly separate "modeled hazard-space coverage" from "real-world hazard completeness" and keep the latter as an assumption requiring external support.
-3. Recast state-space coverage metrics as confidence indicators unless a formal bridge to operational exposure and residual risk is added.
-4. Align Stage 4 with the more careful wording already present in `12-e2e-example.md` about the need for stronger formal methods for joint implication.
-5. Strengthen the documented correspondence argument between offline evidence models and runtime execution semantics.
+1. Fix Stage 7 first by removing "formal proof" language for universal reachability unless backed by model checking.
+2. Soften Stage 3 and Stage 5 wording to emphasize modeled feasibility and scenario-specific evidence.
+3. Qualify Stage 8 language so "constructive proof" is clearly stated as proof within the formal model, with real-world relevance mediated by assumption nodes.
+4. Update Stage 2 wording around "unknown-unsafe" so it refers to the modeled unknown-unsafe space, while preserving the explicit completeness assumption.
+5. Align the residual-risk body text with its existing assumption nodes so coverage metrics are not presented as direct residual-risk bounds without an exposure bridge.
+6. Split Stage 4 outputs into direct PDDL contributions versus outputs requiring stronger formal methods.
+7. Replace or soften "single source of truth" in the tooling analysis and promote the subsumption argument into the main narrative.
