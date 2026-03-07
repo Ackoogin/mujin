@@ -9,9 +9,15 @@ Structured around:
 | **AMLAS** (Assurance of Machine Learning for Autonomous Systems) | University of York / AAIP | ML-component-specific assurance (if/when ML is introduced) |
 | **DSTL Biscuit Book** (Assurance of AI & Autonomous Systems, 2021) | UK MOD / DSTL | Cross-cutting assurance dimensions — requirements, data, algorithms, integration, adversarial |
 | **Defence Standard 00-56** | UK MOD | Safety Management Requirements for Defence Systems |
+| **ISO 21448 (SOTIF)** | ISO | Safety of the intended functionality — functional insufficiency analysis, four-quadrant scenario classification |
+| **ISO 34502** | ISO | Scenario-based safety evaluation — systematic risk factor derivation across perception, judgement, and control |
 
 > [!NOTE]
 > This plan is modular by design. Each numbered section maps to a SACE stage and can be instantiated, reviewed, and evidenced independently. DSTL "biscuit book" cross-cutting concerns are woven through the relevant stages. AMLAS stages are called out where ML components may be introduced.
+
+### PDDL Formal Modelling & GSN Argument Mapping
+
+Detailed documentation of how PDDL formal models contribute to each SACE stage, with GSN argument pattern mappings, ISO 21448/34502 impacts, and UAV worked examples, is provided in the **[SACE–PDDL Integration Guide](sace-pddl/00-index.md)** (12 indexed files covering all 8 stages, residual risk management, and cross-stage summary).
 
 ---
 
@@ -495,3 +501,5 @@ If ML components are introduced (e.g. learned heuristics for the planner, ML-bas
 4. **Defence Standard 00-56** — UK MOD. *Safety Management Requirements for Defence Systems.*
 5. **STPA Handbook** — MIT. *System-Theoretic Process Analysis.*
 6. **UK MOD JDN 3/22** — Joint Doctrine Note: Autonomy in Defence.
+7. **ISO 21448:2022** — Road vehicles — Safety of the intended functionality (SOTIF).
+8. **ISO 34502:2022** — Road vehicles — Test scenarios for automated driving systems — Scenario based safety evaluation framework.
