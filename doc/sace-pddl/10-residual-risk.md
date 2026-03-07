@@ -104,7 +104,7 @@ After all functional insufficiencies have been identified, triggering conditions
 
 2. **Known-unsafe scenarios with incomplete mitigations** — Where PDDL analysis reveals that a mitigation does not fully eliminate the hazardous state (e.g. a safe-state is reachable but with non-zero probability of transient unsafe behaviour during transition), the residual risk must be explicitly quantified.
 
-3. **Unknown-unsafe scenarios** — Residual risk from scenarios not yet discovered. PDDL state-space coverage metrics provide evidence about how much of the scenario space has been explored. The acceptance argument is that the unexplored region is sufficiently small (by coverage metrics) and that the exploration was systematic (by ISO 34502 risk factor coverage) to make the probability of encountering an unknown-unsafe scenario acceptably low.
+3. **Unknown-unsafe scenarios** — Residual risk from scenarios not yet discovered. PDDL state-space coverage metrics provide evidence about how much of the *modelled* scenario space has been explored. The acceptance argument combines two elements: (a) coverage metrics showing that the unexplored region of the abstract state space is small, and (b) a confidence argument that the model's state space is a meaningful proxy for real-world scenario diversity. The latter depends on model fidelity evidence and the systematic derivation of the model from ISO 34502 risk factor categories. Abstract state coverage alone does not directly quantify real-world exposure-weighted risk.
 
 ---
 
@@ -115,7 +115,7 @@ PDDL contributes to residual risk management at four levels:
 1. Provides the **formal model** against which functional insufficiencies are identified — every model assumption is a potential insufficiency if violated
 2. Enables **systematic triggering condition exploration** through fault-injected domain variants parameterised by ISO 34502 risk factors
 3. **Verifies** that defined responses achieve safe states
-4. Provides **quantitative coverage metrics** supporting the argument that residual risk from unknown-unsafe scenarios is acceptable
+4. Provides **quantitative coverage metrics** over the abstract state space, which support — but do not alone establish — the argument that residual risk from unknown-unsafe scenarios is acceptable. A confidence argument linking model coverage to real-world risk is also required
 
 Critically, PDDL also reveals its own limits as residual risk contributors. The assumptions that the PDDL domain is a faithful abstraction, that the predicate set is complete, and that action effects are accurate are themselves sources of residual risk. These must be captured as GSN assumption nodes with explicit confidence arguments.
 
@@ -142,7 +142,7 @@ Residual risk management is the heart of ISO 21448. The standard requires that t
 
 - Formal identification of known-unsafe scenarios through state-space exploration
 - Verified mitigations through constrained planning
-- Coverage metrics that bound the unknown-unsafe residual
+- Coverage metrics over the abstract state space that inform (but do not directly bound) the unknown-unsafe residual — the link between model coverage and real-world risk requires a confidence argument grounded in model fidelity evidence
 
 The acceptance criteria must account for both the probability of encountering an unmitigated scenario and the severity of the potential outcome, consistent with ISO 21448's risk-based approach.
 

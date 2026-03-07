@@ -45,7 +45,7 @@ Pattern [I] argues that all hazardous scenarios have been identified and the ide
 
 ## ISO 21448 (SOTIF) Impact
 
-ISO 21448's four-quadrant model structures the argument. PDDL state-space search addresses the **unknown-unsafe** quadrant by exploring states not anticipated during manual hazard analysis. Each counterexample trace transitions a scenario from unknown-unsafe to known-unsafe.
+ISO 21448's four-quadrant model structures the argument. PDDL state-space search addresses the **unknown-unsafe** quadrant *within the modelled state space* by exploring states not anticipated during manual hazard analysis. Each counterexample trace transitions a scenario from unknown-unsafe to known-unsafe. Note that PDDL exploration cannot discover hazards arising from real-world phenomena absent from the model (state space insufficiencies — see [Residual Risk](10-residual-risk.md)). The completeness of the model itself remains an assumption requiring independent review.
 
 ## ISO 34502 Impact
 
