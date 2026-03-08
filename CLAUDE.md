@@ -2,6 +2,25 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Project Overview
+
+MUJIN is a **PDDL planning + BehaviorTree execution pipeline** for autonomous mission planning and execution. It takes formal mission descriptions (PDDL), automatically plans using LAPKT classical AI search, compiles plans into executable behaviour trees, and runs them with replan-on-failure. A 5-layer observability stack provides full auditability.
+
+See `README.md` for a comprehensive project overview, and `doc/stakeholder_summary.md` for a non-technical summary aimed at programme managers and other stakeholders.
+
+## Documentation
+
+| Document | Purpose |
+|----------|---------|
+| `README.md` | Project overview, quick start, architecture summary |
+| `doc/stakeholder_summary.md` | High-level approach and status for non-technical stakeholders |
+| `doc/concept.md` | Full technical architecture and API specification |
+| `doc/quickstart.md` | Getting started, build, run, Foxglove Studio setup |
+| `doc/extensions.md` | Feature roadmap with completion status |
+| `doc/plan.md` | Implementation plan and slice-to-production gap analysis |
+| `doc/autonomy_assurance_plan.md` | SACE/AMLAS/DSTL safety assurance framework |
+| `doc/neuro_symbolic_reasoning.md` | Neural/LLM integration options and architecture |
+
 ## Build
 
 This project uses MSVC on Windows via CMake. All dependencies (BehaviorTree.CPP, LAPKT, websocketpp, asio, googletest) are fetched automatically by CMake on first configure — no Conan or manual installs needed.
