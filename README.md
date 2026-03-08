@@ -142,6 +142,7 @@ doc/                     Documentation
   plan.md                Implementation plan and gap analysis
   autonomy_assurance_plan.md   SACE/AMLAS/DSTL safety assurance plan
   neuro_symbolic_reasoning.md  Neural integration options
+  neuro_symbolic_reasoning_review.md  Review of documented neuro-symbolic approaches
 ```
 
 ## Documentation
@@ -154,6 +155,7 @@ doc/                     Documentation
 | [Extensions](doc/extensions.md) | Engineers, programme leads | Feature roadmap with status tracking |
 | [Assurance Plan](doc/autonomy_assurance_plan.md) | Safety engineers, assessors | SACE/AMLAS/DSTL autonomy assurance framework |
 | [Neuro-Symbolic Integration](doc/neuro_symbolic_reasoning.md) | Engineers, architects | Options for adding AI/ML capabilities |
+| [Neuro-Symbolic Review Report](doc/neuro_symbolic_reasoning_review.md) | Engineers, architects, programme leads | Review of documented neuro-symbolic approaches, risks, and adoption order |
 
 ## Dependencies
 
