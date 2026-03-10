@@ -250,66 +250,103 @@ Core vertical slice complete. Observability Layer 2 (event stream) should land f
 
 ## 3. Perception Integration
 
-External systems update world model state. The `WorldModel::setFact()` API already supports this — what's needed is the ROS2 service wrapper (from extension 2) and conventions for source tagging in the audit log (extension 1, Layer 3).
+> **Status: IMPLEMENTED** — `PerceptionBridge` class provides thread-safe buffered ingestion of sensor observations into the WorldModel.
+>
+> **Implemented in:** `include/mujin/perception_bridge.h`, `src/perception_bridge.cpp`
+> **Tests:** `tests/test_extensions.cpp` (PerceptionBridge.*)
 
-No new core code required beyond what extensions 1 and 2 provide.
+External systems update world model state via `PerceptionBridge::updateFact()`. Updates are buffered (thread-safe) and applied atomically between BT ticks via `flush()`. Every update is tagged with source `"perception"` (optionally `"perception:<subtag>"`) in the audit log, enabling full causal traceability.
+
+```cpp
+PerceptionBridge bridge(world_model);
+
+// From a sensor thread:
+bridge.updateFact("(at uav1 sector_a)", true, "camera_front");
+
+// From the BT tick thread, between ticks:
+bridge.flush();  // applies buffered updates, fires audit callbacks
+```
+
+The `PerceptionBridge` complements the ROS2 `set_fact` service (extension 2) for in-process sensor integration without ROS2 overhead.
 
 ---
 
 ## 4. PYRAMID Service Nodes
 
-`InvokeService` BT node that maps PDDL actions to PYRAMID SDK service calls.
+> **Status: IMPLEMENTED** — `InvokeService` BT node + `IPyramidService` abstract interface with `MockPyramidService`.
+>
+> **Implemented in:** `include/mujin/pyramid_service.h`, `include/mujin/bt_nodes/invoke_service.h`, `src/bt_nodes/invoke_service.cpp`
+> **Tests:** `tests/test_extensions.cpp` (PyramidService.*, InvokeServiceNode.*)
+
+`InvokeService` BT node maps PDDL actions to PYRAMID SDK service calls via the `IPyramidService` abstract interface. The core library remains SDK-agnostic; concrete adapters implement `IPyramidService::call()`.
 
 ```cpp
-class InvokeService : public BT::StatefulActionNode {
+class InvokeService : public BT::SyncActionNode {
     static PortsList providedPorts() {
         return { InputPort<std::string>("service_name"),
                  InputPort<std::string>("operation"),
-                 BidirectionalPort<ServiceMessage>("request"),
-                 OutputPort<ServiceMessage>("response") };
+                 InputPort<std::string>("request_json"),   // k=v;k=v encoded
+                 OutputPort<std::string>("response_json") };
     }
 };
 ```
 
-### Depends on
-
-PYRAMID SDK availability. ActionRegistry already supports mapping PDDL actions to arbitrary BT node types, so integration is primarily about implementing the `InvokeService` node.
+The blackboard key `"pyramid_service"` must hold an `IPyramidService*`. `MockPyramidService` is provided for unit tests and simulation runs without PYRAMID hardware.
 
 ---
 
 ## 5. Thread Safety
 
-Versioned snapshots for concurrent WorldModel access. Needed for ROS2 multi-node deployment where the BT tick thread and perception update threads access the world model concurrently.
+> **Status: IMPLEMENTED** — `WorldModelSnapshot` + `SnapshotManager` for consistent read isolation between BT ticks and concurrent perception writes.
+>
+> **Implemented in:** `include/mujin/world_model_snapshot.h`, `src/world_model_snapshot.cpp`
+> **Tests:** `tests/test_extensions.cpp` (WorldModelSnapshot.*, SnapshotManager.*)
 
-Approach: the BT reads from a consistent snapshot; perception writes to a pending buffer; snapshots swap at defined sync points (between ticks).
+`SnapshotManager` takes atomic point-in-time copies of `WorldModel` state. The BT tick thread reads from a stable snapshot; perception threads write to the live `WorldModel` via `PerceptionBridge`; `SnapshotManager::publish()` is called between ticks to swap in a new consistent snapshot.
 
-### Depends on
+```cpp
+SnapshotManager manager(world_model);
 
-ROS2 integration (extension 2). Not needed for single-threaded vertical slice.
+// Perception thread:
+bridge.flush();        // applies buffered updates to live WorldModel
+manager.publish();     // snapshot for next BT tick
+
+// BT tick thread:
+auto snap = manager.current();   // shared_ptr, stays alive across publish()
+bool v = snap->getFact("(at uav1 sector_a)");
+```
+
+`SnapshotManager::current()` uses `std::shared_mutex` for concurrent reader safety. The `WorldModel` itself remains single-writer (via `PerceptionBridge::flush()` serialisation).
 
 ---
 
 ## 6. Hierarchical Planning
 
-`ExecutePhaseAction` BT node that triggers sub-planners for decomposed mission phases.
+> **Status: IMPLEMENTED** — `ExecutePhaseAction` BT node triggers sub-planning episodes for decomposed mission phases.
+>
+> **Implemented in:** `include/mujin/bt_nodes/execute_phase_action.h`, `src/bt_nodes/execute_phase_action.cpp`
+> **Tests:** `tests/test_extensions.cpp` (ExecutePhaseAction.*)
+
+`ExecutePhaseAction` is a `BT::StatefulActionNode` that orchestrates a full plan–compile–execute cycle for a sub-goal set, enabling hierarchical decomposition of complex missions.
 
 ```cpp
+// BT XML usage:
+// <ExecutePhaseAction
+//     phase_goals="(searched sector_a);(classified sector_a)"
+//     phase_name="recon_phase"/>
+
 class ExecutePhaseAction : public BT::StatefulActionNode {
     BT::NodeStatus onStart() override {
-        auto sub_goals = mission_model_.getPhaseGoals(phase);
-        auto sub_plan = planner_.solve(world_model_, sub_goals);
-        sub_tree_ = compiler_.compileAndCreate(sub_plan, config().blackboard);
-        return BT::NodeStatus::RUNNING;
+        // solve sub-plan, compile to BT XML, instantiate subtree
     }
     BT::NodeStatus onRunning() override {
         return sub_tree_->tickOnce();
     }
+    void onHalted() override { sub_tree_->haltTree(); }
 };
 ```
 
-### Depends on
-
-Core vertical slice complete. Plan audit trail (extension 1, Layer 5) should capture sub-planning episodes.
+Blackboard keys required: `"world_model"`, `"planner"`, `"plan_compiler"`, `"action_registry"`, `"bt_factory"`. The `PlanAuditLog` (Layer 5) captures sub-planning episodes automatically via `Planner::solve()`.
 
 ---
 
@@ -328,8 +365,8 @@ Core vertical slice + hierarchical planning. Requires a temporal planner backend
 1. ~~**Observability Layers 1–3** — immediate, no blockers~~ **DONE**
 2. ~~**ROS2 Node Wrappers** — after vertical slice~~ **DONE** (`ros2/` ament_cmake package, Jazzy)
 3. ~~**Observability Layers 4–5** — after Layer 2 + ROS2~~ **DONE** (Foxglove WebSocket, no ROS2 needed)
-4. **Perception Integration** — after ROS2
-5. **PYRAMID Service Nodes** — when SDK available
-6. **Thread Safety** — when multi-node deployment needed
-7. **Hierarchical Planning** — post-core hardening
+4. ~~**Perception Integration** — after ROS2~~ **DONE** (`PerceptionBridge`, thread-safe buffered ingestion)
+5. ~~**PYRAMID Service Nodes** — when SDK available~~ **DONE** (`InvokeService` + `IPyramidService` interface)
+6. ~~**Thread Safety** — when multi-node deployment needed~~ **DONE** (`WorldModelSnapshot` + `SnapshotManager`)
+7. ~~**Hierarchical Planning** — post-core hardening~~ **DONE** (`ExecutePhaseAction` BT node)
 8. **Temporal Planning** — last, most complex
