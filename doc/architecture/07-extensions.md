@@ -75,12 +75,74 @@ Blackboard keys required: `"world_model"`, `"planner"`, `"plan_compiler"`, `"act
 
 ## Temporal Planning (Extension 7) — Future
 
-PDDL 2.1 durative actions with STN (Simple Temporal Network) conversion. Requires:
+PDDL 2.1 durative actions with STN (Simple Temporal Network) conversion. See [`../temporal_extension_research.md`](../temporal_extension_research.md) for the full planner evaluation.
 
-- Temporal planner backend (LAPKT temporal extensions or external solver like OPTIC)
-- PDDL 2.1 parser support (`:durative-actions`, `:fluents`)
-- Numeric fluents in WorldModel (extend bitset to typed value store)
-- Temporal causal links in PlanCompiler (start/end time points)
-- Durative actions → STN → timed Parallel/Sequence with deadline decorators
+### Planner Strategy
+
+LAPKT does not natively support temporal planning. The recommended approach uses an external temporal planner alongside the existing LAPKT STRIPS path:
+
+| Option | Role | Rationale |
+|--------|------|-----------|
+| **OPTIC** (primary) | Near-term temporal backend | C++, PDDL 2.1 + 3.0 trajectory constraints, proven IPC planner, subprocess integration |
+| **Aries** (evaluate) | Medium-term replacement candidate | Rust, actively developed, built-in STN/Difference Logic solver, hierarchical + temporal |
+| **TFD** (fallback) | Alternative if OPTIC licence is problematic | GPL, PlanSys2 ROS2 integration exists |
+| **LAPKT** (retained) | STRIPS execution planner | Unchanged for non-temporal domains; fast, auditable |
+
+Integration pattern: `IPlannerBackend` abstraction selects LAPKT for STRIPS domains and the temporal planner for `:durative-actions` domains.
+
+### Architecture Overview
+
+```
+PDDL 2.1 Domain ──▶ PddlParser (extended) ──▶ IPlannerBackend
+                                                   │
+                                    ┌──────────────┼──────────────┐
+                                    ▼              ▼              ▼
+                               LapktBackend   OpticBackend   (future)
+                               (STRIPS)       (subprocess)   AriesBackend
+                                    │              │
+                                    ▼              ▼
+                              Linear Plan    Timed Plan
+                                    │              │
+                                    ▼              ▼
+                              PlanCompiler   PlanCompiler
+                              (Sequence)     (STN → Parallel/Timeout)
+                                    │              │
+                                    └──────┬───────┘
+                                           ▼
+                                      BT Executor
+```
+
+### STN (Simple Temporal Network)
+
+The temporal planner's output (timed action list) is converted into an STN:
+
+- **Nodes:** Time-points for each action's start and end
+- **Edges:** Temporal difference constraints (min/max delays)
+- **Consistency:** Bellman-Ford negative cycle check
+- **Scheduling:** Earliest-start-time computation via SSSP
+- **Compilation:** Topological layers of concurrent actions → `ParallelNode` groups with `TimeoutNode` decorators
+
+### BT Execution of Temporal Plans
+
+| BT.CPP Primitive | Temporal Role |
+|------------------|---------------|
+| `ParallelNode` | Concurrent durative actions (same time layer) |
+| `StatefulActionNode` | Non-blocking action returning `RUNNING` for its duration |
+| `TimeoutNode` | STN upper-bound enforcement (deadline) |
+| `DelayNode` | STN lower-bound enforcement (earliest start) |
+| `ReactiveSequence` | PDDL 2.1 `over all` invariant monitoring |
+
+### Validation
+
+**VAL** (BSD, C++) validates temporal plans against the PDDL 2.1 domain before BT compilation. Catches temporal mutex conflicts, invariant breaches, and constraint violations.
+
+### Required Infrastructure
+
+- PDDL 2.1 parser extensions (`:durative-action`, `:functions`, `at start`/`at end`/`over all`)
+- WorldModel numeric fluent store (typed value map alongside Boolean bitset)
+- `IPlannerBackend` abstraction for planner selection
+- STN data structure (~200-300 LOC: graph, consistency check, scheduling)
+- PlanCompiler temporal compilation path (STN → BT)
+- VAL post-planning validation step
 
 Depends on core vertical slice + hierarchical planning (both done).
