@@ -10,9 +10,13 @@ add_library(mujin_core STATIC
     planner.cpp
     bt_nodes/check_world_predicate.cpp
     bt_nodes/set_world_predicate.cpp
+    bt_nodes/invoke_service.cpp
+    bt_nodes/execute_phase_action.cpp
     bt_logger.cpp
     wm_audit_log.cpp
     plan_audit_log.cpp
+    perception_bridge.cpp
+    world_model_snapshot.cpp
 )
 
 target_include_directories(mujin_core PUBLIC

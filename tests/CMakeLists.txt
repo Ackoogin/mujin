@@ -39,3 +39,8 @@ gtest_discover_tests(test_e2e_pipeline DISCOVERY_MODE PRE_TEST)
 add_executable(test_observability test_observability.cpp)
 target_link_libraries(test_observability PRIVATE mujin_core GTest::gtest_main)
 gtest_discover_tests(test_observability DISCOVERY_MODE PRE_TEST)
+
+# --- Core extensions tests (Extensions 3-6) ---
+add_executable(test_extensions test_extensions.cpp)
+target_link_libraries(test_extensions PRIVATE mujin_core GTest::gtest_main)
+gtest_discover_tests(test_extensions DISCOVERY_MODE PRE_TEST)
