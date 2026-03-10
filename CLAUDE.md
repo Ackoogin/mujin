@@ -14,13 +14,24 @@ See `README.md` for a comprehensive project overview, and `doc/stakeholder_summa
 |----------|---------|
 | `README.md` | Project overview, quick start, architecture summary |
 | `doc/stakeholder_summary.md` | High-level approach and status for non-technical stakeholders |
-| `doc/concept.md` | Full technical architecture and API specification |
+| `doc/architecture/` | **Consolidated architecture reference** (see below) |
 | `doc/quickstart.md` | Getting started, build, run, Foxglove Studio setup |
-| `doc/extensions.md` | Feature roadmap with completion status (extensions 1–6 done) |
 | `doc/plan.md` | Implementation plan and gap analysis (steps 1–8 done) |
 | `doc/TODO.md` | Consolidated remaining work: temporal planning, hardening, future |
 | `doc/autonomy_assurance_plan.md` | SACE/AMLAS/DSTL safety assurance framework |
 | `doc/neuro_symbolic_reasoning.md` | Neural/LLM integration options and architecture |
+
+### Architecture Reference (`doc/architecture/`)
+
+| File | Contents |
+|------|----------|
+| `01-overview.md` | System overview, data flow, design principles, library boundaries, dependencies |
+| `02-world-model.md` | WorldModel API, TypeSystem, eager grounding, authoritative state |
+| `03-planning.md` | PDDL parser, Planner (LAPKT), ActionRegistry API, adding new actions |
+| `04-execution.md` | PlanCompiler algorithm, BT node types, MissionExecutor, replanning |
+| `05-observability.md` | 5-layer observability stack (TreeObserver → FoxgloveBridge → PlanAuditLog) |
+| `06-ros2.md` | ROS2 lifecycle nodes, deployment modes, build/run instructions |
+| `07-extensions.md` | Perception bridge, PYRAMID service, thread safety, hierarchical planning, temporal planning |
 
 ## Build
 
@@ -80,51 +91,12 @@ Produces three JSONL output files in the working directory: `mujin_bt_events.jso
 
 ## Architecture
 
-The system is a **PDDL planning + BehaviorTree execution pipeline** with full observability. The core library (`mujin_core`) is deliberately ROS-agnostic.
+The full architecture is documented in `doc/architecture/` (7 numbered files). Key points for development:
 
-### Data flow
-
-```
-PDDL Domain/Problem
-        |
-        v
-   WorldModel  ──► Planner (LAPKT BRFS) ──► PlanCompiler ──► BT XML
-   (facts +                                                       |
-    actions)                                                      v
-        |                                                  BT.CPP Executor
-        └──► WmAuditLog (Layer 3)                          (tickWhileRunning)
-                                                                  |
-                                              ┌───────────────────┤
-                                              │                   │
-                                        TreeObserver        MujinBTLogger
-                                         (Layer 1)           (Layer 2)
-                                                                  |
-                                                         FoxgloveBridge (Layer 4)
-                                                         ws://localhost:8765
-
-PlanAuditLog (Layer 5) — records each planning episode independently
-```
-
-### Key design decisions
-
-**WorldModel** (`include/mujin/world_model.h`) is the central shared state. It eagerly grounds all fluents when predicates/objects are registered, storing them as a bitset (`vector<uint64_t>`). All components access it by reference. Fact changes fire an `AuditCallback` for observability.
-
-**ActionRegistry** (`include/mujin/action_registry.h`) bridges PDDL action names to BT.CPP node types or XML subtree templates. `PlanCompiler` calls `registry.resolve(name, params)` to emit action XML during compilation.
-
-**BT nodes** (`include/mujin/bt_nodes/`) — `CheckWorldPredicate` reads a fluent, `SetWorldPredicate` writes one. They get the `WorldModel*` from the BT blackboard. New PDDL actions need corresponding BT node implementations registered here plus an `ActionRegistry` mapping.
-
-**Observability** is sink-based and layered:
-- Layer 1: `TreeObserver` (BT.CPP built-in, in-memory stats)
-- Layer 2: `MujinBTLogger` — callback + file sinks, emits JSONL
-- Layer 3: `WmAuditLog` — hooked into `WorldModel::setAuditCallback()`
-- Layer 4: `FoxgloveBridge` — WebSocket server (port 8765), receives callbacks from Layers 2–3
-- Layer 5: `PlanAuditLog` — records full planning episodes (init state, goals, plan, BT XML)
-
-**LAPKT integration**: `Planner::solve()` calls `WorldModel::projectToSTRIPS()` to build an `aptk::STRIPS_Problem`, runs BRFS, and returns plan steps as indices into `WorldModel::groundActions()`. LAPKT is built from source as `lapkt_core` static library (not its own CMake); MSVC compat shims are in `cmake/compat/`.
-
-**`mujin_foxglove`** is a separate static library so `mujin_core` stays dependency-free. Guard any Foxglove code with `#if defined(MUJIN_FOXGLOVE)`.
-
-### Library boundaries
+- **WorldModel** (`include/mujin/world_model.h`) is the central shared state with eager grounding and audit callbacks. See `doc/architecture/02-world-model.md`.
+- **LAPKT integration**: `Planner::solve()` calls `WorldModel::projectToSTRIPS()`. LAPKT is built from source as `lapkt_core` static library; MSVC compat shims in `cmake/compat/`.
+- **`mujin_foxglove`** is a separate static library. Guard Foxglove code with `#if defined(MUJIN_FOXGLOVE)`.
+- **Library boundaries**, **adding new PDDL actions**, and **ROS2 build/run** are all in the architecture docs.
 
 | Library | Contents | Dependencies |
 |---------|----------|-------------|
@@ -132,71 +104,3 @@ PlanAuditLog (Layer 5) — records each planning episode independently
 | `mujin_foxglove` | FoxgloveBridge WebSocket server | mujin_core, websocketpp, asio |
 | `mujin_test_app` | Demo executable (src/main.cpp) | mujin_core, optionally mujin_foxglove |
 | `mujin_ros2_lib` | WorldModelNode, PlannerNode, ExecutorNode, RosWmBridge, LifecycleManager | mujin_core, rclcpp, rclcpp_action, rclcpp_lifecycle |
-
-### Adding a new PDDL action with BT execution
-
-1. Implement a BT node (subclass `BT::SyncActionNode` or `BT::StatefulActionNode`) in `include/mujin/bt_nodes/` + `src/bt_nodes/`
-2. Add it to `mujin_core` in `src/CMakeLists.txt`
-3. Register in `ActionRegistry` via `registerAction(pddl_name, bt_node_type)` or `registerActionSubTree(...)`
-4. Register the BT node type with the BT.CPP factory: `factory.registerNodeType<MyNode>("MyNode")`
-5. In ROS2 mode: also register on `ExecutorNode::factory()` in `combined_main.cpp`
-
-### ROS2 Node Wrappers (`ros2/`)
-
-The `ros2/` directory is a separate `ament_cmake` package (ROS2 Jazzy, `D:\Dev\ros2-windows`). It wraps `mujin_core` with three lifecycle nodes without modifying the core.
-
-**Build sequence (use `build_ros2.bat`):**
-```bat
-:: From the repo root (VS 2022 + pixi environment):
-build_ros2.bat
-```
-Or step by step (from a pixi shell at D:\Dev\ros2-windows):
-```bat
-:: Add pixi DLLs to PATH first (yaml.dll, spdlog.dll, etc.)
-set PATH=D:\Dev\ros2-windows\.pixi\envs\default\Library\bin;%PATH%
-
-:: 1. Install mujin_core
-cmake --preset default -DCMAKE_INSTALL_PREFIX=build/install
-cmake --build build --config Release -j%NUMBER_OF_PROCESSORS%
-cmake --install build --config Release
-
-:: 2. Build the ROS2 package
-call D:\Dev\ros2-windows\setup.bat
-pixi run --manifest-path D:\Dev\ros2-windows\pixi.toml colcon build ^
-  --packages-select mujin_ros2 --base-paths ros2 ^
-  --cmake-args "-DCMAKE_PREFIX_PATH=D:/Dev/ros2-windows;D:/Dev/repo/mujin/build/install"
-```
-
-**Run (use `run_ros2.bat`):**
-```bat
-:: From a pixi shell at D:\Dev\ros2-windows:
-call D:\Dev\repo\mujin\run_ros2.bat
-```
-The script adds pixi Library\bin to PATH, sources `setup.bat` + `install\setup.bat`, then launches `mujin_combined` with the UAV search domain.
-
-**Run tests:**
-```bat
-pixi run --manifest-path D:\Dev\ros2-windows\pixi.toml colcon test --packages-select mujin_ros2
-pixi run --manifest-path D:\Dev\ros2-windows\pixi.toml colcon test-result --verbose
-```
-
-**In-process demo (all nodes on one executor):**
-```bat
-:: From a pixi shell:
-call D:\Dev\ros2-windows\setup.bat
-call D:\Dev\repo\mujin\install\setup.bat
-ros2 launch mujin_ros2 mujin_inprocess.launch.py ^
-  pddl_file:=D:/Dev/repo/mujin/domains/uav_search/domain.pddl ^
-  problem_file:=D:/Dev/repo/mujin/domains/uav_search/problem.pddl
-```
-
-**ROS2 node roles:**
-- `WorldModelNode` — owns canonical `WorldModel`; services `~/get_fact`, `~/set_fact`, `~/query_state`; publisher `/world_state` (reliable, transient_local)
-- `PlannerNode` — `rclcpp_action::Server` at `/mujin/plan`; BRFS runs on dedicated thread; returns `bt_xml` in result
-- `ExecutorNode` — ticks BT at 50 Hz via `rclcpp::Timer`; `factory()` exposes BT.CPP factory for registering action nodes; publishes `/executor/bt_events` (JSON lines)
-- In-process mode: `setInProcessWorldModel(WorldModel*)` skips service calls entirely (use `SingleThreadedExecutor` to avoid WorldModel race conditions)
-- Distributed mode: BT nodes use `RosCheckWorldPredicate`/`RosSetWorldPredicate` which call services with 500ms timeout
-
-### Extension roadmap
-
-See `doc/extensions.md`. Completed: Observability (all 5 layers), ROS2 Node Wrappers. Next: Perception Integration (Extension 3, requires ROS2 services already in place).

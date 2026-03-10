@@ -178,33 +178,6 @@ The `#if defined(MUJIN_FOXGLOVE)` guards in `main.cpp` ensure the code compiles 
 
 ---
 
-## Architecture overview
+## Architecture
 
-```
-                PDDL Domain
-                    |
-                    v
-    WorldModel  <-- Planner (LAPKT BRFS)
-    (facts +        |
-     actions)       v
-        |       PlanCompiler --> BT XML
-        |                          |
-        v                          v
-    WmAuditLog              BT.CPP Executor
-    (Layer 3)                  |       |
-        |               TreeObserver  MujinBTLogger
-        |               (Layer 1)     (Layer 2)
-        |                                |
-        +----------+---------------------+
-                   |
-                   v
-            FoxgloveBridge (Layer 4)
-            ws://localhost:8765
-                   |
-                   v
-            Foxglove Studio
-
-    PlanAuditLog (Layer 5) -- records planning episodes
-```
-
-See `doc/concept.md` for full architecture details and `doc/extensions.md` for the extension roadmap.
+See `doc/architecture/` for the full architecture reference (7 numbered files covering system overview, WorldModel, planning, execution, observability, ROS2, and extensions).
