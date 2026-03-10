@@ -6,14 +6,39 @@ Consolidated from `plan.md` (gap analysis) and `extensions.md`. All vertical sli
 
 ## Extension 7: Temporal Planning (not started)
 
-PDDL 2.1 durative actions with STN (Simple Temporal Network) conversion. Requires:
+PDDL 2.1 durative actions with STN (Simple Temporal Network) conversion. See [`temporal_extension_research.md`](temporal_extension_research.md) for full planner evaluation and integration strategy.
 
-- Temporal planner backend (LAPKT temporal extensions or external solver like OPTIC)
+### Recommended Approach
+
+- **Primary planner:** OPTIC (C++, PDDL 2.1 + 3.0, subprocess invocation)
+- **Medium-term:** Evaluate Aries (Rust, active development, built-in STN solver, hierarchical + temporal)
+- **Fallback:** TFD (GPL, proven in IPC, PlanSys2 ROS2 integration exists)
+- **LAPKT retained** for STRIPS domains; temporal planner invoked only for `:durative-actions` domains
+
+### Implementation Phases
+
+| Phase | Work Item | Effort |
+|-------|-----------|--------|
+| 7a | PDDL 2.1 parser (`:durative-action`, `:functions`, temporal conditions) | Medium |
+| 7b | WorldModel numeric fluent store + audit integration | Medium |
+| 7c | `IPlannerBackend` abstraction + OPTIC subprocess backend | Medium |
+| 7d | STN data structure + consistency check + scheduling | Low |
+| 7e | PlanCompiler temporal mode (STN → BT with `Parallel`/`Timeout`) | High |
+| 7f | VAL integration for post-planning temporal plan validation | Low |
+| 7g | Temporal invariant monitoring (`ReactiveSequence` pattern) | Low |
+| 7h | End-to-end temporal planning tests | Medium |
+| 7i | Aries evaluation + potential migration | Medium |
+
+Phases 7a, 7b, 7d can proceed in parallel. Phase 7e is the critical-path item.
+
+### Requires
+
 - PDDL 2.1 parser support (`:durative-actions`, `:fluents`)
 - Numeric fluents in WorldModel (extend bitset to typed value store)
 - Conditional effects (effect evaluation at tick time, not compile time)
 - Temporal causal links in PlanCompiler (start/end time points)
 - Durative actions → STN → timed Parallel/Sequence with deadline decorators
+- VAL plan validator for temporal correctness checking
 
 **Depends on:** Core vertical slice + hierarchical planning (both done).
 

@@ -18,6 +18,7 @@ See `README.md` for a comprehensive project overview, and `doc/stakeholder_summa
 | `doc/quickstart.md` | Getting started, build, run, Foxglove Studio setup |
 | `doc/plan.md` | Implementation plan and gap analysis (steps 1–8 done) |
 | `doc/TODO.md` | Consolidated remaining work: temporal planning, hardening, future |
+| `doc/temporal_extension_research.md` | **Temporal planner evaluation**: OPTIC, POPF, TFD, Aries, STN, BT.CPP integration |
 | `doc/autonomy_assurance_plan.md` | SACE/AMLAS/DSTL safety assurance framework |
 | `doc/neuro_symbolic_reasoning.md` | Neural/LLM integration options and architecture |
 
