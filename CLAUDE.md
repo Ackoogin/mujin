@@ -16,8 +16,9 @@ See `README.md` for a comprehensive project overview, and `doc/stakeholder_summa
 | `doc/stakeholder_summary.md` | High-level approach and status for non-technical stakeholders |
 | `doc/concept.md` | Full technical architecture and API specification |
 | `doc/quickstart.md` | Getting started, build, run, Foxglove Studio setup |
-| `doc/extensions.md` | Feature roadmap with completion status |
-| `doc/plan.md` | Implementation plan and slice-to-production gap analysis |
+| `doc/extensions.md` | Feature roadmap with completion status (extensions 1–6 done) |
+| `doc/plan.md` | Implementation plan and gap analysis (steps 1–8 done) |
+| `doc/TODO.md` | Consolidated remaining work: temporal planning, hardening, future |
 | `doc/autonomy_assurance_plan.md` | SACE/AMLAS/DSTL safety assurance framework |
 | `doc/neuro_symbolic_reasoning.md` | Neural/LLM integration options and architecture |
 
