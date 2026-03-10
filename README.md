@@ -37,6 +37,8 @@ PDDL Domain/Problem
 | **ActionRegistry** | Maps PDDL action names to BT node types, sub-tree templates, or pre-authored sub-trees |
 | **Observability Stack** | 5 layers: TreeObserver stats, structured BT events, WM audit log, Foxglove bridge, plan audit trail |
 
+For full architecture details, see `doc/architecture/` (7 numbered files covering WorldModel, planning, execution, observability, ROS2, and extensions).
+
 ## Quick Start
 
 ### Prerequisites
@@ -136,10 +138,10 @@ domains/                 PDDL domain and problem files
   uav_search/            UAV search-and-classify example domain
 ros2/                    ROS2 lifecycle node wrappers (ament_cmake)
 doc/                     Documentation
-  concept.md             Full architecture specification
-  extensions.md          Extension roadmap and status
+  architecture/          Consolidated architecture reference (7 numbered files)
   quickstart.md          Getting started and Foxglove setup
-  plan.md                Implementation plan and gap analysis
+  TODO.md                Remaining work: temporal planning, hardening, future
+  plan.md                Implementation plan and gap analysis (historical)
   autonomy_assurance_plan.md   SACE/AMLAS/DSTL safety assurance plan
   neuro_symbolic_reasoning.md  Neural integration options
   neuro_symbolic_reasoning_review.md  Review of documented neuro-symbolic approaches
@@ -150,9 +152,9 @@ doc/                     Documentation
 | Document | Audience | Contents |
 |----------|----------|----------|
 | [Stakeholder Summary](doc/stakeholder_summary.md) | Programme managers, non-technical stakeholders | High-level approach, benefits, and status |
-| [Architecture](doc/concept.md) | Engineers | Full technical architecture and API details |
+| [Architecture](doc/architecture/) | Engineers | Full technical architecture (7 numbered files) |
 | [Quick Start](doc/quickstart.md) | Developers | Build, run, test, and Foxglove setup |
-| [Extensions](doc/extensions.md) | Engineers, programme leads | Feature roadmap with status tracking |
+| [Remaining Work](doc/TODO.md) | Engineers, programme leads | Temporal planning, hardening, future work |
 | [Assurance Plan](doc/autonomy_assurance_plan.md) | Safety engineers, assessors | SACE/AMLAS/DSTL autonomy assurance framework |
 | [Neuro-Symbolic Integration](doc/neuro_symbolic_reasoning.md) | Engineers, architects | Options for adding AI/ML capabilities |
 | [Neuro-Symbolic Review Report](doc/neuro_symbolic_reasoning_review.md) | Engineers, architects, programme leads | Review of documented neuro-symbolic approaches, risks, and adoption order |
