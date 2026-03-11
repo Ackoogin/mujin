@@ -1,7 +1,8 @@
 #include <gtest/gtest.h>
 
-#include "mujin/world_model_component.h"
+#include <mujin/world_model_component.h>
 
+///< REQ_ENGINE_001: World model component shall expose lifecycle and state query behavior.
 TEST(WorldModelComponent, LifecycleAndQueries) {
   mujin::WorldModelComponent component;
   component.setParam("audit_log.enabled", false);

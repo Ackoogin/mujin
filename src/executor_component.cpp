@@ -1,4 +1,4 @@
-#include "mujin/executor_component.h"
+#include <mujin/executor_component.h>
 
 #include <stdexcept>
 

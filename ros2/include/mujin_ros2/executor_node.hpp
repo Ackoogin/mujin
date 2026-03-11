@@ -1,15 +1,14 @@
 #pragma once
 
-#include "mujin/executor_component.h"
+#include <mujin/executor_component.h>
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include <std_msgs/msg/string.hpp>
 
-#include "mujin_ros2/srv/get_fact.hpp"
-#include "mujin_ros2/srv/set_fact.hpp"
-
 #include <behaviortree_cpp/bt_factory.h>
+#include <mujin_ros2/srv/get_fact.hpp>
+#include <mujin_ros2/srv/set_fact.hpp>
 
 namespace mujin_ros2 {
 
@@ -31,53 +30,54 @@ namespace mujin_ros2 {
 ///   world_model_node     (string, "world_model_node")
 class ExecutorNode : public rclcpp_lifecycle::LifecycleNode {
 public:
-    explicit ExecutorNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
+  explicit ExecutorNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
-    using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
+  using CallbackReturn =
+      rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
-    CallbackReturn on_configure(const rclcpp_lifecycle::State& prev) override;
-    CallbackReturn on_activate(const rclcpp_lifecycle::State& prev) override;
-    CallbackReturn on_deactivate(const rclcpp_lifecycle::State& prev) override;
-    CallbackReturn on_cleanup(const rclcpp_lifecycle::State& prev) override;
-    CallbackReturn on_shutdown(const rclcpp_lifecycle::State& prev) override;
+  CallbackReturn on_configure(const rclcpp_lifecycle::State& prev) override;
+  CallbackReturn on_activate(const rclcpp_lifecycle::State& prev) override;
+  CallbackReturn on_deactivate(const rclcpp_lifecycle::State& prev) override;
+  CallbackReturn on_cleanup(const rclcpp_lifecycle::State& prev) override;
+  CallbackReturn on_shutdown(const rclcpp_lifecycle::State& prev) override;
 
-    /// Load BT XML and begin ticking.
-    /// Called externally or via the /executor/bt_xml subscription.
-    void loadAndExecute(const std::string& bt_xml);
+  /// Load BT XML and begin ticking.
+  /// Called externally or via the /executor/bt_xml subscription.
+  void loadAndExecute(const std::string& bt_xml);
 
-    /// For in-process mode: inject WorldModel pointer so BT nodes skip service calls.
-    void setInProcessWorldModel(mujin::WorldModel* wm) {
-        inprocess_wm_ = wm;
-        component_.setInProcessWorldModel(wm);
-    }
+  /// For in-process mode: inject WorldModel pointer so BT nodes skip service calls.
+  void setInProcessWorldModel(mujin::WorldModel* wm) {
+    inprocess_wm_ = wm;
+    component_.setInProcessWorldModel(wm);
+  }
 
-    /// Expose factory so callers can register custom action node types.
-    BT::BehaviorTreeFactory& factory() { return component_.factory(); }
+  /// Expose factory so callers can register custom action node types.
+  BT::BehaviorTreeFactory& factory() { return component_.factory(); }
 
-    BT::NodeStatus lastStatus() const { return component_.lastStatus(); }
+  BT::NodeStatus lastStatus() const { return component_.lastStatus(); }
 
 private:
-    mujin::ExecutorComponent component_;
+  mujin::ExecutorComponent component_;
 
-    mujin::WorldModel* inprocess_wm_ = nullptr;
+  mujin::WorldModel* inprocess_wm_ = nullptr;
 
-    // Tick timer
-    rclcpp::TimerBase::SharedPtr tick_timer_;
-    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_bt_xml_;
+  // Tick timer
+  rclcpp::TimerBase::SharedPtr tick_timer_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_bt_xml_;
 
-    // Publishers
-    rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::String>::SharedPtr pub_bt_events_;
-    rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::String>::SharedPtr pub_status_;
+  // Publishers
+  rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::String>::SharedPtr pub_bt_events_;
+  rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::String>::SharedPtr pub_status_;
 
-    // Service clients for distributed mode
-    rclcpp::Client<mujin_ros2::srv::GetFact>::SharedPtr client_get_fact_;
-    rclcpp::Client<mujin_ros2::srv::SetFact>::SharedPtr client_set_fact_;
+  // Service clients for distributed mode
+  rclcpp::Client<mujin_ros2::srv::GetFact>::SharedPtr client_get_fact_;
+  rclcpp::Client<mujin_ros2::srv::SetFact>::SharedPtr client_set_fact_;
 
-    bool core_nodes_registered_ = false;
+  bool core_nodes_registered_ = false;
 
-    void tickOnce();
-    void registerCoreNodes();
-    void publishStatus(const std::string& status_str);
+  void tickOnce();
+  void registerCoreNodes();
+  void publishStatus(const std::string& status_str);
 };
 
 } // namespace mujin_ros2

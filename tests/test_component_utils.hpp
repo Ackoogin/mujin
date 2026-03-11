@@ -1,7 +1,7 @@
 #pragma once
 
-#include "mujin/action_registry.h"
-#include "mujin/world_model.h"
+#include <mujin/action_registry.h>
+#include <mujin/world_model.h>
 
 #include <behaviortree_cpp/action_node.h>
 #include <behaviortree_cpp/bt_factory.h>

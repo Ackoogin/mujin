@@ -1,9 +1,10 @@
 #include <gtest/gtest.h>
 
-#include "mujin/planner_component.h"
+#include <mujin/planner_component.h>
 
-#include "test_component_utils.hpp"
+#include <test_component_utils.hpp>
 
+///< REQ_ENGINE_002: Planner component shall solve goals from an in-process world model.
 TEST(PlannerComponent, InProcessPlanningDoesNotRequirePddlFiles) {
   auto wm = buildUavWorldModel();
 

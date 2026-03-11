@@ -1,12 +1,13 @@
 #include <gtest/gtest.h>
 
-#include "mujin/bt_nodes/check_world_predicate.h"
-#include "mujin/bt_nodes/set_world_predicate.h"
-#include "mujin/executor_component.h"
-#include "mujin/planner_component.h"
+#include <mujin/bt_nodes/check_world_predicate.h>
+#include <mujin/bt_nodes/set_world_predicate.h>
+#include <mujin/executor_component.h>
+#include <mujin/planner_component.h>
 
-#include "test_component_utils.hpp"
+#include <test_component_utils.hpp>
 
+///< REQ_ENGINE_003: Executor component shall run compiled planner output against the shared world model.
 TEST(ExecutorComponent, ExecutesPlannerOutputAgainstSharedWorldModel) {
   auto wm = buildUavWorldModel();
 
