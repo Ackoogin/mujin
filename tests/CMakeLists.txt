@@ -60,3 +60,7 @@ add_executable(test_pcl_log test_pcl_log.cpp)
 target_link_libraries(test_pcl_log PRIVATE pcl_core GTest::gtest_main)
 gtest_discover_tests(test_pcl_log DISCOVERY_MODE PRE_TEST)
 
+add_executable(test_pcl_robustness test_pcl_robustness.cpp)
+target_link_libraries(test_pcl_robustness PRIVATE pcl_core GTest::gtest_main)
+gtest_discover_tests(test_pcl_robustness DISCOVERY_MODE PRE_TEST)
+
