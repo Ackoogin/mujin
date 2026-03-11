@@ -7,12 +7,14 @@
 #ifndef PCL_COMPONENT_HPP
 #define PCL_COMPONENT_HPP
 
-#include "pcl/pcl_container.h"
-#include "pcl/pcl_log.h"
+#include <pcl/pcl_container.h>
+#include <pcl/pcl_log.h>
 
 #include <string>
 #include <string_view>
 #include <functional>
+#include <cstdarg>
+#include <cstdio>
 #include <utility>
 
 namespace pcl {

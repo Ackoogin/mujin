@@ -1,6 +1,7 @@
 #pragma once
 
 #include <behaviortree_cpp/action_node.h>
+#include <behaviortree_cpp/bt_factory.h>
 #include <string>
 #include <vector>
 #include <memory>
@@ -37,19 +38,19 @@ class ActionRegistry;
 // RUNNING while the subtree is executing.
 class ExecutePhaseAction : public BT::StatefulActionNode {
 public:
-    ExecutePhaseAction(const std::string& name, const BT::NodeConfiguration& config);
+  ExecutePhaseAction(const std::string& name, const BT::NodeConfiguration& config);
 
-    static BT::PortsList providedPorts();
+  static BT::PortsList providedPorts();
 
-    BT::NodeStatus onStart() override;
-    BT::NodeStatus onRunning() override;
-    void onHalted() override;
+  BT::NodeStatus onStart() override;
+  BT::NodeStatus onRunning() override;
+  void onHalted() override;
 
 private:
-    // Parse semicolon-delimited goal string into individual fluent strings.
-    static std::vector<std::string> parseGoals(const std::string& encoded);
+  // Parse semicolon-delimited goal string into individual fluent strings.
+  static std::vector<std::string> parseGoals(const std::string& encoded);
 
-    std::unique_ptr<BT::Tree> sub_tree_;
+  std::unique_ptr<BT::Tree> sub_tree_;
 };
 
 } // namespace mujin

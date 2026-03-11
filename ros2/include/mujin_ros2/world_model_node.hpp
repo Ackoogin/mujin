@@ -1,19 +1,14 @@
 #pragma once
 
-#include "mujin/world_model.h"
-#include "mujin/wm_audit_log.h"
+#include <mujin/world_model_component.h>
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 
-#include "mujin_ros2/msg/world_state.hpp"
-#include "mujin_ros2/srv/get_fact.hpp"
-#include "mujin_ros2/srv/set_fact.hpp"
-#include "mujin_ros2/srv/query_state.hpp"
-
-#include <atomic>
-#include <mutex>
-#include <optional>
+#include <mujin_ros2/msg/world_state.hpp>
+#include <mujin_ros2/srv/get_fact.hpp>
+#include <mujin_ros2/srv/query_state.hpp>
+#include <mujin_ros2/srv/set_fact.hpp>
 
 namespace mujin_ros2 {
 
@@ -35,49 +30,48 @@ namespace mujin_ros2 {
 ///   publish_rate_hz     (double, 10.0)
 class WorldModelNode : public rclcpp_lifecycle::LifecycleNode {
 public:
-    explicit WorldModelNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
+  explicit WorldModelNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
-    using CallbackReturn = rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
+  using CallbackReturn =
+      rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
-    CallbackReturn on_configure(const rclcpp_lifecycle::State& prev) override;
-    CallbackReturn on_activate(const rclcpp_lifecycle::State& prev) override;
-    CallbackReturn on_deactivate(const rclcpp_lifecycle::State& prev) override;
-    CallbackReturn on_cleanup(const rclcpp_lifecycle::State& prev) override;
-    CallbackReturn on_shutdown(const rclcpp_lifecycle::State& prev) override;
+  CallbackReturn on_configure(const rclcpp_lifecycle::State& prev) override;
+  CallbackReturn on_activate(const rclcpp_lifecycle::State& prev) override;
+  CallbackReturn on_deactivate(const rclcpp_lifecycle::State& prev) override;
+  CallbackReturn on_cleanup(const rclcpp_lifecycle::State& prev) override;
+  CallbackReturn on_shutdown(const rclcpp_lifecycle::State& prev) override;
 
-    /// Direct access for in-process (combined_main) mode.
-    mujin::WorldModel& worldModel() { return wm_; }
-    const mujin::WorldModel& worldModel() const { return wm_; }
+  /// Direct access for in-process (combined_main) mode.
+  mujin::WorldModel& worldModel() { return component_.worldModel(); }
+  const mujin::WorldModel& worldModel() const { return component_.worldModel(); }
 
 private:
-    mujin::WorldModel  wm_;
-    std::optional<mujin::WmAuditLog> wm_audit_;
+  mujin::WorldModelComponent component_;
 
-    // Services
-    rclcpp::Service<mujin_ros2::srv::GetFact>::SharedPtr    srv_get_fact_;
-    rclcpp::Service<mujin_ros2::srv::SetFact>::SharedPtr    srv_set_fact_;
-    rclcpp::Service<mujin_ros2::srv::QueryState>::SharedPtr srv_query_state_;
+  // Services
+  rclcpp::Service<mujin_ros2::srv::GetFact>::SharedPtr srv_get_fact_;
+  rclcpp::Service<mujin_ros2::srv::SetFact>::SharedPtr srv_set_fact_;
+  rclcpp::Service<mujin_ros2::srv::QueryState>::SharedPtr srv_query_state_;
 
-    // Publisher + debounce timer
-    rclcpp_lifecycle::LifecyclePublisher<mujin_ros2::msg::WorldState>::SharedPtr pub_world_state_;
-    rclcpp::TimerBase::SharedPtr publish_timer_;
-    std::atomic<bool> state_dirty_{false};
+  // Publisher + debounce timer
+  rclcpp_lifecycle::LifecyclePublisher<mujin_ros2::msg::WorldState>::SharedPtr
+      pub_world_state_;
+  rclcpp::TimerBase::SharedPtr publish_timer_;
 
-    // Service handlers
-    void handleGetFact(
-        std::shared_ptr<mujin_ros2::srv::GetFact::Request>  req,
-        std::shared_ptr<mujin_ros2::srv::GetFact::Response> res);
+  // Service handlers
+  void handleGetFact(
+      std::shared_ptr<mujin_ros2::srv::GetFact::Request> req,
+      std::shared_ptr<mujin_ros2::srv::GetFact::Response> res);
 
-    void handleSetFact(
-        std::shared_ptr<mujin_ros2::srv::SetFact::Request>  req,
-        std::shared_ptr<mujin_ros2::srv::SetFact::Response> res);
+  void handleSetFact(
+      std::shared_ptr<mujin_ros2::srv::SetFact::Request> req,
+      std::shared_ptr<mujin_ros2::srv::SetFact::Response> res);
 
-    void handleQueryState(
-        std::shared_ptr<mujin_ros2::srv::QueryState::Request>  req,
-        std::shared_ptr<mujin_ros2::srv::QueryState::Response> res);
+  void handleQueryState(
+      std::shared_ptr<mujin_ros2::srv::QueryState::Request> req,
+      std::shared_ptr<mujin_ros2::srv::QueryState::Response> res);
 
-    void publishWorldState();
-    void loadDomainFromParams();
+  void publishWorldState();
 };
 
 } // namespace mujin_ros2
