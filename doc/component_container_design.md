@@ -550,11 +550,17 @@ mcl_status_t wm_on_tick(mcl_container_t* c, double dt, void* ud) {
 | # | Question | Impact |
 |---|----------|--------|
 | Q1 | **Tick rate per container or per executor?** Per-container allows different rates (e.g., WM at 10 Hz, executor at 50 Hz) but adds complexity. | API complexity |
+per container
 | Q2 | **Action servers** (long-running async operations) — model as services with feedback callbacks, or as a dedicated port type? | API surface |
+see protocol_agnostic_service_plan.md
 | Q3 | **Logging** — provide a `mcl_log()` C function or leave to user? If provided, should it integrate with ROS2's `RCLCPP_INFO` via the adapter? | Dependency footprint |
+yes, provide a `mcl_log()` C function that integrates with ROS2's `RCLCPP_INFO` via the adapter
 | Q4 | **Dynamic port creation** — allow adding ports after `on_configure`? ROS2 allows this, but it complicates the transport adapter binding. | Flexibility vs. simplicity |
+no, ports are created at configure time
 | Q5 | **Thread-safe shutdown** — `mcl_executor_request_shutdown()` is signal-safe. Should there be a graceful shutdown with timeout that calls `on_deactivate` → `on_shutdown`? | Safety |
+yes, graceful shutdown with timeout that calls `on_deactivate` → `on_shutdown`
 | Q6 | **Should the C API use `mcl_` prefix (mujin container library) or something more generic?** | Naming / reusability |
+use pcl (PYRAMID container library) instead of mcl
 
 ---
 

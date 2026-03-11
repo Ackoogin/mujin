@@ -44,3 +44,19 @@ gtest_discover_tests(test_observability DISCOVERY_MODE PRE_TEST)
 add_executable(test_extensions test_extensions.cpp)
 target_link_libraries(test_extensions PRIVATE mujin_core GTest::gtest_main)
 gtest_discover_tests(test_extensions DISCOVERY_MODE PRE_TEST)
+
+# ---------------------------------------------------------------------------
+# PCL (PYRAMID Container Library) tests
+# ---------------------------------------------------------------------------
+add_executable(test_pcl_lifecycle test_pcl_lifecycle.cpp)
+target_link_libraries(test_pcl_lifecycle PRIVATE pcl_core GTest::gtest_main)
+gtest_discover_tests(test_pcl_lifecycle DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_pcl_executor test_pcl_executor.cpp)
+target_link_libraries(test_pcl_executor PRIVATE pcl_core GTest::gtest_main)
+gtest_discover_tests(test_pcl_executor DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_pcl_log test_pcl_log.cpp)
+target_link_libraries(test_pcl_log PRIVATE pcl_core GTest::gtest_main)
+gtest_discover_tests(test_pcl_log DISCOVERY_MODE PRE_TEST)
+

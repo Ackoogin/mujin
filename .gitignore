@@ -49,3 +49,4 @@ CMakeUserPresets.json
 # Log
 log/*
 install/*
+build_errors.log
