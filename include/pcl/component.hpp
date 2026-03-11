@@ -13,6 +13,8 @@
 #include <string>
 #include <string_view>
 #include <functional>
+#include <cstdarg>
+#include <cstdio>
 #include <utility>
 
 namespace pcl {

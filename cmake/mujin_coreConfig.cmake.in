@@ -15,6 +15,12 @@ find_library(LAPKT_CORE_LIBRARY
     NO_DEFAULT_PATH
     REQUIRED
 )
+find_library(PCL_CORE_LIBRARY
+    NAMES pcl_core
+    PATHS "${PACKAGE_PREFIX_DIR}/lib"
+    NO_DEFAULT_PATH
+    REQUIRED
+)
 find_library(BTCPP_LIBRARY
     NAMES behaviortree_cpp
     PATHS "${PACKAGE_PREFIX_DIR}/lib"
@@ -28,6 +34,12 @@ if(NOT TARGET mujin::mujin_core)
         IMPORTED_LOCATION "${LAPKT_CORE_LIBRARY}"
     )
 
+    add_library(mujin::pcl_core STATIC IMPORTED GLOBAL)
+    set_target_properties(mujin::pcl_core PROPERTIES
+        IMPORTED_LOCATION "${PCL_CORE_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${PACKAGE_PREFIX_DIR}/include"
+    )
+
     add_library(mujin::behaviortree_cpp STATIC IMPORTED GLOBAL)
     set_target_properties(mujin::behaviortree_cpp PROPERTIES
         IMPORTED_LOCATION "${BTCPP_LIBRARY}"
@@ -38,6 +50,6 @@ if(NOT TARGET mujin::mujin_core)
     set_target_properties(mujin::mujin_core PROPERTIES
         IMPORTED_LOCATION "${MUJIN_CORE_LIBRARY}"
         INTERFACE_INCLUDE_DIRECTORIES "${PACKAGE_PREFIX_DIR}/include"
-        INTERFACE_LINK_LIBRARIES "mujin::lapkt_core;mujin::behaviortree_cpp"
+        INTERFACE_LINK_LIBRARIES "mujin::lapkt_core;mujin::pcl_core;mujin::behaviortree_cpp"
     )
 endif()

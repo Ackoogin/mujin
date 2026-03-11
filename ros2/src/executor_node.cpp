@@ -4,10 +4,10 @@
 #include "mujin/bt_nodes/check_world_predicate.h"
 #include "mujin/bt_nodes/set_world_predicate.h"
 
-#include <behaviortree_cpp/loggers/bt_observer.h>
 #include <std_msgs/msg/string.hpp>
 
 #include <chrono>
+#include <stdexcept>
 
 namespace mujin_ros2 {
 
@@ -27,8 +27,26 @@ ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
     client_get_fact_ = create_client<mujin_ros2::srv::GetFact>("/" + wm_ns + "/get_fact");
     client_set_fact_ = create_client<mujin_ros2::srv::SetFact>("/" + wm_ns + "/set_fact");
 
-    // Register BT node types based on mode
+    component_.setParam("bt_log.enabled", get_parameter("bt_log.enabled").as_bool());
+    component_.setParam("bt_log.path", get_parameter("bt_log.path").as_string().c_str());
+    component_.setParam("bt_log.tree_id", get_parameter("bt_log.tree_id").as_string().c_str());
+    component_.setTickRateHz(get_parameter("tick_rate_hz").as_double());
+
+    // Register BT node types based on mode.
     registerCoreNodes();
+    if (inprocess_wm_) {
+        component_.setBlackboardInitializer({});
+    } else {
+        component_.setBlackboardInitializer([this](const BT::Blackboard::Ptr& blackboard) {
+            blackboard->set("get_fact_client", client_get_fact_.get());
+            blackboard->set("set_fact_client", client_set_fact_.get());
+        });
+    }
+
+    if (component_.configure() != PCL_OK) {
+        RCLCPP_ERROR(get_logger(), "Failed to configure executor component");
+        return CallbackReturn::FAILURE;
+    }
 
     RCLCPP_INFO(get_logger(), "ExecutorNode configured");
     return CallbackReturn::SUCCESS;
@@ -36,10 +54,36 @@ ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
 
 ExecutorNode::CallbackReturn
 ExecutorNode::on_activate(const rclcpp_lifecycle::State&) {
+    if (component_.activate() != PCL_OK) {
+        RCLCPP_ERROR(get_logger(), "Failed to activate executor component");
+        return CallbackReturn::FAILURE;
+    }
+
     auto qos = rclcpp::QoS(50).reliable();
     pub_bt_events_ = create_publisher<std_msgs::msg::String>("/executor/bt_events", qos);
     pub_status_    = create_publisher<std_msgs::msg::String>("/executor/status",
                                                               rclcpp::QoS(1).reliable().transient_local());
+    pub_bt_events_->on_activate();
+    pub_status_->on_activate();
+    sub_bt_xml_ = create_subscription<std_msgs::msg::String>(
+        "/executor/bt_xml", rclcpp::QoS(10).reliable(),
+        [this](const std_msgs::msg::String& msg) {
+            try {
+                loadAndExecute(msg.data);
+            } catch (const std::exception& e) {
+                RCLCPP_ERROR(get_logger(), "Failed to load BT XML: %s", e.what());
+                publishStatus("FAILURE");
+            }
+        });
+
+    component_.setEventSink([this](const std::string& json_line) {
+        if (!pub_bt_events_ || !pub_bt_events_->is_activated()) {
+            return;
+        }
+        auto msg = std::make_unique<std_msgs::msg::String>();
+        msg->data = json_line;
+        pub_bt_events_->publish(std::move(msg));
+    });
 
     publishStatus("IDLE");
     RCLCPP_INFO(get_logger(), "ExecutorNode activated");
@@ -49,82 +93,54 @@ ExecutorNode::on_activate(const rclcpp_lifecycle::State&) {
 ExecutorNode::CallbackReturn
 ExecutorNode::on_deactivate(const rclcpp_lifecycle::State&) {
     tick_timer_.reset();
-    executing_ = false;
+    sub_bt_xml_.reset();
     pub_bt_events_.reset();
     pub_status_.reset();
+    component_.deactivate();
     return CallbackReturn::SUCCESS;
 }
 
 ExecutorNode::CallbackReturn
 ExecutorNode::on_cleanup(const rclcpp_lifecycle::State&) {
-    tree_.reset();
-    bt_logger_.reset();
     client_get_fact_.reset();
     client_set_fact_.reset();
+    component_.cleanup();
     return CallbackReturn::SUCCESS;
 }
 
 ExecutorNode::CallbackReturn
 ExecutorNode::on_shutdown(const rclcpp_lifecycle::State&) {
-    if (bt_logger_) bt_logger_->flush();
+    component_.shutdown();
     return CallbackReturn::SUCCESS;
 }
 
 void ExecutorNode::registerCoreNodes() {
+    if (core_nodes_registered_) {
+        return;
+    }
+
     if (inprocess_wm_) {
         // In-process: use direct WorldModel pointer variants (no service overhead)
-        factory_.registerNodeType<mujin::CheckWorldPredicate>("CheckWorldPredicate");
-        factory_.registerNodeType<mujin::SetWorldPredicate>("SetWorldPredicate");
+        component_.factory().registerNodeType<mujin::CheckWorldPredicate>("CheckWorldPredicate");
+        component_.factory().registerNodeType<mujin::SetWorldPredicate>("SetWorldPredicate");
     } else {
         // Distributed: use service-backed variants
-        factory_.registerNodeType<RosCheckWorldPredicate>("CheckWorldPredicate");
-        factory_.registerNodeType<RosSetWorldPredicate>("SetWorldPredicate");
+        component_.factory().registerNodeType<RosCheckWorldPredicate>("CheckWorldPredicate");
+        component_.factory().registerNodeType<RosSetWorldPredicate>("SetWorldPredicate");
     }
+
+    core_nodes_registered_ = true;
 }
 
 void ExecutorNode::loadAndExecute(const std::string& bt_xml) {
-    // Stop any running tree
     tick_timer_.reset();
-    tree_.reset();
-    bt_logger_.reset();
-    executing_ = false;
-
-    // Create tree from XML
-    tree_ = std::make_unique<BT::Tree>(factory_.createTreeFromText(bt_xml));
-
-    // Set blackboard entries for BT node access
-    if (inprocess_wm_) {
-        tree_->rootBlackboard()->set("world_model", inprocess_wm_);
-    } else {
-        tree_->rootBlackboard()->set("get_fact_client", client_get_fact_.get());
-        tree_->rootBlackboard()->set("set_fact_client", client_set_fact_.get());
-    }
-
-    // Attach MujinBTLogger (Layer 2)
-    const auto tree_id = get_parameter("bt_log.tree_id").as_string();
-    bt_logger_ = std::make_unique<mujin::MujinBTLogger>(
-        *tree_, tree_id, inprocess_wm_);
-
-    if (get_parameter("bt_log.enabled").as_bool()) {
-        bt_logger_->addFileSink(get_parameter("bt_log.path").as_string());
-    }
-
-    // Publish BT events as ROS2 topic
-    if (pub_bt_events_ && pub_bt_events_->is_activated()) {
-        bt_logger_->addCallbackSink([this](const std::string& json_line) {
-            auto msg  = std::make_unique<std_msgs::msg::String>();
-            msg->data = json_line;
-            pub_bt_events_->publish(std::move(msg));
-        });
-    }
-
-    // Start tick timer
-    executing_   = true;
-    last_status_ = BT::NodeStatus::RUNNING;
+    component_.loadAndExecute(bt_xml);
     publishStatus("RUNNING");
 
-    double rate_hz = get_parameter("tick_rate_hz").as_double();
-    if (rate_hz <= 0.0) rate_hz = 50.0;
+    double rate_hz = component_.tickRateHz();
+    if (rate_hz <= 0.0) {
+        rate_hz = 50.0;
+    }
     auto period = std::chrono::milliseconds(static_cast<int>(1000.0 / rate_hz));
 
     tick_timer_ = create_wall_timer(period, [this]() { tickOnce(); });
@@ -133,17 +149,12 @@ void ExecutorNode::loadAndExecute(const std::string& bt_xml) {
 }
 
 void ExecutorNode::tickOnce() {
-    if (!tree_ || !executing_) return;
+    component_.tickOnce();
 
-    last_status_ = tree_->tickOnce();
-
-    if (last_status_ != BT::NodeStatus::RUNNING) {
+    if (!component_.isExecuting()) {
         tick_timer_.reset();
-        executing_ = false;
-        if (bt_logger_) bt_logger_->flush();
-
         const std::string status_str =
-            (last_status_ == BT::NodeStatus::SUCCESS) ? "SUCCESS" : "FAILURE";
+            (component_.lastStatus() == BT::NodeStatus::SUCCESS) ? "SUCCESS" : "FAILURE";
         publishStatus(status_str);
         RCLCPP_INFO(get_logger(), "BT execution finished: %s", status_str.c_str());
     }

@@ -1,7 +1,6 @@
 #pragma once
 
-#include "mujin/world_model.h"
-#include "mujin/wm_audit_log.h"
+#include "mujin/world_model_component.h"
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
@@ -10,10 +9,6 @@
 #include "mujin_ros2/srv/get_fact.hpp"
 #include "mujin_ros2/srv/set_fact.hpp"
 #include "mujin_ros2/srv/query_state.hpp"
-
-#include <atomic>
-#include <mutex>
-#include <optional>
 
 namespace mujin_ros2 {
 
@@ -46,12 +41,11 @@ public:
     CallbackReturn on_shutdown(const rclcpp_lifecycle::State& prev) override;
 
     /// Direct access for in-process (combined_main) mode.
-    mujin::WorldModel& worldModel() { return wm_; }
-    const mujin::WorldModel& worldModel() const { return wm_; }
+    mujin::WorldModel& worldModel() { return component_.worldModel(); }
+    const mujin::WorldModel& worldModel() const { return component_.worldModel(); }
 
 private:
-    mujin::WorldModel  wm_;
-    std::optional<mujin::WmAuditLog> wm_audit_;
+    mujin::WorldModelComponent component_;
 
     // Services
     rclcpp::Service<mujin_ros2::srv::GetFact>::SharedPtr    srv_get_fact_;
@@ -61,7 +55,6 @@ private:
     // Publisher + debounce timer
     rclcpp_lifecycle::LifecyclePublisher<mujin_ros2::msg::WorldState>::SharedPtr pub_world_state_;
     rclcpp::TimerBase::SharedPtr publish_timer_;
-    std::atomic<bool> state_dirty_{false};
 
     // Service handlers
     void handleGetFact(
@@ -77,7 +70,6 @@ private:
         std::shared_ptr<mujin_ros2::srv::QueryState::Response> res);
 
     void publishWorldState();
-    void loadDomainFromParams();
 };
 
 } // namespace mujin_ros2

@@ -3,6 +3,7 @@
 #include "mujin/world_model.h"
 
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <shared_mutex>
 #include <string>

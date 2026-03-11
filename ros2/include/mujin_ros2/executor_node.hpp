@@ -1,7 +1,6 @@
 #pragma once
 
-#include "mujin/world_model.h"
-#include "mujin/bt_logger.h"
+#include "mujin/executor_component.h"
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
@@ -11,9 +10,6 @@
 #include "mujin_ros2/srv/set_fact.hpp"
 
 #include <behaviortree_cpp/bt_factory.h>
-
-#include <memory>
-#include <string>
 
 namespace mujin_ros2 {
 
@@ -46,26 +42,28 @@ public:
     CallbackReturn on_shutdown(const rclcpp_lifecycle::State& prev) override;
 
     /// Load BT XML and begin ticking.
-    /// Called externally (e.g. from combined_main after Plan action completes).
+    /// Called externally or via the /executor/bt_xml subscription.
     void loadAndExecute(const std::string& bt_xml);
 
     /// For in-process mode: inject WorldModel pointer so BT nodes skip service calls.
-    void setInProcessWorldModel(mujin::WorldModel* wm) { inprocess_wm_ = wm; }
+    void setInProcessWorldModel(mujin::WorldModel* wm) {
+        inprocess_wm_ = wm;
+        component_.setInProcessWorldModel(wm);
+    }
 
     /// Expose factory so callers can register custom action node types.
-    BT::BehaviorTreeFactory& factory() { return factory_; }
+    BT::BehaviorTreeFactory& factory() { return component_.factory(); }
 
-    BT::NodeStatus lastStatus() const { return last_status_; }
+    BT::NodeStatus lastStatus() const { return component_.lastStatus(); }
 
 private:
-    BT::BehaviorTreeFactory factory_;
-    std::unique_ptr<BT::Tree> tree_;
-    std::unique_ptr<mujin::MujinBTLogger> bt_logger_;
+    mujin::ExecutorComponent component_;
 
     mujin::WorldModel* inprocess_wm_ = nullptr;
 
     // Tick timer
     rclcpp::TimerBase::SharedPtr tick_timer_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr sub_bt_xml_;
 
     // Publishers
     rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::String>::SharedPtr pub_bt_events_;
@@ -75,8 +73,7 @@ private:
     rclcpp::Client<mujin_ros2::srv::GetFact>::SharedPtr client_get_fact_;
     rclcpp::Client<mujin_ros2::srv::SetFact>::SharedPtr client_set_fact_;
 
-    bool executing_ = false;
-    BT::NodeStatus last_status_ = BT::NodeStatus::IDLE;
+    bool core_nodes_registered_ = false;
 
     void tickOnce();
     void registerCoreNodes();

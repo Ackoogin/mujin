@@ -147,11 +147,10 @@ TEST_F(FullPipelineTest, PlanAndExecuteReachesGoal) {
     ASSERT_NE(plan_result, nullptr);
     ASSERT_TRUE(plan_result->success) << plan_result->error_msg;
 
-    // 2. Load BT and execute
-    ex_node_->loadAndExecute(plan_result->bt_xml);
-
+    // 2. Planner publishes BT XML and ExecutorNode subscribes to it.
     deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-    while (ex_node_->lastStatus() == BT::NodeStatus::RUNNING
+    while (ex_node_->lastStatus() != BT::NodeStatus::SUCCESS
+           && ex_node_->lastStatus() != BT::NodeStatus::FAILURE
            && std::chrono::steady_clock::now() < deadline)
     {
         executor_.spin_some(std::chrono::milliseconds(20));

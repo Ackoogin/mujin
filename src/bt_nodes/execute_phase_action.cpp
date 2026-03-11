@@ -34,10 +34,18 @@ BT::NodeStatus ExecutePhaseAction::onStart() {
         return BT::NodeStatus::FAILURE;
     }
 
-    auto* wm       = config().blackboard->get<WorldModel*>("world_model");
-    auto* planner  = config().blackboard->get<Planner*>("planner");
-    auto* compiler = config().blackboard->get<PlanCompiler*>("plan_compiler");
-    auto* registry = config().blackboard->get<ActionRegistry*>("action_registry");
+    WorldModel* wm = nullptr;
+    Planner* planner = nullptr;
+    PlanCompiler* compiler = nullptr;
+    ActionRegistry* registry = nullptr;
+    try {
+        wm = config().blackboard->get<WorldModel*>("world_model");
+        planner = config().blackboard->get<Planner*>("planner");
+        compiler = config().blackboard->get<PlanCompiler*>("plan_compiler");
+        registry = config().blackboard->get<ActionRegistry*>("action_registry");
+    } catch (const std::exception&) {
+        return BT::NodeStatus::FAILURE;
+    }
 
     if (!wm || !planner || !compiler || !registry) {
         return BT::NodeStatus::FAILURE;
@@ -57,7 +65,12 @@ BT::NodeStatus ExecutePhaseAction::onStart() {
 
     // Build the sub-tree using the same factory & blackboard as the parent.
     // The factory must already have all relevant node types registered.
-    auto* factory_ptr = config().blackboard->get<BT::BehaviorTreeFactory*>("bt_factory");
+    BT::BehaviorTreeFactory* factory_ptr = nullptr;
+    try {
+        factory_ptr = config().blackboard->get<BT::BehaviorTreeFactory*>("bt_factory");
+    } catch (const std::exception&) {
+        return BT::NodeStatus::FAILURE;
+    }
     if (!factory_ptr) {
         return BT::NodeStatus::FAILURE;
     }

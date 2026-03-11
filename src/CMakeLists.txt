@@ -8,6 +8,9 @@ add_library(mujin_core STATIC
     plan_compiler.cpp
     pddl_parser.cpp
     planner.cpp
+    world_model_component.cpp
+    planner_component.cpp
+    executor_component.cpp
     bt_nodes/check_world_predicate.cpp
     bt_nodes/set_world_predicate.cpp
     bt_nodes/invoke_service.cpp
@@ -27,6 +30,7 @@ target_link_libraries(mujin_core
     PUBLIC
         behaviortree_cpp
         lapkt_core
+        pcl_core
 )
 
 # ---------------------------------------------------------------------------

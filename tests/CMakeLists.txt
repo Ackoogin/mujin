@@ -69,3 +69,18 @@ target_link_libraries(test_pcl_oom PRIVATE pcl_core GTest::gtest_main)
 target_link_options(test_pcl_oom PRIVATE -Wl,--wrap=malloc,--wrap=calloc)
 gtest_discover_tests(test_pcl_oom DISCOVERY_MODE PRE_TEST)
 
+# ---------------------------------------------------------------------------
+# PCL-backed Mujin component tests
+# ---------------------------------------------------------------------------
+add_executable(test_world_model_component test_world_model_component.cpp)
+target_link_libraries(test_world_model_component PRIVATE mujin_core GTest::gtest_main)
+gtest_discover_tests(test_world_model_component DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_planner_component test_planner_component.cpp)
+target_link_libraries(test_planner_component PRIVATE mujin_core GTest::gtest_main)
+gtest_discover_tests(test_planner_component DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_executor_component test_executor_component.cpp)
+target_link_libraries(test_executor_component PRIVATE mujin_core GTest::gtest_main)
+gtest_discover_tests(test_executor_component DISCOVERY_MODE PRE_TEST)
+

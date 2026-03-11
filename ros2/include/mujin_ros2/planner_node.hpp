@@ -1,15 +1,11 @@
 #pragma once
 
-#include "mujin/world_model.h"
-#include "mujin/planner.h"
-#include "mujin/plan_compiler.h"
-#include "mujin/action_registry.h"
-#include "mujin/plan_audit_log.h"
-#include "mujin/pddl_parser.h"
+#include "mujin/planner_component.h"
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include <rclcpp_action/rclcpp_action.hpp>
+#include <std_msgs/msg/string.hpp>
 
 #include "mujin_ros2/action/plan.hpp"
 #include "mujin_ros2/srv/query_state.hpp"
@@ -52,26 +48,23 @@ public:
     /// For in-process mode: inject the canonical WorldModel directly.
     /// When set, snapshotWorldModel() copies state from this pointer instead of
     /// calling the QueryState service.
-    void setInProcessWorldModel(mujin::WorldModel* wm) { inprocess_wm_ = wm; }
+    void setInProcessWorldModel(mujin::WorldModel* wm) {
+        inprocess_wm_ = wm;
+        component_.setInProcessWorldModel(wm);
+    }
 
     /// Expose ActionRegistry so combined_main can register action node types.
-    mujin::ActionRegistry& actionRegistry() { return registry_; }
+    mujin::ActionRegistry& actionRegistry() { return component_.actionRegistry(); }
 
 private:
-    mujin::Planner       planner_;
-    mujin::PlanCompiler  compiler_;
-    mujin::ActionRegistry registry_;
-    std::optional<mujin::PlanAuditLog> plan_audit_;
+    mujin::PlannerComponent component_;
 
     // In-process mode: direct WorldModel pointer (null = use service)
     mujin::WorldModel* inprocess_wm_ = nullptr;
 
-    // PDDL file paths (used to reconstruct local WM structure for planning)
-    std::string domain_file_;
-    std::string problem_file_;
-
     // Action server
     rclcpp_action::Server<PlanAction>::SharedPtr action_server_;
+    rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::String>::SharedPtr pub_bt_xml_;
 
     // Client to WorldModelNode QueryState service (distributed mode)
     rclcpp::Client<mujin_ros2::srv::QueryState>::SharedPtr client_query_state_;
@@ -89,9 +82,7 @@ private:
     // Runs on a dedicated thread — blocks during BRFS solve
     void executePlan(std::shared_ptr<GoalHandlePlan> goal_handle);
 
-    // Build a local WorldModel snapshot for planning
-    std::unique_ptr<mujin::WorldModel> snapshotWorldModel(
-        const std::vector<std::string>& goal_fluents);
+    mujin::WorldStateSnapshot queryWorldState() const;
 };
 
 } // namespace mujin_ros2

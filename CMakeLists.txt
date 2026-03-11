@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(mujin LANGUAGES CXX)
+project(mujin LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -139,14 +139,14 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
 # ---------------------------------------------------------------------------
-# Core library (ROS-agnostic)
-# ---------------------------------------------------------------------------
-add_subdirectory(src)
-
-# ---------------------------------------------------------------------------
 # PCL — PYRAMID Container Library (pure C, zero dependencies)
 # ---------------------------------------------------------------------------
 add_subdirectory(src/pcl)
+
+# ---------------------------------------------------------------------------
+# Core library (ROS-agnostic)
+# ---------------------------------------------------------------------------
+add_subdirectory(src)
 
 # ---------------------------------------------------------------------------
 # Tests
