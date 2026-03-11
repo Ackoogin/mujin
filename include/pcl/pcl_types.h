@@ -66,6 +66,9 @@ typedef enum {
 ///
 /// The container borrows pointers — caller owns the underlying memory
 /// and must keep it alive for the duration of the call.
+///
+/// When crossing threads, prefer \ref pcl_executor_post_incoming(), which
+/// deep-copies the message into the executor's ingress queue.
 typedef struct {
   const void* data;           // serialized (or raw struct) payload
   uint32_t    size;           // payload size in bytes

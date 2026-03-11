@@ -214,6 +214,11 @@ mcl_status_t mcl_executor_spin(mcl_executor_t* e);
 /* Spin once — process pending work, return immediately */
 mcl_status_t mcl_executor_spin_once(mcl_executor_t* e, uint32_t timeout_ms);
 
+/* Thread-safe ingress from external I/O threads (deep-copies payload) */
+mcl_status_t mcl_executor_post_incoming(mcl_executor_t* e,
+                                        const char* topic,
+                                        const mcl_msg_t* msg);
+
 /* Request shutdown (thread-safe, can be called from signal handler) */
 void mcl_executor_request_shutdown(mcl_executor_t* e);
 
@@ -382,8 +387,9 @@ typedef struct {
     mcl_status_t (*publish)(void* adapter_ctx, const char* topic,
                             const mcl_msg_t* msg);
 
-    /* Called by adapter when message arrives — dispatches to subscriber cb */
-    /* (adapter calls mcl_executor_dispatch_incoming internally) */
+    /* Called by adapter when message arrives. External I/O threads enqueue
+       work with mcl_executor_post_incoming(); executor-thread adapters may
+       dispatch directly. */
 
     /* Service routing */
     mcl_status_t (*serve)(void* adapter_ctx, const char* service_name,
@@ -443,6 +449,7 @@ while (!shutdown_requested) {
 
     for each container in executor:
         if container.state == ACTIVE:
+            drain_ingress_queue(container)          // posted by I/O threads
             process_incoming_messages(container)   // dispatch subscriber callbacks
             process_service_requests(container)     // dispatch service handlers
             container.callbacks.on_tick(container, dt, user_data)
@@ -451,7 +458,7 @@ while (!shutdown_requested) {
 }
 ```
 
-All callbacks execute on the **single executor thread** — no mutexes needed in user code.
+All callbacks execute on the **single executor thread** — no mutexes needed in user code. External transport threads never call user callbacks directly; they only enqueue owned messages into the executor ingress queue.
 
 ---
 

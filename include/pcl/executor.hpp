@@ -78,6 +78,11 @@ public:
     return pcl_executor_dispatch_incoming(handle_, topic, msg);
   }
 
+  /// \brief Queue an incoming message from an external I/O thread.
+  pcl_status_t postIncoming(const char* topic, const pcl_msg_t* msg) {
+    return pcl_executor_post_incoming(handle_, topic, msg);
+  }
+
   /// \brief Raw handle access.
   pcl_executor_t* handle() { return handle_; }
   const pcl_executor_t* handle() const { return handle_; }

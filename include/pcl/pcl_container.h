@@ -3,7 +3,9 @@
 ///
 /// A container encapsulates a single component's business logic behind a
 /// lifecycle state machine.  All callbacks execute on the owning executor's
-/// single thread — no internal synchronization required.
+/// single thread — no internal synchronization required. External I/O threads
+/// must enqueue ingress through the executor rather than calling callbacks
+/// directly.
 ///
 /// Ports (publishers, subscribers, services) must be created during
 /// on_configure and are immutable after that point.

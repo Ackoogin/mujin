@@ -30,9 +30,21 @@ The executor is responsible for driving one or more containers. It provides:
 *   **Sequential Dispatch**: Guarantees that callbacks (`on_tick`, message reception, service handling) never execute concurrently for the same container.
 *   **Graceful Shutdown**: Provides a timeout-based sequenced shutdown mapping (`ACTIVE` -> `CONFIGURED` -> `FINALIZED`) for all managed containers.
 *   **Intra-Process Direct Dispatch**: If no external transport wrapper is provided, the executor handles zero-copy pointer handoffs directly between publishers and subscribers that reside within the same executor memory space.
+*   **Queued Cross-Thread Ingress**: External I/O threads call `pcl_executor_post_incoming()` to enqueue work. The executor deep-copies the topic, type name, and payload bytes, then drains that queue on the executor thread during `spin()` / `spin_once()`.
 
 ### The Transport Adapter (`pcl_transport_t`)
-An interface containing function pointers (`publish`, `serve`, `subscribe`, `shutdown`) that acts as a bridge. For instance, a ROS2 bridge application would initialize a PCL Executor and pass in a transport struct containing pointers to functions that ultimately call `rclcpp::Publisher::publish`. 
+An interface containing function pointers (`publish`, `serve`, `subscribe`, `shutdown`) that acts as a bridge. For instance, a ROS2 bridge application would initialize a PCL Executor and pass in a transport struct containing pointers to functions that ultimately call `rclcpp::Publisher::publish`.
+
+### Threading and I/O Boundary
+PCL draws a hard line between **business logic** and **transport I/O**:
+
+*   All user callbacks (`on_configure`, `on_activate`, subscriber callbacks, service handlers, `on_tick`) run only on the executor thread.
+*   External threads must **never** call component callbacks directly.
+*   External threads may receive data from gRPC, DDS, ROS2, sockets, or device drivers, but they must hand that data to the executor via `pcl_executor_post_incoming()`.
+*   `pcl_executor_post_incoming()` copies the message into an internal ingress queue, so producer threads can safely release or reuse their buffers immediately after posting.
+*   The executor drains queued ingress before ticking containers, which creates a deterministic "apply external updates, then run logic" boundary similar to the existing `PerceptionBridge::flush()` pattern used elsewhere in the codebase.
+
+This means a gRPC server thread does network work, deserializes enough to classify the message, and posts it into the executor queue. The container itself still processes the request on the single executor thread.
 
 ## Serialization and Service Patterns
 
@@ -41,7 +53,25 @@ PCL is designed to handle fully serialized byte buffers or raw struct pointers. 
 *   `size`: The length of the payload.
 *   `type_name`: A canonical string (e.g., `"WorldState"`) used by the transport adapter to determine how to deserialize the payload from the wire.
 
+For same-thread direct dispatch, `pcl_msg_t` is borrowed for the duration of the call. For cross-thread ingress, `pcl_executor_post_incoming()` performs a deep copy before returning.
+
 PCL components enforce the architectural service patterns defined by the system, handling distributed state mutations via asynchronous CRUD (Create, Read, Update, Delete) envelopes and requirements streaming.
+
+### Ingress Sequence
+
+```text
+external I/O thread
+  -> receive / deserialize / classify
+  -> pcl_executor_post_incoming(executor, topic, msg)
+  -> return to middleware immediately
+
+executor thread
+  -> drain ingress queue
+  -> dispatch subscriber callback / service handler
+  -> run on_tick()
+```
+
+For long-latency outbound calls such as gRPC clients, the recommended pattern is the inverse: the executor creates the request, an adapter-owned I/O thread waits for the network completion, and the completion is posted back into the executor as a new ingress event.
 
 ## Example Integration (C++)
 
@@ -91,3 +121,9 @@ int main() {
     return 0;
 }
 ```
+
+See also:
+
+*   `examples/external_io_bridge_example.c` for a concrete producer-thread -> executor-queue -> subscriber flow.
+*   `tests/test_pcl_executor.cpp` for a test that proves the external thread can reuse its source buffer immediately after posting.
+*   `examples/ada/pcl_bindings.ads` and `examples/ada/pcl_sensor_demo.adb` for an Ada-facing wrapper and example over the same C ABI.

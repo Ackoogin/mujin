@@ -43,16 +43,15 @@ TEST(PclExecutor, SpinOnceTicksActiveContainer) {
   auto* c = pcl_container_create("ticker", &cbs, &counter);
   pcl_container_configure(c);
   pcl_container_activate(c);
+  pcl_container_set_tick_rate_hz(c, 100.0);
 
   auto* e = pcl_executor_create();
   pcl_executor_add(e, c);
 
-  // spin_once should tick the active container
-  pcl_executor_spin_once(e, 0);
-
-  // with default 100 Hz and the first tick, the accumulator may not
-  // trigger immediately, so tick multiple times
-  for (int i = 0; i < 5; i++) {
+  // Allow wall-clock time to advance so the tick accumulator crosses the
+  // configured period deterministically.
+  for (int i = 0; i < 10; i++) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
     pcl_executor_spin_once(e, 0);
   }
 
@@ -99,7 +98,8 @@ TEST(PclExecutor, MultipleContainers) {
   pcl_executor_add(e, c1);
   pcl_executor_add(e, c2);
 
-  for (int i = 0; i < 20; i++) {
+  for (int i = 0; i < 15; i++) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
     pcl_executor_spin_once(e, 0);
   }
 
@@ -223,6 +223,67 @@ TEST(PclExecutor, DispatchToUnknownTopicReturnsNotFound) {
   pcl_executor_destroy(e);
 }
 
+struct ThreadInjectedData {
+  bool            received = false;
+  int             value = 0;
+  std::thread::id callback_thread;
+};
+
+static void threaded_sub_callback(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
+  auto* data = static_cast<ThreadInjectedData*>(ud);
+  data->received = true;
+  data->value = *static_cast<const int*>(msg->data);
+  data->callback_thread = std::this_thread::get_id();
+}
+
+TEST(PclExecutor, ExternalThreadPostsCopiedMessageToExecutorThread) {
+  ThreadInjectedData sub_data;
+
+  pcl_callbacks_t sub_cbs = {};
+  sub_cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    pcl_container_add_subscriber(c, "sensor_updates", "SensorMsg",
+                                 threaded_sub_callback, ud);
+    return PCL_OK;
+  };
+
+  auto* sub_c = pcl_container_create("threaded_subscriber", &sub_cbs, &sub_data);
+  ASSERT_NE(sub_c, nullptr);
+  ASSERT_EQ(pcl_container_configure(sub_c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(sub_c), PCL_OK);
+
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  ASSERT_EQ(pcl_executor_add(e, sub_c), PCL_OK);
+
+  std::thread::id producer_thread;
+  pcl_status_t post_rc = PCL_ERR_INVALID;
+  std::thread producer([&]() {
+    int payload = 42;
+    pcl_msg_t msg = {};
+    producer_thread = std::this_thread::get_id();
+    msg.data = &payload;
+    msg.size = sizeof(payload);
+    msg.type_name = "SensorMsg";
+
+    post_rc = pcl_executor_post_incoming(e, "sensor_updates", &msg);
+
+    // Overwrite the source buffer immediately to prove the executor copied it.
+    payload = 99;
+  });
+
+  producer.join();
+
+  ASSERT_EQ(post_rc, PCL_OK);
+  ASSERT_EQ(pcl_executor_spin_once(e, 0), PCL_OK);
+  EXPECT_TRUE(sub_data.received);
+  EXPECT_EQ(sub_data.value, 42);
+  EXPECT_EQ(sub_data.callback_thread, std::this_thread::get_id());
+  EXPECT_NE(sub_data.callback_thread, producer_thread);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(sub_c);
+}
+
 // ── Null Safety ─────────────────────────────────────────────────────────
 
 TEST(PclExecutor, NullSafety) {
@@ -230,4 +291,5 @@ TEST(PclExecutor, NullSafety) {
   EXPECT_EQ(pcl_executor_spin(nullptr), PCL_ERR_INVALID);
   EXPECT_EQ(pcl_executor_spin_once(nullptr, 0), PCL_ERR_INVALID);
   EXPECT_EQ(pcl_executor_shutdown_graceful(nullptr, 0), PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_post_incoming(nullptr, "topic", nullptr), PCL_ERR_INVALID);
 }

@@ -41,8 +41,12 @@ typedef struct {
   /// \brief Called once during executor setup for each subscriber port.
   ///
   /// The adapter should begin listening for messages on the given topic
-  /// and call pcl_executor_dispatch_incoming() when messages arrive.
-  /// May be NULL if the adapter only handles outbound traffic.
+/// and either:
+/// - call pcl_executor_post_incoming() from an external I/O thread, or
+/// - call pcl_executor_dispatch_incoming() when already on the executor
+///   thread.
+///
+/// May be NULL if the adapter only handles outbound traffic.
   pcl_status_t (*subscribe)(void*       adapter_ctx,
                             const char* topic,
                             const char* type_name);
@@ -71,8 +75,10 @@ pcl_status_t pcl_executor_set_transport(pcl_executor_t*        e,
 
 /// \brief Dispatch an incoming message to the appropriate subscriber callback.
 ///
-/// Called by the transport adapter when a message arrives from the wire.
-/// Must be called on the executor thread.
+/// Called by the transport adapter when a message arrives from the wire and
+/// the adapter is already executing on the executor thread.
+///
+/// For external I/O threads, use \ref pcl_executor_post_incoming instead.
 pcl_status_t pcl_executor_dispatch_incoming(pcl_executor_t*  e,
                                             const char*      topic,
                                             const pcl_msg_t* msg);

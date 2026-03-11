@@ -15,6 +15,7 @@
 #else
 #  include <time.h>
 #  include <errno.h>
+#  include <pthread.h>
 #endif
 
 // ── Platform time helpers ───────────────────────────────────────────────
@@ -53,6 +54,74 @@ static void pcl_sleep_seconds(double seconds) {
 
 #define PCL_MAX_CONTAINERS 64
 
+typedef struct pcl_pending_msg_t {
+  char*                     topic;
+  char*                     type_name;
+  void*                     data;
+  uint32_t                  size;
+  struct pcl_pending_msg_t* next;
+} pcl_pending_msg_t;
+
+#ifdef _WIN32
+typedef CRITICAL_SECTION pcl_mutex_t;
+
+static void pcl_mutex_init(pcl_mutex_t* mutex) {
+  InitializeCriticalSection(mutex);
+}
+
+static void pcl_mutex_destroy(pcl_mutex_t* mutex) {
+  DeleteCriticalSection(mutex);
+}
+
+static void pcl_mutex_lock(pcl_mutex_t* mutex) {
+  EnterCriticalSection(mutex);
+}
+
+static void pcl_mutex_unlock(pcl_mutex_t* mutex) {
+  LeaveCriticalSection(mutex);
+}
+#else
+typedef pthread_mutex_t pcl_mutex_t;
+
+static void pcl_mutex_init(pcl_mutex_t* mutex) {
+  pthread_mutex_init(mutex, NULL);
+}
+
+static void pcl_mutex_destroy(pcl_mutex_t* mutex) {
+  pthread_mutex_destroy(mutex);
+}
+
+static void pcl_mutex_lock(pcl_mutex_t* mutex) {
+  pthread_mutex_lock(mutex);
+}
+
+static void pcl_mutex_unlock(pcl_mutex_t* mutex) {
+  pthread_mutex_unlock(mutex);
+}
+#endif
+
+static char* pcl_strdup_local(const char* src) {
+  size_t len;
+  char* copy;
+
+  if (!src) return NULL;
+
+  len = strlen(src) + 1u;
+  copy = (char*)malloc(len);
+  if (!copy) return NULL;
+
+  memcpy(copy, src, len);
+  return copy;
+}
+
+static void free_pending_msg(pcl_pending_msg_t* pending) {
+  if (!pending) return;
+  free(pending->topic);
+  free(pending->type_name);
+  free(pending->data);
+  free(pending);
+}
+
 // ── Internal executor representation ────────────────────────────────────
 
 struct pcl_executor_t {
@@ -65,6 +134,10 @@ struct pcl_executor_t {
   volatile int     shutdown_requested;
 
   double           prev_time;
+
+  pcl_pending_msg_t* incoming_head;
+  pcl_pending_msg_t* incoming_tail;
+  pcl_mutex_t        incoming_lock;
 };
 
 // ── Create / destroy ────────────────────────────────────────────────────
@@ -76,11 +149,30 @@ pcl_executor_t* pcl_executor_create(void) {
   e->has_transport      = 0;
   e->shutdown_requested = 0;
   e->prev_time          = 0.0;
+  pcl_mutex_init(&e->incoming_lock);
   return e;
 }
 
 void pcl_executor_destroy(pcl_executor_t* e) {
+  pcl_pending_msg_t* pending;
   if (!e) return;
+  if (e->has_transport && e->transport.shutdown) {
+    e->transport.shutdown(e->transport.adapter_ctx);
+  }
+
+  pcl_mutex_lock(&e->incoming_lock);
+  pending = e->incoming_head;
+  e->incoming_head = NULL;
+  e->incoming_tail = NULL;
+  pcl_mutex_unlock(&e->incoming_lock);
+
+  while (pending) {
+    pcl_pending_msg_t* next = pending->next;
+    free_pending_msg(pending);
+    pending = next;
+  }
+
+  pcl_mutex_destroy(&e->incoming_lock);
   free(e);
 }
 
@@ -112,6 +204,57 @@ static struct pcl_port_t* find_subscriber(pcl_executor_t* e,
   return NULL;
 }
 
+static pcl_status_t dispatch_incoming_now(pcl_executor_t*  e,
+                                          const char*      topic,
+                                          const pcl_msg_t* msg) {
+  struct pcl_port_t* sub;
+
+  if (!e || !topic || !msg) return PCL_ERR_INVALID;
+
+  sub = find_subscriber(e, topic);
+  if (!sub) return PCL_ERR_NOT_FOUND;
+
+  sub->sub_cb(sub->owner, msg, sub->sub_user_data);
+  return PCL_OK;
+}
+
+static pcl_status_t drain_incoming_queue(pcl_executor_t* e) {
+  pcl_pending_msg_t* pending;
+  pcl_status_t       rc = PCL_OK;
+
+  if (!e) return PCL_ERR_INVALID;
+
+  for (;;) {
+    pcl_msg_t view;
+
+    pcl_mutex_lock(&e->incoming_lock);
+    pending = e->incoming_head;
+    if (pending) {
+      e->incoming_head = pending->next;
+      if (!e->incoming_head) {
+        e->incoming_tail = NULL;
+      }
+    }
+    pcl_mutex_unlock(&e->incoming_lock);
+
+    if (!pending) break;
+
+    memset(&view, 0, sizeof(view));
+    view.data = pending->data;
+    view.size = pending->size;
+    view.type_name = pending->type_name;
+
+    rc = dispatch_incoming_now(e, pending->topic, &view);
+    free_pending_msg(pending);
+
+    if (rc != PCL_OK) {
+      return rc;
+    }
+  }
+
+  return PCL_OK;
+}
+
 // ── Tick one container ──────────────────────────────────────────────────
 
 static void tick_container(pcl_container_t* c, double dt) {
@@ -139,6 +282,7 @@ pcl_status_t pcl_executor_spin(pcl_executor_t* e) {
   double fastest_hz;
   double base_period;
   double t_prev;
+  pcl_status_t rc;
   uint32_t i;
 
   if (!e) return PCL_ERR_INVALID;
@@ -162,6 +306,11 @@ pcl_status_t pcl_executor_spin(pcl_executor_t* e) {
     double remaining;
     t_prev = t_now;
 
+    rc = drain_incoming_queue(e);
+    if (rc != PCL_OK) {
+      return rc;
+    }
+
     for (i = 0; i < e->container_count; ++i) {
       tick_container(e->containers[i], dt);
     }
@@ -180,6 +329,7 @@ pcl_status_t pcl_executor_spin(pcl_executor_t* e) {
 pcl_status_t pcl_executor_spin_once(pcl_executor_t* e, uint32_t timeout_ms) {
   double t_now;
   double dt;
+  pcl_status_t rc;
   uint32_t i;
 
   if (!e) return PCL_ERR_INVALID;
@@ -188,6 +338,9 @@ pcl_status_t pcl_executor_spin_once(pcl_executor_t* e, uint32_t timeout_ms) {
   t_now = pcl_clock_now();
   dt = (e->prev_time > 0.0) ? (t_now - e->prev_time) : 0.001;
   e->prev_time = t_now;
+
+  rc = drain_incoming_queue(e);
+  if (rc != PCL_OK) return rc;
 
   for (i = 0; i < e->container_count; ++i) {
     tick_container(e->containers[i], dt);
@@ -252,12 +405,48 @@ pcl_status_t pcl_executor_set_transport(pcl_executor_t*        e,
 pcl_status_t pcl_executor_dispatch_incoming(pcl_executor_t*  e,
                                             const char*      topic,
                                             const pcl_msg_t* msg) {
-  struct pcl_port_t* sub;
   if (!e || !topic || !msg) return PCL_ERR_INVALID;
+  return dispatch_incoming_now(e, topic, msg);
+}
 
-  sub = find_subscriber(e, topic);
-  if (!sub) return PCL_ERR_NOT_FOUND;
+pcl_status_t pcl_executor_post_incoming(pcl_executor_t*  e,
+                                        const char*      topic,
+                                        const pcl_msg_t* msg) {
+  pcl_pending_msg_t* pending;
 
-  sub->sub_cb(sub->owner, msg, sub->sub_user_data);
+  if (!e || !topic || !msg) return PCL_ERR_INVALID;
+  if (msg->size > 0u && !msg->data) return PCL_ERR_INVALID;
+  if (!msg->type_name) return PCL_ERR_INVALID;
+
+  pending = (pcl_pending_msg_t*)calloc(1, sizeof(pcl_pending_msg_t));
+  if (!pending) return PCL_ERR_NOMEM;
+
+  pending->topic = pcl_strdup_local(topic);
+  pending->type_name = pcl_strdup_local(msg->type_name);
+
+  if (!pending->topic || !pending->type_name) {
+    free_pending_msg(pending);
+    return PCL_ERR_NOMEM;
+  }
+
+  if (msg->size > 0u) {
+    pending->data = malloc(msg->size);
+    if (!pending->data) {
+      free_pending_msg(pending);
+      return PCL_ERR_NOMEM;
+    }
+    memcpy(pending->data, msg->data, msg->size);
+  }
+  pending->size = msg->size;
+
+  pcl_mutex_lock(&e->incoming_lock);
+  if (e->incoming_tail) {
+    e->incoming_tail->next = pending;
+  } else {
+    e->incoming_head = pending;
+  }
+  e->incoming_tail = pending;
+  pcl_mutex_unlock(&e->incoming_lock);
+
   return PCL_OK;
 }

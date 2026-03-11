@@ -41,7 +41,8 @@ pcl_status_t pcl_executor_spin(pcl_executor_t* e);
 
 /// \brief Process one round of pending work then return.
 ///
-/// Dispatches incoming messages and runs one tick per eligible container.
+/// Drains queued ingress, dispatches incoming messages, and runs one tick
+/// per eligible container.
 /// \param timeout_ms  Maximum time to wait for pending work (0 = no wait).
 pcl_status_t pcl_executor_spin_once(pcl_executor_t* e, uint32_t timeout_ms);
 
@@ -62,6 +63,26 @@ void pcl_executor_request_shutdown(pcl_executor_t* e);
 /// \return PCL_OK on clean shutdown, PCL_ERR_TIMEOUT if deadline exceeded.
 pcl_status_t pcl_executor_shutdown_graceful(pcl_executor_t* e,
                                             uint32_t        timeout_ms);
+
+// ── Cross-thread ingress ────────────────────────────────────────────────
+
+/// \brief Queue an incoming message from an external I/O thread.
+///
+/// Safe to call from threads other than the executor thread. The executor
+/// makes a deep copy of the topic, type name, and payload bytes before the
+/// call returns, so the caller may release or reuse the original buffer
+/// immediately afterwards.
+///
+/// Queued messages are dispatched on the executor thread during the next
+/// \ref pcl_executor_spin_once or \ref pcl_executor_spin cycle.
+///
+/// Use this function for middleware callbacks, sensor threads, gRPC
+/// completions, or other external producers. Use
+/// \ref pcl_executor_dispatch_incoming only when already running on the
+/// executor thread.
+pcl_status_t pcl_executor_post_incoming(pcl_executor_t*  e,
+                                        const char*      topic,
+                                        const pcl_msg_t* msg);
 
 #ifdef __cplusplus
 }
