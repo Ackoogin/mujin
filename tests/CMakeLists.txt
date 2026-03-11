@@ -69,6 +69,12 @@ target_link_libraries(test_pcl_oom PRIVATE pcl_core GTest::gtest_main)
 target_link_options(test_pcl_oom PRIVATE -Wl,--wrap=malloc,--wrap=calloc)
 gtest_discover_tests(test_pcl_oom DISCOVERY_MODE PRE_TEST)
 
+add_executable(test_pcl_dining test_pcl_dining.cpp)
+target_link_libraries(test_pcl_dining PRIVATE pcl_core GTest::gtest_main)
+# Expose internals so the port-overflow branch in pcl_bridge.c can be tested.
+target_include_directories(test_pcl_dining PRIVATE ${CMAKE_SOURCE_DIR}/src/pcl)
+gtest_discover_tests(test_pcl_dining DISCOVERY_MODE PRE_TEST)
+
 # ---------------------------------------------------------------------------
 # PCL-backed Mujin component tests
 # ---------------------------------------------------------------------------
@@ -85,4 +91,3 @@ add_executable(test_executor_component test_executor_component.cpp)
 target_link_libraries(test_executor_component PRIVATE mujin_core GTest::gtest_main)
 target_include_directories(test_executor_component PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 gtest_discover_tests(test_executor_component DISCOVERY_MODE PRE_TEST)
-

@@ -9,6 +9,7 @@ add_library(pcl_core STATIC
   pcl_container.c
   pcl_executor.c
   pcl_log.c
+  pcl_bridge.c
 )
 
 target_include_directories(pcl_core PUBLIC

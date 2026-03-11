@@ -13,6 +13,7 @@
 extern "C" {
 #include "pcl/pcl_executor.h"
 #include "pcl/pcl_container.h"
+#include "pcl/pcl_bridge.h"
 #include "pcl/pcl_log.h"
 }
 
@@ -69,54 +70,64 @@ static void restore_logs() {
 //   #2  malloc(strlen(type)+1)   [pcl_strdup_local] → if NULL → free+return PCL_ERR_NOMEM  (line 429)
 //   #3  malloc(msg->size)                           → if NULL → free+return PCL_ERR_NOMEM  (line 435-436)
 
+// Helper: call fn with OOM triggered on the Nth allocation from entry.
+// Storing the result BEFORE any EXPECT_* macro ensures no GTest-internal
+// allocations consume the countdown between arming and the target call.
+struct OomPostCtx { pcl_executor_t* e; const char* topic; pcl_msg_t* msg; };
+
+static pcl_status_t do_post(void* ud) {
+  auto* c = static_cast<OomPostCtx*>(ud);
+  return pcl_executor_post_incoming(c->e, c->topic, c->msg);
+}
+
 // ── Fail allocation #0: calloc for pcl_pending_msg_t ─────────────────
 
 TEST(PclOom, PostIncomingPendingAllocFails) {
   silence_logs();
   auto* e = pcl_executor_create();
+  pcl_msg_t msg = {}; msg.type_name = "T";
+  OomPostCtx ctx{e, "t", &msg};
 
-  pcl_msg_t msg = {};
-  msg.type_name = "T";
-
-  g_oom_countdown = 0; // fail the very next alloc (calloc for pending_msg)
-  EXPECT_EQ(pcl_executor_post_incoming(e, "t", &msg), PCL_ERR_NOMEM);
+  g_oom_countdown = 0;               // arm: fail the very next alloc
+  pcl_status_t rc = do_post(&ctx);   // no GTest between arm and call
   g_oom_countdown = -1;
+  EXPECT_EQ(rc, PCL_ERR_NOMEM);
 
   pcl_executor_destroy(e);
   restore_logs();
 }
 
-// ── Fail allocation #1: topic strdup → line 429 ──────────────────────
+// ── Fail allocation #1: topic strdup → line 428 ──────────────────────
 
 TEST(PclOom, PostIncomingTopicStrdupFails) {
   silence_logs();
   auto* e = pcl_executor_create();
+  pcl_msg_t msg = {}; msg.type_name = "T";
+  OomPostCtx ctx{e, "t", &msg};
 
-  pcl_msg_t msg = {};
-  msg.type_name = "T";
-
-  // Let calloc (#0) succeed; fail malloc #1 (topic strdup)
+  // calloc (#0) succeeds, malloc(topic) (#1) fails → pending->topic = NULL
   g_oom_countdown = 1;
-  EXPECT_EQ(pcl_executor_post_incoming(e, "t", &msg), PCL_ERR_NOMEM);
+  pcl_status_t rc = do_post(&ctx);
   g_oom_countdown = -1;
+  EXPECT_EQ(rc, PCL_ERR_NOMEM);
 
   pcl_executor_destroy(e);
   restore_logs();
 }
 
-// ── Fail allocation #2: type_name strdup → line 429 ─────────────────
+// ── Fail allocation #2: type_name strdup → line 428 ─────────────────
 
 TEST(PclOom, PostIncomingTypeNameStrdupFails) {
   silence_logs();
   auto* e = pcl_executor_create();
+  pcl_msg_t msg = {}; msg.type_name = "T";
+  OomPostCtx ctx{e, "t", &msg};
 
-  pcl_msg_t msg = {};
-  msg.type_name = "T";
-
-  // Let calloc (#0) and topic strdup (#1) succeed; fail #2 (type_name strdup)
+  // calloc (#0) + malloc(topic) (#1) succeed; malloc(type_name) (#2) fails
   g_oom_countdown = 2;
-  EXPECT_EQ(pcl_executor_post_incoming(e, "t", &msg), PCL_ERR_NOMEM);
+  pcl_status_t rc = do_post(&ctx);
   g_oom_countdown = -1;
+  EXPECT_EQ(rc, PCL_ERR_NOMEM);
 
   pcl_executor_destroy(e);
   restore_logs();
@@ -127,18 +138,50 @@ TEST(PclOom, PostIncomingTypeNameStrdupFails) {
 TEST(PclOom, PostIncomingDataMallocFails) {
   silence_logs();
   auto* e = pcl_executor_create();
-
   int payload = 42;
-  pcl_msg_t msg = {};
-  msg.type_name = "T";
-  msg.data = &payload;
-  msg.size = sizeof(payload);
+  pcl_msg_t msg = {}; msg.type_name = "T"; msg.data = &payload; msg.size = sizeof(payload);
+  OomPostCtx ctx{e, "t", &msg};
 
-  // Let calloc (#0), topic strdup (#1), type_name strdup (#2) succeed;
-  // fail #3 (data malloc — lines 435-436)
+  // calloc + malloc(topic) + malloc(type_name) succeed; malloc(data) (#3) fails
   g_oom_countdown = 3;
-  EXPECT_EQ(pcl_executor_post_incoming(e, "t", &msg), PCL_ERR_NOMEM);
+  pcl_status_t rc = do_post(&ctx);
   g_oom_countdown = -1;
+  EXPECT_EQ(rc, PCL_ERR_NOMEM);
+
+  pcl_executor_destroy(e);
+  restore_logs();
+}
+
+// ── Bridge: container_create fails (pcl_bridge.c lines 108-109) ──────────
+//
+// pcl_bridge_create allocates the bridge struct (calloc #0), then calls
+// pcl_container_create which does its own calloc (#1).  Failing #1 causes
+// pcl_bridge_create to free the bridge struct and return NULL.
+
+static pcl_status_t dummy_bridge_fn(const pcl_msg_t*, pcl_msg_t*, void*) {
+  return PCL_OK;
+}
+
+struct OomBridgeCtx { pcl_executor_t* e; pcl_bridge_t* result; };
+
+static pcl_status_t do_bridge_create(void* ud) {
+  auto* c = static_cast<OomBridgeCtx*>(ud);
+  c->result = pcl_bridge_create(c->e, "b", "in", "T", "out", "T2",
+                                dummy_bridge_fn, nullptr);
+  return PCL_OK;
+}
+
+TEST(PclOom, BridgeCreateContainerAllocFails) {
+  silence_logs();
+  auto* e = pcl_executor_create();
+  OomBridgeCtx ctx{e, nullptr};
+
+  // Alloc #0 = calloc for pcl_bridge_t (succeed)
+  // Alloc #1 = calloc for pcl_container_t inside pcl_container_create (fail)
+  g_oom_countdown = 1;
+  do_bridge_create(&ctx);          // no GTest macro between arm and call
+  g_oom_countdown = -1;
+  EXPECT_EQ(nullptr, ctx.result);
 
   pcl_executor_destroy(e);
   restore_logs();
