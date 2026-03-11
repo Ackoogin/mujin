@@ -1006,3 +1006,126 @@ TEST(PclLogRobust, HandlerUserDataPassedThrough) {
   pcl_log_set_handler(nullptr, nullptr);
   pcl_log_set_level(PCL_LOG_INFO);
 }
+
+// ── level_str default branch: pass an out-of-range level ──────────────
+// The default handler formats the level via level_str().  Casting an
+// integer that is not in the pcl_log_level_t enum exercises the
+// "default: return ???" branch in level_str().
+TEST(PclLogRobust, UnknownLevelDefaultBranch) {
+  pcl_log_set_handler(nullptr, nullptr); // use default handler → calls level_str
+  // Cast 99 to pcl_log_level_t so level_str hits the default branch.
+  // g_min_level is PCL_LOG_INFO (1); 99 >= 1 → passes the level filter.
+  pcl_log(nullptr, static_cast<pcl_log_level_t>(99), "unknown level");
+  // Writes "[???] unknown level\n" to stderr — must not crash.
+  pcl_log_set_level(PCL_LOG_INFO);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Missing coverage: pcl_container_add_service success path (lines 322-330)
+// ═══════════════════════════════════════════════════════════════════════
+
+static pcl_status_t svc_echo(pcl_container_t*, const pcl_msg_t* req,
+                              pcl_msg_t* resp, void*) {
+  resp->data      = req->data;
+  resp->size      = req->size;
+  resp->type_name = req->type_name;
+  return PCL_OK;
+}
+
+TEST(PclContainerRobust, AddServiceSuccessPath) {
+  struct SvcCtx { pcl_port_t* svc = nullptr; };
+  SvcCtx ctx;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto* ctx = static_cast<SvcCtx*>(ud);
+    ctx->svc = pcl_container_add_service(c, "echo_svc", "EchoMsg", svc_echo, nullptr);
+    return ctx->svc ? PCL_OK : PCL_ERR_CALLBACK;
+  };
+
+  auto* c = pcl_container_create("svc_host", &cbs, &ctx);
+  EXPECT_EQ(pcl_container_configure(c), PCL_OK);
+  EXPECT_NE(ctx.svc, nullptr);
+  pcl_container_destroy(c);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Missing coverage: pcl_port_publish success path (line 343)
+// ═══════════════════════════════════════════════════════════════════════
+
+TEST(PclContainerRobust, PublishSuccessOnActiveContainer) {
+  PubPortCtx ctx;
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = create_pub_configure;
+
+  auto* c = pcl_container_create("pub_active", &cbs, &ctx);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+
+  pcl_msg_t msg = {};
+  msg.type_name = "Msg";
+  int payload = 7;
+  msg.data = &payload;
+  msg.size = sizeof(payload);
+
+  // Active container + publisher port → PCL_OK
+  EXPECT_EQ(pcl_port_publish(ctx.pub, &msg), PCL_OK);
+
+  pcl_container_destroy(c);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Missing coverage: pcl_executor_spin() exiting on drain error (line 311)
+// ═══════════════════════════════════════════════════════════════════════
+
+TEST(PclExecutorRobust, SpinExitsOnDrainError) {
+  // Post a ghost message BEFORE calling spin().  The very first drain
+  // attempt returns PCL_ERR_NOT_FOUND → spin() returns immediately.
+  auto* e = pcl_executor_create();
+
+  pcl_msg_t msg = {};
+  msg.type_name = "T";
+  ASSERT_EQ(pcl_executor_post_incoming(e, "ghost_spin", &msg), PCL_OK);
+
+  // spin() should return PCL_ERR_NOT_FOUND after draining the bad message.
+  pcl_status_t rc = pcl_executor_spin(e);
+  EXPECT_EQ(rc, PCL_ERR_NOT_FOUND);
+
+  pcl_executor_destroy(e);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Missing coverage: graceful-shutdown timeout log warning (lines 374-375)
+// ═══════════════════════════════════════════════════════════════════════
+
+TEST(PclExecutorRobust, GracefulShutdownTimeoutWarningLogged) {
+  // c1's on_deactivate sleeps long enough to expire the deadline before
+  // the loop reaches c2, triggering the "shutdown timeout - forcing finalize"
+  // warning on c2's iteration.
+  pcl_callbacks_t slow_cbs = {};
+  slow_cbs.on_deactivate = [](pcl_container_t*, void*) -> pcl_status_t {
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    return PCL_OK;
+  };
+
+  auto* c1 = pcl_container_create("slow_c1", &slow_cbs, nullptr);
+  auto* c2 = pcl_container_create("slow_c2", nullptr,   nullptr);
+
+  pcl_container_configure(c1); pcl_container_activate(c1);
+  pcl_container_configure(c2); pcl_container_activate(c2);
+
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c1);
+  pcl_executor_add(e, c2);
+
+  // timeout_ms=5: deadline 5 ms from now.
+  // c1 deactivate takes 20 ms → deadline long expired when c2 iteration starts.
+  pcl_status_t rc = pcl_executor_shutdown_graceful(e, 5);
+  EXPECT_EQ(rc, PCL_ERR_TIMEOUT);
+  EXPECT_EQ(pcl_container_state(c1), PCL_STATE_FINALIZED);
+  EXPECT_EQ(pcl_container_state(c2), PCL_STATE_FINALIZED);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c1);
+  pcl_container_destroy(c2);
+}

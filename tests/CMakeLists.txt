@@ -64,3 +64,8 @@ add_executable(test_pcl_robustness test_pcl_robustness.cpp)
 target_link_libraries(test_pcl_robustness PRIVATE pcl_core GTest::gtest_main)
 gtest_discover_tests(test_pcl_robustness DISCOVERY_MODE PRE_TEST)
 
+add_executable(test_pcl_oom test_pcl_oom.cpp)
+target_link_libraries(test_pcl_oom PRIVATE pcl_core GTest::gtest_main)
+target_link_options(test_pcl_oom PRIVATE -Wl,--wrap=malloc,--wrap=calloc)
+gtest_discover_tests(test_pcl_oom DISCOVERY_MODE PRE_TEST)
+
