@@ -1,8 +1,8 @@
-#include "mujin_ros2/ros_wm_bridge.hpp"
+#include "ame_ros2/ros_wm_bridge.hpp"
 
 #include <chrono>
 
-namespace mujin_ros2 {
+namespace ame_ros2 {
 
 // ---------------------------------------------------------------------------
 // RosCheckWorldPredicate
@@ -28,10 +28,10 @@ BT::NodeStatus RosCheckWorldPredicate::tick() {
     getInput("expected", expected);
 
     auto* client = config().blackboard->get<
-        rclcpp::Client<mujin_ros2::srv::GetFact>*>("get_fact_client");
+        rclcpp::Client<ame_ros2::srv::GetFact>*>("get_fact_client");
     if (!client) return BT::NodeStatus::FAILURE;
 
-    auto req  = std::make_shared<mujin_ros2::srv::GetFact::Request>();
+    auto req  = std::make_shared<ame_ros2::srv::GetFact::Request>();
     req->key  = pred.value();
 
     auto future = client->async_send_request(req);
@@ -68,10 +68,10 @@ BT::NodeStatus RosSetWorldPredicate::tick() {
     getInput("value", value);
 
     auto* client = config().blackboard->get<
-        rclcpp::Client<mujin_ros2::srv::SetFact>*>("set_fact_client");
+        rclcpp::Client<ame_ros2::srv::SetFact>*>("set_fact_client");
     if (!client) return BT::NodeStatus::FAILURE;
 
-    auto req     = std::make_shared<mujin_ros2::srv::SetFact::Request>();
+    auto req     = std::make_shared<ame_ros2::srv::SetFact::Request>();
     req->key     = pred.value();
     req->value   = value;
     req->source  = std::string("SetWorldPredicate:") + name();
@@ -85,4 +85,4 @@ BT::NodeStatus RosSetWorldPredicate::tick() {
     return res->success ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
-} // namespace mujin_ros2
+} // namespace ame_ros2

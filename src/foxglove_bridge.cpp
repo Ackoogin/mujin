@@ -1,4 +1,4 @@
-#include "mujin/foxglove_bridge.h"
+#include "ame/foxglove_bridge.h"
 
 #define ASIO_STANDALONE
 #define _WEBSOCKETPP_CPP11_STL_
@@ -14,7 +14,7 @@
 #include <sstream>
 #include <thread>
 
-namespace mujin {
+namespace ame {
 
 // =========================================================================
 // Foxglove WebSocket protocol constants
@@ -120,14 +120,14 @@ struct FoxgloveBridge::Impl {
             << "\"id\":1,"
             << "\"topic\":\"/bt_events\","
             << "\"encoding\":\"json\","
-            << "\"schemaName\":\"mujin.BTEvent\","
+            << "\"schemaName\":\"ame.BTEvent\","
             << "\"schema\":\"" << jsonEscapeStr(BT_EVENT_SCHEMA) << "\""
             << "},"
             << "{"
             << "\"id\":2,"
             << "\"topic\":\"/wm_audit\","
             << "\"encoding\":\"json\","
-            << "\"schemaName\":\"mujin.WMFactChange\","
+            << "\"schemaName\":\"ame.WMFactChange\","
             << "\"schema\":\"" << jsonEscapeStr(WM_AUDIT_SCHEMA) << "\""
             << "}"
             << "]"
@@ -290,7 +290,7 @@ void FoxgloveBridge::publish(uint32_t channel_id, const std::string& json_data) 
     impl_->broadcast(channel_id, json_data);
 }
 
-MujinBTLogger::SinkCallback FoxgloveBridge::btEventSink() {
+AmeBTLogger::SinkCallback FoxgloveBridge::btEventSink() {
     return [this](const std::string& json_line) {
         publish(1, json_line);  // channel 1 = /bt_events
     };
@@ -302,4 +302,4 @@ std::function<void(const std::string&)> FoxgloveBridge::wmEventSink() {
     };
 }
 
-} // namespace mujin
+} // namespace ame

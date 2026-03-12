@@ -8,7 +8,7 @@ This separation keeps the planning model and execution model independently repla
 
 ## PDDL Parser
 
-`PddlParser` (`include/mujin/pddl_parser.h`) loads PDDL domain and problem files into a WorldModel.
+`PddlParser` (`include/ame/pddl_parser.h`) loads PDDL domain and problem files into a WorldModel.
 
 - Uses LAPKT's FF-parser (`ff_to_aptk`) as backend
 - Supports STRIPS-level PDDL (`:typing`, `:strips`)
@@ -17,7 +17,7 @@ This separation keeps the planning model and execution model independently repla
 
 ## Planner (LAPKT Integration)
 
-`Planner` (`include/mujin/planner.h`) is a stateless STRIPS solver.
+`Planner` (`include/ame/planner.h`) is a stateless STRIPS solver.
 
 1. `Planner::solve()` calls `WorldModel::projectToSTRIPS()` to build an `aptk::STRIPS_Problem`
 2. Runs BRFS (Breadth-First Search) via LAPKT
@@ -28,7 +28,7 @@ LAPKT is built from source as the `lapkt_core` static library (not its own CMake
 
 ## ActionRegistry
 
-`ActionRegistry` (`include/mujin/action_registry.h`) bridges PDDL action names to BT.CPP implementations.
+`ActionRegistry` (`include/ame/action_registry.h`) bridges PDDL action names to BT.CPP implementations.
 
 ```cpp
 class ActionRegistry {
@@ -60,8 +60,8 @@ The `reactive` flag controls whether the compiled action unit uses `ReactiveSequ
 
 ## Adding a New PDDL Action
 
-1. Implement a BT node (subclass `BT::SyncActionNode` or `BT::StatefulActionNode`) in `include/mujin/bt_nodes/` + `src/bt_nodes/`
-2. Add it to `mujin_core` in `src/CMakeLists.txt`
+1. Implement a BT node (subclass `BT::SyncActionNode` or `BT::StatefulActionNode`) in `include/ame/bt_nodes/` + `src/bt_nodes/`
+2. Add it to `ame_core` in `src/CMakeLists.txt`
 3. Register in `ActionRegistry` via `registerAction(pddl_name, bt_node_type)` or `registerActionSubTree(...)`
 4. Register the BT node type with the BT.CPP factory: `factory.registerNodeType<MyNode>("MyNode")`
 5. In ROS2 mode: also register on `ExecutorNode::factory()` in `combined_main.cpp`

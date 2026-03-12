@@ -4,7 +4,7 @@
 ;;; This is the baseline PDDL domain encoding the autonomous operating context.
 ;;; It is the starting point for all subsequent SACE stages.
 ;;;
-;;; STRIPS-only — compatible with the mujin execution planner (LAPKT BRFS).
+;;; STRIPS-only — compatible with the ame execution planner (LAPKT BRFS).
 ;;; ==========================================================================
 
 (define (domain uav-search-sace)

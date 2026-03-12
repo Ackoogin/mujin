@@ -1,7 +1,7 @@
-#include "mujin/type_system.h"
+#include "ame/type_system.h"
 #include <stdexcept>
 
-namespace mujin {
+namespace ame {
 
 void TypeSystem::addType(const std::string& name, const std::string& parent) {
     types_[name] = parent;
@@ -48,4 +48,4 @@ std::string TypeSystem::getObjectType(const std::string& name) const {
     return it->second;
 }
 
-} // namespace mujin
+} // namespace ame

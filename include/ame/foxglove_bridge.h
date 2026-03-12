@@ -1,6 +1,6 @@
 #pragma once
 
-#include "mujin/bt_logger.h"
+#include "ame/bt_logger.h"
 
 #include <atomic>
 #include <cstdint>
@@ -11,7 +11,7 @@
 #include <thread>
 #include <vector>
 
-namespace mujin {
+namespace ame {
 
 /// Foxglove WebSocket bridge for live BT and WM monitoring.
 ///
@@ -24,14 +24,14 @@ namespace mujin {
 /// Usage:
 ///   FoxgloveBridge bridge({.port = 8765});
 ///   bridge.start();
-///   // ... attach as sinks to MujinBTLogger / WmAuditLog ...
+///   // ... attach as sinks to AmeBTLogger / WmAuditLog ...
 ///   bt_logger.addCallbackSink(bridge.btEventSink());
 ///   bridge.stop();
 class FoxgloveBridge {
 public:
     struct Options {
         uint16_t port = 8765;
-        std::string server_name = "mujin";
+        std::string server_name = "ame";
     };
 
     /// Construct with default options.
@@ -50,8 +50,8 @@ public:
     /// Whether the server is currently running.
     bool running() const { return running_.load(); }
 
-    /// Returns a callback suitable for MujinBTLogger::addCallbackSink().
-    MujinBTLogger::SinkCallback btEventSink();
+    /// Returns a callback suitable for AmeBTLogger::addCallbackSink().
+    AmeBTLogger::SinkCallback btEventSink();
 
     /// Returns a callback suitable for WorldModel audit log forwarding.
     /// The caller should format the WM event as a JSON string before calling.
@@ -67,4 +67,4 @@ private:
     std::atomic<bool> running_{false};
 };
 
-} // namespace mujin
+} // namespace ame

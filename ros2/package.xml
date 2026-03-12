@@ -1,10 +1,10 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>mujin_ros2</name>
+  <name>ame_ros2</name>
   <version>0.1.0</version>
-  <description>ROS2 node wrappers for the mujin_core PDDL planning and BT execution library</description>
-  <maintainer email="dev@example.com">mujin</maintainer>
+  <description>ROS2 node wrappers for the ame_core PDDL planning and BT execution library</description>
+  <maintainer email="dev@example.com">ame</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

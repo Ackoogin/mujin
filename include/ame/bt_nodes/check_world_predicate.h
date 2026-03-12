@@ -3,7 +3,7 @@
 #include <behaviortree_cpp/condition_node.h>
 #include <string>
 
-namespace mujin {
+namespace ame {
 
 class WorldModel;
 
@@ -16,4 +16,4 @@ public:
     BT::NodeStatus tick() override;
 };
 
-} // namespace mujin
+} // namespace ame

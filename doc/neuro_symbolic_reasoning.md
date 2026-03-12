@@ -235,7 +235,7 @@ private:
 
 **Cons**: Requires training data (many solved episodes). Domain-specific — must retrain for new domains. Model quality directly affects search efficiency.
 
-**Dependencies**: ONNX Runtime (available via FetchContent, ~5MB static lib) or libtorch. Keeping it optional (`MUJIN_NEURAL_HEURISTIC` CMake flag, similar to `MUJIN_FOXGLOVE`).
+**Dependencies**: ONNX Runtime (available via FetchContent, ~5MB static lib) or libtorch. Keeping it optional (`AME_NEURAL_HEURISTIC` CMake flag, similar to `AME_FOXGLOVE`).
 
 ---
 
@@ -275,9 +275,9 @@ This is the simplest integration point and the lowest risk. The LLM output is a 
 
 | Source | Layer | Content |
 |--------|-------|---------|
-| `mujin_bt_events.jsonl` | 2 | Every BT node status transition |
-| `mujin_wm_audit.jsonl` | 3 | Every fact change with source attribution |
-| `mujin_plan_audit.jsonl` | 5 | Full planning episodes (init, goal, plan, BT XML) |
+| `ame_bt_events.jsonl` | 2 | Every BT node status transition |
+| `ame_wm_audit.jsonl` | 3 | Every fact change with source attribution |
+| `ame_plan_audit.jsonl` | 5 | Full planning episodes (init, goal, plan, BT XML) |
 
 **Capabilities**:
 
@@ -298,7 +298,7 @@ class MissionAnalyst {
 public:
     struct AnalysisRequest {
         std::string question;                            // natural language
-        std::vector<MujinBTLogger::Event> bt_events;    // relevant window
+        std::vector<AmeBTLogger::Event> bt_events;    // relevant window
         std::vector<WmAuditLog::Entry> wm_changes;      // relevant window
         std::vector<PlanAuditLog::Episode> episodes;     // relevant episodes
     };
@@ -331,7 +331,7 @@ public:
 
 ```
 Training (offline):
-   mujin_bt_events.jsonl from successful missions
+   ame_bt_events.jsonl from successful missions
         |
         v
    Train sequence model: P(next_event | event_history)
@@ -439,34 +439,34 @@ For edge deployment (the primary use case), a tiered approach works well:
 
 ## Dependencies and Build Integration
 
-New optional dependencies, following the `MUJIN_FOXGLOVE` pattern:
+New optional dependencies, following the `AME_FOXGLOVE` pattern:
 
 ```cmake
-option(MUJIN_NEURAL_HEURISTIC "Build with ONNX Runtime for learned heuristics" OFF)
-option(MUJIN_LLM "Build with LLM integration (requires libcurl)" OFF)
+option(AME_NEURAL_HEURISTIC "Build with ONNX Runtime for learned heuristics" OFF)
+option(AME_LLM "Build with LLM integration (requires libcurl)" OFF)
 
-if(MUJIN_NEURAL_HEURISTIC)
+if(AME_NEURAL_HEURISTIC)
     FetchContent_Declare(onnxruntime ...)
-    target_link_libraries(mujin_core PRIVATE onnxruntime)
+    target_link_libraries(ame_core PRIVATE onnxruntime)
 endif()
 
-if(MUJIN_LLM)
+if(AME_LLM)
     find_package(CURL REQUIRED)
-    add_library(mujin_llm STATIC
+    add_library(ame_llm STATIC
         src/llm/llm_client.cpp
         src/llm/goal_interpreter.cpp
         src/llm/mission_analyst.cpp
         src/llm/plan_repairer.cpp
     )
-    target_link_libraries(mujin_llm PUBLIC mujin_core PRIVATE CURL::libcurl)
+    target_link_libraries(ame_llm PUBLIC ame_core PRIVATE CURL::libcurl)
 endif()
 ```
 
 Library boundaries remain clean:
-- `mujin_core` — no neural dependencies (unchanged)
-- `mujin_llm` — optional, LLM integrations (Options A, B, C, E, F)
-- `mujin_neural` — optional, ONNX-based models (Options D, G)
-- `mujin_foxglove` — unchanged
+- `ame_core` — no neural dependencies (unchanged)
+- `ame_llm` — optional, LLM integrations (Options A, B, C, E, F)
+- `ame_neural` — optional, ONNX-based models (Options D, G)
+- `ame_foxglove` — unchanged
 
 ---
 

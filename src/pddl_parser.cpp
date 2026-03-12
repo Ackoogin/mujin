@@ -1,5 +1,5 @@
-#include "mujin/pddl_parser.h"
-#include "mujin/world_model.h"
+#include "ame/pddl_parser.h"
+#include "ame/world_model.h"
 
 #include <algorithm>
 #include <cctype>
@@ -8,7 +8,7 @@
 #include <stdexcept>
 #include <vector>
 
-namespace mujin {
+namespace ame {
 
 // =========================================================================
 // Tokenizer
@@ -382,4 +382,4 @@ void PddlParser::parseFromString(const std::string& domain_pddl,
     }
 }
 
-} // namespace mujin
+} // namespace ame

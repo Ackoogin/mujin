@@ -1,26 +1,26 @@
 /**
- * mujin_combined — in-process single-executor mode.
+ * ame_combined — in-process single-executor mode.
  *
  * All three nodes share one SingleThreadedExecutor and the canonical WorldModel
  * is accessed directly (no service IPC for BT nodes or planner snapshots).
  *
  * Usage:
- *   ros2 run mujin_ros2 mujin_combined \
+ *   ros2 run ame_ros2 ame_combined \
  *     --ros-args \
  *     -p domain.pddl_file:=domains/uav_search/domain.pddl \
  *     -p domain.problem_file:=domains/uav_search/problem.pddl
  *
  * After the lifecycle manager brings all nodes up, send a Plan action goal:
- *   ros2 action send_goal /mujin/plan mujin_ros2/action/Plan \
+ *   ros2 action send_goal /ame/plan ame_ros2/action/Plan \
  *     "{goal_fluents: ['(searched sector_a)', '(classified sector_a)'], replan: false}"
  *
  * The ExecutorNode will then tick the compiled BT automatically.
  */
 
-#include "mujin_ros2/world_model_node.hpp"
-#include "mujin_ros2/planner_node.hpp"
-#include "mujin_ros2/executor_node.hpp"
-#include "mujin_ros2/lifecycle_manager.hpp"
+#include "ame_ros2/world_model_node.hpp"
+#include "ame_ros2/planner_node.hpp"
+#include "ame_ros2/executor_node.hpp"
+#include "ame_ros2/lifecycle_manager.hpp"
 
 #include <behaviortree_cpp/action_node.h>
 #include <rclcpp/rclcpp.hpp>
@@ -72,10 +72,10 @@ int main(int argc, char** argv) {
     rclcpp::init(argc, argv);
 
     // Create nodes
-    auto wm_node = std::make_shared<mujin_ros2::WorldModelNode>();
-    auto pl_node = std::make_shared<mujin_ros2::PlannerNode>();
-    auto ex_node = std::make_shared<mujin_ros2::ExecutorNode>();
-    auto lm_node = std::make_shared<mujin_ros2::MujinLifecycleManager>();
+    auto wm_node = std::make_shared<ame_ros2::WorldModelNode>();
+    auto pl_node = std::make_shared<ame_ros2::PlannerNode>();
+    auto ex_node = std::make_shared<ame_ros2::ExecutorNode>();
+    auto lm_node = std::make_shared<ame_ros2::AmeLifecycleManager>();
 
     // Wire in-process mode: direct WorldModel pointer skips service calls
     pl_node->setInProcessWorldModel(&wm_node->worldModel());
@@ -109,13 +109,13 @@ int main(int argc, char** argv) {
         // Give the executor a moment to start
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
         if (!lm_node->startup()) {
-            RCLCPP_ERROR(rclcpp::get_logger("mujin_combined"),
+            RCLCPP_ERROR(rclcpp::get_logger("ame_combined"),
                 "Lifecycle startup failed — nodes may not be fully active");
         }
     });
 
-    RCLCPP_INFO(rclcpp::get_logger("mujin_combined"),
-        "mujin_combined running. Send a Plan action to /mujin/plan to start.");
+    RCLCPP_INFO(rclcpp::get_logger("ame_combined"),
+        "ame_combined running. Send a Plan action to /ame/plan to start.");
 
     executor.spin();
 

@@ -8,7 +8,7 @@
 
 ## 1. Current Baseline
 
-MUJIN uses LAPKT BRFS (Breadth-First Search) over eagerly-grounded STRIPS problems. Actions are instantaneous and sequential. The PlanCompiler produces linear `BT::Sequence` trees. LAPKT does **not** natively support temporal planning or durative actions.
+AME uses LAPKT BRFS (Breadth-First Search) over eagerly-grounded STRIPS problems. Actions are instantaneous and sequential. The PlanCompiler produces linear `BT::Sequence` trees. LAPKT does **not** natively support temporal planning or durative actions.
 
 ---
 
@@ -162,7 +162,7 @@ An STN is a weighted directed graph where:
 - **Consistency** is checked by detecting negative cycles (Bellman-Ford or Floyd-Warshall)
 - **Dispatchability** computes minimal time windows for executing each time-point
 
-### STN Role in MUJIN
+### STN Role in AME
 
 The temporal planner produces a partially-ordered plan with time annotations. The PlanCompiler converts this into an STN:
 

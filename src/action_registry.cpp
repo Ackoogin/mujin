@@ -1,8 +1,8 @@
-#include "mujin/action_registry.h"
+#include "ame/action_registry.h"
 
 #include <stdexcept>
 
-namespace mujin {
+namespace ame {
 
 void ActionRegistry::registerAction(const std::string& pddl_name,
                                     const std::string& bt_node_type,
@@ -72,4 +72,4 @@ bool ActionRegistry::isReactive(const std::string& pddl_name) const {
     return it->second.reactive;
 }
 
-} // namespace mujin
+} // namespace ame

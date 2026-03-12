@@ -1,26 +1,26 @@
 #pragma once
 
-#include <mujin/world_model_component.h>
+#include <ame/world_model_component.h>
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 
-#include <mujin_ros2/msg/world_state.hpp>
-#include <mujin_ros2/srv/get_fact.hpp>
-#include <mujin_ros2/srv/query_state.hpp>
-#include <mujin_ros2/srv/set_fact.hpp>
+#include <ame_ros2/msg/world_state.hpp>
+#include <ame_ros2/srv/get_fact.hpp>
+#include <ame_ros2/srv/query_state.hpp>
+#include <ame_ros2/srv/set_fact.hpp>
 
-namespace mujin_ros2 {
+namespace ame_ros2 {
 
-/// ROS2 lifecycle node that owns a mujin::WorldModel and exposes it via services.
+/// ROS2 lifecycle node that owns a ame::WorldModel and exposes it via services.
 ///
 /// Services (available after on_configure):
-///   ~/get_fact      (mujin_ros2/srv/GetFact)
-///   ~/set_fact      (mujin_ros2/srv/SetFact)
-///   ~/query_state   (mujin_ros2/srv/QueryState)
+///   ~/get_fact      (ame_ros2/srv/GetFact)
+///   ~/set_fact      (ame_ros2/srv/SetFact)
+///   ~/query_state   (ame_ros2/srv/QueryState)
 ///
 /// Publisher (active after on_activate):
-///   /world_state    (mujin_ros2/msg/WorldState) — QoS: reliable, transient_local
+///   /world_state    (ame_ros2/msg/WorldState) — QoS: reliable, transient_local
 ///
 /// Parameters:
 ///   domain.pddl_file    (string, "")    — path to PDDL domain file
@@ -42,36 +42,36 @@ public:
   CallbackReturn on_shutdown(const rclcpp_lifecycle::State& prev) override;
 
   /// Direct access for in-process (combined_main) mode.
-  mujin::WorldModel& worldModel() { return component_.worldModel(); }
-  const mujin::WorldModel& worldModel() const { return component_.worldModel(); }
+  ame::WorldModel& worldModel() { return component_.worldModel(); }
+  const ame::WorldModel& worldModel() const { return component_.worldModel(); }
 
 private:
-  mujin::WorldModelComponent component_;
+  ame::WorldModelComponent component_;
 
   // Services
-  rclcpp::Service<mujin_ros2::srv::GetFact>::SharedPtr srv_get_fact_;
-  rclcpp::Service<mujin_ros2::srv::SetFact>::SharedPtr srv_set_fact_;
-  rclcpp::Service<mujin_ros2::srv::QueryState>::SharedPtr srv_query_state_;
+  rclcpp::Service<ame_ros2::srv::GetFact>::SharedPtr srv_get_fact_;
+  rclcpp::Service<ame_ros2::srv::SetFact>::SharedPtr srv_set_fact_;
+  rclcpp::Service<ame_ros2::srv::QueryState>::SharedPtr srv_query_state_;
 
   // Publisher + debounce timer
-  rclcpp_lifecycle::LifecyclePublisher<mujin_ros2::msg::WorldState>::SharedPtr
+  rclcpp_lifecycle::LifecyclePublisher<ame_ros2::msg::WorldState>::SharedPtr
       pub_world_state_;
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
   // Service handlers
   void handleGetFact(
-      std::shared_ptr<mujin_ros2::srv::GetFact::Request> req,
-      std::shared_ptr<mujin_ros2::srv::GetFact::Response> res);
+      std::shared_ptr<ame_ros2::srv::GetFact::Request> req,
+      std::shared_ptr<ame_ros2::srv::GetFact::Response> res);
 
   void handleSetFact(
-      std::shared_ptr<mujin_ros2::srv::SetFact::Request> req,
-      std::shared_ptr<mujin_ros2::srv::SetFact::Response> res);
+      std::shared_ptr<ame_ros2::srv::SetFact::Request> req,
+      std::shared_ptr<ame_ros2::srv::SetFact::Response> res);
 
   void handleQueryState(
-      std::shared_ptr<mujin_ros2::srv::QueryState::Request> req,
-      std::shared_ptr<mujin_ros2::srv::QueryState::Response> res);
+      std::shared_ptr<ame_ros2::srv::QueryState::Request> req,
+      std::shared_ptr<ame_ros2::srv::QueryState::Response> res);
 
   void publishWorldState();
 };
 
-} // namespace mujin_ros2
+} // namespace ame_ros2

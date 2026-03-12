@@ -1,7 +1,7 @@
 #pragma once
 
-#include <mujin/world_model.h>
-#include <mujin/wm_audit_log.h>
+#include <ame/world_model.h>
+#include <ame/wm_audit_log.h>
 #include <pcl/component.hpp>
 
 #include <atomic>
@@ -10,7 +10,7 @@
 #include <string>
 #include <vector>
 
-namespace mujin {
+namespace ame {
 
 struct WorldFactValue {
   std::string key;
@@ -76,4 +76,4 @@ private:
   std::atomic<bool> state_dirty_{false};
 };
 
-}  // namespace mujin
+}  // namespace ame

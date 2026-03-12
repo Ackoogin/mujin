@@ -1,17 +1,17 @@
-# Run mujin_combined directly with full env setup and timeout
+# Run ame_combined directly with full env setup and timeout
 & 'C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\Tools\Launch-VsDevShell.ps1' -Arch amd64 -SkipAutomaticLocation
 . 'D:\Dev\ros2-windows\setup.ps1'
-. 'D:\Dev\repo\mujin\install\setup.ps1'
+. 'D:\Dev\repo\ame\install\setup.ps1'
 
-$env:PATH = 'D:\Dev\repo\mujin\install\mujin_ros2\lib\mujin_ros2;' + $env:PATH
-$env:PATH = 'D:\Dev\repo\mujin\install\mujin_ros2\bin;' + $env:PATH
-$env:AMENT_PREFIX_PATH = 'D:\Dev\repo\mujin\install\mujin_ros2;' + $env:AMENT_PREFIX_PATH
+$env:PATH = 'D:\Dev\repo\ame\install\ame_ros2\lib\ame_ros2;' + $env:PATH
+$env:PATH = 'D:\Dev\repo\ame\install\ame_ros2\bin;' + $env:PATH
+$env:AMENT_PREFIX_PATH = 'D:\Dev\repo\ame\install\ame_ros2;' + $env:AMENT_PREFIX_PATH
 
-Set-Location D:\Dev\repo\mujin
+Set-Location D:\Dev\repo\ame
 
-Write-Host "Launching mujin_combined..."
-$proc = Start-Process -FilePath 'D:\Dev\repo\mujin\install\mujin_ros2\lib\mujin_ros2\mujin_combined.exe' `
-  -ArgumentList '--ros-args -p domain.pddl_file:=D:/Dev/repo/mujin/domains/uav_search/domain.pddl -p domain.problem_file:=D:/Dev/repo/mujin/domains/uav_search/problem.pddl' `
+Write-Host "Launching ame_combined..."
+$proc = Start-Process -FilePath 'D:\Dev\repo\ame\install\ame_ros2\lib\ame_ros2\ame_combined.exe' `
+  -ArgumentList '--ros-args -p domain.pddl_file:=D:/Dev/repo/ame/domains/uav_search/domain.pddl -p domain.problem_file:=D:/Dev/repo/ame/domains/uav_search/problem.pddl' `
   -PassThru -NoNewWindow `
   -RedirectStandardOutput 'C:\Temp\mc_out.txt' `
   -RedirectStandardError  'C:\Temp\mc_err.txt'

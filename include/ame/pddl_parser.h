@@ -2,7 +2,7 @@
 
 #include <string>
 
-namespace mujin {
+namespace ame {
 
 class WorldModel;
 
@@ -23,4 +23,4 @@ public:
                                 WorldModel& wm);
 };
 
-} // namespace mujin
+} // namespace ame

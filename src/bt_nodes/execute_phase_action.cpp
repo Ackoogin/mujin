@@ -1,14 +1,14 @@
-#include <mujin/action_registry.h>
-#include <mujin/bt_nodes/execute_phase_action.h>
-#include <mujin/plan_compiler.h>
-#include <mujin/planner.h>
-#include <mujin/world_model.h>
+#include <ame/action_registry.h>
+#include <ame/bt_nodes/execute_phase_action.h>
+#include <ame/plan_compiler.h>
+#include <ame/planner.h>
+#include <ame/world_model.h>
 
 #include <behaviortree_cpp/bt_factory.h>
 #include <sstream>
 #include <stdexcept>
 
-namespace mujin {
+namespace ame {
 
 ExecutePhaseAction::ExecutePhaseAction(const std::string& name,
                                        const BT::NodeConfiguration& config)
@@ -119,4 +119,4 @@ std::vector<std::string> ExecutePhaseAction::parseGoals(const std::string& encod
   return goals;
 }
 
-} // namespace mujin
+} // namespace ame

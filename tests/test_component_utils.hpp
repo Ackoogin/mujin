@@ -1,7 +1,7 @@
 #pragma once
 
-#include <mujin/action_registry.h>
-#include <mujin/world_model.h>
+#include <ame/action_registry.h>
+#include <ame/world_model.h>
 
 #include <behaviortree_cpp/action_node.h>
 #include <behaviortree_cpp/bt_factory.h>
@@ -46,8 +46,8 @@ public:
   }
 };
 
-inline mujin::WorldModel buildUavWorldModel() {
-  mujin::WorldModel wm;
+inline ame::WorldModel buildUavWorldModel() {
+  ame::WorldModel wm;
   auto& ts = wm.typeSystem();
   ts.addType("object");
   ts.addType("location", "object");
@@ -84,7 +84,7 @@ inline mujin::WorldModel buildUavWorldModel() {
   return wm;
 }
 
-inline void registerUavActions(mujin::ActionRegistry& registry) {
+inline void registerUavActions(ame::ActionRegistry& registry) {
   registry.registerAction("move", "StubMoveAction");
   registry.registerAction("search", "StubSearchAction");
   registry.registerAction("classify", "StubClassifyAction");

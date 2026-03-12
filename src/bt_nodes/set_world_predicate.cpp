@@ -1,7 +1,7 @@
-#include "mujin/bt_nodes/set_world_predicate.h"
-#include "mujin/world_model.h"
+#include "ame/bt_nodes/set_world_predicate.h"
+#include "ame/world_model.h"
 
-namespace mujin {
+namespace ame {
 
 SetWorldPredicate::SetWorldPredicate(const std::string& name,
                                      const BT::NodeConfiguration& config)
@@ -27,4 +27,4 @@ BT::NodeStatus SetWorldPredicate::tick() {
     return BT::NodeStatus::SUCCESS;
 }
 
-} // namespace mujin
+} // namespace ame

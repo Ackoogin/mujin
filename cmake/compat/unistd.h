@@ -5,8 +5,8 @@
  * MSVC doesn't provide this header. This shim provides the minimal
  * definitions needed.
  */
-#ifndef _MUJIN_UNISTD_H_COMPAT
-#define _MUJIN_UNISTD_H_COMPAT
+#ifndef _AME_UNISTD_H_COMPAT
+#define _AME_UNISTD_H_COMPAT
 
 #ifdef _MSC_VER
 
@@ -17,4 +17,4 @@
 #include_next <unistd.h>
 #endif
 
-#endif // _MUJIN_UNISTD_H_COMPAT
+#endif // _AME_UNISTD_H_COMPAT

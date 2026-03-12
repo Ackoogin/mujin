@@ -208,7 +208,7 @@ graph LR
 
 ## 6. Deployment Example — Single Process, No Middleware
 
-All three MUJIN components share one executor. Communication is intra-process
+All three AME components share one executor. Communication is intra-process
 zero-copy. No transport adapter is set. This is the simplest deployment, suitable
 for testing, simulation, and embedded targets.
 

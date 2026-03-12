@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace mujin_ros2 {
+namespace ame_ros2 {
 
 /// Manages the lifecycle of WorldModelNode, PlannerNode, and ExecutorNode.
 ///
@@ -20,9 +20,9 @@ namespace mujin_ros2 {
 /// Parameters:
 ///   managed_nodes (string[], ["world_model_node","planner_node","executor_node"])
 ///   transition_timeout_ms (int, 5000)
-class MujinLifecycleManager : public rclcpp::Node {
+class AmeLifecycleManager : public rclcpp::Node {
 public:
-    explicit MujinLifecycleManager(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
+    explicit AmeLifecycleManager(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
     /// Bring all managed nodes through configure → activate.
     bool startup();
@@ -38,4 +38,4 @@ private:
     uint8_t getNodeState(const std::string& node_name);
 };
 
-} // namespace mujin_ros2
+} // namespace ame_ros2

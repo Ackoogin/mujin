@@ -1,6 +1,6 @@
 #pragma once
 
-#include <mujin/world_model.h>
+#include <ame/world_model.h>
 
 #include <cstdint>
 #include <memory>
@@ -10,7 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace mujin {
+namespace ame {
 
 // WorldModelSnapshot: immutable point-in-time copy of WorldModel state.
 //
@@ -83,4 +83,4 @@ private:
   std::shared_ptr<const WorldModelSnapshot> current_;
 };
 
-} // namespace mujin
+} // namespace ame

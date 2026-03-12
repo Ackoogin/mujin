@@ -2,7 +2,7 @@
 
 ## 1. Problem Statement
 
-The mujin codebase currently has two deployment modes:
+The ame codebase currently has two deployment modes:
 
 1. **Standalone** (`src/main.cpp`) — direct library calls, no middleware
 2. **ROS2** (`ros2/src/combined_main.cpp`) — lifecycle nodes, `SingleThreadedExecutor`, service IPC
@@ -66,7 +66,7 @@ Both share the same core libraries (`WorldModel`, `Planner`, `PlanCompiler`), bu
 ### 4.1 Opaque Handles
 
 ```c
-/* mujin_container.h */
+/* ame_container.h */
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -261,7 +261,7 @@ Container : mcl_container_t_Access := mcl_container_create("wm", Callbacks'Acces
 
 ### Option B: C++ Abstract Base Class + C Wrapper
 
-**How it works:** A C++ `IComponent` abstract class provides the ergonomic authoring interface. A thin C wrapper (`mujin_container.h`) auto-generates from the vtable.
+**How it works:** A C++ `IComponent` abstract class provides the ergonomic authoring interface. A thin C wrapper (`ame_container.h`) auto-generates from the vtable.
 
 ```cpp
 // component.hpp (C++ authoring API)
@@ -308,7 +308,7 @@ mcl_container_t* mcl_container_create_from_cpp(mcl::IComponent* component);
 | Pros | Cons |
 |------|------|
 | Natural C++ authoring with RAII, templates, type safety | C++ vtable layout is compiler-specific (not strictly ABI-stable) |
-| Existing mujin code ports 1:1 (lifecycle methods match) | Must provide separate C shim for Ada/C consumers |
+| Existing ame code ports 1:1 (lifecycle methods match) | Must provide separate C shim for Ada/C consumers |
 | Less boilerplate per component | Two API surfaces to maintain |
 
 ---
@@ -419,7 +419,7 @@ public:
 };
 ```
 
-This means existing `mujin_ros2` nodes can be **incrementally migrated**: rewrite the logic as an `mcl` component, then wrap with `Ros2Adapter` for the same ROS2 topic/service API.
+This means existing `ame_ros2` nodes can be **incrementally migrated**: rewrite the logic as an `mcl` component, then wrap with `Ros2Adapter` for the same ROS2 topic/service API.
 
 ---
 
@@ -515,14 +515,14 @@ static const mcl_field_desc_t GetFactResponse_fields[] = {
 
 ---
 
-## 9. Mapping Existing Mujin Components
+## 9. Mapping Existing Ame Components
 
 | Current ROS2 Node | Container Equivalent | Ports |
 |--------------------|---------------------|-------|
 | `WorldModelNode` | `wm_container` | Services: `get_fact`, `set_fact`, `query_state`. Publisher: `world_state` |
 | `PlannerNode` | `planner_container` | Action (modeled as service): `plan`. Client: `query_state` |
 | `ExecutorNode` | `executor_container` | Subscriber: `bt_xml`. Publisher: `bt_events`, `status`. Clients: `get_fact`, `set_fact` |
-| `MujinLifecycleManager` | `mcl_executor` (lifecycle transitions are built-in) | N/A — executor handles lifecycle |
+| `AmeLifecycleManager` | `mcl_executor` (lifecycle transitions are built-in) | N/A — executor handles lifecycle |
 
 **Migration path for `WorldModelNode`:**
 
@@ -566,7 +566,7 @@ yes, provide a `mcl_log()` C function that integrates with ROS2's `RCLCPP_INFO` 
 no, ports are created at configure time
 | Q5 | **Thread-safe shutdown** — `mcl_executor_request_shutdown()` is signal-safe. Should there be a graceful shutdown with timeout that calls `on_deactivate` → `on_shutdown`? | Safety |
 yes, graceful shutdown with timeout that calls `on_deactivate` → `on_shutdown`
-| Q6 | **Should the C API use `mcl_` prefix (mujin container library) or something more generic?** | Naming / reusability |
+| Q6 | **Should the C API use `mcl_` prefix (ame container library) or something more generic?** | Naming / reusability |
 use pcl (PYRAMID container library) instead of mcl
 
 ---

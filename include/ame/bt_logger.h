@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace mujin {
+namespace ame {
 
 class WorldModel;
 
@@ -25,7 +25,7 @@ class WorldModel;
 /// }
 ///
 /// Sinks are configurable: file (JSONL), or user-supplied callback.
-class MujinBTLogger : public BT::StatusChangeLogger {
+class AmeBTLogger : public BT::StatusChangeLogger {
 public:
     /// User-defined sink: receives the formatted JSON string for each event.
     using SinkCallback = std::function<void(const std::string& json_line)>;
@@ -34,11 +34,11 @@ public:
     /// @param tree       The BT to observe.
     /// @param tree_id    Logical name for this tree (appears in every event).
     /// @param wm         Optional WorldModel pointer for version tracking.
-    MujinBTLogger(const BT::Tree& tree,
+    AmeBTLogger(const BT::Tree& tree,
                   const std::string& tree_id = "MissionPlan",
                   const WorldModel* wm = nullptr);
 
-    ~MujinBTLogger() override;
+    ~AmeBTLogger() override;
 
     // -- Sink configuration --------------------------------------------------
 
@@ -71,4 +71,4 @@ private:
     std::vector<std::string> events_;
 };
 
-} // namespace mujin
+} // namespace ame

@@ -6,7 +6,7 @@
 
 ## Purpose
 
-This document walks through a concrete application of the SACE process to the UAV search domain, using the PDDL files in `domains/uav_search_sace/`. It demonstrates what each SACE stage produces in practice and identifies exactly where the current mujin execution planner (LAPKT BRFS, STRIPS-only) is sufficient and where external safety-case tooling is required.
+This document walks through a concrete application of the SACE process to the UAV search domain, using the PDDL files in `domains/uav_search_sace/`. It demonstrates what each SACE stage produces in practice and identifies exactly where the current ame execution planner (LAPKT BRFS, STRIPS-only) is sufficient and where external safety-case tooling is required.
 
 ---
 
@@ -40,7 +40,7 @@ The baseline domain (`domain_baseline.pddl`) adds three ODD predicates to the or
 
 Every action that moves the UAV or performs a mission task requires these predicates. This means the planner **cannot** produce a plan that violates the ODD — the operating context is formally enforced.
 
-**Can the mujin planner do this?** Yes. This is pure STRIPS. Run:
+**Can the ame planner do this?** Yes. This is pure STRIPS. Run:
 
 ```
 domain_baseline.pddl + problem_nominal.pddl → expect: PLAN FOUND
@@ -74,12 +74,12 @@ This is a *negative* result used as evidence: the ODD gating prevents the hazard
 
 But we also need to check: *can the UAV still reach a safe state?* The `loiter-in-place` action has no comms precondition, so it remains applicable. This is Stage 7 evidence.
 
-**Can the mujin planner do this?** Yes, for this specific analysis. We run the planner and check:
+**Can the ame planner do this?** Yes, for this specific analysis. We run the planner and check:
 
 - Plan found → hazardous state is reachable (counterexample trace)
 - No plan found → gating prevents the hazardous scenario
 
-**What the mujin planner CANNOT do for Stage 2:**
+**What the ame planner CANNOT do for Stage 2:**
 
 | Analysis Need | Why It's Beyond STRIPS | What's Needed |
 |--------------|----------------------|---------------|
@@ -103,7 +103,7 @@ In PDDL 3.0+ this is a trajectory constraint:
     (implication (not (weather-ok ?l)) (not (at ?r ?l))))))
 ```
 
-**Can the mujin planner do this?** No. The mujin planner supports STRIPS only — no trajectory constraints, no `always`, no `forall`, no `implication`.
+**Can the ame planner do this?** No. The ame planner supports STRIPS only — no trajectory constraints, no `always`, no `forall`, no `implication`.
 
 **Workaround with STRIPS:** In this specific case, we achieved the same effect by encoding the constraint as action preconditions (Stage 1). The `move` action requires `(weather-ok ?to)`, which structurally prevents the constraint violation. This is a *design-time enforcement* rather than a *planning-time check*.
 
@@ -133,7 +133,7 @@ For this example, the system constraint "maintain safe operation" decomposes to:
 | Planning | Only plan to safe locations | `(weather-ok ?to)` precondition on `move` |
 | Control | Safe-state always reachable | `loiter-in-place` has no degraded preconditions |
 
-**Can the mujin planner do this?** Partially. It can verify each sub-domain independently (same STRIPS planning), but it cannot formally verify that the sub-domain constraints *jointly imply* the system constraint. That requires a theorem prover or model checker.
+**Can the ame planner do this?** Partially. It can verify each sub-domain independently (same STRIPS planning), but it cannot formally verify that the sub-domain constraints *jointly imply* the system constraint. That requires a theorem prover or model checker.
 
 ---
 
@@ -157,7 +157,7 @@ The `domain_degraded.pddl` adds two emergency return actions:
 
 This pair of results is the Stage 5 evidence: the design improvement (adding degraded-mode actions) resolves the Stage 7 gap.
 
-**Can the mujin planner do this?** Yes — this is again pure STRIPS. The mujin planner can verify each degraded configuration by running the appropriate problem file.
+**Can the ame planner do this?** Yes — this is again pure STRIPS. The ame planner can verify each degraded configuration by running the appropriate problem file.
 
 ---
 
@@ -169,9 +169,9 @@ Example: "What if the obstacle detector produces a false negative?"
 
 A failure-mode domain variant would remove the `(airspace-clear ?to)` precondition from `move`, modelling a perception failure where the UAV doesn't know the airspace is blocked. If the planner then finds a plan that enters a blocked sector, that's a hazardous failure.
 
-**Can the mujin planner do this?** Yes, for the basic case — create a variant domain, run the planner, check if a hazardous goal state is reachable. But:
+**Can the ame planner do this?** Yes, for the basic case — create a variant domain, run the planner, check if a hazardous goal state is reachable. But:
 
-| Analysis Need | Mujin Planner | External Tool |
+| Analysis Need | Ame Planner | External Tool |
 |--------------|---------------|---------------|
 | Single failure variant | Yes — edit domain, run planner | — |
 | Combinatorial failure analysis | Manual — one domain per combination | Automated variant generator needed |
@@ -188,7 +188,7 @@ The `problem_ooc_recovery.pddl` models the UAV at sector_a with no comms and deg
 
 **The key question for Stage 7:** "From EVERY reachable out-of-context state, can the UAV reach a safe state?"
 
-**Can the mujin planner do this?** Only one state at a time. For each out-of-context configuration, you must write a problem file and run the planner. This does not scale.
+**Can the ame planner do this?** Only one state at a time. For each out-of-context configuration, you must write a problem file and run the planner. This does not scale.
 
 **What's actually needed:** Universal reachability checking — "for all states where `(comms-lost)` is true, does there exist a plan reaching `(at uav1 base)`?" This is a model checking problem (see [Tooling Analysis](13-tooling-analysis.md)).
 
@@ -198,9 +198,9 @@ The `problem_ooc_recovery.pddl` models the UAV at sector_a with no comms and deg
 
 **What we do:** Collect plan traces as verification evidence, compute coverage metrics.
 
-For each problem file, the mujin planner produces a plan trace (or NO_PLAN). Each trace is a plan validity certificate. The set of problem files exercises the scenario space.
+For each problem file, the ame planner produces a plan trace (or NO_PLAN). Each trace is a plan validity certificate. The set of problem files exercises the scenario space.
 
-**Evidence produced (within mujin planner capability):**
+**Evidence produced (within ame planner capability):**
 
 | Evidence | Source | GSN Role |
 |----------|--------|----------|
@@ -210,7 +210,7 @@ For each problem file, the mujin planner produces a plan trace (or NO_PLAN). Eac
 | OOC recovery — no plan (baseline) | `problem_ooc_recovery.pddl` → planner | Solution node (gap identification) |
 | OOC recovery — plan found (degraded) | `problem_ooc_recovery_degraded.pddl` → planner | Solution node (design improvement proof) |
 
-**What the mujin planner CANNOT provide:**
+**What the ame planner CANNOT provide:**
 
 | Verification Need | Why | What's Needed |
 |-------------------|-----|---------------|
@@ -223,7 +223,7 @@ For each problem file, the mujin planner produces a plan trace (or NO_PLAN). Eac
 
 ## Summary: What Works Now vs. What Needs Tooling
 
-### The mujin planner (LAPKT BRFS) can do
+### The ame planner (LAPKT BRFS) can do
 
 - Nominal plan generation for any STRIPS domain
 - Fault-injected scenario testing (plan found / no plan)
@@ -231,7 +231,7 @@ For each problem file, the mujin planner produces a plan trace (or NO_PLAN). Eac
 - Plan trace generation for GSN solution nodes
 - Single-scenario safe-state reachability checks
 
-### The mujin planner cannot do (external tooling required)
+### The ame planner cannot do (external tooling required)
 
 - Trajectory constraint verification (PDDL 3.0+)
 - Universal reachability / safety property checking

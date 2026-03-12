@@ -6,7 +6,7 @@
 
 ## Current Capability Baseline
 
-The mujin system uses LAPKT BRFS (Breadth-First Search) over eagerly-grounded STRIPS problems. This is the **execution planner** — it generates plans that the BT executor runs. It is fast, sound, and complete for STRIPS.
+The ame system uses LAPKT BRFS (Breadth-First Search) over eagerly-grounded STRIPS problems. This is the **execution planner** — it generates plans that the BT executor runs. It is fast, sound, and complete for STRIPS.
 
 However, the SACE safety case requires analyses that go beyond goal-directed STRIPS planning. This document identifies the tooling gaps and recommends specific tools for each.
 
@@ -34,7 +34,7 @@ However, the SACE safety case requires analyses that go beyond goal-directed STR
 | **LPRPG-P** | Preferences and trajectory constraints | GPL | Medium — C++, CLI |
 | **OPTIC** | Temporal + trajectory constraints | Academic | Medium — C++, CLI |
 
-**Integration approach:** Offline analysis tool. Write constrained PDDL domain/problem files. Run external planner as a subprocess. Parse output for plan validity / constraint violation. The mujin execution planner remains unchanged — the external tool is used only for safety case evidence generation.
+**Integration approach:** Offline analysis tool. Write constrained PDDL domain/problem files. Run external planner as a subprocess. Parse output for plan validity / constraint violation. The ame execution planner remains unchanged — the external tool is used only for safety case evidence generation.
 
 ---
 
@@ -62,7 +62,7 @@ However, the SACE safety case requires analyses that go beyond goal-directed STR
 
 **Integration approach — two tiers:**
 
-**Tier 1 (near-term):** Use VAL to validate plan traces from the mujin planner against PDDL 3.0 constrained domains. This is a lightweight check: the mujin planner generates the plan, VAL checks it against the full constraint set. Catches constraint violations without changing the planner.
+**Tier 1 (near-term):** Use VAL to validate plan traces from the ame planner against PDDL 3.0 constrained domains. This is a lightweight check: the ame planner generates the plan, VAL checks it against the full constraint set. Catches constraint violations without changing the planner.
 
 **Tier 2 (medium-term):** Build a PDDL-to-Promela translator for SPIN. This enables full LTL property checking over the PDDL state space. Properties like `AG (comms-lost -> EF (at uav1 base))` ("globally, if comms are lost, eventually the UAV can reach base") become directly checkable.
 
@@ -111,7 +111,7 @@ However, the SACE safety case requires analyses that go beyond goal-directed STR
 | **TPSHE** | Temporal planning with soft/hard time windows | Academic | Good for deadline-constrained problems |
 | **POPF** | Partial-order temporal planner | Academic | Handles temporal concurrency |
 
-**Integration approach:** Create PDDL 2.1 domain variants with `:durative-actions` for timing analysis. Run externally. The mujin execution planner continues to use the STRIPS version for actual execution; temporal analysis is offline evidence only.
+**Integration approach:** Create PDDL 2.1 domain variants with `:durative-actions` for timing analysis. Run externally. The ame execution planner continues to use the STRIPS version for actual execution; temporal analysis is offline evidence only.
 
 ---
 
@@ -127,7 +127,7 @@ However, the SACE safety case requires analyses that go beyond goal-directed STR
 
 **Why manual file creation doesn't scale:** With *n* fault predicates, there are 2^*n* combinations. With 3 perception faults, 2 planning faults, and 2 control faults, that's 128 combinations. Each needs a problem file, planner run, and result classification.
 
-**Recommended approach:** Build a **PDDL Problem Generator** within the mujin toolchain:
+**Recommended approach:** Build a **PDDL Problem Generator** within the ame toolchain:
 
 ```
 Inputs:
@@ -142,7 +142,7 @@ Outputs:
   - Coverage report (which combinations tested, results)
 ```
 
-This is a Python or C++ tool that reads the baseline PDDL, generates variants by toggling init predicates, runs the mujin planner (or an external planner) on each, and collects results. This is the most immediately actionable tooling gap — it requires no new planner, just automation around the existing one.
+This is a Python or C++ tool that reads the baseline PDDL, generates variants by toggling init predicates, runs the ame planner (or an external planner) on each, and collects results. This is the most immediately actionable tooling gap — it requires no new planner, just automation around the existing one.
 
 ---
 
@@ -163,7 +163,7 @@ This is a Python or C++ tool that reads the baseline PDDL, generates variants by
 | **Fast Downward** | Optimal and satisficing STRIPS/SAS+ planning with many heuristics | GPL | Industry standard. Directly consumes PDDL. Drop-in replacement for analysis |
 | **Scorpion** | Optimal planning with symbolic search | GPL | State of the art for optimal STRIPS |
 
-**Integration approach:** Use Fast Downward as an offline analysis planner for plan quality evidence. The mujin BRFS planner remains the execution planner. Fast Downward's cost-optimal plans provide evidence that the execution planner's satisficing plans are not unnecessarily far from optimal.
+**Integration approach:** Use Fast Downward as an offline analysis planner for plan quality evidence. The ame BRFS planner remains the execution planner. Fast Downward's cost-optimal plans provide evidence that the execution planner's satisficing plans are not unnecessarily far from optimal.
 
 ---
 
@@ -176,7 +176,7 @@ This is a Python or C++ tool that reads the baseline PDDL, generates variants by
                     ├─────────────────────────────────────────────┤
                     │                                             │
   PDDL Domain ─────┤  ┌──────────────┐   ┌──────────────────┐   │
-  + Problem         │  │ Problem      │──▶│ Mujin Planner    │   │──▶ Plan traces
+  + Problem         │  │ Problem      │──▶│ Ame Planner    │   │──▶ Plan traces
   + Fault Catalogue │  │ Generator    │   │ (LAPKT BRFS)     │   │    (STRIPS scenarios)
                     │  └──────────────┘   └──────────────────┘   │
                     │         │                                   │
@@ -209,14 +209,14 @@ This is a Python or C++ tool that reads the baseline PDDL, generates variants by
                                          ▼
                     ┌─────────────────────────────────────────────┐
                     │           Runtime Execution                  │
-                    │         (unchanged — mujin core)             │
+                    │         (unchanged — ame core)             │
                     ├─────────────────────────────────────────────┤
                     │  WorldModel ──▶ LAPKT BRFS ──▶ PlanCompiler │
                     │       ──▶ BT.CPP Executor                   │
                     └─────────────────────────────────────────────┘
 ```
 
-**Key architectural principle:** The mujin execution planner is never replaced. External tools run offline, consuming the same PDDL domain files, and produce evidence artefacts that populate the GSN safety argument. The execution pipeline remains STRIPS-only and fast.
+**Key architectural principle:** The ame execution planner is never replaced. External tools run offline, consuming the same PDDL domain files, and produce evidence artefacts that populate the GSN safety argument. The execution pipeline remains STRIPS-only and fast.
 
 ---
 
@@ -237,7 +237,7 @@ This is a Python or C++ tool that reads the baseline PDDL, generates variants by
 
 | Tool | Stage 1 | Stage 2 | Stage 3 | Stage 4 | Stage 5 | Stage 6 | Stage 7 | Stage 8 | Residual |
 |------|---------|---------|---------|---------|---------|---------|---------|---------|----------|
-| **Mujin BRFS** | Plan generation | Fault scenarios (one-at-a-time) | Precondition-gated constraints | Sub-domain plans | Degraded-mode plans | Single failure variants | Per-state recovery | Plan traces | — |
+| **Ame BRFS** | Plan generation | Fault scenarios (one-at-a-time) | Precondition-gated constraints | Sub-domain plans | Degraded-mode plans | Single failure variants | Per-state recovery | Plan traces | — |
 | **Problem Generator** | — | Systematic fault combinations | — | — | Degraded config enumeration | Failure combinations | OOC state enumeration | Scenario coverage | Random scenarios |
 | **VAL** | — | — | Constraint validation | Decomposition validation | — | — | — | Plan validation | — |
 | **Fast Downward** | — | — | — | — | — | — | — | Optimal plans | — |

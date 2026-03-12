@@ -2,7 +2,7 @@
 
 ## Plan-to-BT Compiler
 
-`PlanCompiler` (`include/mujin/plan_compiler.h`) converts a LAPKT plan into executable BT XML.
+`PlanCompiler` (`include/ame/plan_compiler.h`) converts a LAPKT plan into executable BT XML.
 
 ### Algorithm
 

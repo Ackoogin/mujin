@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace mujin {
+namespace ame {
 
 /// Audit trail for planning episodes.
 ///
@@ -53,4 +53,4 @@ private:
     std::vector<Episode> episodes_;
 };
 
-} // namespace mujin
+} // namespace ame

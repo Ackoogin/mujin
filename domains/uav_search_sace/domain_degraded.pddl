@@ -5,7 +5,7 @@
 ;;; degraded conditions. These address the Stage 7 finding that safe-state
 ;;; recovery requires comms-independent actions.
 ;;;
-;;; STRIPS-only — compatible with the mujin execution planner (LAPKT BRFS).
+;;; STRIPS-only — compatible with the ame execution planner (LAPKT BRFS).
 ;;; ==========================================================================
 
 (define (domain uav-search-sace-degraded)

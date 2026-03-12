@@ -7,9 +7,9 @@
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <lifecycle_msgs/msg/transition.hpp>
 #include <behaviortree_cpp/action_node.h>
-#include <mujin_ros2/executor_node.hpp>
-#include <mujin_ros2/planner_node.hpp>
-#include <mujin_ros2/world_model_node.hpp>
+#include <ame_ros2/executor_node.hpp>
+#include <ame_ros2/planner_node.hpp>
+#include <ame_ros2/world_model_node.hpp>
 
 #include <chrono>
 
@@ -65,9 +65,9 @@ protected:
   void SetUp() override {
     rclcpp::init(0, nullptr);
 
-    wm_node_ = std::make_shared<mujin_ros2::WorldModelNode>();
-    pl_node_ = std::make_shared<mujin_ros2::PlannerNode>();
-    ex_node_ = std::make_shared<mujin_ros2::ExecutorNode>();
+    wm_node_ = std::make_shared<ame_ros2::WorldModelNode>();
+    pl_node_ = std::make_shared<ame_ros2::PlannerNode>();
+    ex_node_ = std::make_shared<ame_ros2::ExecutorNode>();
 
     pl_node_->setInProcessWorldModel(&wm_node_->worldModel());
     ex_node_->setInProcessWorldModel(&wm_node_->worldModel());
@@ -135,9 +135,9 @@ protected:
     rclcpp::shutdown();
   }
 
-  std::shared_ptr<mujin_ros2::WorldModelNode> wm_node_;
-  std::shared_ptr<mujin_ros2::PlannerNode> pl_node_;
-  std::shared_ptr<mujin_ros2::ExecutorNode> ex_node_;
+  std::shared_ptr<ame_ros2::WorldModelNode> wm_node_;
+  std::shared_ptr<ame_ros2::PlannerNode> pl_node_;
+  std::shared_ptr<ame_ros2::ExecutorNode> ex_node_;
   rclcpp::executors::SingleThreadedExecutor executor_;
 };
 
@@ -149,16 +149,16 @@ TEST_F(FullPipelineTest, PlanAndExecuteReachesGoal) {
   };
 
   auto action_client =
-      rclcpp_action::create_client<mujin_ros2::action::Plan>(pl_node_, "/mujin/plan");
+      rclcpp_action::create_client<ame_ros2::action::Plan>(pl_node_, "/ame/plan");
   ASSERT_TRUE(action_client->wait_for_action_server(std::chrono::seconds(3)));
 
-  auto goal_msg = mujin_ros2::action::Plan::Goal();
+  auto goal_msg = ame_ros2::action::Plan::Goal();
   goal_msg.goal_fluents = goal_fluents;
 
-  std::shared_ptr<const mujin_ros2::action::Plan::Result> plan_result;
+  std::shared_ptr<const ame_ros2::action::Plan::Result> plan_result;
   bool plan_done = false;
 
-  auto options = rclcpp_action::Client<mujin_ros2::action::Plan>::SendGoalOptions();
+  auto options = rclcpp_action::Client<ame_ros2::action::Plan>::SendGoalOptions();
   options.result_callback = [&](auto wrapped) {
     plan_result = wrapped.result;
     plan_done = true;

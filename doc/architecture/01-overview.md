@@ -16,7 +16,7 @@ PDDL Domain/Problem
                                                                   |
                                               ┌───────────────────┤
                                               │                   │
-                                        TreeObserver        MujinBTLogger
+                                        TreeObserver        AmeBTLogger
                                          (Layer 1)           (Layer 2)
                                                                   |
                                                          FoxgloveBridge (Layer 4)
@@ -37,12 +37,12 @@ PlanAuditLog (Layer 5) — records each planning episode independently
 | **PlanCompiler** | Builds a causal dependency graph from the plan, extracts parallel flows, emits BT XML | `plan_compiler.h` |
 | **BT.CPP Executor** | Ticks the compiled behaviour tree; BT nodes read/write world state directly | `bt_nodes/` |
 | **MissionExecutor** | Top-level tick loop with replan-on-failure | `main.cpp` |
-| **Observability** | 5-layer audit stack: TreeObserver, MujinBTLogger, WmAuditLog, FoxgloveBridge, PlanAuditLog | see [05-observability.md](05-observability.md) |
+| **Observability** | 5-layer audit stack: TreeObserver, AmeBTLogger, WmAuditLog, FoxgloveBridge, PlanAuditLog | see [05-observability.md](05-observability.md) |
 
 ## Design Principles
 
 - **Single source of truth** — WorldModel owns all state. The BT blackboard is a read-only view. LAPKT gets a snapshot projection.
-- **ROS-agnostic core** — `mujin_core` has no ROS2 dependency. ROS2 integration is a separate adapter layer.
+- **ROS-agnostic core** — `ame_core` has no ROS2 dependency. ROS2 integration is a separate adapter layer.
 - **Separation of concerns** — planning model (PDDL) and execution model (BT) are independently replaceable via ActionRegistry.
 - **Sink-based observability** — all logging is callback-driven, composable, and non-blocking.
 - **Automatic recovery** — action failures trigger replanning from current state, not mission abort.
@@ -51,12 +51,12 @@ PlanAuditLog (Layer 5) — records each planning episode independently
 
 | Library | Contents | Dependencies |
 |---------|----------|-------------|
-| `mujin_core` | WorldModel, Planner, PlanCompiler, ActionRegistry, PddlParser, BT nodes, all loggers | BT.CPP, lapkt_core |
-| `mujin_foxglove` | FoxgloveBridge WebSocket server | mujin_core, websocketpp, asio |
-| `mujin_test_app` | Demo executable (`src/main.cpp`) | mujin_core, optionally mujin_foxglove |
-| `mujin_ros2_lib` | WorldModelNode, PlannerNode, ExecutorNode, RosWmBridge, LifecycleManager | mujin_core, rclcpp, rclcpp_action, rclcpp_lifecycle |
+| `ame_core` | WorldModel, Planner, PlanCompiler, ActionRegistry, PddlParser, BT nodes, all loggers | BT.CPP, lapkt_core |
+| `ame_foxglove` | FoxgloveBridge WebSocket server | ame_core, websocketpp, asio |
+| `ame_test_app` | Demo executable (`src/main.cpp`) | ame_core, optionally ame_foxglove |
+| `ame_ros2_lib` | WorldModelNode, PlannerNode, ExecutorNode, RosWmBridge, LifecycleManager | ame_core, rclcpp, rclcpp_action, rclcpp_lifecycle |
 
-`mujin_foxglove` is a separate static library so `mujin_core` stays dependency-free. Guard any Foxglove code with `#if defined(MUJIN_FOXGLOVE)`.
+`ame_foxglove` is a separate static library so `ame_core` stays dependency-free. Guard any Foxglove code with `#if defined(AME_FOXGLOVE)`.
 
 ## Dependencies
 

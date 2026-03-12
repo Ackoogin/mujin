@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "mujin_ros2/executor_node.hpp"
+#include "ame_ros2/executor_node.hpp"
 #include <rclcpp/rclcpp.hpp>
 #include <lifecycle_msgs/msg/transition.hpp>
 #include <behaviortree_cpp/action_node.h>
@@ -29,8 +29,8 @@ class ExecutorNodeTest : public ::testing::Test {
 protected:
     void SetUp() override {
         rclcpp::init(0, nullptr);
-        wm_ = std::make_unique<mujin::WorldModel>();
-        ex_node_ = std::make_shared<mujin_ros2::ExecutorNode>();
+        wm_ = std::make_unique<ame::WorldModel>();
+        ex_node_ = std::make_shared<ame_ros2::ExecutorNode>();
         ex_node_->setInProcessWorldModel(wm_.get());
 
         // Register custom action type before configure
@@ -48,8 +48,8 @@ protected:
         rclcpp::shutdown();
     }
 
-    std::unique_ptr<mujin::WorldModel>           wm_;
-    std::shared_ptr<mujin_ros2::ExecutorNode>    ex_node_;
+    std::unique_ptr<ame::WorldModel>           wm_;
+    std::shared_ptr<ame_ros2::ExecutorNode>    ex_node_;
     rclcpp::executors::SingleThreadedExecutor    executor_;
 };
 

@@ -1,4 +1,4 @@
-#include "mujin/world_model.h"
+#include "ame/world_model.h"
 
 #include <strips_prob.hxx>
 #include <fluent.hxx>
@@ -9,7 +9,7 @@
 #include <chrono>
 #include <stdexcept>
 
-namespace mujin {
+namespace ame {
 
 void WorldModel::registerPredicate(const std::string& name,
                                    const std::vector<std::string>& param_types) {
@@ -317,4 +317,4 @@ aptk::State* WorldModel::currentStateAsSTRIPS(const aptk::STRIPS_Problem& prob) 
     return state;
 }
 
-} // namespace mujin
+} // namespace ame

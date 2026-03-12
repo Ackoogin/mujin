@@ -1,6 +1,6 @@
 # Quickstart Guide
 
-Build, run, and test the MUJIN planning + execution pipeline with live observability.
+Build, run, and test the AME planning + execution pipeline with live observability.
 
 ---
 
@@ -25,7 +25,7 @@ cmake --build build -j$(nproc)
 To disable the Foxglove bridge (removes websocketpp/asio dependencies):
 
 ```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Debug -DMUJIN_FOXGLOVE=OFF
+cmake -B build -DCMAKE_BUILD_TYPE=Debug -DAME_FOXGLOVE=OFF
 ```
 
 ## Run tests
@@ -39,7 +39,7 @@ All 73 tests should pass, covering: WorldModel, TypeSystem, ActionRegistry, Plan
 ## Run the demo
 
 ```bash
-./build/src/mujin_test_app
+./build/src/ame_test_app
 ```
 
 This runs the UAV search-and-classify example end-to-end:
@@ -54,9 +54,9 @@ Output files produced in the current working directory:
 
 | File | Contents |
 |------|----------|
-| `mujin_bt_events.jsonl` | BT node state transitions (Layer 2) |
-| `mujin_wm_audit.jsonl` | World model fact changes (Layer 3) |
-| `mujin_plan_audit.jsonl` | Planning episode audit trail (Layer 5) |
+| `ame_bt_events.jsonl` | BT node state transitions (Layer 2) |
+| `ame_wm_audit.jsonl` | World model fact changes (Layer 3) |
+| `ame_plan_audit.jsonl` | Planning episode audit trail (Layer 5) |
 
 ---
 
@@ -66,18 +66,18 @@ All output files use JSONL (one JSON object per line), viewable with standard to
 
 ```bash
 # Pretty-print BT events
-cat mujin_bt_events.jsonl | python3 -m json.tool --json-lines
+cat ame_bt_events.jsonl | python3 -m json.tool --json-lines
 
 # Show all WM fact changes
-cat mujin_wm_audit.jsonl | python3 -m json.tool --json-lines
+cat ame_wm_audit.jsonl | python3 -m json.tool --json-lines
 
 # Inspect the plan audit trail (init state, goals, solver, plan, BT XML)
-cat mujin_plan_audit.jsonl | python3 -m json.tool
+cat ame_plan_audit.jsonl | python3 -m json.tool
 
 # Query specific fields with jq
-cat mujin_bt_events.jsonl | jq 'select(.status == "SUCCESS")'
-cat mujin_wm_audit.jsonl | jq 'select(.source | startswith("SetWorldPredicate"))'
-cat mujin_plan_audit.jsonl | jq '.plan_actions'
+cat ame_bt_events.jsonl | jq 'select(.status == "SUCCESS")'
+cat ame_wm_audit.jsonl | jq 'select(.source | startswith("SetWorldPredicate"))'
+cat ame_plan_audit.jsonl | jq '.plan_actions'
 ```
 
 ---
@@ -93,7 +93,7 @@ The `FoxgloveBridge` implements the [Foxglove WebSocket protocol](https://github
 2. **Run the demo app** — it starts a WebSocket server automatically:
 
    ```bash
-   ./build/src/mujin_test_app
+   ./build/src/ame_test_app
    ```
 
    You should see:
@@ -116,8 +116,8 @@ Once connected, Foxglove discovers two channels:
 
 | Channel | Schema | Description |
 |---------|--------|-------------|
-| `/bt_events` | `mujin.BTEvent` | BT node state transitions: timestamp, node name, node type, previous status, new status, tree ID, WM version |
-| `/wm_audit` | `mujin.WMFactChange` | World model fact changes: WM version, timestamp, fact key, new value, source tag |
+| `/bt_events` | `ame.BTEvent` | BT node state transitions: timestamp, node name, node type, previous status, new status, tree ID, WM version |
+| `/wm_audit` | `ame.WMFactChange` | World model fact changes: WM version, timestamp, fact key, new value, source tag |
 
 ### Recommended panels
 
@@ -137,15 +137,15 @@ Since the demo app runs to completion quickly, the Foxglove connection is most u
 3. **Use the API programmatically** in your own code:
 
 ```cpp
-#include "mujin/foxglove_bridge.h"
-#include "mujin/bt_logger.h"
+#include "ame/foxglove_bridge.h"
+#include "ame/bt_logger.h"
 
 // Start the bridge
-mujin::FoxgloveBridge bridge({8765, "my_app"});
+ame::FoxgloveBridge bridge({8765, "my_app"});
 bridge.start();
 
 // Wire BT events to Foxglove
-mujin::MujinBTLogger bt_logger(tree, "MyPlan", &world_model);
+ame::AmeBTLogger bt_logger(tree, "MyPlan", &world_model);
 bt_logger.addCallbackSink(bridge.btEventSink());
 
 // Wire WM events to Foxglove
@@ -171,10 +171,10 @@ bridge.stop();
 To build without Foxglove (removes websocketpp/asio dependencies):
 
 ```bash
-cmake -B build -DMUJIN_FOXGLOVE=OFF
+cmake -B build -DAME_FOXGLOVE=OFF
 ```
 
-The `#if defined(MUJIN_FOXGLOVE)` guards in `main.cpp` ensure the code compiles cleanly either way.
+The `#if defined(AME_FOXGLOVE)` guards in `main.cpp` ensure the code compiles cleanly either way.
 
 ---
 

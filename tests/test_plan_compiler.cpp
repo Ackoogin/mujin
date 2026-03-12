@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
-#include "mujin/plan_compiler.h"
-#include "mujin/action_registry.h"
-#include "mujin/world_model.h"
-#include "mujin/bt_nodes/check_world_predicate.h"
-#include "mujin/bt_nodes/set_world_predicate.h"
+#include "ame/plan_compiler.h"
+#include "ame/action_registry.h"
+#include "ame/world_model.h"
+#include "ame/bt_nodes/check_world_predicate.h"
+#include "ame/bt_nodes/set_world_predicate.h"
 
 #include <behaviortree_cpp/bt_factory.h>
 
@@ -22,8 +22,8 @@ public:
     }
 };
 
-static mujin::WorldModel buildUAVDomain() {
-    mujin::WorldModel wm;
+static ame::WorldModel buildUAVDomain() {
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("object");
     ts.addType("location", "object");
@@ -52,15 +52,15 @@ static mujin::WorldModel buildUAVDomain() {
     return wm;
 }
 
-static mujin::ActionRegistry buildRegistry() {
-    mujin::ActionRegistry reg;
+static ame::ActionRegistry buildRegistry() {
+    ame::ActionRegistry reg;
     reg.registerAction("move", "StubMoveAction");
     reg.registerAction("search", "StubSearchAction");
     reg.registerAction("classify", "StubClassifyAction");
     return reg;
 }
 
-static unsigned findAction(const mujin::WorldModel& wm, const std::string& sig) {
+static unsigned findAction(const ame::WorldModel& wm, const std::string& sig) {
     for (unsigned i = 0; i < wm.numGroundActions(); ++i) {
         if (wm.groundActions()[i].signature == sig) return i;
     }
@@ -70,7 +70,7 @@ static unsigned findAction(const mujin::WorldModel& wm, const std::string& sig) 
 TEST(PlanCompiler, CompileEmptyPlan) {
     auto wm = buildUAVDomain();
     auto reg = buildRegistry();
-    mujin::PlanCompiler compiler;
+    ame::PlanCompiler compiler;
 
     auto xml = compiler.compile({}, wm, reg);
     EXPECT_NE(xml.find("Sequence"), std::string::npos);
@@ -80,9 +80,9 @@ TEST(PlanCompiler, CompileEmptyPlan) {
 TEST(PlanCompiler, CompileSequentialTwoActions) {
     auto wm = buildUAVDomain();
     auto reg = buildRegistry();
-    mujin::PlanCompiler compiler;
+    ame::PlanCompiler compiler;
 
-    std::vector<mujin::PlanStep> plan = {
+    std::vector<ame::PlanStep> plan = {
         {findAction(wm, "move(uav1,base,sector_a)")},
         {findAction(wm, "search(uav1,sector_a)")},
     };
@@ -99,10 +99,10 @@ TEST(PlanCompiler, CompileSequentialTwoActions) {
 TEST(PlanCompiler, CausallyLinkedIsSequential) {
     auto wm = buildUAVDomain();
     auto reg = buildRegistry();
-    mujin::PlanCompiler compiler;
+    ame::PlanCompiler compiler;
 
     // move adds at(uav1,sector_a) which is a precondition of search
-    std::vector<mujin::PlanStep> plan = {
+    std::vector<ame::PlanStep> plan = {
         {findAction(wm, "move(uav1,base,sector_a)")},
         {findAction(wm, "search(uav1,sector_a)")},
     };
@@ -113,7 +113,7 @@ TEST(PlanCompiler, CausallyLinkedIsSequential) {
 }
 
 TEST(PlanCompiler, IndependentActionsAreParallel) {
-    mujin::WorldModel wm;
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("item");
     wm.addObject("a", "item");
@@ -123,13 +123,13 @@ TEST(PlanCompiler, IndependentActionsAreParallel) {
     wm.registerAction("do_a", {"?x"}, {"item"}, {}, {"(done ?x)"}, {});
     wm.registerAction("do_b", {"?x"}, {"item"}, {}, {"(done ?x)"}, {});
 
-    mujin::ActionRegistry reg;
+    ame::ActionRegistry reg;
     reg.registerAction("do_a", "DoANode");
     reg.registerAction("do_b", "DoBNode");
 
-    mujin::PlanCompiler compiler;
+    ame::PlanCompiler compiler;
 
-    std::vector<mujin::PlanStep> plan = {
+    std::vector<ame::PlanStep> plan = {
         {findAction(wm, "do_a(a)")},
         {findAction(wm, "do_b(b)")},
     };
@@ -140,13 +140,13 @@ TEST(PlanCompiler, IndependentActionsAreParallel) {
 
 TEST(PlanCompiler, ReactiveSequenceUsed) {
     auto wm = buildUAVDomain();
-    mujin::ActionRegistry reg;
+    ame::ActionRegistry reg;
     reg.registerAction("move", "StubMoveAction", true);
     reg.registerAction("search", "StubSearchAction", false);
 
-    mujin::PlanCompiler compiler;
+    ame::PlanCompiler compiler;
 
-    std::vector<mujin::PlanStep> plan = {
+    std::vector<ame::PlanStep> plan = {
         {findAction(wm, "move(uav1,base,sector_a)")},
     };
 
@@ -157,9 +157,9 @@ TEST(PlanCompiler, ReactiveSequenceUsed) {
 TEST(PlanCompiler, CompiledXMLIsLoadable) {
     auto wm = buildUAVDomain();
     auto reg = buildRegistry();
-    mujin::PlanCompiler compiler;
+    ame::PlanCompiler compiler;
 
-    std::vector<mujin::PlanStep> plan = {
+    std::vector<ame::PlanStep> plan = {
         {findAction(wm, "move(uav1,base,sector_a)")},
         {findAction(wm, "search(uav1,sector_a)")},
         {findAction(wm, "classify(uav1,sector_a)")},
@@ -168,8 +168,8 @@ TEST(PlanCompiler, CompiledXMLIsLoadable) {
     auto xml = compiler.compileSequential(plan, wm, reg);
 
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<mujin::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<mujin::SetWorldPredicate>("SetWorldPredicate");
+    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
+    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
     factory.registerNodeType<StubAction>("StubMoveAction");
     factory.registerNodeType<StubAction>("StubSearchAction");
     factory.registerNodeType<StubAction>("StubClassifyAction");
@@ -184,9 +184,9 @@ TEST(PlanCompiler, FullPlanExecution) {
     wm.setFact("(at uav1 base)", true);
 
     auto reg = buildRegistry();
-    mujin::PlanCompiler compiler;
+    ame::PlanCompiler compiler;
 
-    std::vector<mujin::PlanStep> plan = {
+    std::vector<ame::PlanStep> plan = {
         {findAction(wm, "move(uav1,base,sector_a)")},
         {findAction(wm, "search(uav1,sector_a)")},
         {findAction(wm, "classify(uav1,sector_a)")},
@@ -195,8 +195,8 @@ TEST(PlanCompiler, FullPlanExecution) {
     auto xml = compiler.compileSequential(plan, wm, reg);
 
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<mujin::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<mujin::SetWorldPredicate>("SetWorldPredicate");
+    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
+    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
     factory.registerNodeType<StubAction>("StubMoveAction");
     factory.registerNodeType<StubAction>("StubSearchAction");
     factory.registerNodeType<StubAction>("StubClassifyAction");

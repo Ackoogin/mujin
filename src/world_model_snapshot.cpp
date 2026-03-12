@@ -1,6 +1,6 @@
-#include "mujin/world_model_snapshot.h"
+#include "ame/world_model_snapshot.h"
 
-namespace mujin {
+namespace ame {
 
 SnapshotManager::SnapshotManager(const WorldModel& wm) : wm_(wm) {
     // Publish an initial snapshot so current() is never null.
@@ -42,4 +42,4 @@ std::shared_ptr<const WorldModelSnapshot> SnapshotManager::current() const {
     return current_;
 }
 
-} // namespace mujin
+} // namespace ame

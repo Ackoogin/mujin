@@ -1,4 +1,4 @@
-#include "mujin/plan_compiler.h"
+#include "ame/plan_compiler.h"
 
 #include <algorithm>
 #include <functional>
@@ -8,7 +8,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace mujin {
+namespace ame {
 
 // =========================================================================
 // Helpers
@@ -311,4 +311,4 @@ std::string PlanCompiler::compile(const std::vector<PlanStep>& plan,
     return xml.str();
 }
 
-} // namespace mujin
+} // namespace ame

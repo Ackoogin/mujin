@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace mujin {
+namespace ame {
 
 // Resolved BT implementation for a grounded action
 struct ActionImpl {
@@ -47,4 +47,4 @@ private:
     std::unordered_map<std::string, Registration> registry_;
 };
 
-} // namespace mujin
+} // namespace ame

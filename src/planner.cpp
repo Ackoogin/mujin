@@ -1,4 +1,4 @@
-#include "mujin/planner.h"
+#include "ame/planner.h"
 
 #include <strips_prob.hxx>
 #include <strips_state.hxx>
@@ -9,7 +9,7 @@
 #include <chrono>
 #include <unordered_map>
 
-namespace mujin {
+namespace ame {
 
 using BRFS_Engine = aptk::search::brfs::BRFS<aptk::agnostic::Fwd_Search_Problem>;
 
@@ -65,4 +65,4 @@ PlanResult Planner::solve(const WorldModel& wm) const {
     return result;
 }
 
-} // namespace mujin
+} // namespace ame

@@ -1,5 +1,5 @@
 @echo off
-REM Build script for mujin test app
+REM Build script for ame test app
 REM Uses Visual Studio 2022 generator (MSVC)
 
 echo === Configuring with CMake ===
@@ -19,4 +19,4 @@ if %ERRORLEVEL% neq 0 (
 
 echo.
 echo === Build complete ===
-echo Run: build\src\Release\mujin_test_app.exe
+echo Run: build\src\Release\ame_test_app.exe

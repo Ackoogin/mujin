@@ -1,12 +1,12 @@
 #pragma once
 
-#include "mujin/action_registry.h"
-#include "mujin/world_model.h"
+#include "ame/action_registry.h"
+#include "ame/world_model.h"
 
 #include <string>
 #include <vector>
 
-namespace mujin {
+namespace ame {
 
 // A plan step: an index into the WorldModel's ground actions
 struct PlanStep {
@@ -39,4 +39,4 @@ private:
     static std::vector<std::string> actionParams(const std::string& signature);
 };
 
-} // namespace mujin
+} // namespace ame

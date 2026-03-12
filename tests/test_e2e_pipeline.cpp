@@ -1,10 +1,10 @@
 #include <gtest/gtest.h>
-#include "mujin/world_model.h"
-#include "mujin/action_registry.h"
-#include "mujin/planner.h"
-#include "mujin/plan_compiler.h"
-#include "mujin/bt_nodes/check_world_predicate.h"
-#include "mujin/bt_nodes/set_world_predicate.h"
+#include "ame/world_model.h"
+#include "ame/action_registry.h"
+#include "ame/planner.h"
+#include "ame/plan_compiler.h"
+#include "ame/bt_nodes/check_world_predicate.h"
+#include "ame/bt_nodes/set_world_predicate.h"
 
 #include <behaviortree_cpp/bt_factory.h>
 #include <behaviortree_cpp/action_node.h>
@@ -24,8 +24,8 @@ public:
     }
 };
 
-static mujin::WorldModel buildUAVDomain() {
-    mujin::WorldModel wm;
+static ame::WorldModel buildUAVDomain() {
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("object");
     ts.addType("location", "object");
@@ -54,8 +54,8 @@ static mujin::WorldModel buildUAVDomain() {
     return wm;
 }
 
-static mujin::ActionRegistry buildRegistry() {
-    mujin::ActionRegistry reg;
+static ame::ActionRegistry buildRegistry() {
+    ame::ActionRegistry reg;
     reg.registerAction("move", "StubMoveAction");
     reg.registerAction("search", "StubSearchAction");
     reg.registerAction("classify", "StubClassifyAction");
@@ -64,8 +64,8 @@ static mujin::ActionRegistry buildRegistry() {
 
 static BT::BehaviorTreeFactory buildFactory() {
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<mujin::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<mujin::SetWorldPredicate>("SetWorldPredicate");
+    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
+    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
     factory.registerNodeType<StubAction>("StubMoveAction");
     factory.registerNodeType<StubAction>("StubSearchAction");
     factory.registerNodeType<StubAction>("StubClassifyAction");
@@ -81,13 +81,13 @@ TEST(E2EPipeline, UAVSearchAndClassify) {
     auto reg = buildRegistry();
 
     // Plan
-    mujin::Planner planner;
+    ame::Planner planner;
     auto plan_result = planner.solve(wm);
     ASSERT_TRUE(plan_result.success);
     ASSERT_GE(plan_result.steps.size(), 3u);
 
     // Compile to BT
-    mujin::PlanCompiler compiler;
+    ame::PlanCompiler compiler;
     auto xml = compiler.compileSequential(plan_result.steps, wm, reg);
     ASSERT_FALSE(xml.empty());
 
@@ -112,8 +112,8 @@ TEST(E2EPipeline, ReplanAfterStateChange) {
     wm.setGoal({"(searched sector_a)"});
 
     auto reg = buildRegistry();
-    mujin::Planner planner;
-    mujin::PlanCompiler compiler;
+    ame::Planner planner;
+    ame::PlanCompiler compiler;
 
     // First plan: move + search
     auto result1 = planner.solve(wm);
@@ -160,12 +160,12 @@ TEST(E2EPipeline, CausalAnalysisCompilation) {
 
     auto reg = buildRegistry();
 
-    mujin::Planner planner;
+    ame::Planner planner;
     auto plan_result = planner.solve(wm);
     ASSERT_TRUE(plan_result.success);
 
     // Use compile() which does causal analysis
-    mujin::PlanCompiler compiler;
+    ame::PlanCompiler compiler;
     auto xml = compiler.compile(plan_result.steps, wm, reg);
     ASSERT_FALSE(xml.empty());
 
@@ -188,7 +188,7 @@ TEST(E2EPipeline, PlannerStatistics) {
     wm.setFact("(at uav1 base)", true);
     wm.setGoal({"(searched sector_a)", "(classified sector_a)"});
 
-    mujin::Planner planner;
+    ame::Planner planner;
     auto result = planner.solve(wm);
 
     ASSERT_TRUE(result.success);

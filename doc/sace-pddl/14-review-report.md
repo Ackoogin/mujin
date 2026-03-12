@@ -56,7 +56,7 @@ Make `PlanCompiler` fail hard when any planned action is absent from the registr
 - `ros2/src/planner_node.cpp:162-196` compiles `bt_xml` and returns it in the action result.
 - `ros2/src/executor_node.cpp:85-133` only starts execution when `loadAndExecute(bt_xml)` is called.
 - `ros2/test/test_full_pipeline.cpp:150-159` performs that call manually in the test harness.
-- `ros2/src/combined_main.cpp:13-18` states that after sending a `/mujin/plan` goal, the executor will tick the compiled BT automatically, but no such handoff exists in the production code shown above.
+- `ros2/src/combined_main.cpp:13-18` states that after sending a `/ame/plan` goal, the executor will tick the compiled BT automatically, but no such handoff exists in the production code shown above.
 
 **Why this matters**
 
@@ -105,7 +105,7 @@ Either implement the supervisory executor path now, or explicitly downgrade thes
 - `doc/autonomy_assurance_plan.md:168` says bounded planning time is implemented via a `max_iterations` parameter in the LAPKT solver.
 - `doc/autonomy_assurance_plan.md:203` defines `SR-02`: planner shall terminate within N ms or return `NO_PLAN`.
 - `src/planner.cpp:16-65` exposes no timeout, iteration bound, or node-expansion budget.
-- `include/mujin/planner.h:21-25` also exposes no configuration surface for such a bound.
+- `include/ame/planner.h:21-25` also exposes no configuration surface for such a bound.
 
 **Why this matters**
 

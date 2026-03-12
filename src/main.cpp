@@ -1,5 +1,5 @@
 /**
- * mujin_test_app — End-to-end vertical slice
+ * ame_test_app — End-to-end vertical slice
  *
  * Demonstrates the complete pipeline:
  *   1. Parse PDDL domain + problem → WorldModel
@@ -10,19 +10,19 @@
  *   6. Verify goal state
  */
 
-#include "mujin/pddl_parser.h"
-#include "mujin/world_model.h"
-#include "mujin/action_registry.h"
-#include "mujin/planner.h"
-#include "mujin/plan_compiler.h"
-#include "mujin/bt_nodes/check_world_predicate.h"
-#include "mujin/bt_nodes/set_world_predicate.h"
-#include "mujin/bt_logger.h"
-#include "mujin/wm_audit_log.h"
-#include "mujin/plan_audit_log.h"
+#include "ame/pddl_parser.h"
+#include "ame/world_model.h"
+#include "ame/action_registry.h"
+#include "ame/planner.h"
+#include "ame/plan_compiler.h"
+#include "ame/bt_nodes/check_world_predicate.h"
+#include "ame/bt_nodes/set_world_predicate.h"
+#include "ame/bt_logger.h"
+#include "ame/wm_audit_log.h"
+#include "ame/plan_audit_log.h"
 
-#if defined(MUJIN_FOXGLOVE)
-#include "mujin/foxglove_bridge.h"
+#if defined(AME_FOXGLOVE)
+#include "ame/foxglove_bridge.h"
 #endif
 
 #include <behaviortree_cpp/bt_factory.h>
@@ -86,13 +86,13 @@ public:
 
 int main() {
     std::cout << "============================================\n";
-    std::cout << " MUJIN End-to-End Vertical Slice\n";
+    std::cout << " AME End-to-End Vertical Slice\n";
     std::cout << " PDDL → LAPKT → BT.CPP Pipeline\n";
     std::cout << "============================================\n";
 
     // ---- Step 1: Build world model from PDDL ----
     std::cout << "\n--- Step 1: Build WorldModel ---\n";
-    mujin::WorldModel wm;
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("object");
     ts.addType("location", "object");
@@ -119,24 +119,24 @@ int main() {
         {"(at ?r ?s)", "(searched ?s)"}, {"(classified ?s)"}, {});
 
     // ---- Observability: attach WM audit log (Layer 3) ----
-    mujin::WmAuditLog wm_audit("mujin_wm_audit.jsonl");
+    ame::WmAuditLog wm_audit("ame_wm_audit.jsonl");
 
-#if defined(MUJIN_FOXGLOVE)
+#if defined(AME_FOXGLOVE)
     // ---- Observability: start Foxglove bridge (Layer 4) ----
-    mujin::FoxgloveBridge foxglove({/*.port=*/8765, /*.server_name=*/"mujin"});
+    ame::FoxgloveBridge foxglove({/*.port=*/8765, /*.server_name=*/"ame"});
     foxglove.start();
     auto foxglove_wm_sink = foxglove.wmEventSink();
 #endif
 
     wm.setAuditCallback([&wm_audit
-#if defined(MUJIN_FOXGLOVE)
+#if defined(AME_FOXGLOVE)
                           , &foxglove_wm_sink
 #endif
                          ](uint64_t ver, uint64_t ts,
                            const std::string& fact, bool val,
                            const std::string& src) {
         wm_audit.onFactChange(ver, ts, fact, val, src);
-#if defined(MUJIN_FOXGLOVE)
+#if defined(AME_FOXGLOVE)
         // Forward to Foxglove as a formatted JSON line
         std::string json = std::string("{\"wm_version\":") + std::to_string(ver)
             + ",\"ts_us\":" + std::to_string(ts)
@@ -159,7 +159,7 @@ int main() {
 
     // ---- Step 2: Register BT action mappings ----
     std::cout << "\n--- Step 2: Register Action Mappings ---\n";
-    mujin::ActionRegistry registry;
+    ame::ActionRegistry registry;
     registry.registerAction("move", "StubMoveAction");
     registry.registerAction("search", "StubSearchAction");
     registry.registerAction("classify", "StubClassifyAction");
@@ -167,7 +167,7 @@ int main() {
 
     // ---- Step 3: Plan with LAPKT BRFS ----
     std::cout << "\n--- Step 3: Plan with LAPKT BRFS ---\n";
-    mujin::Planner planner;
+    ame::Planner planner;
     auto plan_result = planner.solve(wm);
 
     if (!plan_result.success) {
@@ -185,14 +185,14 @@ int main() {
 
     // ---- Step 4: Compile plan to BT XML ----
     std::cout << "\n--- Step 4: Compile Plan to BT ---\n";
-    mujin::PlanCompiler compiler;
+    ame::PlanCompiler compiler;
     auto xml = compiler.compileSequential(plan_result.steps, wm, registry);
     std::cout << "  Generated BT XML (" << xml.size() << " bytes)\n";
 
     // ---- Observability: record plan audit trail (Layer 5) ----
-    mujin::PlanAuditLog plan_audit("mujin_plan_audit.jsonl");
+    ame::PlanAuditLog plan_audit("ame_plan_audit.jsonl");
     {
-        mujin::PlanAuditLog::Episode ep;
+        ame::PlanAuditLog::Episode ep;
         ep.ts_us = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::system_clock::now().time_since_epoch()).count());
@@ -224,8 +224,8 @@ int main() {
     // ---- Step 5: Execute BT ----
     std::cout << "\n--- Step 5: Execute BT ---\n";
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<mujin::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<mujin::SetWorldPredicate>("SetWorldPredicate");
+    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
+    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
     factory.registerNodeType<StubMoveAction>("StubMoveAction");
     factory.registerNodeType<StubSearchAction>("StubSearchAction");
     factory.registerNodeType<StubClassifyAction>("StubClassifyAction");
@@ -236,9 +236,9 @@ int main() {
     // ---- Observability: attach BT loggers (Layers 1 + 2) ----
     BT::TreeObserver observer(tree);
 
-    mujin::MujinBTLogger bt_logger(tree, "MissionPlan", &wm);
-    bt_logger.addFileSink("mujin_bt_events.jsonl");
-#if defined(MUJIN_FOXGLOVE)
+    ame::AmeBTLogger bt_logger(tree, "MissionPlan", &wm);
+    bt_logger.addFileSink("ame_bt_events.jsonl");
+#if defined(AME_FOXGLOVE)
     bt_logger.addCallbackSink(foxglove.btEventSink());
 #endif
 
@@ -253,8 +253,8 @@ int main() {
     bt_logger.flush();
     wm_audit.flush();
     plan_audit.flush();
-    std::cout << "  Files: mujin_bt_events.jsonl, mujin_wm_audit.jsonl, mujin_plan_audit.jsonl\n";
-#if defined(MUJIN_FOXGLOVE)
+    std::cout << "  Files: ame_bt_events.jsonl, ame_wm_audit.jsonl, ame_plan_audit.jsonl\n";
+#if defined(AME_FOXGLOVE)
     std::cout << "  Foxglove bridge: ws://localhost:8765\n";
     foxglove.stop();
 #endif

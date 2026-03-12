@@ -1,6 +1,6 @@
 #pragma once
 
-#include "mujin/type_system.h"
+#include "ame/type_system.h"
 
 #include <cstdint>
 #include <functional>
@@ -14,7 +14,7 @@ class STRIPS_Problem;
 class State;
 }
 
-namespace mujin {
+namespace ame {
 
 // Action schema: describes a grounded PDDL action stored in the WorldModel
 struct ActionSchema {
@@ -132,4 +132,4 @@ public:
     const std::vector<unsigned>& goalFluentIds() const { return goal_fluent_ids_; }
 };
 
-} // namespace mujin
+} // namespace ame

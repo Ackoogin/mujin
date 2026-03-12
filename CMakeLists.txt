@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(mujin LANGUAGES C CXX)
+project(ame LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -99,9 +99,9 @@ else()
 endif()
 
 # --- Foxglove WebSocket bridge (optional) ---
-option(MUJIN_FOXGLOVE "Enable Foxglove WebSocket bridge for live monitoring" ON)
+option(AME_FOXGLOVE "Enable Foxglove WebSocket bridge for live monitoring" ON)
 
-if(MUJIN_FOXGLOVE)
+if(AME_FOXGLOVE)
     # websocketpp — header-only C++ WebSocket library
     FetchContent_Declare(
         websocketpp

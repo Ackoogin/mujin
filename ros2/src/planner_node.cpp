@@ -1,10 +1,10 @@
-#include <mujin_ros2/planner_node.hpp>
+#include <ame_ros2/planner_node.hpp>
 
 #include <chrono>
 #include <stdexcept>
 #include <thread>
 
-namespace mujin_ros2 {
+namespace ame_ros2 {
 
 PlannerNode::PlannerNode(const rclcpp::NodeOptions& options)
     : rclcpp_lifecycle::LifecycleNode("planner_node", options)
@@ -32,7 +32,7 @@ PlannerNode::on_configure(const rclcpp_lifecycle::State&) {
 
   const auto wm_ns = get_parameter("world_model_node").as_string();
   client_query_state_ =
-      create_client<mujin_ros2::srv::QueryState>("/" + wm_ns + "/query_state");
+      create_client<ame_ros2::srv::QueryState>("/" + wm_ns + "/query_state");
 
   component_.setParam("domain.pddl_file", domain_file.c_str());
   component_.setParam("domain.problem_file", problem_file.c_str());
@@ -60,7 +60,7 @@ PlannerNode::on_activate(const rclcpp_lifecycle::State&) {
 
   action_server_ = rclcpp_action::create_server<PlanAction>(
       this,
-      "/mujin/plan",
+      "/ame/plan",
       [this](const auto& uuid, auto goal) { return handleGoal(uuid, goal); },
       [this](auto gh) { return handleCancel(gh); },
       [this](auto gh) { handleAccepted(gh); });
@@ -68,7 +68,7 @@ PlannerNode::on_activate(const rclcpp_lifecycle::State&) {
       create_publisher<std_msgs::msg::String>("/executor/bt_xml", rclcpp::QoS(10).reliable());
   pub_bt_xml_->on_activate();
 
-  RCLCPP_INFO(get_logger(), "PlannerNode activated - action server at /mujin/plan");
+  RCLCPP_INFO(get_logger(), "PlannerNode activated - action server at /ame/plan");
   return CallbackReturn::SUCCESS;
 }
 
@@ -129,7 +129,7 @@ void PlannerNode::executePlan(std::shared_ptr<GoalHandlePlan> goal_handle) {
   feedback->elapsed_ms = 0.0;
   goal_handle->publish_feedback(feedback);
 
-  mujin::PlannerExecutionResult execution_result;
+  ame::PlannerExecutionResult execution_result;
   try {
     execution_result = component_.solveGoal(goal->goal_fluents);
   } catch (const std::exception& e) {
@@ -177,8 +177,8 @@ void PlannerNode::executePlan(std::shared_ptr<GoalHandlePlan> goal_handle) {
   goal_handle->succeed(result);
 }
 
-mujin::WorldStateSnapshot PlannerNode::queryWorldState() const {
-  mujin::WorldStateSnapshot snapshot;
+ame::WorldStateSnapshot PlannerNode::queryWorldState() const {
+  ame::WorldStateSnapshot snapshot;
 
   if (inprocess_wm_ != nullptr) {
     snapshot.wm_version = inprocess_wm_->version();
@@ -186,7 +186,7 @@ mujin::WorldStateSnapshot PlannerNode::queryWorldState() const {
       if (!inprocess_wm_->getFact(i)) {
         continue;
       }
-      mujin::WorldFactValue fact;
+      ame::WorldFactValue fact;
       fact.key = inprocess_wm_->fluentName(i);
       fact.value = true;
       fact.wm_version = inprocess_wm_->version();
@@ -199,7 +199,7 @@ mujin::WorldStateSnapshot PlannerNode::queryWorldState() const {
     throw std::runtime_error("QueryState service not available");
   }
 
-  auto req = std::make_shared<mujin_ros2::srv::QueryState::Request>();
+  auto req = std::make_shared<ame_ros2::srv::QueryState::Request>();
   auto future = client_query_state_->async_send_request(req);
   if (future.wait_for(std::chrono::seconds(5)) != std::future_status::ready) {
     throw std::runtime_error("QueryState service timed out");
@@ -209,7 +209,7 @@ mujin::WorldStateSnapshot PlannerNode::queryWorldState() const {
   snapshot.success = res->success;
   snapshot.wm_version = res->wm_version;
   for (const auto& msg_fact : res->facts) {
-    mujin::WorldFactValue fact;
+    ame::WorldFactValue fact;
     fact.key = msg_fact.key;
     fact.value = msg_fact.value;
     fact.source = msg_fact.source;
@@ -219,4 +219,4 @@ mujin::WorldStateSnapshot PlannerNode::queryWorldState() const {
   return snapshot;
 }
 
-} // namespace mujin_ros2
+} // namespace ame_ros2

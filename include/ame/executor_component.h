@@ -1,7 +1,7 @@
 #pragma once
 
-#include <mujin/bt_logger.h>
-#include <mujin/world_model.h>
+#include <ame/bt_logger.h>
+#include <ame/world_model.h>
 #include <pcl/component.hpp>
 
 #include <behaviortree_cpp/bt_factory.h>
@@ -10,7 +10,7 @@
 #include <memory>
 #include <string>
 
-namespace mujin {
+namespace ame {
 
 /// \brief PCL-backed BT execution component with ROS-agnostic runtime logic.
 class ExecutorComponent : public pcl::Component {
@@ -59,7 +59,7 @@ private:
 
   BT::BehaviorTreeFactory factory_;
   std::unique_ptr<BT::Tree> tree_;
-  std::unique_ptr<MujinBTLogger> bt_logger_;
+  std::unique_ptr<AmeBTLogger> bt_logger_;
   WorldModel* inprocess_wm_ = nullptr;
   BlackboardInitializer blackboard_initializer_;
   EventSink event_sink_;
@@ -67,4 +67,4 @@ private:
   BT::NodeStatus last_status_ = BT::NodeStatus::IDLE;
 };
 
-}  // namespace mujin
+}  // namespace ame

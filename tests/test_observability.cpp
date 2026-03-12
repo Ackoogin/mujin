@@ -1,19 +1,19 @@
 /**
  * Tests for Observability Layers 1–3:
  *   - Layer 1: TreeObserver integration
- *   - Layer 2: MujinBTLogger structured JSON events
+ *   - Layer 2: AmeBTLogger structured JSON events
  *   - Layer 3: WorldModel audit log with source tagging
  */
 
-#include "mujin/world_model.h"
-#include "mujin/bt_logger.h"
-#include "mujin/wm_audit_log.h"
-#include "mujin/plan_audit_log.h"
-#include "mujin/action_registry.h"
-#include "mujin/plan_compiler.h"
-#include "mujin/planner.h"
-#include "mujin/bt_nodes/check_world_predicate.h"
-#include "mujin/bt_nodes/set_world_predicate.h"
+#include "ame/world_model.h"
+#include "ame/bt_logger.h"
+#include "ame/wm_audit_log.h"
+#include "ame/plan_audit_log.h"
+#include "ame/action_registry.h"
+#include "ame/plan_compiler.h"
+#include "ame/planner.h"
+#include "ame/bt_nodes/check_world_predicate.h"
+#include "ame/bt_nodes/set_world_predicate.h"
 
 #include <behaviortree_cpp/bt_factory.h>
 #include <behaviortree_cpp/loggers/bt_observer.h>
@@ -27,8 +27,8 @@
 // Helpers
 // =========================================================================
 
-static mujin::WorldModel makeSimpleWorldModel() {
-    mujin::WorldModel wm;
+static ame::WorldModel makeSimpleWorldModel() {
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("object");
     ts.addType("location", "object");
@@ -76,7 +76,7 @@ public:
 // =========================================================================
 
 TEST(WmAuditLog, RecordsFactChanges) {
-    mujin::WorldModel wm;
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("object");
     ts.addType("location", "object");
@@ -85,7 +85,7 @@ TEST(WmAuditLog, RecordsFactChanges) {
     wm.addObject("base", "location");
     wm.registerPredicate("at", {"robot", "location"});
 
-    mujin::WmAuditLog audit;
+    ame::WmAuditLog audit;
     wm.setAuditCallback([&audit](uint64_t ver, uint64_t ts_us,
                                   const std::string& fact, bool val,
                                   const std::string& src) {
@@ -104,14 +104,14 @@ TEST(WmAuditLog, RecordsFactChanges) {
 }
 
 TEST(WmAuditLog, NoEntryWhenValueUnchanged) {
-    mujin::WorldModel wm;
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("object");
     ts.addType("robot", "object");
     wm.addObject("uav1", "robot");
     wm.registerPredicate("ready", {"robot"});
 
-    mujin::WmAuditLog audit;
+    ame::WmAuditLog audit;
     wm.setAuditCallback([&audit](uint64_t ver, uint64_t ts_us,
                                   const std::string& fact, bool val,
                                   const std::string& src) {
@@ -136,7 +136,7 @@ TEST(WmAuditLog, SourceTagFromSetWorldPredicate) {
     wm.setFact("(at uav1 base)", true, "planner_init");
     wm.setGoal({"(searched sector_a)", "(classified sector_a)"});
 
-    mujin::WmAuditLog audit;
+    ame::WmAuditLog audit;
     wm.setAuditCallback([&audit](uint64_t ver, uint64_t ts_us,
                                   const std::string& fact, bool val,
                                   const std::string& src) {
@@ -145,23 +145,23 @@ TEST(WmAuditLog, SourceTagFromSetWorldPredicate) {
     audit.entries(); // clear any prior (none expected yet)
 
     // Plan
-    mujin::Planner planner;
+    ame::Planner planner;
     auto plan = planner.solve(wm);
     ASSERT_TRUE(plan.success);
 
     // Compile
-    mujin::ActionRegistry registry;
+    ame::ActionRegistry registry;
     registry.registerAction("move", "StubAction");
     registry.registerAction("search", "StubAction");
     registry.registerAction("classify", "StubAction");
 
-    mujin::PlanCompiler compiler;
+    ame::PlanCompiler compiler;
     auto xml = compiler.compileSequential(plan.steps, wm, registry);
 
     // Execute
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<mujin::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<mujin::SetWorldPredicate>("SetWorldPredicate");
+    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
+    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
     factory.registerNodeType<StubAction>("StubAction");
 
     auto tree = factory.createTreeFromText(xml);
@@ -188,14 +188,14 @@ TEST(WmAuditLog, WritesToFile) {
     std::string filepath = "test_wm_audit_output.jsonl";
 
     {
-        mujin::WorldModel wm;
+        ame::WorldModel wm;
         auto& ts = wm.typeSystem();
         ts.addType("object");
         ts.addType("robot", "object");
         wm.addObject("r1", "robot");
         wm.registerPredicate("ready", {"robot"});
 
-        mujin::WmAuditLog audit(filepath);
+        ame::WmAuditLog audit(filepath);
         wm.setAuditCallback([&audit](uint64_t ver, uint64_t ts_us,
                                       const std::string& fact, bool val,
                                       const std::string& src) {
@@ -221,36 +221,36 @@ TEST(WmAuditLog, WritesToFile) {
 }
 
 // =========================================================================
-// Layer 2: MujinBTLogger
+// Layer 2: AmeBTLogger
 // =========================================================================
 
-TEST(MujinBTLogger, EmitsEventsOnBTExecution) {
+TEST(AmeBTLogger, EmitsEventsOnBTExecution) {
     auto wm = makeSimpleWorldModel();
     wm.setFact("(at uav1 base)", true, "planner_init");
     wm.setGoal({"(searched sector_a)", "(classified sector_a)"});
 
-    mujin::Planner planner;
+    ame::Planner planner;
     auto plan = planner.solve(wm);
     ASSERT_TRUE(plan.success);
 
-    mujin::ActionRegistry registry;
+    ame::ActionRegistry registry;
     registry.registerAction("move", "StubAction");
     registry.registerAction("search", "StubAction");
     registry.registerAction("classify", "StubAction");
 
-    mujin::PlanCompiler compiler;
+    ame::PlanCompiler compiler;
     auto xml = compiler.compileSequential(plan.steps, wm, registry);
 
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<mujin::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<mujin::SetWorldPredicate>("SetWorldPredicate");
+    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
+    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
     factory.registerNodeType<StubAction>("StubAction");
 
     auto tree = factory.createTreeFromText(xml);
     tree.rootBlackboard()->set("world_model", &wm);
 
-    // Attach MujinBTLogger
-    mujin::MujinBTLogger logger(tree, "TestPlan", &wm);
+    // Attach AmeBTLogger
+    ame::AmeBTLogger logger(tree, "TestPlan", &wm);
 
     auto status = tree.tickWhileRunning();
     EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
@@ -270,26 +270,26 @@ TEST(MujinBTLogger, EmitsEventsOnBTExecution) {
     }
 }
 
-TEST(MujinBTLogger, CallbackSinkReceivesEvents) {
+TEST(AmeBTLogger, CallbackSinkReceivesEvents) {
     auto wm = makeSimpleWorldModel();
     wm.setFact("(at uav1 base)", true, "planner_init");
     wm.setGoal({"(searched sector_a)", "(classified sector_a)"});
 
-    mujin::Planner planner;
+    ame::Planner planner;
     auto plan = planner.solve(wm);
     ASSERT_TRUE(plan.success);
 
-    mujin::ActionRegistry registry;
+    ame::ActionRegistry registry;
     registry.registerAction("move", "StubAction");
     registry.registerAction("search", "StubAction");
     registry.registerAction("classify", "StubAction");
 
-    mujin::PlanCompiler compiler;
+    ame::PlanCompiler compiler;
     auto xml = compiler.compileSequential(plan.steps, wm, registry);
 
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<mujin::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<mujin::SetWorldPredicate>("SetWorldPredicate");
+    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
+    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
     factory.registerNodeType<StubAction>("StubAction");
 
     auto tree = factory.createTreeFromText(xml);
@@ -297,7 +297,7 @@ TEST(MujinBTLogger, CallbackSinkReceivesEvents) {
 
     // Attach logger with callback sink
     std::vector<std::string> received;
-    mujin::MujinBTLogger logger(tree, "TestPlan", &wm);
+    ame::AmeBTLogger logger(tree, "TestPlan", &wm);
     logger.addCallbackSink([&received](const std::string& line) {
         received.push_back(line);
     });
@@ -308,35 +308,35 @@ TEST(MujinBTLogger, CallbackSinkReceivesEvents) {
     EXPECT_EQ(received.size(), logger.events().size());
 }
 
-TEST(MujinBTLogger, WritesToFile) {
+TEST(AmeBTLogger, WritesToFile) {
     auto wm = makeSimpleWorldModel();
     wm.setFact("(at uav1 base)", true, "planner_init");
     wm.setGoal({"(searched sector_a)", "(classified sector_a)"});
 
-    mujin::Planner planner;
+    ame::Planner planner;
     auto plan = planner.solve(wm);
     ASSERT_TRUE(plan.success);
 
-    mujin::ActionRegistry registry;
+    ame::ActionRegistry registry;
     registry.registerAction("move", "StubAction");
     registry.registerAction("search", "StubAction");
     registry.registerAction("classify", "StubAction");
 
-    mujin::PlanCompiler compiler;
+    ame::PlanCompiler compiler;
     auto xml = compiler.compileSequential(plan.steps, wm, registry);
 
     std::string filepath = "test_bt_events_output.jsonl";
 
     {
         BT::BehaviorTreeFactory factory;
-        factory.registerNodeType<mujin::CheckWorldPredicate>("CheckWorldPredicate");
-        factory.registerNodeType<mujin::SetWorldPredicate>("SetWorldPredicate");
+        factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
+        factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
         factory.registerNodeType<StubAction>("StubAction");
 
         auto tree = factory.createTreeFromText(xml);
         tree.rootBlackboard()->set("world_model", &wm);
 
-        mujin::MujinBTLogger logger(tree, "FilePlan", &wm);
+        ame::AmeBTLogger logger(tree, "FilePlan", &wm);
         logger.addFileSink(filepath);
 
         tree.tickWhileRunning();
@@ -362,21 +362,21 @@ TEST(TreeObserver, CollectsStatisticsOnExecution) {
     wm.setFact("(at uav1 base)", true, "planner_init");
     wm.setGoal({"(searched sector_a)", "(classified sector_a)"});
 
-    mujin::Planner planner;
+    ame::Planner planner;
     auto plan = planner.solve(wm);
     ASSERT_TRUE(plan.success);
 
-    mujin::ActionRegistry registry;
+    ame::ActionRegistry registry;
     registry.registerAction("move", "StubAction");
     registry.registerAction("search", "StubAction");
     registry.registerAction("classify", "StubAction");
 
-    mujin::PlanCompiler compiler;
+    ame::PlanCompiler compiler;
     auto xml = compiler.compileSequential(plan.steps, wm, registry);
 
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<mujin::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<mujin::SetWorldPredicate>("SetWorldPredicate");
+    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
+    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
     factory.registerNodeType<StubAction>("StubAction");
 
     auto tree = factory.createTreeFromText(xml);
@@ -403,7 +403,7 @@ TEST(ObservabilityIntegration, AllLayersWorkTogether) {
     auto wm = makeSimpleWorldModel();
 
     // Layer 3: attach audit log
-    mujin::WmAuditLog audit;
+    ame::WmAuditLog audit;
     wm.setAuditCallback([&audit](uint64_t ver, uint64_t ts_us,
                                   const std::string& fact, bool val,
                                   const std::string& src) {
@@ -413,21 +413,21 @@ TEST(ObservabilityIntegration, AllLayersWorkTogether) {
     wm.setFact("(at uav1 base)", true, "planner_init");
     wm.setGoal({"(searched sector_a)", "(classified sector_a)"});
 
-    mujin::Planner planner;
+    ame::Planner planner;
     auto plan = planner.solve(wm);
     ASSERT_TRUE(plan.success);
 
-    mujin::ActionRegistry registry;
+    ame::ActionRegistry registry;
     registry.registerAction("move", "StubAction");
     registry.registerAction("search", "StubAction");
     registry.registerAction("classify", "StubAction");
 
-    mujin::PlanCompiler compiler;
+    ame::PlanCompiler compiler;
     auto xml = compiler.compileSequential(plan.steps, wm, registry);
 
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<mujin::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<mujin::SetWorldPredicate>("SetWorldPredicate");
+    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
+    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
     factory.registerNodeType<StubAction>("StubAction");
 
     auto tree = factory.createTreeFromText(xml);
@@ -436,8 +436,8 @@ TEST(ObservabilityIntegration, AllLayersWorkTogether) {
     // Layer 1: TreeObserver
     BT::TreeObserver observer(tree);
 
-    // Layer 2: MujinBTLogger
-    mujin::MujinBTLogger bt_logger(tree, "IntegrationPlan", &wm);
+    // Layer 2: AmeBTLogger
+    ame::AmeBTLogger bt_logger(tree, "IntegrationPlan", &wm);
 
     auto status = tree.tickWhileRunning();
     EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
@@ -466,23 +466,23 @@ TEST(PlanAuditLog, RecordsEpisodeInMemory) {
     wm.setFact("(at uav1 base)", true, "planner_init");
     wm.setGoal({"(searched sector_a)", "(classified sector_a)"});
 
-    mujin::Planner planner;
+    ame::Planner planner;
     auto plan = planner.solve(wm);
     ASSERT_TRUE(plan.success);
     EXPECT_GT(plan.solve_time_ms, 0.0);
 
-    mujin::ActionRegistry registry;
+    ame::ActionRegistry registry;
     registry.registerAction("move", "StubAction");
     registry.registerAction("search", "StubAction");
     registry.registerAction("classify", "StubAction");
 
-    mujin::PlanCompiler compiler;
+    ame::PlanCompiler compiler;
     auto xml = compiler.compileSequential(plan.steps, wm, registry);
 
     // Record episode
-    mujin::PlanAuditLog audit;
+    ame::PlanAuditLog audit;
 
-    mujin::PlanAuditLog::Episode ep;
+    ame::PlanAuditLog::Episode ep;
     ep.ts_us = 12345;
     for (unsigned i = 0; i < wm.numFluents(); ++i) {
         if (wm.getFact(i)) ep.init_facts.push_back(wm.fluentName(i));
@@ -516,8 +516,8 @@ TEST(PlanAuditLog, WritesToFile) {
     std::string filepath = "test_plan_audit_output.jsonl";
 
     {
-        mujin::PlanAuditLog audit(filepath);
-        mujin::PlanAuditLog::Episode ep;
+        ame::PlanAuditLog audit(filepath);
+        ame::PlanAuditLog::Episode ep;
         ep.ts_us = 99999;
         ep.solver = "BRFS";
         ep.solve_time_ms = 1.5;
@@ -550,7 +550,7 @@ TEST(PlanAuditLog, SolveTimeIsRecorded) {
     wm.setFact("(at uav1 base)", true);
     wm.setGoal({"(searched sector_a)", "(classified sector_a)"});
 
-    mujin::Planner planner;
+    ame::Planner planner;
     auto plan = planner.solve(wm);
 
     EXPECT_TRUE(plan.success);

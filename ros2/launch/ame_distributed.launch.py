@@ -16,7 +16,7 @@ def generate_launch_description():
             description='Path to PDDL problem file'),
 
         LifecycleNode(
-            package='mujin_ros2',
+            package='ame_ros2',
             executable='world_model_node',
             name='world_model_node',
             output='screen',
@@ -30,7 +30,7 @@ def generate_launch_description():
         ),
 
         LifecycleNode(
-            package='mujin_ros2',
+            package='ame_ros2',
             executable='planner_node',
             name='planner_node',
             output='screen',
@@ -45,7 +45,7 @@ def generate_launch_description():
         ),
 
         LifecycleNode(
-            package='mujin_ros2',
+            package='ame_ros2',
             executable='executor_node',
             name='executor_node',
             output='screen',
@@ -58,7 +58,7 @@ def generate_launch_description():
         ),
 
         Node(
-            package='mujin_ros2',
+            package='ame_ros2',
             executable='lifecycle_manager',
             name='lifecycle_manager',
             output='screen',

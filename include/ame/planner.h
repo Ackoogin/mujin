@@ -1,12 +1,12 @@
 #pragma once
 
-#include "mujin/world_model.h"
-#include "mujin/plan_compiler.h"
+#include "ame/world_model.h"
+#include "ame/plan_compiler.h"
 
 #include <string>
 #include <vector>
 
-namespace mujin {
+namespace ame {
 
 // Result of a planning attempt
 struct PlanResult {
@@ -25,4 +25,4 @@ public:
     PlanResult solve(const WorldModel& wm) const;
 };
 
-} // namespace mujin
+} // namespace ame

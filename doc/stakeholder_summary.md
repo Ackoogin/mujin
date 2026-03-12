@@ -1,8 +1,8 @@
-# MUJIN Autonomy Module — Stakeholder Summary
+# Autonomous Mission Engine (AME) — Stakeholder Summary
 
 ## What This System Does
 
-The MUJIN autonomy module enables unmanned platforms to **plan and execute missions automatically**. Given a description of the mission objectives and the current situation, it works out what actions to take, carries them out, and adapts if things go wrong — all without requiring step-by-step human programming for each mission.
+The AME autonomy module enables unmanned platforms to **plan and execute missions automatically**. Given a description of the mission objectives and the current situation, it works out what actions to take, carries them out, and adapts if things go wrong — all without requiring step-by-step human programming for each mission.
 
 Think of it as a mission planner and executor combined: the system receives goals (e.g., "search these sectors and classify anything found"), figures out the steps needed, runs them — potentially in parallel — and recovers automatically if an action fails.
 

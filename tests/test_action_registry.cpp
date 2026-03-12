@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
-#include "mujin/action_registry.h"
+#include "ame/action_registry.h"
 
 TEST(ActionRegistry, RegisterSimpleAction) {
-    mujin::ActionRegistry reg;
+    ame::ActionRegistry reg;
     reg.registerAction("move", "MoveAction");
 
     EXPECT_TRUE(reg.hasAction("move"));
@@ -10,7 +10,7 @@ TEST(ActionRegistry, RegisterSimpleAction) {
 }
 
 TEST(ActionRegistry, ResolveSimpleAction) {
-    mujin::ActionRegistry reg;
+    ame::ActionRegistry reg;
     reg.registerAction("move", "MoveAction");
 
     auto impl = reg.resolve("move", {"uav1", "base", "sector_a"});
@@ -21,7 +21,7 @@ TEST(ActionRegistry, ResolveSimpleAction) {
 }
 
 TEST(ActionRegistry, ResolveSimpleActionNoParams) {
-    mujin::ActionRegistry reg;
+    ame::ActionRegistry reg;
     reg.registerAction("noop", "NoOpAction");
 
     auto impl = reg.resolve("noop", {});
@@ -29,7 +29,7 @@ TEST(ActionRegistry, ResolveSimpleActionNoParams) {
 }
 
 TEST(ActionRegistry, RegisterSubTreeTemplate) {
-    mujin::ActionRegistry reg;
+    ame::ActionRegistry reg;
     reg.registerActionSubTree("search",
         R"(<Sequence><FlyTo target="{param1}"/><RunSensor area="{param1}"/></Sequence>)");
 
@@ -39,7 +39,7 @@ TEST(ActionRegistry, RegisterSubTreeTemplate) {
 }
 
 TEST(ActionRegistry, ReactiveFlag) {
-    mujin::ActionRegistry reg;
+    ame::ActionRegistry reg;
     reg.registerAction("search", "SearchAction", true);
     reg.registerAction("move", "MoveAction", false);
 
@@ -51,13 +51,13 @@ TEST(ActionRegistry, ReactiveFlag) {
 }
 
 TEST(ActionRegistry, UnknownActionThrows) {
-    mujin::ActionRegistry reg;
+    ame::ActionRegistry reg;
     EXPECT_THROW(reg.resolve("nonexistent", {}), std::runtime_error);
     EXPECT_THROW(reg.isReactive("nonexistent"), std::runtime_error);
 }
 
 TEST(ActionRegistry, OverwriteRegistration) {
-    mujin::ActionRegistry reg;
+    ame::ActionRegistry reg;
     reg.registerAction("move", "MoveActionV1");
     reg.registerAction("move", "MoveActionV2");
 
