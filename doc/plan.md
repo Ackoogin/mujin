@@ -7,7 +7,7 @@ Minimal vertical slice: UAV search-and-classify example running end-to-end. Arch
 ## Source Tree Layout
 
 ```
-include/mujin/
+include/ame/
     world_model.h
     type_system.h
     action_registry.h
@@ -59,10 +59,10 @@ doc/
 
 **Goal:** Build infrastructure — directories, CMake updates, Google Test integration.
 
-- Create `include/mujin/`, `src/`, `tests/`, `domains/` directory structure
+- Create `include/ame/`, `src/`, `tests/`, `domains/` directory structure
 - Add Google Test via FetchContent in CMakeLists.txt
 - Add a `tests/CMakeLists.txt` with a test target
-- Update `src/CMakeLists.txt` to glob headers from `include/mujin/`
+- Update `src/CMakeLists.txt` to glob headers from `include/ame/`
 - Verify build still works with existing `main.cpp`
 
 **Acceptance:** `cmake --build` succeeds, `ctest` runs an empty test suite.
@@ -71,7 +71,7 @@ doc/
 
 **Goal:** Implement the authoritative world model with eager grounding.
 
-**Files:** `include/mujin/type_system.h`, `include/mujin/world_model.h`, `src/type_system.cpp`, `src/world_model.cpp`
+**Files:** `include/ame/type_system.h`, `include/ame/world_model.h`, `src/type_system.cpp`, `src/world_model.cpp`
 
 - `TypeSystem`: type hierarchy (name → parent), object registry (name → type)
 - `WorldModel`:
@@ -119,7 +119,7 @@ doc/
 
 - Add `libff_parser` as a FetchContent dependency (from `https://github.com/LAPKT-dev/libff_parser`)
 - Add `${LAPKT_SRC}/translate/pddl/ff/ff_to_aptk.cxx` to the `lapkt_core` build
-- Create `include/mujin/pddl_parser.h` and `src/pddl_parser.cpp`:
+- Create `include/ame/pddl_parser.h` and `src/pddl_parser.cpp`:
   - Wraps `aptk::FF_Parser::get_problem_description()`
   - Populates a `WorldModel` from the parsed `STRIPS_Problem` (reverse projection: extract types, objects, predicates, facts from the grounded problem)
 - Write UAV example domain files: `domains/uav_search/domain.pddl`, `domains/uav_search/problem.pddl`
@@ -136,7 +136,7 @@ doc/
 
 **Goal:** Map PDDL action names to BT implementations.
 
-**Files:** `include/mujin/action_registry.h`, `src/action_registry.cpp`
+**Files:** `include/ame/action_registry.h`, `src/action_registry.cpp`
 
 - `registerAction(pddl_name, bt_node_type, reactive=false)` — simple node mapping
 - `registerActionSubTree(pddl_name, subtree_xml_template, reactive=false)` — XML template with `{param0}`, `{param1}` placeholders
@@ -155,7 +155,7 @@ doc/
 
 **Goal:** Implement the world-model-aware BT nodes.
 
-**Files:** `include/mujin/bt_nodes/check_world_predicate.h`, `include/mujin/bt_nodes/set_world_predicate.h`, corresponding `.cpp` files
+**Files:** `include/ame/bt_nodes/check_world_predicate.h`, `include/ame/bt_nodes/set_world_predicate.h`, corresponding `.cpp` files
 
 - `CheckWorldPredicate`: ConditionNode, reads `predicate` port (string key), queries `WorldModel::getFact()`, returns SUCCESS/FAILURE
 - `SetWorldPredicate`: SyncActionNode, reads `predicate` + `value` ports, calls `WorldModel::setFact()`, returns SUCCESS
@@ -171,7 +171,7 @@ doc/
 
 **Goal:** Convert a LAPKT plan into executable BT XML.
 
-**Files:** `include/mujin/plan_compiler.h`, `src/plan_compiler.cpp`
+**Files:** `include/ame/plan_compiler.h`, `src/plan_compiler.cpp`
 
 Sub-components:
 
@@ -318,7 +318,7 @@ Steps 1–8 deliver a working vertical slice. This section itemises what each co
 
 | Aspect | Slice delivers | Current state | Extension |
 |--------|---------------|---------------|-----------|
-| BT logging | `std::cout` prints | **Done:** `SqliteLogger` enabled (Layer 1) + `MujinBTLogger` (Layer 2) with JSONL + callback sinks | ext 1 Layers 1–2 |
+| BT logging | `std::cout` prints | **Done:** `SqliteLogger` enabled (Layer 1) + `AmeBTLogger` (Layer 2) with JSONL + callback sinks | ext 1 Layers 1–2 |
 | WM logging | `version()` counter | **Done:** `WmAuditLog` (Layer 3) with source-tagged fact changes, JSONL output | ext 1 Layer 3 |
 | Live monitoring | None | **Done:** `FoxgloveBridge` (Layer 4) — Foxglove WebSocket server on `ws://localhost:8765` with `/bt_events` + `/wm_audit` channels | ext 1 Layer 4 |
 | Plan audit | None | **Done:** `PlanAuditLog` (Layer 5) — JSONL with init state, goals, solver, timing, plan actions, compiled BT XML | ext 1 Layer 5 |
@@ -362,5 +362,5 @@ Steps 1–8 deliver a working vertical slice. This section itemises what each co
 | LAPKT Devel2.0 (core) | FetchContent | STRIPS model, BRFS search | Integrated |
 | Google Test 1.14 | FetchContent | Unit/integration testing (73 tests) | Integrated |
 | SQLite3 | System | BT.CPP SQLite logging backend | Integrated |
-| websocketpp 0.8.2 | FetchContent | Foxglove WebSocket server | Integrated (optional: `MUJIN_FOXGLOVE`) |
-| Standalone Asio 1.28 | FetchContent | Async I/O for websocketpp | Integrated (optional: `MUJIN_FOXGLOVE`) |
+| websocketpp 0.8.2 | FetchContent | Foxglove WebSocket server | Integrated (optional: `AME_FOXGLOVE`) |
+| Standalone Asio 1.28 | FetchContent | Async I/O for websocketpp | Integrated (optional: `AME_FOXGLOVE`) |

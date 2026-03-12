@@ -364,7 +364,7 @@ Per the DSTL biscuit book, assurance is underpinned by **Test, Evaluation, Verif
 | **Formal Verification** | Compiler causal-graph correctness, WorldModel invariants | Lightweight model checking / assertion proofs |
 | **Simulation-Based Test** | End-to-end mission execution in representative scenarios | Sim harness with scenario injection |
 | **Adversarial Test** | System behaviour under hostile perception inputs | Fault injection framework |
-| **Runtime Monitoring** | Continuous online assertion checking in deployment | MujinBTLogger + WmAuditLog + watchdog |
+| **Runtime Monitoring** | Continuous online assertion checking in deployment | AmeBTLogger + WmAuditLog + watchdog |
 
 ### 8.2 Existing Test Coverage
 

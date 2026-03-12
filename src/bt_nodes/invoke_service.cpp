@@ -1,8 +1,8 @@
-#include "mujin/bt_nodes/invoke_service.h"
+#include "ame/bt_nodes/invoke_service.h"
 
 #include <sstream>
 
-namespace mujin {
+namespace ame {
 
 InvokeService::InvokeService(const std::string& name,
                              const BT::NodeConfiguration& config)
@@ -68,4 +68,4 @@ std::string InvokeService::serializeResponse(const ServiceMessage& msg) {
     return result;
 }
 
-} // namespace mujin
+} // namespace ame

@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace mujin {
+namespace ame {
 
 class TypeSystem {
 public:
@@ -27,4 +27,4 @@ private:
     std::vector<std::string> object_order_;
 };
 
-} // namespace mujin
+} // namespace ame

@@ -1,11 +1,11 @@
 #pragma once
 
-#include <mujin/action_registry.h>
-#include <mujin/plan_audit_log.h>
-#include <mujin/plan_compiler.h>
-#include <mujin/planner.h>
-#include <mujin/world_model.h>
-#include <mujin/world_model_component.h>
+#include <ame/action_registry.h>
+#include <ame/plan_audit_log.h>
+#include <ame/plan_compiler.h>
+#include <ame/planner.h>
+#include <ame/world_model.h>
+#include <ame/world_model_component.h>
 #include <pcl/component.hpp>
 
 #include <functional>
@@ -14,7 +14,7 @@
 #include <string>
 #include <vector>
 
-namespace mujin {
+namespace ame {
 
 struct PlannerExecutionResult {
   bool success = false;
@@ -73,4 +73,4 @@ private:
   bool compiler_parallel_ = false;
 };
 
-}  // namespace mujin
+}  // namespace ame

@@ -1,7 +1,7 @@
-#include "mujin/bt_nodes/check_world_predicate.h"
-#include "mujin/world_model.h"
+#include "ame/bt_nodes/check_world_predicate.h"
+#include "ame/world_model.h"
 
-namespace mujin {
+namespace ame {
 
 CheckWorldPredicate::CheckWorldPredicate(const std::string& name,
                                          const BT::NodeConfiguration& config)
@@ -27,4 +27,4 @@ BT::NodeStatus CheckWorldPredicate::tick() {
     return (actual == expected) ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
-} // namespace mujin
+} // namespace ame

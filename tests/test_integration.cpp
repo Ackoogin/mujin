@@ -1,13 +1,13 @@
 #include <gtest/gtest.h>
-#include "mujin/world_model.h"
-#include "mujin/bt_nodes/check_world_predicate.h"
-#include "mujin/bt_nodes/set_world_predicate.h"
+#include "ame/world_model.h"
+#include "ame/bt_nodes/check_world_predicate.h"
+#include "ame/bt_nodes/set_world_predicate.h"
 
 #include <behaviortree_cpp/bt_factory.h>
 
 // Helper: set up a WorldModel with a simple domain and register BT nodes
-static mujin::WorldModel makeSimpleWM() {
-    mujin::WorldModel wm;
+static ame::WorldModel makeSimpleWM() {
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("location");
     ts.addType("robot");
@@ -20,8 +20,8 @@ static mujin::WorldModel makeSimpleWM() {
 
 static BT::BehaviorTreeFactory makeFactory() {
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<mujin::CheckWorldPredicate>("CheckWorldPredicate");
-    factory.registerNodeType<mujin::SetWorldPredicate>("SetWorldPredicate");
+    factory.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
+    factory.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
     return factory;
 }
 

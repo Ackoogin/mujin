@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace mujin {
+namespace ame {
 
 /// Structured audit log for WorldModel fact changes.
 ///
@@ -63,4 +63,4 @@ private:
     std::vector<Entry> entries_;
 };
 
-} // namespace mujin
+} // namespace ame

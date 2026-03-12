@@ -1,4 +1,4 @@
-# MUJIN Autonomy Module
+# Autonomous Mission Engine (AME)
 
 A **PDDL planning + Behaviour Tree execution** pipeline for autonomous mission planning and execution, with full observability and audit trail support.
 
@@ -63,7 +63,7 @@ build.bat
 To disable the Foxglove bridge (removes websocketpp/asio dependencies):
 
 ```bash
-cmake --preset default -DMUJIN_FOXGLOVE=OFF
+cmake --preset default -DAME_FOXGLOVE=OFF
 cmake --build build --config Release
 ```
 
@@ -79,19 +79,19 @@ All 73 tests cover: WorldModel, TypeSystem, ActionRegistry, PlanCompiler, Planne
 
 ```bash
 # Linux/macOS
-./build/src/mujin_test_app
+./build/src/ame_test_app
 
 # Windows
-build\src\Release\mujin_test_app.exe
+build\src\Release\ame_test_app.exe
 ```
 
 Runs the UAV search-and-classify example end-to-end and produces three JSONL output files:
 
 | File | Contents |
 |------|----------|
-| `mujin_bt_events.jsonl` | BT node state transitions (Layer 2) |
-| `mujin_wm_audit.jsonl` | World model fact changes with source attribution (Layer 3) |
-| `mujin_plan_audit.jsonl` | Full planning episode audit trail (Layer 5) |
+| `ame_bt_events.jsonl` | BT node state transitions (Layer 2) |
+| `ame_wm_audit.jsonl` | World model fact changes with source attribution (Layer 3) |
+| `ame_plan_audit.jsonl` | Full planning episode audit trail (Layer 5) |
 
 ## Observability
 
@@ -100,7 +100,7 @@ The system replaces the paid Groot2 monitoring tool with an open, layered observ
 | Layer | Component | What It Captures |
 |-------|-----------|-----------------|
 | 1 | TreeObserver | Per-node tick counts, success/failure rates, timing |
-| 2 | MujinBTLogger | Structured JSON events for every BT node state transition |
+| 2 | AmeBTLogger | Structured JSON events for every BT node state transition |
 | 3 | WmAuditLog | Every world model fact change with source tag and timestamp |
 | 4 | FoxgloveBridge | WebSocket server for live Foxglove Studio visualization |
 | 5 | PlanAuditLog | Full planning episodes: initial state, goals, solver, plan, compiled BT XML |
@@ -109,10 +109,10 @@ Connect Foxglove Studio to `ws://localhost:8765` for real-time monitoring. See `
 
 ## ROS2 Integration
 
-The core library (`mujin_core`) is ROS-agnostic. The `ros2/` directory contains an `ament_cmake` package with lifecycle node wrappers:
+The core library (`ame_core`) is ROS-agnostic. The `ros2/` directory contains an `ament_cmake` package with lifecycle node wrappers:
 
 - **WorldModelNode** — owns state, exposes get/set/query services, publishes `/world_state`
-- **PlannerNode** — stateless action server at `/mujin/plan`
+- **PlannerNode** — stateless action server at `/ame/plan`
 - **ExecutorNode** — ticks BT at 50 Hz, publishes `/executor/bt_events`
 
 Supports both in-process (single executor) and distributed (service-backed) deployment modes from the same code. See `doc/quickstart.md` and `CLAUDE.md` for build instructions.
@@ -120,7 +120,7 @@ Supports both in-process (single executor) and distributed (service-backed) depl
 ## Project Structure
 
 ```
-include/mujin/           Core library headers
+include/ame/           Core library headers
   world_model.h          Authoritative state store
   type_system.h          Object/type hierarchy
   action_registry.h      PDDL-to-BT action mapping

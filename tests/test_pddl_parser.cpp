@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "mujin/pddl_parser.h"
-#include "mujin/world_model.h"
+#include "ame/pddl_parser.h"
+#include "ame/world_model.h"
 
 static const char* UAV_DOMAIN = R"(
 (define (domain uav-search)
@@ -53,8 +53,8 @@ static const char* UAV_PROBLEM = R"(
 )";
 
 TEST(PddlParser, ParseTypes) {
-    mujin::WorldModel wm;
-    mujin::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm);
+    ame::WorldModel wm;
+    ame::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm);
 
     auto& ts = wm.typeSystem();
     EXPECT_TRUE(ts.hasType("object"));
@@ -66,8 +66,8 @@ TEST(PddlParser, ParseTypes) {
 }
 
 TEST(PddlParser, ParseObjects) {
-    mujin::WorldModel wm;
-    mujin::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm);
+    ame::WorldModel wm;
+    ame::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm);
 
     auto& ts = wm.typeSystem();
     EXPECT_TRUE(ts.hasObject("uav1"));
@@ -80,8 +80,8 @@ TEST(PddlParser, ParseObjects) {
 }
 
 TEST(PddlParser, ParsePredicates) {
-    mujin::WorldModel wm;
-    mujin::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm);
+    ame::WorldModel wm;
+    ame::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm);
 
     // at(robot, location): 1 robot x 3 locations = 3
     // searched(sector): 2
@@ -91,8 +91,8 @@ TEST(PddlParser, ParsePredicates) {
 }
 
 TEST(PddlParser, ParseInitialState) {
-    mujin::WorldModel wm;
-    mujin::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm);
+    ame::WorldModel wm;
+    ame::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm);
 
     EXPECT_TRUE(wm.getFact("(at uav1 base)"));
     EXPECT_FALSE(wm.getFact("(at uav1 sector_a)"));
@@ -100,8 +100,8 @@ TEST(PddlParser, ParseInitialState) {
 }
 
 TEST(PddlParser, ParseGoal) {
-    mujin::WorldModel wm;
-    mujin::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm);
+    ame::WorldModel wm;
+    ame::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm);
 
     auto& goals = wm.goalFluentIds();
     EXPECT_EQ(goals.size(), 2u);
@@ -117,8 +117,8 @@ TEST(PddlParser, ParseGoal) {
 }
 
 TEST(PddlParser, ParseActions) {
-    mujin::WorldModel wm;
-    mujin::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm);
+    ame::WorldModel wm;
+    ame::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm);
 
     // move: 1 robot x 3 locations x 3 locations = 9
     // search: 1 robot x 2 sectors = 2
@@ -128,11 +128,11 @@ TEST(PddlParser, ParseActions) {
 
 TEST(PddlParser, MatchesProgrammaticConstruction) {
     // Parse from PDDL
-    mujin::WorldModel wm_parsed;
-    mujin::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm_parsed);
+    ame::WorldModel wm_parsed;
+    ame::PddlParser::parseFromString(UAV_DOMAIN, UAV_PROBLEM, wm_parsed);
 
     // Build programmatically (same domain)
-    mujin::WorldModel wm_prog;
+    ame::WorldModel wm_prog;
     auto& ts = wm_prog.typeSystem();
     ts.addType("object");
     ts.addType("location", "object");
@@ -181,11 +181,11 @@ TEST(PddlParser, MatchesProgrammaticConstruction) {
 }
 
 TEST(PddlParser, ParseFromFile) {
-    mujin::WorldModel wm;
+    ame::WorldModel wm;
     // Use the actual PDDL files
     std::string domain_path = std::string(PROJECT_SOURCE_DIR) + "/domains/uav_search/domain.pddl";
     std::string problem_path = std::string(PROJECT_SOURCE_DIR) + "/domains/uav_search/problem.pddl";
-    mujin::PddlParser::parse(domain_path, problem_path, wm);
+    ame::PddlParser::parse(domain_path, problem_path, wm);
 
     EXPECT_EQ(wm.numFluents(), 7u);
     EXPECT_EQ(wm.numGroundActions(), 13u);

@@ -1,8 +1,8 @@
-#include "mujin/plan_audit_log.h"
+#include "ame/plan_audit_log.h"
 
 #include <sstream>
 
-namespace mujin {
+namespace ame {
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -79,4 +79,4 @@ void PlanAuditLog::flush() {
     }
 }
 
-} // namespace mujin
+} // namespace ame

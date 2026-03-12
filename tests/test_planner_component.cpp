@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include <mujin/planner_component.h>
+#include <ame/planner_component.h>
 
 #include <test_component_utils.hpp>
 
@@ -8,7 +8,7 @@
 TEST(PlannerComponent, InProcessPlanningDoesNotRequirePddlFiles) {
   auto wm = buildUavWorldModel();
 
-  mujin::PlannerComponent component;
+  ame::PlannerComponent component;
   component.setParam("plan_audit.enabled", false);
   component.setParam("compiler.parallel", false);
   component.setInProcessWorldModel(&wm);

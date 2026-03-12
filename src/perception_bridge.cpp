@@ -1,6 +1,6 @@
-#include "mujin/perception_bridge.h"
+#include "ame/perception_bridge.h"
 
-namespace mujin {
+namespace ame {
 
 PerceptionBridge::PerceptionBridge(WorldModel& wm) : wm_(wm) {}
 
@@ -40,4 +40,4 @@ unsigned PerceptionBridge::pendingCount() const {
     return static_cast<unsigned>(pending_.size());
 }
 
-} // namespace mujin
+} // namespace ame

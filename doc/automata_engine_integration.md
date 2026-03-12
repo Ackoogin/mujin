@@ -1,12 +1,12 @@
-# MUJIN ↔ PYRAMID Integration: SACE Assurance for GOAP + MUJIN as Strategy
+# AME ↔ PYRAMID Integration: SACE Assurance for GOAP + AME as Strategy
 
 ## 1. SACE Assurance Applicability to GOAP
 
-Mujin's existing [SACE assurance plan](autonomy_assurance_plan.md) is tightly coupled to the **PDDL + LAPKT + BT.CPP** architecture. Below is a stage-by-stage analysis of how each SACE stage — and its evidence arguments — applies (or must adapt) when the planning algorithm is automata_engine's **GOAP A\*** rather than LAPKT BRFS.
+Ame's existing [SACE assurance plan](autonomy_assurance_plan.md) is tightly coupled to the **PDDL + LAPKT + BT.CPP** architecture. Below is a stage-by-stage analysis of how each SACE stage — and its evidence arguments — applies (or must adapt) when the planning algorithm is automata_engine's **GOAP A\*** rather than LAPKT BRFS.
 
 ### 1.1 Property Comparison: LAPKT BRFS vs GOAP A\*
 
-| Assurable Property | LAPKT BRFS (current mujin) | GOAP A\* (automata_engine) | Assurance Impact |
+| Assurable Property | LAPKT BRFS (current ame) | GOAP A\* (automata_engine) | Assurance Impact |
 |---|---|---|---|
 | **Soundness** | ✅ Guaranteed — STRIPS semantics; preconditions checked per step | ✅ Guaranteed — `IAction.getPreconditions()` checked at each A\* node expansion | Equivalent — both validate preconditions before applying effects |
 | **Completeness** | ✅ BRFS is complete for finite STRIPS | ⚠️ A\* is complete **iff** heuristic is admissible and graph is finite; GOAP uses `max_depth` bound | New evidence needed: demonstrate heuristic admissibility or document loss of completeness |
@@ -63,7 +63,7 @@ New/modified safety requirements for GOAP:
 |--------|-------------|-----------|
 | SR-10 | GOAP heuristic SHALL be documented as admissible or the completeness loss SHALL be recorded in the hazard log | H10 |
 | SR-11 | `ICostCalculator` implementations SHALL validate input position data before computing costs | H11 |
-| SR-12 | `WorldState` mutations SHALL be logged with source identification (equivalent to mujin's `AuditCallback`) | H3 |
+| SR-12 | `WorldState` mutations SHALL be logged with source identification (equivalent to ame's `AuditCallback`) | H3 |
 | SR-13 | `GoapStrategy` SHALL expose planning statistics (nodes expanded, depth reached, time elapsed) for audit | SR-02 equivalent |
 
 #### Stage 5 — Design Assurance
@@ -109,16 +109,16 @@ Verification additions needed for GOAP:
 
 ---
 
-## 2. MUJIN as an `IPlanningStrategy` within AutomataEngine
+## 2. AME as an `IPlanningStrategy` within AutomataEngine
 
 ### 2.1 Concept
 
-Wrap mujin's entire PDDL+LAPKT pipeline as an implementation of `pyramid::automata_engine::IPlanningStrategy`, registered alongside GOAP, FSM, Q-Learning, and BT strategies in `AutomataEngine`.
+Wrap ame's entire PDDL+LAPKT pipeline as an implementation of `pyramid::automata_engine::IPlanningStrategy`, registered alongside GOAP, FSM, Q-Learning, and BT strategies in `AutomataEngine`.
 
 ```
 AutomataEngine
   ├── GoapStrategy      (A* + cost calculators)
-  ├── PddlStrategy      (mujin WorldModel + LAPKT BRFS)  ← NEW
+  ├── PddlStrategy      (ame WorldModel + LAPKT BRFS)  ← NEW
   ├── FsmStrategy
   ├── BtStrategy
   └── QLearningStrategy
@@ -139,10 +139,10 @@ The adapter (`PddlStrategy`) would:
 
 | Step | What happens | Implementation |
 |------|-------------|----------------|
-| 1. Extract world state | `PlanningRequest.context` → `mujin::WorldModel` | Translate typed `WorldState` → boolean fluents (threshold/equality checks) |
+| 1. Extract world state | `PlanningRequest.context` → `ame::WorldModel` | Translate typed `WorldState` → boolean fluents (threshold/equality checks) |
 | 2. Extract goals | `PlanningRequest.requirements` → PDDL goal fluents | Map `ExpectedEffect` → `setGoal()` fluent keys |
 | 3. Load domain | From PDDL file path or embedded in `strategy_config` JSON | `PddlParser::parseDomain()` + `parseProblem()` |
-| 4. Solve | `mujin::Planner::solve(wm)` | Returns `PlanResult` with `PlanStep` indices |
+| 4. Solve | `ame::Planner::solve(wm)` | Returns `PlanResult` with `PlanStep` indices |
 | 5. Compile to BT XML | `PlanCompiler::compile()` with causal-graph parallelism | (Optional — can skip if executor uses `Solution` directly) |
 | 6. Map to Solution | `PlanResult.steps` → `vector<SolutionElement>` | One `SolutionElement` per `GroundAction` with `ElementType::ACTION` |
 | 7. Return | `shared_ptr<Solution>` | Includes `total_estimated_cost` (step count) and constraint validation |
@@ -150,12 +150,12 @@ The adapter (`PddlStrategy`) would:
 ### 2.3 Skeleton Code
 
 ```cpp
-// pddl_strategy.h — mujin as an IPlanningStrategy
+// pddl_strategy.h — ame as an IPlanningStrategy
 #pragma once
 #include <interfaces/IPlanningStrategy.h>
-#include "mujin/world_model.h"
-#include "mujin/planner.h"
-#include "mujin/pddl_parser.h"
+#include "ame/world_model.h"
+#include "ame/planner.h"
+#include "ame/pddl_parser.h"
 
 namespace pyramid { namespace automata_engine {
 
@@ -168,17 +168,17 @@ public:
       const PlanningRequest& request) override;
 
 private:
-  // Translate AutomataEngine WorldState → mujin WorldModel fluents
-  void syncWorldState(const WorldState& ae_state, mujin::WorldModel& wm);
+  // Translate AutomataEngine WorldState → ame WorldModel fluents
+  void syncWorldState(const WorldState& ae_state, ame::WorldModel& wm);
 
-  // Translate AutomataEngine Requirements → mujin goal fluents
+  // Translate AutomataEngine Requirements → ame goal fluents
   void syncGoals(const std::vector<std::shared_ptr<Requirement>>& reqs,
-                 mujin::WorldModel& wm);
+                 ame::WorldModel& wm);
 
-  // Convert mujin PlanResult → AutomataEngine Solution
+  // Convert ame PlanResult → AutomataEngine Solution
   std::shared_ptr<Solution> convertResult(
-      const mujin::PlanResult& result,
-      const mujin::WorldModel& wm,
+      const ame::PlanResult& result,
+      const ame::WorldModel& wm,
       const PlanningRequest& request);
 
   std::string domain_path_;
@@ -192,7 +192,7 @@ private:
 
 | Decision | Options | Recommendation |
 |----------|---------|----------------|
-| **State sync direction** | (a) AE WorldState → WM fluents on each `determineSolution()`, (b) Maintain persistent WM | **(a)** — stateless per request, matches mujin's design philosophy and aids assurance |
+| **State sync direction** | (a) AE WorldState → WM fluents on each `determineSolution()`, (b) Maintain persistent WM | **(a)** — stateless per request, matches ame's design philosophy and aids assurance |
 | **BT compilation** | (a) Compile to BT XML and embed in `SolutionElement.details`, (b) Return `SolutionElement` per action, let AE executor handle | **(b)** — more consistent with AE's `BasicPlanExecutor` expectations |
 | **Cost reporting** | (a) Report LAPKT step count as cost, (b) Ignore cost (BRFS doesn't optimize cost) | **(a)** — step count is a valid cost metric; document it as uniform-cost |
 | **When to select PDDL** | (a) Explicit `preferred_strategy_id`, (b) Auto-select when request has no typed state | **(a)** — explicit selection avoids surprising strategy switches |
@@ -222,8 +222,8 @@ This directly supports **SACE Stage 8 (Verification)** by enabling:
 | # | Action | Effort | Prerequisite |
 |---|--------|--------|-------------|
 | 1 | **Write formal semantics for `ActionDefinition`** — precondition satisfaction rules, effect application order, cost monotonicity | 1 week | None |
-| 2 | **Implement `PddlStrategy`** adapter — wrap mujin pipeline behind `IPlanningStrategy` | 2 weeks | Build system integration (mujin_core as dependency of automata_engine) |
+| 2 | **Implement `PddlStrategy`** adapter — wrap ame pipeline behind `IPlanningStrategy` | 2 weeks | Build system integration (ame_core as dependency of automata_engine) |
 | 3 | **Extend SACE hazard table** with H10–H12 (heuristic inadmissibility, cost calculator error, type mismatch) | 1 week | None |
-| 4 | **Add audit trail to `WorldState`** — equivalent to mujin's `AuditCallback` for typed state | 1 week | None |
+| 4 | **Add audit trail to `WorldState`** — equivalent to ame's `AuditCallback` for typed state | 1 week | None |
 | 5 | **Cross-validation harness** — run both strategies on UAV search domain, compare plan equivalence | 2 weeks | Steps 1–2 |
 | 6 | **Update SACE–PDDL integration guide** to cover GOAP as a second planning algorithm | 1 week | Steps 1, 3 |

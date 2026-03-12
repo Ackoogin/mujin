@@ -22,7 +22,7 @@ FetchContent_MakeAvailable(googletest)
 include(GoogleTest)
 
 # ── PCL core library (the three C files we want to cover) ────────────────
-set(PCL_ROOT "${CMAKE_SOURCE_DIR}/../..")   # /home/user/mujin
+set(PCL_ROOT "${CMAKE_SOURCE_DIR}/../..")   # /home/user/ame
 
 add_library(pcl_core STATIC
   ${PCL_ROOT}/src/pcl/pcl_container.c

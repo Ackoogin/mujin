@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(mujin_ros2)
+project(ame_ros2)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -16,18 +16,18 @@ find_package(lifecycle_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 # ---------------------------------------------------------------------------
-# mujin_core: installed by the plain CMake build.
-# Set MUJIN_CORE_INSTALL_PREFIX to override (default: sibling build/install).
+# ame_core: installed by the plain CMake build.
+# Set AME_CORE_INSTALL_PREFIX to override (default: sibling build/install).
 # ---------------------------------------------------------------------------
-if(NOT DEFINED MUJIN_CORE_INSTALL_PREFIX)
-    set(MUJIN_CORE_INSTALL_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/../build/install")
+if(NOT DEFINED AME_CORE_INSTALL_PREFIX)
+    set(AME_CORE_INSTALL_PREFIX "${CMAKE_CURRENT_SOURCE_DIR}/../build/install")
 endif()
 
-find_package(mujin_core REQUIRED
-    HINTS "${MUJIN_CORE_INSTALL_PREFIX}/lib/cmake/mujin_core"
+find_package(ame_core REQUIRED
+    HINTS "${AME_CORE_INSTALL_PREFIX}/lib/cmake/ame_core"
 )
-# mujin::mujin_core's INTERFACE_INCLUDE_DIRECTORIES already contains the install
-# prefix include/ directory, which holds both mujin and BT.CPP headers.
+# ame::ame_core's INTERFACE_INCLUDE_DIRECTORIES already contains the install
+# prefix include/ directory, which holds both ame and BT.CPP headers.
 
 # ---------------------------------------------------------------------------
 # Custom message / service / action generation
@@ -43,9 +43,9 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 )
 
 # ---------------------------------------------------------------------------
-# mujin_ros2_lib — the three node classes + RosWmBridge + LifecycleManager
+# ame_ros2_lib — the three node classes + RosWmBridge + LifecycleManager
 # ---------------------------------------------------------------------------
-add_library(mujin_ros2_lib SHARED
+add_library(ame_ros2_lib SHARED
     src/world_model_node.cpp
     src/planner_node.cpp
     src/executor_node.cpp
@@ -53,14 +53,14 @@ add_library(mujin_ros2_lib SHARED
     src/lifecycle_manager.cpp
 )
 # On Windows, export all symbols so the import library (.lib) is generated.
-set_target_properties(mujin_ros2_lib PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+set_target_properties(ame_ros2_lib PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
-target_include_directories(mujin_ros2_lib PUBLIC
+target_include_directories(ame_ros2_lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>
 )
 
-ament_target_dependencies(mujin_ros2_lib
+ament_target_dependencies(ame_ros2_lib
     rclcpp
     rclcpp_action
     rclcpp_lifecycle
@@ -68,43 +68,43 @@ ament_target_dependencies(mujin_ros2_lib
     lifecycle_msgs
 )
 
-target_link_libraries(mujin_ros2_lib
-    mujin::mujin_core
+target_link_libraries(ame_ros2_lib
+    ame::ame_core
 )
 
 # Link generated message typesupport
 rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} "rosidl_typesupport_cpp")
-target_link_libraries(mujin_ros2_lib ${cpp_typesupport_target})
+target_link_libraries(ame_ros2_lib ${cpp_typesupport_target})
 
 # ---------------------------------------------------------------------------
 # Standalone node executables (distributed deployment)
 # ---------------------------------------------------------------------------
 add_executable(world_model_node src/world_model_node_main.cpp)
-target_link_libraries(world_model_node mujin_ros2_lib)
+target_link_libraries(world_model_node ame_ros2_lib)
 
 add_executable(planner_node src/planner_node_main.cpp)
-target_link_libraries(planner_node mujin_ros2_lib)
+target_link_libraries(planner_node ame_ros2_lib)
 
 add_executable(executor_node src/executor_node_main.cpp)
-target_link_libraries(executor_node mujin_ros2_lib)
+target_link_libraries(executor_node ame_ros2_lib)
 
 # ---------------------------------------------------------------------------
 # Combined in-process executable (all three nodes on one executor)
 # ---------------------------------------------------------------------------
-add_executable(mujin_combined src/combined_main.cpp)
-target_link_libraries(mujin_combined mujin_ros2_lib)
+add_executable(ame_combined src/combined_main.cpp)
+target_link_libraries(ame_combined ame_ros2_lib)
 
 # ---------------------------------------------------------------------------
 # Lifecycle manager standalone executable (for distributed launch)
 # ---------------------------------------------------------------------------
 add_executable(lifecycle_manager src/lifecycle_manager_main.cpp)
-target_link_libraries(lifecycle_manager mujin_ros2_lib)
+target_link_libraries(lifecycle_manager ame_ros2_lib)
 
 # ---------------------------------------------------------------------------
 # Install
 # ---------------------------------------------------------------------------
-install(TARGETS mujin_ros2_lib world_model_node planner_node executor_node mujin_combined lifecycle_manager
-    EXPORT mujin_ros2_lib
+install(TARGETS ame_ros2_lib world_model_node planner_node executor_node ame_combined lifecycle_manager
+    EXPORT ame_ros2_lib
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION lib/${PROJECT_NAME}
@@ -120,6 +120,6 @@ if(BUILD_TESTING)
     add_subdirectory(test)
 endif()
 
-ament_export_targets(mujin_ros2_lib HAS_LIBRARY_TARGET)
+ament_export_targets(ame_ros2_lib HAS_LIBRARY_TARGET)
 ament_export_dependencies(rclcpp rclcpp_action rclcpp_lifecycle std_msgs lifecycle_msgs)
 ament_package()

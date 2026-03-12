@@ -1,5 +1,5 @@
 #include <gtest/gtest.h>
-#include "mujin_ros2/world_model_node.hpp"
+#include "ame_ros2/world_model_node.hpp"
 #include <rclcpp/rclcpp.hpp>
 #include <lifecycle_msgs/msg/transition.hpp>
 #include <chrono>
@@ -9,7 +9,7 @@ class WorldModelNodeTest : public ::testing::Test {
 protected:
     void SetUp() override {
         rclcpp::init(0, nullptr);
-        node_ = std::make_shared<mujin_ros2::WorldModelNode>();
+        node_ = std::make_shared<ame_ros2::WorldModelNode>();
     }
     void TearDown() override {
         node_.reset();
@@ -26,7 +26,7 @@ protected:
         rclcpp::spin_some(node_->get_node_base_interface());
     }
 
-    std::shared_ptr<mujin_ros2::WorldModelNode> node_;
+    std::shared_ptr<ame_ros2::WorldModelNode> node_;
 };
 
 TEST_F(WorldModelNodeTest, ConfiguresWithoutPddlFile) {
@@ -73,13 +73,13 @@ TEST_F(WorldModelNodeTest, GetFactServiceCall) {
 
     // Create a client node and call the service
     auto client_node = rclcpp::Node::make_shared("test_client");
-    auto client = client_node->create_client<mujin_ros2::srv::GetFact>(
+    auto client = client_node->create_client<ame_ros2::srv::GetFact>(
         "/world_model_node/get_fact");
 
     // Wait for service
     ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(2)));
 
-    auto req  = std::make_shared<mujin_ros2::srv::GetFact::Request>();
+    auto req  = std::make_shared<ame_ros2::srv::GetFact::Request>();
     req->key  = "(at uav1 base)";
 
     auto future = client->async_send_request(req);
@@ -115,11 +115,11 @@ TEST_F(WorldModelNodeTest, SetFactServiceCall) {
     wm.registerPredicate("at", {"robot", "location"});
 
     auto client_node = rclcpp::Node::make_shared("test_client");
-    auto client = client_node->create_client<mujin_ros2::srv::SetFact>(
+    auto client = client_node->create_client<ame_ros2::srv::SetFact>(
         "/world_model_node/set_fact");
     ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(2)));
 
-    auto req    = std::make_shared<mujin_ros2::srv::SetFact::Request>();
+    auto req    = std::make_shared<ame_ros2::srv::SetFact::Request>();
     req->key    = "(at uav1 base)";
     req->value  = true;
     req->source = "test";

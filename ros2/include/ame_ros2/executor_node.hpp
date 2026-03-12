@@ -1,16 +1,16 @@
 #pragma once
 
-#include <mujin/executor_component.h>
+#include <ame/executor_component.h>
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include <std_msgs/msg/string.hpp>
 
 #include <behaviortree_cpp/bt_factory.h>
-#include <mujin_ros2/srv/get_fact.hpp>
-#include <mujin_ros2/srv/set_fact.hpp>
+#include <ame_ros2/srv/get_fact.hpp>
+#include <ame_ros2/srv/set_fact.hpp>
 
-namespace mujin_ros2 {
+namespace ame_ros2 {
 
 /// ROS2 lifecycle node that owns the BehaviorTree.CPP runtime.
 ///
@@ -19,7 +19,7 @@ namespace mujin_ros2 {
 /// or ROS2 service calls to WorldModelNode (distributed mode).
 ///
 /// Publishers (active after on_activate):
-///   /executor/bt_events  (std_msgs/String) — JSON lines from MujinBTLogger
+///   /executor/bt_events  (std_msgs/String) — JSON lines from AmeBTLogger
 ///   /executor/status     (std_msgs/String) — "IDLE"/"RUNNING"/"SUCCESS"/"FAILURE"
 ///
 /// Parameters:
@@ -46,7 +46,7 @@ public:
   void loadAndExecute(const std::string& bt_xml);
 
   /// For in-process mode: inject WorldModel pointer so BT nodes skip service calls.
-  void setInProcessWorldModel(mujin::WorldModel* wm) {
+  void setInProcessWorldModel(ame::WorldModel* wm) {
     inprocess_wm_ = wm;
     component_.setInProcessWorldModel(wm);
   }
@@ -57,9 +57,9 @@ public:
   BT::NodeStatus lastStatus() const { return component_.lastStatus(); }
 
 private:
-  mujin::ExecutorComponent component_;
+  ame::ExecutorComponent component_;
 
-  mujin::WorldModel* inprocess_wm_ = nullptr;
+  ame::WorldModel* inprocess_wm_ = nullptr;
 
   // Tick timer
   rclcpp::TimerBase::SharedPtr tick_timer_;
@@ -70,8 +70,8 @@ private:
   rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::String>::SharedPtr pub_status_;
 
   // Service clients for distributed mode
-  rclcpp::Client<mujin_ros2::srv::GetFact>::SharedPtr client_get_fact_;
-  rclcpp::Client<mujin_ros2::srv::SetFact>::SharedPtr client_set_fact_;
+  rclcpp::Client<ame_ros2::srv::GetFact>::SharedPtr client_get_fact_;
+  rclcpp::Client<ame_ros2::srv::SetFact>::SharedPtr client_set_fact_;
 
   bool core_nodes_registered_ = false;
 
@@ -80,4 +80,4 @@ private:
   void publishStatus(const std::string& status_str);
 };
 
-} // namespace mujin_ros2
+} // namespace ame_ros2

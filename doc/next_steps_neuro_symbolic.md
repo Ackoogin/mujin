@@ -37,7 +37,7 @@ We will proceed with the immediate adoption sequence recommended in the review, 
 **Objective:** Provide a batch-processing tool to analyze the extensive SQLite/JSONL audit logs and generate human-readable incident and mission summaries.
 **Implementation Steps:**
 1. Create an offline Python utility (`scripts/mission_analyst.py`).
-2. Implement log ingestion to read `mujin_plan_audit.jsonl`, `mujin_bt_events.jsonl`, and `mujin_wm_audit.jsonl`.
+2. Implement log ingestion to read `ame_plan_audit.jsonl`, `ame_bt_events.jsonl`, and `ame_wm_audit.jsonl`.
 3. Compress and window the transition logs into logical decision epochs.
 4. Prompt the LLM to analyze the sequences (e.g., "Why did the UAV replan at t=1702345679000?").
 5. **Validation:** Enforce evidence citation. The LLM must cite specific `wm_version` numbers and BT node names to justify its explanations.

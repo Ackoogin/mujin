@@ -6,7 +6,7 @@
 #include <vector>
 #include <memory>
 
-namespace mujin {
+namespace ame {
 
 class WorldModel;
 class Planner;
@@ -53,4 +53,4 @@ private:
   std::unique_ptr<BT::Tree> sub_tree_;
 };
 
-} // namespace mujin
+} // namespace ame

@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
 
-#include <mujin/bt_nodes/check_world_predicate.h>
-#include <mujin/bt_nodes/set_world_predicate.h>
-#include <mujin/executor_component.h>
-#include <mujin/planner_component.h>
+#include <ame/bt_nodes/check_world_predicate.h>
+#include <ame/bt_nodes/set_world_predicate.h>
+#include <ame/executor_component.h>
+#include <ame/planner_component.h>
 
 #include <test_component_utils.hpp>
 
@@ -11,7 +11,7 @@
 TEST(ExecutorComponent, ExecutesPlannerOutputAgainstSharedWorldModel) {
   auto wm = buildUavWorldModel();
 
-  mujin::PlannerComponent planner_component;
+  ame::PlannerComponent planner_component;
   planner_component.setParam("plan_audit.enabled", false);
   planner_component.setInProcessWorldModel(&wm);
   registerUavActions(planner_component.actionRegistry());
@@ -22,12 +22,12 @@ TEST(ExecutorComponent, ExecutesPlannerOutputAgainstSharedWorldModel) {
       planner_component.solveGoal({"(searched sector_a)", "(classified sector_a)"});
   ASSERT_TRUE(plan_result.success);
 
-  mujin::ExecutorComponent executor_component;
+  ame::ExecutorComponent executor_component;
   executor_component.setParam("bt_log.enabled", false);
   executor_component.setInProcessWorldModel(&wm);
-  executor_component.factory().registerNodeType<mujin::CheckWorldPredicate>(
+  executor_component.factory().registerNodeType<ame::CheckWorldPredicate>(
       "CheckWorldPredicate");
-  executor_component.factory().registerNodeType<mujin::SetWorldPredicate>(
+  executor_component.factory().registerNodeType<ame::SetWorldPredicate>(
       "SetWorldPredicate");
   registerUavStubNodes(executor_component.factory());
 

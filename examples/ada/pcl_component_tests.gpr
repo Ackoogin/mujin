@@ -1,5 +1,5 @@
 project Pcl_Component_Tests is
-  Root_Dir := "D:/Dev/repo/mujin";
+  Root_Dir := "D:/Dev/repo/ame";
 
   for Languages use ("Ada", "C");
   for Source_Dirs use (".", "../../src/pcl");

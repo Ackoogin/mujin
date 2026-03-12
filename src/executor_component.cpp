@@ -1,8 +1,8 @@
-#include <mujin/executor_component.h>
+#include <ame/executor_component.h>
 
 #include <stdexcept>
 
-namespace mujin {
+namespace ame {
 
 ExecutorComponent::ExecutorComponent()
     : pcl::Component("executor_component") {}
@@ -35,7 +35,7 @@ void ExecutorComponent::loadAndExecute(const std::string& bt_xml) {
     blackboard_initializer_(blackboard);
   }
 
-  bt_logger_ = std::make_unique<MujinBTLogger>(
+  bt_logger_ = std::make_unique<AmeBTLogger>(
       *tree_,
       paramStr("bt_log.tree_id", "MissionPlan"),
       inprocess_wm_);
@@ -98,4 +98,4 @@ void ExecutorComponent::resetExecutionState() {
   bt_logger_.reset();
 }
 
-}  // namespace mujin
+}  // namespace ame

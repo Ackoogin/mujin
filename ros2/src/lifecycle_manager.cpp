@@ -1,10 +1,10 @@
-#include "mujin_ros2/lifecycle_manager.hpp"
+#include "ame_ros2/lifecycle_manager.hpp"
 
 #include <lifecycle_msgs/msg/transition.hpp>
 
-namespace mujin_ros2 {
+namespace ame_ros2 {
 
-MujinLifecycleManager::MujinLifecycleManager(const rclcpp::NodeOptions& options)
+AmeLifecycleManager::AmeLifecycleManager(const rclcpp::NodeOptions& options)
     : rclcpp::Node("lifecycle_manager", options)
 {
     declare_parameter("managed_nodes", std::vector<std::string>{
@@ -19,7 +19,7 @@ MujinLifecycleManager::MujinLifecycleManager(const rclcpp::NodeOptions& options)
                 managed_nodes_.size());
 }
 
-bool MujinLifecycleManager::startup() {
+bool AmeLifecycleManager::startup() {
     // Configure all nodes in order (WorldModel first — others depend on its services)
     for (const auto& node : managed_nodes_) {
         RCLCPP_INFO(get_logger(), "Configuring %s ...", node.c_str());
@@ -40,7 +40,7 @@ bool MujinLifecycleManager::startup() {
     return true;
 }
 
-bool MujinLifecycleManager::shutdown() {
+bool AmeLifecycleManager::shutdown() {
     // Reverse order
     for (auto it = managed_nodes_.rbegin(); it != managed_nodes_.rend(); ++it) {
         const auto& node = *it;
@@ -52,7 +52,7 @@ bool MujinLifecycleManager::shutdown() {
     return true;
 }
 
-bool MujinLifecycleManager::changeNodeState(const std::string& node_name,
+bool AmeLifecycleManager::changeNodeState(const std::string& node_name,
                                              uint8_t transition_id)
 {
     const auto service_name = "/" + node_name + "/change_state";
@@ -75,7 +75,7 @@ bool MujinLifecycleManager::changeNodeState(const std::string& node_name,
     return future.get()->success;
 }
 
-uint8_t MujinLifecycleManager::getNodeState(const std::string& node_name) {
+uint8_t AmeLifecycleManager::getNodeState(const std::string& node_name) {
     const auto service_name = "/" + node_name + "/get_state";
     auto client = create_client<lifecycle_msgs::srv::GetState>(service_name);
 
@@ -88,4 +88,4 @@ uint8_t MujinLifecycleManager::getNodeState(const std::string& node_name) {
     return future.get()->current_state.id;
 }
 
-} // namespace mujin_ros2
+} // namespace ame_ros2

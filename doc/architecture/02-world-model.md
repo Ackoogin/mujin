@@ -4,7 +4,7 @@ The WorldModel is the central shared state of the system. All components access 
 
 ## TypeSystem
 
-`TypeSystem` (`include/mujin/type_system.h`) manages a single-inheritance type hierarchy and object registry:
+`TypeSystem` (`include/ame/type_system.h`) manages a single-inheritance type hierarchy and object registry:
 
 - Type hierarchy: name → parent (e.g., `uav` → `vehicle` → `object`)
 - Object registry: name → type (e.g., `uav1` → `uav`)

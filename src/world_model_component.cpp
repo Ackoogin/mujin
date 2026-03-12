@@ -1,10 +1,10 @@
-#include <mujin/pddl_parser.h>
-#include <mujin/world_model_component.h>
+#include <ame/pddl_parser.h>
+#include <ame/world_model_component.h>
 
 #include <exception>
 #include <stdexcept>
 
-namespace mujin {
+namespace ame {
 
 WorldModelComponent::WorldModelComponent()
     : pcl::Component("world_model_component") {}
@@ -155,4 +155,4 @@ WorldStateSnapshot WorldModelComponent::buildSnapshot(
   return snapshot;
 }
 
-}  // namespace mujin
+}  // namespace ame

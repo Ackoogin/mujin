@@ -3,11 +3,11 @@
 #include <string>
 #include <unordered_map>
 
-namespace mujin {
+namespace ame {
 
 // ServiceMessage: generic key-value payload for PYRAMID service requests and
 // responses.  Concrete PYRAMID SDK types map to/from this bag at the adapter
-// layer so that mujin_core stays SDK-agnostic.
+// layer so that ame_core stays SDK-agnostic.
 struct ServiceMessage {
     std::unordered_map<std::string, std::string> fields;
 
@@ -48,4 +48,4 @@ public:
     }
 };
 
-} // namespace mujin
+} // namespace ame

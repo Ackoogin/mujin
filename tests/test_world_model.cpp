@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "mujin/type_system.h"
-#include "mujin/world_model.h"
+#include "ame/type_system.h"
+#include "ame/world_model.h"
 
 #include <strips_prob.hxx>
 #include <fluent.hxx>
@@ -12,7 +12,7 @@
 // =============================================================================
 
 TEST(TypeSystem, AddAndQueryTypes) {
-    mujin::TypeSystem ts;
+    ame::TypeSystem ts;
     ts.addType("object");
     ts.addType("location", "object");
     ts.addType("robot", "object");
@@ -24,7 +24,7 @@ TEST(TypeSystem, AddAndQueryTypes) {
 }
 
 TEST(TypeSystem, SubtypeRelationship) {
-    mujin::TypeSystem ts;
+    ame::TypeSystem ts;
     ts.addType("object");
     ts.addType("location", "object");
     ts.addType("waypoint", "location");
@@ -37,7 +37,7 @@ TEST(TypeSystem, SubtypeRelationship) {
 }
 
 TEST(TypeSystem, ObjectRegistration) {
-    mujin::TypeSystem ts;
+    ame::TypeSystem ts;
     ts.addType("location");
     ts.addType("robot");
 
@@ -54,7 +54,7 @@ TEST(TypeSystem, ObjectRegistration) {
 }
 
 TEST(TypeSystem, GetObjectsOfType) {
-    mujin::TypeSystem ts;
+    ame::TypeSystem ts;
     ts.addType("object");
     ts.addType("location", "object");
     ts.addType("robot", "object");
@@ -75,7 +75,7 @@ TEST(TypeSystem, GetObjectsOfType) {
 }
 
 TEST(TypeSystem, UnknownTypeThrows) {
-    mujin::TypeSystem ts;
+    ame::TypeSystem ts;
     EXPECT_THROW(ts.addObject("x", "unknown_type"), std::runtime_error);
 }
 
@@ -84,20 +84,20 @@ TEST(TypeSystem, UnknownTypeThrows) {
 // =============================================================================
 
 TEST(WorldModel, EmptyModel) {
-    mujin::WorldModel wm;
+    ame::WorldModel wm;
     EXPECT_EQ(wm.numFluents(), 0u);
     EXPECT_EQ(wm.version(), 0u);
 }
 
 TEST(WorldModel, RegisterPredicateZeroAry) {
-    mujin::WorldModel wm;
+    ame::WorldModel wm;
     wm.registerPredicate("emergency", {});
     EXPECT_EQ(wm.numFluents(), 1u);
     EXPECT_EQ(wm.fluentName(0), "(emergency)");
 }
 
 TEST(WorldModel, EagerGroundingOnPredicateRegistration) {
-    mujin::WorldModel wm;
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("location");
     ts.addType("robot");
@@ -112,7 +112,7 @@ TEST(WorldModel, EagerGroundingOnPredicateRegistration) {
 }
 
 TEST(WorldModel, EagerGroundingOnObjectAddition) {
-    mujin::WorldModel wm;
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("location");
     ts.addType("robot");
@@ -132,7 +132,7 @@ TEST(WorldModel, EagerGroundingOnObjectAddition) {
 }
 
 TEST(WorldModel, SetGetFactByStringKey) {
-    mujin::WorldModel wm;
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("location");
     ts.addType("robot");
@@ -155,7 +155,7 @@ TEST(WorldModel, SetGetFactByStringKey) {
 }
 
 TEST(WorldModel, SetGetFactByIndex) {
-    mujin::WorldModel wm;
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("location");
     ts.addType("robot");
@@ -175,7 +175,7 @@ TEST(WorldModel, SetGetFactByIndex) {
 }
 
 TEST(WorldModel, VersionIncrements) {
-    mujin::WorldModel wm;
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("location");
     ts.addType("robot");
@@ -197,7 +197,7 @@ TEST(WorldModel, VersionIncrements) {
 }
 
 TEST(WorldModel, FluentIndexBiMap) {
-    mujin::WorldModel wm;
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("location");
     ts.addType("robot");
@@ -216,14 +216,14 @@ TEST(WorldModel, FluentIndexBiMap) {
 }
 
 TEST(WorldModel, UnknownFluentThrows) {
-    mujin::WorldModel wm;
+    ame::WorldModel wm;
     EXPECT_THROW(wm.getFact("(nonexistent)"), std::runtime_error);
     EXPECT_THROW(wm.setFact("(nonexistent)", true), std::runtime_error);
     EXPECT_THROW(wm.fluentIndex("(nonexistent)"), std::runtime_error);
 }
 
 TEST(WorldModel, MultiplePredicates) {
-    mujin::WorldModel wm;
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("location");
     ts.addType("robot");
@@ -259,7 +259,7 @@ TEST(WorldModel, MultiplePredicates) {
 
 TEST(WorldModel, LargeFluentCount) {
     // Test that the bitset scales beyond 64 fluents
-    mujin::WorldModel wm;
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("location");
     for (int i = 0; i < 100; ++i) {
@@ -282,8 +282,8 @@ TEST(WorldModel, LargeFluentCount) {
 // =============================================================================
 
 // Helper: build a minimal UAV domain programmatically
-static mujin::WorldModel buildUAVDomain() {
-    mujin::WorldModel wm;
+static ame::WorldModel buildUAVDomain() {
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
 
     ts.addType("object");

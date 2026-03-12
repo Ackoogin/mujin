@@ -6,17 +6,17 @@
  *   - Extension 6: Hierarchical Planning (ExecutePhaseAction)
  */
 
-#include "mujin/world_model.h"
-#include "mujin/perception_bridge.h"
-#include "mujin/world_model_snapshot.h"
-#include "mujin/pyramid_service.h"
-#include "mujin/bt_nodes/invoke_service.h"
-#include "mujin/bt_nodes/execute_phase_action.h"
-#include "mujin/bt_nodes/check_world_predicate.h"
-#include "mujin/bt_nodes/set_world_predicate.h"
-#include "mujin/action_registry.h"
-#include "mujin/plan_compiler.h"
-#include "mujin/planner.h"
+#include "ame/world_model.h"
+#include "ame/perception_bridge.h"
+#include "ame/world_model_snapshot.h"
+#include "ame/pyramid_service.h"
+#include "ame/bt_nodes/invoke_service.h"
+#include "ame/bt_nodes/execute_phase_action.h"
+#include "ame/bt_nodes/check_world_predicate.h"
+#include "ame/bt_nodes/set_world_predicate.h"
+#include "ame/action_registry.h"
+#include "ame/plan_compiler.h"
+#include "ame/planner.h"
 
 #include <behaviortree_cpp/bt_factory.h>
 
@@ -31,8 +31,8 @@
 // Shared helpers
 // =========================================================================
 
-static mujin::WorldModel makeUavWorldModel() {
-    mujin::WorldModel wm;
+static ame::WorldModel makeUavWorldModel() {
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("object");
     ts.addType("location", "object");
@@ -66,7 +66,7 @@ static mujin::WorldModel makeUavWorldModel() {
 
 TEST(PerceptionBridge, BuffersUpdatesBeforeFlush) {
     auto wm = makeUavWorldModel();
-    mujin::PerceptionBridge bridge(wm);
+    ame::PerceptionBridge bridge(wm);
 
     // Fact not set yet
     EXPECT_FALSE(wm.getFact("(at uav1 base)"));
@@ -91,7 +91,7 @@ TEST(PerceptionBridge, SourceTaggedAsPerception) {
         captured_source = src;
     });
 
-    mujin::PerceptionBridge bridge(wm);
+    ame::PerceptionBridge bridge(wm);
     bridge.updateFact("(at uav1 base)", true);
     bridge.flush();
 
@@ -107,7 +107,7 @@ TEST(PerceptionBridge, SourceTagIncludesSubtag) {
         captured_source = src;
     });
 
-    mujin::PerceptionBridge bridge(wm);
+    ame::PerceptionBridge bridge(wm);
     bridge.updateFact("(at uav1 base)", true, "camera_front");
     bridge.flush();
 
@@ -116,7 +116,7 @@ TEST(PerceptionBridge, SourceTagIncludesSubtag) {
 
 TEST(PerceptionBridge, CallbackFiredOnFlush) {
     auto wm = makeUavWorldModel();
-    mujin::PerceptionBridge bridge(wm);
+    ame::PerceptionBridge bridge(wm);
 
     std::vector<std::pair<std::string, bool>> fired;
     bridge.setUpdateCallback([&](const std::string& fact, bool val) {
@@ -138,7 +138,7 @@ TEST(PerceptionBridge, ThreadSafeMultipleWriters) {
     // Pre-register the fact so setFact won't throw
     wm.setFact("(at uav1 base)", false);
 
-    mujin::PerceptionBridge bridge(wm);
+    ame::PerceptionBridge bridge(wm);
 
     // Two threads push updates concurrently
     std::thread t1([&]() {
@@ -164,14 +164,14 @@ TEST(PerceptionBridge, ThreadSafeMultipleWriters) {
 // =========================================================================
 
 TEST(PyramidService, MockAlwaysSucceeds) {
-    mujin::MockPyramidService svc;
-    mujin::ServiceMessage req, resp;
+    ame::MockPyramidService svc;
+    ame::ServiceMessage req, resp;
     req.set("target", "sector_a");
     EXPECT_TRUE(svc.call("imaging", "capture", req, resp));
 }
 
 TEST(PyramidService, ServiceMessageGetSet) {
-    mujin::ServiceMessage msg;
+    ame::ServiceMessage msg;
     msg.set("key1", "val1");
     EXPECT_EQ(msg.get("key1"), "val1");
     EXPECT_EQ(msg.get("missing", "default"), "default");
@@ -181,7 +181,7 @@ TEST(PyramidService, ServiceMessageGetSet) {
 
 TEST(InvokeServiceNode, SuccessWithMockService) {
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<mujin::InvokeService>("InvokeService");
+    factory.registerNodeType<ame::InvokeService>("InvokeService");
 
     static const char* xml = R"xml(
         <root BTCPP_format="4">
@@ -196,8 +196,8 @@ TEST(InvokeServiceNode, SuccessWithMockService) {
 
     auto tree = factory.createTreeFromText(xml);
 
-    mujin::MockPyramidService svc;
-    tree.rootBlackboard()->set("pyramid_service", static_cast<mujin::IPyramidService*>(&svc));
+    ame::MockPyramidService svc;
+    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(&svc));
 
     auto status = tree.tickOnce();
     EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
@@ -205,7 +205,7 @@ TEST(InvokeServiceNode, SuccessWithMockService) {
 
 TEST(InvokeServiceNode, FailureWithNullService) {
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<mujin::InvokeService>("InvokeService");
+    factory.registerNodeType<ame::InvokeService>("InvokeService");
 
     static const char* xml = R"xml(
         <root BTCPP_format="4">
@@ -218,24 +218,24 @@ TEST(InvokeServiceNode, FailureWithNullService) {
     auto tree = factory.createTreeFromText(xml);
     // No "pyramid_service" in blackboard -> should fail gracefully
     // Note: get<IPyramidService*> will return nullptr
-    tree.rootBlackboard()->set("pyramid_service", static_cast<mujin::IPyramidService*>(nullptr));
+    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(nullptr));
 
     auto status = tree.tickOnce();
     EXPECT_EQ(status, BT::NodeStatus::FAILURE);
 }
 
 // Concrete failing service for testing failure path
-class AlwaysFailService : public mujin::IPyramidService {
+class AlwaysFailService : public ame::IPyramidService {
 public:
     bool call(const std::string&, const std::string&,
-              const mujin::ServiceMessage&, mujin::ServiceMessage&) override {
+              const ame::ServiceMessage&, ame::ServiceMessage&) override {
         return false;
     }
 };
 
 TEST(InvokeServiceNode, FailureWhenServiceReturnsFalse) {
     BT::BehaviorTreeFactory factory;
-    factory.registerNodeType<mujin::InvokeService>("InvokeService");
+    factory.registerNodeType<ame::InvokeService>("InvokeService");
 
     static const char* xml = R"xml(
         <root BTCPP_format="4">
@@ -247,7 +247,7 @@ TEST(InvokeServiceNode, FailureWhenServiceReturnsFalse) {
 
     auto tree = factory.createTreeFromText(xml);
     AlwaysFailService svc;
-    tree.rootBlackboard()->set("pyramid_service", static_cast<mujin::IPyramidService*>(&svc));
+    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(&svc));
 
     auto status = tree.tickOnce();
     EXPECT_EQ(status, BT::NodeStatus::FAILURE);
@@ -262,7 +262,7 @@ TEST(WorldModelSnapshot, GetFactMatchesWorldModel) {
     wm.setFact("(at uav1 base)", true);
     wm.setFact("(searched sector_a)", false);
 
-    mujin::SnapshotManager manager(wm);
+    ame::SnapshotManager manager(wm);
     auto snap = manager.current();
 
     ASSERT_NE(snap, nullptr);
@@ -275,7 +275,7 @@ TEST(WorldModelSnapshot, SnapshotIsolatedFromLaterChanges) {
     auto wm = makeUavWorldModel();
     wm.setFact("(at uav1 base)", true);
 
-    mujin::SnapshotManager manager(wm);
+    ame::SnapshotManager manager(wm);
     auto snap_before = manager.current();
 
     // Change live WM
@@ -292,7 +292,7 @@ TEST(WorldModelSnapshot, SnapshotIsolatedFromLaterChanges) {
 
 TEST(WorldModelSnapshot, UnknownFactReturnsFalse) {
     auto wm = makeUavWorldModel();
-    mujin::SnapshotManager manager(wm);
+    ame::SnapshotManager manager(wm);
     auto snap = manager.current();
 
     EXPECT_FALSE(snap->getFact("(nonexistent predicate)"));
@@ -302,7 +302,7 @@ TEST(SnapshotManager, ConcurrentPublishAndRead) {
     auto wm = makeUavWorldModel();
     wm.setFact("(at uav1 base)", true);
 
-    mujin::SnapshotManager manager(wm);
+    ame::SnapshotManager manager(wm);
 
     std::atomic<bool> stop{false};
     std::atomic<unsigned> reads{0};
@@ -345,7 +345,7 @@ public:
     BT::NodeStatus tick() override {
         auto pred = getInput<std::string>("predicate");
         if (pred) {
-            auto* wm = config().blackboard->get<mujin::WorldModel*>("world_model");
+            auto* wm = config().blackboard->get<ame::WorldModel*>("world_model");
             if (wm) wm->setFact(pred.value(), true, "StubAction");
         }
         return BT::NodeStatus::SUCCESS;
@@ -357,9 +357,9 @@ public:
 
 static BT::BehaviorTreeFactory makeFullFactory() {
     BT::BehaviorTreeFactory f;
-    f.registerNodeType<mujin::CheckWorldPredicate>("CheckWorldPredicate");
-    f.registerNodeType<mujin::SetWorldPredicate>("SetWorldPredicate");
-    f.registerNodeType<mujin::ExecutePhaseAction>("ExecutePhaseAction");
+    f.registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
+    f.registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
+    f.registerNodeType<ame::ExecutePhaseAction>("ExecutePhaseAction");
     f.registerNodeType<StubAction>("StubAction");
     return f;
 }
@@ -385,9 +385,9 @@ TEST(ExecutePhaseAction, FailsWithEmptyGoals) {
     auto wm = makeUavWorldModel();
     wm.setFact("(at uav1 sector_a)", true);
 
-    mujin::Planner planner;
-    mujin::PlanCompiler compiler;
-    mujin::ActionRegistry registry;
+    ame::Planner planner;
+    ame::PlanCompiler compiler;
+    ame::ActionRegistry registry;
     registry.registerAction("move",    "StubAction");
     registry.registerAction("search",  "StubAction");
     registry.registerAction("classify","StubAction");
@@ -420,7 +420,7 @@ TEST(ExecutePhaseAction, SucceedsWhenGoalAlreadyMet) {
     wm.setFact("(searched sector_a)", true);
     wm.setGoal({"(searched sector_a)"});
 
-    mujin::Planner planner;
+    ame::Planner planner;
     auto result = planner.solve(wm);
     // An empty plan is valid when goal is already satisfied
     // (LAPKT returns success with 0 steps)
@@ -433,9 +433,9 @@ TEST(ExecutePhaseAction, PlanAndExecuteSubGoal) {
     auto wm = makeUavWorldModel();
     wm.setFact("(at uav1 sector_a)", true);
 
-    mujin::Planner planner;
-    mujin::PlanCompiler compiler;
-    mujin::ActionRegistry registry;
+    ame::Planner planner;
+    ame::PlanCompiler compiler;
+    ame::ActionRegistry registry;
     registry.registerAction("move",    "StubAction");
     registry.registerAction("search",  "StubAction");
     registry.registerAction("classify","StubAction");

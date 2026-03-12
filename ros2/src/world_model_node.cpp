@@ -1,10 +1,10 @@
-#include <mujin_ros2/world_model_node.hpp>
+#include <ame_ros2/world_model_node.hpp>
 
 #include <rclcpp/qos.hpp>
 
 #include <chrono>
 
-namespace mujin_ros2 {
+namespace ame_ros2 {
 
 WorldModelNode::WorldModelNode(const rclcpp::NodeOptions& options)
     : rclcpp_lifecycle::LifecycleNode("world_model_node", options)
@@ -31,9 +31,9 @@ WorldModelNode::on_configure(const rclcpp_lifecycle::State&) {
   }
 
   // Create services during configure so other nodes can query state before activation.
-  using GetFact = mujin_ros2::srv::GetFact;
-  using SetFact = mujin_ros2::srv::SetFact;
-  using QueryState = mujin_ros2::srv::QueryState;
+  using GetFact = ame_ros2::srv::GetFact;
+  using SetFact = ame_ros2::srv::SetFact;
+  using QueryState = ame_ros2::srv::QueryState;
 
   srv_get_fact_ = create_service<GetFact>(
       "~/get_fact",
@@ -66,7 +66,7 @@ WorldModelNode::on_activate(const rclcpp_lifecycle::State&) {
   }
 
   auto qos = rclcpp::QoS(10).reliable().transient_local();
-  pub_world_state_ = create_publisher<mujin_ros2::msg::WorldState>("/world_state", qos);
+  pub_world_state_ = create_publisher<ame_ros2::msg::WorldState>("/world_state", qos);
   pub_world_state_->on_activate();
 
   double rate_hz = get_parameter("publish_rate_hz").as_double();
@@ -113,8 +113,8 @@ WorldModelNode::on_shutdown(const rclcpp_lifecycle::State&) {
 }
 
 void WorldModelNode::handleGetFact(
-    std::shared_ptr<mujin_ros2::srv::GetFact::Request> req,
-    std::shared_ptr<mujin_ros2::srv::GetFact::Response> res) {
+    std::shared_ptr<ame_ros2::srv::GetFact::Request> req,
+    std::shared_ptr<ame_ros2::srv::GetFact::Response> res) {
   const auto result = component_.getFact(req->key);
   res->value = result.value;
   res->found = result.found;
@@ -122,22 +122,22 @@ void WorldModelNode::handleGetFact(
 }
 
 void WorldModelNode::handleSetFact(
-    std::shared_ptr<mujin_ros2::srv::SetFact::Request> req,
-    std::shared_ptr<mujin_ros2::srv::SetFact::Response> res) {
+    std::shared_ptr<ame_ros2::srv::SetFact::Request> req,
+    std::shared_ptr<ame_ros2::srv::SetFact::Response> res) {
   const auto result = component_.setFact(req->key, req->value, req->source);
   res->success = result.success;
   res->wm_version = result.wm_version;
 }
 
 void WorldModelNode::handleQueryState(
-    std::shared_ptr<mujin_ros2::srv::QueryState::Request> req,
-    std::shared_ptr<mujin_ros2::srv::QueryState::Response> res) {
+    std::shared_ptr<ame_ros2::srv::QueryState::Request> req,
+    std::shared_ptr<ame_ros2::srv::QueryState::Response> res) {
   const auto snapshot = component_.queryState(req->keys);
   res->wm_version = snapshot.wm_version;
   res->success = snapshot.success;
 
   for (const auto& fact : snapshot.facts) {
-    mujin_ros2::msg::WorldFact msg;
+    ame_ros2::msg::WorldFact msg;
     msg.key = fact.key;
     msg.value = fact.value;
     msg.source = fact.source;
@@ -152,13 +152,13 @@ void WorldModelNode::publishWorldState() {
   }
 
   const auto snapshot = component_.queryState({});
-  mujin_ros2::msg::WorldState msg;
+  ame_ros2::msg::WorldState msg;
   msg.header.stamp = now();
   msg.header.frame_id = "";
   msg.wm_version = snapshot.wm_version;
 
   for (const auto& fact : snapshot.facts) {
-    mujin_ros2::msg::WorldFact fact_msg;
+    ame_ros2::msg::WorldFact fact_msg;
     fact_msg.key = fact.key;
     fact_msg.value = fact.value;
     fact_msg.source = fact.source;
@@ -173,4 +173,4 @@ void WorldModelNode::publishWorldState() {
   pub_world_state_->publish(msg);
 }
 
-} // namespace mujin_ros2
+} // namespace ame_ros2

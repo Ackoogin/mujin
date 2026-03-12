@@ -1,11 +1,11 @@
-#include <mujin/pddl_parser.h>
-#include <mujin/planner_component.h>
+#include <ame/pddl_parser.h>
+#include <ame/planner_component.h>
 
 #include <chrono>
 #include <stdexcept>
 #include <utility>
 
-namespace mujin {
+namespace ame {
 
 PlannerComponent::PlannerComponent()
     : pcl::Component("planner_component") {}
@@ -166,4 +166,4 @@ void PlannerComponent::recordAuditEpisode(
   audit_log_->flush();
 }
 
-}  // namespace mujin
+}  // namespace ame

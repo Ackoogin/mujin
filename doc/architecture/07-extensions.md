@@ -4,7 +4,7 @@ Additional capabilities built on top of the core pipeline. Extensions 1–6 are 
 
 ## Perception Integration (Extension 3)
 
-**Files:** `include/mujin/perception_bridge.h`, `src/perception_bridge.cpp`
+**Files:** `include/ame/perception_bridge.h`, `src/perception_bridge.cpp`
 
 External systems update world model state via `PerceptionBridge::updateFact()`. Updates are buffered (thread-safe) and applied atomically between BT ticks via `flush()`. Every update is tagged with source `"perception"` (optionally `"perception:<subtag>"`) in the audit log.
 
@@ -22,7 +22,7 @@ Complements the ROS2 `set_fact` service for in-process sensor integration withou
 
 ## PYRAMID Service Nodes (Extension 4)
 
-**Files:** `include/mujin/pyramid_service.h`, `include/mujin/bt_nodes/invoke_service.h`, `src/bt_nodes/invoke_service.cpp`
+**Files:** `include/ame/pyramid_service.h`, `include/ame/bt_nodes/invoke_service.h`, `src/bt_nodes/invoke_service.cpp`
 
 `InvokeService` BT node maps PDDL actions to PYRAMID SDK service calls via the `IPyramidService` abstract interface. The core library remains SDK-agnostic; concrete adapters implement `IPyramidService::call()`.
 
@@ -41,7 +41,7 @@ The blackboard key `"pyramid_service"` must hold an `IPyramidService*`. `MockPyr
 
 ## Thread Safety (Extension 5)
 
-**Files:** `include/mujin/world_model_snapshot.h`, `src/world_model_snapshot.cpp`
+**Files:** `include/ame/world_model_snapshot.h`, `src/world_model_snapshot.cpp`
 
 `SnapshotManager` takes atomic point-in-time copies of WorldModel state. The BT tick thread reads from a stable snapshot; perception threads write to the live WorldModel; `SnapshotManager::publish()` swaps in a new consistent snapshot between ticks.
 
@@ -61,7 +61,7 @@ Uses `std::shared_mutex` for concurrent reader safety. WorldModel itself remains
 
 ## Hierarchical Planning (Extension 6)
 
-**Files:** `include/mujin/bt_nodes/execute_phase_action.h`, `src/bt_nodes/execute_phase_action.cpp`
+**Files:** `include/ame/bt_nodes/execute_phase_action.h`, `src/bt_nodes/execute_phase_action.cpp`
 
 `ExecutePhaseAction` is a `BT::StatefulActionNode` that orchestrates a full plan–compile–execute cycle for a sub-goal set, enabling hierarchical decomposition of complex missions.
 

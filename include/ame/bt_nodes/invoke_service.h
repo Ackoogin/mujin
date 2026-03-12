@@ -1,11 +1,11 @@
 #pragma once
 
-#include "mujin/pyramid_service.h"
+#include "ame/pyramid_service.h"
 
 #include <behaviortree_cpp/action_node.h>
 #include <string>
 
-namespace mujin {
+namespace ame {
 
 // InvokeService: BT node that maps a PDDL action to a PYRAMID SDK service call.
 //
@@ -34,4 +34,4 @@ private:
     static std::string serializeResponse(const ServiceMessage& msg);
 };
 
-} // namespace mujin
+} // namespace ame

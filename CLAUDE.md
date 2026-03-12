@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MUJIN is a **PDDL planning + BehaviorTree execution pipeline** for autonomous mission planning and execution. It takes formal mission descriptions (PDDL), automatically plans using LAPKT classical AI search, compiles plans into executable behaviour trees, and runs them with replan-on-failure. A 5-layer observability stack provides full auditability.
+AME is a **PDDL planning + BehaviorTree execution pipeline** for autonomous mission planning and execution. It takes formal mission descriptions (PDDL), automatically plans using LAPKT classical AI search, compiles plans into executable behaviour trees, and runs them with replan-on-failure. A 5-layer observability stack provides full auditability.
 
 See `README.md` for a comprehensive project overview, and `doc/stakeholder_summary.md` for a non-technical summary aimed at programme managers and other stakeholders.
 
@@ -57,7 +57,7 @@ cmake --build build --config Debug -j%NUMBER_OF_PROCESSORS%
 
 **Without Foxglove bridge (removes websocketpp/asio):**
 ```bat
-cmake --preset default -DMUJIN_FOXGLOVE=OFF
+cmake --preset default -DAME_FOXGLOVE=OFF
 cmake --build build --config Release
 ```
 
@@ -85,23 +85,23 @@ All 73 tests should pass across: WorldModel, TypeSystem, ActionRegistry, PlanCom
 ## Run the demo
 
 ```bat
-build\src\Release\mujin_test_app.exe
+build\src\Release\ame_test_app.exe
 ```
 
-Produces three JSONL output files in the working directory: `mujin_bt_events.jsonl`, `mujin_wm_audit.jsonl`, `mujin_plan_audit.jsonl`.
+Produces three JSONL output files in the working directory: `ame_bt_events.jsonl`, `ame_wm_audit.jsonl`, `ame_plan_audit.jsonl`.
 
 ## Architecture
 
 The full architecture is documented in `doc/architecture/` (7 numbered files). Key points for development:
 
-- **WorldModel** (`include/mujin/world_model.h`) is the central shared state with eager grounding and audit callbacks. See `doc/architecture/02-world-model.md`.
+- **WorldModel** (`include/ame/world_model.h`) is the central shared state with eager grounding and audit callbacks. See `doc/architecture/02-world-model.md`.
 - **LAPKT integration**: `Planner::solve()` calls `WorldModel::projectToSTRIPS()`. LAPKT is built from source as `lapkt_core` static library; MSVC compat shims in `cmake/compat/`.
-- **`mujin_foxglove`** is a separate static library. Guard Foxglove code with `#if defined(MUJIN_FOXGLOVE)`.
+- **`ame_foxglove`** is a separate static library. Guard Foxglove code with `#if defined(AME_FOXGLOVE)`.
 - **Library boundaries**, **adding new PDDL actions**, and **ROS2 build/run** are all in the architecture docs.
 
 | Library | Contents | Dependencies |
 |---------|----------|-------------|
-| `mujin_core` | WorldModel, Planner, PlanCompiler, ActionRegistry, PddlParser, BT nodes, all loggers | BT.CPP, lapkt_core |
-| `mujin_foxglove` | FoxgloveBridge WebSocket server | mujin_core, websocketpp, asio |
-| `mujin_test_app` | Demo executable (src/main.cpp) | mujin_core, optionally mujin_foxglove |
-| `mujin_ros2_lib` | WorldModelNode, PlannerNode, ExecutorNode, RosWmBridge, LifecycleManager | mujin_core, rclcpp, rclcpp_action, rclcpp_lifecycle |
+| `ame_core` | WorldModel, Planner, PlanCompiler, ActionRegistry, PddlParser, BT nodes, all loggers | BT.CPP, lapkt_core |
+| `ame_foxglove` | FoxgloveBridge WebSocket server | ame_core, websocketpp, asio |
+| `ame_test_app` | Demo executable (src/main.cpp) | ame_core, optionally ame_foxglove |
+| `ame_ros2_lib` | WorldModelNode, PlannerNode, ExecutorNode, RosWmBridge, LifecycleManager | ame_core, rclcpp, rclcpp_action, rclcpp_lifecycle |

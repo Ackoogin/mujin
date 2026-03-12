@@ -1,8 +1,8 @@
-#include "mujin/wm_audit_log.h"
+#include "ame/wm_audit_log.h"
 
 #include <sstream>
 
-namespace mujin {
+namespace ame {
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -66,4 +66,4 @@ void WmAuditLog::flush() {
     }
 }
 
-} // namespace mujin
+} // namespace ame

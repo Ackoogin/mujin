@@ -16,9 +16,9 @@ def generate_launch_description():
             description='Path to PDDL problem file'),
 
         Node(
-            package='mujin_ros2',
-            executable='mujin_combined',
-            name='mujin_combined',
+            package='ame_ros2',
+            executable='ame_combined',
+            name='ame_combined',
             output='screen',
             parameters=[{
                 'domain.pddl_file':     LaunchConfiguration('pddl_file'),

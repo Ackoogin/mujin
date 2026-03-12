@@ -1,10 +1,10 @@
-#include "mujin/bt_logger.h"
-#include "mujin/world_model.h"
+#include "ame/bt_logger.h"
+#include "ame/world_model.h"
 
 #include <chrono>
 #include <sstream>
 
-namespace mujin {
+namespace ame {
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -41,7 +41,7 @@ static std::string jsonEscape(const std::string& s) {
 // Construction / destruction
 // ---------------------------------------------------------------------------
 
-MujinBTLogger::MujinBTLogger(const BT::Tree& tree,
+AmeBTLogger::AmeBTLogger(const BT::Tree& tree,
                              const std::string& tree_id,
                              const WorldModel* wm)
     : BT::StatusChangeLogger(tree.rootNode())
@@ -49,7 +49,7 @@ MujinBTLogger::MujinBTLogger(const BT::Tree& tree,
     , wm_(wm)
 {}
 
-MujinBTLogger::~MujinBTLogger() {
+AmeBTLogger::~AmeBTLogger() {
     flush();
 }
 
@@ -57,11 +57,11 @@ MujinBTLogger::~MujinBTLogger() {
 // Sink configuration
 // ---------------------------------------------------------------------------
 
-void MujinBTLogger::addFileSink(const std::string& path) {
+void AmeBTLogger::addFileSink(const std::string& path) {
     file_.open(path, std::ios::out | std::ios::trunc);
 }
 
-void MujinBTLogger::addCallbackSink(SinkCallback cb) {
+void AmeBTLogger::addCallbackSink(SinkCallback cb) {
     callbacks_.push_back(std::move(cb));
 }
 
@@ -69,7 +69,7 @@ void MujinBTLogger::addCallbackSink(SinkCallback cb) {
 // StatusChangeLogger interface
 // ---------------------------------------------------------------------------
 
-void MujinBTLogger::callback(BT::Duration timestamp,
+void AmeBTLogger::callback(BT::Duration timestamp,
                              const BT::TreeNode& node,
                              BT::NodeStatus prev_status,
                              BT::NodeStatus status) {
@@ -105,10 +105,10 @@ void MujinBTLogger::callback(BT::Duration timestamp,
     }
 }
 
-void MujinBTLogger::flush() {
+void AmeBTLogger::flush() {
     if (file_.is_open()) {
         file_.flush();
     }
 }
 
-} // namespace mujin
+} // namespace ame

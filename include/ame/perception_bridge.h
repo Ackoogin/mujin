@@ -1,13 +1,13 @@
 #pragma once
 
-#include "mujin/world_model.h"
+#include "ame/world_model.h"
 
 #include <functional>
 #include <mutex>
 #include <string>
 #include <vector>
 
-namespace mujin {
+namespace ame {
 
 // PerceptionBridge: thread-safe adapter for injecting sensor observations
 // into the WorldModel.
@@ -60,4 +60,4 @@ private:
     UpdateCallback callback_;
 };
 
-} // namespace mujin
+} // namespace ame

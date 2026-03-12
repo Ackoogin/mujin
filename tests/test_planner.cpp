@@ -1,9 +1,9 @@
 #include <gtest/gtest.h>
-#include "mujin/planner.h"
-#include "mujin/world_model.h"
+#include "ame/planner.h"
+#include "ame/world_model.h"
 
-static mujin::WorldModel buildUAVDomain() {
-    mujin::WorldModel wm;
+static ame::WorldModel buildUAVDomain() {
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("object");
     ts.addType("location", "object");
@@ -37,7 +37,7 @@ TEST(Planner, SolvesUAVSearchProblem) {
     wm.setFact("(at uav1 base)", true);
     wm.setGoal({"(searched sector_a)", "(classified sector_a)"});
 
-    mujin::Planner planner;
+    ame::Planner planner;
     auto result = planner.solve(wm);
 
     ASSERT_TRUE(result.success);
@@ -49,7 +49,7 @@ TEST(Planner, PlanContainsRequiredActions) {
     wm.setFact("(at uav1 base)", true);
     wm.setGoal({"(searched sector_a)", "(classified sector_a)"});
 
-    mujin::Planner planner;
+    ame::Planner planner;
     auto result = planner.solve(wm);
 
     ASSERT_TRUE(result.success);
@@ -78,7 +78,7 @@ TEST(Planner, PlanContainsRequiredActions) {
 }
 
 TEST(Planner, UnsolvableProblemReturnsFalse) {
-    mujin::WorldModel wm;
+    ame::WorldModel wm;
     auto& ts = wm.typeSystem();
     ts.addType("item");
     wm.addObject("a", "item");
@@ -86,7 +86,7 @@ TEST(Planner, UnsolvableProblemReturnsFalse) {
     // No actions registered — goal is unreachable
     wm.setGoal({"(done a)"});
 
-    mujin::Planner planner;
+    ame::Planner planner;
     auto result = planner.solve(wm);
 
     EXPECT_FALSE(result.success);
@@ -99,7 +99,7 @@ TEST(Planner, AlreadySatisfiedGoal) {
     wm.setFact("(classified sector_a)", true);
     wm.setGoal({"(searched sector_a)", "(classified sector_a)"});
 
-    mujin::Planner planner;
+    ame::Planner planner;
     auto result = planner.solve(wm);
 
     ASSERT_TRUE(result.success);
@@ -111,7 +111,7 @@ TEST(Planner, ReplanAfterStateChange) {
     wm.setFact("(at uav1 base)", true);
     wm.setGoal({"(searched sector_a)"});
 
-    mujin::Planner planner;
+    ame::Planner planner;
     auto result1 = planner.solve(wm);
     ASSERT_TRUE(result1.success);
 

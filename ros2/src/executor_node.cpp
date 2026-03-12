@@ -1,15 +1,15 @@
-#include <mujin_ros2/executor_node.hpp>
-#include <mujin_ros2/ros_wm_bridge.hpp>
+#include <ame_ros2/executor_node.hpp>
+#include <ame_ros2/ros_wm_bridge.hpp>
 
-#include <mujin/bt_nodes/check_world_predicate.h>
-#include <mujin/bt_nodes/set_world_predicate.h>
+#include <ame/bt_nodes/check_world_predicate.h>
+#include <ame/bt_nodes/set_world_predicate.h>
 
 #include <std_msgs/msg/string.hpp>
 
 #include <chrono>
 #include <stdexcept>
 
-namespace mujin_ros2 {
+namespace ame_ros2 {
 
 ExecutorNode::ExecutorNode(const rclcpp::NodeOptions& options)
     : rclcpp_lifecycle::LifecycleNode("executor_node", options)
@@ -24,8 +24,8 @@ ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
   declare_parameter("world_model_node", std::string("world_model_node"));
 
   const auto wm_ns = get_parameter("world_model_node").as_string();
-  client_get_fact_ = create_client<mujin_ros2::srv::GetFact>("/" + wm_ns + "/get_fact");
-  client_set_fact_ = create_client<mujin_ros2::srv::SetFact>("/" + wm_ns + "/set_fact");
+  client_get_fact_ = create_client<ame_ros2::srv::GetFact>("/" + wm_ns + "/get_fact");
+  client_set_fact_ = create_client<ame_ros2::srv::SetFact>("/" + wm_ns + "/set_fact");
 
   component_.setParam("bt_log.enabled", get_parameter("bt_log.enabled").as_bool());
   component_.setParam("bt_log.path", get_parameter("bt_log.path").as_string().c_str());
@@ -120,8 +120,8 @@ void ExecutorNode::registerCoreNodes() {
   }
 
   if (inprocess_wm_) {
-    component_.factory().registerNodeType<mujin::CheckWorldPredicate>("CheckWorldPredicate");
-    component_.factory().registerNodeType<mujin::SetWorldPredicate>("SetWorldPredicate");
+    component_.factory().registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
+    component_.factory().registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
   } else {
     component_.factory().registerNodeType<RosCheckWorldPredicate>("CheckWorldPredicate");
     component_.factory().registerNodeType<RosSetWorldPredicate>("SetWorldPredicate");
@@ -167,4 +167,4 @@ void ExecutorNode::publishStatus(const std::string& status_str) {
   pub_status_->publish(std::move(status_msg));
 }
 
-} // namespace mujin_ros2
+} // namespace ame_ros2

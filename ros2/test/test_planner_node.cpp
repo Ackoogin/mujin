@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "mujin_ros2/planner_node.hpp"
-#include "mujin_ros2/world_model_node.hpp"
+#include "ame_ros2/planner_node.hpp"
+#include "ame_ros2/world_model_node.hpp"
 #include <rclcpp/rclcpp.hpp>
 #include <lifecycle_msgs/msg/transition.hpp>
 #include <chrono>
@@ -9,8 +9,8 @@ class PlannerNodeTest : public ::testing::Test {
 protected:
     void SetUp() override {
         rclcpp::init(0, nullptr);
-        wm_node_ = std::make_shared<mujin_ros2::WorldModelNode>();
-        pl_node_ = std::make_shared<mujin_ros2::PlannerNode>();
+        wm_node_ = std::make_shared<ame_ros2::WorldModelNode>();
+        pl_node_ = std::make_shared<ame_ros2::PlannerNode>();
 
         // In-process mode: inject canonical WorldModel pointer
         pl_node_->setInProcessWorldModel(&wm_node_->worldModel());
@@ -59,25 +59,25 @@ protected:
         rclcpp::shutdown();
     }
 
-    std::shared_ptr<mujin_ros2::WorldModelNode> wm_node_;
-    std::shared_ptr<mujin_ros2::PlannerNode>    pl_node_;
+    std::shared_ptr<ame_ros2::WorldModelNode> wm_node_;
+    std::shared_ptr<ame_ros2::PlannerNode>    pl_node_;
     rclcpp::executors::SingleThreadedExecutor   executor_;
 };
 
 TEST_F(PlannerNodeTest, PlanActionSucceeds) {
-    auto action_client = rclcpp_action::create_client<mujin_ros2::action::Plan>(
-        pl_node_, "/mujin/plan");
+    auto action_client = rclcpp_action::create_client<ame_ros2::action::Plan>(
+        pl_node_, "/ame/plan");
 
     ASSERT_TRUE(action_client->wait_for_action_server(std::chrono::seconds(3)));
 
-    auto goal = mujin_ros2::action::Plan::Goal();
+    auto goal = ame_ros2::action::Plan::Goal();
     goal.goal_fluents = {"(searched sector_a)", "(classified sector_a)"};
     goal.replan = false;
 
-    std::shared_ptr<mujin_ros2::action::Plan::Result const> result_ptr;
+    std::shared_ptr<ame_ros2::action::Plan::Result const> result_ptr;
     bool done = false;
 
-    auto send_goal_opts = rclcpp_action::Client<mujin_ros2::action::Plan>::SendGoalOptions();
+    auto send_goal_opts = rclcpp_action::Client<ame_ros2::action::Plan>::SendGoalOptions();
     send_goal_opts.result_callback = [&](auto wrapped) {
         result_ptr = wrapped.result;
         done = true;
