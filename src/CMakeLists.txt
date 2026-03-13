@@ -31,6 +31,7 @@ target_link_libraries(ame_core
         behaviortree_cpp
         lapkt_core
         pcl_core
+        pyramid_core
 )
 
 # ---------------------------------------------------------------------------

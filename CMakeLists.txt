@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.21)
 project(ame LANGUAGES C CXX)
 
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -142,6 +145,11 @@ FetchContent_MakeAvailable(googletest)
 # PCL — PYRAMID Container Library (pure C, zero dependencies)
 # ---------------------------------------------------------------------------
 add_subdirectory(src/pcl)
+
+# ---------------------------------------------------------------------------
+# PYRAMID core support library
+# ---------------------------------------------------------------------------
+add_subdirectory(pyramid/core)
 
 # ---------------------------------------------------------------------------
 # Core library (ROS-agnostic)

@@ -1,7 +1,9 @@
 cmake_minimum_required(VERSION 3.21)
 project(pcl_coverage LANGUAGES C CXX)
 
-set(CMAKE_C_STANDARD   17)
+set(CMAKE_C_STANDARD   11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -34,7 +36,9 @@ target_include_directories(pcl_core PUBLIC  ${PCL_ROOT}/include)
 target_include_directories(pcl_core PRIVATE ${PCL_ROOT}/src/pcl)
 set_target_properties(pcl_core PROPERTIES
   LINKER_LANGUAGE C
-  C_STANDARD 17
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
 )
 find_package(Threads REQUIRED)
 target_link_libraries(pcl_core PRIVATE Threads::Threads)
@@ -67,10 +71,17 @@ add_library(pcl_core_oom STATIC
 )
 target_include_directories(pcl_core_oom PUBLIC  ${PCL_ROOT}/include)
 target_include_directories(pcl_core_oom PRIVATE ${PCL_ROOT}/src/pcl)
-set_target_properties(pcl_core_oom PROPERTIES LINKER_LANGUAGE C C_STANDARD 17)
+set_target_properties(pcl_core_oom PROPERTIES
+  LINKER_LANGUAGE C
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+)
 target_link_libraries(pcl_core_oom PRIVATE Threads::Threads)
 
-add_executable(test_pcl_oom ${PCL_ROOT}/tests/test_pcl_oom.cpp)
-target_link_libraries(test_pcl_oom PRIVATE pcl_core_oom GTest::gtest_main)
-target_link_options(test_pcl_oom PRIVATE -Wl,--wrap=malloc,--wrap=calloc)
-gtest_discover_tests(test_pcl_oom DISCOVERY_MODE PRE_TEST)
+if(NOT MSVC)
+  add_executable(test_pcl_oom ${PCL_ROOT}/tests/test_pcl_oom.cpp)
+  target_link_libraries(test_pcl_oom PRIVATE pcl_core_oom GTest::gtest_main)
+  target_link_options(test_pcl_oom PRIVATE -Wl,--wrap=malloc,--wrap=calloc)
+  gtest_discover_tests(test_pcl_oom DISCOVERY_MODE PRE_TEST)
+endif()

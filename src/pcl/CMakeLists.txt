@@ -23,8 +23,9 @@ target_include_directories(pcl_core PRIVATE
 # Force C compilation (not C++)
 set_target_properties(pcl_core PROPERTIES
   LINKER_LANGUAGE C
-  C_STANDARD 17
+  C_STANDARD 11
   C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
 )
 
 # Platform threading library (needed for sleep/timing)

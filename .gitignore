@@ -56,3 +56,6 @@ build_errors.log
 examples/ada/obj_tests/*
 examples/ada/obj/*
 examples/ada/bin/*
+
+# References
+ref/*
