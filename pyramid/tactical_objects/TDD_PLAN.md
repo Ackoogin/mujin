@@ -10,8 +10,8 @@ Each phase produces one test file and one production file (or small group). Ever
 
 Entities can be created by two paths:
 
-1. **Evidence path**: observations arrive on the subscriber, pass through `FusionEngine`, and produce fused objects automatically.
-2. **Direct path**: a caller invokes `createObject` / `updateObject` / `deleteObject` to manage entities without fusion. These objects carry a `direct` provenance marker and bypass correlation.
+1. **Evidence path**: observations arrive on the subscriber, pass through `CorrelationEngine`, and produce correlated objects automatically.
+2. **Direct path**: a caller invokes `createObject` / `updateObject` / `deleteObject` to manage entities without correlation. These objects carry a `direct` provenance marker and bypass the correlation pipeline.
 
 Both paths store objects in the same `ObjectStore` and are queryable through the same `QueryEngine`.
 
@@ -509,44 +509,44 @@ Extract geometry math into helper functions. Add support for remaining geometry 
 
 ---
 
-## Phase 5 — FusionEngine
+## Phase 5 — CorrelationEngine
 
 **Goal**: evidence-based entity creation via correlation, merge, split, and lineage.
 
 **Files created**:
 
-- `include/fusion/FusionEngine.h`
-- `src/fusion/FusionEngine.cpp`
-- `tests/tactical_objects/Test_FusionEngine.cpp`
+- `include/correlation/CorrelationEngine.h`
+- `src/correlation/CorrelationEngine.cpp`
+- `tests/tactical_objects/Test_CorrelationEngine.cpp`
 
 ### RED 5.1 — First observation creates new object
 
 ```
 ///< REQ_TACTICAL_OBJECTS_010: Low-score observation creates new object.
-TEST(FusionEngine, FirstObservationCreatesObject)
-  - Construct FusionEngine with empty ObjectStore and SpatialIndex.
+TEST(CorrelationEngine, FirstObservationCreatesObject)
+  - Construct CorrelationEngine with empty ObjectStore and SpatialIndex.
   - Submit one observation at (51.5, -0.1).
-  - Assert ObjectStore now contains 1 fused object.
-  - Assert fused object has lineage referencing the observation.
-  - FAILS: FusionEngine does not exist.
+  - Assert ObjectStore now contains 1 correlated object.
+  - Assert correlated object has lineage referencing the observation.
+  - FAILS: CorrelationEngine does not exist.
 ```
 
 ### GREEN 5.1
 
-Implement `FusionEngine`:
+Implement `CorrelationEngine`:
 
-- `FusionResult processObservation(const Observation&)`
-- On empty candidate set: create track, create fused object, record lineage.
+- `CorrelationResult processObservation(const Observation&)`
+- On empty candidate set: create track, create correlated object, record lineage.
 
 ### RED 5.2 — Compatible observation merges
 
 ```
 ///< REQ_TACTICAL_OBJECTS_011: High-score observation merges into existing object.
-TEST(FusionEngine, CompatibleObservationMerges)
+TEST(CorrelationEngine, CompatibleObservationMerges)
   - Submit observation A at (51.5, -0.1) from source "radar".
   - Submit observation B at (51.5001, -0.1001) from source "ais", same affiliation.
-  - Assert ObjectStore still contains 1 fused object.
-  - Assert fused object has 2 source references.
+  - Assert ObjectStore still contains 1 correlated object.
+  - Assert correlated object has 2 source references.
 ```
 
 ### GREEN 5.2
@@ -561,10 +561,10 @@ Implement correlation scoring:
 
 ```
 ///< REQ_TACTICAL_OBJECTS_010: Distant observation creates separate object.
-TEST(FusionEngine, DistantObservationCreatesNewObject)
+TEST(CorrelationEngine, DistantObservationCreatesNewObject)
   - Submit observation A at (51.5, -0.1).
   - Submit observation B at (10.0, 20.0).
-  - Assert ObjectStore contains 2 fused objects.
+  - Assert ObjectStore contains 2 correlated objects.
 ```
 
 ### GREEN 5.3
@@ -575,7 +575,7 @@ Already passes if scoring is correct and spatial gate works.
 
 ```
 ///< REQ_TACTICAL_OBJECTS_009: Same input produces same score.
-TEST(FusionEngine, DeterministicScore)
+TEST(CorrelationEngine, DeterministicScore)
   - Submit observation A.
   - Record score for observation B against the object created by A.
   - Reset state, repeat.
@@ -590,7 +590,7 @@ Already passes if scoring is pure function of input.
 
 ```
 ///< REQ_TACTICAL_OBJECTS_008: Only local candidates are scored.
-TEST(FusionEngine, SpatialPrefilterLimitsScoring)
+TEST(CorrelationEngine, SpatialPrefilterLimitsScoring)
   - Insert 100 objects scattered globally.
   - Submit 1 observation at known position.
   - Instrument or mock SpatialIndex to count candidates returned.
@@ -599,29 +599,29 @@ TEST(FusionEngine, SpatialPrefilterLimitsScoring)
 
 ### GREEN 5.5
 
-Already passes if `FusionEngine` queries `SpatialIndex` before scoring.
+Already passes if `CorrelationEngine` queries `SpatialIndex` before scoring.
 
 ### RED 5.6 — Source reference association
 
 ```
-///< REQ_TACTICAL_OBJECTS_006: Fused object retains all contributing source refs.
-TEST(FusionEngine, SourceRefsRetained)
+///< REQ_TACTICAL_OBJECTS_006: Correlated object retains all contributing source refs.
+TEST(CorrelationEngine, SourceRefsRetained)
   - Submit 3 observations from different sources, all merging to same object.
-  - Assert fused object source_refs.size() == 3.
+  - Assert correlated object source_refs.size() == 3.
   - Assert each source_system is distinct and present.
 ```
 
 ### GREEN 5.6
 
-Accumulate source refs on the fused object's `FusionComponent` during merge.
+Accumulate source refs on the correlated object's `CorrelationComponent` during merge.
 
 ### RED 5.7 — Lineage retention
 
 ```
 ///< REQ_TACTICAL_OBJECTS_007: Lineage references contributing observation IDs.
-TEST(FusionEngine, LineageRetained)
+TEST(CorrelationEngine, LineageRetained)
   - Submit 2 observations that merge.
-  - Retrieve lineage from fused object.
+  - Retrieve lineage from correlated object.
   - Assert lineage contains both observation UUIDs.
 ```
 
@@ -633,10 +633,10 @@ Append to lineage list during merge.
 
 ```
 ///< REQ_TACTICAL_OBJECTS_013: Aggregate confidence from weighted sources.
-TEST(FusionEngine, ConfidenceAggregation)
+TEST(CorrelationEngine, ConfidenceAggregation)
   - Submit observation A with confidence 0.9.
   - Submit observation B with confidence 0.3, merging into same object.
-  - Assert fused object confidence is between 0.3 and 0.9.
+  - Assert correlated object confidence is between 0.3 and 0.9.
 ```
 
 ### GREEN 5.8
@@ -647,11 +647,11 @@ Implement weighted confidence aggregation in merge step.
 
 ```
 ///< REQ_TACTICAL_OBJECTS_012: Split after sustained incompatible evidence.
-TEST(FusionEngine, SplitOnSustainedIncompatibility)
+TEST(CorrelationEngine, SplitOnSustainedIncompatibility)
   - Set split_incompatibility_count = 3.
   - Submit initial observation (friendly, ground).
   - Submit 3 consecutive observations at same position but with hostile affiliation.
-  - Assert ObjectStore now contains 2 fused objects.
+  - Assert ObjectStore now contains 2 correlated objects.
   - Assert both have lineage.
 ```
 
@@ -661,7 +661,7 @@ Implement incompatibility counter on tracks. When counter >= threshold, split.
 
 ### REFACTOR 5
 
-Extract scoring into a `CorrelationScorer` helper. Make thresholds configurable via `FusionConfig` struct.
+Extract scoring into a `CorrelationScorer` helper. Make thresholds configurable via `CorrelationConfig` struct.
 
 ---
 
@@ -778,7 +778,7 @@ TEST(TacticalObjectsRuntime, ConstructWithoutPCL)
 
 Implement `TacticalObjectsRuntime`:
 
-- Constructor creates `ObjectStore`, `SpatialIndex`, `FusionEngine`, `ZoneEngine`, `MilClassEngine`, `QueryEngine`, `EventBus`, `Logger`.
+- Constructor creates `ObjectStore`, `SpatialIndex`, `CorrelationEngine`, `ZoneEngine`, `MilClassEngine`, `QueryEngine`, `EventBus`, `Logger`.
 - `getCapability()` returns a `CapabilitySnapshot`.
 
 ### RED 7.2 — Evidence path: observation creates entity
@@ -794,7 +794,7 @@ TEST(TacticalObjectsRuntime, EvidencePathCreatesEntity)
 
 ### GREEN 7.2
 
-Wire `upsertObservationBatch` → `FusionEngine::processObservation` → `ObjectStore`.
+Wire `upsertObservationBatch` → `CorrelationEngine::processObservation` → `ObjectStore`.
 
 ### RED 7.3 — Direct path: create entity via service
 
@@ -930,7 +930,7 @@ Implement staleness check in `tick()`.
 TEST(TacticalObjectsRuntime, CapabilitySnapshot)
   - Construct runtime with specific config (merge_threshold=0.7, etc.).
   - Call getCapability().
-  - Assert snapshot contains object count, zone count, fusion config values.
+  - Assert snapshot contains object count, zone count, correlation config values.
 ```
 
 ### GREEN 7.10
@@ -940,12 +940,12 @@ Populate `CapabilitySnapshot` from current state and config.
 ### RED 7.11 — Domain events emitted
 
 ```
-///< REQ_TACTICAL_OBJECTS_039: Events for create, update, fuse, split, zone_enter, zone_leave.
+///< REQ_TACTICAL_OBJECTS_039: Events for create, update, correlate, split, zone_enter, zone_leave.
 TEST(TacticalObjectsRuntime, DomainEventsEmitted)
   - Subscribe to EventBus for all tactical event types.
   - Create object (direct) -> expect ObjectCreated.
   - Update object -> expect ObjectUpdated.
-  - Submit observation that merges -> expect ObjectFused.
+  - Submit observation that merges -> expect ObjectCorrelated.
   - Submit incompatible observations -> expect ObjectSplit.
   - Move object into zone -> expect ZoneEntered.
   - Move object out of zone -> expect ZoneLeft.
@@ -970,11 +970,11 @@ TEST(TacticalObjectsRuntime, LoggerIntegration)
 
 Add logging calls to `createObject`, `upsertObservationBatch`, `deleteObject`.
 
-### RED 7.13 — Batch fusion determinism
+### RED 7.13 — Batch correlation determinism
 
 ```
 ///< REQ_TACTICAL_OBJECTS_044: Same batch in same order produces same result.
-TEST(TacticalObjectsRuntime, BatchFusionDeterminism)
+TEST(TacticalObjectsRuntime, BatchCorrelationDeterminism)
   - Build identical ObservationBatch.
   - Process in runtime A, snapshot result graph.
   - Process in fresh runtime B, snapshot result graph.
@@ -1505,17 +1505,74 @@ Derive `Object_Solution_Evidence_Requirement` records in component-agnostic term
 ### RED 11.8 — Requirement-to-evidence-to-object traceability
 
 ```
-///< REQ_TACTICAL_OBJECTS_061: Source requirement, derived evidence, observations, and fused objects remain traceable.
+///< REQ_TACTICAL_OBJECTS_061: Source requirement, derived evidence, observations, and correlated objects remain traceable.
 TEST(TacticalObjectsRuntime, RequirementEvidenceObjectTraceability)
   - Submit an AOI requirement and capture the derived evidence requirement ID.
   - Submit observations associated with that derived evidence requirement.
-  - Produce one fused object.
-  - Assert the fused object traces back to the observations, derived evidence requirement, and source tactical object requirement.
+  - Produce one correlated object.
+  - Assert the correlated object traces back to the observations, derived evidence requirement, and source tactical object requirement.
 ```
 
 ### GREEN 11.8
 
 Retain requirement and evidence lineage links alongside the existing observation-to-object lineage.
+
+### RED 11.9 — Measurement criteria acceptance
+
+```
+///< REQ_TACTICAL_OBJECTS_062: Measurement criteria captured and applied during quality assessment.
+TEST(TacticalObjectsRuntime, MeasurementCriteriaAcceptance)
+  - Register a measurement criterion (e.g. location confidence >= 0.9) against an interest requirement.
+  - Provide object data meeting and not meeting the criterion.
+  - Verify the quality assessment uses the criterion to distinguish the two cases.
+```
+
+### GREEN 11.9
+
+Implement measurement criteria storage and application within quality determination.
+
+### RED 11.10 — Progress reporting against interest requirement
+
+```
+///< REQ_TACTICAL_OBJECTS_063: Progress is reported against an active Object_Interest_Requirement.
+TEST(InterestManager, ProgressReportingAgainstRequirement)
+  - Register an interest requirement.
+  - Provide partial evidence satisfying some criteria.
+  - Request progress report.
+  - Assert it reflects partial fulfilment and remaining gaps.
+```
+
+### GREEN 11.10
+
+Implement progress tracking and reporting within the interest management subsystem.
+
+### RED 11.11 — Object probability density capture
+
+```
+///< REQ_TACTICAL_OBJECTS_064: Probability density data captured and stored for objects within locations.
+TEST(TacticalObjectsRuntime, ObjectProbabilityDensityCapture)
+  - Submit probability density data for an object type within a region.
+  - Retrieve the stored density.
+  - Assert the density values and region match the submitted data.
+```
+
+### GREEN 11.11
+
+Implement probability density capture and storage.
+
+### RED 11.12 — Capability progression prediction
+
+```
+///< REQ_TACTICAL_OBJECTS_065: Capability progression is predicted over time and with use.
+TEST(TacticalObjectsRuntime, CapabilityProgressionPrediction)
+  - Configure the runtime with known source availability.
+  - Request a capability progression prediction over a time interval.
+  - Assert the prediction reflects expected changes based on source availability.
+```
+
+### GREEN 11.12
+
+Implement capability progression prediction taking account of source availability and usage patterns.
 
 ### REFACTOR 11
 
@@ -1532,20 +1589,20 @@ Share timestamp helpers and retention policy code between runtime tick handling 
 | 2 | Test_MilClassEngine.cpp | 3 |
 | 3 | Test_SpatialIndex.cpp | 4 |
 | 4 | Test_ZoneEngine.cpp | 9 |
-| 5 | Test_FusionEngine.cpp | 9 |
+| 5 | Test_CorrelationEngine.cpp | 9 |
 | 6 | Test_QueryEngine.cpp | 5 |
 | 7 | Test_TacticalObjectsRuntime.cpp | 15 |
 | 8 | Test_TacticalObjectsCodec.cpp | 5 |
 | 9 | Test_TacticalObjectsComponent.cpp | 13 |
 | 10 | Test_RelationshipIndex.cpp | 4 |
-| 11 | Test_InterestManager.cpp + Test_TacticalHistory.cpp + Test_TacticalObjectsRuntime.cpp | 8 |
-| **Total** | | **84** |
+| 11 | Test_InterestManager.cpp + Test_TacticalHistory.cpp + Test_TacticalObjectsRuntime.cpp | 12 |
+| **Total** | | **88** |
 
 ## Entity Creation Path Summary
 
 | Path | Entry Point | Internal Flow | Provenance |
 |------|------------|---------------|------------|
-| **Evidence** | subscriber `observation_ingress` | Codec → `upsertObservationBatch` → `FusionEngine` → correlate/create/merge → ObjectStore | `fused` with full lineage |
+| **Evidence** | subscriber `observation_ingress` | Codec → `upsertObservationBatch` → `CorrelationEngine` → correlate/create/merge → ObjectStore | `correlated` with full lineage |
 | **Direct** | service `create_object` | Codec → `createObject` → ObjectStore + SpatialIndex + MilClass | `direct` with caller attribution |
 
 Both paths share:
@@ -1557,4 +1614,4 @@ Both paths share:
 - the same `EventBus` notifications
 - the same `ZoneEngine` relationship evaluation
 
-The only difference is that evidence-path objects go through fusion gating, scoring, merge/split, and confidence aggregation, while direct-path objects are stored as-provided with caller-attributed provenance.
+The only difference is that evidence-path objects go through correlation gating, scoring, merge/split, and confidence aggregation, while direct-path objects are stored as-provided with caller-attributed provenance.

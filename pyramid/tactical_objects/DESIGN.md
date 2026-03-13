@@ -6,15 +6,16 @@ It assumes:
 
 - `PCL` is the lifecycle and execution boundary
 - `pyramid::core` is the required C++ support library
-- the tactical objects business logic is implemented as a C++14 library behind a `pcl::Component`
-- the implementation must support MIL-STD-2525B semantics, geographic zones, thousands of entities, and entity fusion
+- the tactical objects business logic is implemented as a C++14 library behind a `pcl::Component` (C++14 is the maximum language standard for this component)
+- the implementation must support object classification (exploitation: MIL-STD-2525B), spatial reasoning (exploitation design), thousands of entities, and entity correlation
+- responsibilities are aligned to PYRAMID Technical Standard 5.4.2.60
 
 ## 1. Chosen Architecture
 
 The implementation shall be split into two layers:
 
 - `TacticalObjectsComponent`: a `pcl::Component` subclass that owns ports, lifecycle, parameter handling, and serialization boundaries
-- `TacticalObjectsRuntime`: a pure C++ domain runtime that owns the object store, indexes, fusion logic, zone logic, and query logic
+- `TacticalObjectsRuntime`: a pure C++ domain runtime that owns the object store, indexes, correlation logic, zone logic, and query logic
 
 `TacticalObjectsComponent` is intentionally thin. All tactical reasoning shall live in `TacticalObjectsRuntime` so that unit tests can exercise domain logic without standing up a `pcl::Executor`.
 
@@ -57,7 +58,7 @@ TacticalObjectsRuntime
   -> ObjectStore
   -> SpatialIndex
   -> RelationshipIndex
-  -> FusionEngine
+  -> CorrelationEngine
   -> ZoneEngine
   -> MilClassEngine
   -> QueryEngine
@@ -100,7 +101,7 @@ Primary members:
 
 Chosen PCL topics and services:
 
-Subscribers (evidence ingress path -- entities created via fusion):
+Subscribers (evidence ingress path -- entities created via correlation):
 
 - subscriber `tactical_objects.observation_ingress` type `TacticalObservationEnvelope`
 - subscriber `tactical_objects.zone_ingress` type `TacticalZoneEnvelope`
@@ -110,7 +111,7 @@ Publishers:
 - publisher `tactical_objects.events` type `TacticalObjectEvent`
 - publisher `tactical_objects.capability` type `TacticalObjectsCapability`
 
-Provided services (direct CRUD -- entities created/modified without fusion):
+Provided services (direct CRUD -- entities created/modified without correlation):
 
 - service `tactical_objects.create_object` type `TacticalObjectCreate`
 - service `tactical_objects.update_object` type `TacticalObjectUpdate`
@@ -132,8 +133,8 @@ Provided services (interest):
 
 The component therefore supports two entity creation paths:
 
-1. **Evidence path**: observations arrive on the subscriber, pass through `FusionEngine`, and produce fused objects automatically.
-2. **Direct path**: a caller invokes `create_object` / `update_object` / `delete_object` services to manage entities without fusion. These objects are stored with a `direct` provenance marker and bypass correlation and fusion scoring.
+1. **Evidence path**: observations arrive on the subscriber, pass through `CorrelationEngine`, and produce correlated objects automatically.
+2. **Direct path**: a caller invokes `create_object` / `update_object` / `delete_object` services to manage entities without correlation. These objects are stored with a `direct` provenance marker and bypass correlation scoring.
 
 ### `TacticalObjectsCodec`
 
@@ -167,11 +168,11 @@ Purpose:
 
 Primary methods:
 
-Evidence path (fusion-based entity creation):
+Evidence path (correlation-based entity creation):
 
 - `upsertObservationBatch(const ObservationBatch&)`
 
-Direct path (explicit entity CRUD without fusion):
+Direct path (explicit entity CRUD without correlation):
 
 - `createObject(const ObjectDefinition&)`
 - `updateObject(const UUID&, const ObjectUpdate&)`
@@ -199,7 +200,7 @@ Primary collaborators:
 - `ObjectStore`
 - `SpatialIndex`
 - `RelationshipIndex`
-- `FusionEngine`
+- `CorrelationEngine`
 - `ZoneEngine`
 - `MilClassEngine`
 - `QueryEngine`
@@ -231,7 +232,7 @@ Component tables:
 - `GeometryComponent`
 - `ZoneComponent`
 - `MilClassComponent`
-- `FusionComponent`
+- `CorrelationComponent`
 - `QualityComponent`
 - `LifecycleComponent`
 
@@ -296,14 +297,14 @@ Exact spatial checks:
 - corridor check as distance to polyline <= corridor width
 - boundary crossing determined by previous and current relationship states
 
-### `FusionEngine`
+### `CorrelationEngine`
 
 Purpose:
 
-- correlate incoming observations against existing tracks and fused objects
+- correlate incoming observations against existing tracks and correlated objects
 - create new tracks when no existing candidate passes gating
-- merge tracks into fused objects
-- split fused objects when evidence diverges
+- merge tracks into correlated objects
+- split correlated objects when evidence diverges
 
 Chosen correlation strategy:
 
@@ -319,13 +320,13 @@ Chosen correlation strategy:
 
 Score outcome:
 
-- score >= merge threshold: same fused object candidate
-- score between create and merge thresholds: attach to existing track but do not fuse identity-critical fields
-- score < create threshold: create new track and new fused object
+- score >= merge threshold: same correlated object candidate
+- score between create and merge thresholds: attach to existing track but do not integrate identity-critical fields
+- score < create threshold: create new track and new correlated object
 
 Split rule:
 
-- if a fused object accumulates mutually incompatible observations beyond configured thresholds for `N` consecutive updates, split the lowest-confidence contributing track into a new fused object
+- if a correlated object accumulates mutually incompatible observations beyond configured thresholds for `N` consecutive updates, split the lowest-confidence contributing track into a new correlated object
 
 ### `MilClassEngine`
 
@@ -437,7 +438,7 @@ Fields:
 - `source_sidc`
 - `lineage_parent_ids`
 
-## 5.3 Fused Object
+## 5.3 Correlated Object
 
 Fields:
 
@@ -485,9 +486,9 @@ Parameters:
 - `stale_object_timeout_ms`
 - `history_retention_ms`
 - `spatial_grid_cell_deg`
-- `fusion.merge_threshold`
-- `fusion.create_threshold`
-- `fusion.split_incompatibility_count`
+- `correlation.merge_threshold`
+- `correlation.create_threshold`
+- `correlation.split_incompatibility_count`
 
 ### `on_activate()`
 
@@ -555,7 +556,7 @@ pyramid/tactical_objects/
     store/ObjectComponents.h
     spatial/SpatialIndex.h
     relationship/RelationshipIndex.h
-    fusion/FusionEngine.h
+    correlation/CorrelationEngine.h
     milclass/MilClassEngine.h
     zone/ZoneEngine.h
     query/QueryEngine.h
@@ -568,7 +569,7 @@ pyramid/tactical_objects/
     store/ObjectStore.cpp
     spatial/SpatialIndex.cpp
     relationship/RelationshipIndex.cpp
-    fusion/FusionEngine.cpp
+    correlation/CorrelationEngine.cpp
     milclass/MilClassEngine.cpp
     zone/ZoneEngine.cpp
     query/QueryEngine.cpp
@@ -583,7 +584,7 @@ tests/tactical_objects/
   Test_ObjectStore.cpp
   Test_SpatialIndex.cpp
   Test_RelationshipIndex.cpp
-  Test_FusionEngine.cpp
+  Test_CorrelationEngine.cpp
   Test_ZoneEngine.cpp
   Test_MilClassEngine.cpp
   Test_QueryEngine.cpp
@@ -598,7 +599,7 @@ tests/tactical_objects/
 
 See `TDD_PLAN.md` for the full red/green/refactor plan.
 
-See `LLR.md` for the 61 low-level requirements with traceability and verification notes.
+See `LLR.md` for the 65 low-level requirements with traceability and verification notes.
 
 Implementation order:
 
@@ -607,7 +608,7 @@ Implementation order:
 3. `SpatialIndex`
 4. `ZoneEngine`
 5. `MilClassEngine`
-6. `FusionEngine`
+6. `CorrelationEngine`
 7. `QueryEngine`
 8. `TacticalObjectsRuntime`
 9. `TacticalObjectsComponent`
@@ -625,13 +626,16 @@ The first implementation cut should include:
 - point objects
 - polygon and circle zones
 - exact affiliation and source reference queries
-- deterministic score-based fusion
+- deterministic score-based correlation
 - lineage retention
 - military classification field storage (battle dimension, affiliation, role, status, echelon, flags, mobility)
 - relationship storage with hierarchical and tactical predicates
 - interest registration, cancellation, expiry, and supersession
 - retained temporal as-of and interval query support
 - behavior estimation and operational state fields
+- measurement criteria acceptance and application
+- progress reporting against interest requirements
+- capability progression prediction
 - PCL subscriber and service integration
 
 The first implementation cut may defer:
@@ -639,6 +643,7 @@ The first implementation cut may defer:
 - optimized ellipse and corridor acceleration so long as correctness is preserved
 - relationship-query indexing optimizations beyond the initial reverse indexes
 - history compaction optimizations beyond a bounded append-only baseline
+- advanced probability density representations beyond scalar confidence per region
 
 ## 10. Recommended First Test Sequence
 
@@ -647,7 +652,7 @@ The first implementation cut may defer:
 3. `Test_SpatialIndex.cpp`
 4. `Test_ZoneEngine.cpp`
 5. `Test_RelationshipIndex.cpp`
-6. `Test_FusionEngine.cpp`
+6. `Test_CorrelationEngine.cpp`
 7. `Test_QueryEngine.cpp`
 8. `Test_InterestManager.cpp`
 9. `Test_TacticalHistory.cpp`

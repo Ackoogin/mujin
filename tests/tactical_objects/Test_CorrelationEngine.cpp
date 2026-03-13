@@ -1,0 +1,188 @@
+#include <gtest/gtest.h>
+#include <correlation/CorrelationEngine.h>
+#include <uuid/UUIDHelper.h>
+
+using namespace tactical_objects;
+using namespace pyramid::core::uuid;
+
+class CorrelationEngineTest : public ::testing::Test {
+protected:
+  std::shared_ptr<ObjectStore> store = std::make_shared<ObjectStore>();
+  std::shared_ptr<SpatialIndex> spatial = std::make_shared<SpatialIndex>(1.0);
+  std::shared_ptr<MilClassEngine> milclass = std::make_shared<MilClassEngine>(store);
+
+  Observation makeObs(double lat, double lon, Affiliation aff = Affiliation::Unknown,
+                      double conf = 0.5, const std::string& src_sys = "sensor-1",
+                      const std::string& src_eid = "track-A") {
+    Observation obs;
+    obs.observation_id = UUIDHelper::generateV4();
+    obs.observed_at = 1000.0;
+    obs.received_at = 1001.0;
+    obs.position.lat = lat;
+    obs.position.lon = lon;
+    obs.velocity = Velocity{0, 0, 0};
+    obs.confidence = conf;
+    obs.affiliation_hint = aff;
+    obs.source_ref.source_system = src_sys;
+    obs.source_ref.source_entity_id = src_eid;
+    obs.source_ref.last_seen = obs.observed_at;
+    return obs;
+  }
+};
+
+///< REQ_TACTICAL_OBJECTS_005: First observation creates a new entity.
+TEST_F(CorrelationEngineTest, FirstObservationCreatesEntity) {
+  CorrelationEngine engine(store, spatial, milclass);
+  auto obs = makeObs(51.5, -0.1, Affiliation::Hostile, 0.8);
+  auto result = engine.processObservation(obs);
+  ASSERT_EQ(result.outcome, CorrelationOutcome::Created);
+  ASSERT_FALSE(result.object_id.isNull());
+  ASSERT_GE(store->objectCount(), 1u);
+}
+
+///< REQ_TACTICAL_OBJECTS_006: Correlated observation merges into existing entity.
+TEST_F(CorrelationEngineTest, CorrelatedObservationMerges) {
+  CorrelationConfig config;
+  config.gate_radius_deg = 0.5;
+  config.merge_threshold = 0.3;
+  CorrelationEngine engine(store, spatial, milclass, config);
+
+  auto obs1 = makeObs(51.5, -0.1, Affiliation::Hostile, 0.8, "radar", "T001");
+  auto r1 = engine.processObservation(obs1);
+
+  auto obs2 = makeObs(51.5001, -0.1001, Affiliation::Hostile, 0.7, "radar", "T001");
+  obs2.observed_at = 1010.0;
+  auto r2 = engine.processObservation(obs2);
+
+  ASSERT_EQ(r2.outcome, CorrelationOutcome::Merged);
+  ASSERT_EQ(r2.object_id, r1.object_id);
+}
+
+///< REQ_TACTICAL_OBJECTS_007: Distant observation creates a separate entity.
+TEST_F(CorrelationEngineTest, DistantObservationNotCorrelated) {
+  CorrelationEngine engine(store, spatial, milclass);
+
+  auto obs1 = makeObs(10.0, 20.0, Affiliation::Neutral);
+  auto r1 = engine.processObservation(obs1);
+
+  auto obs2 = makeObs(60.0, 90.0, Affiliation::Neutral);
+  auto r2 = engine.processObservation(obs2);
+
+  ASSERT_EQ(r2.outcome, CorrelationOutcome::Created);
+  ASSERT_NE(r2.object_id, r1.object_id);
+}
+
+///< REQ_TACTICAL_OBJECTS_008: Repeated incompatibility triggers a split.
+TEST_F(CorrelationEngineTest, IncompatibleAffiliationSplits) {
+  CorrelationConfig config;
+  config.gate_radius_deg = 0.5;
+  config.merge_threshold = 0.3;
+  config.split_incompatibility_count = 2;
+  CorrelationEngine engine(store, spatial, milclass, config);
+
+  auto obs1 = makeObs(51.5, -0.1, Affiliation::Friendly, 0.9, "radar", "T01");
+  auto r1 = engine.processObservation(obs1);
+  ASSERT_EQ(r1.outcome, CorrelationOutcome::Created);
+
+  auto obs2 = makeObs(51.5001, -0.1, Affiliation::Hostile, 0.8, "radar", "T01");
+  engine.processObservation(obs2);
+  auto obs3 = makeObs(51.5002, -0.1, Affiliation::Hostile, 0.8, "radar", "T01");
+  auto r3 = engine.processObservation(obs3);
+
+  ASSERT_EQ(r3.outcome, CorrelationOutcome::Split);
+  ASSERT_NE(r3.object_id, r1.object_id);
+}
+
+///< REQ_TACTICAL_OBJECTS_009: Same input produces same score (deterministic).
+TEST_F(CorrelationEngineTest, DeterministicScore) {
+  CorrelationConfig config;
+  config.gate_radius_deg = 0.5;
+  config.merge_threshold = 0.3;
+
+  auto run = [&]() {
+    auto s = std::make_shared<ObjectStore>();
+    auto sp = std::make_shared<SpatialIndex>(1.0);
+    auto mc = std::make_shared<MilClassEngine>(s);
+    CorrelationEngine eng(s, sp, mc, config);
+    auto obs1 = makeObs(51.5, -0.1, Affiliation::Hostile, 0.8, "radar", "T01");
+    eng.processObservation(obs1);
+    auto obs2 = makeObs(51.5001, -0.1001, Affiliation::Hostile, 0.7, "radar", "T01");
+    return eng.processObservation(obs2);
+  };
+  auto r1 = run();
+  auto r2 = run();
+  ASSERT_EQ(r1.outcome, r2.outcome);
+}
+
+///< REQ_TACTICAL_OBJECTS_008: Only local candidates are scored (spatial prefilter).
+TEST_F(CorrelationEngineTest, SpatialPrefilterLimitsScoring) {
+  CorrelationConfig config;
+  config.gate_radius_deg = 0.5;
+  config.merge_threshold = 0.3;
+  CorrelationEngine engine(store, spatial, milclass, config);
+
+  for (int i = 0; i < 20; ++i) {
+    auto obs = makeObs(static_cast<double>(i) * 5.0, static_cast<double>(i) * 10.0,
+                       Affiliation::Neutral, 0.5, "src-" + std::to_string(i), "T" + std::to_string(i));
+    engine.processObservation(obs);
+  }
+  ASSERT_GE(store->objectCount(), 20u);
+  auto local_obs = makeObs(0.001, 0.001, Affiliation::Neutral, 0.5, "local", "TL");
+  auto r = engine.processObservation(local_obs);
+  ASSERT_EQ(r.outcome, CorrelationOutcome::Merged);
+}
+
+///< REQ_TACTICAL_OBJECTS_006: Correlated object retains all contributing source refs.
+TEST_F(CorrelationEngineTest, SourceRefsRetained) {
+  CorrelationConfig config;
+  config.gate_radius_deg = 0.5;
+  config.merge_threshold = 0.3;
+  CorrelationEngine engine(store, spatial, milclass, config);
+
+  auto obs1 = makeObs(51.5, -0.1, Affiliation::Hostile, 0.8, "radar", "T01");
+  auto r1 = engine.processObservation(obs1);
+  auto obs2 = makeObs(51.5001, -0.1001, Affiliation::Hostile, 0.7, "ais", "T02");
+  engine.processObservation(obs2);
+  auto obs3 = makeObs(51.5002, -0.1002, Affiliation::Hostile, 0.75, "elint", "T03");
+  engine.processObservation(obs3);
+
+  const auto* cc = store->correlation().get(r1.object_id);
+  ASSERT_NE(cc, nullptr);
+  ASSERT_EQ(cc->source_refs.size(), 3u);
+}
+
+///< REQ_TACTICAL_OBJECTS_013: Aggregate confidence from weighted sources.
+TEST_F(CorrelationEngineTest, ConfidenceAggregation) {
+  CorrelationConfig config;
+  config.gate_radius_deg = 0.5;
+  config.merge_threshold = 0.3;
+  CorrelationEngine engine(store, spatial, milclass, config);
+
+  auto obs1 = makeObs(51.5, -0.1, Affiliation::Hostile, 0.9, "radar", "T01");
+  auto r1 = engine.processObservation(obs1);
+  auto obs2 = makeObs(51.5001, -0.1001, Affiliation::Hostile, 0.3, "ais", "T01");
+  engine.processObservation(obs2);
+
+  const auto* cc = store->correlation().get(r1.object_id);
+  ASSERT_NE(cc, nullptr);
+  ASSERT_GT(cc->confidence, 0.3);
+  ASSERT_LT(cc->confidence, 0.9);
+}
+
+///< REQ_TACTICAL_OBJECTS_009: Contributing observations tracked in CorrelationComponent.
+TEST_F(CorrelationEngineTest, ContributingObservationsTracked) {
+  CorrelationConfig config;
+  config.gate_radius_deg = 0.5;
+  config.merge_threshold = 0.3;
+  CorrelationEngine engine(store, spatial, milclass, config);
+
+  auto obs1 = makeObs(51.5, -0.1, Affiliation::Hostile, 0.9, "radar", "T01");
+  auto r1 = engine.processObservation(obs1);
+
+  auto obs2 = makeObs(51.5001, -0.1001, Affiliation::Hostile, 0.8, "radar", "T01");
+  engine.processObservation(obs2);
+
+  const auto* fc = store->correlation().get(r1.object_id);
+  ASSERT_NE(fc, nullptr);
+  ASSERT_GE(fc->contributing_observations.size(), 2u);
+}

@@ -50,68 +50,68 @@ See `TDD_PLAN.md` for the full red/green implementation plan tied to these requi
 **Verification**: `Test_TacticalObjectsRuntime.cpp` submits an ordered batch and verifies emitted events preserve processing order.
 
 ### REQ_TACTICAL_OBJECTS_006 - Source Reference Association
-Each fused object shall retain all distinct source references that contributed to it.
+Each correlated object shall retain all distinct source references that contributed to it.
 
 **Traces**: TOBJ.004
 
-**Verification**: `Test_FusionEngine.cpp` fuses two compatible observations from different sources and verifies both source references are retained.
+**Verification**: `Test_CorrelationEngine.cpp` correlates two compatible observations from different sources and verifies both source references are retained.
 
 ### REQ_TACTICAL_OBJECTS_007 - Lineage Retention
-Each fused object shall retain lineage entries referencing contributing observations and tracks.
+Each correlated object shall retain lineage entries referencing contributing observations and tracks.
 
 **Traces**: TOBJ.020
 
-**Verification**: `Test_FusionEngine.cpp` ingests observations, performs a fusion, and verifies lineage contains the expected observation and track IDs.
+**Verification**: `Test_CorrelationEngine.cpp` ingests observations, performs correlation, and verifies lineage contains the expected observation and track IDs.
 
 ---
 
-## 3. Fusion
+## 3. Correlation
 
 ### REQ_TACTICAL_OBJECTS_008 - Candidate Prefilter by Spatial Index
-`FusionEngine` shall obtain correlation candidates from `SpatialIndex` before exact scoring.
+`CorrelationEngine` shall obtain correlation candidates from `SpatialIndex` before exact scoring.
 
 **Traces**: TOBJ.040
 
-**Verification**: `Test_FusionEngine.cpp` loads distant objects and verifies only local candidates are scored.
+**Verification**: `Test_CorrelationEngine.cpp` loads distant objects and verifies only local candidates are scored.
 
 ### REQ_TACTICAL_OBJECTS_009 - Deterministic Correlation Score
-`FusionEngine` shall calculate a deterministic correlation score from configured gates and fixed field weights.
+`CorrelationEngine` shall calculate a deterministic correlation score from configured gates and fixed field weights.
 
 **Traces**: TOBJ.021
 
-**Verification**: `Test_FusionEngine.cpp` evaluates the same input twice and verifies identical score and decision.
+**Verification**: `Test_CorrelationEngine.cpp` evaluates the same input twice and verifies identical score and decision.
 
 ### REQ_TACTICAL_OBJECTS_010 - Create New Object on Low Score
-If all candidate scores are below `create_threshold`, `FusionEngine` shall create a new track and a new fused object.
+If all candidate scores are below `create_threshold`, `CorrelationEngine` shall create a new track and a new correlated object.
 
 **Traces**: TOBJ.021, TOBJ.022
 
-**Verification**: `Test_FusionEngine.cpp` provides a spatially distant observation and verifies object count increases by one.
+**Verification**: `Test_CorrelationEngine.cpp` provides a spatially distant observation and verifies object count increases by one.
 
 ### REQ_TACTICAL_OBJECTS_011 - Merge on High Score
-If the best candidate score is >= `merge_threshold`, `FusionEngine` shall attach the observation to the existing fused object.
+If the best candidate score is >= `merge_threshold`, `CorrelationEngine` shall attach the observation to the existing correlated object.
 
 **Traces**: TOBJ.022
 
-**Verification**: `Test_FusionEngine.cpp` provides two compatible observations and verifies a single fused object remains.
+**Verification**: `Test_CorrelationEngine.cpp` provides two compatible observations and verifies a single correlated object remains.
 
 ### REQ_TACTICAL_OBJECTS_012 - Split on Sustained Incompatibility
-If incompatible evidence exceeds the configured split threshold for the configured number of updates, `FusionEngine` shall split the contributing track into a new fused object.
+If incompatible evidence exceeds the configured split threshold for the configured number of updates, `CorrelationEngine` shall split the contributing track into a new correlated object.
 
 **Traces**: TOBJ.023
 
-**Verification**: `Test_FusionEngine.cpp` injects repeated incompatible updates and verifies the original fused object is split.
+**Verification**: `Test_CorrelationEngine.cpp` injects repeated incompatible updates and verifies the original correlated object is split.
 
 ### REQ_TACTICAL_OBJECTS_013 - Confidence Aggregation
-`FusionEngine` shall update fused object confidence using weighted contribution from source confidence and recency.
+`CorrelationEngine` shall update correlated object confidence using weighted contribution from source confidence and recency.
 
 **Traces**: TOBJ.019
 
-**Verification**: `Test_FusionEngine.cpp` fuses high-confidence and low-confidence observations and verifies the aggregate confidence lies within configured bounds.
+**Verification**: `Test_CorrelationEngine.cpp` correlates high-confidence and low-confidence observations and verifies the aggregate confidence lies within configured bounds.
 
 ---
 
-## 4. Military Classification (2525B Data)
+## 4. Object Classification (Exploitation: MIL-STD-2525B)
 
 ### REQ_TACTICAL_OBJECTS_014 - Military Classification Fields
 `MilClassEngine` shall store: battle dimension, affiliation, role (function ID), status, echelon, mobility, and boolean flags for headquarters, task force, feint/dummy, and installation.
@@ -136,7 +136,7 @@ If incompatible evidence exceeds the configured split threshold for the configur
 
 ---
 
-## 5. Geography and Zones
+## 5. Spatial Reasoning (Exploitation Design)
 
 ### REQ_TACTICAL_OBJECTS_017 - Supported Geometry Types
 `ZoneEngine` shall support point, polyline, polygon, circle, ellipse, and corridor geometry definitions.
@@ -210,7 +210,7 @@ Inactive zones shall be excluded from zone relationship results outside their va
 ## 7. Direct Entity Management
 
 ### REQ_TACTICAL_OBJECTS_026 - Direct Create
-`TacticalObjectsRuntime::createObject()` shall store an object with all provided components and record `direct` provenance without invoking fusion.
+`TacticalObjectsRuntime::createObject()` shall store an object with all provided components and record `direct` provenance without invoking correlation.
 
 **Traces**: TOBJ.001, TOBJ.002, TOBJ.003
 
@@ -231,7 +231,7 @@ Inactive zones shall be excluded from zone relationship results outside their va
 **Verification**: `Test_TacticalObjectsRuntime.cpp` deletes an object and verifies it is absent from store and spatial index.
 
 ### REQ_TACTICAL_OBJECTS_029 - Both Paths Queryable Together
-Objects created via evidence (fusion) and via direct CRUD shall be queryable through the same `QueryEngine`.
+Objects created via evidence (correlation) and via direct CRUD shall be queryable through the same `QueryEngine`.
 
 **Traces**: TOBJ.007, TOBJ.008
 
@@ -256,7 +256,7 @@ Objects created via evidence (fusion) and via direct CRUD shall be queryable thr
 **Verification**: `Test_TacticalObjectsRuntime.cpp` advances time past the configured timeout and verifies the object becomes stale or retired.
 
 ### REQ_TACTICAL_OBJECTS_032 - Capability Snapshot
-`TacticalObjectsRuntime` shall produce a capability snapshot containing counts, supported geometry types, and fusion configuration state.
+`TacticalObjectsRuntime` shall produce a capability snapshot containing counts, supported geometry types, and correlation configuration state.
 
 **Traces**: TOBJ.043
 
@@ -313,7 +313,7 @@ Object query shall be exposed through a PCL service handler that decodes the req
 ## 10. pyramid::core Integration
 
 ### REQ_TACTICAL_OBJECTS_039 - Domain Events on EventBus
-The runtime shall publish internal domain events on `pyramid::core::event::EventBus` for object created, object updated, object deleted, object fused, object split, zone entered, and zone left.
+The runtime shall publish internal domain events on `pyramid::core::event::EventBus` for object created, object updated, object deleted, object correlated, object split, zone entered, and zone left.
 
 **Traces**: TOBJ.045
 
@@ -351,8 +351,8 @@ Updating one object's position shall only update that object's spatial index mem
 
 **Verification**: `Test_SpatialIndex.cpp` moves one indexed object and verifies unaffected objects retain their original index placement.
 
-### REQ_TACTICAL_OBJECTS_044 - Batch Fusion Determinism
-Processing the same observation batch in the same order shall produce the same fused object graph and versions.
+### REQ_TACTICAL_OBJECTS_044 - Batch Correlation Determinism
+Processing the same observation batch in the same order shall produce the same correlated object graph and versions.
 
 **Traces**: TOBJ.022, TOBJ.024
 
@@ -455,7 +455,39 @@ The runtime and query path shall store and query operational state values and th
 
 ---
 
-## 13. Requirement Fulfilment and Evidence Derivation
+## 13. Measurement, Progress, and Capability Progression
+
+### REQ_TACTICAL_OBJECTS_062 - Measurement Criteria Acceptance
+`TacticalObjectsRuntime` shall accept Measurement_Criterion/criteria that define how the predicted or actual quality of a Tactical_Object or Object_Interest_Requirement is assessed, and apply them during quality determination.
+
+**Traces**: TOBJ.050
+
+**Verification**: `Test_TacticalObjectsRuntime.cpp` registers a measurement criterion against an interest requirement and verifies the quality assessment uses the criterion.
+
+### REQ_TACTICAL_OBJECTS_063 - Progress Reporting
+`TacticalObjectsRuntime` shall report progress against each active Object_Interest_Requirement, including partial fulfilment, remaining gaps, and estimated completeness.
+
+**Traces**: TOBJ.051
+
+**Verification**: `Test_InterestManager.cpp` registers an interest requirement, provides partial evidence, and verifies the progress report reflects partial fulfilment.
+
+### REQ_TACTICAL_OBJECTS_064 - Object Probability Density Capture
+`TacticalObjectsRuntime` shall capture and store probability densities of particular Tactical_Objects within locations.
+
+**Traces**: TOBJ.052
+
+**Verification**: `Test_TacticalObjectsRuntime.cpp` submits probability density data for an object within a region and verifies it is stored and retrievable.
+
+### REQ_TACTICAL_OBJECTS_065 - Capability Progression Prediction
+`TacticalObjectsRuntime` shall predict how its Capability will change over time and with use, taking account of expected information source availability and operational constraints.
+
+**Traces**: TOBJ.053
+
+**Verification**: `Test_TacticalObjectsRuntime.cpp` configures the runtime with known source availability changes and verifies the capability progression prediction reflects expected degradation or improvement.
+
+---
+
+## 14. Requirement Fulfilment and Evidence Derivation
 
 ### REQ_TACTICAL_OBJECTS_058 - Requirement Achievability Assessment
 `TacticalObjectsRuntime` shall assess whether a tactical object requirement is achievable given current capability, constraints, area of interest, timeliness, and expected evidence availability.
@@ -479,11 +511,11 @@ When additional evidence is needed to satisfy a tactical object requirement, the
 **Verification**: `Test_InterestManager.cpp` registers an AOI-based active-finding requirement and verifies the derived evidence requirement expresses evidence needs in tactical-object terms rather than naming a downstream component.
 
 ### REQ_TACTICAL_OBJECTS_061 - Requirement and Evidence Traceability
-The runtime shall retain traceability links between a source tactical object requirement, its derived evidence requirements, the observations or supporting information received in response, and any fused objects produced.
+The runtime shall retain traceability links between a source tactical object requirement, its derived evidence requirements, the observations or supporting information received in response, and any correlated objects produced.
 
 **Traces**: TOBJ.049
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` submits an AOI requirement, records derived evidence requirements and subsequent observations, and verifies the resulting fused object can be traced back to the source requirement.
+**Verification**: `Test_TacticalObjectsRuntime.cpp` submits an AOI requirement, records derived evidence requirements and subsequent observations, and verifies the resulting correlated object can be traced back to the source requirement.
 
 ---
 
@@ -496,14 +528,14 @@ The runtime shall retain traceability links between a source tactical object req
 | 003 | 039 | Test_ObjectStore |
 | 004 | 002 | Test_ObjectStore |
 | 005 | 018, 042 | Test_TacticalObjectsRuntime |
-| 006 | 004 | Test_FusionEngine |
-| 007 | 020 | Test_FusionEngine |
-| 008 | 040 | Test_FusionEngine |
-| 009 | 021 | Test_FusionEngine |
-| 010 | 021, 022 | Test_FusionEngine |
-| 011 | 022 | Test_FusionEngine |
-| 012 | 023 | Test_FusionEngine |
-| 013 | 019 | Test_FusionEngine |
+| 006 | 004 | Test_CorrelationEngine |
+| 007 | 020 | Test_CorrelationEngine |
+| 008 | 040 | Test_CorrelationEngine |
+| 009 | 021 | Test_CorrelationEngine |
+| 010 | 021, 022 | Test_CorrelationEngine |
+| 011 | 022 | Test_CorrelationEngine |
+| 012 | 023 | Test_CorrelationEngine |
+| 013 | 019 | Test_CorrelationEngine |
 | 014 | 025-031 | Test_MilClassEngine |
 | 015 | 032 | Test_MilClassEngine |
 | 016 | 032 | Test_MilClassEngine |
@@ -552,3 +584,7 @@ The runtime shall retain traceability links between a source tactical object req
 | 059 | 047 | Test_TacticalObjectsRuntime |
 | 060 | 048 | Test_InterestManager |
 | 061 | 049 | Test_TacticalObjectsRuntime |
+| 062 | 050 | Test_TacticalObjectsRuntime |
+| 063 | 051 | Test_InterestManager |
+| 064 | 052 | Test_TacticalObjectsRuntime |
+| 065 | 053 | Test_TacticalObjectsRuntime |

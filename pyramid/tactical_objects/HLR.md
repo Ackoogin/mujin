@@ -1,124 +1,118 @@
 # AUTOMTK-TACTICAL-OBJECTS Requirements
 
-Requirements for the `tactical_objects` component, following the PYRAMID component style (see `ref/components.md` Data Fusion and Geography sections).
+Requirements for the `tactical_objects` component, following the PYRAMID component standard (5.4.2.60 of the PYRAMID Technical Standard V1-O).
 
-The component stores, updates, queries, and fuses real-world entities of tactical significance together with geographic zones.
+The component maintains knowledge of objects which exist, or are assumed to exist, within the battlespace and their relationship to each other.
 
 ## Subject Matter
 
-Tactical Objects covers:
+The subject matter of Tactical Objects is objects of tactical importance which exist, or are assumed to exist within the battlespace, their Relationships between each other, and their Behaviour.
 
-- accepting requirements to maintain or actively develop awareness of entities in an area of interest or mission context
-- deriving component-agnostic evidence needs needed to satisfy those requirements
-- storing tactical entities and their state
-- tracking where object information came from and how confident it is
-- storing the military classification data needed to drive MIL-STD-2525B rendering (battle dimension, affiliation, role, status, echelon, etc.)
-- storing geographic areas, routes, corridors, and zones
-- fusing entity data from multiple sources
+**Exclusions (per PYRAMID):**
 
-**Exclusions:** raw sensor processing, map rendering, route planning, and engagement decisions. This component provides authoritative object data to those functions.
+- The detectability of a Tactical_Object.
+- The level of risk a Tactical_Object poses to the Exploiting Platform.
+- Low level sensor data calculation.
+- How the data from the Object_Information_Source is derived.
 
-## Key Entities
-
-| Entity | Description |
-| :--- | :--- |
-| **Tactical_Object** | The system's current best representation of a real-world entity, feature, or tactical construct. |
-| **Tactical_Object_Type** | What kind of thing it is: platform, person, equipment, unit, formation, installation, obstacle, route, point, or zone. |
-| **Observation** | A single source report about a possible object at a point in time, with origin, timestamp, confidence, and uncertainty. |
-| **Track** | A time-ordered sequence of observations believed to refer to the same entity. |
-| **Fused_Object** | A Tactical_Object built from one or more observations or tracks. |
-| **Evidence_Lineage** | The chain linking a Tactical_Object back to the observations, tracks, sources, and fusion steps that produced it. |
-| **Object_Quality** | Confidence, completeness, freshness, consistency, and positional uncertainty for a Tactical_Object. |
-| **Identity** | Callsign, track number, platform class, unit designation, and other naming attributes. |
-| **Affiliation** | Friend, hostile, neutral, unknown, assumed friend, suspect, joker, faker, or pending. |
-| **Battle_Dimension** | Ground, air, sea surface, subsurface, space, or SOF. |
-| **Status** | Present, anticipated, planned, or known. |
-| **Role** | The MIL-STD-2525B function identifier describing what the entity does (e.g. infantry, armor, rotary wing, electronic warfare). |
-| **Echelon** | Team, squad, section, platoon, company, battalion, regiment, brigade, division, corps, army, or higher. |
-| **Kinematic_State** | Position, orientation, velocity, acceleration, and when that data was valid. |
-| **Behavior_State** | Activity, operational state, and intent hypothesis. |
-| **Relationship** | A tactical, hierarchical, organizational, or physical link between objects. |
-| **Geometry** | A spatial shape: point, polyline, polygon, circle, ellipse, corridor, or volume. |
-| **Geographic_Zone** | A tactically significant area with geometry, type, and optional time window (e.g. AOI, no-go zone, kill box, patrol area). |
-| **Zone_Relationship** | How an object relates to a zone: inside, outside, entering, leaving, intersecting, or distance. |
-| **Interest_Requirement** | A request to maintain or actively develop awareness of objects matching given criteria, area, or mission context. |
-| **Object_Solution** | The planned approach for satisfying an interest requirement, including the evidence needed, constraints, and predicted quality. |
-| **Object_Solution_Evidence_Requirement** | A derived, component-agnostic requirement for evidence or supporting information needed to satisfy an interest requirement, without naming or embedding the responsibilities of another PRA component. |
-| **Fusion_Constraint** | A restriction on fusion: source rules, confidence thresholds, identity policies, or time windows. |
-| **Capability** | The component's current ability to maintain objects, fuse evidence, answer queries, and supply complete military classification data. |
+**Additional exploitation exclusions:** raw sensor processing, map rendering, route planning, and engagement decisions. This component provides authoritative object data to those functions.
 
 ## Responsibilities
 
-Responsibility identifiers are included for HLR traceability.
+Responsibilities are taken directly from PYRAMID Technical Standard 5.4.2.60.4. Identifiers are included for HLR traceability.
 
-### RESP.001 - capture_tactical_object_requirements
-- Accept requirements for which object types, areas, and mission contexts to represent.
+### RESP.001 - capture_object_interest_requirement_for_tactical_object
+- To capture provided Object_Interest_Requirements (e.g. the scope of the information required and the frequency that it is reported) for Tactical_Objects.
 
-### RESP.002 - determine_tactical_object_solution
-- Determine how to satisfy a tactical object requirement within applicable constraints, time windows, and mission context.
+### RESP.002 - capture_measurement_criteria_for_tactical_object
+- To capture provided Measurement_Criterion/criteria for Tactical_Objects.
 
-### RESP.003 - determine_evidence_requirements_for_tactical_objects
-- Derive the evidence and supporting-information requirements needed to satisfy a tactical object requirement, expressed in component-agnostic terms consistent with PYRAMID bridge rules.
+### RESP.003 - capture_tactical_objects_constraints
+- To capture provided Constraints for Tactical_Objects solutions (e.g. do not process classified information or stop processing information derived from a specified source).
 
-### RESP.004 - capture_observations
-- Accept observations, tracks, and supporting data from external sources with provenance and uncertainty.
+### RESP.004 - identify_whether_requirement_is_achievable
+- To identify whether an Object_Interest_Requirement is still achievable given current or predicted Capability and Constraints.
 
-### RESP.005 - maintain_tactical_objects
-- Create, update, correlate, split, merge, and retire Tactical_Objects as evidence changes.
+### RESP.005 - determine_requirement_solution
+- To determine a solution to Object_Interest_Requirements.
 
-### RESP.006 - provide_tactical_object_information
-- Provide current-state, historical, and event-oriented information about tactical objects, zones, relationships, and object quality.
+### RESP.006 - determine_potential_objects
+- To determine the potential for Tactical_Objects to exist at locations.
 
-### RESP.007 - maintain_fusion_lineage
-- Keep lineage between observations, tracks, fusion decisions, and resulting objects.
+### RESP.007 - determine_object_information_confidence
+- To determine a level of confidence in the individual Tactical_Object's characteristics (e.g. behaviour, allegiance and association between tactical objects).
 
-### RESP.008 - maintain_military_classification
-- Keep the fields needed to drive MIL-STD-2525B: battle dimension, affiliation, role, status, echelon, mobility, headquarters flag, task force flag, feint/dummy flag, installation flag, and modifiers.
+### RESP.008 - determine_additional_information
+- To determine additional information required to satisfy Object_Interest_Requirements, e.g. improved Tactical_Object confidence required.
 
-### RESP.009 - maintain_geographic_zones
-- Create, update, and query geographic zones and their relationships to objects.
+### RESP.009 - determine_object_relationships
+- To determine the Relationships and dependencies between Tactical_Objects (e.g. if a radar is part of a specific vehicle, or if a specific vehicle is part of this formation and is the flight lead).
 
-### RESP.010 - determine_object_relationships
-- Determine hierarchical, organizational, tactical, and proximity relationships between objects.
+### RESP.010 - estimate_object_behaviour
+- To estimate the Behaviour exhibited by Tactical Objects, including individual Behaviour (e.g. that object is loitering) and Behaviour between Tactical Objects (e.g. that Exploiting Platform is tracking that tank, that Exploiting Platform is landing at that airfield). Behaviour also includes the operational state of a Tactical_Object (e.g. ready for operation, operational on ground, operational in air, or non-operational).
 
-### RESP.011 - determine_zone_relationships
-- Determine containment, intersection, approach, and boundary crossing between objects and zones.
+### RESP.011 - identify_progress
+- To identify the progress against an Object_Interest_Requirement.
 
-### RESP.012 - assess_object_quality
-- Assess confidence, freshness, consistency, and uncertainty of objects and fused identities.
+### RESP.012 - determine_quality_of_tactical_object_of_interest
+- To determine the quality of the Tactical_Object_of_Interest provided by Tactical Objects during execution, measured against given Object_Interest_Requirements and Measurement_Criterion/criteria.
 
-### RESP.013 - identify_missing_information
-- Identify missing information that prevents confident fulfilment of object requirements, correlation, classification, or zone reasoning.
+### RESP.013 - capture_object_information
+- To capture information about Tactical_Objects, including but not limited to: their allegiance to organisations, kinematic behaviour (e.g. velocity, acceleration or path), location (e.g. at this position, within this region) and classification, including their type (e.g. surface ship or emitter), specific type (e.g. Type-45, Captor radar) and registration (e.g. HMS Daring).
 
-### RESP.014 - assess_capability
-- Report the component's current and predicted ability to maintain state at required scale and quality.
+### RESP.014 - capture_object_probability_densities
+- To capture the probability densities of particular Tactical_Objects within locations.
+
+### RESP.015 - assess_capability
+- To assess the Capability to provide Tactical_Object information (e.g. determination and estimation of object characteristics) taking account of system health and observed anomalies (e.g. normal behaviour and impacts due to failures, damage, usage or ageing).
+
+### RESP.016 - identify_missing_information
+- To identify missing information which could improve the certainty or specificity of the component's Capability (i.e. determination and estimation of object characteristics) assessment.
+
+### RESP.017 - predict_capability_progression
+- To predict the progression of the Tactical Objects Capability over time and with use.
+
+## Services
+
+Services are taken directly from PYRAMID Technical Standard 5.4.2.60.7.
+
+| Service | Type | Description |
+| :--- | :--- | :--- |
+| **Object_Of_Interest** | Provided | Determines objects of interest in response to an Object_Interest_Requirement. |
+| **Object_Solution_Evidence** | Consumed | Identifies supporting information needed to acquire or generate information about the existence of Tactical_Objects and their details. Also consumes indications of whether the required information can be provided. |
+| **Matching_Objects** | Provided | Determines which objects satisfy a specified set of criteria and provides their identifiers (not associated details). |
+| **Specific_Object_Detail** | Provided | Provides information in relation to a specified object (e.g. course, speed, altitude, location, relationships, behaviour). |
+| **Object_Evidence** | Consumed | Obtains object information needed to acquire or generate information about the existence of Tactical_Objects and their details. |
+| **Constraint** | Provided | Assesses restrictions that constrain Tactical Objects behaviour with respect to determining information about Tactical_Objects. |
+| **Capability** | Provided | Assesses the current and predicted capability to provide information about Tactical_Objects. |
+| **Capability_Evidence** | Consumed | Consumes the current and predicted state of capabilities that this component depends on, and identifies any missing information, required to determine its own Capability. |
 
 ## Design Decisions
 
 ### D1 - Canonical Internal Model
 Use a single internal model for tactical objects. Treat external message formats and display standards as adapters.
 
-**Why**: Avoids coupling to any single feed or display standard and enables fusion across heterogeneous sources.
+**Why**: Avoids coupling to any single feed or display standard and enables correlation across heterogeneous sources.
 
-### D2 - Separate Observation, Track, and Fused Object Layers
-Keep source observations, correlated tracks, and authoritative fused objects as distinct record types.
+### D2 - Separate Observation, Track, and Correlated Object Layers
+Keep source observations, correlated tracks, and authoritative correlated objects as distinct record types.
 
-**Why**: Separating raw evidence from intermediate correlation from authoritative state supports explainability, auditability, and controlled fusion.
+**Why**: Separating raw evidence from intermediate correlation from authoritative state supports explainability, auditability, and controlled integration.
 
 ### D3 - Provenance Is First-Class
-Every fused object retains lineage to the observations, tracks, sources, and rules that built it.
+Every correlated object retains lineage to the observations, tracks, sources, and rules that built it.
 
-**Why**: Required for trust, debugging, operator explanation, and fusion rollback.
+**Why**: Required for trust, debugging, operator explanation, and correlation rollback.
 
-### D4 - Store Military Classification Data, Not Symbol Codes
-Store the semantic fields (battle dimension, affiliation, role, status, echelon, etc.) that drive 2525B, not rendered icon codes. Preserve source symbol codes when provided, but keep normalized fields so symbols can be regenerated after fusion or reclassification.
+### D4 - Store Military Classification Data, Not Symbol Codes (Exploitation)
+Store the semantic fields (battle dimension, affiliation, role, status, echelon, etc.) that drive 2525B, not rendered icon codes. Preserve source symbol codes when provided, but keep normalized fields so symbols can be regenerated after correlation or reclassification.
 
-**Why**: The same object must support reasoning, exchange, and display. A stored icon code becomes stale when identity or confidence changes.
+**Why**: The same object must support reasoning, exchange, and display. A stored icon code becomes stale when identity or confidence changes. This is an exploitation-specific design choice instantiating PYRAMID's abstract `classification` and `allegiance` attributes from the Specific_Object_Detail and Object_Evidence interfaces.
 
-### D5 - Zones Are First-Class Objects
-Geographic zones have geometry, type, temporal validity, and relationship queries. They are operational constructs, not display overlays.
+### D5 - Zone and Region Reasoning (Exploitation)
+Maintain internal representations of zones and regions to support region-based queries, interest requirement areas, and spatial alerting. Zone data may be sourced from the Geography component or provided externally via interest requirements.
 
-**Why**: Zones drive filtering, alerting, planning, and behavior interpretation.
+**Why**: PYRAMID requires determining potential objects at locations, matching objects by spatial criteria, and supporting region-based interest requirements. Internal zone reasoning is an exploitation design choice to deliver these capabilities. The component does not claim ownership of geographic features (that is Geography's responsibility).
 
 ### D6 - ECS-Style Runtime Storage
 Use sparse-component (ECS-like) storage for hot-path object state.
@@ -130,8 +124,8 @@ ECS storage is an internal detail behind a domain-oriented API.
 
 **Why**: Consumers interact with objects, zones, tracks, and relationships, not storage mechanics.
 
-### D8 - Pluggable Fusion Policy
-Fusion, correlation, merge, and split decisions use pluggable rules and thresholds.
+### D8 - Pluggable Correlation Policy
+Correlation, merge, and split decisions use pluggable rules and thresholds.
 
 **Why**: Correlation policies vary by source mix, mission context, and object class.
 
@@ -157,19 +151,19 @@ Support tactical object types: platform, person, equipment, unit, formation, ins
 ### TOBJ.002 - Object Properties
 Each object can carry: identity, classification, affiliation, battle dimension, role, status, echelon, kinematics, behavior, operational state, provenance, and quality.
 
-**Rationale**: These fields are the minimum needed for tactical reasoning and 2525B rendering.
+**Rationale**: These fields are the minimum needed for tactical reasoning.
 
 ### TOBJ.003 - Stable Internal ID
 Assign each Tactical_Object a stable internal UUID independent of any source-provided identifier.
 
-**Rationale**: Source IDs are not globally unique or stable across fusion events.
+**Rationale**: Source IDs are not globally unique or stable across correlation events.
 
 ### TOBJ.004 - External ID Association
 Support one-to-many mapping between a Tactical_Object and external identifiers, track numbers, and naming schemes.
 
 **Rationale**: The same real-world entity may have different IDs across providers.
 
-## Object Interest
+## Object Interest and Measurement
 
 ### TOBJ.005 - Interest Requirement
 Accept interest requirements based on type, identity, affiliation, status, source, quality, behavior, time, or geography.
@@ -180,6 +174,11 @@ Accept interest requirements based on type, identity, affiliation, status, sourc
 Support cancellation, expiry, and supersession of active interest requirements.
 
 **Rationale**: Lifecycle management.
+
+### TOBJ.050 - Measurement Criteria
+Accept and store measurement criteria against which the predicted or actual quality of Tactical_Objects or Object_Interest_Requirements are assessed.
+
+**Rationale**: PYRAMID mandates capture and use of Measurement_Criterion for quality assessment.
 
 ## Query Support
 
@@ -242,7 +241,7 @@ Track freshness and validity windows for each state element. Expose whether stat
 
 **Rationale**: Consumers must know whether data is trustworthy.
 
-## Fusion and Provenance
+## Correlation and Provenance
 
 ### TOBJ.018 - Multi-Source Ingest
 Ingest and integrate object information from multiple external sources.
@@ -250,12 +249,12 @@ Ingest and integrate object information from multiple external sources.
 **Rationale**: Comprehensive picture.
 
 ### TOBJ.019 - Confidence Tracking
-Maintain and report confidence, uncertainty, and completeness for each field and for the fused object as a whole.
+Maintain and report confidence, uncertainty, and completeness for each field and for the correlated object as a whole.
 
 **Rationale**: Quality awareness.
 
 ### TOBJ.020 - Evidence Lineage
-Maintain lineage from each object back to contributing observations, tracks, sources, and fusion operations.
+Maintain lineage from each object back to contributing observations, tracks, sources, and correlation operations.
 
 **Rationale**: Traceability and explainability.
 
@@ -264,22 +263,24 @@ Determine whether new observations or tracks match an existing object or require
 
 **Rationale**: Correlation is the basis of coherent entity state.
 
-### TOBJ.022 - Entity Fusion
-Fuse multiple observations or tracks into a single object while preserving source identity, lineage, and quality.
+### TOBJ.022 - Entity Integration
+Integrate multiple observations or tracks into a single object while preserving source identity, lineage, and quality.
 
-**Rationale**: Unified picture requires controlled amalgamation.
+**Rationale**: Unified picture requires controlled amalgamation of evidence from multiple sources.
 
 ### TOBJ.023 - Merge and Split
 Support explicit merge and split of objects, retaining lineage across transitions.
 
 **Rationale**: Correlation decisions change as evidence evolves.
 
-### TOBJ.024 - Fusion Constraints
-Support configurable fusion constraints based on source, time window, object type, quality thresholds, and mission context.
+### TOBJ.024 - Constraints
+Support configurable constraints based on source, time window, object type, quality thresholds, and mission context. This includes both correlation-specific and externally imposed operational constraints.
 
-**Rationale**: Rules vary by scenario and confidence model.
+**Rationale**: Rules vary by scenario and confidence model. PYRAMID's Constraint entity covers any externally imposed limit on how or when information from sources may be used.
 
-## Military Classification (MIL-STD-2525B Data)
+## Object Classification (Exploitation: MIL-STD-2525B)
+
+The following requirements instantiate PYRAMID's abstract classification, allegiance, and type attributes (from Specific_Object_Detail and Object_Evidence interfaces) using MIL-STD-2525B field semantics. This is an exploitation design choice (Design Decision D4).
 
 ### TOBJ.025 - Battle Dimension
 Store the object's battle dimension: ground, air, sea surface, subsurface, space, or SOF.
@@ -289,7 +290,7 @@ Store the object's battle dimension: ground, air, sea surface, subsurface, space
 ### TOBJ.026 - Affiliation
 Store affiliation: friendly, hostile, neutral, unknown, assumed friend, suspect, joker, faker, or pending.
 
-**Rationale**: Affiliation is a core 2525B field and a primary filter for rules of engagement and display.
+**Rationale**: Affiliation is a core field and a primary filter for rules of engagement and display.
 
 ### TOBJ.027 - Role / Function Identifier
 Store a function identifier describing what the entity does, using the 2525B function ID scheme (e.g. infantry, armor, artillery, rotary wing, electronic warfare, logistics, C2, medical).
@@ -299,29 +300,31 @@ Store a function identifier describing what the entity does, using the 2525B fun
 ### TOBJ.028 - Status
 Store operational status: present, anticipated, planned, or known.
 
-**Rationale**: Status affects the symbol rendering style (solid vs dashed) and operational reasoning.
+**Rationale**: Status affects the symbol rendering style and operational reasoning.
 
 ### TOBJ.029 - Echelon
 Store organizational echelon when applicable: team, squad, section, platoon, company, battalion, regiment, brigade, division, corps, army, or higher.
 
-**Rationale**: Echelon determines the size/scale indicator in 2525B and matters for force aggregation.
+**Rationale**: Echelon determines the size/scale indicator and matters for force aggregation.
 
 ### TOBJ.030 - Indicator Flags
 Store boolean flags for: headquarters, task force, feint/dummy, and installation.
 
-**Rationale**: These are distinct 2525B modifiers that affect symbol rendering and tactical interpretation.
+**Rationale**: These are distinct modifiers that affect symbol rendering and tactical interpretation.
 
 ### TOBJ.031 - Mobility Indicator
 Store mobility type when applicable: wheeled, tracked, towed, rail, over-snow, sled, barge, amphibious.
 
-**Rationale**: Mobility affects the 2525B symbol modifier and movement planning.
+**Rationale**: Mobility affects the symbol modifier and movement planning.
 
 ### TOBJ.032 - Source Symbol Code Preservation
-When a source provides a complete 2525B SIDC (symbol identification coding), preserve it alongside the normalized fields. Allow symbols to be regenerated from normalized fields after fusion or reclassification.
+When a source provides a complete 2525B SIDC (symbol identification coding), preserve it alongside the normalized fields. Allow symbols to be regenerated from normalized fields after correlation or reclassification.
 
 **Rationale**: Source fidelity and internal consistency are both needed.
 
-## Geography and Zones
+## Spatial Reasoning (Exploitation Design)
+
+The following requirements support PYRAMID's spatial query and region-based interest capabilities. Zone and region management is an exploitation design choice (Design Decision D5) to deliver `determine_potential_objects`, `Matching_Objects`, and region-based `Object_Interest_Requirements`. Geographic feature ownership remains with the Geography component.
 
 ### TOBJ.033 - Geometry Types
 Support point, polyline, polygon, circle, ellipse, corridor, and optionally volume geometries for objects and zones.
@@ -356,7 +359,7 @@ Efficiently maintain and query at least thousands of concurrent objects and zone
 **Rationale**: Operational pictures routinely exceed what naive per-object designs can handle.
 
 ### TOBJ.039 - Sparse Component Storage
-Allow optional storage of object facets (kinematics, military classification, fusion state, relationships) so sparse entities do not pay for unused fields.
+Allow optional storage of object facets (kinematics, military classification, correlation state, relationships) so sparse entities do not pay for unused fields.
 
 **Rationale**: ECS-style sparsity improves memory and update efficiency at scale.
 
@@ -378,12 +381,12 @@ Support efficient bulk ingest and replay of observations and object updates.
 ## Interfaces and Quality
 
 ### TOBJ.043 - Capability Reporting
-Report the component's ability to maintain state, fuse evidence, answer geographic queries, and supply complete military classification data.
+Report the component's ability to maintain state, correlate evidence, answer geographic queries, and supply complete classification data.
 
 **Rationale**: Consumers need confidence in the service itself.
 
 ### TOBJ.044 - Missing Information Reporting
-Identify missing data that prevents confident classification, correlation, military classification completeness, or zone reasoning.
+Identify missing data that prevents confident classification, correlation, classification completeness, or spatial reasoning.
 
 **Rationale**: Gaps should be visible so sensors or operators can fill them.
 
@@ -391,6 +394,21 @@ Identify missing data that prevents confident classification, correlation, milit
 Provide both current-state snapshot access and event-oriented update streams.
 
 **Rationale**: Some consumers need authoritative state; others need incremental changes.
+
+### TOBJ.051 - Progress Reporting
+Report progress against each active Object_Interest_Requirement, including partial fulfilment, remaining gaps, and estimated time to completion.
+
+**Rationale**: PYRAMID mandates identifying progress against requirements.
+
+### TOBJ.052 - Object Probability Densities
+Capture and report the probability densities of particular Tactical_Objects within locations.
+
+**Rationale**: PYRAMID mandates capturing probability densities of objects within locations.
+
+### TOBJ.053 - Capability Progression Prediction
+Predict how the component's Capability will change over time and with use, taking account of expected information source availability and operational constraints.
+
+**Rationale**: PYRAMID mandates predicting capability progression.
 
 ## Requirement Fulfilment and Dependency Derivation
 
@@ -405,12 +423,12 @@ Determine an object solution for satisfying a tactical object requirement, inclu
 **Rationale**: A requirement to actively find entities needs an explicit solution model that can be evaluated and monitored.
 
 ### TOBJ.048 - Derived Evidence Requirement
-When satisfying a tactical object requirement requires additional evidence, derive one or more `Object_Solution_Evidence_Requirement` instances that express the needed evidence or supporting information in component-agnostic terms, without naming or embedding another PRA component's responsibilities.
+When satisfying a tactical object requirement requires additional evidence, derive one or more evidence requirements that express the needed evidence or supporting information in component-agnostic terms, without naming or embedding another PRA component's responsibilities.
 
 **Rationale**: This allows tactical objects to drive active finding while respecting PYRAMID bridge and component-boundary rules.
 
 ### TOBJ.049 - Requirement and Evidence Traceability
-Maintain traceability between the source tactical object requirement, any derived evidence requirements, the resulting observations or supporting information, and the fused objects produced from them.
+Maintain traceability between the source tactical object requirement, any derived evidence requirements, the resulting observations or supporting information, and the correlated objects produced from them.
 
 **Rationale**: Operators and downstream logic need to understand why a search was initiated, what evidence was requested, and what objects resulted.
 
@@ -418,61 +436,66 @@ Maintain traceability between the source tactical object requirement, any derive
 
 | Requirement | Responsibilities |
 | :--- | :--- |
-| `TOBJ.001` | `RESP.001`, `RESP.005` |
-| `TOBJ.002` | `RESP.005`, `RESP.008`, `RESP.012` |
-| `TOBJ.003` | `RESP.005` |
-| `TOBJ.004` | `RESP.004`, `RESP.005` |
+| `TOBJ.001` | `RESP.013` |
+| `TOBJ.002` | `RESP.013`, `RESP.007` |
+| `TOBJ.003` | `RESP.013` |
+| `TOBJ.004` | `RESP.013` |
 | `TOBJ.005` | `RESP.001` |
 | `TOBJ.006` | `RESP.001` |
 | `TOBJ.007` | `RESP.006` |
 | `TOBJ.008` | `RESP.006` |
-| `TOBJ.009` | `RESP.006`, `RESP.011` |
+| `TOBJ.009` | `RESP.006` |
 | `TOBJ.010` | `RESP.006` |
-| `TOBJ.011` | `RESP.010` |
-| `TOBJ.012` | `RESP.010` |
-| `TOBJ.013` | `RESP.010` |
-| `TOBJ.014` | `RESP.010`, `RESP.012` |
-| `TOBJ.015` | `RESP.005`, `RESP.006`, `RESP.012` |
-| `TOBJ.016` | `RESP.005`, `RESP.006` |
-| `TOBJ.017` | `RESP.006`, `RESP.012` |
-| `TOBJ.018` | `RESP.004`, `RESP.005` |
-| `TOBJ.019` | `RESP.012` |
+| `TOBJ.011` | `RESP.009` |
+| `TOBJ.012` | `RESP.009` |
+| `TOBJ.013` | `RESP.009` |
+| `TOBJ.014` | `RESP.009`, `RESP.007` |
+| `TOBJ.015` | `RESP.010` |
+| `TOBJ.016` | `RESP.010` |
+| `TOBJ.017` | `RESP.007`, `RESP.012` |
+| `TOBJ.018` | `RESP.013` |
+| `TOBJ.019` | `RESP.007` |
 | `TOBJ.020` | `RESP.007` |
-| `TOBJ.021` | `RESP.005`, `RESP.012` |
-| `TOBJ.022` | `RESP.005`, `RESP.007`, `RESP.012` |
-| `TOBJ.023` | `RESP.005`, `RESP.007` |
-| `TOBJ.024` | `RESP.002`, `RESP.005` |
-| `TOBJ.025` | `RESP.008` |
-| `TOBJ.026` | `RESP.008` |
-| `TOBJ.027` | `RESP.008` |
-| `TOBJ.028` | `RESP.008` |
-| `TOBJ.029` | `RESP.008` |
-| `TOBJ.030` | `RESP.008` |
-| `TOBJ.031` | `RESP.008` |
-| `TOBJ.032` | `RESP.008` |
-| `TOBJ.033` | `RESP.009`, `RESP.011` |
-| `TOBJ.034` | `RESP.009`, `RESP.011` |
-| `TOBJ.035` | `RESP.009`, `RESP.011` |
-| `TOBJ.036` | `RESP.011`, `RESP.006` |
-| `TOBJ.037` | `RESP.009`, `RESP.011` |
-| `TOBJ.038` | `RESP.005`, `RESP.006`, `RESP.009` |
-| `TOBJ.039` | `RESP.005` |
-| `TOBJ.040` | `RESP.006`, `RESP.009`, `RESP.011` |
-| `TOBJ.041` | `RESP.005`, `RESP.009` |
-| `TOBJ.042` | `RESP.004`, `RESP.005` |
-| `TOBJ.043` | `RESP.014` |
-| `TOBJ.044` | `RESP.013` |
-| `TOBJ.045` | `RESP.006`, `RESP.007` |
-| `TOBJ.046` | `RESP.002`, `RESP.014` |
-| `TOBJ.047` | `RESP.002` |
-| `TOBJ.048` | `RESP.003` |
-| `TOBJ.049` | `RESP.003`, `RESP.007` |
+| `TOBJ.021` | `RESP.006` |
+| `TOBJ.022` | `RESP.006`, `RESP.007` |
+| `TOBJ.023` | `RESP.006` |
+| `TOBJ.024` | `RESP.003` |
+| `TOBJ.025` | `RESP.013` |
+| `TOBJ.026` | `RESP.013` |
+| `TOBJ.027` | `RESP.013` |
+| `TOBJ.028` | `RESP.013` |
+| `TOBJ.029` | `RESP.013` |
+| `TOBJ.030` | `RESP.013` |
+| `TOBJ.031` | `RESP.013` |
+| `TOBJ.032` | `RESP.013` |
+| `TOBJ.033` | `RESP.006` |
+| `TOBJ.034` | `RESP.006` |
+| `TOBJ.035` | `RESP.006` |
+| `TOBJ.036` | `RESP.006` |
+| `TOBJ.037` | `RESP.006` |
+| `TOBJ.038` | `RESP.006`, `RESP.013` |
+| `TOBJ.039` | `RESP.013` |
+| `TOBJ.040` | `RESP.006` |
+| `TOBJ.041` | `RESP.013` |
+| `TOBJ.042` | `RESP.013` |
+| `TOBJ.043` | `RESP.015` |
+| `TOBJ.044` | `RESP.016` |
+| `TOBJ.045` | `RESP.013` |
+| `TOBJ.046` | `RESP.004` |
+| `TOBJ.047` | `RESP.005` |
+| `TOBJ.048` | `RESP.008` |
+| `TOBJ.049` | `RESP.008`, `RESP.011` |
+| `TOBJ.050` | `RESP.002` |
+| `TOBJ.051` | `RESP.011` |
+| `TOBJ.052` | `RESP.014` |
+| `TOBJ.053` | `RESP.017` |
 
 ## Implementation Notes
 
 - Expose a domain model API: `TacticalObject`, `Observation`, `Track`, `Zone`, `Relationship`.
-- Represent source tactical object requirements, derived evidence requirements, and their relationships explicitly enough to preserve lineage and support bridge-mediated dependency fulfilment.
 - Use ECS-style sparse components for hot-path storage.
 - Attach provenance, confidence, and uncertainty to individual fields, not just the whole object.
 - Maintain dedicated indexes for object ID, external references, affiliation, type, time, and spatial lookup.
-- Store the normalized military classification fields (battle dimension, affiliation, role, status, echelon, flags, mobility) as the authoritative data. Treat 2525B symbol code generation as an output concern driven by those fields.
+- Store the normalized classification fields (battle dimension, affiliation, role, status, echelon, flags, mobility) as exploitation design data. Treat symbol code generation as an output concern.
+- Represent source tactical object requirements, derived evidence requirements, and their relationships explicitly enough to preserve lineage and support bridge-mediated dependency fulfilment.
+- Zone geometry and region reasoning are internal exploitation design; geographic feature authority belongs to the Geography component.

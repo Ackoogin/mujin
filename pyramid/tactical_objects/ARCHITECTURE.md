@@ -55,7 +55,7 @@ graph TB
         OS[ObjectStore<br/>ECS sparse-set storage]
         SI[SpatialIndex<br/>grid over WGS84]
         RI[RelationshipIndex<br/>hierarchy + tactics]
-        FE[FusionEngine<br/>correlate / merge / split]
+        FE[CorrelationEngine<br/>correlate / merge / split]
         ZE[ZoneEngine<br/>geometry + transitions]
         MC[MilClassEngine<br/>2525B field storage]
         QE[QueryEngine<br/>compound predicates]
@@ -102,7 +102,7 @@ graph LR
         AF[AffiliationComponent]
         KN[KinematicsComponent]
         MC2[MilClassComponent]
-        FC[FusionComponent]
+        FC[CorrelationComponent]
         GC[GeometryComponent]
         QC[QualityComponent]
         LC2[LifecycleComponent]
@@ -128,7 +128,7 @@ graph LR
     E3 --> LC2
 ```
 
-UUID-001 is a fully-tracked fused entity. UUID-002 is a geographic zone (no kinematics or fusion). UUID-003 is a sparse entity with only identity, classification, kinematics, military classification, and lifecycle.
+UUID-001 is a fully-tracked correlated entity. UUID-002 is a geographic zone (no kinematics or correlation). UUID-003 is a sparse entity with only identity, classification, kinematics, military classification, and lifecycle.
 
 ---
 
@@ -140,10 +140,10 @@ Entities enter the store through two distinct paths.
 flowchart TB
     subgraph Evidence Path
         OBS[Observation arrives<br/>on subscriber] --> DECODE_E[Codec decodes<br/>ObservationBatch]
-        DECODE_E --> FE2[FusionEngine<br/>correlate + score]
-        FE2 -->|score >= merge| MERGE[Attach to existing<br/>fused object]
-        FE2 -->|score < create| NEW[Create new track<br/>+ fused object]
-        FE2 -->|sustained incompatibility| SPLIT[Split fused object]
+        DECODE_E --> FE2[CorrelationEngine<br/>correlate + score]
+        FE2 -->|score >= merge| MERGE[Attach to existing<br/>correlated object]
+        FE2 -->|score < create| NEW[Create new track<br/>+ correlated object]
+        FE2 -->|sustained incompatibility| SPLIT[Split correlated object]
         MERGE --> STORE_E[ObjectStore<br/>update + reindex]
         NEW --> STORE_E
         SPLIT --> STORE_E
@@ -160,13 +160,13 @@ flowchart TB
     IDX --> EVENTS[EventBus emits<br/>created / updated / deleted]
 ```
 
-Evidence-path objects carry `fused` provenance and retain lineage to contributing observations and tracks. Direct-path objects carry `direct` provenance and bypass correlation.
+Evidence-path objects carry `correlated` provenance and retain lineage to contributing observations and tracks. Direct-path objects carry `direct` provenance and bypass correlation.
 
 Both paths feed the same `ObjectStore` and are queryable through the same `QueryEngine`.
 
 ---
 
-## 5. Fusion Pipeline Detail
+## 5. Correlation Pipeline Detail
 
 ```mermaid
 sequenceDiagram
@@ -174,7 +174,7 @@ sequenceDiagram
     participant Codec as TacticalObjectsCodec
     participant RT as TacticalObjectsRuntime
     participant SI as SpatialIndex
-    participant FE as FusionEngine
+    participant FE as CorrelationEngine
     participant OS as ObjectStore
     participant MC as MilClassEngine
     participant EB as EventBus
@@ -192,11 +192,11 @@ sequenceDiagram
             FE-->>RT: MergeResult
         else score < create_threshold
             FE->>OS: createTrack(obs)
-            FE->>OS: createFusedObject(track)
+            FE->>OS: createCorrelatedObject(track)
             FE->>MC: setClassification(new_id, obs hints)
             FE-->>RT: CreateResult
         else sustained incompatibility
-            FE->>OS: splitFusedObject(source_id, divergent_track)
+            FE->>OS: splitCorrelatedObject(source_id, divergent_track)
             FE-->>RT: SplitResult
         end
         RT->>SI: reindex(affected_id)
@@ -356,7 +356,7 @@ sequenceDiagram
     participant Codec as Codec
     participant RT as Runtime
     participant SI as SpatialIndex
-    participant FE as FusionEngine
+    participant FE as CorrelationEngine
     participant OS as ObjectStore
     participant MC as MilClassEngine
     participant EB as EventBus
@@ -372,7 +372,7 @@ sequenceDiagram
     RT->>FE: correlate(obs, [])
     FE->>OS: createTrack(obs)
     OS-->>FE: track_id = UUID-T1
-    FE->>OS: createFusedObject(track=UUID-T1)
+    FE->>OS: createCorrelatedObject(track=UUID-T1)
     OS-->>FE: object_id = UUID-001
     FE-->>RT: CreateResult{object_id=UUID-001}
     RT->>MC: setClassification(UUID-001, battle_dim=AIR, affiliation=UNKNOWN)
@@ -381,7 +381,7 @@ sequenceDiagram
     Comp->>Pub: publish event JSON<br/>{type: "object_created", id: "UUID-001"}
 ```
 
-**Result**: A new fused object UUID-001 exists in the store with battle dimension AIR, affiliation UNKNOWN, confidence 0.7, and a single track UUID-T1 backed by one observation.
+**Result**: A new correlated object UUID-001 exists in the store with battle dimension AIR, affiliation UNKNOWN, confidence 0.7, and a single track UUID-T1 backed by one observation.
 
 ---
 
@@ -396,7 +396,7 @@ sequenceDiagram
     participant Comp as TacticalObjectsComponent
     participant RT as Runtime
     participant SI as SpatialIndex
-    participant FE as FusionEngine
+    participant FE as CorrelationEngine
     participant OS as ObjectStore
     participant MC as MilClassEngine
     participant EB as EventBus
@@ -415,7 +415,7 @@ sequenceDiagram
     RT->>MC: updateClassification(UUID-001, affiliation=FRIENDLY)
     RT->>SI: reindex(UUID-001, 51.501, -1.199)
     RT->>EB: publish(ObjectUpdated{UUID-001})
-    RT->>EB: publish(ObjectFused{UUID-001, sources=["radar-1", "adsb"]})
+    RT->>EB: publish(ObjectCorrelated{UUID-001, sources=["radar-1", "adsb"]})
 ```
 
 **Result**: UUID-001 now has two source references (radar-1 and adsb), affiliation upgraded to FRIENDLY, higher confidence from dual-source corroboration, and lineage tracing back to both observations.
@@ -588,7 +588,7 @@ graph BT
         MC3[MilClassEngine]
         ZE2[ZoneEngine]
         RI2[RelationshipIndex]
-        FE3[FusionEngine]
+        FE3[CorrelationEngine]
         QE2[QueryEngine]
         IM2[InterestManager]
         TH2[TacticalHistory]
@@ -651,7 +651,7 @@ graph BT
 | ObjectComponents | `include/store/ObjectComponents.h` | (header-only) | (covered by ObjectStore tests) |
 | SpatialIndex | `include/spatial/SpatialIndex.h` | `src/spatial/SpatialIndex.cpp` | `Test_SpatialIndex.cpp` |
 | RelationshipIndex | `include/relationship/RelationshipIndex.h` | `src/relationship/RelationshipIndex.cpp` | `Test_RelationshipIndex.cpp` |
-| FusionEngine | `include/fusion/FusionEngine.h` | `src/fusion/FusionEngine.cpp` | `Test_FusionEngine.cpp` |
+| CorrelationEngine | `include/correlation/CorrelationEngine.h` | `src/correlation/CorrelationEngine.cpp` | `Test_CorrelationEngine.cpp` |
 | MilClassEngine | `include/milclass/MilClassEngine.h` | `src/milclass/MilClassEngine.cpp` | `Test_MilClassEngine.cpp` |
 | ZoneEngine | `include/zone/ZoneEngine.h` | `src/zone/ZoneEngine.cpp` | `Test_ZoneEngine.cpp` |
 | QueryEngine | `include/query/QueryEngine.h` | `src/query/QueryEngine.cpp` | `Test_QueryEngine.cpp` |

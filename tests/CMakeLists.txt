@@ -93,3 +93,68 @@ add_executable(test_executor_component test_executor_component.cpp)
 target_link_libraries(test_executor_component PRIVATE ame_core GTest::gtest_main)
 target_include_directories(test_executor_component PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 gtest_discover_tests(test_executor_component DISCOVERY_MODE PRE_TEST)
+
+# ---------------------------------------------------------------------------
+# Tactical Objects tests
+# ---------------------------------------------------------------------------
+set(TOBJ_TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tactical_objects)
+
+add_executable(test_tobj_types ${TOBJ_TEST_DIR}/Test_Types.cpp)
+target_link_libraries(test_tobj_types PRIVATE tactical_objects GTest::gtest_main)
+gtest_discover_tests(test_tobj_types DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_object_store ${TOBJ_TEST_DIR}/Test_ObjectStore.cpp)
+target_link_libraries(test_tobj_object_store PRIVATE tactical_objects GTest::gtest_main)
+gtest_discover_tests(test_tobj_object_store DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_milclass ${TOBJ_TEST_DIR}/Test_MilClassEngine.cpp)
+target_link_libraries(test_tobj_milclass PRIVATE tactical_objects GTest::gtest_main)
+gtest_discover_tests(test_tobj_milclass DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_spatial ${TOBJ_TEST_DIR}/Test_SpatialIndex.cpp)
+target_link_libraries(test_tobj_spatial PRIVATE tactical_objects GTest::gtest_main)
+gtest_discover_tests(test_tobj_spatial DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_zone ${TOBJ_TEST_DIR}/Test_ZoneEngine.cpp)
+target_link_libraries(test_tobj_zone PRIVATE tactical_objects GTest::gtest_main)
+gtest_discover_tests(test_tobj_zone DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_correlation ${TOBJ_TEST_DIR}/Test_CorrelationEngine.cpp)
+target_link_libraries(test_tobj_correlation PRIVATE tactical_objects GTest::gtest_main)
+gtest_discover_tests(test_tobj_correlation DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_query ${TOBJ_TEST_DIR}/Test_QueryEngine.cpp)
+target_link_libraries(test_tobj_query PRIVATE tactical_objects GTest::gtest_main)
+gtest_discover_tests(test_tobj_query DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_relationship ${TOBJ_TEST_DIR}/Test_RelationshipIndex.cpp)
+target_link_libraries(test_tobj_relationship PRIVATE tactical_objects GTest::gtest_main)
+gtest_discover_tests(test_tobj_relationship DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_component ${TOBJ_TEST_DIR}/Test_TacticalObjectsComponent.cpp)
+target_link_libraries(test_tobj_component PRIVATE tactical_objects_component GTest::gtest_main)
+gtest_discover_tests(test_tobj_component DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_component_robustness ${TOBJ_TEST_DIR}/Test_TacticalObjectsComponent_Robustness.cpp)
+target_link_libraries(test_tobj_component_robustness PRIVATE tactical_objects_component GTest::gtest_main)
+gtest_discover_tests(test_tobj_component_robustness DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_component_hlr ${TOBJ_TEST_DIR}/Test_TacticalObjectsComponent_HLR.cpp)
+target_link_libraries(test_tobj_component_hlr PRIVATE tactical_objects_component GTest::gtest_main)
+gtest_discover_tests(test_tobj_component_hlr DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_codec ${TOBJ_TEST_DIR}/Test_TacticalObjectsCodec.cpp)
+target_link_libraries(test_tobj_codec PRIVATE tactical_objects GTest::gtest_main)
+gtest_discover_tests(test_tobj_codec DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_interest ${TOBJ_TEST_DIR}/Test_InterestManager.cpp)
+target_link_libraries(test_tobj_interest PRIVATE tactical_objects GTest::gtest_main)
+gtest_discover_tests(test_tobj_interest DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_history ${TOBJ_TEST_DIR}/Test_TacticalHistory.cpp)
+target_link_libraries(test_tobj_history PRIVATE tactical_objects GTest::gtest_main)
+gtest_discover_tests(test_tobj_history DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_runtime ${TOBJ_TEST_DIR}/Test_Runtime.cpp)
+target_link_libraries(test_tobj_runtime PRIVATE tactical_objects GTest::gtest_main)
+gtest_discover_tests(test_tobj_runtime DISCOVERY_MODE PRE_TEST)

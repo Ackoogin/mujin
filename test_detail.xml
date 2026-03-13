@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="10" failures="4" disabled="0" errors="0" time="0.002" timestamp="2026-03-13T15:57:18.151" name="AllTests">
+  <testsuite name="TacticalObjectsComponentHLR" tests="10" failures="4" disabled="0" skipped="0" errors="0" time="0.002" timestamp="2026-03-13T15:57:18.151">
+    <testcase name="ExternalIdAndLineageFromCorrelation" file="D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp" line="34" status="run" result="completed" time="0.001" timestamp="2026-03-13T15:57:18.151" classname="TacticalObjectsComponentHLR">
+      <failure message="D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp:68&#x0A;Expected equality of these values:&#x0A;  resp.entries.size()&#x0A;    Which is: 2&#x0A;  1u&#x0A;    Which is: 1&#x0A;" type=""><![CDATA[D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp:68
+Expected equality of these values:
+  resp.entries.size()
+    Which is: 2
+  1u
+    Which is: 1
+]]></failure>
+    </testcase>
+    <testcase name="RegionQueryViaService" file="D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp" line="77" status="run" result="completed" time="0." timestamp="2026-03-13T15:57:18.152" classname="TacticalObjectsComponentHLR" />
+    <testcase name="TemporalQueryViaService" file="D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp" line="116" status="run" result="completed" time="0." timestamp="2026-03-13T15:57:18.152" classname="TacticalObjectsComponentHLR" />
+    <testcase name="BehaviorAndOperationalStateViaUpdate" file="D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp" line="145" status="run" result="completed" time="0." timestamp="2026-03-13T15:57:18.153" classname="TacticalObjectsComponentHLR" />
+    <testcase name="ConfidenceFromCorrelation" file="D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp" line="181" status="run" result="completed" time="0." timestamp="2026-03-13T15:57:18.153" classname="TacticalObjectsComponentHLR">
+      <failure message="D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp:204&#x0A;Expected: (qc) != (nullptr), actual: NULL vs (nullptr)&#x0A;" type=""><![CDATA[D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp:204
+Expected: (qc) != (nullptr), actual: NULL vs (nullptr)
+]]></failure>
+    </testcase>
+    <testcase name="FullMilitaryClassificationViaCreate" file="D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp" line="210" status="run" result="completed" time="0." timestamp="2026-03-13T15:57:18.153" classname="TacticalObjectsComponentHLR">
+      <failure message="D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp:243&#x0A;Expected equality of these values:&#x0A;  prof-&gt;echelon&#x0A;    Which is: 4-byte object &lt;00-00 00-00&gt;&#x0A;  Echelon::Company&#x0A;    Which is: 4-byte object &lt;04-00 00-00&gt;&#x0A;" type=""><![CDATA[D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp:243
+Expected equality of these values:
+  prof->echelon
+    Which is: 4-byte object <00-00 00-00>
+  Echelon::Company
+    Which is: 4-byte object <04-00 00-00>
+]]></failure>
+      <failure message="D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp:245&#x0A;Expected equality of these values:&#x0A;  prof-&gt;mobility&#x0A;    Which is: 4-byte object &lt;00-00 00-00&gt;&#x0A;  Mobility::Tracked&#x0A;    Which is: 4-byte object &lt;02-00 00-00&gt;&#x0A;" type=""><![CDATA[D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp:245
+Expected equality of these values:
+  prof->mobility
+    Which is: 4-byte object <00-00 00-00>
+  Mobility::Tracked
+    Which is: 4-byte object <02-00 00-00>
+]]></failure>
+    </testcase>
+    <testcase name="SourceSidcPreserved" file="D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp" line="250" status="run" result="completed" time="0." timestamp="2026-03-13T15:57:18.153" classname="TacticalObjectsComponentHLR">
+      <failure message="D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp:273&#x0A;Value of: prof.has_value()&#x0A;  Actual: false&#x0A;Expected: true&#x0A;" type=""><![CDATA[D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp:273
+Value of: prof.has_value()
+  Actual: false
+Expected: true
+]]></failure>
+    </testcase>
+    <testcase name="SparseObjectCreation" file="D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp" line="279" status="run" result="completed" time="0." timestamp="2026-03-13T15:57:18.153" classname="TacticalObjectsComponentHLR" />
+    <testcase name="AllObjectTypesViaCreate" file="D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp" line="306" status="run" result="completed" time="0." timestamp="2026-03-13T15:57:18.153" classname="TacticalObjectsComponentHLR" />
+    <testcase name="QueryBySourceRef" file="D:\Dev\repo\mujin\tests\tactical_objects\Test_TacticalObjectsComponent_HLR.cpp" line="340" status="run" result="completed" time="0." timestamp="2026-03-13T15:57:18.153" classname="TacticalObjectsComponentHLR" />
+  </testsuite>
+</testsuites>

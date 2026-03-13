@@ -409,6 +409,36 @@ pcl_status_t pcl_executor_dispatch_incoming(pcl_executor_t*  e,
   return dispatch_incoming_now(e, topic, msg);
 }
 
+static struct pcl_port_t* find_service(pcl_executor_t* e, const char* name) {
+  uint32_t ci, pi;
+  for (ci = 0; ci < e->container_count; ++ci) {
+    pcl_container_t* c = e->containers[ci];
+    for (pi = 0; pi < c->port_count; ++pi) {
+      struct pcl_port_t* port = &c->ports[pi];
+      if (port->type == PCL_PORT_SERVICE &&
+          strcmp(port->name, name) == 0 &&
+          port->svc_handler != NULL) {
+        return port;
+      }
+    }
+  }
+  return NULL;
+}
+
+pcl_status_t pcl_executor_invoke_service(pcl_executor_t*  e,
+                                         const char*      service_name,
+                                         const pcl_msg_t* request,
+                                         pcl_msg_t*       response) {
+  struct pcl_port_t* port;
+
+  if (!e || !service_name || !request || !response) return PCL_ERR_INVALID;
+
+  port = find_service(e, service_name);
+  if (!port) return PCL_ERR_NOT_FOUND;
+
+  return port->svc_handler(port->owner, request, response, port->svc_user_data);
+}
+
 pcl_status_t pcl_executor_post_incoming(pcl_executor_t*  e,
                                         const char*      topic,
                                         const pcl_msg_t* msg) {

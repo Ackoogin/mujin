@@ -84,6 +84,18 @@ pcl_status_t pcl_executor_post_incoming(pcl_executor_t*  e,
                                         const char*      topic,
                                         const pcl_msg_t* msg);
 
+// ── Intra-process service invocation (for testing / direct call) ────────
+
+/// \brief Invoke a service by name, dispatching to the registered handler.
+///
+/// Searches all containers for a service port matching the given name.
+/// Caller must ensure response->data points to a buffer; handler populates it.
+/// Safe to call from the executor thread only.
+pcl_status_t pcl_executor_invoke_service(pcl_executor_t*  e,
+                                         const char*      service_name,
+                                         const pcl_msg_t* request,
+                                         pcl_msg_t*       response);
+
 #ifdef __cplusplus
 }
 #endif

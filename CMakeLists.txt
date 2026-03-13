@@ -152,6 +152,11 @@ add_subdirectory(src/pcl)
 add_subdirectory(pyramid/core)
 
 # ---------------------------------------------------------------------------
+# PYRAMID tactical_objects library
+# ---------------------------------------------------------------------------
+add_subdirectory(pyramid/tactical_objects)
+
+# ---------------------------------------------------------------------------
 # Core library (ROS-agnostic)
 # ---------------------------------------------------------------------------
 add_subdirectory(src)
