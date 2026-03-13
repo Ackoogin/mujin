@@ -19,6 +19,11 @@ static pcl_msg_t makeMsg(const std::string& str) {
   return m;
 }
 
+static void dispatchObservation(pcl::Executor& exec, const std::string& payload) {
+  pcl_msg_t msg = makeMsg(payload);
+  exec.dispatchIncoming("observation_ingress", &msg);
+}
+
 static void invokeService(pcl_executor_t* e, const char* svc,
                           const std::string& req_str,
                           char* resp_buf, size_t resp_len, pcl_msg_t* resp) {
@@ -49,7 +54,7 @@ TEST(TacticalObjectsComponentHLR, ExternalIdAndLineageFromCorrelation) {
   batch1.observations.push_back(obs1);
 
   auto j1 = TacticalObjectsCodec::encodeObservationBatch(batch1);
-  exec.dispatchIncoming("observation_ingress", &makeMsg(j1.dump()));
+  dispatchObservation(exec, j1.dump());
 
   ObservationBatch batch2;
   Observation obs2;
@@ -62,7 +67,7 @@ TEST(TacticalObjectsComponentHLR, ExternalIdAndLineageFromCorrelation) {
   batch2.observations.push_back(obs2);
 
   auto j2 = TacticalObjectsCodec::encodeObservationBatch(batch2);
-  exec.dispatchIncoming("observation_ingress", &makeMsg(j2.dump()));
+  dispatchObservation(exec, j2.dump());
 
   auto resp = comp.runtime().query(QueryRequest());
   ASSERT_GE(resp.entries.size(), 1u);
@@ -204,7 +209,7 @@ TEST(TacticalObjectsComponentHLR, ConfidenceFromCorrelation) {
   batch.observations.push_back(obs);
 
   auto j = TacticalObjectsCodec::encodeObservationBatch(batch);
-  exec.dispatchIncoming("observation_ingress", &makeMsg(j.dump()));
+  dispatchObservation(exec, j.dump());
 
   auto qresp = comp.runtime().query(QueryRequest());
   ASSERT_GE(qresp.entries.size(), 1u);
@@ -277,7 +282,7 @@ TEST(TacticalObjectsComponentHLR, SourceSidcPreserved) {
   batch.observations.push_back(obs);
 
   auto j = TacticalObjectsCodec::encodeObservationBatch(batch);
-  exec.dispatchIncoming("observation_ingress", &makeMsg(j.dump()));
+  dispatchObservation(exec, j.dump());
 
   auto qresp = comp.runtime().query(QueryRequest());
   ASSERT_GE(qresp.entries.size(), 1u);
@@ -370,7 +375,7 @@ TEST(TacticalObjectsComponentHLR, QueryBySourceRef) {
   batch.observations.push_back(obs);
 
   auto j = TacticalObjectsCodec::encodeObservationBatch(batch);
-  exec.dispatchIncoming("observation_ingress", &makeMsg(j.dump()));
+  dispatchObservation(exec, j.dump());
 
   QueryRequest qreq;
   qreq.by_source_system = "tracker-a";
