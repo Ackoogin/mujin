@@ -158,3 +158,7 @@ gtest_discover_tests(test_tobj_history DISCOVERY_MODE PRE_TEST)
 add_executable(test_tobj_runtime ${TOBJ_TEST_DIR}/Test_Runtime.cpp)
 target_link_libraries(test_tobj_runtime PRIVATE tactical_objects GTest::gtest_main)
 gtest_discover_tests(test_tobj_runtime DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_zone_perf ${TOBJ_TEST_DIR}/Test_ZonePerformance.cpp)
+target_link_libraries(test_tobj_zone_perf PRIVATE tactical_objects GTest::gtest_main)
+gtest_discover_tests(test_tobj_zone_perf DISCOVERY_MODE PRE_TEST)
