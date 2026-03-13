@@ -45,6 +45,10 @@ public:
   static nlohmann::json encodeZoneDefinition(const ZoneDefinition& def);
   static ZoneDefinition decodeZoneDefinition(const nlohmann::json& j);
 
+  // --- MilClassProfile ---
+  static nlohmann::json encodeMilClassProfile(const MilClassProfile& p);
+  static MilClassProfile decodeMilClassProfile(const nlohmann::json& j);
+
   // --- QueryRequest / QueryResponse ---
   static nlohmann::json encodeQueryRequest(const QueryRequest& req);
   static QueryRequest decodeQueryRequest(const nlohmann::json& j);
@@ -62,8 +66,6 @@ private:
 
   static nlohmann::json encodeSourceRef(const SourceRef& sr);
   static SourceRef decodeSourceRef(const nlohmann::json& j);
-  static nlohmann::json encodeMilClassProfile(const MilClassProfile& p);
-  static MilClassProfile decodeMilClassProfile(const nlohmann::json& j);
 };
 
 } // namespace tactical_objects

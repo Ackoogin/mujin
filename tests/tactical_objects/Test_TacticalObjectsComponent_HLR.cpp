@@ -1,6 +1,7 @@
 /// \file Test_TacticalObjectsComponent_HLR.cpp
 /// \brief PCL component tests with explicit HLR (TOBJ/RESP) traceability.
-/// Ensures 100% coverage of HLR requirements exercisable through the component.
+/// All assertions are made exclusively through data ports (services and
+/// subscribers) — no direct access to component internals or runtime.
 #include <gtest/gtest.h>
 #include <TacticalObjectsComponent.h>
 #include <TacticalObjectsCodec.h>
@@ -10,6 +11,10 @@
 
 using namespace tactical_objects;
 using namespace pyramid::core::uuid;
+
+// ---------------------------------------------------------------------------
+// Port helpers
+// ---------------------------------------------------------------------------
 
 static pcl_msg_t makeMsg(const std::string& str) {
   pcl_msg_t m = {};
@@ -33,9 +38,49 @@ static void invokeService(pcl_executor_t* e, const char* svc,
   ASSERT_EQ(pcl_executor_invoke_service(e, svc, &req, resp), PCL_OK);
 }
 
+/// Helper: invoke create_object and return the object_id string.
+static std::string createObjectViaPort(pcl_executor_t* e,
+                                       const ObjectDefinition& def,
+                                       char* buf, size_t buf_len) {
+  auto j = TacticalObjectsCodec::encodeObjectDefinition(def);
+  pcl_msg_t resp = {};
+  invokeService(e, "create_object", j.dump(), buf, buf_len, &resp);
+  return nlohmann::json::parse(
+    std::string(static_cast<const char*>(resp.data), resp.size))
+    .value("object_id", "");
+}
+
+/// Helper: invoke query and return parsed JSON response.
+static nlohmann::json queryViaPort(pcl_executor_t* e,
+                                   const QueryRequest& req,
+                                   char* buf, size_t buf_len) {
+  auto j_req = TacticalObjectsCodec::encodeQueryRequest(req);
+  pcl_msg_t resp = {};
+  invokeService(e, "query", j_req.dump(), buf, buf_len, &resp);
+  return nlohmann::json::parse(
+    std::string(static_cast<const char*>(resp.data), resp.size));
+}
+
+/// Helper: invoke get_object and return parsed JSON response.
+static nlohmann::json getObjectViaPort(pcl_executor_t* e,
+                                       const std::string& id_str,
+                                       char* buf, size_t buf_len) {
+  nlohmann::json req;
+  req["object_id"] = id_str;
+  pcl_msg_t resp = {};
+  invokeService(e, "get_object", req.dump(), buf, buf_len, &resp);
+  return nlohmann::json::parse(
+    std::string(static_cast<const char*>(resp.data), resp.size));
+}
+
+// ---------------------------------------------------------------------------
+// HLR Tests — data-port only
+// ---------------------------------------------------------------------------
+
 ///< TOBJ.004: External ID association. TOBJ.020: Evidence lineage.
 ///< TOBJ.022: Entity integration. RESP.007: Object confidence. RESP.009: Relationships.
-///< Two observations from same source merge; source_refs and lineage retained.
+///< Two observations from the same source merge; source_refs and lineage are
+///< verified entirely through the get_object service port.
 TEST(TacticalObjectsComponentHLR, ExternalIdAndLineageFromCorrelation) {
   TacticalObjectsComponent comp;
   comp.configure();
@@ -52,9 +97,7 @@ TEST(TacticalObjectsComponentHLR, ExternalIdAndLineageFromCorrelation) {
   obs1.source_ref.source_system = "radar";
   obs1.source_ref.source_entity_id = "T-001";
   batch1.observations.push_back(obs1);
-
-  auto j1 = TacticalObjectsCodec::encodeObservationBatch(batch1);
-  dispatchObservation(exec, j1.dump());
+  dispatchObservation(exec, TacticalObjectsCodec::encodeObservationBatch(batch1).dump());
 
   ObservationBatch batch2;
   Observation obs2;
@@ -65,24 +108,28 @@ TEST(TacticalObjectsComponentHLR, ExternalIdAndLineageFromCorrelation) {
   obs2.source_ref.source_system = "radar";
   obs2.source_ref.source_entity_id = "T-001";
   batch2.observations.push_back(obs2);
+  dispatchObservation(exec, TacticalObjectsCodec::encodeObservationBatch(batch2).dump());
 
-  auto j2 = TacticalObjectsCodec::encodeObservationBatch(batch2);
-  dispatchObservation(exec, j2.dump());
+  // Retrieve all objects via the query service port.
+  char qbuf[8192];
+  auto jq = queryViaPort(exec.handle(), QueryRequest{}, qbuf, sizeof(qbuf));
+  ASSERT_GE(jq["entries"].size(), 1u);
 
-  auto resp = comp.runtime().query(QueryRequest());
-  ASSERT_GE(resp.entries.size(), 1u);
-  UUIDKey correlated_id;
-  for (const auto& e : resp.entries) {
-    if (comp.runtime().store()->correlation().get(e.id)) {
-      correlated_id = e.id;
+  // Find the correlated entity via the get_object service port.
+  bool found_correlated = false;
+  char gbuf[4096];
+  for (auto& entry : jq["entries"]) {
+    auto gdata = getObjectViaPort(exec.handle(),
+                                  entry["id"].get<std::string>(),
+                                  gbuf, sizeof(gbuf));
+    if (gdata.value("has_correlation", false)) {
+      EXPECT_GE(gdata.value("source_refs_count", 0), 1);
+      EXPECT_GE(gdata.value("contributing_observations_count", 0), 1);
+      found_correlated = true;
       break;
     }
   }
-  ASSERT_FALSE(correlated_id.isNull());
-  const auto* cc = comp.runtime().store()->correlation().get(correlated_id);
-  ASSERT_NE(cc, nullptr);
-  EXPECT_GE(cc->source_refs.size(), 1u);
-  EXPECT_GE(cc->contributing_observations.size(), 1u);
+  ASSERT_TRUE(found_correlated);
 }
 
 ///< TOBJ.009: Region query. TOBJ.036: Zone relationship queries. TOBJ.040: Spatial indexing.
@@ -94,29 +141,28 @@ TEST(TacticalObjectsComponentHLR, RegionQueryViaService) {
   pcl::Executor exec;
   exec.add(comp);
 
+  char cbuf[1024];
+
   ObjectDefinition def;
   def.type = ObjectType::Platform;
   def.position = Position{51.5, 0.0, 0};
   def.affiliation = Affiliation::Friendly;
-  auto id1 = comp.runtime().createObject(def);
+  std::string id1_str = createObjectViaPort(exec.handle(), def, cbuf, sizeof(cbuf));
+  ASSERT_FALSE(id1_str.empty());
 
   def.position = Position{52.5, 1.0, 0};
-  auto id2 = comp.runtime().createObject(def);
+  std::string id2_str = createObjectViaPort(exec.handle(), def, cbuf, sizeof(cbuf));
+  ASSERT_FALSE(id2_str.empty());
 
   QueryRequest qreq;
   qreq.by_region = BoundingBox{51.0, 52.0, -0.5, 0.5};
-  auto j_req = TacticalObjectsCodec::encodeQueryRequest(qreq);
-  char resp_buf[4096];
-  pcl_msg_t resp = {};
-  invokeService(exec.handle(), "query", j_req.dump(), resp_buf, sizeof(resp_buf),
-               &resp);
-
-  std::string resp_str(static_cast<const char*>(resp.data), resp.size);
-  auto jr = nlohmann::json::parse(resp_str);
+  char qbuf[4096];
+  auto jr = queryViaPort(exec.handle(), qreq, qbuf, sizeof(qbuf));
   ASSERT_GE(jr["entries"].size(), 1u);
+
   bool found_in_region = false;
   for (auto& e : jr["entries"]) {
-    if (e["id"].get<std::string>() == UUIDHelper::toString(id1.uuid)) {
+    if (e["id"].get<std::string>() == id1_str) {
       found_in_region = true;
       break;
     }
@@ -126,6 +172,8 @@ TEST(TacticalObjectsComponentHLR, RegionQueryViaService) {
 
 ///< TOBJ.010: Temporal query. TOBJ.017: State freshness.
 ///< RESP.006: Query with freshness filter.
+///< An observation with observed_at=100.0 sets freshness; query with
+///< max_age=200 / current_time=150 (age=50) must return the entity.
 TEST(TacticalObjectsComponentHLR, TemporalQueryViaService) {
   TacticalObjectsComponent comp;
   comp.configure();
@@ -133,23 +181,21 @@ TEST(TacticalObjectsComponentHLR, TemporalQueryViaService) {
   pcl::Executor exec;
   exec.add(comp);
 
-  ObjectDefinition def;
-  def.type = ObjectType::Platform;
-  def.position = Position{51.5, 0.0, 0};
-  auto id = comp.runtime().createObject(def);
-  comp.runtime().store()->quality().set(id, QualityComponent{0.8, 0.9, 100.0});
+  // Ingest via subscriber — sets freshness_timestamp = observed_at.
+  ObservationBatch batch;
+  Observation obs;
+  obs.observation_id = UUIDHelper::generateV4();
+  obs.position = Position{51.5, 0.0, 0};
+  obs.observed_at = 100.0;
+  obs.confidence = 0.8;
+  batch.observations.push_back(obs);
+  dispatchObservation(exec, TacticalObjectsCodec::encodeObservationBatch(batch).dump());
 
   QueryRequest qreq;
   qreq.max_age_seconds = 200.0;
-  qreq.current_time = 150.0;
-  auto j_req = TacticalObjectsCodec::encodeQueryRequest(qreq);
-  char resp_buf[4096];
-  pcl_msg_t resp = {};
-  invokeService(exec.handle(), "query", j_req.dump(), resp_buf, sizeof(resp_buf),
-               &resp);
-
-  std::string resp_str(static_cast<const char*>(resp.data), resp.size);
-  auto jr = nlohmann::json::parse(resp_str);
+  qreq.current_time = 150.0;  // age = 50 < 200 → entity must match
+  char qbuf[4096];
+  auto jr = queryViaPort(exec.handle(), qreq, qbuf, sizeof(qbuf));
   ASSERT_GE(jr["entries"].size(), 1u);
 }
 
@@ -165,29 +211,24 @@ TEST(TacticalObjectsComponentHLR, BehaviorAndOperationalStateViaUpdate) {
   ObjectDefinition def;
   def.type = ObjectType::Platform;
   def.position = Position{51.5, 0.0, 0};
-  auto j_create = TacticalObjectsCodec::encodeObjectDefinition(def);
-  char resp_buf[1024];
-  pcl_msg_t resp = {};
-  invokeService(exec.handle(), "create_object", j_create.dump(),
-               resp_buf, sizeof(resp_buf), &resp);
-
-  std::string id_str = nlohmann::json::parse(
-    std::string(static_cast<const char*>(resp.data), resp.size)).value("object_id", "");
+  char cbuf[1024];
+  std::string id_str = createObjectViaPort(exec.handle(), def, cbuf, sizeof(cbuf));
+  ASSERT_FALSE(id_str.empty());
 
   nlohmann::json j_upd;
   j_upd["object_id"] = id_str;
   j_upd["behavior_pattern"] = "loitering";
   j_upd["operational_state"] = "airborne";
+  char ubuf[256];
+  pcl_msg_t uresp = {};
+  invokeService(exec.handle(), "update_object", j_upd.dump(), ubuf, sizeof(ubuf), &uresp);
 
-  invokeService(exec.handle(), "update_object", j_upd.dump(),
-                resp_buf, sizeof(resp_buf), &resp);
-
-  auto parsed = UUIDHelper::fromString(id_str);
-  ASSERT_TRUE(parsed.second);
-  auto bc = comp.runtime().getBehavior(UUIDKey(parsed.first));
-  ASSERT_TRUE(bc.has_value());
-  EXPECT_EQ(bc->behavior_pattern, "loitering");
-  EXPECT_EQ(bc->operational_state, "airborne");
+  // Verify behavior through the get_object service port.
+  char gbuf[2048];
+  auto gdata = getObjectViaPort(exec.handle(), id_str, gbuf, sizeof(gbuf));
+  ASSERT_TRUE(gdata.value("has_behavior", false));
+  EXPECT_EQ(gdata["behavior"].value("behavior_pattern", ""), "loitering");
+  EXPECT_EQ(gdata["behavior"].value("operational_state", ""), "airborne");
 }
 
 ///< TOBJ.019: Confidence tracking. RESP.007: Determine object information confidence.
@@ -207,24 +248,31 @@ TEST(TacticalObjectsComponentHLR, ConfidenceFromCorrelation) {
   obs.source_ref.source_system = "sensor";
   obs.source_ref.source_entity_id = "O1";
   batch.observations.push_back(obs);
+  dispatchObservation(exec, TacticalObjectsCodec::encodeObservationBatch(batch).dump());
 
-  auto j = TacticalObjectsCodec::encodeObservationBatch(batch);
-  dispatchObservation(exec, j.dump());
+  // Retrieve all objects via the query service port.
+  char qbuf[4096];
+  auto jq = queryViaPort(exec.handle(), QueryRequest{}, qbuf, sizeof(qbuf));
+  ASSERT_GE(jq["entries"].size(), 1u);
 
-  auto qresp = comp.runtime().query(QueryRequest());
-  ASSERT_GE(qresp.entries.size(), 1u);
-  const QualityComponent* qc = nullptr;
-  for (const auto& e : qresp.entries) {
-    qc = comp.runtime().store()->quality().get(e.id);
-    if (qc) break;
+  // Find the correlated entity with a confidence value via get_object.
+  bool found_confidence = false;
+  char gbuf[2048];
+  for (auto& entry : jq["entries"]) {
+    auto gdata = getObjectViaPort(exec.handle(),
+                                  entry["id"].get<std::string>(),
+                                  gbuf, sizeof(gbuf));
+    if (gdata.contains("confidence")) {
+      EXPECT_DOUBLE_EQ(gdata.value("confidence", 0.0), 0.75);
+      found_confidence = true;
+      break;
+    }
   }
-  ASSERT_NE(qc, nullptr);
-  EXPECT_DOUBLE_EQ(qc->confidence, 0.75);
+  ASSERT_TRUE(found_confidence);
 }
 
 ///< TOBJ.028: Status. TOBJ.029: Echelon. TOBJ.030: Indicator flags. TOBJ.031: Mobility.
 ///< RESP.013: Capture classification details.
-///< Note: Codec supports battle_dim, affiliation, role, hq, task_force, feint_dummy, installation.
 TEST(TacticalObjectsComponentHLR, FullMilitaryClassificationViaCreate) {
   TacticalObjectsComponent comp;
   comp.configure();
@@ -242,24 +290,20 @@ TEST(TacticalObjectsComponentHLR, FullMilitaryClassificationViaCreate) {
   def.mil_class.hq = true;
   def.mil_class.task_force = true;
 
-  auto j = TacticalObjectsCodec::encodeObjectDefinition(def);
-  char resp_buf[1024];
-  pcl_msg_t resp = {};
-  invokeService(exec.handle(), "create_object", j.dump(),
-               resp_buf, sizeof(resp_buf), &resp);
+  char cbuf[1024];
+  std::string id_str = createObjectViaPort(exec.handle(), def, cbuf, sizeof(cbuf));
+  ASSERT_FALSE(id_str.empty());
 
-  std::string id_str = nlohmann::json::parse(
-    std::string(static_cast<const char*>(resp.data), resp.size)).value("object_id", "");
-  auto parsed = UUIDHelper::fromString(id_str);
-  ASSERT_TRUE(parsed.second);
-
-  auto prof = comp.runtime().getMilClass(UUIDKey(parsed.first));
-  ASSERT_TRUE(prof.has_value());
-  EXPECT_EQ(prof->battle_dim, BattleDimension::Ground);
-  EXPECT_EQ(prof->affiliation, Affiliation::Friendly);
-  EXPECT_EQ(prof->role, "armor");
-  EXPECT_TRUE(prof->hq);
-  EXPECT_TRUE(prof->task_force);
+  // Verify classification through the get_object service port.
+  char gbuf[2048];
+  auto gdata = getObjectViaPort(exec.handle(), id_str, gbuf, sizeof(gbuf));
+  ASSERT_TRUE(gdata.value("found", false));
+  ASSERT_TRUE(gdata.contains("mil_class"));
+  EXPECT_EQ(gdata["mil_class"].value("battle_dim", ""), "Ground");
+  EXPECT_EQ(gdata["mil_class"].value("affiliation", ""), "Friendly");
+  EXPECT_EQ(gdata["mil_class"].value("role", ""), "armor");
+  EXPECT_TRUE(gdata["mil_class"].value("hq", false));
+  EXPECT_TRUE(gdata["mil_class"].value("task_force", false));
 }
 
 ///< TOBJ.032: Source symbol code preservation.
@@ -280,23 +324,33 @@ TEST(TacticalObjectsComponentHLR, SourceSidcPreserved) {
   obs.source_ref.source_system = "tracks";
   obs.source_ref.source_entity_id = "S1";
   batch.observations.push_back(obs);
+  dispatchObservation(exec, TacticalObjectsCodec::encodeObservationBatch(batch).dump());
 
-  auto j = TacticalObjectsCodec::encodeObservationBatch(batch);
-  dispatchObservation(exec, j.dump());
+  // Retrieve all objects via the query service port.
+  char qbuf[4096];
+  auto jq = queryViaPort(exec.handle(), QueryRequest{}, qbuf, sizeof(qbuf));
+  ASSERT_GE(jq["entries"].size(), 1u);
 
-  auto qresp = comp.runtime().query(QueryRequest());
-  ASSERT_GE(qresp.entries.size(), 1u);
-  tl::optional<MilClassProfile> prof;
-  for (const auto& e : qresp.entries) {
-    prof = comp.runtime().getMilClass(e.id);
-    if (prof.has_value() && !prof->source_sidc.empty()) break;
+  // Find the entity carrying the source SIDC via get_object.
+  bool found_sidc = false;
+  char gbuf[2048];
+  for (auto& entry : jq["entries"]) {
+    auto gdata = getObjectViaPort(exec.handle(),
+                                  entry["id"].get<std::string>(),
+                                  gbuf, sizeof(gbuf));
+    if (gdata.contains("mil_class") &&
+        !gdata["mil_class"].value("source_sidc", "").empty()) {
+      EXPECT_EQ(gdata["mil_class"].value("source_sidc", ""), "SFGPUCIZ----");
+      found_sidc = true;
+      break;
+    }
   }
-  ASSERT_TRUE(prof.has_value());
-  EXPECT_EQ(prof->source_sidc, "SFGPUCIZ----");
+  ASSERT_TRUE(found_sidc);
 }
 
 ///< TOBJ.039: Sparse component storage.
-///< Entity with minimal fields does not populate unused components.
+///< Entity with minimal fields does not populate unused components;
+///< verified through the get_object service port presence flags.
 TEST(TacticalObjectsComponentHLR, SparseObjectCreation) {
   TacticalObjectsComponent comp;
   comp.configure();
@@ -306,21 +360,16 @@ TEST(TacticalObjectsComponentHLR, SparseObjectCreation) {
 
   ObjectDefinition def;
   def.type = ObjectType::Point;
-  auto j = TacticalObjectsCodec::encodeObjectDefinition(def);
-  char resp_buf[1024];
-  pcl_msg_t resp = {};
-  invokeService(exec.handle(), "create_object", j.dump(),
-               resp_buf, sizeof(resp_buf), &resp);
+  char cbuf[1024];
+  std::string id_str = createObjectViaPort(exec.handle(), def, cbuf, sizeof(cbuf));
+  ASSERT_FALSE(id_str.empty());
 
-  std::string id_str = nlohmann::json::parse(
-    std::string(static_cast<const char*>(resp.data), resp.size)).value("object_id", "");
-  auto parsed = UUIDHelper::fromString(id_str);
-  ASSERT_TRUE(parsed.second);
-  UUIDKey id(parsed.first);
-
-  EXPECT_FALSE(comp.runtime().store()->identities().has(id));
-  EXPECT_FALSE(comp.runtime().store()->correlation().has(id));
-  EXPECT_FALSE(comp.runtime().store()->behaviors().has(id));
+  char gbuf[2048];
+  auto gdata = getObjectViaPort(exec.handle(), id_str, gbuf, sizeof(gbuf));
+  ASSERT_TRUE(gdata.value("found", false));
+  EXPECT_FALSE(gdata.value("has_identity", true));
+  EXPECT_FALSE(gdata.value("has_correlation", true));
+  EXPECT_FALSE(gdata.value("has_behavior", true));
 }
 
 ///< TOBJ.001: All object types supported.
@@ -338,22 +387,18 @@ TEST(TacticalObjectsComponentHLR, AllObjectTypesViaCreate) {
     ObjectType::Area, ObjectType::Zone
   };
 
-  char resp_buf[1024];
-  pcl_msg_t resp = {};
+  char cbuf[1024];
   for (ObjectType t : types) {
     ObjectDefinition def;
     def.type = t;
     def.position = Position{51.0, 0.0, 0};
-    auto j = TacticalObjectsCodec::encodeObjectDefinition(def);
-    invokeService(exec.handle(), "create_object", j.dump(),
-                  resp_buf, sizeof(resp_buf), &resp);
-    std::string id_str = nlohmann::json::parse(
-      std::string(static_cast<const char*>(resp.data), resp.size)).value("object_id", "");
+    std::string id_str = createObjectViaPort(exec.handle(), def, cbuf, sizeof(cbuf));
     ASSERT_FALSE(id_str.empty());
   }
 
-  auto q = comp.runtime().query(QueryRequest());
-  ASSERT_GE(q.entries.size(), static_cast<size_t>(types.size()));
+  char qbuf[8192];
+  auto jq = queryViaPort(exec.handle(), QueryRequest{}, qbuf, sizeof(qbuf));
+  ASSERT_GE(jq["entries"].size(), static_cast<size_t>(types.size()));
 }
 
 ///< TOBJ.008: Query by external source reference.
@@ -373,19 +418,12 @@ TEST(TacticalObjectsComponentHLR, QueryBySourceRef) {
   obs.source_ref.source_system = "tracker-a";
   obs.source_ref.source_entity_id = "ext-42";
   batch.observations.push_back(obs);
-
-  auto j = TacticalObjectsCodec::encodeObservationBatch(batch);
-  dispatchObservation(exec, j.dump());
+  dispatchObservation(exec, TacticalObjectsCodec::encodeObservationBatch(batch).dump());
 
   QueryRequest qreq;
   qreq.by_source_system = "tracker-a";
   qreq.by_source_entity_id = "ext-42";
-  auto j_req = TacticalObjectsCodec::encodeQueryRequest(qreq);
-  char resp_buf[4096];
-  pcl_msg_t resp = {};
-  invokeService(exec.handle(), "query", j_req.dump(), resp_buf, sizeof(resp_buf),
-               &resp);
-  std::string resp_str(static_cast<const char*>(resp.data), resp.size);
-  auto jr = nlohmann::json::parse(resp_str);
+  char qbuf[4096];
+  auto jr = queryViaPort(exec.handle(), qreq, qbuf, sizeof(qbuf));
   ASSERT_GE(jr["entries"].size(), 1u);
 }
