@@ -125,3 +125,57 @@ TEST(RelationshipIndex, ConfidenceAndProvenanceRetained) {
   ASSERT_EQ(got->source, "sigint-analysis");
   ASSERT_DOUBLE_EQ(got->established_at, 1700000000.0);
 }
+
+///< REQ_TACTICAL_OBJECTS_053: Relationship removal cleans all indexes.
+TEST(RelationshipIndex, RemoveRelationshipCleansAllIndexes) {
+  RelationshipIndex idx;
+  auto subj = makeKey();
+  auto obj  = makeKey();
+  auto rel_id = makeKey();
+
+  RelationshipRecord rec;
+  rec.relationship_id = rel_id;
+  rec.subject_id = subj;
+  rec.object_id  = obj;
+  rec.type = RelationshipType::Escorting;
+  idx.insert(rec);
+
+  // Verify present before removal
+  ASSERT_NE(idx.get(rel_id), nullptr);
+  ASSERT_EQ(idx.bySubject(subj).size(), 1u);
+
+  // remove() returns true and cleans subject/object indexes
+  ASSERT_TRUE(idx.remove(rel_id));
+  ASSERT_EQ(idx.get(rel_id), nullptr);
+  ASSERT_EQ(idx.bySubject(subj).size(), 0u);
+  ASSERT_EQ(idx.byObject(obj).size(), 0u);
+
+  // remove() returns false for unknown ID
+  ASSERT_FALSE(idx.remove(makeKey()));
+}
+
+///< REQ_TACTICAL_OBJECTS_053: byEntity combines subject and object indexes.
+TEST(RelationshipIndex, ByEntityCombinesSubjectAndObject) {
+  RelationshipIndex idx;
+  auto entityA = makeKey();
+  auto entityB = makeKey();
+  auto entityC = makeKey();
+
+  // entityA is subject of r1, object of r2
+  RelationshipRecord r1;
+  r1.relationship_id = makeKey();
+  r1.subject_id = entityA;
+  r1.object_id  = entityB;
+  r1.type = RelationshipType::Tracking;
+  idx.insert(r1);
+
+  RelationshipRecord r2;
+  r2.relationship_id = makeKey();
+  r2.subject_id = entityC;
+  r2.object_id  = entityA;
+  r2.type = RelationshipType::Protecting;
+  idx.insert(r2);
+
+  auto all = idx.byEntity(entityA);
+  ASSERT_EQ(all.size(), 2u);
+}

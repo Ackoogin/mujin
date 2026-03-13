@@ -99,6 +99,14 @@ TEST(InterestManager, MeasurementCriteriaAcceptance) {
   ASSERT_TRUE(mgr.meetsCriteria(interest_id, 0.95));
 }
 
+///< REQ_TACTICAL_OBJECTS_062: getMeasurementCriteria returns empty for unknown interest ID.
+TEST(InterestManager, GetMeasurementCriteriaEmptyForUnknownId) {
+  InterestManager mgr;
+  UUIDKey bogus_id{UUIDHelper::generateV4()};
+  auto criteria = mgr.getMeasurementCriteria(bogus_id);
+  ASSERT_TRUE(criteria.empty());
+}
+
 ///< REQ_TACTICAL_OBJECTS_063: Progress is reported against an active interest requirement.
 TEST(InterestManager, ProgressReportingAgainstRequirement) {
   InterestManager mgr;

@@ -43,6 +43,14 @@
 # Build output
 /build/
 /build_pcl_cov/
+/build-coverage/
+
+# Coverage artefacts
+*.gcov
+*.gcda
+*.gcno
+coverage.html
+coverage*.html
 
 # CMake
 CMakeUserPresets.json

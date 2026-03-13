@@ -134,6 +134,33 @@ TEST_F(ZoneEngineTest, ZoneSemanticTypeRoundTrip) {
   ASSERT_EQ(got->semantics, "radar-coverage");
 }
 
+///< REQ_TACTICAL_OBJECTS_019: isInside returns false for zone with no geometry.
+TEST_F(ZoneEngineTest, IsInsideWithNoGeometryReturnsFalse) {
+  // Create a zone with neither vertices nor radius — fallback path returns false
+  ZoneDefinition def;
+  def.zone_type = ZoneType::AOI;
+  def.geometry.radius_m = 0.0;
+  def.geometry.vertices.clear();
+  auto id = engine.upsertZone(def);
+  ASSERT_FALSE(engine.isInside(Position{51.0, 0.0, 0}, id));
+}
+
+///< REQ_TACTICAL_OBJECTS_021: evaluateTransition returns Outside before active_from.
+TEST_F(ZoneEngineTest, EvaluateTransitionBeforeActivationTime) {
+  ZoneDefinition def;
+  def.zone_type = ZoneType::PatrolArea;
+  def.geometry.center = Position{50.0, 0.0, 0};
+  def.geometry.radius_m = 10000.0;
+  def.active_from = 500.0;
+  def.active_until = 1000.0;
+  auto zone_id = engine.upsertZone(def);
+
+  auto obj_id = UUIDKey{pyramid::core::uuid::UUIDHelper::generateV4()};
+  // Object is spatially inside the zone but queried before active_from
+  auto r = engine.evaluateTransition(obj_id, zone_id, Position{50.0, 0.0, 0}, 200.0);
+  ASSERT_EQ(r, ZoneRelationship::Outside);
+}
+
 ///< REQ_TACTICAL_OBJECTS_056: Circle and proximity checks use geodesic reasoning.
 TEST_F(ZoneEngineTest, GeodesicDistanceUsedForCircleChecks) {
   ZoneDefinition def;

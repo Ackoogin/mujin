@@ -85,6 +85,30 @@ TEST(ObjectStore, DeleteRemovesFromAllTables) {
   ASSERT_EQ(count, 0u);
 }
 
+///< REQ_TACTICAL_OBJECTS_003: Deleting a non-last element swaps it with the last.
+TEST(ObjectStore, DeleteMiddleElementSwapsWithLast) {
+  ObjectStore store;
+  auto id0 = store.createObject(ObjectType::Platform);
+  auto id1 = store.createObject(ObjectType::Person);
+  auto id2 = store.createObject(ObjectType::Unit);
+
+  // Add kinematics to all so removeFromAllComponents is exercised
+  KinematicsComponent kc;
+  kc.position.lat = 10.0;
+  store.kinematics().set(id0, kc);
+  store.kinematics().set(id1, kc);
+  store.kinematics().set(id2, kc);
+
+  // Delete the middle element (id1, index 1) — triggers the idx != last swap
+  ASSERT_TRUE(store.deleteObject(id1));
+  ASSERT_EQ(store.objectCount(), 2u);
+
+  // Remaining objects must still be retrievable
+  ASSERT_NE(store.getRecord(id0), nullptr);
+  ASSERT_NE(store.getRecord(id2), nullptr);
+  ASSERT_EQ(store.getRecord(id1), nullptr);
+}
+
 ///< REQ_TACTICAL_OBJECTS_045: Sparse objects don't allocate unused component entries.
 TEST(ObjectStore, SparseObjectsDontAllocateUnusedComponents) {
   ObjectStore store;

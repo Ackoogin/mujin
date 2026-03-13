@@ -133,6 +133,7 @@ gtest_discover_tests(test_tobj_relationship DISCOVERY_MODE PRE_TEST)
 
 add_executable(test_tobj_component ${TOBJ_TEST_DIR}/Test_TacticalObjectsComponent.cpp)
 target_link_libraries(test_tobj_component PRIVATE tactical_objects_component GTest::gtest_main)
+target_include_directories(test_tobj_component PRIVATE ${CMAKE_SOURCE_DIR}/src/pcl)
 gtest_discover_tests(test_tobj_component DISCOVERY_MODE PRE_TEST)
 
 add_executable(test_tobj_component_robustness ${TOBJ_TEST_DIR}/Test_TacticalObjectsComponent_Robustness.cpp)
