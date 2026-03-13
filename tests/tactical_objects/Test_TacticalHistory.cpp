@@ -35,6 +35,30 @@ TEST(TacticalHistory, QueryStateAtTime) {
   ASSERT_FALSE(at_50.has_value());
 }
 
+///< REQ_TACTICAL_OBJECTS_048: totalSnapshots counts all stored snapshots.
+TEST(TacticalHistory, TotalSnapshotsCount) {
+  TacticalHistory history;
+  auto obj_a = makeKey();
+  auto obj_b = makeKey();
+
+  for (int i = 0; i < 3; ++i) {
+    HistoricalSnapshot s;
+    s.object_id = obj_a;
+    s.timestamp = i * 100.0;
+    s.version = i + 1;
+    history.recordSnapshot(s);
+  }
+  for (int i = 0; i < 5; ++i) {
+    HistoricalSnapshot s;
+    s.object_id = obj_b;
+    s.timestamp = i * 50.0;
+    s.version = i + 1;
+    history.recordSnapshot(s);
+  }
+
+  ASSERT_EQ(history.totalSnapshots(), 8u);
+}
+
 ///< REQ_TACTICAL_OBJECTS_048: Interval query returns retained states across a time window.
 TEST(TacticalHistory, QueryStatesOverInterval) {
   TacticalHistory history;

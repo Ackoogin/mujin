@@ -110,6 +110,23 @@ TEST_F(QueryEngineTest, CompoundQueryTypeAndRegion) {
   ASSERT_EQ(resp.entries.size(), 1u);
 }
 
+///< REQ_TACTICAL_OBJECTS_013: Region query excludes entities whose exact position falls outside bbox.
+TEST_F(QueryEngineTest, RegionQueryFiltersExactPositionOutsideBbox) {
+  // Cell size = 1.0 deg. Entity at (51.0, 0.0) is in cell [51, 0].
+  // Query bbox {51.5, 52.0, 0.5, 1.0} overlaps cell [51,0] but the
+  // entity's exact position (51.0, 0.0) is outside the bbox — triggers continue.
+  auto id_outside = addEntity(ObjectType::Platform, 51.0, 0.0);
+  auto id_inside  = addEntity(ObjectType::Platform, 51.8, 0.7);
+
+  QueryRequest req;
+  req.by_region = BoundingBox{51.5, 52.0, 0.5, 1.0};
+  auto resp = qe.query(req);
+
+  ASSERT_EQ(resp.entries.size(), 1u);
+  ASSERT_EQ(resp.entries[0].id, id_inside);
+  (void)id_outside;
+}
+
 ///< REQ_TACTICAL_OBJECTS_044: Freshness filter excludes stale entities.
 TEST_F(QueryEngineTest, FreshnessFilterExcludesStale) {
   addEntity(ObjectType::Platform, 51.0, 0.0, Affiliation::Unknown, "", "", 100.0);

@@ -4,6 +4,8 @@
 #include <pcl/executor.hpp>
 #include <pcl/pcl_executor.h>
 #include <uuid/UUIDHelper.h>
+#include <pcl_internal.h>
+#include <cstring>
 
 using namespace tactical_objects;
 using namespace pyramid::core::uuid;
@@ -324,4 +326,279 @@ TEST(TacticalObjectsComponent, ZoneRemoveViaService) {
   ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "remove_zone", &req, &resp),
             PCL_OK);
   EXPECT_FALSE(comp.runtime().getZone(zid).has_value());
+}
+
+///< REQ_TACTICAL_OBJECTS_033: on_shutdown lifecycle callback succeeds.
+TEST(TacticalObjectsComponent, ShutdownLifecycle) {
+  TacticalObjectsComponent comp;
+  // shutdown() is callable from any non-finalized state
+  ASSERT_EQ(comp.shutdown(), PCL_OK);
+  ASSERT_EQ(comp.state(), PCL_STATE_FINALIZED);
+}
+
+///< REQ_TACTICAL_OBJECTS_033: on_tick callback executes when accumulator fires.
+TEST(TacticalObjectsComponent, TickCallbackExecutes) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  // With tick_rate_hz = 1000, period = 0.001 s.
+  // spinOnce uses dt = 0.001 on the first call (prev_time == 0),
+  // so tick_accumulator (0 + 0.001) >= period (0.001) — fires on_tick.
+  comp.setTickRateHz(1000.0);
+
+  pcl::Executor exec;
+  exec.add(comp);
+  ASSERT_EQ(exec.spinOnce(0), PCL_OK);
+}
+
+///< REQ_TACTICAL_OBJECTS_037: handleGetObject returns found=false for unknown ID.
+TEST(TacticalObjectsComponent, GetObjectNotFound) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  // Use a UUID that was never registered
+  nlohmann::json j_req;
+  j_req["object_id"] = UUIDHelper::toString(UUIDHelper::generateV4());
+  std::string req_str = j_req.dump();
+  pcl_msg_t req = {};
+  req.data = req_str.data();
+  req.size = static_cast<uint32_t>(req_str.size());
+  req.type_name = "application/json";
+  pcl_msg_t resp = {};
+  char resp_buf[256];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "get_object", &req, &resp), PCL_OK);
+  std::string resp_str(static_cast<const char*>(resp.data), resp.size);
+  auto jr = nlohmann::json::parse(resp_str);
+  ASSERT_FALSE(jr.value("found", true));
+}
+
+// ---------------------------------------------------------------------------
+// PCL port-overflow tests: verify on_configure returns PCL_ERR_CALLBACK when
+// addService fails because the port table is full.
+// Each test pre-fills port_count to PCL_MAX_PORTS - (N+1) so that the Nth
+// addService call overflows. PCL_MAX_PORTS = 64, subscriber takes 1 slot,
+// services take 7 more.
+// ---------------------------------------------------------------------------
+
+///< REQ_TACTICAL_OBJECTS_033: configure returns PCL_ERR_CALLBACK if create_object service fails.
+TEST(TacticalObjectsComponent, ConfigureFailsIfCreateObjectServiceFull) {
+  TacticalObjectsComponent comp;
+  // subscriber gets slot 63 (last), create_object addService sees port_count=64 -> fail
+  comp.handle()->port_count = PCL_MAX_PORTS - 1;
+  ASSERT_NE(comp.configure(), PCL_OK);
+}
+
+///< REQ_TACTICAL_OBJECTS_033: configure returns PCL_ERR_CALLBACK if update_object service fails.
+TEST(TacticalObjectsComponent, ConfigureFailsIfUpdateObjectServiceFull) {
+  TacticalObjectsComponent comp;
+  comp.handle()->port_count = PCL_MAX_PORTS - 2;
+  ASSERT_NE(comp.configure(), PCL_OK);
+}
+
+///< REQ_TACTICAL_OBJECTS_033: configure returns PCL_ERR_CALLBACK if delete_object service fails.
+TEST(TacticalObjectsComponent, ConfigureFailsIfDeleteObjectServiceFull) {
+  TacticalObjectsComponent comp;
+  comp.handle()->port_count = PCL_MAX_PORTS - 3;
+  ASSERT_NE(comp.configure(), PCL_OK);
+}
+
+///< REQ_TACTICAL_OBJECTS_033: configure returns PCL_ERR_CALLBACK if query service fails.
+TEST(TacticalObjectsComponent, ConfigureFailsIfQueryServiceFull) {
+  TacticalObjectsComponent comp;
+  comp.handle()->port_count = PCL_MAX_PORTS - 4;
+  ASSERT_NE(comp.configure(), PCL_OK);
+}
+
+///< REQ_TACTICAL_OBJECTS_033: configure returns PCL_ERR_CALLBACK if get_object service fails.
+TEST(TacticalObjectsComponent, ConfigureFailsIfGetObjectServiceFull) {
+  TacticalObjectsComponent comp;
+  comp.handle()->port_count = PCL_MAX_PORTS - 5;
+  ASSERT_NE(comp.configure(), PCL_OK);
+}
+
+///< REQ_TACTICAL_OBJECTS_033: configure returns PCL_ERR_CALLBACK if upsert_zone service fails.
+TEST(TacticalObjectsComponent, ConfigureFailsIfUpsertZoneServiceFull) {
+  TacticalObjectsComponent comp;
+  comp.handle()->port_count = PCL_MAX_PORTS - 6;
+  ASSERT_NE(comp.configure(), PCL_OK);
+}
+
+///< REQ_TACTICAL_OBJECTS_033: configure returns PCL_ERR_CALLBACK if remove_zone service fails.
+TEST(TacticalObjectsComponent, ConfigureFailsIfRemoveZoneServiceFull) {
+  TacticalObjectsComponent comp;
+  comp.handle()->port_count = PCL_MAX_PORTS - 7;
+  ASSERT_NE(comp.configure(), PCL_OK);
+}
+
+// ---------------------------------------------------------------------------
+// JSON parse-error coverage: send malformed JSON to exercise the catch(...)
+// blocks in every service handler and the subscriber callback.
+// ---------------------------------------------------------------------------
+
+///< Coverage: onObservationIngress silently ignores invalid JSON.
+TEST(TacticalObjectsComponent, ObservationIngressInvalidJsonIgnored) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  const char* bad = "{ not valid json !!!";
+  pcl_msg_t msg{};
+  msg.data     = bad;
+  msg.size     = static_cast<uint32_t>(strlen(bad));
+  msg.type_name = "application/json";
+
+  // The subscriber catch block swallows the parse error; dispatch returns OK.
+  EXPECT_EQ(exec.dispatchIncoming("observation_ingress", &msg), PCL_OK);
+  // No object should have been created.
+  EXPECT_EQ(comp.runtime().query(QueryRequest()).total, 0u);
+}
+
+///< Coverage: handleUpdateObject catch block returns error on invalid JSON.
+TEST(TacticalObjectsComponent, UpdateObjectInvalidJsonReturnsError) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  const char* bad = "{ not valid json !!!";
+  pcl_msg_t req{};
+  req.data      = bad;
+  req.size      = static_cast<uint32_t>(strlen(bad));
+  req.type_name = "application/json";
+  pcl_msg_t resp{};
+  char resp_buf[64];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  EXPECT_NE(pcl_executor_invoke_service(exec.handle(), "update_object", &req, &resp), PCL_OK);
+}
+
+///< Coverage: handleDeleteObject catch block returns error on invalid JSON.
+TEST(TacticalObjectsComponent, DeleteObjectInvalidJsonReturnsError) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  const char* bad = "{ not valid json !!!";
+  pcl_msg_t req{};
+  req.data      = bad;
+  req.size      = static_cast<uint32_t>(strlen(bad));
+  req.type_name = "application/json";
+  pcl_msg_t resp{};
+  char resp_buf[64];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  EXPECT_NE(pcl_executor_invoke_service(exec.handle(), "delete_object", &req, &resp), PCL_OK);
+}
+
+///< Coverage: handleQuery catch block falls through to empty QueryRequest on invalid JSON.
+TEST(TacticalObjectsComponent, QueryInvalidJsonFallsBackToEmptyRequest) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  comp.runtime().createObject(ObjectDefinition());
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  const char* bad = "{ not valid json !!!";
+  pcl_msg_t req{};
+  req.data      = bad;
+  req.size      = static_cast<uint32_t>(strlen(bad));
+  req.type_name = "application/json";
+  pcl_msg_t resp{};
+  char resp_buf[4096];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  // On parse error the handler falls back to an empty QueryRequest and still
+  // returns PCL_OK with a valid (possibly empty) response.
+  EXPECT_EQ(pcl_executor_invoke_service(exec.handle(), "query", &req, &resp), PCL_OK);
+  std::string resp_str(static_cast<const char*>(resp.data), resp.size);
+  auto jr = nlohmann::json::parse(resp_str);
+  EXPECT_TRUE(jr.contains("entries"));
+}
+
+///< Coverage: handleGetObject catch block returns error on invalid JSON.
+TEST(TacticalObjectsComponent, GetObjectInvalidJsonReturnsError) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  const char* bad = "{ not valid json !!!";
+  pcl_msg_t req{};
+  req.data      = bad;
+  req.size      = static_cast<uint32_t>(strlen(bad));
+  req.type_name = "application/json";
+  pcl_msg_t resp{};
+  char resp_buf[64];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  EXPECT_NE(pcl_executor_invoke_service(exec.handle(), "get_object", &req, &resp), PCL_OK);
+}
+
+///< Coverage: handleUpsertZone catch block returns error on invalid JSON.
+TEST(TacticalObjectsComponent, UpsertZoneInvalidJsonReturnsError) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  const char* bad = "{ not valid json !!!";
+  pcl_msg_t req{};
+  req.data      = bad;
+  req.size      = static_cast<uint32_t>(strlen(bad));
+  req.type_name = "application/json";
+  pcl_msg_t resp{};
+  char resp_buf[64];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  EXPECT_NE(pcl_executor_invoke_service(exec.handle(), "upsert_zone", &req, &resp), PCL_OK);
+}
+
+///< Coverage: handleRemoveZone catch block returns error on invalid JSON.
+TEST(TacticalObjectsComponent, RemoveZoneInvalidJsonReturnsError) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  const char* bad = "{ not valid json !!!";
+  pcl_msg_t req{};
+  req.data      = bad;
+  req.size      = static_cast<uint32_t>(strlen(bad));
+  req.type_name = "application/json";
+  pcl_msg_t resp{};
+  char resp_buf[64];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  EXPECT_NE(pcl_executor_invoke_service(exec.handle(), "remove_zone", &req, &resp), PCL_OK);
 }

@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <TacticalObjectsCodec.h>
 #include <uuid/UUIDHelper.h>
+#include <nlohmann/json.hpp>
 
 using namespace tactical_objects;
 using namespace pyramid::core::uuid;
@@ -118,6 +119,123 @@ TEST(TacticalObjectsCodec, QueryRoundTrip) {
   ASSERT_EQ(decoded_resp.total, 2u);
   ASSERT_EQ(decoded_resp.entries[0].id, e1.id);
   ASSERT_EQ(decoded_resp.entries[1].record.type, ObjectType::Person);
+}
+
+///< REQ_TACTICAL_OBJECTS_041: ObjectUpdate encodes and decodes with all optional fields.
+TEST(TacticalObjectsCodec, EncodeDecodeObjectUpdate) {
+  ObjectUpdate upd;
+  upd.position = Position{51.5, -0.1, 100.0};
+  Velocity v; v.north = 10.0; v.east = -5.0; v.down = 0.5;
+  upd.velocity = v;
+  upd.affiliation = Affiliation::Hostile;
+  MilClassProfile p; p.battle_dim = BattleDimension::Air; p.affiliation = Affiliation::Hostile;
+  upd.mil_class = p;
+  upd.identity_name = std::string("Unit-42");
+  upd.operational_state = std::string("active");
+  upd.behavior_pattern = std::string("patrol");
+
+  auto j = TacticalObjectsCodec::encodeObjectUpdate(upd);
+  auto decoded = TacticalObjectsCodec::decodeObjectUpdate(j);
+
+  ASSERT_TRUE(decoded.position.has_value());
+  ASSERT_DOUBLE_EQ(decoded.position->lat, 51.5);
+  ASSERT_TRUE(decoded.velocity.has_value());
+  ASSERT_DOUBLE_EQ(decoded.velocity->north, 10.0);
+  ASSERT_DOUBLE_EQ(decoded.velocity->east, -5.0);
+  ASSERT_DOUBLE_EQ(decoded.velocity->down, 0.5);
+  ASSERT_TRUE(decoded.affiliation.has_value());
+  ASSERT_EQ(*decoded.affiliation, Affiliation::Hostile);
+  ASSERT_TRUE(decoded.mil_class.has_value());
+  ASSERT_EQ(decoded.mil_class->battle_dim, BattleDimension::Air);
+  ASSERT_TRUE(decoded.identity_name.has_value());
+  ASSERT_EQ(*decoded.identity_name, "Unit-42");
+  ASSERT_TRUE(decoded.operational_state.has_value());
+  ASSERT_EQ(*decoded.operational_state, "active");
+  ASSERT_TRUE(decoded.behavior_pattern.has_value());
+  ASSERT_EQ(*decoded.behavior_pattern, "patrol");
+}
+
+///< REQ_TACTICAL_OBJECTS_041: All Affiliation enum values round-trip through ObjectDefinition.
+TEST(TacticalObjectsCodec, AllAffiliationValuesRoundTrip) {
+  // Exercise affiliationToString/stringToAffiliation for all enum values via
+  // encodeObjectDefinition / decodeObjectDefinition which use these private helpers.
+  const Affiliation affiliations[] = {
+    Affiliation::Friendly, Affiliation::Hostile, Affiliation::Neutral, Affiliation::Unknown,
+    Affiliation::AssumedFriend, Affiliation::Suspect, Affiliation::Joker,
+    Affiliation::Faker, Affiliation::Pending
+  };
+  for (auto aff : affiliations) {
+    ObjectDefinition def;
+    def.affiliation = aff;
+    def.mil_class.affiliation = aff;
+    auto j = TacticalObjectsCodec::encodeObjectDefinition(def);
+    auto decoded = TacticalObjectsCodec::decodeObjectDefinition(j);
+    EXPECT_EQ(decoded.affiliation, aff);
+    EXPECT_EQ(decoded.mil_class.affiliation, aff);
+  }
+  // default case: out-of-range value encodes through affiliation field
+  ObjectDefinition def_bad;
+  def_bad.affiliation = static_cast<Affiliation>(999);
+  auto j_bad = TacticalObjectsCodec::encodeObjectDefinition(def_bad);
+  auto decoded_bad = TacticalObjectsCodec::decodeObjectDefinition(j_bad);
+  EXPECT_EQ(decoded_bad.affiliation, Affiliation::Unknown); // default maps back to Unknown
+}
+
+///< REQ_TACTICAL_OBJECTS_041: All ZoneType enum values round-trip through ZoneDefinition.
+TEST(TacticalObjectsCodec, AllZoneTypeValuesRoundTrip) {
+  const ZoneType zone_types[] = {
+    ZoneType::AOI, ZoneType::PatrolArea, ZoneType::RestrictedArea,
+    ZoneType::NoGoArea, ZoneType::KillBox, ZoneType::PhaseLine,
+    ZoneType::Boundary, ZoneType::RouteCorridor, ZoneType::SensorCoverageArea
+  };
+  for (auto zt : zone_types) {
+    ZoneDefinition def;
+    def.zone_type = zt;
+    auto j = TacticalObjectsCodec::encodeZoneDefinition(def);
+    auto decoded = TacticalObjectsCodec::decodeZoneDefinition(j);
+    EXPECT_EQ(decoded.zone_type, zt);
+  }
+  // default case for zoneTypeToString
+  ZoneDefinition def_bad;
+  def_bad.zone_type = static_cast<ZoneType>(999);
+  auto j_bad = TacticalObjectsCodec::encodeZoneDefinition(def_bad);
+  auto decoded_bad = TacticalObjectsCodec::decodeZoneDefinition(j_bad);
+  EXPECT_EQ(decoded_bad.zone_type, ZoneType::AOI);
+}
+
+///< REQ_TACTICAL_OBJECTS_041: All BattleDimension enum values round-trip through ObjectDefinition.
+TEST(TacticalObjectsCodec, AllBattleDimValuesRoundTrip) {
+  const BattleDimension dims[] = {
+    BattleDimension::Ground, BattleDimension::Air, BattleDimension::SeaSurface,
+    BattleDimension::Subsurface, BattleDimension::Space, BattleDimension::SOF
+  };
+  for (auto bd : dims) {
+    ObjectDefinition def;
+    def.mil_class.battle_dim = bd;
+    auto j = TacticalObjectsCodec::encodeObjectDefinition(def);
+    auto decoded = TacticalObjectsCodec::decodeObjectDefinition(j);
+    EXPECT_EQ(decoded.mil_class.battle_dim, bd);
+  }
+  // default case for battleDimToString
+  ObjectDefinition def_bad;
+  def_bad.mil_class.battle_dim = static_cast<BattleDimension>(999);
+  auto j_bad = TacticalObjectsCodec::encodeObjectDefinition(def_bad);
+  auto decoded_bad = TacticalObjectsCodec::decodeObjectDefinition(j_bad);
+  EXPECT_EQ(decoded_bad.mil_class.battle_dim, BattleDimension::Ground);
+}
+
+///< REQ_TACTICAL_OBJECTS_041: objectTypeToString default case (public function).
+TEST(TacticalObjectsCodec, ObjectTypeDefaultCase) {
+  EXPECT_EQ(TacticalObjectsCodec::objectTypeToString(ObjectType::Platform), "Platform");
+  // Out-of-range cast reaches the default branch of the public function
+  EXPECT_EQ(TacticalObjectsCodec::objectTypeToString(static_cast<ObjectType>(999)), "Platform");
+}
+
+///< REQ_TACTICAL_OBJECTS_041: decodeUUID returns null key for invalid UUID string.
+TEST(TacticalObjectsCodec, DecodeUUIDBadString) {
+  nlohmann::json j = "not-a-uuid";
+  auto result = TacticalObjectsCodec::decodeUUID(j);
+  ASSERT_TRUE(result.isNull());
 }
 
 ///< REQ_TACTICAL_OBJECTS_041: ZoneDefinition round-trips through JSON.
