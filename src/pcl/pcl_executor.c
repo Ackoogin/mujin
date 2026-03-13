@@ -1,5 +1,8 @@
 /// \file pcl_executor.c
 /// \brief PCL executor implementation — tick loop, dispatch, lifecycle.
+#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
+#  define _POSIX_C_SOURCE 199309L
+#endif
 #include "pcl_internal.h"
 #include "pcl/pcl_executor.h"
 #include "pcl/pcl_container.h"
