@@ -1,4 +1,5 @@
 #include <correlation/CorrelationEngine.h>
+#include <geo/GeoMath.h>
 #include <uuid/UUIDHelper.h>
 
 #include <algorithm>
@@ -6,22 +7,6 @@
 #include <limits>
 
 namespace tactical_objects {
-
-static const double EARTH_RADIUS_M = 6371000.0;
-static const double PI = 3.14159265358979323846;
-
-static double degToRad(double deg) { return deg * PI / 180.0; }
-
-static double haversine(const Position& a, const Position& b) {
-  double d_lat = degToRad(b.lat - a.lat);
-  double d_lon = degToRad(b.lon - a.lon);
-  double lat1 = degToRad(a.lat);
-  double lat2 = degToRad(b.lat);
-  double sa = std::sin(d_lat / 2.0);
-  double so = std::sin(d_lon / 2.0);
-  double h = sa * sa + std::cos(lat1) * std::cos(lat2) * so * so;
-  return 2.0 * EARTH_RADIUS_M * std::asin(std::sqrt(h));
-}
 
 CorrelationEngine::CorrelationEngine(std::shared_ptr<ObjectStore> store,
                                      std::shared_ptr<SpatialIndex> spatial,
@@ -38,7 +23,7 @@ double CorrelationEngine::scoreCandidate(const Observation& obs, const UUIDKey& 
 
   const auto* kc = store_->kinematics().get(candidate);
   if (kc) {
-    double dist = haversine(obs.position, kc->position);
+    double dist = geo::haversineMeters(obs.position, kc->position);
     double gate_m = config_.gate_radius_deg * 111000.0;
     if (dist > gate_m) return 0.0;
     double spatial_score = 1.0 - (dist / gate_m);

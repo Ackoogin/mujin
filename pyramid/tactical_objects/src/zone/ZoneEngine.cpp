@@ -1,4 +1,5 @@
 #include <zone/ZoneEngine.h>
+#include <geo/GeoMath.h>
 #include <uuid/UUIDHelper.h>
 
 #include <algorithm>
@@ -6,11 +7,6 @@
 #include <limits>
 
 namespace tactical_objects {
-
-static const double PI = 3.14159265358979323846;
-static const double EARTH_RADIUS_M = 6371000.0;
-
-static double degToRad(double deg) { return deg * PI / 180.0; }
 
 ZoneEngine::ZoneEngine(std::shared_ptr<ObjectStore> store,
                        std::shared_ptr<SpatialIndex> spatial)
@@ -75,52 +71,26 @@ bool ZoneEngine::removeZone(const UUIDKey& id) {
 }
 
 BoundingBox ZoneEngine::computeBoundingBox(const ZoneGeometry& geom) {
-  BoundingBox bb;
-  if (geom.geometry_type == ZoneType::AOI ||
-      geom.geometry_type == ZoneType::PatrolArea ||
-      geom.geometry_type == ZoneType::RestrictedArea ||
-      geom.geometry_type == ZoneType::NoGoArea ||
-      geom.geometry_type == ZoneType::KillBox) {
-    if (!geom.vertices.empty()) {
-      bb.min_lat = bb.max_lat = geom.vertices[0].lat;
-      bb.min_lon = bb.max_lon = geom.vertices[0].lon;
-      for (size_t i = 1; i < geom.vertices.size(); ++i) {
-        bb.min_lat = std::min(bb.min_lat, geom.vertices[i].lat);
-        bb.max_lat = std::max(bb.max_lat, geom.vertices[i].lat);
-        bb.min_lon = std::min(bb.min_lon, geom.vertices[i].lon);
-        bb.max_lon = std::max(bb.max_lon, geom.vertices[i].lon);
-      }
-    } else {
-      double offset_deg = geom.radius_m / EARTH_RADIUS_M * (180.0 / PI);
-      bb.min_lat = geom.center.lat - offset_deg;
-      bb.max_lat = geom.center.lat + offset_deg;
-      double cos_lat = std::cos(degToRad(geom.center.lat));
-      double lon_offset = (cos_lat > 1e-9) ? offset_deg / cos_lat : 180.0;
-      bb.min_lon = geom.center.lon - lon_offset;
-      bb.max_lon = geom.center.lon + lon_offset;
+  // Polygon-based zones: compute tight vertex envelope when vertices are present.
+  if (!geom.vertices.empty()) {
+    BoundingBox bb;
+    bb.min_lat = bb.max_lat = geom.vertices[0].lat;
+    bb.min_lon = bb.max_lon = geom.vertices[0].lon;
+    for (size_t i = 1; i < geom.vertices.size(); ++i) {
+      bb.min_lat = std::min(bb.min_lat, geom.vertices[i].lat);
+      bb.max_lat = std::max(bb.max_lat, geom.vertices[i].lat);
+      bb.min_lon = std::min(bb.min_lon, geom.vertices[i].lon);
+      bb.max_lon = std::max(bb.max_lon, geom.vertices[i].lon);
     }
-  } else {
-    double offset_deg = geom.radius_m / EARTH_RADIUS_M * (180.0 / PI);
-    bb.min_lat = geom.center.lat - offset_deg;
-    bb.max_lat = geom.center.lat + offset_deg;
-    double cos_lat = std::cos(degToRad(geom.center.lat));
-    double lon_offset = (cos_lat > 1e-9) ? offset_deg / cos_lat : 180.0;
-    bb.min_lon = geom.center.lon - lon_offset;
-    bb.max_lon = geom.center.lon + lon_offset;
+    return bb;
   }
-  return bb;
+
+  // All other cases (circle-based or fallback): single shared path.
+  return geo::circleBoundingBox(geom.center, geom.radius_m);
 }
 
 double ZoneEngine::haversineMeters(const Position& a, const Position& b) {
-  double d_lat = degToRad(b.lat - a.lat);
-  double d_lon = degToRad(b.lon - a.lon);
-  double lat1 = degToRad(a.lat);
-  double lat2 = degToRad(b.lat);
-
-  double sa = std::sin(d_lat / 2.0);
-  double so = std::sin(d_lon / 2.0);
-  double h = sa * sa + std::cos(lat1) * std::cos(lat2) * so * so;
-  return 2.0 * EARTH_RADIUS_M * std::asin(std::sqrt(h));
+  return geo::haversineMeters(a, b);
 }
 
 bool ZoneEngine::pointInPolygon(const Position& point, const std::vector<Position>& vertices) {
