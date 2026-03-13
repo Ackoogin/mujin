@@ -229,6 +229,40 @@ pcl_status_t TacticalObjectsComponent::handleGetObject(pcl_container_t*,
     out["id"] = TacticalObjectsCodec::encodeUUID(obj_id).get<std::string>();
     out["type"] = TacticalObjectsCodec::objectTypeToString(rec->type);
     out["version"] = rec->version;
+
+    // Identity presence
+    out["has_identity"] = comp->runtime_->store()->identities().has(obj_id);
+
+    // Military classification
+    auto mil = comp->runtime_->getMilClass(obj_id);
+    if (mil.has_value()) {
+      out["mil_class"] = TacticalObjectsCodec::encodeMilClassProfile(*mil);
+    }
+
+    // Behavior
+    auto beh = comp->runtime_->getBehavior(obj_id);
+    out["has_behavior"] = beh.has_value();
+    if (beh.has_value()) {
+      out["behavior"] = json{
+        {"behavior_pattern", beh->behavior_pattern},
+        {"operational_state", beh->operational_state}
+      };
+    }
+
+    // Correlation / lineage
+    const auto* cc = comp->runtime_->store()->correlation().get(obj_id);
+    out["has_correlation"] = (cc != nullptr);
+    if (cc) {
+      out["source_refs_count"] = cc->source_refs.size();
+      out["contributing_observations_count"] = cc->contributing_observations.size();
+    }
+
+    // Quality / confidence
+    const auto* qc = comp->runtime_->store()->quality().get(obj_id);
+    if (qc) {
+      out["confidence"] = qc->confidence;
+    }
+
     comp->response_buffer_ = out.dump();
   }
   response->data = comp->response_buffer_.data();

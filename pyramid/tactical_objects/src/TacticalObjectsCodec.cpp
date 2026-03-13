@@ -368,6 +368,7 @@ json TacticalObjectsCodec::encodeQueryRequest(const QueryRequest& req) {
   json j;
   if (req.by_uuid.has_value()) j["by_uuid"] = encodeUUID(*req.by_uuid);
   if (req.by_source_system.has_value()) j["by_source_system"] = *req.by_source_system;
+  if (req.by_source_entity_id.has_value()) j["by_source_entity_id"] = *req.by_source_entity_id;
   if (req.by_type.has_value()) j["by_type"] = objectTypeToString(*req.by_type);
   if (req.by_affiliation.has_value()) j["by_affiliation"] = affiliationToString(*req.by_affiliation);
   if (req.max_age_seconds.has_value()) j["max_age_seconds"] = *req.max_age_seconds;
@@ -385,6 +386,7 @@ QueryRequest TacticalObjectsCodec::decodeQueryRequest(const json& j) {
   QueryRequest req;
   if (j.count("by_uuid")) req.by_uuid = decodeUUID(j.at("by_uuid"));
   if (j.count("by_source_system")) req.by_source_system = j.at("by_source_system").get<std::string>();
+  if (j.count("by_source_entity_id")) req.by_source_entity_id = j.at("by_source_entity_id").get<std::string>();
   if (j.count("by_type")) req.by_type = stringToObjectType(j.at("by_type").get<std::string>());
   if (j.count("by_affiliation")) req.by_affiliation = stringToAffiliation(j.at("by_affiliation").get<std::string>());
   if (j.count("max_age_seconds")) req.max_age_seconds = j.at("max_age_seconds").get<double>();
