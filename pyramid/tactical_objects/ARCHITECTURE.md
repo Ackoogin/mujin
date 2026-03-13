@@ -2,7 +2,7 @@
 
 This document describes the internal architecture of the `tactical_objects` component with visual diagrams and end-to-end worked examples.
 
-For high-level requirements see `REQUIREMENTS.md`. For the concrete class design see `DESIGN.md`. For low-level requirements and traceability see `LLR.md`. For the TDD implementation plan see `TDD_PLAN.md`.
+For high-level requirements see `HLR.md`. For the concrete class design see `DESIGN.md`. For low-level requirements and traceability see `LLR.md`. For the TDD implementation plan see `TDD_PLAN.md`.
 
 ---
 
@@ -54,10 +54,13 @@ graph TB
     subgraph TacticalObjectsRuntime
         OS[ObjectStore<br/>ECS sparse-set storage]
         SI[SpatialIndex<br/>grid over WGS84]
+        RI[RelationshipIndex<br/>hierarchy + tactics]
         FE[FusionEngine<br/>correlate / merge / split]
         ZE[ZoneEngine<br/>geometry + transitions]
         MC[MilClassEngine<br/>2525B field storage]
         QE[QueryEngine<br/>compound predicates]
+        IM[InterestManager<br/>interest registry]
+        TH[TacticalHistory<br/>retained snapshots]
         EB[EventBus<br/>pyramid::core]
         LG[Logger<br/>pyramid::core]
     end
@@ -66,10 +69,15 @@ graph TB
     PORTS --> CODEC
     CODEC --> TacticalObjectsRuntime
     OS --- SI
+    OS --- RI
     OS --- FE
     OS --- ZE
     OS --- MC
     OS --- QE
+    OS --- TH
+    QE --- RI
+    QE --- TH
+    IM --- QE
     FE --> EB
     ZE --> EB
 ```
@@ -579,8 +587,11 @@ graph BT
         SI2[SpatialIndex]
         MC3[MilClassEngine]
         ZE2[ZoneEngine]
+        RI2[RelationshipIndex]
         FE3[FusionEngine]
         QE2[QueryEngine]
+        IM2[InterestManager]
+        TH2[TacticalHistory]
         RT2[TacticalObjectsRuntime]
         CODEC2[TacticalObjectsCodec]
         COMP[TacticalObjectsComponent]
@@ -596,6 +607,7 @@ graph BT
     OS2 --> UUID
     SI2 --> TYPES
     MC3 --> TYPES
+    RI2 --> TYPES
     ZE2 --> SI2
     ZE2 --> OS2
     ZE2 --> EB2
@@ -603,14 +615,22 @@ graph BT
     FE3 --> OS2
     FE3 --> MC3
     FE3 --> EB2
+    QE2 --> RI2
     QE2 --> OS2
     QE2 --> SI2
+    QE2 --> TH2
+    IM2 --> TYPES
+    TH2 --> TYPES
+    TH2 --> OS2
     RT2 --> OS2
     RT2 --> SI2
+    RT2 --> RI2
     RT2 --> FE3
     RT2 --> ZE2
     RT2 --> MC3
     RT2 --> QE2
+    RT2 --> IM2
+    RT2 --> TH2
     RT2 --> EB2
     RT2 --> LOG
     CODEC2 --> TYPES
@@ -630,12 +650,15 @@ graph BT
 | ObjectStore | `include/store/ObjectStore.h` | `src/store/ObjectStore.cpp` | `Test_ObjectStore.cpp` |
 | ObjectComponents | `include/store/ObjectComponents.h` | (header-only) | (covered by ObjectStore tests) |
 | SpatialIndex | `include/spatial/SpatialIndex.h` | `src/spatial/SpatialIndex.cpp` | `Test_SpatialIndex.cpp` |
+| RelationshipIndex | `include/relationship/RelationshipIndex.h` | `src/relationship/RelationshipIndex.cpp` | `Test_RelationshipIndex.cpp` |
 | FusionEngine | `include/fusion/FusionEngine.h` | `src/fusion/FusionEngine.cpp` | `Test_FusionEngine.cpp` |
 | MilClassEngine | `include/milclass/MilClassEngine.h` | `src/milclass/MilClassEngine.cpp` | `Test_MilClassEngine.cpp` |
 | ZoneEngine | `include/zone/ZoneEngine.h` | `src/zone/ZoneEngine.cpp` | `Test_ZoneEngine.cpp` |
 | QueryEngine | `include/query/QueryEngine.h` | `src/query/QueryEngine.cpp` | `Test_QueryEngine.cpp` |
+| InterestManager | `include/interest/InterestManager.h` | `src/interest/InterestManager.cpp` | `Test_InterestManager.cpp` |
+| TacticalHistory | `include/history/TacticalHistory.h` | `src/history/TacticalHistory.cpp` | `Test_TacticalHistory.cpp` |
 | Runtime | `include/TacticalObjectsRuntime.h` | `src/TacticalObjectsRuntime.cpp` | `Test_TacticalObjectsRuntime.cpp` |
-| Codec | `include/TacticalObjectsCodec.h` | `src/TacticalObjectsCodec.cpp` | `Test_TacticalObjectsComponent.cpp` |
+| Codec | `include/TacticalObjectsCodec.h` | `src/TacticalObjectsCodec.cpp` | `Test_TacticalObjectsCodec.cpp` |
 | Component | `include/TacticalObjectsComponent.h` | `src/TacticalObjectsComponent.cpp` | `Test_TacticalObjectsComponent.cpp` |
 
 All paths are relative to `pyramid/tactical_objects/`. Tests are under `tests/tactical_objects/`.

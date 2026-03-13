@@ -1,6 +1,6 @@
 # Tactical Objects Low-Level Requirements
 
-Low-level requirements for `pyramid/tactical_objects`, derived from the high-level requirements in `REQUIREMENTS.md` and the design decisions in `DESIGN.md`.
+Low-level requirements for `pyramid/tactical_objects`, derived from the high-level requirements in `HLR.md` and the design decisions in `DESIGN.md`.
 
 Each LLR maps to at least one unit or component test. Tests use requirement tags in the form `///< REQ_TACTICAL_OBJECTS_NNN: ...`.
 
@@ -198,12 +198,12 @@ Inactive zones shall be excluded from zone relationship results outside their va
 
 **Verification**: `Test_QueryEngine.cpp` inserts mixed objects and verifies only the exact matching subset is returned.
 
-### REQ_TACTICAL_OBJECTS_025 - External Identifier Query
-`QueryEngine` shall support exact lookup by source system and source entity identifier.
+### REQ_TACTICAL_OBJECTS_025 - Identifier Query
+`QueryEngine` shall support exact lookup by internal UUID and by source system and source entity identifier.
 
 **Traces**: TOBJ.008
 
-**Verification**: `Test_QueryEngine.cpp` inserts source references and verifies the requested external identifier resolves to the correct object.
+**Verification**: `Test_QueryEngine.cpp` verifies both internal UUID lookup and external identifier lookup resolve to the correct object.
 
 ---
 
@@ -319,12 +319,12 @@ The runtime shall publish internal domain events on `pyramid::core::event::Event
 
 **Verification**: `Test_TacticalObjectsRuntime.cpp` subscribes to the event bus and verifies each event is emitted for the corresponding operation.
 
-### REQ_TACTICAL_OBJECTS_040 - Component Logging
-The runtime shall write informational and warning diagnostics to `pyramid::core::logging::Logger`.
+### REQ_TACTICAL_OBJECTS_040 - Missing Information Diagnostics
+The runtime shall identify and log missing or incomplete information that blocks confident classification, correlation, military classification completeness, or zone reasoning.
 
 **Traces**: TOBJ.044
 
-**Verification**: `Test_TacticalObjectsRuntime.cpp` injects a logger, triggers a notable operation, and verifies log history contains the expected message level.
+**Verification**: `Test_TacticalObjectsRuntime.cpp` injects a logger, submits incomplete data, and verifies diagnostics identify the missing information and expected severity.
 
 ### REQ_TACTICAL_OBJECTS_041 - UUID Serialization Boundary
 The codec shall serialize and deserialize internal `UUID` values in a stable canonical string form.
@@ -364,6 +364,126 @@ An object with no zone, behavior, or military classification components shall no
 **Traces**: TOBJ.039
 
 **Verification**: `Test_ObjectStore.cpp` inserts sparse objects and verifies optional component table counts remain unchanged.
+
+---
+
+## 12. Additional HLR Coverage
+
+### REQ_TACTICAL_OBJECTS_046 - Interest Requirement Registration
+`TacticalObjectsRuntime::registerInterest()` shall accept interest requirements over object type, identity, affiliation, status, source, quality, behavior, time window, and geography, and persist them behind a stable interest identifier.
+
+**Traces**: TOBJ.005
+
+**Verification**: `Test_InterestManager.cpp` registers a compound interest requirement and verifies the stored criteria round-trip with a stable interest identifier.
+
+### REQ_TACTICAL_OBJECTS_047 - Interest Cancellation and Supersession
+The runtime shall support explicit cancellation, expiry, and supersession of active interest requirements.
+
+**Traces**: TOBJ.006
+
+**Verification**: `Test_InterestManager.cpp` cancels one interest, lets another expire, supersedes a third, and verifies only the expected requirements remain active.
+
+### REQ_TACTICAL_OBJECTS_048 - Temporal Snapshot and Interval Query
+`QueryEngine` shall support querying object state at a point in time and across a retained history interval.
+
+**Traces**: TOBJ.010
+
+**Verification**: `Test_TacticalHistory.cpp` applies timestamped updates to one object and verifies as-of and interval queries return the correct retained versions.
+
+### REQ_TACTICAL_OBJECTS_049 - Relationship Record Storage
+`RelationshipIndex` shall store relationships between tactical objects as first-class records linked by UUID.
+
+**Traces**: TOBJ.011
+
+**Verification**: `Test_RelationshipIndex.cpp` creates a relationship and verifies it is retrievable from both subject and object perspectives.
+
+### REQ_TACTICAL_OBJECTS_050 - Hierarchical Relationship Query
+The runtime and query path shall represent and query hierarchical relationships such as equipment-on-platform, member-of-unit, and unit-in-formation.
+
+**Traces**: TOBJ.012
+
+**Verification**: `Test_RelationshipIndex.cpp` inserts hierarchical relationships and verifies parent and child queries return the expected linked objects.
+
+### REQ_TACTICAL_OBJECTS_051 - Tactical Relationship Query
+The runtime and query path shall represent and query tactical relationships such as tracking, escorting, engaging, protecting, following, and supporting.
+
+**Traces**: TOBJ.013
+
+**Verification**: `Test_RelationshipIndex.cpp` inserts tactical relationships and verifies query predicates return only matching linked objects.
+
+### REQ_TACTICAL_OBJECTS_052 - Relationship Confidence and Provenance
+Each stored relationship shall retain confidence and source provenance, and expose both through query results.
+
+**Traces**: TOBJ.014
+
+**Verification**: `Test_RelationshipIndex.cpp` stores a relationship with confidence and source metadata and verifies both are preserved in the retrieved record.
+
+### REQ_TACTICAL_OBJECTS_053 - Behavior Estimation Storage
+The runtime shall store and return behavior pattern and intent hypothesis fields when they are provided for an object.
+
+**Traces**: TOBJ.015
+
+**Verification**: `Test_TacticalObjectsRuntime.cpp` creates or updates an object with behavior fields and verifies they round-trip through retrieval and query.
+
+### REQ_TACTICAL_OBJECTS_054 - Operational State Storage
+The runtime and query path shall store and query operational state values and their freshness.
+
+**Traces**: TOBJ.016
+
+**Verification**: `Test_TacticalObjectsRuntime.cpp` updates an object's operational state and freshness, then verifies state-based query and retrieval return the expected values.
+
+### REQ_TACTICAL_OBJECTS_055 - Zone Semantic Typing
+`ZoneEngine` shall preserve semantic zone type such as AOI, patrol area, restricted area, no-go area, kill box, phase line, boundary, route corridor, and sensor coverage area, and expose it in retrieval and query results.
+
+**Traces**: TOBJ.034
+
+**Verification**: `Test_ZoneEngine.cpp` stores zones with distinct semantic types and verifies semantic type round-trip and query filtering.
+
+### REQ_TACTICAL_OBJECTS_056 - Geodesic Spatial Reasoning
+`ZoneEngine` and `QueryEngine` shall use geodesic distance or containment calculations for circle, nearest, and proximity checks when a flat-earth approximation would materially change the result.
+
+**Traces**: TOBJ.035
+
+**Verification**: `Test_ZoneEngine.cpp` evaluates latitude-sensitive distance and containment cases and verifies the accepted result matches geodesic reasoning.
+
+### REQ_TACTICAL_OBJECTS_057 - Interest Service Integration
+`TacticalObjectsComponent` shall expose interest registration and cancellation through the `tactical_objects.interest` service boundary.
+
+**Traces**: TOBJ.005, TOBJ.006
+
+**Verification**: `Test_TacticalObjectsComponent.cpp` invokes the interest service to register and cancel requirements and verifies the runtime interest state changes accordingly.
+
+---
+
+## 13. Requirement Fulfilment and Evidence Derivation
+
+### REQ_TACTICAL_OBJECTS_058 - Requirement Achievability Assessment
+`TacticalObjectsRuntime` shall assess whether a tactical object requirement is achievable given current capability, constraints, area of interest, timeliness, and expected evidence availability.
+
+**Traces**: TOBJ.046
+
+**Verification**: `Test_TacticalObjectsRuntime.cpp` submits an AOI-based requirement under two capability configurations and verifies the achievability result changes accordingly.
+
+### REQ_TACTICAL_OBJECTS_059 - Tactical Object Solution Determination
+The runtime shall determine an object solution for a tactical object requirement, including intended object types, area of interest, timing, and predicted quality or completeness.
+
+**Traces**: TOBJ.047
+
+**Verification**: `Test_TacticalObjectsRuntime.cpp` submits a tactical object requirement and verifies the returned solution contains the expected AOI, object criteria, and predicted-quality fields.
+
+### REQ_TACTICAL_OBJECTS_060 - Derived Evidence Requirement
+When additional evidence is needed to satisfy a tactical object requirement, the runtime shall derive one or more component-agnostic `Object_Solution_Evidence_Requirement` records that describe the needed evidence or supporting information without naming another PRA component.
+
+**Traces**: TOBJ.048
+
+**Verification**: `Test_InterestManager.cpp` registers an AOI-based active-finding requirement and verifies the derived evidence requirement expresses evidence needs in tactical-object terms rather than naming a downstream component.
+
+### REQ_TACTICAL_OBJECTS_061 - Requirement and Evidence Traceability
+The runtime shall retain traceability links between a source tactical object requirement, its derived evidence requirements, the observations or supporting information received in response, and any fused objects produced.
+
+**Traces**: TOBJ.049
+
+**Verification**: `Test_TacticalObjectsRuntime.cpp` submits an AOI requirement, records derived evidence requirements and subsequent observations, and verifies the resulting fused object can be traced back to the source requirement.
 
 ---
 
@@ -416,3 +536,19 @@ An object with no zone, behavior, or military classification components shall no
 | 043 | 041 | Test_SpatialIndex |
 | 044 | 022, 024 | Test_TacticalObjectsRuntime |
 | 045 | 039 | Test_ObjectStore |
+| 046 | 005 | Test_InterestManager |
+| 047 | 006 | Test_InterestManager |
+| 048 | 010 | Test_TacticalHistory |
+| 049 | 011 | Test_RelationshipIndex |
+| 050 | 012 | Test_RelationshipIndex |
+| 051 | 013 | Test_RelationshipIndex |
+| 052 | 014 | Test_RelationshipIndex |
+| 053 | 015 | Test_TacticalObjectsRuntime |
+| 054 | 016 | Test_TacticalObjectsRuntime |
+| 055 | 034 | Test_ZoneEngine |
+| 056 | 035 | Test_ZoneEngine |
+| 057 | 005, 006 | Test_TacticalObjectsComponent |
+| 058 | 046 | Test_TacticalObjectsRuntime |
+| 059 | 047 | Test_TacticalObjectsRuntime |
+| 060 | 048 | Test_InterestManager |
+| 061 | 049 | Test_TacticalObjectsRuntime |

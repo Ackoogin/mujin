@@ -61,6 +61,8 @@ TacticalObjectsRuntime
   -> ZoneEngine
   -> MilClassEngine
   -> QueryEngine
+  -> InterestManager
+  -> TacticalHistory
   -> EventBus
   -> Logger
 ```
@@ -188,6 +190,7 @@ Query:
 Other:
 
 - `registerInterest(const InterestRequest&)`
+- `cancelInterest(const UUID&)`
 - `tick(const TickContext&)`
 - `getCapability() const`
 
@@ -200,6 +203,8 @@ Primary collaborators:
 - `ZoneEngine`
 - `MilClassEngine`
 - `QueryEngine`
+- `InterestManager`
+- `TacticalHistory`
 - `pyramid::core::event::EventBus`
 - `pyramid::core::logging::Logger`
 
@@ -256,6 +261,19 @@ Rationale:
 - it is deterministic
 - it is sufficient for thousands of entities
 - it is easy to unit test
+
+### `RelationshipIndex`
+
+Purpose:
+
+- store first-class relationship records between tactical objects
+- support hierarchical, organizational, and tactical relationship queries
+
+Chosen implementation:
+
+- one relationship record per edge with its own UUID
+- reverse indexes by subject UUID and object UUID
+- store relationship type, confidence, provenance, and validity timestamps
 
 ### `ZoneEngine`
 
@@ -350,7 +368,34 @@ Supported predicates:
 - by zone relationship
 - by quality thresholds
 - by time freshness
+- by historical time point or retained interval
 - by geographic region
+
+### `InterestManager`
+
+Purpose:
+
+- store active interest requirements
+- support registration, cancellation, expiry, and supersession
+
+Chosen implementation:
+
+- stable UUID per interest requirement
+- index active interests by type, affiliation, geography, and expiry time
+- runtime evaluates matching interests against object and zone events
+
+### `TacticalHistory`
+
+Purpose:
+
+- retain sufficient object snapshots or deltas for temporal query
+- enforce configured history retention boundaries
+
+Chosen implementation:
+
+- append-only per-object history records with timestamps and version numbers
+- bounded retention controlled by `history_retention_ms`
+- query helpers for as-of and interval retrieval
 
 ## 5. Canonical Data Model
 
@@ -496,8 +541,11 @@ Responsibilities:
 ```text
 pyramid/tactical_objects/
   CMakeLists.txt
-  REQUIREMENTS.md
+  HLR.md
+  LLR.md
   DESIGN.md
+  ARCHITECTURE.md
+  TDD_PLAN.md
   include/
     TacticalObjectsComponent.h
     TacticalObjectsRuntime.h
@@ -506,20 +554,26 @@ pyramid/tactical_objects/
     store/ObjectStore.h
     store/ObjectComponents.h
     spatial/SpatialIndex.h
+    relationship/RelationshipIndex.h
     fusion/FusionEngine.h
     milclass/MilClassEngine.h
     zone/ZoneEngine.h
     query/QueryEngine.h
+    interest/InterestManager.h
+    history/TacticalHistory.h
   src/
     TacticalObjectsComponent.cpp
     TacticalObjectsRuntime.cpp
     TacticalObjectsCodec.cpp
     store/ObjectStore.cpp
     spatial/SpatialIndex.cpp
+    relationship/RelationshipIndex.cpp
     fusion/FusionEngine.cpp
     milclass/MilClassEngine.cpp
     zone/ZoneEngine.cpp
     query/QueryEngine.cpp
+    interest/InterestManager.cpp
+    history/TacticalHistory.cpp
 ```
 
 Test layout:
@@ -528,11 +582,15 @@ Test layout:
 tests/tactical_objects/
   Test_ObjectStore.cpp
   Test_SpatialIndex.cpp
+  Test_RelationshipIndex.cpp
   Test_FusionEngine.cpp
   Test_ZoneEngine.cpp
   Test_MilClassEngine.cpp
   Test_QueryEngine.cpp
+  Test_InterestManager.cpp
+  Test_TacticalHistory.cpp
   Test_TacticalObjectsRuntime.cpp
+  Test_TacticalObjectsCodec.cpp
   Test_TacticalObjectsComponent.cpp
 ```
 
@@ -540,7 +598,7 @@ tests/tactical_objects/
 
 See `TDD_PLAN.md` for the full red/green/refactor plan.
 
-See `LLR.md` for the 45 low-level requirements with traceability and verification notes.
+See `LLR.md` for the 61 low-level requirements with traceability and verification notes.
 
 Implementation order:
 
@@ -570,13 +628,17 @@ The first implementation cut should include:
 - deterministic score-based fusion
 - lineage retention
 - military classification field storage (battle dimension, affiliation, role, status, echelon, flags, mobility)
+- relationship storage with hierarchical and tactical predicates
+- interest registration, cancellation, expiry, and supersession
+- retained temporal as-of and interval query support
+- behavior estimation and operational state fields
 - PCL subscriber and service integration
 
 The first implementation cut may defer:
 
-- ellipse exact geometry if needed, using bounding-box fallback only in the first pass
-- polyline corridor exact nearest-distance optimization
-- historical replay queries beyond current snapshot plus most recent lineage
+- optimized ellipse and corridor acceleration so long as correctness is preserved
+- relationship-query indexing optimizations beyond the initial reverse indexes
+- history compaction optimizations beyond a bounded append-only baseline
 
 ## 10. Recommended First Test Sequence
 
@@ -584,9 +646,13 @@ The first implementation cut may defer:
 2. `Test_MilClassEngine.cpp`
 3. `Test_SpatialIndex.cpp`
 4. `Test_ZoneEngine.cpp`
-5. `Test_FusionEngine.cpp`
-6. `Test_QueryEngine.cpp`
-7. `Test_TacticalObjectsRuntime.cpp`
-8. `Test_TacticalObjectsComponent.cpp`
+5. `Test_RelationshipIndex.cpp`
+6. `Test_FusionEngine.cpp`
+7. `Test_QueryEngine.cpp`
+8. `Test_InterestManager.cpp`
+9. `Test_TacticalHistory.cpp`
+10. `Test_TacticalObjectsRuntime.cpp`
+11. `Test_TacticalObjectsCodec.cpp`
+12. `Test_TacticalObjectsComponent.cpp`
 
-This sequence builds the lowest-risk foundation first and leaves PCL wiring until the domain model is stable.
+This sequence builds the lowest-risk foundation first, covers the full HLR surface area before integration, and leaves PCL wiring until the domain model is stable.

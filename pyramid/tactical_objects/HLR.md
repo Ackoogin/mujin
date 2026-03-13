@@ -8,6 +8,8 @@ The component stores, updates, queries, and fuses real-world entities of tactica
 
 Tactical Objects covers:
 
+- accepting requirements to maintain or actively develop awareness of entities in an area of interest or mission context
+- deriving component-agnostic evidence needs needed to satisfy those requirements
 - storing tactical entities and their state
 - tracking where object information came from and how confident it is
 - storing the military classification data needed to drive MIL-STD-2525B rendering (battle dimension, affiliation, role, status, echelon, etc.)
@@ -39,40 +41,56 @@ Tactical Objects covers:
 | **Geometry** | A spatial shape: point, polyline, polygon, circle, ellipse, corridor, or volume. |
 | **Geographic_Zone** | A tactically significant area with geometry, type, and optional time window (e.g. AOI, no-go zone, kill box, patrol area). |
 | **Zone_Relationship** | How an object relates to a zone: inside, outside, entering, leaving, intersecting, or distance. |
-| **Interest_Requirement** | A request to maintain awareness of objects matching given criteria, area, or mission context. |
+| **Interest_Requirement** | A request to maintain or actively develop awareness of objects matching given criteria, area, or mission context. |
+| **Object_Solution** | The planned approach for satisfying an interest requirement, including the evidence needed, constraints, and predicted quality. |
+| **Object_Solution_Evidence_Requirement** | A derived, component-agnostic requirement for evidence or supporting information needed to satisfy an interest requirement, without naming or embedding the responsibilities of another PRA component. |
 | **Fusion_Constraint** | A restriction on fusion: source rules, confidence thresholds, identity policies, or time windows. |
 | **Capability** | The component's current ability to maintain objects, fuse evidence, answer queries, and supply complete military classification data. |
 
 ## Responsibilities
 
-### capture_tactical_object_requirements
+Responsibility identifiers are included for HLR traceability.
+
+### RESP.001 - capture_tactical_object_requirements
 - Accept requirements for which object types, areas, and mission contexts to represent.
 
-### capture_observations
+### RESP.002 - determine_tactical_object_solution
+- Determine how to satisfy a tactical object requirement within applicable constraints, time windows, and mission context.
+
+### RESP.003 - determine_evidence_requirements_for_tactical_objects
+- Derive the evidence and supporting-information requirements needed to satisfy a tactical object requirement, expressed in component-agnostic terms consistent with PYRAMID bridge rules.
+
+### RESP.004 - capture_observations
 - Accept observations, tracks, and supporting data from external sources with provenance and uncertainty.
 
-### maintain_tactical_objects
+### RESP.005 - maintain_tactical_objects
 - Create, update, correlate, split, merge, and retire Tactical_Objects as evidence changes.
 
-### maintain_fusion_lineage
+### RESP.006 - provide_tactical_object_information
+- Provide current-state, historical, and event-oriented information about tactical objects, zones, relationships, and object quality.
+
+### RESP.007 - maintain_fusion_lineage
 - Keep lineage between observations, tracks, fusion decisions, and resulting objects.
 
-### maintain_military_classification
+### RESP.008 - maintain_military_classification
 - Keep the fields needed to drive MIL-STD-2525B: battle dimension, affiliation, role, status, echelon, mobility, headquarters flag, task force flag, feint/dummy flag, installation flag, and modifiers.
 
-### maintain_geographic_zones
+### RESP.009 - maintain_geographic_zones
 - Create, update, and query geographic zones and their relationships to objects.
 
-### determine_object_relationships
+### RESP.010 - determine_object_relationships
 - Determine hierarchical, organizational, tactical, and proximity relationships between objects.
 
-### determine_zone_relationships
+### RESP.011 - determine_zone_relationships
 - Determine containment, intersection, approach, and boundary crossing between objects and zones.
 
-### assess_object_quality
+### RESP.012 - assess_object_quality
 - Assess confidence, freshness, consistency, and uncertainty of objects and fused identities.
 
-### assess_capability
+### RESP.013 - identify_missing_information
+- Identify missing information that prevents confident fulfilment of object requirements, correlation, classification, or zone reasoning.
+
+### RESP.014 - assess_capability
 - Report the component's current and predicted ability to maintain state at required scale and quality.
 
 ## Design Decisions
@@ -374,9 +392,86 @@ Provide both current-state snapshot access and event-oriented update streams.
 
 **Rationale**: Some consumers need authoritative state; others need incremental changes.
 
+## Requirement Fulfilment and Dependency Derivation
+
+### TOBJ.046 - Requirement Achievability
+Assess whether a tactical object requirement is achievable given current capability, applicable constraints, area of interest, timeliness, and expected evidence availability.
+
+**Rationale**: Active finding requirements need an explicit achievability assessment, not just passive ingestion.
+
+### TOBJ.047 - Tactical Object Solution
+Determine an object solution for satisfying a tactical object requirement, including the intended object types, area of interest, timing, predicted quality, and completeness expectations.
+
+**Rationale**: A requirement to actively find entities needs an explicit solution model that can be evaluated and monitored.
+
+### TOBJ.048 - Derived Evidence Requirement
+When satisfying a tactical object requirement requires additional evidence, derive one or more `Object_Solution_Evidence_Requirement` instances that express the needed evidence or supporting information in component-agnostic terms, without naming or embedding another PRA component's responsibilities.
+
+**Rationale**: This allows tactical objects to drive active finding while respecting PYRAMID bridge and component-boundary rules.
+
+### TOBJ.049 - Requirement and Evidence Traceability
+Maintain traceability between the source tactical object requirement, any derived evidence requirements, the resulting observations or supporting information, and the fused objects produced from them.
+
+**Rationale**: Operators and downstream logic need to understand why a search was initiated, what evidence was requested, and what objects resulted.
+
+## Responsibility Traceability
+
+| Requirement | Responsibilities |
+| :--- | :--- |
+| `TOBJ.001` | `RESP.001`, `RESP.005` |
+| `TOBJ.002` | `RESP.005`, `RESP.008`, `RESP.012` |
+| `TOBJ.003` | `RESP.005` |
+| `TOBJ.004` | `RESP.004`, `RESP.005` |
+| `TOBJ.005` | `RESP.001` |
+| `TOBJ.006` | `RESP.001` |
+| `TOBJ.007` | `RESP.006` |
+| `TOBJ.008` | `RESP.006` |
+| `TOBJ.009` | `RESP.006`, `RESP.011` |
+| `TOBJ.010` | `RESP.006` |
+| `TOBJ.011` | `RESP.010` |
+| `TOBJ.012` | `RESP.010` |
+| `TOBJ.013` | `RESP.010` |
+| `TOBJ.014` | `RESP.010`, `RESP.012` |
+| `TOBJ.015` | `RESP.005`, `RESP.006`, `RESP.012` |
+| `TOBJ.016` | `RESP.005`, `RESP.006` |
+| `TOBJ.017` | `RESP.006`, `RESP.012` |
+| `TOBJ.018` | `RESP.004`, `RESP.005` |
+| `TOBJ.019` | `RESP.012` |
+| `TOBJ.020` | `RESP.007` |
+| `TOBJ.021` | `RESP.005`, `RESP.012` |
+| `TOBJ.022` | `RESP.005`, `RESP.007`, `RESP.012` |
+| `TOBJ.023` | `RESP.005`, `RESP.007` |
+| `TOBJ.024` | `RESP.002`, `RESP.005` |
+| `TOBJ.025` | `RESP.008` |
+| `TOBJ.026` | `RESP.008` |
+| `TOBJ.027` | `RESP.008` |
+| `TOBJ.028` | `RESP.008` |
+| `TOBJ.029` | `RESP.008` |
+| `TOBJ.030` | `RESP.008` |
+| `TOBJ.031` | `RESP.008` |
+| `TOBJ.032` | `RESP.008` |
+| `TOBJ.033` | `RESP.009`, `RESP.011` |
+| `TOBJ.034` | `RESP.009`, `RESP.011` |
+| `TOBJ.035` | `RESP.009`, `RESP.011` |
+| `TOBJ.036` | `RESP.011`, `RESP.006` |
+| `TOBJ.037` | `RESP.009`, `RESP.011` |
+| `TOBJ.038` | `RESP.005`, `RESP.006`, `RESP.009` |
+| `TOBJ.039` | `RESP.005` |
+| `TOBJ.040` | `RESP.006`, `RESP.009`, `RESP.011` |
+| `TOBJ.041` | `RESP.005`, `RESP.009` |
+| `TOBJ.042` | `RESP.004`, `RESP.005` |
+| `TOBJ.043` | `RESP.014` |
+| `TOBJ.044` | `RESP.013` |
+| `TOBJ.045` | `RESP.006`, `RESP.007` |
+| `TOBJ.046` | `RESP.002`, `RESP.014` |
+| `TOBJ.047` | `RESP.002` |
+| `TOBJ.048` | `RESP.003` |
+| `TOBJ.049` | `RESP.003`, `RESP.007` |
+
 ## Implementation Notes
 
 - Expose a domain model API: `TacticalObject`, `Observation`, `Track`, `Zone`, `Relationship`.
+- Represent source tactical object requirements, derived evidence requirements, and their relationships explicitly enough to preserve lineage and support bridge-mediated dependency fulfilment.
 - Use ECS-style sparse components for hot-path storage.
 - Attach provenance, confidence, and uncertainty to individual fields, not just the whole object.
 - Maintain dedicated indexes for object ID, external references, affiliation, type, time, and spatial lookup.

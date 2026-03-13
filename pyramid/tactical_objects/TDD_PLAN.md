@@ -198,7 +198,7 @@ Implement `deleteObject(const UUID&)` with swap-and-pop on dense array and remov
 ### RED 1.6 — Sparse storage efficiency
 
 ```
-///< REQ_TACTICAL_OBJECTS_040: Sparse objects don't allocate unused component entries.
+///< REQ_TACTICAL_OBJECTS_045: Sparse objects don't allocate unused component entries.
 TEST(ObjectStore, SparseObjectsDontAllocateUnusedComponents)
   - Insert 50 objects with identity only.
   - Assert MilClassComponent table size == 0.
@@ -316,7 +316,7 @@ Implement `SpatialIndex`:
 ### RED 3.2 — Update position
 
 ```
-///< REQ_TACTICAL_OBJECTS_038: Moving one object updates only that object's index.
+///< REQ_TACTICAL_OBJECTS_043: Moving one object updates only that object's index.
 TEST(SpatialIndex, UpdatePositionReindexes)
   - Insert A at (10.0, 20.0).
   - Insert B at (10.0, 20.0).
@@ -344,7 +344,7 @@ Implement `void remove(const UUID&, const Position&)`.
 ### RED 3.4 — Scale candidate filtering
 
 ```
-///< REQ_TACTICAL_OBJECTS_037: Regional query over 10k objects returns bounded candidate set.
+///< REQ_TACTICAL_OBJECTS_042: Regional query over 10k objects returns bounded candidate set.
 TEST(SpatialIndex, TenThousandObjectsLocalQuery)
   - Insert 10,000 objects uniformly distributed across (-90..90, -180..180).
   - Query a 2x2 degree region.
@@ -474,6 +474,34 @@ TEST(ZoneEngine, ExpiredZoneExcluded)
 ### GREEN 4.7
 
 Add time check to zone evaluation.
+
+### RED 4.8 — Zone semantic typing
+
+```
+///< REQ_TACTICAL_OBJECTS_055: Zone semantic type is preserved and queryable.
+TEST(ZoneEngine, ZoneSemanticTypeRoundTrip)
+  - Create zones tagged as AOI, NoGoArea, KillBox, and SensorCoverageArea.
+  - Retrieve each by ID and assert semantic type matches what was stored.
+  - Query/filter by semantic type and assert only matching zones are returned.
+```
+
+### GREEN 4.8
+
+Extend `ZoneDefinition` with an explicit semantic type enum and preserve it through storage, retrieval, and filtering.
+
+### RED 4.9 — Geodesic spatial reasoning
+
+```
+///< REQ_TACTICAL_OBJECTS_056: Circle and proximity checks use geodesic reasoning.
+TEST(ZoneEngine, GeodesicDistanceUsedForCircleChecks)
+  - Create a circle zone at high latitude with radius in meters.
+  - Evaluate one point that is inside by haversine distance and one that is outside.
+  - Assert the result matches geodesic distance rather than naive planar degrees.
+```
+
+### GREEN 4.9
+
+Use haversine or equivalent geodesic calculations for circle containment and proximity checks.
 
 ### REFACTOR 4
 
@@ -650,7 +678,7 @@ Extract scoring into a `CorrelationScorer` helper. Make thresholds configurable 
 ### RED 6.1 — Query by UUID
 
 ```
-///< REQ_TACTICAL_OBJECTS_025: Lookup by external source reference.
+///< REQ_TACTICAL_OBJECTS_025: Lookup by internal UUID.
 TEST(QueryEngine, QueryByUUID)
   - Insert 3 objects into ObjectStore.
   - Call query with specific UUID.
@@ -739,7 +767,7 @@ Normalize `QueryRequest` builder API for ergonomic test setup.
 ### RED 7.1 — Runtime construction without PCL
 
 ```
-///< REQ_TACTICAL_OBJECTS_026: Runtime facade works without PCL executor.
+///< REQ_TACTICAL_OBJECTS_030: Runtime facade works without PCL executor.
 TEST(TacticalObjectsRuntime, ConstructWithoutPCL)
   - Construct TacticalObjectsRuntime with default config.
   - Assert getCapability() returns valid snapshot.
@@ -771,6 +799,7 @@ Wire `upsertObservationBatch` → `FusionEngine::processObservation` → `Object
 ### RED 7.3 — Direct path: create entity via service
 
 ```
+///< REQ_TACTICAL_OBJECTS_026: Direct create stores object with direct provenance.
 TEST(TacticalObjectsRuntime, DirectPathCreatesEntity)
   - Construct runtime.
   - Call createObject(ObjectDefinition{ type=Platform, position={51.5, -0.1, 0}, affiliation=Friendly, battle_dim=Ground, role="armor" }).
@@ -796,6 +825,7 @@ Implement `createObject(const ObjectDefinition&)`:
 ### RED 7.4 — Direct path: update entity
 
 ```
+///< REQ_TACTICAL_OBJECTS_027: Direct update applies partial mutation and reindexing.
 TEST(TacticalObjectsRuntime, DirectPathUpdatesEntity)
   - Create object via direct path with affiliation=Friendly.
   - Call updateObject(id, ObjectUpdate{ affiliation=Hostile }).
@@ -817,6 +847,7 @@ Implement `updateObject(const UUID&, const ObjectUpdate&)`:
 ### RED 7.5 — Direct path: delete entity
 
 ```
+///< REQ_TACTICAL_OBJECTS_028: Direct delete removes entity from store and index.
 TEST(TacticalObjectsRuntime, DirectPathDeletesEntity)
   - Create object via direct path.
   - Call deleteObject(id).
@@ -835,6 +866,7 @@ Implement `deleteObject(const UUID&)`:
 ### RED 7.6 — Evidence and direct objects are queryable together
 
 ```
+///< REQ_TACTICAL_OBJECTS_029: Evidence and direct objects are queryable together.
 TEST(TacticalObjectsRuntime, BothPathsQueryableTogether)
   - Create object A via evidence path (observation).
   - Create object B via direct path.
@@ -878,7 +910,7 @@ Wire `ZoneEngine` evaluation into query path.
 ### RED 7.9 — Stale object expiry
 
 ```
-///< REQ_TACTICAL_OBJECTS_027: Tick expires stale objects.
+///< REQ_TACTICAL_OBJECTS_031: Tick expires stale objects.
 TEST(TacticalObjectsRuntime, StaleObjectExpiry)
   - Configure stale_timeout = 100ms.
   - Submit observation.
@@ -894,7 +926,7 @@ Implement staleness check in `tick()`.
 ### RED 7.10 — Capability snapshot
 
 ```
-///< REQ_TACTICAL_OBJECTS_028: Capability snapshot has configured values.
+///< REQ_TACTICAL_OBJECTS_032: Capability snapshot has configured values.
 TEST(TacticalObjectsRuntime, CapabilitySnapshot)
   - Construct runtime with specific config (merge_threshold=0.7, etc.).
   - Call getCapability().
@@ -908,7 +940,7 @@ Populate `CapabilitySnapshot` from current state and config.
 ### RED 7.11 — Domain events emitted
 
 ```
-///< REQ_TACTICAL_OBJECTS_034: Events for create, update, fuse, split, zone_enter, zone_leave.
+///< REQ_TACTICAL_OBJECTS_039: Events for create, update, fuse, split, zone_enter, zone_leave.
 TEST(TacticalObjectsRuntime, DomainEventsEmitted)
   - Subscribe to EventBus for all tactical event types.
   - Create object (direct) -> expect ObjectCreated.
@@ -927,11 +959,11 @@ Emit events from each relevant code path.
 ### RED 7.12 — Logger integration
 
 ```
-///< REQ_TACTICAL_OBJECTS_035: Informational logging on notable operations.
+///< REQ_TACTICAL_OBJECTS_040: Missing-information diagnostics are emitted.
 TEST(TacticalObjectsRuntime, LoggerIntegration)
   - Construct runtime with injected Logger.
-  - Create object (direct).
-  - Assert Logger history contains at least 1 Info-level entry.
+  - Submit incomplete data that blocks confident classification or correlation.
+  - Assert Logger history identifies the missing information with warning-level diagnostics.
 ```
 
 ### GREEN 7.12
@@ -941,7 +973,7 @@ Add logging calls to `createObject`, `upsertObservationBatch`, `deleteObject`.
 ### RED 7.13 — Batch fusion determinism
 
 ```
-///< REQ_TACTICAL_OBJECTS_039: Same batch in same order produces same result.
+///< REQ_TACTICAL_OBJECTS_044: Same batch in same order produces same result.
 TEST(TacticalObjectsRuntime, BatchFusionDeterminism)
   - Build identical ObservationBatch.
   - Process in runtime A, snapshot result graph.
@@ -952,6 +984,34 @@ TEST(TacticalObjectsRuntime, BatchFusionDeterminism)
 ### GREEN 7.13
 
 Already passes if all operations are deterministic.
+
+### RED 7.14 — Behavior estimation round-trip
+
+```
+///< REQ_TACTICAL_OBJECTS_053: Behavior pattern and intent hypothesis round-trip.
+TEST(TacticalObjectsRuntime, BehaviorEstimationRoundTrip)
+  - Create an object via direct path with behavior fields populated.
+  - Retrieve object and assert behavior pattern and intent hypothesis match.
+  - Query using behavior predicate and assert the object is returned.
+```
+
+### GREEN 7.14
+
+Store behavior fields in the object store and expose them through retrieval and query filtering.
+
+### RED 7.15 — Operational state and freshness
+
+```
+///< REQ_TACTICAL_OBJECTS_054: Operational state and freshness are queryable.
+TEST(TacticalObjectsRuntime, OperationalStateAndFreshnessQuery)
+  - Create or update an object with operational_state = Airborne and freshness = Confirmed.
+  - Query by operational state and freshness window.
+  - Assert the object is returned with the expected values.
+```
+
+### GREEN 7.15
+
+Store operational state and freshness in runtime-managed components and include them in query predicates.
 
 ### REFACTOR 7
 
@@ -972,7 +1032,7 @@ Extract `RuntimeConfig` struct. Ensure `createObject` and `upsertObservationBatc
 ### RED 8.1 — UUID round-trip
 
 ```
-///< REQ_TACTICAL_OBJECTS_036: UUID serializes and deserializes to canonical string.
+///< REQ_TACTICAL_OBJECTS_041: UUID serializes and deserializes to canonical string.
 TEST(TacticalObjectsCodec, UUIDRoundTrip)
   - Generate UUID.
   - Serialize to JSON string.
@@ -1060,7 +1120,7 @@ Extract common JSON helpers (position, enums, timestamps) into codec utilities.
 ### RED 9.1 — Configure creates all ports
 
 ```
-///< REQ_TACTICAL_OBJECTS_029: All ports created during on_configure.
+///< REQ_TACTICAL_OBJECTS_033: All ports created during on_configure.
 TEST(TacticalObjectsComponent, ConfigureCreatesAllPorts)
   - Construct TacticalObjectsComponent.
   - Call configure().
@@ -1088,7 +1148,7 @@ Implement `on_activate()`.
 ### RED 9.3 — Evidence ingress via subscriber callback
 
 ```
-///< REQ_TACTICAL_OBJECTS_031: Observation ingress through subscriber callback.
+///< REQ_TACTICAL_OBJECTS_035: Observation ingress through subscriber callback.
 TEST(TacticalObjectsComponent, EvidenceIngressViaSubscriber)
   - Configure + activate.
   - Build ObservationBatch with 1 observation, encode to JSON.
@@ -1104,6 +1164,7 @@ Wire subscriber callback: decode message, call `runtime_->upsertObservationBatch
 ### RED 9.4 — Direct create via service handler
 
 ```
+///< REQ_TACTICAL_OBJECTS_036: Direct create is exposed through service handler.
 TEST(TacticalObjectsComponent, DirectCreateViaService)
   - Configure + activate.
   - Build ObjectDefinition (Platform, Friendly, Ground, role="infantry"), encode to JSON as request.
@@ -1120,6 +1181,7 @@ Wire `svc_create_object_` handler: decode `ObjectDefinition`, call `runtime_->cr
 ### RED 9.5 — Direct update via service handler
 
 ```
+///< REQ_TACTICAL_OBJECTS_036: Direct update is exposed through service handler.
 TEST(TacticalObjectsComponent, DirectUpdateViaService)
   - Create object via direct service.
   - Build ObjectUpdate { affiliation = Hostile }, encode as request.
@@ -1135,6 +1197,7 @@ Wire `svc_update_object_` handler: decode `ObjectUpdate`, call `runtime_->update
 ### RED 9.6 — Direct delete via service handler
 
 ```
+///< REQ_TACTICAL_OBJECTS_036: Direct delete is exposed through service handler.
 TEST(TacticalObjectsComponent, DirectDeleteViaService)
   - Create object via direct service.
   - Invoke svc_delete_object_ handler with object UUID.
@@ -1149,7 +1212,7 @@ Wire `svc_delete_object_` handler.
 ### RED 9.7 — Query via service handler
 
 ```
-///< REQ_TACTICAL_OBJECTS_032: Query through service handler.
+///< REQ_TACTICAL_OBJECTS_037: Query through service handler.
 TEST(TacticalObjectsComponent, QueryViaService)
   - Create 2 objects (1 evidence, 1 direct).
   - Encode QueryRequest { type = Platform }.
@@ -1206,7 +1269,7 @@ Wire `svc_remove_zone_` handler.
 ### RED 9.11 — Tick drives housekeeping
 
 ```
-///< REQ_TACTICAL_OBJECTS_033: on_tick delegates to runtime tick.
+///< REQ_TACTICAL_OBJECTS_038: on_tick delegates to runtime tick.
 TEST(TacticalObjectsComponent, TickDrivesHousekeeping)
   - Configure + activate with stale_timeout = 1ms.
   - Create object via evidence.
@@ -1222,7 +1285,7 @@ Implement `on_tick(double dt)` calling `runtime_->tick(...)`.
 ### RED 9.12 — No ports after configure
 
 ```
-///< REQ_TACTICAL_OBJECTS_030: No port creation after configure.
+///< REQ_TACTICAL_OBJECTS_034: No port creation after configure.
 TEST(TacticalObjectsComponent, NoPortsAfterConfigure)
   - Configure + activate.
   - Assert port count matches expected total.
@@ -1234,9 +1297,229 @@ TEST(TacticalObjectsComponent, NoPortsAfterConfigure)
 
 Already passes if all ports are created in `on_configure()`.
 
+### RED 9.13 — Interest service handler
+
+```
+///< REQ_TACTICAL_OBJECTS_057: Interest registration and cancellation exposed by service boundary.
+TEST(TacticalObjectsComponent, InterestServiceRoundTrip)
+  - Configure + activate.
+  - Encode an interest registration request with affiliation, geography, and time filters.
+  - Invoke `svc_interest_` handler and assert response contains a stable interest identifier.
+  - Invoke cancellation for that identifier and assert runtime interest registry no longer contains it.
+```
+
+### GREEN 9.13
+
+Wire `svc_interest_` handler: decode register/cancel requests, call runtime interest APIs, and encode the result.
+
 ### REFACTOR 9
 
 Clean up handler boilerplate with a `handleService(codec_fn, runtime_fn)` helper template.
+
+---
+
+## Phase 10 — RelationshipIndex
+
+**Goal**: represent first-class relationships between tactical objects with confidence and provenance.
+
+**Files created**:
+
+- `include/relationship/RelationshipIndex.h`
+- `src/relationship/RelationshipIndex.cpp`
+- `tests/tactical_objects/Test_RelationshipIndex.cpp`
+
+### RED 10.1 — Store generic relationship
+
+```
+///< REQ_TACTICAL_OBJECTS_049: Relationship records are stored as first-class linked entities.
+TEST(RelationshipIndex, StoreAndRetrieveRelationship)
+  - Create two objects.
+  - Insert a relationship between them with a UUID, type, confidence, and source.
+  - Assert the relationship is retrievable from both subject and object lookups.
+```
+
+### GREEN 10.1
+
+Implement `RelationshipIndex` storage keyed by relationship UUID plus subject/object reverse indexes.
+
+### RED 10.2 — Hierarchical relationship query
+
+```
+///< REQ_TACTICAL_OBJECTS_050: Hierarchical relationships are queryable.
+TEST(RelationshipIndex, HierarchicalRelationshipQuery)
+  - Insert member-of-unit and equipment-on-platform relationships.
+  - Query parent and child links.
+  - Assert the expected linked objects are returned.
+```
+
+### GREEN 10.2
+
+Add hierarchical relationship filters and traversal helpers.
+
+### RED 10.3 — Tactical relationship query
+
+```
+///< REQ_TACTICAL_OBJECTS_051: Tactical relationships are queryable.
+TEST(RelationshipIndex, TacticalRelationshipQuery)
+  - Insert escorting, engaging, and protecting relationships.
+  - Query by tactical relationship type.
+  - Assert only exact matches are returned.
+```
+
+### GREEN 10.3
+
+Add tactical relationship filtering over the same relationship store.
+
+### RED 10.4 — Confidence and provenance retention
+
+```
+///< REQ_TACTICAL_OBJECTS_052: Relationship confidence and provenance are retained.
+TEST(RelationshipIndex, ConfidenceAndProvenanceRetained)
+  - Insert one relationship with confidence = 0.65 and source metadata.
+  - Retrieve the relationship.
+  - Assert confidence and provenance values match exactly.
+```
+
+### GREEN 10.4
+
+Persist confidence and provenance in relationship records and expose them through retrieval APIs.
+
+### REFACTOR 10
+
+Normalize relationship type helpers so `QueryEngine` and runtime can share the same predicates.
+
+---
+
+## Phase 11 — Interest and Temporal History
+
+**Goal**: cover the remaining HLR areas for interest requirements and temporal query/history retention.
+
+**Files created**:
+
+- `include/interest/InterestManager.h`
+- `src/interest/InterestManager.cpp`
+- `include/history/TacticalHistory.h`
+- `src/history/TacticalHistory.cpp`
+- `tests/tactical_objects/Test_InterestManager.cpp`
+- `tests/tactical_objects/Test_TacticalHistory.cpp`
+
+### RED 11.1 — Register compound interest requirement
+
+```
+///< REQ_TACTICAL_OBJECTS_046: Compound interest requirement is accepted and persisted.
+TEST(InterestManager, RegisterCompoundInterestRequirement)
+  - Register an interest requirement covering affiliation, area, behavior, and time window.
+  - Assert a stable interest ID is returned.
+  - Assert stored criteria round-trip exactly.
+```
+
+### GREEN 11.1
+
+Implement interest registration with a stable identifier and stored criteria model.
+
+### RED 11.2 — Cancel, expire, and supersede interest
+
+```
+///< REQ_TACTICAL_OBJECTS_047: Active interests support cancellation, expiry, and supersession.
+TEST(InterestManager, CancelExpireAndSupersedeInterest)
+  - Register three interests.
+  - Cancel one explicitly, advance time to expire one, and supersede one with a replacement.
+  - Assert only the replacement remains active.
+```
+
+### GREEN 11.2
+
+Implement lifecycle management for interest records.
+
+### RED 11.3 — Temporal snapshot query
+
+```
+///< REQ_TACTICAL_OBJECTS_048: As-of query returns the correct historical object state.
+TEST(TacticalHistory, QueryStateAtTime)
+  - Create one object and record multiple timestamped updates.
+  - Query state as-of each timestamp.
+  - Assert the returned version matches the retained snapshot for that time.
+```
+
+### GREEN 11.3
+
+Persist retained snapshots or deltas sufficient for deterministic as-of query.
+
+### RED 11.4 — Temporal interval query
+
+```
+///< REQ_TACTICAL_OBJECTS_048: Interval query returns retained states across a time window.
+TEST(TacticalHistory, QueryStatesOverInterval)
+  - Record multiple updates over a retained interval.
+  - Query for a window containing a subset of those updates.
+  - Assert only the expected historical states are returned in order.
+```
+
+### GREEN 11.4
+
+Add interval retrieval over retained history records.
+
+### RED 11.5 — Requirement achievability for active finding
+
+```
+///< REQ_TACTICAL_OBJECTS_058: AOI-based tactical object requirement achievability is assessed.
+TEST(TacticalObjectsRuntime, RequirementAchievabilityAssessment)
+  - Construct runtime with a capability profile covering only selected evidence types.
+  - Submit an AOI-based requirement to actively find hostile ground units within a time window.
+  - Assert the achievability response reflects current capability, constraints, and expected evidence availability.
+```
+
+### GREEN 11.5
+
+Implement achievability assessment for tactical object requirements using runtime capability, constraints, and evidence availability.
+
+### RED 11.6 — Tactical object solution determination
+
+```
+///< REQ_TACTICAL_OBJECTS_059: Tactical object solution is determined for a requirement.
+TEST(TacticalObjectsRuntime, TacticalObjectSolutionDetermination)
+  - Submit a tactical object requirement with object type, AOI, and timeliness criteria.
+  - Request the planned solution.
+  - Assert the solution contains the intended object criteria, AOI, timing, and predicted quality fields.
+```
+
+### GREEN 11.6
+
+Add an object-solution model that captures how the runtime intends to satisfy a tactical object requirement.
+
+### RED 11.7 — Component-agnostic derived evidence requirement
+
+```
+///< REQ_TACTICAL_OBJECTS_060: Derived evidence requirement is expressed without naming another PRA component.
+TEST(InterestManager, DerivedEvidenceRequirementIsComponentAgnostic)
+  - Register an AOI-based active-finding requirement.
+  - Retrieve the derived evidence requirement.
+  - Assert it describes needed evidence and supporting information in tactical-object terms.
+  - Assert it does not encode a named downstream PRA component.
+```
+
+### GREEN 11.7
+
+Derive `Object_Solution_Evidence_Requirement` records in component-agnostic terms suitable for bridge-mediated fulfilment.
+
+### RED 11.8 — Requirement-to-evidence-to-object traceability
+
+```
+///< REQ_TACTICAL_OBJECTS_061: Source requirement, derived evidence, observations, and fused objects remain traceable.
+TEST(TacticalObjectsRuntime, RequirementEvidenceObjectTraceability)
+  - Submit an AOI requirement and capture the derived evidence requirement ID.
+  - Submit observations associated with that derived evidence requirement.
+  - Produce one fused object.
+  - Assert the fused object traces back to the observations, derived evidence requirement, and source tactical object requirement.
+```
+
+### GREEN 11.8
+
+Retain requirement and evidence lineage links alongside the existing observation-to-object lineage.
+
+### REFACTOR 11
+
+Share timestamp helpers and retention policy code between runtime tick handling and temporal query support.
 
 ---
 
@@ -1248,13 +1531,15 @@ Clean up handler boilerplate with a `handleService(codec_fn, runtime_fn)` helper
 | 1 | Test_ObjectStore.cpp | 6 |
 | 2 | Test_MilClassEngine.cpp | 3 |
 | 3 | Test_SpatialIndex.cpp | 4 |
-| 4 | Test_ZoneEngine.cpp | 7 |
+| 4 | Test_ZoneEngine.cpp | 9 |
 | 5 | Test_FusionEngine.cpp | 9 |
 | 6 | Test_QueryEngine.cpp | 5 |
-| 7 | Test_TacticalObjectsRuntime.cpp | 13 |
+| 7 | Test_TacticalObjectsRuntime.cpp | 15 |
 | 8 | Test_TacticalObjectsCodec.cpp | 5 |
-| 9 | Test_TacticalObjectsComponent.cpp | 12 |
-| **Total** | | **67** |
+| 9 | Test_TacticalObjectsComponent.cpp | 13 |
+| 10 | Test_RelationshipIndex.cpp | 4 |
+| 11 | Test_InterestManager.cpp + Test_TacticalHistory.cpp + Test_TacticalObjectsRuntime.cpp | 8 |
+| **Total** | | **84** |
 
 ## Entity Creation Path Summary
 
