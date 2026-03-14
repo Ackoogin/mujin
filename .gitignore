@@ -51,6 +51,12 @@
 *.gcno
 coverage.html
 coverage*.html
+coverage_pcl/
+coverage_tactical_objects/
+coverage_pcl_temp/
+coverage_tobj_temp/
+build-coverage-pcl/
+build-coverage-tactical_objects/
 
 # CMake
 CMakeUserPresets.json
