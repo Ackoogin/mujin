@@ -484,27 +484,34 @@ pcl_status_t TacticalObjectsComponent::handleResync(pcl_container_t*,
     upd.entity_id    = rec.id;
     upd.version      = rec.version;
     upd.timestamp    = 0.0;
-    upd.field_mask   = FieldMaskBit::ALL;
 
+    uint16_t mask = 0;
     const auto* kc = store.kinematics().get(rec.id);
-    if (kc) { upd.position = kc->position; upd.velocity = kc->velocity; }
+    if (kc) {
+      upd.position = kc->position;  mask |= FieldMaskBit::POSITION;
+      upd.velocity = kc->velocity;  mask |= FieldMaskBit::VELOCITY;
+    }
 
     const auto* mc = store.milclass().get(rec.id);
-    if (mc) { upd.affiliation = mc->profile.affiliation; upd.mil_class = mc->profile; }
+    if (mc) {
+      upd.affiliation = mc->profile.affiliation; mask |= FieldMaskBit::AFFILIATION;
+      upd.mil_class = mc->profile;               mask |= FieldMaskBit::MIL_CLASS;
+    }
 
-    upd.object_type = rec.type;
+    upd.object_type = rec.type;  mask |= FieldMaskBit::OBJECT_TYPE;
 
     const auto* qc = store.quality().get(rec.id);
-    if (qc) upd.confidence = qc->confidence;
+    if (qc) { upd.confidence = qc->confidence; mask |= FieldMaskBit::CONFIDENCE; }
 
     const auto* lc = store.lifecycle().get(rec.id);
-    if (lc) upd.lifecycle_status = lc->status;
+    if (lc) { upd.lifecycle_status = lc->status; mask |= FieldMaskBit::LIFECYCLE_STATUS; }
 
     const auto* bc = store.behaviors().get(rec.id);
-    if (bc) upd.behavior = *bc;
+    if (bc) { upd.behavior = *bc; mask |= FieldMaskBit::BEHAVIOR; }
 
     const auto* ic = store.identities().get(rec.id);
-    if (ic) upd.identity_name = ic->name;
+    if (ic) { upd.identity_name = ic->name; mask |= FieldMaskBit::IDENTITY_NAME; }
+    upd.field_mask = mask;
 
     snapshot.push_back(upd);
   });
