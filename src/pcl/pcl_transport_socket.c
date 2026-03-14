@@ -18,6 +18,7 @@
 #  include <winsock2.h>
 #  include <ws2tcpip.h>
 #  pragma comment(lib, "Ws2_32.lib")
+#  define SHUT_RDWR SD_BOTH
 #  define PCL_SOCKET_T int
 #  define PCL_INVALID_SOCKET INVALID_SOCKET
 #  define PCL_SOCKET_ERROR SOCKET_ERROR

@@ -7,6 +7,7 @@
 
 with Ada.Command_Line;
 with Ada.Text_IO;
+with Ada.Unchecked_Conversion;
 with Interfaces.C;
 with Interfaces.C.Strings;
 with Pcl_Bindings;
@@ -14,6 +15,7 @@ with Streaming_Codec;
 with System;
 
 procedure Ada_Tobj_Client is
+  use type Interfaces.C.unsigned;
   use type Interfaces.C.unsigned_short;
   use type Pcl_Bindings.Pcl_Status;
   use type Pcl_Bindings.Pcl_Executor_Access;
@@ -21,6 +23,9 @@ procedure Ada_Tobj_Client is
   use type Pcl_Bindings.Pcl_Socket_Transport_Access;
   use type Pcl_Bindings.Pcl_Port_Access;
   use type Streaming_Codec.Byte;
+  use type System.Address;
+
+  function To_Address is new Ada.Unchecked_Conversion(Interfaces.C.Strings.chars_ptr, System.Address);
 
   -- ── Configuration ──────────────────────────────────────────────────────
 
@@ -126,7 +131,7 @@ procedure Ada_Tobj_Client is
       Container => Container,
       Topic     => Topic,
       Type_Name => Type_N,
-      Callback  => Entity_Updates_Cb'Access,
+      Callback  => Entity_Updates_Cb'Unrestricted_Access,
       User_Data => User_Data);
     Interfaces.C.Strings.Free(Topic);
     Interfaces.C.Strings.Free(Type_N);
@@ -180,7 +185,7 @@ begin
   end if;
 
   -- Create subscriber container
-  Cbs := (On_Configure  => On_Configure_Cb'Access,
+  Cbs := (On_Configure  => On_Configure_Cb'Unrestricted_Access,
           On_Activate   => null,
           On_Deactivate => null,
           On_Cleanup    => null,
@@ -217,7 +222,7 @@ begin
     Resp_Buf : aliased String (1 .. 512) := (others => ' ');
     Resp : aliased Pcl_Bindings.Pcl_Msg;
   begin
-    Req.Data := Interfaces.C.Strings.To_Chars_Ptr(Req_C, Nul_Check => False).all'Address;
+    Req.Data := To_Address(Req_C);
     Req.Size := Interfaces.C.unsigned(Req_Str'Length);
     Req.Type_Name := Interfaces.C.Strings.New_String("application/json");
 

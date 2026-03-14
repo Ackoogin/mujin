@@ -215,10 +215,18 @@ endif()
 # ---------------------------------------------------------------------------
 find_program(GPRBUILD gprbuild)
 if(GPRBUILD)
-  add_test(NAME tobj_ada_socket_e2e
-           COMMAND ${CMAKE_SOURCE_DIR}/scripts/test_ada_socket_e2e.sh
-                   --server-bin $<TARGET_FILE:tobj_socket_server>
-                   --client-bin ${CMAKE_SOURCE_DIR}/examples/ada/bin/ada_tobj_client)
+  if(WIN32)
+    add_test(NAME tobj_ada_socket_e2e
+             COMMAND powershell -ExecutionPolicy Bypass -NoProfile -File
+                     ${CMAKE_SOURCE_DIR}/scripts/test_ada_socket_e2e.ps1
+                     -ServerBin $<TARGET_FILE:tobj_socket_server>
+                     -ClientBin ${CMAKE_SOURCE_DIR}/examples/ada/bin/ada_tobj_client)
+  else()
+    add_test(NAME tobj_ada_socket_e2e
+             COMMAND ${CMAKE_SOURCE_DIR}/scripts/test_ada_socket_e2e.sh
+                     --server-bin $<TARGET_FILE:tobj_socket_server>
+                     --client-bin ${CMAKE_SOURCE_DIR}/examples/ada/bin/ada_tobj_client)
+  endif()
   set_tests_properties(tobj_ada_socket_e2e PROPERTIES
     LABELS "cross_language;integration"
     TIMEOUT 30)

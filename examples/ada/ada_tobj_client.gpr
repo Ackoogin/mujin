@@ -1,5 +1,5 @@
 project Ada_Tobj_Client is
-  Root_Dir := "D:/Dev/repo/ame";
+  Root_Dir := external("MUJIN_ROOT", ".." & "/..");
 
   for Languages use ("Ada", "C");
 
@@ -18,6 +18,6 @@ project Ada_Tobj_Client is
   end Compiler;
 
   package Linker is
-    for Default_Switches ("Ada") use ("-lpthread");
+    for Default_Switches ("Ada") use ("-lws2_32");
   end Linker;
 end Ada_Tobj_Client;

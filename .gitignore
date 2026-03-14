@@ -77,3 +77,13 @@ ref/*
 # Visual Studio
 .vs/*
 out/
+
+# Ada build output
+examples/ada/obj_tobj_client/*ali
+examples/ada/obj_tobj_client/*o
+examples/ada/obj_tobj_client/*bexch
+examples/ada/obj_tobj_client/*stderr
+examples/ada/obj_tobj_client/*stdout
+examples/ada/obj_tobj_client/*deps
+examples/ada/obj_tobj_client/b__*
+
