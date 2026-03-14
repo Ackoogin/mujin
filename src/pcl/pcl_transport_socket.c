@@ -324,18 +324,23 @@ static void* recv_thread_main(void* arg)
       memcpy(topic, payload + 3, topic_len);
       topic[topic_len] = '\0';
       type_len = read_u16_be(payload + 3 + topic_len);
-      data_len = read_u32_be(payload + 5 + topic_len);
+      if (1 + 2 + topic_len + 2 + type_len + 4 > payload_len) {
+        free(topic);
+        free(payload);
+        continue;
+      }
       type_name = (char*)malloc(type_len + 1);
       if (!type_name) {
         free(topic);
         free(payload);
         continue;
       }
-      memcpy(type_name, payload + 9 + topic_len, type_len);
+      memcpy(type_name, payload + 5 + topic_len, type_len);
       type_name[type_len] = '\0';
+      data_len = read_u32_be(payload + 5 + topic_len + type_len);
 
       memset(&msg, 0, sizeof(msg));
-      msg.data = (data_len > 0) ? (payload + 9 + topic_len + 4) : NULL;
+      msg.data = (data_len > 0) ? (payload + 9 + topic_len + type_len) : NULL;
       msg.size = data_len;
       msg.type_name = type_name;
 
@@ -707,7 +712,10 @@ void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx) {
 
   ctx->recv_stop = 1;
 
+  /* shutdown() unblocks any thread blocked in recv() on this socket.
+     close() alone does NOT reliably interrupt a blocked recv() on Linux. */
   if (ctx->client_sock != PCL_INVALID_SOCKET) {
+    shutdown(ctx->client_sock, SHUT_RDWR);
     pcl_close_socket(ctx->client_sock);
     ctx->client_sock = PCL_INVALID_SOCKET;
   }
