@@ -2,6 +2,7 @@
 /// \brief PCL container implementation — lifecycle, parameters, and ports.
 #include "pcl_internal.h"
 #include "pcl/pcl_container.h"
+#include "pcl/pcl_executor.h"
 #include "pcl/pcl_log.h"
 
 #include <stdlib.h>
@@ -338,7 +339,8 @@ pcl_status_t pcl_port_publish(pcl_port_t* port, const pcl_msg_t* msg) {
   if (!port->owner || port->owner->state != PCL_STATE_ACTIVE) {
     return PCL_ERR_PORT_CLOSED;
   }
-  // dispatch is handled by the executor's transport adapter
-  (void)msg;
+  if (port->owner->executor) {
+    return pcl_executor_publish(port->owner->executor, port->name, msg);
+  }
   return PCL_OK;
 }

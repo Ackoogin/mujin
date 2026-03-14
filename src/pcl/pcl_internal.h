@@ -55,6 +55,8 @@ struct pcl_port_t {
 
 // ── Internal container representation ───────────────────────────────────
 
+struct pcl_executor_t;
+
 struct pcl_container_t {
   char              name[128];
   pcl_state_t       state;
@@ -71,6 +73,8 @@ struct pcl_container_t {
 
   pcl_param_t       params[PCL_MAX_PARAMS];
   uint32_t          param_count;
+
+  struct pcl_executor_t* executor;
 };
 
 #ifdef __cplusplus

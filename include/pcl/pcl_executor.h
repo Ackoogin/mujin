@@ -96,6 +96,16 @@ pcl_status_t pcl_executor_invoke_service(pcl_executor_t*  e,
                                          const pcl_msg_t* request,
                                          pcl_msg_t*       response);
 
+/// \brief Publish a message to a topic (intra-process dispatch).
+///
+/// When a container calls pcl_port_publish, the port's owner must have been
+/// added to an executor. This routes the message to subscribers on the topic.
+/// If a transport adapter is set, it is used; otherwise dispatch_incoming.
+/// Safe to call from the executor thread only.
+pcl_status_t pcl_executor_publish(pcl_executor_t*  e,
+                                  const char*      topic,
+                                  const pcl_msg_t* msg);
+
 #ifdef __cplusplus
 }
 #endif

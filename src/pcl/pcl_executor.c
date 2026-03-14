@@ -158,7 +158,11 @@ pcl_executor_t* pcl_executor_create(void) {
 
 void pcl_executor_destroy(pcl_executor_t* e) {
   pcl_pending_msg_t* pending;
+  uint32_t i;
   if (!e) return;
+  for (i = 0; i < e->container_count; ++i) {
+    e->containers[i]->executor = NULL;
+  }
   if (e->has_transport && e->transport.shutdown) {
     e->transport.shutdown(e->transport.adapter_ctx);
   }
@@ -185,6 +189,7 @@ pcl_status_t pcl_executor_add(pcl_executor_t* e, pcl_container_t* c) {
   if (!e || !c) return PCL_ERR_INVALID;
   if (e->container_count >= PCL_MAX_CONTAINERS) return PCL_ERR_NOMEM;
   e->containers[e->container_count++] = c;
+  c->executor = e;
   return PCL_OK;
 }
 
@@ -440,6 +445,16 @@ pcl_status_t pcl_executor_invoke_service(pcl_executor_t*  e,
   if (!port) return PCL_ERR_NOT_FOUND;
 
   return port->svc_handler(port->owner, request, response, port->svc_user_data);
+}
+
+pcl_status_t pcl_executor_publish(pcl_executor_t*  e,
+                                  const char*      topic,
+                                  const pcl_msg_t* msg) {
+  if (!e || !topic || !msg) return PCL_ERR_INVALID;
+  if (e->has_transport && e->transport.publish) {
+    return e->transport.publish(e->transport.adapter_ctx, topic, msg);
+  }
+  return dispatch_incoming_now(e, topic, msg);
 }
 
 pcl_status_t pcl_executor_post_incoming(pcl_executor_t*  e,

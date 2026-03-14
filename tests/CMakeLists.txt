@@ -178,3 +178,9 @@ gtest_discover_tests(test_tobj_runtime_streaming DISCOVERY_MODE PRE_TEST)
 add_executable(test_tobj_interest_matching ${TOBJ_TEST_DIR}/Test_InterestManager_Matching.cpp)
 target_link_libraries(test_tobj_interest_matching PRIVATE tactical_objects GTest::gtest_main)
 gtest_discover_tests(test_tobj_interest_matching DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_e2e ${TOBJ_TEST_DIR}/Test_TacticalObjects_E2E.cpp)
+target_link_libraries(test_tobj_e2e PRIVATE tactical_objects tactical_objects_component
+  pcl_core GTest::gtest_main)
+target_include_directories(test_tobj_e2e PRIVATE ${CMAKE_SOURCE_DIR}/src/pcl)
+gtest_discover_tests(test_tobj_e2e DISCOVERY_MODE PRE_TEST)

@@ -32,8 +32,32 @@ set_target_properties(pcl_core PROPERTIES
 find_package(Threads REQUIRED)
 target_link_libraries(pcl_core PRIVATE Threads::Threads)
 
+# ---------------------------------------------------------------------------
+# pcl_transport_socket — TCP socket transport (optional, platform sockets)
+# ---------------------------------------------------------------------------
+add_library(pcl_transport_socket STATIC
+  pcl_transport_socket.c
+)
+
+target_include_directories(pcl_transport_socket PUBLIC
+  ${CMAKE_SOURCE_DIR}/include
+)
+
+target_link_libraries(pcl_transport_socket PUBLIC pcl_core)
+
+if(WIN32)
+  target_link_libraries(pcl_transport_socket PRIVATE ws2_32)
+endif()
+
+set_target_properties(pcl_transport_socket PROPERTIES
+  LINKER_LANGUAGE C
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+)
+
 # Install
-install(TARGETS pcl_core
+install(TARGETS pcl_core pcl_transport_socket
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
 )
