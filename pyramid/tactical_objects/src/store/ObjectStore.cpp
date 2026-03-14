@@ -75,4 +75,21 @@ void ObjectStore::removeFromAllComponents(const UUIDKey& id) {
   zones_.remove(id);
 }
 
+uint16_t ObjectStore::getDirtyMask(const UUIDKey& id) const {
+  auto it = dirty_masks_.find(id);
+  return it != dirty_masks_.end() ? it->second : 0u;
+}
+
+void ObjectStore::setDirtyBits(const UUIDKey& id, uint16_t bits) {
+  dirty_masks_[id] |= bits;
+}
+
+void ObjectStore::clearDirtyMask(const UUIDKey& id) {
+  dirty_masks_.erase(id);
+}
+
+void ObjectStore::clearAllDirtyMasks() {
+  dirty_masks_.clear();
+}
+
 } // namespace tactical_objects

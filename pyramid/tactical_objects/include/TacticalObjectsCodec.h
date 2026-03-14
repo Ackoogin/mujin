@@ -40,6 +40,8 @@ public:
   static ObjectUpdate decodeObjectUpdate(const nlohmann::json& j);
 
   static std::string objectTypeToString(ObjectType t);
+  static ObjectType objectTypeFromString(const std::string& s);
+  static Affiliation affiliationFromString(const std::string& s);
 
   // --- ZoneDefinition ---
   static nlohmann::json encodeZoneDefinition(const ZoneDefinition& def);

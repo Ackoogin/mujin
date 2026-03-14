@@ -24,6 +24,7 @@ target_sources(tactical_objects
         src/history/TacticalHistory.cpp
         src/TacticalObjectsCodec.cpp
         src/TacticalObjectsRuntime.cpp
+        src/StreamingCodec.cpp
 )
 
 target_include_directories(tactical_objects

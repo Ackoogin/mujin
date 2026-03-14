@@ -8,6 +8,14 @@ using pyramid::core::uuid::UUIDHelper;
 
 // --- Enum string maps ---
 
+ObjectType TacticalObjectsCodec::objectTypeFromString(const std::string& s) {
+  return stringToObjectType(s);
+}
+
+Affiliation TacticalObjectsCodec::affiliationFromString(const std::string& s) {
+  return stringToAffiliation(s);
+}
+
 std::string TacticalObjectsCodec::objectTypeToString(ObjectType t) {
   switch (t) {
     case ObjectType::Platform: return "Platform";

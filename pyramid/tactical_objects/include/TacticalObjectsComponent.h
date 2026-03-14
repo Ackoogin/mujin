@@ -4,8 +4,10 @@
 #include <TacticalObjectsCodec.h>
 #include <pcl/component.hpp>
 
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 namespace tactical_objects {
 
@@ -59,8 +61,31 @@ private:
                                         pcl_msg_t* response,
                                         void* user_data);
 
+  /// \brief Service: register an interest and begin streaming matching entities.
+  static pcl_status_t handleSubscribeInterest(pcl_container_t* c,
+                                               const pcl_msg_t* request,
+                                               pcl_msg_t* response,
+                                               void* user_data);
+
+  /// \brief Service: request a full-snapshot resync for an interest.
+  static pcl_status_t handleResync(pcl_container_t* c,
+                                    const pcl_msg_t* request,
+                                    pcl_msg_t* response,
+                                    void* user_data);
+
   std::shared_ptr<TacticalObjectsRuntime> runtime_;
   std::string response_buffer_;
+
+  // Streaming state
+  uint64_t tick_count_ = 0;
+  int max_entities_per_frame_  = 500;  ///< Split frames larger than this
+  int streaming_tick_divisor_  = 1;    ///< Publish every N ticks
+
+  // Per-interest monotonic sequence IDs (for gap detection)
+  std::unordered_map<UUIDKey, uint64_t> sequence_ids_;
+
+  // Encode buffer for binary publish (reused each tick)
+  std::vector<uint8_t> encode_buf_;
 };
 
 } // namespace tactical_objects
