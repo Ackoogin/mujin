@@ -623,9 +623,10 @@ TEST(TacticalObjectsComponent, SubscribeInterestViaService) {
   j_req["minimum_confidence"] = 0.7;
   j_req["expires_at"] = 9999.0;
 
+  std::string req_str = j_req.dump();
   pcl_msg_t req = {};
-  req.data = j_req.dump().data();
-  req.size = static_cast<uint32_t>(j_req.dump().size());
+  req.data = req_str.data();
+  req.size = static_cast<uint32_t>(req_str.size());
   req.type_name = "application/json";
   pcl_msg_t resp = {};
   char resp_buf[512];
@@ -666,9 +667,10 @@ TEST(TacticalObjectsComponent, ResyncViaService) {
   nlohmann::json j_req;
   j_req["interest_id"] = interest_id_str;
 
+  std::string req_str = j_req.dump();
   pcl_msg_t req = {};
-  req.data = j_req.dump().data();
-  req.size = static_cast<uint32_t>(j_req.dump().size());
+  req.data = req_str.data();
+  req.size = static_cast<uint32_t>(req_str.size());
   req.type_name = "application/json";
   pcl_msg_t resp = {};
   char resp_buf[4096];
@@ -692,9 +694,10 @@ TEST(TacticalObjectsComponent, ResyncInterestNotFound) {
   nlohmann::json j_req;
   j_req["interest_id"] = UUIDHelper::toString(UUIDHelper::generateV4());
 
+  std::string req_str = j_req.dump();
   pcl_msg_t req = {};
-  req.data = j_req.dump().data();
-  req.size = static_cast<uint32_t>(j_req.dump().size());
+  req.data = req_str.data();
+  req.size = static_cast<uint32_t>(req_str.size());
   req.type_name = "application/json";
   pcl_msg_t resp = {};
   char resp_buf[256];

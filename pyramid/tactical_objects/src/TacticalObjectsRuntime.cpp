@@ -27,7 +27,12 @@ UUIDKey TacticalObjectsRuntime::createObject(const ObjectDefinition& def) {
     store_->identities().set(id, ic);
   }
 
-  milclass_->setProfile(id, def.mil_class);
+  MilClassProfile profile = def.mil_class;
+  if (def.affiliation != Affiliation::Unknown &&
+      profile.affiliation == Affiliation::Unknown) {
+    profile.affiliation = def.affiliation;
+  }
+  milclass_->setProfile(id, profile);
 
   // Mark all fields dirty on creation (new entity, full snapshot needed)
   dirty_entities_.insert(id);
@@ -259,21 +264,28 @@ StreamFrame TacticalObjectsRuntime::assembleStreamFrame(
       upd.entity_id    = rec.id;
       upd.version      = rec.version;
       upd.timestamp    = timestamp;
-      upd.field_mask   = FieldMaskBit::ALL;
 
+      uint16_t mask = 0;
       const auto* kc = store_->kinematics().get(rec.id);
-      if (kc) { upd.position = kc->position; upd.velocity = kc->velocity; }
+      if (kc) {
+        upd.position = kc->position;  mask |= FieldMaskBit::POSITION;
+        upd.velocity = kc->velocity;  mask |= FieldMaskBit::VELOCITY;
+      }
       const auto* mc = store_->milclass().get(rec.id);
-      if (mc) { upd.affiliation = mc->profile.affiliation; upd.mil_class = mc->profile; }
-      upd.object_type = rec.type;
+      if (mc) {
+        upd.affiliation = mc->profile.affiliation; mask |= FieldMaskBit::AFFILIATION;
+        upd.mil_class = mc->profile;               mask |= FieldMaskBit::MIL_CLASS;
+      }
+      upd.object_type = rec.type;  mask |= FieldMaskBit::OBJECT_TYPE;
       const auto* qc = store_->quality().get(rec.id);
-      if (qc) upd.confidence = qc->confidence;
+      if (qc) { upd.confidence = qc->confidence; mask |= FieldMaskBit::CONFIDENCE; }
       const auto* lc = store_->lifecycle().get(rec.id);
-      if (lc) upd.lifecycle_status = lc->status;
+      if (lc) { upd.lifecycle_status = lc->status; mask |= FieldMaskBit::LIFECYCLE_STATUS; }
       const auto* bc = store_->behaviors().get(rec.id);
-      if (bc) upd.behavior = *bc;
+      if (bc) { upd.behavior = *bc; mask |= FieldMaskBit::BEHAVIOR; }
       const auto* ic = store_->identities().get(rec.id);
-      if (ic) upd.identity_name = ic->name;
+      if (ic) { upd.identity_name = ic->name; mask |= FieldMaskBit::IDENTITY_NAME; }
+      upd.field_mask = mask;
 
       frame.updates.push_back(upd);
       sub_versions[rec.id] = rec.version;
@@ -321,43 +333,45 @@ StreamFrame TacticalObjectsRuntime::assembleStreamFrame(
     upd.entity_id    = eid;
     upd.version      = entity_version;
     upd.timestamp    = timestamp;
-    upd.field_mask   = mask;
 
+    // Build actual_mask: only include bits for components that exist
+    uint16_t actual_mask = 0;
     if (mask & FieldMaskBit::POSITION) {
       const auto* kc = store_->kinematics().get(eid);
-      if (kc) upd.position = kc->position;
+      if (kc) { upd.position = kc->position; actual_mask |= FieldMaskBit::POSITION; }
     }
     if (mask & FieldMaskBit::VELOCITY) {
       const auto* kc = store_->kinematics().get(eid);
-      if (kc) upd.velocity = kc->velocity;
+      if (kc) { upd.velocity = kc->velocity; actual_mask |= FieldMaskBit::VELOCITY; }
     }
     if (mask & FieldMaskBit::AFFILIATION) {
       const auto* mc = store_->milclass().get(eid);
-      if (mc) upd.affiliation = mc->profile.affiliation;
+      if (mc) { upd.affiliation = mc->profile.affiliation; actual_mask |= FieldMaskBit::AFFILIATION; }
     }
     if (mask & FieldMaskBit::OBJECT_TYPE) {
-      upd.object_type = rec->type;
+      upd.object_type = rec->type; actual_mask |= FieldMaskBit::OBJECT_TYPE;
     }
     if (mask & FieldMaskBit::CONFIDENCE) {
       const auto* qc = store_->quality().get(eid);
-      if (qc) upd.confidence = qc->confidence;
+      if (qc) { upd.confidence = qc->confidence; actual_mask |= FieldMaskBit::CONFIDENCE; }
     }
     if (mask & FieldMaskBit::LIFECYCLE_STATUS) {
       const auto* lc = store_->lifecycle().get(eid);
-      if (lc) upd.lifecycle_status = lc->status;
+      if (lc) { upd.lifecycle_status = lc->status; actual_mask |= FieldMaskBit::LIFECYCLE_STATUS; }
     }
     if (mask & FieldMaskBit::MIL_CLASS) {
       const auto* mc = store_->milclass().get(eid);
-      if (mc) upd.mil_class = mc->profile;
+      if (mc) { upd.mil_class = mc->profile; actual_mask |= FieldMaskBit::MIL_CLASS; }
     }
     if (mask & FieldMaskBit::BEHAVIOR) {
       const auto* bc = store_->behaviors().get(eid);
-      if (bc) upd.behavior = *bc;
+      if (bc) { upd.behavior = *bc; actual_mask |= FieldMaskBit::BEHAVIOR; }
     }
     if (mask & FieldMaskBit::IDENTITY_NAME) {
       const auto* ic = store_->identities().get(eid);
-      if (ic) upd.identity_name = ic->name;
+      if (ic) { upd.identity_name = ic->name; actual_mask |= FieldMaskBit::IDENTITY_NAME; }
     }
+    upd.field_mask = actual_mask;
 
     frame.updates.push_back(upd);
     sub_versions[eid] = entity_version;

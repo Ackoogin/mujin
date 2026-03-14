@@ -75,7 +75,7 @@ static pcl_status_t evidence_producer_on_configure(pcl_container_t* c, void* ud)
 
 ///< E2E: Ada client registers zone interest, evidence producer injects observations,
 ///< tactical_objects correlates and publishes, Ada client receives entity_updates.
-TEST(TacticalObjectsE2E, DISABLED_AdaClientZoneInterestReceivesEntityEvidence) {
+TEST(TacticalObjectsE2E, AdaClientZoneInterestReceivesEntityEvidence) {
   TacticalObjectsComponent tobj;
   tobj.configure();
   tobj.activate();

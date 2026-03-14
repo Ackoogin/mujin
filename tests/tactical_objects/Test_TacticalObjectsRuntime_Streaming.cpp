@@ -311,7 +311,10 @@ TEST(TacticalObjectsRuntimeStreaming, DeltaPathFirstTimeEntityUsesFullMask) {
 
   auto sf = rt.assembleStreamFrame(interest_id, sub, 0.0);
   ASSERT_FALSE(sf.updates.empty());
-  EXPECT_EQ(sf.updates[0].field_mask, FieldMaskBit::ALL);
+  // Mask should include all components that actually exist on the entity,
+  // not FieldMaskBit::ALL (which causes encode/decode mismatch for absent components).
+  EXPECT_TRUE(sf.updates[0].field_mask & FieldMaskBit::POSITION);
+  EXPECT_TRUE(sf.updates[0].field_mask & FieldMaskBit::OBJECT_TYPE);
 }
 
 TEST(TacticalObjectsRuntimeStreaming, DeltaPathWithPositionMask) {
