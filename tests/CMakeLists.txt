@@ -184,3 +184,42 @@ target_link_libraries(test_tobj_e2e PRIVATE tactical_objects tactical_objects_co
   pcl_core GTest::gtest_main)
 target_include_directories(test_tobj_e2e PRIVATE ${CMAKE_SOURCE_DIR}/src/pcl)
 gtest_discover_tests(test_tobj_e2e DISCOVERY_MODE PRE_TEST)
+
+# ---------------------------------------------------------------------------
+# Socket transport E2E tests (Step 6: C++ only, no Ada dependency)
+# ---------------------------------------------------------------------------
+add_executable(test_tobj_socket_e2e ${TOBJ_TEST_DIR}/Test_TacticalObjects_SocketE2E.cpp)
+target_link_libraries(test_tobj_socket_e2e PRIVATE
+  tactical_objects tactical_objects_component
+  pcl_core pcl_transport_socket GTest::gtest_main)
+target_include_directories(test_tobj_socket_e2e PRIVATE ${CMAKE_SOURCE_DIR}/src/pcl)
+if(NOT WIN32)
+  target_link_libraries(test_tobj_socket_e2e PRIVATE pthread)
+endif()
+gtest_discover_tests(test_tobj_socket_e2e DISCOVERY_MODE PRE_TEST)
+
+# ---------------------------------------------------------------------------
+# Socket server harness for cross-process Ada E2E (Step 4)
+# ---------------------------------------------------------------------------
+add_executable(tobj_socket_server ${TOBJ_TEST_DIR}/tobj_socket_server.cpp)
+target_link_libraries(tobj_socket_server PRIVATE
+  tactical_objects tactical_objects_component
+  pcl_core pcl_transport_socket)
+target_include_directories(tobj_socket_server PRIVATE ${CMAKE_SOURCE_DIR}/src/pcl)
+if(NOT WIN32)
+  target_link_libraries(tobj_socket_server PRIVATE pthread)
+endif()
+
+# ---------------------------------------------------------------------------
+# Cross-process Ada socket E2E test (gated on GNAT availability)
+# ---------------------------------------------------------------------------
+find_program(GPRBUILD gprbuild)
+if(GPRBUILD)
+  add_test(NAME tobj_ada_socket_e2e
+           COMMAND ${CMAKE_SOURCE_DIR}/scripts/test_ada_socket_e2e.sh
+                   --server-bin $<TARGET_FILE:tobj_socket_server>
+                   --client-bin ${CMAKE_SOURCE_DIR}/examples/ada/bin/ada_tobj_client)
+  set_tests_properties(tobj_ada_socket_e2e PROPERTIES
+    LABELS "cross_language;integration"
+    TIMEOUT 30)
+endif()

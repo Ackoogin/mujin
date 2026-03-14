@@ -136,6 +136,71 @@ package Pcl_Bindings is
      User_Data : System.Address) return Pcl_Port_Access;
   pragma Import(C, Add_Subscriber, "pcl_container_add_subscriber");
 
+  -- ── Service invocation ─────────────────────────────────────────────────
+
+  function Invoke_Service
+    (Exec         : Pcl_Executor_Access;
+     Service_Name : Interfaces.C.Strings.chars_ptr;
+     Request      : access constant Pcl_Msg;
+     Response     : access Pcl_Msg) return Pcl_Status;
+  pragma Import(C, Invoke_Service, "pcl_executor_invoke_service");
+
+  -- ── Transport adapter ──────────────────────────────────────────────────
+
+  type Pcl_Transport is limited private;
+  type Pcl_Transport_Access is access all Pcl_Transport;
+  pragma Convention(C, Pcl_Transport_Access);
+
+  type Pcl_Transport_Const_Access is access constant Pcl_Transport;
+  pragma Convention(C, Pcl_Transport_Const_Access);
+
+  function Set_Transport
+    (Exec      : Pcl_Executor_Access;
+     Transport : Pcl_Transport_Const_Access) return Pcl_Status;
+  pragma Import(C, Set_Transport, "pcl_executor_set_transport");
+
+  function Dispatch_Incoming
+    (Exec  : Pcl_Executor_Access;
+     Topic : Interfaces.C.Strings.chars_ptr;
+     Msg   : access constant Pcl_Msg) return Pcl_Status;
+  pragma Import(C, Dispatch_Incoming, "pcl_executor_dispatch_incoming");
+
+  -- ── Socket transport ───────────────────────────────────────────────────
+
+  type Pcl_Socket_Transport is limited private;
+  type Pcl_Socket_Transport_Access is access all Pcl_Socket_Transport;
+  pragma Convention(C, Pcl_Socket_Transport_Access);
+
+  function Create_Socket_Server
+    (Port     : Interfaces.C.unsigned_short;
+     Executor : Pcl_Executor_Access) return Pcl_Socket_Transport_Access;
+  pragma Import(C, Create_Socket_Server, "pcl_socket_transport_create_server");
+
+  function Create_Socket_Client
+    (Host     : Interfaces.C.Strings.chars_ptr;
+     Port     : Interfaces.C.unsigned_short;
+     Executor : Pcl_Executor_Access) return Pcl_Socket_Transport_Access;
+  pragma Import(C, Create_Socket_Client, "pcl_socket_transport_create_client");
+
+  function Get_Socket_Transport
+    (Ctx : Pcl_Socket_Transport_Access) return Pcl_Transport_Const_Access;
+  pragma Import(C, Get_Socket_Transport, "pcl_socket_transport_get_transport");
+
+  function Socket_Gateway_Container
+    (Ctx : Pcl_Socket_Transport_Access) return Pcl_Container_Access;
+  pragma Import(C, Socket_Gateway_Container,
+                "pcl_socket_transport_gateway_container");
+
+  function Invoke_Remote
+    (Ctx          : Pcl_Socket_Transport_Access;
+     Service_Name : Interfaces.C.Strings.chars_ptr;
+     Request      : access constant Pcl_Msg;
+     Response     : access Pcl_Msg) return Pcl_Status;
+  pragma Import(C, Invoke_Remote, "pcl_socket_transport_invoke_remote");
+
+  procedure Destroy_Socket_Transport(Ctx : Pcl_Socket_Transport_Access);
+  pragma Import(C, Destroy_Socket_Transport, "pcl_socket_transport_destroy");
+
 private
   type Pcl_Executor is null record;
   pragma Convention(C, Pcl_Executor);
@@ -145,4 +210,10 @@ private
 
   type Pcl_Port is null record;
   pragma Convention(C, Pcl_Port);
+
+  type Pcl_Transport is null record;
+  pragma Convention(C, Pcl_Transport);
+
+  type Pcl_Socket_Transport is null record;
+  pragma Convention(C, Pcl_Socket_Transport);
 end Pcl_Bindings;
