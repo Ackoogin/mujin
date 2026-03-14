@@ -211,6 +211,7 @@ TEST(TacticalObjectsRuntimeStreaming, DirtyMaskAffiliationOnlyOnAffiliationUpdat
 TEST(TacticalObjectsRuntimeStreaming, NewSubscriberReceivesFullSnapshot) {
   TacticalObjectsRuntime rt;
 
+  // Create entity and flush — entity is no longer in dirty_entities_
   ObjectDefinition def;
   def.type = ObjectType::Platform;
   def.position = {1.0, 2.0, 0.0};
@@ -218,12 +219,12 @@ TEST(TacticalObjectsRuntimeStreaming, NewSubscriberReceivesFullSnapshot) {
   auto obj_id = rt.createObject(def);
   rt.flushDirtyEntities(0.0);
 
+  // Register interest and subscriber AFTER flush
   InterestCriteria crit;
   auto interest_id = rt.interestManager().registerInterest(crit);
   SubscriptionHandle sub = rt.registerStreamSubscriber(interest_id, [](const UUIDKey&, const UUIDKey&) {});
 
-  // First assemble — subscriber has never seen this entity
-  rt.store()->setDirtyBits(obj_id, FieldMaskBit::ALL);
+  // New subscriber with no version history triggers a full store scan
   auto sf = rt.assembleStreamFrame(interest_id, sub, 0.0);
 
   ASSERT_FALSE(sf.updates.empty());

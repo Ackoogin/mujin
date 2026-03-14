@@ -247,6 +247,40 @@ StreamFrame TacticalObjectsRuntime::assembleStreamFrame(
 
   auto& sub_versions = subscriber_versions_[subscriber];
 
+  // If this subscriber has no version records at all, perform a full snapshot
+  // scan across all entities in the store (initial connect case).
+  bool is_new_subscriber = sub_versions.empty();
+  if (is_new_subscriber) {
+    store_->forEachObject([&](const EntityRecord& rec) {
+      if (!interest_manager_.matchesInterest(interest_rec->criteria, rec, *store_)) return;
+
+      EntityUpdateFrame upd;
+      upd.message_type = STREAM_MSG_ENTITY_UPDATE;
+      upd.entity_id    = rec.id;
+      upd.version      = rec.version;
+      upd.timestamp    = timestamp;
+      upd.field_mask   = FieldMaskBit::ALL;
+
+      const auto* kc = store_->kinematics().get(rec.id);
+      if (kc) { upd.position = kc->position; upd.velocity = kc->velocity; }
+      const auto* mc = store_->milclass().get(rec.id);
+      if (mc) { upd.affiliation = mc->profile.affiliation; upd.mil_class = mc->profile; }
+      upd.object_type = rec.type;
+      const auto* qc = store_->quality().get(rec.id);
+      if (qc) upd.confidence = qc->confidence;
+      const auto* lc = store_->lifecycle().get(rec.id);
+      if (lc) upd.lifecycle_status = lc->status;
+      const auto* bc = store_->behaviors().get(rec.id);
+      if (bc) upd.behavior = *bc;
+      const auto* ic = store_->identities().get(rec.id);
+      if (ic) upd.identity_name = ic->name;
+
+      frame.updates.push_back(upd);
+      sub_versions[rec.id] = rec.version;
+    });
+    return frame;
+  }
+
   // Deleted entities matching this interest
   for (const auto& del_id : deleted_entities_) {
     // We can't check interest match on a deleted entity — just send delete to all
