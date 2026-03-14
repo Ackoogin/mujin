@@ -125,3 +125,21 @@ TEST(ObjectStore, SparseObjectsDontAllocateUnusedComponents) {
   ASSERT_EQ(store.milclass().size(), 1u);
   ASSERT_EQ(store.kinematics().size(), 0u);
 }
+
+///< Coverage: ObjectStore dirty mask API (setDirtyBits, clearDirtyMask, clearAllDirtyMasks).
+TEST(ObjectStore, DirtyMaskSetClearAndGet) {
+  ObjectStore store;
+  auto id = store.createObject(ObjectType::Platform);
+  ASSERT_EQ(store.getDirtyMask(id), 0u);
+
+  store.setDirtyBits(id, 0x0001u);
+  store.setDirtyBits(id, 0x0002u);
+  ASSERT_EQ(store.getDirtyMask(id), 0x0003u);
+
+  store.clearDirtyMask(id);
+  ASSERT_EQ(store.getDirtyMask(id), 0u);
+
+  store.setDirtyBits(id, 0x0010u);
+  store.clearAllDirtyMasks();
+  ASSERT_EQ(store.getDirtyMask(id), 0u);
+}

@@ -80,6 +80,10 @@ static pcl_status_t do_post(void* ud) {
   return pcl_executor_post_incoming(c->e, c->topic, c->msg);
 }
 
+// Allocation order before post_incoming: executor_create uses 1× calloc.
+// Inside post_incoming: calloc(pending), malloc(topic), malloc(type_name), malloc(data).
+// Countdown N = skip N allocations, fail the (N+1)-th.
+
 // ── Fail allocation #0: calloc for pcl_pending_msg_t ─────────────────
 
 TEST(PclOom, PostIncomingPendingAllocFails) {
@@ -88,8 +92,8 @@ TEST(PclOom, PostIncomingPendingAllocFails) {
   pcl_msg_t msg = {}; msg.type_name = "T";
   OomPostCtx ctx{e, "t", &msg};
 
-  g_oom_countdown = 0;               // arm: fail the very next alloc
-  pcl_status_t rc = do_post(&ctx);   // no GTest between arm and call
+  g_oom_countdown = 0;               // fail the very next alloc (pending calloc)
+  pcl_status_t rc = do_post(&ctx);
   g_oom_countdown = -1;
   EXPECT_EQ(rc, PCL_ERR_NOMEM);
 
@@ -97,7 +101,7 @@ TEST(PclOom, PostIncomingPendingAllocFails) {
   restore_logs();
 }
 
-// ── Fail allocation #1: topic strdup → line 428 ──────────────────────
+// ── Fail allocation #1: topic strdup → free_pending_msg path ─────────
 
 TEST(PclOom, PostIncomingTopicStrdupFails) {
   silence_logs();
@@ -105,8 +109,7 @@ TEST(PclOom, PostIncomingTopicStrdupFails) {
   pcl_msg_t msg = {}; msg.type_name = "T";
   OomPostCtx ctx{e, "t", &msg};
 
-  // calloc (#0) succeeds, malloc(topic) (#1) fails → pending->topic = NULL
-  g_oom_countdown = 1;
+  g_oom_countdown = 2;                // skip executor+pending, fail malloc(topic)
   pcl_status_t rc = do_post(&ctx);
   g_oom_countdown = -1;
   EXPECT_EQ(rc, PCL_ERR_NOMEM);
@@ -115,7 +118,7 @@ TEST(PclOom, PostIncomingTopicStrdupFails) {
   restore_logs();
 }
 
-// ── Fail allocation #2: type_name strdup → line 428 ─────────────────
+// ── Fail allocation #2: type_name strdup → free_pending_msg path ─────
 
 TEST(PclOom, PostIncomingTypeNameStrdupFails) {
   silence_logs();
@@ -123,8 +126,7 @@ TEST(PclOom, PostIncomingTypeNameStrdupFails) {
   pcl_msg_t msg = {}; msg.type_name = "T";
   OomPostCtx ctx{e, "t", &msg};
 
-  // calloc (#0) + malloc(topic) (#1) succeed; malloc(type_name) (#2) fails
-  g_oom_countdown = 2;
+  g_oom_countdown = 2;                // skip pending+topic, fail malloc(type_name) → free_pending_msg
   pcl_status_t rc = do_post(&ctx);
   g_oom_countdown = -1;
   EXPECT_EQ(rc, PCL_ERR_NOMEM);
@@ -133,7 +135,7 @@ TEST(PclOom, PostIncomingTypeNameStrdupFails) {
   restore_logs();
 }
 
-// ── Fail allocation #3: data malloc → lines 435-436 ─────────────────
+// ── Fail allocation #3: data malloc → lines 467-469 ──────────────────
 
 TEST(PclOom, PostIncomingDataMallocFails) {
   silence_logs();
@@ -142,8 +144,7 @@ TEST(PclOom, PostIncomingDataMallocFails) {
   pcl_msg_t msg = {}; msg.type_name = "T"; msg.data = &payload; msg.size = sizeof(payload);
   OomPostCtx ctx{e, "t", &msg};
 
-  // calloc + malloc(topic) + malloc(type_name) succeed; malloc(data) (#3) fails
-  g_oom_countdown = 3;
+  g_oom_countdown = 3;                // skip pending+topic+type_name, fail malloc(data)
   pcl_status_t rc = do_post(&ctx);
   g_oom_countdown = -1;
   EXPECT_EQ(rc, PCL_ERR_NOMEM);

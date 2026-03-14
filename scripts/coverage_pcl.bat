@@ -38,12 +38,12 @@ if %ERRORLEVEL% neq 0 exit /b 1
 echo.
 echo === Building PCL tests ===
 cmake --build %BUILD_DIR% -j%NUMBER_OF_PROCESSORS% ^
-  --target test_pcl_lifecycle test_pcl_executor test_pcl_log test_pcl_robustness test_pcl_dining
+  --target test_pcl_lifecycle test_pcl_executor test_pcl_log test_pcl_robustness test_pcl_dining test_pcl_oom
 if %ERRORLEVEL% neq 0 exit /b 1
 
 echo.
 echo === Running tests ===
-for %%T in (test_pcl_lifecycle test_pcl_executor test_pcl_log test_pcl_robustness test_pcl_dining) do (
+for %%T in (test_pcl_lifecycle test_pcl_executor test_pcl_log test_pcl_robustness test_pcl_dining test_pcl_oom) do (
     set "EXE=%BUILD_DIR%\tests\%%T.exe"
     if exist "!EXE!" (
         echo Running %%T...

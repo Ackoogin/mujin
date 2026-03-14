@@ -28,7 +28,7 @@ cmake -S . -B "$BUILD_DIR" \
 echo ""
 echo "=== Building PCL tests ==="
 cmake --build "$BUILD_DIR" -j"$(nproc)" \
-  --target test_pcl_lifecycle test_pcl_executor test_pcl_log test_pcl_robustness test_pcl_dining
+  --target test_pcl_lifecycle test_pcl_executor test_pcl_log test_pcl_robustness test_pcl_dining test_pcl_oom
 
 echo ""
 echo "=== Running tests ==="
@@ -37,6 +37,7 @@ echo "=== Running tests ==="
 "$BUILD_DIR/tests/test_pcl_log" || true
 "$BUILD_DIR/tests/test_pcl_robustness" || true
 "$BUILD_DIR/tests/test_pcl_dining" || true
+"$BUILD_DIR/tests/test_pcl_oom" || true
 
 echo ""
 echo "=== Generating coverage report ==="

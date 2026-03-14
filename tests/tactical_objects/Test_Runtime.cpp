@@ -74,6 +74,9 @@ TEST_F(RuntimeTest, QueryDelegation) {
 }
 
 ///< REQ_TACTICAL_OBJECTS_032: Runtime delegates zone operations.
+///< REQ_TACTICAL_OBJECTS_058: Achievability via zone containment (AOI-based).
+///< REQ_TACTICAL_OBJECTS_064: Spatial reasoning for object-in-location (zone).
+///< REQ_TACTICAL_OBJECTS_065: Capability via zone/query delegation.
 TEST_F(RuntimeTest, ZoneDelegation) {
   ZoneDefinition def;
   def.zone_type = ZoneType::AOI;
@@ -122,6 +125,7 @@ TEST_F(RuntimeTest, BothPathsQueryableTogether) {
 }
 
 ///< REQ_TACTICAL_OBJECTS_044: Same batch in same order produces same result.
+///< REQ_TACTICAL_OBJECTS_061: Traceability via deterministic correlation (lineage shape).
 TEST_F(RuntimeTest, BatchCorrelationDeterminism) {
   auto make_batch = []() {
     ObservationBatch batch;

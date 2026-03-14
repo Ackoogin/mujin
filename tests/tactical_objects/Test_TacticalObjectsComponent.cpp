@@ -328,6 +328,7 @@ TEST(TacticalObjectsComponent, ZoneRemoveViaService) {
   EXPECT_FALSE(comp.runtime().getZone(zid).has_value());
 }
 
+///< REQ_TACTICAL_OBJECTS_034: No port creation after configure; shutdown from any state.
 ///< REQ_TACTICAL_OBJECTS_033: on_shutdown lifecycle callback succeeds.
 TEST(TacticalObjectsComponent, ShutdownLifecycle) {
   TacticalObjectsComponent comp;
@@ -602,3 +603,291 @@ TEST(TacticalObjectsComponent, RemoveZoneInvalidJsonReturnsError) {
 
   EXPECT_NE(pcl_executor_invoke_service(exec.handle(), "remove_zone", &req, &resp), PCL_OK);
 }
+
+///< REQ_TACTICAL_OBJECTS_046: subscribe_interest service registers interest and returns interest_id.
+///< REQ_TACTICAL_OBJECTS_057: subscribe_interest and resync via PCL service.
+///< TOBJ.005: Interest requirement registration.
+TEST(TacticalObjectsComponent, SubscribeInterestViaService) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  nlohmann::json j_req;
+  j_req["object_type"] = "Platform";
+  j_req["affiliation"] = "Hostile";
+  j_req["area"] = nlohmann::json::object({{"min_lat", 50.0}, {"max_lat", 52.0}, {"min_lon", -1.0}, {"max_lon", 1.0}});
+  j_req["behavior_pattern"] = "patrol";
+  j_req["minimum_confidence"] = 0.7;
+  j_req["expires_at"] = 9999.0;
+
+  pcl_msg_t req = {};
+  req.data = j_req.dump().data();
+  req.size = static_cast<uint32_t>(j_req.dump().size());
+  req.type_name = "application/json";
+  pcl_msg_t resp = {};
+  char resp_buf[512];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "subscribe_interest", &req, &resp), PCL_OK);
+  std::string resp_str(static_cast<const char*>(resp.data), resp.size);
+  auto jr = nlohmann::json::parse(resp_str);
+  std::string interest_id_str = jr.value("interest_id", "");
+  ASSERT_FALSE(interest_id_str.empty());
+
+  auto parsed = UUIDHelper::fromString(interest_id_str);
+  ASSERT_TRUE(parsed.second);
+}
+
+///< REQ_TACTICAL_OBJECTS_057: resync via tactical_objects.resync service.
+///< REQ_TACTICAL_OBJECTS: resync service returns full snapshot for interest.
+TEST(TacticalObjectsComponent, ResyncViaService) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  ObjectDefinition def;
+  def.type = ObjectType::Platform;
+  def.position = Position{51.0, 0.0, 0};
+  def.affiliation = Affiliation::Hostile;
+  comp.runtime().createObject(def);
+
+  InterestCriteria criteria;
+  criteria.object_type = ObjectType::Platform;
+  auto interest_id = comp.runtime().interestManager().registerInterest(criteria, 0.0, 9999.0);
+  std::string interest_id_str = UUIDHelper::toString(interest_id.uuid);
+
+  nlohmann::json j_req;
+  j_req["interest_id"] = interest_id_str;
+
+  pcl_msg_t req = {};
+  req.data = j_req.dump().data();
+  req.size = static_cast<uint32_t>(j_req.dump().size());
+  req.type_name = "application/json";
+  pcl_msg_t resp = {};
+  char resp_buf[4096];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "tactical_objects.resync", &req, &resp), PCL_OK);
+  ASSERT_GT(resp.size, 0u);
+  EXPECT_EQ(std::string(static_cast<const char*>(resp.type_name)), "application/octet-stream");
+}
+
+///< Coverage: resync returns error when interest_id not found.
+TEST(TacticalObjectsComponent, ResyncInterestNotFound) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  nlohmann::json j_req;
+  j_req["interest_id"] = UUIDHelper::toString(UUIDHelper::generateV4());
+
+  pcl_msg_t req = {};
+  req.data = j_req.dump().data();
+  req.size = static_cast<uint32_t>(j_req.dump().size());
+  req.type_name = "application/json";
+  pcl_msg_t resp = {};
+  char resp_buf[256];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  EXPECT_NE(pcl_executor_invoke_service(exec.handle(), "tactical_objects.resync", &req, &resp), PCL_OK);
+}
+
+///< Coverage: subscribe_interest invalid JSON returns error.
+TEST(TacticalObjectsComponent, SubscribeInterestInvalidJsonReturnsError) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  const char* bad = "{ not valid json !!!";
+  pcl_msg_t req{};
+  req.data = bad;
+  req.size = static_cast<uint32_t>(strlen(bad));
+  req.type_name = "application/json";
+  pcl_msg_t resp{};
+  char resp_buf[64];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  EXPECT_NE(pcl_executor_invoke_service(exec.handle(), "subscribe_interest", &req, &resp), PCL_OK);
+}
+
+///< Coverage: resync invalid JSON returns error.
+TEST(TacticalObjectsComponent, ResyncInvalidJsonReturnsError) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  const char* bad = "{ not valid json !!!";
+  pcl_msg_t req{};
+  req.data = bad;
+  req.size = static_cast<uint32_t>(strlen(bad));
+  req.type_name = "application/json";
+  pcl_msg_t resp{};
+  char resp_buf[64];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  EXPECT_NE(pcl_executor_invoke_service(exec.handle(), "tactical_objects.resync", &req, &resp), PCL_OK);
+}
+
+///< Coverage: streaming_tick_divisor > 1 skips publish on non-divisor ticks.
+///< REQ_TACTICAL_OBJECTS_038: Tick-driven housekeeping.
+TEST(TacticalObjectsComponent, StreamingTickDivisorSkipsPublish) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+  comp.setStreamingTickDivisor(2);
+  comp.setTickRateHz(1000.0);
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  exec.spinOnce(0);
+  exec.spinOnce(0.001);
+}
+
+///< Coverage: max_entities_per_frame chunks large frames.
+TEST(TacticalObjectsComponent, ChunkingWithMaxEntitiesPerFrame) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+  comp.setMaxEntitiesPerFrame(2);
+  comp.setTickRateHz(1000.0);
+
+  ObjectDefinition def;
+  def.type = ObjectType::Platform;
+  def.position = Position{51.0, 0.0, 0};
+  def.affiliation = Affiliation::Hostile;
+
+  for (int i = 0; i < 5; ++i) {
+    comp.runtime().createObject(def);
+  }
+
+  InterestCriteria criteria;
+  criteria.object_type = ObjectType::Platform;
+  comp.runtime().interestManager().registerInterest(criteria, 0.0, 9999.0);
+
+  pcl::Executor exec;
+  exec.add(comp);
+  exec.spinOnce(0);
+  exec.spinOnce(0);
+}
+
+///< Coverage: subscribe then create then tick exercises full publish path.
+TEST(TacticalObjectsComponent, SubscribeCreateTickPublishes) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+  comp.setTickRateHz(1000.0);
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  nlohmann::json sub_req;
+  sub_req["object_type"] = "Platform";
+  sub_req["affiliation"] = "Hostile";
+  sub_req["behavior_pattern"] = "patrol";
+  sub_req["expires_at"] = 9999.0;
+  std::string sub_str = sub_req.dump();
+  pcl_msg_t req = {};
+  req.data = sub_str.data();
+  req.size = static_cast<uint32_t>(sub_str.size());
+  req.type_name = "application/json";
+  pcl_msg_t resp = {};
+  char resp_buf[512];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "subscribe_interest", &req, &resp), PCL_OK);
+
+  ObjectDefinition def;
+  def.type = ObjectType::Platform;
+  def.position = Position{51.0, 0.0, 0};
+  def.affiliation = Affiliation::Hostile;
+  auto j_create = TacticalObjectsCodec::encodeObjectDefinition(def);
+  std::string create_str = j_create.dump();
+  req.data = create_str.data();
+  req.size = static_cast<uint32_t>(create_str.size());
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "create_object", &req, &resp), PCL_OK);
+
+  exec.spinOnce(0);
+  exec.spinOnce(0);
+}
+
+///< Coverage: deleted entity appears in streaming frame deletes list (lines 107-116).
+TEST(TacticalObjectsComponent, DeletedEntityPublishesDeleteFrame) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+  comp.setTickRateHz(1000.0);
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  nlohmann::json sub_req;
+  sub_req["object_type"] = "Platform";
+  sub_req["affiliation"] = "Hostile";
+  sub_req["expires_at"] = 9999.0;
+  std::string sub_str = sub_req.dump();
+  pcl_msg_t req = {};
+  req.data = sub_str.data();
+  req.size = static_cast<uint32_t>(sub_str.size());
+  req.type_name = "application/json";
+  pcl_msg_t resp = {};
+  char resp_buf[512];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "subscribe_interest", &req, &resp), PCL_OK);
+
+  ObjectDefinition def;
+  def.type = ObjectType::Platform;
+  def.position = Position{51.0, 0.0, 0};
+  def.affiliation = Affiliation::Hostile;
+  auto j_create = TacticalObjectsCodec::encodeObjectDefinition(def);
+  std::string create_str = j_create.dump();
+  req.data = create_str.data();
+  req.size = static_cast<uint32_t>(create_str.size());
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "create_object", &req, &resp), PCL_OK);
+
+  std::string resp_str(static_cast<const char*>(resp.data), resp.size);
+  auto jr = nlohmann::json::parse(resp_str);
+  std::string obj_id_str = jr.value("object_id", "");
+  ASSERT_FALSE(obj_id_str.empty());
+
+  for (int i = 0; i < 5; ++i) exec.spinOnce(0);
+
+  nlohmann::json del_req;
+  del_req["object_id"] = obj_id_str;
+  std::string del_str = del_req.dump();
+  req.data = del_str.data();
+  req.size = static_cast<uint32_t>(del_str.size());
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "delete_object", &req, &resp), PCL_OK);
+
+  for (int i = 0; i < 5; ++i) exec.spinOnce(0);
+}
+

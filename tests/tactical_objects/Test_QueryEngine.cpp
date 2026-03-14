@@ -97,6 +97,7 @@ TEST_F(QueryEngineTest, QueryByAffiliation) {
   ASSERT_EQ(resp.entries.size(), 1u);
 }
 
+///< REQ_TACTICAL_OBJECTS_024: Compound predicate across type and region.
 ///< REQ_TACTICAL_OBJECTS_013: Compound query combines type + region.
 TEST_F(QueryEngineTest, CompoundQueryTypeAndRegion) {
   addEntity(ObjectType::Platform, 51.0, 0.0);
@@ -110,6 +111,7 @@ TEST_F(QueryEngineTest, CompoundQueryTypeAndRegion) {
   ASSERT_EQ(resp.entries.size(), 1u);
 }
 
+///< REQ_TACTICAL_OBJECTS_023: Exact post-filter removes spatial index false positives.
 ///< REQ_TACTICAL_OBJECTS_013: Region query excludes entities whose exact position falls outside bbox.
 TEST_F(QueryEngineTest, RegionQueryFiltersExactPositionOutsideBbox) {
   // Cell size = 1.0 deg. Entity at (51.0, 0.0) is in cell [51, 0].

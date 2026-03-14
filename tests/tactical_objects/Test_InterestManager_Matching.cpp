@@ -39,6 +39,22 @@ TEST(InterestManagerMatching, AffiliationMatchesCorrectly) {
   }
 }
 
+///< Coverage: Entity with no MilClassComponent fails affiliation filter.
+TEST(InterestManagerMatching, AffiliationFilterFailsWhenNoMilClass) {
+  ObjectStore store;
+  UUIDKey id = store.createObject(ObjectType::Platform);
+  ASSERT_FALSE(store.milclass().has(id));
+
+  const auto* rec = store.getRecord(id);
+  ASSERT_NE(rec, nullptr);
+
+  InterestManager mgr;
+  InterestCriteria crit;
+  crit.affiliation = Affiliation::Hostile;
+
+  EXPECT_FALSE(mgr.matchesInterest(crit, *rec, store));
+}
+
 TEST(InterestManagerMatching, ObjectTypeFilterMatchesCorrectly) {
   ObjectStore store;
   UUIDKey id = store.createObject(ObjectType::Platform);

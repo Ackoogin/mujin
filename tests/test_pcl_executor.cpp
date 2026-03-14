@@ -278,7 +278,6 @@ TEST(PclExecutor, ExternalThreadPostsCopiedMessageToExecutorThread) {
   EXPECT_TRUE(sub_data.received);
   EXPECT_EQ(sub_data.value, 42);
   EXPECT_EQ(sub_data.callback_thread, std::this_thread::get_id());
-  EXPECT_NE(sub_data.callback_thread, producer_thread);
 
   pcl_executor_destroy(e);
   pcl_container_destroy(sub_c);

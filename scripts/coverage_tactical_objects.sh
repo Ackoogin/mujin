@@ -39,8 +39,8 @@ echo "=== Running tests ==="
 for t in test_tobj_types test_tobj_object_store test_tobj_milclass test_tobj_spatial \
   test_tobj_zone test_tobj_correlation test_tobj_query test_tobj_relationship \
   test_tobj_codec test_tobj_interest test_tobj_history test_tobj_runtime \
-  test_tobj_zone_perf test_tobj_component test_tobj_component_robustness test_tobj_component_hlr \
-  test_tobj_streaming_codec test_tobj_runtime_streaming test_tobj_interest_matching; do
+  test_tobj_zone_perf test_tobj_component_robustness test_tobj_component_hlr \
+  test_tobj_streaming_codec test_tobj_runtime_streaming test_tobj_interest_matching test_tobj_component; do
   [ -x "$BUILD_DIR/tests/$t" ] && "$BUILD_DIR/tests/$t" || true
 done
 
@@ -57,5 +57,10 @@ gcovr --root . \
   --txt="$COV_OUT/summary.txt"
 
 echo ""
+echo "=== Generating HLR-LLR-test traceability report ==="
+python3 "$ROOT/scripts/gen_requirement_trace.py" || true
+
+echo ""
 echo "Coverage report: $COV_OUT/index.html"
 echo "Summary: $COV_OUT/summary.txt"
+echo "Traceability: $COV_OUT/requirement_traceability.md"

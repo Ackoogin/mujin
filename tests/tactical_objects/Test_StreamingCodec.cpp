@@ -330,3 +330,158 @@ TEST(StreamingCodec, EncodeFromStorePositionOnly) {
   ASSERT_TRUE(decoded.position.has_value());
   EXPECT_DOUBLE_EQ(decoded.position->lat, 51.0);
 }
+
+TEST(StreamingCodec, EncodeFromStoreVelocityOnly) {
+  ObjectStore store;
+  UUIDKey id = store.createObject(ObjectType::Platform);
+
+  KinematicsComponent kc;
+  kc.velocity = {1.0, 2.0, 3.0};
+  store.kinematics().set(id, kc);
+
+  const auto* rec = store.getRecord(id);
+  ASSERT_NE(rec, nullptr);
+
+  auto encoded = StreamingCodec::encodeEntityUpdate(
+      id, rec->version, 0.0, FieldMaskBit::VELOCITY, store);
+
+  auto decoded = StreamingCodec::decodeEntityUpdate(encoded.data(), encoded.size());
+  EXPECT_EQ(decoded.field_mask, FieldMaskBit::VELOCITY);
+  ASSERT_TRUE(decoded.velocity.has_value());
+  EXPECT_DOUBLE_EQ(decoded.velocity->north, 1.0);
+}
+
+TEST(StreamingCodec, EncodeFromStoreAffiliationOnly) {
+  ObjectStore store;
+  UUIDKey id = store.createObject(ObjectType::Platform);
+
+  MilClassComponent mc;
+  mc.profile.affiliation = Affiliation::Hostile;
+  store.milclass().set(id, mc);
+
+  const auto* rec = store.getRecord(id);
+  ASSERT_NE(rec, nullptr);
+
+  auto encoded = StreamingCodec::encodeEntityUpdate(
+      id, rec->version, 0.0, FieldMaskBit::AFFILIATION, store);
+
+  auto decoded = StreamingCodec::decodeEntityUpdate(encoded.data(), encoded.size());
+  EXPECT_EQ(decoded.field_mask, FieldMaskBit::AFFILIATION);
+  ASSERT_TRUE(decoded.affiliation.has_value());
+  EXPECT_EQ(*decoded.affiliation, Affiliation::Hostile);
+}
+
+TEST(StreamingCodec, EncodeFromStoreObjectTypeOnly) {
+  ObjectStore store;
+  UUIDKey id = store.createObject(ObjectType::Unit);
+
+  const auto* rec = store.getRecord(id);
+  ASSERT_NE(rec, nullptr);
+
+  auto encoded = StreamingCodec::encodeEntityUpdate(
+      id, rec->version, 0.0, FieldMaskBit::OBJECT_TYPE, store);
+
+  auto decoded = StreamingCodec::decodeEntityUpdate(encoded.data(), encoded.size());
+  EXPECT_EQ(decoded.field_mask, FieldMaskBit::OBJECT_TYPE);
+  ASSERT_TRUE(decoded.object_type.has_value());
+  EXPECT_EQ(*decoded.object_type, ObjectType::Unit);
+}
+
+TEST(StreamingCodec, EncodeFromStoreConfidenceOnly) {
+  ObjectStore store;
+  UUIDKey id = store.createObject(ObjectType::Platform);
+
+  QualityComponent qc;
+  qc.confidence = 0.85;
+  store.quality().set(id, qc);
+
+  const auto* rec = store.getRecord(id);
+  ASSERT_NE(rec, nullptr);
+
+  auto encoded = StreamingCodec::encodeEntityUpdate(
+      id, rec->version, 0.0, FieldMaskBit::CONFIDENCE, store);
+
+  auto decoded = StreamingCodec::decodeEntityUpdate(encoded.data(), encoded.size());
+  EXPECT_EQ(decoded.field_mask, FieldMaskBit::CONFIDENCE);
+  ASSERT_TRUE(decoded.confidence.has_value());
+  EXPECT_DOUBLE_EQ(*decoded.confidence, 0.85);
+}
+
+TEST(StreamingCodec, EncodeFromStoreLifecycleStatusOnly) {
+  ObjectStore store;
+  UUIDKey id = store.createObject(ObjectType::Platform);
+
+  const auto* rec = store.getRecord(id);
+  ASSERT_NE(rec, nullptr);
+
+  auto encoded = StreamingCodec::encodeEntityUpdate(
+      id, rec->version, 0.0, FieldMaskBit::LIFECYCLE_STATUS, store);
+
+  auto decoded = StreamingCodec::decodeEntityUpdate(encoded.data(), encoded.size());
+  EXPECT_EQ(decoded.field_mask, FieldMaskBit::LIFECYCLE_STATUS);
+  ASSERT_TRUE(decoded.lifecycle_status.has_value());
+  EXPECT_EQ(*decoded.lifecycle_status, LifecycleStatus::Active);
+}
+
+TEST(StreamingCodec, EncodeFromStoreMilClassOnly) {
+  ObjectStore store;
+  UUIDKey id = store.createObject(ObjectType::Platform);
+
+  MilClassComponent mc;
+  mc.profile.battle_dim = BattleDimension::Air;
+  mc.profile.role = "fighter";
+  store.milclass().set(id, mc);
+
+  const auto* rec = store.getRecord(id);
+  ASSERT_NE(rec, nullptr);
+
+  auto encoded = StreamingCodec::encodeEntityUpdate(
+      id, rec->version, 0.0, FieldMaskBit::MIL_CLASS, store);
+
+  auto decoded = StreamingCodec::decodeEntityUpdate(encoded.data(), encoded.size());
+  EXPECT_EQ(decoded.field_mask, FieldMaskBit::MIL_CLASS);
+  ASSERT_TRUE(decoded.mil_class.has_value());
+  EXPECT_EQ(decoded.mil_class->battle_dim, BattleDimension::Air);
+  EXPECT_EQ(decoded.mil_class->role, "fighter");
+}
+
+TEST(StreamingCodec, EncodeFromStoreBehaviorOnly) {
+  ObjectStore store;
+  UUIDKey id = store.createObject(ObjectType::Platform);
+
+  BehaviorComponent bc;
+  bc.behavior_pattern = "patrol";
+  bc.operational_state = "moving";
+  store.behaviors().set(id, bc);
+
+  const auto* rec = store.getRecord(id);
+  ASSERT_NE(rec, nullptr);
+
+  auto encoded = StreamingCodec::encodeEntityUpdate(
+      id, rec->version, 0.0, FieldMaskBit::BEHAVIOR, store);
+
+  auto decoded = StreamingCodec::decodeEntityUpdate(encoded.data(), encoded.size());
+  EXPECT_EQ(decoded.field_mask, FieldMaskBit::BEHAVIOR);
+  ASSERT_TRUE(decoded.behavior.has_value());
+  EXPECT_EQ(decoded.behavior->behavior_pattern, "patrol");
+}
+
+TEST(StreamingCodec, EncodeFromStoreIdentityNameOnly) {
+  ObjectStore store;
+  UUIDKey id = store.createObject(ObjectType::Platform);
+
+  IdentityComponent ic;
+  ic.name = "Eagle-1";
+  store.identities().set(id, ic);
+
+  const auto* rec = store.getRecord(id);
+  ASSERT_NE(rec, nullptr);
+
+  auto encoded = StreamingCodec::encodeEntityUpdate(
+      id, rec->version, 0.0, FieldMaskBit::IDENTITY_NAME, store);
+
+  auto decoded = StreamingCodec::decodeEntityUpdate(encoded.data(), encoded.size());
+  EXPECT_EQ(decoded.field_mask, FieldMaskBit::IDENTITY_NAME);
+  ASSERT_TRUE(decoded.identity_name.has_value());
+  EXPECT_EQ(*decoded.identity_name, "Eagle-1");
+}

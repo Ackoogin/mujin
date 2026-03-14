@@ -47,7 +47,7 @@ if %ERRORLEVEL% neq 0 exit /b 1
 
 echo.
 echo === Running tests ===
-for %%T in (test_tobj_types test_tobj_object_store test_tobj_milclass test_tobj_spatial test_tobj_zone test_tobj_correlation test_tobj_query test_tobj_relationship test_tobj_codec test_tobj_interest test_tobj_history test_tobj_runtime test_tobj_zone_perf test_tobj_component test_tobj_component_robustness test_tobj_component_hlr test_tobj_streaming_codec test_tobj_runtime_streaming test_tobj_interest_matching) do (
+for %%T in (test_tobj_types test_tobj_object_store test_tobj_milclass test_tobj_spatial test_tobj_zone test_tobj_correlation test_tobj_query test_tobj_relationship test_tobj_codec test_tobj_interest test_tobj_history test_tobj_runtime test_tobj_zone_perf test_tobj_component_robustness test_tobj_component_hlr test_tobj_streaming_codec test_tobj_runtime_streaming test_tobj_interest_matching test_tobj_component) do (
     set "EXE=%BUILD_DIR%\tests\%%T.exe"
     if exist "!EXE!" (
         echo Running %%T...
@@ -68,6 +68,14 @@ gcovr --root . ^
   --txt=%COV_OUT%/summary.txt
 
 echo.
+echo === Generating HLR-LLR-test traceability report ===
+python "%ROOT%\scripts\gen_requirement_trace.py"
+if %ERRORLEVEL% neq 0 (
+    echo WARNING: gen_requirement_trace.py failed - traceability report may be missing
+)
+
+echo.
 echo Coverage report: %COV_OUT%\index.html
 echo Summary: %COV_OUT%\summary.txt
+echo Traceability: %COV_OUT%\requirement_traceability.md
 endlocal

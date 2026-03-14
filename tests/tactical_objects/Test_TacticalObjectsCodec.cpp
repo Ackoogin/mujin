@@ -224,6 +224,16 @@ TEST(TacticalObjectsCodec, AllBattleDimValuesRoundTrip) {
   EXPECT_EQ(decoded_bad.mil_class.battle_dim, BattleDimension::Ground);
 }
 
+///< REQ_TACTICAL_OBJECTS_041: objectTypeFromString and affiliationFromString wrappers.
+TEST(TacticalObjectsCodec, ObjectTypeAndAffiliationFromString) {
+  EXPECT_EQ(TacticalObjectsCodec::objectTypeFromString("Person"), ObjectType::Person);
+  EXPECT_EQ(TacticalObjectsCodec::objectTypeFromString("Equipment"), ObjectType::Equipment);
+  EXPECT_EQ(TacticalObjectsCodec::objectTypeFromString("Unit"), ObjectType::Unit);
+  EXPECT_EQ(TacticalObjectsCodec::affiliationFromString("Hostile"), Affiliation::Hostile);
+  EXPECT_EQ(TacticalObjectsCodec::affiliationFromString("Friendly"), Affiliation::Friendly);
+  EXPECT_EQ(TacticalObjectsCodec::affiliationFromString("Neutral"), Affiliation::Neutral);
+}
+
 ///< REQ_TACTICAL_OBJECTS_041: objectTypeToString default case (public function).
 TEST(TacticalObjectsCodec, ObjectTypeDefaultCase) {
   EXPECT_EQ(TacticalObjectsCodec::objectTypeToString(ObjectType::Platform), "Platform");

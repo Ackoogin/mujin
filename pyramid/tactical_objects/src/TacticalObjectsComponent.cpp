@@ -68,9 +68,6 @@ pcl_status_t TacticalObjectsComponent::on_shutdown() {
 pcl_status_t TacticalObjectsComponent::on_tick(double dt) {
   ++tick_count_;
 
-  // Flush dirty entity tracking and fire simple callbacks
-  runtime_->flushDirtyEntities(dt);
-
   // Only publish batched streaming frames every streaming_tick_divisor_ ticks
   if (streaming_tick_divisor_ > 1 &&
       (static_cast<int>(tick_count_) % streaming_tick_divisor_) != 0) {
@@ -133,6 +130,7 @@ pcl_status_t TacticalObjectsComponent::on_tick(double dt) {
     } while (chunk_start < total);
   }
 
+  runtime_->flushDirtyEntities(dt);
   return PCL_OK;
 }
 

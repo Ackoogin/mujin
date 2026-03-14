@@ -20,6 +20,12 @@ public:
   TacticalObjectsRuntime& runtime() { return *runtime_; }
   const TacticalObjectsRuntime& runtime() const { return *runtime_; }
 
+  /// \brief Set streaming tick divisor (publish every N ticks). For testing/config.
+  void setStreamingTickDivisor(int v) { streaming_tick_divisor_ = v; }
+
+  /// \brief Set max entities per frame for chunking. For testing/config.
+  void setMaxEntitiesPerFrame(int v) { max_entities_per_frame_ = v; }
+
 protected:
   pcl_status_t on_configure() override;
   pcl_status_t on_activate() override;
