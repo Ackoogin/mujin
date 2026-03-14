@@ -29,6 +29,8 @@ TacticalObjectsComponent::TacticalObjectsComponent()
     runtime_(std::make_shared<TacticalObjectsRuntime>()) {}
 
 pcl_status_t TacticalObjectsComponent::on_configure() {
+  entity_updates_port_ = addPublisher(TOPIC_ENTITY_UPDATES, TYPE_BINARY);
+
   addSubscriber(TOPIC_OBSERVATION_INGRESS, TYPE_JSON, onObservationIngress, this);
 
   if (!addService(SVC_CREATE_OBJECT,      TYPE_JSON, handleCreateObject,      this)) return PCL_ERR_CALLBACK;
@@ -119,13 +121,13 @@ pcl_status_t TacticalObjectsComponent::on_tick(double dt) {
 
       encode_buf_ = StreamingCodec::encodeBatchFrame(chunk, dt);
 
-      // Tag the message with interest_id for consumer demux
-      // We publish to the entity_updates topic with binary content
-      pcl_msg_t pub_msg;
-      pub_msg.data      = encode_buf_.data();
-      pub_msg.size      = static_cast<uint32_t>(encode_buf_.size());
-      pub_msg.type_name = TYPE_BINARY;
-      publish(TOPIC_ENTITY_UPDATES, &pub_msg);
+      if (entity_updates_port_) {
+        pcl_msg_t pub_msg;
+        pub_msg.data      = encode_buf_.data();
+        pub_msg.size      = static_cast<uint32_t>(encode_buf_.size());
+        pub_msg.type_name = TYPE_BINARY;
+        pcl_port_publish(entity_updates_port_, &pub_msg);
+      }
 
       chunk_start = chunk_end;
     } while (chunk_start < total);

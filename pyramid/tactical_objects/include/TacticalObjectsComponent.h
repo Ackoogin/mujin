@@ -81,6 +81,9 @@ private:
   int max_entities_per_frame_  = 500;  ///< Split frames larger than this
   int streaming_tick_divisor_  = 1;    ///< Publish every N ticks
 
+  // Publisher port for the entity_updates topic
+  pcl_port_t* entity_updates_port_ = nullptr;
+
   // Per-interest monotonic sequence IDs (for gap detection)
   std::unordered_map<UUIDKey, uint64_t> sequence_ids_;
 
