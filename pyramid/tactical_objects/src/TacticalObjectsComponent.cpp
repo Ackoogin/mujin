@@ -10,14 +10,18 @@ using json = nlohmann::json;
 
 namespace {
 const char* TOPIC_OBSERVATION_INGRESS = "observation_ingress";
-const char* SVC_CREATE_OBJECT = "create_object";
-const char* SVC_UPDATE_OBJECT = "update_object";
-const char* SVC_DELETE_OBJECT = "delete_object";
-const char* SVC_QUERY = "query";
-const char* SVC_GET_OBJECT = "get_object";
-const char* SVC_UPSERT_ZONE = "upsert_zone";
-const char* SVC_REMOVE_ZONE = "remove_zone";
-const char* TYPE_JSON = "application/json";
+const char* TOPIC_ENTITY_UPDATES      = "entity_updates";
+const char* SVC_CREATE_OBJECT         = "create_object";
+const char* SVC_UPDATE_OBJECT         = "update_object";
+const char* SVC_DELETE_OBJECT         = "delete_object";
+const char* SVC_QUERY                 = "query";
+const char* SVC_GET_OBJECT            = "get_object";
+const char* SVC_UPSERT_ZONE           = "upsert_zone";
+const char* SVC_REMOVE_ZONE           = "remove_zone";
+const char* SVC_SUBSCRIBE_INTEREST    = "subscribe_interest";
+const char* SVC_RESYNC                = "tactical_objects.resync";
+const char* TYPE_JSON                 = "application/json";
+const char* TYPE_BINARY               = "application/octet-stream";
 } // namespace
 
 TacticalObjectsComponent::TacticalObjectsComponent()
@@ -25,22 +29,19 @@ TacticalObjectsComponent::TacticalObjectsComponent()
     runtime_(std::make_shared<TacticalObjectsRuntime>()) {}
 
 pcl_status_t TacticalObjectsComponent::on_configure() {
+  entity_updates_port_ = addPublisher(TOPIC_ENTITY_UPDATES, TYPE_BINARY);
+
   addSubscriber(TOPIC_OBSERVATION_INGRESS, TYPE_JSON, onObservationIngress, this);
 
-  if (!addService(SVC_CREATE_OBJECT, TYPE_JSON, handleCreateObject, this))
-    return PCL_ERR_CALLBACK;
-  if (!addService(SVC_UPDATE_OBJECT, TYPE_JSON, handleUpdateObject, this))
-    return PCL_ERR_CALLBACK;
-  if (!addService(SVC_DELETE_OBJECT, TYPE_JSON, handleDeleteObject, this))
-    return PCL_ERR_CALLBACK;
-  if (!addService(SVC_QUERY, TYPE_JSON, handleQuery, this))
-    return PCL_ERR_CALLBACK;
-  if (!addService(SVC_GET_OBJECT, TYPE_JSON, handleGetObject, this))
-    return PCL_ERR_CALLBACK;
-  if (!addService(SVC_UPSERT_ZONE, TYPE_JSON, handleUpsertZone, this))
-    return PCL_ERR_CALLBACK;
-  if (!addService(SVC_REMOVE_ZONE, TYPE_JSON, handleRemoveZone, this))
-    return PCL_ERR_CALLBACK;
+  if (!addService(SVC_CREATE_OBJECT,      TYPE_JSON, handleCreateObject,      this)) return PCL_ERR_CALLBACK;
+  if (!addService(SVC_UPDATE_OBJECT,      TYPE_JSON, handleUpdateObject,      this)) return PCL_ERR_CALLBACK;
+  if (!addService(SVC_DELETE_OBJECT,      TYPE_JSON, handleDeleteObject,      this)) return PCL_ERR_CALLBACK;
+  if (!addService(SVC_QUERY,              TYPE_JSON, handleQuery,              this)) return PCL_ERR_CALLBACK;
+  if (!addService(SVC_GET_OBJECT,         TYPE_JSON, handleGetObject,          this)) return PCL_ERR_CALLBACK;
+  if (!addService(SVC_UPSERT_ZONE,        TYPE_JSON, handleUpsertZone,         this)) return PCL_ERR_CALLBACK;
+  if (!addService(SVC_REMOVE_ZONE,        TYPE_JSON, handleRemoveZone,         this)) return PCL_ERR_CALLBACK;
+  if (!addService(SVC_SUBSCRIBE_INTEREST, TYPE_JSON, handleSubscribeInterest,  this)) return PCL_ERR_CALLBACK;
+  if (!addService(SVC_RESYNC,             TYPE_JSON, handleResync,             this)) return PCL_ERR_CALLBACK;
 
   return PCL_OK;
 }
@@ -55,6 +56,8 @@ pcl_status_t TacticalObjectsComponent::on_deactivate() {
 
 pcl_status_t TacticalObjectsComponent::on_cleanup() {
   runtime_ = std::make_shared<TacticalObjectsRuntime>();
+  tick_count_ = 0;
+  sequence_ids_.clear();
   return PCL_OK;
 }
 
@@ -63,7 +66,73 @@ pcl_status_t TacticalObjectsComponent::on_shutdown() {
 }
 
 pcl_status_t TacticalObjectsComponent::on_tick(double dt) {
-  (void)dt;
+  ++tick_count_;
+
+  // Flush dirty entity tracking and fire simple callbacks
+  runtime_->flushDirtyEntities(dt);
+
+  // Only publish batched streaming frames every streaming_tick_divisor_ ticks
+  if (streaming_tick_divisor_ > 1 &&
+      (static_cast<int>(tick_count_) % streaming_tick_divisor_) != 0) {
+    return PCL_OK;
+  }
+
+  // For each active interest that has registered subscribers, assemble and publish a batch frame
+  auto active_interests = runtime_->interestManager().activeInterests();
+  for (const auto& interest_rec : active_interests) {
+    const UUIDKey& interest_id = interest_rec.interest_id;
+
+    // Collect all subscribers for this interest by asking the runtime
+    // We assemble one frame per interest (shared across all subscribers on this interest)
+    // For simplicity, we publish one aggregated frame per interest to the entity_updates topic.
+
+    // Build the sequence ID for this interest
+    auto& seq_id = sequence_ids_[interest_id];
+
+    // Assemble using the first subscriber handle for version-tracking purposes.
+    // In a more complete implementation each subscriber would have its own frame.
+    // Here we use handle=0 as a "broadcast" subscriber for the publish path.
+    StreamFrame sf = runtime_->assembleStreamFrame(interest_id, 0, dt);
+
+    if (sf.updates.empty() && sf.deletes.empty()) continue;
+
+    sf.tick_id = seq_id++;
+
+    // Split into chunks if max_entities_per_frame_ is set
+    int chunk_start = 0;
+    int total = static_cast<int>(sf.updates.size());
+    do {
+      int chunk_end = std::min(chunk_start + max_entities_per_frame_, total);
+      std::vector<EntityUpdateFrame> chunk(
+          sf.updates.begin() + chunk_start,
+          sf.updates.begin() + chunk_end);
+
+      // Add delete frames as EntityUpdateFrames with delete type
+      if (chunk_start == 0) {
+        for (const auto& del_id : sf.deletes) {
+          EntityUpdateFrame del_frame;
+          del_frame.message_type = STREAM_MSG_ENTITY_DELETE;
+          del_frame.entity_id    = del_id;
+          del_frame.version      = 0;
+          del_frame.timestamp    = dt;
+          chunk.push_back(del_frame);
+        }
+      }
+
+      encode_buf_ = StreamingCodec::encodeBatchFrame(chunk, dt);
+
+      if (entity_updates_port_) {
+        pcl_msg_t pub_msg;
+        pub_msg.data      = encode_buf_.data();
+        pub_msg.size      = static_cast<uint32_t>(encode_buf_.size());
+        pub_msg.type_name = TYPE_BINARY;
+        pcl_port_publish(entity_updates_port_, &pub_msg);
+      }
+
+      chunk_start = chunk_end;
+    } while (chunk_start < total);
+  }
+
   return PCL_OK;
 }
 
@@ -230,16 +299,13 @@ pcl_status_t TacticalObjectsComponent::handleGetObject(pcl_container_t*,
     out["type"] = TacticalObjectsCodec::objectTypeToString(rec->type);
     out["version"] = rec->version;
 
-    // Identity presence
     out["has_identity"] = comp->runtime_->store()->identities().has(obj_id);
 
-    // Military classification
     auto mil = comp->runtime_->getMilClass(obj_id);
     if (mil.has_value()) {
       out["mil_class"] = TacticalObjectsCodec::encodeMilClassProfile(*mil);
     }
 
-    // Behavior
     auto beh = comp->runtime_->getBehavior(obj_id);
     out["has_behavior"] = beh.has_value();
     if (beh.has_value()) {
@@ -249,7 +315,6 @@ pcl_status_t TacticalObjectsComponent::handleGetObject(pcl_container_t*,
       };
     }
 
-    // Correlation / lineage
     const auto* cc = comp->runtime_->store()->correlation().get(obj_id);
     out["has_correlation"] = (cc != nullptr);
     if (cc) {
@@ -257,7 +322,6 @@ pcl_status_t TacticalObjectsComponent::handleGetObject(pcl_container_t*,
       out["contributing_observations_count"] = cc->contributing_observations.size();
     }
 
-    // Quality / confidence
     const auto* qc = comp->runtime_->store()->quality().get(obj_id);
     if (qc) {
       out["confidence"] = qc->confidence;
@@ -323,6 +387,134 @@ pcl_status_t TacticalObjectsComponent::handleRemoveZone(pcl_container_t*,
   response->data = comp->response_buffer_.data();
   response->size = static_cast<uint32_t>(comp->response_buffer_.size());
   response->type_name = TYPE_JSON;
+  return PCL_OK;
+}
+
+pcl_status_t TacticalObjectsComponent::handleSubscribeInterest(pcl_container_t*,
+                                                                const pcl_msg_t* request,
+                                                                pcl_msg_t* response,
+                                                                void* user_data) {
+  auto* comp = static_cast<TacticalObjectsComponent*>(user_data);
+  if (!request->data || request->size == 0) return PCL_ERR_INVALID;
+
+  std::string str(static_cast<const char*>(request->data), request->size);
+  json j;
+  try {
+    j = json::parse(str);
+  } catch (...) {
+    return PCL_ERR_INVALID;
+  }
+
+  // Decode interest criteria
+  InterestCriteria criteria;
+
+  if (j.contains("object_type") && !j["object_type"].is_null()) {
+    try {
+      criteria.object_type = TacticalObjectsCodec::objectTypeFromString(j["object_type"].get<std::string>());
+    } catch (...) {}
+  }
+  if (j.contains("affiliation") && !j["affiliation"].is_null()) {
+    try {
+      criteria.affiliation = TacticalObjectsCodec::affiliationFromString(j["affiliation"].get<std::string>());
+    } catch (...) {}
+  }
+  if (j.contains("area") && j["area"].is_object()) {
+    BoundingBox bb;
+    bb.min_lat = j["area"].value("min_lat", 0.0);
+    bb.max_lat = j["area"].value("max_lat", 0.0);
+    bb.min_lon = j["area"].value("min_lon", 0.0);
+    bb.max_lon = j["area"].value("max_lon", 0.0);
+    criteria.area = bb;
+  }
+  if (j.contains("behavior_pattern") && !j["behavior_pattern"].is_null()) {
+    criteria.behavior_pattern = j["behavior_pattern"].get<std::string>();
+  }
+  criteria.minimum_confidence = j.value("minimum_confidence", 0.0);
+  criteria.time_window_start  = j.value("time_window_start", 0.0);
+  criteria.time_window_end    = j.value("time_window_end", 0.0);
+
+  double expires_at = j.value("expires_at", 0.0);
+  auto interest_id = comp->runtime_->interestManager().registerInterest(criteria, 0.0, expires_at);
+
+  comp->response_buffer_ = json{{"interest_id", uuidToJsonString(interest_id)}}.dump();
+  response->data      = comp->response_buffer_.data();
+  response->size      = static_cast<uint32_t>(comp->response_buffer_.size());
+  response->type_name = TYPE_JSON;
+  return PCL_OK;
+}
+
+pcl_status_t TacticalObjectsComponent::handleResync(pcl_container_t*,
+                                                     const pcl_msg_t* request,
+                                                     pcl_msg_t* response,
+                                                     void* user_data) {
+  auto* comp = static_cast<TacticalObjectsComponent*>(user_data);
+  if (!request->data || request->size == 0) return PCL_ERR_INVALID;
+
+  std::string str(static_cast<const char*>(request->data), request->size);
+  json j;
+  try {
+    j = json::parse(str);
+  } catch (...) {
+    return PCL_ERR_INVALID;
+  }
+
+  std::string id_str = j.value("interest_id", "");
+  if (id_str.empty()) return PCL_ERR_INVALID;
+
+  auto parsed = pyramid::core::uuid::UUIDHelper::fromString(id_str);
+  if (!parsed.second) return PCL_ERR_INVALID;
+
+  UUIDKey interest_id(parsed.first);
+  const InterestRecord* interest_rec = comp->runtime_->interestManager().get(interest_id);
+  if (!interest_rec) {
+    comp->response_buffer_ = "{\"error\":\"interest not found\"}";
+    response->data      = comp->response_buffer_.data();
+    response->size      = static_cast<uint32_t>(comp->response_buffer_.size());
+    response->type_name = TYPE_JSON;
+    return PCL_ERR_INVALID;
+  }
+
+  // Build a full snapshot of all entities matching this interest
+  std::vector<EntityUpdateFrame> snapshot;
+  auto& store = *comp->runtime_->store();
+  store.forEachObject([&](const EntityRecord& rec) {
+    if (!comp->runtime_->interestManager().matchesInterest(
+            interest_rec->criteria, rec, store)) return;
+
+    EntityUpdateFrame upd;
+    upd.message_type = STREAM_MSG_ENTITY_UPDATE;
+    upd.entity_id    = rec.id;
+    upd.version      = rec.version;
+    upd.timestamp    = 0.0;
+    upd.field_mask   = FieldMaskBit::ALL;
+
+    const auto* kc = store.kinematics().get(rec.id);
+    if (kc) { upd.position = kc->position; upd.velocity = kc->velocity; }
+
+    const auto* mc = store.milclass().get(rec.id);
+    if (mc) { upd.affiliation = mc->profile.affiliation; upd.mil_class = mc->profile; }
+
+    upd.object_type = rec.type;
+
+    const auto* qc = store.quality().get(rec.id);
+    if (qc) upd.confidence = qc->confidence;
+
+    const auto* lc = store.lifecycle().get(rec.id);
+    if (lc) upd.lifecycle_status = lc->status;
+
+    const auto* bc = store.behaviors().get(rec.id);
+    if (bc) upd.behavior = *bc;
+
+    const auto* ic = store.identities().get(rec.id);
+    if (ic) upd.identity_name = ic->name;
+
+    snapshot.push_back(upd);
+  });
+
+  comp->encode_buf_ = StreamingCodec::encodeBatchFrame(snapshot, 0.0);
+  response->data      = comp->encode_buf_.data();
+  response->size      = static_cast<uint32_t>(comp->encode_buf_.size());
+  response->type_name = TYPE_BINARY;
   return PCL_OK;
 }
 

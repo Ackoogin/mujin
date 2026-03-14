@@ -29,23 +29,29 @@ UUIDKey TacticalObjectsRuntime::createObject(const ObjectDefinition& def) {
 
   milclass_->setProfile(id, def.mil_class);
 
+  // Mark all fields dirty on creation (new entity, full snapshot needed)
+  dirty_entities_.insert(id);
+  store_->setDirtyBits(id, FieldMaskBit::ALL);
+
   return id;
 }
 
 bool TacticalObjectsRuntime::updateObject(const UUIDKey& id, const ObjectUpdate& update) {
   if (!store_->getRecord(id)) return false;
 
+  uint16_t dirty_bits = 0;
+
   if (update.position || update.velocity) {
     auto* kc = store_->kinematics().getMutable(id);
     if (kc) {
       Position old_pos = kc->position;
-      if (update.position) kc->position = *update.position;
-      if (update.velocity) kc->velocity = *update.velocity;
+      if (update.position) { kc->position = *update.position; dirty_bits |= FieldMaskBit::POSITION; }
+      if (update.velocity) { kc->velocity = *update.velocity; dirty_bits |= FieldMaskBit::VELOCITY; }
       if (update.position) spatial_->update(id, old_pos, kc->position);
     } else {
       KinematicsComponent new_kc;
-      if (update.position) new_kc.position = *update.position;
-      if (update.velocity) new_kc.velocity = *update.velocity;
+      if (update.position) { new_kc.position = *update.position; dirty_bits |= FieldMaskBit::POSITION; }
+      if (update.velocity) { new_kc.velocity = *update.velocity; dirty_bits |= FieldMaskBit::VELOCITY; }
       store_->kinematics().set(id, new_kc);
       if (update.position) spatial_->insert(id, new_kc.position);
     }
@@ -53,6 +59,7 @@ bool TacticalObjectsRuntime::updateObject(const UUIDKey& id, const ObjectUpdate&
 
   if (update.mil_class) {
     milclass_->setProfile(id, *update.mil_class);
+    dirty_bits |= FieldMaskBit::MIL_CLASS | FieldMaskBit::AFFILIATION;
   }
 
   if (update.affiliation) {
@@ -60,6 +67,7 @@ bool TacticalObjectsRuntime::updateObject(const UUIDKey& id, const ObjectUpdate&
     MilClassProfile p = profile ? *profile : MilClassProfile{};
     p.affiliation = *update.affiliation;
     milclass_->setProfile(id, p);
+    dirty_bits |= FieldMaskBit::AFFILIATION | FieldMaskBit::MIL_CLASS;
   }
 
   if (update.identity_name) {
@@ -71,6 +79,7 @@ bool TacticalObjectsRuntime::updateObject(const UUIDKey& id, const ObjectUpdate&
       new_ic.name = *update.identity_name;
       store_->identities().set(id, new_ic);
     }
+    dirty_bits |= FieldMaskBit::IDENTITY_NAME;
   }
 
   if (update.behavior_pattern || update.operational_state) {
@@ -84,9 +93,14 @@ bool TacticalObjectsRuntime::updateObject(const UUIDKey& id, const ObjectUpdate&
       if (update.operational_state) new_bc.operational_state = *update.operational_state;
       store_->behaviors().set(id, new_bc);
     }
+    dirty_bits |= FieldMaskBit::BEHAVIOR;
   }
 
   store_->bumpVersion(id);
+  if (dirty_bits) {
+    dirty_entities_.insert(id);
+    store_->setDirtyBits(id, dirty_bits);
+  }
   return true;
 }
 
@@ -95,7 +109,12 @@ bool TacticalObjectsRuntime::deleteObject(const UUIDKey& id) {
   if (kc) {
     spatial_->remove(id, kc->position);
   }
-  return store_->deleteObject(id);
+  bool ok = store_->deleteObject(id);
+  if (ok) {
+    dirty_entities_.erase(id);
+    deleted_entities_.insert(id);
+  }
+  return ok;
 }
 
 const EntityRecord* TacticalObjectsRuntime::getRecord(const UUIDKey& id) const {
@@ -136,13 +155,19 @@ ZoneRelationship TacticalObjectsRuntime::evaluateZoneTransition(
 }
 
 CorrelationResult TacticalObjectsRuntime::processObservation(const Observation& obs) {
-  return correlation_->processObservation(obs);
+  auto result = correlation_->processObservation(obs);
+  // Mark the correlated entity dirty
+  if (!result.object_id.isNull()) {
+    dirty_entities_.insert(result.object_id);
+    store_->setDirtyBits(result.object_id, FieldMaskBit::ALL);
+  }
+  return result;
 }
 
 CorrelationResult TacticalObjectsRuntime::processObservationBatch(const ObservationBatch& batch) {
   CorrelationResult last{CorrelationOutcome::Created, UUIDKey{}, UUIDKey{}};
   for (auto& obs : batch.observations) {
-    last = correlation_->processObservation(obs);
+    last = processObservation(obs);
   }
   return last;
 }
@@ -159,6 +184,8 @@ void TacticalObjectsRuntime::setBehavior(const UUIDKey& id,
   bc.operational_state = operational_state;
   store_->behaviors().set(id, bc);
   store_->bumpVersion(id);
+  dirty_entities_.insert(id);
+  store_->setDirtyBits(id, FieldMaskBit::BEHAVIOR);
 }
 
 tl::optional<BehaviorComponent> TacticalObjectsRuntime::getBehavior(const UUIDKey& id) const {
@@ -172,6 +199,203 @@ void TacticalObjectsRuntime::logMissingInfo(const UUIDKey& id, const std::string
                     pyramid::core::uuid::UUIDHelper::toString(id.uuid) +
                     ": " + field;
   logger_.log(pyramid::core::logging::LogLevel::Warning, msg);
+}
+
+// ---------------------------------------------------------------------------
+// Streaming subscriptions
+// ---------------------------------------------------------------------------
+
+SubscriptionHandle TacticalObjectsRuntime::registerStreamSubscriber(
+    const UUIDKey& interest_id, EntityUpdateCallback cb) {
+  SubscriptionHandle h = next_handle_++;
+  subscribers_[interest_id].emplace_back(h, std::move(cb));
+  handle_to_interest_[h] = interest_id;
+  // New subscriber: mark all currently-existing matching entities for full snapshot
+  // by setting version 0 (they will be sent with full field mask on first tick).
+  // subscriber_versions_[h] starts empty — absence == "never seen" == send full snapshot.
+  return h;
+}
+
+void TacticalObjectsRuntime::removeStreamSubscriber(SubscriptionHandle handle) {
+  auto it = handle_to_interest_.find(handle);
+  if (it == handle_to_interest_.end()) return;
+  UUIDKey interest_id = it->second;
+  handle_to_interest_.erase(it);
+
+  auto& vec = subscribers_[interest_id];
+  for (auto vit = vec.begin(); vit != vec.end(); ++vit) {
+    if (vit->first == handle) {
+      vec.erase(vit);
+      break;
+    }
+  }
+  if (vec.empty()) subscribers_.erase(interest_id);
+  subscriber_versions_.erase(handle);
+}
+
+// ---------------------------------------------------------------------------
+// Stream frame assembly (Step 5)
+// ---------------------------------------------------------------------------
+
+StreamFrame TacticalObjectsRuntime::assembleStreamFrame(
+    const UUIDKey& interest_id, SubscriptionHandle subscriber, double timestamp) {
+  StreamFrame frame;
+  frame.timestamp = timestamp;
+
+  const InterestRecord* interest_rec = interest_manager_.get(interest_id);
+  if (!interest_rec || interest_rec->status != InterestStatus::Active) return frame;
+
+  auto& sub_versions = subscriber_versions_[subscriber];
+
+  // If this subscriber has no version records at all, perform a full snapshot
+  // scan across all entities in the store (initial connect case).
+  bool is_new_subscriber = sub_versions.empty();
+  if (is_new_subscriber) {
+    store_->forEachObject([&](const EntityRecord& rec) {
+      if (!interest_manager_.matchesInterest(interest_rec->criteria, rec, *store_)) return;
+
+      EntityUpdateFrame upd;
+      upd.message_type = STREAM_MSG_ENTITY_UPDATE;
+      upd.entity_id    = rec.id;
+      upd.version      = rec.version;
+      upd.timestamp    = timestamp;
+      upd.field_mask   = FieldMaskBit::ALL;
+
+      const auto* kc = store_->kinematics().get(rec.id);
+      if (kc) { upd.position = kc->position; upd.velocity = kc->velocity; }
+      const auto* mc = store_->milclass().get(rec.id);
+      if (mc) { upd.affiliation = mc->profile.affiliation; upd.mil_class = mc->profile; }
+      upd.object_type = rec.type;
+      const auto* qc = store_->quality().get(rec.id);
+      if (qc) upd.confidence = qc->confidence;
+      const auto* lc = store_->lifecycle().get(rec.id);
+      if (lc) upd.lifecycle_status = lc->status;
+      const auto* bc = store_->behaviors().get(rec.id);
+      if (bc) upd.behavior = *bc;
+      const auto* ic = store_->identities().get(rec.id);
+      if (ic) upd.identity_name = ic->name;
+
+      frame.updates.push_back(upd);
+      sub_versions[rec.id] = rec.version;
+    });
+    return frame;
+  }
+
+  // Deleted entities matching this interest
+  for (const auto& del_id : deleted_entities_) {
+    // We can't check interest match on a deleted entity — just send delete to all
+    // subscribers for any entity they had previously seen.
+    auto vit = sub_versions.find(del_id);
+    if (vit != sub_versions.end()) {
+      frame.deletes.push_back(del_id);
+      sub_versions.erase(vit);
+    }
+  }
+
+  // Updated entities
+  for (const auto& eid : dirty_entities_) {
+    const auto* rec = store_->getRecord(eid);
+    if (!rec) continue;
+    if (!interest_manager_.matchesInterest(interest_rec->criteria, *rec, *store_)) continue;
+
+    uint64_t entity_version = rec->version;
+    auto vit = sub_versions.find(eid);
+    bool first_time = (vit == sub_versions.end());
+
+    if (!first_time && vit->second == entity_version) {
+      continue;  // version unchanged — skip
+    }
+
+    uint16_t mask;
+    if (first_time) {
+      // Full snapshot for new subscriber or newly-matching entity
+      mask = FieldMaskBit::ALL;
+    } else {
+      // Delta: only fields that changed since last publish
+      mask = store_->getDirtyMask(eid);
+      if (mask == 0) mask = FieldMaskBit::ALL;
+    }
+
+    EntityUpdateFrame upd;
+    upd.message_type = STREAM_MSG_ENTITY_UPDATE;
+    upd.entity_id    = eid;
+    upd.version      = entity_version;
+    upd.timestamp    = timestamp;
+    upd.field_mask   = mask;
+
+    if (mask & FieldMaskBit::POSITION) {
+      const auto* kc = store_->kinematics().get(eid);
+      if (kc) upd.position = kc->position;
+    }
+    if (mask & FieldMaskBit::VELOCITY) {
+      const auto* kc = store_->kinematics().get(eid);
+      if (kc) upd.velocity = kc->velocity;
+    }
+    if (mask & FieldMaskBit::AFFILIATION) {
+      const auto* mc = store_->milclass().get(eid);
+      if (mc) upd.affiliation = mc->profile.affiliation;
+    }
+    if (mask & FieldMaskBit::OBJECT_TYPE) {
+      upd.object_type = rec->type;
+    }
+    if (mask & FieldMaskBit::CONFIDENCE) {
+      const auto* qc = store_->quality().get(eid);
+      if (qc) upd.confidence = qc->confidence;
+    }
+    if (mask & FieldMaskBit::LIFECYCLE_STATUS) {
+      const auto* lc = store_->lifecycle().get(eid);
+      if (lc) upd.lifecycle_status = lc->status;
+    }
+    if (mask & FieldMaskBit::MIL_CLASS) {
+      const auto* mc = store_->milclass().get(eid);
+      if (mc) upd.mil_class = mc->profile;
+    }
+    if (mask & FieldMaskBit::BEHAVIOR) {
+      const auto* bc = store_->behaviors().get(eid);
+      if (bc) upd.behavior = *bc;
+    }
+    if (mask & FieldMaskBit::IDENTITY_NAME) {
+      const auto* ic = store_->identities().get(eid);
+      if (ic) upd.identity_name = ic->name;
+    }
+
+    frame.updates.push_back(upd);
+    sub_versions[eid] = entity_version;
+  }
+
+  return frame;
+}
+
+// ---------------------------------------------------------------------------
+// Flush dirty entities — called by on_tick()
+// ---------------------------------------------------------------------------
+
+void TacticalObjectsRuntime::flushDirtyEntities(double timestamp) {
+  // Step 1: fire simple callbacks
+  for (const auto& eid : dirty_entities_) {
+    const auto* rec = store_->getRecord(eid);
+    if (!rec) continue;
+    auto matching = interest_manager_.matchingInterests(*rec, *store_);
+    for (const auto& interest_id : matching) {
+      auto sit = subscribers_.find(interest_id);
+      if (sit == subscribers_.end()) continue;
+      for (auto& sub_pair : sit->second) {
+        sub_pair.second(interest_id, eid);
+      }
+    }
+  }
+
+  // Clean up deleted entity version entries
+  for (const auto& del_id : deleted_entities_) {
+    for (auto& sub_pair : subscriber_versions_) {
+      sub_pair.second.erase(del_id);
+    }
+  }
+
+  // Clear state for next tick
+  dirty_entities_.clear();
+  deleted_entities_.clear();
+  store_->clearAllDirtyMasks();
 }
 
 } // namespace tactical_objects

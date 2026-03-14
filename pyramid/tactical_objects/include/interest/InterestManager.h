@@ -1,6 +1,7 @@
 #pragma once
 
 #include <TacticalObjectsTypes.h>
+#include <store/ObjectStore.h>
 #include <tl/optional.hpp>
 
 #include <memory>
@@ -96,6 +97,14 @@ public:
   /// \brief Report progress on an interest requirement.
   InterestProgressReport reportProgress(const UUIDKey& interest_id,
                                         const std::vector<bool>& criteria_met) const;
+
+  /// \brief Test whether a single entity matches a given criteria set.
+  bool matchesInterest(const InterestCriteria& criteria, const EntityRecord& rec,
+                       const ObjectStore& store) const;
+
+  /// \brief Return IDs of all active interests whose criteria match the entity.
+  std::vector<UUIDKey> matchingInterests(const EntityRecord& rec,
+                                         const ObjectStore& store) const;
 
   size_t count() const { return records_.size(); }
 

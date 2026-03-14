@@ -163,3 +163,18 @@ gtest_discover_tests(test_tobj_runtime DISCOVERY_MODE PRE_TEST)
 add_executable(test_tobj_zone_perf ${TOBJ_TEST_DIR}/Test_ZonePerformance.cpp)
 target_link_libraries(test_tobj_zone_perf PRIVATE tactical_objects GTest::gtest_main)
 gtest_discover_tests(test_tobj_zone_perf DISCOVERY_MODE PRE_TEST)
+
+# ---------------------------------------------------------------------------
+# Streaming optimisation tests (Steps 1-3, 5)
+# ---------------------------------------------------------------------------
+add_executable(test_tobj_streaming_codec ${TOBJ_TEST_DIR}/Test_StreamingCodec.cpp)
+target_link_libraries(test_tobj_streaming_codec PRIVATE tactical_objects GTest::gtest_main)
+gtest_discover_tests(test_tobj_streaming_codec DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_runtime_streaming ${TOBJ_TEST_DIR}/Test_TacticalObjectsRuntime_Streaming.cpp)
+target_link_libraries(test_tobj_runtime_streaming PRIVATE tactical_objects GTest::gtest_main)
+gtest_discover_tests(test_tobj_runtime_streaming DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_tobj_interest_matching ${TOBJ_TEST_DIR}/Test_InterestManager_Matching.cpp)
+target_link_libraries(test_tobj_interest_matching PRIVATE tactical_objects GTest::gtest_main)
+gtest_discover_tests(test_tobj_interest_matching DISCOVERY_MODE PRE_TEST)

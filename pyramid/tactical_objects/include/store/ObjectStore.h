@@ -33,6 +33,20 @@ public:
   /// \brief Increment an entity's version counter.
   void bumpVersion(const UUIDKey& id);
 
+  // --- Dirty mask tracking (Step 3) ---
+
+  /// \brief Get the accumulated dirty field-mask for an entity since last clear.
+  uint16_t getDirtyMask(const UUIDKey& id) const;
+
+  /// \brief OR additional dirty bits into an entity's mask.
+  void setDirtyBits(const UUIDKey& id, uint16_t bits);
+
+  /// \brief Clear the dirty mask for one entity.
+  void clearDirtyMask(const UUIDKey& id);
+
+  /// \brief Clear dirty masks for all entities.
+  void clearAllDirtyMasks();
+
   /// \brief Iterate all entity records.
   template <typename Fn>
   void forEachObject(Fn fn) const {
@@ -83,6 +97,8 @@ private:
   ComponentTable<ZoneComponent> zones_;
 
   void removeFromAllComponents(const UUIDKey& id);
+
+  std::unordered_map<UUIDKey, uint16_t> dirty_masks_;
 };
 
 } // namespace tactical_objects
