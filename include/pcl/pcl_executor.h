@@ -106,6 +106,24 @@ pcl_status_t pcl_executor_publish(pcl_executor_t*  e,
                                   const char*      topic,
                                   const pcl_msg_t* msg);
 
+// ── Async response delivery ──────────────────────────────────────────────
+
+/// \brief Enqueue a service response callback for delivery on the executor thread.
+///
+/// Called by transport recv_threads (off the executor thread).  The executor
+/// deep-copies \p data before returning so the caller may free immediately.
+/// The callback fires during the next pcl_executor_spin_once / pcl_executor_spin.
+///
+/// \param cb         Callback matching pcl_resp_cb_fn_t.
+/// \param user_data  Passed through to \p cb.
+/// \param data       Response payload bytes (may be NULL if size == 0).
+/// \param size       Payload size in bytes.
+pcl_status_t pcl_executor_post_response_cb(pcl_executor_t*  e,
+                                           pcl_resp_cb_fn_t cb,
+                                           void*            user_data,
+                                           const void*      data,
+                                           uint32_t         size);
+
 #ifdef __cplusplus
 }
 #endif

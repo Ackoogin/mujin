@@ -1,5 +1,11 @@
 /// \file pcl_transport_socket.c
-/// \brief TCP socket transport implementation.
+/// \brief TCP socket transport — fully non-blocking PCL main thread.
+///
+/// All socket writes are serialised through a dedicated send_thread that
+/// drains a mutex-protected FIFO queue.  recv_thread posts inbound
+/// PUBLISH messages via pcl_executor_post_incoming and inbound SVC_RESP
+/// frames via pcl_executor_post_response_cb — both non-blocking enqueues.
+/// The PCL executor thread never calls send() or blocks on I/O.
 #if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
 #  define _POSIX_C_SOURCE 200809L
 #endif
@@ -19,7 +25,7 @@
 #  include <ws2tcpip.h>
 #  pragma comment(lib, "Ws2_32.lib")
 #  define SHUT_RDWR SD_BOTH
-#  define PCL_SOCKET_T int
+#  define PCL_SOCKET_T SOCKET
 #  define PCL_INVALID_SOCKET INVALID_SOCKET
 #  define PCL_SOCKET_ERROR SOCKET_ERROR
 #  define pcl_close_socket closesocket
@@ -37,43 +43,69 @@
 #  define pcl_close_socket close
 #endif
 
-#define PCL_SOCKET_MSG_PUBLISH 0
-#define PCL_SOCKET_MSG_SVC_REQ 1
+// ── Wire protocol constants ──────────────────────────────────────────────
+
+#define PCL_SOCKET_MSG_PUBLISH  0
+#define PCL_SOCKET_MSG_SVC_REQ  1
 #define PCL_SOCKET_MSG_SVC_RESP 2
 #define PCL_SOCKET_TOPIC_SVC_REQ "__pcl_svc_req"
-#define PCL_SOCKET_MAX_PAYLOAD 65536
+#define PCL_SOCKET_MAX_PAYLOAD  65536
+
+// ── Helper FIFO node types ───────────────────────────────────────────────
+
+typedef struct pcl_outbound_frame_t {
+  uint8_t*                     data;
+  uint32_t                     size;
+  struct pcl_outbound_frame_t* next;
+} pcl_outbound_frame_t;
+
+typedef struct pcl_svc_pending_t {
+  uint32_t                  seq_id;
+  pcl_resp_cb_fn_t          cb;
+  void*                     user_data;
+  struct pcl_svc_pending_t* next;
+} pcl_svc_pending_t;
+
+// ── Main transport struct ────────────────────────────────────────────────
 
 struct pcl_socket_transport_t {
-  int                is_server;
-  uint16_t           port;
-  char               host[256];
-  pcl_executor_t*    executor;
-  pcl_transport_t    transport;
+  int               is_server;
+  uint16_t          port;
+  char              host[256];
+  pcl_executor_t*   executor;
+  pcl_transport_t   transport;
 
-  PCL_SOCKET_T       listen_sock;
-  PCL_SOCKET_T       client_sock;
+  PCL_SOCKET_T      listen_sock;
+  PCL_SOCKET_T      client_sock;
 
-  volatile int       recv_running;
-  volatile int       recv_stop;
+  volatile int      recv_running;
+  volatile int      recv_stop;
 
 #ifdef _WIN32
   HANDLE             recv_thread;
-  CRITICAL_SECTION   send_lock;
-  CRITICAL_SECTION   resp_lock;
-  CONDITION_VARIABLE resp_cond;
+  HANDLE             send_thread;
+  CRITICAL_SECTION   send_lock;    /* guards send_head/send_tail + send_cond */
+  CONDITION_VARIABLE send_cond;
+  CRITICAL_SECTION   pending_lock;
 #else
   pthread_t          recv_thread;
+  pthread_t          send_thread;
   pthread_mutex_t    send_lock;
-  pthread_mutex_t    resp_lock;
-  pthread_cond_t     resp_cond;
+  pthread_cond_t     send_cond;
+  pthread_mutex_t    pending_lock;
 #endif
 
-  volatile int       resp_ready;
-  uint32_t           resp_size;
-  void*              resp_data;
+  volatile int          send_stop;
+  pcl_outbound_frame_t* send_head;
+  pcl_outbound_frame_t* send_tail;
 
-  pcl_container_t*   gateway;
+  volatile uint32_t     next_seq_id; /* 1-based, never wraps to 0 */
+  pcl_svc_pending_t*    pending_head;
+
+  pcl_container_t*  gateway;
 };
+
+// ── Byte-order helpers ───────────────────────────────────────────────────
 
 static uint16_t read_u16_be(const uint8_t* p) {
   return (uint16_t)((p[0] << 8) | p[1]);
@@ -94,6 +126,8 @@ static void write_u32_be(uint8_t* p, uint32_t v) {
   p[2] = (uint8_t)(v >> 8);
   p[3] = (uint8_t)(v & 0xFF);
 }
+
+// ── Socket I/O helpers ───────────────────────────────────────────────────
 
 static int recv_all(PCL_SOCKET_T sock, void* buf, size_t len) {
   size_t got = 0;
@@ -123,144 +157,212 @@ static int send_all(PCL_SOCKET_T sock, const void* buf, size_t len) {
   return 0;
 }
 
-static pcl_status_t socket_publish(void* adapter_ctx,
-                                   const char* topic,
-                                   const pcl_msg_t* msg) {
-  struct pcl_socket_transport_t* ctx = (struct pcl_socket_transport_t*)adapter_ctx;
-  uint8_t hdr[4];
-  uint8_t type_hdr[1];
-  uint16_t topic_len, type_len;
-  uint32_t data_len;
-  size_t total;
-  uint8_t* buf;
-  size_t off;
+// ── Outbound FIFO queue ──────────────────────────────────────────────────
+// Called from ANY thread (PCL main, recv_thread, application).
+// The send_thread is the ONLY thread that calls send_all().
 
-  if (!ctx || ctx->client_sock == PCL_INVALID_SOCKET) return PCL_ERR_INVALID;
+static pcl_status_t enqueue_outbound_frame(struct pcl_socket_transport_t* ctx,
+                                           const uint8_t*                 data,
+                                           uint32_t                       size) {
+  pcl_outbound_frame_t* f;
 
-  topic_len = (uint16_t)strlen(topic);
-  type_len = (uint16_t)(msg->type_name ? strlen(msg->type_name) : 0);
-  data_len = msg->size;
+  f = (pcl_outbound_frame_t*)malloc(sizeof(*f));
+  if (!f) return PCL_ERR_NOMEM;
 
-  total = 1 + 2 + topic_len + 2 + type_len + 4 + data_len;
-  if (total > PCL_SOCKET_MAX_PAYLOAD) return PCL_ERR_NOMEM;
-
-  buf = (uint8_t*)malloc(total);
-  if (!buf) return PCL_ERR_NOMEM;
-
-  off = 0;
-  buf[off++] = PCL_SOCKET_MSG_PUBLISH;
-  write_u16_be(buf + off, topic_len); off += 2;
-  memcpy(buf + off, topic, topic_len); off += topic_len;
-  write_u16_be(buf + off, type_len); off += 2;
-  if (type_len) {
-    memcpy(buf + off, msg->type_name, type_len); off += type_len;
+  f->data = (uint8_t*)malloc(size);
+  if (!f->data) {
+    free(f);
+    return PCL_ERR_NOMEM;
   }
-  write_u32_be(buf + off, data_len); off += 4;
-  if (data_len && msg->data) {
-    memcpy(buf + off, msg->data, data_len);
-  }
-
-  write_u32_be(hdr, (uint32_t)total);
-  type_hdr[0] = PCL_SOCKET_MSG_PUBLISH;
+  memcpy(f->data, data, size);
+  f->size = size;
+  f->next = NULL;
 
 #ifdef _WIN32
   EnterCriticalSection(&ctx->send_lock);
-#else
-  pthread_mutex_lock(&ctx->send_lock);
-#endif
-
-  if (send_all(ctx->client_sock, hdr, 4) != 0 ||
-      send_all(ctx->client_sock, buf, total) != 0) {
-#ifdef _WIN32
-    LeaveCriticalSection(&ctx->send_lock);
-#else
-    pthread_mutex_unlock(&ctx->send_lock);
-#endif
-    free(buf);
-    return PCL_ERR_NOMEM;
-  }
-
-#ifdef _WIN32
+  if (ctx->send_tail) { ctx->send_tail->next = f; } else { ctx->send_head = f; }
+  ctx->send_tail = f;
+  WakeConditionVariable(&ctx->send_cond);
   LeaveCriticalSection(&ctx->send_lock);
 #else
+  pthread_mutex_lock(&ctx->send_lock);
+  if (ctx->send_tail) { ctx->send_tail->next = f; } else { ctx->send_head = f; }
+  ctx->send_tail = f;
+  pthread_cond_signal(&ctx->send_cond);
   pthread_mutex_unlock(&ctx->send_lock);
 #endif
-  free(buf);
+
   return PCL_OK;
 }
 
+// ── Send thread ──────────────────────────────────────────────────────────
+// Sole writer to client_sock.
+
+#ifdef _WIN32
+static DWORD WINAPI send_thread_main(LPVOID arg)
+#else
+static void* send_thread_main(void* arg)
+#endif
+{
+  struct pcl_socket_transport_t* ctx = (struct pcl_socket_transport_t*)arg;
+
+  for (;;) {
+    pcl_outbound_frame_t* f;
+
+#ifdef _WIN32
+    EnterCriticalSection(&ctx->send_lock);
+    while (ctx->send_head == NULL && !ctx->send_stop) {
+      SleepConditionVariableCS(&ctx->send_cond, &ctx->send_lock, INFINITE);
+    }
+    f = ctx->send_head;
+    if (f) {
+      ctx->send_head = f->next;
+      if (!ctx->send_head) ctx->send_tail = NULL;
+    }
+    LeaveCriticalSection(&ctx->send_lock);
+#else
+    pthread_mutex_lock(&ctx->send_lock);
+    while (ctx->send_head == NULL && !ctx->send_stop) {
+      pthread_cond_wait(&ctx->send_cond, &ctx->send_lock);
+    }
+    f = ctx->send_head;
+    if (f) {
+      ctx->send_head = f->next;
+      if (!ctx->send_head) ctx->send_tail = NULL;
+    }
+    pthread_mutex_unlock(&ctx->send_lock);
+#endif
+
+    if (!f) break; /* send_stop set and queue drained */
+
+    if (ctx->client_sock != PCL_INVALID_SOCKET) {
+      send_all(ctx->client_sock, f->data, f->size);
+    }
+    free(f->data);
+    free(f);
+  }
+
+#ifdef _WIN32
+  return 0;
+#else
+  return NULL;
+#endif
+}
+
+// ── Transport vtable: publish (called on PCL main thread) ────────────────
+
+static pcl_status_t socket_publish(void*            adapter_ctx,
+                                   const char*      topic,
+                                   const pcl_msg_t* msg) {
+  struct pcl_socket_transport_t* ctx = (struct pcl_socket_transport_t*)adapter_ctx;
+  uint16_t topic_len, type_len;
+  uint32_t data_len, payload_size;
+  uint8_t* frame;
+  size_t   off;
+  pcl_status_t rc;
+
+  if (!ctx || ctx->client_sock == PCL_INVALID_SOCKET) return PCL_ERR_INVALID;
+
+  topic_len    = (uint16_t)strlen(topic);
+  type_len     = (uint16_t)(msg->type_name ? strlen(msg->type_name) : 0);
+  data_len     = msg->size;
+  payload_size = 1u + 2u + topic_len + 2u + type_len + 4u + data_len;
+
+  if (payload_size > PCL_SOCKET_MAX_PAYLOAD) return PCL_ERR_NOMEM;
+
+  /* frame: [4:payload_size][1:type=PUBLISH][2:topic_len][topic]
+            [2:type_len][type_name][4:data_len][data] */
+  frame = (uint8_t*)malloc(4u + payload_size);
+  if (!frame) return PCL_ERR_NOMEM;
+
+  off = 0;
+  write_u32_be(frame + off, payload_size);              off += 4;
+  frame[off++] = PCL_SOCKET_MSG_PUBLISH;
+  write_u16_be(frame + off, topic_len);                 off += 2;
+  memcpy(frame + off, topic, topic_len);                off += topic_len;
+  write_u16_be(frame + off, type_len);                  off += 2;
+  if (type_len && msg->type_name) {
+    memcpy(frame + off, msg->type_name, type_len);
+  }
+  off += type_len;
+  write_u32_be(frame + off, data_len);                  off += 4;
+  if (data_len && msg->data) {
+    memcpy(frame + off, msg->data, data_len);
+  }
+
+  rc = enqueue_outbound_frame(ctx, frame, (uint32_t)(4u + payload_size));
+  free(frame);
+  return rc;
+}
+
+// ── Gateway subscriber callback (PCL main thread) ────────────────────────
+// Invoked when a SVC_REQ arrives from the wire.  Calls the service handler
+// synchronously (fine — runs on executor thread), then enqueues the response
+// to send_thread (non-blocking).
+
 static void gateway_sub_cb(pcl_container_t* c,
                            const pcl_msg_t* msg,
-                           void* user_data) {
+                           void*            user_data) {
   struct pcl_socket_transport_t* ctx = (struct pcl_socket_transport_t*)user_data;
   const uint8_t* p;
-  uint32_t conn_id, svc_len, req_len;
-  char svc_name[256];
+  uint32_t seq_id, svc_len, req_len;
+  char     svc_name[256];
   pcl_msg_t req, resp;
-  uint8_t resp_buf[PCL_SOCKET_MAX_PAYLOAD];
-  uint8_t hdr[4];
-  uint8_t type_byte;
-  uint32_t total;
+  uint8_t   resp_buf[PCL_SOCKET_MAX_PAYLOAD];
+  uint8_t*  frame;
+  uint32_t  payload_size;
+  size_t    off;
 
   (void)c;
 
-  if (!ctx || !msg || msg->size < 10) return;
+  if (!ctx || !msg || msg->size < 10u) return;
 
   p = (const uint8_t*)msg->data;
-  conn_id = read_u32_be(p); p += 4;
-  svc_len = read_u16_be(p); p += 2;
+  seq_id  = read_u32_be(p);                    p += 4;
+  svc_len = (uint32_t)read_u16_be(p);          p += 2;
   if (svc_len >= sizeof(svc_name)) return;
-  memcpy(svc_name, p, svc_len); svc_name[svc_len] = '\0'; p += svc_len;
-  req_len = read_u32_be(p); p += 4;
+  memcpy(svc_name, p, svc_len);
+  svc_name[svc_len] = '\0';                    p += svc_len;
+  req_len = read_u32_be(p);                    p += 4;
 
   memset(&req, 0, sizeof(req));
-  req.data = (req_len > 0) ? (const void*)p : NULL;
-  req.size = req_len;
+  req.data      = (req_len > 0u) ? (const void*)p : NULL;
+  req.size      = req_len;
   req.type_name = "SubscribeInterest_Request";
 
   memset(&resp, 0, sizeof(resp));
-  resp.data = resp_buf;
-  resp.size = sizeof(resp_buf);
+  resp.data      = resp_buf;
+  resp.size      = (uint32_t)sizeof(resp_buf);
   resp.type_name = "SubscribeInterest_Response";
 
   if (pcl_executor_invoke_service(ctx->executor, svc_name, &req, &resp) != PCL_OK) {
     resp.size = 0;
   }
 
-  type_byte = PCL_SOCKET_MSG_SVC_RESP;
-  total = 1 + 4 + resp.size;
-  write_u32_be(hdr, total);
+  /* frame: [4:payload_size][1:type=SVC_RESP][4:seq_id][4:resp_size][resp_data] */
+  payload_size = 1u + 4u + 4u + resp.size;
+  frame = (uint8_t*)malloc(4u + payload_size);
+  if (!frame) return;
 
-#ifdef _WIN32
-  EnterCriticalSection(&ctx->send_lock);
-#else
-  pthread_mutex_lock(&ctx->send_lock);
-#endif
-
-  if (ctx->client_sock != PCL_INVALID_SOCKET) {
-    uint8_t wire[9];
-    wire[0] = type_byte;
-    write_u32_be(wire + 1, resp.size);
-    send_all(ctx->client_sock, hdr, 4);
-    send_all(ctx->client_sock, wire, 5);
-    if (resp.size > 0 && resp.data) {
-      send_all(ctx->client_sock, resp.data, resp.size);
-    }
+  off = 0;
+  write_u32_be(frame + off, payload_size);      off += 4;
+  frame[off++] = PCL_SOCKET_MSG_SVC_RESP;
+  write_u32_be(frame + off, seq_id);            off += 4;
+  write_u32_be(frame + off, resp.size);         off += 4;
+  if (resp.size > 0u && resp.data) {
+    memcpy(frame + off, resp.data, resp.size);
   }
 
-#ifdef _WIN32
-  LeaveCriticalSection(&ctx->send_lock);
-#else
-  pthread_mutex_unlock(&ctx->send_lock);
-#endif
+  enqueue_outbound_frame(ctx, frame, 4u + payload_size);
+  free(frame);
 }
 
-static pcl_status_t socket_subscribe(void* adapter_ctx,
+// ── Transport vtable: subscribe / shutdown ───────────────────────────────
+
+static pcl_status_t socket_subscribe(void*       adapter_ctx,
                                      const char* topic,
                                      const char* type_name) {
-  (void)adapter_ctx;
-  (void)topic;
-  (void)type_name;
+  (void)adapter_ctx; (void)topic; (void)type_name;
   return PCL_OK;
 }
 
@@ -270,6 +372,10 @@ static void socket_shutdown(void* adapter_ctx) {
   ctx->recv_stop = 1;
 }
 
+// ── Receive thread ───────────────────────────────────────────────────────
+// recv_thread only calls pcl_executor_post_incoming and
+// pcl_executor_post_response_cb — both are non-blocking enqueues.
+
 #ifdef _WIN32
 static DWORD WINAPI recv_thread_main(LPVOID arg)
 #else
@@ -277,22 +383,16 @@ static void* recv_thread_main(void* arg)
 #endif
 {
   struct pcl_socket_transport_t* ctx = (struct pcl_socket_transport_t*)arg;
-  uint8_t len_buf[4];
-  uint8_t type_buf[1];
+  uint8_t  len_buf[4];
   uint32_t payload_len;
   uint8_t* payload;
-  uint16_t topic_len, type_len;
-  uint32_t data_len;
-  char* topic;
-  char* type_name;
-  pcl_msg_t msg;
 
   ctx->recv_running = 1;
 
   while (!ctx->recv_stop && ctx->client_sock != PCL_INVALID_SOCKET) {
     if (recv_all(ctx->client_sock, len_buf, 4) != 0) break;
     payload_len = read_u32_be(len_buf);
-    if (payload_len == 0 || payload_len > PCL_SOCKET_MAX_PAYLOAD) break;
+    if (payload_len == 0u || payload_len > PCL_SOCKET_MAX_PAYLOAD) break;
 
     payload = (uint8_t*)malloc(payload_len);
     if (!payload) break;
@@ -302,103 +402,113 @@ static void* recv_thread_main(void* arg)
       break;
     }
 
-    if (payload_len < 1) {
+    if (payload_len < 1u) {
       free(payload);
       continue;
     }
 
     if (payload[0] == PCL_SOCKET_MSG_PUBLISH) {
-      if (payload_len < 1 + 2 + 2 + 4) {
-        free(payload);
-        continue;
-      }
+      /* [0x00][2:topic_len][topic][2:type_len][type_name][4:data_len][data] */
+      uint16_t topic_len, type_len;
+      uint32_t data_len;
+      char*    topic_s;
+      char*    type_s;
+      pcl_msg_t msg;
+
+      if (payload_len < 1u + 2u + 2u + 4u) { free(payload); continue; }
+
       topic_len = read_u16_be(payload + 1);
-      if (1 + 2 + topic_len + 2 + 4 > payload_len) {
-        free(payload);
-        continue;
-      }
-      topic = (char*)malloc(topic_len + 1);
-      if (!topic) {
-        free(payload);
-        continue;
-      }
-      memcpy(topic, payload + 3, topic_len);
-      topic[topic_len] = '\0';
+      if (1u + 2u + topic_len + 2u + 4u > payload_len) { free(payload); continue; }
+
+      topic_s = (char*)malloc(topic_len + 1u);
+      if (!topic_s) { free(payload); continue; }
+      memcpy(topic_s, payload + 3, topic_len);
+      topic_s[topic_len] = '\0';
+
       type_len = read_u16_be(payload + 3 + topic_len);
-      if (1 + 2 + topic_len + 2 + type_len + 4 > payload_len) {
-        free(topic);
-        free(payload);
-        continue;
+      if (1u + 2u + topic_len + 2u + type_len + 4u > payload_len) {
+        free(topic_s); free(payload); continue;
       }
-      type_name = (char*)malloc(type_len + 1);
-      if (!type_name) {
-        free(topic);
-        free(payload);
-        continue;
-      }
-      memcpy(type_name, payload + 5 + topic_len, type_len);
-      type_name[type_len] = '\0';
+
+      type_s = (char*)malloc(type_len + 1u);
+      if (!type_s) { free(topic_s); free(payload); continue; }
+      memcpy(type_s, payload + 5 + topic_len, type_len);
+      type_s[type_len] = '\0';
+
       data_len = read_u32_be(payload + 5 + topic_len + type_len);
 
       memset(&msg, 0, sizeof(msg));
-      msg.data = (data_len > 0) ? (payload + 9 + topic_len + type_len) : NULL;
-      msg.size = data_len;
-      msg.type_name = type_name;
+      msg.data      = (data_len > 0u) ? (payload + 9 + topic_len + type_len) : NULL;
+      msg.size      = data_len;
+      msg.type_name = type_s;
 
-      pcl_executor_post_incoming(ctx->executor, topic, &msg);
+      pcl_executor_post_incoming(ctx->executor, topic_s, &msg);
 
-      free(topic);
-      free(type_name);
+      free(topic_s);
+      free(type_s);
       free(payload);
+
     } else if (payload[0] == PCL_SOCKET_MSG_SVC_REQ && ctx->is_server) {
-      pcl_msg_t svc_msg;
-      uint8_t* fwd;
-      uint32_t fwd_len = 4 + payload_len - 1;
-      fwd = (uint8_t*)malloc(fwd_len);
-      if (!fwd) {
-        free(payload);
-        continue;
-      }
-      write_u32_be(fwd, 0);
-      memcpy(fwd + 4, payload + 1, payload_len - 1);
-
-      memset(&svc_msg, 0, sizeof(svc_msg));
-      svc_msg.data = fwd;
-      svc_msg.size = fwd_len;
-      svc_msg.type_name = "SubscribeInterest_Request";
-
-      pcl_executor_post_incoming(ctx->executor, PCL_SOCKET_TOPIC_SVC_REQ, &svc_msg);
-      free(fwd);
-      free(payload);
-    } else if (payload[0] == PCL_SOCKET_MSG_SVC_RESP && !ctx->is_server) {
-#ifdef _WIN32
-      EnterCriticalSection(&ctx->resp_lock);
-#else
-      pthread_mutex_lock(&ctx->resp_lock);
-#endif
-      if (payload_len >= 5) {
-        ctx->resp_size = read_u32_be(payload + 1);
-        if (ctx->resp_size > 0 && ctx->resp_size <= payload_len - 5) {
-          void* tmp = realloc(ctx->resp_data, ctx->resp_size);
-          if (tmp) {
-            ctx->resp_data = tmp;
-            memcpy(ctx->resp_data, payload + 5, ctx->resp_size);
-          }
-        } else {
-          ctx->resp_size = 0;
+      /* [0x01][4:seq_id][2:svc_len][svc_name][4:req_len][req_data]
+         Strip the type byte; forward [seq_id][svc_len][svc_name][req_len][req_data]
+         as the message body for the gateway's __pcl_svc_req subscriber. */
+      if (payload_len >= 1u + 4u + 2u + 4u) {
+        uint32_t  fwd_len = payload_len - 1u;
+        uint8_t*  fwd     = (uint8_t*)malloc(fwd_len);
+        if (fwd) {
+          pcl_msg_t svc_msg;
+          memcpy(fwd, payload + 1, fwd_len);
+          memset(&svc_msg, 0, sizeof(svc_msg));
+          svc_msg.data      = fwd;
+          svc_msg.size      = fwd_len;
+          svc_msg.type_name = "SubscribeInterest_Request";
+          pcl_executor_post_incoming(ctx->executor, PCL_SOCKET_TOPIC_SVC_REQ, &svc_msg);
+          free(fwd);
         }
-      } else {
-        ctx->resp_size = 0;
       }
-      ctx->resp_ready = 1;
-#ifdef _WIN32
-      WakeConditionVariable(&ctx->resp_cond);
-      LeaveCriticalSection(&ctx->resp_lock);
-#else
-      pthread_cond_signal(&ctx->resp_cond);
-      pthread_mutex_unlock(&ctx->resp_lock);
-#endif
       free(payload);
+
+    } else if (payload[0] == PCL_SOCKET_MSG_SVC_RESP && !ctx->is_server) {
+      /* [0x02][4:seq_id][4:resp_len][resp_data]
+         Match seq_id to a pending async call and deliver via post_response_cb. */
+      if (payload_len >= 1u + 4u + 4u) {
+        uint32_t           seq_id    = read_u32_be(payload + 1);
+        uint32_t           resp_size = read_u32_be(payload + 5);
+        const void*        resp_data = (resp_size > 0u &&
+                                        payload_len >= 9u + resp_size)
+                                       ? (const void*)(payload + 9) : NULL;
+        pcl_svc_pending_t* pending   = NULL;
+        pcl_svc_pending_t** pp;
+
+#ifdef _WIN32
+        EnterCriticalSection(&ctx->pending_lock);
+#else
+        pthread_mutex_lock(&ctx->pending_lock);
+#endif
+        for (pp = &ctx->pending_head; *pp; pp = &(*pp)->next) {
+          if ((*pp)->seq_id == seq_id) {
+            pending  = *pp;
+            *pp      = pending->next;
+            break;
+          }
+        }
+#ifdef _WIN32
+        LeaveCriticalSection(&ctx->pending_lock);
+#else
+        pthread_mutex_unlock(&ctx->pending_lock);
+#endif
+
+        if (pending) {
+          pcl_executor_post_response_cb(ctx->executor,
+                                        pending->cb,
+                                        pending->user_data,
+                                        resp_data,
+                                        resp_size);
+          free(pending);
+        }
+      }
+      free(payload);
+
     } else {
       free(payload);
     }
@@ -413,45 +523,55 @@ static void* recv_thread_main(void* arg)
 #endif
 }
 
+// ── Gateway container setup ──────────────────────────────────────────────
+
 static pcl_status_t gateway_on_configure(pcl_container_t* c, void* ud) {
   struct pcl_socket_transport_t* t = (struct pcl_socket_transport_t*)ud;
-  if (!pcl_container_add_subscriber(c, PCL_SOCKET_TOPIC_SVC_REQ, "SubscribeInterest_Request",
-                                    gateway_sub_cb, t)) {
+  if (!pcl_container_add_subscriber(c,
+        PCL_SOCKET_TOPIC_SVC_REQ,
+        "SubscribeInterest_Request",
+        gateway_sub_cb, t)) {
     return PCL_ERR_NOMEM;
   }
   return PCL_OK;
 }
 
-static pcl_status_t socket_transport_create_common(struct pcl_socket_transport_t* ctx,
-                                                   pcl_executor_t* executor) {
+// ── Common initialisation ────────────────────────────────────────────────
+
+static void socket_transport_create_common(struct pcl_socket_transport_t* ctx,
+                                           pcl_executor_t*               executor) {
   memset(&ctx->transport, 0, sizeof(ctx->transport));
-  ctx->transport.publish = socket_publish;
-  ctx->transport.subscribe = socket_subscribe;
-  ctx->transport.shutdown = socket_shutdown;
+  ctx->transport.publish     = socket_publish;
+  ctx->transport.subscribe   = socket_subscribe;
+  ctx->transport.shutdown    = socket_shutdown;
   ctx->transport.adapter_ctx = ctx;
 
-  ctx->listen_sock = PCL_INVALID_SOCKET;
-  ctx->client_sock = PCL_INVALID_SOCKET;
+  ctx->listen_sock  = PCL_INVALID_SOCKET;
+  ctx->client_sock  = PCL_INVALID_SOCKET;
   ctx->recv_running = 0;
-  ctx->recv_stop = 0;
-  ctx->resp_ready = 0;
-  ctx->resp_data = NULL;
+  ctx->recv_stop    = 0;
+  ctx->send_stop    = 0;
+  ctx->send_head    = NULL;
+  ctx->send_tail    = NULL;
+  ctx->next_seq_id  = 1;
+  ctx->pending_head = NULL;
+  ctx->executor     = executor;
 
 #ifdef _WIN32
   InitializeCriticalSection(&ctx->send_lock);
-  InitializeCriticalSection(&ctx->resp_lock);
-  InitializeConditionVariable(&ctx->resp_cond);
+  InitializeConditionVariable(&ctx->send_cond);
+  InitializeCriticalSection(&ctx->pending_lock);
 #else
   pthread_mutex_init(&ctx->send_lock, NULL);
-  pthread_mutex_init(&ctx->resp_lock, NULL);
-  pthread_cond_init(&ctx->resp_cond, NULL);
+  pthread_cond_init(&ctx->send_cond, NULL);
+  pthread_mutex_init(&ctx->pending_lock, NULL);
 #endif
-
-  return PCL_OK;
 }
 
+// ── Public create: server ────────────────────────────────────────────────
+
 pcl_socket_transport_t* pcl_socket_transport_create_server(uint16_t        port,
-                                                          pcl_executor_t* executor) {
+                                                           pcl_executor_t* executor) {
   struct pcl_socket_transport_t* ctx;
   struct sockaddr_in addr;
   int opt = 1;
@@ -459,19 +579,14 @@ pcl_socket_transport_t* pcl_socket_transport_create_server(uint16_t        port,
   if (!executor) return NULL;
 
 #ifdef _WIN32
-  {
-    WSADATA wsa;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return NULL;
-  }
+  { WSADATA wsa; if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return NULL; }
 #endif
 
   ctx = (struct pcl_socket_transport_t*)calloc(1, sizeof(*ctx));
   if (!ctx) return NULL;
 
   ctx->is_server = 1;
-  ctx->port = port;
-  ctx->executor = executor;
-
+  ctx->port      = port;
   socket_transport_create_common(ctx, executor);
 
   ctx->listen_sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -480,13 +595,12 @@ pcl_socket_transport_t* pcl_socket_transport_create_server(uint16_t        port,
     return NULL;
   }
 
-  setsockopt(ctx->listen_sock, SOL_SOCKET, SO_REUSEADDR,
-             (char*)&opt, sizeof(opt));
+  setsockopt(ctx->listen_sock, SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(opt));
 
   memset(&addr, 0, sizeof(addr));
-  addr.sin_family = AF_INET;
+  addr.sin_family      = AF_INET;
   addr.sin_addr.s_addr = INADDR_ANY;
-  addr.sin_port = htons(port);
+  addr.sin_port        = htons(port);
 
   if (bind(ctx->listen_sock, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
     pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx);
@@ -499,9 +613,8 @@ pcl_socket_transport_t* pcl_socket_transport_create_server(uint16_t        port,
 #else
     socklen_t len = sizeof(addr);
 #endif
-    if (getsockname(ctx->listen_sock, (struct sockaddr*)&addr, &len) == 0) {
+    if (getsockname(ctx->listen_sock, (struct sockaddr*)&addr, &len) == 0)
       ctx->port = ntohs(addr.sin_port);
-    }
   }
 
   if (listen(ctx->listen_sock, 1) != 0) {
@@ -520,14 +633,15 @@ pcl_socket_transport_t* pcl_socket_transport_create_server(uint16_t        port,
 
 #ifdef _WIN32
   ctx->recv_thread = CreateThread(NULL, 0, recv_thread_main, ctx, 0, NULL);
-  if (!ctx->recv_thread) {
-    pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx);
-    return NULL;
-  }
+  if (!ctx->recv_thread) { pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL; }
+  ctx->send_thread = CreateThread(NULL, 0, send_thread_main, ctx, 0, NULL);
+  if (!ctx->send_thread) { pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL; }
 #else
   if (pthread_create(&ctx->recv_thread, NULL, recv_thread_main, ctx) != 0) {
-    pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx);
-    return NULL;
+    pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL;
+  }
+  if (pthread_create(&ctx->send_thread, NULL, send_thread_main, ctx) != 0) {
+    pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL;
   }
 #endif
 
@@ -541,69 +655,64 @@ pcl_socket_transport_t* pcl_socket_transport_create_server(uint16_t        port,
   return (pcl_socket_transport_t*)ctx;
 }
 
+// ── Public create: client ────────────────────────────────────────────────
+
 pcl_socket_transport_t* pcl_socket_transport_create_client(const char*      host,
-                                                           uint16_t        port,
-                                                           pcl_executor_t* executor) {
+                                                           uint16_t         port,
+                                                           pcl_executor_t*  executor) {
   struct pcl_socket_transport_t* ctx;
   struct sockaddr_in addr;
-  struct hostent* he;
+  struct hostent*    he;
 
   if (!host || !executor) return NULL;
 
 #ifdef _WIN32
-  {
-    WSADATA wsa;
-    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return NULL;
-  }
+  { WSADATA wsa; if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return NULL; }
 #endif
 
   ctx = (struct pcl_socket_transport_t*)calloc(1, sizeof(*ctx));
   if (!ctx) return NULL;
 
   ctx->is_server = 0;
-  ctx->port = port;
+  ctx->port      = port;
   snprintf(ctx->host, sizeof(ctx->host), "%s", host);
-  ctx->executor = executor;
-
   socket_transport_create_common(ctx, executor);
 
   he = gethostbyname(host);
-  if (!he) {
-    pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx);
-    return NULL;
-  }
+  if (!he) { pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL; }
 
   memset(&addr, 0, sizeof(addr));
   addr.sin_family = AF_INET;
-  addr.sin_port = htons(port);
+  addr.sin_port   = htons(port);
   memcpy(&addr.sin_addr, he->h_addr_list[0], (size_t)he->h_length);
 
   ctx->client_sock = socket(AF_INET, SOCK_STREAM, 0);
   if (ctx->client_sock == PCL_INVALID_SOCKET) {
-    pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx);
-    return NULL;
+    pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL;
   }
 
   if (connect(ctx->client_sock, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
-    pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx);
-    return NULL;
+    pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL;
   }
 
 #ifdef _WIN32
   ctx->recv_thread = CreateThread(NULL, 0, recv_thread_main, ctx, 0, NULL);
-  if (!ctx->recv_thread) {
-    pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx);
-    return NULL;
-  }
+  if (!ctx->recv_thread) { pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL; }
+  ctx->send_thread = CreateThread(NULL, 0, send_thread_main, ctx, 0, NULL);
+  if (!ctx->send_thread) { pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL; }
 #else
   if (pthread_create(&ctx->recv_thread, NULL, recv_thread_main, ctx) != 0) {
-    pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx);
-    return NULL;
+    pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL;
+  }
+  if (pthread_create(&ctx->send_thread, NULL, send_thread_main, ctx) != 0) {
+    pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL;
   }
 #endif
 
   return (pcl_socket_transport_t*)ctx;
 }
+
+// ── Accessors ────────────────────────────────────────────────────────────
 
 const pcl_transport_t* pcl_socket_transport_get_transport(pcl_socket_transport_t* ctx) {
   if (!ctx) return NULL;
@@ -615,106 +724,120 @@ pcl_container_t* pcl_socket_transport_gateway_container(pcl_socket_transport_t* 
   return ctx->gateway;
 }
 
-pcl_status_t pcl_socket_transport_invoke_remote(pcl_socket_transport_t* ctx,
-                                                const char*             service_name,
-                                                const pcl_msg_t*        request,
-                                                pcl_msg_t*             response) {
-  uint16_t svc_len;
-  uint32_t req_len;
-  size_t total;
-  uint8_t* buf;
-  uint8_t hdr[4];
-  size_t off;
+// ── Async service invocation (client only) ───────────────────────────────
 
-  if (!ctx || !service_name || !request || !response) return PCL_ERR_INVALID;
-  if (ctx->is_server) return PCL_ERR_INVALID;
-  if (ctx->client_sock == PCL_INVALID_SOCKET) return PCL_ERR_INVALID;
+pcl_status_t pcl_socket_transport_invoke_remote_async(
+    pcl_socket_transport_t* ctx_opaque,
+    const char*             service_name,
+    const pcl_msg_t*        request,
+    pcl_resp_cb_fn_t        callback,
+    void*                   user_data) {
 
-  svc_len = (uint16_t)strlen(service_name);
-  req_len = request->size;
+  struct pcl_socket_transport_t* ctx = (struct pcl_socket_transport_t*)ctx_opaque;
+  pcl_svc_pending_t* pending;
+  uint16_t  svc_len;
+  uint32_t  req_len, seq_id, payload_size;
+  uint8_t*  frame;
+  size_t    off;
+  pcl_status_t rc;
 
-  total = 1 + 2 + svc_len + 4 + req_len;
-  if (total > PCL_SOCKET_MAX_PAYLOAD) return PCL_ERR_NOMEM;
+  if (!ctx || !service_name || !request || !callback) return PCL_ERR_INVALID;
+  if (ctx->is_server)                                  return PCL_ERR_INVALID;
+  if (ctx->client_sock == PCL_INVALID_SOCKET)          return PCL_ERR_INVALID;
 
-  buf = (uint8_t*)malloc(total);
-  if (!buf) return PCL_ERR_NOMEM;
+  pending = (pcl_svc_pending_t*)malloc(sizeof(*pending));
+  if (!pending) return PCL_ERR_NOMEM;
 
-  off = 0;
-  buf[off++] = PCL_SOCKET_MSG_SVC_REQ;
-  write_u16_be(buf + off, svc_len); off += 2;
-  memcpy(buf + off, service_name, svc_len); off += svc_len;
-  write_u32_be(buf + off, req_len); off += 4;
-  if (req_len && request->data) {
-    memcpy(buf + off, request->data, req_len);
-  }
+  svc_len      = (uint16_t)strlen(service_name);
+  req_len      = request->size;
+  payload_size = 1u + 4u + 2u + svc_len + 4u + req_len;
 
-  write_u32_be(hdr, (uint32_t)total);
-
-#ifdef _WIN32
-  EnterCriticalSection(&ctx->send_lock);
-#else
-  pthread_mutex_lock(&ctx->send_lock);
-#endif
-
-  if (send_all(ctx->client_sock, hdr, 4) != 0 ||
-      send_all(ctx->client_sock, buf, total) != 0) {
-#ifdef _WIN32
-    LeaveCriticalSection(&ctx->send_lock);
-#else
-    pthread_mutex_unlock(&ctx->send_lock);
-#endif
-    free(buf);
+  if (payload_size > PCL_SOCKET_MAX_PAYLOAD) {
+    free(pending);
     return PCL_ERR_NOMEM;
   }
 
-#ifdef _WIN32
-  LeaveCriticalSection(&ctx->send_lock);
-#else
-  pthread_mutex_unlock(&ctx->send_lock);
-#endif
-  free(buf);
+  /* frame: [4:payload_size][1:type=SVC_REQ][4:seq_id][2:svc_len][svc_name][4:req_len][req_data] */
+  frame = (uint8_t*)malloc(4u + payload_size);
+  if (!frame) {
+    free(pending);
+    return PCL_ERR_NOMEM;
+  }
 
-  ctx->resp_ready = 0;
+  /* Assign sequence ID and register pending record under pending_lock */
 #ifdef _WIN32
-  EnterCriticalSection(&ctx->resp_lock);
-  while (!ctx->resp_ready && !ctx->recv_stop) {
-    SleepConditionVariableCS(&ctx->resp_cond, &ctx->resp_lock, INFINITE);
-  }
-  if (ctx->resp_data) {
-    if (response->data && response->size >= ctx->resp_size) {
-      memcpy((void*)response->data, ctx->resp_data, ctx->resp_size);
-      response->size = ctx->resp_size;
-    } else {
-      response->size = ctx->resp_size;
-    }
-  }
-  LeaveCriticalSection(&ctx->resp_lock);
+  EnterCriticalSection(&ctx->pending_lock);
 #else
-  pthread_mutex_lock(&ctx->resp_lock);
-  while (!ctx->resp_ready && !ctx->recv_stop) {
-    pthread_cond_wait(&ctx->resp_cond, &ctx->resp_lock);
-  }
-  if (ctx->resp_data) {
-    if (response->data && response->size >= ctx->resp_size) {
-      memcpy((void*)response->data, ctx->resp_data, ctx->resp_size);
-      response->size = ctx->resp_size;
-    } else {
-      response->size = ctx->resp_size;
-    }
-  }
-  pthread_mutex_unlock(&ctx->resp_lock);
+  pthread_mutex_lock(&ctx->pending_lock);
 #endif
 
-  return PCL_OK;
+  seq_id = ctx->next_seq_id++;
+  if (ctx->next_seq_id == 0u) ctx->next_seq_id = 1u; /* skip 0 */
+
+  pending->seq_id    = seq_id;
+  pending->cb        = callback;
+  pending->user_data = user_data;
+  pending->next      = ctx->pending_head;
+  ctx->pending_head  = pending;
+
+#ifdef _WIN32
+  LeaveCriticalSection(&ctx->pending_lock);
+#else
+  pthread_mutex_unlock(&ctx->pending_lock);
+#endif
+
+  off = 0;
+  write_u32_be(frame + off, payload_size);              off += 4;
+  frame[off++] = PCL_SOCKET_MSG_SVC_REQ;
+  write_u32_be(frame + off, seq_id);                    off += 4;
+  write_u16_be(frame + off, svc_len);                   off += 2;
+  memcpy(frame + off, service_name, svc_len);           off += svc_len;
+  write_u32_be(frame + off, req_len);                   off += 4;
+  if (req_len > 0u && request->data) {
+    memcpy(frame + off, request->data, req_len);
+  }
+
+  rc = enqueue_outbound_frame(ctx, frame, (uint32_t)(4u + payload_size));
+  free(frame);
+
+  if (rc != PCL_OK) {
+    /* Remove pending record since frame was not enqueued */
+    pcl_svc_pending_t** pp;
+#ifdef _WIN32
+    EnterCriticalSection(&ctx->pending_lock);
+#else
+    pthread_mutex_lock(&ctx->pending_lock);
+#endif
+    for (pp = &ctx->pending_head; *pp; pp = &(*pp)->next) {
+      if ((*pp)->seq_id == seq_id) {
+        pcl_svc_pending_t* dead = *pp;
+        *pp = dead->next;
+        free(dead);
+        break;
+      }
+    }
+#ifdef _WIN32
+    LeaveCriticalSection(&ctx->pending_lock);
+#else
+    pthread_mutex_unlock(&ctx->pending_lock);
+#endif
+  }
+
+  return rc;
 }
 
-void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx) {
+// ── Destroy ──────────────────────────────────────────────────────────────
+
+void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx_opaque) {
+  struct pcl_socket_transport_t* ctx = (struct pcl_socket_transport_t*)ctx_opaque;
   if (!ctx) return;
 
+  /* Signal threads to stop */
   ctx->recv_stop = 1;
+  ctx->send_stop = 1;
 
-  /* shutdown() unblocks any thread blocked in recv() on this socket.
-     close() alone does NOT reliably interrupt a blocked recv() on Linux. */
+  /* Unblock recv_thread: shutdown() reliably interrupts a blocked recv().
+     Close socket so recv_thread exits its loop. */
   if (ctx->client_sock != PCL_INVALID_SOCKET) {
     shutdown(ctx->client_sock, SHUT_RDWR);
     pcl_close_socket(ctx->client_sock);
@@ -725,25 +848,70 @@ void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx) {
     ctx->listen_sock = PCL_INVALID_SOCKET;
   }
 
+  /* Wake send_thread (may be waiting on empty queue) */
+#ifdef _WIN32
+  EnterCriticalSection(&ctx->send_lock);
+  WakeConditionVariable(&ctx->send_cond);
+  LeaveCriticalSection(&ctx->send_lock);
+#else
+  pthread_mutex_lock(&ctx->send_lock);
+  pthread_cond_signal(&ctx->send_cond);
+  pthread_mutex_unlock(&ctx->send_lock);
+#endif
+
+  /* Join threads */
 #ifdef _WIN32
   if (ctx->recv_thread) {
     WaitForSingleObject(ctx->recv_thread, 5000);
     CloseHandle(ctx->recv_thread);
+    ctx->recv_thread = NULL;
+  }
+  if (ctx->send_thread) {
+    WaitForSingleObject(ctx->send_thread, 5000);
+    CloseHandle(ctx->send_thread);
+    ctx->send_thread = NULL;
   }
   DeleteCriticalSection(&ctx->send_lock);
-  DeleteCriticalSection(&ctx->resp_lock);
+  DeleteCriticalSection(&ctx->pending_lock);
 #else
   if (ctx->recv_thread) {
     pthread_join(ctx->recv_thread, NULL);
+    ctx->recv_thread = 0;
+  }
+  if (ctx->send_thread) {
+    pthread_join(ctx->send_thread, NULL);
+    ctx->send_thread = 0;
   }
   pthread_mutex_destroy(&ctx->send_lock);
-  pthread_mutex_destroy(&ctx->resp_lock);
-  pthread_cond_destroy(&ctx->resp_cond);
+  pthread_cond_destroy(&ctx->send_cond);
+  pthread_mutex_destroy(&ctx->pending_lock);
 #endif
 
-  free(ctx->resp_data);
+  /* Drain any unsent frames */
+  {
+    pcl_outbound_frame_t* f = ctx->send_head;
+    while (f) {
+      pcl_outbound_frame_t* next = f->next;
+      free(f->data);
+      free(f);
+      f = next;
+    }
+  }
+
+  /* Free any un-responded pending async calls */
+  {
+    pcl_svc_pending_t* p = ctx->pending_head;
+    while (p) {
+      pcl_svc_pending_t* next = p->next;
+      free(p);
+      p = next;
+    }
+  }
+
   if (ctx->gateway) {
     pcl_container_destroy(ctx->gateway);
+    ctx->gateway = NULL;
   }
+
   free(ctx);
 }

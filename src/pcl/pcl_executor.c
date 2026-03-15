@@ -65,6 +65,14 @@ typedef struct pcl_pending_msg_t {
   struct pcl_pending_msg_t* next;
 } pcl_pending_msg_t;
 
+typedef struct pcl_resp_cb_node_t {
+  pcl_resp_cb_fn_t            cb;
+  void*                       user_data;
+  void*                       data;
+  uint32_t                    size;
+  struct pcl_resp_cb_node_t*  next;
+} pcl_resp_cb_node_t;
+
 #ifdef _WIN32
 typedef CRITICAL_SECTION pcl_mutex_t;
 
@@ -141,6 +149,10 @@ struct pcl_executor_t {
   pcl_pending_msg_t* incoming_head;
   pcl_pending_msg_t* incoming_tail;
   pcl_mutex_t        incoming_lock;
+
+  pcl_resp_cb_node_t* resp_cb_head;
+  pcl_resp_cb_node_t* resp_cb_tail;
+  pcl_mutex_t         resp_cb_lock;
 };
 
 // ── Create / destroy ────────────────────────────────────────────────────
@@ -153,6 +165,7 @@ pcl_executor_t* pcl_executor_create(void) {
   e->shutdown_requested = 0;
   e->prev_time          = 0.0;
   pcl_mutex_init(&e->incoming_lock);
+  pcl_mutex_init(&e->resp_cb_lock);
   return e;
 }
 
@@ -179,6 +192,21 @@ void pcl_executor_destroy(pcl_executor_t* e) {
     pending = next;
   }
 
+  {
+    pcl_resp_cb_node_t* node;
+    pcl_mutex_lock(&e->resp_cb_lock);
+    node = e->resp_cb_head;
+    e->resp_cb_head = NULL;
+    e->resp_cb_tail = NULL;
+    pcl_mutex_unlock(&e->resp_cb_lock);
+    while (node) {
+      pcl_resp_cb_node_t* next = node->next;
+      free(node->data);
+      free(node);
+      node = next;
+    }
+  }
+  pcl_mutex_destroy(&e->resp_cb_lock);
   pcl_mutex_destroy(&e->incoming_lock);
   free(e);
 }
@@ -224,6 +252,33 @@ static pcl_status_t dispatch_incoming_now(pcl_executor_t*  e,
 
   sub->sub_cb(sub->owner, msg, sub->sub_user_data);
   return PCL_OK;
+}
+
+static void drain_resp_cb_queue(pcl_executor_t* e) {
+  for (;;) {
+    pcl_resp_cb_node_t* node;
+    pcl_msg_t           resp;
+
+    pcl_mutex_lock(&e->resp_cb_lock);
+    node = e->resp_cb_head;
+    if (node) {
+      e->resp_cb_head = node->next;
+      if (!e->resp_cb_head) e->resp_cb_tail = NULL;
+    }
+    pcl_mutex_unlock(&e->resp_cb_lock);
+
+    if (!node) break;
+
+    memset(&resp, 0, sizeof(resp));
+    resp.data      = node->data;
+    resp.size      = node->size;
+    resp.type_name = NULL;
+
+    node->cb(&resp, node->user_data);
+
+    free(node->data);
+    free(node);
+  }
 }
 
 static pcl_status_t drain_incoming_queue(pcl_executor_t* e) {
@@ -319,6 +374,8 @@ pcl_status_t pcl_executor_spin(pcl_executor_t* e) {
       return rc;
     }
 
+    drain_resp_cb_queue(e);
+
     for (i = 0; i < e->container_count; ++i) {
       tick_container(e->containers[i], dt);
     }
@@ -349,6 +406,8 @@ pcl_status_t pcl_executor_spin_once(pcl_executor_t* e, uint32_t timeout_ms) {
 
   rc = drain_incoming_queue(e);
   if (rc != PCL_OK) return rc;
+
+  drain_resp_cb_queue(e);
 
   for (i = 0; i < e->container_count; ++i) {
     tick_container(e->containers[i], dt);
@@ -455,6 +514,43 @@ pcl_status_t pcl_executor_publish(pcl_executor_t*  e,
     return e->transport.publish(e->transport.adapter_ctx, topic, msg);
   }
   return dispatch_incoming_now(e, topic, msg);
+}
+
+pcl_status_t pcl_executor_post_response_cb(pcl_executor_t*  e,
+                                           pcl_resp_cb_fn_t cb,
+                                           void*            user_data,
+                                           const void*      data,
+                                           uint32_t         size) {
+  pcl_resp_cb_node_t* node;
+
+  if (!e || !cb) return PCL_ERR_INVALID;
+
+  node = (pcl_resp_cb_node_t*)calloc(1, sizeof(*node));
+  if (!node) return PCL_ERR_NOMEM;
+
+  node->cb        = cb;
+  node->user_data = user_data;
+  node->size      = size;
+
+  if (size > 0u && data) {
+    node->data = malloc(size);
+    if (!node->data) {
+      free(node);
+      return PCL_ERR_NOMEM;
+    }
+    memcpy(node->data, data, size);
+  }
+
+  pcl_mutex_lock(&e->resp_cb_lock);
+  if (e->resp_cb_tail) {
+    e->resp_cb_tail->next = node;
+  } else {
+    e->resp_cb_head = node;
+  }
+  e->resp_cb_tail = node;
+  pcl_mutex_unlock(&e->resp_cb_lock);
+
+  return PCL_OK;
 }
 
 pcl_status_t pcl_executor_post_incoming(pcl_executor_t*  e,

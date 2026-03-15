@@ -215,22 +215,46 @@ begin
   Status := Pcl_Bindings.Activate(Container);
   Status := Pcl_Bindings.Add_Container(Exec, Container);
 
-  -- ── Invoke EntityActions Read via subscribe_interest ──────────────────────
+  -- ── Invoke EntityActions Read via subscribe_interest (async) ──────────────
   --
   --  Build a typed TacticalObjectQuery (from the proto IDL) then serialise
   --  it to JSON.  The service name is taken from the service stub constant —
   --  no bare strings in call sites.
+  --
+  --  The call is fully async: invoke_remote_async enqueues the SVC_REQ to
+  --  the send_thread and returns immediately.  The response callback fires on
+  --  the PCL executor thread during the spin loop below.
 
   declare
+    Svc_Response_Ready : Boolean                   := False;
+    Svc_Response_Size  : Interfaces.C.unsigned     := 0;
+
+    procedure Svc_Response_Cb
+      (Resp      : access constant Pcl_Bindings.Pcl_Msg;
+       User_Data : System.Address);
+    pragma Convention(C, Svc_Response_Cb);
+
+    procedure Svc_Response_Cb
+      (Resp      : access constant Pcl_Bindings.Pcl_Msg;
+       User_Data : System.Address)
+    is
+      pragma Unreferenced(User_Data);
+    begin
+      if Resp /= null then
+        Svc_Response_Size := Resp.Size;
+      end if;
+      Svc_Response_Ready := True;
+    end Svc_Response_Cb;
+
     Query : Tactical_Object_Query;
   begin
-    Query.By_Type       := (Has   => True,
-                            Value => Platform);
+    Query.By_Type        := (Has   => True,
+                             Value => Platform);
     Query.By_Affiliation := (Has   => True,
                              Value => Hostile);
-    Query.By_Region     := (Has   => True,
-                            Value => (Min_Lat => 50.0, Max_Lat => 52.0,
-                                      Min_Lon => -1.0, Max_Lon =>  1.0));
+    Query.By_Region      := (Has   => True,
+                             Value => (Min_Lat => 50.0, Max_Lat => 52.0,
+                                       Min_Lon => -1.0, Max_Lon =>  1.0));
 
     declare
       Req_Str : constant String :=
@@ -241,8 +265,6 @@ begin
         Interfaces.C.Strings.New_String(
           Tactical_Objects_Service.Read_Service_Name);
       Req     : aliased Pcl_Bindings.Pcl_Msg;
-      Resp_Buf: aliased String(1 .. 512) := (others => ' ');
-      Resp    : aliased Pcl_Bindings.Pcl_Msg;
     begin
       Log("Read request: " & Req_Str);
 
@@ -250,18 +272,13 @@ begin
       Req.Size      := Interfaces.C.unsigned(Req_Str'Length);
       Req.Type_Name := Interfaces.C.Strings.New_String("application/json");
 
-      Resp.Data      := Resp_Buf(1)'Address;
-      Resp.Size      := Interfaces.C.unsigned(Resp_Buf'Length);
-      Resp.Type_Name := Interfaces.C.Strings.Null_Ptr;
+      Status := Pcl_Bindings.Invoke_Remote_Async(
+        Transport, Svc_C, Req'Access,
+        Svc_Response_Cb'Unrestricted_Access, System.Null_Address);
 
-      Status := Pcl_Bindings.Invoke_Remote(
-        Transport, Svc_C, Req'Access, Resp'Access);
-
-      if Status = Pcl_Bindings.PCL_OK then
-        Log(Tactical_Objects_Service.Read_Service_Name & " OK, response size=" &
-            Interfaces.C.unsigned'Image(Resp.Size));
-      else
-        Log(Tactical_Objects_Service.Read_Service_Name & " FAILED, status=" &
+      if Status /= Pcl_Bindings.PCL_OK then
+        Log(Tactical_Objects_Service.Read_Service_Name &
+            " async submit FAILED, status=" &
             Pcl_Bindings.Pcl_Status'Image(Status));
       end if;
 
@@ -269,16 +286,27 @@ begin
       Interfaces.C.Strings.Free(Svc_C);
       Interfaces.C.Strings.Free(Req.Type_Name);
     end;
+
+    --  Spin until the service response arrives, then continue to wait for
+    --  entity_updates.  Both are drained through the same spin loop.
+    Log("Spinning to receive service response and entity updates...");
+    for Iteration in 1 .. 200 loop
+      Status := Pcl_Bindings.Spin_Once(Exec, 0);
+      if Svc_Response_Ready and then not (Status = Pcl_Bindings.PCL_OK) then
+        null;
+      end if;
+      exit when Svc_Response_Ready and then Frames_Received > 0;
+      delay 0.01;  -- 10 ms
+    end loop;
+
+    if Svc_Response_Ready then
+      Log(Tactical_Objects_Service.Read_Service_Name &
+          " OK, response size=" &
+          Interfaces.C.unsigned'Image(Svc_Response_Size));
+    else
+      Log(Tactical_Objects_Service.Read_Service_Name & " TIMEOUT: no response");
+    end if;
   end;
-
-  -- ── Spin to receive entity updates ────────────────────────────────────────
-
-  Log("Spinning to receive entity updates...");
-  for Iteration in 1 .. 200 loop
-    Status := Pcl_Bindings.Spin_Once(Exec, 0);
-    exit when Frames_Received > 0;
-    delay 0.01;  -- 10 ms
-  end loop;
 
   -- ── Report pass/fail ──────────────────────────────────────────────────────
 

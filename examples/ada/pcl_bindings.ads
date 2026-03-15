@@ -145,6 +145,13 @@ package Pcl_Bindings is
      Response     : access Pcl_Msg) return Pcl_Status;
   pragma Import(C, Invoke_Service, "pcl_executor_invoke_service");
 
+  -- ── Async service response callback ────────────────────────────────────
+
+  type Pcl_Resp_Cb_Access is access procedure
+    (Resp      : access constant Pcl_Msg;
+     User_Data : System.Address);
+  pragma Convention(C, Pcl_Resp_Cb_Access);
+
   -- ── Transport adapter ──────────────────────────────────────────────────
 
   type Pcl_Transport is limited private;
@@ -191,12 +198,14 @@ package Pcl_Bindings is
   pragma Import(C, Socket_Gateway_Container,
                 "pcl_socket_transport_gateway_container");
 
-  function Invoke_Remote
+  function Invoke_Remote_Async
     (Ctx          : Pcl_Socket_Transport_Access;
      Service_Name : Interfaces.C.Strings.chars_ptr;
      Request      : access constant Pcl_Msg;
-     Response     : access Pcl_Msg) return Pcl_Status;
-  pragma Import(C, Invoke_Remote, "pcl_socket_transport_invoke_remote");
+     Callback     : Pcl_Resp_Cb_Access;
+     User_Data    : System.Address) return Pcl_Status;
+  pragma Import(C, Invoke_Remote_Async,
+                "pcl_socket_transport_invoke_remote_async");
 
   procedure Destroy_Socket_Transport(Ctx : Pcl_Socket_Transport_Access);
   pragma Import(C, Destroy_Socket_Transport, "pcl_socket_transport_destroy");
