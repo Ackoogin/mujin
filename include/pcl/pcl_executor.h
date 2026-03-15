@@ -32,6 +32,14 @@ void pcl_executor_destroy(pcl_executor_t* e);
 /// is destroyed.
 pcl_status_t pcl_executor_add(pcl_executor_t* e, pcl_container_t* c);
 
+/// \brief Remove a container from the executor without destroying it.
+///
+/// Clears the container's back-pointer to the executor and removes it from
+/// the internal containers array.  The container is NOT destroyed — caller
+/// retains ownership.  Safe to call before pcl_container_destroy when the
+/// container was previously added with pcl_executor_add.
+pcl_status_t pcl_executor_remove(pcl_executor_t* e, pcl_container_t* c);
+
 // ── Spin ────────────────────────────────────────────────────────────────
 
 /// \brief Block and run the tick loop for all managed containers.

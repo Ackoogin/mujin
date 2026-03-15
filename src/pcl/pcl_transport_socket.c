@@ -832,6 +832,12 @@ void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx_opaque) {
   struct pcl_socket_transport_t* ctx = (struct pcl_socket_transport_t*)ctx_opaque;
   if (!ctx) return;
 
+  /* Unregister from executor before freeing so pcl_executor_destroy does not
+     call transport.shutdown() on the already-freed ctx (use-after-free). */
+  if (ctx->executor) {
+    pcl_executor_set_transport(ctx->executor, NULL);
+  }
+
   /* Signal threads to stop */
   ctx->recv_stop = 1;
   ctx->send_stop = 1;
@@ -909,6 +915,12 @@ void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx_opaque) {
   }
 
   if (ctx->gateway) {
+    /* Remove from executor before freeing: pcl_executor_destroy iterates its
+       containers array and writes c->executor = NULL; if the gateway is already
+       freed that is a use-after-free / access violation. */
+    if (ctx->executor) {
+      pcl_executor_remove(ctx->executor, ctx->gateway);
+    }
     pcl_container_destroy(ctx->gateway);
     ctx->gateway = NULL;
   }

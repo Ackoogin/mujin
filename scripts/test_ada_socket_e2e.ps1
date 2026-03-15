@@ -66,7 +66,9 @@ try {
     Write-Host "[driver] python not found — skipping Ada stub generation"
   }
 
-  # Step 1: Build Ada client if gprbuild is available
+  # Step 1: Build Ada client if gprbuild is available and working.
+  # If the build fails we fall through to check for a pre-built binary;
+  # only SKIP when no usable binary exists at all.
   $gprbuild = Get-Command gprbuild -ErrorAction SilentlyContinue
   if ($gprbuild) {
     Write-Host "[driver] Building Ada client..."
@@ -75,7 +77,7 @@ try {
     try {
       Push-Location $adaDir
       $env:MUJIN_ROOT = $RootDir
-      $null = & gprbuild -P ada_tobj_client.gpr -q 2>&1
+      $buildOutput = & gprbuild -P ada_tobj_client.gpr -q 2>&1
       $buildOk = ($LASTEXITCODE -eq 0)
     } catch {
       $buildOk = $false
@@ -83,8 +85,8 @@ try {
       Pop-Location -ErrorAction SilentlyContinue
     }
     if (-not $buildOk) {
-      Write-Host "[driver] SKIP: gprbuild failed (GNAT toolchain issue)"
-      exit 0
+      Write-Host "[driver] gprbuild failed — falling back to pre-built binary"
+      Write-Host "[driver] gprbuild output: $buildOutput"
     }
   } else {
     Write-Host "[driver] gprbuild not found — checking for pre-built client..."

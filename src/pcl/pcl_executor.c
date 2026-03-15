@@ -221,6 +221,21 @@ pcl_status_t pcl_executor_add(pcl_executor_t* e, pcl_container_t* c) {
   return PCL_OK;
 }
 
+pcl_status_t pcl_executor_remove(pcl_executor_t* e, pcl_container_t* c) {
+  uint32_t i;
+  if (!e || !c) return PCL_ERR_INVALID;
+  for (i = 0; i < e->container_count; ++i) {
+    if (e->containers[i] == c) {
+      c->executor = NULL;
+      memmove(&e->containers[i], &e->containers[i + 1],
+              (e->container_count - i - 1) * sizeof(e->containers[0]));
+      e->container_count--;
+      return PCL_OK;
+    }
+  }
+  return PCL_ERR_NOT_FOUND;
+}
+
 // ── Intra-process dispatch ──────────────────────────────────────────────
 
 static struct pcl_port_t* find_subscriber(pcl_executor_t* e,

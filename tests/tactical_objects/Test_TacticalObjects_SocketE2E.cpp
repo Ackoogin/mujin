@@ -258,8 +258,11 @@ TEST(TacticalObjectsSocketE2E, CppClientReceivesEntityUpdates) {
   // which unblocks the server's recv thread so it can exit cleanly).
   srv.done.store(true);
   pcl_socket_transport_destroy(client_transport);
-  pcl_container_destroy(client_container);
+  // Destroy executor before container: pcl_executor_destroy iterates its
+  // containers array and writes c->executor = NULL.  If the container is
+  // freed first that write is a use-after-free / access violation.
   pcl_executor_destroy(client_exec);
+  pcl_container_destroy(client_container);
 
   server.join();
 
