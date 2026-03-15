@@ -771,7 +771,7 @@ The `.proto` files define **what** the service contract is (messages, operations
 - Protobuf binary wire format on any transport
 - Any gRPC-specific concepts (channels, interceptors, deadlines)
 
-The `service` / `rpc` blocks in `.proto` files are read by our codex generators (`proto_generator.py`, `cpp_model_generator.py`, `ada_service_generator.py`) to produce target-language service stubs with EntityActions CRUD semantics. The generated code uses whatever transport the target platform requires (PCL, ROS2, Ada middleware, etc.).
+The `service` / `rpc` blocks in `.proto` files are read by our codex generators (`ada_service_generator.py`, `ros2_msg_generator.py`) to produce target-language service stubs with EntityActions CRUD semantics. The generated code uses whatever transport the target platform requires (PCL, ROS2, Ada middleware, etc.).
 
 ### Pipeline: SysML model to generated code
 
@@ -782,8 +782,8 @@ The pipeline tooling lives in `pim/` and is checked into this repository:
 | `pim/sysml_parser.py` | Parses Cameo/MagicDraw XMI export into JSON IR (`datamodel.json`) |
 | `pim/proto_generator.py` | Generates `.proto` files from JSON IR with EntityActions CRUD services |
 | `pim/cpp_model_generator.py` | Generates C++14 headers (unique_ptr, topo-sorted) from JSON IR |
-| `pim/ada_model_generator.py` | Generates Ada type packages from JSON IR |
-| `pim/ada_service_generator.py` | Generates Ada service specs/stubs with middleware abstraction |
+| `pim/ada_model_generator.py` | Generates Ada type packages from JSON IR *(scaffolding: generated once, then manually owned)* |
+| `pim/ada_service_generator.py` | Generates Ada service specs/stubs from `.proto` IDL (transport target — not a JSON IR consumer) |
 | `pim/ada_type_generator.py` | Generates Ada type definitions |
 | `pim/python_model_generator.py` | Generates Python dataclasses from JSON IR |
 | `pim/contract_resolver.py` | Resolves provided/consumed service contracts between components |
@@ -797,25 +797,26 @@ The pipeline tooling lives in `pim/` and is checked into this repository:
 │ (MagicDraw)  │     │    .py       │     │ (datamodel.json)     │
 └──────────────┘     └──────────────┘     └──────────┬───────────┘
                                                      │
-                     ┌───────────────┬───────────────┼───────────────┬───────────────┐
-                     │               │               │               │               │
-                     ▼               ▼               ▼               ▼               ▼
-              ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-              │proto_gen    │ │cpp_model_gen│ │ada_model_gen│ │ada_svc_gen  │ │python_gen   │
-              │  .py        │ │  .py        │ │  .py        │ │  .py        │ │  .py        │
-              └──────┬──────┘ └──────┬──────┘ └──────┬──────┘ └──────┬──────┘ └──────┬──────┘
-                     │               │               │               │               │
-                     ▼               ▼               ▼               ▼               ▼
-              .proto files     C++14 headers   Ada types      Ada service     Python
-              (IDL only —      (unique_ptr,    packages       specs/stubs     dataclasses
-               no gRPC)        topo-sorted)                   (middleware
-                     │                                         abstraction)
+                     ┌───────────────┬───────────────┼───────────────┐
+                     │               │               │               │
+                     ▼               ▼               ▼               ▼
+              ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+              │proto_gen    │ │cpp_model_gen│ │ada_model_gen│ │python_gen   │
+              │  .py        │ │  .py        │ │  .py        │ │  .py        │
+              └──────┬──────┘ └──────┬──────┘ └──────┬──────┘ └──────┬──────┘
+                     │               │               │               │
+                     ▼               ▼               ▼               ▼
+              .proto files     C++14 headers  ╔═════════════╗  Python
+              (IDL only —      (unique_ptr,   ║  Ada types  ║  dataclasses
+               no gRPC)        topo-sorted)   ║[scaffolding]║
+                     │                        ╚═════════════╝
                      │
-            ┌────────┼────────┐
-            ▼        ▼        ▼
-         PCL codec  ROS2     Transport-
-         (custom)  .msg/.srv  specific
-                   (script)   adapters
+            ┌────────┼──────────────┐
+            ▼        ▼              ▼
+         PCL codec  ROS2      Ada middleware
+         (custom)  .msg/.srv  stubs
+                   (ros2_msg_ (ada_service_
+                   generator) generator.py)
 ```
 
 **The key insight:** `.proto` files are **generated from the SysML model** and **checked into the repository** as the operational interface contract. The `service`/`rpc` blocks describe EntityActions CRUD semantics that codex generators consume — they are **not** gRPC endpoint definitions. Day-to-day consumers work with `.proto` files directly. Schema changes flow through the model when architectural changes occur.
@@ -830,7 +831,7 @@ The pipeline tooling lives in `pim/` and is checked into this repository:
 | **G4: User-friendly** | Developers work with `.proto` files day-to-day; SysML is for architects |
 | **G5: Backward-compatible** | Not a constraint — tactical objects schema can change freely |
 | **G6: EntityActions** | `proto_generator.py` enforces CRUD semantics from the model |
-| **G7: Ada compatible** | `ada_service_generator.py` produces Ada specs from the same JSON IR |
+| **G7: Ada compatible** | `ada_service_generator.py` reads `.proto`; `ada_model_generator.py` bootstraps Ada types (scaffolding) |
 
 ### Migration path
 
@@ -856,7 +857,7 @@ Phase 4 — Integrate protobuf IDL into PCL:
           • TacticalObjectsComponent handlers use generated types
           • Retire hand-rolled StreamingCodec + TacticalObjectsCodec
 
-Phase 5 — Ada services generated in parallel from same JSON IR
+Phase 5 — Ada services generated from .proto (ada_service_generator.py reads .proto, not JSON IR)
           (gRPC server is NOT a goal — transport remains PCL/ROS2/socket)
 
 Phase 6 — Validate end-to-end:
@@ -943,7 +944,7 @@ The code generation pipeline is checked into `pim/`. These are the codex generat
 | `pim/cpp_model_generator.py` | `datamodel.json` | C++14 headers | `unique_ptr`, topologically sorted, includes from generalizations |
 | `pim/ada_model_generator.py` | `datamodel.json` | Ada type packages | Ada record types with discriminants |
 | `pim/ada_type_generator.py` | `datamodel.json` | Ada type definitions | Low-level Ada type generation |
-| `pim/ada_service_generator.py` | `datamodel.json` | Ada service specs/stubs | Event-driven, middleware-abstracted service procedures |
+| `pim/ada_service_generator.py` | `.proto` file or directory | Ada service specs/stubs | Reads proto `service`/`rpc` blocks; transport target alongside ROS2/PCL |
 | `pim/python_model_generator.py` | `datamodel.json` | Python dataclasses | Python model types |
 | `pim/contract_resolver.py` | `datamodel.json` | Contract mappings | Resolves provided/consumed service contracts between components |
 | `pim/activity_parser.py` | XMI | Activity models | Parses SysML activity diagrams for behavioural generation |

@@ -177,4 +177,54 @@ package Tactical_Objects_Types is
     Has_Velocity     : Boolean             := False;
   end record;
 
+  -- ── Zone entity (maps to proto Zone) ─────────────────────────────────────
+
+  type Zone_Type_Enum is
+    (Zone_Type_Unspecified,
+     Zone_Type_Aoi,
+     Zone_Type_Patrol_Area,
+     Zone_Type_Restricted_Area,
+     Zone_Type_No_Go_Area,
+     Zone_Type_Kill_Box,
+     Zone_Type_Phase_Line,
+     Zone_Type_Boundary,
+     Zone_Type_Route_Corridor,
+     Zone_Type_Sensor_Coverage_Area);
+
+  type Zone_Entity is record
+    Id           : Identifier;
+    Zone_Type_V  : Zone_Type_Enum          := Zone_Type_Unspecified;
+    Active_From  : Interfaces.C.double     := 0.0;
+    Active_Until : Interfaces.C.double     := 0.0;
+    Priority     : Integer                 := 0;
+    Owner        : Unbounded_String        := Null_Unbounded_String;
+    Semantics    : Unbounded_String        := Null_Unbounded_String;
+  end record;
+
+  type Zone_Query is record
+    One_Shot      : Boolean       := True;
+    By_Zone_Type  : Zone_Type_Enum := Zone_Type_Unspecified;
+    Has_Zone_Type : Boolean       := False;
+  end record;
+
+  -- ── Observation entity (maps to proto Observation, flow: in) ─────────────
+
+  type Observation is record
+    Observation_Id      : Identifier;
+    Received_At         : Interfaces.C.double  := 0.0;
+    Observed_At         : Interfaces.C.double  := 0.0;
+    Object_Hint_Type    : Object_Type          := Object_Type_Unspecified;
+    Pos                 : Position;
+    Vel                 : Velocity;
+    Affiliation_Hint    : Affiliation          := Affiliation_Unspecified;
+    Confidence          : Interfaces.C.double  := 0.0;
+    Uncertainty_Radius_M: Interfaces.C.double  := 0.0;
+  end record;
+
+  -- ── Sentinel values ───────────────────────────────────────────────────────
+
+  Null_Identifier : constant Identifier := Null_Unbounded_String;
+  Ack_Ok          : constant Ack        := (Success => True);
+  Ack_Fail        : constant Ack        := (Success => False);
+
 end Tactical_Objects_Types;

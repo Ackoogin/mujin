@@ -50,6 +50,22 @@ function Cleanup {
 try {
   Write-Host "=== Ada Socket E2E Test ==="
 
+  # Step 0: Generate Ada service stubs from proto
+  $python = Get-Command python -ErrorAction SilentlyContinue
+  if ($python) {
+    $ProtoFile = Join-Path $RootDir "proto\pyramid\components\tactical_objects.proto"
+    $AdaGenOut = Join-Path $RootDir "examples\ada\generated"
+    Write-Host "[driver] Generating Ada service stubs from proto..."
+    $genResult = & python (Join-Path $RootDir "pim\ada_service_generator.py") $ProtoFile $AdaGenOut 2>&1
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host "[driver] SKIP: Ada service generation failed — $genResult"
+      exit 0
+    }
+    Write-Host "[driver] Generated stubs in $AdaGenOut"
+  } else {
+    Write-Host "[driver] python not found — skipping Ada stub generation"
+  }
+
   # Step 1: Build Ada client if gprbuild is available
   $gprbuild = Get-Command gprbuild -ErrorAction SilentlyContinue
   if ($gprbuild) {

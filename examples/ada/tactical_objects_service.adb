@@ -5,8 +5,118 @@
 
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 with Interfaces.C;
+with System;
 
 package body Tactical_Objects_Service is
+
+  -- ── EntityActions handler stubs ───────────────────────────────────────────
+
+  procedure Handle_Create_Tactical_Object
+    (Request  : in  Tactical_Object;
+     Response : out Tactical_Objects_Types.Identifier)
+  is
+    pragma Unreferenced(Request);
+  begin
+    Response := Tactical_Objects_Types.Null_Identifier;  --  TODO: implement
+  end Handle_Create_Tactical_Object;
+
+  procedure Handle_Read_Tactical_Object
+    (Request  : in  Tactical_Object_Query;
+     Response : out Tactical_Object_Array)
+  is
+    pragma Unreferenced(Request);
+    Empty : Tactical_Object_Array(1 .. 0);
+  begin
+    Response := Empty;  --  TODO: implement
+  end Handle_Read_Tactical_Object;
+
+  procedure Handle_Update_Tactical_Object
+    (Request  : in  Tactical_Object;
+     Response : out Tactical_Objects_Types.Ack)
+  is
+    pragma Unreferenced(Request);
+  begin
+    Response := Tactical_Objects_Types.Ack_Ok;  --  TODO: implement
+  end Handle_Update_Tactical_Object;
+
+  procedure Handle_Delete_Tactical_Object
+    (Request  : in  Tactical_Objects_Types.Identifier;
+     Response : out Tactical_Objects_Types.Ack)
+  is
+    pragma Unreferenced(Request);
+  begin
+    Response := Tactical_Objects_Types.Ack_Ok;  --  TODO: implement
+  end Handle_Delete_Tactical_Object;
+
+  procedure Handle_Create_Zone
+    (Request  : in  Zone_Entity;
+     Response : out Tactical_Objects_Types.Identifier)
+  is
+    pragma Unreferenced(Request);
+  begin
+    Response := Tactical_Objects_Types.Null_Identifier;  --  TODO: implement
+  end Handle_Create_Zone;
+
+  procedure Handle_Read_Zone
+    (Request  : in  Zone_Query;
+     Response : out Zone_Array)
+  is
+    pragma Unreferenced(Request);
+    Empty : Zone_Array(1 .. 0);
+  begin
+    Response := Empty;  --  TODO: implement
+  end Handle_Read_Zone;
+
+  procedure Handle_Update_Zone
+    (Request  : in  Zone_Entity;
+     Response : out Tactical_Objects_Types.Ack)
+  is
+    pragma Unreferenced(Request);
+  begin
+    Response := Tactical_Objects_Types.Ack_Ok;  --  TODO: implement
+  end Handle_Update_Zone;
+
+  procedure Handle_Delete_Zone
+    (Request  : in  Tactical_Objects_Types.Identifier;
+     Response : out Tactical_Objects_Types.Ack)
+  is
+    pragma Unreferenced(Request);
+  begin
+    Response := Tactical_Objects_Types.Ack_Ok;  --  TODO: implement
+  end Handle_Delete_Zone;
+
+  procedure Handle_Create_Observation
+    (Request  : in  Observation;
+     Response : out Tactical_Objects_Types.Identifier)
+  is
+    pragma Unreferenced(Request);
+  begin
+    Response := Tactical_Objects_Types.Null_Identifier;  --  TODO: implement
+  end Handle_Create_Observation;
+
+  procedure Dispatch
+    (Channel      : in  Service_Channel;
+     Request_Buf  : in  System.Address;
+     Request_Size : in  Natural;
+     Response_Buf : out System.Address;
+     Response_Size: out Natural)
+  is
+    pragma Unreferenced(Request_Buf, Request_Size);
+  begin
+    Response_Buf  := System.Null_Address;
+    Response_Size := 0;
+    case Channel is
+      when Ch_Create_Tactical_Object => null;  --  TODO: deserialise, call Handle_Create_Tactical_Object
+      when Ch_Read_Tactical_Object   => null;  --  TODO: deserialise, call Handle_Read_Tactical_Object
+      when Ch_Update_Tactical_Object => null;  --  TODO: deserialise, call Handle_Update_Tactical_Object
+      when Ch_Delete_Tactical_Object => null;  --  TODO: deserialise, call Handle_Delete_Tactical_Object
+      when Ch_Create_Zone            => null;  --  TODO: deserialise, call Handle_Create_Zone
+      when Ch_Read_Zone              => null;  --  TODO: deserialise, call Handle_Read_Zone
+      when Ch_Update_Zone            => null;  --  TODO: deserialise, call Handle_Update_Zone
+      when Ch_Delete_Zone            => null;  --  TODO: deserialise, call Handle_Delete_Zone
+      when Ch_Create_Observation     => null;  --  TODO: deserialise, call Handle_Create_Observation
+    end case;
+  end Dispatch;
 
   -- ── Internal helpers ──────────────────────────────────────────────────────
 

@@ -1,203 +1,238 @@
 #!/usr/bin/env python3
 """
 Ada Service Stub Generator
-Generates PCL-aligned EntityActions service stubs from the SysML JSON IR.
+Generates PCL-aligned EntityActions service stubs from a .proto IDL file.
 
-Each entity property with flow direction (inout/out/in) produces a set of
-Handle_<Op>_<Entity> procedures matching the EntityActions CRUD contract:
+Each rpc in a proto service block produces a Handle_<Op>_<Entity> procedure
+matching the EntityActions CRUD contract:
 
-  inout → Handle_Create, Handle_Read, Handle_Update, Handle_Delete
-  out   → Handle_Read only
-  in    → Handle_Create, Handle_Update, Handle_Delete
+  CreateXxx(Xxx)            returns (Identifier)   → Handle_Create_Xxx
+  ReadXxx(XxxQuery)         returns (stream Xxx)   → Handle_Read_Xxx
+  UpdateXxx(Xxx)            returns (Ack)           → Handle_Update_Xxx
+  DeleteXxx(Identifier)     returns (Ack)           → Handle_Delete_Xxx
 
 A Dispatch procedure is generated as the single integration point for any
 transport (PCL, socket, shared memory, etc.) — it routes an incoming
 operation+channel to the correct typed handler.
 
 This replaces the former Pyramid.Middleware Send/Receive/Receive_Any pattern.
+
+Usage:
+    python ada_service_generator.py <file.proto> <output_dir>
+    python ada_service_generator.py <proto_dir/>  <output_dir>
 """
 
-import json
 import sys
-from pathlib import Path
-from typing import Dict, List, Any, Optional
 import re
+from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 
-# ── EntityActions operation set per flow direction ───────────────────────────
+# ── EntityActions operation set ───────────────────────────────────────────────
 
-FLOW_OPS = {
-    'inout': ['Create', 'Read', 'Update', 'Delete'],
-    'out':   ['Read'],
-    'in':    ['Create', 'Update', 'Delete'],
-    None:    ['Create', 'Read', 'Update', 'Delete'],  # default = inout
+# Maps rpc name prefix → op kind
+OP_PREFIXES = ['Create', 'Read', 'Update', 'Delete']
+
+# Ada parameter signature per operation (req type, optional rsp type)
+# {entity} is substituted with the entity name (CamelCase Ada form)
+OP_SIGNATURE: Dict[str, Dict] = {
+    'Create': {'req': '{entity}',       'rsp': 'Identifier'},
+    'Read':   {'req': '{entity}Query',  'rsp': '{entity}_Array'},
+    'Update': {'req': '{entity}',       'rsp': 'Ack'},
+    'Delete': {'req': 'Identifier',     'rsp': 'Ack'},
 }
 
-# Ada parameter signature per operation (Req type, optional Rsp type)
-# Rsp is None when the operation has no response output parameter.
-OP_SIGNATURE = {
-    'Create': {'req': '{entity_type}',      'rsp': 'Identifier'},
-    'Read':   {'req': 'Query',              'rsp': '{entity_type}_Array'},
-    'Update': {'req': '{entity_type}',      'rsp': 'Ack'},
-    'Delete': {'req': 'Identifier',         'rsp': 'Ack'},
+# Base-type short names from pyramid.data_model.base.*
+BASE_TYPE_MAP = {
+    'pyramid.data_model.base.Identifier': 'Identifier',
+    'pyramid.data_model.base.Query':      'Query',
+    'pyramid.data_model.base.Ack':        'Ack',
 }
 
+
+# ── Proto parser ──────────────────────────────────────────────────────────────
+
+def _strip_comments(text: str) -> str:
+    """Remove // line comments and /* */ block comments."""
+    text = re.sub(r'//[^\n]*', '', text)
+    text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
+    return text
+
+
+def _camel_to_snake(name: str) -> str:
+    """TacticalObject → Tactical_Object  (Ada identifier style)."""
+    s = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', name)
+    s = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s)
+    return s
+
+
+def _short_type(full_type: str) -> str:
+    """pyramid.data_model.base.Identifier → Identifier."""
+    if full_type in BASE_TYPE_MAP:
+        return BASE_TYPE_MAP[full_type]
+    # strip package prefix — keep the message name
+    return full_type.split('.')[-1]
+
+
+class ProtoRpc:
+    """One rpc entry extracted from a proto service block."""
+
+    def __init__(self, name: str, req: str, rsp: str, streaming: bool):
+        self.name = name          # e.g. "CreateTacticalObject"
+        self.req = req            # e.g. "TacticalObject"
+        self.rsp = rsp            # e.g. "pyramid.data_model.base.Identifier"
+        self.streaming = streaming  # True when returns (stream Xxx)
+
+        # Detect op and entity from rpc name
+        self.op: Optional[str] = None
+        self.entity: Optional[str] = None  # CamelCase, e.g. "TacticalObject"
+        for prefix in OP_PREFIXES:
+            if name.startswith(prefix):
+                self.op = prefix
+                self.entity = name[len(prefix):]
+                break
+
+    @property
+    def ada_handler(self) -> str:
+        """Handle_Create_Tactical_Object"""
+        return f'Handle_{self.op}_{_camel_to_snake(self.entity)}'
+
+    @property
+    def ada_channel(self) -> str:
+        """Ch_Create_Tactical_Object"""
+        return f'Ch_{self.op}_{_camel_to_snake(self.entity)}'
+
+    @property
+    def ada_req_type(self) -> str:
+        sig = OP_SIGNATURE[self.op]['req']
+        return sig.replace('{entity}', self.entity)
+
+    @property
+    def ada_rsp_type(self) -> Optional[str]:
+        sig = OP_SIGNATURE[self.op].get('rsp')
+        if sig is None:
+            return None
+        return sig.replace('{entity}', self.entity)
+
+
+class ProtoService:
+    """One service block from a .proto file."""
+
+    def __init__(self, name: str, rpcs: List[ProtoRpc]):
+        self.name = name   # e.g. "TacticalObjectService"
+        self.rpcs = [r for r in rpcs if r.op is not None]  # only EntityActions rpcs
+
+
+class ProtoFile:
+    """Parsed .proto file."""
+
+    def __init__(self, package: str, services: List[ProtoService]):
+        self.package = package    # e.g. "pyramid.components.tactical_objects"
+        self.services = services
+
+
+def parse_proto(proto_path: Path) -> ProtoFile:
+    text = _strip_comments(proto_path.read_text(encoding='utf-8'))
+
+    # package
+    pkg_match = re.search(r'\bpackage\s+([\w.]+)\s*;', text)
+    package = pkg_match.group(1) if pkg_match else ''
+
+    # services
+    services: List[ProtoService] = []
+    for svc_match in re.finditer(r'\bservice\s+(\w+)\s*\{([^}]*)\}', text, re.DOTALL):
+        svc_name = svc_match.group(1)
+        svc_body = svc_match.group(2)
+
+        rpcs: List[ProtoRpc] = []
+        for rpc_match in re.finditer(
+                r'\brpc\s+(\w+)\s*\(\s*([\w.]+)\s*\)\s*returns\s*\(\s*(stream\s+)?([\w.]+)\s*\)',
+                svc_body):
+            rpc_name = rpc_match.group(1)
+            req_type = rpc_match.group(2)
+            streaming = bool(rpc_match.group(3))
+            rsp_type = rpc_match.group(4)
+            rpcs.append(ProtoRpc(rpc_name, req_type, rsp_type, streaming))
+
+        services.append(ProtoService(svc_name, rpcs))
+
+    return ProtoFile(package, services)
+
+
+# ── Ada package name derivation ───────────────────────────────────────────────
+
+def _pkg_name_from_proto(proto_file: ProtoFile) -> str:
+    """
+    pyramid.components.tactical_objects →
+    Pyramid.Services.Tactical_Objects.Provided
+    """
+    parts = proto_file.package.split('.')
+    # Drop well-known prefixes: 'pyramid', 'components'
+    meaningful = [p for p in parts
+                  if p.lower() not in ('pyramid', 'components', 'data_model', 'base')]
+    ada_parts = ['Pyramid', 'Services']
+    for p in meaningful:
+        # Title-case each underscore-separated word: tactical_objects → Tactical_Objects
+        titled = '_'.join(w.capitalize() for w in p.split('_'))
+        ada_parts.append(titled)
+    ada_parts.append('Provided')
+    return '.'.join(ada_parts)
+
+
+# ── Code generation ───────────────────────────────────────────────────────────
 
 class AdaServiceGenerator:
 
-    def __init__(self, datamodel_file: str):
-        with open(datamodel_file, 'r') as f:
-            self.data = json.load(f)
+    def __init__(self, proto_input: str):
+        """
+        proto_input: path to a .proto file or a directory of .proto files.
+        """
+        self._proto_input = Path(proto_input)
 
     def generate(self, output_dir: str):
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
-        groups = self._group_services_by_component_and_type()
+        proto_files: List[Path] = []
+        if self._proto_input.is_dir():
+            proto_files = list(self._proto_input.rglob('*.proto'))
+        elif self._proto_input.is_file():
+            proto_files = [self._proto_input]
+        else:
+            print(f'ERROR: {self._proto_input} is not a file or directory', file=sys.stderr)
+            sys.exit(1)
 
-        for (component_ns, service_type), services in groups.items():
-            all_service_props = []
-            for service in services:
-                entity_props = self._collect_all_entity_properties(service)
-                if entity_props:
-                    all_service_props.append({
-                        'service_name': service['name'],
-                        'properties': entity_props,
-                    })
+        for pf in proto_files:
+            parsed = parse_proto(pf)
+            # Collect all rpcs across all services in this file
+            all_rpcs: List[Tuple[str, ProtoRpc]] = []
+            for svc in parsed.services:
+                for rpc in svc.rpcs:
+                    all_rpcs.append((svc.name, rpc))
 
-            if all_service_props:
-                self._generate_grouped_service(
-                    output_path, component_ns, service_type, all_service_props)
+            if not all_rpcs:
+                continue
 
-    # ── Grouping ──────────────────────────────────────────────────────────────
+            pkg_name = _pkg_name_from_proto(parsed)
+            ads_path = output_path / (pkg_name.lower().replace('.', '-') + '.ads')
+            adb_path = output_path / (pkg_name.lower().replace('.', '-') + '.adb')
 
-    def _group_services_by_component_and_type(self) -> Dict:
-        grouped = {}
-
-        for cls in self.data.get('classes', []):
-            ns = cls.get('namespace', [])
-            component_parts = []
-            service_type = None
-
-            for part in ns:
-                part_lower = part.lower()
-                if 'provided' in part_lower or 'offered' in part_lower:
-                    service_type = 'Provided'
-                    break
-                elif 'consumed' in part_lower or 'required' in part_lower:
-                    service_type = 'Consumed'
-                    break
-                elif 'service' in part_lower:
-                    continue
-                else:
-                    component_parts.append(part)
-
-            if service_type:
-                key = (tuple(component_parts), service_type)
-                grouped.setdefault(key, []).append(cls)
-
-        return grouped
-
-    def _collect_all_entity_properties(self, cls: Dict) -> List[Dict]:
-        """Collect entity properties from this class and all ancestors."""
-        props = []
-        for parent_name in cls.get('generalizes', []):
-            parent = self._find_class_by_name(parent_name)
-            if parent:
-                props.extend(self._collect_all_entity_properties(parent))
-
-        for prop in cls.get('properties', []):
-            type_name = prop.get('typeName')
-            if type_name and self._is_entity_derived(type_name):
-                props.append({
-                    'name': prop['name'],
-                    'type': type_name,
-                    'flow_direction': prop.get('flow_direction'),  # None = inout
-                })
-        return props
-
-    def _find_class_by_name(self, name: str) -> Optional[Dict]:
-        for cls in self.data.get('classes', []):
-            if cls['name'] == name:
-                return cls
-        return None
-
-    def _is_entity_derived(self, type_name: str) -> bool:
-        for dt in self.data.get('dataTypes', []):
-            if dt['name'] == type_name:
-                if 'Entity' in dt.get('generalizes', []):
-                    return True
-                for parent in dt.get('generalizes', []):
-                    if self._is_entity_derived(parent):
-                        return True
-        return False
-
-    # ── Code generation ───────────────────────────────────────────────────────
-
-    def _generate_grouped_service(self, output_path: Path, component_ns: tuple,
-                                   service_type: str, all_service_props: List[Dict]):
-        """Generate one .ads/.adb pair for all provided/consumed services in a component."""
-        pkg_parts = ['Pyramid', 'Services']
-
-        for part in component_ns:
-            clean = re.sub(r'^\d+\.\s*', '', part)
-            clean = re.sub(r'[^\w\s]', '', clean)
-            clean = re.sub(r'\s+', '_', clean)
-            clean = re.sub(r'^\d+', '', clean)
-            if clean:
-                pkg_parts.append(clean)
-
-        pkg_parts.append(service_type)
-        pkg_name = '.'.join(pkg_parts)
-
-        ads_path = output_path / (pkg_name.lower().replace('.', '-') + '.ads')
-        adb_path = output_path / (pkg_name.lower().replace('.', '-') + '.adb')
-
-        self._write_spec(ads_path, pkg_name, all_service_props)
-        self._write_body(adb_path, pkg_name, all_service_props)
-        print(f'  Generated {pkg_name}')
-
-    def _all_ops(self, all_service_props: List[Dict]) -> List[Dict]:
-        """Flatten to a list of (op, entity_type, prop_name) records."""
-        ops = []
-        for svc in all_service_props:
-            for prop in svc['properties']:
-                flow = prop['flow_direction']
-                for op in FLOW_OPS.get(flow, FLOW_OPS[None]):
-                    ops.append({
-                        'op': op,
-                        'entity_type': prop['type'],
-                        'prop_name': prop['name'],
-                        'service_name': svc['service_name'],
-                    })
-        return ops
-
-    def _proc_name(self, op: str, prop_name: str) -> str:
-        """Produce a stable Ada identifier: Handle_<Op>_<PropName>."""
-        clean_prop = re.sub(r'\s+', '_', prop_name)
-        clean_prop = re.sub(r'[^\w]', '_', clean_prop)
-        return f'Handle_{op}_{clean_prop}'
-
-    def _req_type(self, op: str, entity_type: str) -> str:
-        sig = OP_SIGNATURE[op]['req']
-        return sig.replace('{entity_type}', entity_type)
-
-    def _rsp_type(self, op: str, entity_type: str) -> Optional[str]:
-        sig = OP_SIGNATURE[op].get('rsp')
-        if sig is None:
-            return None
-        return sig.replace('{entity_type}', entity_type)
+            self._write_spec(ads_path, pkg_name, parsed, all_rpcs)
+            self._write_body(adb_path, pkg_name, parsed, all_rpcs)
+            print(f'  Generated {pkg_name}')
 
     # ── Spec (.ads) ───────────────────────────────────────────────────────────
 
-    def _write_spec(self, path: Path, pkg_name: str, all_service_props: List[Dict]):
-        ops = self._all_ops(all_service_props)
-
-        # Collect unique entity types for array type declarations
-        entity_types = sorted({o['entity_type'] for o in ops if o['op'] == 'Read'})
+    def _write_spec(self, path: Path, pkg_name: str, parsed: ProtoFile,
+                    all_rpcs: List[Tuple[str, ProtoRpc]]):
+        entity_types_for_arrays = sorted({
+            rpc.entity for _, rpc in all_rpcs if rpc.op == 'Read'
+        })
 
         with open(path, 'w') as f:
             f.write(f'--  Auto-generated EntityActions service specification\n')
+            f.write(f'--  Generated from: {self._proto_input.name}'
+                    f' by ada_service_generator.py\n')
             f.write(f'--  Package: {pkg_name}\n')
             f.write(f'--\n')
             f.write(f'--  Each Handle_<Op>_<Entity> procedure corresponds to one EntityActions\n')
@@ -211,7 +246,7 @@ class AdaServiceGenerator:
             f.write(f'package {pkg_name} is\n')
             f.write(f'\n')
 
-            # Operation kind enumeration
+            # Operation_Kind enumeration
             f.write(f'   type Operation_Kind is\n')
             f.write(f'     (Op_Create,\n')
             f.write(f'      Op_Read,\n')
@@ -219,50 +254,44 @@ class AdaServiceGenerator:
             f.write(f'      Op_Delete);\n')
             f.write(f'\n')
 
-            # Service channel enumeration — one per (op, entity)
+            # Service_Channel enumeration — one per rpc
             f.write(f'   type Service_Channel is\n')
-            channel_values = []
-            for o in ops:
-                channel_values.append(f'      Ch_{o["op"]}_{o["prop_name"]}')
+            channel_values = [f'      {rpc.ada_channel}' for _, rpc in all_rpcs]
             if channel_values:
-                f.write(',\n'.join(channel_values))
-                f.write(');\n')
+                f.write('     (' + ',\n'.join(channel_values).lstrip() + ');\n')
             else:
-                f.write('      Ch_None);\n')
+                f.write('     (Ch_None);\n')
             f.write('\n')
 
-            # Array types for Read responses
-            for et in entity_types:
+            # Array types for streaming Read responses
+            for et in entity_types_for_arrays:
                 f.write(f'   type {et}_Array is array (Positive range <>) of {et};\n')
-            if entity_types:
+            if entity_types_for_arrays:
                 f.write('\n')
 
-            # Handler procedure declarations
+            # Handler procedure declarations grouped by service
             f.write(f'   --  ── EntityActions handlers ─────────────────────────────────────\n')
             f.write(f'   --  Implement these procedures in the package body.\n')
             f.write(f'\n')
 
-            for svc in all_service_props:
-                f.write(f'   --  {svc["service_name"]}\n')
-                flow_ops = []
-                for prop in svc['properties']:
-                    flow = prop['flow_direction']
-                    for op in FLOW_OPS.get(flow, FLOW_OPS[None]):
-                        flow_ops.append((op, prop))
+            current_svc = None
+            for svc_name, rpc in all_rpcs:
+                if svc_name != current_svc:
+                    f.write(f'   --  {svc_name}\n')
+                    current_svc = svc_name
 
-                for op, prop in flow_ops:
-                    proc = self._proc_name(op, prop['name'])
-                    req_t = self._req_type(op, prop['type'])
-                    rsp_t = self._rsp_type(op, prop['type'])
+                req_t = rpc.ada_req_type
+                rsp_t = rpc.ada_rsp_type
 
-                    if rsp_t:
-                        f.write(f'   procedure {proc}\n')
-                        f.write(f'     (Request  : in  {req_t};\n')
-                        f.write(f'      Response : out {rsp_t});\n')
-                    else:
-                        f.write(f'   procedure {proc}\n')
-                        f.write(f'     (Request : in {req_t});\n')
-                f.write('\n')
+                if rsp_t:
+                    f.write(f'   procedure {rpc.ada_handler}\n')
+                    f.write(f'     (Request  : in  {req_t};\n')
+                    f.write(f'      Response : out {rsp_t});\n')
+                else:
+                    f.write(f'   procedure {rpc.ada_handler}\n')
+                    f.write(f'     (Request : in {req_t});\n')
+
+            f.write('\n')
 
             # Dispatch procedure
             f.write(f'   --  ── Transport integration point ─────────────────────────────────\n')
@@ -281,9 +310,8 @@ class AdaServiceGenerator:
 
     # ── Body (.adb) ───────────────────────────────────────────────────────────
 
-    def _write_body(self, path: Path, pkg_name: str, all_service_props: List[Dict]):
-        ops = self._all_ops(all_service_props)
-
+    def _write_body(self, path: Path, pkg_name: str, parsed: ProtoFile,
+                    all_rpcs: List[Tuple[str, ProtoRpc]]):
         with open(path, 'w') as f:
             f.write(f'--  Auto-generated EntityActions service body\n')
             f.write(f'--  Package body: {pkg_name}\n')
@@ -295,27 +323,27 @@ class AdaServiceGenerator:
             f.write(f'\n')
 
             # Handler stubs
-            for svc in all_service_props:
-                f.write(f'   --  ── {svc["service_name"]} ─────────────────────────────────────\n')
-                for prop in svc['properties']:
-                    flow = prop['flow_direction']
-                    for op in FLOW_OPS.get(flow, FLOW_OPS[None]):
-                        proc = self._proc_name(op, prop['name'])
-                        req_t = self._req_type(op, prop['type'])
-                        rsp_t = self._rsp_type(op, prop['type'])
+            current_svc = None
+            for svc_name, rpc in all_rpcs:
+                if svc_name != current_svc:
+                    f.write(f'   --  ── {svc_name} ─────────────────────────────────────\n')
+                    current_svc = svc_name
 
-                        if rsp_t:
-                            f.write(f'   procedure {proc}\n')
-                            f.write(f'     (Request  : in  {req_t};\n')
-                            f.write(f'      Response : out {rsp_t})\n')
-                        else:
-                            f.write(f'   procedure {proc}\n')
-                            f.write(f'     (Request : in {req_t})\n')
-                        f.write(f'   is\n')
-                        f.write(f'   begin\n')
-                        f.write(f'      null;  --  TODO: implement\n')
-                        f.write(f'   end {proc};\n')
-                        f.write(f'\n')
+                req_t = rpc.ada_req_type
+                rsp_t = rpc.ada_rsp_type
+
+                if rsp_t:
+                    f.write(f'   procedure {rpc.ada_handler}\n')
+                    f.write(f'     (Request  : in  {req_t};\n')
+                    f.write(f'      Response : out {rsp_t})\n')
+                else:
+                    f.write(f'   procedure {rpc.ada_handler}\n')
+                    f.write(f'     (Request : in {req_t})\n')
+                f.write(f'   is\n')
+                f.write(f'   begin\n')
+                f.write(f'      null;  --  TODO: implement\n')
+                f.write(f'   end {rpc.ada_handler};\n')
+                f.write(f'\n')
 
             # Dispatch stub with case statement
             f.write(f'   procedure Dispatch\n')
@@ -330,10 +358,9 @@ class AdaServiceGenerator:
             f.write(f'      Response_Size := 0;\n')
             f.write(f'      case Channel is\n')
 
-            for o in ops:
-                proc = self._proc_name(o['op'], o['prop_name'])
-                f.write(f'         when Ch_{o["op"]}_{o["prop_name"]} =>\n')
-                f.write(f'            null;  --  TODO: deserialise Request_Buf, call {proc}\n')
+            for _, rpc in all_rpcs:
+                f.write(f'         when {rpc.ada_channel} =>\n')
+                f.write(f'            null;  --  TODO: deserialise Request_Buf, call {rpc.ada_handler}\n')
 
             f.write(f'      end case;\n')
             f.write(f'   end Dispatch;\n')
@@ -343,7 +370,7 @@ class AdaServiceGenerator:
 
 def main():
     if len(sys.argv) < 3:
-        print('Usage: python ada_service_generator.py <datamodel.json> <output_dir>')
+        print('Usage: python ada_service_generator.py <file.proto|proto_dir> <output_dir>')
         sys.exit(1)
 
     gen = AdaServiceGenerator(sys.argv[1])
