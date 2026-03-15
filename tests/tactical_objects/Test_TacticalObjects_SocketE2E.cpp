@@ -183,7 +183,12 @@ TEST(TacticalObjectsSocketE2E, CppClientReceivesEntityUpdates) {
   pcl_container_activate(client_container);
   pcl_executor_add(client_exec, client_container);
 
-  // Remote service call: subscribe_interest
+  // Remote service call: subscribe_interest (async — non-blocking enqueue)
+  struct SvcRespCtx {
+    std::string   body;
+    std::atomic<bool> ready{false};
+  } svc_resp;
+
   {
     nlohmann::json sub_req;
     sub_req["object_type"] = "Platform";
@@ -197,32 +202,41 @@ TEST(TacticalObjectsSocketE2E, CppClientReceivesEntityUpdates) {
     req.data = sub_str.data();
     req.size = static_cast<uint32_t>(sub_str.size());
     req.type_name = "application/json";
-    char rbuf[512];
-    pcl_msg_t resp = {};
-    resp.data = rbuf;
-    resp.size = sizeof(rbuf);
 
-    pcl_status_t rc = pcl_socket_transport_invoke_remote(
-        client_transport, "subscribe_interest", &req, &resp);
-    ASSERT_EQ(rc, PCL_OK) << "subscribe_interest remote call failed";
+    struct SvcCb {
+      static void fn(const pcl_msg_t* resp, void* ud) {
+        auto* ctx = static_cast<SvcRespCtx*>(ud);
+        if (resp && resp->data && resp->size > 0) {
+          ctx->body.assign(static_cast<const char*>(resp->data), resp->size);
+        }
+        ctx->ready.store(true);
+      }
+    };
 
-    std::string resp_str(static_cast<const char*>(resp.data), resp.size);
-    auto jr = nlohmann::json::parse(resp_str);
+    pcl_status_t rc = pcl_socket_transport_invoke_remote_async(
+        client_transport, "subscribe_interest", &req,
+        SvcCb::fn, &svc_resp);
+    ASSERT_EQ(rc, PCL_OK) << "invoke_remote_async enqueue failed";
+  }
+
+  // Spin client until service response and at least one entity update arrive
+  {
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (std::chrono::steady_clock::now() < deadline) {
+      pcl_executor_spin_once(client_exec, 0);
+      if (svc_resp.ready.load() && recv_ctx.received_any.load()) break;
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+  }
+
+  ASSERT_TRUE(svc_resp.ready.load()) << "subscribe_interest response timed out";
+  {
+    auto jr = nlohmann::json::parse(svc_resp.body);
     std::string interest_id = jr.value("interest_id", "");
     ASSERT_FALSE(interest_id.empty())
         << "subscribe_interest returned no interest_id";
     std::fprintf(stderr, "[client] Got interest_id: %s\n",
                  interest_id.c_str());
-  }
-
-  // Spin client to receive entity updates
-  {
-    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (!recv_ctx.received_any.load() &&
-           std::chrono::steady_clock::now() < deadline) {
-      pcl_executor_spin_once(client_exec, 0);
-      std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    }
   }
 
   // Capture results before teardown
