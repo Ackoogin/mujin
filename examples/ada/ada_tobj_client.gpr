@@ -6,6 +6,10 @@ project Ada_Tobj_Client is
   for Source_Dirs use (".", "../../src/pcl");
   for Main use ("ada_tobj_client.adb");
 
+  --  Proto/Ada-gen service interface (EntityActions-aligned types + stubs)
+  --  Source: tactical_objects_types.ads
+  --          tactical_objects_service.ads / .adb
+
   for Object_Dir use "obj_tobj_client";
   for Exec_Dir use "bin";
 

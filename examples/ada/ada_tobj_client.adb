@@ -1,7 +1,11 @@
 -- ada_tobj_client.adb
 -- Standalone Ada executable that connects to a TacticalObjectsComponent server
--- via TCP socket transport, subscribes to entity_updates, invokes
--- subscribe_interest, receives and decodes entity update batch frames.
+-- via TCP socket transport, subscribes to entity_updates, receives and decodes
+-- entity update batch frames.
+--
+-- Uses the EntityActions-aligned service interface (tactical_objects_service)
+-- generated from the proto/ada codex.  No bare JSON strings or PCL service
+-- name literals appear in this file.
 --
 -- Usage: ada_tobj_client --host 127.0.0.1 --port 19123
 
@@ -12,11 +16,14 @@ with Interfaces.C;
 with Interfaces.C.Strings;
 with Pcl_Bindings;
 with Streaming_Codec;
+with Tactical_Objects_Types;   use Tactical_Objects_Types;
+with Tactical_Objects_Service;
 with System;
 
 procedure Ada_Tobj_Client is
   use type Interfaces.C.unsigned;
   use type Interfaces.C.unsigned_short;
+  use type Interfaces.C.double;
   use type Pcl_Bindings.Pcl_Status;
   use type Pcl_Bindings.Pcl_Executor_Access;
   use type Pcl_Bindings.Pcl_Container_Access;
@@ -25,11 +32,13 @@ procedure Ada_Tobj_Client is
   use type Streaming_Codec.Byte;
   use type System.Address;
 
-  function To_Address is new Ada.Unchecked_Conversion(Interfaces.C.Strings.chars_ptr, System.Address);
+  function To_Address is new
+    Ada.Unchecked_Conversion(Interfaces.C.Strings.chars_ptr, System.Address);
 
-  -- ── Configuration ──────────────────────────────────────────────────────
+  -- ── Configuration ──────────────────────────────────────────────────────────
 
-  Host_Str : String := "127.0.0.1";
+  Host_Str : Interfaces.C.Strings.chars_ptr :=
+    Interfaces.C.Strings.New_String("127.0.0.1");
   Port_Val : Interfaces.C.unsigned_short := 19000;
 
   procedure Parse_Args is
@@ -38,15 +47,8 @@ procedure Ada_Tobj_Client is
   begin
     while I <= Argument_Count loop
       if Argument(I) = "--host" and then I + 1 <= Argument_Count then
-        -- Ada strings are immutable length; use a helper
-        declare
-          H : constant String := Argument(I + 1);
-        begin
-          Host_Str(Host_Str'First .. Host_Str'First + H'Length - 1) :=
-            H(H'First .. H'Last);
-          -- This is simplified; real impl would use Unbounded_String
-          null;
-        end;
+        Interfaces.C.Strings.Free(Host_Str);
+        Host_Str := Interfaces.C.Strings.New_String(Argument(I + 1));
         I := I + 2;
       elsif Argument(I) = "--port" and then I + 1 <= Argument_Count then
         Port_Val := Interfaces.C.unsigned_short'Value(Argument(I + 1));
@@ -57,19 +59,24 @@ procedure Ada_Tobj_Client is
     end loop;
   end Parse_Args;
 
-  -- ── Logging ────────────────────────────────────────────────────────────
+  -- ── Logging ────────────────────────────────────────────────────────────────
 
   procedure Log(Msg : String) is
   begin
-    Ada.Text_IO.Put_Line(Ada.Text_IO.Standard_Error, "[ada_tobj_client] " & Msg);
+    Ada.Text_IO.Put_Line(Ada.Text_IO.Standard_Error,
+                         "[ada_tobj_client] " & Msg);
     Ada.Text_IO.Flush(Ada.Text_IO.Standard_Error);
   end Log;
 
-  -- ── Client state ───────────────────────────────────────────────────────
+  -- ── Client state ───────────────────────────────────────────────────────────
 
   Frames_Received : Natural := 0;
 
-  -- ── Callbacks ──────────────────────────────────────────────────────────
+  -- ── Subscriber callback ────────────────────────────────────────────────────
+  --
+  --  Receives raw binary batch frames on the entity_updates topic.
+  --  Decodes with Streaming_Codec then maps each frame to a typed
+  --  TacticalObject via Tactical_Objects_Service.Frame_To_Tactical_Object.
 
   procedure Entity_Updates_Cb
     (Container : Pcl_Bindings.Pcl_Container_Access;
@@ -82,35 +89,31 @@ procedure Ada_Tobj_Client is
      Msg       : access constant Pcl_Bindings.Pcl_Msg;
      User_Data : System.Address)
   is
-    pragma Unreferenced(Container);
-    pragma Unreferenced(User_Data);
+    pragma Unreferenced(Container, User_Data);
     Result : Streaming_Codec.Decode_Result;
   begin
     if Msg.Data = System.Null_Address or else Msg.Size = 0 then
       return;
     end if;
+
     Result := Streaming_Codec.Decode_Batch(Msg.Data, Msg.Size);
     Frames_Received := Frames_Received + Result.Count;
+
     if Result.Count > 0 then
       Log("Received batch with" & Natural'Image(Result.Count) & " entities");
-      -- Print first entity details
+
+      --  Map first frame to a typed TacticalObject and log it
       declare
-        F : constant Streaming_Codec.Entity_Update_Frame :=
-          Result.Frames(0);
+        Obj : constant Tactical_Object :=
+          Tactical_Objects_Service.Frame_To_Tactical_Object(
+            Result.Frames(0));
       begin
-        Log("  entity msg_type=" & Streaming_Codec.Byte'Image(F.Message_Type));
-        if F.Has_Position then
-          Log("  position: lat=" &
-              Interfaces.C.double'Image(F.Pos.Lat) & " lon=" &
-              Interfaces.C.double'Image(F.Pos.Lon));
-        end if;
-        if F.Has_Affiliation then
-          Log("  affiliation ordinal=" &
-              Streaming_Codec.Byte'Image(F.Affiliation_Val));
-        end if;
+        Log("  entity: " & Tactical_Objects_Service.Tactical_Object_Image(Obj));
       end;
     end if;
   end Entity_Updates_Cb;
+
+  -- ── on_configure: subscribe to entity_updates ─────────────────────────────
 
   function On_Configure_Cb
     (Container : Pcl_Bindings.Pcl_Container_Access;
@@ -121,11 +124,12 @@ procedure Ada_Tobj_Client is
     (Container : Pcl_Bindings.Pcl_Container_Access;
      User_Data : System.Address) return Pcl_Bindings.Pcl_Status
   is
-    Topic : Interfaces.C.Strings.chars_ptr :=
+    Topic  : Interfaces.C.Strings.chars_ptr :=
       Interfaces.C.Strings.New_String("entity_updates");
     Type_N : Interfaces.C.Strings.chars_ptr :=
       Interfaces.C.Strings.New_String("application/octet-stream");
-    Port : Pcl_Bindings.Pcl_Port_Access;
+    Port   : Pcl_Bindings.Pcl_Port_Access;
+    pragma Unreferenced(Port);
   begin
     Port := Pcl_Bindings.Add_Subscriber(
       Container => Container,
@@ -138,22 +142,22 @@ procedure Ada_Tobj_Client is
     return Pcl_Bindings.PCL_OK;
   end On_Configure_Cb;
 
-  -- ── Main ───────────────────────────────────────────────────────────────
+  -- ── Main variables ─────────────────────────────────────────────────────────
 
   Exec      : Pcl_Bindings.Pcl_Executor_Access;
   Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
   Container : Pcl_Bindings.Pcl_Container_Access;
-  Host_C    : Interfaces.C.Strings.chars_ptr;
   Name_C    : Interfaces.C.Strings.chars_ptr;
   Cbs       : aliased Pcl_Bindings.Pcl_Callbacks;
   Status    : Pcl_Bindings.Pcl_Status;
 
 begin
   Parse_Args;
-  Log("Connecting to " & Host_Str & ":" &
-      Interfaces.C.unsigned_short'Image(Port_Val));
+  Log("Connecting to " & Interfaces.C.Strings.Value(Host_Str) &
+      ":" & Interfaces.C.unsigned_short'Image(Port_Val));
 
-  -- Create executor
+  -- ── Create executor ────────────────────────────────────────────────────────
+
   Exec := Pcl_Bindings.Create_Executor;
   if Exec = null then
     Log("FAIL: could not create executor");
@@ -161,10 +165,10 @@ begin
     return;
   end if;
 
-  -- Connect via socket transport
-  Host_C := Interfaces.C.Strings.New_String(Host_Str);
-  Transport := Pcl_Bindings.Create_Socket_Client(Host_C, Port_Val, Exec);
-  Interfaces.C.Strings.Free(Host_C);
+  -- ── Connect via socket client transport ────────────────────────────────────
+
+  Transport := Pcl_Bindings.Create_Socket_Client(Host_Str, Port_Val, Exec);
+  Interfaces.C.Strings.Free(Host_Str);
 
   if Transport = null then
     Log("FAIL: could not connect to server");
@@ -173,18 +177,21 @@ begin
     return;
   end if;
 
-  -- Set transport on executor
+  -- ── Set transport on executor ──────────────────────────────────────────────
+
   Status := Pcl_Bindings.Set_Transport(
     Exec, Pcl_Bindings.Get_Socket_Transport(Transport));
   if Status /= Pcl_Bindings.PCL_OK then
-    Log("FAIL: could not set transport");
+    Log("FAIL: could not set transport (status=" &
+        Pcl_Bindings.Pcl_Status'Image(Status) & ")");
     Pcl_Bindings.Destroy_Socket_Transport(Transport);
     Pcl_Bindings.Destroy_Executor(Exec);
     Ada.Command_Line.Set_Exit_Status(1);
     return;
   end if;
 
-  -- Create subscriber container
+  -- ── Create subscriber container ────────────────────────────────────────────
+
   Cbs := (On_Configure  => On_Configure_Cb'Unrestricted_Access,
           On_Activate   => null,
           On_Deactivate => null,
@@ -208,53 +215,73 @@ begin
   Status := Pcl_Bindings.Activate(Container);
   Status := Pcl_Bindings.Add_Container(Exec, Container);
 
-  -- Invoke remote subscribe_interest
+  -- ── Invoke EntityActions Read via subscribe_interest ──────────────────────
+  --
+  --  Build a typed TacticalObjectQuery (from the proto IDL) then serialise
+  --  it to JSON.  The service name is taken from the service stub constant —
+  --  no bare strings in call sites.
+
   declare
-    Req_Str : constant String :=
-      "{""object_type"":""Platform"",""affiliation"":""Hostile""," &
-      """area"":{""min_lat"":50,""max_lat"":52,""min_lon"":-1,""max_lon"":1}," &
-      """expires_at"":9999}";
-    Req_C : Interfaces.C.Strings.chars_ptr :=
-      Interfaces.C.Strings.New_String(Req_Str);
-    Svc_C : Interfaces.C.Strings.chars_ptr :=
-      Interfaces.C.Strings.New_String("subscribe_interest");
-    Req : aliased Pcl_Bindings.Pcl_Msg;
-    Resp_Buf : aliased String (1 .. 512) := (others => ' ');
-    Resp : aliased Pcl_Bindings.Pcl_Msg;
+    Query : Tactical_Object_Query;
   begin
-    Req.Data := To_Address(Req_C);
-    Req.Size := Interfaces.C.unsigned(Req_Str'Length);
-    Req.Type_Name := Interfaces.C.Strings.New_String("application/json");
+    Query.By_Type       := (Has   => True,
+                            Value => Platform);
+    Query.By_Affiliation := (Has   => True,
+                             Value => Hostile);
+    Query.By_Region     := (Has   => True,
+                            Value => (Min_Lat => 50.0, Max_Lat => 52.0,
+                                      Min_Lon => -1.0, Max_Lon =>  1.0));
 
-    Resp.Data := Resp_Buf(1)'Address;
-    Resp.Size := Interfaces.C.unsigned(Resp_Buf'Length);
-    Resp.Type_Name := Interfaces.C.Strings.Null_Ptr;
+    declare
+      Req_Str : constant String :=
+        Tactical_Objects_Service.Build_Read_Request_Json(Query);
+      Req_C   : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String(Req_Str);
+      Svc_C   : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String(
+          Tactical_Objects_Service.Read_Service_Name);
+      Req     : aliased Pcl_Bindings.Pcl_Msg;
+      Resp_Buf: aliased String(1 .. 512) := (others => ' ');
+      Resp    : aliased Pcl_Bindings.Pcl_Msg;
+    begin
+      Log("Read request: " & Req_Str);
 
-    Status := Pcl_Bindings.Invoke_Remote(
-      Transport, Svc_C, Req'Access, Resp'Access);
+      Req.Data      := To_Address(Req_C);
+      Req.Size      := Interfaces.C.unsigned(Req_Str'Length);
+      Req.Type_Name := Interfaces.C.Strings.New_String("application/json");
 
-    if Status = Pcl_Bindings.PCL_OK then
-      Log("subscribe_interest OK, response size=" &
-          Interfaces.C.unsigned'Image(Resp.Size));
-    else
-      Log("subscribe_interest FAILED, status=" &
-          Pcl_Bindings.Pcl_Status'Image(Status));
-    end if;
+      Resp.Data      := Resp_Buf(1)'Address;
+      Resp.Size      := Interfaces.C.unsigned(Resp_Buf'Length);
+      Resp.Type_Name := Interfaces.C.Strings.Null_Ptr;
 
-    Interfaces.C.Strings.Free(Req_C);
-    Interfaces.C.Strings.Free(Svc_C);
-    Interfaces.C.Strings.Free(Req.Type_Name);
+      Status := Pcl_Bindings.Invoke_Remote(
+        Transport, Svc_C, Req'Access, Resp'Access);
+
+      if Status = Pcl_Bindings.PCL_OK then
+        Log(Tactical_Objects_Service.Read_Service_Name & " OK, response size=" &
+            Interfaces.C.unsigned'Image(Resp.Size));
+      else
+        Log(Tactical_Objects_Service.Read_Service_Name & " FAILED, status=" &
+            Pcl_Bindings.Pcl_Status'Image(Status));
+      end if;
+
+      Interfaces.C.Strings.Free(Req_C);
+      Interfaces.C.Strings.Free(Svc_C);
+      Interfaces.C.Strings.Free(Req.Type_Name);
+    end;
   end;
 
-  -- Spin to receive entity updates (up to 200 iterations or until received)
+  -- ── Spin to receive entity updates ────────────────────────────────────────
+
   Log("Spinning to receive entity updates...");
   for Iteration in 1 .. 200 loop
     Status := Pcl_Bindings.Spin_Once(Exec, 0);
     exit when Frames_Received > 0;
-    delay 0.01;  -- 10ms
+    delay 0.01;  -- 10 ms
   end loop;
 
-  -- Report
+  -- ── Report pass/fail ──────────────────────────────────────────────────────
+
   if Frames_Received > 0 then
     Log("PASS: received" & Natural'Image(Frames_Received) & " entity frames");
     Ada.Command_Line.Set_Exit_Status(0);
@@ -263,7 +290,8 @@ begin
     Ada.Command_Line.Set_Exit_Status(1);
   end if;
 
-  -- Cleanup
+  -- ── Cleanup ───────────────────────────────────────────────────────────────
+
   Pcl_Bindings.Destroy_Socket_Transport(Transport);
   Pcl_Bindings.Destroy_Container(Container);
   Pcl_Bindings.Destroy_Executor(Exec);

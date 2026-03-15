@@ -38,9 +38,24 @@ class ProtobufGenerator:
                 ('string', 'value', 1, 'UUID string representation (e.g., "550e8400-e29b-41d4-a716-446655440000")')
             ]
         },
+        'Query': {
+            'comment': 'EntityActions query scope',
+            'fields': [
+                ('repeated Identifier', 'id', 1, 'Filter by specific IDs; empty = all'),
+                ('bool', 'one_shot', 2, 'true = single response; false = continuous stream'),
+            ]
+        },
+        'Ack': {
+            'comment': 'EntityActions acknowledgment',
+            'fields': [
+                ('bool', 'success', 1, 'Operation success/failure'),
+            ]
+        },
         'Timestamp': {
-            'comment': 'Point in time (uses google.protobuf.Timestamp)',
-            'use_google_timestamp': True  # Special flag to use google timestamp directly
+            'comment': 'Point in time (epoch milliseconds)',
+            'fields': [
+                ('int64', 'epoch_ms', 1, 'Milliseconds since Unix epoch'),
+            ]
         },
         'Angle': {
             'comment': 'Angular measurement in radians (SI unit)',
@@ -252,12 +267,6 @@ class ProtobufGenerator:
             # Add imports
             imports = []
             
-            # Add google protobuf imports if needed
-            if google_imports['timestamp']:
-                imports.append('import "google/protobuf/timestamp.proto";')
-            if google_imports['empty']:
-                imports.append('import "google/protobuf/empty.proto";')
-            
             # Add pyramid.base import if services use Identifier
             if google_imports['base_for_identifier']:
                 # Check if Identifier is not in current package
@@ -357,28 +366,16 @@ class ProtobufGenerator:
     
     def _needs_google_imports(self, types: Dict[str, List]) -> Dict[str, bool]:
         """Check which google protobuf imports are needed"""
-        needs = {'timestamp': False, 'empty': False, 'base_for_identifier': False}
-        
-        # Check if Timestamp base type is in this file (needs google import)
-        for dt in types['dataTypes']:
-            if dt['name'] == 'Timestamp':
-                needs['timestamp'] = True
-        
-        # Check for Timestamp usage in properties
-        for dt in types['dataTypes']:
-            for prop in dt.get('properties', []):
-                if prop.get('typeName') == 'Timestamp':
-                    needs['timestamp'] = True
+        needs = {'timestamp': False, 'base_for_identifier': False}
+
+        # No google.protobuf.Empty — EntityActions uses Ack instead
+
         for cls in types['classes']:
             for prop in cls.get('properties', []):
-                if prop.get('typeName') == 'Timestamp':
-                    needs['timestamp'] = True
-                # Check if property is entity-derived (will generate service with Empty and Identifier)
                 type_name = prop.get('typeName')
                 if type_name and self._is_entity_derived(type_name):
-                    needs['empty'] = True
                     needs['base_for_identifier'] = True
-        
+
         return needs
     
     def _write_enum(self, f, enum: Dict[str, Any]):
@@ -736,74 +733,50 @@ class ProtobufGenerator:
                             return True
         return False
     
-    def _write_grpc_service(self, f, service_name: str, entity_properties: List[Dict], current_package: str):
-        """Generate gRPC service definition for entity-derived properties"""
-        f.write(f'// gRPC Service for {service_name}\n')
+    def _write_entity_service(self, f, service_name: str, entity_properties: List[Dict], current_package: str):
+        """Generate EntityActions service definition for entity-derived properties.
+
+        Produces Create/Read/Update/Delete RPCs with correct EntityActions signatures.
+        This is a semantic contract consumed by codex generators — not a gRPC endpoint.
+        """
+        f.write(f'// EntityActions Service for {service_name}\n')
         f.write(f'service {service_name}_Service {{\n')
-        
+
         for prop in entity_properties:
             prop_name = prop['name']
             prop_type = prop['type']
-            # Qualify the property type if from different package
             qualified_type = self._get_qualified_type(prop_type, current_package)
             flow_direction = prop.get('flow_direction', 'inout')
-            
-            # Get qualified Identifier type
+
             qualified_identifier = self._get_qualified_type('Identifier', current_package)
-            
-            # CamelCase the property name for RPC method names
+            qualified_query = self._get_qualified_type('Query', current_package)
+            qualified_ack = self._get_qualified_type('Ack', current_package)
+
             prop_camel = ''.join(word.capitalize() for word in prop_name.split('_'))
-            
-            # Determine operations based on flow direction
-            # inout = full CRUD
-            # out = read only
-            # in = write only (create, update, delete)
-            
+
+            # inout → full CRUD
+            # out   → Read only
+            # in    → Create + Update + Delete (no Read)
+
             if flow_direction == 'inout' or flow_direction is None:
-                # INOUT: All CRUD operations
-                f.write(f'  // Create {prop_name}\n')
-                f.write(f'  rpc Create{prop_camel}({qualified_type}) returns ({qualified_identifier});\n')
-                f.write(f'  \n')
-                f.write(f'  // Read {prop_name}\n')
-                f.write(f'  rpc Read{prop_camel}({qualified_identifier}) returns ({qualified_type});\n')
-                f.write(f'  \n')
-                f.write(f'  // Update {prop_name}\n')
-                f.write(f'  rpc Update{prop_camel}({qualified_type}) returns (google.protobuf.Empty);\n')
-                f.write(f'  \n')
-                f.write(f'  // Delete {prop_name}\n')
-                f.write(f'  rpc Delete{prop_camel}({qualified_identifier}) returns (google.protobuf.Empty);\n')
-                f.write(f'  \n')
-                f.write(f'  // List {prop_name}\n')
-                f.write(f'  rpc List{prop_camel}(google.protobuf.Empty) returns (stream {qualified_identifier});\n')
-                f.write(f'  \n')
-                f.write(f'  // Stream {prop_name}\n')
-                f.write(f'  rpc Stream{prop_camel}({qualified_identifier}) returns (stream {qualified_type});\n')
+                f.write(f'  rpc Create{prop_camel} ({qualified_type}) returns ({qualified_identifier});\n')
+                f.write(f'  rpc Read{prop_camel}   ({qualified_query}) returns (stream {qualified_type});\n')
+                f.write(f'  rpc Update{prop_camel} ({qualified_type}) returns ({qualified_ack});\n')
+                f.write(f'  rpc Delete{prop_camel} ({qualified_identifier}) returns ({qualified_ack});\n')
             elif flow_direction == 'out':
-                # OUT: Read operations only
-                f.write(f'  // Read {prop_name} (output only)\n')
-                f.write(f'  rpc Read{prop_camel}({qualified_identifier}) returns ({qualified_type});\n')
-                f.write(f'  \n')
-                f.write(f'  // List {prop_name} (output only)\n')
-                f.write(f'  rpc List{prop_camel}(google.protobuf.Empty) returns (stream {qualified_identifier});\n')
-                f.write(f'  \n')
-                f.write(f'  // Stream {prop_name} (output only)\n')
-                f.write(f'  rpc Stream{prop_camel}({qualified_identifier}) returns (stream {qualified_type});\n')
+                f.write(f'  rpc Read{prop_camel} ({qualified_query}) returns (stream {qualified_type});\n')
             elif flow_direction == 'in':
-                # IN: Write operations only
-                f.write(f'  // Create {prop_name} (input only)\n')
-                f.write(f'  rpc Create{prop_camel}({qualified_type}) returns ({qualified_identifier});\n')
-                f.write(f'  \n')
-                f.write(f'  // Update {prop_name} (input only)\n')
-                f.write(f'  rpc Update{prop_camel}({qualified_type}) returns (google.protobuf.Empty);\n')
-                f.write(f'  \n')
-                f.write(f'  // Delete {prop_name} (input only)\n')
-                f.write(f'  rpc Delete{prop_camel}({qualified_identifier}) returns (google.protobuf.Empty);\n')
-            
-            # Add blank line between properties
+                f.write(f'  rpc Create{prop_camel} ({qualified_type}) returns ({qualified_identifier});\n')
+                f.write(f'  rpc Update{prop_camel} ({qualified_type}) returns ({qualified_ack});\n')
+                f.write(f'  rpc Delete{prop_camel} ({qualified_identifier}) returns ({qualified_ack});\n')
+
             if entity_properties.index(prop) < len(entity_properties) - 1:
                 f.write('\n')
-        
+
         f.write('}\n')
+
+    # Keep old name as alias so callers that weren't updated still work
+    _write_grpc_service = _write_entity_service
     
     def _map_type(self, sysml_type: str) -> str:
         """Map SysML type to protobuf type"""

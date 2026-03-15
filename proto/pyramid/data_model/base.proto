@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package pyramid.data_model.base;
+
+// ── EntityActions Base Types ─────────────────────────────────────────────────
+//
+// These three types are the canonical inputs/outputs for all EntityActions CRUD
+// operations.  Every component service imports this file.
+//
+// This file is hand-written (SysML XMI not yet available).
+// Source of truth: TacticalObjectsTypes.h + EntityActions semantics.
+
+// Universally Unique Identifier.
+// Maps to: tactical_objects::UUIDKey (uuid as hex string).
+message Identifier {
+  string value = 1;  // UUID string, e.g. "550e8400-e29b-41d4-a716-446655440000"
+}
+
+// EntityActions query scope — passed to every Read operation.
+// Maps to: tactical_objects::QueryRequest (simplified base form).
+message Query {
+  repeated Identifier id = 1;  // Filter by specific IDs; empty = all entities
+  bool one_shot = 2;           // true = single response; false = continuous stream
+}
+
+// EntityActions acknowledgment — returned by Update and Delete.
+message Ack {
+  bool success = 1;
+}

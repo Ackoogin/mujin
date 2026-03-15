@@ -1,0 +1,313 @@
+syntax = "proto3";
+
+package pyramid.components.tactical_objects;
+
+import "pyramid/data_model/base.proto";
+
+// ── Tactical Objects Component Schema ────────────────────────────────────────
+//
+// Hand-written to be consistent with the C++ implementation in
+// pyramid/tactical_objects/include/.  No SysML XMI available at this time.
+//
+// Service contracts follow EntityActions CRUD semantics (Appendix A of
+// service_schema_tactical_objects.md).  The service/rpc blocks are IDL
+// contracts consumed by codex generators — not gRPC endpoints.
+
+// ── Enumerations ─────────────────────────────────────────────────────────────
+// Each maps 1-to-1 with the C++ enum class of the same name.
+
+enum ObjectType {
+  OBJECT_TYPE_UNSPECIFIED = 0;
+  OBJECT_TYPE_PLATFORM     = 1;
+  OBJECT_TYPE_PERSON       = 2;
+  OBJECT_TYPE_EQUIPMENT    = 3;
+  OBJECT_TYPE_UNIT         = 4;
+  OBJECT_TYPE_FORMATION    = 5;
+  OBJECT_TYPE_INSTALLATION = 6;
+  OBJECT_TYPE_FEATURE      = 7;
+  OBJECT_TYPE_ROUTE        = 8;
+  OBJECT_TYPE_POINT        = 9;
+  OBJECT_TYPE_AREA         = 10;
+  OBJECT_TYPE_ZONE         = 11;
+}
+
+enum Affiliation {
+  AFFILIATION_UNSPECIFIED    = 0;
+  AFFILIATION_FRIENDLY       = 1;
+  AFFILIATION_HOSTILE        = 2;
+  AFFILIATION_NEUTRAL        = 3;
+  AFFILIATION_UNKNOWN        = 4;
+  AFFILIATION_ASSUMED_FRIEND = 5;
+  AFFILIATION_SUSPECT        = 6;
+  AFFILIATION_JOKER          = 7;
+  AFFILIATION_FAKER          = 8;
+  AFFILIATION_PENDING        = 9;
+}
+
+enum BattleDimension {
+  BATTLE_DIMENSION_UNSPECIFIED  = 0;
+  BATTLE_DIMENSION_GROUND       = 1;
+  BATTLE_DIMENSION_AIR          = 2;
+  BATTLE_DIMENSION_SEA_SURFACE  = 3;
+  BATTLE_DIMENSION_SUBSURFACE   = 4;
+  BATTLE_DIMENSION_SPACE        = 5;
+  BATTLE_DIMENSION_SOF          = 6;
+}
+
+enum MilStatus {
+  MIL_STATUS_UNSPECIFIED  = 0;
+  MIL_STATUS_PRESENT      = 1;
+  MIL_STATUS_ANTICIPATED  = 2;
+  MIL_STATUS_PLANNED      = 3;
+  MIL_STATUS_KNOWN        = 4;
+}
+
+enum Echelon {
+  ECHELON_UNSPECIFIED  = 0;
+  ECHELON_TEAM         = 1;
+  ECHELON_SQUAD        = 2;
+  ECHELON_SECTION      = 3;
+  ECHELON_PLATOON      = 4;
+  ECHELON_COMPANY      = 5;
+  ECHELON_BATTALION    = 6;
+  ECHELON_REGIMENT     = 7;
+  ECHELON_BRIGADE      = 8;
+  ECHELON_DIVISION     = 9;
+  ECHELON_CORPS        = 10;
+  ECHELON_ARMY         = 11;
+  ECHELON_ARMY_GROUP   = 12;
+}
+
+enum Mobility {
+  MOBILITY_UNSPECIFIED  = 0;
+  MOBILITY_NONE         = 1;
+  MOBILITY_WHEELED      = 2;
+  MOBILITY_TRACKED      = 3;
+  MOBILITY_TOWED        = 4;
+  MOBILITY_RAIL         = 5;
+  MOBILITY_OVER_SNOW    = 6;
+  MOBILITY_SLED         = 7;
+  MOBILITY_BARGE        = 8;
+  MOBILITY_AMPHIBIOUS   = 9;
+}
+
+enum ZoneType {
+  ZONE_TYPE_UNSPECIFIED          = 0;
+  ZONE_TYPE_AOI                  = 1;
+  ZONE_TYPE_PATROL_AREA          = 2;
+  ZONE_TYPE_RESTRICTED_AREA      = 3;
+  ZONE_TYPE_NO_GO_AREA           = 4;
+  ZONE_TYPE_KILL_BOX             = 5;
+  ZONE_TYPE_PHASE_LINE           = 6;
+  ZONE_TYPE_BOUNDARY             = 7;
+  ZONE_TYPE_ROUTE_CORRIDOR       = 8;
+  ZONE_TYPE_SENSOR_COVERAGE_AREA = 9;
+}
+
+enum LifecycleStatus {
+  LIFECYCLE_STATUS_UNSPECIFIED = 0;
+  LIFECYCLE_STATUS_ACTIVE      = 1;
+  LIFECYCLE_STATUS_STALE       = 2;
+  LIFECYCLE_STATUS_RETIRED     = 3;
+}
+
+enum Provenance {
+  PROVENANCE_UNSPECIFIED = 0;
+  PROVENANCE_CORRELATED  = 1;
+  PROVENANCE_DIRECT      = 2;
+}
+
+// ── Primitives ────────────────────────────────────────────────────────────────
+
+// Maps to: tactical_objects::Position
+message Position {
+  double lat = 1;  // WGS-84 latitude (degrees)
+  double lon = 2;  // WGS-84 longitude (degrees)
+  double alt = 3;  // Altitude (meters, WGS-84 ellipsoid)
+}
+
+// Maps to: tactical_objects::Velocity
+message Velocity {
+  double north = 1;  // m/s northward
+  double east  = 2;  // m/s eastward
+  double down  = 3;  // m/s downward (positive = descending)
+}
+
+// Maps to: tactical_objects::BoundingBox
+message BoundingBox {
+  double min_lat = 1;
+  double max_lat = 2;
+  double min_lon = 3;
+  double max_lon = 4;
+}
+
+// Maps to: tactical_objects::SourceRef
+message SourceRef {
+  string source_system    = 1;
+  string source_entity_id = 2;
+  string source_track_id  = 3;
+  double first_seen       = 4;  // epoch seconds
+  double last_seen        = 5;  // epoch seconds
+}
+
+// Maps to: tactical_objects::MilClassProfile
+message MilClassProfile {
+  BattleDimension battle_dim   = 1;
+  Affiliation     affiliation  = 2;
+  string          role         = 3;
+  MilStatus       status       = 4;
+  Echelon         echelon      = 5;
+  Mobility        mobility     = 6;
+  bool            hq           = 7;
+  bool            task_force   = 8;
+  bool            feint_dummy  = 9;
+  bool            installation = 10;
+  string          source_sidc  = 11;
+}
+
+// Maps to: tactical_objects::ZoneGeometry
+message ZoneGeometry {
+  ZoneType          geometry_type = 1;
+  repeated Position vertices      = 2;
+  Position          center        = 3;
+  double            radius_m      = 4;
+}
+
+// ── Entity: TacticalObject ────────────────────────────────────────────────────
+//
+// The full denormalized view of a tracked entity — used for Create, Read, and
+// Update.  Combines ObjectDefinition (creation input) with the component store
+// fields (KinematicsComponent, MilClassComponent, IdentityComponent,
+// LifecycleComponent, BehaviorComponent).
+//
+// Maps to: tactical_objects::ObjectDefinition (create/update input) +
+//          tactical_objects::EntityRecord + component tables (read output).
+message TacticalObject {
+  pyramid.data_model.base.Identifier id               = 1;   // assigned on Create; empty on Create request
+  ObjectType                         type             = 2;
+  Position                           position         = 3;
+  Velocity                           velocity         = 4;
+  Affiliation                        affiliation      = 5;
+  MilClassProfile                    mil_class        = 6;
+  string                             identity_name    = 7;
+  repeated SourceRef                 source_refs      = 8;
+  uint64                             version          = 9;   // populated on Read; ignored on Create/Update
+  LifecycleStatus                    lifecycle_status = 10;  // populated on Read; ignored on Create
+  string                             operational_state = 11;
+  string                             behavior_pattern  = 12;
+}
+
+// ── Extended Query for TacticalObject ────────────────────────────────────────
+//
+// Superset of base Query with compound predicates from QueryRequest.
+// Used as the request type for ReadTacticalObject.
+//
+// Maps to: tactical_objects::QueryRequest
+message TacticalObjectQuery {
+  pyramid.data_model.base.Query base            = 1;  // ID filter + oneShot flag
+  optional ObjectType           by_type         = 2;
+  optional Affiliation          by_affiliation  = 3;
+  optional BoundingBox          by_region       = 4;
+  optional double               max_age_seconds = 5;
+  optional string               by_source_system    = 6;
+  optional string               by_source_entity_id = 7;
+}
+
+// ── Entity: Zone ──────────────────────────────────────────────────────────────
+//
+// Maps to: tactical_objects::ZoneDefinition + UUIDKey id.
+message Zone {
+  pyramid.data_model.base.Identifier id           = 1;   // assigned on Create
+  ZoneType                           zone_type    = 2;
+  ZoneGeometry                       geometry     = 3;
+  double                             active_from  = 4;   // epoch seconds; 0 = always active
+  double                             active_until = 5;   // epoch seconds; 0 = no expiry
+  int32                              priority     = 6;
+  string                             owner        = 7;
+  string                             semantics    = 8;
+}
+
+// ── Entity: Observation (flow: in) ───────────────────────────────────────────
+//
+// Write-only ingress.  Observations are correlated into TacticalObjects
+// internally; they are never read back via EntityActions.
+//
+// Maps to: tactical_objects::Observation
+message Observation {
+  pyramid.data_model.base.Identifier   observation_id       = 1;
+  double                               received_at          = 2;  // epoch seconds
+  double                               observed_at          = 3;  // epoch seconds
+  SourceRef                            source_ref           = 4;
+  ObjectType                           object_hint_type     = 5;
+  Position                             position             = 6;
+  Velocity                             velocity             = 7;
+  string                               classification_hint  = 8;
+  Affiliation                          affiliation_hint     = 9;
+  double                               confidence           = 10;
+  double                               uncertainty_radius_m = 11;
+  string                               source_sidc          = 12;
+  repeated pyramid.data_model.base.Identifier lineage_parent_ids = 13;
+}
+
+// ── Streaming: EntityUpdateFrame ─────────────────────────────────────────────
+//
+// Published on the entity_updates topic at each tick.  Carries only the fields
+// indicated by field_mask (aligned with StreamingCodec::FieldMaskBit).
+//
+// Maps to: tactical_objects::EntityUpdateFrame
+message EntityUpdateFrame {
+  // message_type: 1 = update, 2 = delete  (matches STREAM_MSG_* constants)
+  uint32                             message_type     = 1;
+  pyramid.data_model.base.Identifier entity_id        = 2;
+  uint64                             version          = 3;
+  double                             timestamp        = 4;   // epoch seconds
+  uint32                             field_mask       = 5;   // FieldMaskBit bitmask
+
+  optional Position        position         = 6;
+  optional Velocity        velocity         = 7;
+  optional Affiliation     affiliation      = 8;
+  optional ObjectType      object_type      = 9;
+  optional double          confidence       = 10;
+  optional LifecycleStatus lifecycle_status = 11;
+  optional MilClassProfile mil_class        = 12;
+  optional string          behavior_pattern = 13;
+  optional string          operational_state = 14;
+  optional string          identity_name    = 15;
+}
+
+// ── Interest / Subscription ───────────────────────────────────────────────────
+//
+// Interest criteria for subscribing to filtered entity_updates.
+// Maps to the subscribeInterest handler in TacticalObjectsComponent.
+message InterestCriteria {
+  optional ObjectType  by_type        = 1;
+  optional Affiliation by_affiliation = 2;
+  optional BoundingBox by_region      = 3;
+}
+
+// ── Services ──────────────────────────────────────────────────────────────────
+//
+// EntityActions CRUD contracts.  service/rpc blocks are IDL — not gRPC
+// endpoints.  Codex generators (ada_service_generator.py, cpp_model_generator)
+// consume these to produce target-language service stubs.
+
+// TacticalObject: flow inout → full CRUD
+service TacticalObjectService {
+  rpc CreateTacticalObject (TacticalObject)      returns (pyramid.data_model.base.Identifier);
+  rpc ReadTacticalObject   (TacticalObjectQuery) returns (stream TacticalObject);
+  rpc UpdateTacticalObject (TacticalObject)      returns (pyramid.data_model.base.Ack);
+  rpc DeleteTacticalObject (pyramid.data_model.base.Identifier) returns (pyramid.data_model.base.Ack);
+}
+
+// Zone: flow inout → full CRUD
+service ZoneService {
+  rpc CreateZone (Zone)                               returns (pyramid.data_model.base.Identifier);
+  rpc ReadZone   (pyramid.data_model.base.Query)      returns (stream Zone);
+  rpc UpdateZone (Zone)                               returns (pyramid.data_model.base.Ack);
+  rpc DeleteZone (pyramid.data_model.base.Identifier) returns (pyramid.data_model.base.Ack);
+}
+
+// Observation: flow in → write-only ingress (Create only; no Read/Update/Delete)
+service ObservationIngressService {
+  rpc CreateObservation (Observation) returns (pyramid.data_model.base.Identifier);
+}
