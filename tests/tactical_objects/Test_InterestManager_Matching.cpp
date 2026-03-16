@@ -241,3 +241,78 @@ TEST(InterestManagerMatching, MatchingInterestsReturnsCorrectIds) {
   EXPECT_TRUE(has_i1);
   EXPECT_TRUE(has_i3);
 }
+
+// ---------------------------------------------------------------------------
+// battle_dimension filter in matchesInterest (lines 199-200)
+// ---------------------------------------------------------------------------
+
+///< Coverage: battle_dimension filter passes when entity has matching battle_dim.
+TEST(InterestManagerMatching, BattleDimensionFilterMatchesCorrectly) {
+  ObjectStore store;
+  UUIDKey id = store.createObject(ObjectType::Platform);
+
+  MilClassComponent mc;
+  mc.profile.battle_dim = BattleDimension::Air;
+  store.milclass().set(id, mc);
+
+  const auto* rec = store.getRecord(id);
+  ASSERT_NE(rec, nullptr);
+
+  InterestManager mgr;
+
+  // Matching battle_dimension
+  {
+    InterestCriteria crit;
+    crit.battle_dimension = BattleDimension::Air;
+    EXPECT_TRUE(mgr.matchesInterest(crit, *rec, store));
+  }
+
+  // Non-matching battle_dimension
+  {
+    InterestCriteria crit;
+    crit.battle_dimension = BattleDimension::Ground;
+    EXPECT_FALSE(mgr.matchesInterest(crit, *rec, store));
+  }
+}
+
+///< Coverage: battle_dimension filter fails when entity has no MilClassComponent.
+TEST(InterestManagerMatching, BattleDimensionFilterFailsWhenNoMilClass) {
+  ObjectStore store;
+  UUIDKey id = store.createObject(ObjectType::Platform);
+  ASSERT_FALSE(store.milclass().has(id));
+
+  const auto* rec = store.getRecord(id);
+  ASSERT_NE(rec, nullptr);
+
+  InterestManager mgr;
+  InterestCriteria crit;
+  crit.battle_dimension = BattleDimension::SeaSurface;
+  EXPECT_FALSE(mgr.matchesInterest(crit, *rec, store));
+}
+
+// ---------------------------------------------------------------------------
+// deriveEvidenceRequirement with battle_dimension set (line 88)
+// ---------------------------------------------------------------------------
+
+///< Coverage: deriveEvidenceRequirement appends "battle_dimension filter active"
+///< when the interest criteria includes a battle_dimension.
+TEST(InterestManagerMatching, DeriveEvidenceRequirementWithBattleDimension) {
+  InterestManager mgr;
+  InterestCriteria crit;
+  crit.query_mode       = QueryMode::ActiveFind;
+  crit.battle_dimension = BattleDimension::Air;
+
+  auto interest_id = mgr.registerInterest(crit, 0.0, 9999.0);
+
+  // determineSolution calls deriveEvidenceRequirement when is_active == true.
+  auto solution = mgr.determineSolution(interest_id);
+  ASSERT_GE(solution.evidence_requirements.size(), 1u);
+
+  bool found_bd = false;
+  for (const auto& der : solution.evidence_requirements) {
+    if (der.evidence_description.find("battle_dimension") != std::string::npos) {
+      found_bd = true;
+    }
+  }
+  EXPECT_TRUE(found_bd);
+}

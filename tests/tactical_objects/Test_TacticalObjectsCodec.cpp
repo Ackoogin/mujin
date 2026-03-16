@@ -277,3 +277,13 @@ TEST(TacticalObjectsCodec, ZoneDefinitionRoundTrip) {
   ASSERT_DOUBLE_EQ(decoded.geometry.center.lat, 51.5);
   ASSERT_DOUBLE_EQ(decoded.geometry.radius_m, 5000.0);
 }
+
+///< Coverage: TacticalObjectsCodec::battleDimensionFromString (lines 19-20).
+TEST(TacticalObjectsCodec, BattleDimensionFromString) {
+  EXPECT_EQ(TacticalObjectsCodec::battleDimensionFromString("Air"),        BattleDimension::Air);
+  EXPECT_EQ(TacticalObjectsCodec::battleDimensionFromString("Ground"),     BattleDimension::Ground);
+  EXPECT_EQ(TacticalObjectsCodec::battleDimensionFromString("SeaSurface"), BattleDimension::SeaSurface);
+  EXPECT_EQ(TacticalObjectsCodec::battleDimensionFromString("Subsurface"), BattleDimension::Subsurface);
+  EXPECT_EQ(TacticalObjectsCodec::battleDimensionFromString("Space"),      BattleDimension::Space);
+  EXPECT_EQ(TacticalObjectsCodec::battleDimensionFromString("SOF"),        BattleDimension::SOF);
+}
