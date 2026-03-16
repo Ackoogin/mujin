@@ -1,4 +1,5 @@
 #include <TacticalObjectsRuntime.h>
+#include <pcl/pcl_log.h>
 
 namespace tactical_objects {
 
@@ -160,15 +161,14 @@ ZoneRelationship TacticalObjectsRuntime::evaluateZoneTransition(
 }
 
 CorrelationResult TacticalObjectsRuntime::processObservation(const Observation& obs) {
-  logger_.log(pyramid::core::logging::LogLevel::Debug, 
-      "[DEBUG] processObservation id: " + pyramid::core::uuid::UUIDHelper::toString(obs.observation_id));
+  pcl_log(nullptr, PCL_LOG_DEBUG, "processObservation id: %s",
+          pyramid::core::uuid::UUIDHelper::toString(obs.observation_id).c_str());
   auto result = correlation_->processObservation(obs);
   if (result.object_id.isNull()) {
-    logger_.log(pyramid::core::logging::LogLevel::Debug, 
-        "[DEBUG] processObservation returned NULL object_id");
+    pcl_log(nullptr, PCL_LOG_DEBUG, "processObservation returned NULL object_id");
   } else {
-    logger_.log(pyramid::core::logging::LogLevel::Debug, 
-        "[DEBUG] processObservation correlated to object_id: " + pyramid::core::uuid::UUIDHelper::toString(result.object_id.uuid));
+    pcl_log(nullptr, PCL_LOG_DEBUG, "processObservation correlated to object_id: %s",
+            pyramid::core::uuid::UUIDHelper::toString(result.object_id.uuid).c_str());
     dirty_entities_.insert(result.object_id);
     store_->setDirtyBits(result.object_id, FieldMaskBit::ALL);
   }
@@ -176,8 +176,8 @@ CorrelationResult TacticalObjectsRuntime::processObservation(const Observation& 
 }
 
 CorrelationResult TacticalObjectsRuntime::processObservationBatch(const ObservationBatch& batch) {
-  logger_.log(pyramid::core::logging::LogLevel::Debug, 
-      "[DEBUG] processObservationBatch with " + std::to_string(batch.observations.size()) + " observations");
+  pcl_log(nullptr, PCL_LOG_DEBUG, "processObservationBatch with %zu observations",
+          batch.observations.size());
   CorrelationResult last{CorrelationOutcome::Created, UUIDKey{}, UUIDKey{}};
   for (auto& obs : batch.observations) {
     last = processObservation(obs);
@@ -215,7 +215,7 @@ void TacticalObjectsRuntime::logMissingInfo(const UUIDKey& id, const std::string
   std::string msg = "Missing information for entity " +
                     pyramid::core::uuid::UUIDHelper::toString(id.uuid) +
                     ": " + field;
-  logger_.log(pyramid::core::logging::LogLevel::Warning, msg);
+  pcl_log(nullptr, PCL_LOG_WARN, "%s", msg.c_str());
 }
 
 // ---------------------------------------------------------------------------
@@ -322,9 +322,9 @@ StreamFrame TacticalObjectsRuntime::assembleStreamFrame(
     if (!rec) continue;
     
     bool matched = interest_manager_.matchesInterest(interest_rec->criteria, *rec, *store_);
-    logger_.log(pyramid::core::logging::LogLevel::Debug, 
-        "[DEBUG] flushDirtyEntities: entity " + pyramid::core::uuid::UUIDHelper::toString(eid.uuid) + 
-        " matchesInterest=" + (matched ? "true" : "false"));
+    pcl_log(nullptr, PCL_LOG_DEBUG, "assembleStreamFrame: entity %s matchesInterest=%s",
+            pyramid::core::uuid::UUIDHelper::toString(eid.uuid).c_str(),
+            matched ? "true" : "false");
         
     if (!matched) continue;
 

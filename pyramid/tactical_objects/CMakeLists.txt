@@ -37,6 +37,7 @@ target_link_libraries(tactical_objects
     PUBLIC
         pyramid::core
         nlohmann_json::nlohmann_json
+        pcl_core
 )
 
 target_compile_features(tactical_objects PUBLIC cxx_std_14)

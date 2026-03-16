@@ -3,7 +3,7 @@
 
 #include <nlohmann/json.hpp>
 #include <pcl/pcl_container.h>
-#include <iostream>
+#include <pcl/pcl_log.h>
 
 namespace tactical_objects {
 
@@ -45,10 +45,6 @@ pcl_status_t TacticalObjectsComponent::on_configure() {
   if (!addService(SVC_REMOVE_ZONE,        TYPE_JSON, handleRemoveZone,         this)) return PCL_ERR_CALLBACK;
   if (!addService(SVC_SUBSCRIBE_INTEREST, TYPE_JSON, handleSubscribeInterest,  this)) return PCL_ERR_CALLBACK;
   if (!addService(SVC_RESYNC,             TYPE_JSON, handleResync,             this)) return PCL_ERR_CALLBACK;
-
-  runtime_->logger().subscribe([](const pyramid::core::logging::LogEntry& entry) {
-    std::cout << entry.message << std::endl;
-  });
 
   return PCL_OK;
 }
@@ -141,26 +137,24 @@ pcl_status_t TacticalObjectsComponent::on_tick(double dt) {
   return PCL_OK;
 }
 
-void TacticalObjectsComponent::onObservationIngress(pcl_container_t*, const pcl_msg_t* msg,
+void TacticalObjectsComponent::onObservationIngress(pcl_container_t* c, const pcl_msg_t* msg,
                                                    void* user_data) {
   auto* comp = static_cast<TacticalObjectsComponent*>(user_data);
   if (!msg->data || msg->size == 0) return;
 
-  comp->runtime_->logger().log(pyramid::core::logging::LogLevel::Debug, 
-      "[DEBUG] onObservationIngress received: " + std::to_string(msg->size) + " bytes");
+  pcl_log(c, PCL_LOG_DEBUG, "onObservationIngress received: %u bytes", msg->size);
   std::string str(static_cast<const char*>(msg->data), msg->size);
   json j;
   try {
     j = json::parse(str);
   } catch (...) {
-    comp->runtime_->logger().log(pyramid::core::logging::LogLevel::Debug, 
-        "[DEBUG] onObservationIngress JSON parse failed");
+    pcl_log(c, PCL_LOG_DEBUG, "onObservationIngress JSON parse failed");
     return;
   }
 
   ObservationBatch batch = TacticalObjectsCodec::decodeObservationBatch(j);
-  comp->runtime_->logger().log(pyramid::core::logging::LogLevel::Debug, 
-      "[DEBUG] onObservationIngress decoded batch of " + std::to_string(batch.observations.size()) + " observations");
+  pcl_log(c, PCL_LOG_DEBUG, "onObservationIngress decoded batch of %zu observations",
+          batch.observations.size());
   comp->runtime_->processObservationBatch(batch);
 }
 

@@ -84,6 +84,18 @@ UUIDKey CorrelationEngine::createNewEntity(const Observation& obs) {
   MilClassProfile profile;
   profile.affiliation = obs.affiliation_hint;
   profile.source_sidc = obs.source_sidc;
+  // Derive battle dimension from SIDC position 2 (APP-6B)
+  if (obs.source_sidc.size() >= 3) {
+    switch (obs.source_sidc[2]) {
+      case 'P': profile.battle_dim = BattleDimension::Space;      break;
+      case 'A': profile.battle_dim = BattleDimension::Air;        break;
+      case 'G': profile.battle_dim = BattleDimension::Ground;     break;
+      case 'S': profile.battle_dim = BattleDimension::SeaSurface; break;
+      case 'U': profile.battle_dim = BattleDimension::Subsurface; break;
+      case 'F': profile.battle_dim = BattleDimension::SOF;        break;
+      default: break;
+    }
+  }
   milclass_->setProfile(entity_id, profile);
 
   spatial_->insert(entity_id, obs.position);
