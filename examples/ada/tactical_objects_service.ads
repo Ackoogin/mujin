@@ -111,6 +111,9 @@ package Tactical_Objects_Service is
    function Build_Read_Request_Json
      (Query : Tactical_Object_Query) return String;
 
+   function Build_Active_Find_Request_Json
+     (Query : Tactical_Object_Query) return String;
+
    function Frame_To_Tactical_Object
      (Frame : Streaming_Codec.Entity_Update_Frame) return Tactical_Object;
 

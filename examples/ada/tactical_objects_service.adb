@@ -192,7 +192,24 @@ package body Tactical_Objects_Service is
       end case;
     end Object_Type_Json_Name;
 
+    function Battle_Dim_Json_Name (D : Battle_Dimension) return String is
+    begin
+      case D is
+        when Ground      => return "Ground";
+        when Air         => return "Air";
+        when Sea_Surface => return "SeaSurface";
+        when Subsurface  => return "Subsurface";
+        when Space       => return "Space";
+        when SOF         => return "SOF";
+        when others      => return "Ground";
+      end case;
+    end Battle_Dim_Json_Name;
+
   begin
+    if Query.Mode.Has and then Query.Mode.Value = Active_Find then
+      Comma;
+      Append(S, """query_mode"":""active_find""");
+    end if;
     if Query.By_Type.Has then
       Comma;
       Append(S, """object_type"":""" &
@@ -203,6 +220,12 @@ package body Tactical_Objects_Service is
       Comma;
       Append(S, """affiliation"":""" &
                 Affiliation_Json_Name(Query.By_Affiliation.Value) & """");
+    end if;
+
+    if Query.By_Battle_Dimension.Has then
+      Comma;
+      Append(S, """battle_dimension"":""" &
+                Battle_Dim_Json_Name(Query.By_Battle_Dimension.Value) & """");
     end if;
 
     if Query.By_Region.Has then
@@ -236,6 +259,19 @@ package body Tactical_Objects_Service is
     Append(S, "}");
     return To_String(S);
   end Build_Read_Request_Json;
+
+  -- ── Build_Active_Find_Request_Json ─────────────────────────────────────
+  --
+  --  Convenience wrapper: sets query_mode = active_find then delegates.
+
+  function Build_Active_Find_Request_Json
+    (Query : Tactical_Object_Query) return String
+  is
+    AF_Query : Tactical_Object_Query := Query;
+  begin
+    AF_Query.Mode := (Has => True, Value => Active_Find);
+    return Build_Read_Request_Json(AF_Query);
+  end Build_Active_Find_Request_Json;
 
   -- ── Ordinal conversions ───────────────────────────────────────────────────
   --

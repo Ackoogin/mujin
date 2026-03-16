@@ -1,0 +1,23 @@
+project Ada_Active_Find_E2E is
+  Root_Dir := external("MUJIN_ROOT", ".." & "/..");
+
+  for Languages use ("Ada", "C");
+
+  for Source_Dirs use (".", "../../src/pcl");
+  for Main use ("ada_active_find_e2e.adb");
+
+  for Object_Dir use "obj_active_find";
+  for Exec_Dir use "bin";
+
+  package Compiler is
+    for Default_Switches ("Ada") use ("-g");
+    for Default_Switches ("C") use
+      ("-std=c17",
+       "-I" & Root_Dir & "/include",
+       "-I" & Root_Dir & "/src/pcl");
+  end Compiler;
+
+  package Linker is
+    for Default_Switches ("Ada") use ("-lws2_32");
+  end Linker;
+end Ada_Active_Find_E2E;

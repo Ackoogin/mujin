@@ -32,6 +32,7 @@ int main(int argc, char* argv[]) {
   uint16_t port = 19123;
   std::string port_file;
   int timeout_secs = 15;
+  bool create_entity = true;
 
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
@@ -40,6 +41,8 @@ int main(int argc, char* argv[]) {
       port_file = argv[++i];
     } else if (std::strcmp(argv[i], "--timeout") == 0 && i + 1 < argc) {
       timeout_secs = std::atoi(argv[++i]);
+    } else if (std::strcmp(argv[i], "--no-entity") == 0) {
+      create_entity = false;
     }
   }
 
@@ -91,24 +94,28 @@ int main(int argc, char* argv[]) {
   pcl_container_activate(gateway);
   pcl_executor_add(exec, gateway);
 
-  std::fprintf(stderr, "[server] Client connected. Creating test entity...\n");
+  std::fprintf(stderr, "[server] Client connected.\n");
 
-  // Create a test entity
-  ObjectDefinition def;
-  def.type = ObjectType::Platform;
-  def.position = Position{51.0, 0.0, 0};
-  def.affiliation = Affiliation::Hostile;
-  auto j = TacticalObjectsCodec::encodeObjectDefinition(def);
-  std::string create_str = j.dump();
-  pcl_msg_t req = {};
-  req.data = create_str.data();
-  req.size = static_cast<uint32_t>(create_str.size());
-  req.type_name = "application/json";
-  pcl_msg_t resp = {};
-  char resp_buf[512];
-  resp.data = resp_buf;
-  resp.size = sizeof(resp_buf);
-  pcl_executor_invoke_service(exec, "create_object", &req, &resp);
+  if (create_entity) {
+    std::fprintf(stderr, "[server] Creating test entity...\n");
+    ObjectDefinition def;
+    def.type = ObjectType::Platform;
+    def.position = Position{51.0, 0.0, 0};
+    def.affiliation = Affiliation::Hostile;
+    auto j = TacticalObjectsCodec::encodeObjectDefinition(def);
+    std::string create_str = j.dump();
+    pcl_msg_t req = {};
+    req.data = create_str.data();
+    req.size = static_cast<uint32_t>(create_str.size());
+    req.type_name = "application/json";
+    pcl_msg_t resp = {};
+    char resp_buf[512];
+    resp.data = resp_buf;
+    resp.size = sizeof(resp_buf);
+    pcl_executor_invoke_service(exec, "create_object", &req, &resp);
+  } else {
+    std::fprintf(stderr, "[server] Skipping entity creation (--no-entity)\n");
+  }
 
   std::fprintf(stderr, "[server] Spinning for up to %d seconds...\n",
                timeout_secs);
