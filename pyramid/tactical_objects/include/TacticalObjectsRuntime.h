@@ -9,7 +9,6 @@
 #include <zone/ZoneEngine.h>
 #include <query/QueryEngine.h>
 #include <interest/InterestManager.h>
-#include <logging/Logger.h>
 #include <tl/optional.hpp>
 
 #include <cstdint>
@@ -131,8 +130,6 @@ public:
   std::shared_ptr<CorrelationEngine> correlationEngine() { return correlation_; }
   std::shared_ptr<ZoneEngine> zoneEngine() { return zone_; }
   std::shared_ptr<QueryEngine> queryEngine() { return query_; }
-  pyramid::core::logging::Logger& logger() { return logger_; }
-
 private:
   std::shared_ptr<ObjectStore>       store_;
   std::shared_ptr<SpatialIndex>      spatial_;
@@ -141,7 +138,6 @@ private:
   std::shared_ptr<ZoneEngine>        zone_;
   std::shared_ptr<QueryEngine>       query_;
   InterestManager                    interest_manager_;
-  pyramid::core::logging::Logger     logger_;
 
   // Dirty entity tracking
   std::unordered_set<UUIDKey> dirty_entities_;

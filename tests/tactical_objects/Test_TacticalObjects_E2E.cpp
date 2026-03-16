@@ -16,6 +16,10 @@
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_transport.h>
 #include <uuid/UUIDHelper.h>
+#include <pcl/pcl_log.h>
+
+#include <chrono>
+#include <thread>
 
 using namespace tactical_objects;
 using namespace pyramid::core::uuid;
@@ -224,7 +228,7 @@ static void e2e_provider_evidence_req_cb(pcl_container_t*, const pcl_msg_t* msg,
   obs.classification_hint = "Vessel";
   // Encode battle dimension into the SIDC or we need it to default correctly if MilClass isn't fully set.
   // Wait, correlation engine uses `obs.source_sidc` to create the profile. Let's just pass a generic SIDC that implies SeaSurface Hostile: "SH*P------*****"
-  obs.source_sidc = "SH*P------*****";
+  obs.source_sidc = "SHSP------*****";
   
   ctx->pending_observations.push_back(obs);
 }
@@ -281,6 +285,7 @@ TEST(TacticalObjectsE2E, ActiveFindSolutionDrivesEvidenceProvider) {
   pcl_container_t* provider_cont = pcl_container_create("provider", &provider_cbs, &provider_ctx);
   ASSERT_NE(provider_cont, nullptr);
   pcl_container_configure(provider_cont);
+  pcl_container_set_tick_rate_hz(provider_cont, 1000.0);
   pcl_container_activate(provider_cont);
 
   {
@@ -331,21 +336,19 @@ TEST(TacticalObjectsE2E, ActiveFindSolutionDrivesEvidenceProvider) {
   }
   ASSERT_TRUE(client_ctx.derived_reqs_received);
 
-  // 5. Spin executor to allow messages to propagate:
-  //    - Tick 1: tobj publishes evidence reqs, provider receives them
-  //    - Tick 2: provider tick fires, publishing observation to ingress
-  //    - Tick 3: tobj consumes ingress, correlates observation to entity
-  //    - Tick 4: tobj tick flushes dirty entities, generating entity update
-  //    - Tick 5: client receives entity update and triggers callback
-  for (int i = 0; i < 20; ++i) { // Increase spin cycles
-    exec.spinOnce(0.1); // Assuming some nominal dt
+  // 5. Spin executor to allow messages to propagate.
+  //    Each spinOnce needs real wall-clock time to elapse so that
+  //    container ticks (1000 Hz = 1 ms period) actually fire.
+  for (int i = 0; i < 20; ++i) {
+    exec.spinOnce(0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
   }
 
   // 6. Verify full flow
-  std::cout << "[DEBUG] requirement_received = " << provider_ctx.requirement_received << "\n";
-  std::cout << "[DEBUG] active_requirement_id = " << provider_ctx.active_requirement_id << "\n";
-  std::cout << "[DEBUG] entity_updates_received = " << client_ctx.entity_updates_received << "\n";
-  std::cout << "[DEBUG] received_frames.size() = " << client_ctx.received_frames.size() << "\n";
+  pcl_log(nullptr, PCL_LOG_DEBUG, "requirement_received = %d", (int)provider_ctx.requirement_received);
+  pcl_log(nullptr, PCL_LOG_DEBUG, "active_requirement_id = %s", provider_ctx.active_requirement_id.c_str());
+  pcl_log(nullptr, PCL_LOG_DEBUG, "entity_updates_received = %d", (int)client_ctx.entity_updates_received);
+  pcl_log(nullptr, PCL_LOG_DEBUG, "received_frames.size() = %zu", client_ctx.received_frames.size());
 
   EXPECT_TRUE(provider_ctx.requirement_received) 
     << "Evidence provider should have received the evidence requirement";
