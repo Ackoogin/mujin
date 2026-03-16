@@ -160,9 +160,15 @@ ZoneRelationship TacticalObjectsRuntime::evaluateZoneTransition(
 }
 
 CorrelationResult TacticalObjectsRuntime::processObservation(const Observation& obs) {
+  logger_.log(pyramid::core::logging::LogLevel::Debug, 
+      "[DEBUG] processObservation id: " + pyramid::core::uuid::UUIDHelper::toString(obs.observation_id));
   auto result = correlation_->processObservation(obs);
-  // Mark the correlated entity dirty
-  if (!result.object_id.isNull()) {
+  if (result.object_id.isNull()) {
+    logger_.log(pyramid::core::logging::LogLevel::Debug, 
+        "[DEBUG] processObservation returned NULL object_id");
+  } else {
+    logger_.log(pyramid::core::logging::LogLevel::Debug, 
+        "[DEBUG] processObservation correlated to object_id: " + pyramid::core::uuid::UUIDHelper::toString(result.object_id.uuid));
     dirty_entities_.insert(result.object_id);
     store_->setDirtyBits(result.object_id, FieldMaskBit::ALL);
   }
@@ -170,6 +176,8 @@ CorrelationResult TacticalObjectsRuntime::processObservation(const Observation& 
 }
 
 CorrelationResult TacticalObjectsRuntime::processObservationBatch(const ObservationBatch& batch) {
+  logger_.log(pyramid::core::logging::LogLevel::Debug, 
+      "[DEBUG] processObservationBatch with " + std::to_string(batch.observations.size()) + " observations");
   CorrelationResult last{CorrelationOutcome::Created, UUIDKey{}, UUIDKey{}};
   for (auto& obs : batch.observations) {
     last = processObservation(obs);
@@ -179,6 +187,10 @@ CorrelationResult TacticalObjectsRuntime::processObservationBatch(const Observat
 
 QueryResponse TacticalObjectsRuntime::query(const QueryRequest& req) const {
   return query_->query(req);
+}
+
+ObjectSolution TacticalObjectsRuntime::determineSolution(const UUIDKey& interest_id) {
+  return interest_manager_.determineSolution(interest_id);
 }
 
 void TacticalObjectsRuntime::setBehavior(const UUIDKey& id,
@@ -308,7 +320,13 @@ StreamFrame TacticalObjectsRuntime::assembleStreamFrame(
   for (const auto& eid : dirty_entities_) {
     const auto* rec = store_->getRecord(eid);
     if (!rec) continue;
-    if (!interest_manager_.matchesInterest(interest_rec->criteria, *rec, *store_)) continue;
+    
+    bool matched = interest_manager_.matchesInterest(interest_rec->criteria, *rec, *store_);
+    logger_.log(pyramid::core::logging::LogLevel::Debug, 
+        "[DEBUG] flushDirtyEntities: entity " + pyramid::core::uuid::UUIDHelper::toString(eid.uuid) + 
+        " matchesInterest=" + (matched ? "true" : "false"));
+        
+    if (!matched) continue;
 
     uint64_t entity_version = rec->version;
     auto vit = sub_versions.find(eid);

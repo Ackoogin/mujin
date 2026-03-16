@@ -80,6 +80,9 @@ public:
 
   QueryResponse query(const QueryRequest& req) const;
 
+  /// \brief Determine an object solution for an interest requirement.
+  ObjectSolution determineSolution(const UUIDKey& interest_id);
+
   // --- Behavior & state ---
 
   void setBehavior(const UUIDKey& id, const std::string& behavior_pattern,
@@ -128,6 +131,7 @@ public:
   std::shared_ptr<CorrelationEngine> correlationEngine() { return correlation_; }
   std::shared_ptr<ZoneEngine> zoneEngine() { return zone_; }
   std::shared_ptr<QueryEngine> queryEngine() { return query_; }
+  pyramid::core::logging::Logger& logger() { return logger_; }
 
 private:
   std::shared_ptr<ObjectStore>       store_;

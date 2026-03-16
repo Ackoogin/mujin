@@ -3,25 +3,27 @@
 
 #include <nlohmann/json.hpp>
 #include <pcl/pcl_container.h>
+#include <iostream>
 
 namespace tactical_objects {
 
 using json = nlohmann::json;
 
 namespace {
-const char* TOPIC_OBSERVATION_INGRESS = "observation_ingress";
-const char* TOPIC_ENTITY_UPDATES      = "entity_updates";
-const char* SVC_CREATE_OBJECT         = "create_object";
-const char* SVC_UPDATE_OBJECT         = "update_object";
-const char* SVC_DELETE_OBJECT         = "delete_object";
-const char* SVC_QUERY                 = "query";
-const char* SVC_GET_OBJECT            = "get_object";
-const char* SVC_UPSERT_ZONE           = "upsert_zone";
-const char* SVC_REMOVE_ZONE           = "remove_zone";
-const char* SVC_SUBSCRIBE_INTEREST    = "subscribe_interest";
-const char* SVC_RESYNC                = "tactical_objects.resync";
-const char* TYPE_JSON                 = "application/json";
-const char* TYPE_BINARY               = "application/octet-stream";
+const char* TOPIC_OBSERVATION_INGRESS      = "observation_ingress";
+const char* TOPIC_ENTITY_UPDATES           = "entity_updates";
+const char* TOPIC_EVIDENCE_REQUIREMENTS    = "evidence_requirements";
+const char* SVC_CREATE_OBJECT              = "create_object";
+const char* SVC_UPDATE_OBJECT              = "update_object";
+const char* SVC_DELETE_OBJECT              = "delete_object";
+const char* SVC_QUERY                      = "query";
+const char* SVC_GET_OBJECT                 = "get_object";
+const char* SVC_UPSERT_ZONE               = "upsert_zone";
+const char* SVC_REMOVE_ZONE               = "remove_zone";
+const char* SVC_SUBSCRIBE_INTEREST         = "subscribe_interest";
+const char* SVC_RESYNC                     = "tactical_objects.resync";
+const char* TYPE_JSON                      = "application/json";
+const char* TYPE_BINARY                    = "application/octet-stream";
 } // namespace
 
 TacticalObjectsComponent::TacticalObjectsComponent()
@@ -30,6 +32,7 @@ TacticalObjectsComponent::TacticalObjectsComponent()
 
 pcl_status_t TacticalObjectsComponent::on_configure() {
   entity_updates_port_ = addPublisher(TOPIC_ENTITY_UPDATES, TYPE_BINARY);
+  evidence_requirements_port_ = addPublisher(TOPIC_EVIDENCE_REQUIREMENTS, TYPE_JSON);
 
   addSubscriber(TOPIC_OBSERVATION_INGRESS, TYPE_JSON, onObservationIngress, this);
 
@@ -42,6 +45,10 @@ pcl_status_t TacticalObjectsComponent::on_configure() {
   if (!addService(SVC_REMOVE_ZONE,        TYPE_JSON, handleRemoveZone,         this)) return PCL_ERR_CALLBACK;
   if (!addService(SVC_SUBSCRIBE_INTEREST, TYPE_JSON, handleSubscribeInterest,  this)) return PCL_ERR_CALLBACK;
   if (!addService(SVC_RESYNC,             TYPE_JSON, handleResync,             this)) return PCL_ERR_CALLBACK;
+
+  runtime_->logger().subscribe([](const pyramid::core::logging::LogEntry& entry) {
+    std::cout << entry.message << std::endl;
+  });
 
   return PCL_OK;
 }
@@ -139,15 +146,21 @@ void TacticalObjectsComponent::onObservationIngress(pcl_container_t*, const pcl_
   auto* comp = static_cast<TacticalObjectsComponent*>(user_data);
   if (!msg->data || msg->size == 0) return;
 
+  comp->runtime_->logger().log(pyramid::core::logging::LogLevel::Debug, 
+      "[DEBUG] onObservationIngress received: " + std::to_string(msg->size) + " bytes");
   std::string str(static_cast<const char*>(msg->data), msg->size);
   json j;
   try {
     j = json::parse(str);
   } catch (...) {
+    comp->runtime_->logger().log(pyramid::core::logging::LogLevel::Debug, 
+        "[DEBUG] onObservationIngress JSON parse failed");
     return;
   }
 
   ObservationBatch batch = TacticalObjectsCodec::decodeObservationBatch(j);
+  comp->runtime_->logger().log(pyramid::core::logging::LogLevel::Debug, 
+      "[DEBUG] onObservationIngress decoded batch of " + std::to_string(batch.observations.size()) + " observations");
   comp->runtime_->processObservationBatch(batch);
 }
 
@@ -406,6 +419,15 @@ pcl_status_t TacticalObjectsComponent::handleSubscribeInterest(pcl_container_t*,
   // Decode interest criteria
   InterestCriteria criteria;
 
+  // Query mode: "read_current" (default) or "active_find"
+  if (j.contains("query_mode") && !j["query_mode"].is_null()) {
+    std::string qm = j["query_mode"].get<std::string>();
+    if (qm == "active_find") {
+      criteria.query_mode = QueryMode::ActiveFind;
+    } else {
+      criteria.query_mode = QueryMode::ReadCurrent;
+    }
+  }
   if (j.contains("object_type") && !j["object_type"].is_null()) {
     try {
       criteria.object_type = TacticalObjectsCodec::objectTypeFromString(j["object_type"].get<std::string>());
@@ -414,6 +436,12 @@ pcl_status_t TacticalObjectsComponent::handleSubscribeInterest(pcl_container_t*,
   if (j.contains("affiliation") && !j["affiliation"].is_null()) {
     try {
       criteria.affiliation = TacticalObjectsCodec::affiliationFromString(j["affiliation"].get<std::string>());
+    } catch (...) {}
+  }
+  if (j.contains("battle_dimension") && !j["battle_dimension"].is_null()) {
+    try {
+      criteria.battle_dimension = TacticalObjectsCodec::battleDimensionFromString(
+          j["battle_dimension"].get<std::string>());
     } catch (...) {}
   }
   if (j.contains("area") && j["area"].is_object()) {
@@ -434,7 +462,41 @@ pcl_status_t TacticalObjectsComponent::handleSubscribeInterest(pcl_container_t*,
   double expires_at = j.value("expires_at", 0.0);
   auto interest_id = comp->runtime_->interestManager().registerInterest(criteria, 0.0, expires_at);
 
-  comp->response_buffer_ = json{{"interest_id", uuidToJsonString(interest_id)}}.dump();
+  json resp_json;
+  resp_json["interest_id"] = uuidToJsonString(interest_id);
+
+  // For ActiveFind interests, determine a solution and publish evidence requirements
+  bool is_active_find = criteria.query_mode.has_value() &&
+                        *criteria.query_mode == QueryMode::ActiveFind;
+  if (is_active_find) {
+    auto solution = comp->runtime_->determineSolution(interest_id);
+    resp_json["solution_id"] = uuidToJsonString(solution.solution_id);
+    resp_json["predicted_quality"]      = solution.predicted_quality;
+    resp_json["predicted_completeness"] = solution.predicted_completeness;
+
+    // Publish each derived evidence requirement on the evidence_requirements topic
+    json ev_reqs = json::array();
+    for (const auto& der : solution.evidence_requirements) {
+      json ev;
+      ev["requirement_id"]     = uuidToJsonString(der.requirement_id);
+      ev["source_interest_id"] = uuidToJsonString(der.source_interest_id);
+      ev["evidence_description"] = der.evidence_description;
+      ev_reqs.push_back(ev);
+
+      // Publish to evidence_requirements topic (Object_Solution_Evidence service)
+      if (comp->evidence_requirements_port_) {
+        std::string ev_str = ev.dump();
+        pcl_msg_t ev_msg = {};
+        ev_msg.data      = ev_str.data();
+        ev_msg.size      = static_cast<uint32_t>(ev_str.size());
+        ev_msg.type_name = TYPE_JSON;
+        pcl_port_publish(comp->evidence_requirements_port_, &ev_msg);
+      }
+    }
+    resp_json["evidence_requirements"] = ev_reqs;
+  }
+
+  comp->response_buffer_ = resp_json.dump();
   response->data      = comp->response_buffer_.data();
   response->size      = static_cast<uint32_t>(comp->response_buffer_.size());
   response->type_name = TYPE_JSON;

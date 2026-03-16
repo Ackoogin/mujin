@@ -65,6 +65,34 @@ TEST_F(RuntimeTest, CorrelationDelegation) {
 }
 
 ///< REQ_TACTICAL_OBJECTS_031: Runtime delegates to query engine.
+///< REQ_TACTICAL_OBJECTS_059: Tactical object solution is determined for a requirement.
+TEST_F(RuntimeTest, TacticalObjectSolutionDetermination) {
+  // Register an active-find interest with object type, AOI, and timeliness
+  InterestCriteria crit;
+  crit.query_mode = QueryMode::ActiveFind;
+  crit.object_type = ObjectType::Platform;
+  crit.affiliation = Affiliation::Hostile;
+  crit.area = BoundingBox{50.0, 52.0, -2.0, 2.0};
+  crit.time_window_start = 1000.0;
+  crit.time_window_end = 2000.0;
+
+  auto interest_id = rt.interestManager().registerInterest(crit, 1000.0, 5000.0);
+
+  // Determine solution
+  auto solution = rt.determineSolution(interest_id);
+
+  // Verify solution captures requirement criteria
+  EXPECT_FALSE(solution.solution_id.isNull());
+  EXPECT_EQ(solution.source_interest_id, interest_id);
+  ASSERT_TRUE(solution.intended_object_type.has_value());
+  EXPECT_EQ(*solution.intended_object_type, ObjectType::Platform);
+  ASSERT_TRUE(solution.area_of_interest.has_value());
+  EXPECT_DOUBLE_EQ(solution.area_of_interest->min_lat, 50.0);
+  EXPECT_GT(solution.predicted_quality, 0.0);
+  // Active-find generates derived evidence requirements
+  EXPECT_FALSE(solution.evidence_requirements.empty());
+}
+
 TEST_F(RuntimeTest, QueryDelegation) {
   auto id = rt.createObject(makePlatform(51.5, -0.1, Affiliation::Friendly));
   QueryRequest req;

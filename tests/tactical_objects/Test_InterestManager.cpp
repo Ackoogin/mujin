@@ -80,6 +80,33 @@ TEST(InterestManager, DerivedEvidenceRequirementIsComponentAgnostic) {
   ASSERT_EQ(der.evidence_description.find("Geography"), std::string::npos);
 }
 
+///< REQ_TACTICAL_OBJECTS_059: ActiveFind query mode triggers solution with evidence requirements.
+TEST(InterestManager, ActiveFindSolutionContainsEvidenceRequirements) {
+  InterestManager mgr;
+
+  InterestCriteria crit;
+  crit.query_mode = QueryMode::ActiveFind;
+  crit.affiliation = Affiliation::Hostile;
+  crit.object_type = ObjectType::Platform;
+  crit.area = BoundingBox{50.0, 52.0, -1.0, 1.0};
+
+  auto interest_id = mgr.registerInterest(crit, 1000.0, 5000.0);
+  
+  auto solution = mgr.determineSolution(interest_id);
+
+  ASSERT_FALSE(solution.solution_id.isNull());
+  ASSERT_EQ(solution.source_interest_id, interest_id);
+  ASSERT_TRUE(solution.intended_object_type.has_value());
+  ASSERT_EQ(*solution.intended_object_type, ObjectType::Platform);
+  ASSERT_TRUE(solution.area_of_interest.has_value());
+  
+  // ActiveFind means we get evidence requirements
+  ASSERT_FALSE(solution.evidence_requirements.empty());
+  ASSERT_FALSE(solution.evidence_requirements[0].requirement_id.isNull());
+  ASSERT_EQ(solution.evidence_requirements[0].source_interest_id, interest_id);
+  ASSERT_FALSE(solution.evidence_requirements[0].evidence_description.empty());
+}
+
 ///< REQ_TACTICAL_OBJECTS_062: Measurement criteria captured and applied during quality assessment.
 TEST(InterestManager, MeasurementCriteriaAcceptance) {
   InterestManager mgr;

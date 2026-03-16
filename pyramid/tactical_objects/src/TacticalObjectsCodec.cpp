@@ -16,6 +16,10 @@ Affiliation TacticalObjectsCodec::affiliationFromString(const std::string& s) {
   return stringToAffiliation(s);
 }
 
+BattleDimension TacticalObjectsCodec::battleDimensionFromString(const std::string& s) {
+  return stringToBattleDim(s);
+}
+
 std::string TacticalObjectsCodec::objectTypeToString(ObjectType t) {
   switch (t) {
     case ObjectType::Platform: return "Platform";

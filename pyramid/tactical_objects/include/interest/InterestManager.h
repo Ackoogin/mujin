@@ -11,6 +11,12 @@
 
 namespace tactical_objects {
 
+/// \brief Distinguishes passive read-current-data from active-find requests.
+enum class QueryMode {
+  ReadCurrent,  ///< Return only what is currently known.
+  ActiveFind    ///< Actively seek entities matching the criteria.
+};
+
 enum class InterestStatus {
   Active,
   Cancelled,
@@ -19,8 +25,10 @@ enum class InterestStatus {
 };
 
 struct InterestCriteria {
+  tl::optional<QueryMode> query_mode;          ///< ReadCurrent (default) or ActiveFind.
   tl::optional<Affiliation> affiliation;
   tl::optional<ObjectType> object_type;
+  tl::optional<BattleDimension> battle_dimension; ///< e.g. SeaSurface, Air.
   tl::optional<BoundingBox> area;
   tl::optional<std::string> behavior_pattern;
   double time_window_start = 0.0;
@@ -59,6 +67,20 @@ struct MeasurementCriterion {
   double threshold = 0.0;
 };
 
+/// \brief Captures how the runtime intends to satisfy a tactical object requirement.
+struct ObjectSolution {
+  UUIDKey solution_id;
+  UUIDKey source_interest_id;
+  tl::optional<ObjectType> intended_object_type;
+  tl::optional<BattleDimension> intended_battle_dimension;
+  tl::optional<BoundingBox> area_of_interest;
+  double timing_start          = 0.0;
+  double timing_end            = 0.0;
+  double predicted_quality     = 0.0;  ///< 0..1
+  double predicted_completeness = 0.0; ///< 0..1
+  std::vector<DerivedEvidenceRequirement> evidence_requirements;
+};
+
 /// \brief Manages interest requirements, derived evidence requests, and progress tracking.
 class InterestManager {
 public:
@@ -84,6 +106,9 @@ public:
 
   /// \brief Derive a component-agnostic evidence requirement from an interest.
   DerivedEvidenceRequirement deriveEvidenceRequirement(const UUIDKey& interest_id);
+
+  /// \brief Determine an object solution for satisfying an interest requirement.
+  ObjectSolution determineSolution(const UUIDKey& interest_id);
 
   /// \brief Register a measurement criterion against an interest.
   void addMeasurementCriterion(const MeasurementCriterion& mc);

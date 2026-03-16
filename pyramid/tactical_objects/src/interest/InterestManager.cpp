@@ -1,6 +1,8 @@
+#include <uuid/UUIDHelper.h>
 #include <interest/InterestManager.h>
 #include <store/ObjectComponents.h>
 #include <uuid/UUIDHelper.h>
+#include <iostream>
 
 namespace tactical_objects {
 
@@ -82,6 +84,9 @@ DerivedEvidenceRequirement InterestManager::deriveEvidenceRequirement(
     if (it->second.criteria.affiliation) {
       desc += " affiliation filter active";
     }
+    if (it->second.criteria.battle_dimension) {
+      desc += " battle_dimension filter active";
+    }
     if (it->second.criteria.area) {
       desc += " spatial area filter active";
     }
@@ -91,6 +96,39 @@ DerivedEvidenceRequirement InterestManager::deriveEvidenceRequirement(
   }
 
   return der;
+}
+
+ObjectSolution InterestManager::determineSolution(const UUIDKey& interest_id) {
+  ObjectSolution sol;
+  sol.solution_id = UUIDKey{UUIDHelper::generateV4()};
+  sol.source_interest_id = interest_id;
+
+  auto it = records_.find(interest_id);
+  if (it == records_.end()) return sol;
+
+  const auto& crit = it->second.criteria;
+
+  // Carry forward the criteria into the solution
+  sol.intended_object_type = crit.object_type;
+  sol.intended_battle_dimension = crit.battle_dimension;
+  sol.area_of_interest = crit.area;
+  sol.timing_start = crit.time_window_start;
+  sol.timing_end   = crit.time_window_end;
+
+  // Predict quality based on the mode and specificity of criteria
+  bool is_active = crit.query_mode.has_value() &&
+                   *crit.query_mode == QueryMode::ActiveFind;
+  // ActiveFind gets higher predicted quality (proactive search)
+  sol.predicted_quality = is_active ? 0.8 : 0.5;
+  sol.predicted_completeness = is_active ? 0.7 : 0.4;
+
+  // For ActiveFind interests, derive evidence requirements
+  if (is_active) {
+    auto der = deriveEvidenceRequirement(interest_id);
+    sol.evidence_requirements.push_back(der);
+  }
+
+  return sol;
 }
 
 void InterestManager::addMeasurementCriterion(const MeasurementCriterion& mc) {
@@ -154,6 +192,12 @@ bool InterestManager::matchesInterest(const InterestCriteria& criteria,
     const auto* kc = store.kinematics().get(rec.id);
     if (!kc) return false;
     if (!criteria.area->contains(kc->position.lat, kc->position.lon)) return false;
+  }
+
+  // battle_dimension filter
+  if (criteria.battle_dimension) {
+    const auto* mc = store.milclass().get(rec.id);
+    if (!mc || mc->profile.battle_dim != *criteria.battle_dimension) return false;
   }
 
   // behavior_pattern filter
