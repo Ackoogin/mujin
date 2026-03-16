@@ -87,3 +87,11 @@ examples/ada/obj_tobj_client/*stdout
 examples/ada/obj_tobj_client/*deps
 examples/ada/obj_tobj_client/b__*
 
+examples/ada/obj_active_find/*ali
+examples/ada/obj_active_find/*o
+examples/ada/obj_active_find/*bexch
+examples/ada/obj_active_find/*stderr
+examples/ada/obj_active_find/*stdout
+examples/ada/obj_active_find/*deps
+examples/ada/obj_active_find/b__*
+

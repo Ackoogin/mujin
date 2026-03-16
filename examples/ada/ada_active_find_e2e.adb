@@ -27,6 +27,7 @@ with Streaming_Codec;
 with Tactical_Objects_Types;   use Tactical_Objects_Types;
 with Tactical_Objects_Service;
 with System;
+with System.Storage_Elements;
 
 procedure Ada_Active_Find_E2E is
   use type Interfaces.C.unsigned;
@@ -398,9 +399,9 @@ begin
                 exit;
               end if;
             end loop;
-            -- Check for evidence_requirements
-            for I in Body_Str'First .. Body_Str'Last - 21 loop
-              if Body_Str(I .. I + 21) = "evidence_requirements" then
+            -- Check for evidence_requirements (21 chars)
+            for I in Body_Str'First .. Body_Str'Last - 20 loop
+              if Body_Str(I .. I + 20) = "evidence_requirements" then
                 Ev_Reqs_Found := True;
                 exit;
               end if;
