@@ -519,6 +519,59 @@ The runtime shall retain traceability links between a source tactical object req
 
 ---
 
+## 15. Active Find Scenario — Solution Dependency and End-to-End Flow
+
+### REQ_TACTICAL_OBJECTS_066 - ActiveFind Mode Dispatch at Service Boundary
+`TacticalObjectsComponent::handleSubscribeInterest()` shall distinguish `query_mode=active_find` from `read_current` (or absent). When the mode is `active_find`, the handler shall invoke `determineSolution()` and include the solution and derived evidence requirements in the service response. When the mode is `read_current` or absent, the handler shall register the interest without triggering solution derivation.
+
+**Traces**: TOBJ.005, TOBJ.047
+
+**Verification**: `Test_TacticalObjectsComponent_HLR.cpp` invokes the `subscribe_interest` service with `query_mode=active_find` and verifies the response contains `solution_id`, `predicted_quality`, `predicted_completeness`, and a non-empty `evidence_requirements` array. A second invocation without `query_mode` verifies the response contains `interest_id` but no `solution_id`.
+
+### REQ_TACTICAL_OBJECTS_067 - Evidence Requirement Publication
+When an ActiveFind interest is registered, `TacticalObjectsComponent` shall publish each derived `DerivedEvidenceRequirement` as a JSON message on the `evidence_requirements` topic, containing `requirement_id`, `source_interest_id`, and `evidence_description`.
+
+**Traces**: TOBJ.048, TOBJ.047
+
+**Verification**: `Test_TacticalObjectsComponent_HLR.cpp` registers a subscriber on `evidence_requirements`, invokes `subscribe_interest` with `query_mode=active_find`, and verifies the subscriber receives a JSON message with the expected fields.
+
+### REQ_TACTICAL_OBJECTS_068 - Interest-Entity Matching for Streaming
+`TacticalObjectsComponent::on_tick()` shall iterate active interests, match entities in the store against each interest's criteria using `InterestManager::matchesInterest()`, and publish matching entities as binary `entity_updates` frames to subscribed consumers.
+
+**Traces**: TOBJ.005, TOBJ.045
+
+**Verification**: `Test_TacticalObjects_E2E.cpp` (`AdaClientZoneInterestReceivesEntityEvidence`) registers an interest, creates an entity matching the criteria, spins the executor, and verifies the entity_updates subscriber receives at least one frame containing the matching entity.
+
+### REQ_TACTICAL_OBJECTS_069 - Battle Dimension Filter in Interest Matching
+`InterestManager::matchesInterest()` shall reject entities whose `MilClassComponent.battle_dim` does not match the interest criteria's `battle_dimension`, when that criterion is specified.
+
+**Traces**: TOBJ.005, TOBJ.025
+
+**Verification**: `Test_InterestManager_Matching.cpp` creates entities with different battle dimensions (e.g. Ground, SeaSurface, Air) and verifies that an interest with `battle_dimension=SeaSurface` matches only the SeaSurface entity.
+
+### REQ_TACTICAL_OBJECTS_070 - ActiveFind Closed-Loop Integration
+When an ActiveFind interest is registered, the full closed-loop shall execute: (1) the component derives evidence requirements and publishes them, (2) an evidence provider receives the requirement and submits observations to `observation_ingress`, (3) the component correlates those observations into tracked entities, and (4) the component streams entity updates matching the interest criteria back to the subscribing client.
+
+**Traces**: TOBJ.047, TOBJ.048, TOBJ.049, TOBJ.005
+
+**Verification**: `Test_TacticalObjects_E2E.cpp` (`ActiveFindSolutionDrivesEvidenceProvider`) exercises the full three-party flow (client, tactical_objects, evidence provider) and asserts: solution_id is returned, evidence provider receives a derived requirement, entity updates arrive at the client, and the received entity matches the original `Hostile Platform SeaSurface` criteria.
+
+### REQ_TACTICAL_OBJECTS_071 - Solution Response Encoding Contract
+The `subscribe_interest` service response for an ActiveFind request shall be a JSON object containing: `interest_id` (string UUID), `solution_id` (string UUID), `predicted_quality` (double, 0..1), `predicted_completeness` (double, 0..1), and `evidence_requirements` (array of objects each with `requirement_id`, `source_interest_id`, `evidence_description`).
+
+**Traces**: TOBJ.047
+
+**Verification**: `Test_TacticalObjectsComponent_HLR.cpp` invokes `subscribe_interest` with `query_mode=active_find`, parses the JSON response, and asserts the presence and types of all specified fields.
+
+### REQ_TACTICAL_OBJECTS_072 - Derived Evidence Requirement Carries Interest Criteria
+Each `DerivedEvidenceRequirement` produced by `InterestManager::deriveEvidenceRequirement()` shall carry a copy of the source interest's criteria (object_type, affiliation, battle_dimension, area) so that an evidence provider can fulfil the requirement without further queries.
+
+**Traces**: TOBJ.048
+
+**Verification**: `Test_InterestManager.cpp` registers an ActiveFind interest with all criteria fields populated, derives an evidence requirement, and verifies the derived requirement's `criteria` fields match the source interest's criteria.
+
+---
+
 ## Traceability Summary
 
 | LLR | TOBJ | Test File |
@@ -588,3 +641,10 @@ The runtime shall retain traceability links between a source tactical object req
 | 063 | 051 | Test_InterestManager |
 | 064 | 052 | Test_TacticalObjectsRuntime |
 | 065 | 053 | Test_TacticalObjectsRuntime |
+| 066 | 005, 047 | Test_TacticalObjectsComponent_HLR |
+| 067 | 048, 047 | Test_TacticalObjectsComponent_HLR |
+| 068 | 005, 045 | Test_TacticalObjects_E2E |
+| 069 | 005, 025 | Test_InterestManager_Matching |
+| 070 | 047, 048, 049, 005 | Test_TacticalObjects_E2E |
+| 071 | 047 | Test_TacticalObjectsComponent_HLR |
+| 072 | 048 | Test_InterestManager |
