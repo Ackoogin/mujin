@@ -281,16 +281,17 @@ package body Tactical_Objects_Service is
   function Ordinal_To_Affiliation
     (V : Streaming_Codec.Byte) return Affiliation is
   begin
+    --  C++ enum Affiliation is 0-based: Friendly=0, Hostile=1, ...
     case V is
-      when 1      => return Friendly;
-      when 2      => return Hostile;
-      when 3      => return Neutral;
-      when 4      => return Unknown;
-      when 5      => return Assumed_Friend;
-      when 6      => return Suspect;
-      when 7      => return Joker;
-      when 8      => return Faker;
-      when 9      => return Pending;
+      when 0      => return Friendly;
+      when 1      => return Hostile;
+      when 2      => return Neutral;
+      when 3      => return Unknown;
+      when 4      => return Assumed_Friend;
+      when 5      => return Suspect;
+      when 6      => return Joker;
+      when 7      => return Faker;
+      when 8      => return Pending;
       when others => return Affiliation_Unspecified;
     end case;
   end Ordinal_To_Affiliation;
@@ -298,18 +299,19 @@ package body Tactical_Objects_Service is
   function Ordinal_To_Object_Type
     (V : Streaming_Codec.Byte) return Object_Type is
   begin
+    --  C++ enum ObjectType is 0-based: Platform=0, Person=1, ...
     case V is
-      when 1      => return Platform;
-      when 2      => return Person;
-      when 3      => return Equipment;
-      when 4      => return Unit;
-      when 5      => return Formation;
-      when 6      => return Installation;
-      when 7      => return Feature;
-      when 8      => return Route;
-      when 9      => return Point;
-      when 10     => return Area;
-      when 11     => return Zone;
+      when 0      => return Platform;
+      when 1      => return Person;
+      when 2      => return Equipment;
+      when 3      => return Unit;
+      when 4      => return Formation;
+      when 5      => return Installation;
+      when 6      => return Feature;
+      when 7      => return Route;
+      when 8      => return Point;
+      when 9      => return Area;
+      when 10     => return Zone;
       when others => return Object_Type_Unspecified;
     end case;
   end Ordinal_To_Object_Type;
@@ -317,10 +319,11 @@ package body Tactical_Objects_Service is
   function Ordinal_To_Lifecycle_Status
     (V : Streaming_Codec.Byte) return Lifecycle_Status is
   begin
+    --  C++ enum LifecycleStatus is 0-based: Active=0, Stale=1, ...
     case V is
-      when 1      => return Active;
-      when 2      => return Stale;
-      when 3      => return Retired;
+      when 0      => return Active;
+      when 1      => return Stale;
+      when 2      => return Retired;
       when others => return Lifecycle_Unspecified;
     end case;
   end Ordinal_To_Lifecycle_Status;
