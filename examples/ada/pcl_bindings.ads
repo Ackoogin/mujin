@@ -172,6 +172,12 @@ package Pcl_Bindings is
      Msg   : access constant Pcl_Msg) return Pcl_Status;
   pragma Import(C, Dispatch_Incoming, "pcl_executor_dispatch_incoming");
 
+  function Publish
+    (Exec  : Pcl_Executor_Access;
+     Topic : Interfaces.C.Strings.chars_ptr;
+     Msg   : access constant Pcl_Msg) return Pcl_Status;
+  pragma Import(C, Publish, "pcl_executor_publish");
+
   -- ── Socket transport ───────────────────────────────────────────────────
 
   type Pcl_Socket_Transport is limited private;

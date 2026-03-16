@@ -92,6 +92,37 @@ package Tactical_Objects_Types is
      Stale    => 2,
      Retired  => 3);
 
+  --  BattleDimension — ordinal matches StreamingCodec / TacticalObjectsCodec
+  type Battle_Dimension is
+    (Dimension_Unspecified,  --  0
+     Ground,                  --  1
+     Air,                     --  2
+     Sea_Surface,             --  3
+     Subsurface,              --  4
+     Space,                   --  5
+     SOF);                    --  6
+  for Battle_Dimension use
+    (Dimension_Unspecified => 0,
+     Ground      => 1,
+     Air         => 2,
+     Sea_Surface => 3,
+     Subsurface  => 4,
+     Space       => 5,
+     SOF         => 6);
+
+  type Optional_Battle_Dimension is record
+    Has   : Boolean          := False;
+    Value : Battle_Dimension := Dimension_Unspecified;
+  end record;
+
+  --  QueryMode — matches C++ QueryMode enum
+  type Query_Mode is (Read_Current, Active_Find);
+
+  type Optional_Query_Mode is record
+    Has   : Boolean    := False;
+    Value : Query_Mode := Read_Current;
+  end record;
+
   -- ── Geometry types ────────────────────────────────────────────────────────
 
   --  Maps to proto Position / tactical_objects::Position
@@ -151,8 +182,10 @@ package Tactical_Objects_Types is
 
   type Tactical_Object_Query is record
     One_Shot            : Boolean              := True;
+    Mode                : Optional_Query_Mode;
     By_Type             : Optional_Object_Type;
     By_Affiliation      : Optional_Affiliation;
+    By_Battle_Dimension : Optional_Battle_Dimension;
     By_Region           : Optional_Bounding_Box;
     Max_Age_Seconds     : Optional_Double;
     By_Source_System    : Optional_String;
