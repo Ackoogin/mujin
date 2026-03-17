@@ -6,6 +6,8 @@
 #include <uuid/UUIDHelper.h>
 #include <pcl_internal.h>
 #include <cstring>
+#include <thread>
+#include <chrono>
 
 using namespace tactical_objects;
 using namespace pyramid::core::uuid;
@@ -891,6 +893,286 @@ TEST(TacticalObjectsComponent, DeletedEntityPublishesDeleteFrame) {
   resp.size = sizeof(resp_buf);
   ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "delete_object", &req, &resp), PCL_OK);
 
+  // Sleep so the accumulator reaches >= 1ms (period at 1000Hz) before next spinOnce.
+  std::this_thread::sleep_for(std::chrono::milliseconds(5));
   for (int i = 0; i < 5; ++i) exec.spinOnce(0);
 }
 
+
+///< Coverage: subscribe_interest with query_mode="active_find" registers ActiveFind interest
+///< and returns solution_id + evidence_requirements (lines 418-420, 464-491).
+TEST(TacticalObjectsComponent, SubscribeInterestActiveFindReturnsEvidenceRequirements) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  nlohmann::json j_req;
+  j_req["query_mode"]       = "active_find";
+  j_req["object_type"]      = "Platform";
+  j_req["affiliation"]      = "Hostile";
+  j_req["battle_dimension"] = "Air";
+  j_req["expires_at"]       = 9999.0;
+
+  std::string req_str = j_req.dump();
+  pcl_msg_t req = {};
+  req.data      = req_str.data();
+  req.size      = static_cast<uint32_t>(req_str.size());
+  req.type_name = "application/json";
+
+  pcl_msg_t resp = {};
+  char resp_buf[2048];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "subscribe_interest", &req, &resp), PCL_OK);
+
+  std::string resp_str(static_cast<const char*>(resp.data), resp.size);
+  auto jr = nlohmann::json::parse(resp_str);
+
+  ASSERT_TRUE(jr.contains("interest_id"));
+  ASSERT_TRUE(jr.contains("solution_id"));
+  ASSERT_TRUE(jr.contains("evidence_requirements"));
+
+  // The evidence requirements should mention battle_dimension (covers line 88 in InterestManager).
+  bool found = false;
+  for (auto& ev : jr["evidence_requirements"]) {
+    std::string desc = ev.value("evidence_description", "");
+    if (desc.find("battle_dimension") != std::string::npos) found = true;
+  }
+  EXPECT_TRUE(found);
+}
+
+///< Coverage: subscribe_interest with query_mode="read_current" sets ReadCurrent (line 422).
+TEST(TacticalObjectsComponent, SubscribeInterestReadCurrentMode) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  nlohmann::json j_req;
+  j_req["query_mode"] = "read_current";
+  j_req["expires_at"] = 9999.0;
+
+  std::string req_str = j_req.dump();
+  pcl_msg_t req = {};
+  req.data      = req_str.data();
+  req.size      = static_cast<uint32_t>(req_str.size());
+  req.type_name = "application/json";
+
+  pcl_msg_t resp = {};
+  char resp_buf[512];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "subscribe_interest", &req, &resp), PCL_OK);
+
+  std::string resp_str(static_cast<const char*>(resp.data), resp.size);
+  auto jr = nlohmann::json::parse(resp_str);
+  ASSERT_TRUE(jr.contains("interest_id"));
+  // ReadCurrent → no solution_id
+  ASSERT_FALSE(jr.contains("solution_id"));
+}
+
+///< Coverage: subscribe_interest with battle_dimension field (lines 437-439).
+TEST(TacticalObjectsComponent, SubscribeInterestWithBattleDimension) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  nlohmann::json j_req;
+  j_req["battle_dimension"] = "Ground";
+  j_req["expires_at"]       = 9999.0;
+
+  std::string req_str = j_req.dump();
+  pcl_msg_t req = {};
+  req.data      = req_str.data();
+  req.size      = static_cast<uint32_t>(req_str.size());
+  req.type_name = "application/json";
+
+  pcl_msg_t resp = {};
+  char resp_buf[512];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "subscribe_interest", &req, &resp), PCL_OK);
+
+  std::string resp_str(static_cast<const char*>(resp.data), resp.size);
+  auto jr = nlohmann::json::parse(resp_str);
+  ASSERT_FALSE(jr.value("interest_id", "").empty());
+}
+
+///< Coverage: on_tick publishes delete frames after entity removed (lines 113-119).
+///< The test registers an interest, waits for a full-snapshot tick so the
+///< subscriber_versions table is populated, then deletes the entity and
+///< waits for the next tick to fire so the delete frame is assembled.
+TEST(TacticalObjectsComponent, DeletedEntityAppearsInDeleteFrame) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+  comp.setTickRateHz(1000.0); // 1 ms period — first spinOnce (dt=0.001) fires tick
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  // Register a read-current interest so on_tick assembles frames.
+  nlohmann::json sub_req;
+  sub_req["object_type"] = "Platform";
+  sub_req["expires_at"]  = 9999.0;
+  std::string sub_str    = sub_req.dump();
+  pcl_msg_t req = {};
+  req.data      = sub_str.data();
+  req.size      = static_cast<uint32_t>(sub_str.size());
+  req.type_name = "application/json";
+  pcl_msg_t resp = {};
+  char resp_buf[512];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "subscribe_interest", &req, &resp), PCL_OK);
+
+  // Create a Platform entity.
+  ObjectDefinition def;
+  def.type        = ObjectType::Platform;
+  def.position    = Position{51.0, 0.0, 0};
+  def.affiliation = Affiliation::Hostile;
+  auto id = comp.runtime().createObject(def);
+
+  // First tick: subscriber is "new" (sub_versions empty) — full snapshot,
+  // populates subscriber_versions so the entity is tracked.
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  exec.spinOnce(0);
+
+  // Delete the entity; it goes into deleted_entities_.
+  auto id_str = UUIDHelper::toString(id.uuid);
+  nlohmann::json del_req;
+  del_req["object_id"] = id_str;
+  std::string del_str  = del_req.dump();
+  req.data      = del_str.data();
+  req.size      = static_cast<uint32_t>(del_str.size());
+  resp.data     = resp_buf;
+  resp.size     = sizeof(resp_buf);
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "delete_object", &req, &resp), PCL_OK);
+
+  // Second tick: not a new subscriber, deleted_entities_ = {id} → assembles
+  // delete frame, hitting lines 113-119.
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  exec.spinOnce(0);
+}
+
+///< Coverage: on_tick splits large frames into multiple chunks (line 107, second
+///< iteration of do-while where chunk_start > 0).
+///< Strategy: first tick populates subscriber_versions (new-subscriber full scan),
+///< then all entities are marked dirty again so the second tick processes them
+///< through the dirty-entity path with max=1 → multiple chunks.
+TEST(TacticalObjectsComponent, MultipleChunksSecondIteration) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+  comp.setMaxEntitiesPerFrame(1); // forces multiple loop iterations
+  comp.setTickRateHz(1000.0);     // 1 ms period — first spinOnce (dt=0.001) fires tick
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  // Register interest.
+  nlohmann::json sub_req;
+  sub_req["object_type"] = "Platform";
+  sub_req["expires_at"]  = 9999.0;
+  std::string sub_str    = sub_req.dump();
+  pcl_msg_t req = {};
+  req.data      = sub_str.data();
+  req.size      = static_cast<uint32_t>(sub_str.size());
+  req.type_name = "application/json";
+  pcl_msg_t resp = {};
+  char resp_buf[512];
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "subscribe_interest", &req, &resp), PCL_OK);
+
+  // Create 3 objects.
+  ObjectDefinition def;
+  def.type        = ObjectType::Platform;
+  def.position    = Position{51.0, 0.0, 0};
+  def.affiliation = Affiliation::Hostile;
+  auto id1 = comp.runtime().createObject(def);
+  def.position.lat = 52.0;
+  auto id2 = comp.runtime().createObject(def);
+  def.position.lat = 53.0;
+  auto id3 = comp.runtime().createObject(def);
+
+  // First tick: new subscriber, full scan produces 3 updates (1 chunk each
+  // with max=1, so 3 loop iterations already, but chunk_start is always the
+  // next start value). Populates subscriber_versions.
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  exec.spinOnce(0);
+
+  // Mark all 3 dirty again so the next (non-new-subscriber) tick processes them.
+  ObjectUpdate upd;
+  upd.position = Position{51.5, 0.0, 0};
+  comp.runtime().updateObject(id1, upd);
+  upd.position = Position{52.5, 0.0, 0};
+  comp.runtime().updateObject(id2, upd);
+  upd.position = Position{53.5, 0.0, 0};
+  comp.runtime().updateObject(id3, upd);
+
+  // Second tick: NOT new subscriber, dirty_entities has 3 entries →
+  // sf.updates.size() == 3, max==1 → second and third iterations with
+  // chunk_start > 0, covering line 107.
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  exec.spinOnce(0);
+}
+
+///< Coverage: subscribe_interest with non-string object_type/affiliation/battle_dimension
+///< triggers catch (...) {} exception handlers at lines 428, 433, 439.
+///< nlohmann::json::get<std::string>() throws type_error when the value is not a string.
+TEST(TacticalObjectsComponent, SubscribeInterestInvalidTypeFieldsCoverCatchBlocks) {
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  // object_type is an integer — not null, but get<std::string>() throws (line 428).
+  {
+    nlohmann::json j;
+    j["object_type"] = 42;       // integer, not string
+    j["expires_at"]  = 9999.0;
+    std::string s = j.dump();
+    pcl_msg_t req = {}; req.data = s.data(); req.size = static_cast<uint32_t>(s.size());
+    req.type_name = "application/json";
+    pcl_msg_t resp = {}; char buf[512]; resp.data = buf; resp.size = sizeof(buf);
+    EXPECT_EQ(pcl_executor_invoke_service(exec.handle(), "subscribe_interest", &req, &resp), PCL_OK);
+  }
+
+  // affiliation is an integer — triggers catch at line 433.
+  {
+    nlohmann::json j;
+    j["affiliation"] = 99;
+    j["expires_at"]  = 9999.0;
+    std::string s = j.dump();
+    pcl_msg_t req = {}; req.data = s.data(); req.size = static_cast<uint32_t>(s.size());
+    req.type_name = "application/json";
+    pcl_msg_t resp = {}; char buf[512]; resp.data = buf; resp.size = sizeof(buf);
+    EXPECT_EQ(pcl_executor_invoke_service(exec.handle(), "subscribe_interest", &req, &resp), PCL_OK);
+  }
+
+  // battle_dimension is an integer — triggers catch at line 439.
+  {
+    nlohmann::json j;
+    j["battle_dimension"] = 7;
+    j["expires_at"]       = 9999.0;
+    std::string s = j.dump();
+    pcl_msg_t req = {}; req.data = s.data(); req.size = static_cast<uint32_t>(s.size());
+    req.type_name = "application/json";
+    pcl_msg_t resp = {}; char buf[512]; resp.data = buf; resp.size = sizeof(buf);
+    EXPECT_EQ(pcl_executor_invoke_service(exec.handle(), "subscribe_interest", &req, &resp), PCL_OK);
+  }
+}

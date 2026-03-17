@@ -187,3 +187,26 @@ TEST(PclOom, BridgeCreateContainerAllocFails) {
   pcl_executor_destroy(e);
   restore_logs();
 }
+
+// ── post_response_cb: data malloc fails (lines 553-554) ──────────────────
+//
+// Inside pcl_executor_post_response_cb the allocation sequence is:
+//   #0  calloc(1, sizeof(node))   → node created
+//   #1  malloc(size)              → data buffer; if NULL: free(node) + ERR_NOMEM
+
+TEST(PclOom, PostResponseCbDataMallocFails) {
+  silence_logs();
+  auto* e = pcl_executor_create();
+
+  auto cb = [](const pcl_msg_t*, void*) {};
+  int payload = 42;
+
+  // Fail the 2nd allocation inside the call (skip node calloc, fail data malloc).
+  g_oom_countdown = 1;
+  pcl_status_t rc = pcl_executor_post_response_cb(e, cb, nullptr, &payload, sizeof(payload));
+  g_oom_countdown = -1;
+  EXPECT_EQ(rc, PCL_ERR_NOMEM);
+
+  pcl_executor_destroy(e);
+  restore_logs();
+}

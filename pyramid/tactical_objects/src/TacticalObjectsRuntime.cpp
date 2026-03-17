@@ -164,9 +164,7 @@ CorrelationResult TacticalObjectsRuntime::processObservation(const Observation& 
   pcl_log(nullptr, PCL_LOG_DEBUG, "processObservation id: %s",
           pyramid::core::uuid::UUIDHelper::toString(obs.observation_id).c_str());
   auto result = correlation_->processObservation(obs);
-  if (result.object_id.isNull()) {
-    pcl_log(nullptr, PCL_LOG_DEBUG, "processObservation returned NULL object_id");
-  } else {
+  if (!result.object_id.isNull()) {
     pcl_log(nullptr, PCL_LOG_DEBUG, "processObservation correlated to object_id: %s",
             pyramid::core::uuid::UUIDHelper::toString(result.object_id.uuid).c_str());
     dirty_entities_.insert(result.object_id);

@@ -186,3 +186,77 @@ TEST_F(CorrelationEngineTest, ContributingObservationsTracked) {
   ASSERT_NE(fc, nullptr);
   ASSERT_GE(fc->contributing_observations.size(), 2u);
 }
+
+// ---------------------------------------------------------------------------
+// SIDC battle-dimension parsing (lines 90-91, 93-96 in CorrelationEngine.cpp)
+// ---------------------------------------------------------------------------
+
+///< Coverage: SIDC position 2 == 'P' → BattleDimension::Space
+TEST_F(CorrelationEngineTest, SIDCBattleDimension_Space) {
+  CorrelationEngine engine(store, spatial, milclass);
+  auto obs = makeObs(10.0, 10.0);
+  obs.source_sidc = "SFP";  // position 2 = 'P'
+  auto result = engine.processObservation(obs);
+  ASSERT_FALSE(result.object_id.isNull());
+  const auto* mc = store->milclass().get(result.object_id);
+  ASSERT_NE(mc, nullptr);
+  EXPECT_EQ(mc->profile.battle_dim, BattleDimension::Space);
+}
+
+///< Coverage: SIDC position 2 == 'A' → BattleDimension::Air
+TEST_F(CorrelationEngineTest, SIDCBattleDimension_Air) {
+  CorrelationEngine engine(store, spatial, milclass);
+  auto obs = makeObs(11.0, 10.0);
+  obs.source_sidc = "SFA";
+  auto result = engine.processObservation(obs);
+  ASSERT_FALSE(result.object_id.isNull());
+  const auto* mc = store->milclass().get(result.object_id);
+  ASSERT_NE(mc, nullptr);
+  EXPECT_EQ(mc->profile.battle_dim, BattleDimension::Air);
+}
+
+///< Coverage: SIDC position 2 == 'S' → BattleDimension::SeaSurface
+TEST_F(CorrelationEngineTest, SIDCBattleDimension_SeaSurface) {
+  CorrelationEngine engine(store, spatial, milclass);
+  auto obs = makeObs(12.0, 10.0);
+  obs.source_sidc = "SFS";
+  auto result = engine.processObservation(obs);
+  ASSERT_FALSE(result.object_id.isNull());
+  const auto* mc = store->milclass().get(result.object_id);
+  ASSERT_NE(mc, nullptr);
+  EXPECT_EQ(mc->profile.battle_dim, BattleDimension::SeaSurface);
+}
+
+///< Coverage: SIDC position 2 == 'U' → BattleDimension::Subsurface
+TEST_F(CorrelationEngineTest, SIDCBattleDimension_Subsurface) {
+  CorrelationEngine engine(store, spatial, milclass);
+  auto obs = makeObs(13.0, 10.0);
+  obs.source_sidc = "SFU";
+  auto result = engine.processObservation(obs);
+  ASSERT_FALSE(result.object_id.isNull());
+  const auto* mc = store->milclass().get(result.object_id);
+  ASSERT_NE(mc, nullptr);
+  EXPECT_EQ(mc->profile.battle_dim, BattleDimension::Subsurface);
+}
+
+///< Coverage: SIDC position 2 == 'F' → BattleDimension::SOF
+TEST_F(CorrelationEngineTest, SIDCBattleDimension_SOF) {
+  CorrelationEngine engine(store, spatial, milclass);
+  auto obs = makeObs(14.0, 10.0);
+  obs.source_sidc = "SFF";
+  auto result = engine.processObservation(obs);
+  ASSERT_FALSE(result.object_id.isNull());
+  const auto* mc = store->milclass().get(result.object_id);
+  ASSERT_NE(mc, nullptr);
+  EXPECT_EQ(mc->profile.battle_dim, BattleDimension::SOF);
+}
+
+///< Coverage: SIDC position 2 is unrecognized character → default: break (line 96)
+TEST_F(CorrelationEngineTest, SIDCBattleDimension_UnknownChar) {
+  CorrelationEngine engine(store, spatial, milclass);
+  auto obs = makeObs(15.0, 10.0);
+  obs.source_sidc = "SFX";  // position 2 = 'X' → hits default: break
+  auto result = engine.processObservation(obs);
+  ASSERT_FALSE(result.object_id.isNull());
+  // No specific battle_dim assertion: default value remains
+}

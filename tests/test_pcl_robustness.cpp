@@ -1129,3 +1129,305 @@ TEST(PclExecutorRobust, GracefulShutdownTimeoutWarningLogged) {
   pcl_container_destroy(c1);
   pcl_container_destroy(c2);
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// pcl_executor_remove — previously uncovered
+// ═══════════════════════════════════════════════════════════════════════
+
+TEST(PclExecutorRobust, RemoveContainerSuccess) {
+  auto* e  = pcl_executor_create();
+  auto* c1 = pcl_container_create("rem1", nullptr, nullptr);
+  auto* c2 = pcl_container_create("rem2", nullptr, nullptr);
+  auto* c3 = pcl_container_create("rem3", nullptr, nullptr);
+
+  ASSERT_EQ(pcl_executor_add(e, c1), PCL_OK);
+  ASSERT_EQ(pcl_executor_add(e, c2), PCL_OK);
+  ASSERT_EQ(pcl_executor_add(e, c3), PCL_OK);
+
+  // Remove the middle container — should succeed.
+  EXPECT_EQ(pcl_executor_remove(e, c2), PCL_OK);
+
+  // Removing the same container again returns NOT_FOUND (already removed).
+  EXPECT_EQ(pcl_executor_remove(e, c2), PCL_ERR_NOT_FOUND);
+
+  // Null safety
+  EXPECT_EQ(pcl_executor_remove(nullptr, c1), PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_remove(e, nullptr), PCL_ERR_INVALID);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c1);
+  pcl_container_destroy(c2);
+  pcl_container_destroy(c3);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// pcl_executor_invoke_service — find_service + dispatch
+// ═══════════════════════════════════════════════════════════════════════
+
+static pcl_status_t echo_svc_handler(pcl_container_t*, const pcl_msg_t* req,
+                                     pcl_msg_t* resp, void*) {
+  resp->data      = req->data;
+  resp->size      = req->size;
+  resp->type_name = req->type_name;
+  return PCL_OK;
+}
+
+TEST(PclExecutorRobust, InvokeServiceFound) {
+  struct SvcCtx { pcl_port_t* port = nullptr; };
+  SvcCtx ctx;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto* ctx2 = static_cast<SvcCtx*>(ud);
+    ctx2->port = pcl_container_add_service(c, "my_svc", "Msg", echo_svc_handler, nullptr);
+    return ctx2->port ? PCL_OK : PCL_ERR_CALLBACK;
+  };
+
+  auto* c = pcl_container_create("svc_container", &cbs, &ctx);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+
+  int payload = 42;
+  pcl_msg_t req = {};
+  req.data = &payload;
+  req.size = sizeof(payload);
+  req.type_name = "Msg";
+
+  pcl_msg_t resp = {};
+  int resp_buf = 0;
+  resp.data = &resp_buf;
+  resp.size = sizeof(resp_buf);
+
+  EXPECT_EQ(pcl_executor_invoke_service(e, "my_svc", &req, &resp), PCL_OK);
+  EXPECT_EQ(resp.size, sizeof(int));
+
+  // Invoke a service that does not exist.
+  EXPECT_EQ(pcl_executor_invoke_service(e, "no_such_svc", &req, &resp), PCL_ERR_NOT_FOUND);
+
+  // Null safety.
+  EXPECT_EQ(pcl_executor_invoke_service(nullptr, "my_svc", &req, &resp), PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_invoke_service(e, nullptr, &req, &resp), PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_invoke_service(e, "my_svc", nullptr, &resp), PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_invoke_service(e, "my_svc", &req, nullptr), PCL_ERR_INVALID);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// pcl_executor_publish — with and without transport adapter
+// ═══════════════════════════════════════════════════════════════════════
+
+TEST(PclExecutorRobust, PublishNoTransportDispatchesToSubscriber) {
+  struct Recv { bool got = false; };
+  Recv recv;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    pcl_container_add_subscriber(c, "pub_topic", "Msg",
+      [](pcl_container_t*, const pcl_msg_t*, void* ud) {
+        static_cast<Recv*>(ud)->got = true;
+      }, ud);
+    return PCL_OK;
+  };
+
+  auto* sub_c = pcl_container_create("pub_sub", &cbs, &recv);
+  pcl_container_configure(sub_c);
+  pcl_container_activate(sub_c);
+
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, sub_c);
+
+  pcl_msg_t msg = {};
+  msg.type_name = "Msg";
+  int val = 1;
+  msg.data = &val;
+  msg.size = sizeof(val);
+
+  // Without transport: routes via dispatch_incoming_now.
+  EXPECT_EQ(pcl_executor_publish(e, "pub_topic", &msg), PCL_OK);
+  EXPECT_TRUE(recv.got);
+
+  // Null safety.
+  EXPECT_EQ(pcl_executor_publish(nullptr, "pub_topic", &msg), PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_publish(e, nullptr, &msg), PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_publish(e, "pub_topic", nullptr), PCL_ERR_INVALID);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(sub_c);
+}
+
+TEST(PclExecutorRobust, PublishWithTransportCallsTransportPublish) {
+  struct TransportCtx {
+    bool called = false;
+    pcl_status_t rc = PCL_OK;
+  } tctx;
+
+  pcl_transport_t t = {};
+  t.publish = [](void* ctx, const char*, const pcl_msg_t*) -> pcl_status_t {
+    static_cast<TransportCtx*>(ctx)->called = true;
+    return static_cast<TransportCtx*>(ctx)->rc;
+  };
+  t.adapter_ctx = &tctx;
+
+  auto* e = pcl_executor_create();
+  ASSERT_EQ(pcl_executor_set_transport(e, &t), PCL_OK);
+
+  pcl_msg_t msg = {};
+  msg.type_name = "Msg";
+  EXPECT_EQ(pcl_executor_publish(e, "topic", &msg), PCL_OK);
+  EXPECT_TRUE(tctx.called);
+
+  pcl_executor_destroy(e);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// pcl_executor_post_response_cb + drain_resp_cb_queue
+// ═══════════════════════════════════════════════════════════════════════
+
+TEST(PclExecutorRobust, PostResponseCbWithDataFiresOnSpin) {
+  struct RespCtx {
+    bool called = false;
+    uint32_t size = 0;
+    int value = 0;
+  } rctx;
+
+  auto* e = pcl_executor_create();
+
+  int payload = 99;
+  EXPECT_EQ(pcl_executor_post_response_cb(e,
+    [](const pcl_msg_t* resp, void* ud) {
+      auto* ctx = static_cast<RespCtx*>(ud);
+      ctx->called = true;
+      ctx->size = resp->size;
+      if (resp->data && resp->size >= sizeof(int))
+        memcpy(&ctx->value, resp->data, sizeof(int));
+    }, &rctx, &payload, sizeof(payload)), PCL_OK);
+
+  // Callback fires during spin_once.
+  EXPECT_EQ(pcl_executor_spin_once(e, 0), PCL_OK);
+  EXPECT_TRUE(rctx.called);
+  EXPECT_EQ(rctx.size, sizeof(int));
+  EXPECT_EQ(rctx.value, 99);
+
+  pcl_executor_destroy(e);
+}
+
+TEST(PclExecutorRobust, PostResponseCbNoData) {
+  bool called = false;
+  auto* e = pcl_executor_create();
+
+  EXPECT_EQ(pcl_executor_post_response_cb(e,
+    [](const pcl_msg_t* resp, void* ud) {
+      *static_cast<bool*>(ud) = true;
+      EXPECT_EQ(resp->size, 0u);
+      EXPECT_EQ(resp->data, nullptr);
+    }, &called, nullptr, 0), PCL_OK);
+
+  EXPECT_EQ(pcl_executor_spin_once(e, 0), PCL_OK);
+  EXPECT_TRUE(called);
+
+  pcl_executor_destroy(e);
+}
+
+TEST(PclExecutorRobust, PostResponseCbMultipleOnQueue) {
+  // Post two callbacks; spin once drains both.
+  std::atomic<int> count{0};
+  auto* e = pcl_executor_create();
+
+  auto cb = [](const pcl_msg_t*, void* ud) {
+    static_cast<std::atomic<int>*>(ud)->fetch_add(1);
+  };
+
+  int d1 = 1, d2 = 2;
+  EXPECT_EQ(pcl_executor_post_response_cb(e, cb, &count, &d1, sizeof(d1)), PCL_OK);
+  EXPECT_EQ(pcl_executor_post_response_cb(e, cb, &count, &d2, sizeof(d2)), PCL_OK);
+
+  EXPECT_EQ(pcl_executor_spin_once(e, 0), PCL_OK);
+  EXPECT_EQ(count.load(), 2);
+
+  pcl_executor_destroy(e);
+}
+
+TEST(PclExecutorRobust, PostResponseCbNullSafety) {
+  auto* e = pcl_executor_create();
+  auto cb = [](const pcl_msg_t*, void*) {};
+  // Null executor or null callback returns INVALID.
+  EXPECT_EQ(pcl_executor_post_response_cb(nullptr, cb, nullptr, nullptr, 0), PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_post_response_cb(e, nullptr, nullptr, nullptr, 0), PCL_ERR_INVALID);
+  pcl_executor_destroy(e);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// pcl_port_publish with executor routes via pcl_executor_publish (line 343)
+// ═══════════════════════════════════════════════════════════════════════
+
+TEST(PclContainerRobust, PublishWithExecutorRoutes) {
+  struct Ctx {
+    pcl_port_t* pub = nullptr;
+    bool sub_received = false;
+  } ctx;
+
+  pcl_callbacks_t pub_cbs = {};
+  pub_cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    static_cast<Ctx*>(ud)->pub = pcl_container_add_publisher(c, "routed_topic", "Msg");
+    return static_cast<Ctx*>(ud)->pub ? PCL_OK : PCL_ERR_CALLBACK;
+  };
+
+  pcl_callbacks_t sub_cbs = {};
+  sub_cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    pcl_container_add_subscriber(c, "routed_topic", "Msg",
+      [](pcl_container_t*, const pcl_msg_t*, void* ud) {
+        static_cast<Ctx*>(ud)->sub_received = true;
+      }, ud);
+    return PCL_OK;
+  };
+
+  auto* pub_c = pcl_container_create("pub_container", &pub_cbs, &ctx);
+  auto* sub_c = pcl_container_create("sub_container", &sub_cbs, &ctx);
+
+  pcl_container_configure(pub_c);
+  pcl_container_activate(pub_c);
+  pcl_container_configure(sub_c);
+  pcl_container_activate(sub_c);
+
+  // Add BOTH containers to the same executor.  When the publisher calls
+  // pcl_port_publish, the port's executor is set, so it routes via
+  // pcl_executor_publish → dispatch_incoming_now → subscriber callback.
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, pub_c);
+  pcl_executor_add(e, sub_c);
+
+  pcl_msg_t msg = {};
+  msg.type_name = "Msg";
+  int val = 7;
+  msg.data = &val;
+  msg.size = sizeof(val);
+
+  EXPECT_EQ(pcl_port_publish(ctx.pub, &msg), PCL_OK);
+  EXPECT_TRUE(ctx.sub_received);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(pub_c);
+  pcl_container_destroy(sub_c);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// pcl_executor_destroy with queued response_cb nodes that have data (lines 203-206)
+// ═══════════════════════════════════════════════════════════════════════
+
+TEST(PclExecutorRobust, DestroyWithQueuedRespCbWithData) {
+  auto* e = pcl_executor_create();
+  auto cb = [](const pcl_msg_t*, void*) {};
+
+  // Post several callbacks with non-NULL data so destroy must free node->data.
+  for (int i = 0; i < 5; ++i) {
+    int d = i;
+    EXPECT_EQ(pcl_executor_post_response_cb(e, cb, nullptr, &d, sizeof(d)), PCL_OK);
+  }
+  // Destroy without spinning — must not leak or crash.
+  pcl_executor_destroy(e);
+}

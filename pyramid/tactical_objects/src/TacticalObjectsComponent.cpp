@@ -103,9 +103,9 @@ pcl_status_t TacticalObjectsComponent::on_tick(double dt) {
     int total = static_cast<int>(sf.updates.size());
     do {
       int chunk_end = std::min(chunk_start + max_entities_per_frame_, total);
-      std::vector<EntityUpdateFrame> chunk(
-          sf.updates.begin() + chunk_start,
-          sf.updates.begin() + chunk_end);
+      auto it_begin = sf.updates.begin() + chunk_start;
+      auto it_end   = sf.updates.begin() + chunk_end;
+      std::vector<EntityUpdateFrame> chunk(it_begin, it_end);
 
       // Add delete frames as EntityUpdateFrames with delete type
       if (chunk_start == 0) {
