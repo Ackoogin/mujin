@@ -211,6 +211,18 @@ if(NOT WIN32)
 endif()
 
 # ---------------------------------------------------------------------------
+# Standalone StandardBridge (dual TCP transport) for 3-process active find E2E
+# ---------------------------------------------------------------------------
+add_executable(standalone_bridge ${TOBJ_TEST_DIR}/standalone_bridge.cpp)
+target_link_libraries(standalone_bridge PRIVATE
+  tactical_objects tactical_objects_component
+  pcl_core pcl_transport_socket)
+target_include_directories(standalone_bridge PRIVATE ${CMAKE_SOURCE_DIR}/src/pcl)
+if(NOT WIN32)
+  target_link_libraries(standalone_bridge PRIVATE pthread)
+endif()
+
+# ---------------------------------------------------------------------------
 # Cross-process Ada socket E2E test (gated on GNAT availability)
 # ---------------------------------------------------------------------------
 find_program(GPRBUILD gprbuild)
@@ -231,17 +243,19 @@ if(GPRBUILD)
     LABELS "cross_language;integration"
     TIMEOUT 30)
 
-  # ActiveFind E2E — Ada client + evidence provider over socket transport
+  # ActiveFind E2E — 3-process: server → standalone bridge → Ada client
   if(WIN32)
     add_test(NAME tobj_ada_active_find_e2e
              COMMAND powershell -ExecutionPolicy Bypass -NoProfile -File
                      ${CMAKE_SOURCE_DIR}/scripts/test_ada_active_find_e2e.ps1
                      -ServerBin $<TARGET_FILE:tobj_socket_server>
+                     -BridgeBin $<TARGET_FILE:standalone_bridge>
                      -ClientBin ${CMAKE_SOURCE_DIR}/examples/ada/bin/ada_active_find_e2e)
   else()
     add_test(NAME tobj_ada_active_find_e2e
              COMMAND ${CMAKE_SOURCE_DIR}/scripts/test_ada_active_find_e2e.sh
                      --server-bin $<TARGET_FILE:tobj_socket_server>
+                     --bridge-bin $<TARGET_FILE:standalone_bridge>
                      --client-bin ${CMAKE_SOURCE_DIR}/examples/ada/bin/ada_active_find_e2e)
   endif()
   set_tests_properties(tobj_ada_active_find_e2e PROPERTIES

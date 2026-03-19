@@ -5,10 +5,9 @@
 --  Each Handle_<Op>_<Entity> procedure corresponds to one EntityActions
 --  CRUD operation.  The Dispatch procedure is the single integration
 --  point for any transport (PCL, socket, shared memory, etc.).
---  DO NOT add Pyramid.Middleware.Send/Receive calls here.
 
-with Pyramid.Model;  --  Identifier, Query, Ack
-use  Pyramid.Model;
+with Tactical_Objects_Types;  use Tactical_Objects_Types;
+with System;
 
 package Pyramid.Services.Tactical_Objects.Provided is
 
@@ -26,39 +25,77 @@ package Pyramid.Services.Tactical_Objects.Provided is
       Ch_Delete_Requirement,
       Ch_Read_Detail);
 
-   type Detail_Array is array (Positive range <>) of Detail;
-   type Match_Array is array (Positive range <>) of Match;
-   type Requirement_Array is array (Positive range <>) of Requirement;
+   type Object_Detail_Array is array (Positive range <>) of Object_Detail;
+   type Object_Interest_Requirement_Array is array (Positive range <>) of Object_Interest_Requirement;
+   type Object_Match_Array is array (Positive range <>) of Object_Match;
 
-   --  -- EntityActions handlers -------------------------------------
+   --  -- Service wire-name constants (generated from proto) --------
+
+   Svc_Read_Match : constant String :=
+     "matching_objects.read_match";
+   Svc_Create_Requirement : constant String :=
+     "object_of_interest.create_requirement";
+   Svc_Read_Requirement : constant String :=
+     "object_of_interest.read_requirement";
+   Svc_Update_Requirement : constant String :=
+     "object_of_interest.update_requirement";
+   Svc_Delete_Requirement : constant String :=
+     "object_of_interest.delete_requirement";
+   Svc_Read_Detail : constant String :=
+     "specific_object_detail.read_detail";
+
+   --  -- Standard topic name constants --------------------------
+
+   Topic_Entity_Matches : constant String :=
+     "standard.entity_matches";
+   Topic_Evidence_Requirements : constant String :=
+     "standard.evidence_requirements";
+
+   --  -- EntityActions handlers ------------------------------------
    --  Implement these procedures in the package body.
 
    --  Matching_Objects_Service
    procedure Handle_Read_Match
-     (Request  : in  MatchQuery;
-      Response : out Match_Array);
+     (Request  : in  Query;
+      Response : out Object_Match_Array);
    --  Object_Of_Interest_Service
    procedure Handle_Create_Requirement
-     (Request  : in  Requirement;
+     (Request  : in  Object_Interest_Requirement;
       Response : out Identifier);
    procedure Handle_Read_Requirement
-     (Request  : in  RequirementQuery;
-      Response : out Requirement_Array);
+     (Request  : in  Query;
+      Response : out Object_Interest_Requirement_Array);
    procedure Handle_Update_Requirement
-     (Request  : in  Requirement;
+     (Request  : in  Object_Interest_Requirement;
       Response : out Ack);
    procedure Handle_Delete_Requirement
      (Request  : in  Identifier;
       Response : out Ack);
    --  Specific_Object_Detail_Service
    procedure Handle_Read_Detail
-     (Request  : in  DetailQuery;
-      Response : out Detail_Array);
+     (Request  : in  Query;
+      Response : out Object_Detail_Array);
 
-   --  -- Transport integration point ---------------------------------
-   --  Route an incoming (channel, raw buffer) call to the correct
-   --  typed handler.  The transport layer calls this; it never calls
-   --  Handle_* procedures directly.
+   --  -- JSON builder functions (GNATCOLL.JSON) -----------------
+
+   function Build_Standard_Requirement_Json
+     (Policy      : String;
+      Identity    : String;
+      Dimension   : String := "";
+      Min_Lat_Rad : Long_Float := 0.0;
+      Max_Lat_Rad : Long_Float := 0.0;
+      Min_Lon_Rad : Long_Float := 0.0;
+      Max_Lon_Rad : Long_Float := 0.0) return String;
+
+   function Build_Standard_Evidence_Json
+     (Identity    : String;
+      Dimension   : String;
+      Lat_Rad     : Long_Float;
+      Lon_Rad     : Long_Float;
+      Confidence  : Long_Float;
+      Observed_At : Long_Float := 0.5) return String;
+
+   --  -- Transport integration point ------------------------------
 
    procedure Dispatch
      (Channel      : in  Service_Channel;

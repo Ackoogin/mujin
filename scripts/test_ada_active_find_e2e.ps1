@@ -1,22 +1,20 @@
 # test_ada_active_find_e2e.ps1 -- Cross-process ActiveFind E2E test driver (Windows).
 #
-# Orchestrates:
-#   1. Build Ada active-find client (if gprbuild available)
-#   2. Start C++ server with --no-entity (tobj_socket_server)
-#   3. Wait for server to be ready (port file appears)
-#   4. Start Ada active-find executable (client + evidence provider)
-#   5. Wait for Ada process to exit
-#   6. Terminate server
-#   7. Report pass/fail
+# 3-process architecture:
+#   1. TacticalObjectsComponent server (--no-bridge --no-entity)
+#   2. Standalone StandardBridge (dual TCP: client->server, server->Ada)
+#   3. Ada active-find client (connects to bridge)
 #
-# Usage: scripts/test_ada_active_find_e2e.ps1 [-ServerBin PATH] [-ClientBin PATH]
-# CTest: powershell -ExecutionPolicy Bypass -File script.ps1 -ServerBin PATH -ClientBin PATH
+# Usage: scripts/test_ada_active_find_e2e.ps1 [-ServerBin PATH]
+#            [-BridgeBin PATH] [-ClientBin PATH]
 
 param(
   [string]$ServerBin = "",
+  [string]$BridgeBin = "",
   [string]$ClientBin = "",
-  [int]$Port = 19235,
-  [int]$Timeout = 20
+  [int]$BackendPort = 19235,
+  [int]$FrontendPort = 19236,
+  [int]$Timeout = 25
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,6 +24,9 @@ $RootDir = Split-Path -Parent $ScriptDir
 if (-not $ServerBin) {
   $ServerBin = Join-Path $RootDir "build\tests\Release\tobj_socket_server.exe"
 }
+if (-not $BridgeBin) {
+  $BridgeBin = Join-Path $RootDir "build\tests\Release\standalone_bridge.exe"
+}
 if (-not $ClientBin) {
   $ClientBin = Join-Path $RootDir "examples\ada\bin\ada_active_find_e2e.exe"
   if (-not (Test-Path $ClientBin)) {
@@ -34,9 +35,16 @@ if (-not $ClientBin) {
 }
 
 $PortFile = [System.IO.Path]::GetTempFileName()
+$BridgePortFile = [System.IO.Path]::GetTempFileName()
 $ServerProcess = $null
+$BridgeProcess = $null
 
 function Cleanup {
+  if ($BridgeProcess -and -not $BridgeProcess.HasExited) {
+    try {
+      Stop-Process -Id $BridgeProcess.Id -Force -ErrorAction SilentlyContinue
+    } catch {}
+  }
   if ($ServerProcess -and -not $ServerProcess.HasExited) {
     try {
       Stop-Process -Id $ServerProcess.Id -Force -ErrorAction SilentlyContinue
@@ -45,14 +53,15 @@ function Cleanup {
   if (Test-Path $PortFile) {
     Remove-Item $PortFile -Force -ErrorAction SilentlyContinue
   }
+  if (Test-Path $BridgePortFile) {
+    Remove-Item $BridgePortFile -Force -ErrorAction SilentlyContinue
+  }
 }
 
 try {
-  Write-Host "=== Ada ActiveFind E2E Test ==="
+  Write-Host "=== Ada ActiveFind E2E Test (3-process: server -> bridge -> client) ==="
 
   # Step 1: Build Ada active-find client if gprbuild is available.
-  # If the build fails we fall through to check for a pre-built binary;
-  # only SKIP when no usable binary exists at all.
   $gprbuild = Get-Command gprbuild -ErrorAction SilentlyContinue
   if ($gprbuild) {
     Write-Host "[driver] Building Ada active-find client..."
@@ -76,7 +85,7 @@ try {
     Write-Host "[driver] gprbuild not found -- checking for pre-built client..."
   }
 
-  # Resolve client path (try without .exe suffix too)
+  # Resolve client path
   if (-not (Test-Path $ClientBin)) {
     $altClient = $ClientBin + ".exe"
     if (Test-Path $altClient) {
@@ -87,24 +96,27 @@ try {
     Write-Host "[driver] SKIP: Ada client binary not found at $ClientBin"
     exit 0
   }
-
   if (-not (Test-Path $ServerBin)) {
     Write-Host "[driver] FAIL: Server binary not found at $ServerBin"
     exit 1
   }
+  if (-not (Test-Path $BridgeBin)) {
+    Write-Host "[driver] FAIL: Bridge binary not found at $BridgeBin"
+    exit 1
+  }
 
-  # Step 2: Start server with --no-entity (Ada client drives entity creation via ActiveFind)
-  Write-Host "[driver] Starting server on port $Port (--no-entity)..."
+  # Step 2: Start backend server with --no-bridge --no-entity
+  Write-Host "[driver] Starting backend server on port $BackendPort (--no-bridge --no-entity)..."
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName = $ServerBin
-  $psi.Arguments = "--port $Port --port-file `"$PortFile`" --timeout $Timeout --no-entity"
+  $psi.Arguments = "--port $BackendPort --port-file `"$PortFile`" --timeout $Timeout --no-entity --no-bridge"
   $psi.UseShellExecute = $false
   $psi.RedirectStandardOutput = $true
   $psi.RedirectStandardError = $true
   $psi.CreateNoWindow = $true
   $ServerProcess = [System.Diagnostics.Process]::Start($psi)
 
-  # Step 3: Wait for port file
+  # Step 3: Wait for server port file
   Write-Host "[driver] Waiting for server to write port file..."
   $maxAttempts = 50
   $attempt = 0
@@ -122,17 +134,51 @@ try {
     exit 1
   }
 
-  $ActualPort = (Get-Content $PortFile -Raw).Trim()
-  Write-Host "[driver] Server ready on port $ActualPort"
+  $ActualBackendPort = (Get-Content $PortFile -Raw).Trim()
+  Write-Host "[driver] Backend server ready on port $ActualBackendPort"
 
   # Step 4: Brief delay so server enters accept()
   Start-Sleep -Milliseconds 200
 
-  # Step 5: Start Ada active-find client
-  Write-Host "[driver] Starting Ada active-find client..."
+  # Step 5: Start standalone bridge
+  Write-Host "[driver] Starting standalone bridge (backend=$ActualBackendPort, frontend=$FrontendPort)..."
+  $bpsi = New-Object System.Diagnostics.ProcessStartInfo
+  $bpsi.FileName = $BridgeBin
+  $bpsi.Arguments = "--backend-host 127.0.0.1 --backend-port $ActualBackendPort --frontend-port $FrontendPort --port-file `"$BridgePortFile`" --timeout $Timeout"
+  $bpsi.UseShellExecute = $false
+  $bpsi.RedirectStandardOutput = $true
+  $bpsi.RedirectStandardError = $true
+  $bpsi.CreateNoWindow = $true
+  $BridgeProcess = [System.Diagnostics.Process]::Start($bpsi)
+
+  # Step 6: Wait for bridge port file
+  Write-Host "[driver] Waiting for bridge to write port file..."
+  $attempt = 0
+  while ($attempt -lt $maxAttempts) {
+    Start-Sleep -Milliseconds 100
+    if ((Test-Path $BridgePortFile) -and (Get-Item $BridgePortFile).Length -gt 0) {
+      break
+    }
+    $attempt++
+  }
+
+  if (-not (Test-Path $BridgePortFile) -or (Get-Item $BridgePortFile).Length -eq 0) {
+    Write-Host "[driver] FAIL: Bridge did not write port file within 5 seconds"
+    Cleanup
+    exit 1
+  }
+
+  $ActualFrontendPort = (Get-Content $BridgePortFile -Raw).Trim()
+  Write-Host "[driver] Bridge ready, frontend on port $ActualFrontendPort"
+
+  # Step 7: Brief delay so bridge enters accept()
+  Start-Sleep -Milliseconds 200
+
+  # Step 8: Start Ada active-find client (connects to bridge)
+  Write-Host "[driver] Starting Ada active-find client (-> bridge port $ActualFrontendPort)..."
   $clientPsi = New-Object System.Diagnostics.ProcessStartInfo
   $clientPsi.FileName = $ClientBin
-  $clientPsi.Arguments = "--host 127.0.0.1 --port $ActualPort"
+  $clientPsi.Arguments = "--host 127.0.0.1 --port $ActualFrontendPort"
   $clientPsi.UseShellExecute = $false
   $clientPsi.RedirectStandardOutput = $true
   $clientPsi.RedirectStandardError = $true
@@ -141,12 +187,12 @@ try {
   $null = $clientProcess.WaitForExit(30000)
   $ClientExit = $clientProcess.ExitCode
 
-  # Step 6: Stop server
+  # Step 9: Cleanup
   Cleanup
 
-  # Step 7: Report
+  # Step 10: Report
   if ($ClientExit -eq 0) {
-    Write-Host "[driver] PASS: Ada ActiveFind E2E -- evidence provider + entity correlation succeeded"
+    Write-Host "[driver] PASS: Ada ActiveFind E2E (3-process) -- evidence + correlation via standalone bridge succeeded"
     exit 0
   } else {
     Write-Host "[driver] FAIL: Ada active-find client exited with code $ClientExit"
