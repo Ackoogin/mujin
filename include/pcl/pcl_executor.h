@@ -13,7 +13,7 @@
 extern "C" {
 #endif
 
-// ── Create / destroy ────────────────────────────────────────────────────
+// -- Create / destroy ----------------------------------------------------
 
 /// \brief Create a new executor.
 pcl_executor_t* pcl_executor_create(void);
@@ -23,7 +23,7 @@ pcl_executor_t* pcl_executor_create(void);
 /// Does NOT destroy managed containers — caller retains ownership.
 void pcl_executor_destroy(pcl_executor_t* e);
 
-// ── Container management ────────────────────────────────────────────────
+// -- Container management ------------------------------------------------
 
 /// \brief Add a container to the executor.
 ///
@@ -40,7 +40,7 @@ pcl_status_t pcl_executor_add(pcl_executor_t* e, pcl_container_t* c);
 /// container was previously added with pcl_executor_add.
 pcl_status_t pcl_executor_remove(pcl_executor_t* e, pcl_container_t* c);
 
-// ── Spin ────────────────────────────────────────────────────────────────
+// -- Spin ----------------------------------------------------------------
 
 /// \brief Block and run the tick loop for all managed containers.
 ///
@@ -54,7 +54,7 @@ pcl_status_t pcl_executor_spin(pcl_executor_t* e);
 /// \param timeout_ms  Maximum time to wait for pending work (0 = no wait).
 pcl_status_t pcl_executor_spin_once(pcl_executor_t* e, uint32_t timeout_ms);
 
-// ── Shutdown ────────────────────────────────────────────────────────────
+// -- Shutdown ------------------------------------------------------------
 
 /// \brief Request the executor to stop spinning.
 ///
@@ -72,7 +72,7 @@ void pcl_executor_request_shutdown(pcl_executor_t* e);
 pcl_status_t pcl_executor_shutdown_graceful(pcl_executor_t* e,
                                             uint32_t        timeout_ms);
 
-// ── Cross-thread ingress ────────────────────────────────────────────────
+// -- Cross-thread ingress ------------------------------------------------
 
 /// \brief Queue an incoming message from an external I/O thread.
 ///
@@ -92,7 +92,7 @@ pcl_status_t pcl_executor_post_incoming(pcl_executor_t*  e,
                                         const char*      topic,
                                         const pcl_msg_t* msg);
 
-// ── Intra-process service invocation (for testing / direct call) ────────
+// -- Intra-process service invocation (for testing / direct call) --------
 
 /// \brief Invoke a service by name, dispatching to the registered handler.
 ///
@@ -114,7 +114,7 @@ pcl_status_t pcl_executor_publish(pcl_executor_t*  e,
                                   const char*      topic,
                                   const pcl_msg_t* msg);
 
-// ── Async response delivery ──────────────────────────────────────────────
+// -- Async response delivery ----------------------------------------------
 
 /// \brief Enqueue a service response callback for delivery on the executor thread.
 ///

@@ -170,50 +170,50 @@ This is a Python or C++ tool that reads the baseline PDDL, generates variants by
 ## Recommended Tooling Architecture
 
 ```
-                    ┌─────────────────────────────────────────────┐
+                    ┌---------------------------------------------┐
                     │           SACE Evidence Pipeline             │
                     │         (offline, safety case only)          │
-                    ├─────────────────────────────────────────────┤
+                    ├---------------------------------------------┤
                     │                                             │
-  PDDL Domain ─────┤  ┌──────────────┐   ┌──────────────────┐   │
-  + Problem         │  │ Problem      │──▶│ Ame Planner    │   │──▶ Plan traces
+  PDDL Domain -----┤  ┌--------------┐   ┌------------------┐   │
+  + Problem         │  │ Problem      │--▶│ Ame Planner    │   │--▶ Plan traces
   + Fault Catalogue │  │ Generator    │   │ (LAPKT BRFS)     │   │    (STRIPS scenarios)
-                    │  └──────────────┘   └──────────────────┘   │
+                    │  └--------------┘   └------------------┘   │
                     │         │                                   │
-                    │         │           ┌──────────────────┐   │
-                    │         └──────────▶│ VAL              │   │──▶ Constraint checks
+                    │         │           ┌------------------┐   │
+                    │         └----------▶│ VAL              │   │--▶ Constraint checks
                     │                     │ (Plan Validator)  │   │    (PDDL 3.0)
-                    │                     └──────────────────┘   │
+                    │                     └------------------┘   │
                     │                                             │
-  PDDL 3.0         │  ┌──────────────────────────────────────┐   │
-  Constrained  ─────┤  │ ENHSP / OPTIC                       │   │──▶ Constraint-
+  PDDL 3.0         │  ┌--------------------------------------┐   │
+  Constrained  -----┤  │ ENHSP / OPTIC                       │   │--▶ Constraint-
   Domain            │  │ (trajectory constraint planner)      │   │    satisfying plans
-                    │  └──────────────────────────────────────┘   │
+                    │  └--------------------------------------┘   │
                     │                                             │
-  Promela /         │  ┌──────────────────────────────────────┐   │
-  SMV Model    ─────┤  │ SPIN / NuSMV                         │   │──▶ Property proofs
+  Promela /         │  ┌--------------------------------------┐   │
+  SMV Model    -----┤  │ SPIN / NuSMV                         │   │--▶ Property proofs
   (translated)      │  │ (model checker)                      │   │    + counterexamples
-                    │  └──────────────────────────────────────┘   │
+                    │  └--------------------------------------┘   │
                     │                                             │
-  PDDL +            │  ┌──────────────────────────────────────┐   │
-  Failure Rates ────┤  │ PRISM / Storm                        │   │──▶ Quantitative
+  PDDL +            │  ┌--------------------------------------┐   │
+  Failure Rates ----┤  │ PRISM / Storm                        │   │--▶ Quantitative
                     │  │ (probabilistic model checker)        │   │    risk metrics
-                    │  └──────────────────────────────────────┘   │
+                    │  └--------------------------------------┘   │
                     │                                             │
-  PDDL Domain ─────┤  ┌──────────────────────────────────────┐   │
-                    │  │ Fast Downward                        │   │──▶ Optimal plan
+  PDDL Domain -----┤  ┌--------------------------------------┐   │
+                    │  │ Fast Downward                        │   │--▶ Optimal plan
                     │  │ (optimal STRIPS planner)             │   │    quality evidence
-                    │  └──────────────────────────────────────┘   │
-                    └─────────────────────────────────────────────┘
+                    │  └--------------------------------------┘   │
+                    └---------------------------------------------┘
                                          │
                                          ▼
-                    ┌─────────────────────────────────────────────┐
+                    ┌---------------------------------------------┐
                     │           Runtime Execution                  │
                     │         (unchanged — ame core)             │
-                    ├─────────────────────────────────────────────┤
-                    │  WorldModel ──▶ LAPKT BRFS ──▶ PlanCompiler │
-                    │       ──▶ BT.CPP Executor                   │
-                    └─────────────────────────────────────────────┘
+                    ├---------------------------------------------┤
+                    │  WorldModel --▶ LAPKT BRFS --▶ PlanCompiler │
+                    │       --▶ BT.CPP Executor                   │
+                    └---------------------------------------------┘
 ```
 
 **Key architectural principle:** The ame execution planner is never replaced. External tools run offline, consuming the same PDDL domain files, and produce evidence artefacts that populate the GSN safety argument. The execution pipeline remains STRIPS-only and fast.

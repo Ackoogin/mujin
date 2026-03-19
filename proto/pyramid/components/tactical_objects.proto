@@ -3,8 +3,9 @@ syntax = "proto3";
 package pyramid.components.tactical_objects;
 
 import "pyramid/data_model/base.proto";
+import "pyramid/data_model/common.proto";
 
-// ── Tactical Objects Component Schema ────────────────────────────────────────
+// -- Tactical Objects Component Schema ----------------------------------------
 //
 // Hand-written to be consistent with the C++ implementation in
 // pyramid/tactical_objects/include/.  No SysML XMI available at this time.
@@ -13,7 +14,7 @@ import "pyramid/data_model/base.proto";
 // service_schema_tactical_objects.md).  The service/rpc blocks are IDL
 // contracts consumed by codex generators — not gRPC endpoints.
 
-// ── Enumerations ─────────────────────────────────────────────────────────────
+// -- Enumerations -------------------------------------------------------------
 // Each maps 1-to-1 with the C++ enum class of the same name.
 
 enum ObjectType {
@@ -117,7 +118,7 @@ enum Provenance {
   PROVENANCE_DIRECT      = 2;
 }
 
-// ── Primitives ────────────────────────────────────────────────────────────────
+// -- Primitives ----------------------------------------------------------------
 
 // Maps to: tactical_objects::Position
 message Position {
@@ -173,7 +174,7 @@ message ZoneGeometry {
   double            radius_m      = 4;
 }
 
-// ── Entity: TacticalObject ────────────────────────────────────────────────────
+// -- Entity: TacticalObject ----------------------------------------------------
 //
 // The full denormalized view of a tracked entity — used for Create, Read, and
 // Update.  Combines ObjectDefinition (creation input) with the component store
@@ -197,14 +198,14 @@ message TacticalObject {
   string                             behavior_pattern  = 12;
 }
 
-// ── Extended Query for TacticalObject ────────────────────────────────────────
+// -- Extended Query for TacticalObject ----------------------------------------
 //
 // Superset of base Query with compound predicates from QueryRequest.
 // Used as the request type for ReadTacticalObject.
 //
 // Maps to: tactical_objects::QueryRequest
 message TacticalObjectQuery {
-  pyramid.data_model.base.Query base            = 1;  // ID filter + oneShot flag
+  pyramid.data_model.common.Query base            = 1;  // ID filter + oneShot flag
   optional ObjectType           by_type         = 2;
   optional Affiliation          by_affiliation  = 3;
   optional BoundingBox          by_region       = 4;
@@ -213,7 +214,7 @@ message TacticalObjectQuery {
   optional string               by_source_entity_id = 7;
 }
 
-// ── Entity: Zone ──────────────────────────────────────────────────────────────
+// -- Entity: Zone --------------------------------------------------------------
 //
 // Maps to: tactical_objects::ZoneDefinition + UUIDKey id.
 message Zone {
@@ -227,7 +228,7 @@ message Zone {
   string                             semantics    = 8;
 }
 
-// ── Entity: Observation (flow: in) ───────────────────────────────────────────
+// -- Entity: Observation (flow: in) -------------------------------------------
 //
 // Write-only ingress.  Observations are correlated into TacticalObjects
 // internally; they are never read back via EntityActions.
@@ -249,7 +250,7 @@ message Observation {
   repeated pyramid.data_model.base.Identifier lineage_parent_ids = 13;
 }
 
-// ── Streaming: EntityUpdateFrame ─────────────────────────────────────────────
+// -- Streaming: EntityUpdateFrame ---------------------------------------------
 //
 // Published on the entity_updates topic at each tick.  Carries only the fields
 // indicated by field_mask (aligned with StreamingCodec::FieldMaskBit).
@@ -275,7 +276,7 @@ message EntityUpdateFrame {
   optional string          identity_name    = 15;
 }
 
-// ── Interest / Subscription ───────────────────────────────────────────────────
+// -- Interest / Subscription ---------------------------------------------------
 //
 // Interest criteria for subscribing to filtered entity_updates.
 // Maps to the subscribeInterest handler in TacticalObjectsComponent.
@@ -285,7 +286,7 @@ message InterestCriteria {
   optional BoundingBox by_region      = 3;
 }
 
-// ── Services ──────────────────────────────────────────────────────────────────
+// -- Services ------------------------------------------------------------------
 //
 // EntityActions CRUD contracts.  service/rpc blocks are IDL — not gRPC
 // endpoints.  Codex generators (ada_service_generator.py, cpp_model_generator)
@@ -295,16 +296,16 @@ message InterestCriteria {
 service TacticalObjectService {
   rpc CreateTacticalObject (TacticalObject)      returns (pyramid.data_model.base.Identifier);
   rpc ReadTacticalObject   (TacticalObjectQuery) returns (stream TacticalObject);
-  rpc UpdateTacticalObject (TacticalObject)      returns (pyramid.data_model.base.Ack);
-  rpc DeleteTacticalObject (pyramid.data_model.base.Identifier) returns (pyramid.data_model.base.Ack);
+  rpc UpdateTacticalObject (TacticalObject)      returns (pyramid.data_model.common.Ack);
+  rpc DeleteTacticalObject (pyramid.data_model.base.Identifier) returns (pyramid.data_model.common.Ack);
 }
 
 // Zone: flow inout → full CRUD
 service ZoneService {
   rpc CreateZone (Zone)                               returns (pyramid.data_model.base.Identifier);
-  rpc ReadZone   (pyramid.data_model.base.Query)      returns (stream Zone);
-  rpc UpdateZone (Zone)                               returns (pyramid.data_model.base.Ack);
-  rpc DeleteZone (pyramid.data_model.base.Identifier) returns (pyramid.data_model.base.Ack);
+  rpc ReadZone   (pyramid.data_model.common.Query)      returns (stream Zone);
+  rpc UpdateZone (Zone)                               returns (pyramid.data_model.common.Ack);
+  rpc DeleteZone (pyramid.data_model.base.Identifier) returns (pyramid.data_model.common.Ack);
 }
 
 // Observation: flow in → write-only ingress (Create only; no Read/Update/Delete)

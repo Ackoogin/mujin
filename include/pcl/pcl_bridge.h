@@ -47,7 +47,7 @@
 extern "C" {
 #endif
 
-// ── Transform function ──────────────────────────────────────────────────
+// -- Transform function --------------------------------------------------
 
 /// \brief Bridge transform callback.
 ///
@@ -67,11 +67,11 @@ typedef pcl_status_t (*pcl_bridge_fn_t)(const pcl_msg_t* in,
                                         pcl_msg_t*       out,
                                         void*            user_data);
 
-// ── Opaque bridge handle ────────────────────────────────────────────────
+// -- Opaque bridge handle ------------------------------------------------
 
 typedef struct pcl_bridge_t pcl_bridge_t;
 
-// ── Lifecycle ───────────────────────────────────────────────────────────
+// -- Lifecycle -----------------------------------------------------------
 
 /// \brief Create a bridge between two topics.
 ///

@@ -20,12 +20,12 @@ The system takes a formal mission description (PDDL domain and problem files), a
 PDDL Domain/Problem
         |
         v
-   WorldModel  ──> Planner (LAPKT BRFS) ──> PlanCompiler ──> BT.CPP Executor
+   WorldModel  --> Planner (LAPKT BRFS) --> PlanCompiler --> BT.CPP Executor
    (facts +                                                       |
     actions)                                                      v
         ^                                                  Tick loop with
         |                                                  replan-on-failure
-        +──── effects + perception updates ───────────────────────+
+        +---- effects + perception updates -----------------------+
 ```
 
 | Component | Role |

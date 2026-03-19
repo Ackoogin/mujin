@@ -16,7 +16,7 @@
 #include <stdio.h>
 #include <string.h>
 
-// ── Application state ───────────────────────────────────────────────────
+// -- Application state ---------------------------------------------------
 
 typedef struct {
   int        tick_count;
@@ -25,7 +25,7 @@ typedef struct {
   pcl_port_t* srv_get_fact;
 } WmData;
 
-// ── Service handler ─────────────────────────────────────────────────────
+// -- Service handler -----------------------------------------------------
 
 static pcl_status_t handle_get_fact(pcl_container_t* c,
                                     const pcl_msg_t* request,
@@ -44,7 +44,7 @@ static pcl_status_t handle_get_fact(pcl_container_t* c,
   return PCL_OK;
 }
 
-// ── Lifecycle callbacks ─────────────────────────────────────────────────
+// -- Lifecycle callbacks -------------------------------------------------
 
 static pcl_status_t wm_on_configure(pcl_container_t* c, void* ud) {
   WmData* d = (WmData*)ud;
@@ -110,7 +110,7 @@ static pcl_status_t wm_on_shutdown(pcl_container_t* c, void* ud) {
   return PCL_OK;
 }
 
-// ── Main ────────────────────────────────────────────────────────────────
+// -- Main ----------------------------------------------------------------
 
 int main(void) {
   printf("=== PCL WorldModel Container Example ===\n\n");

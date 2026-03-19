@@ -1,21 +1,21 @@
 --  Auto-generated EntityActions service body
---  Package body: Pyramid.Services.Tactical_Objects.Provided
+--  Package body: Pyramid.Services.Tactical_Objects.Consumed
 --  TODO: replace null stubs with real implementations.
 
 with System;
 
-package body Pyramid.Services.Tactical_Objects.Provided is
+package body Pyramid.Services.Tactical_Objects.Consumed is
 
-   --  -- Matching_Objects_Service -------------------------------------
-   procedure Handle_Read_Match
-     (Request  : in  MatchQuery;
-      Response : out Match_Array)
+   --  -- Object_Evidence_Service -------------------------------------
+   procedure Handle_Read_Detail
+     (Request  : in  DetailQuery;
+      Response : out Detail_Array)
    is
    begin
       null;  --  TODO: implement
-   end Handle_Read_Match;
+   end Handle_Read_Detail;
 
-   --  -- Object_Of_Interest_Service -------------------------------------
+   --  -- Object_Solution_Evidence_Service -------------------------------------
    procedure Handle_Create_Requirement
      (Request  : in  Requirement;
       Response : out Identifier)
@@ -48,14 +48,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       null;  --  TODO: implement
    end Handle_Delete_Requirement;
 
-   --  -- Specific_Object_Detail_Service -------------------------------------
-   procedure Handle_Read_Detail
-     (Request  : in  DetailQuery;
-      Response : out Detail_Array)
+   --  -- Object_Source_Capability_Service -------------------------------------
+   procedure Handle_Read_Capability
+     (Request  : in  CapabilityQuery;
+      Response : out Capability_Array)
    is
    begin
       null;  --  TODO: implement
-   end Handle_Read_Detail;
+   end Handle_Read_Capability;
 
    procedure Dispatch
      (Channel      : in  Service_Channel;
@@ -68,8 +68,8 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Response_Buf  := System.Null_Address;
       Response_Size := 0;
       case Channel is
-         when Ch_Read_Match =>
-            null;  --  TODO: deserialise Request_Buf, call Handle_Read_Match
+         when Ch_Read_Detail =>
+            null;  --  TODO: deserialise Request_Buf, call Handle_Read_Detail
          when Ch_Create_Requirement =>
             null;  --  TODO: deserialise Request_Buf, call Handle_Create_Requirement
          when Ch_Read_Requirement =>
@@ -78,9 +78,9 @@ package body Pyramid.Services.Tactical_Objects.Provided is
             null;  --  TODO: deserialise Request_Buf, call Handle_Update_Requirement
          when Ch_Delete_Requirement =>
             null;  --  TODO: deserialise Request_Buf, call Handle_Delete_Requirement
-         when Ch_Read_Detail =>
-            null;  --  TODO: deserialise Request_Buf, call Handle_Read_Detail
+         when Ch_Read_Capability =>
+            null;  --  TODO: deserialise Request_Buf, call Handle_Read_Capability
       end case;
    end Dispatch;
 
-end Pyramid.Services.Tactical_Objects.Provided;
+end Pyramid.Services.Tactical_Objects.Consumed;

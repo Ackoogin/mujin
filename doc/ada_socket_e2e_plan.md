@@ -169,18 +169,18 @@ Inner frame:  msg_type(1) + uuid(16) + version(8 LE) + timestamp(8 LE)
 
 ```
 Ada Client Process                         C++ Server Process
-──────────────────                         ──────────────────
+------------------                         ------------------
 executor + socket client transport    ←TCP→ executor + socket server transport
 ada_tobj_client container                   TacticalObjectsComponent
-  ├─ subscribe to "entity_updates"          ├─ services: subscribe_interest,
-  ├─ invoke_remote("subscribe_interest")    │   create_object, etc.
-  │   → SERVICE_REQ over TCP ──────────→    │   → gateway dispatches to handler
-  │   ← SERVICE_RESP over TCP ←────────    │   ← response with interest_id
+  ├- subscribe to "entity_updates"          ├- services: subscribe_interest,
+  ├- invoke_remote("subscribe_interest")    │   create_object, etc.
+  │   → SERVICE_REQ over TCP ----------→    │   → gateway dispatches to handler
+  │   ← SERVICE_RESP over TCP ←--------    │   ← response with interest_id
   │                                         │
   │                                         │ on_tick():
   │                                         │   assembleStreamFrame
-  │   ← PUBLISH "entity_updates" ←────    │   pcl_port_publish → socket_publish
-  └─ on_message: decode batch frame         └─
+  │   ← PUBLISH "entity_updates" ←----    │   pcl_port_publish → socket_publish
+  └- on_message: decode batch frame         └-
 ```
 
 ---
@@ -334,17 +334,17 @@ and runnable.
 ```
 Step 1 (Ada socket bindings)
   │
-  ├──> Step 2 (Ada streaming codec)
+  ├--> Step 2 (Ada streaming codec)
   │      │
-  │      └──> Step 3 (Ada client executable)
+  │      └--> Step 3 (Ada client executable)
   │             │
-  │             └──> Step 5 (Cross-process driver script)
+  │             └--> Step 5 (Cross-process driver script)
   │
-  └──> Step 4 (C++ server harness)
+  └--> Step 4 (C++ server harness)
          │
-         ├──> Step 5 (Cross-process driver script)
+         ├--> Step 5 (Cross-process driver script)
          │
-         └──> Step 6 (C++ only socket test — no Ada dependency)
+         └--> Step 6 (C++ only socket test — no Ada dependency)
 ```
 
 Steps 1+4 can proceed in parallel.  Step 6 is independent of Ada and can

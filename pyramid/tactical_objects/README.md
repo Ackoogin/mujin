@@ -43,17 +43,17 @@ auto resp = rt.query(QueryRequest{});
 
 ```
 PCL transport
-    └─ TacticalObjectsComponent    (PCL lifecycle + ports + codec)
-           └─ TacticalObjectsRuntime  (pure domain logic, testable in isolation)
-                  ├─ ObjectStore          ECS sparse-set, UUID-keyed
-                  ├─ SpatialIndex         WGS84 grid, O(1) region queries
-                  ├─ CorrelationEngine    evidence → entity (merge / split / lineage)
-                  ├─ ZoneEngine           polygon/circle geometry + transition detection
-                  ├─ MilClassEngine       MIL-STD-2525B field storage + symbol key derivation
-                  ├─ QueryEngine          compound predicate filter (type / affil / region / age)
-                  ├─ RelationshipIndex    hierarchical + tactical relationships, reverse-indexed
-                  ├─ InterestManager      interest requirements + derived evidence + progress
-                  └─ TacticalHistory      timestamped snapshots, as-of / interval retrieval
+    └- TacticalObjectsComponent    (PCL lifecycle + ports + codec)
+           └- TacticalObjectsRuntime  (pure domain logic, testable in isolation)
+                  ├- ObjectStore          ECS sparse-set, UUID-keyed
+                  ├- SpatialIndex         WGS84 grid, O(1) region queries
+                  ├- CorrelationEngine    evidence → entity (merge / split / lineage)
+                  ├- ZoneEngine           polygon/circle geometry + transition detection
+                  ├- MilClassEngine       MIL-STD-2525B field storage + symbol key derivation
+                  ├- QueryEngine          compound predicate filter (type / affil / region / age)
+                  ├- RelationshipIndex    hierarchical + tactical relationships, reverse-indexed
+                  ├- InterestManager      interest requirements + derived evidence + progress
+                  └- TacticalHistory      timestamped snapshots, as-of / interval retrieval
 ```
 
 The component layer is intentionally thin — it owns only port wiring, JSON serialisation via `TacticalObjectsCodec`, and the PCL lifecycle. All domain reasoning lives in `TacticalObjectsRuntime` so unit tests can exercise it without a running executor.

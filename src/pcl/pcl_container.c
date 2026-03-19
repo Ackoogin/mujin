@@ -9,7 +9,7 @@
 #include <string.h>
 #include <stdio.h>
 
-// ── Helpers ─────────────────────────────────────────────────────────────
+// -- Helpers -------------------------------------------------------------
 
 static pcl_param_t* find_param(const pcl_container_t* c, const char* key) {
   uint32_t i;
@@ -30,7 +30,7 @@ static pcl_param_t* find_or_add_param(pcl_container_t* c, const char* key) {
   return p;
 }
 
-// ── Create / destroy ────────────────────────────────────────────────────
+// -- Create / destroy ----------------------------------------------------
 
 pcl_container_t* pcl_container_create(const char*            name,
                                       const pcl_callbacks_t* callbacks,
@@ -62,7 +62,7 @@ void pcl_container_destroy(pcl_container_t* c) {
   free(c);
 }
 
-// ── Lifecycle transitions ───────────────────────────────────────────────
+// -- Lifecycle transitions -----------------------------------------------
 
 pcl_status_t pcl_container_configure(pcl_container_t* c) {
   pcl_status_t rc = PCL_OK;
@@ -164,7 +164,7 @@ pcl_status_t pcl_container_shutdown(pcl_container_t* c) {
   return PCL_OK;
 }
 
-// ── State query ─────────────────────────────────────────────────────────
+// -- State query ---------------------------------------------------------
 
 pcl_state_t pcl_container_state(const pcl_container_t* c) {
   return c ? c->state : PCL_STATE_FINALIZED;
@@ -174,7 +174,7 @@ const char* pcl_container_name(const pcl_container_t* c) {
   return c ? c->name : "";
 }
 
-// ── Tick rate ───────────────────────────────────────────────────────────
+// -- Tick rate -----------------------------------------------------------
 
 pcl_status_t pcl_container_set_tick_rate_hz(pcl_container_t* c, double hz) {
   if (!c) return PCL_ERR_INVALID;
@@ -187,7 +187,7 @@ double pcl_container_get_tick_rate_hz(const pcl_container_t* c) {
   return c ? c->tick_rate_hz : 0.0;
 }
 
-// ── Parameters ──────────────────────────────────────────────────────────
+// -- Parameters ----------------------------------------------------------
 
 pcl_status_t pcl_container_set_param_str(pcl_container_t* c,
                                          const char* key, const char* value) {
@@ -270,7 +270,7 @@ bool pcl_container_get_param_bool(const pcl_container_t* c,
   return p->u.bool_val;
 }
 
-// ── Port creation ───────────────────────────────────────────────────────
+// -- Port creation -------------------------------------------------------
 
 pcl_port_t* pcl_container_add_publisher(pcl_container_t* c,
                                         const char*      topic,
@@ -331,7 +331,7 @@ pcl_port_t* pcl_container_add_service(pcl_container_t*      c,
   return p;
 }
 
-// ── Publishing ──────────────────────────────────────────────────────────
+// -- Publishing ----------------------------------------------------------
 
 pcl_status_t pcl_port_publish(pcl_port_t* port, const pcl_msg_t* msg) {
   if (!port || !msg) return PCL_ERR_INVALID;

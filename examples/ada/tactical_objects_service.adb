@@ -1,23 +1,138 @@
 --  tactical_objects_service.adb
 --
---  Body for EntityActions service interface — Tactical Objects component.
+--  Body for EntityActions service interface -- Tactical Objects component.
 --  See tactical_objects_service.ads for rationale.
 
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 with Interfaces.C;
+with GNATCOLL.JSON;          use GNATCOLL.JSON;
 with System;
 
 package body Tactical_Objects_Service is
 
-  -- ── EntityActions handler stubs ───────────────────────────────────────────
+  -- =========================================================================
+  --  Standard provided service handler stubs
+  -- =========================================================================
 
-  procedure Handle_Create_Tactical_Object
-    (Request  : in  Tactical_Object;
-     Response : out Tactical_Objects_Types.Identifier)
+  procedure Handle_Read_Match
+    (Request  : in  Query;
+     Response : out Object_Match_Array)
+  is
+    pragma Unreferenced(Request);
+    Empty : Object_Match_Array(1 .. 0);
+  begin
+    Response := Empty;  --  TODO: implement
+  end Handle_Read_Match;
+
+  procedure Handle_Create_Requirement
+    (Request  : in  Object_Interest_Requirement;
+     Response : out Identifier)
   is
     pragma Unreferenced(Request);
   begin
-    Response := Tactical_Objects_Types.Null_Identifier;  --  TODO: implement
+    Response := Null_Identifier;  --  TODO: implement
+  end Handle_Create_Requirement;
+
+  procedure Handle_Read_Requirement
+    (Request  : in  Query;
+     Response : out Object_Interest_Requirement)
+  is
+    pragma Unreferenced(Request);
+    Empty : Object_Interest_Requirement;
+  begin
+    Response := Empty;  --  TODO: implement
+  end Handle_Read_Requirement;
+
+  procedure Handle_Update_Requirement
+    (Request  : in  Object_Interest_Requirement;
+     Response : out Ack)
+  is
+    pragma Unreferenced(Request);
+  begin
+    Response := Ack_Ok;  --  TODO: implement
+  end Handle_Update_Requirement;
+
+  procedure Handle_Delete_Requirement
+    (Request  : in  Identifier;
+     Response : out Ack)
+  is
+    pragma Unreferenced(Request);
+  begin
+    Response := Ack_Ok;  --  TODO: implement
+  end Handle_Delete_Requirement;
+
+  procedure Handle_Read_Detail
+    (Request  : in  Query;
+     Response : out Object_Detail_Array)
+  is
+    pragma Unreferenced(Request);
+    Empty : Object_Detail_Array(1 .. 0);
+  begin
+    Response := Empty;  --  TODO: implement
+  end Handle_Read_Detail;
+
+  -- =========================================================================
+  --  Standard consumed service handler stubs
+  -- =========================================================================
+
+  procedure Handle_Read_Evidence_Detail
+    (Request  : in  Query;
+     Response : out Object_Detail_Array)
+  is
+    pragma Unreferenced(Request);
+    Empty : Object_Detail_Array(1 .. 0);
+  begin
+    Response := Empty;  --  TODO: implement
+  end Handle_Read_Evidence_Detail;
+
+  procedure Handle_Create_Evidence_Requirement
+    (Request  : in  Object_Evidence_Requirement;
+     Response : out Identifier)
+  is
+    pragma Unreferenced(Request);
+  begin
+    Response := Null_Identifier;  --  TODO: implement
+  end Handle_Create_Evidence_Requirement;
+
+  procedure Handle_Read_Evidence_Requirement
+    (Request  : in  Query;
+     Response : out Object_Evidence_Requirement)
+  is
+    pragma Unreferenced(Request);
+    Empty : Object_Evidence_Requirement;
+  begin
+    Response := Empty;  --  TODO: implement
+  end Handle_Read_Evidence_Requirement;
+
+  procedure Handle_Update_Evidence_Requirement
+    (Request  : in  Object_Evidence_Requirement;
+     Response : out Ack)
+  is
+    pragma Unreferenced(Request);
+  begin
+    Response := Ack_Ok;  --  TODO: implement
+  end Handle_Update_Evidence_Requirement;
+
+  procedure Handle_Delete_Evidence_Requirement
+    (Request  : in  Identifier;
+     Response : out Ack)
+  is
+    pragma Unreferenced(Request);
+  begin
+    Response := Ack_Ok;  --  TODO: implement
+  end Handle_Delete_Evidence_Requirement;
+
+  -- =========================================================================
+  --  Legacy EntityActions handler stubs
+  -- =========================================================================
+
+  procedure Handle_Create_Tactical_Object
+    (Request  : in  Tactical_Object;
+     Response : out Identifier)
+  is
+    pragma Unreferenced(Request);
+  begin
+    Response := Null_Identifier;  --  TODO: implement
   end Handle_Create_Tactical_Object;
 
   procedure Handle_Read_Tactical_Object
@@ -32,29 +147,29 @@ package body Tactical_Objects_Service is
 
   procedure Handle_Update_Tactical_Object
     (Request  : in  Tactical_Object;
-     Response : out Tactical_Objects_Types.Ack)
+     Response : out Ack)
   is
     pragma Unreferenced(Request);
   begin
-    Response := Tactical_Objects_Types.Ack_Ok;  --  TODO: implement
+    Response := Ack_Ok;  --  TODO: implement
   end Handle_Update_Tactical_Object;
 
   procedure Handle_Delete_Tactical_Object
-    (Request  : in  Tactical_Objects_Types.Identifier;
-     Response : out Tactical_Objects_Types.Ack)
+    (Request  : in  Identifier;
+     Response : out Ack)
   is
     pragma Unreferenced(Request);
   begin
-    Response := Tactical_Objects_Types.Ack_Ok;  --  TODO: implement
+    Response := Ack_Ok;  --  TODO: implement
   end Handle_Delete_Tactical_Object;
 
   procedure Handle_Create_Zone
     (Request  : in  Zone_Entity;
-     Response : out Tactical_Objects_Types.Identifier)
+     Response : out Identifier)
   is
     pragma Unreferenced(Request);
   begin
-    Response := Tactical_Objects_Types.Null_Identifier;  --  TODO: implement
+    Response := Null_Identifier;  --  TODO: implement
   end Handle_Create_Zone;
 
   procedure Handle_Read_Zone
@@ -69,29 +184,29 @@ package body Tactical_Objects_Service is
 
   procedure Handle_Update_Zone
     (Request  : in  Zone_Entity;
-     Response : out Tactical_Objects_Types.Ack)
+     Response : out Ack)
   is
     pragma Unreferenced(Request);
   begin
-    Response := Tactical_Objects_Types.Ack_Ok;  --  TODO: implement
+    Response := Ack_Ok;  --  TODO: implement
   end Handle_Update_Zone;
 
   procedure Handle_Delete_Zone
-    (Request  : in  Tactical_Objects_Types.Identifier;
-     Response : out Tactical_Objects_Types.Ack)
+    (Request  : in  Identifier;
+     Response : out Ack)
   is
     pragma Unreferenced(Request);
   begin
-    Response := Tactical_Objects_Types.Ack_Ok;  --  TODO: implement
+    Response := Ack_Ok;  --  TODO: implement
   end Handle_Delete_Zone;
 
   procedure Handle_Create_Observation
     (Request  : in  Observation;
-     Response : out Tactical_Objects_Types.Identifier)
+     Response : out Identifier)
   is
     pragma Unreferenced(Request);
   begin
-    Response := Tactical_Objects_Types.Null_Identifier;  --  TODO: implement
+    Response := Null_Identifier;  --  TODO: implement
   end Handle_Create_Observation;
 
   procedure Dispatch
@@ -118,7 +233,7 @@ package body Tactical_Objects_Service is
     end case;
   end Dispatch;
 
-  -- ── Internal helpers ──────────────────────────────────────────────────────
+  -- -- Internal helpers ------------------------------------------------------
 
   function Double_Image (V : Interfaces.C.double) return String is
   begin
@@ -129,10 +244,11 @@ package body Tactical_Objects_Service is
   begin
     return (if V then "true" else "false");
   end Bool_To_Json;
+  pragma Unreferenced(Bool_To_Json);
 
-  -- ── Build_Read_Request_Json ───────────────────────────────────────────────
+  -- -- Build_Read_Request_Json -----------------------------------------------
   --
-  --  Serialise TacticalObjectQuery → JSON accepted by subscribe_interest.
+  --  Serialise TacticalObjectQuery -> JSON accepted by subscribe_interest.
   --
   --  C++ subscribe_interest expects (subset used by the test):
   --    { "object_type": "Platform",
@@ -140,9 +256,6 @@ package body Tactical_Objects_Service is
   --      "area": { "min_lat": 50, "max_lat": 52,
   --                "min_lon": -1, "max_lon":  1 },
   --      "expires_at": 9999 }
-  --
-  --  Fields that are not set in the query are omitted from the JSON.
-  --  expires_at defaults to 9999 (far future) when a region filter is present.
 
   function Build_Read_Request_Json
     (Query : Tactical_Object_Query) return String
@@ -195,13 +308,12 @@ package body Tactical_Objects_Service is
     function Battle_Dim_Json_Name (D : Battle_Dimension) return String is
     begin
       case D is
-        when Ground      => return "Ground";
-        when Air         => return "Air";
-        when Sea_Surface => return "SeaSurface";
-        when Subsurface  => return "Subsurface";
-        when Space       => return "Space";
-        when SOF         => return "SOF";
-        when others      => return "Ground";
+        when Ground             => return "Ground";
+        when Air                => return "Air";
+        when Sea_Surface        => return "SeaSurface";
+        when Subsurface         => return "Subsurface";
+        when Dimension_Unknown  => return "Unknown";
+        when others             => return "Ground";
       end case;
     end Battle_Dim_Json_Name;
 
@@ -260,9 +372,58 @@ package body Tactical_Objects_Service is
     return To_String(S);
   end Build_Read_Request_Json;
 
-  -- ── Build_Active_Find_Request_Json ─────────────────────────────────────
+  -- -- Build_Standard_Requirement_Json ----------------------------------------
   --
-  --  Convenience wrapper: sets query_mode = active_find then delegates.
+  --  Build standard bridge request JSON using GNATCOLL.JSON.
+  --  Dimension may be "" to omit the filter entirely.
+
+  function Build_Standard_Requirement_Json
+    (Policy      : String;
+     Identity    : String;
+     Dimension   : String := "";
+     Min_Lat_Rad : Long_Float := 0.0;
+     Max_Lat_Rad : Long_Float := 0.0;
+     Min_Lon_Rad : Long_Float := 0.0;
+     Max_Lon_Rad : Long_Float := 0.0) return String
+  is
+    Obj : JSON_Value := Create_Object;
+  begin
+    Set_Field (Obj, "policy",   Policy);
+    Set_Field (Obj, "identity", Identity);
+    if Dimension /= "" then
+      Set_Field (Obj, "dimension", Dimension);
+    end if;
+    Set_Field_Long_Float (Obj, "min_lat_rad", Min_Lat_Rad);
+    Set_Field_Long_Float (Obj, "max_lat_rad", Max_Lat_Rad);
+    Set_Field_Long_Float (Obj, "min_lon_rad", Min_Lon_Rad);
+    Set_Field_Long_Float (Obj, "max_lon_rad", Max_Lon_Rad);
+    return Write (Obj);
+  end Build_Standard_Requirement_Json;
+
+  -- -- Build_Standard_Evidence_Json -------------------------------------------
+  --
+  --  Build standard bridge evidence JSON using GNATCOLL.JSON.
+
+  function Build_Standard_Evidence_Json
+    (Identity    : String;
+     Dimension   : String;
+     Lat_Rad     : Long_Float;
+     Lon_Rad     : Long_Float;
+     Confidence  : Long_Float;
+     Observed_At : Long_Float := 0.5) return String
+  is
+    Obj : JSON_Value := Create_Object;
+  begin
+    Set_Field (Obj, "identity",      Identity);
+    Set_Field (Obj, "dimension",     Dimension);
+    Set_Field_Long_Float (Obj, "latitude_rad",  Lat_Rad);
+    Set_Field_Long_Float (Obj, "longitude_rad", Lon_Rad);
+    Set_Field_Long_Float (Obj, "confidence",    Confidence);
+    Set_Field_Long_Float (Obj, "observed_at",   Observed_At);
+    return Write (Obj);
+  end Build_Standard_Evidence_Json;
+
+  -- -- Build_Active_Find_Request_Json -----------------------------------------
 
   function Build_Active_Find_Request_Json
     (Query : Tactical_Object_Query) return String
@@ -273,15 +434,11 @@ package body Tactical_Objects_Service is
     return Build_Read_Request_Json(AF_Query);
   end Build_Active_Find_Request_Json;
 
-  -- ── Ordinal conversions ───────────────────────────────────────────────────
-  --
-  --  Ordinals match StreamingCodec ordinalToAffiliation / ordinalToObjectType.
-  --  Aligned with the proto enum values in tactical_objects.proto.
+  -- -- Ordinal conversions (C++ StreamingCodec wire-format ordinals) ----------
 
   function Ordinal_To_Affiliation
     (V : Streaming_Codec.Byte) return Affiliation is
   begin
-    --  C++ enum Affiliation is 0-based: Friendly=0, Hostile=1, ...
     case V is
       when 0      => return Friendly;
       when 1      => return Hostile;
@@ -299,7 +456,6 @@ package body Tactical_Objects_Service is
   function Ordinal_To_Object_Type
     (V : Streaming_Codec.Byte) return Object_Type is
   begin
-    --  C++ enum ObjectType is 0-based: Platform=0, Person=1, ...
     case V is
       when 0      => return Platform;
       when 1      => return Person;
@@ -319,7 +475,6 @@ package body Tactical_Objects_Service is
   function Ordinal_To_Lifecycle_Status
     (V : Streaming_Codec.Byte) return Lifecycle_Status is
   begin
-    --  C++ enum LifecycleStatus is 0-based: Active=0, Stale=1, ...
     case V is
       when 0      => return Active;
       when 1      => return Stale;
@@ -328,22 +483,17 @@ package body Tactical_Objects_Service is
     end case;
   end Ordinal_To_Lifecycle_Status;
 
-  -- ── Frame_To_Tactical_Object ──────────────────────────────────────────────
-  --
-  --  Map a decoded Streaming_Codec frame to a typed TacticalObject.
-  --  Only fields present in the frame (Has_* = True) are populated.
+  -- -- Frame_To_Tactical_Object -----------------------------------------------
 
   function Frame_To_Tactical_Object
     (Frame : Streaming_Codec.Entity_Update_Frame) return Tactical_Object
   is
     Obj : Tactical_Object;
   begin
-    --  Obj_Type
     if Frame.Has_Object_Type then
       Obj.Obj_Type := Ordinal_To_Object_Type(Frame.Object_Type_Val);
     end if;
 
-    --  Position
     if Frame.Has_Position then
       Obj.Pos := (Lat => Frame.Pos.Lat,
                   Lon => Frame.Pos.Lon,
@@ -351,7 +501,6 @@ package body Tactical_Objects_Service is
       Obj.Has_Position := True;
     end if;
 
-    --  Velocity
     if Frame.Has_Velocity then
       Obj.Vel := (North => Frame.Vel.North,
                   East  => Frame.Vel.East,
@@ -359,23 +508,20 @@ package body Tactical_Objects_Service is
       Obj.Has_Velocity := True;
     end if;
 
-    --  Affiliation
     if Frame.Has_Affiliation then
       Obj.Affil := Ordinal_To_Affiliation(Frame.Affiliation_Val);
     end if;
 
-    --  Lifecycle
     if Frame.Has_Lifecycle then
       Obj.Status := Ordinal_To_Lifecycle_Status(Frame.Lifecycle_Val);
     end if;
 
-    --  Version and timestamp from frame header
     Obj.Version := Frame.Version;
 
     return Obj;
   end Frame_To_Tactical_Object;
 
-  -- ── Tactical_Object_Image ─────────────────────────────────────────────────
+  -- -- Tactical_Object_Image --------------------------------------------------
 
   function Tactical_Object_Image
     (Obj : Tactical_Object) return String

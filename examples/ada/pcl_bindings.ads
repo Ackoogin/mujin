@@ -136,7 +136,7 @@ package Pcl_Bindings is
      User_Data : System.Address) return Pcl_Port_Access;
   pragma Import(C, Add_Subscriber, "pcl_container_add_subscriber");
 
-  -- ── Service invocation ─────────────────────────────────────────────────
+  -- -- Service invocation -------------------------------------------------
 
   function Invoke_Service
     (Exec         : Pcl_Executor_Access;
@@ -145,14 +145,14 @@ package Pcl_Bindings is
      Response     : access Pcl_Msg) return Pcl_Status;
   pragma Import(C, Invoke_Service, "pcl_executor_invoke_service");
 
-  -- ── Async service response callback ────────────────────────────────────
+  -- -- Async service response callback ------------------------------------
 
   type Pcl_Resp_Cb_Access is access procedure
     (Resp      : access constant Pcl_Msg;
      User_Data : System.Address);
   pragma Convention(C, Pcl_Resp_Cb_Access);
 
-  -- ── Transport adapter ──────────────────────────────────────────────────
+  -- -- Transport adapter --------------------------------------------------
 
   type Pcl_Transport is limited private;
   type Pcl_Transport_Access is access all Pcl_Transport;
@@ -178,7 +178,7 @@ package Pcl_Bindings is
      Msg   : access constant Pcl_Msg) return Pcl_Status;
   pragma Import(C, Publish, "pcl_executor_publish");
 
-  -- ── Socket transport ───────────────────────────────────────────────────
+  -- -- Socket transport ---------------------------------------------------
 
   type Pcl_Socket_Transport is limited private;
   type Pcl_Socket_Transport_Access is access all Pcl_Socket_Transport;

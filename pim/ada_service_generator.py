@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 
-# ── EntityActions operation set ───────────────────────────────────────────────
+# -- EntityActions operation set -----------------------------------------------
 
 # Maps rpc name prefix → op kind
 OP_PREFIXES = ['Create', 'Read', 'Update', 'Delete']
@@ -42,15 +42,18 @@ OP_SIGNATURE: Dict[str, Dict] = {
     'Delete': {'req': 'Identifier',     'rsp': 'Ack'},
 }
 
-# Base-type short names from pyramid.data_model.base.*
+# Base-type short names from pyramid.data_model.base.* and pyramid.data_model.common.*
 BASE_TYPE_MAP = {
     'pyramid.data_model.base.Identifier': 'Identifier',
     'pyramid.data_model.base.Query':      'Query',
     'pyramid.data_model.base.Ack':        'Ack',
+    'pyramid.data_model.common.Query':    'Query',
+    'pyramid.data_model.common.Ack':      'Ack',
+    'pyramid.data_model.common.Capability': 'Capability',
 }
 
 
-# ── Proto parser ──────────────────────────────────────────────────────────────
+# -- Proto parser --------------------------------------------------------------
 
 def _strip_comments(text: str) -> str:
     """Remove // line comments and /* */ block comments."""
@@ -159,27 +162,41 @@ def parse_proto(proto_path: Path) -> ProtoFile:
     return ProtoFile(package, services)
 
 
-# ── Ada package name derivation ───────────────────────────────────────────────
+# -- Ada package name derivation -----------------------------------------------
 
 def _pkg_name_from_proto(proto_file: ProtoFile) -> str:
     """
+    pyramid.components.tactical_objects.services.provided →
+        Pyramid.Services.Tactical_Objects.Provided
+    pyramid.components.tactical_objects.services.consumed →
+        Pyramid.Services.Tactical_Objects.Consumed
     pyramid.components.tactical_objects →
-    Pyramid.Services.Tactical_Objects.Provided
+        Pyramid.Services.Tactical_Objects.Provided   (legacy fallback)
     """
     parts = proto_file.package.split('.')
-    # Drop well-known prefixes: 'pyramid', 'components'
-    meaningful = [p for p in parts
-                  if p.lower() not in ('pyramid', 'components', 'data_model', 'base')]
+
+    # Detect explicit provided/consumed leaf
+    last = parts[-1].lower()
+    explicit_suffix = None
+    if last in ('provided', 'consumed'):
+        explicit_suffix = parts[-1].capitalize()
+        parts = parts[:-1]
+
+    # Drop well-known structural prefixes/noise words
+    skip = {'pyramid', 'components', 'data_model', 'base', 'services'}
+    meaningful = [p for p in parts if p.lower() not in skip]
+
     ada_parts = ['Pyramid', 'Services']
     for p in meaningful:
         # Title-case each underscore-separated word: tactical_objects → Tactical_Objects
         titled = '_'.join(w.capitalize() for w in p.split('_'))
         ada_parts.append(titled)
-    ada_parts.append('Provided')
+
+    ada_parts.append(explicit_suffix if explicit_suffix else 'Provided')
     return '.'.join(ada_parts)
 
 
-# ── Code generation ───────────────────────────────────────────────────────────
+# -- Code generation -----------------------------------------------------------
 
 class AdaServiceGenerator:
 
@@ -221,7 +238,7 @@ class AdaServiceGenerator:
             self._write_body(adb_path, pkg_name, parsed, all_rpcs)
             print(f'  Generated {pkg_name}')
 
-    # ── Spec (.ads) ───────────────────────────────────────────────────────────
+    # -- Spec (.ads) -----------------------------------------------------------
 
     def _write_spec(self, path: Path, pkg_name: str, parsed: ProtoFile,
                     all_rpcs: List[Tuple[str, ProtoRpc]]):
@@ -270,7 +287,7 @@ class AdaServiceGenerator:
                 f.write('\n')
 
             # Handler procedure declarations grouped by service
-            f.write(f'   --  ── EntityActions handlers ─────────────────────────────────────\n')
+            f.write(f'   --  -- EntityActions handlers -------------------------------------\n')
             f.write(f'   --  Implement these procedures in the package body.\n')
             f.write(f'\n')
 
@@ -294,7 +311,7 @@ class AdaServiceGenerator:
             f.write('\n')
 
             # Dispatch procedure
-            f.write(f'   --  ── Transport integration point ─────────────────────────────────\n')
+            f.write(f'   --  -- Transport integration point ---------------------------------\n')
             f.write(f'   --  Route an incoming (channel, raw buffer) call to the correct\n')
             f.write(f'   --  typed handler.  The transport layer calls this; it never calls\n')
             f.write(f'   --  Handle_* procedures directly.\n')
@@ -308,7 +325,7 @@ class AdaServiceGenerator:
             f.write(f'\n')
             f.write(f'end {pkg_name};\n')
 
-    # ── Body (.adb) ───────────────────────────────────────────────────────────
+    # -- Body (.adb) -----------------------------------------------------------
 
     def _write_body(self, path: Path, pkg_name: str, parsed: ProtoFile,
                     all_rpcs: List[Tuple[str, ProtoRpc]]):
@@ -326,7 +343,7 @@ class AdaServiceGenerator:
             current_svc = None
             for svc_name, rpc in all_rpcs:
                 if svc_name != current_svc:
-                    f.write(f'   --  ── {svc_name} ─────────────────────────────────────\n')
+                    f.write(f'   --  -- {svc_name} -------------------------------------\n')
                     current_svc = svc_name
 
                 req_t = rpc.ada_req_type

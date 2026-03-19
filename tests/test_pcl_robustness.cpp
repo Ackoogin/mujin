@@ -18,7 +18,7 @@ extern "C" {
 #include "pcl/pcl_log.h"
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────
+// -- Helpers -------------------------------------------------------------
 
 static pcl_container_t* make_active(const char* name) {
   pcl_container_t* c = pcl_container_create(name, nullptr, nullptr);
@@ -31,7 +31,7 @@ static pcl_container_t* make_active(const char* name) {
 // pcl_container.c — uncovered branches
 // ═══════════════════════════════════════════════════════════════════════
 
-// ── Parameter overflow (PCL_MAX_PARAMS = 128) ────────────────────────
+// -- Parameter overflow (PCL_MAX_PARAMS = 128) ------------------------
 
 TEST(PclContainerRobust, ParamOverflowReturnsNomem) {
   auto* c = pcl_container_create("overflow", nullptr, nullptr);
@@ -50,7 +50,7 @@ TEST(PclContainerRobust, ParamOverflowReturnsNomem) {
   pcl_container_destroy(c);
 }
 
-// ── Type-mismatch param getters return default ───────────────────────
+// -- Type-mismatch param getters return default -----------------------
 
 TEST(PclContainerRobust, ParamTypeMismatchReturnsDefault) {
   auto* c = pcl_container_create("mismatch", nullptr, nullptr);
@@ -71,7 +71,7 @@ TEST(PclContainerRobust, ParamTypeMismatchReturnsDefault) {
   pcl_container_destroy(c);
 }
 
-// ── Null key/value in param setters ─────────────────────────────────
+// -- Null key/value in param setters ---------------------------------
 
 TEST(PclContainerRobust, ParamNullArgs) {
   auto* c = pcl_container_create("pnull", nullptr, nullptr);
@@ -95,7 +95,7 @@ TEST(PclContainerRobust, ParamGetNullArgs) {
   EXPECT_EQ(pcl_container_get_param_bool(nullptr, "k", true), true);
 }
 
-// ── Port overflow (PCL_MAX_PORTS = 64) ──────────────────────────────
+// -- Port overflow (PCL_MAX_PORTS = 64) ------------------------------
 
 static void sub_nop(pcl_container_t*, const pcl_msg_t*, void*) {}
 static pcl_status_t svc_nop(pcl_container_t*, const pcl_msg_t*, pcl_msg_t*, void*) {
@@ -144,7 +144,7 @@ TEST(PclContainerRobust, PortOverflowReturnNull) {
   pcl_container_destroy(c);
 }
 
-// ── Port creation with NULL mandatory args ───────────────────────────
+// -- Port creation with NULL mandatory args ---------------------------
 
 static pcl_status_t null_port_args_configure(pcl_container_t* c, void*) {
   // publisher: null topic, null type
@@ -173,7 +173,7 @@ TEST(PclContainerRobust, PortCreationNullArgs) {
   pcl_container_destroy(c);
 }
 
-// ── Port publish edge cases ───────────────────────────────────────────
+// -- Port publish edge cases -------------------------------------------
 
 struct PubPortCtx { pcl_port_t* pub = nullptr; };
 
@@ -233,7 +233,7 @@ TEST(PclContainerRobust, PublishOnSubscriberPortReturnsInvalid) {
   pcl_container_destroy(c);
 }
 
-// ── Callback failure paths for deactivate and cleanup ────────────────
+// -- Callback failure paths for deactivate and cleanup ----------------
 
 TEST(PclContainerRobust, DeactivateCallbackFailureKeepsActiveState) {
   pcl_callbacks_t cbs = {};
@@ -272,7 +272,7 @@ TEST(PclContainerRobust, ActivateCallbackFailureKeepsConfiguredState) {
   pcl_container_destroy(c);
 }
 
-// ── Cleanup resets port_count ─────────────────────────────────────────
+// -- Cleanup resets port_count -----------------------------------------
 
 TEST(PclContainerRobust, CleanupResetsPortCount) {
   PubPortCtx ctx;
@@ -289,7 +289,7 @@ TEST(PclContainerRobust, CleanupResetsPortCount) {
   pcl_container_destroy(c);
 }
 
-// ── Container name truncation (>127 chars) ─────────────────────────
+// -- Container name truncation (>127 chars) -------------------------
 
 TEST(PclContainerRobust, LongNameTruncated) {
   std::string long_name(200, 'a');
@@ -304,7 +304,7 @@ TEST(PclContainerRobust, LongNameTruncated) {
 // pcl_executor.c — uncovered branches
 // ═══════════════════════════════════════════════════════════════════════
 
-// ── Executor container overflow (PCL_MAX_CONTAINERS = 64) ────────────
+// -- Executor container overflow (PCL_MAX_CONTAINERS = 64) ------------
 
 TEST(PclExecutorRobust, ContainerOverflowReturnsNomem) {
   auto* e = pcl_executor_create();
@@ -326,7 +326,7 @@ TEST(PclExecutorRobust, ContainerOverflowReturnsNomem) {
   for (auto* c : containers) pcl_container_destroy(c);
 }
 
-// ── pcl_executor_add null safety ─────────────────────────────────────
+// -- pcl_executor_add null safety -------------------------------------
 
 TEST(PclExecutorRobust, AddNullContainerReturnsInvalid) {
   auto* e = pcl_executor_create();
@@ -335,7 +335,7 @@ TEST(PclExecutorRobust, AddNullContainerReturnsInvalid) {
   pcl_executor_destroy(e);
 }
 
-// ── pcl_executor_post_incoming bad inputs ────────────────────────────
+// -- pcl_executor_post_incoming bad inputs ----------------------------
 
 TEST(PclExecutorRobust, PostIncomingBadInputs) {
   auto* e = pcl_executor_create();
@@ -368,7 +368,7 @@ TEST(PclExecutorRobust, PostIncomingBadInputs) {
   pcl_executor_destroy(e);
 }
 
-// ── Zero-size post (data=null, size=0) is valid ───────────────────────
+// -- Zero-size post (data=null, size=0) is valid -----------------------
 
 TEST(PclExecutorRobust, PostIncomingZeroSizeNoData) {
   struct Recv { bool got = false; };
@@ -404,7 +404,7 @@ TEST(PclExecutorRobust, PostIncomingZeroSizeNoData) {
   pcl_container_destroy(c);
 }
 
-// ── dispatch_incoming_now with null args ─────────────────────────────
+// -- dispatch_incoming_now with null args -----------------------------
 
 TEST(PclExecutorRobust, DispatchIncomingNullArgs) {
   auto* e = pcl_executor_create();
@@ -416,7 +416,7 @@ TEST(PclExecutorRobust, DispatchIncomingNullArgs) {
   pcl_executor_destroy(e);
 }
 
-// ── Drain queue: dispatch fails → error propagated ───────────────────
+// -- Drain queue: dispatch fails → error propagated -------------------
 
 TEST(PclExecutorRobust, DrainQueuePropagatesNotFound) {
   // Post to a topic that has no subscriber → drain should get PCL_ERR_NOT_FOUND
@@ -431,7 +431,7 @@ TEST(PclExecutorRobust, DrainQueuePropagatesNotFound) {
   pcl_executor_destroy(e);
 }
 
-// ── Executor destroy flushes pending messages ─────────────────────────
+// -- Executor destroy flushes pending messages -------------------------
 
 TEST(PclExecutorRobust, DestroyWithPendingMessagesFrees) {
   auto* e = pcl_executor_create();
@@ -448,7 +448,7 @@ TEST(PclExecutorRobust, DestroyWithPendingMessagesFrees) {
   pcl_executor_destroy(e);
 }
 
-// ── Transport adapter wiring ─────────────────────────────────────────
+// -- Transport adapter wiring -----------------------------------------
 
 TEST(PclExecutorRobust, SetTransportAndClear) {
   auto* e = pcl_executor_create();
@@ -483,7 +483,7 @@ TEST(PclExecutorRobust, SetTransportNullExecutorReturnsInvalid) {
   EXPECT_EQ(pcl_executor_set_transport(nullptr, nullptr), PCL_ERR_INVALID);
 }
 
-// ── Graceful shutdown timeout ────────────────────────────────────────
+// -- Graceful shutdown timeout ----------------------------------------
 
 TEST(PclExecutorRobust, GracefulShutdownTimeout) {
   // Use a container that stalls on deactivate long enough to time out
@@ -518,7 +518,7 @@ TEST(PclExecutorRobust, GracefulShutdownTimeout) {
   pcl_container_destroy(c);
 }
 
-// ── Graceful shutdown: already-finalized container is a no-op ────────
+// -- Graceful shutdown: already-finalized container is a no-op --------
 
 TEST(PclExecutorRobust, GracefulShutdownAlreadyFinalized) {
   auto* c = pcl_container_create("already_fin", nullptr, nullptr);
@@ -536,7 +536,7 @@ TEST(PclExecutorRobust, GracefulShutdownAlreadyFinalized) {
   pcl_container_destroy(c);
 }
 
-// ── spin_once first call (prev_time == 0) uses 1 ms fallback ────────
+// -- spin_once first call (prev_time == 0) uses 1 ms fallback --------
 
 TEST(PclExecutorRobust, SpinOnceFirstCallUsesDefaultDt) {
   std::atomic<int> tick_count{0};
@@ -564,7 +564,7 @@ TEST(PclExecutorRobust, SpinOnceFirstCallUsesDefaultDt) {
   pcl_container_destroy(c);
 }
 
-// ── request_shutdown on null is safe ─────────────────────────────────
+// -- request_shutdown on null is safe ---------------------------------
 
 TEST(PclExecutorRobust, RequestShutdownNullSafe) {
   pcl_executor_request_shutdown(nullptr); // must not crash
@@ -718,7 +718,7 @@ TEST(PclThreading, SpinInBackgroundShutdownFromForeground) {
   pcl_container_destroy(c);
 }
 
-// ── Post while spin is running (lock stress) ─────────────────────────
+// -- Post while spin is running (lock stress) -------------------------
 
 TEST(PclThreading, PostDuringActiveSpinNoCorruption) {
   // Spin on one thread, 4 producers pump messages concurrently.
@@ -1007,7 +1007,7 @@ TEST(PclLogRobust, HandlerUserDataPassedThrough) {
   pcl_log_set_level(PCL_LOG_INFO);
 }
 
-// ── level_str default branch: pass an out-of-range level ──────────────
+// -- level_str default branch: pass an out-of-range level --------------
 // The default handler formats the level via level_str().  Casting an
 // integer that is not in the pcl_log_level_t enum exercises the
 // "default: return ???" branch in level_str().

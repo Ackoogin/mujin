@@ -12,7 +12,7 @@ extern "C" {
 #include "pcl/pcl_log.h"
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────
+// -- Helpers -------------------------------------------------------------
 
 struct TickCounter {
   int tick_count = 0;
@@ -29,7 +29,7 @@ static pcl_callbacks_t counting_callbacks() {
   return cbs;
 }
 
-// ── Basic Executor Tests ────────────────────────────────────────────────
+// -- Basic Executor Tests ------------------------------------------------
 
 TEST(PclExecutor, CreateDestroy) {
   auto* e = pcl_executor_create();
@@ -112,7 +112,7 @@ TEST(PclExecutor, MultipleContainers) {
   pcl_container_destroy(c2);
 }
 
-// ── Shutdown Tests ──────────────────────────────────────────────────────
+// -- Shutdown Tests ------------------------------------------------------
 
 TEST(PclExecutor, RequestShutdownStopsSpin) {
   auto* c = pcl_container_create("spin_test", nullptr, nullptr);
@@ -164,7 +164,7 @@ TEST(PclExecutor, GracefulShutdownFinalizesContainers) {
   pcl_container_destroy(c);
 }
 
-// ── Intra-process Dispatch Tests ────────────────────────────────────────
+// -- Intra-process Dispatch Tests ----------------------------------------
 
 struct SubReceived {
   bool received = false;
@@ -283,7 +283,7 @@ TEST(PclExecutor, ExternalThreadPostsCopiedMessageToExecutorThread) {
   pcl_container_destroy(sub_c);
 }
 
-// ── Null Safety ─────────────────────────────────────────────────────────
+// -- Null Safety ---------------------------------------------------------
 
 TEST(PclExecutor, NullSafety) {
   EXPECT_EQ(pcl_executor_add(nullptr, nullptr), PCL_ERR_INVALID);

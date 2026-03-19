@@ -1,3 +1,5 @@
+with "gnatcoll";
+
 project Ada_Tobj_Client is
   Root_Dir := external("MUJIN_ROOT", ".." & "/..");
 
@@ -21,7 +23,15 @@ project Ada_Tobj_Client is
        "-I" & Root_Dir & "/src/pcl");
   end Compiler;
 
+  type OS_Type is ("Windows_NT", "linux", "darwin");
+  OS : OS_Type := external ("OS", "linux");
+
   package Linker is
-    for Default_Switches ("Ada") use ("-lws2_32");
+    case OS is
+      when "Windows_NT" =>
+        for Default_Switches ("Ada") use ("-lws2_32");
+      when others =>
+        null;
+    end case;
   end Linker;
 end Ada_Tobj_Client;

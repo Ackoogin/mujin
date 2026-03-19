@@ -8,6 +8,7 @@
 /// Usage: tobj_socket_server [--port PORT] [--port-file PATH] [--timeout SECS]
 #include <TacticalObjectsComponent.h>
 #include <TacticalObjectsCodec.h>
+#include <StandardBridge.h>
 #include <pcl/pcl_executor.h>
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_transport_socket.h>
@@ -62,6 +63,12 @@ int main(int argc, char* argv[]) {
   tobj.activate();
   tobj.setTickRateHz(100.0);
   pcl_executor_add(exec, tobj.handle());
+
+  // Create and configure StandardBridge (translates standard proto ↔ internal)
+  StandardBridge bridge(tobj.runtime(), exec);
+  bridge.configure();
+  bridge.activate();
+  pcl_executor_add(exec, bridge.handle());
 
   // Write port file before accept (so client knows the port to connect to)
   if (!port_file.empty()) {

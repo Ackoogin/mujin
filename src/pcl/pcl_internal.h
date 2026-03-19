@@ -17,7 +17,7 @@ extern "C" {
 #define PCL_MAX_PORTS  64
 #define PCL_MAX_PARAMS 128
 
-// ── Parameter value tagged union ────────────────────────────────────────
+// -- Parameter value tagged union ----------------------------------------
 
 typedef enum {
   PCL_PARAM_STR,
@@ -37,7 +37,7 @@ typedef struct {
   } u;
 } pcl_param_t;
 
-// ── Internal port representation ────────────────────────────────────────
+// -- Internal port representation ----------------------------------------
 
 struct pcl_port_t {
   pcl_port_type_t       type;
@@ -53,7 +53,7 @@ struct pcl_port_t {
   pcl_container_t*      owner;
 };
 
-// ── Internal container representation ───────────────────────────────────
+// -- Internal container representation -----------------------------------
 
 struct pcl_executor_t;
 

@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package pyramid.components.tactical_objects.services.consumed;
+
+import "google/protobuf/empty.proto";
+import "pyramid/data_model/base.proto";
+import "pyramid/data_model/common.proto";
+import "pyramid/data_model/tactical.proto";
+
+// gRPC Service for Object_Evidence
+service Object_Evidence_Service {
+  // Read detail (output only)
+  rpc ReadDetail(pyramid.data_model.common.Query) returns (stream pyramid.data_model.tactical.ObjectDetail);
+}
+
+// gRPC Service for Object_Solution_Evidence
+service Object_Solution_Evidence_Service {
+  // Create requirement
+  rpc CreateRequirement(pyramid.data_model.tactical.ObjectEvidenceRequirement) returns (pyramid.data_model.base.Identifier);
+
+  // Read requirement
+  rpc ReadRequirement(pyramid.data_model.common.Query) returns (stream pyramid.data_model.tactical.ObjectEvidenceRequirement);
+
+  // Update requirement
+  rpc UpdateRequirement(pyramid.data_model.tactical.ObjectEvidenceRequirement) returns (pyramid.data_model.common.Ack);
+
+  // Delete requirement
+  rpc DeleteRequirement(pyramid.data_model.base.Identifier) returns (pyramid.data_model.common.Ack);
+}
+
+// gRPC Service for Object_Source_Capability
+service Object_Source_Capability_Service {
+  // Read capability (output only)
+  rpc ReadCapability(pyramid.data_model.common.Query) returns (stream pyramid.data_model.common.Capability);
+}

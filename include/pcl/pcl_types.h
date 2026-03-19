@@ -13,13 +13,13 @@
 extern "C" {
 #endif
 
-// ── Opaque handles ──────────────────────────────────────────────────────
+// -- Opaque handles ------------------------------------------------------
 
 typedef struct pcl_executor_t  pcl_executor_t;
 typedef struct pcl_container_t pcl_container_t;
 typedef struct pcl_port_t      pcl_port_t;
 
-// ── Return codes ────────────────────────────────────────────────────────
+// -- Return codes --------------------------------------------------------
 
 typedef enum {
   PCL_OK              =  0,
@@ -32,7 +32,7 @@ typedef enum {
   PCL_ERR_PORT_CLOSED = -7,   // port not available (container inactive)
 } pcl_status_t;
 
-// ── Lifecycle states ────────────────────────────────────────────────────
+// -- Lifecycle states ----------------------------------------------------
 
 typedef enum {
   PCL_STATE_UNCONFIGURED = 0,
@@ -41,7 +41,7 @@ typedef enum {
   PCL_STATE_FINALIZED    = 3,
 } pcl_state_t;
 
-// ── Port types ──────────────────────────────────────────────────────────
+// -- Port types ----------------------------------------------------------
 
 typedef enum {
   PCL_PORT_PUBLISHER  = 0,
@@ -50,7 +50,7 @@ typedef enum {
   PCL_PORT_CLIENT     = 3,    // request-reply client
 } pcl_port_type_t;
 
-// ── Log levels ──────────────────────────────────────────────────────────
+// -- Log levels ----------------------------------------------------------
 
 typedef enum {
   PCL_LOG_DEBUG = 0,
@@ -60,7 +60,7 @@ typedef enum {
   PCL_LOG_FATAL = 4,
 } pcl_log_level_t;
 
-// ── Message buffer ──────────────────────────────────────────────────────
+// -- Message buffer ------------------------------------------------------
 
 /// \brief Generic message exchanged through ports.
 ///

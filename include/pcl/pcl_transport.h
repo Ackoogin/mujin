@@ -14,7 +14,7 @@
 extern "C" {
 #endif
 
-// ── Transport adapter vtable ────────────────────────────────────────────
+// -- Transport adapter vtable --------------------------------------------
 
 /// \brief Function pointers that a transport adapter implements.
 ///
@@ -61,7 +61,7 @@ typedef struct {
   void* adapter_ctx;
 } pcl_transport_t;
 
-// ── Executor ↔ transport wiring ─────────────────────────────────────────
+// -- Executor ↔ transport wiring -----------------------------------------
 
 /// \brief Set the transport adapter for an executor.
 ///

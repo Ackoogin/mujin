@@ -10,7 +10,7 @@ extern "C" {
 #include "pcl/pcl_container.h"
 }
 
-// ── Test helpers ────────────────────────────────────────────────────────
+// -- Test helpers --------------------------------------------------------
 
 struct LogEntry {
   pcl_log_level_t level;
@@ -46,7 +46,7 @@ protected:
   }
 };
 
-// ── Tests ───────────────────────────────────────────────────────────────
+// -- Tests ---------------------------------------------------------------
 
 TEST_F(PclLogTest, CustomHandlerReceivesMessages) {
   pcl_log(nullptr, PCL_LOG_INFO, "hello %s", "world");

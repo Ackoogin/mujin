@@ -26,9 +26,9 @@ Detailed documentation of how PDDL formal models contribute to each SACE stage, 
 ### 0.1 Architecture Summary
 
 ```
-WorldModel ──▶ LAPKT Planner ──▶ Plan-to-BT Compiler ──▶ BT.CPP Executor
+WorldModel --▶ LAPKT Planner --▶ Plan-to-BT Compiler --▶ BT.CPP Executor
     ▲                                                          │
-    └──────────── effects + perception ◀───────────────────────┘
+    └------------ effects + perception ◀-----------------------┘
 ```
 
 | Component | Role | Key Assurance Concern |

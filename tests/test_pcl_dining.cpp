@@ -52,7 +52,7 @@ extern "C" {
 // Part 1 — Bridge unit tests
 // ═══════════════════════════════════════════════════════════════════════════
 
-// ── helpers ────────────────────────────────────────────────────────────────
+// -- helpers ----------------------------------------------------------------
 
 /// Identity bridge: passes the message through unchanged.
 static pcl_status_t identity_fn(const pcl_msg_t* in, pcl_msg_t* out, void*) {
@@ -82,7 +82,7 @@ static pcl_status_t mps_to_kmph_fn(const pcl_msg_t* in,
   return PCL_OK;
 }
 
-// ── null / invalid argument guard tests ───────────────────────────────────
+// -- null / invalid argument guard tests -----------------------------------
 
 TEST(PclBridge, CreateNullArgsReturnNull) {
   auto* e = pcl_executor_create();
@@ -106,7 +106,7 @@ TEST(PclBridge, DestroyNullIsNoOp) {
   pcl_bridge_destroy(nullptr);  // must not crash
 }
 
-// ── creation and lifecycle ─────────────────────────────────────────────────
+// -- creation and lifecycle -------------------------------------------------
 
 TEST(PclBridge, CreateAndDestroy) {
   auto* e = pcl_executor_create();
@@ -124,7 +124,7 @@ TEST(PclBridge, CreateAndDestroy) {
   pcl_bridge_destroy(b);  // owns container
 }
 
-// ── unit conversion: float m/s → int32 km/h ──────────────────────────────
+// -- unit conversion: float m/s → int32 km/h ------------------------------
 
 TEST(PclBridge, SpeedUnitConversion) {
   // Consumer: subscribes to "speed/kmph" and records the last received value.
@@ -187,7 +187,7 @@ TEST(PclBridge, SpeedUnitConversion) {
   pcl_container_destroy(consumer);
 }
 
-// ── transform returning non-OK suppresses forwarding ──────────────────────
+// -- transform returning non-OK suppresses forwarding ----------------------
 
 TEST(PclBridge, FailTransformSuppressesForward) {
   static int received = 0;
@@ -230,7 +230,7 @@ TEST(PclBridge, FailTransformSuppressesForward) {
   pcl_container_destroy(consumer);
 }
 
-// ── bridge on inactive container does not forward ─────────────────────────
+// -- bridge on inactive container does not forward -------------------------
 
 TEST(PclBridge, BridgeInactiveDoesNotForward) {
   // Only configure the bridge, never activate it.
@@ -260,7 +260,7 @@ TEST(PclBridge, BridgeInactiveDoesNotForward) {
   pcl_bridge_destroy(b);
 }
 
-// ── bridge_on_configure port-overflow path (lines 67-69 in pcl_bridge.c) ──
+// -- bridge_on_configure port-overflow path (lines 67-69 in pcl_bridge.c) --
 //
 // Fills the bridge's internal container to PCL_MAX_PORTS before configure
 // is called.  pcl_container_add_subscriber then returns NULL, which triggers
@@ -291,7 +291,7 @@ TEST(PclBridge, ConfigureFailsWhenPortsFull) {
   pcl_bridge_destroy(b);
 }
 
-// ── NOT_FOUND dispatch logs a DEBUG message (lines 53-54 in pcl_bridge.c) ──
+// -- NOT_FOUND dispatch logs a DEBUG message (lines 53-54 in pcl_bridge.c) --
 //
 // Dispatches to a bridge whose out_topic has no registered subscriber.
 // The bridge's sub_cb fires, transform succeeds, dispatch returns NOT_FOUND,
@@ -334,7 +334,7 @@ static constexpr int kMealsRequired = 3;  // meals each philosopher must eat
 static constexpr int kThinkTicks    = 3;  // ticks spent thinking
 static constexpr int kEatTicks      = 2;  // ticks spent eating
 
-// ── Bridge transform: int32 philosopher state → string label ──────────────
+// -- Bridge transform: int32 philosopher state → string label --------------
 
 static const char* phil_state_label(int32_t s) {
   switch (s) {
@@ -357,7 +357,7 @@ static pcl_status_t state_to_label_fn(const pcl_msg_t* in,
   return PCL_OK;
 }
 
-// ── Shared dining-philosopher state (accessed only on executor thread) ─────
+// -- Shared dining-philosopher state (accessed only on executor thread) -----
 
 struct DiningState {
   bool forks [kN] = {};   // true = held by a philosopher
@@ -370,7 +370,7 @@ struct DiningState {
   MonSub mon_subs[kN];
 };
 
-// ── Philosopher context ────────────────────────────────────────────────────
+// -- Philosopher context ----------------------------------------------------
 
 struct PhilCtx {
   int             id;
@@ -447,7 +447,7 @@ static pcl_status_t philosopher_tick(pcl_container_t* c,
   return PCL_OK;
 }
 
-// ── Monitor subscriber callback ────────────────────────────────────────────
+// -- Monitor subscriber callback --------------------------------------------
 
 static void monitor_sub_cb(pcl_container_t*,
                             const pcl_msg_t* msg,
@@ -470,7 +470,7 @@ static void monitor_sub_cb(pcl_container_t*,
   }
 }
 
-// ── on_configure for monitor: register one subscriber per philosopher ──────
+// -- on_configure for monitor: register one subscriber per philosopher ------
 
 static pcl_status_t monitor_configure(pcl_container_t* c, void* ud) {
   DiningState* ds = static_cast<DiningState*>(ud);
@@ -485,7 +485,7 @@ static pcl_status_t monitor_configure(pcl_container_t* c, void* ud) {
   return PCL_OK;
 }
 
-// ── THE TEST ───────────────────────────────────────────────────────────────
+// -- THE TEST ---------------------------------------------------------------
 
 TEST(PclDining, FivePhilosophersWithBridges) {
   // Suppress log noise during the long spin.
@@ -496,7 +496,7 @@ TEST(PclDining, FivePhilosophersWithBridges) {
 
   auto* exec = pcl_executor_create();
 
-  // ── Philosophers ────────────────────────────────────────────────────────
+  // -- Philosophers --------------------------------------------------------
   std::array<PhilCtx,         kN> phil_ctxs{};
   std::array<pcl_container_t*, kN> phil_ctr{};
 
@@ -517,7 +517,7 @@ TEST(PclDining, FivePhilosophersWithBridges) {
     pcl_executor_add(exec, phil_ctr[i]);
   }
 
-  // ── Monitor ─────────────────────────────────────────────────────────────
+  // -- Monitor -------------------------------------------------------------
   pcl_callbacks_t mon_cbs = {};
   mon_cbs.on_configure = monitor_configure;
 
@@ -527,7 +527,7 @@ TEST(PclDining, FivePhilosophersWithBridges) {
   pcl_container_activate(monitor);
   pcl_executor_add(exec, monitor);
 
-  // ── Bridges (int32 state → string label) ────────────────────────────────
+  // -- Bridges (int32 state → string label) --------------------------------
   std::array<pcl_bridge_t*,   kN> bridges{};
 
   for (int i = 0; i < kN; ++i) {
@@ -547,7 +547,7 @@ TEST(PclDining, FivePhilosophersWithBridges) {
     pcl_container_activate(bc);
   }
 
-  // ── Spin ────────────────────────────────────────────────────────────────
+  // -- Spin ----------------------------------------------------------------
   // Each meal cycle = kThinkTicks + up to kN hungry ticks + kEatTicks ticks.
   // Worst case ≈ (3 + 5 + 2) * kMealsRequired = 30 ticks per philosopher.
   // At 500 Hz that's ≤ 60 ms.  Use 2 s for plenty of margin.
@@ -556,7 +556,7 @@ TEST(PclDining, FivePhilosophersWithBridges) {
   pcl_executor_request_shutdown(exec);
   spin_thread.join();
 
-  // ── Assertions ──────────────────────────────────────────────────────────
+  // -- Assertions ----------------------------------------------------------
   EXPECT_FALSE(ds.violation)
       << "Mutual exclusion violated: two neighbouring philosophers ate "
          "simultaneously.";
@@ -567,7 +567,7 @@ TEST(PclDining, FivePhilosophersWithBridges) {
         << " meals (required " << kMealsRequired << ").";
   }
 
-  // ── Cleanup ─────────────────────────────────────────────────────────────
+  // -- Cleanup -------------------------------------------------------------
   pcl_executor_destroy(exec);
   for (int i = 0; i < kN; ++i) {
     pcl_bridge_destroy(bridges[i]);

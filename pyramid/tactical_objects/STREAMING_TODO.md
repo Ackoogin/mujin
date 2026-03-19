@@ -273,13 +273,13 @@ Field mask bits:
 ```
 Step 1 (Interest-filtered push)
   │
-  ├──> Step 2 (Binary streaming codec)
+  ├--> Step 2 (Binary streaming codec)
   │      │
-  │      └──> Step 3 (Version-gated deltas)
+  │      └--> Step 3 (Version-gated deltas)
   │             │
-  │             ├──> Step 4 (FlatBuffers, optional)
+  │             ├--> Step 4 (FlatBuffers, optional)
   │             │
-  │             └──> Step 5 (Batched frames in on_tick)
+  │             └--> Step 5 (Batched frames in on_tick)
 ```
 
 Steps 1 and 2 can proceed in parallel. Step 3 depends on both. Steps 4 and 5 depend on Step 3 and can proceed in parallel with each other.

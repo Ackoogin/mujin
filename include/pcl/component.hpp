@@ -59,7 +59,7 @@ public:
     return *this;
   }
 
-  // ── Lifecycle (call or let executor manage) ─────────────────────────
+  // -- Lifecycle (call or let executor manage) -------------------------
 
   pcl_status_t configure()  { return pcl_container_configure(handle_); }
   pcl_status_t activate()   { return pcl_container_activate(handle_); }
@@ -70,7 +70,7 @@ public:
   pcl_state_t state() const { return pcl_container_state(handle_); }
   const char* name() const  { return pcl_container_name(handle_); }
 
-  // ── Tick rate ───────────────────────────────────────────────────────
+  // -- Tick rate -------------------------------------------------------
 
   void setTickRateHz(double hz) {
     pcl_container_set_tick_rate_hz(handle_, hz);
@@ -80,7 +80,7 @@ public:
     return pcl_container_get_tick_rate_hz(handle_);
   }
 
-  // ── Parameters ──────────────────────────────────────────────────────
+  // -- Parameters ------------------------------------------------------
 
   void setParam(const char* key, const char* value) {
     pcl_container_set_param_str(handle_, key, value);
@@ -115,7 +115,7 @@ public:
     return pcl_container_get_param_bool(handle_, key, default_val);
   }
 
-  // ── Port creation (call during on_configure) ────────────────────────
+  // -- Port creation (call during on_configure) ------------------------
 
   pcl_port_t* addPublisher(const char* topic, const char* type_name) {
     return pcl_container_add_publisher(handle_, topic, type_name);
@@ -133,7 +133,7 @@ public:
                                      handler, user_data);
   }
 
-  // ── Logging ─────────────────────────────────────────────────────────
+  // -- Logging ---------------------------------------------------------
 
   void logDebug(const char* fmt, ...) const {
     va_list args;
@@ -163,13 +163,13 @@ public:
     va_end(args);
   }
 
-  // ── Raw handle access ───────────────────────────────────────────────
+  // -- Raw handle access -----------------------------------------------
 
   pcl_container_t* handle() { return handle_; }
   const pcl_container_t* handle() const { return handle_; }
 
 protected:
-  // ── Override these ──────────────────────────────────────────────────
+  // -- Override these --------------------------------------------------
 
   virtual pcl_status_t on_configure()        { return PCL_OK; }
   virtual pcl_status_t on_activate()         { return PCL_OK; }
@@ -181,7 +181,7 @@ protected:
 private:
   pcl_container_t* handle_ = nullptr;
 
-  // ── C → C++ trampolines ─────────────────────────────────────────────
+  // -- C → C++ trampolines ---------------------------------------------
 
   static pcl_status_t trampoline_configure(pcl_container_t*, void* ud) {
     return static_cast<Component*>(ud)->on_configure();

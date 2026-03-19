@@ -48,7 +48,10 @@ target_compile_features(tactical_objects PUBLIC cxx_std_14)
 add_library(tactical_objects_component)
 add_library(pyramid::tactical_objects_component ALIAS tactical_objects_component)
 
-target_sources(tactical_objects_component PRIVATE src/TacticalObjectsComponent.cpp)
+target_sources(tactical_objects_component PRIVATE
+    src/TacticalObjectsComponent.cpp
+    src/StandardBridge.cpp
+)
 target_include_directories(tactical_objects_component PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>

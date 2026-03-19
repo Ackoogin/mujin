@@ -117,11 +117,11 @@ Wrap ame's entire PDDL+LAPKT pipeline as an implementation of `pyramid::automata
 
 ```
 AutomataEngine
-  ├── GoapStrategy      (A* + cost calculators)
-  ├── PddlStrategy      (ame WorldModel + LAPKT BRFS)  ← NEW
-  ├── FsmStrategy
-  ├── BtStrategy
-  └── QLearningStrategy
+  ├-- GoapStrategy      (A* + cost calculators)
+  ├-- PddlStrategy      (ame WorldModel + LAPKT BRFS)  ← NEW
+  ├-- FsmStrategy
+  ├-- BtStrategy
+  └-- QLearningStrategy
 ```
 
 ### 2.2 Interface Mapping
@@ -202,8 +202,8 @@ private:
 Registering `PddlStrategy` alongside `GoapStrategy` in `AutomataEngine` creates a **cross-validation** opportunity:
 
 ```
-PlanningRequest ──► GoapStrategy ──► Solution A (cost-optimal)
-                └─► PddlStrategy ──► Solution B (complete, formally assured)
+PlanningRequest --► GoapStrategy --► Solution A (cost-optimal)
+                └-► PddlStrategy --► Solution B (complete, formally assured)
                                           │
                                Cross-Validate: same goal reached?
                                same actions available? divergence → flag

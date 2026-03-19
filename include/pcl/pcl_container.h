@@ -18,7 +18,7 @@
 extern "C" {
 #endif
 
-// ── Callback signatures ─────────────────────────────────────────────────
+// -- Callback signatures -------------------------------------------------
 
 /// \brief Subscriber callback — invoked on executor thread when a message arrives.
 typedef void (*pcl_sub_callback_t)(pcl_container_t* c,
@@ -31,7 +31,7 @@ typedef pcl_status_t (*pcl_service_handler_t)(pcl_container_t* c,
                                               pcl_msg_t*       response,
                                               void*            user_data);
 
-// ── Lifecycle callbacks (user implements) ────────────────────────────────
+// -- Lifecycle callbacks (user implements) --------------------------------
 
 /// \brief Lifecycle and tick callbacks provided by the user.
 ///
@@ -50,7 +50,7 @@ typedef struct {
                           void* user_data);
 } pcl_callbacks_t;
 
-// ── Create / destroy ────────────────────────────────────────────────────
+// -- Create / destroy ----------------------------------------------------
 
 /// \brief Create a new container in the UNCONFIGURED state.
 /// \param name       Human-readable component name (copied).
@@ -64,7 +64,7 @@ pcl_container_t* pcl_container_create(const char*            name,
 /// \brief Destroy a container and free all associated resources.
 void pcl_container_destroy(pcl_container_t* c);
 
-// ── Lifecycle transitions ───────────────────────────────────────────────
+// -- Lifecycle transitions -----------------------------------------------
 
 /// \brief Transition UNCONFIGURED → CONFIGURED.
 pcl_status_t pcl_container_configure(pcl_container_t* c);
@@ -81,7 +81,7 @@ pcl_status_t pcl_container_cleanup(pcl_container_t* c);
 /// \brief Transition any state → FINALIZED.
 pcl_status_t pcl_container_shutdown(pcl_container_t* c);
 
-// ── State query ─────────────────────────────────────────────────────────
+// -- State query ---------------------------------------------------------
 
 /// \brief Get the current lifecycle state.
 pcl_state_t pcl_container_state(const pcl_container_t* c);
@@ -89,7 +89,7 @@ pcl_state_t pcl_container_state(const pcl_container_t* c);
 /// \brief Get the container name.
 const char* pcl_container_name(const pcl_container_t* c);
 
-// ── Tick rate ───────────────────────────────────────────────────────────
+// -- Tick rate -----------------------------------------------------------
 
 /// \brief Set the container's tick rate in Hz.
 ///
@@ -100,7 +100,7 @@ pcl_status_t pcl_container_set_tick_rate_hz(pcl_container_t* c, double hz);
 /// \brief Get the container's configured tick rate in Hz.
 double pcl_container_get_tick_rate_hz(const pcl_container_t* c);
 
-// ── Parameters (key-value configuration) ────────────────────────────────
+// -- Parameters (key-value configuration) --------------------------------
 
 /// \brief Set a string parameter.
 pcl_status_t pcl_container_set_param_str(pcl_container_t* c,
@@ -137,7 +137,7 @@ int64_t pcl_container_get_param_i64(const pcl_container_t* c,
 bool pcl_container_get_param_bool(const pcl_container_t* c,
                                   const char* key, bool default_val);
 
-// ── Port creation (valid only during on_configure) ──────────────────────
+// -- Port creation (valid only during on_configure) ----------------------
 
 /// \brief Add a publisher port.
 pcl_port_t* pcl_container_add_publisher(pcl_container_t* c,
@@ -158,7 +158,7 @@ pcl_port_t* pcl_container_add_service(pcl_container_t*      c,
                                       pcl_service_handler_t handler,
                                       void*                 user_data);
 
-// ── Publishing ──────────────────────────────────────────────────────────
+// -- Publishing ----------------------------------------------------------
 
 /// \brief Publish a message on a publisher port.  Only valid while ACTIVE.
 pcl_status_t pcl_port_publish(pcl_port_t* port, const pcl_msg_t* msg);

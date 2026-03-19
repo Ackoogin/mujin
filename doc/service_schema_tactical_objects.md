@@ -101,7 +101,7 @@ Define all messages and services in `.proto` files. Use protobuf as the canonica
 syntax = "proto3";
 package pyramid.data_model.base;
 
-// ── EntityActions Base Types ────────────────────────────
+// -- EntityActions Base Types ----------------------------
 
 message Identifier {
   string uuid = 1;
@@ -123,7 +123,7 @@ package pyramid.components.tactical_objects;
 
 import "pyramid/data_model/base.proto";
 
-// ── Primitives ──────────────────────────────────────────
+// -- Primitives ------------------------------------------
 
 message Position {
   double latitude  = 1;  // WGS-84
@@ -181,7 +181,7 @@ message MilClassProfile {
   string          source_sidc  = 11;
 }
 
-// ── Entity: TacticalObject ──────────────────────────────
+// -- Entity: TacticalObject ------------------------------
 // Entity-derived type → generates CRUD service via EntityActions
 
 message TacticalObject {
@@ -197,7 +197,7 @@ message TacticalObject {
   string          behavior_pattern  = 10;
 }
 
-// ── Entity: Zone ────────────────────────────────────────
+// -- Entity: Zone ----------------------------------------
 
 message Zone {
   Identifier      id         = 1;
@@ -210,7 +210,7 @@ message Zone {
   string          semantics  = 8;
 }
 
-// ── Extended Query (superset of base Query) ─────────────
+// -- Extended Query (superset of base Query) -------------
 
 message TacticalObjectQuery {
   pyramid.data_model.base.Query base    = 1;  // ID filter + oneShot flag
@@ -221,7 +221,7 @@ message TacticalObjectQuery {
   optional string      by_source_system = 6;
 }
 
-// ── gRPC Services (EntityActions pattern) ───────────────
+// -- gRPC Services (EntityActions pattern) ---------------
 
 service TacticalObjectService {
   // EntityActions CRUD — flow: inout
@@ -569,18 +569,18 @@ This option leverages the pipeline that already exists and has proven patterns f
 ### How it works
 
 ```
-┌──────────────┐     ┌────────────────┐     ┌──────────────────────────────────┐
-│ SysML Model  │────▶│ sysml_parser.py│────▶│ JSON Intermediate Representation │
+┌--------------┐     ┌----------------┐     ┌----------------------------------┐
+│ SysML Model  │----▶│ sysml_parser.py│----▶│ JSON Intermediate Representation │
 │ (MagicDraw)  │     │  (XMI → JSON)  │     │  (datamodel.json)                │
-└──────────────┘     └────────────────┘     └────────┬─────────────────────────┘
+└--------------┘     └----------------┘     └--------┬-------------------------┘
                                                      │
-                     ┌───────────────────────────────┬┼───────────────────────────┐
+                     ┌-------------------------------┬┼---------------------------┐
                      │                               ││                           │
                      ▼                               ▼│                           ▼
-              ┌──────────────┐              ┌──────────────┐             ┌──────────────┐
+              ┌--------------┐              ┌--------------┐             ┌--------------┐
               │proto_generator│              │cpp_model_gen │             │ada_model_gen │
               │    .py        │              │    .py       │             │ada_service_gen│
-              └──────┬───────┘              └──────┬───────┘             └──────┬───────┘
+              └------┬-------┘              └------┬-------┘             └------┬-------┘
                      │                             │                            │
                      ▼                             ▼                            ▼
               .proto + gRPC            C++14 headers               Ada specs + stubs
@@ -588,10 +588,10 @@ This option leverages the pipeline that already exists and has proven patterns f
                                         topo-sorted)               middleware binding)
                      │
                      ▼
-              ┌──────────────┐
+              ┌--------------┐
               │ proto→msg    │  (new script)
               │  converter   │
-              └──────┬───────┘
+              └------┬-------┘
                      ▼
               ROS2 .msg/.srv
 ```
@@ -604,15 +604,15 @@ The model defines Entity-derived types as classes with properties. The pipeline 
 - **Non-entity property** → becomes a message field
 
 ```
-┌─────────────────────────────────────────────┐
+┌---------------------------------------------┐
 │ «Component» Tactical_Objects                │
-│─────────────────────────────────────────────│
+│---------------------------------------------│
 │ + matching_object : TacticalObject {inout}  │  ← Entity → CRUD service
 │ + zone            : Zone           {inout}  │  ← Entity → CRUD service
 │ + interest        : Interest       {out}    │  ← Entity → Read-only service
 │ + observation     : Observation    {in}     │  ← Entity → Write-only service
 │ + config          : Configuration           │  ← non-Entity → message field
-└─────────────────────────────────────────────┘
+└---------------------------------------------┘
 ```
 
 ### Generated proto output (from proto_generator.py)
@@ -623,7 +623,7 @@ package pyramid.components.tactical_objects;
 
 import "pyramid/data_model/base.proto";
 
-// ── EntityActions CRUD for TacticalObject (flow: inout) ─
+// -- EntityActions CRUD for TacticalObject (flow: inout) -
 
 service Matching_Objects_Service {
   rpc CreateMatchingObject (TacticalObject) returns (pyramid.data_model.base.Identifier);
@@ -632,7 +632,7 @@ service Matching_Objects_Service {
   rpc DeleteMatchingObject (pyramid.data_model.base.Identifier) returns (pyramid.data_model.base.Ack);
 }
 
-// ── EntityActions CRUD for Zone (flow: inout) ───────────
+// -- EntityActions CRUD for Zone (flow: inout) -----------
 
 service Zone_Service {
   rpc CreateZone (Zone) returns (pyramid.data_model.base.Identifier);
@@ -641,13 +641,13 @@ service Zone_Service {
   rpc DeleteZone (pyramid.data_model.base.Identifier) returns (pyramid.data_model.base.Ack);
 }
 
-// ── Interest (flow: out → Read only) ────────────────────
+// -- Interest (flow: out → Read only) --------------------
 
 service Interest_Service {
   rpc ReadInterest (pyramid.data_model.base.Query) returns (stream Interest);
 }
 
-// ── Observation (flow: in → Write only) ─────────────────
+// -- Observation (flow: in → Write only) -----------------
 
 service Observation_Ingress_Service {
   rpc CreateObservation (Observation) returns (pyramid.data_model.base.Identifier);
@@ -686,7 +686,7 @@ end Pyramid.Services.Components.Tactical_Objects.Provided;
 
 ```
 Base_Service  (has capability: Capability {inout})
-  └── Sensor_Requirement  (inherits + has sensor_config: SensorConfig {inout})
+  └-- Sensor_Requirement  (inherits + has sensor_config: SensorConfig {inout})
 ```
 
 Sensor_Requirement inherits all Capability CRUD RPCs from Base_Service plus its own SensorConfig RPCs — **without importing the parent message or embedding a base field**.
@@ -792,18 +792,18 @@ The pipeline tooling lives in `pim/` and is checked into this repository:
 | `pim/test_generator.py` | Generates test harnesses |
 
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────────────┐
-│ SysML Model  │────▶│sysml_parser  │────▶│ JSON IR              │
+┌--------------┐     ┌--------------┐     ┌----------------------┐
+│ SysML Model  │----▶│sysml_parser  │----▶│ JSON IR              │
 │ (MagicDraw)  │     │    .py       │     │ (datamodel.json)     │
-└──────────────┘     └──────────────┘     └──────────┬───────────┘
+└--------------┘     └--------------┘     └----------┬-----------┘
                                                      │
-                     ┌───────────────┬───────────────┼───────────────┐
+                     ┌---------------┬---------------┼---------------┐
                      │               │               │               │
                      ▼               ▼               ▼               ▼
-              ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+              ┌-------------┐ ┌-------------┐ ┌-------------┐ ┌-------------┐
               │proto_gen    │ │cpp_model_gen│ │ada_model_gen│ │python_gen   │
               │  .py        │ │  .py        │ │  .py        │ │  .py        │
-              └──────┬──────┘ └──────┬──────┘ └──────┬──────┘ └──────┬──────┘
+              └------┬------┘ └------┬------┘ └------┬------┘ └------┬------┘
                      │               │               │               │
                      ▼               ▼               ▼               ▼
               .proto files     C++14 headers  ╔═════════════╗  Python
@@ -811,7 +811,7 @@ The pipeline tooling lives in `pim/` and is checked into this repository:
                no gRPC)        topo-sorted)   ║[scaffolding]║
                      │                        ╚═════════════╝
                      │
-            ┌────────┼──────────────┐
+            ┌--------┼--------------┐
             ▼        ▼              ▼
          PCL codec  ROS2      Ada middleware
          (custom)  .msg/.srv  stubs
@@ -879,23 +879,23 @@ Phase 6 — Validate end-to-end:
 The abstract `EntityActions` contract from the SysML pipeline:
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
+┌------------------------------------------------------------------┐
 │ EntityActions<T>                                                 │
-│──────────────────────────────────────────────────────────────────│
+│------------------------------------------------------------------│
 │ create(data: T)           → Identifier                          │
 │ read(scope: Query)        → stream T                            │
 │ update(data: T)           → Ack                                 │
 │ delete(id: Identifier)    → Ack                                 │
-│──────────────────────────────────────────────────────────────────│
+│------------------------------------------------------------------│
 │ Query = { id: Identifier[*], oneShot: Boolean }                 │
 │ Ack   = { success: Boolean }                                    │
 │ Identifier = { uuid: string }                                   │
-│──────────────────────────────────────────────────────────────────│
+│------------------------------------------------------------------│
 │ Flow Direction:                                                  │
 │   inout → Create + Read + Update + Delete                       │
 │   out   → Read only                                             │
 │   in    → Create + Update + Delete                              │
-└──────────────────────────────────────────────────────────────────┘
+└------------------------------------------------------------------┘
 ```
 
 ### Flow direction applied to Tactical Objects
