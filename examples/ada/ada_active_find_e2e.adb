@@ -1,19 +1,21 @@
 -- ada_active_find_e2e.adb
--- Multi-process Ada E2E test for the ActiveFind flow.
+-- Multi-process Ada E2E test for the ActiveFind flow via the StandardBridge.
 --
--- Two PCL containers run in a single Ada process, connected to a
--- TacticalObjectsComponent server via TCP socket transport:
+-- Two PCL containers run in a single Ada process, connected to a server via
+-- TCP socket transport.  The server runs TacticalObjectsComponent + StandardBridge.
 --
---   1. Ada Client — subscribes to entity_updates, invokes subscribe_interest
---      with query_mode=active_find and battle_dimension=SeaSurface.
---   2. Evidence Provider — subscribes to evidence_requirements, and on
---      receipt publishes an observation batch to observation_ingress that
---      satisfies the requirement (SeaSurface Hostile Platform).
+-- STANDARD interface (bridge topics/services):
 --
--- The server (tobj_socket_server --no-entity) runs the
--- TacticalObjectsComponent which processes the interest, derives an
--- evidence requirement, correlates the incoming observation to create
--- a tracked entity, and streams entity updates back to the client.
+--   1. Ada Client — calls "object_of_interest.create_requirement" (standard JSON),
+--      subscribes to "standard.entity_matches" (standard JSON).
+--   2. Evidence Provider — subscribes to "standard.evidence_requirements" (JSON),
+--      and on receipt publishes a standard observation to "standard.object_evidence".
+--
+-- The bridge translates:
+--   - create_requirement  → subscribe_interest (internal)
+--   - standard.object_evidence → processObservationBatch (internal)
+--   - entity_updates (binary) → standard.entity_matches (JSON)
+--   - evidence_requirements (JSON) → standard.evidence_requirements (JSON)
 --
 -- Usage: ada_active_find_e2e --host 127.0.0.1 --port 19123
 
@@ -23,7 +25,6 @@ with Ada.Unchecked_Conversion;
 with Interfaces.C;
 with Interfaces.C.Strings;
 with Pcl_Bindings;
-with Streaming_Codec;
 with Tactical_Objects_Types;   use Tactical_Objects_Types;
 with Tactical_Objects_Service;
 with System;
@@ -38,11 +39,13 @@ procedure Ada_Active_Find_E2E is
   use type Pcl_Bindings.Pcl_Container_Access;
   use type Pcl_Bindings.Pcl_Socket_Transport_Access;
   use type Pcl_Bindings.Pcl_Port_Access;
-  use type Streaming_Codec.Byte;
   use type System.Address;
 
   function To_Address is new
     Ada.Unchecked_Conversion(Interfaces.C.Strings.chars_ptr, System.Address);
+
+  Pi         : constant Interfaces.C.double := 3.14159265358979323846;
+  Deg_To_Rad : constant Interfaces.C.double := Pi / 180.0;
 
   -- -- Configuration ----------------------------------------------------------
 
@@ -79,56 +82,61 @@ procedure Ada_Active_Find_E2E is
 
   -- -- Shared state -----------------------------------------------------------
 
-  Frames_Received       : Natural := 0;
-  Found_Hostile_Platform: Boolean := False;
-  Evidence_Req_Received : Boolean := False;
-  Observation_Sent      : Boolean := False;
+  Matches_Received       : Natural := 0;
+  Found_Hostile_Entity   : Boolean := False;
+  Evidence_Req_Received  : Boolean := False;
+  Observation_Sent       : Boolean := False;
 
   -- Store executor handle for evidence provider to publish through
   Exec_Handle : Pcl_Bindings.Pcl_Executor_Access := null;
 
   -- ═══════════════════════════════════════════════════════════════════════════
-  -- Container 1: Ada Client — subscribes to entity_updates
+  -- Container 1: Ada Client — subscribes to standard.entity_matches
   -- ═══════════════════════════════════════════════════════════════════════════
 
-  procedure Client_Entity_Updates_Cb
+  procedure Client_Entity_Matches_Cb
     (Container : Pcl_Bindings.Pcl_Container_Access;
      Msg       : access constant Pcl_Bindings.Pcl_Msg;
      User_Data : System.Address);
-  pragma Convention(C, Client_Entity_Updates_Cb);
+  pragma Convention(C, Client_Entity_Matches_Cb);
 
-  procedure Client_Entity_Updates_Cb
+  procedure Client_Entity_Matches_Cb
     (Container : Pcl_Bindings.Pcl_Container_Access;
      Msg       : access constant Pcl_Bindings.Pcl_Msg;
      User_Data : System.Address)
   is
     pragma Unreferenced(Container, User_Data);
-    Result : Streaming_Codec.Decode_Result;
   begin
     if Msg.Data = System.Null_Address or else Msg.Size = 0 then
       return;
     end if;
 
-    Result := Streaming_Codec.Decode_Batch(Msg.Data, Msg.Size);
-    Frames_Received := Frames_Received + Result.Count;
-
-    if Result.Count > 0 then
-      Log("Received batch with" & Natural'Image(Result.Count) & " entities");
-      for I in 0 .. Result.Count - 1 loop
-        declare
-          Obj : constant Tactical_Object :=
-            Tactical_Objects_Service.Frame_To_Tactical_Object(
-              Result.Frames(I));
-        begin
-          Log("  entity: " &
-              Tactical_Objects_Service.Tactical_Object_Image(Obj));
-          if Obj.Obj_Type = Platform and then Obj.Affil = Hostile then
-            Found_Hostile_Platform := True;
-          end if;
-        end;
+    declare
+      use System.Storage_Elements;
+      type Char_Array is array (1 .. Natural(Msg.Size)) of Character;
+      pragma Pack(Char_Array);
+      Chars : Char_Array;
+      for Chars'Address use Msg.Data;
+      pragma Import(Ada, Chars);
+      Body_Str : constant String := String(Chars);
+    begin
+      Log("standard.entity_matches: " & Body_Str);
+      --  Count opening braces as a proxy for entity count in the JSON array
+      for C of Body_Str loop
+        if C = '{' then
+          Matches_Received := Matches_Received + 1;
+        end if;
       end loop;
-    end if;
-  end Client_Entity_Updates_Cb;
+
+      --  Check for HOSTILE identity in the JSON
+      for I in Body_Str'First .. Body_Str'Last - 24 loop
+        if Body_Str(I .. I + 24) = "STANDARD_IDENTITY_HOSTILE" then
+          Found_Hostile_Entity := True;
+          exit;
+        end if;
+      end loop;
+    end;
+  end Client_Entity_Matches_Cb;
 
   function Client_On_Configure
     (Container : Pcl_Bindings.Pcl_Container_Access;
@@ -140,9 +148,10 @@ procedure Ada_Active_Find_E2E is
      User_Data : System.Address) return Pcl_Bindings.Pcl_Status
   is
     Topic  : Interfaces.C.Strings.chars_ptr :=
-      Interfaces.C.Strings.New_String("entity_updates");
+      Interfaces.C.Strings.New_String(
+        Tactical_Objects_Service.Standard_Entity_Matches_Topic);
     Type_N : Interfaces.C.Strings.chars_ptr :=
-      Interfaces.C.Strings.New_String("application/octet-stream");
+      Interfaces.C.Strings.New_String("application/json");
     Port   : Pcl_Bindings.Pcl_Port_Access;
     pragma Unreferenced(Port);
   begin
@@ -150,7 +159,7 @@ procedure Ada_Active_Find_E2E is
       Container => Container,
       Topic     => Topic,
       Type_Name => Type_N,
-      Callback  => Client_Entity_Updates_Cb'Unrestricted_Access,
+      Callback  => Client_Entity_Matches_Cb'Unrestricted_Access,
       User_Data => User_Data);
     Interfaces.C.Strings.Free(Topic);
     Interfaces.C.Strings.Free(Type_N);
@@ -158,7 +167,7 @@ procedure Ada_Active_Find_E2E is
   end Client_On_Configure;
 
   -- ═══════════════════════════════════════════════════════════════════════════
-  -- Container 2: Evidence Provider — subscribes to evidence_requirements
+  -- Container 2: Evidence Provider — subscribes to standard.evidence_requirements
   -- ═══════════════════════════════════════════════════════════════════════════
 
   procedure Provider_Evidence_Req_Cb
@@ -179,31 +188,40 @@ procedure Ada_Active_Find_E2E is
     end if;
 
     Evidence_Req_Received := True;
-    Log("Evidence requirement received");
 
-    -- Publish an observation batch to observation_ingress that satisfies
-    -- the requirement: SeaSurface Hostile Platform at (51.0, 0.0).
-    -- The SIDC "SHSP------*****" encodes:
-    --   S = Warfighting, H = Hostile, S = SeaSurface, P = Present
+    if Msg.Size > 0 then
+      declare
+        use System.Storage_Elements;
+        type Char_Array is array (1 .. Natural(Msg.Size)) of Character;
+        pragma Pack(Char_Array);
+        Chars : Char_Array;
+        for Chars'Address use Msg.Data;
+        pragma Import(Ada, Chars);
+      begin
+        Log("Standard evidence requirement: " & String(Chars));
+      end;
+    else
+      Log("Standard evidence requirement received");
+    end if;
+
+    -- Publish a standard observation to standard.object_evidence.
+    -- The bridge converts this to a processObservationBatch() call internally.
+    -- Position: 51.0°N 0.0°E → radians; identity: HOSTILE; dim: SEA_SURFACE.
     if Exec_Handle /= null and then not Observation_Sent then
       declare
-        -- Build a minimal observation batch JSON
         Obs_Json : constant String :=
-          "{""observations"":[{" &
-          """observation_id"":""00000000-0000-4000-8000-000000000001""," &
-          """observed_at"":0.5," &
-          """object_hint_type"":""Platform""," &
-          """position"":{""lat"":51.0,""lon"":0.0,""alt"":0.0}," &
-          """velocity"":{""north"":0.0,""east"":0.0,""down"":0.0}," &
-          """affiliation_hint"":""Hostile""," &
-          """confidence"":0.9," &
-          """uncertainty_radius_m"":0.0," &
-          """source_sidc"":""SHSP------*****""" &
-          "}]}";
+          Tactical_Objects_Service.Build_Standard_Evidence_Json(
+            Identity    => "STANDARD_IDENTITY_HOSTILE",
+            Dimension   => "BATTLE_DIMENSION_SEA_SURFACE",
+            Lat_Rad     => 51.0 * Deg_To_Rad,
+            Lon_Rad     => 0.0 * Deg_To_Rad,
+            Confidence  => 0.9,
+            Observed_At => 0.5);
         Obs_C   : Interfaces.C.Strings.chars_ptr :=
           Interfaces.C.Strings.New_String(Obs_Json);
         Topic_C : Interfaces.C.Strings.chars_ptr :=
-          Interfaces.C.Strings.New_String("observation_ingress");
+          Interfaces.C.Strings.New_String(
+            Tactical_Objects_Service.Standard_Object_Evidence_Topic);
         Pub_Msg : aliased Pcl_Bindings.Pcl_Msg;
         Status  : Pcl_Bindings.Pcl_Status;
       begin
@@ -211,17 +229,18 @@ procedure Ada_Active_Find_E2E is
         Pub_Msg.Size      := Interfaces.C.unsigned(Obs_Json'Length);
         Pub_Msg.Type_Name := Interfaces.C.Strings.New_String("application/json");
 
-        Log("Publishing observation to observation_ingress (" &
-            Natural'Image(Obs_Json'Length) & " bytes)");
+        Log("Publishing standard observation to " &
+            Tactical_Objects_Service.Standard_Object_Evidence_Topic &
+            " (" & Natural'Image(Obs_Json'Length) & " bytes)");
 
         Status := Pcl_Bindings.Publish(
           Exec_Handle, Topic_C, Pub_Msg'Access);
 
         if Status = Pcl_Bindings.PCL_OK then
           Observation_Sent := True;
-          Log("Observation published successfully");
+          Log("Standard observation published successfully");
         else
-          Log("Observation publish FAILED, status=" &
+          Log("Standard observation publish FAILED, status=" &
               Pcl_Bindings.Pcl_Status'Image(Status));
         end if;
 
@@ -242,7 +261,8 @@ procedure Ada_Active_Find_E2E is
      User_Data : System.Address) return Pcl_Bindings.Pcl_Status
   is
     Topic  : Interfaces.C.Strings.chars_ptr :=
-      Interfaces.C.Strings.New_String("evidence_requirements");
+      Interfaces.C.Strings.New_String(
+        Tactical_Objects_Service.Standard_Evidence_Reqs_Topic);
     Type_N : Interfaces.C.Strings.chars_ptr :=
       Interfaces.C.Strings.New_String("application/json");
     Port   : Pcl_Bindings.Pcl_Port_Access;
@@ -358,13 +378,15 @@ begin
   Status := Pcl_Bindings.Activate(Provider_C);
   Status := Pcl_Bindings.Add_Container(Exec, Provider_C);
 
-  -- -- Invoke subscribe_interest with active_find -----------------------------
+  -- -- Call object_of_interest.create_requirement (standard bridge) -----------
+  --
+  --  Standard ActiveFind: policy=DATA_POLICY_OBTAIN, identity=HOSTILE,
+  --  dimension=SEA_SURFACE, bounding box [50°,52°] × [-1°,1°] in radians.
 
   declare
     Svc_Response_Ready : Boolean               := False;
-    Svc_Response_Body  : Interfaces.C.unsigned  := 0;
-    Solution_Id_Found  : Boolean                := False;
-    Ev_Reqs_Found      : Boolean                := False;
+    Svc_Response_Body  : Interfaces.C.unsigned := 0;
+    Interest_Id_Found  : Boolean               := False;
 
     procedure Svc_Response_Cb
       (Resp      : access constant Pcl_Bindings.Pcl_Msg;
@@ -379,8 +401,6 @@ begin
     begin
       if Resp /= null then
         Svc_Response_Body := Resp.Size;
-        -- Parse for solution_id and evidence_requirements presence
-        -- (simple substring check since we don't have a JSON parser in Ada)
         if Resp.Data /= System.Null_Address and then Resp.Size > 0 then
           declare
             use System.Storage_Elements;
@@ -391,18 +411,11 @@ begin
             pragma Import(Ada, Chars);
             Body_Str : constant String := String(Chars);
           begin
-            Log("Service response: " & Body_Str);
-            -- Check for solution_id
+            Log("create_requirement response: " & Body_Str);
+            -- Check for interest_id in response
             for I in Body_Str'First .. Body_Str'Last - 10 loop
-              if Body_Str(I .. I + 10) = "solution_id" then
-                Solution_Id_Found := True;
-                exit;
-              end if;
-            end loop;
-            -- Check for evidence_requirements (21 chars)
-            for I in Body_Str'First .. Body_Str'Last - 20 loop
-              if Body_Str(I .. I + 20) = "evidence_requirements" then
-                Ev_Reqs_Found := True;
+              if Body_Str(I .. I + 10) = "interest_id" then
+                Interest_Id_Found := True;
                 exit;
               end if;
             end loop;
@@ -412,27 +425,25 @@ begin
       Svc_Response_Ready := True;
     end Svc_Response_Cb;
 
-    Query : Tactical_Object_Query;
   begin
-    Query.Mode              := (Has => True, Value => Active_Find);
-    Query.By_Type           := (Has => True, Value => Platform);
-    Query.By_Affiliation    := (Has => True, Value => Hostile);
-    Query.By_Battle_Dimension := (Has => True, Value => Sea_Surface);
-    Query.By_Region         := (Has => True,
-                                Value => (Min_Lat => 50.0, Max_Lat => 52.0,
-                                          Min_Lon => -1.0, Max_Lon =>  1.0));
-
     declare
       Req_Str : constant String :=
-        Tactical_Objects_Service.Build_Active_Find_Request_Json(Query);
+        Tactical_Objects_Service.Build_Standard_Requirement_Json(
+          Policy      => "DATA_POLICY_OBTAIN",
+          Identity    => "STANDARD_IDENTITY_HOSTILE",
+          Dimension   => "BATTLE_DIMENSION_SEA_SURFACE",
+          Min_Lat_Rad => 50.0 * Deg_To_Rad,
+          Max_Lat_Rad => 52.0 * Deg_To_Rad,
+          Min_Lon_Rad => (-1.0) * Deg_To_Rad,
+          Max_Lon_Rad => 1.0 * Deg_To_Rad);
       Req_C   : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String(Req_Str);
       Svc_C   : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String(
-          Tactical_Objects_Service.Read_Service_Name);
+          Tactical_Objects_Service.Standard_Create_Requirement_Service);
       Req     : aliased Pcl_Bindings.Pcl_Msg;
     begin
-      Log("ActiveFind request: " & Req_Str);
+      Log("Standard ActiveFind request: " & Req_Str);
 
       Req.Data      := To_Address(Req_C);
       Req.Size      := Interfaces.C.unsigned(Req_Str'Length);
@@ -443,7 +454,7 @@ begin
         Svc_Response_Cb'Unrestricted_Access, System.Null_Address);
 
       if Status /= Pcl_Bindings.PCL_OK then
-        Log("subscribe_interest async submit FAILED, status=" &
+        Log("create_requirement async submit FAILED, status=" &
             Pcl_Bindings.Pcl_Status'Image(Status));
       end if;
 
@@ -452,34 +463,31 @@ begin
       Interfaces.C.Strings.Free(Req.Type_Name);
     end;
 
-    -- Spin until the full flow completes:
-    --   1. Service response with solution_id + evidence_requirements
-    --   2. Evidence provider receives requirement and publishes observation
-    --   3. Server correlates and streams entity_updates
-    --   4. Client receives entity update frames
-    Log("Spinning to drive ActiveFind flow...");
+    -- Spin until the full standard flow completes:
+    --   1. create_requirement response with interest_id
+    --   2. Bridge forwards evidence_requirements → standard.evidence_requirements
+    --   3. Evidence provider receives and publishes to standard.object_evidence
+    --   4. Bridge converts to processObservationBatch → correlates entity
+    --   5. Server streams entity_updates (binary) → bridge publishes standard.entity_matches
+    --   6. Client receives standard entity matches
+    Log("Spinning to drive standard ActiveFind flow...");
     for Iteration in 1 .. 400 loop
       Status := Pcl_Bindings.Spin_Once(Exec, 0);
-      exit when Svc_Response_Ready and then Frames_Received > 0;
+      exit when Svc_Response_Ready and then Matches_Received > 0;
       delay 0.01;  -- 10 ms
     end loop;
 
     -- Report findings
     if Svc_Response_Ready then
-      Log("subscribe_interest OK, response size=" &
+      Log("create_requirement OK, response size=" &
           Interfaces.C.unsigned'Image(Svc_Response_Body));
-      if Solution_Id_Found then
-        Log("  solution_id present in response");
+      if Interest_Id_Found then
+        Log("  interest_id present in response");
       else
-        Log("  WARNING: solution_id NOT found in response");
-      end if;
-      if Ev_Reqs_Found then
-        Log("  evidence_requirements present in response");
-      else
-        Log("  WARNING: evidence_requirements NOT found in response");
+        Log("  WARNING: interest_id NOT found in response");
       end if;
     else
-      Log("subscribe_interest TIMEOUT: no response");
+      Log("create_requirement TIMEOUT: no response");
     end if;
   end;
 
@@ -488,23 +496,24 @@ begin
   Log("--- Results ---");
   Log("  Evidence requirement received: " &
       Boolean'Image(Evidence_Req_Received));
-  Log("  Observation sent: " &
+  Log("  Standard observation sent:     " &
       Boolean'Image(Observation_Sent));
-  Log("  Entity frames received: " &
-      Natural'Image(Frames_Received));
-  Log("  Found Hostile Platform: " &
-      Boolean'Image(Found_Hostile_Platform));
+  Log("  Standard entity matches received: " &
+      Natural'Image(Matches_Received));
+  Log("  Found HOSTILE entity:          " &
+      Boolean'Image(Found_Hostile_Entity));
 
   if Evidence_Req_Received and then
      Observation_Sent and then
-     Frames_Received > 0 and then
-     Found_Hostile_Platform
+     Matches_Received > 0 and then
+     Found_Hostile_Entity
   then
-    Log("PASS: ActiveFind flow completed — evidence provider drove " &
-        "entity creation, client received Hostile Platform update");
+    Log("PASS: Standard ActiveFind flow completed — " &
+        "evidence provider drove entity creation via bridge, " &
+        "client received HOSTILE entity via standard.entity_matches");
     Ada.Command_Line.Set_Exit_Status(0);
   else
-    Log("FAIL: ActiveFind flow incomplete");
+    Log("FAIL: Standard ActiveFind flow incomplete");
     Ada.Command_Line.Set_Exit_Status(1);
   end if;
 

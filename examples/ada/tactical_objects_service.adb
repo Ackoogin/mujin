@@ -371,6 +371,58 @@ package body Tactical_Objects_Service is
     return To_String(S);
   end Build_Read_Request_Json;
 
+  -- -- Build_Standard_Requirement_Json ----------------------------------------
+  --
+  --  Build standard bridge request JSON for object_of_interest.create_requirement.
+  --  Uses STANDARD_IDENTITY_* and BATTLE_DIMENSION_* enum names.
+  --  Positions are in radians.
+
+  function Build_Standard_Requirement_Json
+    (Policy    : String;
+     Identity  : String;
+     Dimension : String;
+     Min_Lat_Rad : Interfaces.C.double;
+     Max_Lat_Rad : Interfaces.C.double;
+     Min_Lon_Rad : Interfaces.C.double;
+     Max_Lon_Rad : Interfaces.C.double) return String
+  is
+    S : Unbounded_String := To_Unbounded_String("{");
+  begin
+    Append(S, """policy"":""" & Policy & """,");
+    Append(S, """identity"":""" & Identity & """,");
+    Append(S, """dimension"":""" & Dimension & """,");
+    Append(S, """min_lat_rad"":" & Double_Image(Min_Lat_Rad) & ",");
+    Append(S, """max_lat_rad"":" & Double_Image(Max_Lat_Rad) & ",");
+    Append(S, """min_lon_rad"":" & Double_Image(Min_Lon_Rad) & ",");
+    Append(S, """max_lon_rad"":" & Double_Image(Max_Lon_Rad));
+    Append(S, "}");
+    return To_String(S);
+  end Build_Standard_Requirement_Json;
+
+  -- -- Build_Standard_Evidence_Json -------------------------------------------
+  --
+  --  Build standard bridge evidence JSON for standard.object_evidence.
+
+  function Build_Standard_Evidence_Json
+    (Identity    : String;
+     Dimension   : String;
+     Lat_Rad     : Interfaces.C.double;
+     Lon_Rad     : Interfaces.C.double;
+     Confidence  : Interfaces.C.double;
+     Observed_At : Interfaces.C.double := 0.5) return String
+  is
+    S : Unbounded_String := To_Unbounded_String("{");
+  begin
+    Append(S, """identity"":""" & Identity & """,");
+    Append(S, """dimension"":""" & Dimension & """,");
+    Append(S, """latitude_rad"":" & Double_Image(Lat_Rad) & ",");
+    Append(S, """longitude_rad"":" & Double_Image(Lon_Rad) & ",");
+    Append(S, """confidence"":" & Double_Image(Confidence) & ",");
+    Append(S, """observed_at"":" & Double_Image(Observed_At));
+    Append(S, "}");
+    return To_String(S);
+  end Build_Standard_Evidence_Json;
+
   -- -- Build_Active_Find_Request_Json -----------------------------------------
 
   function Build_Active_Find_Request_Json
