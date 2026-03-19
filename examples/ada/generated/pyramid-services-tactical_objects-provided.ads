@@ -1,12 +1,19 @@
---  Auto-generated EntityActions service specification
+--  Auto-generated service binding specification
 --  Generated from: services by ada_service_generator.py
 --  Package: Pyramid.Services.Tactical_Objects.Provided
 --
---  Each Handle_<Op>_<Entity> procedure corresponds to one EntityActions
---  CRUD operation.  The Dispatch procedure is the single integration
---  point for any transport (PCL, socket, shared memory, etc.).
+--  Architecture: component logic > service binding (this) > PCL
+--
+--  This package provides:
+--    1. Wire-name constants and topic constants
+--    2. EntityActions handler stubs (Handle_*)
+--    3. JSON builder functions (GNATCOLL.JSON)
+--    4. PCL binding procedures (Subscribe_*, Invoke_*, Publish_*)
+--    5. Msg_To_String utility for PCL message payloads
 
 with Tactical_Objects_Types;  use Tactical_Objects_Types;
+with Pcl_Bindings;
+with Interfaces.C;
 with System;
 
 package Pyramid.Services.Tactical_Objects.Provided is
@@ -51,6 +58,12 @@ package Pyramid.Services.Tactical_Objects.Provided is
    Topic_Evidence_Requirements : constant String :=
      "standard.evidence_requirements";
 
+   --  -- PCL message utility ------------------------------------
+
+   function Msg_To_String
+     (Data : System.Address;
+      Size : Interfaces.C.unsigned) return String;
+
    --  -- EntityActions handlers ------------------------------------
    --  Implement these procedures in the package body.
 
@@ -94,6 +107,55 @@ package Pyramid.Services.Tactical_Objects.Provided is
       Lon_Rad     : Long_Float;
       Confidence  : Long_Float;
       Observed_At : Long_Float := 0.5) return String;
+
+   --  -- PCL binding procedures ------------------------------------
+   --  Subscribe/Invoke/Publish wrappers for PCL transport layer.
+
+   procedure Subscribe_Entity_Matches
+     (Container : Pcl_Bindings.Pcl_Container_Access;
+      Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;
+      User_Data : System.Address := System.Null_Address);
+
+   procedure Subscribe_Evidence_Requirements
+     (Container : Pcl_Bindings.Pcl_Container_Access;
+      Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;
+      User_Data : System.Address := System.Null_Address);
+
+   procedure Invoke_Read_Match
+     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+      Request   : String;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address);
+
+   procedure Invoke_Create_Requirement
+     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+      Request   : String;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address);
+
+   procedure Invoke_Read_Requirement
+     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+      Request   : String;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address);
+
+   procedure Invoke_Update_Requirement
+     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+      Request   : String;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address);
+
+   procedure Invoke_Delete_Requirement
+     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+      Request   : String;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address);
+
+   procedure Invoke_Read_Detail
+     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+      Request   : String;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address);
 
    --  -- Transport integration point ------------------------------
 

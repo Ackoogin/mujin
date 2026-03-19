@@ -1,45 +1,21 @@
 --  tactical_objects_service.ads
 --
---  Unified service interface for the Tactical Objects component.
+--  Legacy codec helpers for the TacticalObjects binary wire format.
 --
---  Standard service channel enums, wire-name constants, topic constants,
---  and JSON builders are imported from the generated packages:
+--  Standard service constants, JSON builders, and PCL bindings are now
+--  in the generated packages:
 --    Pyramid.Services.Tactical_Objects.Provided
 --    Pyramid.Services.Tactical_Objects.Consumed
 --
---  This package re-exports the generated constants for backward compatibility
---  and adds codec-level helpers (ordinal conversions, frame-to-object, etc.)
---  that are not generated from proto definitions.
+--  This package retains only:
+--    - Legacy service name constants (direct TacticalObjectsComponent)
+--    - Binary codec helpers (ordinal conversions, Frame_To_Tactical_Object)
+--    - Legacy query JSON builders (Build_Read_Request_Json, etc.)
 
 with Tactical_Objects_Types;  use Tactical_Objects_Types;
 with Streaming_Codec;
-with Pyramid.Services.Tactical_Objects.Provided;
-with Pyramid.Services.Tactical_Objects.Consumed;
-with System;
 
 package Tactical_Objects_Service is
-
-   -- =========================================================================
-   --  Re-exported generated types and constants (from Provided / Consumed)
-   -- =========================================================================
-
-   --  Service channel types (re-exported from generated packages)
-   subtype Provided_Channel is
-     Pyramid.Services.Tactical_Objects.Provided.Service_Channel;
-   subtype Consumed_Channel is
-     Pyramid.Services.Tactical_Objects.Consumed.Service_Channel;
-
-   --  Standard bridge service / topic names (from generated Provided package)
-   Standard_Create_Requirement_Service : constant String :=
-     Pyramid.Services.Tactical_Objects.Provided.Svc_Create_Requirement;
-   Standard_Entity_Matches_Topic : constant String :=
-     Pyramid.Services.Tactical_Objects.Provided.Topic_Entity_Matches;
-   Standard_Evidence_Reqs_Topic  : constant String :=
-     Pyramid.Services.Tactical_Objects.Provided.Topic_Evidence_Requirements;
-
-   --  Standard consumed topic name (from generated Consumed package)
-   Standard_Object_Evidence_Topic : constant String :=
-     Pyramid.Services.Tactical_Objects.Consumed.Topic_Object_Evidence;
 
    -- =========================================================================
    --  Legacy service constants (direct TacticalObjectsComponent interface)
@@ -49,29 +25,6 @@ package Tactical_Objects_Service is
    Create_Service_Name : constant String := "create_object";
    Update_Service_Name : constant String := "update_object";
    Delete_Service_Name : constant String := "delete_object";
-
-   -- =========================================================================
-   --  JSON builders (delegated to generated package)
-   -- =========================================================================
-
-   function Build_Standard_Requirement_Json
-     (Policy      : String;
-      Identity    : String;
-      Dimension   : String := "";
-      Min_Lat_Rad : Long_Float := 0.0;
-      Max_Lat_Rad : Long_Float := 0.0;
-      Min_Lon_Rad : Long_Float := 0.0;
-      Max_Lon_Rad : Long_Float := 0.0) return String
-     renames Pyramid.Services.Tactical_Objects.Provided.Build_Standard_Requirement_Json;
-
-   function Build_Standard_Evidence_Json
-     (Identity    : String;
-      Dimension   : String;
-      Lat_Rad     : Long_Float;
-      Lon_Rad     : Long_Float;
-      Confidence  : Long_Float;
-      Observed_At : Long_Float := 0.5) return String
-     renames Pyramid.Services.Tactical_Objects.Provided.Build_Standard_Evidence_Json;
 
    -- =========================================================================
    --  Legacy query JSON builders (hand-maintained, not proto-derived)
