@@ -7,11 +7,11 @@ set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# ── Coverage flags ──────────────────────────────────────────────────────
+# -- Coverage flags ------------------------------------------------------
 add_compile_options(--coverage -O0 -g -fprofile-abs-path)
 add_link_options(--coverage)
 
-# ── GoogleTest via FetchContent ──────────────────────────────────────────
+# -- GoogleTest via FetchContent ------------------------------------------
 include(FetchContent)
 FetchContent_Declare(
   googletest
@@ -23,7 +23,7 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 include(GoogleTest)
 
-# ── PCL core library (the three C files we want to cover) ────────────────
+# -- PCL core library (the three C files we want to cover) ----------------
 set(PCL_ROOT "${CMAKE_SOURCE_DIR}/../..")   # /home/user/ame
 
 add_library(pcl_core STATIC
@@ -43,7 +43,7 @@ set_target_properties(pcl_core PROPERTIES
 find_package(Threads REQUIRED)
 target_link_libraries(pcl_core PRIVATE Threads::Threads)
 
-# ── Helper to add a PCL test executable ────────────────────────────────
+# -- Helper to add a PCL test executable --------------------------------
 function(add_pcl_test name src)
   add_executable(${name} ${PCL_ROOT}/tests/${src})
   target_link_libraries(${name} PRIVATE pcl_core GTest::gtest_main)

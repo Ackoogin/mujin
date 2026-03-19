@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package pyramid.data_model.base;
 
-// ── EntityActions Base Types ─────────────────────────────────────────────────
+// -- EntityActions Base Types -------------------------------------------------
 //
 // These three types are the canonical inputs/outputs for all EntityActions CRUD
 // operations.  Every component service imports this file.

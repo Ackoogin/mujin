@@ -10,7 +10,7 @@ Options for integrating neural reasoning (LLMs and other models) into the PDDL p
 PDDL Domain/Problem
         |
         v
-   WorldModel ──► Planner (LAPKT BRFS) ──► PlanCompiler ──► BT Executor
+   WorldModel --► Planner (LAPKT BRFS) --► PlanCompiler --► BT Executor
    (bitset)          pure symbolic              causal          tick loop
                      search                     graph
 ```
@@ -33,7 +33,7 @@ Any neural integration must preserve these properties or explicitly document whi
 WorldModel snapshot (init facts + goal fluents)
         |
         v
-   LLM Heuristic ──► ranked action preferences / initial plan sketch
+   LLM Heuristic --► ranked action preferences / initial plan sketch
         |
         v
    LAPKT solver (BRFS / best-first) with LLM-informed h(n)
@@ -100,10 +100,10 @@ BT Failure detected
      - Recent WM audit entries (what changed unexpectedly)
         |
         v
-   LLM Plan Repair ──► candidate repair (partial plan suffix)
+   LLM Plan Repair --► candidate repair (partial plan suffix)
         |
         v
-   Validate repair against PDDL ──► if valid, compile to BT
+   Validate repair against PDDL --► if valid, compile to BT
                                      if invalid, fall back to full BRFS replan
 ```
 
@@ -148,10 +148,10 @@ Operator intent (natural language)
   + Object/type inventory from WorldModel
         |
         v
-   LLM Domain Author ──► candidate PDDL domain + problem
+   LLM Domain Author --► candidate PDDL domain + problem
         |
         v
-   PDDL Validator ──► syntax + type check
+   PDDL Validator --► syntax + type check
         |
         v
    WorldModel::registerPredicate() / registerAction()
@@ -195,7 +195,7 @@ public:
 
 ```
 Training (offline):
-   PlanAuditLog episodes ──► (state, goal, optimal_cost) pairs
+   PlanAuditLog episodes --► (state, goal, optimal_cost) pairs
         |
         v
    Train h(s, g) model (small GNN/MLP)
@@ -371,33 +371,33 @@ Phase 1 can start immediately — it requires no changes to the core planning or
 ## Architecture: Where Neural Components Fit
 
 ```
-                                    ┌─────────────────┐
+                                    ┌-----------------┐
                                     │  Goal Interpreter│ (Option E)
                                     │  (LLM)          │
-                                    └────────┬────────┘
+                                    └--------┬--------┘
                                              │ goal fluents
                                              v
-Operator ──► Mission Description ──► WorldModel ──► Planner ──► PlanCompiler ──► BT Executor
+Operator --► Mission Description --► WorldModel --► Planner --► PlanCompiler --► BT Executor
                                          │              │                            │
-                                         │         ┌────┴─────┐                      │
+                                         │         ┌----┴-----┐                      │
                                          │         │ Neural   │ (Options A, D)       │
                                          │         │ Heuristic│                      │
-                                         │         └──────────┘                      │
+                                         │         └----------┘                      │
                                          │                                           │
-                                         │              ┌──────────────┐             │
+                                         │              ┌--------------┐             │
                                          │              │ Plan Repair  │ (Option B)  │
-                                         │              │ (LLM)        │◄────────────┘
-                                         │              └──────────────┘   on failure
+                                         │              │ (LLM)        │◄------------┘
+                                         │              └--------------┘   on failure
                                          │
                                          ▼
                               Observability Layers 2,3,5
                                          │
-                              ┌──────────┴──────────┐
+                              ┌----------┴----------┐
                               │                     │
-                      ┌───────▼──────┐    ┌─────────▼────────┐
+                      ┌-------▼------┐    ┌---------▼--------┐
                       │Mission Analyst│    │Anomaly Detector  │ (Options F, G)
                       │(LLM, batch)  │    │(neural, real-time)│
-                      └──────────────┘    └──────────────────┘
+                      └--------------┘    └------------------┘
 ```
 
 ---

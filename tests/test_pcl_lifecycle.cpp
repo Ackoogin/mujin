@@ -7,7 +7,7 @@ extern "C" {
 #include "pcl/pcl_log.h"
 }
 
-// ── Test helpers ────────────────────────────────────────────────────────
+// -- Test helpers --------------------------------------------------------
 
 struct LifecycleLog {
   int configure_count  = 0;
@@ -62,7 +62,7 @@ static pcl_callbacks_t make_callbacks() {
   return cbs;
 }
 
-// ── Lifecycle Tests ─────────────────────────────────────────────────────
+// -- Lifecycle Tests -----------------------------------------------------
 
 TEST(PclLifecycle, CreateDestroy) {
   pcl_callbacks_t cbs = make_callbacks();
@@ -177,7 +177,7 @@ TEST(PclLifecycle, NullCallbacksAreNoOp) {
   pcl_container_destroy(c);
 }
 
-// ── Parameter Tests ─────────────────────────────────────────────────────
+// -- Parameter Tests -----------------------------------------------------
 
 TEST(PclParams, StringRoundTrip) {
   auto* c = pcl_container_create("params", nullptr, nullptr);
@@ -216,7 +216,7 @@ TEST(PclParams, OverwriteExisting) {
   pcl_container_destroy(c);
 }
 
-// ── Port Creation Tests ─────────────────────────────────────────────────
+// -- Port Creation Tests -------------------------------------------------
 
 static pcl_status_t configure_with_ports(pcl_container_t* c, void*) {
   auto* pub = pcl_container_add_publisher(c, "state", "State");
@@ -242,7 +242,7 @@ TEST(PclPorts, RejectedOutsideConfigure) {
   pcl_container_destroy(c);
 }
 
-// ── Tick Rate Tests ─────────────────────────────────────────────────────
+// -- Tick Rate Tests -----------------------------------------------------
 
 TEST(PclTickRate, DefaultIs100Hz) {
   auto* c = pcl_container_create("rate", nullptr, nullptr);
@@ -262,7 +262,7 @@ TEST(PclTickRate, SetAndGet) {
   pcl_container_destroy(c);
 }
 
-// ── Null Safety ─────────────────────────────────────────────────────────
+// -- Null Safety ---------------------------------------------------------
 
 TEST(PclNull, NullHandlesReturnError) {
   EXPECT_EQ(pcl_container_configure(nullptr), PCL_ERR_INVALID);

@@ -14,7 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// ── Internal representation ──────────────────────────────────────────────
+// -- Internal representation ----------------------------------------------
 
 struct pcl_bridge_t {
   pcl_container_t* container;
@@ -27,7 +27,7 @@ struct pcl_bridge_t {
   char             out_type [128];
 };
 
-// ── Subscriber callback ─────────────────────────────────────────────────
+// -- Subscriber callback -------------------------------------------------
 
 static void bridge_sub_cb(pcl_container_t* c,
                            const pcl_msg_t* in,
@@ -57,7 +57,7 @@ static void bridge_sub_cb(pcl_container_t* c,
   }
 }
 
-// ── on_configure: wire up the subscriber port ───────────────────────────
+// -- on_configure: wire up the subscriber port ---------------------------
 
 static pcl_status_t bridge_on_configure(pcl_container_t* c, void* ud) {
   pcl_bridge_t* b = (pcl_bridge_t*)ud;
@@ -73,7 +73,7 @@ static pcl_status_t bridge_on_configure(pcl_container_t* c, void* ud) {
   return PCL_OK;
 }
 
-// ── Public API ─────────────────────────────────────────────────────────
+// -- Public API ---------------------------------------------------------
 
 pcl_bridge_t* pcl_bridge_create(pcl_executor_t*  executor,
                                  const char*      name,

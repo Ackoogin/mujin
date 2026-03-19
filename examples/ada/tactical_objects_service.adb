@@ -9,7 +9,7 @@ with System;
 
 package body Tactical_Objects_Service is
 
-  -- ── EntityActions handler stubs ───────────────────────────────────────────
+  -- -- EntityActions handler stubs -------------------------------------------
 
   procedure Handle_Create_Tactical_Object
     (Request  : in  Tactical_Object;
@@ -118,7 +118,7 @@ package body Tactical_Objects_Service is
     end case;
   end Dispatch;
 
-  -- ── Internal helpers ──────────────────────────────────────────────────────
+  -- -- Internal helpers ------------------------------------------------------
 
   function Double_Image (V : Interfaces.C.double) return String is
   begin
@@ -130,7 +130,7 @@ package body Tactical_Objects_Service is
     return (if V then "true" else "false");
   end Bool_To_Json;
 
-  -- ── Build_Read_Request_Json ───────────────────────────────────────────────
+  -- -- Build_Read_Request_Json -----------------------------------------------
   --
   --  Serialise TacticalObjectQuery → JSON accepted by subscribe_interest.
   --
@@ -260,7 +260,7 @@ package body Tactical_Objects_Service is
     return To_String(S);
   end Build_Read_Request_Json;
 
-  -- ── Build_Active_Find_Request_Json ─────────────────────────────────────
+  -- -- Build_Active_Find_Request_Json -------------------------------------
   --
   --  Convenience wrapper: sets query_mode = active_find then delegates.
 
@@ -273,7 +273,7 @@ package body Tactical_Objects_Service is
     return Build_Read_Request_Json(AF_Query);
   end Build_Active_Find_Request_Json;
 
-  -- ── Ordinal conversions ───────────────────────────────────────────────────
+  -- -- Ordinal conversions ---------------------------------------------------
   --
   --  Ordinals match StreamingCodec ordinalToAffiliation / ordinalToObjectType.
   --  Aligned with the proto enum values in tactical_objects.proto.
@@ -328,7 +328,7 @@ package body Tactical_Objects_Service is
     end case;
   end Ordinal_To_Lifecycle_Status;
 
-  -- ── Frame_To_Tactical_Object ──────────────────────────────────────────────
+  -- -- Frame_To_Tactical_Object ----------------------------------------------
   --
   --  Map a decoded Streaming_Codec frame to a typed TacticalObject.
   --  Only fields present in the frame (Has_* = True) are populated.
@@ -375,7 +375,7 @@ package body Tactical_Objects_Service is
     return Obj;
   end Frame_To_Tactical_Object;
 
-  -- ── Tactical_Object_Image ─────────────────────────────────────────────────
+  -- -- Tactical_Object_Image -------------------------------------------------
 
   function Tactical_Object_Image
     (Obj : Tactical_Object) return String

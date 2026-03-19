@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 
-# ── EntityActions operation set ───────────────────────────────────────────────
+# -- EntityActions operation set -----------------------------------------------
 
 # Maps rpc name prefix → op kind
 OP_PREFIXES = ['Create', 'Read', 'Update', 'Delete']
@@ -50,7 +50,7 @@ BASE_TYPE_MAP = {
 }
 
 
-# ── Proto parser ──────────────────────────────────────────────────────────────
+# -- Proto parser --------------------------------------------------------------
 
 def _strip_comments(text: str) -> str:
     """Remove // line comments and /* */ block comments."""
@@ -159,7 +159,7 @@ def parse_proto(proto_path: Path) -> ProtoFile:
     return ProtoFile(package, services)
 
 
-# ── Ada package name derivation ───────────────────────────────────────────────
+# -- Ada package name derivation -----------------------------------------------
 
 def _pkg_name_from_proto(proto_file: ProtoFile) -> str:
     """
@@ -179,7 +179,7 @@ def _pkg_name_from_proto(proto_file: ProtoFile) -> str:
     return '.'.join(ada_parts)
 
 
-# ── Code generation ───────────────────────────────────────────────────────────
+# -- Code generation -----------------------------------------------------------
 
 class AdaServiceGenerator:
 
@@ -221,7 +221,7 @@ class AdaServiceGenerator:
             self._write_body(adb_path, pkg_name, parsed, all_rpcs)
             print(f'  Generated {pkg_name}')
 
-    # ── Spec (.ads) ───────────────────────────────────────────────────────────
+    # -- Spec (.ads) -----------------------------------------------------------
 
     def _write_spec(self, path: Path, pkg_name: str, parsed: ProtoFile,
                     all_rpcs: List[Tuple[str, ProtoRpc]]):
@@ -270,7 +270,7 @@ class AdaServiceGenerator:
                 f.write('\n')
 
             # Handler procedure declarations grouped by service
-            f.write(f'   --  ── EntityActions handlers ─────────────────────────────────────\n')
+            f.write(f'   --  -- EntityActions handlers -------------------------------------\n')
             f.write(f'   --  Implement these procedures in the package body.\n')
             f.write(f'\n')
 
@@ -294,7 +294,7 @@ class AdaServiceGenerator:
             f.write('\n')
 
             # Dispatch procedure
-            f.write(f'   --  ── Transport integration point ─────────────────────────────────\n')
+            f.write(f'   --  -- Transport integration point ---------------------------------\n')
             f.write(f'   --  Route an incoming (channel, raw buffer) call to the correct\n')
             f.write(f'   --  typed handler.  The transport layer calls this; it never calls\n')
             f.write(f'   --  Handle_* procedures directly.\n')
@@ -308,7 +308,7 @@ class AdaServiceGenerator:
             f.write(f'\n')
             f.write(f'end {pkg_name};\n')
 
-    # ── Body (.adb) ───────────────────────────────────────────────────────────
+    # -- Body (.adb) -----------------------------------------------------------
 
     def _write_body(self, path: Path, pkg_name: str, parsed: ProtoFile,
                     all_rpcs: List[Tuple[str, ProtoRpc]]):
@@ -326,7 +326,7 @@ class AdaServiceGenerator:
             current_svc = None
             for svc_name, rpc in all_rpcs:
                 if svc_name != current_svc:
-                    f.write(f'   --  ── {svc_name} ─────────────────────────────────────\n')
+                    f.write(f'   --  -- {svc_name} -------------------------------------\n')
                     current_svc = svc_name
 
                 req_t = rpc.ada_req_type

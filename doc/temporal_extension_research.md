@@ -168,11 +168,11 @@ The temporal planner produces a partially-ordered plan with time annotations. Th
 
 ```
 Temporal Plan Output          STN Representation           BT Structure
-─────────────────────    →    ──────────────────    →    ──────────────
-0.000: (move uav1 a b) [5]   t0 ──[0,0]── t_start     Parallel {
-5.000: (scan uav1 b) [3]     t_start ──[5]── t1          Sequence {
-0.000: (move uav2 c d) [4]   t1 ──[3]── t2                 move(uav1,a,b)  // 5s
-                              t_start ──[4]── t3            scan(uav1,b)    // 3s
+---------------------    →    ------------------    →    --------------
+0.000: (move uav1 a b) [5]   t0 --[0,0]-- t_start     Parallel {
+5.000: (scan uav1 b) [3]     t_start --[5]-- t1          Sequence {
+0.000: (move uav2 c d) [4]   t1 --[3]-- t2                 move(uav1,a,b)  // 5s
+                              t_start --[4]-- t3            scan(uav1,b)    // 3s
                               ...                         }
                                                           move(uav2,c,d)    // 4s (concurrent)
                                                         }

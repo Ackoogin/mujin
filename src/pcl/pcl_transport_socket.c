@@ -43,7 +43,7 @@
 #  define pcl_close_socket close
 #endif
 
-// ── Wire protocol constants ──────────────────────────────────────────────
+// -- Wire protocol constants ----------------------------------------------
 
 #define PCL_SOCKET_MSG_PUBLISH  0
 #define PCL_SOCKET_MSG_SVC_REQ  1
@@ -51,7 +51,7 @@
 #define PCL_SOCKET_TOPIC_SVC_REQ "__pcl_svc_req"
 #define PCL_SOCKET_MAX_PAYLOAD  65536
 
-// ── Helper FIFO node types ───────────────────────────────────────────────
+// -- Helper FIFO node types -----------------------------------------------
 
 typedef struct pcl_outbound_frame_t {
   uint8_t*                     data;
@@ -66,7 +66,7 @@ typedef struct pcl_svc_pending_t {
   struct pcl_svc_pending_t* next;
 } pcl_svc_pending_t;
 
-// ── Main transport struct ────────────────────────────────────────────────
+// -- Main transport struct ------------------------------------------------
 
 struct pcl_socket_transport_t {
   int               is_server;
@@ -105,7 +105,7 @@ struct pcl_socket_transport_t {
   pcl_container_t*  gateway;
 };
 
-// ── Byte-order helpers ───────────────────────────────────────────────────
+// -- Byte-order helpers ---------------------------------------------------
 
 static uint16_t read_u16_be(const uint8_t* p) {
   return (uint16_t)((p[0] << 8) | p[1]);
@@ -127,7 +127,7 @@ static void write_u32_be(uint8_t* p, uint32_t v) {
   p[3] = (uint8_t)(v & 0xFF);
 }
 
-// ── Socket I/O helpers ───────────────────────────────────────────────────
+// -- Socket I/O helpers ---------------------------------------------------
 
 static int recv_all(PCL_SOCKET_T sock, void* buf, size_t len) {
   size_t got = 0;
@@ -157,7 +157,7 @@ static int send_all(PCL_SOCKET_T sock, const void* buf, size_t len) {
   return 0;
 }
 
-// ── Outbound FIFO queue ──────────────────────────────────────────────────
+// -- Outbound FIFO queue --------------------------------------------------
 // Called from ANY thread (PCL main, recv_thread, application).
 // The send_thread is the ONLY thread that calls send_all().
 
@@ -195,7 +195,7 @@ static pcl_status_t enqueue_outbound_frame(struct pcl_socket_transport_t* ctx,
   return PCL_OK;
 }
 
-// ── Send thread ──────────────────────────────────────────────────────────
+// -- Send thread ----------------------------------------------------------
 // Sole writer to client_sock.
 
 #ifdef _WIN32
@@ -249,7 +249,7 @@ static void* send_thread_main(void* arg)
 #endif
 }
 
-// ── Transport vtable: publish (called on PCL main thread) ────────────────
+// -- Transport vtable: publish (called on PCL main thread) ----------------
 
 static pcl_status_t socket_publish(void*            adapter_ctx,
                                    const char*      topic,
@@ -295,7 +295,7 @@ static pcl_status_t socket_publish(void*            adapter_ctx,
   return rc;
 }
 
-// ── Gateway subscriber callback (PCL main thread) ────────────────────────
+// -- Gateway subscriber callback (PCL main thread) ------------------------
 // Invoked when a SVC_REQ arrives from the wire.  Calls the service handler
 // synchronously (fine — runs on executor thread), then enqueues the response
 // to send_thread (non-blocking).
@@ -357,7 +357,7 @@ static void gateway_sub_cb(pcl_container_t* c,
   free(frame);
 }
 
-// ── Transport vtable: subscribe / shutdown ───────────────────────────────
+// -- Transport vtable: subscribe / shutdown -------------------------------
 
 static pcl_status_t socket_subscribe(void*       adapter_ctx,
                                      const char* topic,
@@ -372,7 +372,7 @@ static void socket_shutdown(void* adapter_ctx) {
   ctx->recv_stop = 1;
 }
 
-// ── Receive thread ───────────────────────────────────────────────────────
+// -- Receive thread -------------------------------------------------------
 // recv_thread only calls pcl_executor_post_incoming and
 // pcl_executor_post_response_cb — both are non-blocking enqueues.
 
@@ -523,7 +523,7 @@ static void* recv_thread_main(void* arg)
 #endif
 }
 
-// ── Gateway container setup ──────────────────────────────────────────────
+// -- Gateway container setup ----------------------------------------------
 
 static pcl_status_t gateway_on_configure(pcl_container_t* c, void* ud) {
   struct pcl_socket_transport_t* t = (struct pcl_socket_transport_t*)ud;
@@ -536,7 +536,7 @@ static pcl_status_t gateway_on_configure(pcl_container_t* c, void* ud) {
   return PCL_OK;
 }
 
-// ── Common initialisation ────────────────────────────────────────────────
+// -- Common initialisation ------------------------------------------------
 
 static void socket_transport_create_common(struct pcl_socket_transport_t* ctx,
                                            pcl_executor_t*               executor) {
@@ -568,7 +568,7 @@ static void socket_transport_create_common(struct pcl_socket_transport_t* ctx,
 #endif
 }
 
-// ── Public create: server ────────────────────────────────────────────────
+// -- Public create: server ------------------------------------------------
 
 pcl_socket_transport_t* pcl_socket_transport_create_server(uint16_t        port,
                                                            pcl_executor_t* executor) {
@@ -655,7 +655,7 @@ pcl_socket_transport_t* pcl_socket_transport_create_server(uint16_t        port,
   return (pcl_socket_transport_t*)ctx;
 }
 
-// ── Public create: client ────────────────────────────────────────────────
+// -- Public create: client ------------------------------------------------
 
 pcl_socket_transport_t* pcl_socket_transport_create_client(const char*      host,
                                                            uint16_t         port,
@@ -712,7 +712,7 @@ pcl_socket_transport_t* pcl_socket_transport_create_client(const char*      host
   return (pcl_socket_transport_t*)ctx;
 }
 
-// ── Accessors ────────────────────────────────────────────────────────────
+// -- Accessors ------------------------------------------------------------
 
 const pcl_transport_t* pcl_socket_transport_get_transport(pcl_socket_transport_t* ctx) {
   if (!ctx) return NULL;
@@ -724,7 +724,7 @@ pcl_container_t* pcl_socket_transport_gateway_container(pcl_socket_transport_t* 
   return ctx->gateway;
 }
 
-// ── Async service invocation (client only) ───────────────────────────────
+// -- Async service invocation (client only) -------------------------------
 
 pcl_status_t pcl_socket_transport_invoke_remote_async(
     pcl_socket_transport_t* ctx_opaque,
@@ -826,7 +826,7 @@ pcl_status_t pcl_socket_transport_invoke_remote_async(
   return rc;
 }
 
-// ── Destroy ──────────────────────────────────────────────────────────────
+// -- Destroy --------------------------------------------------------------
 
 void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx_opaque) {
   struct pcl_socket_transport_t* ctx = (struct pcl_socket_transport_t*)ctx_opaque;

@@ -93,9 +93,9 @@ Integration pattern: `IPlannerBackend` abstraction selects LAPKT for STRIPS doma
 ### Architecture Overview
 
 ```
-PDDL 2.1 Domain ──▶ PddlParser (extended) ──▶ IPlannerBackend
+PDDL 2.1 Domain --▶ PddlParser (extended) --▶ IPlannerBackend
                                                    │
-                                    ┌──────────────┼──────────────┐
+                                    ┌--------------┼--------------┐
                                     ▼              ▼              ▼
                                LapktBackend   OpticBackend   (future)
                                (STRIPS)       (subprocess)   AriesBackend
@@ -107,7 +107,7 @@ PDDL 2.1 Domain ──▶ PddlParser (extended) ──▶ IPlannerBackend
                               PlanCompiler   PlanCompiler
                               (Sequence)     (STN → Parallel/Timeout)
                                     │              │
-                                    └──────┬───────┘
+                                    └------┬-------┘
                                            ▼
                                       BT Executor
 ```

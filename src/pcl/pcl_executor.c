@@ -21,7 +21,7 @@
 #  include <pthread.h>
 #endif
 
-// ── Platform time helpers ───────────────────────────────────────────────
+// -- Platform time helpers -----------------------------------------------
 
 static double pcl_clock_now(void) {
 #ifdef _WIN32
@@ -53,7 +53,7 @@ static void pcl_sleep_seconds(double seconds) {
 #endif
 }
 
-// ── Limits ──────────────────────────────────────────────────────────────
+// -- Limits --------------------------------------------------------------
 
 #define PCL_MAX_CONTAINERS 64
 
@@ -133,7 +133,7 @@ static void free_pending_msg(pcl_pending_msg_t* pending) {
   free(pending);
 }
 
-// ── Internal executor representation ────────────────────────────────────
+// -- Internal executor representation ------------------------------------
 
 struct pcl_executor_t {
   pcl_container_t* containers[PCL_MAX_CONTAINERS];
@@ -155,7 +155,7 @@ struct pcl_executor_t {
   pcl_mutex_t         resp_cb_lock;
 };
 
-// ── Create / destroy ────────────────────────────────────────────────────
+// -- Create / destroy ----------------------------------------------------
 
 pcl_executor_t* pcl_executor_create(void) {
   pcl_executor_t* e = (pcl_executor_t*)calloc(1, sizeof(pcl_executor_t));
@@ -211,7 +211,7 @@ void pcl_executor_destroy(pcl_executor_t* e) {
   free(e);
 }
 
-// ── Container management ────────────────────────────────────────────────
+// -- Container management ------------------------------------------------
 
 pcl_status_t pcl_executor_add(pcl_executor_t* e, pcl_container_t* c) {
   if (!e || !c) return PCL_ERR_INVALID;
@@ -236,7 +236,7 @@ pcl_status_t pcl_executor_remove(pcl_executor_t* e, pcl_container_t* c) {
   return PCL_ERR_NOT_FOUND;
 }
 
-// ── Intra-process dispatch ──────────────────────────────────────────────
+// -- Intra-process dispatch ----------------------------------------------
 
 static struct pcl_port_t* find_subscriber(pcl_executor_t* e,
                                           const char* topic) {
@@ -333,7 +333,7 @@ static pcl_status_t drain_incoming_queue(pcl_executor_t* e) {
   return PCL_OK;
 }
 
-// ── Tick one container ──────────────────────────────────────────────────
+// -- Tick one container --------------------------------------------------
 
 static void tick_container(pcl_container_t* c, double dt) {
   double tick_period;
@@ -354,7 +354,7 @@ static void tick_container(pcl_container_t* c, double dt) {
   }
 }
 
-// ── Spin ────────────────────────────────────────────────────────────────
+// -- Spin ----------------------------------------------------------------
 
 pcl_status_t pcl_executor_spin(pcl_executor_t* e) {
   double fastest_hz;
@@ -431,7 +431,7 @@ pcl_status_t pcl_executor_spin_once(pcl_executor_t* e, uint32_t timeout_ms) {
   return PCL_OK;
 }
 
-// ── Shutdown ────────────────────────────────────────────────────────────
+// -- Shutdown ------------------------------------------------------------
 
 void pcl_executor_request_shutdown(pcl_executor_t* e) {
   if (e) e->shutdown_requested = 1;
@@ -469,7 +469,7 @@ pcl_status_t pcl_executor_shutdown_graceful(pcl_executor_t* e,
   return timed_out ? PCL_ERR_TIMEOUT : PCL_OK;
 }
 
-// ── Transport ───────────────────────────────────────────────────────────
+// -- Transport -----------------------------------------------------------
 
 pcl_status_t pcl_executor_set_transport(pcl_executor_t*        e,
                                         const pcl_transport_t* transport) {

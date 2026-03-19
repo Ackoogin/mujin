@@ -7,13 +7,13 @@
 #include <stdio.h>
 #include <string.h>
 
-// ── Module state ────────────────────────────────────────────────────────
+// -- Module state --------------------------------------------------------
 
 static pcl_log_handler_t g_handler   = NULL;
 static void*             g_user_data = NULL;
 static pcl_log_level_t   g_min_level = PCL_LOG_INFO;
 
-// ── Default handler ─────────────────────────────────────────────────────
+// -- Default handler -----------------------------------------------------
 
 static const char* level_str(pcl_log_level_t level) {
   switch (level) {
@@ -38,7 +38,7 @@ static void default_handler(pcl_log_level_t level,
   }
 }
 
-// ── Public API ──────────────────────────────────────────────────────────
+// -- Public API ----------------------------------------------------------
 
 void pcl_log_set_handler(pcl_log_handler_t handler, void* user_data) {
   g_handler   = handler;

@@ -17,7 +17,7 @@ extern "C" {
 #include "pcl/pcl_log.h"
 }
 
-// ── Malloc interposer ────────────────────────────────────────────────────
+// -- Malloc interposer ----------------------------------------------------
 //
 // g_oom_countdown (thread-local):
 //   -1  → never fail (normal operation)
@@ -62,7 +62,7 @@ static void restore_logs() {
   pcl_log_set_level(PCL_LOG_INFO);
 }
 
-// ── pcl_executor_post_incoming allocation sequence ──────────────────────
+// -- pcl_executor_post_incoming allocation sequence ----------------------
 //
 // Inside post_incoming the allocations happen in this order:
 //   #0  calloc(1, sizeof(pcl_pending_msg_t))       → if NULL → return PCL_ERR_NOMEM
@@ -84,7 +84,7 @@ static pcl_status_t do_post(void* ud) {
 // Inside post_incoming: calloc(pending), malloc(topic), malloc(type_name), malloc(data).
 // Countdown N = skip N allocations, fail the (N+1)-th.
 
-// ── Fail allocation #0: calloc for pcl_pending_msg_t ─────────────────
+// -- Fail allocation #0: calloc for pcl_pending_msg_t -----------------
 
 TEST(PclOom, PostIncomingPendingAllocFails) {
   silence_logs();
@@ -101,7 +101,7 @@ TEST(PclOom, PostIncomingPendingAllocFails) {
   restore_logs();
 }
 
-// ── Fail allocation #1: topic strdup → free_pending_msg path ─────────
+// -- Fail allocation #1: topic strdup → free_pending_msg path ---------
 
 TEST(PclOom, PostIncomingTopicStrdupFails) {
   silence_logs();
@@ -118,7 +118,7 @@ TEST(PclOom, PostIncomingTopicStrdupFails) {
   restore_logs();
 }
 
-// ── Fail allocation #2: type_name strdup → free_pending_msg path ─────
+// -- Fail allocation #2: type_name strdup → free_pending_msg path -----
 
 TEST(PclOom, PostIncomingTypeNameStrdupFails) {
   silence_logs();
@@ -135,7 +135,7 @@ TEST(PclOom, PostIncomingTypeNameStrdupFails) {
   restore_logs();
 }
 
-// ── Fail allocation #3: data malloc → lines 467-469 ──────────────────
+// -- Fail allocation #3: data malloc → lines 467-469 ------------------
 
 TEST(PclOom, PostIncomingDataMallocFails) {
   silence_logs();
@@ -153,7 +153,7 @@ TEST(PclOom, PostIncomingDataMallocFails) {
   restore_logs();
 }
 
-// ── Bridge: container_create fails (pcl_bridge.c lines 108-109) ──────────
+// -- Bridge: container_create fails (pcl_bridge.c lines 108-109) ----------
 //
 // pcl_bridge_create allocates the bridge struct (calloc #0), then calls
 // pcl_container_create which does its own calloc (#1).  Failing #1 causes
@@ -188,7 +188,7 @@ TEST(PclOom, BridgeCreateContainerAllocFails) {
   restore_logs();
 }
 
-// ── post_response_cb: data malloc fails (lines 553-554) ──────────────────
+// -- post_response_cb: data malloc fails (lines 553-554) ------------------
 //
 // Inside pcl_executor_post_response_cb the allocation sequence is:
 //   #0  calloc(1, sizeof(node))   → node created

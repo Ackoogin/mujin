@@ -6,7 +6,7 @@ with System;
 
 package body Pyramid.Services.Tactical_Objects.Provided is
 
-   --  ── TacticalObjectService ─────────────────────────────────────
+   --  -- TacticalObjectService -------------------------------------
    procedure Handle_Create_Tactical_Object
      (Request  : in  TacticalObject;
       Response : out Identifier)
@@ -39,7 +39,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       null;  --  TODO: implement
    end Handle_Delete_Tactical_Object;
 
-   --  ── ZoneService ─────────────────────────────────────
+   --  -- ZoneService -------------------------------------
    procedure Handle_Create_Zone
      (Request  : in  Zone;
       Response : out Identifier)
@@ -72,7 +72,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       null;  --  TODO: implement
    end Handle_Delete_Zone;
 
-   --  ── ObservationIngressService ─────────────────────────────────────
+   --  -- ObservationIngressService -------------------------------------
    procedure Handle_Create_Observation
      (Request  : in  Observation;
       Response : out Identifier)

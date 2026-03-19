@@ -32,7 +32,7 @@ package Pyramid.Services.Tactical_Objects.Provided is
    type TacticalObject_Array is array (Positive range <>) of TacticalObject;
    type Zone_Array is array (Positive range <>) of Zone;
 
-   --  ── EntityActions handlers ─────────────────────────────────────
+   --  -- EntityActions handlers -------------------------------------
    --  Implement these procedures in the package body.
 
    --  TacticalObjectService
@@ -66,7 +66,7 @@ package Pyramid.Services.Tactical_Objects.Provided is
      (Request  : in  Observation;
       Response : out Identifier);
 
-   --  ── Transport integration point ─────────────────────────────────
+   --  -- Transport integration point ---------------------------------
    --  Route an incoming (channel, raw buffer) call to the correct
    --  typed handler.  The transport layer calls this; it never calls
    --  Handle_* procedures directly.

@@ -44,7 +44,7 @@ procedure Ada_Active_Find_E2E is
   function To_Address is new
     Ada.Unchecked_Conversion(Interfaces.C.Strings.chars_ptr, System.Address);
 
-  -- ── Configuration ──────────────────────────────────────────────────────────
+  -- -- Configuration ----------------------------------------------------------
 
   Host_Str : Interfaces.C.Strings.chars_ptr :=
     Interfaces.C.Strings.New_String("127.0.0.1");
@@ -68,7 +68,7 @@ procedure Ada_Active_Find_E2E is
     end loop;
   end Parse_Args;
 
-  -- ── Logging ────────────────────────────────────────────────────────────────
+  -- -- Logging ----------------------------------------------------------------
 
   procedure Log(Msg : String) is
   begin
@@ -77,7 +77,7 @@ procedure Ada_Active_Find_E2E is
     Ada.Text_IO.Flush(Ada.Text_IO.Standard_Error);
   end Log;
 
-  -- ── Shared state ───────────────────────────────────────────────────────────
+  -- -- Shared state -----------------------------------------------------------
 
   Frames_Received       : Natural := 0;
   Found_Hostile_Platform: Boolean := False;
@@ -259,7 +259,7 @@ procedure Ada_Active_Find_E2E is
     return Pcl_Bindings.PCL_OK;
   end Provider_On_Configure;
 
-  -- ── Main variables ─────────────────────────────────────────────────────────
+  -- -- Main variables ---------------------------------------------------------
 
   Exec       : Pcl_Bindings.Pcl_Executor_Access;
   Transport  : Pcl_Bindings.Pcl_Socket_Transport_Access;
@@ -275,7 +275,7 @@ begin
   Log("Connecting to " & Interfaces.C.Strings.Value(Host_Str) &
       ":" & Interfaces.C.unsigned_short'Image(Port_Val));
 
-  -- ── Create executor ────────────────────────────────────────────────────────
+  -- -- Create executor --------------------------------------------------------
 
   Exec := Pcl_Bindings.Create_Executor;
   if Exec = null then
@@ -285,7 +285,7 @@ begin
   end if;
   Exec_Handle := Exec;
 
-  -- ── Connect via socket client transport ────────────────────────────────────
+  -- -- Connect via socket client transport ------------------------------------
 
   Transport := Pcl_Bindings.Create_Socket_Client(Host_Str, Port_Val, Exec);
   Interfaces.C.Strings.Free(Host_Str);
@@ -307,7 +307,7 @@ begin
     return;
   end if;
 
-  -- ── Create Ada client container ────────────────────────────────────────────
+  -- -- Create Ada client container --------------------------------------------
 
   Client_Cbs := (On_Configure  => Client_On_Configure'Unrestricted_Access,
                  On_Activate   => null,
@@ -332,7 +332,7 @@ begin
   Status := Pcl_Bindings.Activate(Client_C);
   Status := Pcl_Bindings.Add_Container(Exec, Client_C);
 
-  -- ── Create evidence provider container ─────────────────────────────────────
+  -- -- Create evidence provider container -------------------------------------
 
   Prov_Cbs := (On_Configure  => Provider_On_Configure'Unrestricted_Access,
                On_Activate   => null,
@@ -358,7 +358,7 @@ begin
   Status := Pcl_Bindings.Activate(Provider_C);
   Status := Pcl_Bindings.Add_Container(Exec, Provider_C);
 
-  -- ── Invoke subscribe_interest with active_find ─────────────────────────────
+  -- -- Invoke subscribe_interest with active_find -----------------------------
 
   declare
     Svc_Response_Ready : Boolean               := False;
@@ -483,7 +483,7 @@ begin
     end if;
   end;
 
-  -- ── Report pass/fail ───────────────────────────────────────────────────────
+  -- -- Report pass/fail -------------------------------------------------------
 
   Log("--- Results ---");
   Log("  Evidence requirement received: " &
@@ -508,7 +508,7 @@ begin
     Ada.Command_Line.Set_Exit_Status(1);
   end if;
 
-  -- ── Cleanup ────────────────────────────────────────────────────────────────
+  -- -- Cleanup ----------------------------------------------------------------
 
   Pcl_Bindings.Destroy_Socket_Transport(Transport);
   Pcl_Bindings.Destroy_Container(Provider_C);

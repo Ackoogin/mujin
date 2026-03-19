@@ -14,7 +14,7 @@ with Interfaces.C;
 
 package Tactical_Objects_Types is
 
-  -- ── Base EntityActions types (base.proto) ─────────────────────────────────
+  -- -- Base EntityActions types (base.proto) ---------------------------------
 
   subtype Identifier is Unbounded_String;
 
@@ -27,7 +27,7 @@ package Tactical_Objects_Types is
     Success : Boolean := False;
   end record;
 
-  -- ── Enumerations (matching C++ enum class + proto ordinals) ───────────────
+  -- -- Enumerations (matching C++ enum class + proto ordinals) ---------------
 
   --  ObjectType — ordinal matches StreamingCodec.objectTypeToOrdinal
   type Object_Type is
@@ -123,7 +123,7 @@ package Tactical_Objects_Types is
     Value : Query_Mode := Read_Current;
   end record;
 
-  -- ── Geometry types ────────────────────────────────────────────────────────
+  -- -- Geometry types --------------------------------------------------------
 
   --  Maps to proto Position / tactical_objects::Position
   type Position is record
@@ -147,7 +147,7 @@ package Tactical_Objects_Types is
     Max_Lon : Interfaces.C.double := 0.0;
   end record;
 
-  -- ── Optional wrappers ─────────────────────────────────────────────────────
+  -- -- Optional wrappers -----------------------------------------------------
   --  Ada 2012 has no built-in optional; mirror proto "optional" fields
   --  with a Has/Value pair.
 
@@ -176,7 +176,7 @@ package Tactical_Objects_Types is
     Value : Unbounded_String := Null_Unbounded_String;
   end record;
 
-  -- ── TacticalObjectQuery (maps to proto TacticalObjectQuery) ───────────────
+  -- -- TacticalObjectQuery (maps to proto TacticalObjectQuery) ---------------
   --  Superset of base Query with compound predicates.
   --  Corresponds to: tactical_objects::QueryRequest
 
@@ -192,7 +192,7 @@ package Tactical_Objects_Types is
     By_Source_Entity_Id : Optional_String;
   end record;
 
-  -- ── TacticalObject entity (maps to proto TacticalObject) ─────────────────
+  -- -- TacticalObject entity (maps to proto TacticalObject) -----------------
   --  Full denormalized view — used for Create, Read, and Update responses.
 
   type Tactical_Object is record
@@ -210,7 +210,7 @@ package Tactical_Objects_Types is
     Has_Velocity     : Boolean             := False;
   end record;
 
-  -- ── Zone entity (maps to proto Zone) ─────────────────────────────────────
+  -- -- Zone entity (maps to proto Zone) -------------------------------------
 
   type Zone_Type_Enum is
     (Zone_Type_Unspecified,
@@ -240,7 +240,7 @@ package Tactical_Objects_Types is
     Has_Zone_Type : Boolean       := False;
   end record;
 
-  -- ── Observation entity (maps to proto Observation, flow: in) ─────────────
+  -- -- Observation entity (maps to proto Observation, flow: in) -------------
 
   type Observation is record
     Observation_Id      : Identifier;
@@ -254,7 +254,7 @@ package Tactical_Objects_Types is
     Uncertainty_Radius_M: Interfaces.C.double  := 0.0;
   end record;
 
-  -- ── Sentinel values ───────────────────────────────────────────────────────
+  -- -- Sentinel values -------------------------------------------------------
 
   Null_Identifier : constant Identifier := Null_Unbounded_String;
   Ack_Ok          : constant Ack        := (Success => True);

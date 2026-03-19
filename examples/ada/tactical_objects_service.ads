@@ -20,7 +20,7 @@ with System;
 
 package Tactical_Objects_Service is
 
-   --  ── EntityActions operation kind ─────────────────────────────────────────
+   --  -- EntityActions operation kind -----------------------------------------
 
    type Operation_Kind is
      (Op_Create,
@@ -28,7 +28,7 @@ package Tactical_Objects_Service is
       Op_Update,
       Op_Delete);
 
-   --  ── Service channel (one per proto rpc) ──────────────────────────────────
+   --  -- Service channel (one per proto rpc) ----------------------------------
 
    type Service_Channel is
      (Ch_Create_Tactical_Object,
@@ -45,7 +45,7 @@ package Tactical_Objects_Service is
    type Tactical_Object_Array is array (Positive range <>) of Tactical_Object;
    type Zone_Array            is array (Positive range <>) of Zone_Entity;
 
-   --  ── EntityActions handlers ────────────────────────────────────────────────
+   --  -- EntityActions handlers ------------------------------------------------
    --  Implement these in the package body.
 
    --  TacticalObjectService
@@ -87,7 +87,7 @@ package Tactical_Objects_Service is
      (Request  : in  Observation;
       Response : out Tactical_Objects_Types.Identifier);
 
-   --  ── Transport integration point ──────────────────────────────────────────
+   --  -- Transport integration point ------------------------------------------
    --  Route an incoming (channel, raw buffer) call to the correct typed
    --  handler.  The transport layer calls this; it never calls Handle_*
    --  procedures directly.
@@ -99,7 +99,7 @@ package Tactical_Objects_Service is
       Response_Buf : out System.Address;
       Response_Size: out Natural);
 
-   --  ── Transport-level helpers (used by ada_tobj_client) ────────────────────
+   --  -- Transport-level helpers (used by ada_tobj_client) --------------------
    --  These will move to the .adb body once the client calls Handle_Read_*
    --  directly instead of driving PCL socket invocations manually.
 

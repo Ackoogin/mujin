@@ -8,13 +8,13 @@ PDDL planning + behaviour tree execution with a shared world model, full observa
 PDDL Domain/Problem
         |
         v
-   WorldModel  ──► Planner (LAPKT BRFS) ──► PlanCompiler ──► BT XML
+   WorldModel  --► Planner (LAPKT BRFS) --► PlanCompiler --► BT XML
    (facts +                                                       |
     actions)                                                      v
         |                                                  BT.CPP Executor
-        └──► WmAuditLog (Layer 3)                          (tickWhileRunning)
+        └--► WmAuditLog (Layer 3)                          (tickWhileRunning)
                                                                   |
-                                              ┌───────────────────┤
+                                              ┌-------------------┤
                                               │                   │
                                         TreeObserver        AmeBTLogger
                                          (Layer 1)           (Layer 2)

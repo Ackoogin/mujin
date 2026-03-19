@@ -35,7 +35,7 @@ procedure Ada_Tobj_Client is
   function To_Address is new
     Ada.Unchecked_Conversion(Interfaces.C.Strings.chars_ptr, System.Address);
 
-  -- ── Configuration ──────────────────────────────────────────────────────────
+  -- -- Configuration ----------------------------------------------------------
 
   Host_Str : Interfaces.C.Strings.chars_ptr :=
     Interfaces.C.Strings.New_String("127.0.0.1");
@@ -59,7 +59,7 @@ procedure Ada_Tobj_Client is
     end loop;
   end Parse_Args;
 
-  -- ── Logging ────────────────────────────────────────────────────────────────
+  -- -- Logging ----------------------------------------------------------------
 
   procedure Log(Msg : String) is
   begin
@@ -68,11 +68,11 @@ procedure Ada_Tobj_Client is
     Ada.Text_IO.Flush(Ada.Text_IO.Standard_Error);
   end Log;
 
-  -- ── Client state ───────────────────────────────────────────────────────────
+  -- -- Client state -----------------------------------------------------------
 
   Frames_Received : Natural := 0;
 
-  -- ── Subscriber callback ────────────────────────────────────────────────────
+  -- -- Subscriber callback ----------------------------------------------------
   --
   --  Receives raw binary batch frames on the entity_updates topic.
   --  Decodes with Streaming_Codec then maps each frame to a typed
@@ -113,7 +113,7 @@ procedure Ada_Tobj_Client is
     end if;
   end Entity_Updates_Cb;
 
-  -- ── on_configure: subscribe to entity_updates ─────────────────────────────
+  -- -- on_configure: subscribe to entity_updates -----------------------------
 
   function On_Configure_Cb
     (Container : Pcl_Bindings.Pcl_Container_Access;
@@ -142,7 +142,7 @@ procedure Ada_Tobj_Client is
     return Pcl_Bindings.PCL_OK;
   end On_Configure_Cb;
 
-  -- ── Main variables ─────────────────────────────────────────────────────────
+  -- -- Main variables ---------------------------------------------------------
 
   Exec      : Pcl_Bindings.Pcl_Executor_Access;
   Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
@@ -156,7 +156,7 @@ begin
   Log("Connecting to " & Interfaces.C.Strings.Value(Host_Str) &
       ":" & Interfaces.C.unsigned_short'Image(Port_Val));
 
-  -- ── Create executor ────────────────────────────────────────────────────────
+  -- -- Create executor --------------------------------------------------------
 
   Exec := Pcl_Bindings.Create_Executor;
   if Exec = null then
@@ -165,7 +165,7 @@ begin
     return;
   end if;
 
-  -- ── Connect via socket client transport ────────────────────────────────────
+  -- -- Connect via socket client transport ------------------------------------
 
   Transport := Pcl_Bindings.Create_Socket_Client(Host_Str, Port_Val, Exec);
   Interfaces.C.Strings.Free(Host_Str);
@@ -177,7 +177,7 @@ begin
     return;
   end if;
 
-  -- ── Set transport on executor ──────────────────────────────────────────────
+  -- -- Set transport on executor ----------------------------------------------
 
   Status := Pcl_Bindings.Set_Transport(
     Exec, Pcl_Bindings.Get_Socket_Transport(Transport));
@@ -190,7 +190,7 @@ begin
     return;
   end if;
 
-  -- ── Create subscriber container ────────────────────────────────────────────
+  -- -- Create subscriber container --------------------------------------------
 
   Cbs := (On_Configure  => On_Configure_Cb'Unrestricted_Access,
           On_Activate   => null,
@@ -215,7 +215,7 @@ begin
   Status := Pcl_Bindings.Activate(Container);
   Status := Pcl_Bindings.Add_Container(Exec, Container);
 
-  -- ── Invoke EntityActions Read via subscribe_interest (async) ──────────────
+  -- -- Invoke EntityActions Read via subscribe_interest (async) --------------
   --
   --  Build a typed TacticalObjectQuery (from the proto IDL) then serialise
   --  it to JSON.  The service name is taken from the service stub constant —
@@ -308,7 +308,7 @@ begin
     end if;
   end;
 
-  -- ── Report pass/fail ──────────────────────────────────────────────────────
+  -- -- Report pass/fail ------------------------------------------------------
 
   if Frames_Received > 0 then
     Log("PASS: received" & Natural'Image(Frames_Received) & " entity frames");
@@ -318,7 +318,7 @@ begin
     Ada.Command_Line.Set_Exit_Status(1);
   end if;
 
-  -- ── Cleanup ───────────────────────────────────────────────────────────────
+  -- -- Cleanup ---------------------------------------------------------------
 
   Pcl_Bindings.Destroy_Socket_Transport(Transport);
   Pcl_Bindings.Destroy_Container(Container);
