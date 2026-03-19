@@ -5,7 +5,7 @@ project Ada_Tobj_Client is
 
   for Languages use ("Ada", "C");
 
-  for Source_Dirs use (".", "../../src/pcl");
+  for Source_Dirs use (".", "generated", "../../src/pcl");
   for Main use ("ada_tobj_client.adb");
 
   --  Proto/Ada-gen service interface (EntityActions-aligned types + stubs)

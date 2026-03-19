@@ -1,12 +1,19 @@
---  Auto-generated EntityActions service specification
+--  Auto-generated service binding specification
 --  Generated from: services by ada_service_generator.py
 --  Package: Pyramid.Services.Tactical_Objects.Consumed
 --
---  Each Handle_<Op>_<Entity> procedure corresponds to one EntityActions
---  CRUD operation.  The Dispatch procedure is the single integration
---  point for any transport (PCL, socket, shared memory, etc.).
+--  Architecture: component logic > service binding (this) > PCL
+--
+--  This package provides:
+--    1. Wire-name constants and topic constants
+--    2. EntityActions handler stubs (Handle_*)
+--    3. JSON builder functions (GNATCOLL.JSON)
+--    4. PCL binding procedures (Subscribe_*, Invoke_*, Publish_*)
+--    5. Msg_To_String utility for PCL message payloads
 
 with Tactical_Objects_Types;  use Tactical_Objects_Types;
+with Pcl_Bindings;
+with Interfaces.C;
 with System;
 
 package Pyramid.Services.Tactical_Objects.Consumed is
@@ -49,6 +56,12 @@ package Pyramid.Services.Tactical_Objects.Consumed is
    Topic_Object_Evidence : constant String :=
      "standard.object_evidence";
 
+   --  -- PCL message utility ------------------------------------
+
+   function Msg_To_String
+     (Data : System.Address;
+      Size : Interfaces.C.unsigned) return String;
+
    --  -- EntityActions handlers ------------------------------------
    --  Implement these procedures in the package body.
 
@@ -73,6 +86,18 @@ package Pyramid.Services.Tactical_Objects.Consumed is
    procedure Handle_Read_Capability
      (Request  : in  Query;
       Response : out Identifier_Array);
+
+   --  -- PCL binding procedures ------------------------------------
+   --  Subscribe/Invoke/Publish wrappers for PCL transport layer.
+
+   procedure Subscribe_Object_Evidence
+     (Container : Pcl_Bindings.Pcl_Container_Access;
+      Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;
+      User_Data : System.Address := System.Null_Address);
+
+   procedure Publish_Object_Evidence
+     (Exec    : Pcl_Bindings.Pcl_Executor_Access;
+      Payload : String);
 
    --  -- Transport integration point ------------------------------
 

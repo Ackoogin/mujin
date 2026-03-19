@@ -17,8 +17,11 @@ operation+channel to the correct typed handler.
 
 Generated packages reference Tactical_Objects_Types for Ada type definitions.
 
-Service wire-name constants and JSON builder functions are generated for
-standard pyramid protocol interaction (GNATCOLL.JSON).
+Service wire-name constants, JSON builder functions, and PCL binding procedures
+(Subscribe_*, Invoke_*, Publish_*) are generated for standard pyramid protocol
+interaction.
+
+Architecture: component logic > service binding (this layer) > pcl
 
 Usage:
     python ada_service_generator.py <file.proto> <output_dir>
@@ -147,6 +150,16 @@ class ProtoRpc:
         """create_requirement (rpc part of wire name)."""
         return _camel_to_lower_snake(self.name)
 
+    @property
+    def ada_invoke_name(self) -> str:
+        """Invoke_Create_Requirement."""
+        return f'Invoke_{_camel_to_snake(self.name)}'
+
+    @property
+    def ada_svc_const(self) -> str:
+        """Svc_Create_Requirement."""
+        return f'Svc_{_camel_to_snake(self.name)}'
+
 
 class ProtoService:
     def __init__(self, name: str, rpcs: List[ProtoRpc]):
@@ -265,18 +278,27 @@ class AdaServiceGenerator:
         })
 
         is_provided = _is_provided(parsed)
+        topic_set = STANDARD_TOPICS.get(
+            'provided' if is_provided else 'consumed', {})
 
         with open(path, 'w') as f:
-            f.write(f'--  Auto-generated EntityActions service specification\n')
+            f.write(f'--  Auto-generated service binding specification\n')
             f.write(f'--  Generated from: {self._proto_input.name}'
                     f' by ada_service_generator.py\n')
             f.write(f'--  Package: {pkg_name}\n')
             f.write(f'--\n')
-            f.write(f'--  Each Handle_<Op>_<Entity> procedure corresponds to one EntityActions\n')
-            f.write(f'--  CRUD operation.  The Dispatch procedure is the single integration\n')
-            f.write(f'--  point for any transport (PCL, socket, shared memory, etc.).\n')
+            f.write(f'--  Architecture: component logic > service binding (this) > PCL\n')
+            f.write(f'--\n')
+            f.write(f'--  This package provides:\n')
+            f.write(f'--    1. Wire-name constants and topic constants\n')
+            f.write(f'--    2. EntityActions handler stubs (Handle_*)\n')
+            f.write(f'--    3. JSON builder functions (GNATCOLL.JSON)\n')
+            f.write(f'--    4. PCL binding procedures (Subscribe_*, Invoke_*, Publish_*)\n')
+            f.write(f'--    5. Msg_To_String utility for PCL message payloads\n')
             f.write(f'\n')
             f.write(f'with Tactical_Objects_Types;  use Tactical_Objects_Types;\n')
+            f.write(f'with Pcl_Bindings;\n')
+            f.write(f'with Interfaces.C;\n')
             f.write(f'with System;\n')
             f.write(f'\n')
             f.write(f'package {pkg_name} is\n')
@@ -319,19 +341,23 @@ class AdaServiceGenerator:
             f.write('\n')
 
             # -- Topic name constants ------------------------------------------
-            topic_set = STANDARD_TOPICS.get(
-                'provided' if is_provided else 'consumed', {})
             if topic_set:
                 f.write(f'   --  -- Standard topic name constants --------------------------\n')
                 f.write(f'\n')
                 for key, wire in topic_set.items():
-                    const_name = f'Topic_{_camel_to_snake(key).title().replace(" ", "_")}'
-                    # Title case each word
                     const_name = 'Topic_' + '_'.join(
                         w.capitalize() for w in key.split('_'))
                     f.write(f'   {const_name} : constant String :=\n')
                     f.write(f'     "{wire}";\n')
                 f.write('\n')
+
+            # -- Msg_To_String utility -----------------------------------------
+            f.write(f'   --  -- PCL message utility ------------------------------------\n')
+            f.write(f'\n')
+            f.write(f'   function Msg_To_String\n')
+            f.write(f'     (Data : System.Address;\n')
+            f.write(f'      Size : Interfaces.C.unsigned) return String;\n')
+            f.write(f'\n')
 
             # Handler procedure declarations
             f.write(f'   --  -- EntityActions handlers ------------------------------------\n')
@@ -375,6 +401,42 @@ class AdaServiceGenerator:
                 f.write(f'      Observed_At : Long_Float := 0.5) return String;\n')
                 f.write(f'\n')
 
+            # -- PCL binding procedures ----------------------------------------
+            f.write(f'   --  -- PCL binding procedures ------------------------------------\n')
+            f.write(f'   --  Subscribe/Invoke/Publish wrappers for PCL transport layer.\n')
+            f.write(f'\n')
+
+            # Subscribe helpers for topics
+            for key in topic_set:
+                ada_name = 'Subscribe_' + '_'.join(
+                    w.capitalize() for w in key.split('_'))
+                f.write(f'   procedure {ada_name}\n')
+                f.write(f'     (Container : Pcl_Bindings.Pcl_Container_Access;\n')
+                f.write(f'      Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;\n')
+                f.write(f'      User_Data : System.Address := System.Null_Address);\n')
+                f.write(f'\n')
+
+            # Invoke helpers for services (provided = client can call them)
+            if is_provided:
+                for svc in parsed.services:
+                    for rpc in svc.rpcs:
+                        f.write(f'   procedure {rpc.ada_invoke_name}\n')
+                        f.write(f'     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;\n')
+                        f.write(f'      Request   : String;\n')
+                        f.write(f'      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
+                        f.write(f'      User_Data : System.Address := System.Null_Address);\n')
+                        f.write(f'\n')
+
+            # Publish helpers for consumed topics (client publishes to server)
+            if not is_provided:
+                for key in topic_set:
+                    ada_name = 'Publish_' + '_'.join(
+                        w.capitalize() for w in key.split('_'))
+                    f.write(f'   procedure {ada_name}\n')
+                    f.write(f'     (Exec    : Pcl_Bindings.Pcl_Executor_Access;\n')
+                    f.write(f'      Payload : String);\n')
+                    f.write(f'\n')
+
             # Dispatch procedure
             f.write(f'   --  -- Transport integration point ------------------------------\n')
             f.write(f'\n')
@@ -392,16 +454,42 @@ class AdaServiceGenerator:
     def _write_body(self, path: Path, pkg_name: str, parsed: ProtoFile,
                     all_rpcs: List[Tuple[str, ProtoRpc]]):
         is_provided = _is_provided(parsed)
+        topic_set = STANDARD_TOPICS.get(
+            'provided' if is_provided else 'consumed', {})
 
         with open(path, 'w') as f:
-            f.write(f'--  Auto-generated EntityActions service body\n')
+            f.write(f'--  Auto-generated service binding body\n')
             f.write(f'--  Package body: {pkg_name}\n')
             f.write(f'\n')
+            f.write(f'with Ada.Unchecked_Conversion;\n')
+            f.write(f'with Interfaces.C.Strings;\n')
             if is_provided:
                 f.write(f'with GNATCOLL.JSON;  use GNATCOLL.JSON;\n')
             f.write(f'with System;\n')
+            f.write(f'with System.Storage_Elements;\n')
             f.write(f'\n')
             f.write(f'package body {pkg_name} is\n')
+            f.write(f'\n')
+
+            # -- Internal helpers ----------------------------------------------
+            f.write(f'   function To_Address is new\n')
+            f.write(f'     Ada.Unchecked_Conversion (Interfaces.C.Strings.chars_ptr, System.Address);\n')
+            f.write(f'\n')
+
+            # -- Msg_To_String -------------------------------------------------
+            f.write(f'   function Msg_To_String\n')
+            f.write(f'     (Data : System.Address;\n')
+            f.write(f'      Size : Interfaces.C.unsigned) return String\n')
+            f.write(f'   is\n')
+            f.write(f'      use System.Storage_Elements;\n')
+            f.write(f'      type Char_Array is array (1 .. Natural (Size)) of Character;\n')
+            f.write(f'      pragma Pack (Char_Array);\n')
+            f.write(f'      Chars : Char_Array;\n')
+            f.write(f"      for Chars'Address use Data;\n")
+            f.write(f'      pragma Import (Ada, Chars);\n')
+            f.write(f'   begin\n')
+            f.write(f'      return String (Chars);\n')
+            f.write(f'   end Msg_To_String;\n')
             f.write(f'\n')
 
             # Handler stubs
@@ -488,6 +576,101 @@ class AdaServiceGenerator:
                 f.write(f'      return Write (Obj);\n')
                 f.write(f'   end Build_Standard_Evidence_Json;\n')
                 f.write(f'\n')
+
+            # -- PCL binding implementations -----------------------------------
+            f.write(f'   --  -- PCL binding implementations -------------------------------\n')
+            f.write(f'\n')
+
+            # Subscribe helpers
+            for key, wire in topic_set.items():
+                ada_name = 'Subscribe_' + '_'.join(
+                    w.capitalize() for w in key.split('_'))
+                const_name = 'Topic_' + '_'.join(
+                    w.capitalize() for w in key.split('_'))
+
+                f.write(f'   procedure {ada_name}\n')
+                f.write(f'     (Container : Pcl_Bindings.Pcl_Container_Access;\n')
+                f.write(f'      Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;\n')
+                f.write(f'      User_Data : System.Address := System.Null_Address)\n')
+                f.write(f'   is\n')
+                f.write(f'      Topic  : Interfaces.C.Strings.chars_ptr :=\n')
+                f.write(f'        Interfaces.C.Strings.New_String ({const_name});\n')
+                f.write(f'      Type_N : Interfaces.C.Strings.chars_ptr :=\n')
+                f.write(f'        Interfaces.C.Strings.New_String ("application/json");\n')
+                f.write(f'      Port   : Pcl_Bindings.Pcl_Port_Access;\n')
+                f.write(f'      pragma Unreferenced (Port);\n')
+                f.write(f'   begin\n')
+                f.write(f'      Port := Pcl_Bindings.Add_Subscriber\n')
+                f.write(f'        (Container => Container,\n')
+                f.write(f'         Topic     => Topic,\n')
+                f.write(f'         Type_Name => Type_N,\n')
+                f.write(f'         Callback  => Callback,\n')
+                f.write(f'         User_Data => User_Data);\n')
+                f.write(f'      Interfaces.C.Strings.Free (Topic);\n')
+                f.write(f'      Interfaces.C.Strings.Free (Type_N);\n')
+                f.write(f'   end {ada_name};\n')
+                f.write(f'\n')
+
+            # Invoke helpers (provided services)
+            if is_provided:
+                for svc in parsed.services:
+                    for rpc in svc.rpcs:
+                        f.write(f'   procedure {rpc.ada_invoke_name}\n')
+                        f.write(f'     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;\n')
+                        f.write(f'      Request   : String;\n')
+                        f.write(f'      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
+                        f.write(f'      User_Data : System.Address := System.Null_Address)\n')
+                        f.write(f'   is\n')
+                        f.write(f'      use type Pcl_Bindings.Pcl_Status;\n')
+                        f.write(f'      Req_C  : Interfaces.C.Strings.chars_ptr :=\n')
+                        f.write(f'        Interfaces.C.Strings.New_String (Request);\n')
+                        f.write(f'      Svc_C  : Interfaces.C.Strings.chars_ptr :=\n')
+                        f.write(f'        Interfaces.C.Strings.New_String ({rpc.ada_svc_const});\n')
+                        f.write(f'      Msg    : aliased Pcl_Bindings.Pcl_Msg;\n')
+                        f.write(f'      Status : Pcl_Bindings.Pcl_Status;\n')
+                        f.write(f'      pragma Unreferenced (Status);\n')
+                        f.write(f'   begin\n')
+                        f.write(f"      Msg.Data      := To_Address (Req_C);\n")
+                        f.write(f"      Msg.Size      := Interfaces.C.unsigned (Request'Length);\n")
+                        f.write(f'      Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");\n')
+                        f.write(f'      Status := Pcl_Bindings.Invoke_Remote_Async\n')
+                        f.write(f"        (Transport, Svc_C, Msg'Access, Callback, User_Data);\n")
+                        f.write(f'      Interfaces.C.Strings.Free (Req_C);\n')
+                        f.write(f'      Interfaces.C.Strings.Free (Svc_C);\n')
+                        f.write(f'      Interfaces.C.Strings.Free (Msg.Type_Name);\n')
+                        f.write(f'   end {rpc.ada_invoke_name};\n')
+                        f.write(f'\n')
+
+            # Publish helpers (consumed topics)
+            if not is_provided:
+                for key, wire in topic_set.items():
+                    ada_name = 'Publish_' + '_'.join(
+                        w.capitalize() for w in key.split('_'))
+                    const_name = 'Topic_' + '_'.join(
+                        w.capitalize() for w in key.split('_'))
+
+                    f.write(f'   procedure {ada_name}\n')
+                    f.write(f'     (Exec    : Pcl_Bindings.Pcl_Executor_Access;\n')
+                    f.write(f'      Payload : String)\n')
+                    f.write(f'   is\n')
+                    f.write(f'      use type Pcl_Bindings.Pcl_Status;\n')
+                    f.write(f'      Payload_C : Interfaces.C.Strings.chars_ptr :=\n')
+                    f.write(f'        Interfaces.C.Strings.New_String (Payload);\n')
+                    f.write(f'      Topic_C   : Interfaces.C.Strings.chars_ptr :=\n')
+                    f.write(f'        Interfaces.C.Strings.New_String ({const_name});\n')
+                    f.write(f'      Msg       : aliased Pcl_Bindings.Pcl_Msg;\n')
+                    f.write(f'      Status    : Pcl_Bindings.Pcl_Status;\n')
+                    f.write(f'      pragma Unreferenced (Status);\n')
+                    f.write(f'   begin\n')
+                    f.write(f"      Msg.Data      := To_Address (Payload_C);\n")
+                    f.write(f"      Msg.Size      := Interfaces.C.unsigned (Payload'Length);\n")
+                    f.write(f'      Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");\n')
+                    f.write(f"      Status := Pcl_Bindings.Publish (Exec, Topic_C, Msg'Access);\n")
+                    f.write(f'      Interfaces.C.Strings.Free (Payload_C);\n')
+                    f.write(f'      Interfaces.C.Strings.Free (Topic_C);\n')
+                    f.write(f'      Interfaces.C.Strings.Free (Msg.Type_Name);\n')
+                    f.write(f'   end {ada_name};\n')
+                    f.write(f'\n')
 
             # Dispatch stub with case statement
             f.write(f'   procedure Dispatch\n')
