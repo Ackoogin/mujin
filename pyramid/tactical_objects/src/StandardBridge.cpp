@@ -23,14 +23,11 @@ using json = nlohmann::json;
 static const char* SVC_CREATE_REQUIREMENT     = "object_of_interest.create_requirement";
 static const char* SVC_SUBSCRIBE_INTEREST     = "subscribe_interest";
 
-static const char* TOPIC_ENTITY_UPDATES       = "entity_updates";
-static const char* TOPIC_EVIDENCE_REQS        = "evidence_requirements";
 static const char* TOPIC_STD_ENTITY_MATCHES   = "standard.entity_matches";
 static const char* TOPIC_STD_EVIDENCE_REQS    = "standard.evidence_requirements";
 static const char* TOPIC_STD_OBJECT_EVIDENCE  = "standard.object_evidence";
 
 static const char* TYPE_JSON   = "application/json";
-static const char* TYPE_BINARY = "application/octet-stream";
 
 // ---------------------------------------------------------------------------
 // Constructor
@@ -51,10 +48,6 @@ pcl_status_t StandardBridge::on_configure() {
   if (!addService(SVC_CREATE_REQUIREMENT, TYPE_JSON, handleCreateRequirement, this)) {
     return PCL_ERR_CALLBACK;
   }
-
-  // Subscribe to internal topics to translate outward
-  addSubscriber(TOPIC_ENTITY_UPDATES,   TYPE_BINARY, onEntityUpdates,       this);
-  addSubscriber(TOPIC_EVIDENCE_REQS,    TYPE_JSON,   onEvidenceRequirements, this);
 
   // Subscribe to standard input topic from Ada clients
   addSubscriber(TOPIC_STD_OBJECT_EVIDENCE, TYPE_JSON, onStandardObjectEvidence, this);
@@ -179,9 +172,40 @@ pcl_status_t StandardBridge::handleCreateRequirement(pcl_container_t*,
     iresp_j = json::object();
   }
 
+  // Register a streaming subscription handle so on_tick can call assembleStreamFrame.
+  std::string interest_id_str = iresp_j.value("interest_id", "");
+  if (!interest_id_str.empty()) {
+    auto parsed = pyramid::core::uuid::UUIDHelper::fromString(interest_id_str);
+    if (parsed.second) {
+      UUIDKey interest_key(parsed.first);
+      SubscriptionHandle handle = self->runtime_.registerStreamSubscriber(
+          interest_key,
+          [](const UUIDKey&, const UUIDKey&){});
+      self->interests_.emplace_back(interest_key, handle);
+      pcl_log(nullptr, PCL_LOG_INFO,
+              "[StandardBridge] registered interest %s handle=%llu",
+              interest_id_str.c_str(), (unsigned long long)handle);
+    }
+  }
+
+  // For ActiveFind: publish evidence_requirements directly (can't rely on PCL pub/sub
+  // to route from TacticalObjectsComponent when a socket transport is active).
+  if (iresp_j.contains("evidence_requirements") &&
+      iresp_j["evidence_requirements"].is_array() &&
+      self->pub_evidence_reqs_) {
+    for (const auto& ev : iresp_j["evidence_requirements"]) {
+      std::string ev_str = ev.dump();
+      pcl_msg_t ev_msg   = {};
+      ev_msg.data        = ev_str.data();
+      ev_msg.size        = static_cast<uint32_t>(ev_str.size());
+      ev_msg.type_name   = TYPE_JSON;
+      pcl_port_publish(self->pub_evidence_reqs_, &ev_msg);
+    }
+  }
+
   // Build standard response — expose interest_id for Ada clients
   json std_resp;
-  std_resp["interest_id"] = iresp_j.value("interest_id", "");
+  std_resp["interest_id"] = interest_id_str;
   if (iresp_j.contains("solution_id")) {
     std_resp["solution_id"] = iresp_j["solution_id"];
   }
@@ -194,72 +218,55 @@ pcl_status_t StandardBridge::handleCreateRequirement(pcl_container_t*,
 }
 
 // ---------------------------------------------------------------------------
-// Subscriber: entity_updates (binary) → standard.entity_matches (JSON)
+// on_tick: assemble entity matches directly via runtime and publish as JSON
 // ---------------------------------------------------------------------------
+//
+// This bypasses the PCL pub/sub path for entity_updates (which fails when a
+// socket transport is active, because pcl_executor_publish routes to the
+// transport and never calls dispatch_incoming_now for local subscribers).
 
-void StandardBridge::onEntityUpdates(pcl_container_t*,
-                                      const pcl_msg_t* msg,
-                                      void* user_data) {
-  auto* self = static_cast<StandardBridge*>(user_data);
-  if (!msg->data || msg->size == 0) return;
-  if (!self->pub_entity_matches_) return;
+pcl_status_t StandardBridge::on_tick(double dt) {
+  if (!pub_entity_matches_ || interests_.empty()) return PCL_OK;
 
-  const auto* data = static_cast<const uint8_t*>(msg->data);
-  auto frames = StreamingCodec::decodeBatchFrame(data, msg->size);
-  if (frames.empty()) return;
+  for (auto& [interest_id, handle] : interests_) {
+    StreamFrame sf = runtime_.assembleStreamFrame(interest_id, handle, dt);
+    if (sf.updates.empty() && sf.deletes.empty()) continue;
 
-  json arr = json::array();
-  for (const auto& frame : frames) {
-    if (frame.message_type == STREAM_MSG_ENTITY_DELETE) continue;
+    json arr = json::array();
+    for (const auto& upd : sf.updates) {
+      if (upd.message_type == STREAM_MSG_ENTITY_DELETE) continue;
 
-    json obj;
-    obj["object_id"] = TacticalObjectsCodec::encodeUUID(frame.entity_id).get<std::string>();
+      json obj;
+      obj["object_id"] = TacticalObjectsCodec::encodeUUID(upd.entity_id).get<std::string>();
 
-    if (frame.affiliation) {
-      obj["identity"] = self->affiliationToStandardIdentity(*frame.affiliation);
+      if (upd.affiliation) {
+        obj["identity"] = affiliationToStandardIdentity(*upd.affiliation);
+      }
+      if (upd.mil_class) {
+        obj["dimension"] = battleDimToStandard(upd.mil_class->battle_dim);
+      }
+      if (upd.position) {
+        obj["latitude_rad"]  = degToRad(upd.position->lat);
+        obj["longitude_rad"] = degToRad(upd.position->lon);
+      }
+      if (upd.confidence) {
+        obj["confidence"] = *upd.confidence;
+      }
+
+      arr.push_back(obj);
     }
-    if (frame.mil_class) {
-      obj["dimension"] = self->battleDimToStandard(frame.mil_class->battle_dim);
-    }
-    if (frame.position) {
-      obj["latitude_rad"]  = self->degToRad(frame.position->lat);
-      obj["longitude_rad"] = self->degToRad(frame.position->lon);
-    }
-    if (frame.confidence) {
-      obj["confidence"] = *frame.confidence;
-    }
 
-    arr.push_back(obj);
+    if (arr.empty()) continue;
+
+    pub_buf_          = arr.dump();
+    pcl_msg_t out     = {};
+    out.data          = pub_buf_.data();
+    out.size          = static_cast<uint32_t>(pub_buf_.size());
+    out.type_name     = TYPE_JSON;
+    pcl_port_publish(pub_entity_matches_, &out);
   }
 
-  if (arr.empty()) return;
-
-  self->pub_buf_  = arr.dump();
-  pcl_msg_t out   = {};
-  out.data        = self->pub_buf_.data();
-  out.size        = static_cast<uint32_t>(self->pub_buf_.size());
-  out.type_name   = TYPE_JSON;
-  pcl_port_publish(self->pub_entity_matches_, &out);
-}
-
-// ---------------------------------------------------------------------------
-// Subscriber: evidence_requirements (JSON) → standard.evidence_requirements
-// ---------------------------------------------------------------------------
-
-void StandardBridge::onEvidenceRequirements(pcl_container_t*,
-                                              const pcl_msg_t* msg,
-                                              void* user_data) {
-  auto* self = static_cast<StandardBridge*>(user_data);
-  if (!msg->data || msg->size == 0) return;
-  if (!self->pub_evidence_reqs_) return;
-
-  // Forward the internal JSON as-is to standard.evidence_requirements.
-  // Ada clients read requirement_id, source_interest_id, evidence_description.
-  pcl_msg_t out = {};
-  out.data      = msg->data;
-  out.size      = msg->size;
-  out.type_name = TYPE_JSON;
-  pcl_port_publish(self->pub_evidence_reqs_, &out);
+  return PCL_OK;
 }
 
 // ---------------------------------------------------------------------------

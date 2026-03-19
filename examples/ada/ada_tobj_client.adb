@@ -4,10 +4,9 @@
 --
 -- Uses the STANDARD bridge interface:
 --   - Calls  "object_of_interest.create_requirement"  (standard JSON)
---   - Subscribes to "standard.entity_matches"         (standard JSON)
+--   - Subscribes to "standard.entity_matches"         (standard JSON array)
 --
--- The StandardBridge on the server translates these to/from the internal
--- TacticalObjectsComponent wire format.
+-- JSON is built with GNATCOLL.JSON (no string concatenation).
 --
 -- Usage: ada_tobj_client --host 127.0.0.1 --port 19123
 
@@ -16,6 +15,7 @@ with Ada.Text_IO;
 with Ada.Unchecked_Conversion;
 with Interfaces.C;
 with Interfaces.C.Strings;
+with GNATCOLL.JSON;
 with Pcl_Bindings;
 with Tactical_Objects_Types;   use Tactical_Objects_Types;
 with Tactical_Objects_Service;
@@ -23,6 +23,7 @@ with System;
 with System.Storage_Elements;
 
 procedure Ada_Tobj_Client is
+  use GNATCOLL.JSON;
   use type Interfaces.C.unsigned;
   use type Interfaces.C.unsigned_short;
   use type Interfaces.C.double;
@@ -69,16 +70,28 @@ procedure Ada_Tobj_Client is
     Ada.Text_IO.Flush(Ada.Text_IO.Standard_Error);
   end Log;
 
+  --  Helper: extract Ada String from a pcl_msg_t data pointer + size
+  function Msg_To_String
+    (Data : System.Address; Size : Interfaces.C.unsigned) return String
+  is
+    use System.Storage_Elements;
+    type Char_Array is array (1 .. Natural(Size)) of Character;
+    pragma Pack(Char_Array);
+    Chars : Char_Array;
+    for Chars'Address use Data;
+    pragma Import(Ada, Chars);
+  begin
+    return String(Chars);
+  end Msg_To_String;
+
   -- -- Client state -----------------------------------------------------------
 
   Matches_Received : Natural := 0;
 
-  -- -- Subscriber callback: standard.entity_matches (JSON) -------------------
+  -- -- Subscriber callback: standard.entity_matches (JSON array) -------------
   --
-  --  The StandardBridge publishes a JSON array of matched entities.
-  --  Format: [{"object_id":"<uuid>","identity":"STANDARD_IDENTITY_HOSTILE",
-  --             "dimension":"BATTLE_DIMENSION_SEA_SURFACE",
-  --             "latitude_rad":<r>,"longitude_rad":<r>,"confidence":<c>},...]
+  --  Parses the JSON array with GNATCOLL.JSON, counts entity objects,
+  --  and logs each one.
 
   procedure Entity_Matches_Cb
     (Container : Pcl_Bindings.Pcl_Container_Access;
@@ -98,21 +111,40 @@ procedure Ada_Tobj_Client is
     end if;
 
     declare
-      use System.Storage_Elements;
-      type Char_Array is array (1 .. Natural(Msg.Size)) of Character;
-      pragma Pack(Char_Array);
-      Chars : Char_Array;
-      for Chars'Address use Msg.Data;
-      pragma Import(Ada, Chars);
-      Body_Str : constant String := String(Chars);
+      Body_Str     : constant String :=
+        Msg_To_String(Msg.Data, Msg.Size);
+      Parse_Result : GNATCOLL.JSON.Read_Result;
+      Val          : GNATCOLL.JSON.JSON_Value;
+      Arr          : GNATCOLL.JSON.JSON_Array;
     begin
       Log("standard.entity_matches: " & Body_Str);
-      --  Count opening braces as a proxy for entity count in the JSON array
-      for C of Body_Str loop
-        if C = '{' then
-          Matches_Received := Matches_Received + 1;
-        end if;
-      end loop;
+      Parse_Result := GNATCOLL.JSON.Read(Body_Str);
+      if not Parse_Result.Success then
+        Log("WARNING: could not parse entity_matches JSON");
+        return;
+      end if;
+      Val := Parse_Result.Value;
+      if Val.Kind = GNATCOLL.JSON.JSON_Array_Type then
+        Arr := GNATCOLL.JSON.Get(Val);
+        for I in 1 .. GNATCOLL.JSON.Length(Arr) loop
+          declare
+            Ent      : constant GNATCOLL.JSON.JSON_Value :=
+              GNATCOLL.JSON.Get(Arr, I);
+            Identity : constant String :=
+              (if GNATCOLL.JSON.Has_Field(Ent, "identity")
+               then GNATCOLL.JSON.Get(Ent, "identity")
+               else "?");
+            Obj_Id   : constant String :=
+              (if GNATCOLL.JSON.Has_Field(Ent, "object_id")
+               then GNATCOLL.JSON.Get(Ent, "object_id")
+               else "?");
+          begin
+            Log("  entity[" & Natural'Image(I) & "] id=" & Obj_Id &
+                " identity=" & Identity);
+            Matches_Received := Matches_Received + 1;
+          end;
+        end loop;
+      end if;
     end;
   end Entity_Matches_Cb;
 
@@ -221,16 +253,18 @@ begin
 
   -- -- Call object_of_interest.create_requirement (standard bridge) ----------
   --
-  --  Build a standard requirement JSON using STANDARD_IDENTITY_* and
-  --  BATTLE_DIMENSION_* enum names; positions in radians.
+  --  Query policy: DATA_POLICY_QUERY (read-current, no active tasking).
+  --  Identity filter: HOSTILE only.  No dimension filter (entity has no
+  --  mil-class battle-dimension set, so omit to avoid false exclusion).
   --  Bounding box: lat [50°, 52°] lon [-1°, 1°] in radians.
 
   declare
-    Pi            : constant Interfaces.C.double := 3.14159265358979323846;
-    Deg_To_Rad    : constant Interfaces.C.double := Pi / 180.0;
+    Pi            : constant Long_Float := 3.14159265358979323846;
+    Deg_To_Rad    : constant Long_Float := Pi / 180.0;
 
-    Svc_Response_Ready : Boolean               := False;
-    Svc_Response_Size  : Interfaces.C.unsigned := 0;
+    Svc_Response_Ready   : Boolean               := False;
+    Svc_Response_Size    : Interfaces.C.unsigned := 0;
+    Interest_Id_Received : Boolean               := False;
 
     procedure Svc_Response_Cb
       (Resp      : access constant Pcl_Bindings.Pcl_Msg;
@@ -243,31 +277,37 @@ begin
     is
       pragma Unreferenced(User_Data);
     begin
-      if Resp /= null then
+      if Resp /= null and then
+         Resp.Data /= System.Null_Address and then
+         Resp.Size > 0
+      then
         Svc_Response_Size := Resp.Size;
-        if Resp.Data /= System.Null_Address and then Resp.Size > 0 then
-          declare
-            use System.Storage_Elements;
-            type Char_Array is array (1 .. Natural(Resp.Size)) of Character;
-            pragma Pack(Char_Array);
-            Chars : Char_Array;
-            for Chars'Address use Resp.Data;
-            pragma Import(Ada, Chars);
-          begin
-            Log("create_requirement response: " & String(Chars));
-          end;
-        end if;
+        declare
+          Body_Str     : constant String :=
+            Msg_To_String(Resp.Data, Resp.Size);
+          Parse_Result : GNATCOLL.JSON.Read_Result;
+        begin
+          Log("create_requirement response: " & Body_Str);
+          Parse_Result := GNATCOLL.JSON.Read(Body_Str);
+          if Parse_Result.Success and then
+             GNATCOLL.JSON.Has_Field(Parse_Result.Value, "interest_id")
+          then
+            Interest_Id_Received := True;
+          end if;
+        end;
       end if;
       Svc_Response_Ready := True;
     end Svc_Response_Cb;
 
   begin
     declare
+      --  No dimension filter: this is a passive read-current query.
+      --  The test entity has affiliation=Hostile but no milclass battle-dim.
       Req_Str : constant String :=
         Tactical_Objects_Service.Build_Standard_Requirement_Json(
           Policy      => "DATA_POLICY_QUERY",
           Identity    => "STANDARD_IDENTITY_HOSTILE",
-          Dimension   => "BATTLE_DIMENSION_SEA_SURFACE",
+          Dimension   => "",           --  omit: no dimension filter
           Min_Lat_Rad => 50.0 * Deg_To_Rad,
           Max_Lat_Rad => 52.0 * Deg_To_Rad,
           Min_Lon_Rad => (-1.0) * Deg_To_Rad,
@@ -299,8 +339,7 @@ begin
       Interfaces.C.Strings.Free(Req.Type_Name);
     end;
 
-    --  Spin until the service response arrives, then continue to wait for
-    --  standard.entity_matches.
+    --  Spin until the service response arrives then wait for entity matches.
     Log("Spinning to receive service response and entity matches...");
     for Iteration in 1 .. 200 loop
       Status := Pcl_Bindings.Spin_Once(Exec, 0);
@@ -311,6 +350,11 @@ begin
     if Svc_Response_Ready then
       Log("create_requirement OK, response size=" &
           Interfaces.C.unsigned'Image(Svc_Response_Size));
+      if Interest_Id_Received then
+        Log("  interest_id present");
+      else
+        Log("  WARNING: interest_id NOT found in response");
+      end if;
     else
       Log("create_requirement TIMEOUT: no response");
     end if;

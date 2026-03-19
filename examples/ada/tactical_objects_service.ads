@@ -22,7 +22,6 @@
 --  This file retains the transport-level helpers and the full set of channels
 --  used by the demo clients.
 
-with Interfaces.C;
 with Tactical_Objects_Types;  use Tactical_Objects_Types;
 with Streaming_Codec;
 with System;
@@ -221,26 +220,26 @@ package Tactical_Objects_Service is
    function Build_Active_Find_Request_Json
      (Query : Tactical_Object_Query) return String;
 
-   --  Build standard JSON for object_of_interest.create_requirement
-   --  Uses standard enum names (STANDARD_IDENTITY_*, BATTLE_DIMENSION_*)
-   --  and positions in radians.
+   --  Build standard JSON for object_of_interest.create_requirement.
+   --  Uses standard enum names (STANDARD_IDENTITY_*, BATTLE_DIMENSION_*).
+   --  Positions are in radians.  Dimension may be "" to omit the filter.
    function Build_Standard_Requirement_Json
-     (Policy    : String;          --  "DATA_POLICY_OBTAIN" | "DATA_POLICY_QUERY"
-      Identity  : String;          --  "STANDARD_IDENTITY_HOSTILE" | ...
-      Dimension : String;          --  "BATTLE_DIMENSION_SEA_SURFACE" | ...
-      Min_Lat_Rad : Interfaces.C.double;
-      Max_Lat_Rad : Interfaces.C.double;
-      Min_Lon_Rad : Interfaces.C.double;
-      Max_Lon_Rad : Interfaces.C.double) return String;
+     (Policy      : String;   --  "DATA_POLICY_OBTAIN" | "DATA_POLICY_QUERY"
+      Identity    : String;   --  "STANDARD_IDENTITY_HOSTILE" | ...
+      Dimension   : String := "";  --  "BATTLE_DIMENSION_SEA_SURFACE" | "" = omit
+      Min_Lat_Rad : Long_Float := 0.0;
+      Max_Lat_Rad : Long_Float := 0.0;
+      Min_Lon_Rad : Long_Float := 0.0;
+      Max_Lon_Rad : Long_Float := 0.0) return String;
 
-   --  Build standard JSON for standard.object_evidence publication
+   --  Build standard JSON for standard.object_evidence publication.
    function Build_Standard_Evidence_Json
-     (Identity    : String;          --  "STANDARD_IDENTITY_HOSTILE" | ...
-      Dimension   : String;          --  "BATTLE_DIMENSION_SEA_SURFACE" | ...
-      Lat_Rad     : Interfaces.C.double;
-      Lon_Rad     : Interfaces.C.double;
-      Confidence  : Interfaces.C.double;
-      Observed_At : Interfaces.C.double := 0.5) return String;
+     (Identity    : String;   --  "STANDARD_IDENTITY_HOSTILE" | ...
+      Dimension   : String;   --  "BATTLE_DIMENSION_SEA_SURFACE" | ...
+      Lat_Rad     : Long_Float;
+      Lon_Rad     : Long_Float;
+      Confidence  : Long_Float;
+      Observed_At : Long_Float := 0.5) return String;
 
    function Frame_To_Tactical_Object
      (Frame : Streaming_Codec.Entity_Update_Frame) return Tactical_Object;

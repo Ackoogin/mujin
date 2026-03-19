@@ -5,6 +5,8 @@
 #include <pcl/component.hpp>
 
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace tactical_objects {
 
@@ -66,13 +68,11 @@ private:
                                                pcl_msg_t* response,
                                                void* user_data);
 
+  // ---- on_tick: stream entity matches directly via runtime ----------------
+
+  pcl_status_t on_tick(double dt) override;
+
   // ---- PCL subscriber callbacks -------------------------------------------
-
-  /// entity_updates (binary) → standard.entity_matches (JSON)
-  static void onEntityUpdates(pcl_container_t* c, const pcl_msg_t* msg, void* user_data);
-
-  /// evidence_requirements (JSON) → standard.evidence_requirements (JSON)
-  static void onEvidenceRequirements(pcl_container_t* c, const pcl_msg_t* msg, void* user_data);
 
   /// standard.object_evidence (JSON) → processObservationBatch
   static void onStandardObjectEvidence(pcl_container_t* c, const pcl_msg_t* msg, void* user_data);
@@ -96,9 +96,13 @@ private:
   pcl_port_t* pub_entity_matches_   = nullptr;
   pcl_port_t* pub_evidence_reqs_    = nullptr;
 
+  /// Registered interests: (interest_id, subscription_handle) pairs.
+  /// Populated in handleCreateRequirement; consumed in on_tick.
+  std::vector<std::pair<UUIDKey, SubscriptionHandle>> interests_;
+
   /// Reusable response buffer for handleCreateRequirement.
   std::string resp_buf_;
-  /// Reusable publish buffer for onEntityUpdates.
+  /// Reusable publish buffer for on_tick entity matches.
   std::string pub_buf_;
 };
 

@@ -1,3 +1,5 @@
+with "gnatcoll";
+
 project Ada_Active_Find_E2E is
   Root_Dir := external("MUJIN_ROOT", ".." & "/..");
 

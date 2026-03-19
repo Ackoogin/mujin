@@ -1,3 +1,5 @@
+with "gnatcoll";
+
 project Ada_Tobj_Client is
   Root_Dir := external("MUJIN_ROOT", ".." & "/..");
 

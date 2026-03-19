@@ -5,6 +5,7 @@
 
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 with Interfaces.C;
+with GNATCOLL.JSON;          use GNATCOLL.JSON;
 with System;
 
 package body Tactical_Objects_Service is
@@ -373,54 +374,53 @@ package body Tactical_Objects_Service is
 
   -- -- Build_Standard_Requirement_Json ----------------------------------------
   --
-  --  Build standard bridge request JSON for object_of_interest.create_requirement.
-  --  Uses STANDARD_IDENTITY_* and BATTLE_DIMENSION_* enum names.
-  --  Positions are in radians.
+  --  Build standard bridge request JSON using GNATCOLL.JSON.
+  --  Dimension may be "" to omit the filter entirely.
 
   function Build_Standard_Requirement_Json
-    (Policy    : String;
-     Identity  : String;
-     Dimension : String;
-     Min_Lat_Rad : Interfaces.C.double;
-     Max_Lat_Rad : Interfaces.C.double;
-     Min_Lon_Rad : Interfaces.C.double;
-     Max_Lon_Rad : Interfaces.C.double) return String
+    (Policy      : String;
+     Identity    : String;
+     Dimension   : String := "";
+     Min_Lat_Rad : Long_Float := 0.0;
+     Max_Lat_Rad : Long_Float := 0.0;
+     Min_Lon_Rad : Long_Float := 0.0;
+     Max_Lon_Rad : Long_Float := 0.0) return String
   is
-    S : Unbounded_String := To_Unbounded_String("{");
+    Obj : JSON_Value := Create_Object;
   begin
-    Append(S, """policy"":""" & Policy & """,");
-    Append(S, """identity"":""" & Identity & """,");
-    Append(S, """dimension"":""" & Dimension & """,");
-    Append(S, """min_lat_rad"":" & Double_Image(Min_Lat_Rad) & ",");
-    Append(S, """max_lat_rad"":" & Double_Image(Max_Lat_Rad) & ",");
-    Append(S, """min_lon_rad"":" & Double_Image(Min_Lon_Rad) & ",");
-    Append(S, """max_lon_rad"":" & Double_Image(Max_Lon_Rad));
-    Append(S, "}");
-    return To_String(S);
+    Set_Field (Obj, "policy",   Policy);
+    Set_Field (Obj, "identity", Identity);
+    if Dimension /= "" then
+      Set_Field (Obj, "dimension", Dimension);
+    end if;
+    Set_Field_Long_Float (Obj, "min_lat_rad", Min_Lat_Rad);
+    Set_Field_Long_Float (Obj, "max_lat_rad", Max_Lat_Rad);
+    Set_Field_Long_Float (Obj, "min_lon_rad", Min_Lon_Rad);
+    Set_Field_Long_Float (Obj, "max_lon_rad", Max_Lon_Rad);
+    return Write (Obj);
   end Build_Standard_Requirement_Json;
 
   -- -- Build_Standard_Evidence_Json -------------------------------------------
   --
-  --  Build standard bridge evidence JSON for standard.object_evidence.
+  --  Build standard bridge evidence JSON using GNATCOLL.JSON.
 
   function Build_Standard_Evidence_Json
     (Identity    : String;
      Dimension   : String;
-     Lat_Rad     : Interfaces.C.double;
-     Lon_Rad     : Interfaces.C.double;
-     Confidence  : Interfaces.C.double;
-     Observed_At : Interfaces.C.double := 0.5) return String
+     Lat_Rad     : Long_Float;
+     Lon_Rad     : Long_Float;
+     Confidence  : Long_Float;
+     Observed_At : Long_Float := 0.5) return String
   is
-    S : Unbounded_String := To_Unbounded_String("{");
+    Obj : JSON_Value := Create_Object;
   begin
-    Append(S, """identity"":""" & Identity & """,");
-    Append(S, """dimension"":""" & Dimension & """,");
-    Append(S, """latitude_rad"":" & Double_Image(Lat_Rad) & ",");
-    Append(S, """longitude_rad"":" & Double_Image(Lon_Rad) & ",");
-    Append(S, """confidence"":" & Double_Image(Confidence) & ",");
-    Append(S, """observed_at"":" & Double_Image(Observed_At));
-    Append(S, "}");
-    return To_String(S);
+    Set_Field (Obj, "identity",      Identity);
+    Set_Field (Obj, "dimension",     Dimension);
+    Set_Field_Long_Float (Obj, "latitude_rad",  Lat_Rad);
+    Set_Field_Long_Float (Obj, "longitude_rad", Lon_Rad);
+    Set_Field_Long_Float (Obj, "confidence",    Confidence);
+    Set_Field_Long_Float (Obj, "observed_at",   Observed_At);
+    return Write (Obj);
   end Build_Standard_Evidence_Json;
 
   -- -- Build_Active_Find_Request_Json -----------------------------------------
