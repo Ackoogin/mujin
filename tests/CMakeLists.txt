@@ -199,6 +199,27 @@ endif()
 gtest_discover_tests(test_tobj_socket_e2e DISCOVERY_MODE PRE_TEST)
 
 # ---------------------------------------------------------------------------
+# C++ PCL/proto service binding tests (generated bindings)
+# ---------------------------------------------------------------------------
+set(PROTO_BINDINGS_DIR ${CMAKE_SOURCE_DIR}/examples/cpp/generated)
+
+add_executable(test_pcl_proto_bindings
+  test_pcl_proto_bindings.cpp
+  ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
+  ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
+)
+target_link_libraries(test_pcl_proto_bindings PRIVATE
+  pcl_core pcl_transport_socket tactical_objects GTest::gtest_main)
+target_include_directories(test_pcl_proto_bindings PRIVATE
+  ${PROTO_BINDINGS_DIR}
+  ${CMAKE_SOURCE_DIR}/pyramid/tactical_objects/include
+  ${CMAKE_SOURCE_DIR}/pyramid/core/include)
+if(NOT WIN32)
+  target_link_libraries(test_pcl_proto_bindings PRIVATE pthread)
+endif()
+gtest_discover_tests(test_pcl_proto_bindings DISCOVERY_MODE PRE_TEST)
+
+# ---------------------------------------------------------------------------
 # Socket server harness for cross-process Ada E2E (Step 4)
 # ---------------------------------------------------------------------------
 add_executable(tobj_socket_server ${TOBJ_TEST_DIR}/tobj_socket_server.cpp)
