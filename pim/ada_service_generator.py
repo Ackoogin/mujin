@@ -42,11 +42,14 @@ OP_SIGNATURE: Dict[str, Dict] = {
     'Delete': {'req': 'Identifier',     'rsp': 'Ack'},
 }
 
-# Base-type short names from pyramid.data_model.base.*
+# Base-type short names from pyramid.data_model.base.* and pyramid.data_model.common.*
 BASE_TYPE_MAP = {
     'pyramid.data_model.base.Identifier': 'Identifier',
     'pyramid.data_model.base.Query':      'Query',
     'pyramid.data_model.base.Ack':        'Ack',
+    'pyramid.data_model.common.Query':    'Query',
+    'pyramid.data_model.common.Ack':      'Ack',
+    'pyramid.data_model.common.Capability': 'Capability',
 }
 
 
@@ -163,19 +166,33 @@ def parse_proto(proto_path: Path) -> ProtoFile:
 
 def _pkg_name_from_proto(proto_file: ProtoFile) -> str:
     """
+    pyramid.components.tactical_objects.services.provided →
+        Pyramid.Services.Tactical_Objects.Provided
+    pyramid.components.tactical_objects.services.consumed →
+        Pyramid.Services.Tactical_Objects.Consumed
     pyramid.components.tactical_objects →
-    Pyramid.Services.Tactical_Objects.Provided
+        Pyramid.Services.Tactical_Objects.Provided   (legacy fallback)
     """
     parts = proto_file.package.split('.')
-    # Drop well-known prefixes: 'pyramid', 'components'
-    meaningful = [p for p in parts
-                  if p.lower() not in ('pyramid', 'components', 'data_model', 'base')]
+
+    # Detect explicit provided/consumed leaf
+    last = parts[-1].lower()
+    explicit_suffix = None
+    if last in ('provided', 'consumed'):
+        explicit_suffix = parts[-1].capitalize()
+        parts = parts[:-1]
+
+    # Drop well-known structural prefixes/noise words
+    skip = {'pyramid', 'components', 'data_model', 'base', 'services'}
+    meaningful = [p for p in parts if p.lower() not in skip]
+
     ada_parts = ['Pyramid', 'Services']
     for p in meaningful:
         # Title-case each underscore-separated word: tactical_objects → Tactical_Objects
         titled = '_'.join(w.capitalize() for w in p.split('_'))
         ada_parts.append(titled)
-    ada_parts.append('Provided')
+
+    ada_parts.append(explicit_suffix if explicit_suffix else 'Provided')
     return '.'.join(ada_parts)
 
 

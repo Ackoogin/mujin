@@ -3,6 +3,7 @@ syntax = "proto3";
 package pyramid.components.tactical_objects;
 
 import "pyramid/data_model/base.proto";
+import "pyramid/data_model/common.proto";
 
 // -- Tactical Objects Component Schema ----------------------------------------
 //
@@ -204,7 +205,7 @@ message TacticalObject {
 //
 // Maps to: tactical_objects::QueryRequest
 message TacticalObjectQuery {
-  pyramid.data_model.base.Query base            = 1;  // ID filter + oneShot flag
+  pyramid.data_model.common.Query base            = 1;  // ID filter + oneShot flag
   optional ObjectType           by_type         = 2;
   optional Affiliation          by_affiliation  = 3;
   optional BoundingBox          by_region       = 4;
@@ -295,16 +296,16 @@ message InterestCriteria {
 service TacticalObjectService {
   rpc CreateTacticalObject (TacticalObject)      returns (pyramid.data_model.base.Identifier);
   rpc ReadTacticalObject   (TacticalObjectQuery) returns (stream TacticalObject);
-  rpc UpdateTacticalObject (TacticalObject)      returns (pyramid.data_model.base.Ack);
-  rpc DeleteTacticalObject (pyramid.data_model.base.Identifier) returns (pyramid.data_model.base.Ack);
+  rpc UpdateTacticalObject (TacticalObject)      returns (pyramid.data_model.common.Ack);
+  rpc DeleteTacticalObject (pyramid.data_model.base.Identifier) returns (pyramid.data_model.common.Ack);
 }
 
 // Zone: flow inout → full CRUD
 service ZoneService {
   rpc CreateZone (Zone)                               returns (pyramid.data_model.base.Identifier);
-  rpc ReadZone   (pyramid.data_model.base.Query)      returns (stream Zone);
-  rpc UpdateZone (Zone)                               returns (pyramid.data_model.base.Ack);
-  rpc DeleteZone (pyramid.data_model.base.Identifier) returns (pyramid.data_model.base.Ack);
+  rpc ReadZone   (pyramid.data_model.common.Query)      returns (stream Zone);
+  rpc UpdateZone (Zone)                               returns (pyramid.data_model.common.Ack);
+  rpc DeleteZone (pyramid.data_model.base.Identifier) returns (pyramid.data_model.common.Ack);
 }
 
 // Observation: flow in → write-only ingress (Create only; no Read/Update/Delete)

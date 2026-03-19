@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package pyramid.components.tactical_objects.services.provided;
+
+import "google/protobuf/empty.proto";
+import "pyramid/data_model/base.proto";
+import "pyramid/data_model/common.proto";
+import "pyramid/data_model/tactical.proto";
+
+// gRPC Service for Matching_Objects
+service Matching_Objects_Service {
+  // Read match (output only)
+  rpc ReadMatch(pyramid.data_model.common.Query) returns (stream pyramid.data_model.tactical.ObjectMatch);
+}
+
+// gRPC Service for Object_Of_Interest
+service Object_Of_Interest_Service {
+  // Create requirement
+  rpc CreateRequirement(pyramid.data_model.tactical.ObjectInterestRequirement) returns (pyramid.data_model.base.Identifier);
+
+  // Read requirement
+  rpc ReadRequirement(pyramid.data_model.common.Query) returns (stream pyramid.data_model.tactical.ObjectInterestRequirement);
+
+  // Update requirement
+  rpc UpdateRequirement(pyramid.data_model.tactical.ObjectInterestRequirement) returns (pyramid.data_model.common.Ack);
+
+  // Delete requirement
+  rpc DeleteRequirement(pyramid.data_model.base.Identifier) returns (pyramid.data_model.common.Ack);
+}
+
+// gRPC Service for Specific_Object_Detail
+service Specific_Object_Detail_Service {
+  // Read detail (output only)
+  rpc ReadDetail(pyramid.data_model.common.Query) returns (stream pyramid.data_model.tactical.ObjectDetail);
+}

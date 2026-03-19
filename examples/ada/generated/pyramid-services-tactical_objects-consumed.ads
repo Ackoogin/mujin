@@ -1,6 +1,6 @@
 --  Auto-generated EntityActions service specification
 --  Generated from: services by ada_service_generator.py
---  Package: Pyramid.Services.Tactical_Objects.Provided
+--  Package: Pyramid.Services.Tactical_Objects.Consumed
 --
 --  Each Handle_<Op>_<Entity> procedure corresponds to one EntityActions
 --  CRUD operation.  The Dispatch procedure is the single integration
@@ -10,7 +10,7 @@
 with Pyramid.Model;  --  Identifier, Query, Ack
 use  Pyramid.Model;
 
-package Pyramid.Services.Tactical_Objects.Provided is
+package Pyramid.Services.Tactical_Objects.Consumed is
 
    type Operation_Kind is
      (Op_Create,
@@ -19,25 +19,25 @@ package Pyramid.Services.Tactical_Objects.Provided is
       Op_Delete);
 
    type Service_Channel is
-     (Ch_Read_Match,
+     (Ch_Read_Detail,
       Ch_Create_Requirement,
       Ch_Read_Requirement,
       Ch_Update_Requirement,
       Ch_Delete_Requirement,
-      Ch_Read_Detail);
+      Ch_Read_Capability);
 
+   type Capability_Array is array (Positive range <>) of Capability;
    type Detail_Array is array (Positive range <>) of Detail;
-   type Match_Array is array (Positive range <>) of Match;
    type Requirement_Array is array (Positive range <>) of Requirement;
 
    --  -- EntityActions handlers -------------------------------------
    --  Implement these procedures in the package body.
 
-   --  Matching_Objects_Service
-   procedure Handle_Read_Match
-     (Request  : in  MatchQuery;
-      Response : out Match_Array);
-   --  Object_Of_Interest_Service
+   --  Object_Evidence_Service
+   procedure Handle_Read_Detail
+     (Request  : in  DetailQuery;
+      Response : out Detail_Array);
+   --  Object_Solution_Evidence_Service
    procedure Handle_Create_Requirement
      (Request  : in  Requirement;
       Response : out Identifier);
@@ -50,10 +50,10 @@ package Pyramid.Services.Tactical_Objects.Provided is
    procedure Handle_Delete_Requirement
      (Request  : in  Identifier;
       Response : out Ack);
-   --  Specific_Object_Detail_Service
-   procedure Handle_Read_Detail
-     (Request  : in  DetailQuery;
-      Response : out Detail_Array);
+   --  Object_Source_Capability_Service
+   procedure Handle_Read_Capability
+     (Request  : in  CapabilityQuery;
+      Response : out Capability_Array);
 
    --  -- Transport integration point ---------------------------------
    --  Route an incoming (channel, raw buffer) call to the correct
@@ -67,4 +67,4 @@ package Pyramid.Services.Tactical_Objects.Provided is
       Response_Buf : out System.Address;
       Response_Size: out Natural);
 
-end Pyramid.Services.Tactical_Objects.Provided;
+end Pyramid.Services.Tactical_Objects.Consumed;
