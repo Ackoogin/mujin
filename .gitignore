@@ -42,6 +42,7 @@
 
 # Build output
 /build/
+/build_linux/
 /build_pcl_cov/
 /build-coverage/
 
