@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <thread>
 
@@ -34,6 +35,7 @@ int main(int argc, char* argv[]) {
   std::string port_file;
   int timeout_secs = 15;
   bool create_entity = true;
+  bool use_bridge = true;
 
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
@@ -44,6 +46,8 @@ int main(int argc, char* argv[]) {
       timeout_secs = std::atoi(argv[++i]);
     } else if (std::strcmp(argv[i], "--no-entity") == 0) {
       create_entity = false;
+    } else if (std::strcmp(argv[i], "--no-bridge") == 0) {
+      use_bridge = false;
     }
   }
 
@@ -65,10 +69,14 @@ int main(int argc, char* argv[]) {
   pcl_executor_add(exec, tobj.handle());
 
   // Create and configure StandardBridge (translates standard proto ↔ internal)
-  StandardBridge bridge(tobj.runtime(), exec);
-  bridge.configure();
-  bridge.activate();
-  pcl_executor_add(exec, bridge.handle());
+  // When --no-bridge is set, the bridge runs as a separate process.
+  std::unique_ptr<StandardBridge> bridge;
+  if (use_bridge) {
+    bridge = std::make_unique<StandardBridge>(tobj.runtime(), exec);
+    bridge->configure();
+    bridge->activate();
+    pcl_executor_add(exec, bridge->handle());
+  }
 
   // Write port file before accept (so client knows the port to connect to)
   if (!port_file.empty()) {
