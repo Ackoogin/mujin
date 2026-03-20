@@ -42,7 +42,7 @@ PCL draws a hard line between **business logic** and **transport I/O**:
 *   External threads must **never** call component callbacks directly.
 *   External threads may receive data from gRPC, DDS, ROS2, sockets, or device drivers, but they must hand that data to the executor via `pcl_executor_post_incoming()`.
 *   `pcl_executor_post_incoming()` copies the message into an internal ingress queue, so producer threads can safely release or reuse their buffers immediately after posting.
-*   The executor drains queued ingress before ticking containers, which creates a deterministic "apply external updates, then run logic" boundary similar to the existing `PerceptionBridge::flush()` pattern used elsewhere in the codebase.
+*   The executor drains queued ingress before ticking containers, which creates a deterministic "apply external updates, then run logic" boundary.
 
 This means a gRPC server thread does network work, deserializes enough to classify the message, and posts it into the executor queue. The container itself still processes the request on the single executor thread.
 

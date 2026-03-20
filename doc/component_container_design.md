@@ -1,24 +1,10 @@
-# Component Container Design — ROS2-Compatible, C-ABI Deployable
+# PCL Component Container — Developer Guide
 
-## 1. Problem Statement
+## 1. Overview
 
-The ame codebase currently has two deployment modes:
+The PYRAMID Container Library (PCL) provides a standard component container for autonomous mission systems. It encapsulates business logic behind a consistent lifecycle while entirely decoupling it from external middleware.
 
-1. **Standalone** (`src/main.cpp`) — direct library calls, no middleware
-2. **ROS2** (`ros2/src/combined_main.cpp`) — lifecycle nodes, `SingleThreadedExecutor`, service IPC
-
-Both share the same core libraries (`WorldModel`, `Planner`, `PlanCompiler`), but the node/container abstraction is entirely ROS2-specific (`rclcpp_lifecycle::LifecycleNode`). This means:
-
-- Deploying without ROS2 requires ad-hoc `main()` wiring
-- Ada and bare-metal C++ consumers cannot use the ROS2 node model
-- The lifecycle state machine (configure → activate → deactivate → cleanup) is tightly coupled to `rclcpp`
-
-**Goal:** Define a standard **Component Container** that:
-
-- Provides a lifecycle state machine and single-threaded executor for business logic
-- Treats service I/O (ROS2, DDS, shared memory, sockets) as a pluggable adapter
-- Exposes a **C-ABI** so that Ada, C++, and C consumers can all use it
-- Can be wrapped trivially as a ROS2 node (backward-compatible)
+PCL uses a **hybrid architecture**: a pure-C ABI core for maximum portability (Ada, C, C++, Rust), with an optional header-only C++ wrapper for ergonomic authoring. Transport adapters (ROS2, DDS, sockets, shared memory) are pluggable — your component code never depends on middleware.
 
 ---
 
@@ -29,12 +15,12 @@ Both share the same core libraries (`WorldModel`, `Planner`, `PlanCompiler`), bu
 | P1 | **Logic owns the thread** | Business logic runs on exactly one thread (the executor). No internal mutexes needed. |
 | P2 | **I/O is injected** | Transport adapters (ROS2, DDS, sockets, shared-mem) are set via function pointers / vtable, not compiled in. |
 | P3 | **C-ABI at the boundary** | All public symbols are `extern "C"` with opaque handles. C++ internals are hidden behind the ABI wall. |
-| P4 | **Lifecycle is explicit** | Components follow a state machine: `UNCONFIGURED → CONFIGURED → ACTIVE → FINALIZED`. Same states as ROS2 lifecycle but no rclcpp dependency. |
+| P4 | **Lifecycle is explicit** | Components follow a state machine: `UNCONFIGURED → CONFIGURED → ACTIVE → FINALIZED`. Compatible with ROS2 lifecycle but no rclcpp dependency. |
 | P5 | **Zero-copy where possible** | Intra-process communication between containers in the same executor uses pointer handoff, not serialization. |
 
 ---
 
-## 3. Architecture Overview
+## 3. Architecture
 
 ```
 ┌---------------------------------------------------------┐
@@ -54,10 +40,12 @@ Both share the same core libraries (`WorldModel`, `Planner`, `PlanCompiler`), bu
 │                                                         │
 │  ┌-------------------------------------------------┐    │
 │  │         Transport Adapter (pluggable)            │    │
-│  │   ROS2 / DDS / SharedMem / Socket / Lattice     │    │
+│  │   ROS2 / DDS / SharedMem / Socket / gRPC        │    │
 │  └-------------------------------------------------┘    │
 └---------------------------------------------------------┘
 ```
+
+The library itself (`pcl_core`) is pure C17 with zero dependencies. A header-only C++ wrapper (`pcl/component.hpp`) provides RAII, virtual method overrides, and modern C++ ergonomics without compromising the ABI. Ada and C consumers use the raw C API directly.
 
 ---
 
@@ -66,7 +54,7 @@ Both share the same core libraries (`WorldModel`, `Planner`, `PlanCompiler`), bu
 ### 4.1 Opaque Handles
 
 ```c
-/* ame_container.h */
+/* pcl_container.h */
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -75,27 +63,27 @@ extern "C" {
 #endif
 
 /* Opaque handles */
-typedef struct mcl_executor_t  mcl_executor_t;
-typedef struct mcl_container_t mcl_container_t;
-typedef struct mcl_port_t      mcl_port_t;
+typedef struct pcl_executor_t  pcl_executor_t;
+typedef struct pcl_container_t pcl_container_t;
+typedef struct pcl_port_t      pcl_port_t;
 
 /* Return codes */
 typedef enum {
-    MCL_OK             = 0,
-    MCL_ERR_INVALID    = -1,
-    MCL_ERR_STATE      = -2,   /* wrong lifecycle state for this operation */
-    MCL_ERR_TIMEOUT    = -3,
-    MCL_ERR_CALLBACK   = -4,   /* user callback returned error */
-    MCL_ERR_NOMEM      = -5,
-} mcl_status_t;
+    PCL_OK             = 0,
+    PCL_ERR_INVALID    = -1,
+    PCL_ERR_STATE      = -2,   /* wrong lifecycle state for this operation */
+    PCL_ERR_TIMEOUT    = -3,
+    PCL_ERR_CALLBACK   = -4,   /* user callback returned error */
+    PCL_ERR_NOMEM      = -5,
+} pcl_status_t;
 
 /* Lifecycle states */
 typedef enum {
-    MCL_STATE_UNCONFIGURED = 0,
-    MCL_STATE_CONFIGURED   = 1,
-    MCL_STATE_ACTIVE       = 2,
-    MCL_STATE_FINALIZED    = 3,
-} mcl_state_t;
+    PCL_STATE_UNCONFIGURED = 0,
+    PCL_STATE_CONFIGURED   = 1,
+    PCL_STATE_ACTIVE       = 2,
+    PCL_STATE_FINALIZED    = 3,
+} pcl_state_t;
 ```
 
 ### 4.2 Lifecycle Callbacks (User Implements)
@@ -103,51 +91,51 @@ typedef enum {
 ```c
 /* User-provided callbacks — all called on the executor thread */
 typedef struct {
-    mcl_status_t (*on_configure)(mcl_container_t* self, void* user_data);
-    mcl_status_t (*on_activate)(mcl_container_t* self, void* user_data);
-    mcl_status_t (*on_deactivate)(mcl_container_t* self, void* user_data);
-    mcl_status_t (*on_cleanup)(mcl_container_t* self, void* user_data);
-    mcl_status_t (*on_shutdown)(mcl_container_t* self, void* user_data);
+    pcl_status_t (*on_configure)(pcl_container_t* self, void* user_data);
+    pcl_status_t (*on_activate)(pcl_container_t* self, void* user_data);
+    pcl_status_t (*on_deactivate)(pcl_container_t* self, void* user_data);
+    pcl_status_t (*on_cleanup)(pcl_container_t* self, void* user_data);
+    pcl_status_t (*on_shutdown)(pcl_container_t* self, void* user_data);
 
     /* Periodic tick — called at configured rate while ACTIVE */
-    mcl_status_t (*on_tick)(mcl_container_t* self, double dt_seconds,
+    pcl_status_t (*on_tick)(pcl_container_t* self, double dt_seconds,
                             void* user_data);
-} mcl_callbacks_t;
+} pcl_callbacks_t;
 ```
 
 ### 4.3 Container Lifecycle
 
 ```c
 /* Create / destroy */
-mcl_container_t* mcl_container_create(const char* name,
-                                       const mcl_callbacks_t* callbacks,
+pcl_container_t* pcl_container_create(const char* name,
+                                       const pcl_callbacks_t* callbacks,
                                        void* user_data);
-void mcl_container_destroy(mcl_container_t* c);
+void pcl_container_destroy(pcl_container_t* c);
 
 /* Lifecycle transitions */
-mcl_status_t mcl_container_configure(mcl_container_t* c);
-mcl_status_t mcl_container_activate(mcl_container_t* c);
-mcl_status_t mcl_container_deactivate(mcl_container_t* c);
-mcl_status_t mcl_container_cleanup(mcl_container_t* c);
-mcl_status_t mcl_container_shutdown(mcl_container_t* c);
+pcl_status_t pcl_container_configure(pcl_container_t* c);
+pcl_status_t pcl_container_activate(pcl_container_t* c);
+pcl_status_t pcl_container_deactivate(pcl_container_t* c);
+pcl_status_t pcl_container_cleanup(pcl_container_t* c);
+pcl_status_t pcl_container_shutdown(pcl_container_t* c);
 
-mcl_state_t  mcl_container_state(const mcl_container_t* c);
-const char*  mcl_container_name(const mcl_container_t* c);
+pcl_state_t  pcl_container_state(const pcl_container_t* c);
+const char*  pcl_container_name(const pcl_container_t* c);
 
 /* Parameters (key-value config) */
-mcl_status_t mcl_container_set_param_str(mcl_container_t* c,
+pcl_status_t pcl_container_set_param_str(pcl_container_t* c,
                                           const char* key, const char* value);
-mcl_status_t mcl_container_set_param_f64(mcl_container_t* c,
+pcl_status_t pcl_container_set_param_f64(pcl_container_t* c,
                                           const char* key, double value);
-mcl_status_t mcl_container_set_param_i64(mcl_container_t* c,
+pcl_status_t pcl_container_set_param_i64(pcl_container_t* c,
                                           const char* key, int64_t value);
-mcl_status_t mcl_container_set_param_bool(mcl_container_t* c,
+pcl_status_t pcl_container_set_param_bool(pcl_container_t* c,
                                            const char* key, bool value);
 
-const char*  mcl_container_get_param_str(const mcl_container_t* c,
+const char*  pcl_container_get_param_str(const pcl_container_t* c,
                                           const char* key,
                                           const char* default_val);
-double       mcl_container_get_param_f64(const mcl_container_t* c,
+double       pcl_container_get_param_f64(const pcl_container_t* c,
                                           const char* key, double default_val);
 ```
 
@@ -156,71 +144,74 @@ double       mcl_container_get_param_f64(const mcl_container_t* c,
 ```c
 /* Port types */
 typedef enum {
-    MCL_PORT_PUBLISHER   = 0,
-    MCL_PORT_SUBSCRIBER  = 1,
-    MCL_PORT_SERVICE     = 2,   /* request-reply server */
-    MCL_PORT_CLIENT      = 3,   /* request-reply client */
-} mcl_port_type_t;
+    PCL_PORT_PUBLISHER   = 0,
+    PCL_PORT_SUBSCRIBER  = 1,
+    PCL_PORT_SERVICE     = 2,   /* request-reply server */
+    PCL_PORT_CLIENT      = 3,   /* request-reply client */
+} pcl_port_type_t;
 
 /* Message buffer — user owns the data, container borrows it */
 typedef struct {
     const void*  data;
     uint32_t     size;
-    const char*  type_name;      /* e.g. "WorldState", "GetFact_Request" */
-} mcl_msg_t;
+    const char*  type_name;      /* e.g. "SensorReading", "StatusResponse" */
+} pcl_msg_t;
 
 /* Subscriber callback — called on executor thread */
-typedef void (*mcl_sub_callback_t)(mcl_container_t* c,
-                                    const mcl_msg_t* msg,
+typedef void (*pcl_sub_callback_t)(pcl_container_t* c,
+                                    const pcl_msg_t* msg,
                                     void* user_data);
 
 /* Service handler — called on executor thread, must fill response */
-typedef mcl_status_t (*mcl_service_handler_t)(mcl_container_t* c,
-                                               const mcl_msg_t* request,
-                                               mcl_msg_t* response,
+typedef pcl_status_t (*pcl_service_handler_t)(pcl_container_t* c,
+                                               const pcl_msg_t* request,
+                                               pcl_msg_t* response,
                                                void* user_data);
 
-/* Create ports (during on_configure or on_activate) */
-mcl_port_t* mcl_container_add_publisher(mcl_container_t* c,
+/* Create ports (must be called during on_configure) */
+pcl_port_t* pcl_container_add_publisher(pcl_container_t* c,
                                          const char* topic,
                                          const char* type_name);
-mcl_port_t* mcl_container_add_subscriber(mcl_container_t* c,
+pcl_port_t* pcl_container_add_subscriber(pcl_container_t* c,
                                           const char* topic,
                                           const char* type_name,
-                                          mcl_sub_callback_t cb,
+                                          pcl_sub_callback_t cb,
                                           void* user_data);
-mcl_port_t* mcl_container_add_service(mcl_container_t* c,
+pcl_port_t* pcl_container_add_service(pcl_container_t* c,
                                        const char* service_name,
                                        const char* type_name,
-                                       mcl_service_handler_t handler,
+                                       pcl_service_handler_t handler,
                                        void* user_data);
 
 /* Publish (from on_tick or service handler) */
-mcl_status_t mcl_port_publish(mcl_port_t* port, const mcl_msg_t* msg);
+pcl_status_t pcl_port_publish(pcl_port_t* port, const pcl_msg_t* msg);
 ```
 
 ### 4.5 Executor
 
 ```c
 /* Executor — runs one or more containers on a single thread */
-mcl_executor_t* mcl_executor_create(void);
-void            mcl_executor_destroy(mcl_executor_t* e);
+pcl_executor_t* pcl_executor_create(void);
+void            pcl_executor_destroy(pcl_executor_t* e);
 
-mcl_status_t mcl_executor_add(mcl_executor_t* e, mcl_container_t* c);
+pcl_status_t pcl_executor_add(pcl_executor_t* e, pcl_container_t* c);
 
 /* Spin — blocks, runs all containers' ticks and I/O callbacks in round-robin */
-mcl_status_t mcl_executor_spin(mcl_executor_t* e);
+pcl_status_t pcl_executor_spin(pcl_executor_t* e);
 
 /* Spin once — process pending work, return immediately */
-mcl_status_t mcl_executor_spin_once(mcl_executor_t* e, uint32_t timeout_ms);
+pcl_status_t pcl_executor_spin_once(pcl_executor_t* e, uint32_t timeout_ms);
 
 /* Thread-safe ingress from external I/O threads (deep-copies payload) */
-mcl_status_t mcl_executor_post_incoming(mcl_executor_t* e,
+pcl_status_t pcl_executor_post_incoming(pcl_executor_t* e,
                                         const char* topic,
-                                        const mcl_msg_t* msg);
+                                        const pcl_msg_t* msg);
 
 /* Request shutdown (thread-safe, can be called from signal handler) */
-void mcl_executor_request_shutdown(mcl_executor_t* e);
+void pcl_executor_request_shutdown(pcl_executor_t* e);
+
+/* Logging — integrates with transport adapter (e.g. ROS2 RCLCPP_INFO) */
+void pcl_log(pcl_container_t* c, int level, const char* fmt, ...);
 
 #ifdef __cplusplus
 }
@@ -229,150 +220,66 @@ void mcl_executor_request_shutdown(mcl_executor_t* e);
 
 ---
 
-## 5. Design Options
+## 5. C++ Wrapper
 
-### Option A: Callback-Only (shown above)
-
-**How it works:** User provides a `mcl_callbacks_t` struct of function pointers. The container calls them at the right moments. All state is in `user_data`.
-
-| Pros | Cons |
-|------|------|
-| Minimal API surface | User must manage all state via `void*` |
-| Trivially callable from Ada, C, C++ | No compile-time type safety on ports |
-| No vtable / inheritance | Slightly more boilerplate per component |
-| ABI-stable by construction | |
-
-**Ada usage sketch:**
-```ada
-procedure On_Configure(Self : System.Address; User_Data : System.Address)
-  return Interfaces.C.int
-  with Convention => C;
-
-Callbacks : aliased mcl_callbacks_t := (
-  on_configure  => On_Configure'Access,
-  on_activate   => On_Activate'Access,
-  on_tick       => On_Tick'Access,
-  others        => null
-);
-Container : mcl_container_t_Access := mcl_container_create("wm", Callbacks'Access, ...);
-```
-
----
-
-### Option B: C++ Abstract Base Class + C Wrapper
-
-**How it works:** A C++ `IComponent` abstract class provides the ergonomic authoring interface. A thin C wrapper (`ame_container.h`) auto-generates from the vtable.
+The header-only C++ wrapper (`pcl/component.hpp`) provides ergonomic authoring on top of the C ABI. The wrapper uses static trampoline functions to bridge virtual method calls to the C callback interface.
 
 ```cpp
-// component.hpp (C++ authoring API)
-namespace mcl {
-
-class IComponent {
-public:
-    virtual ~IComponent() = default;
-
-    virtual Status on_configure() { return Status::OK; }
-    virtual Status on_activate()  { return Status::OK; }
-    virtual Status on_deactivate(){ return Status::OK; }
-    virtual Status on_cleanup()   { return Status::OK; }
-    virtual Status on_shutdown()  { return Status::OK; }
-    virtual Status on_tick(double dt) { return Status::OK; }
-
-    // Port creation helpers (call during on_configure)
-    Publisher  add_publisher(std::string_view topic, std::string_view type);
-    Subscriber add_subscriber(std::string_view topic, std::string_view type,
-                              std::function<void(const MessageView&)> cb);
-    ServiceServer add_service(std::string_view name, std::string_view type,
-                              ServiceHandler handler);
-
-    // Parameter access
-    template<typename T>
-    T param(std::string_view key, T default_val = {}) const;
-
-protected:
-    // Set by container framework
-    std::string name_;
-    ParameterMap params_;
-    PortRegistry ports_;
-};
-
-} // namespace mcl
-```
-
-The C API wraps this:
-```c
-/* Generated / hand-written shim */
-mcl_container_t* mcl_container_create_from_cpp(mcl::IComponent* component);
-```
-
-| Pros | Cons |
-|------|------|
-| Natural C++ authoring with RAII, templates, type safety | C++ vtable layout is compiler-specific (not strictly ABI-stable) |
-| Existing ame code ports 1:1 (lifecycle methods match) | Must provide separate C shim for Ada/C consumers |
-| Less boilerplate per component | Two API surfaces to maintain |
-
----
-
-### Option C: Hybrid — C ABI Core + C++ Header-Only Helpers
-
-**How it works:** The library itself is pure C ABI (Option A). A **header-only** C++ wrapper provides ergonomics for C++ users. Ada/C use the raw C API directly.
-
-```cpp
-// mcl/component.hpp — header-only C++ convenience wrapper
-namespace mcl {
+// pcl/component.hpp — header-only C++ convenience wrapper
+namespace pcl {
 
 class Component {
 public:
     Component(std::string_view name) {
-        mcl_callbacks_t cbs = {};
-        cbs.on_configure = [](mcl_container_t* c, void* ud) -> mcl_status_t {
+        pcl_callbacks_t cbs = {};
+        cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
             return static_cast<Component*>(ud)->on_configure();
         };
-        cbs.on_activate = [](mcl_container_t* c, void* ud) -> mcl_status_t {
+        cbs.on_activate = [](pcl_container_t* c, void* ud) -> pcl_status_t {
             return static_cast<Component*>(ud)->on_activate();
         };
-        cbs.on_tick = [](mcl_container_t* c, double dt, void* ud) -> mcl_status_t {
+        cbs.on_tick = [](pcl_container_t* c, double dt, void* ud) -> pcl_status_t {
             return static_cast<Component*>(ud)->on_tick(dt);
         };
         // ... other callbacks
-        handle_ = mcl_container_create(name.data(), &cbs, this);
+        handle_ = pcl_container_create(name.data(), &cbs, this);
     }
 
-    virtual ~Component() { mcl_container_destroy(handle_); }
+    virtual ~Component() { pcl_container_destroy(handle_); }
 
-    // Override these
-    virtual mcl_status_t on_configure() { return MCL_OK; }
-    virtual mcl_status_t on_activate()  { return MCL_OK; }
-    virtual mcl_status_t on_tick(double dt) { return MCL_OK; }
+    // Override these in your component
+    virtual pcl_status_t on_configure() { return PCL_OK; }
+    virtual pcl_status_t on_activate()  { return PCL_OK; }
+    virtual pcl_status_t on_deactivate(){ return PCL_OK; }
+    virtual pcl_status_t on_tick(double dt) { return PCL_OK; }
     // ...
 
-    mcl_container_t* handle() { return handle_; }
+    // Convenience helpers
+    pcl_port_t* addPublisher(const char* topic, const char* type) {
+        return pcl_container_add_publisher(handle_, topic, type);
+    }
+    double paramF64(const char* key, double def) {
+        return pcl_container_get_param_f64(handle_, key, def);
+    }
+    void logInfo(const char* fmt, ...) { /* delegates to pcl_log */ }
+
+    pcl_container_t* handle() { return handle_; }
 
 private:
-    mcl_container_t* handle_;
+    pcl_container_t* handle_;
 };
 
-} // namespace mcl
+} // namespace pcl
 ```
-
-| Pros | Cons |
-|------|------|
-| Single ABI (pure C) — maximum portability | Stateless C function pointers can't capture context without `void*` (solved by wrapper) |
-| C++ ergonomics via header-only layer (zero link cost) | Slightly more indirection vs Option B |
-| Ada/C use the same binary | Header-only layer must be careful with ODR |
-| ABI never breaks between C++ compiler versions | |
-
-> [!IMPORTANT]
-> **Recommendation:** Option C (Hybrid) is the recommended approach. It gives ABI stability for Ada/C/C++ consumers while providing ergonomic C++ authoring. The ROS2 adapter then wraps the C API, not the C++ layer.
 
 ---
 
 ## 6. Transport Adapter Layer
 
-The container's ports produce/consume `mcl_msg_t` (opaque byte buffers + type name). A **transport adapter** connects these to the real middleware:
+The container's ports produce/consume `pcl_msg_t` (opaque byte buffers + type name). A **transport adapter** connects these to the real middleware:
 
 ```
-Container Port --mcl_msg_t--► Transport Adapter --► Wire
+Container Port --pcl_msg_t--► Transport Adapter --► Wire
                                    │
                           ┌--------┼--------┐
                           ▼        ▼        ▼
@@ -381,51 +288,54 @@ Container Port --mcl_msg_t--► Transport Adapter --► Wire
 
 ### 6.1 Adapter Interface
 
+Implement a transport adapter by filling in four function pointers:
+
 ```c
 typedef struct {
     /* Called when container publishes — adapter sends to wire */
-    mcl_status_t (*publish)(void* adapter_ctx, const char* topic,
-                            const mcl_msg_t* msg);
+    pcl_status_t (*publish)(void* adapter_ctx, const char* topic,
+                            const pcl_msg_t* msg);
 
-    /* Called by adapter when message arrives. External I/O threads enqueue
-       work with mcl_executor_post_incoming(); executor-thread adapters may
-       dispatch directly. */
+    /* Called to register a subscription on the adapter side */
+    pcl_status_t (*subscribe)(void* adapter_ctx, const char* topic,
+                               const char* type_name);
 
     /* Service routing */
-    mcl_status_t (*serve)(void* adapter_ctx, const char* service_name,
-                          const mcl_msg_t* request, mcl_msg_t* response);
+    pcl_status_t (*serve)(void* adapter_ctx, const char* service_name,
+                          const pcl_msg_t* request, pcl_msg_t* response);
+
+    /* Cleanup */
+    void (*shutdown)(void* adapter_ctx);
 
     void* adapter_ctx;
-} mcl_transport_t;
+} pcl_transport_t;
 
-mcl_status_t mcl_executor_set_transport(mcl_executor_t* e,
-                                         const mcl_transport_t* transport);
+pcl_status_t pcl_executor_set_transport(pcl_executor_t* e,
+                                         const pcl_transport_t* transport);
 ```
 
-### 6.2 ROS2 Adapter (Backward Compatibility)
+### 6.2 ROS2 Adapter Example
 
 ```cpp
-// ros2_adapter.cpp — wraps mcl containers as rclcpp_lifecycle::LifecycleNode
+// ros2_adapter.cpp — wraps PCL containers as rclcpp_lifecycle::LifecycleNode
 class Ros2Adapter {
 public:
     Ros2Adapter(rclcpp::executors::SingleThreadedExecutor& ros_exec,
-                mcl_executor_t* mcl_exec);
+                pcl_executor_t* pcl_exec);
 
-    // Wraps each mcl_container_t as a LifecycleNode with matching services/pubs
-    void bridge(mcl_container_t* container);
+    // Wraps each pcl_container_t as a LifecycleNode with matching services/pubs
+    void bridge(pcl_container_t* container);
 
-    // Pumps mcl_executor_spin_once from a ROS2 timer callback
+    // Pumps pcl_executor_spin_once from a ROS2 timer callback
     void spin_integrated();
 };
 ```
-
-This means existing `ame_ros2` nodes can be **incrementally migrated**: rewrite the logic as an `mcl` component, then wrap with `Ros2Adapter` for the same ROS2 topic/service API.
 
 ---
 
 ## 7. Lifecycle State Machine
 
-Matches ROS2 managed-node states but with no rclcpp dependency:
+PCL enforces a strict lifecycle compatible with ROS 2 managed nodes but with no rclcpp dependency:
 
 ```mermaid
 stateDiagram-v2
@@ -439,6 +349,11 @@ stateDiagram-v2
     UNCONFIGURED --> FINALIZED : shutdown() / on_shutdown
     FINALIZED --> [*]
 ```
+
+**Key rules:**
+- **Ports must be created during `on_configure`.** Dynamic port creation after configure is not supported.
+- **`on_tick()` is only called while `ACTIVE`.** Each container has its own tick rate (set via parameter).
+- **Shutdown is graceful** with a configurable timeout: `ACTIVE → on_deactivate → on_shutdown → FINALIZED`.
 
 **Executor tick loop** (while `ACTIVE`):
 
@@ -454,133 +369,183 @@ while (!shutdown_requested) {
             process_service_requests(container)     // dispatch service handlers
             container.callbacks.on_tick(container, dt, user_data)
 
-    sleep_until(next_tick)  // configurable rate, default 100 Hz
+    sleep_until(next_tick)
 }
 ```
 
-All callbacks execute on the **single executor thread** — no mutexes needed in user code. External transport threads never call user callbacks directly; they only enqueue owned messages into the executor ingress queue.
+All callbacks execute on the **single executor thread** — no mutexes needed in user code. External transport threads never call user callbacks directly; they only enqueue messages via `pcl_executor_post_incoming()`.
 
 ---
 
-## 8. Serialization Strategy
+## 8. Serialization
 
-Ports exchange `mcl_msg_t` (pointer + size + type name). The question is **who serializes?**
+Ports exchange `pcl_msg_t` — a pointer, size, and type name string. PCL is **format-agnostic**: the `data` field is an opaque byte buffer. Each transport adapter knows how to route bytes on the wire.
 
-### Option S1: User Serializes (CDR / Protobuf / FlatBuffers / custom)
+For **intra-process** communication (no transport adapter set), messages are passed by pointer with zero-copy semantics.
 
-The container is format-agnostic. The `data` field is an opaque byte buffer. Each transport adapter knows how to route bytes.
-
-| Pros | Cons |
-|------|------|
-| Container library has zero serialization dependencies | User must serialize/deserialize manually |
-| Maximum flexibility (CDR for ROS2, Protobuf for gRPC, raw structs for shared-mem) | More boilerplate |
-
-### Option S2: Built-in Schema + Codegen
-
-Define a `.mcl` schema (or reuse `.msg` / `.proto`), generate C structs + serialize/deserialize functions.
-
-| Pros | Cons |
-|------|------|
-| Type-safe, ergonomic | New codegen tool to maintain |
-| Could generate ROS2 `.msg` and C struct from same source | |
-
-### Option S3: POD Structs with Layout Descriptor
-
-Pass plain C structs between containers. A compile-time layout descriptor enables the transport adapter to serialize when crossing process boundaries.
+For **cross-process** or **cross-network** communication, you can optionally use POD structs with layout descriptors to enable automatic serialization by the transport adapter:
 
 ```c
 typedef struct {
-    uint64_t wm_version;
-    bool     value;
-    bool     found;
-} GetFactResponse;
+    uint64_t version;
+    double   value;
+    bool     valid;
+} SensorReading;
 
 /* Layout descriptor for transport adapters */
-static const mcl_field_desc_t GetFactResponse_fields[] = {
-    { "wm_version", MCL_TYPE_U64,  offsetof(GetFactResponse, wm_version) },
-    { "value",      MCL_TYPE_BOOL, offsetof(GetFactResponse, value) },
-    { "found",      MCL_TYPE_BOOL, offsetof(GetFactResponse, found) },
+static const pcl_field_desc_t SensorReading_fields[] = {
+    { "version", PCL_TYPE_U64,  offsetof(SensorReading, version) },
+    { "value",   PCL_TYPE_F64,  offsetof(SensorReading, value) },
+    { "valid",   PCL_TYPE_BOOL, offsetof(SensorReading, valid) },
     { NULL, 0, 0 }
 };
 ```
 
-| Pros | Cons |
-|------|------|
-| Zero-copy intra-process (just pass pointer) | Structs must be POD (no strings without special handling) |
-| No codegen tool needed | Need reflection/descriptor for each type |
-| C and Ada can define the same struct layout | |
-
-> [!TIP]
-> **Recommendation:** Start with **S1** (user serializes) for maximum flexibility. Add **S3** (POD + descriptors) as an optional convenience layer for common message types. This keeps the core minimal while supporting zero-copy intra-process.
+This keeps the core minimal while supporting zero-copy intra-process and automatic serialization for common message types.
 
 ---
 
-## 9. Mapping Existing Ame Components
+## 9. Writing a Component (C++)
 
-| Current ROS2 Node | Container Equivalent | Ports |
-|--------------------|---------------------|-------|
-| `WorldModelNode` | `wm_container` | Services: `get_fact`, `set_fact`, `query_state`. Publisher: `world_state` |
-| `PlannerNode` | `planner_container` | Action (modeled as service): `plan`. Client: `query_state` |
-| `ExecutorNode` | `executor_container` | Subscriber: `bt_xml`. Publisher: `bt_events`, `status`. Clients: `get_fact`, `set_fact` |
-| `AmeLifecycleManager` | `mcl_executor` (lifecycle transitions are built-in) | N/A — executor handles lifecycle |
+Here is a complete example of a PCL component using the C++ wrapper:
 
-**Migration path for `WorldModelNode`:**
+```cpp
+#include "pcl/component.hpp"
+#include "pcl/executor.hpp"
 
-```c
-mcl_status_t wm_on_configure(mcl_container_t* c, void* ud) {
-    WorldModelData* d = (WorldModelData*)ud;
-    const char* domain = mcl_container_get_param_str(c, "domain.pddl_file", "");
-    const char* problem = mcl_container_get_param_str(c, "domain.problem_file", "");
-    /* parse PDDL, init WorldModel... */
+class TemperatureSensor : public pcl::Component {
+public:
+    TemperatureSensor() : Component("temp_sensor") {}
 
-    d->pub_state = mcl_container_add_publisher(c, "world_state", "WorldState");
-    mcl_container_add_service(c, "get_fact", "GetFact", wm_handle_get_fact, ud);
-    mcl_container_add_service(c, "set_fact", "SetFact", wm_handle_set_fact, ud);
-    return MCL_OK;
-}
-
-mcl_status_t wm_on_tick(mcl_container_t* c, double dt, void* ud) {
-    WorldModelData* d = (WorldModelData*)ud;
-    if (d->state_dirty) {
-        mcl_msg_t msg = serialize_world_state(d);
-        mcl_port_publish(d->pub_state, &msg);
-        d->state_dirty = false;
+protected:
+    pcl_status_t on_configure() override {
+        threshold_ = paramF64("alert_threshold", 50.0);
+        pub_alert_ = addPublisher("alerts", "AlertMsg");
+        addSubscriber("config_updates", "ConfigMsg",
+            [this](const pcl_msg_t* msg) { /* handle config update */ });
+        return PCL_OK;
     }
-    return MCL_OK;
+
+    pcl_status_t on_activate() override {
+        setTickRateHz(10.0);
+        return PCL_OK;
+    }
+
+    pcl_status_t on_tick(double dt) override {
+        logInfo("Sensor ticking... dt=%f", dt);
+        // Read sensor, check threshold, publish alert if needed
+        return PCL_OK;
+    }
+
+private:
+    double threshold_ = 0.0;
+    pcl_port_t* pub_alert_ = nullptr;
+};
+
+int main() {
+    TemperatureSensor sensor;
+    pcl::Executor exec;
+
+    sensor.configure();
+    sensor.activate();
+
+    exec.add(sensor);
+    exec.spin();  // Blocks and runs the tick loop
+
+    return 0;
 }
 ```
 
 ---
 
-## 10. Open Questions for Discussion
+## 10. Writing a Component (C)
 
-| # | Question | Impact |
-|---|----------|--------|
-| Q1 | **Tick rate per container or per executor?** Per-container allows different rates (e.g., WM at 10 Hz, executor at 50 Hz) but adds complexity. | API complexity |
-per container
-| Q2 | **Action servers** (long-running async operations) — model as services with feedback callbacks, or as a dedicated port type? | API surface |
-see protocol_agnostic_service_plan.md
-| Q3 | **Logging** — provide a `mcl_log()` C function or leave to user? If provided, should it integrate with ROS2's `RCLCPP_INFO` via the adapter? | Dependency footprint |
-yes, provide a `mcl_log()` C function that integrates with ROS2's `RCLCPP_INFO` via the adapter
-| Q4 | **Dynamic port creation** — allow adding ports after `on_configure`? ROS2 allows this, but it complicates the transport adapter binding. | Flexibility vs. simplicity |
-no, ports are created at configure time
-| Q5 | **Thread-safe shutdown** — `mcl_executor_request_shutdown()` is signal-safe. Should there be a graceful shutdown with timeout that calls `on_deactivate` → `on_shutdown`? | Safety |
-yes, graceful shutdown with timeout that calls `on_deactivate` → `on_shutdown`
-| Q6 | **Should the C API use `mcl_` prefix (ame container library) or something more generic?** | Naming / reusability |
-use pcl (PYRAMID container library) instead of mcl
+The same component in pure C, suitable for Ada interop or embedded targets:
+
+```c
+#include "pcl/pcl_container.h"
+#include "pcl/pcl_executor.h"
+
+typedef struct {
+    pcl_port_t* pub_alert;
+    double threshold;
+} SensorData;
+
+pcl_status_t sensor_on_configure(pcl_container_t* c, void* ud) {
+    SensorData* d = (SensorData*)ud;
+    d->threshold = pcl_container_get_param_f64(c, "alert_threshold", 50.0);
+    d->pub_alert = pcl_container_add_publisher(c, "alerts", "AlertMsg");
+    return PCL_OK;
+}
+
+pcl_status_t sensor_on_tick(pcl_container_t* c, double dt, void* ud) {
+    SensorData* d = (SensorData*)ud;
+    /* Read sensor, check threshold, publish alert if needed */
+    return PCL_OK;
+}
+
+int main(void) {
+    SensorData data = {0};
+    pcl_callbacks_t cbs = {
+        .on_configure = sensor_on_configure,
+        .on_tick      = sensor_on_tick,
+    };
+
+    pcl_container_t* c = pcl_container_create("temp_sensor", &cbs, &data);
+    pcl_executor_t* e = pcl_executor_create();
+
+    pcl_container_configure(c);
+    pcl_container_activate(c);
+    pcl_executor_add(e, c);
+    pcl_executor_spin(e);
+
+    pcl_executor_destroy(e);
+    pcl_container_destroy(c);
+    return 0;
+}
+```
 
 ---
 
-## 11. Comparison Summary
+## 11. Writing a Component (Ada)
 
-| Dimension | Option A (Callback) | Option B (C++ ABC) | **Option C (Hybrid)** |
-|-----------|--------------------|--------------------|----------------------|
-| Ada compatible | ✅ Direct | ⚠️ Via C shim | ✅ Direct (C API) |
-| C compatible | ✅ Native | ⚠️ Via C shim | ✅ Native |
-| C++ ergonomics | ⚠️ Manual | ✅ Virtual methods | ✅ Header-only wrapper |
-| ABI stability | ✅ Stable | ❌ Fragile | ✅ Stable |
-| ROS2 wrappable | ✅ Yes | ✅ Yes | ✅ Yes |
-| Maintenance cost | Low | Medium | Low |
+The pure-C ABI enables direct Ada bindings with no C++ dependency:
 
-> [!IMPORTANT]
-> **Overall recommendation:** Option C (Hybrid C ABI + C++ header-only wrapper) with serialization strategy S1+S3 (user-serialized with optional POD descriptors). This gives ABI stability, multi-language support, and ROS2 backward compatibility with minimal maintenance overhead.
+```ada
+procedure On_Configure(Self : System.Address; User_Data : System.Address)
+  return Interfaces.C.int
+  with Convention => C;
+
+Callbacks : aliased pcl_callbacks_t := (
+  on_configure  => On_Configure'Access,
+  on_activate   => On_Activate'Access,
+  on_tick       => On_Tick'Access,
+  others        => null
+);
+Container : pcl_container_t_Access :=
+    pcl_container_create("sensor", Callbacks'Access, User_Data'Address);
+```
+
+See `examples/ada/pcl_bindings.ads` for the full Ada binding specification.
+
+---
+
+## 12. External I/O Integration
+
+PCL draws a hard line between business logic and transport I/O. External threads (gRPC, sockets, device drivers) must never call component callbacks directly. Instead, they post messages into the executor's ingress queue:
+
+```
+external I/O thread
+  -> receive / deserialize / classify
+  -> pcl_executor_post_incoming(executor, topic, msg)
+  -> return to middleware immediately
+
+executor thread
+  -> drain ingress queue
+  -> dispatch subscriber callback / service handler
+  -> run on_tick()
+```
+
+For long-latency outbound calls (e.g., gRPC clients), the recommended pattern is the inverse: the executor creates the request, an adapter-owned I/O thread waits for network completion, and the completion is posted back into the executor as a new ingress event.
+
+See `examples/external_io_bridge_example.c` for a concrete producer-thread to executor-queue to subscriber flow.

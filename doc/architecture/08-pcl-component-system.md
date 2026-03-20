@@ -8,41 +8,65 @@ configurations with different communication bindings.
 
 ## 1. PCL Layer Stack
 
-The PCL separates application logic from middleware through a clean layered design.
-The pure-C core has zero external dependencies; language wrappers and transport
-adapters are injected at composition time.
+The PCL separates application logic from middleware through three distinct concerns:
+**components** encapsulate business logic and own their ports/parameters, the
+**executor** drives one or more components on a single thread, and **transport
+adapters** are injected at composition time to bridge ports to external middleware.
 
 ```mermaid
-block-beta
-  columns 1
-  block:app["Application Layer"]
-    columns 3
-    WM["WorldModelComponent"]
-    PL["PlannerComponent"]
-    EX["ExecutorComponent"]
-  end
-  block:cpp["C++ Wrapper (component.hpp)"]
-    columns 1
-    COMP["pcl::Component — RAII, virtual methods, trampolines"]
-  end
-  block:capi["Pure C API (pcl_container.h / pcl_executor.h)"]
-    columns 4
-    CONT["Container"]
-    EXEC["Executor"]
-    PORT["Ports"]
-    PARAM["Parameters"]
-  end
-  block:transport["Transport Adapter Layer (pcl_transport.h)"]
-    columns 4
-    NONE["None (intra-process)"]
-    ROS2["ROS 2 / DDS"]
-    GRPC["gRPC"]
-    SHM["Shared Memory"]
+graph TB
+  subgraph Components["Components (user-authored)"]
+    direction TB
+
+    subgraph CompA["Component A"]
+      direction LR
+      A_LOGIC["Business Logic"]
+      A_PORTS["Ports (pub/sub/svc)"]
+      A_PARAMS["Parameters"]
+    end
+
+    subgraph CompB["Component B"]
+      direction LR
+      B_LOGIC["Business Logic"]
+      B_PORTS["Ports (pub/sub/svc)"]
+      B_PARAMS["Parameters"]
+    end
   end
 
-  app --> cpp
-  cpp --> capi
-  capi --> transport
+  subgraph Wrapper["C++ Wrapper (optional, header-only)"]
+    CPP["pcl::Component — RAII, virtual methods, trampolines"]
+  end
+
+  subgraph Core["Pure C API (pcl_container.h)"]
+    CONT["pcl_container_t"]
+    PORT["pcl_port_t"]
+    PARAM["pcl_param API"]
+  end
+
+  subgraph Executor["Executor (pcl_executor.h)"]
+    EXEC["pcl_executor_t — single-thread tick loop, ingress queue"]
+  end
+
+  subgraph Transport["Transport Adapter (injected via pcl_transport_t)"]
+    direction LR
+    NONE["None<br/>(intra-process)"]
+    ROS2["ROS 2 /<br/>DDS"]
+    GRPC["gRPC"]
+    SHM["Shared<br/>Memory"]
+  end
+
+  CompA & CompB -->|"authored via"| Wrapper
+  Wrapper -->|"delegates to"| Core
+  CompA & CompB -->|"or directly via"| Core
+  EXEC -->|"drives"| Components
+  EXEC -.->|"transport injected"| Transport
+  A_PORTS & B_PORTS -.->|"routed through"| Transport
+
+  style Components fill:#e8f5e9,stroke:#2e7d32
+  style Executor fill:#e8eaf6,stroke:#283593
+  style Transport fill:#fff8e1,stroke:#f9a825
+  style Core fill:#f5f5f5,stroke:#616161
+  style Wrapper fill:#f3e5f5,stroke:#7b1fa2
 ```
 
 ---
@@ -65,17 +89,17 @@ graph TB
 
     subgraph C1["Container A"]
       direction LR
-      PUB1["pub: ~/state"]
-      SUB1["sub: ~/cmd"]
-      SVC1["svc: get_fact"]
+      PUB1["pub: ~/output"]
+      SUB1["sub: ~/input"]
+      SVC1["svc: query"]
       TICK1["on_tick()"]
     end
 
     subgraph C2["Container B"]
       direction LR
-      PUB2["pub: ~/plan"]
-      SUB2["sub: ~/state"]
-      SVC2["svc: solve_goal"]
+      PUB2["pub: ~/result"]
+      SUB2["sub: ~/output"]
+      SVC2["svc: process"]
       TICK2["on_tick()"]
     end
 
@@ -208,7 +232,7 @@ graph LR
 
 ## 6. Deployment Example — Single Process, No Middleware
 
-All three AME components share one executor. Communication is intra-process
+All components share one executor. Communication is intra-process
 zero-copy. No transport adapter is set. This is the simplest deployment, suitable
 for testing, simulation, and embedded targets.
 
@@ -218,35 +242,34 @@ graph TB
     subgraph Exec["pcl_executor_t"]
       direction TB
 
-      subgraph WMC["WorldModelComponent"]
-        WM_SVC["svc: get_fact, set_fact, query_state"]
-        WM_PUB["pub: ~/state"]
-        WM_TICK["on_tick: publish state if dirty"]
+      subgraph CA["Component A (State Manager)"]
+        CA_SVC["svc: get_state, set_state"]
+        CA_PUB["pub: ~/state"]
+        CA_TICK["on_tick: publish state if dirty"]
       end
 
-      subgraph PC["PlannerComponent"]
-        PC_WM["inprocess_wm_ = &wm"]
-        PC_METHOD["solveGoal() → direct call"]
+      subgraph CB["Component B (Processor)"]
+        CB_REF["inprocess_ref = &state_mgr"]
+        CB_METHOD["process() → direct call"]
       end
 
-      subgraph EC["ExecutorComponent"]
-        EC_WM["inprocess_wm_ = &wm"]
-        EC_TICK["on_tick: tickOnce()"]
-        EC_FACTORY["BT::Factory"]
+      subgraph CC["Component C (Task Runner)"]
+        CC_REF["inprocess_ref = &state_mgr"]
+        CC_TICK["on_tick: runNext()"]
       end
     end
   end
 
-  PC_WM -.->|"direct pointer<br/>(zero-copy)"| WMC
-  EC_WM -.->|"direct pointer<br/>(zero-copy)"| WMC
-  WM_PUB -->|"intra-process dispatch"| PC
-  WM_PUB -->|"intra-process dispatch"| EC
+  CB_REF -.->|"direct pointer<br/>(zero-copy)"| CA
+  CC_REF -.->|"direct pointer<br/>(zero-copy)"| CA
+  CA_PUB -->|"intra-process dispatch"| CB
+  CA_PUB -->|"intra-process dispatch"| CC
 
   style Process fill:#f5f5f5,stroke:#424242
   style Exec fill:#e8eaf6,stroke:#283593
-  style WMC fill:#e8f5e9,stroke:#2e7d32
-  style PC fill:#fff3e0,stroke:#e65100
-  style EC fill:#e3f2fd,stroke:#1565c0
+  style CA fill:#e8f5e9,stroke:#2e7d32
+  style CB fill:#fff3e0,stroke:#e65100
+  style CC fill:#e3f2fd,stroke:#1565c0
 ```
 
 ---
@@ -254,15 +277,14 @@ graph TB
 ## 7. Deployment Example — ROS 2 Transport Binding
 
 Each component runs in its own executor (potentially in separate processes or nodes).
-A ROS 2 transport adapter bridges PCL ports to DDS topics and services. The planner
-uses `setQueryStateCallback()` instead of a direct pointer, receiving world state
-snapshots over the wire.
+A ROS 2 transport adapter bridges PCL ports to DDS topics and services. Components
+use service callbacks instead of direct pointers, receiving state snapshots over the wire.
 
 ```mermaid
 graph TB
   subgraph Node1["Process / Node 1"]
     subgraph Exec1["pcl_executor_t"]
-      WMC2["WorldModelComponent"]
+      CA2["Component A"]
     end
     TA1["ROS 2 Transport Adapter"]
     Exec1 --- TA1
@@ -270,7 +292,7 @@ graph TB
 
   subgraph Node2["Process / Node 2"]
     subgraph Exec2["pcl_executor_t"]
-      PC2["PlannerComponent"]
+      CB2["Component B"]
     end
     TA2["ROS 2 Transport Adapter"]
     Exec2 --- TA2
@@ -278,25 +300,25 @@ graph TB
 
   subgraph Node3["Process / Node 3"]
     subgraph Exec3["pcl_executor_t"]
-      EC2["ExecutorComponent"]
+      CC2["Component C"]
     end
     TA3["ROS 2 Transport Adapter"]
     Exec3 --- TA3
   end
 
   subgraph DDS["DDS Network (ROS 2 middleware)"]
-    T_STATE["topic: ~/state<br/>WorldState"]
-    T_PLAN["topic: ~/plan<br/>PlanResult"]
-    S_FACT["service: get_fact"]
-    S_GOAL["service: solve_goal"]
+    T_STATE["topic: ~/state"]
+    T_RESULT["topic: ~/result"]
+    S_QUERY["service: query"]
+    S_PROCESS["service: process"]
   end
 
   TA1 <-->|"rclcpp pub/sub"| T_STATE
-  TA1 <-->|"rclcpp service"| S_FACT
+  TA1 <-->|"rclcpp service"| S_QUERY
   TA2 <-->|"rclcpp pub/sub"| T_STATE
-  TA2 <-->|"rclcpp service"| S_GOAL
-  TA2 <-->|"rclcpp pub/sub"| T_PLAN
-  TA3 <-->|"rclcpp pub/sub"| T_PLAN
+  TA2 <-->|"rclcpp service"| S_PROCESS
+  TA2 <-->|"rclcpp pub/sub"| T_RESULT
+  TA3 <-->|"rclcpp pub/sub"| T_RESULT
   TA3 <-->|"rclcpp pub/sub"| T_STATE
 
   style DDS fill:#fce4ec,stroke:#c62828
@@ -317,9 +339,9 @@ handle protocol translation at system boundaries.
 graph TB
   subgraph Vehicle["Vehicle On-Board Computer"]
     subgraph ExecA["pcl_executor_t (autonomy)"]
-      WMC3["WorldModelComponent"]
-      EC3["ExecutorComponent"]
-      BRIDGE_OUT["Bridge: WM state<br/>→ protobuf encoding"]
+      CA3["StateComponent"]
+      CC3["TaskRunnerComponent"]
+      BRIDGE_OUT["Bridge: state<br/>→ protobuf encoding"]
     end
 
     subgraph ExecS["pcl_executor_t (sensors)"]
@@ -331,18 +353,18 @@ graph TB
 
   subgraph GCS["Ground Control Station"]
     subgraph ExecG["pcl_executor_t"]
-      PLAN["PlannerComponent"]
+      PLAN["ProcessorComponent"]
       HMI["HMI / Dashboard"]
     end
     TAG["gRPC Transport Adapter"]
     ExecG --- TAG
   end
 
-  WMC3 -->|"intra-process<br/>zero-copy"| EC3
+  CA3 -->|"intra-process<br/>zero-copy"| CC3
   LIDAR -->|"intra-process"| BRIDGE_UNIT
-  BRIDGE_UNIT -->|"intra-process"| WMC3
-  IMU -->|"intra-process"| WMC3
-  WMC3 -->|"intra-process"| BRIDGE_OUT
+  BRIDGE_UNIT -->|"intra-process"| CA3
+  IMU -->|"intra-process"| CA3
+  CA3 -->|"intra-process"| BRIDGE_OUT
 
   BRIDGE_OUT <-->|"gRPC / protobuf<br/>over network"| TAG
   TAG <--> PLAN
@@ -374,17 +396,17 @@ graph TB
       end
 
       subgraph Cpp["C++ Components"]
-        CPP_WM["WorldModelComponent"]
-        CPP_PLAN["PlannerComponent"]
-        CPP_EXEC["ExecutorComponent"]
+        CPP_A["Component A"]
+        CPP_B["Component B"]
+        CPP_C["Component C"]
       end
     end
   end
 
-  ADA_SENSOR -->|"pub: ~/sensor_data<br/>(C ABI, zero-copy)"| CPP_WM
-  ADA_SAFETY -->|"sub: ~/state<br/>(C ABI, zero-copy)"| CPP_WM
-  CPP_WM -->|"intra-process"| CPP_PLAN
-  CPP_PLAN -->|"intra-process"| CPP_EXEC
+  ADA_SENSOR -->|"pub: ~/sensor_data<br/>(C ABI, zero-copy)"| CPP_A
+  ADA_SAFETY -->|"sub: ~/state<br/>(C ABI, zero-copy)"| CPP_A
+  CPP_A -->|"intra-process"| CPP_B
+  CPP_B -->|"intra-process"| CPP_C
 
   subgraph ABI["Shared Interface"]
     CABI["Pure C ABI<br/>pcl_container_t / pcl_port_t / pcl_msg_t<br/>No C++ symbols cross boundary"]
