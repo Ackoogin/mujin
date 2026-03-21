@@ -1,5 +1,5 @@
 // Auto-generated service binding implementation
-// Generated from: services by cpp_service_generator
+// Generated from: provided.proto by cpp_service_generator
 // Namespace: pyramid::services::tactical_objects::provided
 
 #include "pyramid_services_tactical_objects_provided.hpp"
@@ -7,10 +7,6 @@
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_transport_socket.h>
 
-#include <nlohmann/json.hpp>
-
-#include <cstring>
-#include <sstream>
 #include <string>
 #include <vector>
 
@@ -56,54 +52,6 @@ ServiceHandler::handleDeleteRequirement(const Identifier& /*request*/) {
 std::vector<ObjectDetail>
 ServiceHandler::handleReadDetail(const Query& /*request*/) {
     return {};
-}
-
-// ---------------------------------------------------------------------------
-// JSON builder: buildStandardRequirementJson
-// ---------------------------------------------------------------------------
-
-std::string buildStandardRequirementJson(
-    std::string_view policy,
-    std::string_view identity,
-    std::string_view dimension,
-    double min_lat_rad,
-    double max_lat_rad,
-    double min_lon_rad,
-    double max_lon_rad)
-{
-    nlohmann::json obj;
-    obj["policy"]      = std::string(policy);
-    obj["identity"]    = std::string(identity);
-    if (!dimension.empty()) {
-        obj["dimension"] = std::string(dimension);
-    }
-    obj["min_lat_rad"] = min_lat_rad;
-    obj["max_lat_rad"] = max_lat_rad;
-    obj["min_lon_rad"] = min_lon_rad;
-    obj["max_lon_rad"] = max_lon_rad;
-    return obj.dump();
-}
-
-// ---------------------------------------------------------------------------
-// JSON builder: buildStandardEvidenceJson
-// ---------------------------------------------------------------------------
-
-std::string buildStandardEvidenceJson(
-    std::string_view identity,
-    std::string_view dimension,
-    double lat_rad,
-    double lon_rad,
-    double confidence,
-    double observed_at)
-{
-    nlohmann::json obj;
-    obj["identity"]      = std::string(identity);
-    obj["dimension"]     = std::string(dimension);
-    obj["latitude_rad"]  = lat_rad;
-    obj["longitude_rad"] = lon_rad;
-    obj["confidence"]    = confidence;
-    obj["observed_at"]   = observed_at;
-    return obj.dump();
 }
 
 // ---------------------------------------------------------------------------
@@ -173,8 +121,7 @@ pcl_status_t invokeCreateRequirement(pcl_socket_transport_t* transport,
                                      pcl_resp_cb_fn_t        callback,
                                      void*                   user_data)
 {
-    return invoke_async(transport, kSvcCreateRequirement, request,
-                        callback, user_data);
+    return invoke_async(transport, kSvcCreateRequirement, request, callback, user_data);
 }
 
 pcl_status_t invokeReadRequirement(pcl_socket_transport_t* transport,
@@ -182,8 +129,7 @@ pcl_status_t invokeReadRequirement(pcl_socket_transport_t* transport,
                                    pcl_resp_cb_fn_t        callback,
                                    void*                   user_data)
 {
-    return invoke_async(transport, kSvcReadRequirement, request,
-                        callback, user_data);
+    return invoke_async(transport, kSvcReadRequirement, request, callback, user_data);
 }
 
 pcl_status_t invokeUpdateRequirement(pcl_socket_transport_t* transport,
@@ -191,8 +137,7 @@ pcl_status_t invokeUpdateRequirement(pcl_socket_transport_t* transport,
                                      pcl_resp_cb_fn_t        callback,
                                      void*                   user_data)
 {
-    return invoke_async(transport, kSvcUpdateRequirement, request,
-                        callback, user_data);
+    return invoke_async(transport, kSvcUpdateRequirement, request, callback, user_data);
 }
 
 pcl_status_t invokeDeleteRequirement(pcl_socket_transport_t* transport,
@@ -200,8 +145,7 @@ pcl_status_t invokeDeleteRequirement(pcl_socket_transport_t* transport,
                                      pcl_resp_cb_fn_t        callback,
                                      void*                   user_data)
 {
-    return invoke_async(transport, kSvcDeleteRequirement, request,
-                        callback, user_data);
+    return invoke_async(transport, kSvcDeleteRequirement, request, callback, user_data);
 }
 
 pcl_status_t invokeReadDetail(pcl_socket_transport_t* transport,

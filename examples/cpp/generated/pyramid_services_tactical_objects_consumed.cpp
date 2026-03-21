@@ -1,5 +1,5 @@
 // Auto-generated service binding implementation
-// Generated from: services by cpp_service_generator
+// Generated from: consumed.proto by cpp_service_generator
 // Namespace: pyramid::services::tactical_objects::consumed
 
 #include "pyramid_services_tactical_objects_consumed.hpp"

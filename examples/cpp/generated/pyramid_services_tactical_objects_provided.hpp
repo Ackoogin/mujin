@@ -1,5 +1,5 @@
 // Auto-generated service binding header
-// Generated from: services by cpp_service_generator
+// Generated from: provided.proto by cpp_service_generator
 // Namespace: pyramid::services::tactical_objects::provided
 //
 // Architecture: component logic > service binding (this) > PCL
@@ -7,9 +7,8 @@
 // This header provides:
 //   1. Wire-name constants and topic constants
 //   2. EntityActions handler base class (ServiceHandler — override Handle*)
-//   3. JSON builder functions (nlohmann::json / string)
-//   4. PCL binding functions (subscribe*, invoke*)
-//   5. msgToString utility for PCL message payloads
+//   3. PCL binding functions (subscribe*, invoke*)
+//   4. msgToString utility for PCL message payloads
 #pragma once
 
 #include "pyramid_services_tactical_objects_types.hpp"
@@ -103,37 +102,6 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// JSON builder functions
-// ---------------------------------------------------------------------------
-
-/// \brief Build a JSON object for an interest/evidence requirement.
-///
-/// Produces: {"policy":..., "identity":..., "dimension":...,
-///            "min_lat_rad":..., "max_lat_rad":...,
-///            "min_lon_rad":..., "max_lon_rad":...}
-std::string buildStandardRequirementJson(
-    std::string_view policy,
-    std::string_view identity,
-    std::string_view dimension  = "",
-    double min_lat_rad          = 0.0,
-    double max_lat_rad          = 0.0,
-    double min_lon_rad          = 0.0,
-    double max_lon_rad          = 0.0);
-
-/// \brief Build a JSON object for an observation evidence report.
-///
-/// Produces: {"identity":..., "dimension":...,
-///            "latitude_rad":..., "longitude_rad":...,
-///            "confidence":..., "observed_at":...}
-std::string buildStandardEvidenceJson(
-    std::string_view identity,
-    std::string_view dimension,
-    double lat_rad,
-    double lon_rad,
-    double confidence,
-    double observed_at = 0.5);
-
-// ---------------------------------------------------------------------------
 // PCL binding functions — Subscribe / Invoke wrappers
 // ---------------------------------------------------------------------------
 
@@ -148,7 +116,7 @@ void subscribeEvidenceRequirements(pcl_container_t*  container,
                                    pcl_sub_callback_t callback,
                                    void*             user_data = nullptr);
 
-/// \brief Asynchronously invoke matching_objects.read_match on a remote peer.
+/// \brief Asynchronously invoke matching_objects.read_match.
 pcl_status_t invokeReadMatch(pcl_socket_transport_t* transport,
                              const std::string&      request,
                              pcl_resp_cb_fn_t        callback,
