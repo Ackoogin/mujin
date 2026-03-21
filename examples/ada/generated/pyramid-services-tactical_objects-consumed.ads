@@ -1,5 +1,5 @@
 --  Auto-generated service binding specification
---  Generated from: services by ada_service_generator.py
+--  Generated from: consumed.proto by ada_service_generator.py
 --  Package: Pyramid.Services.Tactical_Objects.Consumed
 --
 --  Architecture: component logic > service binding (this) > PCL
@@ -7,9 +7,11 @@
 --  This package provides:
 --    1. Wire-name constants and topic constants
 --    2. EntityActions handler stubs (Handle_*)
---    3. JSON builder functions (GNATCOLL.JSON)
---    4. PCL binding procedures (Subscribe_*, Invoke_*, Publish_*)
---    5. Msg_To_String utility for PCL message payloads
+--    3. PCL binding procedures (Subscribe_*, Invoke_*, Publish_*)
+--    4. Msg_To_String utility for PCL message payloads
+--
+--  JSON serialisation/deserialisation is provided by the companion
+--  Pyramid.Services.Tactical_Objects.Json_Codec package.
 
 with Tactical_Objects_Types;  use Tactical_Objects_Types;
 with Pcl_Bindings;
@@ -89,11 +91,7 @@ package Pyramid.Services.Tactical_Objects.Consumed is
 
    --  -- PCL binding procedures ------------------------------------
    --  Subscribe/Invoke/Publish wrappers for PCL transport layer.
-
-   procedure Subscribe_Object_Evidence
-     (Container : Pcl_Bindings.Pcl_Container_Access;
-      Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;
-      User_Data : System.Address := System.Null_Address);
+   --  Use Json_Codec to serialise/deserialise message payloads.
 
    procedure Publish_Object_Evidence
      (Exec    : Pcl_Bindings.Pcl_Executor_Access;

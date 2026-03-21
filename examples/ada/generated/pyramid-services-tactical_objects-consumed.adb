@@ -87,28 +87,6 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
 
    --  -- PCL binding implementations -------------------------------
 
-   procedure Subscribe_Object_Evidence
-     (Container : Pcl_Bindings.Pcl_Container_Access;
-      Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;
-      User_Data : System.Address := System.Null_Address)
-   is
-      Topic  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Topic_Object_Evidence);
-      Type_N : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String ("application/json");
-      Port   : Pcl_Bindings.Pcl_Port_Access;
-      pragma Unreferenced (Port);
-   begin
-      Port := Pcl_Bindings.Add_Subscriber
-        (Container => Container,
-         Topic     => Topic,
-         Type_Name => Type_N,
-         Callback  => Callback,
-         User_Data => User_Data);
-      Interfaces.C.Strings.Free (Topic);
-      Interfaces.C.Strings.Free (Type_N);
-   end Subscribe_Object_Evidence;
-
    procedure Publish_Object_Evidence
      (Exec    : Pcl_Bindings.Pcl_Executor_Access;
       Payload : String)
