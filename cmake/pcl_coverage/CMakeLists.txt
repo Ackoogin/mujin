@@ -43,6 +43,23 @@ set_target_properties(pcl_core PROPERTIES
 find_package(Threads REQUIRED)
 target_link_libraries(pcl_core PRIVATE Threads::Threads)
 
+# -- PCL socket transport library ----------------------------------------
+add_library(pcl_transport_socket STATIC
+  ${PCL_ROOT}/src/pcl/pcl_transport_socket.c
+)
+target_include_directories(pcl_transport_socket PUBLIC  ${PCL_ROOT}/include)
+target_include_directories(pcl_transport_socket PRIVATE ${PCL_ROOT}/src/pcl)
+target_link_libraries(pcl_transport_socket PUBLIC pcl_core)
+if(WIN32)
+  target_link_libraries(pcl_transport_socket PUBLIC ws2_32)
+endif()
+set_target_properties(pcl_transport_socket PROPERTIES
+  LINKER_LANGUAGE C
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+)
+
 # -- Helper to add a PCL test executable --------------------------------
 function(add_pcl_test name src)
   add_executable(${name} ${PCL_ROOT}/tests/${src})
@@ -57,6 +74,16 @@ add_pcl_test(test_pcl_robustness  test_pcl_robustness.cpp)
 add_pcl_test(test_pcl_dining      test_pcl_dining.cpp)
 # Dining test needs internal header to trigger port-overflow branch in bridge.
 target_include_directories(test_pcl_dining PRIVATE ${PCL_ROOT}/src/pcl)
+
+# Socket transport tests
+add_executable(test_pcl_socket_transport ${PCL_ROOT}/tests/test_pcl_socket_transport.cpp)
+target_link_libraries(test_pcl_socket_transport PRIVATE pcl_core pcl_transport_socket GTest::gtest_main)
+gtest_discover_tests(test_pcl_socket_transport DISCOVERY_MODE PRE_TEST)
+
+# C++ wrapper tests
+add_executable(test_pcl_cpp_wrappers ${PCL_ROOT}/tests/test_pcl_cpp_wrappers.cpp)
+target_link_libraries(test_pcl_cpp_wrappers PRIVATE pcl_core GTest::gtest_main)
+gtest_discover_tests(test_pcl_cpp_wrappers DISCOVERY_MODE PRE_TEST)
 
 # OOM test: built against a SEPARATE copy of pcl_core so its gcda counters
 # don't accumulate on the shared pcl_core object files.  The --wrap linker

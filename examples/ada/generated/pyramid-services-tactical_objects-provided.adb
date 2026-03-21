@@ -3,7 +3,6 @@
 
 with Ada.Unchecked_Conversion;
 with Interfaces.C.Strings;
-with GNATCOLL.JSON;  use GNATCOLL.JSON;
 with System;
 with System.Storage_Elements;
 
@@ -26,121 +25,101 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       return String (Chars);
    end Msg_To_String;
 
-   --  -- Matching_Objects_Service ------------------------------------
-   procedure Handle_Read_Match
-     (Request  : in  Query;
-      Response : out Object_Match_Array)
-   is
-      pragma Unreferenced (Request);
-      Empty : Object_Match_Array (1 .. 0);
-   begin
-      Response := Empty;
-   end Handle_Read_Match;
-
-   --  -- Object_Of_Interest_Service ------------------------------------
-   procedure Handle_Create_Requirement
-     (Request  : in  Object_Interest_Requirement;
+   --  -- TacticalObjectService ------------------------------------
+   procedure Handle_Create_Tactical_Object
+     (Request  : in  Tactical_Object;
       Response : out Identifier)
    is
       pragma Unreferenced (Request);
    begin
       Response := Null_Identifier;
-   end Handle_Create_Requirement;
+   end Handle_Create_Tactical_Object;
 
-   procedure Handle_Read_Requirement
-     (Request  : in  Query;
-      Response : out Object_Interest_Requirement_Array)
+   procedure Handle_Read_Tactical_Object
+     (Request  : in  Tactical_Object_Query;
+      Response : out Tactical_Object_Array)
    is
       pragma Unreferenced (Request);
-      Empty : Object_Interest_Requirement_Array (1 .. 0);
+      Empty : Tactical_Object_Array (1 .. 0);
    begin
       Response := Empty;
-   end Handle_Read_Requirement;
+   end Handle_Read_Tactical_Object;
 
-   procedure Handle_Update_Requirement
-     (Request  : in  Object_Interest_Requirement;
+   procedure Handle_Update_Tactical_Object
+     (Request  : in  Tactical_Object;
       Response : out Ack)
    is
       pragma Unreferenced (Request);
    begin
       Response := Ack_Ok;
-   end Handle_Update_Requirement;
+   end Handle_Update_Tactical_Object;
 
-   procedure Handle_Delete_Requirement
+   procedure Handle_Delete_Tactical_Object
      (Request  : in  Identifier;
       Response : out Ack)
    is
       pragma Unreferenced (Request);
    begin
       Response := Ack_Ok;
-   end Handle_Delete_Requirement;
+   end Handle_Delete_Tactical_Object;
 
-   --  -- Specific_Object_Detail_Service ------------------------------------
-   procedure Handle_Read_Detail
-     (Request  : in  Query;
-      Response : out Object_Detail_Array)
+   --  -- ZoneService ------------------------------------
+   procedure Handle_Create_Zone
+     (Request  : in  Zone;
+      Response : out Identifier)
    is
       pragma Unreferenced (Request);
-      Empty : Object_Detail_Array (1 .. 0);
+   begin
+      Response := Null_Identifier;
+   end Handle_Create_Zone;
+
+   procedure Handle_Read_Zone
+     (Request  : in  Query;
+      Response : out Zone_Array)
+   is
+      pragma Unreferenced (Request);
+      Empty : Zone_Array (1 .. 0);
    begin
       Response := Empty;
-   end Handle_Read_Detail;
+   end Handle_Read_Zone;
 
-   --  -- JSON builder: Build_Standard_Requirement_Json ----------
-
-   function Build_Standard_Requirement_Json
-     (Policy      : String;
-      Identity    : String;
-      Dimension   : String := "";
-      Min_Lat_Rad : Long_Float := 0.0;
-      Max_Lat_Rad : Long_Float := 0.0;
-      Min_Lon_Rad : Long_Float := 0.0;
-      Max_Lon_Rad : Long_Float := 0.0) return String
+   procedure Handle_Update_Zone
+     (Request  : in  Zone;
+      Response : out Ack)
    is
-      Obj : JSON_Value := Create_Object;
+      pragma Unreferenced (Request);
    begin
-      Set_Field (Obj, "policy",   Policy);
-      Set_Field (Obj, "identity", Identity);
-      if Dimension /= "" then
-         Set_Field (Obj, "dimension", Dimension);
-      end if;
-      Set_Field_Long_Float (Obj, "min_lat_rad", Min_Lat_Rad);
-      Set_Field_Long_Float (Obj, "max_lat_rad", Max_Lat_Rad);
-      Set_Field_Long_Float (Obj, "min_lon_rad", Min_Lon_Rad);
-      Set_Field_Long_Float (Obj, "max_lon_rad", Max_Lon_Rad);
-      return Write (Obj);
-   end Build_Standard_Requirement_Json;
+      Response := Ack_Ok;
+   end Handle_Update_Zone;
 
-   --  -- JSON builder: Build_Standard_Evidence_Json -------------
-
-   function Build_Standard_Evidence_Json
-     (Identity    : String;
-      Dimension   : String;
-      Lat_Rad     : Long_Float;
-      Lon_Rad     : Long_Float;
-      Confidence  : Long_Float;
-      Observed_At : Long_Float := 0.5) return String
+   procedure Handle_Delete_Zone
+     (Request  : in  Identifier;
+      Response : out Ack)
    is
-      Obj : JSON_Value := Create_Object;
+      pragma Unreferenced (Request);
    begin
-      Set_Field (Obj, "identity",      Identity);
-      Set_Field (Obj, "dimension",     Dimension);
-      Set_Field_Long_Float (Obj, "latitude_rad",  Lat_Rad);
-      Set_Field_Long_Float (Obj, "longitude_rad", Lon_Rad);
-      Set_Field_Long_Float (Obj, "confidence",    Confidence);
-      Set_Field_Long_Float (Obj, "observed_at",   Observed_At);
-      return Write (Obj);
-   end Build_Standard_Evidence_Json;
+      Response := Ack_Ok;
+   end Handle_Delete_Zone;
+
+   --  -- ObservationIngressService ------------------------------------
+   procedure Handle_Create_Observation
+     (Request  : in  Observation;
+      Response : out Identifier)
+   is
+      pragma Unreferenced (Request);
+   begin
+      Response := Null_Identifier;
+   end Handle_Create_Observation;
 
    --  -- PCL binding implementations -------------------------------
 
-   procedure Subscribe_Entity_Matches
+   procedure Subscribe_Object_Evidence
      (Container : Pcl_Bindings.Pcl_Container_Access;
       Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;
       User_Data : System.Address := System.Null_Address)
    is
       Topic  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Topic_Entity_Matches);
+        Interfaces.C.Strings.New_String (Topic_Object_Evidence);
       Type_N : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String ("application/json");
       Port   : Pcl_Bindings.Pcl_Port_Access;
@@ -154,179 +133,29 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          User_Data => User_Data);
       Interfaces.C.Strings.Free (Topic);
       Interfaces.C.Strings.Free (Type_N);
-   end Subscribe_Entity_Matches;
+   end Subscribe_Object_Evidence;
 
-   procedure Subscribe_Evidence_Requirements
-     (Container : Pcl_Bindings.Pcl_Container_Access;
-      Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;
-      User_Data : System.Address := System.Null_Address)
-   is
-      Topic  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Topic_Evidence_Requirements);
-      Type_N : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String ("application/json");
-      Port   : Pcl_Bindings.Pcl_Port_Access;
-      pragma Unreferenced (Port);
-   begin
-      Port := Pcl_Bindings.Add_Subscriber
-        (Container => Container,
-         Topic     => Topic,
-         Type_Name => Type_N,
-         Callback  => Callback,
-         User_Data => User_Data);
-      Interfaces.C.Strings.Free (Topic);
-      Interfaces.C.Strings.Free (Type_N);
-   end Subscribe_Evidence_Requirements;
-
-   procedure Invoke_Read_Match
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
-      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address)
+   procedure Publish_Object_Evidence
+     (Exec    : Pcl_Bindings.Pcl_Executor_Access;
+      Payload : String)
    is
       use type Pcl_Bindings.Pcl_Status;
-      Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Request);
-      Svc_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Svc_Read_Match);
-      Msg    : aliased Pcl_Bindings.Pcl_Msg;
-      Status : Pcl_Bindings.Pcl_Status;
+      Payload_C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Payload);
+      Topic_C   : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Topic_Object_Evidence);
+      Msg       : aliased Pcl_Bindings.Pcl_Msg;
+      Status    : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
    begin
-      Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Request'Length);
+      Msg.Data      := To_Address (Payload_C);
+      Msg.Size      := Interfaces.C.unsigned (Payload'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
-      Status := Pcl_Bindings.Invoke_Remote_Async
-        (Transport, Svc_C, Msg'Access, Callback, User_Data);
-      Interfaces.C.Strings.Free (Req_C);
-      Interfaces.C.Strings.Free (Svc_C);
+      Status := Pcl_Bindings.Publish (Exec, Topic_C, Msg'Access);
+      Interfaces.C.Strings.Free (Payload_C);
+      Interfaces.C.Strings.Free (Topic_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
-   end Invoke_Read_Match;
-
-   procedure Invoke_Create_Requirement
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
-      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address)
-   is
-      use type Pcl_Bindings.Pcl_Status;
-      Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Request);
-      Svc_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Svc_Create_Requirement);
-      Msg    : aliased Pcl_Bindings.Pcl_Msg;
-      Status : Pcl_Bindings.Pcl_Status;
-      pragma Unreferenced (Status);
-   begin
-      Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Request'Length);
-      Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
-      Status := Pcl_Bindings.Invoke_Remote_Async
-        (Transport, Svc_C, Msg'Access, Callback, User_Data);
-      Interfaces.C.Strings.Free (Req_C);
-      Interfaces.C.Strings.Free (Svc_C);
-      Interfaces.C.Strings.Free (Msg.Type_Name);
-   end Invoke_Create_Requirement;
-
-   procedure Invoke_Read_Requirement
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
-      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address)
-   is
-      use type Pcl_Bindings.Pcl_Status;
-      Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Request);
-      Svc_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Svc_Read_Requirement);
-      Msg    : aliased Pcl_Bindings.Pcl_Msg;
-      Status : Pcl_Bindings.Pcl_Status;
-      pragma Unreferenced (Status);
-   begin
-      Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Request'Length);
-      Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
-      Status := Pcl_Bindings.Invoke_Remote_Async
-        (Transport, Svc_C, Msg'Access, Callback, User_Data);
-      Interfaces.C.Strings.Free (Req_C);
-      Interfaces.C.Strings.Free (Svc_C);
-      Interfaces.C.Strings.Free (Msg.Type_Name);
-   end Invoke_Read_Requirement;
-
-   procedure Invoke_Update_Requirement
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
-      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address)
-   is
-      use type Pcl_Bindings.Pcl_Status;
-      Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Request);
-      Svc_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Svc_Update_Requirement);
-      Msg    : aliased Pcl_Bindings.Pcl_Msg;
-      Status : Pcl_Bindings.Pcl_Status;
-      pragma Unreferenced (Status);
-   begin
-      Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Request'Length);
-      Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
-      Status := Pcl_Bindings.Invoke_Remote_Async
-        (Transport, Svc_C, Msg'Access, Callback, User_Data);
-      Interfaces.C.Strings.Free (Req_C);
-      Interfaces.C.Strings.Free (Svc_C);
-      Interfaces.C.Strings.Free (Msg.Type_Name);
-   end Invoke_Update_Requirement;
-
-   procedure Invoke_Delete_Requirement
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
-      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address)
-   is
-      use type Pcl_Bindings.Pcl_Status;
-      Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Request);
-      Svc_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Svc_Delete_Requirement);
-      Msg    : aliased Pcl_Bindings.Pcl_Msg;
-      Status : Pcl_Bindings.Pcl_Status;
-      pragma Unreferenced (Status);
-   begin
-      Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Request'Length);
-      Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
-      Status := Pcl_Bindings.Invoke_Remote_Async
-        (Transport, Svc_C, Msg'Access, Callback, User_Data);
-      Interfaces.C.Strings.Free (Req_C);
-      Interfaces.C.Strings.Free (Svc_C);
-      Interfaces.C.Strings.Free (Msg.Type_Name);
-   end Invoke_Delete_Requirement;
-
-   procedure Invoke_Read_Detail
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
-      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address)
-   is
-      use type Pcl_Bindings.Pcl_Status;
-      Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Request);
-      Svc_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Svc_Read_Detail);
-      Msg    : aliased Pcl_Bindings.Pcl_Msg;
-      Status : Pcl_Bindings.Pcl_Status;
-      pragma Unreferenced (Status);
-   begin
-      Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Request'Length);
-      Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
-      Status := Pcl_Bindings.Invoke_Remote_Async
-        (Transport, Svc_C, Msg'Access, Callback, User_Data);
-      Interfaces.C.Strings.Free (Req_C);
-      Interfaces.C.Strings.Free (Svc_C);
-      Interfaces.C.Strings.Free (Msg.Type_Name);
-   end Invoke_Read_Detail;
+   end Publish_Object_Evidence;
 
    procedure Dispatch
      (Channel      : in  Service_Channel;
@@ -340,18 +169,24 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Response_Buf  := System.Null_Address;
       Response_Size := 0;
       case Channel is
-         when Ch_Read_Match =>
-            null;  --  TODO: deserialise, call Handle_Read_Match
-         when Ch_Create_Requirement =>
-            null;  --  TODO: deserialise, call Handle_Create_Requirement
-         when Ch_Read_Requirement =>
-            null;  --  TODO: deserialise, call Handle_Read_Requirement
-         when Ch_Update_Requirement =>
-            null;  --  TODO: deserialise, call Handle_Update_Requirement
-         when Ch_Delete_Requirement =>
-            null;  --  TODO: deserialise, call Handle_Delete_Requirement
-         when Ch_Read_Detail =>
-            null;  --  TODO: deserialise, call Handle_Read_Detail
+         when Ch_Create_Tactical_Object =>
+            null;  --  TODO: deserialise, call Handle_Create_Tactical_Object
+         when Ch_Read_Tactical_Object =>
+            null;  --  TODO: deserialise, call Handle_Read_Tactical_Object
+         when Ch_Update_Tactical_Object =>
+            null;  --  TODO: deserialise, call Handle_Update_Tactical_Object
+         when Ch_Delete_Tactical_Object =>
+            null;  --  TODO: deserialise, call Handle_Delete_Tactical_Object
+         when Ch_Create_Zone =>
+            null;  --  TODO: deserialise, call Handle_Create_Zone
+         when Ch_Read_Zone =>
+            null;  --  TODO: deserialise, call Handle_Read_Zone
+         when Ch_Update_Zone =>
+            null;  --  TODO: deserialise, call Handle_Update_Zone
+         when Ch_Delete_Zone =>
+            null;  --  TODO: deserialise, call Handle_Delete_Zone
+         when Ch_Create_Observation =>
+            null;  --  TODO: deserialise, call Handle_Create_Observation
       end case;
    end Dispatch;
 

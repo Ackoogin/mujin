@@ -77,6 +77,17 @@ target_link_libraries(test_pcl_dining PRIVATE pcl_core GTest::gtest_main)
 target_include_directories(test_pcl_dining PRIVATE ${CMAKE_SOURCE_DIR}/src/pcl)
 gtest_discover_tests(test_pcl_dining DISCOVERY_MODE PRE_TEST)
 
+add_executable(test_pcl_socket_transport test_pcl_socket_transport.cpp)
+target_link_libraries(test_pcl_socket_transport PRIVATE pcl_core pcl_transport_socket GTest::gtest_main)
+if(NOT WIN32)
+  target_link_libraries(test_pcl_socket_transport PRIVATE pthread)
+endif()
+gtest_discover_tests(test_pcl_socket_transport DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_pcl_cpp_wrappers test_pcl_cpp_wrappers.cpp)
+target_link_libraries(test_pcl_cpp_wrappers PRIVATE pcl_core GTest::gtest_main)
+gtest_discover_tests(test_pcl_cpp_wrappers DISCOVERY_MODE PRE_TEST)
+
 # ---------------------------------------------------------------------------
 # PCL-backed Ame component tests
 # ---------------------------------------------------------------------------

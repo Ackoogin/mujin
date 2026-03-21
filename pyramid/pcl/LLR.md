@@ -876,6 +876,361 @@ A container name exceeding the internal buffer shall be truncated without crashi
 
 ---
 
+## 16. TCP Socket Transport
+
+### REQ_PCL_115 - Server Creation Returns Valid Transport
+`pcl_socket_transport_create_server()` shall return a non-NULL handle with a valid transport vtable (publish, subscribe, shutdown all non-NULL).
+
+**Traces**: PCL.031
+
+**Verification**: `test_pcl_socket_transport.cpp::ServerCreationAndDestroy`.
+
+### REQ_PCL_116 - Server Null Executor Returns NULL
+`pcl_socket_transport_create_server()` shall return NULL when the executor argument is NULL.
+
+**Traces**: PCL.031, PCL.045
+
+**Verification**: `test_pcl_socket_transport.cpp::ServerNullExecutorReturnsNull`.
+
+### REQ_PCL_117 - Client Creation Returns Valid Transport
+`pcl_socket_transport_create_client()` shall return a non-NULL handle with a valid transport vtable when connecting to a listening server.
+
+**Traces**: PCL.032
+
+**Verification**: `test_pcl_socket_transport.cpp::ClientCreationAndDestroy`.
+
+### REQ_PCL_118 - Client Null Arguments Return NULL
+`pcl_socket_transport_create_client()` shall return NULL when the host or executor argument is NULL.
+
+**Traces**: PCL.032, PCL.045
+
+**Verification**: `test_pcl_socket_transport.cpp::ClientNullArgsReturnNull`.
+
+### REQ_PCL_119 - Client Connect To Nonexistent Server Fails
+`pcl_socket_transport_create_client()` shall return NULL when no server is listening on the target port.
+
+**Traces**: PCL.032
+
+**Verification**: `test_pcl_socket_transport.cpp::ClientConnectToNonexistentServerFails`.
+
+### REQ_PCL_120 - Publish Server To Client Delivered
+A message published via the server transport shall be received by a matching subscriber on the client executor.
+
+**Traces**: PCL.033
+
+**Verification**: `test_pcl_socket_transport.cpp::PublishServerToClientDelivered`.
+
+### REQ_PCL_121 - Publish Client To Server Delivered
+A message published via the client transport shall be received by a matching subscriber on the server executor.
+
+**Traces**: PCL.033
+
+**Verification**: `test_pcl_socket_transport.cpp::PublishClientToServerDelivered`.
+
+### REQ_PCL_122 - Gateway Container Exists And Is Configurable
+`pcl_socket_transport_gateway_container()` on a server transport shall return a non-NULL container that supports full lifecycle transitions.
+
+**Traces**: PCL.034
+
+**Verification**: `test_pcl_socket_transport.cpp::GatewayContainerExists`.
+
+### REQ_PCL_123 - Gateway Null Transport Returns NULL
+`pcl_socket_transport_gateway_container(NULL)` shall return NULL.
+
+**Traces**: PCL.034, PCL.045
+
+**Verification**: `test_pcl_socket_transport.cpp::GatewayContainerNullReturnsNull`.
+
+### REQ_PCL_124 - Client Has No Gateway
+`pcl_socket_transport_gateway_container()` on a client transport shall return NULL (gateway is server-only).
+
+**Traces**: PCL.034
+
+**Verification**: `test_pcl_socket_transport.cpp::ClientHasNoGateway`.
+
+### REQ_PCL_125 - Publish Is Non-Blocking
+Publishing 100 messages in rapid succession via the transport shall complete in under 1 second, confirming no blocking I/O on the publish path.
+
+**Traces**: PCL.035
+
+**Verification**: `test_pcl_socket_transport.cpp::PublishIsNonBlocking`.
+
+### REQ_PCL_126 - Async Remote Service Round Trip
+`pcl_socket_transport_invoke_remote_async()` shall send a service request from the client, invoke the registered handler on the server, and deliver the response back to the client callback.
+
+**Traces**: PCL.036
+
+**Verification**: `test_pcl_socket_transport.cpp::AsyncRemoteServiceRoundTrip`.
+
+### REQ_PCL_127 - Invoke Remote Async Null Arguments
+`pcl_socket_transport_invoke_remote_async()` shall return `PCL_ERR_INVALID` when any required argument (transport, service name, request, callback) is NULL.
+
+**Traces**: PCL.036, PCL.045
+
+**Verification**: `test_pcl_socket_transport.cpp::InvokeRemoteAsyncNullArgs`.
+
+### REQ_PCL_128 - Invoke Remote Async On Server Returns Invalid
+`pcl_socket_transport_invoke_remote_async()` shall return `PCL_ERR_INVALID` when called on a server transport (only clients may invoke remote services).
+
+**Traces**: PCL.036
+
+**Verification**: `test_pcl_socket_transport.cpp::InvokeRemoteAsyncOnServerReturnsInvalid`.
+
+### REQ_PCL_129 - Get Transport Null Returns NULL
+`pcl_socket_transport_get_transport(NULL)` shall return NULL.
+
+**Traces**: PCL.045
+
+**Verification**: `test_pcl_socket_transport.cpp::GetTransportNullReturnsNull`.
+
+### REQ_PCL_130 - Destroy Null Is No-Op
+`pcl_socket_transport_destroy(NULL)` shall be a no-op (no crash).
+
+**Traces**: PCL.045
+
+**Verification**: `test_pcl_socket_transport.cpp::DestroyNullIsNoOp`.
+
+### REQ_PCL_158 - Subscribe Vtable Is Callable
+The transport vtable `subscribe` function shall be callable and return `PCL_OK` (interest registration is a no-op in the socket transport).
+
+**Traces**: PCL.031
+
+**Verification**: `test_pcl_socket_transport.cpp::SubscribeVtableCallSucceeds`.
+
+### REQ_PCL_159 - Shutdown Vtable Sets Stop Flag
+The transport vtable `shutdown` function shall set the recv_stop flag, signalling the receive thread to exit.
+
+**Traces**: PCL.031
+
+**Verification**: `test_pcl_socket_transport.cpp::ShutdownVtableCallSucceeds`.
+
+### REQ_PCL_160 - Destroy With Pending Async Calls Frees Resources
+`pcl_socket_transport_destroy()` shall free all un-responded pending async service records without leak.
+
+**Traces**: PCL.036
+
+**Verification**: `test_pcl_socket_transport.cpp::DestroyWithPendingAsyncCallNoLeak`.
+
+### REQ_PCL_161 - Destroy With Unsent Frames Frees Resources
+`pcl_socket_transport_destroy()` shall drain and free all queued outbound frames without leak.
+
+**Traces**: PCL.035
+
+**Verification**: `test_pcl_socket_transport.cpp::DestroyWithUnsentFramesNoLeak`.
+
+### REQ_PCL_162 - Invoke Remote Async Oversized Payload Returns NOMEM
+`pcl_socket_transport_invoke_remote_async()` shall return `PCL_ERR_NOMEM` when the total payload exceeds `PCL_SOCKET_MAX_PAYLOAD`.
+
+**Traces**: PCL.036
+
+**Verification**: `test_pcl_socket_transport.cpp::InvokeRemoteAsyncOversizedPayloadReturnsNomem`.
+
+### REQ_PCL_163 - Gateway Service Dispatch With No Match
+When the gateway receives a service request for which no handler is registered, it shall still send a response (with empty data) back to the client.
+
+**Traces**: PCL.034, PCL.036
+
+**Verification**: `test_pcl_socket_transport.cpp::GatewayServiceDispatchNoMatch`.
+
+---
+
+## 17. C++ Component Wrapper
+
+### REQ_PCL_131 - Component Construction Produces Valid Handle
+Constructing a `pcl::Component` subclass shall produce a non-NULL `pcl_container_t` handle in UNCONFIGURED state with the given name.
+
+**Traces**: PCL.048
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.ConstructionProducesValidHandle`.
+
+### REQ_PCL_132 - Component Destructor Frees Resources
+The `pcl::Component` destructor shall call `pcl_container_destroy()`, freeing all associated resources without leak or crash.
+
+**Traces**: PCL.048
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.DestructorFreesResources`.
+
+### REQ_PCL_133 - Component Lifecycle Callbacks Invoked
+Virtual methods `on_configure`, `on_activate`, `on_deactivate`, `on_cleanup`, and `on_shutdown` shall be invoked via the C trampoline on the corresponding lifecycle transitions.
+
+**Traces**: PCL.048
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.LifecycleCallbacksInvoked`.
+
+### REQ_PCL_134 - Component addPublisher During Configure
+`addPublisher()` shall create a publisher port during `on_configure` and return a non-NULL port handle.
+
+**Traces**: PCL.048
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.AddPublisherDuringConfigure`.
+
+### REQ_PCL_135 - Component addSubscriber During Configure
+`addSubscriber()` shall create a subscriber port during `on_configure` and return a non-NULL port handle.
+
+**Traces**: PCL.048
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.AddSubscriberDuringConfigure`.
+
+### REQ_PCL_136 - Component addService During Configure
+`addService()` shall create a service port during `on_configure` and return a non-NULL port handle.
+
+**Traces**: PCL.048
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.AddServiceDuringConfigure`.
+
+### REQ_PCL_137 - Component Parameter String Round-Trip
+`setParam(key, string)` followed by `paramStr(key)` shall return the stored string value; missing keys shall return the default.
+
+**Traces**: PCL.048
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.ParamStringRoundTrip`.
+
+### REQ_PCL_138 - Component Parameter Double Round-Trip
+`setParam(key, double)` followed by `paramF64(key)` shall return the stored value; missing keys shall return the default.
+
+**Traces**: PCL.048
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.ParamDoubleRoundTrip`.
+
+### REQ_PCL_139 - Component Parameter Int64 Round-Trip
+`setParam(key, int64_t)` followed by `paramI64(key)` shall return the stored value; missing keys shall return the default.
+
+**Traces**: PCL.048
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.ParamInt64RoundTrip`.
+
+### REQ_PCL_140 - Component Parameter Bool Round-Trip
+`setParam(key, bool)` followed by `paramBool(key)` shall return the stored value; missing keys shall return the default.
+
+**Traces**: PCL.048
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.ParamBoolRoundTrip`.
+
+### REQ_PCL_141 - Component Tick Rate Round-Trip
+`setTickRateHz()` followed by `tickRateHz()` shall return the stored rate; the default shall be 100 Hz.
+
+**Traces**: PCL.048
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.TickRateRoundTrip`.
+
+### REQ_PCL_142 - Component Logging Does Not Crash
+`logDebug`, `logInfo`, `logWarn`, and `logError` shall forward to `pcl_log()` without crash.
+
+**Traces**: PCL.048
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.LoggingDoesNotCrash`.
+
+### REQ_PCL_143 - Component Move Constructor Transfers Ownership
+The move constructor shall transfer the underlying `pcl_container_t` handle, leaving the source with a NULL handle.
+
+**Traces**: PCL.048
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.MoveConstructor`.
+
+### REQ_PCL_144 - Component Move Assignment Transfers Ownership
+The move assignment operator shall transfer the underlying `pcl_container_t` handle, destroying any prior handle held by the target.
+
+**Traces**: PCL.048
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppComponent.MoveAssignment`.
+
+---
+
+## 18. C++ Executor Wrapper
+
+### REQ_PCL_145 - Executor Construction Produces Valid Handle
+Constructing a `pcl::Executor` shall produce a non-NULL `pcl_executor_t` handle.
+
+**Traces**: PCL.049
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppExecutor.ConstructionProducesValidHandle`.
+
+### REQ_PCL_146 - Executor Destructor Frees Resources
+The `pcl::Executor` destructor shall call `pcl_executor_destroy()`, freeing all associated resources without leak or crash.
+
+**Traces**: PCL.049
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppExecutor.DestructorFreesResources`.
+
+### REQ_PCL_147 - Executor Add Component
+`add(Component&)` shall add a `pcl::Component` to the executor and return `PCL_OK`.
+
+**Traces**: PCL.049
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppExecutor.AddComponent`.
+
+### REQ_PCL_148 - Executor Add Raw Container
+`add(pcl_container_t*)` shall add a raw C container to the executor and return `PCL_OK`.
+
+**Traces**: PCL.049
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppExecutor.AddRawContainer`.
+
+### REQ_PCL_149 - Executor SpinOnce Ticks Component
+`spinOnce()` shall tick all ACTIVE components added to the executor, incrementing their tick count.
+
+**Traces**: PCL.049
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppExecutor.SpinOnceTicksComponent`.
+
+### REQ_PCL_150 - Executor RequestShutdown Stops Spin
+`requestShutdown()` shall cause a running `spin()` loop to return.
+
+**Traces**: PCL.049
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppExecutor.RequestShutdownStopsSpin`.
+
+### REQ_PCL_151 - Executor ShutdownGraceful Finalizes Components
+`shutdownGraceful()` shall deactivate and finalize all added components, returning `PCL_OK`.
+
+**Traces**: PCL.049
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppExecutor.ShutdownGracefulFinalizesComponents`.
+
+### REQ_PCL_152 - Executor SetTransport Wires Adapter
+`setTransport()` shall wire a transport adapter to the executor; passing NULL shall clear it.
+
+**Traces**: PCL.049
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppExecutor.SetTransport`.
+
+### REQ_PCL_153 - Executor DispatchIncoming Routes To Subscribers
+`dispatchIncoming()` shall synchronously route a message to all matching subscribers.
+
+**Traces**: PCL.049
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppExecutor.DispatchIncoming`.
+
+### REQ_PCL_154 - Executor PostIncoming Queues From External Thread
+`postIncoming()` shall deep-copy and enqueue a message for dispatch on the next `spinOnce()`.
+
+**Traces**: PCL.049
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppExecutor.PostIncoming`.
+
+### REQ_PCL_155 - Executor Move Constructor Transfers Ownership
+The move constructor shall transfer the underlying `pcl_executor_t` handle, leaving the source with a NULL handle.
+
+**Traces**: PCL.049
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppExecutor.MoveConstructor`.
+
+### REQ_PCL_156 - Executor Move Assignment Transfers Ownership
+The move assignment operator shall transfer the underlying `pcl_executor_t` handle, destroying any prior handle held by the target.
+
+**Traces**: PCL.049
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppExecutor.MoveAssignment`.
+
+### REQ_PCL_157 - Component Lifecycle Via Executor Integration
+A `pcl::Component` added to a `pcl::Executor` shall receive ticks when active and reach FINALIZED state after `shutdownGraceful()`.
+
+**Traces**: PCL.048, PCL.049
+
+**Verification**: `test_pcl_cpp_wrappers.cpp::PclCppIntegration.ComponentLifecycleViaExecutor`.
+
+---
+
 ## Traceability Summary
 
 | LLR | PCL (HLR) | Test File |
@@ -994,3 +1349,52 @@ A container name exceeding the internal buffer shall be truncated without crashi
 | 112 | 045 | test_pcl_executor |
 | 113 | 045 | test_pcl_robustness |
 | 114 | 005, 045 | test_pcl_robustness |
+| 115 | 031 | test_pcl_socket_transport |
+| 116 | 031, 045 | test_pcl_socket_transport |
+| 117 | 032 | test_pcl_socket_transport |
+| 118 | 032, 045 | test_pcl_socket_transport |
+| 119 | 032 | test_pcl_socket_transport |
+| 120 | 033 | test_pcl_socket_transport |
+| 121 | 033 | test_pcl_socket_transport |
+| 122 | 034 | test_pcl_socket_transport |
+| 123 | 034, 045 | test_pcl_socket_transport |
+| 124 | 034 | test_pcl_socket_transport |
+| 125 | 035 | test_pcl_socket_transport |
+| 126 | 036 | test_pcl_socket_transport |
+| 127 | 036, 045 | test_pcl_socket_transport |
+| 128 | 036 | test_pcl_socket_transport |
+| 129 | 045 | test_pcl_socket_transport |
+| 130 | 045 | test_pcl_socket_transport |
+| 131 | 048 | test_pcl_cpp_wrappers |
+| 132 | 048 | test_pcl_cpp_wrappers |
+| 133 | 048 | test_pcl_cpp_wrappers |
+| 134 | 048 | test_pcl_cpp_wrappers |
+| 135 | 048 | test_pcl_cpp_wrappers |
+| 136 | 048 | test_pcl_cpp_wrappers |
+| 137 | 048 | test_pcl_cpp_wrappers |
+| 138 | 048 | test_pcl_cpp_wrappers |
+| 139 | 048 | test_pcl_cpp_wrappers |
+| 140 | 048 | test_pcl_cpp_wrappers |
+| 141 | 048 | test_pcl_cpp_wrappers |
+| 142 | 048 | test_pcl_cpp_wrappers |
+| 143 | 048 | test_pcl_cpp_wrappers |
+| 144 | 048 | test_pcl_cpp_wrappers |
+| 145 | 049 | test_pcl_cpp_wrappers |
+| 146 | 049 | test_pcl_cpp_wrappers |
+| 147 | 049 | test_pcl_cpp_wrappers |
+| 148 | 049 | test_pcl_cpp_wrappers |
+| 149 | 049 | test_pcl_cpp_wrappers |
+| 150 | 049 | test_pcl_cpp_wrappers |
+| 151 | 049 | test_pcl_cpp_wrappers |
+| 152 | 049 | test_pcl_cpp_wrappers |
+| 153 | 049 | test_pcl_cpp_wrappers |
+| 154 | 049 | test_pcl_cpp_wrappers |
+| 155 | 049 | test_pcl_cpp_wrappers |
+| 156 | 049 | test_pcl_cpp_wrappers |
+| 157 | 048, 049 | test_pcl_cpp_wrappers |
+| 158 | 031 | test_pcl_socket_transport |
+| 159 | 031 | test_pcl_socket_transport |
+| 160 | 036 | test_pcl_socket_transport |
+| 161 | 035 | test_pcl_socket_transport |
+| 162 | 036 | test_pcl_socket_transport |
+| 163 | 034, 036 | test_pcl_socket_transport |
