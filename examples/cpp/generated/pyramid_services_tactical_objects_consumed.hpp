@@ -1,5 +1,5 @@
 // Auto-generated service binding header
-// Generated from: services by cpp_service_generator
+// Generated from: consumed.proto by cpp_service_generator
 // Namespace: pyramid::services::tactical_objects::consumed
 //
 // Architecture: component logic > service binding (this) > PCL
@@ -105,9 +105,9 @@ public:
 // ---------------------------------------------------------------------------
 
 /// \brief Subscribe to object-evidence publications on kTopicObjectEvidence.
-void subscribeObjectEvidence(pcl_container_t*   container,
-                             pcl_sub_callback_t  callback,
-                             void*              user_data = nullptr);
+void subscribeObjectEvidence(pcl_container_t*  container,
+                             pcl_sub_callback_t callback,
+                             void*             user_data = nullptr);
 
 /// \brief Publish an object-evidence payload on kTopicObjectEvidence.
 ///

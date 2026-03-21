@@ -33,6 +33,8 @@ import re
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+import json_schema as schema
+
 
 # -- EntityActions operation set -----------------------------------------------
 
@@ -48,18 +50,18 @@ BASE_TYPE_MAP = {
     'pyramid.data_model.common.Capability': 'Identifier',
 }
 
-# Standard topic names by convention (same as Ada generator)
-STANDARD_TOPICS = {
-    'provided': {
-        'entity_matches': 'standard.entity_matches',
-        'evidence_requirements': 'standard.evidence_requirements',
-    },
-    'consumed': {
-        'object_evidence': 'standard.object_evidence',
-    },
-}
+# Standard topic names — sourced from json_schema.py as canonical authority.
+# Provided side: client subscribes to these (server publishes).
+SUBSCRIBE_TOPICS = schema.SUBSCRIBE_TOPICS   # entity_matches, evidence_requirements
+# Consumed side: client publishes to these (server subscribes).
+PUBLISH_TOPICS   = schema.PUBLISH_TOPICS     # object_evidence
 
 _SEP = '// ' + '-' * 75
+
+# Codec package name constant
+_CODEC_NS    = 'pyramid::services::tactical_objects::json_codec'
+_CODEC_PREFIX = 'pyramid_services_tactical_objects_json_codec'
+_TYPES_NS    = 'pyramid::services::tactical_objects'
 
 
 # -- Proto parser --------------------------------------------------------------
@@ -329,8 +331,11 @@ class CppServiceGenerator:
                       types_header: str, parsed: ProtoFile,
                       all_rpcs: List[Tuple[str, ProtoRpc]]):
         is_provided = _is_provided(parsed)
-        topic_set = STANDARD_TOPICS.get(
-            'provided' if is_provided else 'consumed', {})
+        sub_topics = SUBSCRIBE_TOPICS if is_provided else {}
+        pub_topics = {} if is_provided else PUBLISH_TOPICS
+        all_topics = dict(sub_topics)
+        all_topics.update(pub_topics)
+        topic_set = all_topics
 
         # Collect raw type names (no BASE_TYPE_MAP) for using declarations
         raw_types = sorted({
@@ -353,9 +358,8 @@ class CppServiceGenerator:
             f.write('//   2. EntityActions handler base class'
                     ' (ServiceHandler \u2014 override Handle*)\n')
             if is_provided:
-                f.write('//   3. JSON builder functions (nlohmann::json / string)\n')
-                f.write('//   4. PCL binding functions (subscribe*, invoke*)\n')
-                f.write('//   5. msgToString utility for PCL message payloads\n')
+                f.write('//   3. PCL binding functions (subscribe*, invoke*)\n')
+                f.write('//   4. msgToString utility for PCL message payloads\n')
             else:
                 f.write('//   3. PCL binding functions (subscribe*, publish*)\n')
                 f.write('//   4. msgToString utility for PCL message payloads\n')
@@ -467,40 +471,6 @@ class CppServiceGenerator:
 
             f.write('};\n\n')
 
-            # ---- JSON builder functions (provided only) ----------------------
-            if is_provided:
-                f.write(_SEP + '\n')
-                f.write('// JSON builder functions\n')
-                f.write(_SEP + '\n\n')
-                f.write('/// \\brief Build a JSON object for an interest/evidence'
-                        ' requirement.\n')
-                f.write('///\n')
-                f.write('/// Produces: {"policy":..., "identity":..., "dimension":...,\n')
-                f.write('///            "min_lat_rad":..., "max_lat_rad":...,\n')
-                f.write('///            "min_lon_rad":..., "max_lon_rad":...}\n')
-                f.write('std::string buildStandardRequirementJson(\n')
-                f.write('    std::string_view policy,\n')
-                f.write('    std::string_view identity,\n')
-                f.write('    std::string_view dimension  = "",\n')
-                f.write('    double min_lat_rad          = 0.0,\n')
-                f.write('    double max_lat_rad          = 0.0,\n')
-                f.write('    double min_lon_rad          = 0.0,\n')
-                f.write('    double max_lon_rad          = 0.0);\n')
-                f.write('\n')
-                f.write('/// \\brief Build a JSON object for an observation evidence'
-                        ' report.\n')
-                f.write('///\n')
-                f.write('/// Produces: {"identity":..., "dimension":...,\n')
-                f.write('///            "latitude_rad":..., "longitude_rad":...,\n')
-                f.write('///            "confidence":..., "observed_at":...}\n')
-                f.write('std::string buildStandardEvidenceJson(\n')
-                f.write('    std::string_view identity,\n')
-                f.write('    std::string_view dimension,\n')
-                f.write('    double lat_rad,\n')
-                f.write('    double lon_rad,\n')
-                f.write('    double confidence,\n')
-                f.write('    double observed_at = 0.5);\n\n')
-
             # ---- PCL binding functions ---------------------------------------
             f.write(_SEP + '\n')
             if is_provided:
@@ -587,8 +557,11 @@ class CppServiceGenerator:
                     types_ns: str, parsed: ProtoFile,
                     all_rpcs: List[Tuple[str, ProtoRpc]]):
         is_provided = _is_provided(parsed)
-        topic_set = STANDARD_TOPICS.get(
-            'provided' if is_provided else 'consumed', {})
+        sub_topics = SUBSCRIBE_TOPICS if is_provided else {}
+        pub_topics = {} if is_provided else PUBLISH_TOPICS
+        all_topics = dict(sub_topics)
+        all_topics.update(pub_topics)
+        topic_set = all_topics
         hpp_name = file_prefix + '.hpp'
 
         with open(path, 'w') as f:
@@ -603,7 +576,6 @@ class CppServiceGenerator:
             f.write('#include <pcl/pcl_container.h>\n')
             if is_provided:
                 f.write('#include <pcl/pcl_transport_socket.h>\n')
-                f.write('\n#include <nlohmann/json.hpp>\n')
             f.write('\n#include <string>\n')
             f.write('#include <vector>\n\n')
 
@@ -636,54 +608,6 @@ class CppServiceGenerator:
                 else:
                     f.write('    return {};\n')
 
-                f.write('}\n\n')
-
-            # ---- JSON builders (provided only) -------------------------------
-            if is_provided:
-                f.write(_SEP + '\n')
-                f.write('// JSON builder: buildStandardRequirementJson\n')
-                f.write(_SEP + '\n\n')
-                f.write('std::string buildStandardRequirementJson(\n')
-                f.write('    std::string_view policy,\n')
-                f.write('    std::string_view identity,\n')
-                f.write('    std::string_view dimension,\n')
-                f.write('    double min_lat_rad,\n')
-                f.write('    double max_lat_rad,\n')
-                f.write('    double min_lon_rad,\n')
-                f.write('    double max_lon_rad)\n')
-                f.write('{\n')
-                f.write('    nlohmann::json obj;\n')
-                f.write('    obj["policy"]      = std::string(policy);\n')
-                f.write('    obj["identity"]    = std::string(identity);\n')
-                f.write('    if (!dimension.empty()) {\n')
-                f.write('        obj["dimension"] = std::string(dimension);\n')
-                f.write('    }\n')
-                f.write('    obj["min_lat_rad"] = min_lat_rad;\n')
-                f.write('    obj["max_lat_rad"] = max_lat_rad;\n')
-                f.write('    obj["min_lon_rad"] = min_lon_rad;\n')
-                f.write('    obj["max_lon_rad"] = max_lon_rad;\n')
-                f.write('    return obj.dump();\n')
-                f.write('}\n\n')
-
-                f.write(_SEP + '\n')
-                f.write('// JSON builder: buildStandardEvidenceJson\n')
-                f.write(_SEP + '\n\n')
-                f.write('std::string buildStandardEvidenceJson(\n')
-                f.write('    std::string_view identity,\n')
-                f.write('    std::string_view dimension,\n')
-                f.write('    double lat_rad,\n')
-                f.write('    double lon_rad,\n')
-                f.write('    double confidence,\n')
-                f.write('    double observed_at)\n')
-                f.write('{\n')
-                f.write('    nlohmann::json obj;\n')
-                f.write('    obj["identity"]      = std::string(identity);\n')
-                f.write('    obj["dimension"]     = std::string(dimension);\n')
-                f.write('    obj["latitude_rad"]  = lat_rad;\n')
-                f.write('    obj["longitude_rad"] = lon_rad;\n')
-                f.write('    obj["confidence"]    = confidence;\n')
-                f.write('    obj["observed_at"]   = observed_at;\n')
-                f.write('    return obj.dump();\n')
                 f.write('}\n\n')
 
             # ---- PCL binding helpers -----------------------------------------
@@ -807,7 +731,272 @@ class CppServiceGenerator:
             f.write(f'}} // namespace {full_ns}\n')
 
 
+class CppJsonCodecGenerator:
+    """Generates the canonical JSON ser/de header+impl from json_schema.py.
+
+    Output files:
+      pyramid_services_tactical_objects_json_codec.hpp
+      pyramid_services_tactical_objects_json_codec.cpp
+
+    The namespace is  pyramid::services::tactical_objects::json_codec
+    Types from the parent namespace are brought in via  using namespace.
+
+    Usage:
+        gen = CppJsonCodecGenerator()
+        gen.generate('/path/to/output_dir')
+    """
+
+    HPP = _CODEC_PREFIX + '.hpp'
+    CPP = _CODEC_PREFIX + '.cpp'
+    NS  = _CODEC_NS
+    TYPES_NS = _TYPES_NS
+
+    def generate(self, output_dir: str):
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        self._write_header(out / self.HPP)
+        self._write_impl(out / self.CPP)
+        print(f'  Generated {self.NS}')
+
+    # -- Header ----------------------------------------------------------------
+
+    def _write_header(self, path: Path):
+        ek = schema.FieldKind
+
+        with open(path, 'w') as f:
+            f.write('// Auto-generated JSON codec header\n')
+            f.write(f'// Namespace: {self.NS}\n')
+            f.write('// Generated by cpp_service_generator.py (CppJsonCodecGenerator)\n')
+            f.write('// Schema source: pim/json_schema.py\n')
+            f.write('//\n')
+            f.write('// Canonical JSON wire format for the pyramid standard bridge protocol.\n')
+            f.write('// Each message schema maps directly to a proto message type:\n')
+            f.write('//\n')
+            for msg in schema.ALL_SCHEMAS:
+                f.write(f'//   {msg.cpp_name:<34} {msg.wire_description}\n')
+            f.write('//\n')
+            f.write('// Architecture: component logic > JsonCodec > service binding > PCL\n')
+            f.write('#pragma once\n\n')
+            f.write(f'#include "pyramid_services_tactical_objects_types.hpp"\n\n')
+            f.write('#include <string>\n')
+            f.write('#include <vector>\n\n')
+            f.write(f'namespace {self.NS} {{\n\n')
+            f.write(f'using namespace {self.TYPES_NS};\n\n')
+
+            # -- Message struct declarations ------------------------------------
+            f.write(_SEP + '\n')
+            f.write('// Wire message structs\n')
+            f.write(_SEP + '\n\n')
+            for msg in schema.ALL_SCHEMAS:
+                f.write(f'// {msg.wire_description}\n')
+                f.write(f'struct {msg.cpp_name} {{\n')
+                for fld in msg.fields:
+                    comment = f'  // {fld.description}' if fld.description else ''
+                    opt_tag = '' if fld.required else '  // optional'
+                    tag = comment or opt_tag
+                    f.write(f'    {fld.cpp_type} {fld.name} = {fld.cpp_default};{tag}\n')
+                f.write('};\n\n')
+
+            # Array alias for entity matches
+            f.write('using EntityMatchArray = std::vector<EntityMatch>;\n\n')
+
+            # -- Serialisation -------------------------------------------------
+            f.write(_SEP + '\n')
+            f.write('// Serialisation (toJson)\n')
+            f.write(_SEP + '\n\n')
+            for msg in schema.ALL_SCHEMAS:
+                f.write(f'std::string toJson(const {msg.cpp_name}& msg);\n')
+            f.write('\n')
+
+            # -- Deserialisation -----------------------------------------------
+            f.write(_SEP + '\n')
+            f.write('// Deserialisation (fromJson)\n')
+            f.write(_SEP + '\n\n')
+            for msg in schema.ALL_SCHEMAS:
+                f.write(f'{msg.cpp_name} {_lc_first(msg.cpp_name)}FromJson'
+                        f'(const std::string& s);\n')
+            f.write('\n')
+            f.write('// Deserialise standard.entity_matches JSON array\n')
+            f.write('EntityMatchArray entityMatchesFromJson(const std::string& s);\n\n')
+
+            # -- Enum string converters ----------------------------------------
+            f.write(_SEP + '\n')
+            f.write('// Enum string converters\n')
+            f.write(_SEP + '\n\n')
+            for _kind, spec in schema.ENUM_SPECS.items():
+                t = spec.cpp_type
+                fn = _lc_first(t)
+                f.write(f'std::string toString({t} v);\n')
+                f.write(f'{t} {fn}FromString(const std::string& s);\n')
+            f.write('\n')
+
+            f.write(f'}} // namespace {self.NS}\n')
+
+    # -- Implementation --------------------------------------------------------
+
+    def _write_impl(self, path: Path):
+        ek = schema.FieldKind
+
+        with open(path, 'w') as f:
+            f.write('// Auto-generated JSON codec implementation\n')
+            f.write(f'// Namespace: {self.NS}\n\n')
+            f.write(f'#include "{self.HPP}"\n\n')
+            f.write('#include <nlohmann/json.hpp>\n\n')
+            f.write(f'namespace {self.NS} {{\n\n')
+
+            # -- Enum string converters ----------------------------------------
+            f.write(_SEP + '\n')
+            f.write('// Enum string converters\n')
+            f.write(_SEP + '\n\n')
+            for _kind, spec in schema.ENUM_SPECS.items():
+                t   = spec.cpp_type
+                fn  = _lc_first(t)
+                tbl = spec.table()
+
+                # toString
+                f.write(f'std::string toString({t} v) {{\n')
+                f.write(f'    switch (v) {{\n')
+                for proto_str, _ada, cpp_lit, _ord in tbl:
+                    f.write(f'        case {t}::{cpp_lit}: return "{proto_str}";\n')
+                f.write(f'    }}\n')
+                f.write(f'    return "{tbl[0][0]}";\n')  # fallback = first (Unspecified)
+                f.write(f'}}\n\n')
+
+                # fromString
+                f.write(f'{t} {fn}FromString(const std::string& s) {{\n')
+                for proto_str, _ada, cpp_lit, _ord in tbl:
+                    f.write(f'    if (s == "{proto_str}") return {t}::{cpp_lit};\n')
+                f.write(f'    return {t}::{spec.default_cpp};\n')
+                f.write(f'}}\n\n')
+
+            # -- toJson implementations ----------------------------------------
+            f.write(_SEP + '\n')
+            f.write('// Serialisation (toJson)\n')
+            f.write(_SEP + '\n\n')
+            for msg in schema.ALL_SCHEMAS:
+                f.write(f'std::string toJson(const {msg.cpp_name}& msg) {{\n')
+                f.write(f'    nlohmann::json obj;\n')
+                for fld in msg.fields:
+                    jkey = fld.name
+                    if fld.is_enum:
+                        spec = schema.ENUM_SPECS[fld.kind]
+                        fn   = _lc_first(spec.cpp_type)
+                        if fld.required:
+                            f.write(f'    obj["{jkey}"] = toString(msg.{jkey});\n')
+                        else:
+                            f.write(f'    if (msg.{jkey} != {fld.cpp_default})'
+                                    f' obj["{jkey}"] = toString(msg.{jkey});\n')
+                    elif fld.kind in (ek.STRING, ek.IDENTIFIER):
+                        if fld.required:
+                            f.write(f'    obj["{jkey}"] = msg.{jkey};\n')
+                        else:
+                            f.write(f'    if (!msg.{jkey}.empty())'
+                                    f' obj["{jkey}"] = msg.{jkey};\n')
+                    elif fld.kind == ek.DOUBLE:
+                        if fld.required:
+                            f.write(f'    obj["{jkey}"] = msg.{jkey};\n')
+                        else:
+                            f.write(f'    if (msg.{jkey} != 0.0)'
+                                    f' obj["{jkey}"] = msg.{jkey};\n')
+                    elif fld.kind == ek.BOOL:
+                        f.write(f'    obj["{jkey}"] = msg.{jkey};\n')
+                f.write(f'    return obj.dump();\n')
+                f.write(f'}}\n\n')
+
+            # -- fromJson implementations ---------------------------------------
+            f.write(_SEP + '\n')
+            f.write('// Deserialisation (fromJson)\n')
+            f.write(_SEP + '\n\n')
+            for msg in schema.ALL_SCHEMAS:
+                fname = f'{_lc_first(msg.cpp_name)}FromJson'
+                f.write(f'{msg.cpp_name} {fname}(const std::string& s) {{\n')
+                f.write(f'    {msg.cpp_name} result;\n')
+                f.write(f'    try {{\n')
+                f.write(f'        auto j = nlohmann::json::parse(s);\n')
+                for fld in msg.fields:
+                    jkey = fld.name
+                    if fld.is_enum:
+                        spec = schema.ENUM_SPECS[fld.kind]
+                        fn   = _lc_first(spec.cpp_type)
+                        f.write(f'        if (j.contains("{jkey}"))\n')
+                        f.write(f'            result.{jkey} = {fn}FromString('
+                                f'j["{jkey}"].get<std::string>());\n')
+                    elif fld.kind in (ek.STRING, ek.IDENTIFIER):
+                        f.write(f'        if (j.contains("{jkey}"))\n')
+                        f.write(f'            result.{jkey} = '
+                                f'j["{jkey}"].get<std::string>();\n')
+                    elif fld.kind == ek.DOUBLE:
+                        f.write(f'        if (j.contains("{jkey}"))\n')
+                        f.write(f'            result.{jkey} = '
+                                f'j["{jkey}"].get<double>();\n')
+                    elif fld.kind == ek.BOOL:
+                        f.write(f'        if (j.contains("{jkey}"))\n')
+                        f.write(f'            result.{jkey} = '
+                                f'j["{jkey}"].get<bool>();\n')
+                f.write(f'    }} catch (...) {{}}\n')
+                f.write(f'    return result;\n')
+                f.write(f'}}\n\n')
+
+            # -- entityMatchesFromJson -----------------------------------------
+            f.write(_SEP + '\n')
+            f.write('// Array deserialisation\n')
+            f.write(_SEP + '\n\n')
+            f.write('EntityMatchArray entityMatchesFromJson(const std::string& s) {\n')
+            f.write('    EntityMatchArray result;\n')
+            f.write('    try {\n')
+            f.write('        auto arr = nlohmann::json::parse(s);\n')
+            f.write('        if (!arr.is_array()) return result;\n')
+            f.write('        result.reserve(arr.size());\n')
+            f.write('        for (const auto& elem : arr) {\n')
+            f.write('            EntityMatch m;\n')
+            for fld in schema.ENTITY_MATCH.fields:
+                jkey = fld.name
+                if fld.is_enum:
+                    spec = schema.ENUM_SPECS[fld.kind]
+                    fn   = _lc_first(spec.cpp_type)
+                    f.write(f'            if (elem.contains("{jkey}"))\n')
+                    f.write(f'                m.{jkey} = {fn}FromString('
+                            f'elem["{jkey}"].get<std::string>());\n')
+                elif fld.kind in (ek.STRING, ek.IDENTIFIER):
+                    f.write(f'            if (elem.contains("{jkey}"))\n')
+                    f.write(f'                m.{jkey} = '
+                            f'elem["{jkey}"].get<std::string>();\n')
+                elif fld.kind == ek.DOUBLE:
+                    f.write(f'            if (elem.contains("{jkey}"))\n')
+                    f.write(f'                m.{jkey} = '
+                            f'elem["{jkey}"].get<double>();\n')
+            f.write('            result.push_back(std::move(m));\n')
+            f.write('        }\n')
+            f.write('    } catch (...) {}\n')
+            f.write('    return result;\n')
+            f.write('}\n\n')
+
+            f.write(f'}} // namespace {self.NS}\n')
+
+
+def _lc_first(s: str) -> str:
+    """Lowercase first character: CreateRequirementRequest -> createRequirementRequest."""
+    if not s:
+        return s
+    return s[0].lower() + s[1:]
+
+
 def main():
+    if len(sys.argv) < 2:
+        print('Usage: python cpp_service_generator.py'
+              ' <file.proto|proto_dir> <output_dir>')
+        print('       python cpp_service_generator.py --codec <output_dir>')
+        sys.exit(1)
+
+    if sys.argv[1] == '--codec':
+        if len(sys.argv) < 3:
+            print('Usage: python cpp_service_generator.py --codec <output_dir>')
+            sys.exit(1)
+        gen = CppJsonCodecGenerator()
+        gen.generate(sys.argv[2])
+        print('\n\u2713 C++ JSON codec generated')
+        return
+
     if len(sys.argv) < 3:
         print('Usage: python cpp_service_generator.py'
               ' <file.proto|proto_dir> <output_dir>')

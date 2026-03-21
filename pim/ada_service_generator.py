@@ -734,12 +734,9 @@ class JsonCodecGenerator:
             # -- Enum string converters ----------------------------------------
             f.write('   --  -- Enum string converters -----------------------------------------\n')
             f.write('\n')
-            for kind, info in schema.ENUM_TABLES.items():
-                ada_t = info['ada_type']
-                to_fn   = info['to_str_fn']
-                from_fn = info['from_str_fn']
-                f.write(f'   function {to_fn} (V : {ada_t}) return String;\n')
-                f.write(f'   function {from_fn} (S : String) return {ada_t};\n')
+            for _kind, spec in schema.ENUM_SPECS.items():
+                f.write(f'   function {spec.ada_to_str_fn} (V : {spec.ada_type}) return String;\n')
+                f.write(f'   function {spec.ada_from_str_fn} (S : String) return {spec.ada_type};\n')
             f.write('\n')
 
             f.write(f'end {self.PKG};\n')
@@ -802,30 +799,26 @@ class JsonCodecGenerator:
             # -- Enum string converters ----------------------------------------
             f.write('   --  -- Enum string converters -----------------------------------------\n')
             f.write('\n')
-            for kind, info in schema.ENUM_TABLES.items():
-                ada_t   = info['ada_type']
-                default = info['default']
-                to_fn   = info['to_str_fn']
-                from_fn = info['from_str_fn']
-                table   = info['table']
+            for _kind, spec in schema.ENUM_SPECS.items():
+                table = spec.table()
 
                 # To_String
-                f.write(f'   function {to_fn} (V : {ada_t}) return String is\n')
+                f.write(f'   function {spec.ada_to_str_fn} (V : {spec.ada_type}) return String is\n')
                 f.write(f'   begin\n')
                 f.write(f'      case V is\n')
-                for wire_str, ada_lit in table:
-                    f.write(f'         when {ada_lit} => return "{wire_str}";\n')
+                for proto_str, ada_lit, _cpp_lit, _ord in table:
+                    f.write(f'         when {ada_lit} => return "{proto_str}";\n')
                 f.write(f'      end case;\n')
-                f.write(f'   end {to_fn};\n')
+                f.write(f'   end {spec.ada_to_str_fn};\n')
                 f.write('\n')
 
                 # From_String
-                f.write(f'   function {from_fn} (S : String) return {ada_t} is\n')
+                f.write(f'   function {spec.ada_from_str_fn} (S : String) return {spec.ada_type} is\n')
                 f.write(f'   begin\n')
-                for wire_str, ada_lit in table:
-                    f.write(f'      if S = "{wire_str}" then return {ada_lit}; end if;\n')
-                f.write(f'      return {default};\n')
-                f.write(f'   end {from_fn};\n')
+                for proto_str, ada_lit, _cpp_lit, _ord in table:
+                    f.write(f'      if S = "{proto_str}" then return {ada_lit}; end if;\n')
+                f.write(f'      return {spec.default_ada};\n')
+                f.write(f'   end {spec.ada_from_str_fn};\n')
                 f.write('\n')
 
             # -- To_Json implementations --------------------------------------
@@ -855,13 +848,12 @@ class JsonCodecGenerator:
                             f.write(f'         Set_Field (Obj, "{jkey}", To_String (Msg.{fname}));\n')
                             f.write(f'      end if;\n')
                     elif fld.is_enum:
-                        to_fn = schema.ENUM_TABLES[fld.kind]['to_str_fn']
-                        default_ada = schema.ENUM_TABLES[fld.kind]['default']
+                        spec = schema.ENUM_SPECS[fld.kind]
                         if fld.required:
-                            f.write(f'      Set_Field (Obj, "{jkey}", {to_fn} (Msg.{fname}));\n')
+                            f.write(f'      Set_Field (Obj, "{jkey}", {spec.ada_to_str_fn} (Msg.{fname}));\n')
                         else:
-                            f.write(f'      if Msg.{fname} /= {default_ada} then\n')
-                            f.write(f'         Set_Field (Obj, "{jkey}", {to_fn} (Msg.{fname}));\n')
+                            f.write(f'      if Msg.{fname} /= {spec.default_ada} then\n')
+                            f.write(f'         Set_Field (Obj, "{jkey}", {spec.ada_to_str_fn} (Msg.{fname}));\n')
                             f.write(f'      end if;\n')
                 f.write(f'      return Write (Obj);\n')
                 f.write(f'   end To_Json;\n')
@@ -896,9 +888,9 @@ class JsonCodecGenerator:
                         f.write(f'      Result.{fname} :=\n')
                         f.write(f'        To_Unbounded_String (Get_S (J, "{jkey}"));\n')
                     elif fld.is_enum:
-                        from_fn = schema.ENUM_TABLES[fld.kind]['from_str_fn']
+                        spec = schema.ENUM_SPECS[fld.kind]
                         f.write(f'      Result.{fname} :=\n')
-                        f.write(f'        {from_fn} (Get_S (J, "{jkey}"));\n')
+                        f.write(f'        {spec.ada_from_str_fn} (Get_S (J, "{jkey}"));\n')
                 f.write(f'      return Result;\n')
                 f.write(f'   end From_Json;\n')
                 f.write('\n')
@@ -934,9 +926,9 @@ class JsonCodecGenerator:
                     f.write(f'               M.{fname} :=\n')
                     f.write(f'                 To_Unbounded_String (Get_S (Elem, "{jkey}"));\n')
                 elif fld.is_enum:
-                    from_fn = schema.ENUM_TABLES[fld.kind]['from_str_fn']
+                    spec = schema.ENUM_SPECS[fld.kind]
                     f.write(f'               M.{fname} :=\n')
-                    f.write(f'                 {from_fn} (Get_S (Elem, "{jkey}"));\n')
+                    f.write(f'                 {spec.ada_from_str_fn} (Get_S (Elem, "{jkey}"));\n')
             f.write('               Result (I) := M;\n')
             f.write('            end;\n')
             f.write('         end loop;\n')
