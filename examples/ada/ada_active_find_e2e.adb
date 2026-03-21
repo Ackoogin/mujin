@@ -8,6 +8,9 @@
 --
 --  Architecture: main (this) > component logic > service binding > PCL
 --
+--  Business/test logic (what to request, what to assert) is authored here.
+--  All JSON serialisation is handled by the generated Json_Codec package.
+--
 --  Usage: ada_active_find_e2e --host 127.0.0.1 --port 19123
 
 with Ada.Command_Line;
@@ -15,6 +18,7 @@ with Ada.Text_IO;
 with Interfaces.C;
 with Interfaces.C.Strings;
 with Pcl_Bindings;
+with Tactical_Objects_Types;  use Tactical_Objects_Types;
 with Tobj_Interest_Client;
 with Tobj_Evidence_Provider;
 with System;
@@ -160,12 +164,16 @@ begin
    Status := Pcl_Bindings.Add_Container (Exec, Provider_C);
 
    -- -- Send create_requirement (ActiveFind via bridge) ------------------------
+   --
+   --  Business logic: request HOSTILE entities in SEA_SURFACE dimension within
+   --  a bounding box covering the English Channel (50–52°N, 1°W–1°E).
+   --  Typed enum values avoid stringly-typed JSON construction here.
 
    Tobj_Interest_Client.Send_Create_Requirement
      (Transport   => Transport,
-      Policy      => "DATA_POLICY_OBTAIN",
-      Identity    => "STANDARD_IDENTITY_HOSTILE",
-      Dimension   => "BATTLE_DIMENSION_SEA_SURFACE",
+      Policy      => Policy_Obtain,
+      Identity    => Identity_Hostile,
+      Dimension   => Sea_Surface,
       Min_Lat_Rad => 50.0 * Deg_To_Rad,
       Max_Lat_Rad => 52.0 * Deg_To_Rad,
       Min_Lon_Rad => (-1.0) * Deg_To_Rad,

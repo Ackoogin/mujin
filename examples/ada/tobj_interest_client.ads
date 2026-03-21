@@ -3,9 +3,10 @@
 --  Reusable component: subscribes to standard.entity_matches, invokes
 --  object_of_interest.create_requirement via the generated service bindings.
 --
---  Architecture: component logic (this) > service binding > PCL
+--  Architecture: component logic (this) > Json_Codec > service binding > PCL
 
 with Pcl_Bindings;
+with Tactical_Objects_Types;
 with System;
 
 package Tobj_Interest_Client is
@@ -35,12 +36,14 @@ package Tobj_Interest_Client is
       User_Data : System.Address);
    pragma Convention (C, On_Create_Requirement_Response);
 
-   --  Send a create_requirement request (ActiveFind or Query)
+   --  Send a create_requirement request.
+   --  Takes typed enum values — JSON serialisation is done by Json_Codec.
    procedure Send_Create_Requirement
      (Transport   : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Policy      : String;
-      Identity    : String;
-      Dimension   : String := "";
+      Policy      : Tactical_Objects_Types.Data_Policy;
+      Identity    : Tactical_Objects_Types.Standard_Identity;
+      Dimension   : Tactical_Objects_Types.Battle_Dimension :=
+                      Tactical_Objects_Types.Dimension_Unspecified;
       Min_Lat_Rad : Long_Float := 0.0;
       Max_Lat_Rad : Long_Float := 0.0;
       Min_Lon_Rad : Long_Float := 0.0;

@@ -1,18 +1,21 @@
 --  tobj_evidence_provider.adb
 --
 --  Component body: subscribes to evidence_requirements, publishes observations.
---  Uses generated service bindings for all PCL operations.
+--  Uses generated service bindings and Json_Codec for all serialisation.
 
 with Ada.Text_IO;
 with Interfaces.C;
 with Pyramid.Services.Tactical_Objects.Provided;
 with Pyramid.Services.Tactical_Objects.Consumed;
+with Pyramid.Services.Tactical_Objects.Json_Codec;
+with Tactical_Objects_Types;
 with System;
 
 package body Tobj_Evidence_Provider is
 
    package Provided renames Pyramid.Services.Tactical_Objects.Provided;
    package Consumed renames Pyramid.Services.Tactical_Objects.Consumed;
+   package Codec    renames Pyramid.Services.Tactical_Objects.Json_Codec;
 
    use type Interfaces.C.unsigned;
    use type Pcl_Bindings.Pcl_Executor_Access;
@@ -20,6 +23,7 @@ package body Tobj_Evidence_Provider is
 
    Pi         : constant Long_Float := 3.14159265358979323846;
    Deg_To_Rad : constant Long_Float := Pi / 180.0;
+   pragma Unreferenced (Deg_To_Rad);
 
    procedure Log (Msg : String) is
    begin
@@ -56,27 +60,39 @@ package body Tobj_Evidence_Provider is
       end if;
 
       Evidence_Req_Received := True;
-      Log ("evidence requirement: " &
-           Provided.Msg_To_String (Msg.Data, Msg.Size));
 
-      --  Publish a standard observation.
+      declare
+         Body_Str : constant String :=
+           Provided.Msg_To_String (Msg.Data, Msg.Size);
+         Req      : constant Codec.Evidence_Requirement :=
+           Codec.From_Json (Body_Str);
+         pragma Unreferenced (Req);
+      begin
+         Log ("evidence requirement: " & Body_Str);
+      end;
+
+      --  Publish a typed observation using the canonical Json_Codec.
       --  Position: 51.0N 0.0E in radians; HOSTILE; SEA_SURFACE dimension.
       if Exec_Handle /= null and then not Observation_Sent then
          declare
-            Obs_Json : constant String :=
-              Provided.Build_Standard_Evidence_Json
-                (Identity    => "STANDARD_IDENTITY_HOSTILE",
-                 Dimension   => "BATTLE_DIMENSION_SEA_SURFACE",
-                 Lat_Rad     => 51.0 * Deg_To_Rad,
-                 Lon_Rad     => 0.0 * Deg_To_Rad,
-                 Confidence  => 0.9,
-                 Observed_At => 0.5);
+            Obs : Codec.Object_Evidence;
          begin
-            Log ("Publishing standard observation to " &
-                 Consumed.Topic_Object_Evidence);
-            Consumed.Publish_Object_Evidence (Exec_Handle, Obs_Json);
-            Observation_Sent := True;
-            Log ("Standard observation published");
+            Obs.Identity      := Tactical_Objects_Types.Identity_Hostile;
+            Obs.Dimension     := Tactical_Objects_Types.Sea_Surface;
+            Obs.Latitude_Rad  := 51.0 * (3.14159265358979323846 / 180.0);
+            Obs.Longitude_Rad := 0.0;
+            Obs.Confidence    := 0.9;
+            Obs.Observed_At   := 0.5;
+
+            declare
+               Obs_Json : constant String := Codec.To_Json (Obs);
+            begin
+               Log ("Publishing standard observation to " &
+                    Consumed.Topic_Object_Evidence);
+               Consumed.Publish_Object_Evidence (Exec_Handle, Obs_Json);
+               Observation_Sent := True;
+               Log ("Standard observation published");
+            end;
          end;
       end if;
    end On_Evidence_Requirement;

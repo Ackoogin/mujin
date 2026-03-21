@@ -96,3 +96,8 @@ examples/ada/obj_active_find/*stdout
 examples/ada/obj_active_find/*deps
 examples/ada/obj_active_find/b__*
 
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
