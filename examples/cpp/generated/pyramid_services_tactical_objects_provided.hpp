@@ -108,49 +108,57 @@ public:
 /// \brief Subscribe to entity-match publications on kTopicEntityMatches.
 void subscribeEntityMatches(pcl_container_t*  container,
                             pcl_sub_callback_t callback,
-                            void*             user_data = nullptr);
+                            void*             user_data = nullptr,
+                            const char*       content_type = "application/json");
 
 /// \brief Subscribe to evidence-requirement publications on
 ///        kTopicEvidenceRequirements.
 void subscribeEvidenceRequirements(pcl_container_t*  container,
                                    pcl_sub_callback_t callback,
-                                   void*             user_data = nullptr);
+                                   void*             user_data = nullptr,
+                                   const char*       content_type = "application/json");
 
 /// \brief Asynchronously invoke matching_objects.read_match.
 pcl_status_t invokeReadMatch(pcl_socket_transport_t* transport,
                              const std::string&      request,
                              pcl_resp_cb_fn_t        callback,
-                             void*                   user_data = nullptr);
+                             void*                   user_data = nullptr,
+                             const char*             content_type = "application/json");
 
 /// \brief Asynchronously invoke object_of_interest.create_requirement.
 pcl_status_t invokeCreateRequirement(pcl_socket_transport_t* transport,
                                      const std::string&      request,
                                      pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr);
+                                     void*                   user_data = nullptr,
+                                     const char*             content_type = "application/json");
 
 /// \brief Asynchronously invoke object_of_interest.read_requirement.
 pcl_status_t invokeReadRequirement(pcl_socket_transport_t* transport,
                                    const std::string&      request,
                                    pcl_resp_cb_fn_t        callback,
-                                   void*                   user_data = nullptr);
+                                   void*                   user_data = nullptr,
+                                   const char*             content_type = "application/json");
 
 /// \brief Asynchronously invoke object_of_interest.update_requirement.
 pcl_status_t invokeUpdateRequirement(pcl_socket_transport_t* transport,
                                      const std::string&      request,
                                      pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr);
+                                     void*                   user_data = nullptr,
+                                     const char*             content_type = "application/json");
 
 /// \brief Asynchronously invoke object_of_interest.delete_requirement.
 pcl_status_t invokeDeleteRequirement(pcl_socket_transport_t* transport,
                                      const std::string&      request,
                                      pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr);
+                                     void*                   user_data = nullptr,
+                                     const char*             content_type = "application/json");
 
 /// \brief Asynchronously invoke specific_object_detail.read_detail.
 pcl_status_t invokeReadDetail(pcl_socket_transport_t* transport,
                               const std::string&      request,
                               pcl_resp_cb_fn_t        callback,
-                              void*                   user_data = nullptr);
+                              void*                   user_data = nullptr,
+                              const char*             content_type = "application/json");
 
 // ---------------------------------------------------------------------------
 // Transport dispatch point

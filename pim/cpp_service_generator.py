@@ -63,6 +63,11 @@ _CODEC_NS    = 'pyramid::services::tactical_objects::json_codec'
 _CODEC_PREFIX = 'pyramid_services_tactical_objects_json_codec'
 _TYPES_NS    = 'pyramid::services::tactical_objects'
 
+# Default content type — used when no port-level override is provided.
+# Generated code accepts content_type as a parameter so components can
+# configure per-port codecs at pcl_container_add_* time.
+_DEFAULT_CONTENT_TYPE = 'application/json'
+
 
 # -- Proto parser --------------------------------------------------------------
 
@@ -499,7 +504,8 @@ class CppServiceGenerator:
                     f.write(brief + '\n')
                 f.write(f'void {fname}(pcl_container_t*  container,\n')
                 f.write(f'{sp}pcl_sub_callback_t callback,\n')
-                f.write(f'{sp}void*             user_data = nullptr);\n\n')
+                f.write(f'{sp}void*             user_data = nullptr,\n')
+                f.write(f'{sp}const char*       content_type = "application/json");\n\n')
 
             if is_provided:
                 # Invoke helpers
@@ -515,7 +521,9 @@ class CppServiceGenerator:
                         f.write(f'{sp}const std::string&      request,\n')
                         f.write(f'{sp}pcl_resp_cb_fn_t        callback,\n')
                         f.write(f'{sp}void*                   user_data'
-                                f' = nullptr);\n\n')
+                                f' = nullptr,\n')
+                        f.write(f'{sp}const char*             content_type'
+                                f' = "application/json");\n\n')
             else:
                 # Publish helpers
                 for key, _wire in topic_set.items():
@@ -532,7 +540,9 @@ class CppServiceGenerator:
                             f' by addPublisher for\n')
                     f.write(f'/// {cname}, obtained during on_configure.\n')
                     f.write(f'pcl_status_t {fname}(pcl_port_t*        publisher,\n')
-                    f.write(f'{sp}const std::string& payload);\n\n')
+                    f.write(f'{sp}const std::string& payload,\n')
+                    f.write(f'{sp}const char*        content_type'
+                            f' = "application/json");\n\n')
 
             # ---- dispatch() --------------------------------------------------
             f.write(_SEP + '\n')
@@ -628,12 +638,14 @@ class CppServiceGenerator:
                 f.write('                           pcl_resp_cb_fn_t'
                         '        callback,\n')
                 f.write('                           void*'
-                        '                   user_data)\n')
+                        '                   user_data,\n')
+                f.write('                           const char*'
+                        '             content_type)\n')
                 f.write('{\n')
                 f.write('    pcl_msg_t msg{};\n')
                 f.write('    msg.data      = request.data();\n')
                 f.write('    msg.size      = static_cast<uint32_t>(request.size());\n')
-                f.write('    msg.type_name = "application/json";\n')
+                f.write('    msg.type_name = content_type;\n')
                 f.write('    return pcl_socket_transport_invoke_remote_async(\n')
                 f.write('        transport, service_name, &msg, callback, user_data);\n')
                 f.write('}\n\n')
@@ -655,11 +667,12 @@ class CppServiceGenerator:
                     sp = ' ' * col
                     f.write(f'void {fname}(pcl_container_t*   container,\n')
                     f.write(f'{sp}pcl_sub_callback_t  callback,\n')
-                    f.write(f'{sp}void*              user_data)\n')
+                    f.write(f'{sp}void*              user_data,\n')
+                    f.write(f'{sp}const char*        content_type)\n')
                     f.write('{\n')
                     f.write('    pcl_container_add_subscriber(container,\n')
                     f.write(f'                                 {cname},\n')
-                    f.write('                                 "application/json",\n')
+                    f.write('                                 content_type,\n')
                     f.write('                                 callback,\n')
                     f.write('                                 user_data);\n')
                     f.write('}\n\n')
@@ -677,11 +690,12 @@ class CppServiceGenerator:
                                 f'(pcl_socket_transport_t* transport,\n')
                         f.write(f'{sp}const std::string&      request,\n')
                         f.write(f'{sp}pcl_resp_cb_fn_t        callback,\n')
-                        f.write(f'{sp}void*                   user_data)\n')
+                        f.write(f'{sp}void*                   user_data,\n')
+                        f.write(f'{sp}const char*             content_type)\n')
                         f.write('{\n')
                         f.write(f'    return invoke_async(transport,'
                                 f' {rpc.cpp_svc_const}, request, callback,'
-                                f' user_data);\n')
+                                f' user_data, content_type);\n')
                         f.write('}\n\n')
             else:
                 # Publish wrappers
@@ -697,12 +711,13 @@ class CppServiceGenerator:
                         col = 13 + len(fname) + 1
                         sp = ' ' * col
                         f.write(f'pcl_status_t {fname}(pcl_port_t*        publisher,\n')
-                        f.write(f'{sp}const std::string& payload)\n')
+                        f.write(f'{sp}const std::string& payload,\n')
+                        f.write(f'{sp}const char*        content_type)\n')
                         f.write('{\n')
                         f.write('    pcl_msg_t msg{};\n')
                         f.write('    msg.data      = payload.data();\n')
                         f.write('    msg.size      = static_cast<uint32_t>(payload.size());\n')
-                        f.write('    msg.type_name = "application/json";\n')
+                        f.write('    msg.type_name = content_type;\n')
                         f.write('    return pcl_port_publish(publisher, &msg);\n')
                         f.write('}\n\n')
 

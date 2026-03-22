@@ -17,7 +17,8 @@
 6. [Language and Binary Compatibility](#6-language-and-binary-compatibility)
 7. [Integration Options](#7-integration-options)
 8. [Adding a New Component / Service](#8-adding-a-new-component--service)
-9. [Quick-Reference Command Summary](#9-quick-reference-command-summary)
+9. [Multi-Codec Architecture](#9-multi-codec-architecture)
+10. [Quick-Reference Command Summary](#10-quick-reference-command-summary)
 
 ---
 
@@ -541,7 +542,159 @@ python cpp_service_generator.py services/provided.proto ../examples/cpp/generate
 
 ---
 
-## 9. Quick-Reference Command Summary
+## 9. Multi-Codec Architecture
+
+The binding system supports multiple wire codecs beyond JSON.  Codec
+selection is **per-port** — each publisher, subscriber, or service endpoint
+chooses its codec at configuration time via the `content_type` string passed
+to `pcl_container_add_publisher` / `pcl_container_add_subscriber`.
+
+### Supported codecs
+
+| Content type | Backend | Notes |
+|---|---|---|
+| `application/json` | nlohmann/json (C++), GNATCOLL.JSON (Ada) | Default, always available |
+| `application/flatbuffers` | FlatBuffers via flatc | Requires `CODEC_FLATBUFFERS` compile flag |
+| `application/protobuf` | protoc-generated | Requires `CODEC_PROTOBUF` compile flag |
+| gRPC | Full transport replacement | Separate backend, not dispatched via PCL |
+
+### How it works
+
+```
+component logic
+       │
+       ▼
+codec_dispatch::serialize(typed_struct, content_type)
+       │
+       ├── "application/json"        → json_codec::toJson()
+       ├── "application/flatbuffers"  → flatbuffers_codec::toBinary()
+       └── "application/protobuf"    → protobuf_codec::toBinary()
+       │
+       ▼
+   pcl_msg_t { .data, .size, .type_name = content_type }
+       │
+       ▼
+   PCL transport (in-process / socket / shared-memory)
+       │
+       ▼
+subscriber callback receives pcl_msg_t with type_name preserved
+       │
+       ▼
+codec_dispatch::deserialize*(data, size, content_type)
+       │
+       ▼
+   typed struct returned to component business logic
+```
+
+### Proto as single source of truth
+
+All codec backends are generated from `.proto` files by
+`pim/generate_bindings.py`.  No codec generator has hardcoded knowledge of
+specific data models — everything is derived from the proto IDL:
+
+```bash
+# Generate all backends for all languages
+cd pim && python generate_bindings.py ../proto/pyramid/ output/
+
+# Generate specific backends only
+python generate_bindings.py ../proto/pyramid/ output/ --backends json,flatbuffers
+
+# Generate for specific languages only
+python generate_bindings.py ../proto/pyramid/ output/ --languages cpp
+```
+
+### Generation pipeline
+
+```
+proto/*.proto
+      │
+      ▼
+  proto_parser.py          — parses proto IDL, builds ProtoTypeIndex
+      │
+      ├── backends/json_backend.py         → json_codec.{hpp,cpp,ads,adb}
+      ├── backends/flatbuffers_backend.py  → .fbs + flatbuffers_codec.{hpp,ads}
+      ├── backends/protobuf_backend.py     → protobuf_codec.{hpp,ads}
+      ├── backends/grpc_backend.py         → grpc transport .{hpp,ads}
+      │
+      └── backends/codec_dispatch_generator.py
+              → codec_dispatch.{hpp,cpp,ads,adb}
+```
+
+### Port-level codec configuration
+
+The generated service binding wrappers (`subscribe*`, `publish*`, `invoke*`)
+accept an optional `content_type` parameter that defaults to
+`"application/json"`:
+
+```cpp
+// Default — backwards compatible, uses JSON
+prov::subscribeEntityMatches(container, callback, user_data);
+
+// Explicit — use FlatBuffers for this port
+prov::subscribeEntityMatches(container, callback, user_data,
+                              "application/flatbuffers");
+```
+
+```cpp
+// Publish with explicit codec
+cons::publishObjectEvidence(port, payload, "application/protobuf");
+```
+
+The content_type string flows through `pcl_msg_t.type_name` and is
+preserved end-to-end: publisher → PCL transport → subscriber callback.
+Components can read `msg->type_name` to determine which codec was used.
+
+### Wire protocol
+
+No changes to the PCL wire protocol are required.  `pcl_msg_t.type_name`
+already existed and was previously hardcoded to `"application/json"`.  The
+only change is that it is now configurable per-port.
+
+PUBLISH frames carry `type_name` on the wire.  SERVICE frames do not — but
+since codec selection is per-port (not per-message), both sides of a
+service call agree on the codec at configuration time.
+
+### Codec dispatch layer
+
+The generated `codec_dispatch.hpp` provides `serialize()` and
+`deserialize*()` functions that route on content_type:
+
+```cpp
+#include "pyramid_data_model_tactical_codec_dispatch.hpp"
+
+namespace cd = pyramid::data_model::tactical::codec_dispatch;
+
+// Serialize — routes to JSON, FlatBuffers, or Protobuf
+std::string payload = cd::serialize(my_object_detail, content_type);
+
+// Deserialize — routes to the correct codec
+auto detail = cd::deserializeObjectDetail(msg->data, msg->size, content_type);
+
+// Build pcl_msg_t from serialized payload
+pcl_msg_t pcl_msg = cd::makeMsg(payload, content_type);
+```
+
+Binary codecs (FlatBuffers, Protobuf) are guarded by compile-time feature
+flags (`CODEC_FLATBUFFERS`, `CODEC_PROTOBUF`).  If the flag is not defined,
+attempting to use that codec throws `std::runtime_error`.
+
+### E2E tests
+
+`tests/test_codec_dispatch_e2e.cpp` validates multi-codec communication:
+
+| Test | What it verifies |
+|------|------------------|
+| `JsonPubSubRoundTrip` | Publisher/subscriber with JSON codec, field-level round-trip |
+| `ContentTypePropagation` | Non-JSON content type survives through pcl_msg_t |
+| `PerPortCodecSelection` | Two publishers with different codecs, subscribers receive correct type |
+| `DefaultCodecIsJson` | Generated subscribe wrappers default to "application/json" |
+| `ExplicitCodecProtobuf` | Explicit "application/protobuf" content type |
+| `JsonCodecSerDeRoundTrip` | JSON serialisation/deserialisation of all field types |
+| `JsonCodecEnumRoundTrip` | All StandardIdentity enum values survive toString/fromString |
+
+---
+
+## 10. Quick-Reference Command Summary
 
 ```bash
 # Regenerate Ada codec only
@@ -582,7 +735,16 @@ python cpp_service_generator.py --codec ../examples/cpp/generated
 pim/
 ├── json_schema.py               canonical wire format & enum specs
 ├── ada_service_generator.py     Ada generator
-└── cpp_service_generator.py     C++ generator
+├── cpp_service_generator.py     C++ generator
+├── proto_parser.py              proto IDL parser (single source of truth)
+├── codec_backends.py            abstract CodecBackend + registry
+├── generate_bindings.py         unified multi-codec generator CLI
+└── backends/
+    ├── json_backend.py          JSON codec backend
+    ├── flatbuffers_backend.py   FlatBuffers codec backend
+    ├── protobuf_backend.py      Protobuf codec backend
+    ├── grpc_backend.py          gRPC transport backend
+    └── codec_dispatch_generator.py  codec dispatch layer generator
 
 proto/pyramid/
 ├── data_model/common.proto      enum definitions (StandardIdentity etc.)
@@ -611,4 +773,7 @@ examples/
         ├── pyramid_services_tactical_objects_provided.{hpp,cpp}
         ├── pyramid_services_tactical_objects_consumed.{hpp,cpp}
         └── pyramid_services_tactical_objects_json_codec.{hpp,cpp}
+
+tests/
+└── test_codec_dispatch_e2e.cpp  multi-codec E2E tests
 ```
