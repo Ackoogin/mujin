@@ -107,14 +107,16 @@ public:
 /// \brief Subscribe to object-evidence publications on kTopicObjectEvidence.
 void subscribeObjectEvidence(pcl_container_t*  container,
                              pcl_sub_callback_t callback,
-                             void*             user_data = nullptr);
+                             void*             user_data = nullptr,
+                             const char*       content_type = "application/json");
 
 /// \brief Publish an object-evidence payload on kTopicObjectEvidence.
 ///
 /// \p publisher must be the pcl_port_t* returned by addPublisher for
 /// kTopicObjectEvidence, obtained during on_configure.
 pcl_status_t publishObjectEvidence(pcl_port_t*        publisher,
-                                   const std::string& payload);
+                                   const std::string& payload,
+                                   const char*        content_type = "application/json");
 
 // ---------------------------------------------------------------------------
 // Transport dispatch point

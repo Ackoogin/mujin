@@ -59,11 +59,12 @@ ServiceHandler::handleReadCapability(const Query& /*request*/) {
 
 void subscribeObjectEvidence(pcl_container_t*   container,
                              pcl_sub_callback_t  callback,
-                             void*              user_data)
+                             void*              user_data,
+                             const char*        content_type)
 {
     pcl_container_add_subscriber(container,
                                  kTopicObjectEvidence,
-                                 "application/json",
+                                 content_type,
                                  callback,
                                  user_data);
 }
@@ -73,12 +74,13 @@ void subscribeObjectEvidence(pcl_container_t*   container,
 // ---------------------------------------------------------------------------
 
 pcl_status_t publishObjectEvidence(pcl_port_t*        publisher,
-                                   const std::string& payload)
+                                   const std::string& payload,
+                                   const char*        content_type)
 {
     pcl_msg_t msg{};
     msg.data      = payload.data();
     msg.size      = static_cast<uint32_t>(payload.size());
-    msg.type_name = "application/json";
+    msg.type_name = content_type;
     return pcl_port_publish(publisher, &msg);
 }
 

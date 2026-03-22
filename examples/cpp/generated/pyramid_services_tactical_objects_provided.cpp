@@ -66,12 +66,13 @@ pcl_status_t invoke_async(pcl_socket_transport_t* transport,
                            const char*             service_name,
                            const std::string&      request,
                            pcl_resp_cb_fn_t        callback,
-                           void*                   user_data)
+                           void*                   user_data,
+                           const char*             content_type)
 {
     pcl_msg_t msg{};
     msg.data      = request.data();
     msg.size      = static_cast<uint32_t>(request.size());
-    msg.type_name = "application/json";
+    msg.type_name = content_type;
     return pcl_socket_transport_invoke_remote_async(
         transport, service_name, &msg, callback, user_data);
 }
@@ -84,22 +85,24 @@ pcl_status_t invoke_async(pcl_socket_transport_t* transport,
 
 void subscribeEntityMatches(pcl_container_t*   container,
                             pcl_sub_callback_t  callback,
-                            void*              user_data)
+                            void*              user_data,
+                            const char*        content_type)
 {
     pcl_container_add_subscriber(container,
                                  kTopicEntityMatches,
-                                 "application/json",
+                                 content_type,
                                  callback,
                                  user_data);
 }
 
 void subscribeEvidenceRequirements(pcl_container_t*   container,
                                    pcl_sub_callback_t  callback,
-                                   void*              user_data)
+                                   void*              user_data,
+                                   const char*        content_type)
 {
     pcl_container_add_subscriber(container,
                                  kTopicEvidenceRequirements,
-                                 "application/json",
+                                 content_type,
                                  callback,
                                  user_data);
 }
@@ -111,49 +114,55 @@ void subscribeEvidenceRequirements(pcl_container_t*   container,
 pcl_status_t invokeReadMatch(pcl_socket_transport_t* transport,
                              const std::string&      request,
                              pcl_resp_cb_fn_t        callback,
-                             void*                   user_data)
+                             void*                   user_data,
+                             const char*             content_type)
 {
-    return invoke_async(transport, kSvcReadMatch, request, callback, user_data);
+    return invoke_async(transport, kSvcReadMatch, request, callback, user_data, content_type);
 }
 
 pcl_status_t invokeCreateRequirement(pcl_socket_transport_t* transport,
                                      const std::string&      request,
                                      pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data)
+                                     void*                   user_data,
+                                     const char*             content_type)
 {
-    return invoke_async(transport, kSvcCreateRequirement, request, callback, user_data);
+    return invoke_async(transport, kSvcCreateRequirement, request, callback, user_data, content_type);
 }
 
 pcl_status_t invokeReadRequirement(pcl_socket_transport_t* transport,
                                    const std::string&      request,
                                    pcl_resp_cb_fn_t        callback,
-                                   void*                   user_data)
+                                   void*                   user_data,
+                                   const char*             content_type)
 {
-    return invoke_async(transport, kSvcReadRequirement, request, callback, user_data);
+    return invoke_async(transport, kSvcReadRequirement, request, callback, user_data, content_type);
 }
 
 pcl_status_t invokeUpdateRequirement(pcl_socket_transport_t* transport,
                                      const std::string&      request,
                                      pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data)
+                                     void*                   user_data,
+                                     const char*             content_type)
 {
-    return invoke_async(transport, kSvcUpdateRequirement, request, callback, user_data);
+    return invoke_async(transport, kSvcUpdateRequirement, request, callback, user_data, content_type);
 }
 
 pcl_status_t invokeDeleteRequirement(pcl_socket_transport_t* transport,
                                      const std::string&      request,
                                      pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data)
+                                     void*                   user_data,
+                                     const char*             content_type)
 {
-    return invoke_async(transport, kSvcDeleteRequirement, request, callback, user_data);
+    return invoke_async(transport, kSvcDeleteRequirement, request, callback, user_data, content_type);
 }
 
 pcl_status_t invokeReadDetail(pcl_socket_transport_t* transport,
                               const std::string&      request,
                               pcl_resp_cb_fn_t        callback,
-                              void*                   user_data)
+                              void*                   user_data,
+                              const char*             content_type)
 {
-    return invoke_async(transport, kSvcReadDetail, request, callback, user_data);
+    return invoke_async(transport, kSvcReadDetail, request, callback, user_data, content_type);
 }
 
 // ---------------------------------------------------------------------------
