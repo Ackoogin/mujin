@@ -31,6 +31,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from proto_parser import parse_proto_tree, ProtoTypeIndex
 import codec_backends
+from backends.codec_dispatch_generator import (
+    generate_cpp_dispatch, generate_ada_dispatch,
+)
 
 # Importing the backends package auto-registers all backends
 import backends  # noqa: F401
@@ -97,16 +100,16 @@ def main():
     # Determine backends and languages
     backend_names = (args.backends.split(',') if args.backends
                      else list(codec_backends.all_backends().keys()))
-    languages = args.languages.split(',') if args.languages else ['cpp', 'ada']
+    langs = set(args.languages.split(',') if args.languages else ['cpp', 'ada'])
 
     # Generate
     print(f'\nGenerating backends: {", ".join(backend_names)}')
-    print(f'Languages: {", ".join(languages)}')
+    print(f'Languages: {", ".join(sorted(langs))}')
     print()
 
     results = codec_backends.generate_all(
         index, output_dir,
-        languages=languages,
+        languages=list(langs),
         backends=backend_names,
     )
 
@@ -116,6 +119,19 @@ def main():
         for fp in files:
             print(f'    {fp}')
         total += len(files)
+
+    # Generate codec dispatch layer (always, routes between backends)
+    print('\nGenerating codec dispatch layer...')
+    dispatch_dir = output_dir / 'dispatch'
+    dispatch_files = []
+    if 'cpp' in langs:
+        dispatch_files.extend(generate_cpp_dispatch(index, dispatch_dir / 'cpp'))
+    if 'ada' in langs:
+        dispatch_files.extend(generate_ada_dispatch(index, dispatch_dir / 'ada'))
+    print(f'  dispatch: {len(dispatch_files)} files generated')
+    for fp in dispatch_files:
+        print(f'    {fp}')
+    total += len(dispatch_files)
 
     print(f'\nDone — {total} files generated in {output_dir}/')
 
