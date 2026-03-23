@@ -15,7 +15,7 @@ A Dispatch procedure is generated as the single integration point for any
 transport (PCL, socket, shared memory, etc.) -- it routes an incoming
 operation+channel to the correct typed handler.
 
-Generated packages reference Tactical_Objects_Types for Ada type definitions.
+Generated packages reference the types package derived from the proto file.
 
 Service wire-name constants and PCL binding procedures
 (Subscribe_*, Invoke_*, Publish_*) are generated for standard pyramid protocol
@@ -31,7 +31,7 @@ Usage:
     python ada_service_generator.py <proto_dir/>  <output_dir>
 
     # Also generate the JSON codec package:
-    python ada_service_generator.py --codec <output_dir>
+    python ada_service_generator.py --codec <file.proto> <output_dir>
 """
 
 import sys
@@ -237,6 +237,36 @@ def _is_provided(proto_file: ProtoFile) -> bool:
     return 'provided' in proto_file.package.lower()
 
 
+def _types_pkg_from_proto(proto_file: ProtoFile) -> str:
+    """Derive Ada types package name from proto package.
+
+    pyramid.components.tactical_objects.services.provided -> Tactical_Objects_Types
+    """
+    parts = proto_file.package.split('.')
+    skip = {'pyramid', 'components', 'data_model', 'base', 'services', 'provided', 'consumed'}
+    meaningful = [p for p in parts if p.lower() not in skip]
+    ada_parts = ['_'.join(w.capitalize() for w in p.split('_')) for p in meaningful]
+    return '_'.join(ada_parts) + '_Types'
+
+
+def _codec_pkg_from_proto(proto_file: ProtoFile) -> str:
+    """Derive Ada JSON codec package name from proto package.
+
+    pyramid.components.tactical_objects.services.provided
+      -> Pyramid.Services.Tactical_Objects.Json_Codec
+    """
+    parts = proto_file.package.split('.')
+    if parts and parts[-1].lower() in ('provided', 'consumed'):
+        parts = parts[:-1]
+    skip = {'pyramid', 'components', 'data_model', 'base', 'services'}
+    meaningful = [p for p in parts if p.lower() not in skip]
+    ada_parts = ['Pyramid', 'Services']
+    for p in meaningful:
+        ada_parts.append('_'.join(w.capitalize() for w in p.split('_')))
+    ada_parts.append('Json_Codec')
+    return '.'.join(ada_parts)
+
+
 # -- Code generation -----------------------------------------------------------
 
 class AdaServiceGenerator:
@@ -304,10 +334,12 @@ class AdaServiceGenerator:
             f.write(f'--    3. PCL binding procedures (Subscribe_*, Invoke_*, Publish_*)\n')
             f.write(f'--    4. Msg_To_String utility for PCL message payloads\n')
             f.write(f'--\n')
+            codec_pkg = _codec_pkg_from_proto(parsed)
+            types_pkg = _types_pkg_from_proto(parsed)
             f.write(f'--  JSON serialisation/deserialisation is provided by the companion\n')
-            f.write(f'--  Pyramid.Services.Tactical_Objects.Json_Codec package.\n')
+            f.write(f'--  {codec_pkg} package.\n')
             f.write(f'\n')
-            f.write(f'with Tactical_Objects_Types;  use Tactical_Objects_Types;\n')
+            f.write(f'with {types_pkg};  use {types_pkg};\n')
             f.write(f'with Pcl_Bindings;\n')
             f.write(f'with Interfaces.C;\n')
             f.write(f'with System;\n')
@@ -636,8 +668,6 @@ class AdaServiceGenerator:
 
 # -- JSON Codec Generator -----------------------------------------------------
 
-_CODEC_PKG = 'Pyramid.Services.Tactical_Objects.Json_Codec'
-
 
 def _ada_tag(key: str) -> str:
     """entity_matches -> Entity_Matches."""
@@ -647,16 +677,18 @@ def _ada_tag(key: str) -> str:
 class JsonCodecGenerator:
     """Generates the canonical JSON ser/de package from json_schema.py.
 
-    Output package: Pyramid.Services.Tactical_Objects.Json_Codec
+    Output package name is derived from the supplied .proto file.
     This package provides typed To_Json / From_Json for every message defined
     in json_schema.ALL_SCHEMAS, plus enum-to-string converters.
 
     Usage:
-        gen = JsonCodecGenerator()
+        gen = JsonCodecGenerator(proto_file)
         gen.generate('/path/to/output_dir')
     """
 
-    PKG = _CODEC_PKG
+    def __init__(self, proto_file: ProtoFile):
+        self.PKG = _codec_pkg_from_proto(proto_file)
+        self._types_pkg = _types_pkg_from_proto(proto_file)
 
     def generate(self, output_dir: str):
         out = Path(output_dir)
@@ -687,7 +719,7 @@ class JsonCodecGenerator:
             f.write('--  Architecture: component logic > Json_Codec > service binding > PCL\n')
             f.write('\n')
             f.write('with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')
-            f.write('with Tactical_Objects_Types;  use Tactical_Objects_Types;\n')
+            f.write(f'with {self._types_pkg};  use {self._types_pkg};\n')
             f.write('\n')
             f.write(f'package {self.PKG} is\n')
             f.write('\n')
@@ -945,15 +977,16 @@ class JsonCodecGenerator:
 def main():
     if len(sys.argv) < 2:
         print('Usage: python ada_service_generator.py <file.proto|proto_dir> <output_dir>')
-        print('       python ada_service_generator.py --codec <output_dir>')
+        print('       python ada_service_generator.py --codec <file.proto> <output_dir>')
         sys.exit(1)
 
     if sys.argv[1] == '--codec':
-        if len(sys.argv) < 3:
-            print('Usage: python ada_service_generator.py --codec <output_dir>')
+        if len(sys.argv) < 4:
+            print('Usage: python ada_service_generator.py --codec <file.proto> <output_dir>')
             sys.exit(1)
-        gen = JsonCodecGenerator()
-        gen.generate(sys.argv[2])
+        parsed = parse_proto(Path(sys.argv[2]))
+        gen = JsonCodecGenerator(parsed)
+        gen.generate(sys.argv[3])
         print('\n\u2713 JSON codec generated')
         return
 
