@@ -41,6 +41,10 @@ from typing import Dict, List, Optional, Tuple
 
 # Import canonical schema — also used by JsonCodecGenerator below
 import json_schema as schema
+from proto_parser import (
+    parse_proto_tree, ProtoTypeIndex, ProtoMessage, ProtoEnum,
+    screaming_to_pascal, camel_to_snake, _PROTO_SCALARS,
+)
 
 
 # -- EntityActions operation set -----------------------------------------------
@@ -972,13 +976,304 @@ class JsonCodecGenerator:
             f.write(f'end {self.PKG};\n')
 
 
+# ---------------------------------------------------------------------------
+# Ada types package generator
+# ---------------------------------------------------------------------------
+
+_ADA_SCALAR_MAP: Dict[str, str] = {
+    'double': 'Long_Float', 'float': 'Float',
+    'int32': 'Integer', 'int64': 'Long_Integer',
+    'uint32': 'Natural', 'uint64': 'Long_Integer',
+    'sint32': 'Integer', 'sint64': 'Long_Integer',
+    'fixed32': 'Natural', 'fixed64': 'Long_Integer',
+    'sfixed32': 'Integer', 'sfixed64': 'Long_Integer',
+    'bool': 'Boolean', 'string': 'Unbounded_String', 'bytes': 'Unbounded_String',
+}
+
+_ADA_DEFAULTS: Dict[str, str] = {
+    'Long_Float': '0.0', 'Float': '0.0',
+    'Integer': '0', 'Long_Integer': '0', 'Natural': '0',
+    'Boolean': 'False', 'Unbounded_String': 'Null_Unbounded_String',
+}
+
+_ADA_UNIT_FIELD_NAMES = frozenset({
+    'value', 'radians', 'meters', 'meters_per_second', 'seconds',
+})
+
+
+def _ada_name(cpp_or_proto_name: str) -> str:
+    """Convert CamelCase or snake_case proto name to Ada Title_Case."""
+    s = camel_to_snake(cpp_or_proto_name)   # CamelCase → Camel_Case
+    return '_'.join(w.capitalize() for w in s.split('_'))
+
+
+class AdaTypesGenerator:
+    """Generates ``{Prefix}_Types.ads`` from data model proto files.
+
+    Scalar wrapper messages are emitted as subtypes; all other messages become
+    record types.  Enums are emitted with a ``{Last_Word}_`` prefix on each
+    literal.
+
+    Usage::
+        gen = AdaTypesGenerator(data_model_dir, service_proto)
+        gen.generate(output_dir)
+    """
+
+    def __init__(self, data_model_dir: Path, service_proto: Path):
+        proto_files = parse_proto_tree(data_model_dir)
+        self._index = ProtoTypeIndex(proto_files)
+        self._data_model_dir = data_model_dir
+
+        # Derive Ada package name from service proto
+        self._ada_pkg = _types_pkg_from_proto(parse_proto(service_proto))
+        file_base = self._ada_pkg.lower().replace('.', '-')
+        self._file_base = file_base
+        self._aliases = self._find_scalar_wrappers()
+
+    # -- public ----------------------------------------------------------------
+
+    def generate(self, output_dir: str) -> None:
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        ads = out / (self._file_base + '.ads')
+        self._write_ads(ads)
+        print(f'  Generated {self._ada_pkg}')
+
+    # -- internal --------------------------------------------------------------
+
+    def _find_scalar_wrappers(self) -> Dict[str, str]:
+        aliases: Dict[str, str] = {'Timestamp': 'Long_Float'}
+        for msg in self._index.all_messages():
+            fields = msg.all_fields()
+            if len(fields) == 1 and not fields[0].is_repeated:
+                ft = fields[0].type
+                fn = fields[0].name
+                if ft in _ADA_SCALAR_MAP and fn in _ADA_UNIT_FIELD_NAMES:
+                    aliases[msg.name] = _ADA_SCALAR_MAP[ft]
+        return aliases
+
+    def _ada_base_type(self, field_type: str) -> str:
+        """Resolve a proto type to its Ada element type name."""
+        short = field_type.split('.')[-1]
+        if field_type in _ADA_SCALAR_MAP:
+            return _ADA_SCALAR_MAP[field_type]
+        if short in self._aliases:
+            return self._aliases[short]
+        if self._index.is_enum_type(field_type) or self._index.is_enum_type(short):
+            return _ada_name(short)
+        if self._index.is_message_type(field_type) or self._index.is_message_type(short):
+            if short in self._aliases:
+                return self._aliases[short]
+            return _ada_name(short)
+        return _ada_name(short)
+
+    def _ada_field_type(self, field_type: str, repeated: bool,
+                        field_name: str) -> Tuple[str, Optional[str]]:
+        """Return (ada_type_string, array_type_name_or_None)."""
+        base = self._ada_base_type(field_type)
+        if repeated:
+            arr = _ada_name(field_name) + '_Array'
+            return (arr, arr)
+        return (base, None)
+
+    def _ada_default(self, ada_type: str, field_type: str) -> Optional[str]:
+        """Return Ada default expression, or None if the type has component defaults."""
+        short = field_type.split('.')[-1]
+        if ada_type in _ADA_DEFAULTS:
+            return _ADA_DEFAULTS[ada_type]
+        if self._index.is_enum_type(field_type) or self._index.is_enum_type(short):
+            enum = (self._index.resolve_enum(field_type)
+                    or self._index.resolve_enum(short))
+            if enum and enum.values:
+                suf = enum.suffix_of(enum.values[0].name)
+                val = screaming_to_pascal(suf) if suf else enum.values[0].name
+                ada_enum = _ada_name(short)
+                prefix = ada_enum.split('_')[-1] + '_'
+                return prefix + val
+        # Record types rely on their own component defaults — no initialiser needed
+        return None
+
+    def _toposort(self, messages: List[ProtoMessage]) -> List[ProtoMessage]:
+        names = {m.name for m in messages}
+        by_name = {m.name: m for m in messages}
+        deps: Dict[str, set] = {}
+        for m in messages:
+            d = set()
+            for f in m.all_fields():
+                short = f.type.split('.')[-1]
+                if short in names and short != m.name and short not in self._aliases:
+                    d.add(short)
+            deps[m.name] = d
+        order: List[str] = []
+        visited: set = set()
+
+        def visit(name: str) -> None:
+            if name in visited:
+                return
+            visited.add(name)
+            for dep in deps.get(name, set()):
+                visit(dep)
+            order.append(name)
+
+        for m in messages:
+            visit(m.name)
+        return [by_name[n] for n in order]
+
+    def _inline_base_fields(self, msg: ProtoMessage):
+        own_names = {f.name for f in msg.fields if f.name != 'base'}
+        for field in msg.fields:
+            if field.name == 'base' and not field.is_repeated:
+                short = field.type.split('.')[-1]
+                base_msg = (self._index.resolve_message(field.type)
+                            or self._index.resolve_message(short))
+                if base_msg and base_msg.name not in self._aliases:
+                    for bf in base_msg.fields:
+                        name = bf.name
+                        if name in own_names:
+                            name = short.lower() + '_' + name
+                        yield bf, name
+                    continue
+            yield field, field.name
+
+    def _write_enum(self, f, enum: ProtoEnum) -> None:
+        ada_name = _ada_name(enum.name)
+        prefix = ada_name.split('_')[-1] + '_'
+        f.write(f'   type {ada_name} is\n     (')
+        vals = []
+        for v in enum.values:
+            suf = enum.suffix_of(v.name)
+            lit = screaming_to_pascal(suf) if suf else v.name
+            vals.append(prefix + lit)
+        f.write((',\n      ').join(vals))
+        f.write(');\n\n')
+
+    def _arrays_for_msg(self, msg: ProtoMessage) -> List[Tuple[str, str]]:
+        """Return [(array_type_name, element_ada_type)] needed by this message."""
+        seen: set = set()
+        result = []
+        for field, fname in self._inline_base_fields(msg):
+            if field.is_repeated:
+                arr = _ada_name(fname) + '_Array'
+                if arr not in seen:
+                    seen.add(arr)
+                    result.append((arr, self._ada_base_type(field.type)))
+        for oo in msg.oneofs:
+            for fld in oo.fields:
+                if fld.is_repeated:
+                    arr = _ada_name(fld.name) + '_Array'
+                    if arr not in seen:
+                        seen.add(arr)
+                        result.append((arr, self._ada_base_type(fld.type)))
+        return result
+
+    def _write_record(self, f, msg: ProtoMessage) -> None:
+        ada_name = _ada_name(msg.name)
+        f.write(f'   type {ada_name} is record\n')
+        for field, fname in self._inline_base_fields(msg):
+            ada_fname = _ada_name(fname)
+            ada_type, arr = self._ada_field_type(field.type, field.is_repeated, fname)
+            if arr:
+                # Array fields: no initializer (empty by default from type definition)
+                f.write(f'      {ada_fname} : {ada_type};\n')
+            elif field.is_optional and _ADA_SCALAR_MAP.get(field.type, '') not in (
+                    'Unbounded_String', ''):
+                f.write(f'      Has_{ada_fname} : Boolean := False;\n')
+                dflt = self._ada_default(ada_type, field.type)
+                init = f' := {dflt}' if dflt else ''
+                f.write(f'      {ada_fname} : {ada_type}{init};\n')
+            else:
+                dflt = self._ada_default(ada_type, field.type)
+                init = f' := {dflt}' if dflt else ''
+                f.write(f'      {ada_fname} : {ada_type}{init};\n')
+        for oo in msg.oneofs:
+            f.write(f'      --  oneof {oo.name}\n')
+            for fld in oo.fields:
+                ada_fname = _ada_name(fld.name)
+                ada_type, _ = self._ada_field_type(fld.type, False, fld.name)
+                f.write(f'      Has_{ada_fname} : Boolean := False;\n')
+                dflt = self._ada_default(ada_type, fld.type)
+                init = f' := {dflt}' if dflt else ''
+                f.write(f'      {ada_fname} : {ada_type}{init};\n')
+        f.write(f'   end record;\n\n')
+
+    def _write_ads(self, path: Path) -> None:
+        alias_names = set(self._aliases.keys())
+        non_alias = [m for m in self._index.all_messages()
+                     if m.name not in alias_names]
+        sorted_msgs = self._toposort(non_alias)
+
+        with open(path, 'w') as f:
+            f.write('--  Auto-generated types specification\n')
+            f.write(f'--  Generated from: {self._data_model_dir}'
+                    f' by ada_service_generator.py --types\n')
+            f.write(f'--  Package: {self._ada_pkg}\n\n')
+            f.write('with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n\n')
+            f.write(f'package {self._ada_pkg} is\n\n')
+
+            # Subtypes for scalar wrappers
+            for msg in self._index.all_messages():
+                if msg.name in self._aliases:
+                    ada_n = _ada_name(msg.name)
+                    f.write(f'   subtype {ada_n} is {self._aliases[msg.name]};\n')
+            f.write('\n')
+
+            # Enums (always declared before records)
+            for enum in self._index.all_enums():
+                self._write_enum(f, enum)
+
+            # Array types for scalar/enum elements (no forward-ref risk)
+            emitted_arrays: set = set()
+            enum_names = {_ada_name(e.name) for e in self._index.all_enums()}
+            scalar_types = set(_ADA_SCALAR_MAP.values())
+            for msg in sorted_msgs:
+                for arr_name, elem_type in self._arrays_for_msg(msg):
+                    if arr_name not in emitted_arrays and (
+                            elem_type in scalar_types
+                            or elem_type in enum_names
+                            or elem_type == 'Unbounded_String'):
+                        f.write(f'   type {arr_name} is'
+                                f' array (Positive range <>) of {elem_type};\n')
+                        emitted_arrays.add(arr_name)
+            if emitted_arrays:
+                f.write('\n')
+
+            # Records interleaved with their array type dependencies
+            for msg in sorted_msgs:
+                # Emit array types that depend on this record (now it's declared)
+                ada_msg_name = _ada_name(msg.name)
+                # First write the record itself
+                self._write_record(f, msg)
+                # Then emit any arrays whose element is this record type
+                for later_msg in sorted_msgs:
+                    for arr_name, elem_type in self._arrays_for_msg(later_msg):
+                        if arr_name not in emitted_arrays and elem_type == ada_msg_name:
+                            f.write(f'   type {arr_name} is'
+                                    f' array (Positive range <>) of {elem_type};\n')
+                            emitted_arrays.add(arr_name)
+                            f.write('\n')
+
+            f.write(f'end {self._ada_pkg};\n')
+
+
 # -- main() -------------------------------------------------------------------
 
 def main():
     if len(sys.argv) < 2:
         print('Usage: python ada_service_generator.py <file.proto|proto_dir> <output_dir>')
         print('       python ada_service_generator.py --codec <file.proto> <output_dir>')
+        print('       python ada_service_generator.py --types <data_model_dir>'
+              ' <service_proto> <output_dir>')
         sys.exit(1)
+
+    if sys.argv[1] == '--types':
+        if len(sys.argv) < 5:
+            print('Usage: python ada_service_generator.py --types'
+                  ' <data_model_dir> <service_proto> <output_dir>')
+            sys.exit(1)
+        gen = AdaTypesGenerator(Path(sys.argv[2]), Path(sys.argv[3]))
+        gen.generate(sys.argv[4])
+        print('\n\u2713 Ada types generated')
+        return
 
     if sys.argv[1] == '--codec':
         if len(sys.argv) < 4:

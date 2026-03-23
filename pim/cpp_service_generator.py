@@ -34,9 +34,13 @@ Usage:
 import sys
 import re
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import json_schema as schema
+from proto_parser import (
+    parse_proto_tree, ProtoTypeIndex, ProtoMessage, ProtoEnum,
+    screaming_to_pascal, _PROTO_SCALARS,
+)
 
 
 # -- EntityActions operation set -----------------------------------------------
@@ -993,12 +997,292 @@ def _lc_first(s: str) -> str:
     return s[0].lower() + s[1:]
 
 
+# ---------------------------------------------------------------------------
+# Types header generator
+# ---------------------------------------------------------------------------
+
+_CPP_SCALAR_MAP: Dict[str, str] = {
+    'double': 'double', 'float': 'float',
+    'int32': 'int32_t', 'int64': 'int64_t',
+    'uint32': 'uint32_t', 'uint64': 'uint64_t',
+    'sint32': 'int32_t', 'sint64': 'int64_t',
+    'fixed32': 'uint32_t', 'fixed64': 'uint64_t',
+    'sfixed32': 'int32_t', 'sfixed64': 'int64_t',
+    'bool': 'bool', 'string': 'std::string', 'bytes': 'std::string',
+}
+
+_CPP_DEFAULTS: Dict[str, str] = {
+    'double': '0.0', 'float': '0.0f',
+    'int32_t': '0', 'int64_t': '0', 'uint32_t': '0', 'uint64_t': '0',
+    'bool': 'false', 'std::string': '{}',
+}
+
+# Messages whose single scalar field makes them transparent wrappers.
+# Identifier is special-cased to std::string; Timestamp to double (epoch s).
+_FORCED_ALIASES: Dict[str, str] = {
+    'Timestamp': 'double',  # google.protobuf.Timestamp wrapper → epoch seconds
+}
+
+# Single-field message is a scalar wrapper only when the field name signals
+# a physical unit or a generic "value" placeholder — NOT domain names like
+# "success" (Ack) which carry independent meaning as a struct.
+_UNIT_FIELD_NAMES = frozenset({
+    'value', 'radians', 'meters', 'meters_per_second', 'seconds',
+    'kilograms', 'kelvin', 'pascals', 'hertz',
+})
+
+# After emitting a struct, optionally emit named constants { name: initialiser }.
+_STRUCT_CONSTANTS: Dict[str, List[Tuple[str, str]]] = {
+    'Ack': [
+        ('kAckOk',   'Ack{ true  }'),
+        ('kAckFail', 'Ack{ false }'),
+    ],
+}
+
+
+class CppTypesGenerator:
+    """Generates ``{prefix}_types.hpp`` from data model proto files.
+
+    Scalar wrapper messages (single-field message whose sole field is a proto
+    scalar) are emitted as ``using`` aliases; all other messages become
+    ``struct``s.  Enums are always emitted as ``enum class``.
+
+    Usage::
+        gen = CppTypesGenerator(data_model_dir, service_proto)
+        gen.generate(output_dir)
+    """
+
+    def __init__(self, data_model_dir: Path, service_proto: Path):
+        proto_files = parse_proto_tree(data_model_dir)
+        self._index = ProtoTypeIndex(proto_files)
+        self._data_model_dir = data_model_dir
+
+        parsed_svc = parse_proto(service_proto)
+        _, _, types_ns = _namespace_from_proto(parsed_svc)
+        self._ns = types_ns
+        self._prefix = '_'.join(types_ns.split('::'))
+        self._aliases = self._find_scalar_wrappers()
+
+    # -- public ----------------------------------------------------------------
+
+    def generate(self, output_dir: str) -> None:
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        hpp = out / (self._prefix + '_types.hpp')
+        self._write_hpp(hpp)
+        print(f'  Generated {self._ns} (types)')
+
+    # -- internal --------------------------------------------------------------
+
+    def _find_scalar_wrappers(self) -> Dict[str, str]:
+        """Return {message_name: cpp_scalar_type} for transparent wrappers.
+
+        Only messages whose single field has a unit-style name (e.g. "radians",
+        "meters", "value") are inlined as aliases.  Domain fields like "success"
+        are left as structs so their enclosing type retains its semantics.
+        """
+        aliases: Dict[str, str] = dict(_FORCED_ALIASES)
+        for msg in self._index.all_messages():
+            fields = msg.all_fields()
+            if len(fields) == 1 and not fields[0].is_repeated:
+                ft = fields[0].type
+                fn = fields[0].name
+                if ft in _CPP_SCALAR_MAP and fn in _UNIT_FIELD_NAMES:
+                    aliases[msg.name] = _CPP_SCALAR_MAP[ft]
+        return aliases
+
+    def _cpp_field_type(self, field_type: str, repeated: bool) -> str:
+        """Resolve a proto field type to a C++ type string."""
+        short = field_type.split('.')[-1]
+        if field_type in _CPP_SCALAR_MAP:
+            base = _CPP_SCALAR_MAP[field_type]
+        elif short in self._aliases:
+            base = self._aliases[short]
+        elif self._index.is_enum_type(field_type) or self._index.is_enum_type(short):
+            base = short
+        elif self._index.is_message_type(field_type) or self._index.is_message_type(short):
+            if short in self._aliases:
+                base = self._aliases[short]
+            else:
+                base = short
+        else:
+            base = short  # fallback
+        return f'std::vector<{base}>' if repeated else base
+
+    def _cpp_default(self, cpp_type: str, field_type: str) -> str:
+        """Default initialiser for a C++ field."""
+        short = field_type.split('.')[-1]
+        if cpp_type.startswith('std::vector'):
+            return '{}'
+        if cpp_type in _CPP_DEFAULTS:
+            return _CPP_DEFAULTS[cpp_type]
+        if self._index.is_enum_type(field_type) or self._index.is_enum_type(short):
+            enum = (self._index.resolve_enum(field_type)
+                    or self._index.resolve_enum(short))
+            if enum and enum.values:
+                suf = enum.suffix_of(enum.values[0].name)
+                lit = screaming_to_pascal(suf) if suf else enum.values[0].name
+                return f'{short}::{lit}'
+        return '{}'
+
+    def _toposort(self, messages: List[ProtoMessage]) -> List[ProtoMessage]:
+        """Return messages in dependency order (dependencies first)."""
+        names = {m.name for m in messages}
+        by_name = {m.name: m for m in messages}
+        deps: Dict[str, set] = {}
+        for m in messages:
+            d = set()
+            for f in m.all_fields():
+                short = f.type.split('.')[-1]
+                if short in names and short != m.name and short not in self._aliases:
+                    d.add(short)
+            deps[m.name] = d
+
+        order: List[str] = []
+        visited: set = set()
+
+        def visit(name: str) -> None:
+            if name in visited:
+                return
+            visited.add(name)
+            for dep in deps.get(name, set()):
+                visit(dep)
+            order.append(name)
+
+        for m in messages:
+            visit(m.name)
+        return [by_name[n] for n in order]
+
+    def _write_enum(self, f, enum: ProtoEnum) -> None:
+        f.write(f'enum class {enum.name} : int {{\n')
+        for v in enum.values:
+            suf = enum.suffix_of(v.name)
+            lit = screaming_to_pascal(suf) if suf else v.name
+            f.write(f'    {lit} = {v.number},\n')
+        f.write('};\n\n')
+
+    def _inline_base_fields(self, msg: ProtoMessage):
+        """Yield (field, comment) for all non-base fields, inlining any 'base'
+        fields by expanding their sub-fields directly into the parent struct.
+
+        Only one level of inlining is done; nested 'base' fields are kept as-is.
+        """
+        own_names = {f.name for f in msg.fields if f.name != 'base'}
+        for field in msg.fields:
+            if field.name == 'base' and not field.is_repeated:
+                short = field.type.split('.')[-1]
+                base_msg = self._index.resolve_message(field.type) or \
+                           self._index.resolve_message(short)
+                if base_msg and base_msg.name not in self._aliases:
+                    # inline the base's own fields with collision renaming
+                    for bf in base_msg.fields:
+                        name = bf.name
+                        if name in own_names:
+                            name = short.lower() + '_' + name
+                        yield bf, name, f'  // from {base_msg.name}'
+                    continue
+            yield field, field.name, ''
+
+    def _write_struct(self, f, msg: ProtoMessage) -> None:
+        f.write(f'struct {msg.name} {{\n')
+        # Regular fields (with base inlining)
+        for field, fname, comment in self._inline_base_fields(msg):
+            base_cpp = self._cpp_field_type(field.type, False)
+            if field.is_repeated:
+                cpp_type = f'std::vector<{base_cpp}>'
+                default = '{}'
+                opt = ''
+            elif field.is_optional and base_cpp not in ('std::string',):
+                # optional scalar → std::optional for clean presence checking
+                cpp_type = f'std::optional<{base_cpp}>'
+                default = ''
+                opt = '  // optional'
+            else:
+                cpp_type = base_cpp
+                default = self._cpp_default(base_cpp, field.type)
+                opt = '  // optional' if field.is_optional else ''
+            assign = f' = {default}' if default else ''
+            f.write(f'    {cpp_type} {fname}{assign};{comment}{opt}\n')
+        # oneof groups
+        for oo in msg.oneofs:
+            f.write(f'    // oneof {oo.name}\n')
+            for field in oo.fields:
+                cpp_type = self._cpp_field_type(field.type, False)
+                f.write(f'    std::optional<{cpp_type}> {field.name};\n')
+        f.write('};\n')
+        # post-struct constants (e.g. kAckOk / kAckFail for Ack)
+        for const_name, init in _STRUCT_CONSTANTS.get(msg.name, []):
+            # init may be 'Ack{ true }' — strip the redundant type prefix
+            body = init[len(msg.name):] if init.startswith(msg.name) else (
+                '{ ' + init + ' }')
+            f.write('constexpr ' + msg.name + ' ' + const_name + body + ';\n')
+        f.write('\n')
+
+    def _write_hpp(self, path: Path) -> None:
+        proto_files_rel = sorted(
+            str(p.relative_to(self._data_model_dir.parent))
+            for pf in self._index.files
+            for p in [self._data_model_dir / f'{pf.package.replace(".", "/")}.proto']
+            if (self._data_model_dir.parent / p).exists() or True
+        )
+        with open(path, 'w') as f:
+            f.write('// Auto-generated types header\n')
+            f.write(f'// Generated from: {self._data_model_dir}'
+                    f' by cpp_service_generator.py --types\n')
+            f.write(f'// Namespace: {self._ns}\n')
+            f.write('#pragma once\n\n')
+            f.write('#include <cstdint>\n')
+            f.write('#include <optional>\n')
+            f.write('#include <string>\n')
+            f.write('#include <vector>\n\n')
+            f.write(f'namespace {self._ns} {{\n\n')
+
+            # using aliases for scalar wrappers
+            for msg in self._index.all_messages():
+                if msg.name in self._aliases:
+                    f.write(f'using {msg.name} = {self._aliases[msg.name]};\n')
+            # force Identifier → std::string even if not caught above
+            if 'Identifier' not in {m.name for m in self._index.all_messages()}:
+                f.write('using Identifier = std::string;\n')
+            f.write('\n')
+
+            # enums
+            all_enums = self._index.all_enums()
+            if all_enums:
+                for enum in all_enums:
+                    self._write_enum(f, enum)
+
+            # structs (alias messages already handled above)
+            alias_names = set(self._aliases.keys())
+            non_alias = [m for m in self._index.all_messages()
+                         if m.name not in alias_names]
+            for msg in self._toposort(non_alias):
+                self._write_struct(f, msg)
+
+            f.write(f'}} // namespace {self._ns}\n')
+
+
+# ---------------------------------------------------------------------------
+
+
 def main():
     if len(sys.argv) < 2:
         print('Usage: python cpp_service_generator.py'
               ' <file.proto|proto_dir> <output_dir>')
         print('       python cpp_service_generator.py --codec <file.proto> <output_dir>')
+        print('       python cpp_service_generator.py --types <data_model_dir>'
+              ' <service_proto> <output_dir>')
         sys.exit(1)
+
+    if sys.argv[1] == '--types':
+        if len(sys.argv) < 5:
+            print('Usage: python cpp_service_generator.py --types'
+                  ' <data_model_dir> <service_proto> <output_dir>')
+            sys.exit(1)
+        gen = CppTypesGenerator(Path(sys.argv[2]), Path(sys.argv[3]))
+        gen.generate(sys.argv[4])
+        print('\n\u2713 C++ types generated')
+        return
 
     if sys.argv[1] == '--codec':
         if len(sys.argv) < 4:

@@ -1,148 +1,181 @@
-// Auto-generated service types header
-// Generated from: proto/pyramid/data_model/ by cpp_service_generator
+// Auto-generated types header
+// Generated from: proto/pyramid/data_model by cpp_service_generator.py --types
 // Namespace: pyramid::services::tactical_objects
-//
-// Architecture: component logic > service binding > PCL
-//
-// C++ types mirroring the standard pyramid data model proto files:
-//   proto/pyramid/data_model/base.proto
-//   proto/pyramid/data_model/common.proto
-//   proto/pyramid/data_model/tactical.proto
 #pragma once
 
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
-#include <optional>
 
 namespace pyramid::services::tactical_objects {
 
-// -- base.proto: Identifier ------------------------------------------------
-
+using Angle = double;
+using Length = double;
+using Timestamp = double;
 using Identifier = std::string;
+using Speed = double;
+using Percentage = double;
 
-// -- common.proto: Ack / Query ---------------------------------------------
+enum class Feasibility : int {
+    Unspecified = 0,
+    Feasible = 1,
+    NotFeasible = 2,
+    PartiallyFeasible = 3,
+    Pending = 4,
+};
+
+enum class Progress : int {
+    Unspecified = 0,
+    NotStarted = 1,
+    InProgress = 2,
+    Completed = 3,
+    Cancelled = 4,
+    Failed = 5,
+};
+
+enum class StandardIdentity : int {
+    Unspecified = 0,
+    Unknown = 1,
+    Friendly = 2,
+    Hostile = 3,
+    Suspect = 4,
+    Neutral = 5,
+    Pending = 6,
+    Joker = 7,
+    Faker = 8,
+    AssumedFriendly = 9,
+};
+
+enum class BattleDimension : int {
+    Unspecified = 0,
+    Ground = 1,
+    Subsurface = 2,
+    SeaSurface = 3,
+    Air = 4,
+    Unknown = 5,
+};
+
+enum class DataPolicy : int {
+    Unspecified = 0,
+    Query = 1,
+    Obtain = 2,
+};
+
+enum class ObjectSource : int {
+    Unspecified = 0,
+    Radar = 1,
+    Local = 2,
+};
+
+struct GeodeticPosition {
+    double latitude = 0.0;
+    double longitude = 0.0;
+};
+
+struct PolyArea {
+    std::vector<GeodeticPosition> points = {};
+};
+
+struct Entity {
+    std::optional<double> update_time;  // optional
+    std::string id = {};  // optional
+    std::string source = {};  // optional
+};
+
+struct Achievement {
+    std::optional<double> update_time;  // from Entity  // optional
+    std::string id = {};  // from Entity  // optional
+    std::string source = {};  // from Entity  // optional
+    Progress status = Progress::Unspecified;
+    std::optional<double> quality;  // optional
+    Feasibility achieveability = Feasibility::Unspecified;
+};
+
+struct Requirement {
+    std::optional<double> update_time;  // from Entity  // optional
+    std::string id = {};  // from Entity  // optional
+    std::string source = {};  // from Entity  // optional
+    Achievement status = {};
+};
+
+struct Contraint {
+    std::string name = {};
+    int32_t value = 0;
+};
+
+struct Capability {
+    std::optional<double> update_time;  // from Entity  // optional
+    std::string id = {};  // from Entity  // optional
+    std::string source = {};  // from Entity  // optional
+    bool availability = false;
+    std::string name = {};
+    std::vector<Contraint> contraint = {};
+};
+
+struct CircleArea {
+    GeodeticPosition position = {};
+    double radius = 0.0;
+};
+
+struct Point {
+    GeodeticPosition position = {};
+};
 
 struct Ack {
     bool success = false;
 };
-
-constexpr Ack kAckOk  { true  };
+constexpr Ack kAckOk{ true  };
 constexpr Ack kAckFail{ false };
 
 struct Query {
-    std::vector<Identifier> ids;
-    bool one_shot = true;
+    std::vector<std::string> id = {};
+    std::optional<bool> one_shot;  // optional
 };
-
-// -- common.proto: BattleDimension -----------------------------------------
-// Ordinals match pyramid.data_model.common.BattleDimension proto values.
-
-enum class BattleDimension : int {
-    Unspecified = 0,
-    Ground      = 1,
-    Subsurface  = 2,
-    SeaSurface  = 3,
-    Air         = 4,
-    Unknown     = 5,
-};
-
-// -- common.proto: DataPolicy ----------------------------------------------
-
-enum class DataPolicy : int {
-    Unspecified = 0,
-    Query       = 1,   // query existing data only
-    Obtain      = 2,   // actively collect new data
-};
-
-// -- common.proto: StandardIdentity ----------------------------------------
-// Ordinals match pyramid.data_model.common.StandardIdentity proto values.
-
-enum class StandardIdentity : int {
-    Unspecified     = 0,
-    Unknown         = 1,
-    Friendly        = 2,
-    Hostile         = 3,
-    Suspect         = 4,
-    Neutral         = 5,
-    Pending         = 6,
-    Joker           = 7,
-    Faker           = 8,
-    AssumedFriendly = 9,
-};
-
-// -- common.proto: GeodeticPosition ----------------------------------------
-// Geodetic coordinates (radians), matching proto Angle.radians field.
-
-struct GeodeticPosition {
-    double latitude  = 0.0;  // radians
-    double longitude = 0.0;  // radians
-};
-
-// -- common.proto: Capability ----------------------------------------------
-
-struct Capability {
-    Identifier id;
-    bool availability = false;
-    std::string name;
-};
-
-// -- tactical.proto: ObjectSource ------------------------------------------
-
-enum class ObjectSource : int {
-    Unspecified = 0,
-    Radar       = 1,
-    Local       = 2,
-};
-
-// -- tactical.proto: ObjectDetail ------------------------------------------
-// Maps to pyramid.data_model.tactical.ObjectDetail.
 
 struct ObjectDetail {
-    Identifier        id;
-    Identifier        source_id;
-    GeodeticPosition  position;
-    double            quality    = 0.0;
-    bool              has_quality = false;
-    double            course_rad = 0.0;
-    bool              has_course = false;
-    double            speed_mps  = 0.0;
-    bool              has_speed  = false;
-    double            length_m   = 0.0;
-    bool              has_length = false;
-    StandardIdentity  identity   = StandardIdentity::Unspecified;
-    BattleDimension   dimension  = BattleDimension::Unspecified;
-    ObjectSource      obj_source = ObjectSource::Unspecified;
+    std::optional<double> update_time;  // from Entity  // optional
+    std::string id = {};  // from Entity  // optional
+    std::string entity_source = {};  // from Entity  // optional
+    std::vector<ObjectSource> source = {};
+    GeodeticPosition position = {};
+    double creation_time = 0.0;
+    std::optional<double> quality;  // optional
+    std::optional<double> course;  // optional
+    std::optional<double> speed;  // optional
+    std::optional<double> length;  // optional
+    StandardIdentity identity = StandardIdentity::Unspecified;
+    BattleDimension dimension = BattleDimension::Unspecified;
 };
-
-// -- tactical.proto: ObjectMatch -------------------------------------------
-// Reference type — entity ID pair.
-
-struct ObjectMatch {
-    Identifier match_id;            // common.Entity.id
-    Identifier matching_object_id;  // the correlated tactical object
-};
-
-// -- tactical.proto: ObjectInterestRequirement -----------------------------
-// Maps to pyramid.data_model.tactical.ObjectInterestRequirement.
-
-struct ObjectInterestRequirement {
-    Identifier                    id;
-    std::optional<ObjectSource>   source;
-    DataPolicy                    policy = DataPolicy::Unspecified;
-    GeodeticPosition              center;
-    double                        radius_m = 0.0;
-    std::vector<BattleDimension>  dimensions;
-};
-
-// -- tactical.proto: ObjectEvidenceRequirement -----------------------------
-// Maps to pyramid.data_model.tactical.ObjectEvidenceRequirement.
 
 struct ObjectEvidenceRequirement {
-    Identifier                    id;
-    DataPolicy                    policy = DataPolicy::Unspecified;
-    GeodeticPosition              center;
-    double                        radius_m = 0.0;
-    std::vector<BattleDimension>  dimensions;
+    Entity base = {};  // from Requirement
+    Achievement status = {};  // from Requirement
+    DataPolicy policy = DataPolicy::Unspecified;
+    std::vector<BattleDimension> dimension = {};
+    // oneof location
+    std::optional<PolyArea> poly_area;
+    std::optional<CircleArea> circle_area;
+    std::optional<Point> point;
+};
+
+struct ObjectInterestRequirement {
+    Entity base = {};  // from Requirement
+    Achievement status = {};  // from Requirement
+    std::optional<ObjectSource> source;  // optional
+    DataPolicy policy = DataPolicy::Unspecified;
+    std::vector<BattleDimension> dimension = {};
+    // oneof location
+    std::optional<PolyArea> poly_area;
+    std::optional<CircleArea> circle_area;
+    std::optional<Point> point;
+};
+
+struct ObjectMatch {
+    std::optional<double> update_time;  // from Entity  // optional
+    std::string id = {};  // from Entity  // optional
+    std::string source = {};  // from Entity  // optional
+    std::string matching_object_id = {};
 };
 
 } // namespace pyramid::services::tactical_objects
