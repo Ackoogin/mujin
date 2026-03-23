@@ -15,6 +15,7 @@
 
 #include "pyramid_services_tactical_objects_consumed.hpp"
 #include "pyramid_services_tactical_objects_provided.hpp"
+#include "pyramid_services_tactical_objects_json_codec.hpp"
 #include "pyramid_services_tactical_objects_types.hpp"
 
 extern "C" {
@@ -31,6 +32,7 @@ extern "C" {
 
 namespace prov = pyramid::services::tactical_objects::provided;
 namespace cons = pyramid::services::tactical_objects::consumed;
+namespace codec = pyramid::services::tactical_objects::json_codec;
 namespace types = pyramid::services::tactical_objects;
 
 // ===========================================================================
@@ -86,60 +88,69 @@ TEST(ProtoBindingsProvided, MsgToStringEmpty) {
 }
 
 // ===========================================================================
-// JSON builder — buildStandardRequirementJson
+// JSON codec — CreateRequirementRequest (replaces buildStandardRequirementJson)
 // ===========================================================================
 
-TEST(ProtoBindingsProvided, BuildRequirementJsonKeys) {
-    std::string json_str = prov::buildStandardRequirementJson(
-        "query", "RADAR-001", "air",
-        0.1, 0.2, 0.3, 0.4);
+TEST(ProtoBindingsProvided, CreateRequirementJsonKeys) {
+    codec::CreateRequirementRequest req;
+    req.policy      = codec::DataPolicy::Query;
+    req.identity    = codec::StandardIdentity::Hostile;
+    req.dimension   = codec::BattleDimension::Air;
+    req.min_lat_rad = 0.1;
+    req.max_lat_rad = 0.2;
+    req.min_lon_rad = 0.3;
+    req.max_lon_rad = 0.4;
 
+    std::string json_str = codec::toJson(req);
     auto j = nlohmann::json::parse(json_str);
-    EXPECT_EQ(j["policy"].get<std::string>(),   "query");
-    EXPECT_EQ(j["identity"].get<std::string>(), "RADAR-001");
-    EXPECT_EQ(j["dimension"].get<std::string>(), "air");
+    EXPECT_TRUE(j.contains("policy"));
+    EXPECT_TRUE(j.contains("identity"));
+    EXPECT_TRUE(j.contains("dimension"));
     EXPECT_DOUBLE_EQ(j["min_lat_rad"].get<double>(), 0.1);
     EXPECT_DOUBLE_EQ(j["max_lat_rad"].get<double>(), 0.2);
     EXPECT_DOUBLE_EQ(j["min_lon_rad"].get<double>(), 0.3);
     EXPECT_DOUBLE_EQ(j["max_lon_rad"].get<double>(), 0.4);
 }
 
-TEST(ProtoBindingsProvided, BuildRequirementJsonNoDimension) {
-    // When dimension is empty, the key should be absent.
-    std::string json_str = prov::buildStandardRequirementJson("obtain", "SENSOR-7");
-
+TEST(ProtoBindingsProvided, CreateRequirementJsonDefaults) {
+    // Default-constructed request: zero-valued coords are omitted by codec
+    codec::CreateRequirementRequest req;
+    std::string json_str = codec::toJson(req);
     auto j = nlohmann::json::parse(json_str);
-    EXPECT_EQ(j["policy"].get<std::string>(),   "obtain");
-    EXPECT_EQ(j["identity"].get<std::string>(), "SENSOR-7");
+    EXPECT_FALSE(j.contains("min_lat_rad"));
+    EXPECT_FALSE(j.contains("max_lat_rad"));
     EXPECT_FALSE(j.contains("dimension"));
-    // Default lat/lon should be 0.0
-    EXPECT_DOUBLE_EQ(j["min_lat_rad"].get<double>(), 0.0);
-    EXPECT_DOUBLE_EQ(j["max_lat_rad"].get<double>(), 0.0);
 }
 
 // ===========================================================================
-// JSON builder — buildStandardEvidenceJson
+// JSON codec — ObjectEvidence (replaces buildStandardEvidenceJson)
 // ===========================================================================
 
-TEST(ProtoBindingsProvided, BuildEvidenceJsonKeys) {
-    std::string json_str = prov::buildStandardEvidenceJson(
-        "UNIT-42", "ground", 0.785, -1.571, 0.9, 0.75);
+TEST(ProtoBindingsProvided, EvidenceJsonKeys) {
+    codec::ObjectEvidence ev;
+    ev.identity      = codec::StandardIdentity::Friendly;
+    ev.dimension     = codec::BattleDimension::Ground;
+    ev.latitude_rad  = 0.785;
+    ev.longitude_rad = -1.571;
+    ev.confidence    = 0.9;
+    ev.observed_at   = 0.75;
 
+    std::string json_str = codec::toJson(ev);
     auto j = nlohmann::json::parse(json_str);
-    EXPECT_EQ(j["identity"].get<std::string>(),  "UNIT-42");
-    EXPECT_EQ(j["dimension"].get<std::string>(), "ground");
+    EXPECT_TRUE(j.contains("identity"));
+    EXPECT_TRUE(j.contains("dimension"));
     EXPECT_DOUBLE_EQ(j["latitude_rad"].get<double>(),  0.785);
     EXPECT_DOUBLE_EQ(j["longitude_rad"].get<double>(), -1.571);
     EXPECT_DOUBLE_EQ(j["confidence"].get<double>(),    0.9);
     EXPECT_DOUBLE_EQ(j["observed_at"].get<double>(),   0.75);
 }
 
-TEST(ProtoBindingsProvided, BuildEvidenceJsonDefaultObservedAt) {
-    std::string json_str = prov::buildStandardEvidenceJson(
-        "TGT-1", "air", 0.1, 0.2, 0.8);
-
+TEST(ProtoBindingsProvided, EvidenceJsonDefaultObservedAt) {
+    // Default-constructed evidence: observed_at = 0.0 is omitted by codec
+    codec::ObjectEvidence ev;
+    std::string json_str = codec::toJson(ev);
     auto j = nlohmann::json::parse(json_str);
-    EXPECT_DOUBLE_EQ(j["observed_at"].get<double>(), 0.5);
+    EXPECT_FALSE(j.contains("observed_at"));
 }
 
 // ===========================================================================

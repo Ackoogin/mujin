@@ -218,6 +218,7 @@ add_executable(test_pcl_proto_bindings
   test_pcl_proto_bindings.cpp
   ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
   ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
+  ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_json_codec.cpp
 )
 target_link_libraries(test_pcl_proto_bindings PRIVATE
   pcl_core pcl_transport_socket tactical_objects GTest::gtest_main)
