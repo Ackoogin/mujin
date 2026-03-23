@@ -15,7 +15,7 @@ A dispatch() function is generated as the single integration point for any
 transport (PCL, socket, shared memory, etc.) -- it routes an incoming
 ServiceChannel to the correct typed handler.
 
-Generated files reference a <prefix>_types.hpp for C++ type definitions.
+Generated file names and namespaces are derived entirely from the proto file.
 
 Service wire-name constants, JSON builder functions (provided only), and PCL
 binding functions (subscribe*, invoke*, publish*) are generated for standard
@@ -26,6 +26,9 @@ Architecture: component logic > service binding (this layer) > PCL
 Usage:
     python cpp_service_generator.py <file.proto> <output_dir>
     python cpp_service_generator.py <proto_dir/>  <output_dir>
+
+    # Also generate the JSON codec files:
+    python cpp_service_generator.py --codec <file.proto> <output_dir>
 """
 
 import sys
@@ -58,16 +61,10 @@ PUBLISH_TOPICS   = schema.PUBLISH_TOPICS     # object_evidence
 
 _SEP = '// ' + '-' * 75
 
-# Codec package name constant
-_CODEC_NS    = 'pyramid::services::tactical_objects::json_codec'
-_CODEC_PREFIX = 'pyramid_services_tactical_objects_json_codec'
-_TYPES_NS    = 'pyramid::services::tactical_objects'
-
 # Default content type — used when no port-level override is provided.
 # Generated code accepts content_type as a parameter so components can
 # configure per-port codecs at pcl_container_add_* time.
 _DEFAULT_CONTENT_TYPE = 'application/json'
-
 
 # -- Proto parser --------------------------------------------------------------
 
@@ -749,22 +746,22 @@ class CppServiceGenerator:
 class CppJsonCodecGenerator:
     """Generates the canonical JSON ser/de header+impl from json_schema.py.
 
-    Output files:
-      pyramid_services_tactical_objects_json_codec.hpp
-      pyramid_services_tactical_objects_json_codec.cpp
-
-    The namespace is  pyramid::services::tactical_objects::json_codec
+    Output file names and namespaces are derived from the supplied .proto file.
     Types from the parent namespace are brought in via  using namespace.
 
     Usage:
-        gen = CppJsonCodecGenerator()
+        gen = CppJsonCodecGenerator(proto_file)
         gen.generate('/path/to/output_dir')
     """
 
-    HPP = _CODEC_PREFIX + '.hpp'
-    CPP = _CODEC_PREFIX + '.cpp'
-    NS  = _CODEC_NS
-    TYPES_NS = _TYPES_NS
+    def __init__(self, proto_file: ProtoFile):
+        _, _, types_ns = _namespace_from_proto(proto_file)
+        self.TYPES_NS = types_ns
+        self.NS       = types_ns + '::json_codec'
+        prefix        = '_'.join(types_ns.split('::'))
+        self.HPP      = prefix + '_json_codec.hpp'
+        self.CPP      = prefix + '_json_codec.cpp'
+        self._types_header = prefix + '_types.hpp'
 
     def generate(self, output_dir: str):
         out = Path(output_dir)
@@ -792,7 +789,7 @@ class CppJsonCodecGenerator:
             f.write('//\n')
             f.write('// Architecture: component logic > JsonCodec > service binding > PCL\n')
             f.write('#pragma once\n\n')
-            f.write(f'#include "pyramid_services_tactical_objects_types.hpp"\n\n')
+            f.write(f'#include "{self._types_header}"\n\n')
             f.write('#include <string>\n')
             f.write('#include <vector>\n\n')
             f.write(f'namespace {self.NS} {{\n\n')
@@ -1000,15 +997,16 @@ def main():
     if len(sys.argv) < 2:
         print('Usage: python cpp_service_generator.py'
               ' <file.proto|proto_dir> <output_dir>')
-        print('       python cpp_service_generator.py --codec <output_dir>')
+        print('       python cpp_service_generator.py --codec <file.proto> <output_dir>')
         sys.exit(1)
 
     if sys.argv[1] == '--codec':
-        if len(sys.argv) < 3:
-            print('Usage: python cpp_service_generator.py --codec <output_dir>')
+        if len(sys.argv) < 4:
+            print('Usage: python cpp_service_generator.py --codec <file.proto> <output_dir>')
             sys.exit(1)
-        gen = CppJsonCodecGenerator()
-        gen.generate(sys.argv[2])
+        parsed = parse_proto(Path(sys.argv[2]))
+        gen = CppJsonCodecGenerator(parsed)
+        gen.generate(sys.argv[3])
         print('\n\u2713 C++ JSON codec generated')
         return
 
