@@ -1,5 +1,5 @@
 // Auto-generated service binding implementation
-// Generated from: provided.proto by cpp_service_generator
+// Generated from: components by cpp_service_generator
 // Namespace: pyramid::services::tactical_objects::provided
 
 #include "pyramid_services_tactical_objects_provided.hpp"
@@ -41,12 +41,12 @@ ServiceHandler::handleReadRequirement(const Query& /*request*/) {
 
 Ack
 ServiceHandler::handleUpdateRequirement(const ObjectInterestRequirement& /*request*/) {
-    return kAckOk;
+    return pyramid::data_model::kAckOk;
 }
 
 Ack
 ServiceHandler::handleDeleteRequirement(const Identifier& /*request*/) {
-    return kAckOk;
+    return pyramid::data_model::kAckOk;
 }
 
 std::vector<ObjectDetail>

@@ -241,16 +241,15 @@ def _is_provided(proto_file: ProtoFile) -> bool:
     return 'provided' in proto_file.package.lower()
 
 
-def _types_pkg_from_proto(proto_file: ProtoFile) -> str:
-    """Derive Ada types package name from proto package.
+_DATA_MODEL_TYPES_PKG = 'Pyramid_Data_Model_Types'
 
-    pyramid.components.tactical_objects.services.provided -> Tactical_Objects_Types
+def _types_pkg_from_proto(proto_file: ProtoFile) -> str:
+    """Return the Ada types package name for the data model.
+
+    All services reference the shared data model types package regardless
+    of which service proto is being generated.
     """
-    parts = proto_file.package.split('.')
-    skip = {'pyramid', 'components', 'data_model', 'base', 'services', 'provided', 'consumed'}
-    meaningful = [p for p in parts if p.lower() not in skip]
-    ada_parts = ['_'.join(w.capitalize() for w in p.split('_')) for p in meaningful]
-    return '_'.join(ada_parts) + '_Types'
+    return _DATA_MODEL_TYPES_PKG
 
 
 def _codec_pkg_from_proto(proto_file: ProtoFile) -> str:
@@ -1007,6 +1006,23 @@ def _ada_name(cpp_or_proto_name: str) -> str:
     return '_'.join(w.capitalize() for w in s.split('_'))
 
 
+def _common_ada_pkg(index: ProtoTypeIndex) -> str:
+    """Derive Ada package name from common package prefix of data model protos.
+
+    e.g. pyramid.data_model.base, pyramid.data_model.common
+      -> Pyramid_Data_Model_Types
+    """
+    pkgs = [pf.package for pf in index.files if pf.package]
+    if not pkgs:
+        return 'Data_Model_Types'
+    parts = [p.split('.') for p in pkgs]
+    common = parts[0]
+    for p in parts[1:]:
+        common = [a for a, b in zip(common, p) if a == b]
+    ada_parts = ['_'.join(w.capitalize() for w in seg.split('_')) for seg in common]
+    return '_'.join(ada_parts) + '_Types'
+
+
 class AdaTypesGenerator:
     """Generates ``{Prefix}_Types.ads`` from data model proto files.
 
@@ -1014,20 +1030,20 @@ class AdaTypesGenerator:
     record types.  Enums are emitted with a ``{Last_Word}_`` prefix on each
     literal.
 
+    The Ada package name and output file name are derived automatically from
+    the common package prefix of the data model proto files.
+
     Usage::
-        gen = AdaTypesGenerator(data_model_dir, service_proto)
+        gen = AdaTypesGenerator(data_model_dir)
         gen.generate(output_dir)
     """
 
-    def __init__(self, data_model_dir: Path, service_proto: Path):
+    def __init__(self, data_model_dir: Path):
         proto_files = parse_proto_tree(data_model_dir)
         self._index = ProtoTypeIndex(proto_files)
         self._data_model_dir = data_model_dir
-
-        # Derive Ada package name from service proto
-        self._ada_pkg = _types_pkg_from_proto(parse_proto(service_proto))
-        file_base = self._ada_pkg.lower().replace('.', '-')
-        self._file_base = file_base
+        self._ada_pkg = _common_ada_pkg(self._index)
+        self._file_base = self._ada_pkg.lower().replace('.', '-')
         self._aliases = self._find_scalar_wrappers()
 
     # -- public ----------------------------------------------------------------
@@ -1262,16 +1278,17 @@ def main():
         print('Usage: python ada_service_generator.py <file.proto|proto_dir> <output_dir>')
         print('       python ada_service_generator.py --codec <file.proto> <output_dir>')
         print('       python ada_service_generator.py --types <data_model_dir>'
-              ' <service_proto> <output_dir>')
+              ' <output_dir>')
         sys.exit(1)
 
     if sys.argv[1] == '--types':
-        if len(sys.argv) < 5:
+        if len(sys.argv) < 4:
             print('Usage: python ada_service_generator.py --types'
-                  ' <data_model_dir> <service_proto> <output_dir>')
+                  ' <data_model_dir> <output_dir>')
+            print('  e.g. --types proto/pyramid/data_model examples/ada/generated')
             sys.exit(1)
-        gen = AdaTypesGenerator(Path(sys.argv[2]), Path(sys.argv[3]))
-        gen.generate(sys.argv[4])
+        gen = AdaTypesGenerator(Path(sys.argv[2]))
+        gen.generate(sys.argv[3])
         print('\n\u2713 Ada types generated')
         return
 

@@ -255,13 +255,16 @@ def parse_proto(proto_path: Path) -> ProtoFile:
 
 # -- C++ namespace / file name derivation -------------------------------------
 
-def _namespace_from_proto(proto_file: ProtoFile) -> Tuple[str, str, str]:
-    """Return (full_namespace, file_prefix, types_namespace).
+_DATA_MODEL_TYPES_NS = 'pyramid::data_model'
+
+def _namespace_from_proto(proto_file: ProtoFile) -> Tuple[str, str, str, str]:
+    """Return (full_namespace, file_prefix, svc_base_ns, types_namespace).
 
     pyramid.components.tactical_objects.services.provided
       -> full_ns    : pyramid::services::tactical_objects::provided
       -> file_prefix: pyramid_services_tactical_objects_provided
-      -> types_ns   : pyramid::services::tactical_objects
+      -> svc_base_ns: pyramid::services::tactical_objects
+      -> types_ns   : pyramid::data_model
     """
     parts = proto_file.package.split('.')
 
@@ -277,11 +280,11 @@ def _namespace_from_proto(proto_file: ProtoFile) -> Tuple[str, str, str]:
     ns_parts = ['pyramid', 'services'] + [p.lower() for p in meaningful]
     suffix = suffix or 'provided'
 
-    types_ns = '::'.join(ns_parts)
-    full_ns = types_ns + '::' + suffix
+    svc_base_ns = '::'.join(ns_parts)
+    full_ns = svc_base_ns + '::' + suffix
     file_prefix = '_'.join(ns_parts + [suffix])
 
-    return full_ns, file_prefix, types_ns
+    return full_ns, file_prefix, svc_base_ns, _DATA_MODEL_TYPES_NS
 
 
 def _is_provided(proto_file: ProtoFile) -> bool:
@@ -319,7 +322,7 @@ class CppServiceGenerator:
             if not all_rpcs:
                 continue
 
-            full_ns, file_prefix, types_ns = _namespace_from_proto(parsed)
+            full_ns, file_prefix, _svc_base_ns, types_ns = _namespace_from_proto(parsed)
             types_header = '_'.join(types_ns.split('::')) + '_types.hpp'
 
             hpp_path = output_path / (file_prefix + '.hpp')
@@ -615,7 +618,7 @@ class CppServiceGenerator:
                         f'(const {req_t}& /*request*/) {{\n')
 
                 if rsp_t == 'Ack':
-                    f.write('    return kAckOk;\n')
+                    f.write(f'    return {types_ns}::kAckOk;\n')
                 else:
                     f.write('    return {};\n')
 
@@ -759,13 +762,13 @@ class CppJsonCodecGenerator:
     """
 
     def __init__(self, proto_file: ProtoFile):
-        _, _, types_ns = _namespace_from_proto(proto_file)
+        _, _, svc_base_ns, types_ns = _namespace_from_proto(proto_file)
         self.TYPES_NS = types_ns
-        self.NS       = types_ns + '::json_codec'
-        prefix        = '_'.join(types_ns.split('::'))
-        self.HPP      = prefix + '_json_codec.hpp'
-        self.CPP      = prefix + '_json_codec.cpp'
-        self._types_header = prefix + '_types.hpp'
+        self.NS       = svc_base_ns + '::json_codec'
+        svc_prefix    = '_'.join(svc_base_ns.split('::'))
+        self.HPP      = svc_prefix + '_json_codec.hpp'
+        self.CPP      = svc_prefix + '_json_codec.cpp'
+        self._types_header = '_'.join(types_ns.split('::')) + '_types.hpp'
 
     def generate(self, output_dir: str):
         out = Path(output_dir)
@@ -1040,6 +1043,21 @@ _STRUCT_CONSTANTS: Dict[str, List[Tuple[str, str]]] = {
 }
 
 
+def _common_cpp_ns(index: ProtoTypeIndex) -> str:
+    """Derive C++ namespace from common package prefix of data model protos.
+
+    e.g. pyramid.data_model.base, pyramid.data_model.common -> pyramid::data_model
+    """
+    pkgs = [pf.package for pf in index.files if pf.package]
+    if not pkgs:
+        return 'data_model'
+    parts = [p.split('.') for p in pkgs]
+    common = parts[0]
+    for p in parts[1:]:
+        common = [a for a, b in zip(common, p) if a == b]
+    return '::'.join(common)
+
+
 class CppTypesGenerator:
     """Generates ``{prefix}_types.hpp`` from data model proto files.
 
@@ -1047,20 +1065,20 @@ class CppTypesGenerator:
     scalar) are emitted as ``using`` aliases; all other messages become
     ``struct``s.  Enums are always emitted as ``enum class``.
 
+    The namespace and output file name are derived automatically from the
+    common package prefix of the data model proto files.
+
     Usage::
-        gen = CppTypesGenerator(data_model_dir, service_proto)
+        gen = CppTypesGenerator(data_model_dir)
         gen.generate(output_dir)
     """
 
-    def __init__(self, data_model_dir: Path, service_proto: Path):
+    def __init__(self, data_model_dir: Path):
         proto_files = parse_proto_tree(data_model_dir)
         self._index = ProtoTypeIndex(proto_files)
         self._data_model_dir = data_model_dir
-
-        parsed_svc = parse_proto(service_proto)
-        _, _, types_ns = _namespace_from_proto(parsed_svc)
-        self._ns = types_ns
-        self._prefix = '_'.join(types_ns.split('::'))
+        self._ns = _common_cpp_ns(self._index)
+        self._prefix = '_'.join(self._ns.split('::'))
         self._aliases = self._find_scalar_wrappers()
 
     # -- public ----------------------------------------------------------------
@@ -1271,16 +1289,17 @@ def main():
               ' <file.proto|proto_dir> <output_dir>')
         print('       python cpp_service_generator.py --codec <file.proto> <output_dir>')
         print('       python cpp_service_generator.py --types <data_model_dir>'
-              ' <service_proto> <output_dir>')
+              ' <output_dir>')
         sys.exit(1)
 
     if sys.argv[1] == '--types':
-        if len(sys.argv) < 5:
+        if len(sys.argv) < 4:
             print('Usage: python cpp_service_generator.py --types'
-                  ' <data_model_dir> <service_proto> <output_dir>')
+                  ' <data_model_dir> <output_dir>')
+            print('  e.g. --types proto/pyramid/data_model examples/cpp/generated')
             sys.exit(1)
-        gen = CppTypesGenerator(Path(sys.argv[2]), Path(sys.argv[3]))
-        gen.generate(sys.argv[4])
+        gen = CppTypesGenerator(Path(sys.argv[2]))
+        gen.generate(sys.argv[3])
         print('\n\u2713 C++ types generated')
         return
 

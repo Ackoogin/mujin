@@ -1,10 +1,10 @@
 --  Auto-generated types specification
 --  Generated from: proto/pyramid/data_model by ada_service_generator.py --types
---  Package: Tactical_Objects_Types
+--  Package: Pyramid_Data_Model_Types
 
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 
-package Tactical_Objects_Types is
+package Pyramid_Data_Model_Types is
 
    subtype Angle is Long_Float;
    subtype Length is Long_Float;
@@ -181,4 +181,4 @@ package Tactical_Objects_Types is
       Matching_Object_Id : Unbounded_String := Null_Unbounded_String;
    end record;
 
-end Tactical_Objects_Types;
+end Pyramid_Data_Model_Types;

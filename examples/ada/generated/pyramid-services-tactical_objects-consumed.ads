@@ -1,5 +1,5 @@
 --  Auto-generated service binding specification
---  Generated from: consumed.proto by ada_service_generator.py
+--  Generated from: components by ada_service_generator.py
 --  Package: Pyramid.Services.Tactical_Objects.Consumed
 --
 --  Architecture: component logic > service binding (this) > PCL
@@ -13,7 +13,7 @@
 --  JSON serialisation/deserialisation is provided by the companion
 --  Pyramid.Services.Tactical_Objects.Json_Codec package.
 
-with Tactical_Objects_Types;  use Tactical_Objects_Types;
+with Pyramid_Data_Model_Types;  use Pyramid_Data_Model_Types;
 with Pcl_Bindings;
 with Interfaces.C;
 with System;
