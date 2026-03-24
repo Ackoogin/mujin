@@ -465,8 +465,8 @@ TEST(ProtoBindingsTypes, AckConstants) {
 
 TEST(ProtoBindingsTypes, QueryDefault) {
     types::Query q;
-    EXPECT_TRUE(q.one_shot);
-    EXPECT_TRUE(q.ids.empty());
+    EXPECT_FALSE(q.one_shot.has_value());  // proto3: unset optional
+    EXPECT_TRUE(q.id.empty());
 }
 
 TEST(ProtoBindingsTypes, IdentifierIsString) {
@@ -477,11 +477,11 @@ TEST(ProtoBindingsTypes, IdentifierIsString) {
 TEST(ProtoBindingsTypes, ObjectDetailDefaults) {
     types::ObjectDetail d;
     EXPECT_EQ(d.id, "");
-    EXPECT_FALSE(d.has_quality);
-    EXPECT_FALSE(d.has_course);
-    EXPECT_FALSE(d.has_speed);
-    EXPECT_FALSE(d.has_length);
+    EXPECT_FALSE(d.quality.has_value());
+    EXPECT_FALSE(d.course.has_value());
+    EXPECT_FALSE(d.speed.has_value());
+    EXPECT_FALSE(d.length.has_value());
     EXPECT_EQ(d.identity,  types::StandardIdentity::Unspecified);
     EXPECT_EQ(d.dimension, types::BattleDimension::Unspecified);
-    EXPECT_EQ(d.obj_source, types::ObjectSource::Unspecified);
+    EXPECT_TRUE(d.source.empty());  // repeated ObjectSource field
 }
