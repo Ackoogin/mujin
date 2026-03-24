@@ -1015,18 +1015,16 @@ class AdaTypesGenerator:
     literal.
 
     Usage::
-        gen = AdaTypesGenerator(data_model_dir, service_proto)
+        gen = AdaTypesGenerator(data_model_dir, 'Tactical_Objects_Types')
         gen.generate(output_dir)
     """
 
-    def __init__(self, data_model_dir: Path, service_proto: Path):
+    def __init__(self, data_model_dir: Path, ada_package: str):
         proto_files = parse_proto_tree(data_model_dir)
         self._index = ProtoTypeIndex(proto_files)
         self._data_model_dir = data_model_dir
-
-        # Derive Ada package name from service proto
-        self._ada_pkg = _types_pkg_from_proto(parse_proto(service_proto))
-        file_base = self._ada_pkg.lower().replace('.', '-')
+        self._ada_pkg = ada_package
+        file_base = ada_package.lower().replace('.', '-')
         self._file_base = file_base
         self._aliases = self._find_scalar_wrappers()
 
@@ -1268,9 +1266,11 @@ def main():
     if sys.argv[1] == '--types':
         if len(sys.argv) < 5:
             print('Usage: python ada_service_generator.py --types'
-                  ' <data_model_dir> <service_proto> <output_dir>')
+                  ' <data_model_dir> <ada_package> <output_dir>')
+            print('  e.g. --types proto/pyramid/data_model'
+                  ' Tactical_Objects_Types examples/ada/generated')
             sys.exit(1)
-        gen = AdaTypesGenerator(Path(sys.argv[2]), Path(sys.argv[3]))
+        gen = AdaTypesGenerator(Path(sys.argv[2]), sys.argv[3])
         gen.generate(sys.argv[4])
         print('\n\u2713 Ada types generated')
         return

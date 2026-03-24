@@ -1048,19 +1048,16 @@ class CppTypesGenerator:
     ``struct``s.  Enums are always emitted as ``enum class``.
 
     Usage::
-        gen = CppTypesGenerator(data_model_dir, service_proto)
+        gen = CppTypesGenerator(data_model_dir, 'pyramid::services::tactical_objects')
         gen.generate(output_dir)
     """
 
-    def __init__(self, data_model_dir: Path, service_proto: Path):
+    def __init__(self, data_model_dir: Path, namespace: str):
         proto_files = parse_proto_tree(data_model_dir)
         self._index = ProtoTypeIndex(proto_files)
         self._data_model_dir = data_model_dir
-
-        parsed_svc = parse_proto(service_proto)
-        _, _, types_ns = _namespace_from_proto(parsed_svc)
-        self._ns = types_ns
-        self._prefix = '_'.join(types_ns.split('::'))
+        self._ns = namespace
+        self._prefix = '_'.join(namespace.split('::'))
         self._aliases = self._find_scalar_wrappers()
 
     # -- public ----------------------------------------------------------------
@@ -1277,9 +1274,11 @@ def main():
     if sys.argv[1] == '--types':
         if len(sys.argv) < 5:
             print('Usage: python cpp_service_generator.py --types'
-                  ' <data_model_dir> <service_proto> <output_dir>')
+                  ' <data_model_dir> <namespace> <output_dir>')
+            print('  e.g. --types proto/pyramid/data_model'
+                  ' pyramid::services::tactical_objects examples/cpp/generated')
             sys.exit(1)
-        gen = CppTypesGenerator(Path(sys.argv[2]), Path(sys.argv[3]))
+        gen = CppTypesGenerator(Path(sys.argv[2]), sys.argv[3])
         gen.generate(sys.argv[4])
         print('\n\u2713 C++ types generated')
         return
