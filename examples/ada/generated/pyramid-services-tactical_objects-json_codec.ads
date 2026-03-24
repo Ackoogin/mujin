@@ -15,7 +15,7 @@
 --  Architecture: component logic > Json_Codec > service binding > PCL
 
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
-with Tactical_Objects_Types;  use Tactical_Objects_Types;
+with Pyramid_Data_Model_Types;  use Pyramid_Data_Model_Types;
 
 package Pyramid.Services.Tactical_Objects.Json_Codec is
 
