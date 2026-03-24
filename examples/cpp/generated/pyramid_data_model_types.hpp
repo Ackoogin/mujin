@@ -1,6 +1,6 @@
 // Auto-generated types header
 // Generated from: proto/pyramid/data_model by cpp_service_generator.py --types
-// Namespace: pyramid::services::tactical_objects
+// Namespace: pyramid::data_model
 #pragma once
 
 #include <cstdint>
@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-namespace pyramid::services::tactical_objects {
+namespace pyramid::data_model {
 
 using Angle = double;
 using Length = double;
@@ -178,4 +178,4 @@ struct ObjectMatch {
     std::string matching_object_id = {};
 };
 
-} // namespace pyramid::services::tactical_objects
+} // namespace pyramid::data_model

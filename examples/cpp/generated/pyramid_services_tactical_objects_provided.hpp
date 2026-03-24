@@ -1,5 +1,5 @@
 // Auto-generated service binding header
-// Generated from: provided.proto by cpp_service_generator
+// Generated from: components by cpp_service_generator
 // Namespace: pyramid::services::tactical_objects::provided
 //
 // Architecture: component logic > service binding (this) > PCL
@@ -11,7 +11,7 @@
 //   4. msgToString utility for PCL message payloads
 #pragma once
 
-#include "pyramid_services_tactical_objects_types.hpp"
+#include "pyramid_data_model_types.hpp"
 
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_transport_socket.h>
@@ -68,12 +68,12 @@ std::string msgToString(const void* data, unsigned size);
 // Default implementations return empty / null values (stub behaviour).
 // ---------------------------------------------------------------------------
 
-using pyramid::services::tactical_objects::Ack;
-using pyramid::services::tactical_objects::Identifier;
-using pyramid::services::tactical_objects::ObjectDetail;
-using pyramid::services::tactical_objects::ObjectInterestRequirement;
-using pyramid::services::tactical_objects::ObjectMatch;
-using pyramid::services::tactical_objects::Query;
+using pyramid::data_model::Ack;
+using pyramid::data_model::Identifier;
+using pyramid::data_model::ObjectDetail;
+using pyramid::data_model::ObjectInterestRequirement;
+using pyramid::data_model::ObjectMatch;
+using pyramid::data_model::Query;
 
 class ServiceHandler {
 public:

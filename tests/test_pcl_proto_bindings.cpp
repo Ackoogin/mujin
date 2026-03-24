@@ -16,7 +16,7 @@
 #include "pyramid_services_tactical_objects_consumed.hpp"
 #include "pyramid_services_tactical_objects_provided.hpp"
 #include "pyramid_services_tactical_objects_json_codec.hpp"
-#include "pyramid_services_tactical_objects_types.hpp"
+#include "pyramid_data_model_types.hpp"
 
 extern "C" {
 #include <pcl/pcl_container.h>
@@ -33,7 +33,7 @@ extern "C" {
 namespace prov = pyramid::services::tactical_objects::provided;
 namespace cons = pyramid::services::tactical_objects::consumed;
 namespace codec = pyramid::services::tactical_objects::json_codec;
-namespace types = pyramid::services::tactical_objects;
+namespace types = pyramid::data_model;
 
 // ===========================================================================
 // Wire-name constant tests

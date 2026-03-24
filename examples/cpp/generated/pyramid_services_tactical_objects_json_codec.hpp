@@ -15,14 +15,14 @@
 // Architecture: component logic > JsonCodec > service binding > PCL
 #pragma once
 
-#include "pyramid_services_tactical_objects_types.hpp"
+#include "pyramid_data_model_types.hpp"
 
 #include <string>
 #include <vector>
 
 namespace pyramid::services::tactical_objects::json_codec {
 
-using namespace pyramid::services::tactical_objects;
+using namespace pyramid::data_model;
 
 // ---------------------------------------------------------------------------
 // Wire message structs
