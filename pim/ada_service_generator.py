@@ -383,6 +383,12 @@ class AdaServiceGenerator:
             f.write(f'\n')
             for tp in _DATA_MODEL_TYPES_PKGS:
                 f.write(f'with {tp};  use {tp};\n')
+            # Import Json_Codec if any Invoke_* uses wire types
+            has_wire_types = is_provided and any(
+                schema.INVOKE_WIRE_TYPES.get(rpc.ada_req_type)
+                for svc in parsed.services for rpc in svc.rpcs)
+            if has_wire_types:
+                f.write(f'with {codec_pkg};\n')
             f.write(f'with Pcl_Bindings;\n')
             f.write(f'with Interfaces.C;\n')
             f.write(f'with System;\n')
@@ -489,14 +495,19 @@ class AdaServiceGenerator:
                 f.write(f'\n')
 
             # Invoke helpers for services (provided = client can call them)
-            # Typed interface: accept data model types, serialise internally.
+            # When a proto request type has a Json_Codec wire type mapping
+            # (INVOKE_WIRE_TYPES), the Invoke procedure accepts the wire type
+            # and serialises via Json_Codec.To_Json.  Otherwise it accepts the
+            # data model type directly.
             if is_provided:
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
                         req_t = rpc.ada_req_type
+                        wire_t = schema.INVOKE_WIRE_TYPES.get(req_t)
+                        invoke_t = f'{codec_pkg}.{wire_t}' if wire_t else req_t
                         f.write(f'   procedure {rpc.ada_invoke_name}\n')
                         f.write(f'     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;\n')
-                        f.write(f'      Request   : {req_t};\n')
+                        f.write(f'      Request   : {invoke_t};\n')
                         f.write(f'      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
                         f.write(f'      User_Data : System.Address := System.Null_Address);\n')
                         f.write(f'\n')
@@ -548,6 +559,9 @@ class AdaServiceGenerator:
             # Bring codec packages into scope for To_Json / From_Json
             for cp in _DM_CODEC_PKGS:
                 f.write(f'with {cp};  use {cp};\n')
+            # Import Json_Codec for wire-type serialisation in Invoke_*
+            codec_pkg = _codec_pkg_from_proto(parsed)
+            f.write(f'with {codec_pkg};\n')
             f.write(f'\n')
             f.write(f'package body {pkg_name} is\n')
             f.write(f'\n')
@@ -650,19 +664,25 @@ class AdaServiceGenerator:
 
             # Invoke helpers (provided services) — typed, serialize internally
             if is_provided:
+                codec_pkg = _codec_pkg_from_proto(parsed)
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
                         req_t = rpc.ada_req_type
+                        wire_t = schema.INVOKE_WIRE_TYPES.get(req_t)
+                        invoke_t = f'{codec_pkg}.{wire_t}' if wire_t else req_t
                         f.write(f'   procedure {rpc.ada_invoke_name}\n')
                         f.write(f'     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;\n')
-                        f.write(f'      Request   : {req_t};\n')
+                        f.write(f'      Request   : {invoke_t};\n')
                         f.write(f'      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
                         f.write(f'      User_Data : System.Address := System.Null_Address)\n')
                         f.write(f'   is\n')
                         f.write(f'      use type Pcl_Bindings.Pcl_Status;\n')
-                        # Serialize request to JSON string
+                        # Serialize request to JSON string — use Json_Codec
+                        # for wire types, data model codec for base types.
                         if req_t == 'Identifier':
                             f.write(f'      Payload : constant String := To_String (Request);\n')
+                        elif wire_t:
+                            f.write(f'      Payload : constant String := {codec_pkg}.To_Json (Request);\n')
                         else:
                             f.write(f'      Payload : constant String := To_Json (Request);\n')
                         f.write(f'      Req_C  : Interfaces.C.Strings.chars_ptr :=\n')

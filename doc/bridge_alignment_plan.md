@@ -1,6 +1,6 @@
 # Bridge Alignment Plan — Original ↔ PYRAMID Proto Formats
 
-> **Status**: Draft — created during service generator pipeline update.
+> **Status**: Implemented — generator fixed, bridge unchanged.
 > **Date**: 2026-03-25
 
 ---
@@ -143,13 +143,51 @@ PYRAMID data model JSON and internal format, driven by both proto schemas.
 
 ---
 
-## 5. Recommended Path
+## 5. Chosen Approach
 
-| Phase | Action | Effort |
-|-------|--------|--------|
-| **Now** | **Option B** — Restore `Json_Codec` usage in `tobj_interest_client.adb` for bridge-facing calls, keeping typed internal logic. This unblocks the active-find E2E immediately. | Small |
-| **Next** | **Option A** — Add format detection in `standalone_bridge.cpp` so it accepts both JSON dialects. This allows pure-typed Ada clients to work through the bridge. | Medium |
-| **Later** | **Option C** — Incrementally align C++ implementation to PYRAMID types, starting with shared enums and working toward full type alignment. Use `proto/example/tactical_objects.proto` as the mapping reference. | Large |
+**Root cause**: The service binding generator (`ada_service_generator.py`) emitted
+`Invoke_Create_Requirement` with `Object_Interest_Requirement` (data model type)
+and called `To_Json(Request)` — which resolved to the data model codec stub
+returning `"{}"`.  The bridge was never the problem; it already speaks the
+Json_Codec wire format.
+
+**Fix** (implemented):
+
+1. **Generator** (`pim/json_schema.py` + `pim/ada_service_generator.py`):
+   Added `INVOKE_WIRE_TYPES` mapping so `Invoke_*` procedures that accept PIM
+   data model types are replaced with Json_Codec wire types.  Serialization
+   uses `Json_Codec.To_Json` (qualified), bypassing data model codec stubs.
+
+2. **Ada client** (`tobj_interest_client.adb`): Builds a
+   `Codec.Create_Requirement_Request` (wire type) with all fields populated,
+   instead of a default-initialized `Object_Interest_Requirement`.
+
+3. **Bridge**: No changes needed.  `standalone_bridge.cpp` and
+   `StandardBridge.cpp` already accept the Json_Codec flat JSON format
+   (`DATA_POLICY_OBTAIN`, `STANDARD_IDENTITY_HOSTILE`, `min_lat_rad`, etc.)
+   which is exactly what `Json_Codec.To_Json` produces.
+
+**Architecture**:
+
+```
+Ada Component Logic
+    │  builds Codec.Create_Requirement_Request (wire type)
+    ▼
+Json_Codec.To_Json (PIM-generated, flat JSON)
+    │  {"policy":"DATA_POLICY_OBTAIN","identity":"STANDARD_IDENTITY_HOSTILE",...}
+    ▼
+PCL Transport → standalone_bridge.cpp
+    │  translates to internal subscribe_interest JSON
+    ▼
+TacticalObjectsComponent (internal types, unchanged)
+```
+
+| Principle | Outcome |
+|-----------|---------|
+| Tactical Objects component unchanged | ✓ No internal C++ changes |
+| Tests use PIM service generation pipeline | ✓ Json_Codec is PIM-generated; Invoke_* uses it |
+| Bridge translates between the two | ✓ Bridge already spoke Json_Codec format |
+| No hand-written code in generated files | ✓ Data model codec stubs remain for user extension |
 
 ---
 
@@ -195,5 +233,5 @@ PYRAMID data model JSON and internal format, driven by both proto schemas.
 |------|--------|---------------|
 | `ada_generated_bindings_roundtrip` (509) | ✅ Pass | None |
 | `tobj_ada_socket_e2e` (510) | ✅ Pass | None |
-| `tobj_ada_active_find_e2e` (511) | ❌ Fail | Bridge JSON format mismatch — apply Option B or A |
-| All C++ tests (1–508) | ✅ Pass | None until Option C alignment |
+| `tobj_ada_active_find_e2e` (511) | ✅ Fixed | Generator now emits Json_Codec wire types; client populates all fields |
+| All C++ tests (1–508) | ✅ Pass | None |

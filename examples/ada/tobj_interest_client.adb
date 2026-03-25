@@ -7,7 +7,6 @@ with Ada.Text_IO;
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 with Interfaces.C;
 with Pyramid_Data_Model_Common_Types;  use Pyramid_Data_Model_Common_Types;
-with Pyramid_Data_Model_Tactical_Types; use Pyramid_Data_Model_Tactical_Types;
 with Pyramid.Services.Tactical_Objects.Provided;
 with Pyramid.Services.Tactical_Objects.Json_Codec;
 with System;
@@ -114,11 +113,15 @@ package body Tobj_Interest_Client is
       Min_Lon_Rad : Long_Float := 0.0;
       Max_Lon_Rad : Long_Float := 0.0)
    is
-      pragma Unreferenced (Identity, Dimension);
-      pragma Unreferenced (Min_Lat_Rad, Max_Lat_Rad, Min_Lon_Rad, Max_Lon_Rad);
-      Req : Object_Interest_Requirement;
+      Req : Codec.Create_Requirement_Request;
    begin
-      Req.Policy := Policy;
+      Req.Policy      := Policy;
+      Req.Identity    := Identity;
+      Req.Dimension   := Dimension;
+      Req.Min_Lat_Rad := Min_Lat_Rad;
+      Req.Max_Lat_Rad := Max_Lat_Rad;
+      Req.Min_Lon_Rad := Min_Lon_Rad;
+      Req.Max_Lon_Rad := Max_Lon_Rad;
 
       Log ("create_requirement request (typed)");
       Provided.Invoke_Create_Requirement

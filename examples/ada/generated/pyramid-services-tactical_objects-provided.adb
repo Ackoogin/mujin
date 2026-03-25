@@ -8,6 +8,7 @@ with System;
 with System.Storage_Elements;
 with Pyramid_Data_Model_Common_Types_Codec;  use Pyramid_Data_Model_Common_Types_Codec;
 with Pyramid_Data_Model_Tactical_Types_Codec;  use Pyramid_Data_Model_Tactical_Types_Codec;
+with Pyramid.Services.Tactical_Objects.Json_Codec;
 
 package body Pyramid.Services.Tactical_Objects.Provided is
 
@@ -159,12 +160,12 @@ package body Pyramid.Services.Tactical_Objects.Provided is
 
    procedure Invoke_Create_Requirement
      (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : Object_Interest_Requirement;
+      Request   : Pyramid.Services.Tactical_Objects.Json_Codec.Create_Requirement_Request;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address)
    is
       use type Pcl_Bindings.Pcl_Status;
-      Payload : constant String := To_Json (Request);
+      Payload : constant String := Pyramid.Services.Tactical_Objects.Json_Codec.To_Json (Request);
       Req_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Payload);
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
@@ -211,12 +212,12 @@ package body Pyramid.Services.Tactical_Objects.Provided is
 
    procedure Invoke_Update_Requirement
      (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : Object_Interest_Requirement;
+      Request   : Pyramid.Services.Tactical_Objects.Json_Codec.Create_Requirement_Request;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address)
    is
       use type Pcl_Bindings.Pcl_Status;
-      Payload : constant String := To_Json (Request);
+      Payload : constant String := Pyramid.Services.Tactical_Objects.Json_Codec.To_Json (Request);
       Req_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Payload);
       Svc_C  : Interfaces.C.Strings.chars_ptr :=

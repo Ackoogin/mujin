@@ -16,6 +16,7 @@
 with Pyramid_Data_Model_Base_Types;  use Pyramid_Data_Model_Base_Types;
 with Pyramid_Data_Model_Common_Types;  use Pyramid_Data_Model_Common_Types;
 with Pyramid_Data_Model_Tactical_Types;  use Pyramid_Data_Model_Tactical_Types;
+with Pyramid.Services.Tactical_Objects.Json_Codec;
 with Pcl_Bindings;
 with Interfaces.C;
 with System;
@@ -112,7 +113,7 @@ package Pyramid.Services.Tactical_Objects.Provided is
 
    procedure Invoke_Create_Requirement
      (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : Object_Interest_Requirement;
+      Request   : Pyramid.Services.Tactical_Objects.Json_Codec.Create_Requirement_Request;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address);
 
@@ -124,7 +125,7 @@ package Pyramid.Services.Tactical_Objects.Provided is
 
    procedure Invoke_Update_Requirement
      (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : Object_Interest_Requirement;
+      Request   : Pyramid.Services.Tactical_Objects.Json_Codec.Create_Requirement_Request;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address);
 

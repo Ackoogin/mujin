@@ -21,7 +21,7 @@ Wire format sources:
 
 import re
 from pathlib import Path
-from typing import List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 # Root of the repository (parent of this script's directory).
 _PROTO_ROOT = Path(__file__).resolve().parent.parent
@@ -416,6 +416,15 @@ ALL_SCHEMAS: List[MessageSchema] = [
     OBJECT_EVIDENCE,
     EVIDENCE_REQUIREMENT,
 ]
+
+# Maps proto Ada request type → Json_Codec wire type Ada name.
+# Used by the service binding generator: Invoke_* procedures accept the
+# wire type and serialise with Json_Codec.To_Json, avoiding the data model
+# codec stubs.  Types NOT in this map use To_Json(Request) as-is (base types
+# like Query, Identifier, Ack whose codecs are complete).
+INVOKE_WIRE_TYPES: Dict[str, str] = {
+    'Object_Interest_Requirement': 'Create_Requirement_Request',
+}
 
 # ── Standard topic names ──────────────────────────────────────────────────────
 # Topics the Ada/C++ client SUBSCRIBES to (server publishes these):
