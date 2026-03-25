@@ -1086,9 +1086,15 @@ class CppTypesGenerator:
     def generate(self, output_dir: str) -> None:
         out = Path(output_dir)
         out.mkdir(parents=True, exist_ok=True)
-        hpp = out / (self._prefix + '_types.hpp')
-        self._write_hpp(hpp)
-        print(f'  Generated {self._ns} (types)')
+        for pf in self._index.files:
+            prefix = pf.package.replace('.', '_')
+            hpp = out / (prefix + '_types.hpp')
+            self._write_hpp_for_file(hpp, pf)
+            print(f'  Generated {pf.package.replace(".", "::")} (types)')
+        # Umbrella header: pyramid_data_model_types.hpp → includes all + re-exports
+        umbrella = out / (self._prefix + '_types.hpp')
+        self._write_umbrella_hpp(umbrella)
+        print(f'  Generated {self._ns} (umbrella)')
 
     # -- internal --------------------------------------------------------------
 
@@ -1109,25 +1115,51 @@ class CppTypesGenerator:
                     aliases[msg.name] = _CPP_SCALAR_MAP[ft]
         return aliases
 
-    def _cpp_field_type(self, field_type: str, repeated: bool) -> str:
-        """Resolve a proto field type to a C++ type string."""
+    def _package_of_type(self, name: str) -> str:
+        """Return the proto package that defines a type (short name lookup)."""
+        short = name.split('.')[-1]
+        for pf in self._index.files:
+            for msg in pf.messages:
+                if msg.name == short:
+                    return pf.package
+            for enum in pf.enums:
+                if enum.name == short:
+                    return pf.package
+        return ''
+
+    def _cpp_field_type(self, field_type: str, repeated: bool,
+                         current_pkg: str = '') -> str:
+        """Resolve a proto field type to a C++ type string.
+
+        When current_pkg is given, cross-package references are fully qualified.
+        Both FQN (dotted) and short-name types are qualified when necessary.
+        """
         short = field_type.split('.')[-1]
         if field_type in _CPP_SCALAR_MAP:
             base = _CPP_SCALAR_MAP[field_type]
         elif short in self._aliases:
-            base = self._aliases[short]
-        elif self._index.is_enum_type(field_type) or self._index.is_enum_type(short):
-            base = short
-        elif self._index.is_message_type(field_type) or self._index.is_message_type(short):
-            if short in self._aliases:
-                base = self._aliases[short]
+            base = self._aliases[short]           # always a scalar — no namespace
+        elif '.' in field_type and not field_type.startswith('google.'):
+            # Fully-qualified proto type
+            pkg = '.'.join(field_type.split('.')[:-1])
+            if current_pkg and pkg != current_pkg:
+                base = pkg.replace('.', '::') + '::' + short
             else:
                 base = short
+        elif (self._index.is_enum_type(field_type)
+              or self._index.is_message_type(field_type)):
+            # Short name — look up its package for cross-package qualification
+            pkg = self._package_of_type(field_type)
+            if current_pkg and pkg and pkg != current_pkg:
+                base = pkg.replace('.', '::') + '::' + field_type
+            else:
+                base = field_type
         else:
-            base = short  # fallback
+            base = short
         return f'std::vector<{base}>' if repeated else base
 
-    def _cpp_default(self, cpp_type: str, field_type: str) -> str:
+    def _cpp_default(self, cpp_type: str, field_type: str,
+                     current_pkg: str = '') -> str:
         """Default initialiser for a C++ field."""
         short = field_type.split('.')[-1]
         if cpp_type.startswith('std::vector'):
@@ -1140,6 +1172,14 @@ class CppTypesGenerator:
             if enum and enum.values:
                 suf = enum.suffix_of(enum.values[0].name)
                 lit = screaming_to_pascal(suf) if suf else enum.values[0].name
+                if '.' in field_type and not field_type.startswith('google.'):
+                    pkg = '.'.join(field_type.split('.')[:-1])
+                    if current_pkg and pkg != current_pkg:
+                        return f'{pkg.replace(".", "::")}::{short}::{lit}'
+                else:
+                    pkg = self._package_of_type(field_type)
+                    if current_pkg and pkg and pkg != current_pkg:
+                        return f'{pkg.replace(".", "::")}::{field_type}::{lit}'
                 return f'{short}::{lit}'
         return '{}'
 
@@ -1201,83 +1241,446 @@ class CppTypesGenerator:
                     continue
             yield field, field.name, ''
 
-    def _write_struct(self, f, msg: ProtoMessage) -> None:
+    def _write_struct(self, f, msg: ProtoMessage,
+                      current_pkg: str = '') -> None:
         f.write(f'struct {msg.name} {{\n')
-        # Regular fields (with base inlining)
         for field, fname, comment in self._inline_base_fields(msg):
-            base_cpp = self._cpp_field_type(field.type, False)
+            base_cpp = self._cpp_field_type(field.type, False, current_pkg)
             if field.is_repeated:
                 cpp_type = f'std::vector<{base_cpp}>'
                 default = '{}'
                 opt = ''
             elif field.is_optional and base_cpp not in ('std::string',):
-                # optional scalar → std::optional for clean presence checking
                 cpp_type = f'std::optional<{base_cpp}>'
                 default = ''
                 opt = '  // optional'
             else:
                 cpp_type = base_cpp
-                default = self._cpp_default(base_cpp, field.type)
+                default = self._cpp_default(base_cpp, field.type, current_pkg)
                 opt = '  // optional' if field.is_optional else ''
             assign = f' = {default}' if default else ''
             f.write(f'    {cpp_type} {fname}{assign};{comment}{opt}\n')
-        # oneof groups
         for oo in msg.oneofs:
             f.write(f'    // oneof {oo.name}\n')
             for field in oo.fields:
-                cpp_type = self._cpp_field_type(field.type, False)
+                cpp_type = self._cpp_field_type(field.type, False, current_pkg)
                 f.write(f'    std::optional<{cpp_type}> {field.name};\n')
         f.write('};\n')
-        # post-struct constants (e.g. kAckOk / kAckFail for Ack)
         for const_name, init in _STRUCT_CONSTANTS.get(msg.name, []):
-            # init may be 'Ack{ true }' — strip the redundant type prefix
             body = init[len(msg.name):] if init.startswith(msg.name) else (
                 '{ ' + init + ' }')
             f.write('constexpr ' + msg.name + ' ' + const_name + body + ';\n')
         f.write('\n')
 
-    def _write_hpp(self, path: Path) -> None:
-        proto_files_rel = sorted(
-            str(p.relative_to(self._data_model_dir.parent))
-            for pf in self._index.files
-            for p in [self._data_model_dir / f'{pf.package.replace(".", "/")}.proto']
-            if (self._data_model_dir.parent / p).exists() or True
-        )
+    def _includes_for_file(self, pf) -> List[str]:
+        """Map proto imports to #include lines for sibling data model types headers."""
+        result = []
+        for imp in pf.imports:
+            if imp.startswith('google/'):
+                continue
+            pkg = imp.replace('/', '.').removesuffix('.proto')
+            for indexed_pf in self._index.files:
+                if indexed_pf.package == pkg:
+                    result.append(f'#include "{pkg.replace(".", "_")}_types.hpp"')
+                    break
+        return result
+
+    def _write_hpp_for_file(self, path: Path, pf) -> None:
+        ns = pf.package.replace('.', '::')
+        current_pkg = pf.package
+        includes = self._includes_for_file(pf)
+        alias_names = set(self._aliases.keys())
+        non_alias = [m for m in pf.messages if m.name not in alias_names]
+
         with open(path, 'w') as f:
             f.write('// Auto-generated types header\n')
-            f.write(f'// Generated from: {self._data_model_dir}'
+            f.write(f'// Generated from: {pf.path.name}'
                     f' by cpp_service_generator.py --types\n')
-            f.write(f'// Namespace: {self._ns}\n')
+            f.write(f'// Namespace: {ns}\n')
             f.write('#pragma once\n\n')
             f.write('#include <cstdint>\n')
             f.write('#include <optional>\n')
             f.write('#include <string>\n')
-            f.write('#include <vector>\n\n')
-            f.write(f'namespace {self._ns} {{\n\n')
+            f.write('#include <vector>\n')
+            for inc in includes:
+                f.write(inc + '\n')
+            f.write(f'\nnamespace {ns} {{\n\n')
 
-            # using aliases for scalar wrappers
-            for msg in self._index.all_messages():
+            # using aliases for scalar wrappers defined in this file
+            for msg in pf.messages:
                 if msg.name in self._aliases:
                     f.write(f'using {msg.name} = {self._aliases[msg.name]};\n')
-            # force Identifier → std::string even if not caught above
-            if 'Identifier' not in {m.name for m in self._index.all_messages()}:
-                f.write('using Identifier = std::string;\n')
             f.write('\n')
 
-            # enums
-            all_enums = self._index.all_enums()
-            if all_enums:
-                for enum in all_enums:
-                    self._write_enum(f, enum)
+            # enums defined in this file
+            for enum in pf.enums:
+                self._write_enum(f, enum)
 
-            # structs (alias messages already handled above)
-            alias_names = set(self._aliases.keys())
-            non_alias = [m for m in self._index.all_messages()
-                         if m.name not in alias_names]
+            # structs defined in this file (toposorted within this file)
             for msg in self._toposort(non_alias):
-                self._write_struct(f, msg)
+                self._write_struct(f, msg, current_pkg=current_pkg)
+
+            f.write(f'}} // namespace {ns}\n')
+
+    def _write_umbrella_hpp(self, path: Path) -> None:
+        """Umbrella header that includes all per-file headers and re-exports
+        everything into the common pyramid::data_model namespace for backward
+        compatibility with code that uses that single namespace."""
+        per_file_headers = sorted(
+            pf.package.replace('.', '_') + '_types.hpp'
+            for pf in self._index.files
+        )
+        with open(path, 'w') as f:
+            f.write('// Auto-generated umbrella types header\n')
+            f.write('// Includes all data model type headers and re-exports\n')
+            f.write('// their contents into namespace pyramid::data_model.\n')
+            f.write('#pragma once\n\n')
+            for h in per_file_headers:
+                f.write(f'#include "{h}"\n')
+            f.write('\n// Re-export all sub-namespace types into the common namespace\n')
+            f.write('// so existing code using pyramid::data_model::T continues to work.\n')
+            f.write(f'namespace {self._ns} {{\n')
+            for pf in self._index.files:
+                ns = pf.package.replace('.', '::')
+                if ns != self._ns:
+                    f.write(f'using namespace {ns};\n')
+            f.write(f'}} // namespace {self._ns}\n')
+
+
+# ---------------------------------------------------------------------------
+# Data model JSON codec generator (proto-driven, per file)
+# ---------------------------------------------------------------------------
+
+_CPP_INTEGRAL_SCALARS = frozenset({
+    'double', 'float', 'int32_t', 'int64_t', 'uint32_t', 'uint64_t', 'bool',
+})
+
+
+class CppDataModelCodecGenerator:
+    """Generates ``{pkg}_codec.hpp/cpp`` from a single data model proto file.
+
+    For each message and enum defined in the proto, emits nlohmann::json-based
+    toJson / fromJson helpers in the same namespace as the types.
+
+    Usage::
+        proto_files = parse_proto_tree(data_model_dir)
+        index = ProtoTypeIndex(proto_files)
+        for pf in proto_files:
+            gen = CppDataModelCodecGenerator(pf, index)
+            gen.generate(output_dir)
+    """
+
+    def __init__(self, pf, index: 'ProtoTypeIndex'):
+        self._pf = pf
+        self._index = index
+        self._ns = pf.package.replace('.', '::')
+        self._prefix = pf.package.replace('.', '_')
+        self._types_header = self._prefix + '_types.hpp'
+        self._hpp_name = self._prefix + '_codec.hpp'
+        self._cpp_name = self._prefix + '_codec.cpp'
+        # Build alias map (scalar wrappers) — same logic as CppTypesGenerator
+        self._aliases: Dict[str, str] = dict(_FORCED_ALIASES)
+        for msg in self._index.all_messages():
+            fields = msg.all_fields()
+            if len(fields) == 1 and not fields[0].is_repeated:
+                ft = fields[0].type
+                fn = fields[0].name
+                if ft in _CPP_SCALAR_MAP and fn in _UNIT_FIELD_NAMES:
+                    self._aliases[msg.name] = _CPP_SCALAR_MAP[ft]
+
+    def generate(self, output_dir: str) -> None:
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        self._write_header(out / self._hpp_name)
+        self._write_impl(out / self._cpp_name)
+        print(f'  Generated {self._ns} (codec)')
+
+    # ------------------------------------------------------------------ header
+
+    def _write_header(self, path: Path) -> None:
+        with open(path, 'w') as f:
+            f.write('// Auto-generated data model JSON codec header\n')
+            f.write(f'// Generated from: {self._pf.path.name}'
+                    f' by cpp_service_generator.py --codec\n')
+            f.write(f'// Namespace: {self._ns}\n')
+            f.write('#pragma once\n\n')
+            f.write(f'#include "{self._types_header}"\n')
+            f.write('#include <string>\n\n')
+            f.write(f'namespace {self._ns} {{\n\n')
+
+            # Enum converters
+            if self._pf.enums:
+                f.write('// Enum string converters\n')
+                for enum in self._pf.enums:
+                    t = enum.name
+                    fn = _lc_first(t)
+                    f.write(f'std::string toString({t} v);\n')
+                    f.write(f'{t} {fn}FromString(const std::string& s);\n')
+                f.write('\n')
+
+            alias_names = set(self._aliases.keys())
+            structs = [m for m in self._pf.messages if m.name not in alias_names]
+
+            # Struct codec declarations
+            if structs:
+                f.write('// JSON codec\n')
+                for msg in structs:
+                    f.write(f'std::string toJson(const {msg.name}& msg);\n')
+                    f.write(f'{msg.name} fromJson(const std::string& s,'
+                            f' {msg.name}* /*tag*/ = nullptr);\n')
+                f.write('\n')
 
             f.write(f'}} // namespace {self._ns}\n')
+
+    # ------------------------------------------------------------------ impl
+
+    def _write_impl(self, path: Path) -> None:
+        alias_names = set(self._aliases.keys())
+        structs = [m for m in self._pf.messages if m.name not in alias_names]
+        current_pkg = self._pf.package
+
+        with open(path, 'w') as f:
+            f.write('// Auto-generated data model JSON codec implementation\n')
+            f.write(f'// Namespace: {self._ns}\n\n')
+            f.write(f'#include "{self._hpp_name}"\n\n')
+            f.write('#include <nlohmann/json.hpp>\n\n')
+            # Include codec headers for imported packages (for nested toJson calls)
+            for imp in self._pf.imports:
+                if imp.startswith('google/'):
+                    continue
+                pkg = imp.replace('/', '.').removesuffix('.proto')
+                for indexed_pf in self._index.files:
+                    if indexed_pf.package == pkg:
+                        f.write(f'#include "{pkg.replace(".", "_")}_codec.hpp"\n')
+                        break
+            f.write(f'\nnamespace {self._ns} {{\n\n')
+
+            # Enum converters
+            for enum in self._pf.enums:
+                t = enum.name
+                fn = _lc_first(t)
+                f.write(f'std::string toString({t} v) {{\n')
+                f.write(f'    switch (v) {{\n')
+                for v in enum.values:
+                    suf = enum.suffix_of(v.name)
+                    lit = screaming_to_pascal(suf) if suf else v.name
+                    f.write(f'        case {t}::{lit}: return "{v.name}";\n')
+                f.write(f'    }}\n')
+                first_suf = enum.suffix_of(enum.values[0].name)
+                first_lit = screaming_to_pascal(first_suf) if first_suf else enum.values[0].name
+                f.write(f'    return "{enum.values[0].name}";\n')
+                f.write(f'}}\n\n')
+
+                f.write(f'{t} {fn}FromString(const std::string& s) {{\n')
+                for v in enum.values:
+                    suf = enum.suffix_of(v.name)
+                    lit = screaming_to_pascal(suf) if suf else v.name
+                    f.write(f'    if (s == "{v.name}") return {t}::{lit};\n')
+                first_suf = enum.suffix_of(enum.values[0].name)
+                first_lit = screaming_to_pascal(first_suf) if first_suf else enum.values[0].name
+                f.write(f'    return {t}::{first_lit};\n')
+                f.write(f'}}\n\n')
+
+            # Struct codec implementations
+            for msg in structs:
+                self._write_to_json(f, msg, current_pkg)
+                self._write_from_json(f, msg, current_pkg)
+
+            f.write(f'}} // namespace {self._ns}\n')
+
+    def _package_of_type(self, name: str) -> str:
+        """Return the proto package that defines a type."""
+        short = name.split('.')[-1]
+        for pf in self._index.files:
+            for msg in pf.messages:
+                if msg.name == short:
+                    return pf.package
+            for enum in pf.enums:
+                if enum.name == short:
+                    return pf.package
+        return ''
+
+    def _qualify(self, type_name: str, current_pkg: str) -> str:
+        """Return qualified C++ name for type_name relative to current_pkg."""
+        short = type_name.split('.')[-1]
+        if '.' in type_name and not type_name.startswith('google.'):
+            pkg = '.'.join(type_name.split('.')[:-1])
+        else:
+            pkg = self._package_of_type(type_name)
+        if pkg and pkg != current_pkg:
+            return pkg.replace('.', '::') + '::' + short
+        return short
+
+    def _field_info(self, field, fname: str, current_pkg: str):
+        """Return (base_cpp_type, is_struct, is_enum, is_alias) for a field."""
+        short = field.type.split('.')[-1]
+        if field.type in _CPP_SCALAR_MAP:
+            return _CPP_SCALAR_MAP[field.type], False, False, False
+        if short in self._aliases:
+            return self._aliases[short], False, False, True
+        if self._index.is_enum_type(field.type) or self._index.is_enum_type(short):
+            return self._qualify(field.type, current_pkg), False, True, False
+        if self._index.is_message_type(field.type) or self._index.is_message_type(short):
+            if short in self._aliases:
+                return self._aliases[short], False, False, True
+            return self._qualify(field.type, current_pkg), True, False, False
+        return short, False, False, False
+
+    def _write_to_json(self, f, msg, current_pkg: str) -> None:
+        f.write(f'std::string toJson(const {msg.name}& msg) {{\n')
+        f.write('    nlohmann::json obj;\n')
+        for field, fname, _ in self._inline_base_fields(msg):
+            base_cpp, is_struct, is_enum, _is_alias = self._field_info(
+                field, fname, current_pkg)
+            if field.is_repeated:
+                f.write(f'    {{\n')
+                f.write(f'        nlohmann::json arr = nlohmann::json::array();\n')
+                f.write(f'        for (const auto& v : msg.{fname}) {{\n')
+                if is_enum:
+                    ns_tok = base_cpp.rsplit('::', 1)[0] + '::' if '::' in base_cpp else ''
+                    fn_name = _lc_first(base_cpp.split('::')[-1]) + 'FromString'
+                    f.write(f'            arr.push_back('
+                            f'{ns_tok if ns_tok else ""}toString(v));\n')
+                elif is_struct:
+                    f.write(f'            arr.push_back('
+                            f'nlohmann::json::parse(toJson(v)));\n')
+                else:
+                    f.write(f'            arr.push_back(v);\n')
+                f.write(f'        }}\n')
+                f.write(f'        obj["{fname}"] = arr;\n')
+                f.write(f'    }}\n')
+            elif field.is_optional and base_cpp not in ('std::string',):
+                f.write(f'    if (msg.{fname}.has_value()) {{\n')
+                if is_struct:
+                    f.write(f'        obj["{fname}"] = nlohmann::json::parse('
+                            f'toJson(msg.{fname}.value()));\n')
+                elif is_enum:
+                    f.write(f'        obj["{fname}"] = toString(msg.{fname}.value());\n')
+                else:
+                    f.write(f'        obj["{fname}"] = msg.{fname}.value();\n')
+                f.write(f'    }}\n')
+            else:
+                if is_struct:
+                    f.write(f'    obj["{fname}"] = nlohmann::json::parse('
+                            f'toJson(msg.{fname}));\n')
+                elif is_enum:
+                    f.write(f'    obj["{fname}"] = toString(msg.{fname});\n')
+                else:
+                    f.write(f'    obj["{fname}"] = msg.{fname};\n')
+        for oo in msg.oneofs:
+            for field in oo.fields:
+                base_cpp, is_struct, is_enum, _ = self._field_info(
+                    field, field.name, current_pkg)
+                f.write(f'    if (msg.{field.name}.has_value()) {{\n')
+                if is_struct:
+                    f.write(f'        obj["{field.name}"] = nlohmann::json::parse('
+                            f'toJson(msg.{field.name}.value()));\n')
+                elif is_enum:
+                    f.write(f'        obj["{field.name}"] = toString('
+                            f'msg.{field.name}.value());\n')
+                else:
+                    f.write(f'        obj["{field.name}"] = msg.{field.name}.value();\n')
+                f.write(f'    }}\n')
+        f.write('    return obj.dump();\n')
+        f.write(f'}}\n\n')
+
+    def _write_from_json(self, f, msg, current_pkg: str) -> None:
+        f.write(f'{msg.name} fromJson(const std::string& s,'
+                f' {msg.name}* /*tag*/) {{\n')
+        f.write('    auto j = nlohmann::json::parse(s);\n')
+        f.write(f'    {msg.name} msg;\n')
+        for field, fname, _ in self._inline_base_fields(msg):
+            base_cpp, is_struct, is_enum, _is_alias = self._field_info(
+                field, fname, current_pkg)
+            short_type = base_cpp.split('::')[-1]
+            if field.is_repeated:
+                f.write(f'    if (j.contains("{fname}")) {{\n')
+                f.write(f'        for (const auto& v : j["{fname}"]) {{\n')
+                if is_enum:
+                    fn_name = (_lc_first(short_type) + 'FromString')
+                    ns_pre = (base_cpp.rsplit('::', 1)[0] + '::'
+                              if '::' in base_cpp else '')
+                    f.write(f'            msg.{fname}.push_back('
+                            f'{ns_pre}{fn_name}(v.get<std::string>()));\n')
+                elif is_struct:
+                    f.write(f'            msg.{fname}.push_back('
+                            f'fromJson(v.dump(), '
+                            f'static_cast<{base_cpp}*>(nullptr)));\n')
+                else:
+                    f.write(f'            msg.{fname}.push_back(v.get<{base_cpp}>());\n')
+                f.write(f'        }}\n')
+                f.write(f'    }}\n')
+            elif field.is_optional and base_cpp not in ('std::string',):
+                f.write(f'    if (j.contains("{fname}")) {{\n')
+                if is_struct:
+                    f.write(f'        msg.{fname} = fromJson('
+                            f'j["{fname}"].dump(),'
+                            f' static_cast<{base_cpp}*>(nullptr));\n')
+                elif is_enum:
+                    fn_name = _lc_first(short_type) + 'FromString'
+                    ns_pre = (base_cpp.rsplit('::', 1)[0] + '::'
+                              if '::' in base_cpp else '')
+                    f.write(f'        msg.{fname} = {ns_pre}{fn_name}('
+                            f'j["{fname}"].get<std::string>());\n')
+                else:
+                    f.write(f'        msg.{fname} = j["{fname}"].get<{base_cpp}>();\n')
+                f.write(f'    }}\n')
+            else:
+                if is_struct:
+                    f.write(f'    if (j.contains("{fname}")) msg.{fname} = fromJson('
+                            f'j["{fname}"].dump(),'
+                            f' static_cast<{base_cpp}*>(nullptr));\n')
+                elif is_enum:
+                    fn_name = _lc_first(short_type) + 'FromString'
+                    ns_pre = (base_cpp.rsplit('::', 1)[0] + '::'
+                              if '::' in base_cpp else '')
+                    f.write(f'    if (j.contains("{fname}")) msg.{fname} = '
+                            f'{ns_pre}{fn_name}(j["{fname}"].get<std::string>());\n')
+                elif base_cpp == 'std::string':
+                    f.write(f'    if (j.contains("{fname}")) msg.{fname} = '
+                            f'j["{fname}"].get<std::string>();\n')
+                else:
+                    f.write(f'    if (j.contains("{fname}")) msg.{fname} = '
+                            f'j["{fname}"].get<{base_cpp}>();\n')
+        for oo in msg.oneofs:
+            for field in oo.fields:
+                base_cpp, is_struct, is_enum, _ = self._field_info(
+                    field, field.name, current_pkg)
+                short_type = base_cpp.split('::')[-1]
+                f.write(f'    if (j.contains("{field.name}")) {{\n')
+                if is_struct:
+                    f.write(f'        msg.{field.name} = fromJson('
+                            f'j["{field.name}"].dump(),'
+                            f' static_cast<{base_cpp}*>(nullptr));\n')
+                elif is_enum:
+                    fn_name = _lc_first(short_type) + 'FromString'
+                    ns_pre = (base_cpp.rsplit('::', 1)[0] + '::'
+                              if '::' in base_cpp else '')
+                    f.write(f'        msg.{field.name} = {ns_pre}{fn_name}('
+                            f'j["{field.name}"].get<std::string>());\n')
+                else:
+                    f.write(f'        msg.{field.name} = '
+                            f'j["{field.name}"].get<{base_cpp}>();\n')
+                f.write(f'    }}\n')
+        f.write('    return msg;\n')
+        f.write(f'}}\n\n')
+
+    def _inline_base_fields(self, msg):
+        """Mirror CppTypesGenerator._inline_base_fields for codec use."""
+        own_names = {f.name for f in msg.fields if f.name != 'base'}
+        for field in msg.fields:
+            if field.name == 'base' and not field.is_repeated:
+                short = field.type.split('.')[-1]
+                base_msg = (self._index.resolve_message(field.type)
+                            or self._index.resolve_message(short))
+                if base_msg and base_msg.name not in self._aliases:
+                    for bf in base_msg.fields:
+                        name = bf.name
+                        if name in own_names:
+                            name = short.lower() + '_' + name
+                        yield bf, name, ''
+                    continue
+            yield field, field.name, ''
 
 
 # ---------------------------------------------------------------------------
@@ -1305,12 +1708,23 @@ def main():
 
     if sys.argv[1] == '--codec':
         if len(sys.argv) < 4:
-            print('Usage: python cpp_service_generator.py --codec <file.proto> <output_dir>')
+            print('Usage: python cpp_service_generator.py --codec'
+                  ' <file.proto|data_model_dir> <output_dir>')
             sys.exit(1)
-        parsed = parse_proto(Path(sys.argv[2]))
-        gen = CppJsonCodecGenerator(parsed)
-        gen.generate(sys.argv[3])
-        print('\n\u2713 C++ JSON codec generated')
+        codec_path = Path(sys.argv[2])
+        if codec_path.is_dir():
+            # Data model dir: generate one proto-driven codec per .proto file
+            proto_files = parse_proto_tree(codec_path)
+            index = ProtoTypeIndex(proto_files)
+            for pf in proto_files:
+                gen = CppDataModelCodecGenerator(pf, index)
+                gen.generate(sys.argv[3])
+            print('\n\u2713 C++ data model codecs generated')
+        else:
+            parsed = parse_proto(codec_path)
+            gen = CppJsonCodecGenerator(parsed)
+            gen.generate(sys.argv[3])
+            print('\n\u2713 C++ JSON codec generated')
         return
 
     if len(sys.argv) < 3:
