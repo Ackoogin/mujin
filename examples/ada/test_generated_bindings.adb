@@ -8,6 +8,7 @@
 
 with Ada.Text_IO;                use Ada.Text_IO;
 with Ada.Strings.Unbounded;      use Ada.Strings.Unbounded;
+with System;
 
 --  Generated data model types
 with Pyramid_Data_Model_Base_Types;     use Pyramid_Data_Model_Base_Types;

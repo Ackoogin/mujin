@@ -15,13 +15,15 @@ package Pyramid_Data_Model_Tactical_Types is
       Source_Local);
 
    type Source_Array is array (Positive range <>) of Object_Source;
+   type Source_Array_Acc is access all Source_Array;
    type Dimension_Array is array (Positive range <>) of Battle_Dimension;
+   type Dimension_Array_Acc is access all Dimension_Array;
 
    type Object_Detail is record
       Update_Time : Long_Float := 0.0;
       Id : Unbounded_String := Null_Unbounded_String;
       Entity_Source : Unbounded_String := Null_Unbounded_String;
-      Source : Source_Array;
+      Source : Source_Array_Acc := null;
       Position : Geodetic_Position;
       Creation_Time : Long_Float := 0.0;
       Quality : Long_Float := 0.0;
@@ -36,14 +38,14 @@ package Pyramid_Data_Model_Tactical_Types is
       Base : Entity;
       Status : Achievement;
       Policy : Data_Policy := Policy_Unspecified;
-      Dimension : Dimension_Array;
+      Dimension : Dimension_Array_Acc := null;
       --  oneof location
-      Has_Poly_Area : Boolean := False;
-      Poly_Area : Poly_Area;
-      Has_Circle_Area : Boolean := False;
-      Circle_Area : Circle_Area;
-      Has_Point : Boolean := False;
-      Point : Point;
+      Has_Val_Poly_Area : Boolean := False;
+      Val_Poly_Area : Poly_Area;
+      Has_Val_Circle_Area : Boolean := False;
+      Val_Circle_Area : Circle_Area;
+      Has_Val_Point : Boolean := False;
+      Val_Point : Point;
    end record;
 
    type Object_Interest_Requirement is record
@@ -51,14 +53,14 @@ package Pyramid_Data_Model_Tactical_Types is
       Status : Achievement;
       Source : Object_Source := Source_Unspecified;
       Policy : Data_Policy := Policy_Unspecified;
-      Dimension : Dimension_Array;
+      Dimension : Dimension_Array_Acc := null;
       --  oneof location
-      Has_Poly_Area : Boolean := False;
-      Poly_Area : Poly_Area;
-      Has_Circle_Area : Boolean := False;
-      Circle_Area : Circle_Area;
-      Has_Point : Boolean := False;
-      Point : Point;
+      Has_Val_Poly_Area : Boolean := False;
+      Val_Poly_Area : Poly_Area;
+      Has_Val_Circle_Area : Boolean := False;
+      Val_Circle_Area : Circle_Area;
+      Has_Val_Point : Boolean := False;
+      Val_Point : Point;
    end record;
 
    type Object_Match is record

@@ -1,7 +1,6 @@
 --  Auto-generated data model JSON codec body
 --  Package: Pyramid_Data_Model_Tactical_Types_Codec
 
-with pyramid_data_model_tactical_types_codec.ads;
 pragma Warnings (Off);
 
 package body Pyramid_Data_Model_Tactical_Types_Codec is

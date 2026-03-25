@@ -80,24 +80,16 @@ ref/*
 out/
 
 # Ada build output
-examples/ada/obj_tobj_client/*ali
-examples/ada/obj_tobj_client/*o
-examples/ada/obj_tobj_client/*bexch
-examples/ada/obj_tobj_client/*stderr
-examples/ada/obj_tobj_client/*stdout
-examples/ada/obj_tobj_client/*deps
-examples/ada/obj_tobj_client/b__*
-
-examples/ada/obj_active_find/*ali
-examples/ada/obj_active_find/*o
-examples/ada/obj_active_find/*bexch
-examples/ada/obj_active_find/*stderr
-examples/ada/obj_active_find/*stdout
-examples/ada/obj_active_find/*deps
-examples/ada/obj_active_find/b__*
-
+*ali
+*o
+*bexch
+*stderr
+*stdout
+*deps
+b__*
 
 # Python
 __pycache__/
 *.pyc
 *.pyo
+examples/ada/obj_test_bindings/pcl_container.c.stderr

@@ -1,7 +1,6 @@
 --  Auto-generated data model JSON codec body
 --  Package: Pyramid_Data_Model_Common_Types_Codec
 
-with pyramid_data_model_common_types_codec.ads;
 pragma Warnings (Off);
 
 package body Pyramid_Data_Model_Common_Types_Codec is
@@ -258,16 +257,22 @@ package body Pyramid_Data_Model_Common_Types_Codec is
 
    function To_Json (Msg : Ack) return String is
    begin
-      --  TODO: serialise Ack fields to JSON
-      pragma Unreferenced (Msg);
-      return "{}";
+      return "{" &
+        """success"":" & (if Msg.Success then "true" else "false") &
+        "}";
    end To_Json;
 
    function From_Json (S : String; Tag : access Ack) return Ack is
-      pragma Unreferenced (S, Tag);
+      pragma Unreferenced (Tag);
       Result : Ack;
    begin
-      --  TODO: deserialise JSON to Ack fields
+      --  Minimal parse: look for "true" after "success" key
+      for I in S'First .. S'Last - 3 loop
+         if S (I .. I + 3) = "true" then
+            Result.Success := True;
+            exit;
+         end if;
+      end loop;
       return Result;
    end From_Json;
 

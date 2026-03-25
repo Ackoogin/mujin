@@ -70,16 +70,14 @@ package Pyramid.Services.Tactical_Objects.Consumed is
    --  Implement these procedures in the package body.
 
    --  Object_Evidence_Service
-   procedure Handle_Read_Detail
-     (Request  : in  Query;
-      Response : out Object_Detail_Array);
+   function Handle_Read_Detail
+     (Request : Query) return Object_Detail_Array;
    --  Object_Solution_Evidence_Service
    procedure Handle_Create_Requirement
      (Request  : in  Object_Evidence_Requirement;
       Response : out Identifier);
-   procedure Handle_Read_Requirement
-     (Request  : in  Query;
-      Response : out Object_Evidence_Requirement_Array);
+   function Handle_Read_Requirement
+     (Request : Query) return Object_Evidence_Requirement_Array;
    procedure Handle_Update_Requirement
      (Request  : in  Object_Evidence_Requirement;
       Response : out Ack);
@@ -87,9 +85,8 @@ package Pyramid.Services.Tactical_Objects.Consumed is
      (Request  : in  Identifier;
       Response : out Ack);
    --  Object_Source_Capability_Service
-   procedure Handle_Read_Capability
-     (Request  : in  Query;
-      Response : out Identifier_Array);
+   function Handle_Read_Capability
+     (Request : Query) return Identifier_Array;
 
    --  -- PCL binding procedures ------------------------------------
    --  Subscribe/Invoke/Publish wrappers for PCL transport layer.

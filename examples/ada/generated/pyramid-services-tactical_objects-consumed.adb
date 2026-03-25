@@ -29,14 +29,13 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
    end Msg_To_String;
 
    --  -- Object_Evidence_Service ------------------------------------
-   procedure Handle_Read_Detail
-     (Request  : in  Query;
-      Response : out Object_Detail_Array)
+   function Handle_Read_Detail
+     (Request : Query) return Object_Detail_Array
    is
       pragma Unreferenced (Request);
       Empty : Object_Detail_Array (1 .. 0);
    begin
-      Response := Empty;
+      return Empty;
    end Handle_Read_Detail;
 
    --  -- Object_Solution_Evidence_Service ------------------------------------
@@ -49,14 +48,13 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
       Response := Null_Unbounded_String;
    end Handle_Create_Requirement;
 
-   procedure Handle_Read_Requirement
-     (Request  : in  Query;
-      Response : out Object_Evidence_Requirement_Array)
+   function Handle_Read_Requirement
+     (Request : Query) return Object_Evidence_Requirement_Array
    is
       pragma Unreferenced (Request);
       Empty : Object_Evidence_Requirement_Array (1 .. 0);
    begin
-      Response := Empty;
+      return Empty;
    end Handle_Read_Requirement;
 
    procedure Handle_Update_Requirement
@@ -78,14 +76,13 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
    end Handle_Delete_Requirement;
 
    --  -- Object_Source_Capability_Service ------------------------------------
-   procedure Handle_Read_Capability
-     (Request  : in  Query;
-      Response : out Identifier_Array)
+   function Handle_Read_Capability
+     (Request : Query) return Identifier_Array
    is
       pragma Unreferenced (Request);
       Empty : Identifier_Array (1 .. 0);
    begin
-      Response := Empty;
+      return Empty;
    end Handle_Read_Capability;
 
    --  -- PCL binding implementations -------------------------------
@@ -141,9 +138,9 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
             declare
                Req : constant Query :=
                  From_Json (Req_Str, null);
-               Rsp : Object_Detail_Array;
+               Rsp : constant Object_Detail_Array :=
+                 Handle_Read_Detail (Req);
             begin
-               Handle_Read_Detail (Req, Rsp);
                declare
                   use Ada.Strings.Unbounded;
                   Acc : Unbounded_String :=
@@ -174,9 +171,9 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
             declare
                Req : constant Query :=
                  From_Json (Req_Str, null);
-               Rsp : Object_Evidence_Requirement_Array;
+               Rsp : constant Object_Evidence_Requirement_Array :=
+                 Handle_Read_Requirement (Req);
             begin
-               Handle_Read_Requirement (Req, Rsp);
                declare
                   use Ada.Strings.Unbounded;
                   Acc : Unbounded_String :=
@@ -217,9 +214,9 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
             declare
                Req : constant Query :=
                  From_Json (Req_Str, null);
-               Rsp : Identifier_Array;
+               Rsp : constant Identifier_Array :=
+                 Handle_Read_Capability (Req);
             begin
-               Handle_Read_Capability (Req, Rsp);
                declare
                   use Ada.Strings.Unbounded;
                   Acc : Unbounded_String :=
@@ -229,7 +226,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                      if I > Rsp'First then
                         Append (Acc, ",");
                      end if;
-                     Append (Acc, To_Json (Rsp (I)));
+                     Append (Acc, """" & To_String (Rsp (I)) & """");
                   end loop;
                   Append (Acc, "]");
                   Copy_To_Buf (To_String (Acc),

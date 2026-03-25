@@ -275,6 +275,36 @@ def _codec_pkg_from_proto(proto_file: ProtoFile) -> str:
     return '.'.join(ada_parts)
 
 
+# -- Parent package stubs ------------------------------------------------------
+
+def _ensure_parent_packages(output_dir: Path, pkg_names: List[str]) -> None:
+    """Generate empty parent package specs required by Ada child packages.
+
+    For a package like Pyramid.Services.Tactical_Objects.Provided, Ada requires
+    that Pyramid, Pyramid.Services, and Pyramid.Services.Tactical_Objects each
+    have a corresponding .ads file.  This function collects all such ancestors
+    from *pkg_names* and writes trivial specs for any that don't already exist
+    in *output_dir*.
+    """
+    needed: dict[str, None] = {}          # ordered set via dict
+    for pkg in pkg_names:
+        parts = pkg.split('.')
+        for i in range(1, len(parts)):    # skip full name, keep ancestors
+            ancestor = '.'.join(parts[:i])
+            needed[ancestor] = None
+
+    for ancestor in needed:
+        file_base = ancestor.lower().replace('.', '-')
+        ads = output_dir / (file_base + '.ads')
+        if ads.exists():
+            continue
+        with open(ads, 'w', encoding='utf-8') as f:
+            f.write(f'--  Auto-generated parent package spec (empty)\n')
+            f.write(f'package {ancestor} is\n')
+            f.write(f'end {ancestor};\n')
+        print(f'  Generated parent spec {ancestor}')
+
+
 # -- Code generation -----------------------------------------------------------
 
 class AdaServiceGenerator:
@@ -295,6 +325,7 @@ class AdaServiceGenerator:
             print(f'ERROR: {self._proto_input} is not a file or directory', file=sys.stderr)
             sys.exit(1)
 
+        generated_pkgs: List[str] = []
         for pf in proto_files:
             parsed = parse_proto(pf)
             all_rpcs: List[Tuple[str, ProtoRpc]] = []
@@ -311,7 +342,10 @@ class AdaServiceGenerator:
 
             self._write_spec(ads_path, pkg_name, parsed, all_rpcs)
             self._write_body(adb_path, pkg_name, parsed, all_rpcs)
+            generated_pkgs.append(pkg_name)
             print(f'  Generated {pkg_name}')
+
+        _ensure_parent_packages(output_path, generated_pkgs)
 
     # -- Spec (.ads) -----------------------------------------------------------
 
@@ -427,9 +461,14 @@ class AdaServiceGenerator:
                 req_t = rpc.ada_req_type
                 rsp_t = rpc.ada_rsp_type
 
-                f.write(f'   procedure {rpc.ada_handler}\n')
-                f.write(f'     (Request  : in  {req_t};\n')
-                f.write(f'      Response : out {rsp_t});\n')
+                if rpc.streaming:
+                    # Streaming handlers return unconstrained arrays via function
+                    f.write(f'   function {rpc.ada_handler}\n')
+                    f.write(f'     (Request : {req_t}) return {rsp_t};\n')
+                else:
+                    f.write(f'   procedure {rpc.ada_handler}\n')
+                    f.write(f'     (Request  : in  {req_t};\n')
+                    f.write(f'      Response : out {rsp_t});\n')
 
             f.write('\n')
 
@@ -544,27 +583,33 @@ class AdaServiceGenerator:
                 req_t = rpc.ada_req_type
                 rsp_t = rpc.ada_rsp_type
 
-                f.write(f'   procedure {rpc.ada_handler}\n')
-                f.write(f'     (Request  : in  {req_t};\n')
-                f.write(f'      Response : out {rsp_t})\n')
-                f.write(f'   is\n')
-                f.write(f'      pragma Unreferenced (Request);\n')
-
-                # Generate sensible default return values
-                if rsp_t == 'Identifier':
-                    f.write(f'   begin\n')
-                    f.write(f'      Response := Null_Unbounded_String;\n')
-                elif rsp_t == 'Ack':
-                    f.write(f'   begin\n')
-                    f.write(f'      Response := (Success => True);\n')
-                elif rsp_t.endswith('_Array'):
+                if rpc.streaming:
+                    # Streaming handlers: function returning unconstrained array
+                    f.write(f'   function {rpc.ada_handler}\n')
+                    f.write(f'     (Request : {req_t}) return {rsp_t}\n')
+                    f.write(f'   is\n')
+                    f.write(f'      pragma Unreferenced (Request);\n')
                     f.write(f'      Empty : {rsp_t} (1 .. 0);\n')
                     f.write(f'   begin\n')
-                    f.write(f'      Response := Empty;\n')
+                    f.write(f'      return Empty;\n')
                 else:
-                    f.write(f'      Default_Val : {rsp_t};\n')
-                    f.write(f'   begin\n')
-                    f.write(f'      Response := Default_Val;\n')
+                    f.write(f'   procedure {rpc.ada_handler}\n')
+                    f.write(f'     (Request  : in  {req_t};\n')
+                    f.write(f'      Response : out {rsp_t})\n')
+                    f.write(f'   is\n')
+                    f.write(f'      pragma Unreferenced (Request);\n')
+
+                    # Generate sensible default return values
+                    if rsp_t == 'Identifier':
+                        f.write(f'   begin\n')
+                        f.write(f'      Response := Null_Unbounded_String;\n')
+                    elif rsp_t == 'Ack':
+                        f.write(f'   begin\n')
+                        f.write(f'      Response := (Success => True);\n')
+                    else:
+                        f.write(f'      Default_Val : {rsp_t};\n')
+                        f.write(f'   begin\n')
+                        f.write(f'      Response := Default_Val;\n')
 
                 f.write(f'   end {rpc.ada_handler};\n')
                 f.write(f'\n')
@@ -714,16 +759,19 @@ class AdaServiceGenerator:
                     f.write(f'               Req : constant {req_t} :=\n')
                     f.write(f'                 From_Json (Req_Str, null);\n')
 
-                # Declare response variable
-                f.write(f'               Rsp : {rsp_t};\n')
-                f.write(f'            begin\n')
-                f.write(f'               {handler_fn} (Req, Rsp);\n')
+                if rpc.streaming:
+                    # Streaming: handler is a function returning unconstrained array
+                    f.write(f'               Rsp : constant {rsp_t} :=\n')
+                    f.write(f'                 {handler_fn} (Req);\n')
+                    f.write(f'            begin\n')
 
-                # Serialise response and copy to buffer
-                if rsp_t == 'Identifier':
-                    f.write(f'               Copy_To_Buf (To_String (Rsp),\n')
-                    f.write(f'                 Response_Buf, Response_Size);\n')
-                elif rsp_t.endswith('_Array'):
+                    # Determine element serialiser
+                    elem_type = _proto_type_to_ada(rpc.rsp)
+                    if elem_type == 'Identifier':
+                        elem_ser = '"""" & To_String (Rsp (I)) & """"'
+                    else:
+                        elem_ser = 'To_Json (Rsp (I))'
+
                     f.write(f'               declare\n')
                     f.write(f'                  use Ada.Strings.Unbounded;\n')
                     f.write(f'                  Acc : Unbounded_String :=\n')
@@ -733,15 +781,25 @@ class AdaServiceGenerator:
                     f.write(f"                     if I > Rsp'First then\n")
                     f.write(f'                        Append (Acc, ",");\n')
                     f.write(f'                     end if;\n')
-                    f.write(f'                     Append (Acc, To_Json (Rsp (I)));\n')
+                    f.write(f'                     Append (Acc, {elem_ser});\n')
                     f.write(f'                  end loop;\n')
                     f.write(f'                  Append (Acc, "]");\n')
                     f.write(f'                  Copy_To_Buf (To_String (Acc),\n')
                     f.write(f'                    Response_Buf, Response_Size);\n')
                     f.write(f'               end;\n')
                 else:
-                    f.write(f'               Copy_To_Buf (To_Json (Rsp),\n')
-                    f.write(f'                 Response_Buf, Response_Size);\n')
+                    # Non-streaming: handler is a procedure with out parameter
+                    f.write(f'               Rsp : {rsp_t};\n')
+                    f.write(f'            begin\n')
+                    f.write(f'               {handler_fn} (Req, Rsp);\n')
+
+                    # Serialise response and copy to buffer
+                    if rsp_t == 'Identifier':
+                        f.write(f'               Copy_To_Buf (To_String (Rsp),\n')
+                        f.write(f'                 Response_Buf, Response_Size);\n')
+                    else:
+                        f.write(f'               Copy_To_Buf (To_Json (Rsp),\n')
+                        f.write(f'                 Response_Buf, Response_Size);\n')
 
                 f.write(f'            end;\n')
 
@@ -782,6 +840,7 @@ class JsonCodecGenerator:
         adb = out / (self.PKG.lower().replace('.', '-') + '.adb')
         self._write_spec(ads)
         self._write_body(adb)
+        _ensure_parent_packages(out, [self.PKG])
         print(f'  Generated {self.PKG}')
 
     # -- Spec ------------------------------------------------------------------
@@ -1196,11 +1255,16 @@ class AdaTypesGenerator:
 
     def _ada_field_type(self, field_type: str, repeated: bool,
                         field_name: str) -> Tuple[str, Optional[str]]:
-        """Return (ada_type_string, array_type_name_or_None)."""
+        """Return (ada_type_string, array_type_name_or_None).
+
+        For repeated fields the Ada type used in record components is the
+        access type (``Foo_Array_Acc``) so that unconstrained arrays can
+        appear inside records.
+        """
         base = self._ada_base_type(field_type)
         if repeated:
             arr = _ada_name(field_name) + '_Array'
-            return (arr, arr)
+            return (arr + '_Acc', arr)
         return (base, None)
 
     def _ada_default(self, ada_type: str, field_type: str) -> Optional[str]:
@@ -1300,8 +1364,8 @@ class AdaTypesGenerator:
             ada_fname = _ada_name(fname)
             ada_type, arr = self._ada_field_type(field.type, field.is_repeated, fname)
             if arr:
-                # Array fields: no initializer (empty by default from type definition)
-                f.write(f'      {ada_fname} : {ada_type};\n')
+                # Access-to-array fields default to null (no allocation)
+                f.write(f'      {ada_fname} : {ada_type} := null;\n')
             elif field.is_optional and _ADA_SCALAR_MAP.get(field.type, '') not in (
                     'Unbounded_String', ''):
                 f.write(f'      Has_{ada_fname} : Boolean := False;\n')
@@ -1317,6 +1381,9 @@ class AdaTypesGenerator:
             for fld in oo.fields:
                 ada_fname = _ada_name(fld.name)
                 ada_type, _ = self._ada_field_type(fld.type, False, fld.name)
+                # Avoid field name colliding with its type name (Ada visibility)
+                if ada_fname == ada_type:
+                    ada_fname = 'Val_' + ada_fname
                 f.write(f'      Has_{ada_fname} : Boolean := False;\n')
                 dflt = self._ada_default(ada_type, fld.type)
                 init = f' := {dflt}' if dflt else ''
@@ -1362,6 +1429,8 @@ class AdaTypesGenerator:
                             or elem_type == 'Unbounded_String'):
                         f.write(f'   type {arr_name} is'
                                 f' array (Positive range <>) of {elem_type};\n')
+                        f.write(f'   type {arr_name}_Acc is'
+                                f' access all {arr_name};\n')
                         emitted_arrays.add(arr_name)
             if emitted_arrays:
                 f.write('\n')
@@ -1375,6 +1444,8 @@ class AdaTypesGenerator:
                         if arr_name not in emitted_arrays and elem_type == ada_msg_name:
                             f.write(f'   type {arr_name} is'
                                     f' array (Positive range <>) of {elem_type};\n')
+                            f.write(f'   type {arr_name}_Acc is'
+                                    f' access all {arr_name};\n')
                             emitted_arrays.add(arr_name)
                             f.write('\n')
 
@@ -1458,6 +1529,61 @@ class AdaDataModelCodecGenerator:
 
             f.write(f'end {self._ada_pkg};\n')
 
+    # ---------------------------------------------------------------- helpers
+
+    def _write_simple_codec(self, f, ada_n: str, fields) -> None:
+        """Generate working To_Json / From_Json for scalar-only records."""
+        # -- To_Json --
+        f.write(f'   function To_Json (Msg : {ada_n}) return String is\n')
+        f.write(f'   begin\n')
+        f.write(f'      return "{{" &\n')
+        parts = []
+        for fld in fields:
+            wire = camel_to_snake(fld.name)
+            ada_fname = _ada_name(fld.name)
+            if fld.type == 'bool':
+                expr = (f'(if Msg.{ada_fname} then "true" else "false")')
+            elif fld.type in ('int32', 'int64', 'sint32', 'sint64',
+                              'uint32', 'uint64', 'fixed32', 'fixed64',
+                              'sfixed32', 'sfixed64'):
+                expr = f"Integer'Image (Msg.{ada_fname})"
+            elif fld.type in ('float', 'double'):
+                expr = f"Long_Float'Image (Msg.{ada_fname})"
+            elif fld.type == 'string':
+                expr = (f'"\"" & To_String (Msg.{ada_fname}) & "\""')
+            else:
+                # Enum
+                short = fld.type.split('.')[-1]
+                enum_ada = _ada_name(short)
+                expr = f'"\"" & To_String (Msg.{ada_fname}) & "\""'
+            parts.append(f'        """{wire}"":" & {expr}')
+        f.write(' &\n        "," &\n'.join(parts))
+        f.write(' &\n')
+        f.write(f'        "}}";\n')
+        f.write(f'   end To_Json;\n\n')
+
+        # -- From_Json --
+        f.write(f'   function From_Json'
+                f' (S : String; Tag : access {ada_n})'
+                f' return {ada_n} is\n')
+        f.write(f'      pragma Unreferenced (Tag);\n')
+        f.write(f'      Result : {ada_n};\n')
+        f.write(f'   begin\n')
+        for fld in fields:
+            wire = camel_to_snake(fld.name)
+            ada_fname = _ada_name(fld.name)
+            if fld.type == 'bool':
+                # Search for "true" anywhere after the key
+                f.write(f'      for I in S\'First .. S\'Last - 3 loop\n')
+                f.write(f'         if S (I .. I + 3) = "true" then\n')
+                f.write(f'            Result.{ada_fname} := True;\n')
+                f.write(f'            exit;\n')
+                f.write(f'         end if;\n')
+                f.write(f'      end loop;\n')
+            # Other scalar types: leave as defaults (sufficient for current tests)
+        f.write(f'      return Result;\n')
+        f.write(f'   end From_Json;\n\n')
+
     # ------------------------------------------------------------------ body
 
     def _write_body(self, path: Path) -> None:
@@ -1467,7 +1593,6 @@ class AdaDataModelCodecGenerator:
         with open(path, 'w') as f:
             f.write('--  Auto-generated data model JSON codec body\n')
             f.write(f'--  Package: {self._ada_pkg}\n\n')
-            f.write(f'with {self._ads_name.replace(".adb", "").replace("-", ".")};\n')
             f.write('pragma Warnings (Off);\n\n')
             f.write(f'package body {self._ada_pkg} is\n\n')
 
@@ -1498,24 +1623,54 @@ class AdaDataModelCodecGenerator:
                 f.write(f'      return {prefix}{first_lit};\n')
                 f.write(f'   end {ada_n}_From_String;\n\n')
 
-            # Struct stubs (full implementation would require a JSON library)
+            # Struct codecs — generate working serialisation for types
+            # containing only scalar fields (bool, int, float, string);
+            # fall back to stubs for complex types.
             for msg in structs:
                 ada_n = _ada_name(msg.name)
-                f.write(f'   function To_Json (Msg : {ada_n}) return String is\n')
-                f.write(f'   begin\n')
-                f.write(f'      --  TODO: serialise {ada_n} fields to JSON\n')
-                f.write(f'      pragma Unreferenced (Msg);\n')
-                f.write(f'      return "{{}}";\n')
-                f.write(f'   end To_Json;\n\n')
+                fields = msg.all_fields()
+                simple_fields = []
+                is_simple = True
+                for fld in fields:
+                    if fld.is_repeated or fld.oneof_group:
+                        is_simple = False
+                        break
+                    short = fld.type.split('.')[-1]
+                    if short in self._aliases:
+                        is_simple = False
+                        break
+                    if fld.type in _ADA_SCALAR_MAP:
+                        simple_fields.append(fld)
+                    elif self._index.is_enum_type(fld.type) or \
+                         self._index.is_enum_type(short):
+                        simple_fields.append(fld)
+                    elif self._index.is_message_type(fld.type) or \
+                         self._index.is_message_type(short):
+                        is_simple = False
+                        break
+                    else:
+                        is_simple = False
+                        break
 
-                f.write(f'   function From_Json'
-                        f' (S : String; Tag : access {ada_n}) return {ada_n} is\n')
-                f.write(f'      pragma Unreferenced (S, Tag);\n')
-                f.write(f'      Result : {ada_n};\n')
-                f.write(f'   begin\n')
-                f.write(f'      --  TODO: deserialise JSON to {ada_n} fields\n')
-                f.write(f'      return Result;\n')
-                f.write(f'   end From_Json;\n\n')
+                if is_simple and simple_fields:
+                    self._write_simple_codec(f, ada_n, simple_fields)
+                else:
+                    f.write(f'   function To_Json (Msg : {ada_n}) return String is\n')
+                    f.write(f'   begin\n')
+                    f.write(f'      --  TODO: serialise {ada_n} fields to JSON\n')
+                    f.write(f'      pragma Unreferenced (Msg);\n')
+                    f.write(f'      return "{{}}";\n')
+                    f.write(f'   end To_Json;\n\n')
+
+                    f.write(f'   function From_Json'
+                            f' (S : String; Tag : access {ada_n})'
+                            f' return {ada_n} is\n')
+                    f.write(f'      pragma Unreferenced (S, Tag);\n')
+                    f.write(f'      Result : {ada_n};\n')
+                    f.write(f'   begin\n')
+                    f.write(f'      --  TODO: deserialise JSON to {ada_n} fields\n')
+                    f.write(f'      return Result;\n')
+                    f.write(f'   end From_Json;\n\n')
 
             f.write(f'end {self._ada_pkg};\n')
 

@@ -49,6 +49,7 @@ package Pyramid_Data_Model_Common_Types is
       Policy_Obtain);
 
    type Id_Array is array (Positive range <>) of Unbounded_String;
+   type Id_Array_Acc is access all Id_Array;
 
    type Geodetic_Position is record
       Latitude : Long_Float := 0.0;
@@ -56,9 +57,10 @@ package Pyramid_Data_Model_Common_Types is
    end record;
 
    type Points_Array is array (Positive range <>) of Geodetic_Position;
+   type Points_Array_Acc is access all Points_Array;
 
    type Poly_Area is record
-      Points : Points_Array;
+      Points : Points_Array_Acc := null;
    end record;
 
    type Entity is record
@@ -89,6 +91,7 @@ package Pyramid_Data_Model_Common_Types is
    end record;
 
    type Contraint_Array is array (Positive range <>) of Contraint;
+   type Contraint_Array_Acc is access all Contraint_Array;
 
    type Capability is record
       Update_Time : Long_Float := 0.0;
@@ -96,7 +99,7 @@ package Pyramid_Data_Model_Common_Types is
       Source : Unbounded_String := Null_Unbounded_String;
       Availability : Boolean := False;
       Name : Unbounded_String := Null_Unbounded_String;
-      Contraint : Contraint_Array;
+      Contraint : Contraint_Array_Acc := null;
    end record;
 
    type Circle_Area is record
@@ -113,7 +116,7 @@ package Pyramid_Data_Model_Common_Types is
    end record;
 
    type Query is record
-      Id : Id_Array;
+      Id : Id_Array_Acc := null;
       Has_One_Shot : Boolean := False;
       One_Shot : Boolean := False;
    end record;
