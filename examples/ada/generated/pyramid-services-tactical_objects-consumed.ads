@@ -13,7 +13,9 @@
 --  JSON serialisation/deserialisation is provided by the companion
 --  Pyramid.Services.Tactical_Objects.Json_Codec package.
 
-with Pyramid_Data_Model_Types;  use Pyramid_Data_Model_Types;
+with Pyramid_Data_Model_Base_Types;  use Pyramid_Data_Model_Base_Types;
+with Pyramid_Data_Model_Common_Types;  use Pyramid_Data_Model_Common_Types;
+with Pyramid_Data_Model_Tactical_Types;  use Pyramid_Data_Model_Tactical_Types;
 with Pcl_Bindings;
 with Interfaces.C;
 with System;

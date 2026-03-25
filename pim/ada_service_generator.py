@@ -241,14 +241,19 @@ def _is_provided(proto_file: ProtoFile) -> bool:
     return 'provided' in proto_file.package.lower()
 
 
-_DATA_MODEL_TYPES_PKG = 'Pyramid_Data_Model_Types'
+# All data model type packages, ordered base → common → tactical so that
+# `use` clauses in dependent order work correctly.
+_DATA_MODEL_TYPES_PKGS = [
+    'Pyramid_Data_Model_Base_Types',
+    'Pyramid_Data_Model_Common_Types',
+    'Pyramid_Data_Model_Tactical_Types',
+]
+
+# Primary (most specific) package — kept for codec / single-package references.
+_DATA_MODEL_TYPES_PKG = _DATA_MODEL_TYPES_PKGS[-1]
 
 def _types_pkg_from_proto(proto_file: ProtoFile) -> str:
-    """Return the Ada types package name for the data model.
-
-    All services reference the shared data model types package regardless
-    of which service proto is being generated.
-    """
+    """Return the primary Ada types package (tactical — includes all types)."""
     return _DATA_MODEL_TYPES_PKG
 
 
@@ -342,7 +347,8 @@ class AdaServiceGenerator:
             f.write(f'--  JSON serialisation/deserialisation is provided by the companion\n')
             f.write(f'--  {codec_pkg} package.\n')
             f.write(f'\n')
-            f.write(f'with {types_pkg};  use {types_pkg};\n')
+            for tp in _DATA_MODEL_TYPES_PKGS:
+                f.write(f'with {tp};  use {tp};\n')
             f.write(f'with Pcl_Bindings;\n')
             f.write(f'with Interfaces.C;\n')
             f.write(f'with System;\n')
@@ -722,7 +728,8 @@ class JsonCodecGenerator:
             f.write('--  Architecture: component logic > Json_Codec > service binding > PCL\n')
             f.write('\n')
             f.write('with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')
-            f.write(f'with {self._types_pkg};  use {self._types_pkg};\n')
+            for tp in _DATA_MODEL_TYPES_PKGS:
+                f.write(f'with {tp};  use {tp};\n')
             f.write('\n')
             f.write(f'package {self.PKG} is\n')
             f.write('\n')
@@ -1051,9 +1058,37 @@ class AdaTypesGenerator:
     def generate(self, output_dir: str) -> None:
         out = Path(output_dir)
         out.mkdir(parents=True, exist_ok=True)
-        ads = out / (self._file_base + '.ads')
-        self._write_ads(ads)
-        print(f'  Generated {self._ada_pkg}')
+        for pf in self._index.files:
+            ada_pkg = self._ada_pkg_for_file(pf)
+            file_base = ada_pkg.lower().replace('.', '-')
+            ads = out / (file_base + '.ads')
+            self._write_ads_for_file(ads, pf, ada_pkg)
+            print(f'  Generated {ada_pkg}')
+
+    @staticmethod
+    def _ada_pkg_for_file(pf) -> str:
+        """Derive Ada package name from a proto file's package.
+
+        pyramid.data_model.common -> Pyramid_Data_Model_Common_Types
+        """
+        parts = pf.package.split('.')
+        ada_parts = ['_'.join(w.capitalize() for w in seg.split('_'))
+                     for seg in parts]
+        return '_'.join(ada_parts) + '_Types'
+
+    def _with_clauses_for_file(self, pf) -> List[str]:
+        """Return Ada 'with Pkg; use Pkg;' lines for imports from the index."""
+        result = []
+        for imp in pf.imports:
+            if imp.startswith('google/'):
+                continue
+            pkg = imp.replace('/', '.').removesuffix('.proto')
+            for indexed_pf in self._index.files:
+                if indexed_pf.package == pkg:
+                    ada_pkg = self._ada_pkg_for_file(indexed_pf)
+                    result.append(f'with {ada_pkg};  use {ada_pkg};')
+                    break
+        return result
 
     # -- internal --------------------------------------------------------------
 
@@ -1212,40 +1247,42 @@ class AdaTypesGenerator:
                 f.write(f'      {ada_fname} : {ada_type}{init};\n')
         f.write(f'   end record;\n\n')
 
-    def _write_ads(self, path: Path) -> None:
+    def _write_ads_for_file(self, path: Path, pf, ada_pkg: str) -> None:
         alias_names = set(self._aliases.keys())
-        non_alias = [m for m in self._index.all_messages()
-                     if m.name not in alias_names]
+        non_alias = [m for m in pf.messages if m.name not in alias_names]
         sorted_msgs = self._toposort(non_alias)
+        with_clauses = self._with_clauses_for_file(pf)
 
         with open(path, 'w') as f:
             f.write('--  Auto-generated types specification\n')
-            f.write(f'--  Generated from: {self._data_model_dir}'
+            f.write(f'--  Generated from: {pf.path.name}'
                     f' by ada_service_generator.py --types\n')
-            f.write(f'--  Package: {self._ada_pkg}\n\n')
-            f.write('with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n\n')
-            f.write(f'package {self._ada_pkg} is\n\n')
+            f.write(f'--  Package: {ada_pkg}\n\n')
+            f.write('with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')
+            for wc in with_clauses:
+                f.write(wc + '\n')
+            f.write(f'\npackage {ada_pkg} is\n\n')
 
-            # Subtypes for scalar wrappers
-            for msg in self._index.all_messages():
+            # Subtypes for scalar wrappers defined in this file
+            for msg in pf.messages:
                 if msg.name in self._aliases:
                     ada_n = _ada_name(msg.name)
                     f.write(f'   subtype {ada_n} is {self._aliases[msg.name]};\n')
             f.write('\n')
 
-            # Enums (always declared before records)
-            for enum in self._index.all_enums():
+            # Enums defined in this file
+            for enum in pf.enums:
                 self._write_enum(f, enum)
 
-            # Array types for scalar/enum elements (no forward-ref risk)
+            # Array types for scalar/enum elements
             emitted_arrays: set = set()
-            enum_names = {_ada_name(e.name) for e in self._index.all_enums()}
+            all_enum_names = {_ada_name(e.name) for e in self._index.all_enums()}
             scalar_types = set(_ADA_SCALAR_MAP.values())
             for msg in sorted_msgs:
                 for arr_name, elem_type in self._arrays_for_msg(msg):
                     if arr_name not in emitted_arrays and (
                             elem_type in scalar_types
-                            or elem_type in enum_names
+                            or elem_type in all_enum_names
                             or elem_type == 'Unbounded_String'):
                         f.write(f'   type {arr_name} is'
                                 f' array (Positive range <>) of {elem_type};\n')
@@ -1255,11 +1292,8 @@ class AdaTypesGenerator:
 
             # Records interleaved with their array type dependencies
             for msg in sorted_msgs:
-                # Emit array types that depend on this record (now it's declared)
                 ada_msg_name = _ada_name(msg.name)
-                # First write the record itself
                 self._write_record(f, msg)
-                # Then emit any arrays whose element is this record type
                 for later_msg in sorted_msgs:
                     for arr_name, elem_type in self._arrays_for_msg(later_msg):
                         if arr_name not in emitted_arrays and elem_type == ada_msg_name:
@@ -1267,6 +1301,145 @@ class AdaTypesGenerator:
                                     f' array (Positive range <>) of {elem_type};\n')
                             emitted_arrays.add(arr_name)
                             f.write('\n')
+
+            f.write(f'end {ada_pkg};\n')
+
+
+# ---------------------------------------------------------------------------
+# Ada data model codec generator (proto-driven, per file)
+# ---------------------------------------------------------------------------
+
+class AdaDataModelCodecGenerator:
+    """Generates ``{pkg}_codec.ads/adb`` from a single data model proto file.
+
+    For each message and enum in the proto, emits JSON To_Json / From_Json
+    functions in the same Ada package as the types.
+
+    Usage::
+        proto_files = parse_proto_tree(data_model_dir)
+        index = ProtoTypeIndex(proto_files)
+        for pf in proto_files:
+            gen = AdaDataModelCodecGenerator(pf, index)
+            gen.generate(output_dir)
+    """
+
+    def __init__(self, pf, index: 'ProtoTypeIndex'):
+        self._pf = pf
+        self._index = index
+        self._ada_pkg = AdaTypesGenerator._ada_pkg_for_file(pf) + '_Codec'
+        self._types_pkg = AdaTypesGenerator._ada_pkg_for_file(pf)
+        file_base = self._ada_pkg.lower().replace('.', '-')
+        self._ads_name = file_base + '.ads'
+        self._adb_name = file_base + '.adb'
+        # Build alias map (scalar wrappers)
+        self._aliases: Dict[str, str] = {'Timestamp': 'Long_Float'}
+        for msg in self._index.all_messages():
+            fields = msg.all_fields()
+            if len(fields) == 1 and not fields[0].is_repeated:
+                ft = fields[0].type
+                fn = fields[0].name
+                if ft in _ADA_SCALAR_MAP and fn in _ADA_UNIT_FIELD_NAMES:
+                    self._aliases[msg.name] = _ADA_SCALAR_MAP[ft]
+
+    def generate(self, output_dir: str) -> None:
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        self._write_spec(out / self._ads_name)
+        self._write_body(out / self._adb_name)
+        print(f'  Generated {self._ada_pkg}')
+
+    # ------------------------------------------------------------------ spec
+
+    def _write_spec(self, path: Path) -> None:
+        alias_names = set(self._aliases.keys())
+        structs = [m for m in self._pf.messages if m.name not in alias_names]
+
+        with open(path, 'w') as f:
+            f.write('--  Auto-generated data model JSON codec specification\n')
+            f.write(f'--  Generated from: {self._pf.path.name}'
+                    f' by ada_service_generator.py --codec\n')
+            f.write(f'--  Package: {self._ada_pkg}\n\n')
+            f.write('with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')
+            f.write(f'with {self._types_pkg};  use {self._types_pkg};\n')
+            f.write(f'\npackage {self._ada_pkg} is\n\n')
+
+            # Enum converters
+            for enum in self._pf.enums:
+                ada_n = _ada_name(enum.name)
+                f.write(f'   function To_String (V : {ada_n}) return String;\n')
+                f.write(f'   function {ada_n}_From_String (S : String) return {ada_n};\n')
+            if self._pf.enums:
+                f.write('\n')
+
+            # Struct codec declarations
+            for msg in structs:
+                ada_n = _ada_name(msg.name)
+                f.write(f'   function To_Json (Msg : {ada_n}) return String;\n')
+                f.write(f'   function From_Json (S : String;'
+                        f' Tag : access {ada_n}) return {ada_n};\n')
+            if structs:
+                f.write('\n')
+
+            f.write(f'end {self._ada_pkg};\n')
+
+    # ------------------------------------------------------------------ body
+
+    def _write_body(self, path: Path) -> None:
+        alias_names = set(self._aliases.keys())
+        structs = [m for m in self._pf.messages if m.name not in alias_names]
+
+        with open(path, 'w') as f:
+            f.write('--  Auto-generated data model JSON codec body\n')
+            f.write(f'--  Package: {self._ada_pkg}\n\n')
+            f.write(f'with {self._ads_name.replace(".adb", "").replace("-", ".")};\n')
+            f.write('pragma Warnings (Off);\n\n')
+            f.write(f'package body {self._ada_pkg} is\n\n')
+
+            # Enum converters
+            for enum in self._pf.enums:
+                ada_n = _ada_name(enum.name)
+                prefix = ada_n.split('_')[-1] + '_'
+
+                f.write(f'   function To_String (V : {ada_n}) return String is\n')
+                f.write(f'   begin\n')
+                f.write(f'      case V is\n')
+                for v in enum.values:
+                    suf = enum.suffix_of(v.name)
+                    lit = screaming_to_pascal(suf) if suf else v.name
+                    f.write(f'         when {prefix}{lit} => return "{v.name}";\n')
+                f.write(f'      end case;\n')
+                f.write(f'   end To_String;\n\n')
+
+                f.write(f'   function {ada_n}_From_String (S : String) return {ada_n} is\n')
+                f.write(f'   begin\n')
+                for v in enum.values:
+                    suf = enum.suffix_of(v.name)
+                    lit = screaming_to_pascal(suf) if suf else v.name
+                    f.write(f'      if S = "{v.name}" then return {prefix}{lit}; end if;\n')
+                first_suf = enum.suffix_of(enum.values[0].name)
+                first_lit = (screaming_to_pascal(first_suf)
+                             if first_suf else enum.values[0].name)
+                f.write(f'      return {prefix}{first_lit};\n')
+                f.write(f'   end {ada_n}_From_String;\n\n')
+
+            # Struct stubs (full implementation would require a JSON library)
+            for msg in structs:
+                ada_n = _ada_name(msg.name)
+                f.write(f'   function To_Json (Msg : {ada_n}) return String is\n')
+                f.write(f'   begin\n')
+                f.write(f'      --  TODO: serialise {ada_n} fields to JSON\n')
+                f.write(f'      pragma Unreferenced (Msg);\n')
+                f.write(f'      return "{{}}";\n')
+                f.write(f'   end To_Json;\n\n')
+
+                f.write(f'   function From_Json'
+                        f' (S : String; Tag : access {ada_n}) return {ada_n} is\n')
+                f.write(f'      pragma Unreferenced (S, Tag);\n')
+                f.write(f'      Result : {ada_n};\n')
+                f.write(f'   begin\n')
+                f.write(f'      --  TODO: deserialise JSON to {ada_n} fields\n')
+                f.write(f'      return Result;\n')
+                f.write(f'   end From_Json;\n\n')
 
             f.write(f'end {self._ada_pkg};\n')
 
@@ -1294,12 +1467,22 @@ def main():
 
     if sys.argv[1] == '--codec':
         if len(sys.argv) < 4:
-            print('Usage: python ada_service_generator.py --codec <file.proto> <output_dir>')
+            print('Usage: python ada_service_generator.py --codec'
+                  ' <file.proto|data_model_dir> <output_dir>')
             sys.exit(1)
-        parsed = parse_proto(Path(sys.argv[2]))
-        gen = JsonCodecGenerator(parsed)
-        gen.generate(sys.argv[3])
-        print('\n\u2713 JSON codec generated')
+        codec_path = Path(sys.argv[2])
+        if codec_path.is_dir():
+            proto_files = parse_proto_tree(codec_path)
+            index = ProtoTypeIndex(proto_files)
+            for pf in proto_files:
+                gen = AdaDataModelCodecGenerator(pf, index)
+                gen.generate(sys.argv[3])
+            print('\n\u2713 Ada data model codecs generated')
+        else:
+            parsed = parse_proto(codec_path)
+            gen = JsonCodecGenerator(parsed)
+            gen.generate(sys.argv[3])
+            print('\n\u2713 JSON codec generated')
         return
 
     if len(sys.argv) < 3:
