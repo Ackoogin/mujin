@@ -1,10 +1,13 @@
 --  Auto-generated service binding body
 --  Package body: Pyramid.Services.Tactical_Objects.Consumed
 
+with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 with Ada.Unchecked_Conversion;
 with Interfaces.C.Strings;
 with System;
 with System.Storage_Elements;
+with Pyramid_Data_Model_Common_Types_Codec;  use Pyramid_Data_Model_Common_Types_Codec;
+with Pyramid_Data_Model_Tactical_Types_Codec;  use Pyramid_Data_Model_Tactical_Types_Codec;
 
 package body Pyramid.Services.Tactical_Objects.Consumed is
 
@@ -43,7 +46,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
    is
       pragma Unreferenced (Request);
    begin
-      Response := Null_Identifier;
+      Response := Null_Unbounded_String;
    end Handle_Create_Requirement;
 
    procedure Handle_Read_Requirement
@@ -62,7 +65,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
    is
       pragma Unreferenced (Request);
    begin
-      Response := Ack_Ok;
+      Response := (Success => True);
    end Handle_Update_Requirement;
 
    procedure Handle_Delete_Requirement
@@ -71,7 +74,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
    is
       pragma Unreferenced (Request);
    begin
-      Response := Ack_Ok;
+      Response := (Success => True);
    end Handle_Delete_Requirement;
 
    --  -- Object_Source_Capability_Service ------------------------------------
@@ -109,6 +112,18 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
       Interfaces.C.Strings.Free (Msg.Type_Name);
    end Publish_Object_Evidence;
 
+   procedure Copy_To_Buf
+     (S    : in  String;
+      Buf  : out System.Address;
+      Size : out Natural)
+   is
+      C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (S);
+   begin
+      Buf  := To_Address (C);
+      Size := S'Length;
+   end Copy_To_Buf;
+
    procedure Dispatch
      (Channel      : in  Service_Channel;
       Request_Buf  : in  System.Address;
@@ -116,23 +131,111 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
       Response_Buf : out System.Address;
       Response_Size: out Natural)
    is
-      pragma Unreferenced (Request_Buf, Request_Size);
+      Req_Str : constant String := Msg_To_String (Request_Buf,
+        Interfaces.C.unsigned (Request_Size));
    begin
       Response_Buf  := System.Null_Address;
       Response_Size := 0;
       case Channel is
          when Ch_Read_Detail =>
-            null;  --  TODO: deserialise, call Handle_Read_Detail
+            declare
+               Req : constant Query :=
+                 From_Json (Req_Str, null);
+               Rsp : Object_Detail_Array;
+            begin
+               Handle_Read_Detail (Req, Rsp);
+               declare
+                  use Ada.Strings.Unbounded;
+                  Acc : Unbounded_String :=
+                    To_Unbounded_String ("[");
+               begin
+                  for I in Rsp'Range loop
+                     if I > Rsp'First then
+                        Append (Acc, ",");
+                     end if;
+                     Append (Acc, To_Json (Rsp (I)));
+                  end loop;
+                  Append (Acc, "]");
+                  Copy_To_Buf (To_String (Acc),
+                    Response_Buf, Response_Size);
+               end;
+            end;
          when Ch_Create_Requirement =>
-            null;  --  TODO: deserialise, call Handle_Create_Requirement
+            declare
+               Req : constant Object_Evidence_Requirement :=
+                 From_Json (Req_Str, null);
+               Rsp : Identifier;
+            begin
+               Handle_Create_Requirement (Req, Rsp);
+               Copy_To_Buf (To_String (Rsp),
+                 Response_Buf, Response_Size);
+            end;
          when Ch_Read_Requirement =>
-            null;  --  TODO: deserialise, call Handle_Read_Requirement
+            declare
+               Req : constant Query :=
+                 From_Json (Req_Str, null);
+               Rsp : Object_Evidence_Requirement_Array;
+            begin
+               Handle_Read_Requirement (Req, Rsp);
+               declare
+                  use Ada.Strings.Unbounded;
+                  Acc : Unbounded_String :=
+                    To_Unbounded_String ("[");
+               begin
+                  for I in Rsp'Range loop
+                     if I > Rsp'First then
+                        Append (Acc, ",");
+                     end if;
+                     Append (Acc, To_Json (Rsp (I)));
+                  end loop;
+                  Append (Acc, "]");
+                  Copy_To_Buf (To_String (Acc),
+                    Response_Buf, Response_Size);
+               end;
+            end;
          when Ch_Update_Requirement =>
-            null;  --  TODO: deserialise, call Handle_Update_Requirement
+            declare
+               Req : constant Object_Evidence_Requirement :=
+                 From_Json (Req_Str, null);
+               Rsp : Ack;
+            begin
+               Handle_Update_Requirement (Req, Rsp);
+               Copy_To_Buf (To_Json (Rsp),
+                 Response_Buf, Response_Size);
+            end;
          when Ch_Delete_Requirement =>
-            null;  --  TODO: deserialise, call Handle_Delete_Requirement
+            declare
+               Req : constant Identifier :=
+                 To_Unbounded_String (Req_Str);
+               Rsp : Ack;
+            begin
+               Handle_Delete_Requirement (Req, Rsp);
+               Copy_To_Buf (To_Json (Rsp),
+                 Response_Buf, Response_Size);
+            end;
          when Ch_Read_Capability =>
-            null;  --  TODO: deserialise, call Handle_Read_Capability
+            declare
+               Req : constant Query :=
+                 From_Json (Req_Str, null);
+               Rsp : Identifier_Array;
+            begin
+               Handle_Read_Capability (Req, Rsp);
+               declare
+                  use Ada.Strings.Unbounded;
+                  Acc : Unbounded_String :=
+                    To_Unbounded_String ("[");
+               begin
+                  for I in Rsp'Range loop
+                     if I > Rsp'First then
+                        Append (Acc, ",");
+                     end if;
+                     Append (Acc, To_Json (Rsp (I)));
+                  end loop;
+                  Append (Acc, "]");
+                  Copy_To_Buf (To_String (Acc),
+                    Response_Buf, Response_Size);
+               end;
+            end;
       end case;
    end Dispatch;
 

@@ -4,12 +4,23 @@
 
 #include "pyramid_services_tactical_objects_consumed.hpp"
 
+#include "pyramid_data_model_common_codec.hpp"
+#include "pyramid_data_model_tactical_codec.hpp"
+
 #include <pcl/pcl_container.h>
 
+#include <cstdlib>
+#include <cstring>
 #include <string>
 #include <vector>
 
 namespace pyramid::services::tactical_objects::consumed {
+
+// Bring data model codec functions into scope
+using pyramid::data_model::common::toJson;
+using pyramid::data_model::common::fromJson;
+using pyramid::data_model::tactical::toJson;
+using pyramid::data_model::tactical::fromJson;
 
 // ---------------------------------------------------------------------------
 // PCL message utility
@@ -54,6 +65,14 @@ ServiceHandler::handleReadCapability(const Query& /*request*/) {
 }
 
 // ---------------------------------------------------------------------------
+// Internal PCL helpers
+// ---------------------------------------------------------------------------
+
+namespace {
+
+} // namespace
+
+// ---------------------------------------------------------------------------
 // PCL subscribe wrapper
 // ---------------------------------------------------------------------------
 
@@ -85,37 +104,80 @@ pcl_status_t publishObjectEvidence(pcl_port_t*        publisher,
 }
 
 // ---------------------------------------------------------------------------
-// Dispatch — routes raw buffer to the appropriate handler stub
+// Dispatch — deserialise request, call handler, serialise response
 // ---------------------------------------------------------------------------
 
-void dispatch(ServiceChannel channel,
-              const void*    /*request_buf*/,
-              size_t         /*request_size*/,
-              void**         response_buf,
-              size_t*        response_size)
+void dispatch(ServiceHandler& handler,
+              ServiceChannel  channel,
+              const void*     request_buf,
+              size_t          request_size,
+              void**          response_buf,
+              size_t*         response_size)
 {
-    *response_buf  = nullptr;
-    *response_size = 0;
+    std::string req_str(static_cast<const char*>(request_buf), request_size);
+    std::string rsp_str;
 
     switch (channel) {
-        case ServiceChannel::ReadDetail:
-            // TODO: deserialise request, call handler, serialise response
-            break;
-        case ServiceChannel::CreateRequirement:
-            // TODO: deserialise request, call handler, serialise response
-            break;
-        case ServiceChannel::ReadRequirement:
-            // TODO: deserialise request, call handler, serialise response
-            break;
-        case ServiceChannel::UpdateRequirement:
-            // TODO: deserialise request, call handler, serialise response
-            break;
-        case ServiceChannel::DeleteRequirement:
-            // TODO: deserialise request, call handler, serialise response
-            break;
-        case ServiceChannel::ReadCapability:
-            // TODO: deserialise request, call handler, serialise response
-            break;
+    case ServiceChannel::ReadDetail: {
+        auto req = fromJson(req_str, static_cast<Query*>(nullptr));
+        auto rsp = handler.handleReadDetail(req);
+        rsp_str = "[";
+        for (size_t i = 0; i < rsp.size(); ++i) {
+            if (i > 0) rsp_str += ",";
+            rsp_str += toJson(rsp[i]);
+        }
+        rsp_str += "]";
+        break;
+    }
+    case ServiceChannel::CreateRequirement: {
+        auto req = fromJson(req_str, static_cast<ObjectEvidenceRequirement*>(nullptr));
+        auto rsp = handler.handleCreateRequirement(req);
+        rsp_str = rsp;
+        break;
+    }
+    case ServiceChannel::ReadRequirement: {
+        auto req = fromJson(req_str, static_cast<Query*>(nullptr));
+        auto rsp = handler.handleReadRequirement(req);
+        rsp_str = "[";
+        for (size_t i = 0; i < rsp.size(); ++i) {
+            if (i > 0) rsp_str += ",";
+            rsp_str += toJson(rsp[i]);
+        }
+        rsp_str += "]";
+        break;
+    }
+    case ServiceChannel::UpdateRequirement: {
+        auto req = fromJson(req_str, static_cast<ObjectEvidenceRequirement*>(nullptr));
+        auto rsp = handler.handleUpdateRequirement(req);
+        rsp_str = toJson(rsp);
+        break;
+    }
+    case ServiceChannel::DeleteRequirement: {
+        auto& req = req_str;
+        auto rsp = handler.handleDeleteRequirement(req);
+        rsp_str = toJson(rsp);
+        break;
+    }
+    case ServiceChannel::ReadCapability: {
+        auto req = fromJson(req_str, static_cast<Query*>(nullptr));
+        auto rsp = handler.handleReadCapability(req);
+        rsp_str = "[";
+        for (size_t i = 0; i < rsp.size(); ++i) {
+            if (i > 0) rsp_str += ",";
+            rsp_str += "\"" + rsp[i] + "\""; 
+        }
+        rsp_str += "]";
+        break;
+    }
+    }
+
+    if (!rsp_str.empty()) {
+        *response_size = rsp_str.size();
+        *response_buf = std::malloc(rsp_str.size());
+        std::memcpy(*response_buf, rsp_str.data(), rsp_str.size());
+    } else {
+        *response_buf = nullptr;
+        *response_size = 0;
     }
 }
 

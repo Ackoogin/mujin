@@ -1,5 +1,5 @@
 --  Auto-generated service binding specification
---  Generated from: components by ada_service_generator.py
+--  Generated from: services by ada_service_generator.py
 --  Package: Pyramid.Services.Tactical_Objects.Provided
 --
 --  Architecture: component logic > service binding (this) > PCL
@@ -95,7 +95,7 @@ package Pyramid.Services.Tactical_Objects.Provided is
 
    --  -- PCL binding procedures ------------------------------------
    --  Subscribe/Invoke/Publish wrappers for PCL transport layer.
-   --  Use Json_Codec to serialise/deserialise message payloads.
+   --  Serialisation is handled internally (codec baked at generation time).
 
    procedure Subscribe_Entity_Matches
      (Container : Pcl_Bindings.Pcl_Container_Access;
@@ -109,37 +109,37 @@ package Pyramid.Services.Tactical_Objects.Provided is
 
    procedure Invoke_Read_Match
      (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
+      Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address);
 
    procedure Invoke_Create_Requirement
      (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
+      Request   : Object_Interest_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address);
 
    procedure Invoke_Read_Requirement
      (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
+      Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address);
 
    procedure Invoke_Update_Requirement
      (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
+      Request   : Object_Interest_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address);
 
    procedure Invoke_Delete_Requirement
      (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
+      Request   : Identifier;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address);
 
    procedure Invoke_Read_Detail
      (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
+      Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address);
 

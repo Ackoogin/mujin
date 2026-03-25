@@ -1,5 +1,5 @@
 --  Auto-generated service binding specification
---  Generated from: components by ada_service_generator.py
+--  Generated from: services by ada_service_generator.py
 --  Package: Pyramid.Services.Tactical_Objects.Consumed
 --
 --  Architecture: component logic > service binding (this) > PCL
@@ -93,7 +93,7 @@ package Pyramid.Services.Tactical_Objects.Consumed is
 
    --  -- PCL binding procedures ------------------------------------
    --  Subscribe/Invoke/Publish wrappers for PCL transport layer.
-   --  Use Json_Codec to serialise/deserialise message payloads.
+   --  Serialisation is handled internally (codec baked at generation time).
 
    procedure Publish_Object_Evidence
      (Exec    : Pcl_Bindings.Pcl_Executor_Access;

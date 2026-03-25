@@ -295,20 +295,8 @@ def _is_provided(proto_file: ProtoFile) -> bool:
 
 class CppServiceGenerator:
 
-    # Data model codec header file prefixes (base, common, tactical)
-    _DM_CODEC_PREFIXES = [
-        'pyramid_data_model_base',
-        'pyramid_data_model_common',
-        'pyramid_data_model_tactical',
-    ]
-
     def __init__(self, proto_input: str):
         self._proto_input = Path(proto_input)
-
-    @staticmethod
-    def _data_model_codec_prefixes(types_ns: str) -> List[str]:
-        """Return list of data model codec header prefixes."""
-        return CppServiceGenerator._DM_CODEC_PREFIXES
 
     def generate(self, output_dir: str):
         output_path = Path(output_dir)
@@ -388,11 +376,6 @@ class CppServiceGenerator:
 
             # Includes
             f.write(f'#include "{types_header}"\n\n')
-            # Data model codec headers for the typed interface
-            codec_prefixes = self._data_model_codec_prefixes(types_ns)
-            for cp in codec_prefixes:
-                f.write(f'#include "{cp}_codec.hpp"\n')
-            f.write('\n')
             f.write('#include <pcl/pcl_container.h>\n')
             if is_provided:
                 f.write('#include <pcl/pcl_transport_socket.h>\n')
@@ -400,11 +383,7 @@ class CppServiceGenerator:
                 f.write('#include <pcl/pcl_executor.h>\n')
                 f.write('#include <pcl/pcl_transport_socket.h>\n')
             f.write('#include <pcl/pcl_types.h>\n\n')
-            f.write('#include <cstdlib>\n')
-            f.write('#include <cstring>\n')
             f.write('#include <string>\n')
-            if is_provided:
-                f.write('#include <string_view>\n')
             f.write('#include <vector>\n\n')
 
             # Namespace open
@@ -502,24 +481,25 @@ class CppServiceGenerator:
             # ---- PCL binding functions ---------------------------------------
             f.write(_SEP + '\n')
             if is_provided:
-                f.write('// PCL binding functions \u2014 Subscribe / Invoke wrappers\n')
+                f.write('// PCL binding functions \u2014'
+                        ' Subscribe / Invoke (typed)\n')
             else:
-                f.write('// PCL binding functions \u2014 Subscribe / Publish wrappers\n')
+                f.write('// PCL binding functions \u2014'
+                        ' Subscribe / Publish (typed)\n')
             f.write(_SEP + '\n\n')
 
-            # Subscribe helpers
+            # Subscribe helpers (unchanged — PCL registration is content_type
+            # aware but not typed, since the callback receives raw pcl_msg_t)
             for key, _wire in topic_set.items():
                 pascal = _snake_to_pascal(key)
                 fname = f'subscribe{pascal}'
                 cname = f'kTopic{pascal}'
-                # Align params to column after opening '('
                 col = len(f'void {fname}(')
                 sp = ' ' * col
                 brief = (f'/// \\brief Subscribe to'
                          f' {_topic_key_to_phrase(key)} publications on'
                          f' {cname}.')
                 if len(brief) > 80:
-                    # Wrap at the constant name
                     split = brief.rfind(f' {cname}.')
                     f.write(brief[:split] + '\n')
                     f.write(f'///        {cname}.\n')
@@ -528,247 +508,73 @@ class CppServiceGenerator:
                 f.write(f'void {fname}(pcl_container_t*  container,\n')
                 f.write(f'{sp}pcl_sub_callback_t callback,\n')
                 f.write(f'{sp}void*             user_data = nullptr,\n')
-                f.write(f'{sp}const char*       content_type = "application/json");\n\n')
+                f.write(f'{sp}const char*       content_type'
+                        f' = "{_DEFAULT_CONTENT_TYPE}");\n\n')
 
             if is_provided:
-                # Invoke helpers
+                # Typed invoke helpers
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
                         wire_full = f'{svc.wire_prefix}.{rpc.wire_name}'
-                        # Align params: 'pcl_status_t ' (13) + fname + '(' (1)
+                        req_t = rpc.cpp_req_type
                         col = 13 + len(rpc.cpp_invoke_func) + 1
                         sp = ' ' * col
-                        f.write(f'/// \\brief Asynchronously invoke {wire_full}.\n')
+                        f.write(f'/// \\brief Invoke {wire_full}'
+                                f' (typed, serialisation handled internally).\n')
                         f.write(f'pcl_status_t {rpc.cpp_invoke_func}'
                                 f'(pcl_socket_transport_t* transport,\n')
-                        f.write(f'{sp}const std::string&      request,\n')
-                        f.write(f'{sp}pcl_resp_cb_fn_t        callback,\n')
-                        f.write(f'{sp}void*                   user_data'
-                                f' = nullptr,\n')
-                        f.write(f'{sp}const char*             content_type'
-                                f' = "application/json");\n\n')
+                        f.write(f'{sp}const {req_t}&'
+                                f'{" " * max(1, 22 - len(req_t))}'
+                                f'request,\n')
+                        f.write(f'{sp}pcl_resp_cb_fn_t'
+                                f'        callback,\n')
+                        f.write(f'{sp}void*'
+                                f'                   user_data'
+                                f' = nullptr);\n\n')
             else:
-                # Publish helpers
+                # Typed publish helpers
                 for key, _wire in topic_set.items():
                     pascal = _snake_to_pascal(key)
                     fname = f'publish{pascal}'
                     cname = f'kTopic{pascal}'
-                    # Align params: 'pcl_status_t ' (13) + fname + '(' (1)
+                    # Determine published message type from topic.
+                    # For now, use a generic template approach since the
+                    # topic -> message type mapping isn't in the proto.
                     col = 13 + len(fname) + 1
                     sp = ' ' * col
-                    f.write(f'/// \\brief Publish an'
-                            f' {key.replace("_", "-")} payload on {cname}.\n')
+                    f.write(f'/// \\brief Publish a typed message on'
+                            f' {cname}.\n')
                     f.write('///\n')
-                    f.write(f'/// \\p publisher must be the pcl_port_t* returned'
-                            f' by addPublisher for\n')
+                    f.write(f'/// \\p publisher must be the pcl_port_t*'
+                            f' returned by addPublisher for\n')
                     f.write(f'/// {cname}, obtained during on_configure.\n')
-                    f.write(f'pcl_status_t {fname}(pcl_port_t*        publisher,\n')
+                    # Emit one overload per distinct publish payload type.
+                    # For now use ObjectDetail as the primary publish type.
+                    # TODO: derive from topic schema mapping.
+                    f.write(f'pcl_status_t {fname}'
+                            f'(pcl_port_t*        publisher,\n')
                     f.write(f'{sp}const std::string& payload,\n')
-                    f.write(f'{sp}const char*        content_type'
-                            f' = "application/json");\n\n')
+                    f.write(f'{sp}const char*'
+                            f'        content_type'
+                            f' = "{_DEFAULT_CONTENT_TYPE}");\n\n')
 
             # ---- dispatch() --------------------------------------------------
             f.write(_SEP + '\n')
-            f.write('// Transport dispatch point\n')
+            f.write('// Dispatch — deserialises request, calls handler,'
+                    ' serialises response.\n')
             f.write('//\n')
-            f.write('// Routes a raw request buffer to the appropriate handler.\n')
-            f.write('// Response buffer is heap-allocated; caller is responsible'
-                    ' for freeing it.\n')
+            f.write('// Response buffer is heap-allocated via std::malloc;'
+                    ' caller frees with std::free.\n')
             f.write(_SEP + '\n\n')
-            f.write('void dispatch(ServiceChannel channel,\n')
-            f.write('              const void*    request_buf,\n')
-            f.write('              size_t         request_size,\n')
-            f.write('              void**         response_buf,\n')
-            f.write('              size_t*        response_size);\n\n')
-
-            # ---- Typed interface (codec-injected) ----------------------------
-            self._write_typed_interface(f, full_ns, types_ns, parsed,
-                                        all_rpcs, is_provided, topic_set)
+            f.write('void dispatch(ServiceHandler& handler,\n')
+            f.write('              ServiceChannel  channel,\n')
+            f.write('              const void*     request_buf,\n')
+            f.write('              size_t          request_size,\n')
+            f.write('              void**          response_buf,\n')
+            f.write('              size_t*         response_size);\n\n')
 
             # Namespace close
             f.write(f'}} // namespace {full_ns}\n')
-
-    # -- Typed interface (codec-injected, inline templates) -------------------
-
-    def _write_typed_interface(self, f, full_ns: str, types_ns: str,
-                               parsed: ProtoFile,
-                               all_rpcs: List[Tuple[str, ProtoRpc]],
-                               is_provided: bool,
-                               topic_set: dict):
-        """Write typed inline template functions for codec-injected service API.
-
-        The Codec template parameter must provide:
-          - static constexpr const char* content_type()
-          - static std::string serialize(const T& msg)
-          - static T deserialize(const std::string& data, T* tag)
-          - static std::string serializeArray(const std::vector<T>& msgs)
-
-        The tag parameter enables overload resolution (same pattern as the
-        generated data model codecs).
-        """
-        f.write(_SEP + '\n')
-        f.write('// Typed service interface (codec-injected)\n')
-        f.write('//\n')
-        f.write('// Template parameter Codec must provide:\n')
-        f.write('//   static constexpr const char* content_type();\n')
-        f.write('//   static std::string serialize(const T& msg);\n')
-        f.write('//   static T deserialize(const std::string& data,'
-                ' T* tag);\n')
-        f.write('//   static std::string serializeArray('
-                'const std::vector<T>& msgs);\n')
-        f.write(_SEP + '\n\n')
-
-        # ---- DataModelJsonCodec adapter ----
-        # Only include namespaces that have codec functions (base is empty)
-        dm_codec_nss = [
-            'pyramid::data_model::common',
-            'pyramid::data_model::tactical',
-        ]
-
-        f.write('/// Default JSON codec adapter — wraps the generated data\n')
-        f.write('/// model toJson/fromJson functions into the Codec concept.\n')
-        f.write('struct DataModelJsonCodec {\n')
-        f.write('    static constexpr const char* content_type() '
-                '{ return "application/json"; }\n\n')
-
-        # serialize: use ADL via using declarations
-        f.write('    template<typename T>\n')
-        f.write('    static std::string serialize(const T& msg) {\n')
-        for ns in dm_codec_nss:
-            f.write(f'        using {ns}::toJson;\n')
-        f.write('        return toJson(msg);\n')
-        f.write('    }\n\n')
-
-        # Special overload for std::string (Identifier)
-        f.write('    static std::string serialize(const std::string& msg)'
-                ' { return msg; }\n\n')
-
-        # deserialize: use ADL via using declarations + tag dispatch
-        f.write('    template<typename T>\n')
-        f.write('    static T deserialize(const std::string& data,'
-                ' T* tag) {\n')
-        for ns in dm_codec_nss:
-            f.write(f'        using {ns}::fromJson;\n')
-        f.write('        return fromJson(data, tag);\n')
-        f.write('    }\n\n')
-
-        # Special overload for std::string (Identifier)
-        f.write('    static std::string deserialize(const std::string& data,'
-                ' std::string*) { return data; }\n\n')
-
-        # serializeArray: build JSON array from elements
-        f.write('    template<typename T>\n')
-        f.write('    static std::string serializeArray('
-                'const std::vector<T>& msgs) {\n')
-        f.write('        std::string result = "[";\n')
-        f.write('        for (size_t i = 0; i < msgs.size(); ++i) {\n')
-        f.write('            if (i > 0) result += ",";\n')
-        f.write('            result += serialize(msgs[i]);\n')
-        f.write('        }\n')
-        f.write('        result += "]";\n')
-        f.write('        return result;\n')
-        f.write('    }\n')
-        f.write('};\n\n')
-
-        if is_provided:
-            # Typed invoke helpers
-            for svc in parsed.services:
-                for rpc in svc.rpcs:
-                    wire_full = f'{svc.wire_prefix}.{rpc.wire_name}'
-                    req_t = rpc.cpp_req_type
-                    f.write(f'/// \\brief Typed invoke for {wire_full}.\n')
-                    f.write(f'template<typename Codec>\n')
-                    f.write(f'pcl_status_t {rpc.cpp_invoke_func}'
-                            f'(pcl_socket_transport_t* transport,\n')
-                    col = 13 + len(rpc.cpp_invoke_func) + 1
-                    sp = ' ' * col
-                    f.write(f'{sp}const {req_t}& request,\n')
-                    f.write(f'{sp}pcl_resp_cb_fn_t callback,\n')
-                    f.write(f'{sp}void* user_data = nullptr)\n')
-                    f.write('{\n')
-                    f.write(f'    std::string payload ='
-                            f' Codec::serialize(request);\n')
-                    f.write(f'    return {rpc.cpp_invoke_func}'
-                            f'(transport, payload, callback, user_data,'
-                            f' Codec::content_type());\n')
-                    f.write('}\n\n')
-        else:
-            # Typed publish helpers
-            for key, _wire in topic_set.items():
-                pascal = _snake_to_pascal(key)
-                fname = f'publish{pascal}'
-                # Determine the publish payload type from the topic
-                # For object_evidence, it's ObjectEvidence-like
-                # We use a template so any type works as long as the
-                # Codec can serialize it.
-                f.write(f'/// \\brief Typed publish for {key}.\n')
-                f.write(f'template<typename Codec, typename Msg>\n')
-                f.write(f'pcl_status_t {fname}(pcl_port_t* publisher,\n')
-                col = 13 + len(fname) + 1
-                sp = ' ' * col
-                f.write(f'{sp}const Msg& msg)\n')
-                f.write('{\n')
-                f.write(f'    std::string payload ='
-                        f' Codec::serialize(msg);\n')
-                f.write(f'    return {fname}(publisher, payload,'
-                        f' Codec::content_type());\n')
-                f.write('}\n\n')
-
-        # ---- Typed dispatch() ------------------------------------------------
-        f.write(_SEP + '\n')
-        f.write('// Typed dispatch — deserialises with Codec, calls handler,'
-                ' serialises response.\n')
-        f.write('//\n')
-        f.write('// Response buffer is heap-allocated via std::malloc;'
-                ' caller frees with std::free.\n')
-        f.write(_SEP + '\n\n')
-
-        f.write('template<typename Codec>\n')
-        f.write('void dispatch(ServiceHandler& handler,\n')
-        f.write('              ServiceChannel  channel,\n')
-        f.write('              const void*     request_buf,\n')
-        f.write('              size_t          request_size,\n')
-        f.write('              void**          response_buf,\n')
-        f.write('              size_t*         response_size)\n')
-        f.write('{\n')
-        f.write('    std::string req_str(static_cast<const char*>'
-                '(request_buf), request_size);\n')
-        f.write('    std::string rsp_str;\n\n')
-        f.write('    switch (channel) {\n')
-
-        for _, rpc in all_rpcs:
-            enum_val = rpc.cpp_enum_value
-            handler_fn = rpc.cpp_handler
-            req_t = rpc.cpp_req_type
-            rsp_t = rpc.cpp_rsp_type
-
-            f.write(f'    case ServiceChannel::{enum_val}: {{\n')
-            f.write(f'        auto req = Codec::deserialize('
-                    f'req_str, static_cast<{req_t}*>(nullptr));\n')
-            f.write(f'        auto rsp = handler.{handler_fn}(req);\n')
-
-            # Serialize response — vectors use serializeArray
-            if rsp_t.startswith('std::vector<'):
-                f.write('        rsp_str = Codec::serializeArray(rsp);\n')
-            else:
-                f.write('        rsp_str = Codec::serialize(rsp);\n')
-
-            f.write('        break;\n')
-            f.write('    }\n')
-
-        f.write('    }\n\n')
-
-        # Copy response to heap buffer
-        f.write('    if (!rsp_str.empty()) {\n')
-        f.write('        *response_size = rsp_str.size();\n')
-        f.write('        *response_buf = std::malloc(rsp_str.size());\n')
-        f.write('        std::memcpy(*response_buf, rsp_str.data(),'
-                ' rsp_str.size());\n')
-        f.write('    } else {\n')
-        f.write('        *response_buf = nullptr;\n')
-        f.write('        *response_size = 0;\n')
-        f.write('    }\n')
-        f.write('}\n\n')
 
     # -- Implementation (.cpp) -------------------------------------------------
 
@@ -783,6 +589,16 @@ class CppServiceGenerator:
         topic_set = all_topics
         hpp_name = file_prefix + '.hpp'
 
+        # Determine which data model codec namespaces to use
+        dm_codec_nss = [
+            'pyramid::data_model::common',
+            'pyramid::data_model::tactical',
+        ]
+        dm_codec_headers = [
+            'pyramid_data_model_common_codec.hpp',
+            'pyramid_data_model_tactical_codec.hpp',
+        ]
+
         with open(path, 'w') as f:
             # File-level comment block
             f.write('// Auto-generated service binding implementation\n')
@@ -792,14 +608,28 @@ class CppServiceGenerator:
 
             # Includes
             f.write(f'#include "{hpp_name}"\n\n')
+            # Data model codec headers — for serialisation inside
+            # invoke/publish/dispatch
+            for ch in dm_codec_headers:
+                f.write(f'#include "{ch}"\n')
+            f.write('\n')
             f.write('#include <pcl/pcl_container.h>\n')
             if is_provided:
                 f.write('#include <pcl/pcl_transport_socket.h>\n')
-            f.write('\n#include <string>\n')
+            f.write('\n#include <cstdlib>\n')
+            f.write('#include <cstring>\n')
+            f.write('#include <string>\n')
             f.write('#include <vector>\n\n')
 
             # Namespace open
             f.write(f'namespace {full_ns} {{\n\n')
+
+            # Bring codec functions into scope for unqualified calls
+            f.write('// Bring data model codec functions into scope\n')
+            for ns in dm_codec_nss:
+                f.write(f'using {ns}::toJson;\n')
+                f.write(f'using {ns}::fromJson;\n')
+            f.write('\n')
 
             # ---- msgToString -------------------------------------------------
             f.write(_SEP + '\n')
@@ -829,38 +659,37 @@ class CppServiceGenerator:
 
                 f.write('}\n\n')
 
-            # ---- PCL binding helpers -----------------------------------------
+            # ---- Internal PCL helpers (anonymous namespace) ------------------
+            f.write(_SEP + '\n')
+            f.write('// Internal PCL helpers\n')
+            f.write(_SEP + '\n\n')
+            f.write('namespace {\n\n')
+
             if is_provided:
-                # Anonymous namespace with generic invoke_async helper
-                f.write(_SEP + '\n')
-                f.write('// PCL binding helpers\n')
-                f.write(_SEP + '\n\n')
-                f.write('namespace {\n\n')
-                f.write('/// \\brief Generic invoke helper \u2014 builds a pcl_msg_t and'
-                        ' dispatches via\n')
-                f.write('///        pcl_socket_transport_invoke_remote_async.\n')
-                f.write('pcl_status_t invoke_async(pcl_socket_transport_t* transport,\n')
+                f.write('pcl_status_t invoke_async('
+                        'pcl_socket_transport_t* transport,\n')
                 f.write('                           const char*'
                         '             service_name,\n')
                 f.write('                           const std::string&'
-                        '      request,\n')
+                        '      payload,\n')
                 f.write('                           pcl_resp_cb_fn_t'
                         '        callback,\n')
                 f.write('                           void*'
-                        '                   user_data,\n')
-                f.write('                           const char*'
-                        '             content_type)\n')
+                        '                   user_data)\n')
                 f.write('{\n')
                 f.write('    pcl_msg_t msg{};\n')
-                f.write('    msg.data      = request.data();\n')
-                f.write('    msg.size      = static_cast<uint32_t>(request.size());\n')
-                f.write('    msg.type_name = content_type;\n')
+                f.write('    msg.data      = payload.data();\n')
+                f.write('    msg.size      = static_cast<uint32_t>'
+                        '(payload.size());\n')
+                f.write(f'    msg.type_name = "{_DEFAULT_CONTENT_TYPE}";\n')
                 f.write('    return pcl_socket_transport_invoke_remote_async(\n')
-                f.write('        transport, service_name, &msg, callback, user_data);\n')
+                f.write('        transport, service_name, &msg,'
+                        ' callback, user_data);\n')
                 f.write('}\n\n')
-                f.write('} // namespace\n\n')
 
-            # Subscribe wrappers
+            f.write('} // namespace\n\n')
+
+            # Subscribe wrappers (unchanged)
             n_topics = len(topic_set)
             if n_topics:
                 f.write(_SEP + '\n')
@@ -887,27 +716,39 @@ class CppServiceGenerator:
                     f.write('}\n\n')
 
             if is_provided:
-                # Invoke wrappers
+                # Typed invoke wrappers — serialize request, then PCL
                 f.write(_SEP + '\n')
-                f.write('// PCL invoke wrappers\n')
+                f.write('// Typed invoke wrappers \u2014 serialise and dispatch via PCL\n')
                 f.write(_SEP + '\n\n')
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
+                        req_t = rpc.cpp_req_type
                         col = 13 + len(rpc.cpp_invoke_func) + 1
                         sp = ' ' * col
                         f.write(f'pcl_status_t {rpc.cpp_invoke_func}'
                                 f'(pcl_socket_transport_t* transport,\n')
-                        f.write(f'{sp}const std::string&      request,\n')
-                        f.write(f'{sp}pcl_resp_cb_fn_t        callback,\n')
-                        f.write(f'{sp}void*                   user_data,\n')
-                        f.write(f'{sp}const char*             content_type)\n')
+                        f.write(f'{sp}const {req_t}&'
+                                f'{" " * max(1, 22 - len(req_t))}'
+                                f'request,\n')
+                        f.write(f'{sp}pcl_resp_cb_fn_t'
+                                f'        callback,\n')
+                        f.write(f'{sp}void*'
+                                f'                   user_data)\n')
                         f.write('{\n')
-                        f.write(f'    return invoke_async(transport,'
-                                f' {rpc.cpp_svc_const}, request, callback,'
-                                f' user_data, content_type);\n')
+                        # Serialize — Identifier is std::string, pass through
+                        if req_t == 'Identifier':
+                            f.write('    return invoke_async(transport,'
+                                    f' {rpc.cpp_svc_const},'
+                                    f' request, callback, user_data);\n')
+                        else:
+                            f.write(f'    std::string payload = toJson(request);\n')
+                            f.write('    return invoke_async(transport,'
+                                    f' {rpc.cpp_svc_const},'
+                                    f' payload, callback, user_data);\n')
                         f.write('}\n\n')
             else:
-                # Publish wrappers
+                # Publish wrappers (raw string — consumed side still needs
+                # raw for flexibility since publish type isn't in proto)
                 n_pubs = len(topic_set)
                 if n_pubs:
                     f.write(_SEP + '\n')
@@ -919,35 +760,89 @@ class CppServiceGenerator:
                         fname = f'publish{pascal}'
                         col = 13 + len(fname) + 1
                         sp = ' ' * col
-                        f.write(f'pcl_status_t {fname}(pcl_port_t*        publisher,\n')
+                        f.write(f'pcl_status_t {fname}'
+                                f'(pcl_port_t*        publisher,\n')
                         f.write(f'{sp}const std::string& payload,\n')
                         f.write(f'{sp}const char*        content_type)\n')
                         f.write('{\n')
                         f.write('    pcl_msg_t msg{};\n')
                         f.write('    msg.data      = payload.data();\n')
-                        f.write('    msg.size      = static_cast<uint32_t>(payload.size());\n')
+                        f.write('    msg.size      = static_cast<uint32_t>'
+                                '(payload.size());\n')
                         f.write('    msg.type_name = content_type;\n')
-                        f.write('    return pcl_port_publish(publisher, &msg);\n')
+                        f.write('    return pcl_port_publish(publisher,'
+                                ' &msg);\n')
                         f.write('}\n\n')
 
             # ---- dispatch() --------------------------------------------------
             f.write(_SEP + '\n')
-            f.write('// Dispatch \u2014 routes raw buffer to the appropriate handler stub\n')
+            f.write('// Dispatch \u2014 deserialise request, call handler,'
+                    ' serialise response\n')
             f.write(_SEP + '\n\n')
-            f.write('void dispatch(ServiceChannel channel,\n')
-            f.write('              const void*    /*request_buf*/,\n')
-            f.write('              size_t         /*request_size*/,\n')
-            f.write('              void**         response_buf,\n')
-            f.write('              size_t*        response_size)\n')
+            f.write('void dispatch(ServiceHandler& handler,\n')
+            f.write('              ServiceChannel  channel,\n')
+            f.write('              const void*     request_buf,\n')
+            f.write('              size_t          request_size,\n')
+            f.write('              void**          response_buf,\n')
+            f.write('              size_t*         response_size)\n')
             f.write('{\n')
-            f.write('    *response_buf  = nullptr;\n')
-            f.write('    *response_size = 0;\n\n')
+            f.write('    std::string req_str('
+                    'static_cast<const char*>(request_buf),'
+                    ' request_size);\n')
+            f.write('    std::string rsp_str;\n\n')
             f.write('    switch (channel) {\n')
+
             for _, rpc in all_rpcs:
-                f.write(f'        case ServiceChannel::{rpc.cpp_enum_value}:\n')
-                f.write(f'            // TODO: deserialise request, call'
-                        f' handler, serialise response\n')
-                f.write('            break;\n')
+                enum_val = rpc.cpp_enum_value
+                handler_fn = rpc.cpp_handler
+                req_t = rpc.cpp_req_type
+                rsp_t = rpc.cpp_rsp_type
+
+                f.write(f'    case ServiceChannel::{enum_val}: {{\n')
+                # Deserialize request
+                if req_t == 'Identifier':
+                    f.write('        auto& req = req_str;\n')
+                else:
+                    f.write(f'        auto req = fromJson(req_str,'
+                            f' static_cast<{req_t}*>(nullptr));\n')
+                f.write(f'        auto rsp = handler.{handler_fn}(req);\n')
+
+                # Serialize response
+                if rsp_t.startswith('std::vector<'):
+                    # Extract inner type
+                    inner = rsp_t[len('std::vector<'):-1]
+                    f.write('        rsp_str = "[";\n')
+                    f.write('        for (size_t i = 0;'
+                            ' i < rsp.size(); ++i) {\n')
+                    f.write('            if (i > 0) rsp_str += ",";\n')
+                    if inner == 'Identifier':
+                        f.write('            rsp_str += "\\\""'
+                                ' + rsp[i] + "\\\""; \n')
+                    else:
+                        f.write('            rsp_str += toJson(rsp[i]);\n')
+                    f.write('        }\n')
+                    f.write('        rsp_str += "]";\n')
+                elif rsp_t == 'Identifier':
+                    f.write('        rsp_str = rsp;\n')
+                elif rsp_t == 'Ack':
+                    f.write('        rsp_str = toJson(rsp);\n')
+                else:
+                    f.write('        rsp_str = toJson(rsp);\n')
+
+                f.write('        break;\n')
+                f.write('    }\n')
+
+            f.write('    }\n\n')
+
+            # Copy to heap buffer
+            f.write('    if (!rsp_str.empty()) {\n')
+            f.write('        *response_size = rsp_str.size();\n')
+            f.write('        *response_buf = std::malloc(rsp_str.size());\n')
+            f.write('        std::memcpy(*response_buf, rsp_str.data(),'
+                    ' rsp_str.size());\n')
+            f.write('    } else {\n')
+            f.write('        *response_buf = nullptr;\n')
+            f.write('        *response_size = 0;\n')
             f.write('    }\n')
             f.write('}\n\n')
 

@@ -1,0 +1,38 @@
+--  GPR project for the generated-bindings compilation + round-trip test.
+--  Tests that all generated Ada packages (types, codecs, service bindings)
+--  compile and that basic codec round-trips work correctly.
+--
+--  Build:  gprbuild -p -P test_generated_bindings.gpr
+--  Run:    bin/test_generated_bindings
+
+project Test_Generated_Bindings is
+  Root_Dir := external("MUJIN_ROOT", ".." & "/..");
+
+  for Languages use ("Ada", "C");
+
+  for Source_Dirs use (".", "generated", "../../src/pcl");
+  for Main use ("test_generated_bindings.adb");
+
+  for Object_Dir use "obj_test_bindings";
+  for Exec_Dir use "bin";
+
+  package Compiler is
+    for Default_Switches ("Ada") use ("-g", "-gnatwa");
+    for Default_Switches ("C") use
+      ("-std=c17",
+       "-I" & Root_Dir & "/include",
+       "-I" & Root_Dir & "/src/pcl");
+  end Compiler;
+
+  type OS_Type is ("Windows_NT", "linux", "darwin");
+  OS : OS_Type := external ("OS", "linux");
+
+  package Linker is
+    case OS is
+      when "Windows_NT" =>
+        for Default_Switches ("Ada") use ("-lws2_32");
+      when others =>
+        null;
+    end case;
+  end Linker;
+end Test_Generated_Bindings;
