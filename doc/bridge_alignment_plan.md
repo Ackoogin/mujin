@@ -191,20 +191,24 @@ TacticalObjectsComponent (internal types, unchanged)
 
 ---
 
-## 6. Files Affected
+## 6. Files Changed
 
-### Bridge (C++)
-- `tests/tactical_objects/standalone_bridge.cpp` — format detection / dual-dialect
-- `tests/tactical_objects/tobj_socket_server.cpp` — if service handler parsing changes
+### Generators (root cause fix)
+- `pim/json_schema.py` — added `INVOKE_WIRE_TYPES` mapping
+- `pim/ada_service_generator.py` — `Invoke_*` now emits Json_Codec wire types
+
+### Generated bindings (regenerated)
+- `examples/ada/generated/pyramid-services-tactical_objects-provided.ads` — `Invoke_Create_Requirement` accepts `Json_Codec.Create_Requirement_Request`
+- `examples/ada/generated/pyramid-services-tactical_objects-provided.adb` — serializes via `Json_Codec.To_Json`
 
 ### Ada clients
-- `examples/ada/tobj_interest_client.adb` — bridge-facing serialization
-- `examples/ada/tobj_evidence_provider.adb` — observation publishing format
-- `examples/ada/ada_active_find_e2e.adb` — E2E test assertions
+- `examples/ada/tobj_interest_client.adb` — builds `Codec.Create_Requirement_Request` with all fields populated
 
-### Generators
-- `pim/json_schema.py` — enum naming conventions (fixed)
-- `pim/ada_service_generator.py` — JsonCodecGenerator GNATCOLL compatibility (fixed)
+### Not changed
+- `tests/tactical_objects/standalone_bridge.cpp` — already speaks Json_Codec format
+- `pyramid/tactical_objects/src/StandardBridge.cpp` — already speaks Json_Codec format
+- `examples/ada/tobj_evidence_provider.adb` — already uses `Codec.Object_Evidence` correctly
+- `examples/ada/ada_active_find_e2e.adb` — no changes needed
 
 ### Proto references
 - `proto/example/tactical_objects.proto` — original format reference
