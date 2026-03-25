@@ -84,6 +84,70 @@ graph TB
 
 ---
 
+## 2b. StandardBridge — PYRAMID-to-Internal Translation Layer
+
+The `StandardBridge` is an adapter component that sits between external
+clients (Ada, future gRPC) and the internal `TacticalObjectsComponent`.
+The name refers to the **PYRAMID standard** data model — the bridge
+translates from the PYRAMID standard wire format into the component's
+internal types and back.
+
+**Why it exists**: The `TacticalObjectsComponent` uses its own internal
+type system (`Affiliation`, `Position` in degrees, `BattleDimension`
+with domain-specific ordinals, flat JSON fields).  External clients
+speak the PYRAMID standard format (`STANDARD_IDENTITY_HOSTILE`,
+`BATTLE_DIMENSION_SEA_SURFACE`, positions in radians, etc.) as defined
+by the PIM-generated `Json_Codec`.  The bridge converts between the two
+so that neither side needs to change.
+
+```
+External Clients (Ada / gRPC)
+    │  PYRAMID standard JSON (Json_Codec wire format)
+    │  e.g. {"policy":"DATA_POLICY_OBTAIN","identity":"STANDARD_IDENTITY_HOSTILE",...}
+    ▼
+┌──────────────────────────────────────────────────────┐
+│  StandardBridge                                       │
+│                                                       │
+│  Service translation:                                 │
+│    create_requirement  →  subscribe_interest           │
+│    (std enums, rad)       (internal enums, deg)       │
+│                                                       │
+│  Topic translation:                                   │
+│    standard.object_evidence  →  observation_ingress    │
+│    entity_updates (binary)   →  standard.entity_matches│
+│    evidence_requirements     →  std evidence_reqs      │
+│                                                       │
+│  Conversions:                                         │
+│    STANDARD_IDENTITY_*  ↔  Affiliation enum            │
+│    BATTLE_DIMENSION_*   ↔  BattleDimension enum        │
+│    radians              ↔  degrees                     │
+│    DATA_POLICY_*        →  query_mode (active_find/    │
+│                               read_current)            │
+└──────────────────┬───────────────────────────────────┘
+                   │  Internal JSON / binary streaming
+                   ▼
+TacticalObjectsComponent (unchanged internal types)
+```
+
+**Two deployment forms**:
+
+| Variant | File | Use case |
+|---------|------|----------|
+| **In-process** | `StandardBridge.h/.cpp` | PCL component co-located with `TacticalObjectsComponent` in the same executor |
+| **Standalone** | `standalone_bridge.cpp` | Separate process with dual TCP transports — backend to the component server, frontend to Ada/test clients |
+
+Both perform identical translations; the standalone variant adds TCP
+transport plumbing and a message forwarding loop between the two
+executors.
+
+**Key source files**:
+
+- `include/StandardBridge.h` — in-process bridge header
+- `src/StandardBridge.cpp` — enum converters, service handler, tick-based entity match publishing
+- `tests/tactical_objects/standalone_bridge.cpp` — standalone dual-transport bridge process
+
+---
+
 ## 3. Object Store (ECS Layout)
 
 The `ObjectStore` uses a sparse-set pattern. Each entity has a UUID. Optional component tables hold facets. Not every entity populates every table.

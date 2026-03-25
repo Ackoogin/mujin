@@ -10,18 +10,23 @@
 
 namespace tactical_objects {
 
-/// \brief Bridge component that translates between the standard pyramid proto
-///        interface and the internal TacticalObjects wire format.
+/// \brief PYRAMID-to-Internal translation layer.
+///
+/// "Standard" here refers to the PYRAMID standard data model — the external
+/// wire format defined in the proto IDL and serialised by the PIM-generated
+/// Json_Codec.  This bridge translates between that format and the internal
+/// TacticalObjects types so that neither external clients nor the internal
+/// component need to change.
 ///
 /// External consumers (Ada clients, future gRPC clients) call:
-///   - Service  "object_of_interest.create_requirement"  (JSON, standard)
-///   - Topic    "standard.object_evidence"               (JSON, standard)
+///   - Service  "object_of_interest.create_requirement"  (JSON, PYRAMID standard)
+///   - Topic    "standard.object_evidence"               (JSON, PYRAMID standard)
 ///
 /// The bridge translates and delegates to:
 ///   - Service  "subscribe_interest"       (JSON, internal)
 ///   - Runtime  processObservationBatch()  (direct in-process call)
 ///
-/// Internal outputs forwarded as standard topics:
+/// Internal outputs forwarded as PYRAMID standard topics:
 ///   - "entity_updates"           (binary)  → "standard.entity_matches"  (JSON)
 ///   - "evidence_requirements"    (JSON)    → "standard.evidence_requirements" (JSON)
 ///
