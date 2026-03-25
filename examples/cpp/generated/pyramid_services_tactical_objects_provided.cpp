@@ -1,5 +1,5 @@
 // Auto-generated service binding implementation
-// Generated from: components by cpp_service_generator
+// Generated from: services by cpp_service_generator
 // Namespace: pyramid::services::tactical_objects::provided
 
 #include "pyramid_services_tactical_objects_provided.hpp"
