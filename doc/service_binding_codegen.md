@@ -68,7 +68,11 @@ layer**.
 | `pim/json_schema.py` | **Canonical authority** — wire field names, message shapes, enum naming rules |
 | `pim/ada_service_generator.py` | Reads `.proto` + `json_schema`, emits Ada packages |
 | `pim/cpp_service_generator.py` | Reads `.proto` + `json_schema`, emits C++ headers/sources |
+| `pim/proto_parser.py` | Proto IDL parser — extracts messages, enums, services into `ProtoFile` / `ProtoTypeIndex` |
+| `pim/generate_bindings.py` | Batch entry point — generates all bindings for a component |
+| `pim/codec_backends.py` | Registry of binary codec backends (JSON, FlatBuffers, Protobuf) |
 | `proto/pyramid/data_model/common.proto` | Source of enum values (`StandardIdentity`, `BattleDimension`, `DataPolicy`) |
+| `proto/pyramid/data_model/tactical.proto` | Tactical data model types (`ObjectInterestRequirement`, `ObjectMatch`, etc.) |
 | `proto/pyramid/components/tactical_objects/services/provided.proto` | Service contract for client-facing RPCs |
 | `proto/pyramid/components/tactical_objects/services/consumed.proto` | Service contract for evidence/capability RPCs |
 
@@ -94,7 +98,7 @@ Enum naming rules are configured once per enum type:
 | Enum | Proto prefix stripped | Ada prefix | Ada special case | C++ |
 |------|-----------------------|-----------|-----------------|-----|
 | `StandardIdentity` | `STANDARD_IDENTITY_` | `Identity_` (all values) | — | `StandardIdentity::Hostile` |
-| `BattleDimension` | `BATTLE_DIMENSION_` | `Dimension_` (only `UNSPECIFIED`, `UNKNOWN`) | others bare: `Ground`, `Sea_Surface` | `BattleDimension::SeaSurface` |
+| `BattleDimension` | `BATTLE_DIMENSION_` | `Dimension_` (all values) | — | `BattleDimension::SeaSurface` |
 | `DataPolicy` | `DATA_POLICY_` | `Policy_` (all values) | — | `DataPolicy::Obtain` |
 
 To add a new enum to the codec, add one `EnumSpec` entry to `ENUM_SPECS` in
@@ -103,23 +107,35 @@ To add a new enum to the codec, add one `EnumSpec` entry to `ENUM_SPECS` in
 ### Running the generators
 
 ```bash
-cd pim
+cd <repo_root>
 
-# Ada: codec package only
-python ada_service_generator.py --codec ../examples/ada/generated
+# Ada: data model types from all protos in data_model/
+python pim/ada_service_generator.py --types \
+    proto/pyramid/data_model examples/ada/generated
+
+# Ada: data model codecs (To_Json / From_Json per type)
+python pim/ada_service_generator.py --codec \
+    proto/pyramid/data_model examples/ada/generated
+
+# Ada: bridge-level Json_Codec (json_schema.py format) for one service proto
+python pim/ada_service_generator.py --codec \
+    proto/pyramid/components/tactical_objects/services/provided.proto \
+    examples/ada/generated
 
 # Ada: service binding for one proto
-python ada_service_generator.py \
-    ../proto/pyramid/components/tactical_objects/services/provided.proto \
-    ../examples/ada/generated
+python pim/ada_service_generator.py \
+    proto/pyramid/components/tactical_objects/services/provided.proto \
+    examples/ada/generated
 
 # C++: codec package only
-python cpp_service_generator.py --codec ../examples/cpp/generated
+python pim/cpp_service_generator.py --codec \
+    proto/pyramid/components/tactical_objects/services/provided.proto \
+    examples/cpp/generated
 
 # C++: service binding for one proto
-python cpp_service_generator.py \
-    ../proto/pyramid/components/tactical_objects/services/provided.proto \
-    ../examples/cpp/generated
+python pim/cpp_service_generator.py \
+    proto/pyramid/components/tactical_objects/services/provided.proto \
+    examples/cpp/generated
 ```
 
 ---
@@ -213,16 +229,26 @@ All files live in `examples/ada/generated/`.
 ### Package structure
 
 ```
+Pyramid_Data_Model_Base_Types          (pyramid_data_model_base_types.ads)
+Pyramid_Data_Model_Common_Types        (pyramid_data_model_common_types.ads)
+Pyramid_Data_Model_Tactical_Types      (pyramid_data_model_tactical_types.ads)
+Pyramid_Data_Model_Common_Types_Codec  (pyramid_data_model_common_types_codec.ads/.adb)
+Pyramid_Data_Model_Tactical_Types_Codec(pyramid_data_model_tactical_types_codec.ads/.adb)
+Pyramid_Data_Model_Base_Types_Codec    (pyramid_data_model_base_types_codec.ads/.adb)
+
 Pyramid.Services.Tactical_Objects
 ├── Provided              (pyramid-services-tactical_objects-provided.ads/.adb)
 ├── Consumed              (pyramid-services-tactical_objects-consumed.ads/.adb)
 └── Json_Codec            (pyramid-services-tactical_objects-json_codec.ads/.adb)
 ```
 
-The packages depend on two hand-authored files that are **not** generated:
+The data model types packages (`Pyramid_Data_Model_*_Types`) are generated from
+`proto/pyramid/data_model/` via `--types`.  The per-type codecs
+(`*_Types_Codec`) are generated via `--codec <data_model_dir>`.  The service
+packages and bridge-level `Json_Codec` are generated from the service protos.
 
-- `Tactical_Objects_Types` (`examples/ada/tactical_objects_types.ads`) —
-  Ada enum and record types mirroring the proto data model.
+The packages depend on one hand-authored file that is **not** generated:
+
 - `Pcl_Bindings` (`examples/ada/pcl_bindings.ads`) — thin Ada spec over the
   PCL C ABI.
 
@@ -379,7 +405,7 @@ Because all field names and enum strings are defined in `json_schema.py` and
 validated against the `.proto` IDL, any language that can serialise to the
 same JSON shape can participate.
 
-The enum ordinals in `Tactical_Objects_Types` (Ada) and
+The enum ordinals in `Pyramid_Data_Model_Common_Types` (Ada) and
 `pyramid_services_tactical_objects_types.hpp` (C++) deliberately match the
 proto ordinals, but the **wire format always uses the proto string name**
 (e.g. `"BATTLE_DIMENSION_SEA_SURFACE"`), never the numeric ordinal.
@@ -525,12 +551,21 @@ needs to be configured.
 ### Step 3 — Regenerate
 
 ```bash
-cd pim
-python ada_service_generator.py --codec    ../examples/ada/generated
-python ada_service_generator.py services/provided.proto ../examples/ada/generated
+cd <repo_root>
 
-python cpp_service_generator.py --codec    ../examples/cpp/generated
-python cpp_service_generator.py services/provided.proto ../examples/cpp/generated
+# Ada: types + codecs + service bindings
+python pim/ada_service_generator.py --types proto/pyramid/data_model examples/ada/generated
+python pim/ada_service_generator.py --codec proto/pyramid/data_model examples/ada/generated
+python pim/ada_service_generator.py --codec \
+    proto/pyramid/components/<component>/services/provided.proto examples/ada/generated
+python pim/ada_service_generator.py \
+    proto/pyramid/components/<component>/services/provided.proto examples/ada/generated
+
+# C++: codec + service bindings
+python pim/cpp_service_generator.py --codec \
+    proto/pyramid/components/<component>/services/provided.proto examples/cpp/generated
+python pim/cpp_service_generator.py \
+    proto/pyramid/components/<component>/services/provided.proto examples/cpp/generated
 ```
 
 ### Step 4 — Implement the component

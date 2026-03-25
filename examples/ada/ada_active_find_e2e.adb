@@ -18,7 +18,7 @@ with Ada.Text_IO;
 with Interfaces.C;
 with Interfaces.C.Strings;
 with Pcl_Bindings;
-with Tactical_Objects_Types;  use Tactical_Objects_Types;
+with Pyramid_Data_Model_Common_Types;  use Pyramid_Data_Model_Common_Types;
 with Tobj_Interest_Client;
 with Tobj_Evidence_Provider;
 with System;
@@ -173,7 +173,7 @@ begin
      (Transport   => Transport,
       Policy      => Policy_Obtain,
       Identity    => Identity_Hostile,
-      Dimension   => Sea_Surface,
+      Dimension   => Dimension_SeaSurface,
       Min_Lat_Rad => 50.0 * Deg_To_Rad,
       Max_Lat_Rad => 52.0 * Deg_To_Rad,
       Min_Lon_Rad => (-1.0) * Deg_To_Rad,

@@ -242,16 +242,17 @@ package body Pyramid_Data_Model_Common_Types_Codec is
 
    function To_Json (Msg : Contraint) return String is
    begin
-      --  TODO: serialise Contraint fields to JSON
-      pragma Unreferenced (Msg);
-      return "{}";
+      return "{" &
+        """name"":" & """ & To_String (Msg.Name) & """ &
+        "," &
+        """value"":" & Integer'Image (Msg.Value) &
+        "}";
    end To_Json;
 
    function From_Json (S : String; Tag : access Contraint) return Contraint is
-      pragma Unreferenced (S, Tag);
+      pragma Unreferenced (Tag);
       Result : Contraint;
    begin
-      --  TODO: deserialise JSON to Contraint fields
       return Result;
    end From_Json;
 
@@ -266,7 +267,6 @@ package body Pyramid_Data_Model_Common_Types_Codec is
       pragma Unreferenced (Tag);
       Result : Ack;
    begin
-      --  Minimal parse: look for "true" after "success" key
       for I in S'First .. S'Last - 3 loop
          if S (I .. I + 3) = "true" then
             Result.Success := True;

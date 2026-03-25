@@ -44,6 +44,22 @@ trap cleanup EXIT
 
 echo "=== Ada Socket E2E Test ==="
 
+# Step 0: Generate Ada service stubs from proto (provided + consumed)
+if command -v python3 &>/dev/null || command -v python &>/dev/null; then
+  PY=$(command -v python3 || command -v python)
+  GEN_SCRIPT="$ROOT_DIR/pim/ada_service_generator.py"
+  ADA_GEN_OUT="$ROOT_DIR/examples/ada/generated"
+  DATA_MODEL_DIR="$ROOT_DIR/proto/pyramid/data_model"
+  PROTO_SVC_DIR="$ROOT_DIR/proto/pyramid/components/tactical_objects/services"
+  echo "[driver] Generating Ada types, codecs and service stubs from proto..."
+  "$PY" "$GEN_SCRIPT" --types "$DATA_MODEL_DIR" "$ADA_GEN_OUT" 2>&1 || true
+  "$PY" "$GEN_SCRIPT" --codec "$DATA_MODEL_DIR" "$ADA_GEN_OUT" 2>&1 || true
+  "$PY" "$GEN_SCRIPT" "$PROTO_SVC_DIR/provided.proto" "$ADA_GEN_OUT" 2>&1 || true
+  "$PY" "$GEN_SCRIPT" "$PROTO_SVC_DIR/consumed.proto" "$ADA_GEN_OUT" 2>&1 || true
+else
+  echo "[driver] python not found — skipping Ada stub generation"
+fi
+
 # Step 1: Build Ada client if gprbuild is available
 if command -v gprbuild &>/dev/null; then
   echo "[driver] Building Ada client..."

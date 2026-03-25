@@ -6,7 +6,7 @@
 --  Architecture: component logic (this) > Json_Codec > service binding > PCL
 
 with Pcl_Bindings;
-with Tactical_Objects_Types;
+with Pyramid_Data_Model_Common_Types;
 with System;
 
 package Tobj_Interest_Client is
@@ -40,10 +40,10 @@ package Tobj_Interest_Client is
    --  Takes typed enum values — JSON serialisation is done by Json_Codec.
    procedure Send_Create_Requirement
      (Transport   : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Policy      : Tactical_Objects_Types.Data_Policy;
-      Identity    : Tactical_Objects_Types.Standard_Identity;
-      Dimension   : Tactical_Objects_Types.Battle_Dimension :=
-                      Tactical_Objects_Types.Dimension_Unspecified;
+      Policy      : Pyramid_Data_Model_Common_Types.Data_Policy;
+      Identity    : Pyramid_Data_Model_Common_Types.Standard_Identity;
+      Dimension   : Pyramid_Data_Model_Common_Types.Battle_Dimension :=
+                      Pyramid_Data_Model_Common_Types.Dimension_Unspecified;
       Min_Lat_Rad : Long_Float := 0.0;
       Max_Lat_Rad : Long_Float := 0.0;
       Min_Lon_Rad : Long_Float := 0.0;

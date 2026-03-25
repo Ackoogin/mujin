@@ -70,7 +70,7 @@ def _to_ada_literal(suffix: str, ada_prefix: str,
     prefixed_suffixes  – if None, prefix is always added;
                          if a set, only those suffixes get the prefix.
     """
-    title = '_'.join(w.capitalize() for w in suffix.split('_'))
+    title = ''.join(w.capitalize() for w in suffix.split('_'))
     use_prefix = (prefixed_suffixes is None) or (suffix in prefixed_suffixes)
     return (ada_prefix + title) if use_prefix else title
 
@@ -202,7 +202,7 @@ BATTLE_DIMENSION_SPEC = EnumSpec(
     ada_type='Battle_Dimension',
     ada_prefix='Dimension_',
     cpp_type='BattleDimension',
-    ada_prefixed_suffixes={'UNSPECIFIED', 'UNKNOWN'},  # generic/ambiguous values only
+    ada_prefixed_suffixes=None,          # all values get Dimension_ prefix
 )
 
 DATA_POLICY_SPEC = EnumSpec(

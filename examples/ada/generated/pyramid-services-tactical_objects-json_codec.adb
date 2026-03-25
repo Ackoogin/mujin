@@ -13,7 +13,7 @@ package body Pyramid.Services.Tactical_Objects.Json_Codec is
       Val  : Long_Float)
    is
    begin
-      Set_Field (Obj, Name, JSON_Float (Val));
+      Set_Field (Obj, Name, Create (Val));
    end Set_F;
 
    function Get_F
@@ -23,7 +23,7 @@ package body Pyramid.Services.Tactical_Objects.Json_Codec is
    is
    begin
       if Has_Field (J, Name) then
-         return Long_Float (JSON_Float'(Get (Get (J, Name))));
+         return Get_Long_Float (Get (J, Name));
       end if;
       return Def;
    exception
@@ -58,7 +58,7 @@ package body Pyramid.Services.Tactical_Objects.Json_Codec is
          when Identity_Pending => return "STANDARD_IDENTITY_PENDING";
          when Identity_Joker => return "STANDARD_IDENTITY_JOKER";
          when Identity_Faker => return "STANDARD_IDENTITY_FAKER";
-         when Identity_Assumed_Friendly => return "STANDARD_IDENTITY_ASSUMED_FRIENDLY";
+         when Identity_AssumedFriendly => return "STANDARD_IDENTITY_ASSUMED_FRIENDLY";
       end case;
    end Standard_Identity_To_String;
 
@@ -73,7 +73,7 @@ package body Pyramid.Services.Tactical_Objects.Json_Codec is
       if S = "STANDARD_IDENTITY_PENDING" then return Identity_Pending; end if;
       if S = "STANDARD_IDENTITY_JOKER" then return Identity_Joker; end if;
       if S = "STANDARD_IDENTITY_FAKER" then return Identity_Faker; end if;
-      if S = "STANDARD_IDENTITY_ASSUMED_FRIENDLY" then return Identity_Assumed_Friendly; end if;
+      if S = "STANDARD_IDENTITY_ASSUMED_FRIENDLY" then return Identity_AssumedFriendly; end if;
       return Identity_Unspecified;
    end Standard_Identity_From_String;
 
@@ -81,10 +81,10 @@ package body Pyramid.Services.Tactical_Objects.Json_Codec is
    begin
       case V is
          when Dimension_Unspecified => return "BATTLE_DIMENSION_UNSPECIFIED";
-         when Ground => return "BATTLE_DIMENSION_GROUND";
-         when Subsurface => return "BATTLE_DIMENSION_SUBSURFACE";
-         when Sea_Surface => return "BATTLE_DIMENSION_SEA_SURFACE";
-         when Air => return "BATTLE_DIMENSION_AIR";
+         when Dimension_Ground => return "BATTLE_DIMENSION_GROUND";
+         when Dimension_Subsurface => return "BATTLE_DIMENSION_SUBSURFACE";
+         when Dimension_SeaSurface => return "BATTLE_DIMENSION_SEA_SURFACE";
+         when Dimension_Air => return "BATTLE_DIMENSION_AIR";
          when Dimension_Unknown => return "BATTLE_DIMENSION_UNKNOWN";
       end case;
    end Battle_Dimension_To_String;
@@ -92,10 +92,10 @@ package body Pyramid.Services.Tactical_Objects.Json_Codec is
    function Battle_Dimension_From_String (S : String) return Battle_Dimension is
    begin
       if S = "BATTLE_DIMENSION_UNSPECIFIED" then return Dimension_Unspecified; end if;
-      if S = "BATTLE_DIMENSION_GROUND" then return Ground; end if;
-      if S = "BATTLE_DIMENSION_SUBSURFACE" then return Subsurface; end if;
-      if S = "BATTLE_DIMENSION_SEA_SURFACE" then return Sea_Surface; end if;
-      if S = "BATTLE_DIMENSION_AIR" then return Air; end if;
+      if S = "BATTLE_DIMENSION_GROUND" then return Dimension_Ground; end if;
+      if S = "BATTLE_DIMENSION_SUBSURFACE" then return Dimension_Subsurface; end if;
+      if S = "BATTLE_DIMENSION_SEA_SURFACE" then return Dimension_SeaSurface; end if;
+      if S = "BATTLE_DIMENSION_AIR" then return Dimension_Air; end if;
       if S = "BATTLE_DIMENSION_UNKNOWN" then return Dimension_Unknown; end if;
       return Dimension_Unspecified;
    end Battle_Dimension_From_String;
@@ -342,9 +342,9 @@ package body Pyramid.Services.Tactical_Objects.Json_Codec is
       end if;
       Arr := Get (R.Value);
       declare
-         Result : Entity_Match_Array (1 .. Length (Arr));
+         Result : Entity_Match_Array (1 .. GNATCOLL.JSON.Length (Arr));
       begin
-         for I in 1 .. Length (Arr) loop
+         for I in 1 .. GNATCOLL.JSON.Length (Arr) loop
             declare
                Elem : constant JSON_Value := Get (Arr, I);
                M    : Entity_Match;

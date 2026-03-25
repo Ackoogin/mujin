@@ -34,7 +34,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Debug -DAME_FOXGLOVE=OFF
 ctest --test-dir build --output-on-failure
 ```
 
-All 73 tests should pass, covering: WorldModel, TypeSystem, ActionRegistry, PlanCompiler, Planner, PDDL Parser, BT integration, end-to-end pipeline, and observability (Layers 1-5).
+All 511 tests should pass (510 if the Ada active-find E2E bridge alignment is pending), covering: WorldModel, TypeSystem, ActionRegistry, PlanCompiler, Planner, PDDL Parser, BT integration, end-to-end pipeline, observability (Layers 1-5), PCL lifecycle/executor/transport, tactical objects component/codec/streaming, Ada generated bindings, cross-language E2E (Ada ↔ C++ over socket), and multi-codec dispatch (JSON, FlatBuffers, Protobuf).
 
 ## Run the demo
 

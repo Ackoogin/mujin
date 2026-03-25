@@ -8,7 +8,7 @@ with Interfaces.C;
 with Pyramid.Services.Tactical_Objects.Provided;
 with Pyramid.Services.Tactical_Objects.Consumed;
 with Pyramid.Services.Tactical_Objects.Json_Codec;
-with Tactical_Objects_Types;
+with Pyramid_Data_Model_Common_Types;  use Pyramid_Data_Model_Common_Types;
 with System;
 
 package body Tobj_Evidence_Provider is
@@ -77,8 +77,8 @@ package body Tobj_Evidence_Provider is
          declare
             Obs : Codec.Object_Evidence;
          begin
-            Obs.Identity      := Tactical_Objects_Types.Identity_Hostile;
-            Obs.Dimension     := Tactical_Objects_Types.Sea_Surface;
+            Obs.Identity      := Identity_Hostile;
+            Obs.Dimension     := Dimension_SeaSurface;
             Obs.Latitude_Rad  := 51.0 * (3.14159265358979323846 / 180.0);
             Obs.Longitude_Rad := 0.0;
             Obs.Confidence    := 0.9;

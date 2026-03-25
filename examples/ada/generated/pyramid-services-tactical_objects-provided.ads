@@ -1,5 +1,5 @@
 --  Auto-generated service binding specification
---  Generated from: tactical_objects.proto by ada_service_generator.py
+--  Generated from: provided.proto by ada_service_generator.py
 --  Package: Pyramid.Services.Tactical_Objects.Provided
 --
 --  Architecture: component logic > service binding (this) > PCL
@@ -29,44 +29,38 @@ package Pyramid.Services.Tactical_Objects.Provided is
       Op_Delete);
 
    type Service_Channel is
-     (Ch_Create_Tactical_Object,
-      Ch_Read_Tactical_Object,
-      Ch_Update_Tactical_Object,
-      Ch_Delete_Tactical_Object,
-      Ch_Create_Zone,
-      Ch_Read_Zone,
-      Ch_Update_Zone,
-      Ch_Delete_Zone,
-      Ch_Create_Observation);
+     (Ch_Read_Match,
+      Ch_Create_Requirement,
+      Ch_Read_Requirement,
+      Ch_Update_Requirement,
+      Ch_Delete_Requirement,
+      Ch_Read_Detail);
 
-   type Tactical_Object_Array is array (Positive range <>) of Tactical_Object;
-   type Zone_Array is array (Positive range <>) of Zone;
+   type Object_Detail_Array is array (Positive range <>) of Object_Detail;
+   type Object_Interest_Requirement_Array is array (Positive range <>) of Object_Interest_Requirement;
+   type Object_Match_Array is array (Positive range <>) of Object_Match;
 
    --  -- Service wire-name constants (generated from proto) --------
 
-   Svc_Create_Tactical_Object : constant String :=
-     "tactical_object_service.create_tactical_object";
-   Svc_Read_Tactical_Object : constant String :=
-     "tactical_object_service.read_tactical_object";
-   Svc_Update_Tactical_Object : constant String :=
-     "tactical_object_service.update_tactical_object";
-   Svc_Delete_Tactical_Object : constant String :=
-     "tactical_object_service.delete_tactical_object";
-   Svc_Create_Zone : constant String :=
-     "zone_service.create_zone";
-   Svc_Read_Zone : constant String :=
-     "zone_service.read_zone";
-   Svc_Update_Zone : constant String :=
-     "zone_service.update_zone";
-   Svc_Delete_Zone : constant String :=
-     "zone_service.delete_zone";
-   Svc_Create_Observation : constant String :=
-     "observation_ingress_service.create_observation";
+   Svc_Read_Match : constant String :=
+     "matching_objects.read_match";
+   Svc_Create_Requirement : constant String :=
+     "object_of_interest.create_requirement";
+   Svc_Read_Requirement : constant String :=
+     "object_of_interest.read_requirement";
+   Svc_Update_Requirement : constant String :=
+     "object_of_interest.update_requirement";
+   Svc_Delete_Requirement : constant String :=
+     "object_of_interest.delete_requirement";
+   Svc_Read_Detail : constant String :=
+     "specific_object_detail.read_detail";
 
    --  -- Standard topic name constants --------------------------
 
-   Topic_Object_Evidence : constant String :=
-     "standard.object_evidence";
+   Topic_Entity_Matches : constant String :=
+     "standard.entity_matches";
+   Topic_Evidence_Requirements : constant String :=
+     "standard.evidence_requirements";
 
    --  -- PCL message utility ------------------------------------
 
@@ -77,42 +71,74 @@ package Pyramid.Services.Tactical_Objects.Provided is
    --  -- EntityActions handlers ------------------------------------
    --  Implement these procedures in the package body.
 
-   --  TacticalObjectService
-   procedure Handle_Create_Tactical_Object
-     (Request  : in  Tactical_Object;
+   --  Matching_Objects_Service
+   function Handle_Read_Match
+     (Request : Query) return Object_Match_Array;
+   --  Object_Of_Interest_Service
+   procedure Handle_Create_Requirement
+     (Request  : in  Object_Interest_Requirement;
       Response : out Identifier);
-   function Handle_Read_Tactical_Object
-     (Request : Tactical_Object_Query) return Tactical_Object_Array;
-   procedure Handle_Update_Tactical_Object
-     (Request  : in  Tactical_Object;
+   function Handle_Read_Requirement
+     (Request : Query) return Object_Interest_Requirement_Array;
+   procedure Handle_Update_Requirement
+     (Request  : in  Object_Interest_Requirement;
       Response : out Ack);
-   procedure Handle_Delete_Tactical_Object
+   procedure Handle_Delete_Requirement
      (Request  : in  Identifier;
       Response : out Ack);
-   --  ZoneService
-   procedure Handle_Create_Zone
-     (Request  : in  Zone;
-      Response : out Identifier);
-   function Handle_Read_Zone
-     (Request : Query) return Zone_Array;
-   procedure Handle_Update_Zone
-     (Request  : in  Zone;
-      Response : out Ack);
-   procedure Handle_Delete_Zone
-     (Request  : in  Identifier;
-      Response : out Ack);
-   --  ObservationIngressService
-   procedure Handle_Create_Observation
-     (Request  : in  Observation;
-      Response : out Identifier);
+   --  Specific_Object_Detail_Service
+   function Handle_Read_Detail
+     (Request : Query) return Object_Detail_Array;
 
    --  -- PCL binding procedures ------------------------------------
    --  Subscribe/Invoke/Publish wrappers for PCL transport layer.
    --  Serialisation is handled internally (codec baked at generation time).
 
-   procedure Publish_Object_Evidence
-     (Exec    : Pcl_Bindings.Pcl_Executor_Access;
-      Payload : String);
+   procedure Subscribe_Entity_Matches
+     (Container : Pcl_Bindings.Pcl_Container_Access;
+      Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;
+      User_Data : System.Address := System.Null_Address);
+
+   procedure Subscribe_Evidence_Requirements
+     (Container : Pcl_Bindings.Pcl_Container_Access;
+      Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;
+      User_Data : System.Address := System.Null_Address);
+
+   procedure Invoke_Read_Match
+     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+      Request   : Query;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address);
+
+   procedure Invoke_Create_Requirement
+     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+      Request   : Object_Interest_Requirement;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address);
+
+   procedure Invoke_Read_Requirement
+     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+      Request   : Query;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address);
+
+   procedure Invoke_Update_Requirement
+     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+      Request   : Object_Interest_Requirement;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address);
+
+   procedure Invoke_Delete_Requirement
+     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+      Request   : Identifier;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address);
+
+   procedure Invoke_Read_Detail
+     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+      Request   : Query;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address);
 
    --  -- Transport integration point ------------------------------
 

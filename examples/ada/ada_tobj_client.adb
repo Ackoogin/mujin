@@ -16,6 +16,7 @@ with Ada.Text_IO;
 with Interfaces.C;
 with Interfaces.C.Strings;
 with Pcl_Bindings;
+with Pyramid_Data_Model_Common_Types;  use Pyramid_Data_Model_Common_Types;
 with Tobj_Interest_Client;
 with System;
 
@@ -134,9 +135,9 @@ begin
 
    Tobj_Interest_Client.Send_Create_Requirement
      (Transport   => Transport,
-      Policy      => "DATA_POLICY_QUERY",
-      Identity    => "STANDARD_IDENTITY_HOSTILE",
-      Dimension   => "",
+      Policy      => Policy_Query,
+      Identity    => Identity_Hostile,
+      Dimension   => Dimension_Unspecified,
       Min_Lat_Rad => 50.0 * Deg_To_Rad,
       Max_Lat_Rad => 52.0 * Deg_To_Rad,
       Min_Lon_Rad => (-1.0) * Deg_To_Rad,

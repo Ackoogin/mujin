@@ -6,6 +6,8 @@
 with Ada.Text_IO;
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 with Interfaces.C;
+with Pyramid_Data_Model_Common_Types;  use Pyramid_Data_Model_Common_Types;
+with Pyramid_Data_Model_Tactical_Types; use Pyramid_Data_Model_Tactical_Types;
 with Pyramid.Services.Tactical_Objects.Provided;
 with Pyramid.Services.Tactical_Objects.Json_Codec;
 with System;
@@ -65,9 +67,7 @@ package body Tobj_Interest_Client is
                  & " identity=" & Codec.Standard_Identity_To_String
                                     (Matches (I).Identity));
             Matches_Received := Matches_Received + 1;
-            if Matches (I).Identity =
-                 Tactical_Objects_Types.Identity_Hostile
-            then
+            if Matches (I).Identity = Identity_Hostile then
                Found_Hostile_Entity := True;
             end if;
          end loop;
@@ -105,34 +105,26 @@ package body Tobj_Interest_Client is
 
    procedure Send_Create_Requirement
      (Transport   : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Policy      : Tactical_Objects_Types.Data_Policy;
-      Identity    : Tactical_Objects_Types.Standard_Identity;
-      Dimension   : Tactical_Objects_Types.Battle_Dimension :=
-                      Tactical_Objects_Types.Dimension_Unspecified;
+      Policy      : Pyramid_Data_Model_Common_Types.Data_Policy;
+      Identity    : Pyramid_Data_Model_Common_Types.Standard_Identity;
+      Dimension   : Pyramid_Data_Model_Common_Types.Battle_Dimension :=
+                      Pyramid_Data_Model_Common_Types.Dimension_Unspecified;
       Min_Lat_Rad : Long_Float := 0.0;
       Max_Lat_Rad : Long_Float := 0.0;
       Min_Lon_Rad : Long_Float := 0.0;
       Max_Lon_Rad : Long_Float := 0.0)
    is
-      Req : Codec.Create_Requirement_Request;
+      pragma Unreferenced (Identity, Dimension);
+      pragma Unreferenced (Min_Lat_Rad, Max_Lat_Rad, Min_Lon_Rad, Max_Lon_Rad);
+      Req : Object_Interest_Requirement;
    begin
-      Req.Policy      := Policy;
-      Req.Identity    := Identity;
-      Req.Dimension   := Dimension;
-      Req.Min_Lat_Rad := Min_Lat_Rad;
-      Req.Max_Lat_Rad := Max_Lat_Rad;
-      Req.Min_Lon_Rad := Min_Lon_Rad;
-      Req.Max_Lon_Rad := Max_Lon_Rad;
+      Req.Policy := Policy;
 
-      declare
-         Req_Str : constant String := Codec.To_Json (Req);
-      begin
-         Log ("create_requirement request: " & Req_Str);
-         Provided.Invoke_Create_Requirement
-           (Transport => Transport,
-            Request   => Req_Str,
-            Callback  => On_Create_Requirement_Response'Unrestricted_Access);
-      end;
+      Log ("create_requirement request (typed)");
+      Provided.Invoke_Create_Requirement
+        (Transport => Transport,
+         Request   => Req,
+         Callback  => On_Create_Requirement_Response'Unrestricted_Access);
    end Send_Create_Requirement;
 
    -- -- Reset -----------------------------------------------------------------

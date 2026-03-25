@@ -50,15 +50,25 @@ function Cleanup {
 try {
   Write-Host "=== Ada Socket E2E Test ==="
 
-  # Step 0: Generate Ada service stubs from proto
+  # Step 0: Generate Ada service stubs from proto (provided + consumed)
   $python = Get-Command python -ErrorAction SilentlyContinue
   if ($python) {
-    $ProtoFile = Join-Path $RootDir "proto\pyramid\components\tactical_objects.proto"
     $AdaGenOut = Join-Path $RootDir "examples\ada\generated"
-    Write-Host "[driver] Generating Ada service stubs from proto..."
-    $genResult = & python (Join-Path $RootDir "pim\ada_service_generator.py") $ProtoFile $AdaGenOut 2>&1
-    if ($LASTEXITCODE -ne 0) {
-      Write-Host "[driver] SKIP: Ada service generation failed — $genResult"
+    $GenScript = Join-Path $RootDir "pim\ada_service_generator.py"
+    $ProtoDir  = Join-Path $RootDir "proto\pyramid\components\tactical_objects\services"
+    $DataModelDir = Join-Path $RootDir "proto\pyramid\data_model"
+    Write-Host "[driver] Generating Ada types, codecs and service stubs from proto..."
+    $genOk = $true
+    & python $GenScript --types $DataModelDir $AdaGenOut 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { $genOk = $false }
+    & python $GenScript --codec $DataModelDir $AdaGenOut 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { $genOk = $false }
+    & python $GenScript (Join-Path $ProtoDir "provided.proto") $AdaGenOut 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { $genOk = $false }
+    & python $GenScript (Join-Path $ProtoDir "consumed.proto") $AdaGenOut 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { $genOk = $false }
+    if (-not $genOk) {
+      Write-Host "[driver] SKIP: Ada service generation failed"
       exit 0
     }
     Write-Host "[driver] Generated stubs in $AdaGenOut"
