@@ -1,5 +1,5 @@
 // Auto-generated service binding header
-// Generated from: components by cpp_service_generator
+// Generated from: services by cpp_service_generator
 // Namespace: pyramid::services::tactical_objects::provided
 //
 // Architecture: component logic > service binding (this) > PCL
@@ -18,7 +18,6 @@
 #include <pcl/pcl_types.h>
 
 #include <string>
-#include <string_view>
 #include <vector>
 
 namespace pyramid::services::tactical_objects::provided {
@@ -102,7 +101,7 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// PCL binding functions — Subscribe / Invoke wrappers
+// PCL binding functions — Subscribe / Invoke (typed)
 // ---------------------------------------------------------------------------
 
 /// \brief Subscribe to entity-match publications on kTopicEntityMatches.
@@ -118,59 +117,53 @@ void subscribeEvidenceRequirements(pcl_container_t*  container,
                                    void*             user_data = nullptr,
                                    const char*       content_type = "application/json");
 
-/// \brief Asynchronously invoke matching_objects.read_match.
+/// \brief Invoke matching_objects.read_match (typed, serialisation handled internally).
 pcl_status_t invokeReadMatch(pcl_socket_transport_t* transport,
-                             const std::string&      request,
+                             const Query&                 request,
                              pcl_resp_cb_fn_t        callback,
-                             void*                   user_data = nullptr,
-                             const char*             content_type = "application/json");
+                             void*                   user_data = nullptr);
 
-/// \brief Asynchronously invoke object_of_interest.create_requirement.
+/// \brief Invoke object_of_interest.create_requirement (typed, serialisation handled internally).
 pcl_status_t invokeCreateRequirement(pcl_socket_transport_t* transport,
-                                     const std::string&      request,
+                                     const ObjectInterestRequirement& request,
                                      pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr,
-                                     const char*             content_type = "application/json");
+                                     void*                   user_data = nullptr);
 
-/// \brief Asynchronously invoke object_of_interest.read_requirement.
+/// \brief Invoke object_of_interest.read_requirement (typed, serialisation handled internally).
 pcl_status_t invokeReadRequirement(pcl_socket_transport_t* transport,
-                                   const std::string&      request,
+                                   const Query&                 request,
                                    pcl_resp_cb_fn_t        callback,
-                                   void*                   user_data = nullptr,
-                                   const char*             content_type = "application/json");
+                                   void*                   user_data = nullptr);
 
-/// \brief Asynchronously invoke object_of_interest.update_requirement.
+/// \brief Invoke object_of_interest.update_requirement (typed, serialisation handled internally).
 pcl_status_t invokeUpdateRequirement(pcl_socket_transport_t* transport,
-                                     const std::string&      request,
+                                     const ObjectInterestRequirement& request,
                                      pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr,
-                                     const char*             content_type = "application/json");
+                                     void*                   user_data = nullptr);
 
-/// \brief Asynchronously invoke object_of_interest.delete_requirement.
+/// \brief Invoke object_of_interest.delete_requirement (typed, serialisation handled internally).
 pcl_status_t invokeDeleteRequirement(pcl_socket_transport_t* transport,
-                                     const std::string&      request,
+                                     const Identifier&            request,
                                      pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr,
-                                     const char*             content_type = "application/json");
+                                     void*                   user_data = nullptr);
 
-/// \brief Asynchronously invoke specific_object_detail.read_detail.
+/// \brief Invoke specific_object_detail.read_detail (typed, serialisation handled internally).
 pcl_status_t invokeReadDetail(pcl_socket_transport_t* transport,
-                              const std::string&      request,
+                              const Query&                 request,
                               pcl_resp_cb_fn_t        callback,
-                              void*                   user_data = nullptr,
-                              const char*             content_type = "application/json");
+                              void*                   user_data = nullptr);
 
 // ---------------------------------------------------------------------------
-// Transport dispatch point
+// Dispatch — deserialises request, calls handler, serialises response.
 //
-// Routes a raw request buffer to the appropriate handler.
-// Response buffer is heap-allocated; caller is responsible for freeing it.
+// Response buffer is heap-allocated via std::malloc; caller frees with std::free.
 // ---------------------------------------------------------------------------
 
-void dispatch(ServiceChannel channel,
-              const void*    request_buf,
-              size_t         request_size,
-              void**         response_buf,
-              size_t*        response_size);
+void dispatch(ServiceHandler& handler,
+              ServiceChannel  channel,
+              const void*     request_buf,
+              size_t          request_size,
+              void**          response_buf,
+              size_t*         response_size);
 
 } // namespace pyramid::services::tactical_objects::provided

@@ -1,10 +1,13 @@
 --  Auto-generated service binding body
 --  Package body: Pyramid.Services.Tactical_Objects.Provided
 
+with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 with Ada.Unchecked_Conversion;
 with Interfaces.C.Strings;
 with System;
 with System.Storage_Elements;
+with Pyramid_Data_Model_Common_Types_Codec;  use Pyramid_Data_Model_Common_Types_Codec;
+with Pyramid_Data_Model_Tactical_Types_Codec;  use Pyramid_Data_Model_Tactical_Types_Codec;
 
 package body Pyramid.Services.Tactical_Objects.Provided is
 
@@ -43,7 +46,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    is
       pragma Unreferenced (Request);
    begin
-      Response := Null_Identifier;
+      Response := Null_Unbounded_String;
    end Handle_Create_Requirement;
 
    procedure Handle_Read_Requirement
@@ -62,7 +65,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    is
       pragma Unreferenced (Request);
    begin
-      Response := Ack_Ok;
+      Response := (Success => True);
    end Handle_Update_Requirement;
 
    procedure Handle_Delete_Requirement
@@ -71,7 +74,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    is
       pragma Unreferenced (Request);
    begin
-      Response := Ack_Ok;
+      Response := (Success => True);
    end Handle_Delete_Requirement;
 
    --  -- Specific_Object_Detail_Service ------------------------------------
@@ -133,13 +136,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
 
    procedure Invoke_Read_Match
      (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
+      Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address)
    is
       use type Pcl_Bindings.Pcl_Status;
+      Payload : constant String := To_Json (Request);
       Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Request);
+        Interfaces.C.Strings.New_String (Payload);
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Svc_Read_Match);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
@@ -147,7 +151,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       pragma Unreferenced (Status);
    begin
       Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Request'Length);
+      Msg.Size      := Interfaces.C.unsigned (Payload'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
       Status := Pcl_Bindings.Invoke_Remote_Async
         (Transport, Svc_C, Msg'Access, Callback, User_Data);
@@ -158,13 +162,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
 
    procedure Invoke_Create_Requirement
      (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
+      Request   : Object_Interest_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address)
    is
       use type Pcl_Bindings.Pcl_Status;
+      Payload : constant String := To_Json (Request);
       Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Request);
+        Interfaces.C.Strings.New_String (Payload);
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Svc_Create_Requirement);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
@@ -172,7 +177,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       pragma Unreferenced (Status);
    begin
       Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Request'Length);
+      Msg.Size      := Interfaces.C.unsigned (Payload'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
       Status := Pcl_Bindings.Invoke_Remote_Async
         (Transport, Svc_C, Msg'Access, Callback, User_Data);
@@ -183,13 +188,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
 
    procedure Invoke_Read_Requirement
      (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
+      Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address)
    is
       use type Pcl_Bindings.Pcl_Status;
+      Payload : constant String := To_Json (Request);
       Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Request);
+        Interfaces.C.Strings.New_String (Payload);
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Svc_Read_Requirement);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
@@ -197,7 +203,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       pragma Unreferenced (Status);
    begin
       Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Request'Length);
+      Msg.Size      := Interfaces.C.unsigned (Payload'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
       Status := Pcl_Bindings.Invoke_Remote_Async
         (Transport, Svc_C, Msg'Access, Callback, User_Data);
@@ -208,13 +214,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
 
    procedure Invoke_Update_Requirement
      (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
+      Request   : Object_Interest_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address)
    is
       use type Pcl_Bindings.Pcl_Status;
+      Payload : constant String := To_Json (Request);
       Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Request);
+        Interfaces.C.Strings.New_String (Payload);
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Svc_Update_Requirement);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
@@ -222,7 +229,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       pragma Unreferenced (Status);
    begin
       Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Request'Length);
+      Msg.Size      := Interfaces.C.unsigned (Payload'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
       Status := Pcl_Bindings.Invoke_Remote_Async
         (Transport, Svc_C, Msg'Access, Callback, User_Data);
@@ -233,13 +240,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
 
    procedure Invoke_Delete_Requirement
      (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
+      Request   : Identifier;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address)
    is
       use type Pcl_Bindings.Pcl_Status;
+      Payload : constant String := To_String (Request);
       Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Request);
+        Interfaces.C.Strings.New_String (Payload);
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Svc_Delete_Requirement);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
@@ -247,7 +255,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       pragma Unreferenced (Status);
    begin
       Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Request'Length);
+      Msg.Size      := Interfaces.C.unsigned (Payload'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
       Status := Pcl_Bindings.Invoke_Remote_Async
         (Transport, Svc_C, Msg'Access, Callback, User_Data);
@@ -258,13 +266,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
 
    procedure Invoke_Read_Detail
      (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Request   : String;
+      Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address)
    is
       use type Pcl_Bindings.Pcl_Status;
+      Payload : constant String := To_Json (Request);
       Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Request);
+        Interfaces.C.Strings.New_String (Payload);
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Svc_Read_Detail);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
@@ -272,7 +281,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       pragma Unreferenced (Status);
    begin
       Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Request'Length);
+      Msg.Size      := Interfaces.C.unsigned (Payload'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
       Status := Pcl_Bindings.Invoke_Remote_Async
         (Transport, Svc_C, Msg'Access, Callback, User_Data);
@@ -281,6 +290,18 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Interfaces.C.Strings.Free (Msg.Type_Name);
    end Invoke_Read_Detail;
 
+   procedure Copy_To_Buf
+     (S    : in  String;
+      Buf  : out System.Address;
+      Size : out Natural)
+   is
+      C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (S);
+   begin
+      Buf  := To_Address (C);
+      Size := S'Length;
+   end Copy_To_Buf;
+
    procedure Dispatch
      (Channel      : in  Service_Channel;
       Request_Buf  : in  System.Address;
@@ -288,23 +309,111 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Response_Buf : out System.Address;
       Response_Size: out Natural)
    is
-      pragma Unreferenced (Request_Buf, Request_Size);
+      Req_Str : constant String := Msg_To_String (Request_Buf,
+        Interfaces.C.unsigned (Request_Size));
    begin
       Response_Buf  := System.Null_Address;
       Response_Size := 0;
       case Channel is
          when Ch_Read_Match =>
-            null;  --  TODO: deserialise, call Handle_Read_Match
+            declare
+               Req : constant Query :=
+                 From_Json (Req_Str, null);
+               Rsp : Object_Match_Array;
+            begin
+               Handle_Read_Match (Req, Rsp);
+               declare
+                  use Ada.Strings.Unbounded;
+                  Acc : Unbounded_String :=
+                    To_Unbounded_String ("[");
+               begin
+                  for I in Rsp'Range loop
+                     if I > Rsp'First then
+                        Append (Acc, ",");
+                     end if;
+                     Append (Acc, To_Json (Rsp (I)));
+                  end loop;
+                  Append (Acc, "]");
+                  Copy_To_Buf (To_String (Acc),
+                    Response_Buf, Response_Size);
+               end;
+            end;
          when Ch_Create_Requirement =>
-            null;  --  TODO: deserialise, call Handle_Create_Requirement
+            declare
+               Req : constant Object_Interest_Requirement :=
+                 From_Json (Req_Str, null);
+               Rsp : Identifier;
+            begin
+               Handle_Create_Requirement (Req, Rsp);
+               Copy_To_Buf (To_String (Rsp),
+                 Response_Buf, Response_Size);
+            end;
          when Ch_Read_Requirement =>
-            null;  --  TODO: deserialise, call Handle_Read_Requirement
+            declare
+               Req : constant Query :=
+                 From_Json (Req_Str, null);
+               Rsp : Object_Interest_Requirement_Array;
+            begin
+               Handle_Read_Requirement (Req, Rsp);
+               declare
+                  use Ada.Strings.Unbounded;
+                  Acc : Unbounded_String :=
+                    To_Unbounded_String ("[");
+               begin
+                  for I in Rsp'Range loop
+                     if I > Rsp'First then
+                        Append (Acc, ",");
+                     end if;
+                     Append (Acc, To_Json (Rsp (I)));
+                  end loop;
+                  Append (Acc, "]");
+                  Copy_To_Buf (To_String (Acc),
+                    Response_Buf, Response_Size);
+               end;
+            end;
          when Ch_Update_Requirement =>
-            null;  --  TODO: deserialise, call Handle_Update_Requirement
+            declare
+               Req : constant Object_Interest_Requirement :=
+                 From_Json (Req_Str, null);
+               Rsp : Ack;
+            begin
+               Handle_Update_Requirement (Req, Rsp);
+               Copy_To_Buf (To_Json (Rsp),
+                 Response_Buf, Response_Size);
+            end;
          when Ch_Delete_Requirement =>
-            null;  --  TODO: deserialise, call Handle_Delete_Requirement
+            declare
+               Req : constant Identifier :=
+                 To_Unbounded_String (Req_Str);
+               Rsp : Ack;
+            begin
+               Handle_Delete_Requirement (Req, Rsp);
+               Copy_To_Buf (To_Json (Rsp),
+                 Response_Buf, Response_Size);
+            end;
          when Ch_Read_Detail =>
-            null;  --  TODO: deserialise, call Handle_Read_Detail
+            declare
+               Req : constant Query :=
+                 From_Json (Req_Str, null);
+               Rsp : Object_Detail_Array;
+            begin
+               Handle_Read_Detail (Req, Rsp);
+               declare
+                  use Ada.Strings.Unbounded;
+                  Acc : Unbounded_String :=
+                    To_Unbounded_String ("[");
+               begin
+                  for I in Rsp'Range loop
+                     if I > Rsp'First then
+                        Append (Acc, ",");
+                     end if;
+                     Append (Acc, To_Json (Rsp (I)));
+                  end loop;
+                  Append (Acc, "]");
+                  Copy_To_Buf (To_String (Acc),
+                    Response_Buf, Response_Size);
+               end;
+            end;
       end case;
    end Dispatch;
 

@@ -415,6 +415,7 @@ TEST(ProtoBindingsConsumed, PublishSucceedsWhenActive) {
 // ===========================================================================
 
 TEST(ProtoBindingsProvided, DispatchAllChannelsNoCrash) {
+    prov::ServiceHandler handler;  // default stubs
     const prov::ServiceChannel channels[] = {
         prov::ServiceChannel::ReadMatch,
         prov::ServiceChannel::CreateRequirement,
@@ -424,17 +425,21 @@ TEST(ProtoBindingsProvided, DispatchAllChannelsNoCrash) {
         prov::ServiceChannel::ReadDetail,
     };
 
+    // Empty JSON object as minimal valid request for all channels
+    std::string empty_req = "{}";
     for (auto ch : channels) {
         void*  resp_buf  = nullptr;
         size_t resp_size = 0;
         EXPECT_NO_FATAL_FAILURE(
-            prov::dispatch(ch, nullptr, 0, &resp_buf, &resp_size));
-        EXPECT_EQ(resp_buf,  nullptr);
-        EXPECT_EQ(resp_size, 0u);
+            prov::dispatch(handler, ch, empty_req.data(), empty_req.size(),
+                           &resp_buf, &resp_size));
+        // All stubs return something ([] for streams, "" for id, json for ack)
+        if (resp_buf) std::free(resp_buf);
     }
 }
 
 TEST(ProtoBindingsConsumed, DispatchAllChannelsNoCrash) {
+    cons::ServiceHandler handler;  // default stubs
     const cons::ServiceChannel channels[] = {
         cons::ServiceChannel::ReadDetail,
         cons::ServiceChannel::CreateRequirement,
@@ -444,14 +449,114 @@ TEST(ProtoBindingsConsumed, DispatchAllChannelsNoCrash) {
         cons::ServiceChannel::ReadCapability,
     };
 
+    std::string empty_req = "{}";
     for (auto ch : channels) {
         void*  resp_buf  = nullptr;
         size_t resp_size = 0;
         EXPECT_NO_FATAL_FAILURE(
-            cons::dispatch(ch, nullptr, 0, &resp_buf, &resp_size));
-        EXPECT_EQ(resp_buf,  nullptr);
-        EXPECT_EQ(resp_size, 0u);
+            cons::dispatch(handler, ch, empty_req.data(), empty_req.size(),
+                           &resp_buf, &resp_size));
+        if (resp_buf) std::free(resp_buf);
     }
+}
+
+// ===========================================================================
+// Typed dispatch — round-trip through handler with real serialization
+// ===========================================================================
+
+TEST(ProtoBindingsProvided, DispatchCreateRequirementRoundTrip) {
+    // Custom handler that captures the deserialized request
+    struct CapturingHandler : public prov::ServiceHandler {
+        types::ObjectInterestRequirement captured_req;
+        types::Identifier
+        handleCreateRequirement(const types::ObjectInterestRequirement& req) override {
+            captured_req = req;
+            return "new-id-42";
+        }
+    };
+
+    CapturingHandler handler;
+
+    // Build a JSON request with specific fields
+    nlohmann::json j;
+    j["policy"] = "DATA_POLICY_OBTAIN";
+    std::string req_json = j.dump();
+
+    void*  resp_buf  = nullptr;
+    size_t resp_size = 0;
+    prov::dispatch(handler, prov::ServiceChannel::CreateRequirement,
+                   req_json.data(), req_json.size(),
+                   &resp_buf, &resp_size);
+
+    // Handler should have received deserialized request
+    EXPECT_EQ(handler.captured_req.policy, types::DataPolicy::Obtain);
+
+    // Response should be the identifier string
+    ASSERT_NE(resp_buf, nullptr);
+    std::string resp_str(static_cast<const char*>(resp_buf), resp_size);
+    EXPECT_EQ(resp_str, "new-id-42");
+    std::free(resp_buf);
+}
+
+TEST(ProtoBindingsProvided, DispatchReadMatchReturnsJsonArray) {
+    struct MatchHandler : public prov::ServiceHandler {
+        std::vector<types::ObjectMatch>
+        handleReadMatch(const types::Query& /*req*/) override {
+            types::ObjectMatch m;
+            m.id = "obj-1";
+            m.matching_object_id = "match-1";
+            return {m};
+        }
+    };
+
+    MatchHandler handler;
+    std::string req_json = "{}";
+
+    void*  resp_buf  = nullptr;
+    size_t resp_size = 0;
+    prov::dispatch(handler, prov::ServiceChannel::ReadMatch,
+                   req_json.data(), req_json.size(),
+                   &resp_buf, &resp_size);
+
+    ASSERT_NE(resp_buf, nullptr);
+    std::string resp_str(static_cast<const char*>(resp_buf), resp_size);
+    auto arr = nlohmann::json::parse(resp_str);
+    ASSERT_TRUE(arr.is_array());
+    ASSERT_EQ(arr.size(), 1u);
+    EXPECT_EQ(arr[0]["matching_object_id"], "match-1");
+    std::free(resp_buf);
+}
+
+TEST(ProtoBindingsConsumed, DispatchUpdateRequirementRoundTrip) {
+    struct AckHandler : public cons::ServiceHandler {
+        types::ObjectEvidenceRequirement captured_req;
+        types::Ack
+        handleUpdateRequirement(const types::ObjectEvidenceRequirement& req) override {
+            captured_req = req;
+            return types::kAckOk;
+        }
+    };
+
+    AckHandler handler;
+    nlohmann::json j;
+    j["policy"] = "DATA_POLICY_QUERY";
+    j["base"] = nlohmann::json::object();
+    j["status"] = nlohmann::json::object();
+    std::string req_json = j.dump();
+
+    void*  resp_buf  = nullptr;
+    size_t resp_size = 0;
+    cons::dispatch(handler, cons::ServiceChannel::UpdateRequirement,
+                   req_json.data(), req_json.size(),
+                   &resp_buf, &resp_size);
+
+    EXPECT_EQ(handler.captured_req.policy, types::DataPolicy::Query);
+
+    ASSERT_NE(resp_buf, nullptr);
+    std::string resp_str(static_cast<const char*>(resp_buf), resp_size);
+    auto ack_j = nlohmann::json::parse(resp_str);
+    EXPECT_TRUE(ack_j["success"].get<bool>());
+    std::free(resp_buf);
 }
 
 // ===========================================================================

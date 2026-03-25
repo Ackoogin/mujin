@@ -1,5 +1,5 @@
 // Auto-generated service binding header
-// Generated from: components by cpp_service_generator
+// Generated from: services by cpp_service_generator
 // Namespace: pyramid::services::tactical_objects::consumed
 //
 // Architecture: component logic > service binding (this) > PCL
@@ -101,7 +101,7 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// PCL binding functions — Subscribe / Publish wrappers
+// PCL binding functions — Subscribe / Publish (typed)
 // ---------------------------------------------------------------------------
 
 /// \brief Subscribe to object-evidence publications on kTopicObjectEvidence.
@@ -110,7 +110,7 @@ void subscribeObjectEvidence(pcl_container_t*  container,
                              void*             user_data = nullptr,
                              const char*       content_type = "application/json");
 
-/// \brief Publish an object-evidence payload on kTopicObjectEvidence.
+/// \brief Publish a typed message on kTopicObjectEvidence.
 ///
 /// \p publisher must be the pcl_port_t* returned by addPublisher for
 /// kTopicObjectEvidence, obtained during on_configure.
@@ -119,16 +119,16 @@ pcl_status_t publishObjectEvidence(pcl_port_t*        publisher,
                                    const char*        content_type = "application/json");
 
 // ---------------------------------------------------------------------------
-// Transport dispatch point
+// Dispatch — deserialises request, calls handler, serialises response.
 //
-// Routes a raw request buffer to the appropriate handler.
-// Response buffer is heap-allocated; caller is responsible for freeing it.
+// Response buffer is heap-allocated via std::malloc; caller frees with std::free.
 // ---------------------------------------------------------------------------
 
-void dispatch(ServiceChannel channel,
-              const void*    request_buf,
-              size_t         request_size,
-              void**         response_buf,
-              size_t*        response_size);
+void dispatch(ServiceHandler& handler,
+              ServiceChannel  channel,
+              const void*     request_buf,
+              size_t          request_size,
+              void**          response_buf,
+              size_t*         response_size);
 
 } // namespace pyramid::services::tactical_objects::consumed

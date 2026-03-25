@@ -436,7 +436,7 @@ class AdaServiceGenerator:
             # -- PCL binding procedures ----------------------------------------
             f.write(f'   --  -- PCL binding procedures ------------------------------------\n')
             f.write(f'   --  Subscribe/Invoke/Publish wrappers for PCL transport layer.\n')
-            f.write(f'   --  Use Json_Codec to serialise/deserialise message payloads.\n')
+            f.write(f'   --  Serialisation is handled internally (codec baked at generation time).\n')
             f.write(f'\n')
 
             # Subscribe helpers for topics (provided side: Ada client subscribes)
@@ -450,12 +450,14 @@ class AdaServiceGenerator:
                 f.write(f'\n')
 
             # Invoke helpers for services (provided = client can call them)
+            # Typed interface: accept data model types, serialise internally.
             if is_provided:
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
+                        req_t = rpc.ada_req_type
                         f.write(f'   procedure {rpc.ada_invoke_name}\n')
                         f.write(f'     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;\n')
-                        f.write(f'      Request   : String;\n')
+                        f.write(f'      Request   : {req_t};\n')
                         f.write(f'      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
                         f.write(f'      User_Data : System.Address := System.Null_Address);\n')
                         f.write(f'\n')
@@ -489,14 +491,24 @@ class AdaServiceGenerator:
         sub_topics  = SUBSCRIBE_TOPICS if is_provided else {}
         pub_topics  = {} if is_provided else PUBLISH_TOPICS
 
+        # Data model codec packages for serialisation (baked at generation time)
+        _DM_CODEC_PKGS = [
+            'Pyramid_Data_Model_Common_Types_Codec',
+            'Pyramid_Data_Model_Tactical_Types_Codec',
+        ]
+
         with open(path, 'w') as f:
             f.write(f'--  Auto-generated service binding body\n')
             f.write(f'--  Package body: {pkg_name}\n')
             f.write(f'\n')
+            f.write(f'with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')
             f.write(f'with Ada.Unchecked_Conversion;\n')
             f.write(f'with Interfaces.C.Strings;\n')
             f.write(f'with System;\n')
             f.write(f'with System.Storage_Elements;\n')
+            # Bring codec packages into scope for To_Json / From_Json
+            for cp in _DM_CODEC_PKGS:
+                f.write(f'with {cp};  use {cp};\n')
             f.write(f'\n')
             f.write(f'package body {pkg_name} is\n')
             f.write(f'\n')
@@ -541,10 +553,10 @@ class AdaServiceGenerator:
                 # Generate sensible default return values
                 if rsp_t == 'Identifier':
                     f.write(f'   begin\n')
-                    f.write(f'      Response := Null_Identifier;\n')
+                    f.write(f'      Response := Null_Unbounded_String;\n')
                 elif rsp_t == 'Ack':
                     f.write(f'   begin\n')
-                    f.write(f'      Response := Ack_Ok;\n')
+                    f.write(f'      Response := (Success => True);\n')
                 elif rsp_t.endswith('_Array'):
                     f.write(f'      Empty : {rsp_t} (1 .. 0);\n')
                     f.write(f'   begin\n')
@@ -591,19 +603,25 @@ class AdaServiceGenerator:
                 f.write(f'   end {ada_name};\n')
                 f.write(f'\n')
 
-            # Invoke helpers (provided services)
+            # Invoke helpers (provided services) — typed, serialize internally
             if is_provided:
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
+                        req_t = rpc.ada_req_type
                         f.write(f'   procedure {rpc.ada_invoke_name}\n')
                         f.write(f'     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;\n')
-                        f.write(f'      Request   : String;\n')
+                        f.write(f'      Request   : {req_t};\n')
                         f.write(f'      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
                         f.write(f'      User_Data : System.Address := System.Null_Address)\n')
                         f.write(f'   is\n')
                         f.write(f'      use type Pcl_Bindings.Pcl_Status;\n')
+                        # Serialize request to JSON string
+                        if req_t == 'Identifier':
+                            f.write(f'      Payload : constant String := To_String (Request);\n')
+                        else:
+                            f.write(f'      Payload : constant String := To_Json (Request);\n')
                         f.write(f'      Req_C  : Interfaces.C.Strings.chars_ptr :=\n')
-                        f.write(f'        Interfaces.C.Strings.New_String (Request);\n')
+                        f.write(f'        Interfaces.C.Strings.New_String (Payload);\n')
                         f.write(f'      Svc_C  : Interfaces.C.Strings.chars_ptr :=\n')
                         f.write(f'        Interfaces.C.Strings.New_String ({rpc.ada_svc_const});\n')
                         f.write(f'      Msg    : aliased Pcl_Bindings.Pcl_Msg;\n')
@@ -611,7 +629,7 @@ class AdaServiceGenerator:
                         f.write(f'      pragma Unreferenced (Status);\n')
                         f.write(f'   begin\n')
                         f.write(f"      Msg.Data      := To_Address (Req_C);\n")
-                        f.write(f"      Msg.Size      := Interfaces.C.unsigned (Request'Length);\n")
+                        f.write(f"      Msg.Size      := Interfaces.C.unsigned (Payload'Length);\n")
                         f.write(f'      Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");\n')
                         f.write(f'      Status := Pcl_Bindings.Invoke_Remote_Async\n')
                         f.write(f"        (Transport, Svc_C, Msg'Access, Callback, User_Data);\n")
@@ -651,7 +669,22 @@ class AdaServiceGenerator:
                 f.write(f'   end {ada_name};\n')
                 f.write(f'\n')
 
-            # Dispatch stub with case statement
+            # -- Helper: copy string into heap buffer (caller frees) --------
+            f.write(f'   procedure Copy_To_Buf\n')
+            f.write(f'     (S    : in  String;\n')
+            f.write(f'      Buf  : out System.Address;\n')
+            f.write(f'      Size : out Natural)\n')
+            f.write(f'   is\n')
+            f.write(f'      C : Interfaces.C.Strings.chars_ptr :=\n')
+            f.write(f'        Interfaces.C.Strings.New_String (S);\n')
+            f.write(f'   begin\n')
+            f.write(f'      Buf  := To_Address (C);\n')
+            f.write(f"      Size := S'Length;\n")
+            f.write(f'   end Copy_To_Buf;\n')
+            f.write(f'\n')
+
+            # Dispatch — deserialise request, call handler, serialise response,
+            # allocate response buffer via New_String (caller frees with C free).
             f.write(f'   procedure Dispatch\n')
             f.write(f'     (Channel      : in  Service_Channel;\n')
             f.write(f'      Request_Buf  : in  System.Address;\n')
@@ -659,15 +692,58 @@ class AdaServiceGenerator:
             f.write(f'      Response_Buf : out System.Address;\n')
             f.write(f'      Response_Size: out Natural)\n')
             f.write(f'   is\n')
-            f.write(f'      pragma Unreferenced (Request_Buf, Request_Size);\n')
+            f.write(f'      Req_Str : constant String := Msg_To_String (Request_Buf,\n')
+            f.write(f'        Interfaces.C.unsigned (Request_Size));\n')
             f.write(f'   begin\n')
             f.write(f'      Response_Buf  := System.Null_Address;\n')
             f.write(f'      Response_Size := 0;\n')
             f.write(f'      case Channel is\n')
 
             for _, rpc in all_rpcs:
+                req_t = rpc.ada_req_type
+                rsp_t = rpc.ada_rsp_type
+                handler_fn = rpc.ada_handler
                 f.write(f'         when {rpc.ada_channel} =>\n')
-                f.write(f'            null;  --  TODO: deserialise, call {rpc.ada_handler}\n')
+                f.write(f'            declare\n')
+
+                # Deserialise request
+                if req_t == 'Identifier':
+                    f.write(f'               Req : constant Identifier :=\n')
+                    f.write(f'                 To_Unbounded_String (Req_Str);\n')
+                else:
+                    f.write(f'               Req : constant {req_t} :=\n')
+                    f.write(f'                 From_Json (Req_Str, null);\n')
+
+                # Declare response variable
+                f.write(f'               Rsp : {rsp_t};\n')
+                f.write(f'            begin\n')
+                f.write(f'               {handler_fn} (Req, Rsp);\n')
+
+                # Serialise response and copy to buffer
+                if rsp_t == 'Identifier':
+                    f.write(f'               Copy_To_Buf (To_String (Rsp),\n')
+                    f.write(f'                 Response_Buf, Response_Size);\n')
+                elif rsp_t.endswith('_Array'):
+                    f.write(f'               declare\n')
+                    f.write(f'                  use Ada.Strings.Unbounded;\n')
+                    f.write(f'                  Acc : Unbounded_String :=\n')
+                    f.write(f'                    To_Unbounded_String ("[");\n')
+                    f.write(f'               begin\n')
+                    f.write(f"                  for I in Rsp'Range loop\n")
+                    f.write(f"                     if I > Rsp'First then\n")
+                    f.write(f'                        Append (Acc, ",");\n')
+                    f.write(f'                     end if;\n')
+                    f.write(f'                     Append (Acc, To_Json (Rsp (I)));\n')
+                    f.write(f'                  end loop;\n')
+                    f.write(f'                  Append (Acc, "]");\n')
+                    f.write(f'                  Copy_To_Buf (To_String (Acc),\n')
+                    f.write(f'                    Response_Buf, Response_Size);\n')
+                    f.write(f'               end;\n')
+                else:
+                    f.write(f'               Copy_To_Buf (To_Json (Rsp),\n')
+                    f.write(f'                 Response_Buf, Response_Size);\n')
+
+                f.write(f'            end;\n')
 
             f.write(f'      end case;\n')
             f.write(f'   end Dispatch;\n')

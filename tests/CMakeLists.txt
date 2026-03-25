@@ -219,6 +219,8 @@ add_executable(test_pcl_proto_bindings
   ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
   ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
   ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_json_codec.cpp
+  ${PROTO_BINDINGS_DIR}/pyramid_data_model_common_codec.cpp
+  ${PROTO_BINDINGS_DIR}/pyramid_data_model_tactical_codec.cpp
 )
 target_link_libraries(test_pcl_proto_bindings PRIVATE
   pcl_core pcl_transport_socket tactical_objects GTest::gtest_main)
@@ -239,6 +241,8 @@ add_executable(test_codec_dispatch_e2e
   ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
   ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
   ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_json_codec.cpp
+  ${PROTO_BINDINGS_DIR}/pyramid_data_model_common_codec.cpp
+  ${PROTO_BINDINGS_DIR}/pyramid_data_model_tactical_codec.cpp
 )
 target_link_libraries(test_codec_dispatch_e2e PRIVATE
   pcl_core pcl_transport_socket tactical_objects GTest::gtest_main)
@@ -280,6 +284,24 @@ endif()
 # ---------------------------------------------------------------------------
 find_program(GPRBUILD gprbuild)
 if(GPRBUILD)
+  set(ADA_SRC_DIR ${CMAKE_SOURCE_DIR}/examples/ada)
+
+  # Build the generated-bindings validation test binary via gprbuild
+  add_custom_target(ada_test_generated_bindings_build ALL
+    COMMAND ${GPRBUILD} -p -P ${ADA_SRC_DIR}/test_generated_bindings.gpr
+            -XMUJIN_ROOT=${CMAKE_SOURCE_DIR}
+    WORKING_DIRECTORY ${ADA_SRC_DIR}
+    COMMENT "Building Ada generated-bindings test"
+  )
+
+  # Run: compiles all generated Ada packages AND exercises codec round-trips
+  add_test(NAME ada_generated_bindings_roundtrip
+           COMMAND ${ADA_SRC_DIR}/bin/test_generated_bindings)
+  set_tests_properties(ada_generated_bindings_roundtrip PROPERTIES
+    LABELS "ada;generated;codec"
+    TIMEOUT 20
+    DEPENDS ada_test_generated_bindings_build)
+
   if(WIN32)
     add_test(NAME tobj_ada_socket_e2e
              COMMAND powershell -ExecutionPolicy Bypass -NoProfile -File
