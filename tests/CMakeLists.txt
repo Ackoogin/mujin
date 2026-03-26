@@ -304,10 +304,9 @@ if(GPRBUILD)
 
   if(WIN32)
     add_test(NAME tobj_ada_socket_e2e
-             COMMAND powershell -ExecutionPolicy Bypass -NoProfile -File
-                     ${CMAKE_SOURCE_DIR}/scripts/test_ada_socket_e2e.ps1
-                     -ServerBin $<TARGET_FILE:tobj_socket_server>
-                     -ClientBin ${CMAKE_SOURCE_DIR}/examples/ada/bin/ada_tobj_client)
+             COMMAND cmd /c ${CMAKE_SOURCE_DIR}/scripts/test_ada_socket_e2e.bat
+                     --server-bin $<TARGET_FILE:tobj_socket_server>
+                     --client-bin ${CMAKE_SOURCE_DIR}/examples/ada/bin/ada_tobj_client)
   else()
     add_test(NAME tobj_ada_socket_e2e
              COMMAND ${CMAKE_SOURCE_DIR}/scripts/test_ada_socket_e2e.sh
@@ -321,11 +320,10 @@ if(GPRBUILD)
   # ActiveFind E2E — 3-process: server → standalone bridge → Ada client
   if(WIN32)
     add_test(NAME tobj_ada_active_find_e2e
-             COMMAND powershell -ExecutionPolicy Bypass -NoProfile -File
-                     ${CMAKE_SOURCE_DIR}/scripts/test_ada_active_find_e2e.ps1
-                     -ServerBin $<TARGET_FILE:tobj_socket_server>
-                     -BridgeBin $<TARGET_FILE:standalone_bridge>
-                     -ClientBin ${CMAKE_SOURCE_DIR}/examples/ada/bin/ada_active_find_e2e)
+             COMMAND cmd /c ${CMAKE_SOURCE_DIR}/scripts/test_ada_active_find_e2e.bat
+                     --server-bin $<TARGET_FILE:tobj_socket_server>
+                     --bridge-bin $<TARGET_FILE:standalone_bridge>
+                     --client-bin ${CMAKE_SOURCE_DIR}/examples/ada/bin/ada_active_find_e2e)
   else()
     add_test(NAME tobj_ada_active_find_e2e
              COMMAND ${CMAKE_SOURCE_DIR}/scripts/test_ada_active_find_e2e.sh
