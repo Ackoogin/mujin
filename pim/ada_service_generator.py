@@ -1639,15 +1639,42 @@ class AdaDataModelCodecGenerator:
     def _from_json_stmts(self, f, fld, ada_fname: str, wire: str,
                           indent: str = '      ') -> None:
         """Emit Ada statements that deserialise a single scalar/enum field
-        from a JSON string *S* into Result.<ada_fname>."""
+        from a GNATCOLL.JSON JSON_Value *J* into Result.<ada_fname>."""
+        short = fld.type.split('.')[-1]
+        ada_target = self._aliases.get(short, '')
+
         if fld.type == 'bool':
-            f.write(f'{indent}for I in S\'First .. S\'Last - 3 loop\n')
-            f.write(f'{indent}   if S (I .. I + 3) = "true" then\n')
-            f.write(f'{indent}      Result.{ada_fname} := True;\n')
-            f.write(f'{indent}      exit;\n')
-            f.write(f'{indent}   end if;\n')
-            f.write(f'{indent}end loop;\n')
-        # Other scalar types: leave as defaults (sufficient for current codecs)
+            f.write(f'{indent}if Has_Field (J, "{wire}") then\n')
+            f.write(f'{indent}   Result.{ada_fname} := Get (Get (J, "{wire}"));\n')
+            f.write(f'{indent}end if;\n')
+        elif fld.type == 'string' or ada_target == 'Unbounded_String':
+            f.write(f'{indent}if Has_Field (J, "{wire}") then\n')
+            f.write(f'{indent}   Result.{ada_fname} := To_Unbounded_String (Get (Get (J, "{wire}")));\n')
+            f.write(f'{indent}end if;\n')
+        elif fld.type in ('float', 'double') or ada_target in (
+                'Long_Float', 'Float'):
+            # Numeric float
+            if fld.type in ('float', 'double') or ada_target == 'Long_Float':
+                f.write(f'{indent}if Has_Field (J, "{wire}") then\n')
+                f.write(f'{indent}   Result.{ada_fname} := Get_Long_Float (Get (J, "{wire}"));\n')
+                f.write(f'{indent}end if;\n')
+            elif ada_target == 'Float':
+                f.write(f'{indent}if Has_Field (J, "{wire}") then\n')
+                f.write(f'{indent}   Result.{ada_fname} := Float (Get_Long_Float (Get (J, "{wire}")));\n')
+                f.write(f'{indent}end if;\n')
+        elif fld.type in ('int32', 'int64', 'sint32', 'sint64',
+                           'uint32', 'uint64', 'fixed32', 'fixed64',
+                           'sfixed32', 'sfixed64') or ada_target in (
+                           'Integer', 'Long_Integer', 'Natural'):
+            f.write(f'{indent}if Has_Field (J, "{wire}") then\n')
+            f.write(f'{indent}   Result.{ada_fname} := Integer (Get_Long_Float (Get (J, "{wire}")));\n')
+            f.write(f'{indent}end if;\n')
+        elif (self._index.is_enum_type(fld.type) or
+              self._index.is_enum_type(short)):
+            enum_ada = _ada_name(short)
+            f.write(f'{indent}if Has_Field (J, "{wire}") then\n')
+            f.write(f'{indent}   Result.{ada_fname} := {enum_ada}_From_String (Get (Get (J, "{wire}")));\n')
+            f.write(f'{indent}end if;\n')
 
     def _is_field_scalar_or_enum(self, fld) -> bool:
         """Return True if *fld* is a scalar, enum or alias (unit type)."""
@@ -1672,14 +1699,15 @@ class AdaDataModelCodecGenerator:
         between the simple string-concat approach for scalar-only records
         and the full implementation for complex records."""
         fields = list(self._inline_base_fields(msg))
-        has_complex = False
-        for fld, fname in fields:
-            if fld.is_repeated or fld.oneof_group:
-                has_complex = True
-                break
-            if self._is_field_message(fld):
-                has_complex = True
-                break
+        has_complex = bool(msg.oneofs)
+        if not has_complex:
+            for fld, fname in fields:
+                if fld.is_repeated or fld.oneof_group:
+                    has_complex = True
+                    break
+                if self._is_field_message(fld):
+                    has_complex = True
+                    break
 
         if has_complex:
             self._write_complex_codec(f, ada_n, msg, fields)
@@ -1710,6 +1738,7 @@ class AdaDataModelCodecGenerator:
                 f' (S : String; Tag : access {ada_n})'
                 f' return {ada_n} is\n')
         f.write(f'      pragma Unreferenced (Tag);\n')
+        f.write(f'      J      : constant JSON_Value := Read (S);\n')
         f.write(f'      Result : {ada_n};\n')
         f.write(f'   begin\n')
         for fld in fields:
@@ -1717,14 +1746,20 @@ class AdaDataModelCodecGenerator:
             ada_fname = _ada_name(fld.name)
             self._from_json_stmts(f, fld, ada_fname, wire)
         f.write(f'      return Result;\n')
+        f.write(f'   exception\n')
+        f.write(f'      when others => return Result;\n')
         f.write(f'   end From_Json;\n\n')
 
     def _write_complex_codec(self, f, ada_n: str, msg, fields) -> None:
         """Generate To_Json / From_Json for records with nested messages,
         repeated fields, oneofs and aliases."""
 
-        # Collect oneof groups so we can emit them once (not per-variant)
+        # Collect oneof groups from msg.oneofs (they are separate from fields)
         oneof_groups: dict = {}  # group_name -> [(fld, fname)]
+        for oo in msg.oneofs:
+            for fld in oo.fields:
+                oneof_groups.setdefault(oo.name, []).append((fld, fld.name))
+        # Regular fields — filter out any that happen to have oneof_group set
         regular_fields = []
         for fld, fname in fields:
             if fld.oneof_group:
@@ -1754,7 +1789,12 @@ class AdaDataModelCodecGenerator:
             for fld, fname in variants:
                 wire = camel_to_snake(fname)
                 ada_fname = _ada_name(fname)
-                has_flag = 'Has_Val_' + ada_fname.replace('Val_', '')
+                # Apply same collision-avoidance as types generator
+                oo_short = fld.type.split('.')[-1]
+                oo_ada_type = _ada_name(oo_short)
+                if ada_fname == oo_ada_type:
+                    ada_fname = 'Val_' + ada_fname
+                has_flag = 'Has_' + ada_fname
                 # Only emit the variant that is set
                 f.write(f'      if Msg.{has_flag} then\n')
                 f.write(f'         Comma;\n')
@@ -1771,6 +1811,7 @@ class AdaDataModelCodecGenerator:
                 f' (S : String; Tag : access {ada_n})'
                 f' return {ada_n} is\n')
         f.write(f'      pragma Unreferenced (Tag);\n')
+        f.write(f'      J      : constant JSON_Value := Read (S);\n')
         f.write(f'      Result : {ada_n};\n')
         f.write(f'   begin\n')
 
@@ -1783,11 +1824,31 @@ class AdaDataModelCodecGenerator:
             for fld, fname in variants:
                 wire = camel_to_snake(fname)
                 ada_fname = _ada_name(fname)
-                has_flag = 'Has_Val_' + ada_fname.replace('Val_', '')
-                # Simple presence detection — check if the key appears in S
-                f.write(f'      --  oneof {group}: {wire}\n')
+                # Apply same collision-avoidance as types generator
+                oo_short = fld.type.split('.')[-1]
+                oo_ada_type = _ada_name(oo_short)
+                if ada_fname == oo_ada_type:
+                    ada_fname = 'Val_' + ada_fname
+                has_flag = 'Has_' + ada_fname
+                short = fld.type.split('.')[-1]
+                f.write(f'      if Has_Field (J, "{wire}") then\n')
+                f.write(f'         Result.{has_flag} := True;\n')
+                if self._is_field_message(fld) and short not in self._aliases:
+                    qpkg = self._msg_to_codec.get(short, self._ada_pkg)
+                    qual = f'{qpkg}.' if qpkg != self._ada_pkg else ''
+                    f.write(f'         declare\n')
+                    f.write(f'            Sub : constant String := Write (Get (J, "{wire}"));\n')
+                    f.write(f'         begin\n')
+                    f.write(f'            Result.{ada_fname} := {qual}From_Json (Sub, null);\n')
+                    f.write(f'         end;\n')
+                else:
+                    self._from_json_stmts(f, fld, ada_fname, wire,
+                                          indent='         ')
+                f.write(f'      end if;\n')
 
         f.write(f'      return Result;\n')
+        f.write(f'   exception\n')
+        f.write(f'      when others => return Result;\n')
         f.write(f'   end From_Json;\n\n')
 
     def _emit_to_json_field(self, f, fld, ada_fname: str, wire: str) -> None:
@@ -1844,12 +1905,57 @@ class AdaDataModelCodecGenerator:
         short = fld.type.split('.')[-1]
 
         if fld.is_repeated:
-            # Repeated fields: leave at default (null) for now — the array
-            # allocation pattern used in Ada requires knowing the count first
-            f.write(f'      --  repeated: {wire} (deserialised via array access)\n')
+            # Repeated field — iterate JSON array, allocate Ada array
+            arr_type = _ada_name(fld.name) + '_Array'
+            elem_is_msg = (self._is_field_message(fld) and
+                           short not in self._aliases)
+            elem_is_enum = (self._index.is_enum_type(fld.type) or
+                            self._index.is_enum_type(short))
+            ada_target = self._aliases.get(short, '')
+
+            f.write(f'      if Has_Field (J, "{wire}") then\n')
+            f.write(f'         declare\n')
+            f.write(f'            Arr : constant JSON_Value := Get (J, "{wire}");\n')
+            f.write(f'            Len : constant Natural := Length (Arr);\n')
+            f.write(f'         begin\n')
+            f.write(f'            if Len > 0 then\n')
+            f.write(f'               Result.{ada_fname} := new {arr_type} (1 .. Len);\n')
+            f.write(f'               for I in 1 .. Len loop\n')
+            if elem_is_msg:
+                qpkg = self._msg_to_codec.get(short, self._ada_pkg)
+                qual = f'{qpkg}.' if qpkg != self._ada_pkg else ''
+                f.write(f'                  declare\n')
+                f.write(f'                     Sub : constant String := Write (Get (Arr, I));\n')
+                f.write(f'                  begin\n')
+                f.write(f'                     Result.{ada_fname} (I) := {qual}From_Json (Sub, null);\n')
+                f.write(f'                  end;\n')
+            elif elem_is_enum:
+                enum_ada = _ada_name(short)
+                f.write(f'                  Result.{ada_fname} (I) := {enum_ada}_From_String (Get (Get (Arr, I)));\n')
+            elif fld.type == 'string' or ada_target == 'Unbounded_String':
+                f.write(f'                  Result.{ada_fname} (I) := To_Unbounded_String (Get (Get (Arr, I)));\n')
+            elif fld.type == 'bool' or ada_target == 'Boolean':
+                f.write(f'                  Result.{ada_fname} (I) := Get (Get (Arr, I));\n')
+            elif ada_target in ('Integer', 'Long_Integer', 'Natural'):
+                f.write(f'                  Result.{ada_fname} (I) := Integer (Get_Long_Float (Get (Arr, I)));\n')
+            else:
+                # Default to float
+                f.write(f'                  Result.{ada_fname} (I) := Get_Long_Float (Get (Arr, I));\n')
+            f.write(f'               end loop;\n')
+            f.write(f'            end if;\n')
+            f.write(f'         end;\n')
+            f.write(f'      end if;\n')
         elif self._is_field_message(fld) and short not in self._aliases:
-            # Nested message: leave at component defaults
-            f.write(f'      --  nested: {wire}\n')
+            # Nested message — extract sub-object, serialise to string, call From_Json
+            qpkg = self._msg_to_codec.get(short, self._ada_pkg)
+            qual = f'{qpkg}.' if qpkg != self._ada_pkg else ''
+            f.write(f'      if Has_Field (J, "{wire}") then\n')
+            f.write(f'         declare\n')
+            f.write(f'            Sub : constant String := Write (Get (J, "{wire}"));\n')
+            f.write(f'         begin\n')
+            f.write(f'            Result.{ada_fname} := {qual}From_Json (Sub, null);\n')
+            f.write(f'         end;\n')
+            f.write(f'      end if;\n')
         else:
             self._from_json_stmts(f, fld, ada_fname, wire)
 
@@ -1862,6 +1968,7 @@ class AdaDataModelCodecGenerator:
         with open(path, 'w') as f:
             f.write('--  Auto-generated data model JSON codec body\n')
             f.write(f'--  Package: {self._ada_pkg}\n\n')
+            f.write('with GNATCOLL.JSON;  use GNATCOLL.JSON;\n')
             # Import foreign codec packages for cross-file To_Json calls
             for dep in self._foreign_codec_deps():
                 f.write(f'with {dep};\n')

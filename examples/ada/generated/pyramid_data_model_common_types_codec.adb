@@ -1,6 +1,7 @@
 --  Auto-generated data model JSON codec body
 --  Package: Pyramid_Data_Model_Common_Types_Codec
 
+with GNATCOLL.JSON;  use GNATCOLL.JSON;
 pragma Warnings (Off);
 
 package body Pyramid_Data_Model_Common_Types_Codec is
@@ -139,9 +140,18 @@ package body Pyramid_Data_Model_Common_Types_Codec is
 
    function From_Json (S : String; Tag : access Geodetic_Position) return Geodetic_Position is
       pragma Unreferenced (Tag);
+      J      : constant JSON_Value := Read (S);
       Result : Geodetic_Position;
    begin
+      if Has_Field (J, "latitude") then
+         Result.Latitude := Get_Long_Float (Get (J, "latitude"));
+      end if;
+      if Has_Field (J, "longitude") then
+         Result.Longitude := Get_Long_Float (Get (J, "longitude"));
+      end if;
       return Result;
+   exception
+      when others => return Result;
    end From_Json;
 
    function To_Json (Msg : Poly_Area) return String is
@@ -170,10 +180,29 @@ package body Pyramid_Data_Model_Common_Types_Codec is
 
    function From_Json (S : String; Tag : access Poly_Area) return Poly_Area is
       pragma Unreferenced (Tag);
+      J      : constant JSON_Value := Read (S);
       Result : Poly_Area;
    begin
-      --  repeated: points (deserialised via array access)
+      if Has_Field (J, "points") then
+         declare
+            Arr : constant JSON_Value := Get (J, "points");
+            Len : constant Natural := Length (Arr);
+         begin
+            if Len > 0 then
+               Result.Points := new Points_Array (1 .. Len);
+               for I in 1 .. Len loop
+                  declare
+                     Sub : constant String := Write (Get (Arr, I));
+                  begin
+                     Result.Points (I) := From_Json (Sub, null);
+                  end;
+               end loop;
+            end if;
+         end;
+      end if;
       return Result;
+   exception
+      when others => return Result;
    end From_Json;
 
    function To_Json (Msg : Achievement) return String is
@@ -203,9 +232,30 @@ package body Pyramid_Data_Model_Common_Types_Codec is
 
    function From_Json (S : String; Tag : access Achievement) return Achievement is
       pragma Unreferenced (Tag);
+      J      : constant JSON_Value := Read (S);
       Result : Achievement;
    begin
+      if Has_Field (J, "update_time") then
+         Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
+      end if;
+      if Has_Field (J, "id") then
+         Result.Id := To_Unbounded_String (Get (Get (J, "id")));
+      end if;
+      if Has_Field (J, "source") then
+         Result.Source := To_Unbounded_String (Get (Get (J, "source")));
+      end if;
+      if Has_Field (J, "status") then
+         Result.Status := Progress_From_String (Get (Get (J, "status")));
+      end if;
+      if Has_Field (J, "quality") then
+         Result.Quality := Get_Long_Float (Get (J, "quality"));
+      end if;
+      if Has_Field (J, "achieveability") then
+         Result.Achieveability := Feasibility_From_String (Get (Get (J, "achieveability")));
+      end if;
       return Result;
+   exception
+      when others => return Result;
    end From_Json;
 
    function To_Json (Msg : Requirement) return String is
@@ -231,10 +281,28 @@ package body Pyramid_Data_Model_Common_Types_Codec is
 
    function From_Json (S : String; Tag : access Requirement) return Requirement is
       pragma Unreferenced (Tag);
+      J      : constant JSON_Value := Read (S);
       Result : Requirement;
    begin
-      --  nested: status
+      if Has_Field (J, "update_time") then
+         Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
+      end if;
+      if Has_Field (J, "id") then
+         Result.Id := To_Unbounded_String (Get (Get (J, "id")));
+      end if;
+      if Has_Field (J, "source") then
+         Result.Source := To_Unbounded_String (Get (Get (J, "source")));
+      end if;
+      if Has_Field (J, "status") then
+         declare
+            Sub : constant String := Write (Get (J, "status"));
+         begin
+            Result.Status := From_Json (Sub, null);
+         end;
+      end if;
       return Result;
+   exception
+      when others => return Result;
    end From_Json;
 
    function To_Json (Msg : Capability) return String is
@@ -273,16 +341,44 @@ package body Pyramid_Data_Model_Common_Types_Codec is
 
    function From_Json (S : String; Tag : access Capability) return Capability is
       pragma Unreferenced (Tag);
+      J      : constant JSON_Value := Read (S);
       Result : Capability;
    begin
-      for I in S'First .. S'Last - 3 loop
-         if S (I .. I + 3) = "true" then
-            Result.Availability := True;
-            exit;
-         end if;
-      end loop;
-      --  repeated: contraint (deserialised via array access)
+      if Has_Field (J, "update_time") then
+         Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
+      end if;
+      if Has_Field (J, "id") then
+         Result.Id := To_Unbounded_String (Get (Get (J, "id")));
+      end if;
+      if Has_Field (J, "source") then
+         Result.Source := To_Unbounded_String (Get (Get (J, "source")));
+      end if;
+      if Has_Field (J, "availability") then
+         Result.Availability := Get (Get (J, "availability"));
+      end if;
+      if Has_Field (J, "name") then
+         Result.Name := To_Unbounded_String (Get (Get (J, "name")));
+      end if;
+      if Has_Field (J, "contraint") then
+         declare
+            Arr : constant JSON_Value := Get (J, "contraint");
+            Len : constant Natural := Length (Arr);
+         begin
+            if Len > 0 then
+               Result.Contraint := new Contraint_Array (1 .. Len);
+               for I in 1 .. Len loop
+                  declare
+                     Sub : constant String := Write (Get (Arr, I));
+                  begin
+                     Result.Contraint (I) := From_Json (Sub, null);
+                  end;
+               end loop;
+            end if;
+         end;
+      end if;
       return Result;
+   exception
+      when others => return Result;
    end From_Json;
 
    function To_Json (Msg : Entity) return String is
@@ -306,9 +402,21 @@ package body Pyramid_Data_Model_Common_Types_Codec is
 
    function From_Json (S : String; Tag : access Entity) return Entity is
       pragma Unreferenced (Tag);
+      J      : constant JSON_Value := Read (S);
       Result : Entity;
    begin
+      if Has_Field (J, "update_time") then
+         Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
+      end if;
+      if Has_Field (J, "id") then
+         Result.Id := To_Unbounded_String (Get (Get (J, "id")));
+      end if;
+      if Has_Field (J, "source") then
+         Result.Source := To_Unbounded_String (Get (Get (J, "source")));
+      end if;
       return Result;
+   exception
+      when others => return Result;
    end From_Json;
 
    function To_Json (Msg : Circle_Area) return String is
@@ -330,10 +438,22 @@ package body Pyramid_Data_Model_Common_Types_Codec is
 
    function From_Json (S : String; Tag : access Circle_Area) return Circle_Area is
       pragma Unreferenced (Tag);
+      J      : constant JSON_Value := Read (S);
       Result : Circle_Area;
    begin
-      --  nested: position
+      if Has_Field (J, "position") then
+         declare
+            Sub : constant String := Write (Get (J, "position"));
+         begin
+            Result.Position := From_Json (Sub, null);
+         end;
+      end if;
+      if Has_Field (J, "radius") then
+         Result.Radius := Get_Long_Float (Get (J, "radius"));
+      end if;
       return Result;
+   exception
+      when others => return Result;
    end From_Json;
 
    function To_Json (Msg : Point) return String is
@@ -353,10 +473,19 @@ package body Pyramid_Data_Model_Common_Types_Codec is
 
    function From_Json (S : String; Tag : access Point) return Point is
       pragma Unreferenced (Tag);
+      J      : constant JSON_Value := Read (S);
       Result : Point;
    begin
-      --  nested: position
+      if Has_Field (J, "position") then
+         declare
+            Sub : constant String := Write (Get (J, "position"));
+         begin
+            Result.Position := From_Json (Sub, null);
+         end;
+      end if;
       return Result;
+   exception
+      when others => return Result;
    end From_Json;
 
    function To_Json (Msg : Contraint) return String is
@@ -370,9 +499,18 @@ package body Pyramid_Data_Model_Common_Types_Codec is
 
    function From_Json (S : String; Tag : access Contraint) return Contraint is
       pragma Unreferenced (Tag);
+      J      : constant JSON_Value := Read (S);
       Result : Contraint;
    begin
+      if Has_Field (J, "name") then
+         Result.Name := To_Unbounded_String (Get (Get (J, "name")));
+      end if;
+      if Has_Field (J, "value") then
+         Result.Value := Integer (Get_Long_Float (Get (J, "value")));
+      end if;
       return Result;
+   exception
+      when others => return Result;
    end From_Json;
 
    function To_Json (Msg : Ack) return String is
@@ -384,15 +522,15 @@ package body Pyramid_Data_Model_Common_Types_Codec is
 
    function From_Json (S : String; Tag : access Ack) return Ack is
       pragma Unreferenced (Tag);
+      J      : constant JSON_Value := Read (S);
       Result : Ack;
    begin
-      for I in S'First .. S'Last - 3 loop
-         if S (I .. I + 3) = "true" then
-            Result.Success := True;
-            exit;
-         end if;
-      end loop;
+      if Has_Field (J, "success") then
+         Result.Success := Get (Get (J, "success"));
+      end if;
       return Result;
+   exception
+      when others => return Result;
    end From_Json;
 
    function To_Json (Msg : Query) return String is
@@ -423,16 +561,28 @@ package body Pyramid_Data_Model_Common_Types_Codec is
 
    function From_Json (S : String; Tag : access Query) return Query is
       pragma Unreferenced (Tag);
+      J      : constant JSON_Value := Read (S);
       Result : Query;
    begin
-      --  repeated: id (deserialised via array access)
-      for I in S'First .. S'Last - 3 loop
-         if S (I .. I + 3) = "true" then
-            Result.One_Shot := True;
-            exit;
-         end if;
-      end loop;
+      if Has_Field (J, "id") then
+         declare
+            Arr : constant JSON_Value := Get (J, "id");
+            Len : constant Natural := Length (Arr);
+         begin
+            if Len > 0 then
+               Result.Id := new Id_Array (1 .. Len);
+               for I in 1 .. Len loop
+                  Result.Id (I) := To_Unbounded_String (Get (Get (Arr, I)));
+               end loop;
+            end if;
+         end;
+      end if;
+      if Has_Field (J, "one_shot") then
+         Result.One_Shot := Get (Get (J, "one_shot"));
+      end if;
       return Result;
+   exception
+      when others => return Result;
    end From_Json;
 
 end Pyramid_Data_Model_Common_Types_Codec;
