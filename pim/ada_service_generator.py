@@ -1238,8 +1238,9 @@ class AdaTypesGenerator:
             if imp.startswith('google/'):
                 continue
             pkg = imp.replace('/', '.').removesuffix('.proto')
+            imp_stem = Path(imp).stem
             for indexed_pf in self._index.files:
-                if indexed_pf.package == pkg:
+                if indexed_pf.package == pkg or indexed_pf.path.stem == imp_stem:
                     ada_pkg = self._ada_pkg_for_file(indexed_pf)
                     result.append(f'with {ada_pkg};  use {ada_pkg};')
                     break
