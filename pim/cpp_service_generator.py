@@ -1379,9 +1379,10 @@ class CppTypesGenerator:
             if imp.startswith('google/'):
                 continue
             pkg = imp.replace('/', '.').removesuffix('.proto')
+            imp_stem = Path(imp).stem
             for indexed_pf in self._index.files:
-                if indexed_pf.package == pkg:
-                    result.append(f'#include "{pkg.replace(".", "_")}_types.hpp"')
+                if indexed_pf.package == pkg or indexed_pf.path.stem == imp_stem:
+                    result.append(f'#include "{indexed_pf.package.replace(".", "_")}_types.hpp"')
                     break
         return result
 
@@ -1549,9 +1550,10 @@ class CppDataModelCodecGenerator:
                 if imp.startswith('google/'):
                     continue
                 pkg = imp.replace('/', '.').removesuffix('.proto')
+                imp_stem = Path(imp).stem
                 for indexed_pf in self._index.files:
-                    if indexed_pf.package == pkg:
-                        f.write(f'#include "{pkg.replace(".", "_")}_codec.hpp"\n')
+                    if indexed_pf.package == pkg or indexed_pf.path.stem == imp_stem:
+                        f.write(f'#include "{indexed_pf.package.replace(".", "_")}_codec.hpp"\n')
                         break
             f.write(f'\nnamespace {self._ns} {{\n\n')
 
