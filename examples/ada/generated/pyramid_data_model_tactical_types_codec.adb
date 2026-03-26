@@ -1,6 +1,7 @@
 --  Auto-generated data model JSON codec body
 --  Package: Pyramid_Data_Model_Tactical_Types_Codec
 
+with Pyramid_Data_Model_Common_Types_Codec;
 pragma Warnings (Off);
 
 package body Pyramid_Data_Model_Tactical_Types_Codec is
@@ -49,7 +50,7 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
          Append (Result, "]");
       end if;
       Comma;
-      Append (Result, """position"":" & To_Json (Msg.Position));
+      Append (Result, """position"":" & Pyramid_Data_Model_Common_Types_Codec.To_Json (Msg.Position));
       Comma;
       Append (Result, """creation_time"":" & Long_Float'Image (Msg.Creation_Time));
       Comma;
@@ -87,9 +88,9 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
       end Comma;
    begin
       Comma;
-      Append (Result, """base"":" & To_Json (Msg.Base));
+      Append (Result, """base"":" & Pyramid_Data_Model_Common_Types_Codec.To_Json (Msg.Base));
       Comma;
-      Append (Result, """status"":" & To_Json (Msg.Status));
+      Append (Result, """status"":" & Pyramid_Data_Model_Common_Types_Codec.To_Json (Msg.Status));
       Comma;
       Append (Result, """policy"":" & """ & To_String (Msg.Policy) & """);
       if Msg.Dimension /= null then
@@ -127,9 +128,9 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
       end Comma;
    begin
       Comma;
-      Append (Result, """base"":" & To_Json (Msg.Base));
+      Append (Result, """base"":" & Pyramid_Data_Model_Common_Types_Codec.To_Json (Msg.Base));
       Comma;
-      Append (Result, """status"":" & To_Json (Msg.Status));
+      Append (Result, """status"":" & Pyramid_Data_Model_Common_Types_Codec.To_Json (Msg.Status));
       Comma;
       Append (Result, """source"":" & """ & To_String (Msg.Source) & """);
       Comma;

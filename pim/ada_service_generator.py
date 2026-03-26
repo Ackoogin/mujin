@@ -1499,6 +1499,12 @@ class AdaDataModelCodecGenerator:
         file_base = self._ada_pkg.lower().replace('.', '-')
         self._ads_name = file_base + '.ads'
         self._adb_name = file_base + '.adb'
+        # Build map: message name -> codec package name (for qualified calls)
+        self._msg_to_codec: Dict[str, str] = {}
+        for other_pf in self._index.files:
+            codec_pkg = AdaTypesGenerator._ada_pkg_for_file(other_pf) + '_Codec'
+            for m in other_pf.messages:
+                self._msg_to_codec[m.name] = codec_pkg
         # Build alias map (scalar wrappers)
         self._aliases: Dict[str, str] = {'Timestamp': 'Long_Float'}
         for msg in self._index.all_messages():
@@ -1568,6 +1574,36 @@ class AdaDataModelCodecGenerator:
             f.write(f'end {self._ada_pkg};\n')
 
     # ---------------------------------------------------------------- helpers
+
+    def _qualified_to_json(self, fld, accessor: str) -> str:
+        """Return a qualified To_Json call for a nested message field.
+
+        If the message type lives in a different codec package, qualify with
+        that package name to avoid Ada overload ambiguity.
+        """
+        short = fld.type.split('.')[-1]
+        codec_pkg = self._msg_to_codec.get(short, self._ada_pkg)
+        if codec_pkg != self._ada_pkg:
+            return f'{codec_pkg}.To_Json ({accessor})'
+        return f'To_Json ({accessor})'
+
+    def _foreign_codec_deps(self) -> List[str]:
+        """Return sorted list of foreign codec package names that this
+        file's messages reference (for ``with`` clauses)."""
+        deps: set = set()
+        alias_names = set(self._aliases.keys())
+        for msg in self._pf.messages:
+            if msg.name in alias_names:
+                continue
+            for fld, fname in self._inline_base_fields(msg):
+                short = fld.type.split('.')[-1]
+                if short in self._aliases:
+                    continue
+                if self._is_field_message(fld):
+                    codec = self._msg_to_codec.get(short, '')
+                    if codec and codec != self._ada_pkg:
+                        deps.add(codec)
+        return sorted(deps)
 
     # -- field-level serialisation helpers ------------------------------------
 
@@ -1722,7 +1758,8 @@ class AdaDataModelCodecGenerator:
                 # Only emit the variant that is set
                 f.write(f'      if Msg.{has_flag} then\n')
                 f.write(f'         Comma;\n')
-                f.write(f'         Append (Result, """{wire}"":" & To_Json (Msg.{ada_fname}));\n')
+                qcall = self._qualified_to_json(fld, f'Msg.{ada_fname}')
+                f.write(f'         Append (Result, """{wire}"":" & {qcall});\n')
                 f.write(f'      end if;\n')
 
         f.write(f'      Append (Result, "}}");\n')
@@ -1785,15 +1822,17 @@ class AdaDataModelCodecGenerator:
                 else:
                     f.write(f'            Append (Result, Integer\'Image (Msg.{ada_fname} (I)));\n')
             else:
-                # Nested message element
-                f.write(f'            Append (Result, To_Json (Msg.{ada_fname} (I)));\n')
+                # Nested message element — qualify to avoid ambiguity
+                qcall = self._qualified_to_json(fld, f'Msg.{ada_fname} (I)')
+                f.write(f'            Append (Result, {qcall});\n')
             f.write(f'         end loop;\n')
             f.write(f'         Append (Result, "]");\n')
             f.write(f'      end if;\n')
         elif self._is_field_message(fld) and short not in self._aliases:
-            # Nested message — delegate to its To_Json
+            # Nested message — delegate with qualified call
+            qcall = self._qualified_to_json(fld, f'Msg.{ada_fname}')
             f.write(f'      Comma;\n')
-            f.write(f'      Append (Result, """{wire}"":" & To_Json (Msg.{ada_fname}));\n')
+            f.write(f'      Append (Result, """{wire}"":" & {qcall});\n')
         else:
             # Scalar / enum / alias
             expr = self._to_json_expr(fld, ada_fname)
@@ -1823,6 +1862,9 @@ class AdaDataModelCodecGenerator:
         with open(path, 'w') as f:
             f.write('--  Auto-generated data model JSON codec body\n')
             f.write(f'--  Package: {self._ada_pkg}\n\n')
+            # Import foreign codec packages for cross-file To_Json calls
+            for dep in self._foreign_codec_deps():
+                f.write(f'with {dep};\n')
             f.write('pragma Warnings (Off);\n\n')
             f.write(f'package body {self._ada_pkg} is\n\n')
 
