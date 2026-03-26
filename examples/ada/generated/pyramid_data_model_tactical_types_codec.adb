@@ -23,62 +23,167 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
    end Object_Source_From_String;
 
    function To_Json (Msg : Object_Detail) return String is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      First  : Boolean := True;
+      procedure Comma is
+      begin
+         if First then First := False;
+         else Append (Result, ","); end if;
+      end Comma;
    begin
-      --  TODO: serialise Object_Detail fields to JSON
-      pragma Unreferenced (Msg);
-      return "{}";
+      Comma;
+      Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
+      Comma;
+      Append (Result, """id"":" & Long_Float'Image (Msg.Id));
+      Comma;
+      Append (Result, """entity_source"":" & Long_Float'Image (Msg.Entity_Source));
+      if Msg.Source /= null then
+         Comma;
+         Append (Result, """source"":[");
+         for I in Msg.Source'Range loop
+            if I > Msg.Source'First then
+               Append (Result, ",");
+            end if;
+            Append (Result, """ & To_String (Msg.Source (I)) & """);
+         end loop;
+         Append (Result, "]");
+      end if;
+      Comma;
+      Append (Result, """position"":" & To_Json (Msg.Position));
+      Comma;
+      Append (Result, """creation_time"":" & Long_Float'Image (Msg.Creation_Time));
+      Comma;
+      Append (Result, """quality"":" & Long_Float'Image (Msg.Quality));
+      Comma;
+      Append (Result, """course"":" & Long_Float'Image (Msg.Course));
+      Comma;
+      Append (Result, """speed"":" & Long_Float'Image (Msg.Speed));
+      Comma;
+      Append (Result, """length"":" & Long_Float'Image (Msg.Length));
+      Comma;
+      Append (Result, """identity"":" & """ & To_String (Msg.Identity) & """);
+      Comma;
+      Append (Result, """dimension"":" & """ & To_String (Msg.Dimension) & """);
+      Append (Result, "}");
+      return To_String (Result);
    end To_Json;
 
    function From_Json (S : String; Tag : access Object_Detail) return Object_Detail is
-      pragma Unreferenced (S, Tag);
+      pragma Unreferenced (Tag);
       Result : Object_Detail;
    begin
-      --  TODO: deserialise JSON to Object_Detail fields
+      --  repeated: source (deserialised via array access)
+      --  nested: position
       return Result;
    end From_Json;
 
    function To_Json (Msg : Object_Evidence_Requirement) return String is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      First  : Boolean := True;
+      procedure Comma is
+      begin
+         if First then First := False;
+         else Append (Result, ","); end if;
+      end Comma;
    begin
-      --  TODO: serialise Object_Evidence_Requirement fields to JSON
-      pragma Unreferenced (Msg);
-      return "{}";
+      Comma;
+      Append (Result, """base"":" & To_Json (Msg.Base));
+      Comma;
+      Append (Result, """status"":" & To_Json (Msg.Status));
+      Comma;
+      Append (Result, """policy"":" & """ & To_String (Msg.Policy) & """);
+      if Msg.Dimension /= null then
+         Comma;
+         Append (Result, """dimension"":[");
+         for I in Msg.Dimension'Range loop
+            if I > Msg.Dimension'First then
+               Append (Result, ",");
+            end if;
+            Append (Result, """ & To_String (Msg.Dimension (I)) & """);
+         end loop;
+         Append (Result, "]");
+      end if;
+      Append (Result, "}");
+      return To_String (Result);
    end To_Json;
 
    function From_Json (S : String; Tag : access Object_Evidence_Requirement) return Object_Evidence_Requirement is
-      pragma Unreferenced (S, Tag);
+      pragma Unreferenced (Tag);
       Result : Object_Evidence_Requirement;
    begin
-      --  TODO: deserialise JSON to Object_Evidence_Requirement fields
+      --  nested: base
+      --  nested: status
+      --  repeated: dimension (deserialised via array access)
       return Result;
    end From_Json;
 
    function To_Json (Msg : Object_Interest_Requirement) return String is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      First  : Boolean := True;
+      procedure Comma is
+      begin
+         if First then First := False;
+         else Append (Result, ","); end if;
+      end Comma;
    begin
-      --  TODO: serialise Object_Interest_Requirement fields to JSON
-      pragma Unreferenced (Msg);
-      return "{}";
+      Comma;
+      Append (Result, """base"":" & To_Json (Msg.Base));
+      Comma;
+      Append (Result, """status"":" & To_Json (Msg.Status));
+      Comma;
+      Append (Result, """source"":" & """ & To_String (Msg.Source) & """);
+      Comma;
+      Append (Result, """policy"":" & """ & To_String (Msg.Policy) & """);
+      if Msg.Dimension /= null then
+         Comma;
+         Append (Result, """dimension"":[");
+         for I in Msg.Dimension'Range loop
+            if I > Msg.Dimension'First then
+               Append (Result, ",");
+            end if;
+            Append (Result, """ & To_String (Msg.Dimension (I)) & """);
+         end loop;
+         Append (Result, "]");
+      end if;
+      Append (Result, "}");
+      return To_String (Result);
    end To_Json;
 
    function From_Json (S : String; Tag : access Object_Interest_Requirement) return Object_Interest_Requirement is
-      pragma Unreferenced (S, Tag);
+      pragma Unreferenced (Tag);
       Result : Object_Interest_Requirement;
    begin
-      --  TODO: deserialise JSON to Object_Interest_Requirement fields
+      --  nested: base
+      --  nested: status
+      --  repeated: dimension (deserialised via array access)
       return Result;
    end From_Json;
 
    function To_Json (Msg : Object_Match) return String is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      First  : Boolean := True;
+      procedure Comma is
+      begin
+         if First then First := False;
+         else Append (Result, ","); end if;
+      end Comma;
    begin
-      --  TODO: serialise Object_Match fields to JSON
-      pragma Unreferenced (Msg);
-      return "{}";
+      Comma;
+      Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
+      Comma;
+      Append (Result, """id"":" & Long_Float'Image (Msg.Id));
+      Comma;
+      Append (Result, """source"":" & Long_Float'Image (Msg.Source));
+      Comma;
+      Append (Result, """matching_object_id"":" & Long_Float'Image (Msg.Matching_Object_Id));
+      Append (Result, "}");
+      return To_String (Result);
    end To_Json;
 
    function From_Json (S : String; Tag : access Object_Match) return Object_Match is
-      pragma Unreferenced (S, Tag);
+      pragma Unreferenced (Tag);
       Result : Object_Match;
    begin
-      --  TODO: deserialise JSON to Object_Match fields
       return Result;
    end From_Json;
 

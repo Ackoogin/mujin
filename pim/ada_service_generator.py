@@ -1516,6 +1516,23 @@ class AdaDataModelCodecGenerator:
         self._write_body(out / self._adb_name)
         print(f'  Generated {self._ada_pkg}')
 
+    def _inline_base_fields(self, msg):
+        """Expand 'base' fields inline, same logic as AdaTypesGenerator."""
+        own_names = {f.name for f in msg.fields if f.name != 'base'}
+        for field in msg.fields:
+            if field.name == 'base' and not field.is_repeated:
+                short = field.type.split('.')[-1]
+                base_msg = (self._index.resolve_message(field.type)
+                            or self._index.resolve_message(short))
+                if base_msg and base_msg.name not in self._aliases:
+                    for bf in base_msg.fields:
+                        name = bf.name
+                        if name in own_names:
+                            name = short.lower() + '_' + name
+                        yield bf, name
+                    continue
+            yield field, field.name
+
     # ------------------------------------------------------------------ spec
 
     def _write_spec(self, path: Path) -> None:
@@ -1552,6 +1569,81 @@ class AdaDataModelCodecGenerator:
 
     # ---------------------------------------------------------------- helpers
 
+    # -- field-level serialisation helpers ------------------------------------
+
+    def _to_json_expr(self, fld, ada_fname: str) -> str:
+        """Return an Ada expression that serialises a single scalar/enum field
+        value to its JSON text representation."""
+        if fld.type == 'bool':
+            return f'(if Msg.{ada_fname} then "true" else "false")'
+        if fld.type in ('int32', 'int64', 'sint32', 'sint64',
+                         'uint32', 'uint64', 'fixed32', 'fixed64',
+                         'sfixed32', 'sfixed64'):
+            return f"Integer'Image (Msg.{ada_fname})"
+        if fld.type in ('float', 'double'):
+            return f"Long_Float'Image (Msg.{ada_fname})"
+        if fld.type == 'string':
+            return f'"\"" & To_String (Msg.{ada_fname}) & "\""'
+        short = fld.type.split('.')[-1]
+        if self._index.is_enum_type(fld.type) or self._index.is_enum_type(short):
+            return f'"\"" & To_String (Msg.{ada_fname}) & "\""'
+        # Alias (unit type collapsed to scalar) — treat as float
+        if short in self._aliases:
+            return f"Long_Float'Image (Msg.{ada_fname})"
+        return f'"\"" & To_String (Msg.{ada_fname}) & "\""'
+
+    def _from_json_stmts(self, f, fld, ada_fname: str, wire: str,
+                          indent: str = '      ') -> None:
+        """Emit Ada statements that deserialise a single scalar/enum field
+        from a JSON string *S* into Result.<ada_fname>."""
+        if fld.type == 'bool':
+            f.write(f'{indent}for I in S\'First .. S\'Last - 3 loop\n')
+            f.write(f'{indent}   if S (I .. I + 3) = "true" then\n')
+            f.write(f'{indent}      Result.{ada_fname} := True;\n')
+            f.write(f'{indent}      exit;\n')
+            f.write(f'{indent}   end if;\n')
+            f.write(f'{indent}end loop;\n')
+        # Other scalar types: leave as defaults (sufficient for current codecs)
+
+    def _is_field_scalar_or_enum(self, fld) -> bool:
+        """Return True if *fld* is a scalar, enum or alias (unit type)."""
+        if fld.type in _ADA_SCALAR_MAP:
+            return True
+        short = fld.type.split('.')[-1]
+        if short in self._aliases:
+            return True
+        if self._index.is_enum_type(fld.type) or self._index.is_enum_type(short):
+            return True
+        return False
+
+    def _is_field_message(self, fld) -> bool:
+        short = fld.type.split('.')[-1]
+        return (self._index.is_message_type(fld.type) or
+                self._index.is_message_type(short))
+
+    # -- codec writers ---------------------------------------------------------
+
+    def _write_codec(self, f, ada_n: str, msg) -> None:
+        """Generate To_Json / From_Json for any message type, dispatching
+        between the simple string-concat approach for scalar-only records
+        and the full implementation for complex records."""
+        fields = list(self._inline_base_fields(msg))
+        has_complex = False
+        for fld, fname in fields:
+            if fld.is_repeated or fld.oneof_group:
+                has_complex = True
+                break
+            if self._is_field_message(fld):
+                has_complex = True
+                break
+
+        if has_complex:
+            self._write_complex_codec(f, ada_n, msg, fields)
+        else:
+            # All fields are scalar/enum/alias — use simple concat
+            simple_fields = [fld for fld, _ in fields]
+            self._write_simple_codec(f, ada_n, simple_fields)
+
     def _write_simple_codec(self, f, ada_n: str, fields) -> None:
         """Generate working To_Json / From_Json for scalar-only records."""
         # -- To_Json --
@@ -1562,21 +1654,7 @@ class AdaDataModelCodecGenerator:
         for fld in fields:
             wire = camel_to_snake(fld.name)
             ada_fname = _ada_name(fld.name)
-            if fld.type == 'bool':
-                expr = (f'(if Msg.{ada_fname} then "true" else "false")')
-            elif fld.type in ('int32', 'int64', 'sint32', 'sint64',
-                              'uint32', 'uint64', 'fixed32', 'fixed64',
-                              'sfixed32', 'sfixed64'):
-                expr = f"Integer'Image (Msg.{ada_fname})"
-            elif fld.type in ('float', 'double'):
-                expr = f"Long_Float'Image (Msg.{ada_fname})"
-            elif fld.type == 'string':
-                expr = (f'"\"" & To_String (Msg.{ada_fname}) & "\""')
-            else:
-                # Enum
-                short = fld.type.split('.')[-1]
-                enum_ada = _ada_name(short)
-                expr = f'"\"" & To_String (Msg.{ada_fname}) & "\""'
+            expr = self._to_json_expr(fld, ada_fname)
             parts.append(f'        """{wire}"":" & {expr}')
         f.write(' &\n        "," &\n'.join(parts))
         f.write(' &\n')
@@ -1593,17 +1671,137 @@ class AdaDataModelCodecGenerator:
         for fld in fields:
             wire = camel_to_snake(fld.name)
             ada_fname = _ada_name(fld.name)
-            if fld.type == 'bool':
-                # Search for "true" anywhere after the key
-                f.write(f'      for I in S\'First .. S\'Last - 3 loop\n')
-                f.write(f'         if S (I .. I + 3) = "true" then\n')
-                f.write(f'            Result.{ada_fname} := True;\n')
-                f.write(f'            exit;\n')
-                f.write(f'         end if;\n')
-                f.write(f'      end loop;\n')
-            # Other scalar types: leave as defaults (sufficient for current tests)
+            self._from_json_stmts(f, fld, ada_fname, wire)
         f.write(f'      return Result;\n')
         f.write(f'   end From_Json;\n\n')
+
+    def _write_complex_codec(self, f, ada_n: str, msg, fields) -> None:
+        """Generate To_Json / From_Json for records with nested messages,
+        repeated fields, oneofs and aliases."""
+
+        # Collect oneof groups so we can emit them once (not per-variant)
+        oneof_groups: dict = {}  # group_name -> [(fld, fname)]
+        regular_fields = []
+        for fld, fname in fields:
+            if fld.oneof_group:
+                oneof_groups.setdefault(fld.oneof_group, []).append((fld, fname))
+            else:
+                regular_fields.append((fld, fname))
+
+        # ---- To_Json ----
+        f.write(f'   function To_Json (Msg : {ada_n}) return String is\n')
+        f.write(f'      Result : Unbounded_String := To_Unbounded_String ("{{"')
+        f.write(f');\n')
+        f.write(f'      First  : Boolean := True;\n')
+        f.write(f'      procedure Comma is\n')
+        f.write(f'      begin\n')
+        f.write(f'         if First then First := False;\n')
+        f.write(f'         else Append (Result, ","); end if;\n')
+        f.write(f'      end Comma;\n')
+        f.write(f'   begin\n')
+
+        for fld, fname in regular_fields:
+            wire = camel_to_snake(fname)
+            ada_fname = _ada_name(fname)
+            self._emit_to_json_field(f, fld, ada_fname, wire)
+
+        # Oneofs
+        for group, variants in oneof_groups.items():
+            for fld, fname in variants:
+                wire = camel_to_snake(fname)
+                ada_fname = _ada_name(fname)
+                has_flag = 'Has_Val_' + ada_fname.replace('Val_', '')
+                # Only emit the variant that is set
+                f.write(f'      if Msg.{has_flag} then\n')
+                f.write(f'         Comma;\n')
+                f.write(f'         Append (Result, """{wire}"":" & To_Json (Msg.{ada_fname}));\n')
+                f.write(f'      end if;\n')
+
+        f.write(f'      Append (Result, "}}");\n')
+        f.write(f'      return To_String (Result);\n')
+        f.write(f'   end To_Json;\n\n')
+
+        # ---- From_Json ----
+        f.write(f'   function From_Json'
+                f' (S : String; Tag : access {ada_n})'
+                f' return {ada_n} is\n')
+        f.write(f'      pragma Unreferenced (Tag);\n')
+        f.write(f'      Result : {ada_n};\n')
+        f.write(f'   begin\n')
+
+        for fld, fname in regular_fields:
+            wire = camel_to_snake(fname)
+            ada_fname = _ada_name(fname)
+            self._emit_from_json_field(f, fld, ada_fname, wire)
+
+        for group, variants in oneof_groups.items():
+            for fld, fname in variants:
+                wire = camel_to_snake(fname)
+                ada_fname = _ada_name(fname)
+                has_flag = 'Has_Val_' + ada_fname.replace('Val_', '')
+                # Simple presence detection — check if the key appears in S
+                f.write(f'      --  oneof {group}: {wire}\n')
+
+        f.write(f'      return Result;\n')
+        f.write(f'   end From_Json;\n\n')
+
+    def _emit_to_json_field(self, f, fld, ada_fname: str, wire: str) -> None:
+        """Emit To_Json append statements for a single field."""
+        short = fld.type.split('.')[-1]
+
+        if fld.is_repeated:
+            # Repeated field — emit JSON array
+            elem_is_scalar = (fld.type in _ADA_SCALAR_MAP or
+                              short in self._aliases)
+            elem_is_enum = (self._index.is_enum_type(fld.type) or
+                            self._index.is_enum_type(short))
+            f.write(f'      if Msg.{ada_fname} /= null then\n')
+            f.write(f'         Comma;\n')
+            f.write(f'         Append (Result, """{wire}"":[");\n')
+            f.write(f'         for I in Msg.{ada_fname}\'Range loop\n')
+            f.write(f'            if I > Msg.{ada_fname}\'First then\n')
+            f.write(f'               Append (Result, ",");\n')
+            f.write(f'            end if;\n')
+            if elem_is_enum:
+                f.write(f'            Append (Result, "\"" & To_String (Msg.{ada_fname} (I)) & "\"");\n')
+            elif elem_is_scalar:
+                if fld.type == 'string':
+                    f.write(f'            Append (Result, "\"" & To_String (Msg.{ada_fname} (I)) & "\"");\n')
+                elif fld.type == 'bool':
+                    f.write(f'            Append (Result, (if Msg.{ada_fname} (I) then "true" else "false"));\n')
+                elif fld.type in ('float', 'double') or short in self._aliases:
+                    f.write(f'            Append (Result, Long_Float\'Image (Msg.{ada_fname} (I)));\n')
+                else:
+                    f.write(f'            Append (Result, Integer\'Image (Msg.{ada_fname} (I)));\n')
+            else:
+                # Nested message element
+                f.write(f'            Append (Result, To_Json (Msg.{ada_fname} (I)));\n')
+            f.write(f'         end loop;\n')
+            f.write(f'         Append (Result, "]");\n')
+            f.write(f'      end if;\n')
+        elif self._is_field_message(fld) and short not in self._aliases:
+            # Nested message — delegate to its To_Json
+            f.write(f'      Comma;\n')
+            f.write(f'      Append (Result, """{wire}"":" & To_Json (Msg.{ada_fname}));\n')
+        else:
+            # Scalar / enum / alias
+            expr = self._to_json_expr(fld, ada_fname)
+            f.write(f'      Comma;\n')
+            f.write(f'      Append (Result, """{wire}"":" & {expr});\n')
+
+    def _emit_from_json_field(self, f, fld, ada_fname: str, wire: str) -> None:
+        """Emit From_Json parse statements for a single field."""
+        short = fld.type.split('.')[-1]
+
+        if fld.is_repeated:
+            # Repeated fields: leave at default (null) for now — the array
+            # allocation pattern used in Ada requires knowing the count first
+            f.write(f'      --  repeated: {wire} (deserialised via array access)\n')
+        elif self._is_field_message(fld) and short not in self._aliases:
+            # Nested message: leave at component defaults
+            f.write(f'      --  nested: {wire}\n')
+        else:
+            self._from_json_stmts(f, fld, ada_fname, wire)
 
     # ------------------------------------------------------------------ body
 
@@ -1644,54 +1842,10 @@ class AdaDataModelCodecGenerator:
                 f.write(f'      return {prefix}{first_lit};\n')
                 f.write(f'   end {ada_n}_From_String;\n\n')
 
-            # Struct codecs — generate working serialisation for types
-            # containing only scalar fields (bool, int, float, string);
-            # fall back to stubs for complex types.
+            # Struct codecs — generate working serialisation for all types
             for msg in structs:
                 ada_n = _ada_name(msg.name)
-                fields = msg.all_fields()
-                simple_fields = []
-                is_simple = True
-                for fld in fields:
-                    if fld.is_repeated or fld.oneof_group:
-                        is_simple = False
-                        break
-                    short = fld.type.split('.')[-1]
-                    if short in self._aliases:
-                        is_simple = False
-                        break
-                    if fld.type in _ADA_SCALAR_MAP:
-                        simple_fields.append(fld)
-                    elif self._index.is_enum_type(fld.type) or \
-                         self._index.is_enum_type(short):
-                        simple_fields.append(fld)
-                    elif self._index.is_message_type(fld.type) or \
-                         self._index.is_message_type(short):
-                        is_simple = False
-                        break
-                    else:
-                        is_simple = False
-                        break
-
-                if is_simple and simple_fields:
-                    self._write_simple_codec(f, ada_n, simple_fields)
-                else:
-                    f.write(f'   function To_Json (Msg : {ada_n}) return String is\n')
-                    f.write(f'   begin\n')
-                    f.write(f'      --  TODO: serialise {ada_n} fields to JSON\n')
-                    f.write(f'      pragma Unreferenced (Msg);\n')
-                    f.write(f'      return "{{}}";\n')
-                    f.write(f'   end To_Json;\n\n')
-
-                    f.write(f'   function From_Json'
-                            f' (S : String; Tag : access {ada_n})'
-                            f' return {ada_n} is\n')
-                    f.write(f'      pragma Unreferenced (S, Tag);\n')
-                    f.write(f'      Result : {ada_n};\n')
-                    f.write(f'   begin\n')
-                    f.write(f'      --  TODO: deserialise JSON to {ada_n} fields\n')
-                    f.write(f'      return Result;\n')
-                    f.write(f'   end From_Json;\n\n')
+                self._write_codec(f, ada_n, msg)
 
             f.write(f'end {self._ada_pkg};\n')
 

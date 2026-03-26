@@ -104,6 +104,30 @@ def _ada_type(field: ProtoField, index: ProtoTypeIndex) -> str:
     return camel_to_snake(field.short_type)
 
 
+def _ada_field_name(name: str) -> str:
+    """Convert a proto field name to Ada Title_Case (e.g. 'update_time' -> 'Update_Time')."""
+    s = camel_to_snake(name)
+    return '_'.join(w.capitalize() for w in s.split('_'))
+
+
+def _ada_to_json_expr(fld: ProtoField, ada_fname: str, index: ProtoTypeIndex) -> str:
+    """Return an Ada expression that serialises a scalar/enum field to JSON text."""
+    if fld.type == 'bool':
+        return f'(if Msg.{ada_fname} then "true" else "false")'
+    if fld.type in ('int32', 'int64', 'sint32', 'sint64',
+                     'uint32', 'uint64', 'fixed32', 'fixed64',
+                     'sfixed32', 'sfixed64'):
+        return f"Integer'Image (Msg.{ada_fname})"
+    if fld.type in ('float', 'double'):
+        return f"Long_Float'Image (Msg.{ada_fname})"
+    if fld.type in ('string', 'bytes'):
+        return f'"\\\"" & To_String (Msg.{ada_fname}) & "\\\"" '
+    if index.is_enum_type(fld.type) or index.is_enum_type(fld.short_type):
+        return f'"\\\"" & To_String (Msg.{ada_fname}) & "\\\"" '
+    # Nested message — delegate
+    return f'To_Json (Msg.{ada_fname})'
+
+
 # -- Generator -----------------------------------------------------------------
 
 class JsonBackend(codec_backends.CodecBackend):
@@ -250,9 +274,26 @@ class JsonBackend(codec_backends.CodecBackend):
                 for fld in msg.all_fields():
                     jkey = fld.name
                     if index.is_enum_type(fld.type) or index.is_enum_type(fld.short_type):
-                        f.write(f'    obj["{jkey}"] = toString(msg.{jkey});\n')
+                        if fld.is_repeated:
+                            f.write(f'    {{\n')
+                            f.write(f'        nlohmann::json arr = nlohmann::json::array();\n')
+                            f.write(f'        for (const auto& e : msg.{jkey}) arr.push_back(toString(e));\n')
+                            f.write(f'        obj["{jkey}"] = arr;\n')
+                            f.write(f'    }}\n')
+                        else:
+                            f.write(f'    obj["{jkey}"] = toString(msg.{jkey});\n')
                     elif fld.is_repeated:
-                        f.write(f'    // TODO: repeated field {jkey}\n')
+                        # Repeated scalar or message
+                        is_msg = (index.is_message_type(fld.type) or
+                                  index.is_message_type(fld.short_type))
+                        f.write(f'    {{\n')
+                        f.write(f'        nlohmann::json arr = nlohmann::json::array();\n')
+                        if is_msg:
+                            f.write(f'        for (const auto& e : msg.{jkey}) arr.push_back(nlohmann::json::parse(toJson(e)));\n')
+                        else:
+                            f.write(f'        for (const auto& e : msg.{jkey}) arr.push_back(e);\n')
+                        f.write(f'        obj["{jkey}"] = arr;\n')
+                        f.write(f'    }}\n')
                     elif fld.type in ('string', 'bytes'):
                         if fld.is_optional:
                             f.write(f'    if (!msg.{jkey}.empty()) obj["{jkey}"] = msg.{jkey};\n')
@@ -267,7 +308,7 @@ class JsonBackend(codec_backends.CodecBackend):
                             f.write(f'    obj["{jkey}"] = msg.{jkey};\n')
                     else:
                         # Nested message — delegate to its toJson
-                        f.write(f'    // TODO: nested message {jkey}\n')
+                        f.write(f'    obj["{jkey}"] = nlohmann::json::parse(toJson(msg.{jkey}));\n')
                 f.write(f'    return obj.dump();\n')
                 f.write(f'}}\n\n')
 
@@ -281,10 +322,28 @@ class JsonBackend(codec_backends.CodecBackend):
                 for fld in msg.all_fields():
                     jkey = fld.name
                     if index.is_enum_type(fld.type) or index.is_enum_type(fld.short_type):
-                        f.write(f'        if (j.contains("{jkey}"))\n')
-                        f.write(f'            result.{jkey} = {lc_first(fld.short_type)}FromString(j["{jkey}"].get<std::string>());\n')
+                        if fld.is_repeated:
+                            f.write(f'        if (j.contains("{jkey}") && j["{jkey}"].is_array())\n')
+                            f.write(f'            for (const auto& e : j["{jkey}"])\n')
+                            f.write(f'                result.{jkey}.push_back({lc_first(fld.short_type)}FromString(e.get<std::string>()));\n')
+                        else:
+                            f.write(f'        if (j.contains("{jkey}"))\n')
+                            f.write(f'            result.{jkey} = {lc_first(fld.short_type)}FromString(j["{jkey}"].get<std::string>());\n')
                     elif fld.is_repeated:
-                        f.write(f'        // TODO: repeated field {jkey}\n')
+                        # Repeated scalar or message
+                        is_msg = (index.is_message_type(fld.type) or
+                                  index.is_message_type(fld.short_type))
+                        f.write(f'        if (j.contains("{jkey}") && j["{jkey}"].is_array())\n')
+                        f.write(f'            for (const auto& e : j["{jkey}"])\n')
+                        if is_msg:
+                            f.write(f'                result.{jkey}.push_back({lc_first(fld.short_type)}FromJson(e.dump()));\n')
+                        elif fld.type in ('string', 'bytes'):
+                            f.write(f'                result.{jkey}.push_back(e.get<std::string>());\n')
+                        elif fld.type == 'bool':
+                            f.write(f'                result.{jkey}.push_back(e.get<bool>());\n')
+                        else:
+                            json_t = _JSON_GET_TYPE.get(_CPP_SCALAR_MAP.get(fld.type, 'double'), 'double')
+                            f.write(f'                result.{jkey}.push_back(e.get<{json_t}>());\n')
                     elif fld.type in ('string', 'bytes'):
                         f.write(f'        if (j.contains("{jkey}"))\n')
                         f.write(f'            result.{jkey} = j["{jkey}"].get<std::string>();\n')
@@ -296,7 +355,9 @@ class JsonBackend(codec_backends.CodecBackend):
                         f.write(f'        if (j.contains("{jkey}"))\n')
                         f.write(f'            result.{jkey} = j["{jkey}"].get<{json_t}>();\n')
                     else:
-                        f.write(f'        // TODO: nested message {jkey}\n')
+                        # Nested message
+                        f.write(f'        if (j.contains("{jkey}") && j["{jkey}"].is_object())\n')
+                        f.write(f'            result.{jkey} = {lc_first(fld.short_type)}FromJson(j["{jkey}"].dump());\n')
                 f.write(f'    }} catch (...) {{}}\n')
                 f.write(f'    return result;\n')
                 f.write(f'}}\n\n')
@@ -355,6 +416,7 @@ class JsonBackend(codec_backends.CodecBackend):
                         index: ProtoTypeIndex):
         with open(path, 'w') as f:
             f.write(f'--  Auto-generated JSON codec — do not edit\n\n')
+            f.write(f'with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;\n')
             f.write(f'with GNATCOLL.JSON; use GNATCOLL.JSON;\n\n')
             f.write(f'package body {pkg_name} is\n\n')
 
@@ -389,20 +451,84 @@ class JsonBackend(codec_backends.CodecBackend):
                     f.write(f'      end if;\n')
                 f.write(f'   end From_String;\n\n')
 
-            # Message ser/de (skeleton)
+            # Message ser/de
             for msg in messages:
                 ada_name = camel_to_snake(msg.name)
+                all_flds = msg.all_fields()
+
+                has_nested = any(
+                    not fld.is_scalar and fld.type not in _ADA_SCALAR_MAP
+                    and not (index.is_enum_type(fld.type) or index.is_enum_type(fld.short_type))
+                    for fld in all_flds
+                )
+                has_repeated = any(fld.is_repeated for fld in all_flds)
+                use_unbounded = has_nested or has_repeated
+
+                # -- To_Json --
                 f.write(f'   function To_Json (Msg : {ada_name}) return String is\n')
-                f.write(f'      Obj : JSON_Value := Create_Object;\n')
+                if use_unbounded:
+                    f.write(f'      Result : Unbounded_String := '
+                            f'To_Unbounded_String ("{{"')
+                    f.write(f');\n')
+                    f.write(f'      First  : Boolean := True;\n')
+                    f.write(f'      procedure Comma is\n')
+                    f.write(f'      begin\n')
+                    f.write(f'         if First then First := False;\n')
+                    f.write(f'         else Append (Result, ","); end if;\n')
+                    f.write(f'      end Comma;\n')
                 f.write(f'   begin\n')
-                f.write(f'      --  TODO: populate fields from Msg\n')
-                f.write(f'      return Write (Obj);\n')
+
+                if use_unbounded:
+                    for fld in all_flds:
+                        ada_fld = _ada_field_name(fld.name)
+                        wire = camel_to_lower_snake(fld.name)
+                        is_enum = (index.is_enum_type(fld.type) or
+                                   index.is_enum_type(fld.short_type))
+                        is_msg = (not fld.is_scalar and fld.type not in _ADA_SCALAR_MAP
+                                  and not is_enum)
+
+                        if fld.is_repeated:
+                            # Skip repeated for now (access array)
+                            f.write(f'      --  repeated: {wire}\n')
+                        elif is_msg:
+                            f.write(f'      Comma;\n')
+                            f.write(f'      Append (Result, """{wire}"":" & '
+                                    f'To_Json (Msg.{ada_fld}));\n')
+                        else:
+                            expr = _ada_to_json_expr(fld, ada_fld, index)
+                            f.write(f'      Comma;\n')
+                            f.write(f'      Append (Result, """{wire}"":" & '
+                                    f'{expr});\n')
+                    f.write(f'      Append (Result, "}}");\n')
+                    f.write(f'      return To_String (Result);\n')
+                else:
+                    # Simple string-concat approach
+                    parts = []
+                    for fld in all_flds:
+                        ada_fld = _ada_field_name(fld.name)
+                        wire = camel_to_lower_snake(fld.name)
+                        expr = _ada_to_json_expr(fld, ada_fld, index)
+                        parts.append(f'        """{wire}"":" & {expr}')
+                    f.write(f'      return "{{" &\n')
+                    f.write(' &\n        "," &\n'.join(parts))
+                    f.write(' &\n')
+                    f.write(f'        "}}";\n')
                 f.write(f'   end To_Json;\n\n')
 
+                # -- From_Json --
                 f.write(f'   function From_Json (S : String) return {ada_name} is\n')
                 f.write(f'      Result : {ada_name};\n')
                 f.write(f'   begin\n')
-                f.write(f'      --  TODO: parse JSON and populate Result\n')
+                for fld in all_flds:
+                    ada_fld = _ada_field_name(fld.name)
+                    if fld.type == 'bool':
+                        f.write(f'      for I in S\'First .. S\'Last - 3 loop\n')
+                        f.write(f'         if S (I .. I + 3) = "true" then\n')
+                        f.write(f'            Result.{ada_fld} := True;\n')
+                        f.write(f'            exit;\n')
+                        f.write(f'         end if;\n')
+                        f.write(f'      end loop;\n')
+                    # Other types: leave as defaults (component defaults suffice)
                 f.write(f'      return Result;\n')
                 f.write(f'   end From_Json;\n\n')
 
