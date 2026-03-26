@@ -121,122 +121,241 @@ package body Pyramid_Data_Model_Common_Types_Codec is
    end Data_Policy_From_String;
 
    function To_Json (Msg : Geodetic_Position) return String is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      First  : Boolean := True;
+      procedure Comma is
+      begin
+         if First then First := False;
+         else Append (Result, ","); end if;
+      end Comma;
    begin
-      --  TODO: serialise Geodetic_Position fields to JSON
-      pragma Unreferenced (Msg);
-      return "{}";
+      Comma;
+      Append (Result, """latitude"":" & Long_Float'Image (Msg.Latitude));
+      Comma;
+      Append (Result, """longitude"":" & Long_Float'Image (Msg.Longitude));
+      Append (Result, "}");
+      return To_String (Result);
    end To_Json;
 
    function From_Json (S : String; Tag : access Geodetic_Position) return Geodetic_Position is
-      pragma Unreferenced (S, Tag);
+      pragma Unreferenced (Tag);
       Result : Geodetic_Position;
    begin
-      --  TODO: deserialise JSON to Geodetic_Position fields
       return Result;
    end From_Json;
 
    function To_Json (Msg : Poly_Area) return String is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      First  : Boolean := True;
+      procedure Comma is
+      begin
+         if First then First := False;
+         else Append (Result, ","); end if;
+      end Comma;
    begin
-      --  TODO: serialise Poly_Area fields to JSON
-      pragma Unreferenced (Msg);
-      return "{}";
+      if Msg.Points /= null then
+         Comma;
+         Append (Result, """points"":[");
+         for I in Msg.Points'Range loop
+            if I > Msg.Points'First then
+               Append (Result, ",");
+            end if;
+            Append (Result, To_Json (Msg.Points (I)));
+         end loop;
+         Append (Result, "]");
+      end if;
+      Append (Result, "}");
+      return To_String (Result);
    end To_Json;
 
    function From_Json (S : String; Tag : access Poly_Area) return Poly_Area is
-      pragma Unreferenced (S, Tag);
+      pragma Unreferenced (Tag);
       Result : Poly_Area;
    begin
-      --  TODO: deserialise JSON to Poly_Area fields
+      --  repeated: points (deserialised via array access)
       return Result;
    end From_Json;
 
    function To_Json (Msg : Achievement) return String is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      First  : Boolean := True;
+      procedure Comma is
+      begin
+         if First then First := False;
+         else Append (Result, ","); end if;
+      end Comma;
    begin
-      --  TODO: serialise Achievement fields to JSON
-      pragma Unreferenced (Msg);
-      return "{}";
+      Comma;
+      Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
+      Comma;
+      Append (Result, """id"":" & Long_Float'Image (Msg.Id));
+      Comma;
+      Append (Result, """source"":" & Long_Float'Image (Msg.Source));
+      Comma;
+      Append (Result, """status"":" & """ & To_String (Msg.Status) & """);
+      Comma;
+      Append (Result, """quality"":" & Long_Float'Image (Msg.Quality));
+      Comma;
+      Append (Result, """achieveability"":" & """ & To_String (Msg.Achieveability) & """);
+      Append (Result, "}");
+      return To_String (Result);
    end To_Json;
 
    function From_Json (S : String; Tag : access Achievement) return Achievement is
-      pragma Unreferenced (S, Tag);
+      pragma Unreferenced (Tag);
       Result : Achievement;
    begin
-      --  TODO: deserialise JSON to Achievement fields
       return Result;
    end From_Json;
 
    function To_Json (Msg : Requirement) return String is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      First  : Boolean := True;
+      procedure Comma is
+      begin
+         if First then First := False;
+         else Append (Result, ","); end if;
+      end Comma;
    begin
-      --  TODO: serialise Requirement fields to JSON
-      pragma Unreferenced (Msg);
-      return "{}";
+      Comma;
+      Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
+      Comma;
+      Append (Result, """id"":" & Long_Float'Image (Msg.Id));
+      Comma;
+      Append (Result, """source"":" & Long_Float'Image (Msg.Source));
+      Comma;
+      Append (Result, """status"":" & To_Json (Msg.Status));
+      Append (Result, "}");
+      return To_String (Result);
    end To_Json;
 
    function From_Json (S : String; Tag : access Requirement) return Requirement is
-      pragma Unreferenced (S, Tag);
+      pragma Unreferenced (Tag);
       Result : Requirement;
    begin
-      --  TODO: deserialise JSON to Requirement fields
+      --  nested: status
       return Result;
    end From_Json;
 
    function To_Json (Msg : Capability) return String is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      First  : Boolean := True;
+      procedure Comma is
+      begin
+         if First then First := False;
+         else Append (Result, ","); end if;
+      end Comma;
    begin
-      --  TODO: serialise Capability fields to JSON
-      pragma Unreferenced (Msg);
-      return "{}";
+      Comma;
+      Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
+      Comma;
+      Append (Result, """id"":" & Long_Float'Image (Msg.Id));
+      Comma;
+      Append (Result, """source"":" & Long_Float'Image (Msg.Source));
+      Comma;
+      Append (Result, """availability"":" & (if Msg.Availability then "true" else "false"));
+      Comma;
+      Append (Result, """name"":" & """ & To_String (Msg.Name) & """);
+      if Msg.Contraint /= null then
+         Comma;
+         Append (Result, """contraint"":[");
+         for I in Msg.Contraint'Range loop
+            if I > Msg.Contraint'First then
+               Append (Result, ",");
+            end if;
+            Append (Result, To_Json (Msg.Contraint (I)));
+         end loop;
+         Append (Result, "]");
+      end if;
+      Append (Result, "}");
+      return To_String (Result);
    end To_Json;
 
    function From_Json (S : String; Tag : access Capability) return Capability is
-      pragma Unreferenced (S, Tag);
+      pragma Unreferenced (Tag);
       Result : Capability;
    begin
-      --  TODO: deserialise JSON to Capability fields
+      for I in S'First .. S'Last - 3 loop
+         if S (I .. I + 3) = "true" then
+            Result.Availability := True;
+            exit;
+         end if;
+      end loop;
+      --  repeated: contraint (deserialised via array access)
       return Result;
    end From_Json;
 
    function To_Json (Msg : Entity) return String is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      First  : Boolean := True;
+      procedure Comma is
+      begin
+         if First then First := False;
+         else Append (Result, ","); end if;
+      end Comma;
    begin
-      --  TODO: serialise Entity fields to JSON
-      pragma Unreferenced (Msg);
-      return "{}";
+      Comma;
+      Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
+      Comma;
+      Append (Result, """id"":" & Long_Float'Image (Msg.Id));
+      Comma;
+      Append (Result, """source"":" & Long_Float'Image (Msg.Source));
+      Append (Result, "}");
+      return To_String (Result);
    end To_Json;
 
    function From_Json (S : String; Tag : access Entity) return Entity is
-      pragma Unreferenced (S, Tag);
+      pragma Unreferenced (Tag);
       Result : Entity;
    begin
-      --  TODO: deserialise JSON to Entity fields
       return Result;
    end From_Json;
 
    function To_Json (Msg : Circle_Area) return String is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      First  : Boolean := True;
+      procedure Comma is
+      begin
+         if First then First := False;
+         else Append (Result, ","); end if;
+      end Comma;
    begin
-      --  TODO: serialise Circle_Area fields to JSON
-      pragma Unreferenced (Msg);
-      return "{}";
+      Comma;
+      Append (Result, """position"":" & To_Json (Msg.Position));
+      Comma;
+      Append (Result, """radius"":" & Long_Float'Image (Msg.Radius));
+      Append (Result, "}");
+      return To_String (Result);
    end To_Json;
 
    function From_Json (S : String; Tag : access Circle_Area) return Circle_Area is
-      pragma Unreferenced (S, Tag);
+      pragma Unreferenced (Tag);
       Result : Circle_Area;
    begin
-      --  TODO: deserialise JSON to Circle_Area fields
+      --  nested: position
       return Result;
    end From_Json;
 
    function To_Json (Msg : Point) return String is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      First  : Boolean := True;
+      procedure Comma is
+      begin
+         if First then First := False;
+         else Append (Result, ","); end if;
+      end Comma;
    begin
-      --  TODO: serialise Point fields to JSON
-      pragma Unreferenced (Msg);
-      return "{}";
+      Comma;
+      Append (Result, """position"":" & To_Json (Msg.Position));
+      Append (Result, "}");
+      return To_String (Result);
    end To_Json;
 
    function From_Json (S : String; Tag : access Point) return Point is
-      pragma Unreferenced (S, Tag);
+      pragma Unreferenced (Tag);
       Result : Point;
    begin
-      --  TODO: deserialise JSON to Point fields
+      --  nested: position
       return Result;
    end From_Json;
 
@@ -277,17 +396,42 @@ package body Pyramid_Data_Model_Common_Types_Codec is
    end From_Json;
 
    function To_Json (Msg : Query) return String is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      First  : Boolean := True;
+      procedure Comma is
+      begin
+         if First then First := False;
+         else Append (Result, ","); end if;
+      end Comma;
    begin
-      --  TODO: serialise Query fields to JSON
-      pragma Unreferenced (Msg);
-      return "{}";
+      if Msg.Id /= null then
+         Comma;
+         Append (Result, """id"":[");
+         for I in Msg.Id'Range loop
+            if I > Msg.Id'First then
+               Append (Result, ",");
+            end if;
+            Append (Result, Long_Float'Image (Msg.Id (I)));
+         end loop;
+         Append (Result, "]");
+      end if;
+      Comma;
+      Append (Result, """one_shot"":" & (if Msg.One_Shot then "true" else "false"));
+      Append (Result, "}");
+      return To_String (Result);
    end To_Json;
 
    function From_Json (S : String; Tag : access Query) return Query is
-      pragma Unreferenced (S, Tag);
+      pragma Unreferenced (Tag);
       Result : Query;
    begin
-      --  TODO: deserialise JSON to Query fields
+      --  repeated: id (deserialised via array access)
+      for I in S'First .. S'Last - 3 loop
+         if S (I .. I + 3) = "true" then
+            Result.One_Shot := True;
+            exit;
+         end if;
+      end loop;
       return Result;
    end From_Json;
 
