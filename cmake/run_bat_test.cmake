@@ -1,0 +1,41 @@
+# run_bat_test.cmake — CTest wrapper for .bat test scripts on Windows.
+#
+# CTest's add_test() quotes each argument individually, which breaks
+# cmd.exe /c parsing.  This wrapper uses execute_process() which
+# constructs the command line correctly for Windows.
+#
+# Required: -DSCRIPT=path/to/script.bat
+# Optional: -DSERVER_BIN=...  -DCLIENT_BIN=...  -DBRIDGE_BIN=...
+#           -DPORT=...  -DTIMEOUT_VAL=...
+
+if(NOT DEFINED SCRIPT)
+  message(FATAL_ERROR "SCRIPT not defined")
+endif()
+
+string(REPLACE "/" "\\" NATIVE_SCRIPT "${SCRIPT}")
+
+set(extra_args)
+if(DEFINED SERVER_BIN)
+  list(APPEND extra_args --server-bin "${SERVER_BIN}")
+endif()
+if(DEFINED BRIDGE_BIN)
+  list(APPEND extra_args --bridge-bin "${BRIDGE_BIN}")
+endif()
+if(DEFINED CLIENT_BIN)
+  list(APPEND extra_args --client-bin "${CLIENT_BIN}")
+endif()
+if(DEFINED PORT)
+  list(APPEND extra_args --port "${PORT}")
+endif()
+if(DEFINED TIMEOUT_VAL)
+  list(APPEND extra_args --timeout "${TIMEOUT_VAL}")
+endif()
+
+execute_process(
+  COMMAND cmd /c "${NATIVE_SCRIPT}" ${extra_args}
+  RESULT_VARIABLE result
+)
+
+if(NOT result EQUAL 0)
+  message(FATAL_ERROR "Test failed with exit code ${result}")
+endif()

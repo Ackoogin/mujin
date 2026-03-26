@@ -66,8 +66,7 @@ if %errorlevel% equ 0 (
     python "!GEN_SCRIPT!" "!PROTO_DIR!\consumed.proto" "!ADA_GEN_OUT!" >nul 2>&1
     if !errorlevel! neq 0 set "GEN_OK=0"
     if "!GEN_OK!"=="0" (
-        echo [driver] SKIP: Ada service generation failed
-        exit /b 0
+        echo [driver] WARNING: Ada service generation failed -- continuing with existing sources
     )
     echo [driver] Generated stubs in !ADA_GEN_OUT!
 ) else (

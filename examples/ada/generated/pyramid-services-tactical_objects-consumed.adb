@@ -8,6 +8,7 @@ with System;
 with System.Storage_Elements;
 with Pyramid_Data_Model_Common_Types_Codec;  use Pyramid_Data_Model_Common_Types_Codec;
 with Pyramid_Data_Model_Tactical_Types_Codec;  use Pyramid_Data_Model_Tactical_Types_Codec;
+with Pyramid.Services.Tactical_Objects.Json_Codec;
 
 package body Pyramid.Services.Tactical_Objects.Consumed is
 

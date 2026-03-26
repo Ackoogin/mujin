@@ -303,10 +303,13 @@ if(GPRBUILD)
     DEPENDS ada_test_generated_bindings_build)
 
   if(WIN32)
+    # CTest + cmd /c has quoting issues — use cmake -P wrapper to invoke .bat
     add_test(NAME tobj_ada_socket_e2e
-             COMMAND cmd /c ${CMAKE_SOURCE_DIR}/scripts/test_ada_socket_e2e.bat
-                     --server-bin $<TARGET_FILE:tobj_socket_server>
-                     --client-bin ${CMAKE_SOURCE_DIR}/examples/ada/bin/ada_tobj_client)
+             COMMAND ${CMAKE_COMMAND}
+                     -DSCRIPT=${CMAKE_SOURCE_DIR}/scripts/test_ada_socket_e2e.bat
+                     -DSERVER_BIN=$<TARGET_FILE:tobj_socket_server>
+                     -DCLIENT_BIN=${CMAKE_SOURCE_DIR}/examples/ada/bin/ada_tobj_client
+                     -P ${CMAKE_SOURCE_DIR}/cmake/run_bat_test.cmake)
   else()
     add_test(NAME tobj_ada_socket_e2e
              COMMAND ${CMAKE_SOURCE_DIR}/scripts/test_ada_socket_e2e.sh
@@ -320,10 +323,12 @@ if(GPRBUILD)
   # ActiveFind E2E — 3-process: server → standalone bridge → Ada client
   if(WIN32)
     add_test(NAME tobj_ada_active_find_e2e
-             COMMAND cmd /c ${CMAKE_SOURCE_DIR}/scripts/test_ada_active_find_e2e.bat
-                     --server-bin $<TARGET_FILE:tobj_socket_server>
-                     --bridge-bin $<TARGET_FILE:standalone_bridge>
-                     --client-bin ${CMAKE_SOURCE_DIR}/examples/ada/bin/ada_active_find_e2e)
+             COMMAND ${CMAKE_COMMAND}
+                     -DSCRIPT=${CMAKE_SOURCE_DIR}/scripts/test_ada_active_find_e2e.bat
+                     -DSERVER_BIN=$<TARGET_FILE:tobj_socket_server>
+                     -DBRIDGE_BIN=$<TARGET_FILE:standalone_bridge>
+                     -DCLIENT_BIN=${CMAKE_SOURCE_DIR}/examples/ada/bin/ada_active_find_e2e
+                     -P ${CMAKE_SOURCE_DIR}/cmake/run_bat_test.cmake)
   else()
     add_test(NAME tobj_ada_active_find_e2e
              COMMAND ${CMAKE_SOURCE_DIR}/scripts/test_ada_active_find_e2e.sh

@@ -206,10 +206,13 @@ static void frontend_object_evidence_cb(pcl_container_t*, const pcl_msg_t* msg,
     return;
   }
 
-  // Translate standard observation to internal format
+  // Translate standard observation to internal format (must match
+  // TacticalObjectsCodec::decodeObservation expected schema).
   json internal;
   internal["observations"] = json::array();
   json obs;
+  obs["observation_id"] = pyramid::core::uuid::UUIDHelper::toString(
+      pyramid::core::uuid::UUIDHelper::generateV4());
   obs["position"] = json::object();
   obs["position"]["lat"] = radToDeg(j.value("latitude_rad", 0.0));
   obs["position"]["lon"] = radToDeg(j.value("longitude_rad", 0.0));

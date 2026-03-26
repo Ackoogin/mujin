@@ -5,6 +5,8 @@
 --  Build:  gprbuild -p -P test_generated_bindings.gpr
 --  Run:    bin/test_generated_bindings
 
+with "gnatcoll";
+
 project Test_Generated_Bindings is
   Root_Dir := external("MUJIN_ROOT", ".." & "/..");
 

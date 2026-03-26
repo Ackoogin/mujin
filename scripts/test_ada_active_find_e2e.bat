@@ -150,7 +150,7 @@ call :cleanup
 
 REM Step 10: Report
 if %CLIENT_EXIT% equ 0 (
-    echo [driver] PASS: Ada ActiveFind E2E (3-process) -- evidence + correlation via standalone bridge succeeded
+    echo [driver] PASS: Ada ActiveFind E2E -- evidence + correlation via standalone bridge succeeded
     exit /b 0
 ) else (
     echo [driver] FAIL: Ada active-find client exited with code %CLIENT_EXIT%
