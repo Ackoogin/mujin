@@ -1587,9 +1587,17 @@ class AdaDataModelCodecGenerator:
         short = fld.type.split('.')[-1]
         if self._index.is_enum_type(fld.type) or self._index.is_enum_type(short):
             return f'"\"" & To_String (Msg.{ada_fname}) & "\""'
-        # Alias (unit type collapsed to scalar) — treat as float
+        # Alias (unit type collapsed to scalar) — dispatch on target type
         if short in self._aliases:
-            return f"Long_Float'Image (Msg.{ada_fname})"
+            ada_target = self._aliases[short]
+            if ada_target == 'Unbounded_String':
+                return f'"\"" & To_String (Msg.{ada_fname}) & "\""'
+            elif ada_target in ('Integer', 'Long_Integer', 'Natural'):
+                return f"Integer'Image (Msg.{ada_fname})"
+            elif ada_target == 'Boolean':
+                return f'(if Msg.{ada_fname} then "true" else "false")'
+            else:
+                return f"Long_Float'Image (Msg.{ada_fname})"
         return f'"\"" & To_String (Msg.{ada_fname}) & "\""'
 
     def _from_json_stmts(self, f, fld, ada_fname: str, wire: str,
@@ -1765,10 +1773,13 @@ class AdaDataModelCodecGenerator:
             if elem_is_enum:
                 f.write(f'            Append (Result, "\"" & To_String (Msg.{ada_fname} (I)) & "\"");\n')
             elif elem_is_scalar:
-                if fld.type == 'string':
+                ada_target = self._aliases.get(short, '')
+                if fld.type == 'string' or ada_target == 'Unbounded_String':
                     f.write(f'            Append (Result, "\"" & To_String (Msg.{ada_fname} (I)) & "\"");\n')
-                elif fld.type == 'bool':
+                elif fld.type == 'bool' or ada_target == 'Boolean':
                     f.write(f'            Append (Result, (if Msg.{ada_fname} (I) then "true" else "false"));\n')
+                elif ada_target in ('Integer', 'Long_Integer', 'Natural'):
+                    f.write(f'            Append (Result, Integer\'Image (Msg.{ada_fname} (I)));\n')
                 elif fld.type in ('float', 'double') or short in self._aliases:
                     f.write(f'            Append (Result, Long_Float\'Image (Msg.{ada_fname} (I)));\n')
                 else:

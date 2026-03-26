@@ -34,9 +34,9 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
       Comma;
       Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
       Comma;
-      Append (Result, """id"":" & Long_Float'Image (Msg.Id));
+      Append (Result, """id"":" & """ & To_String (Msg.Id) & """);
       Comma;
-      Append (Result, """entity_source"":" & Long_Float'Image (Msg.Entity_Source));
+      Append (Result, """entity_source"":" & """ & To_String (Msg.Entity_Source) & """);
       if Msg.Source /= null then
          Comma;
          Append (Result, """source"":[");
@@ -171,11 +171,11 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
       Comma;
       Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
       Comma;
-      Append (Result, """id"":" & Long_Float'Image (Msg.Id));
+      Append (Result, """id"":" & """ & To_String (Msg.Id) & """);
       Comma;
-      Append (Result, """source"":" & Long_Float'Image (Msg.Source));
+      Append (Result, """source"":" & """ & To_String (Msg.Source) & """);
       Comma;
-      Append (Result, """matching_object_id"":" & Long_Float'Image (Msg.Matching_Object_Id));
+      Append (Result, """matching_object_id"":" & """ & To_String (Msg.Matching_Object_Id) & """);
       Append (Result, "}");
       return To_String (Result);
    end To_Json;

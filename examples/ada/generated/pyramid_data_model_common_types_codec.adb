@@ -188,9 +188,9 @@ package body Pyramid_Data_Model_Common_Types_Codec is
       Comma;
       Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
       Comma;
-      Append (Result, """id"":" & Long_Float'Image (Msg.Id));
+      Append (Result, """id"":" & """ & To_String (Msg.Id) & """);
       Comma;
-      Append (Result, """source"":" & Long_Float'Image (Msg.Source));
+      Append (Result, """source"":" & """ & To_String (Msg.Source) & """);
       Comma;
       Append (Result, """status"":" & """ & To_String (Msg.Status) & """);
       Comma;
@@ -220,9 +220,9 @@ package body Pyramid_Data_Model_Common_Types_Codec is
       Comma;
       Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
       Comma;
-      Append (Result, """id"":" & Long_Float'Image (Msg.Id));
+      Append (Result, """id"":" & """ & To_String (Msg.Id) & """);
       Comma;
-      Append (Result, """source"":" & Long_Float'Image (Msg.Source));
+      Append (Result, """source"":" & """ & To_String (Msg.Source) & """);
       Comma;
       Append (Result, """status"":" & To_Json (Msg.Status));
       Append (Result, "}");
@@ -249,9 +249,9 @@ package body Pyramid_Data_Model_Common_Types_Codec is
       Comma;
       Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
       Comma;
-      Append (Result, """id"":" & Long_Float'Image (Msg.Id));
+      Append (Result, """id"":" & """ & To_String (Msg.Id) & """);
       Comma;
-      Append (Result, """source"":" & Long_Float'Image (Msg.Source));
+      Append (Result, """source"":" & """ & To_String (Msg.Source) & """);
       Comma;
       Append (Result, """availability"":" & (if Msg.Availability then "true" else "false"));
       Comma;
@@ -297,9 +297,9 @@ package body Pyramid_Data_Model_Common_Types_Codec is
       Comma;
       Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
       Comma;
-      Append (Result, """id"":" & Long_Float'Image (Msg.Id));
+      Append (Result, """id"":" & """ & To_String (Msg.Id) & """);
       Comma;
-      Append (Result, """source"":" & Long_Float'Image (Msg.Source));
+      Append (Result, """source"":" & """ & To_String (Msg.Source) & """);
       Append (Result, "}");
       return To_String (Result);
    end To_Json;
@@ -411,7 +411,7 @@ package body Pyramid_Data_Model_Common_Types_Codec is
             if I > Msg.Id'First then
                Append (Result, ",");
             end if;
-            Append (Result, Long_Float'Image (Msg.Id (I)));
+            Append (Result, """ & To_String (Msg.Id (I)) & """);
          end loop;
          Append (Result, "]");
       end if;
