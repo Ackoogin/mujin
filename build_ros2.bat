@@ -7,7 +7,7 @@ REM   build_ros2.bat              -- build everything
 REM   build_ros2.bat core-only    -- only install ame_core, skip colcon
 REM   build_ros2.bat ros2-only    -- only colcon build (ame_core must already be installed)
 
-set AME_ROOT=D:\Dev\repo\ame
+set AME_ROOT=D:\Dev\repo\mujin
 
 REM 1. VS 2022 build tools environment
 call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
@@ -36,7 +36,7 @@ call D:\Dev\ros2-windows\setup.bat
 pixi run --manifest-path D:\Dev\ros2-windows\pixi.toml colcon build ^
   --packages-select ame_ros2 ^
   --base-paths %AME_ROOT%\ros2 ^
-  --cmake-args "-DCMAKE_PREFIX_PATH=D:/Dev/ros2-windows;D:/Dev/repo/ame/build/install"
+  --cmake-args "-DCMAKE_PREFIX_PATH=D:/Dev/ros2-windows;D:/Dev/repo/mujin/build/install"
 if errorlevel 1 goto error
 
 :done

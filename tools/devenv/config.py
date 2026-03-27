@@ -44,19 +44,19 @@ class AppConfig:
 
 # BT node status colours (R, G, B, A)
 STATUS_COLOURS = {
-    "SUCCESS":  (80, 200, 80, 255),
-    "RUNNING":  (220, 180, 40, 255),
-    "FAILURE":  (220, 60, 60, 255),
-    "IDLE":     (120, 120, 130, 255),
-    "SKIPPED":  (100, 140, 200, 255),
+    "SUCCESS":  (52, 199, 105, 255),
+    "RUNNING":  (210, 170,  30, 255),
+    "FAILURE":  (210,  55,  55, 255),
+    "IDLE":     (90,  110,  95, 255),
+    "SKIPPED":  (90,  140, 180, 255),
 }
 
 # Source tag colours for WM audit
 SOURCE_COLOURS = {
-    "perception":        (100, 180, 255, 255),
-    "SetWorldPredicate": (80, 200, 80, 255),
-    "planner_init":      (180, 140, 255, 255),
-    "devenv":            (255, 180, 60, 255),
+    "perception":        (90,  180, 210, 255),
+    "SetWorldPredicate": (52,  199, 105, 255),
+    "planner_init":      (160, 130, 220, 255),
+    "devenv":            (210, 160,  40, 255),
 }
 
 # PDDL syntax keywords for editor highlighting
