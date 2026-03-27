@@ -15,5 +15,8 @@ if not exist "%PYTHON%" (
     if errorlevel 1 exit /b 1
 )
 
+REM Pin CycloneDDS to one interface (avoids multi-NIC reply confusion with VMware adapters)
+set CYCLONEDDS_URI=file://D:/Dev/repo/mujin/cyclonedds_localhost.xml
+
 cd /d "%REPO_ROOT%"
 "%PYTHON%" -m tools.devenv %*

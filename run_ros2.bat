@@ -9,7 +9,7 @@ set PROBLEM=%2
 if "%DOMAIN%"=="" set DOMAIN=D:\Dev\repo\mujin\domains\uav_search\domain.pddl
 if "%PROBLEM%"=="" set PROBLEM=D:\Dev\repo\mujin\domains\uav_search\problem.pddl
 
-REM Pin DDS to one interface (avoids multi-NIC reply confusion with VMware adapters)
+REM Pin CycloneDDS to one interface (avoids multi-NIC reply confusion with VMware adapters)
 set CYCLONEDDS_URI=file://D:/Dev/repo/mujin/cyclonedds_localhost.xml
 
 REM 1. Add pixi conda Library/bin to PATH (yaml.dll, vcruntime, openssl, etc.)

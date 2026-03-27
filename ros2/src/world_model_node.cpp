@@ -129,6 +129,7 @@ WorldModelNode::on_shutdown(const rclcpp_lifecycle::State&) {
 void WorldModelNode::handleGetFact(
   std::shared_ptr<ame_ros2::srv::GetFact::Request> req,
   std::shared_ptr<ame_ros2::srv::GetFact::Response> res) {
+  RCLCPP_INFO(get_logger(), "get_fact called (key='%s')", req->key.c_str());
   const auto result = component_.getFact(req->key);
   res->value = result.value;
   res->found = result.found;
@@ -138,6 +139,8 @@ void WorldModelNode::handleGetFact(
 void WorldModelNode::handleSetFact(
   std::shared_ptr<ame_ros2::srv::SetFact::Request> req,
   std::shared_ptr<ame_ros2::srv::SetFact::Response> res) {
+  RCLCPP_INFO(get_logger(), "set_fact called (key='%s' value=%s source='%s')",
+              req->key.c_str(), req->value ? "true" : "false", req->source.c_str());
   const auto result = component_.setFact(req->key, req->value, req->source);
   res->success = result.success;
   res->wm_version = result.wm_version;
@@ -146,6 +149,7 @@ void WorldModelNode::handleSetFact(
 void WorldModelNode::handleQueryState(
   std::shared_ptr<ame_ros2::srv::QueryState::Request> req,
   std::shared_ptr<ame_ros2::srv::QueryState::Response> res) {
+  RCLCPP_INFO(get_logger(), "query_state called (keys=%zu)", req->keys.size());
   const auto snapshot = component_.queryState(req->keys);
   res->wm_version = snapshot.wm_version;
   res->success = snapshot.success;
