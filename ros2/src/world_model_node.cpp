@@ -1,5 +1,6 @@
 #include <ame_ros2/world_model_node.hpp>
 
+#include <ame/world_model.h>
 #include <rclcpp/qos.hpp>
 
 #include <chrono>
@@ -17,6 +18,8 @@ WorldModelNode::on_configure(const rclcpp_lifecycle::State&) {
   declare_parameter("audit_log.enabled", true);
   declare_parameter("audit_log.path", std::string("wm_audit.jsonl"));
   declare_parameter("publish_rate_hz", 10.0);
+  declare_parameter("perception.enabled", true);
+  declare_parameter("perception.confidence_threshold", 0.5);
 
   component_.setParam("domain.pddl_file", get_parameter("domain.pddl_file").as_string().c_str());
   component_.setParam(
@@ -49,6 +52,16 @@ WorldModelNode::on_configure(const rclcpp_lifecycle::State&) {
     "~/query_state",
     [this](std::shared_ptr<QueryState::Request> req,
            std::shared_ptr<QueryState::Response> res) { handleQueryState(req, res); });
+
+  // Perception integration
+  perception_confidence_threshold_ = get_parameter("perception.confidence_threshold").as_double();
+  if (get_parameter("perception.enabled").as_bool()) {
+    sub_detections_ = create_subscription<ame_ros2::msg::Detection>(
+      "/detections", rclcpp::SensorDataQoS(),
+      [this](const ame_ros2::msg::Detection::SharedPtr msg) { handleDetection(msg); });
+    RCLCPP_INFO(get_logger(), "Perception integration enabled (confidence >= %.2f)",
+                perception_confidence_threshold_);
+  }
 
   RCLCPP_INFO(
     get_logger(),
@@ -91,6 +104,7 @@ WorldModelNode::CallbackReturn
 WorldModelNode::on_deactivate(const rclcpp_lifecycle::State&) {
   publish_timer_.reset();
   pub_world_state_.reset();
+  sub_detections_.reset();
   component_.deactivate();
   RCLCPP_INFO(get_logger(), "WorldModelNode deactivated");
   return CallbackReturn::SUCCESS;
@@ -143,6 +157,46 @@ void WorldModelNode::handleQueryState(
     msg.source = fact.source;
     msg.wm_version = fact.wm_version;
     res->facts.push_back(msg);
+  }
+}
+
+void WorldModelNode::handleDetection(const ame_ros2::msg::Detection::SharedPtr msg) {
+  // Filter by confidence threshold
+  if (msg->confidence < perception_confidence_threshold_) {
+    RCLCPP_DEBUG(get_logger(), "Ignoring detection '%s' (confidence %.2f < %.2f)",
+                 msg->entity_id.c_str(), msg->confidence, perception_confidence_threshold_);
+    return;
+  }
+
+  // Map detection properties to world model facts with CONFIRMED authority
+  auto& wm = component_.worldModel();
+  const std::string source = "perception:" + msg->sensor_source;
+
+  for (size_t i = 0; i < msg->property_keys.size() && i < msg->property_values.size(); ++i) {
+    // Build PDDL-style fact key: (predicate entity_id arg...)
+    std::string fact_key = "(" + msg->property_keys[i] + " " + msg->entity_id;
+    if (!msg->property_values[i].empty()) {
+      fact_key += " " + msg->property_values[i];
+    }
+    fact_key += ")";
+
+    try {
+      // Check for authority conflict before setting
+      unsigned fluent_id = wm.fluentIndex(fact_key);
+      bool perceived_value = true;  // Detection implies predicate is true
+
+      if (wm.hasAuthorityConflict(fluent_id, perceived_value)) {
+        RCLCPP_WARN(get_logger(),
+          "Authority conflict: perception says '%s' is %s but plan predicted otherwise",
+          fact_key.c_str(), perceived_value ? "true" : "false");
+      }
+
+      wm.setFact(fact_key, true, source, ame::FactAuthority::CONFIRMED);
+      RCLCPP_DEBUG(get_logger(), "Perception set CONFIRMED fact: %s", fact_key.c_str());
+    } catch (const std::exception& e) {
+      RCLCPP_WARN(get_logger(), "Failed to set perception fact '%s': %s",
+                  fact_key.c_str(), e.what());
+    }
   }
 }
 

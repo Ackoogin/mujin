@@ -1,6 +1,9 @@
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+## Coding standards 
+See `doc/CODING_STYLE.md` for coding standards.
+
 
 ## Project Overview
 

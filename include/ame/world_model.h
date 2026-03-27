@@ -2,8 +2,12 @@
 
 #include "ame/type_system.h"
 
+#include <atomic>
 #include <cstdint>
 #include <functional>
+#include <memory>
+#include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -15,6 +19,53 @@ class State;
 }
 
 namespace ame {
+
+/// State authority classification for facts.
+/// Used to distinguish perception-sourced facts from plan-applied predictions.
+enum class FactAuthority {
+    BELIEVED,   ///< Fact value derived from plan effects (predicted)
+    CONFIRMED   ///< Fact value derived from perception (observed)
+};
+
+/// Metadata associated with each fact.
+struct FactMetadata {
+    FactAuthority authority = FactAuthority::BELIEVED;
+    uint64_t timestamp_us = 0;   ///< Microseconds since epoch when last set
+    std::string source;          ///< Originator identifier
+};
+
+/// Immutable snapshot of world state for thread-safe reads.
+/// BT executor captures a snapshot at tick start and reads from it.
+class WorldStateData {
+public:
+    std::vector<uint64_t> state_bits;
+    std::vector<FactMetadata> fact_metadata;
+    uint64_t version = 0;
+
+    bool getFact(unsigned id) const {
+        unsigned word = id / 64;
+        unsigned bit = id % 64;
+        if (word >= state_bits.size()) return false;
+        return (state_bits[word] >> bit) & 1u;
+    }
+
+    const FactMetadata& getMetadata(unsigned id) const {
+        static const FactMetadata empty{};
+        if (id >= fact_metadata.size()) return empty;
+        return fact_metadata[id];
+    }
+};
+
+using WorldStateSnapshotPtr = std::shared_ptr<const WorldStateData>;
+
+/// A pending fact mutation queued for batch application.
+struct PendingMutation {
+    unsigned fluent_id;
+    bool value;
+    std::string source;
+    FactAuthority authority;
+    uint64_t timestamp_us;
+};
 
 // Action schema: describes a grounded PDDL action stored in the WorldModel
 struct ActionSchema {
@@ -35,6 +86,17 @@ struct GroundAction {
 
 class WorldModel {
 public:
+    WorldModel() = default;
+    ~WorldModel() = default;
+
+    /// Copy constructor: creates independent copy with fresh mutexes.
+    WorldModel(const WorldModel& other);
+    WorldModel& operator=(const WorldModel& other);
+
+    /// Move constructor: behaves like copy (mutex not movable).
+    WorldModel(WorldModel&& other) : WorldModel(static_cast<const WorldModel&>(other)) {}
+    WorldModel& operator=(WorldModel&& other) { return operator=(static_cast<const WorldModel&>(other)); }
+
     TypeSystem& typeSystem() { return types_; }
     const TypeSystem& typeSystem() const { return types_; }
 
@@ -57,12 +119,40 @@ public:
 
     // Fact access by string key (e.g. "(at robot base)")
     // The optional source tag identifies the originator (e.g. "SetWorldPredicate:node_name").
-    void setFact(const std::string& key, bool value, const std::string& source = "");
+    // authority: BELIEVED for plan effects, CONFIRMED for perception-sourced facts.
+    void setFact(const std::string& key, bool value,
+                 const std::string& source = "",
+                 FactAuthority authority = FactAuthority::BELIEVED);
     bool getFact(const std::string& key) const;
+    FactMetadata getFactMetadata(const std::string& key) const;
 
     // Fact access by fluent index
-    void setFact(unsigned id, bool value, const std::string& source = "");
+    void setFact(unsigned id, bool value,
+                 const std::string& source = "",
+                 FactAuthority authority = FactAuthority::BELIEVED);
     bool getFact(unsigned id) const;
+    FactMetadata getFactMetadata(unsigned id) const;
+
+    /// Capture an immutable snapshot of the current state for thread-safe reads.
+    /// BT executor should call this at tick start.
+    WorldStateSnapshotPtr captureSnapshot() const;
+
+    /// Check if a CONFIRMED fact conflicts with current BELIEVED value.
+    /// Returns true if there's a conflict (perception disagrees with plan prediction).
+    bool hasAuthorityConflict(unsigned id, bool perceived_value) const;
+
+    /// Queue a mutation for deferred application (thread-safe).
+    /// Use this from perception callbacks to batch updates between BT ticks.
+    void enqueueMutation(unsigned id, bool value,
+                         const std::string& source,
+                         FactAuthority authority = FactAuthority::CONFIRMED);
+
+    /// Apply all queued mutations atomically. Call this between BT ticks.
+    /// Returns number of mutations applied.
+    size_t applyQueuedMutations();
+
+    /// Check if there are pending mutations.
+    bool hasPendingMutations() const;
 
     // Fluent index <-> string key mapping
     unsigned fluentIndex(const std::string& key) const;
@@ -115,6 +205,10 @@ private:
 
     // Grounded fluent storage (bitset as vector<uint64_t>)
     std::vector<uint64_t> state_bits_;
+    std::vector<FactMetadata> fact_metadata_;
+
+    // Thread safety: protects state_bits_ and fact_metadata_
+    mutable std::shared_mutex state_mutex_;
 
     // BiMap: fluent index <-> string key
     std::vector<std::string> fluent_names_;           // index -> name
@@ -125,6 +219,10 @@ private:
 
     uint64_t version_ = 0;
     AuditCallback audit_callback_;
+
+    // Mutation queue for batched perception updates
+    mutable std::mutex mutation_queue_mutex_;
+    std::vector<PendingMutation> mutation_queue_;
 
 public:
     // Goal management

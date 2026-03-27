@@ -446,3 +446,341 @@ TEST(WorldModel, ProjectToSTRIPS_RoundTrip) {
         EXPECT_EQ(prob.actions()[i]->signature(), wm.groundActions()[i].signature);
     }
 }
+
+// =============================================================================
+// State Authority & Thread Safety tests (Extensions 3 & 5)
+// =============================================================================
+
+TEST(WorldModel, FactAuthorityBelievedDefault) {
+    ame::WorldModel wm;
+    auto& ts = wm.typeSystem();
+    ts.addType("location");
+    ts.addType("robot");
+    wm.addObject("uav1", "robot");
+    wm.addObject("base", "location");
+    wm.registerPredicate("at", {"robot", "location"});
+
+    // Default authority is BELIEVED
+    wm.setFact("(at uav1 base)", true);
+    auto meta = wm.getFactMetadata("(at uav1 base)");
+    EXPECT_EQ(meta.authority, ame::FactAuthority::BELIEVED);
+    EXPECT_FALSE(meta.source.empty() == false);  // source can be empty
+}
+
+TEST(WorldModel, FactAuthorityConfirmed) {
+    ame::WorldModel wm;
+    auto& ts = wm.typeSystem();
+    ts.addType("location");
+    ts.addType("robot");
+    wm.addObject("uav1", "robot");
+    wm.addObject("base", "location");
+    wm.registerPredicate("at", {"robot", "location"});
+
+    // Set with CONFIRMED authority (perception-sourced)
+    wm.setFact("(at uav1 base)", true, "perception:camera_1", ame::FactAuthority::CONFIRMED);
+    auto meta = wm.getFactMetadata("(at uav1 base)");
+    EXPECT_EQ(meta.authority, ame::FactAuthority::CONFIRMED);
+    EXPECT_EQ(meta.source, "perception:camera_1");
+    EXPECT_GT(meta.timestamp_us, 0u);
+}
+
+TEST(WorldModel, AuthorityConflictDetection) {
+    ame::WorldModel wm;
+    auto& ts = wm.typeSystem();
+    ts.addType("location");
+    ts.addType("robot");
+    wm.addObject("uav1", "robot");
+    wm.addObject("base", "location");
+    wm.addObject("sector_a", "location");
+    wm.registerPredicate("at", {"robot", "location"});
+
+    // Plan predicts UAV is at base (BELIEVED)
+    wm.setFact("(at uav1 base)", true, "plan:move_action", ame::FactAuthority::BELIEVED);
+
+    unsigned base_id = wm.fluentIndex("(at uav1 base)");
+
+    // Perception confirms same value - no conflict
+    EXPECT_FALSE(wm.hasAuthorityConflict(base_id, true));
+
+    // Perception disagrees - conflict!
+    EXPECT_TRUE(wm.hasAuthorityConflict(base_id, false));
+}
+
+TEST(WorldModel, CaptureSnapshot) {
+    ame::WorldModel wm;
+    auto& ts = wm.typeSystem();
+    ts.addType("location");
+    ts.addType("robot");
+    wm.addObject("uav1", "robot");
+    wm.addObject("base", "location");
+    wm.addObject("sector_a", "location");
+    wm.registerPredicate("at", {"robot", "location"});
+
+    wm.setFact("(at uav1 base)", true, "init", ame::FactAuthority::BELIEVED);
+
+    // Capture snapshot
+    auto snapshot = wm.captureSnapshot();
+    ASSERT_NE(snapshot, nullptr);
+    EXPECT_EQ(snapshot->version, 1u);
+
+    unsigned base_id = wm.fluentIndex("(at uav1 base)");
+    unsigned sector_id = wm.fluentIndex("(at uav1 sector_a)");
+
+    EXPECT_TRUE(snapshot->getFact(base_id));
+    EXPECT_FALSE(snapshot->getFact(sector_id));
+
+    // Verify metadata in snapshot
+    auto& meta = snapshot->getMetadata(base_id);
+    EXPECT_EQ(meta.authority, ame::FactAuthority::BELIEVED);
+    EXPECT_EQ(meta.source, "init");
+}
+
+TEST(WorldModel, SnapshotIsImmutable) {
+    ame::WorldModel wm;
+    auto& ts = wm.typeSystem();
+    ts.addType("location");
+    ts.addType("robot");
+    wm.addObject("uav1", "robot");
+    wm.addObject("base", "location");
+    wm.addObject("sector_a", "location");
+    wm.registerPredicate("at", {"robot", "location"});
+
+    wm.setFact("(at uav1 base)", true);
+
+    // Capture snapshot before modification
+    auto snapshot = wm.captureSnapshot();
+    uint64_t old_version = snapshot->version;
+    unsigned base_id = wm.fluentIndex("(at uav1 base)");
+    unsigned sector_id = wm.fluentIndex("(at uav1 sector_a)");
+
+    EXPECT_TRUE(snapshot->getFact(base_id));
+    EXPECT_FALSE(snapshot->getFact(sector_id));
+
+    // Modify the live world model
+    wm.setFact("(at uav1 base)", false);
+    wm.setFact("(at uav1 sector_a)", true);
+
+    // Snapshot should be unchanged (immutable)
+    EXPECT_TRUE(snapshot->getFact(base_id));
+    EXPECT_FALSE(snapshot->getFact(sector_id));
+    EXPECT_EQ(snapshot->version, old_version);
+
+    // New snapshot reflects changes
+    auto new_snapshot = wm.captureSnapshot();
+    EXPECT_FALSE(new_snapshot->getFact(base_id));
+    EXPECT_TRUE(new_snapshot->getFact(sector_id));
+    EXPECT_GT(new_snapshot->version, old_version);
+}
+
+TEST(WorldModel, MutationQueueBasic) {
+    ame::WorldModel wm;
+    auto& ts = wm.typeSystem();
+    ts.addType("location");
+    ts.addType("robot");
+    wm.addObject("uav1", "robot");
+    wm.addObject("base", "location");
+    wm.addObject("sector_a", "location");
+    wm.registerPredicate("at", {"robot", "location"});
+
+    unsigned base_id = wm.fluentIndex("(at uav1 base)");
+    unsigned sector_id = wm.fluentIndex("(at uav1 sector_a)");
+
+    // Queue mutations
+    EXPECT_FALSE(wm.hasPendingMutations());
+    wm.enqueueMutation(base_id, true, "perception:test", ame::FactAuthority::CONFIRMED);
+    EXPECT_TRUE(wm.hasPendingMutations());
+
+    // State unchanged before applying
+    EXPECT_FALSE(wm.getFact(base_id));
+
+    // Apply queued mutations
+    size_t applied = wm.applyQueuedMutations();
+    EXPECT_EQ(applied, 1u);
+    EXPECT_FALSE(wm.hasPendingMutations());
+
+    // State now reflects the mutation
+    EXPECT_TRUE(wm.getFact(base_id));
+    auto meta = wm.getFactMetadata(base_id);
+    EXPECT_EQ(meta.authority, ame::FactAuthority::CONFIRMED);
+    EXPECT_EQ(meta.source, "perception:test");
+}
+
+TEST(WorldModel, MutationQueueBatchApply) {
+    ame::WorldModel wm;
+    auto& ts = wm.typeSystem();
+    ts.addType("location");
+    ts.addType("robot");
+    wm.addObject("uav1", "robot");
+    wm.addObject("base", "location");
+    wm.addObject("sector_a", "location");
+    wm.addObject("sector_b", "location");
+    wm.registerPredicate("at", {"robot", "location"});
+    wm.registerPredicate("searched", {"location"});
+
+    unsigned base_id = wm.fluentIndex("(at uav1 base)");
+    unsigned sector_a_id = wm.fluentIndex("(at uav1 sector_a)");
+    unsigned searched_a = wm.fluentIndex("(searched sector_a)");
+    unsigned searched_b = wm.fluentIndex("(searched sector_b)");
+
+    // Queue multiple mutations
+    wm.enqueueMutation(base_id, true, "perception:cam", ame::FactAuthority::CONFIRMED);
+    wm.enqueueMutation(searched_a, true, "perception:cam", ame::FactAuthority::CONFIRMED);
+    wm.enqueueMutation(searched_b, true, "perception:cam", ame::FactAuthority::CONFIRMED);
+
+    EXPECT_TRUE(wm.hasPendingMutations());
+
+    // All applied atomically
+    size_t applied = wm.applyQueuedMutations();
+    EXPECT_EQ(applied, 3u);
+
+    EXPECT_TRUE(wm.getFact(base_id));
+    EXPECT_TRUE(wm.getFact(searched_a));
+    EXPECT_TRUE(wm.getFact(searched_b));
+    EXPECT_FALSE(wm.getFact(sector_a_id));
+}
+
+// =============================================================================
+// Thread Safety Stress Tests
+// =============================================================================
+
+#include <thread>
+#include <atomic>
+
+TEST(WorldModel, ConcurrentReads) {
+    ame::WorldModel wm;
+    auto& ts = wm.typeSystem();
+    ts.addType("location");
+    for (int i = 0; i < 10; ++i) {
+        wm.addObject("loc" + std::to_string(i), "location");
+    }
+    wm.registerPredicate("visited", {"location"});
+
+    // Set some initial state
+    for (int i = 0; i < 5; ++i) {
+        wm.setFact("(visited loc" + std::to_string(i) + ")", true);
+    }
+
+    std::atomic<int> read_count{0};
+    std::atomic<bool> error_occurred{false};
+
+    // Spawn multiple reader threads
+    std::vector<std::thread> readers;
+    for (int t = 0; t < 4; ++t) {
+        readers.emplace_back([&wm, &read_count, &error_occurred]() {
+            for (int iter = 0; iter < 1000; ++iter) {
+                try {
+                    auto snapshot = wm.captureSnapshot();
+                    // Read from snapshot
+                    for (unsigned i = 0; i < wm.numFluents(); ++i) {
+                        [[maybe_unused]] bool val = snapshot->getFact(i);
+                    }
+                    ++read_count;
+                } catch (...) {
+                    error_occurred = true;
+                }
+            }
+        });
+    }
+
+    for (auto& t : readers) t.join();
+
+    EXPECT_FALSE(error_occurred);
+    EXPECT_EQ(read_count.load(), 4000);
+}
+
+TEST(WorldModel, ConcurrentReadWrite) {
+    ame::WorldModel wm;
+    auto& ts = wm.typeSystem();
+    ts.addType("location");
+    for (int i = 0; i < 10; ++i) {
+        wm.addObject("loc" + std::to_string(i), "location");
+    }
+    wm.registerPredicate("visited", {"location"});
+
+    std::atomic<bool> stop{false};
+    std::atomic<bool> error_occurred{false};
+    std::atomic<int> write_count{0};
+    std::atomic<int> read_count{0};
+
+    // Writer thread
+    std::thread writer([&]() {
+        for (int iter = 0; iter < 500 && !error_occurred; ++iter) {
+            try {
+                for (int i = 0; i < 10; ++i) {
+                    wm.setFact("(visited loc" + std::to_string(i) + ")",
+                               (iter % 2 == 0), "writer", ame::FactAuthority::BELIEVED);
+                }
+                ++write_count;
+            } catch (...) {
+                error_occurred = true;
+            }
+        }
+        stop = true;
+    });
+
+    // Reader threads using snapshots
+    std::vector<std::thread> readers;
+    for (int t = 0; t < 3; ++t) {
+        readers.emplace_back([&]() {
+            while (!stop && !error_occurred) {
+                try {
+                    auto snapshot = wm.captureSnapshot();
+                    for (unsigned i = 0; i < wm.numFluents(); ++i) {
+                        [[maybe_unused]] bool val = snapshot->getFact(i);
+                    }
+                    ++read_count;
+                } catch (...) {
+                    error_occurred = true;
+                }
+            }
+        });
+    }
+
+    writer.join();
+    for (auto& t : readers) t.join();
+
+    EXPECT_FALSE(error_occurred);
+    EXPECT_EQ(write_count.load(), 500);
+    EXPECT_GT(read_count.load(), 0);
+}
+
+TEST(WorldModel, ConcurrentMutationQueue) {
+    ame::WorldModel wm;
+    auto& ts = wm.typeSystem();
+    ts.addType("location");
+    for (int i = 0; i < 20; ++i) {
+        wm.addObject("loc" + std::to_string(i), "location");
+    }
+    wm.registerPredicate("detected", {"location"});
+
+    std::atomic<bool> error_occurred{false};
+    std::atomic<int> enqueue_count{0};
+
+    // Multiple threads enqueue mutations (simulating perception callbacks)
+    std::vector<std::thread> enqueuers;
+    for (int t = 0; t < 4; ++t) {
+        enqueuers.emplace_back([&, t]() {
+            for (int iter = 0; iter < 100; ++iter) {
+                try {
+                    unsigned id = wm.fluentIndex("(detected loc" + std::to_string((t * 5 + iter) % 20) + ")");
+                    wm.enqueueMutation(id, true, "perception:sensor_" + std::to_string(t),
+                                       ame::FactAuthority::CONFIRMED);
+                    ++enqueue_count;
+                } catch (...) {
+                    error_occurred = true;
+                }
+            }
+        });
+    }
+
+    for (auto& t : enqueuers) t.join();
+
+    EXPECT_FALSE(error_occurred);
+    EXPECT_EQ(enqueue_count.load(), 400);
+    EXPECT_TRUE(wm.hasPendingMutations());
+
+    // Apply all mutations
+    size_t applied = wm.applyQueuedMutations();
+    EXPECT_EQ(applied, 400u);
+    EXPECT_FALSE(wm.hasPendingMutations());
+}

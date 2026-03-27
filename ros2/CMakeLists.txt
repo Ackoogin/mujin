@@ -35,6 +35,7 @@ find_package(ame_core REQUIRED
 rosidl_generate_interfaces(${PROJECT_NAME}
     "msg/WorldFact.msg"
     "msg/WorldState.msg"
+    "msg/Detection.msg"
     "srv/GetFact.srv"
     "srv/SetFact.srv"
     "srv/QueryState.srv"

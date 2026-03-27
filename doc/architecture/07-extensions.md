@@ -4,21 +4,48 @@ Additional capabilities built on top of the core pipeline. Extensions 1–6 are 
 
 ## Perception Integration (Extension 3)
 
-**Files:** `include/ame/perception_bridge.h`, `src/perception_bridge.cpp`
+**Files:** `include/ame/world_model.h`, `ros2/include/ame_ros2/world_model_node.hpp`, `ros2/msg/Detection.msg`
 
-External systems update world model state via `PerceptionBridge::updateFact()`. Updates are buffered (thread-safe) and applied atomically between BT ticks via `flush()`. Every update is tagged with source `"perception"` (optionally `"perception:<subtag>"`) in the audit log.
+Perception data flows into the WorldModel via two paths:
+
+### ROS2 `/detections` Topic
+
+`WorldModelNode` subscribes to `/detections` (`ame_ros2::msg::Detection`) and maps detections to `setFact()` calls with `FactAuthority::CONFIRMED`:
 
 ```cpp
-PerceptionBridge bridge(world_model);
-
-// From a sensor thread:
-bridge.updateFact("(at uav1 sector_a)", true, "camera_front");
-
-// From the BT tick thread, between ticks:
-bridge.flush();  // applies buffered updates, fires audit callbacks
+// Detection message fields:
+string entity_id        // e.g., "uav1"
+string entity_type      // e.g., "robot"
+string[] property_keys  // e.g., ["at"]
+string[] property_values // e.g., ["sector_a"]
+float32 confidence      // [0.0, 1.0]
+string sensor_source    // e.g., "camera_front"
 ```
 
-Complements the ROS2 `set_fact` service for in-process sensor integration without ROS2 overhead.
+Detections below `perception.confidence_threshold` (default 0.5) are filtered.
+
+### In-Process Mutation Queue
+
+For direct sensor integration without ROS2 overhead:
+
+```cpp
+// From a sensor thread:
+unsigned id = wm.fluentIndex("(at uav1 sector_a)");
+wm.enqueueMutation(id, true, "perception:camera", FactAuthority::CONFIRMED);
+
+// From the BT tick thread, between ticks:
+wm.applyQueuedMutations();  // atomically applies all queued updates
+```
+
+### Authority Conflict Detection
+
+When perception disagrees with plan predictions:
+
+```cpp
+if (wm.hasAuthorityConflict(fluent_id, perceived_value)) {
+    // Log warning, trigger replan, or escalate
+}
+```
 
 ## PYRAMID Service Nodes (Extension 4)
 
@@ -41,23 +68,45 @@ The blackboard key `"pyramid_service"` must hold an `IPyramidService*`. `MockPyr
 
 ## Thread Safety (Extension 5)
 
-**Files:** `include/ame/world_model_snapshot.h`, `src/world_model_snapshot.cpp`
+**Files:** `include/ame/world_model.h`, `src/ame/world_model.cpp`
 
-`SnapshotManager` takes atomic point-in-time copies of WorldModel state. The BT tick thread reads from a stable snapshot; perception threads write to the live WorldModel; `SnapshotManager::publish()` swaps in a new consistent snapshot between ticks.
+Thread safety is built directly into `WorldModel` using RCU (Read-Copy-Update) semantics:
+
+### Immutable Snapshots
 
 ```cpp
-SnapshotManager manager(world_model);
+// BT tick thread captures snapshot at tick start:
+auto snapshot = wm.captureSnapshot();  // WorldStateSnapshotPtr
 
-// Perception thread:
-bridge.flush();        // applies buffered updates to live WorldModel
-manager.publish();     // snapshot for next BT tick
-
-// BT tick thread:
-auto snap = manager.current();   // shared_ptr, stays alive across publish()
-bool v = snap->getFact("(at uav1 sector_a)");
+// Read from snapshot (immutable, safe across concurrent writes):
+bool val = snapshot->getFact(fluent_id);
+auto& meta = snapshot->getMetadata(fluent_id);
+uint64_t ver = snapshot->version;
 ```
 
-Uses `std::shared_mutex` for concurrent reader safety. WorldModel itself remains single-writer (via `PerceptionBridge::flush()` serialisation).
+### Synchronisation
+
+- **State access**: `std::shared_mutex` (multiple readers, exclusive writer)
+- **Mutation queue**: Separate `std::mutex` for lock-free enqueue from perception threads
+- **Atomic batch apply**: `applyQueuedMutations()` acquires exclusive lock, applies all queued updates
+
+### WorldStateData
+
+```cpp
+class WorldStateData {
+public:
+    std::vector<uint64_t> state_bits;
+    std::vector<FactMetadata> fact_metadata;
+    uint64_t version;
+
+    bool getFact(unsigned id) const;
+    const FactMetadata& getMetadata(unsigned id) const;
+};
+
+using WorldStateSnapshotPtr = std::shared_ptr<const WorldStateData>;
+```
+
+Snapshots are immutable and reference-counted — safe to hold across multiple BT ticks while live state evolves.
 
 ## Hierarchical Planning (Extension 6)
 

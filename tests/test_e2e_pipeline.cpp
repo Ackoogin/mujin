@@ -196,3 +196,164 @@ TEST(E2EPipeline, PlannerStatistics) {
     EXPECT_GT(result.generated, 0u);
     EXPECT_GT(result.cost, 0.0f);
 }
+
+// =============================================================================
+// Extensions 3 & 5: Perception & Thread Safety E2E Tests
+// =============================================================================
+
+// Test State Authority: plan effects are BELIEVED, can be overridden by CONFIRMED
+TEST(E2EPipeline, StateAuthoritySemantics) {
+    auto wm = buildUAVDomain();
+    wm.setFact("(at uav1 base)", true, "init", ame::FactAuthority::BELIEVED);
+    wm.setGoal({"(searched sector_a)"});
+
+    auto reg = buildRegistry();
+    ame::Planner planner;
+    ame::PlanCompiler compiler;
+
+    // Plan and execute
+    auto result = planner.solve(wm);
+    ASSERT_TRUE(result.success);
+
+    auto xml = compiler.compileSequential(result.steps, wm, reg);
+    auto factory = buildFactory();
+    auto tree = factory.createTreeFromText(xml);
+    tree.rootBlackboard()->set("world_model", &wm);
+    tree.tickWhileRunning();
+
+    // After execution, facts set by BT should be BELIEVED
+    auto at_meta = wm.getFactMetadata("(at uav1 sector_a)");
+    EXPECT_EQ(at_meta.authority, ame::FactAuthority::BELIEVED);
+
+    // Simulate perception confirming the location
+    wm.setFact("(at uav1 sector_a)", true, "perception:gps", ame::FactAuthority::CONFIRMED);
+    auto confirmed_meta = wm.getFactMetadata("(at uav1 sector_a)");
+    EXPECT_EQ(confirmed_meta.authority, ame::FactAuthority::CONFIRMED);
+    EXPECT_EQ(confirmed_meta.source, "perception:gps");
+}
+
+// Test snapshot isolation: BT reads consistent state while perception updates
+TEST(E2EPipeline, SnapshotIsolationDuringExecution) {
+    auto wm = buildUAVDomain();
+    wm.setFact("(at uav1 base)", true);
+
+    // Capture snapshot before any changes
+    auto snapshot1 = wm.captureSnapshot();
+    unsigned base_id = wm.fluentIndex("(at uav1 base)");
+    unsigned sector_id = wm.fluentIndex("(at uav1 sector_a)");
+
+    EXPECT_TRUE(snapshot1->getFact(base_id));
+    EXPECT_FALSE(snapshot1->getFact(sector_id));
+
+    // Simulate perception updating live state
+    wm.setFact("(at uav1 base)", false, "perception:tracker", ame::FactAuthority::CONFIRMED);
+    wm.setFact("(at uav1 sector_a)", true, "perception:tracker", ame::FactAuthority::CONFIRMED);
+
+    // Snapshot1 should be unchanged (immutable)
+    EXPECT_TRUE(snapshot1->getFact(base_id));
+    EXPECT_FALSE(snapshot1->getFact(sector_id));
+
+    // New snapshot reflects updated state
+    auto snapshot2 = wm.captureSnapshot();
+    EXPECT_FALSE(snapshot2->getFact(base_id));
+    EXPECT_TRUE(snapshot2->getFact(sector_id));
+    EXPECT_GT(snapshot2->version, snapshot1->version);
+}
+
+// Test mutation queue: batch perception updates between BT ticks
+TEST(E2EPipeline, MutationQueueBatchedPerception) {
+    auto wm = buildUAVDomain();
+    wm.setFact("(at uav1 base)", true);
+    wm.setGoal({"(searched sector_a)", "(searched sector_b)"});
+
+    unsigned searched_a = wm.fluentIndex("(searched sector_a)");
+    unsigned searched_b = wm.fluentIndex("(searched sector_b)");
+
+    // Simulate perception thread queueing multiple updates
+    EXPECT_FALSE(wm.hasPendingMutations());
+    wm.enqueueMutation(searched_a, true, "perception:camera", ame::FactAuthority::CONFIRMED);
+    wm.enqueueMutation(searched_b, true, "perception:camera", ame::FactAuthority::CONFIRMED);
+    EXPECT_TRUE(wm.hasPendingMutations());
+
+    // State unchanged until applied
+    EXPECT_FALSE(wm.getFact(searched_a));
+    EXPECT_FALSE(wm.getFact(searched_b));
+
+    // Apply all queued mutations atomically (between BT ticks)
+    size_t applied = wm.applyQueuedMutations();
+    EXPECT_EQ(applied, 2u);
+    EXPECT_FALSE(wm.hasPendingMutations());
+
+    // Now state reflects perception
+    EXPECT_TRUE(wm.getFact(searched_a));
+    EXPECT_TRUE(wm.getFact(searched_b));
+
+    // Goal now satisfied — replanning should find empty plan
+    ame::Planner planner;
+    auto result = planner.solve(wm);
+    EXPECT_TRUE(result.success);
+    EXPECT_EQ(result.steps.size(), 0u);  // already at goal
+}
+
+// Test authority conflict detection during replan
+TEST(E2EPipeline, AuthorityConflictTriggersReplan) {
+    auto wm = buildUAVDomain();
+    wm.setFact("(at uav1 base)", true, "init", ame::FactAuthority::BELIEVED);
+    wm.setGoal({"(searched sector_a)"});
+
+    auto reg = buildRegistry();
+    ame::Planner planner;
+    ame::PlanCompiler compiler;
+
+    // Plan expects: move(base→sector_a), search(sector_a)
+    auto result1 = planner.solve(wm);
+    ASSERT_TRUE(result1.success);
+    EXPECT_GE(result1.steps.size(), 2u);
+
+    // Simulate: plan predicts UAV will be at sector_a after move
+    wm.setFact("(at uav1 base)", false, "plan:move", ame::FactAuthority::BELIEVED);
+    wm.setFact("(at uav1 sector_a)", true, "plan:move", ame::FactAuthority::BELIEVED);
+
+    // But perception says UAV is actually at sector_b (conflict!)
+    unsigned sector_a_id = wm.fluentIndex("(at uav1 sector_a)");
+    EXPECT_TRUE(wm.hasAuthorityConflict(sector_a_id, false));  // perception would say false
+
+    // Perception overrides with ground truth
+    wm.setFact("(at uav1 sector_a)", false, "perception:gps", ame::FactAuthority::CONFIRMED);
+    wm.setFact("(at uav1 sector_b)", true, "perception:gps", ame::FactAuthority::CONFIRMED);
+
+    // Replan from actual state
+    auto result2 = planner.solve(wm);
+    ASSERT_TRUE(result2.success);
+
+    // New plan should start from sector_b
+    auto xml = compiler.compileSequential(result2.steps, wm, reg);
+    auto factory = buildFactory();
+    auto tree = factory.createTreeFromText(xml);
+    tree.rootBlackboard()->set("world_model", &wm);
+    tree.tickWhileRunning();
+
+    EXPECT_TRUE(wm.getFact("(searched sector_a)"));
+}
+
+// Test snapshot metadata access
+TEST(E2EPipeline, SnapshotMetadataAccess) {
+    auto wm = buildUAVDomain();
+    wm.setFact("(at uav1 base)", true, "init", ame::FactAuthority::BELIEVED);
+    wm.setFact("(searched sector_a)", true, "perception:camera", ame::FactAuthority::CONFIRMED);
+
+    auto snapshot = wm.captureSnapshot();
+
+    unsigned base_id = wm.fluentIndex("(at uav1 base)");
+    unsigned searched_id = wm.fluentIndex("(searched sector_a)");
+
+    // Verify metadata in snapshot
+    auto& base_meta = snapshot->getMetadata(base_id);
+    EXPECT_EQ(base_meta.authority, ame::FactAuthority::BELIEVED);
+    EXPECT_EQ(base_meta.source, "init");
+
+    auto& searched_meta = snapshot->getMetadata(searched_id);
+    EXPECT_EQ(searched_meta.authority, ame::FactAuthority::CONFIRMED);
+    EXPECT_EQ(searched_meta.source, "perception:camera");
+    EXPECT_GT(searched_meta.timestamp_us, 0u);
+}

@@ -4,19 +4,32 @@ All vertical slice steps (1–8) and extensions 1–6 are complete. This documen
 
 ---
 
-## Extensions 3 & 5: Perception & Thread Safety
+## Extensions 3 & 5: Perception & Thread Safety ✓
+
+**Status: COMPLETE**
 
 These extensions are intertwined — a single authoritative `WorldModel` accessed by concurrent perception callbacks and a BT tick thread requires synchronisation.
 
-### Versioned Snapshots
-- Update `WorldModel` to maintain double-buffering or RCU (Read-Copy-Update) semantics
-- BT executor reads from a consistent snapshot (captured at tick start)
-- Apply queued `setFact()` mutations from perception between BT ticks
+### Versioned Snapshots ✓
+- [x] `WorldModel` maintains RCU semantics via `captureSnapshot()` returning immutable `WorldStateSnapshot`
+- [x] BT executor can capture snapshot at tick start for consistent reads
+- [x] `enqueueMutation()` / `applyQueuedMutations()` for batching perception updates between ticks
+- [x] Thread-safe access with `std::shared_mutex` (readers) and `std::mutex` (mutation queue)
 
-### Perception Integration
-- Add dedicated interface in `WorldModelNode` to subscribe to `/detections` or `/telemetry` topics
-- Map ROS messages into `setFact()` calls
-- Enforce **State Authority Semantics**: mark perception-sourced facts as `CONFIRMED` vs plan-applied `BELIEVED` facts
+### Perception Integration ✓
+- [x] `WorldModelNode` subscribes to `/detections` topic (`ame_ros2::msg::Detection`)
+- [x] Maps detection properties to `setFact()` calls with `FactAuthority::CONFIRMED`
+- [x] Configurable confidence threshold (`perception.confidence_threshold` parameter)
+- [x] Authority conflict detection: `hasAuthorityConflict()` warns when perception disagrees with plan
+
+### State Authority Semantics ✓
+- [x] `FactAuthority` enum: `BELIEVED` (plan effects) vs `CONFIRMED` (perception)
+- [x] `FactMetadata` struct: authority, timestamp, source for each fact
+- [x] `getFactMetadata()` API for querying fact provenance
+
+### Test Coverage
+- [x] Unit tests for authority semantics, snapshots, mutation queue
+- [x] Thread safety stress tests (concurrent reads, read/write, mutation queue)
 
 ---
 

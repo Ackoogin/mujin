@@ -9,6 +9,7 @@
 #include <ame_ros2/srv/get_fact.hpp>
 #include <ame_ros2/srv/query_state.hpp>
 #include <ame_ros2/srv/set_fact.hpp>
+#include <ame_ros2/msg/detection.hpp>
 
 namespace ame_ros2 {
 
@@ -28,6 +29,8 @@ namespace ame_ros2 {
 ///   audit_log.enabled   (bool, true)
 ///   audit_log.path      (string, "wm_audit.jsonl")
 ///   publish_rate_hz     (double, 10.0)
+///   perception.enabled  (bool, true)         — enable /detections subscription
+///   perception.confidence_threshold (double, 0.5) — minimum confidence to accept
 class WorldModelNode : public rclcpp_lifecycle::LifecycleNode {
 public:
   explicit WorldModelNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
@@ -72,6 +75,11 @@ private:
     std::shared_ptr<ame_ros2::srv::QueryState::Response> res);
 
   void publishWorldState();
+
+  // Perception integration
+  void handleDetection(const ame_ros2::msg::Detection::SharedPtr msg);
+  rclcpp::Subscription<ame_ros2::msg::Detection>::SharedPtr sub_detections_;
+  double perception_confidence_threshold_ = 0.5;
 };
 
 } // namespace ame_ros2

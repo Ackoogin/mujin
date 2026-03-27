@@ -27,12 +27,29 @@ public:
     bool getFact(PredicateId pred, const std::vector<ObjectId>& args) const;
 
     // String-keyed access (used by BT nodes)
-    void setFact(const std::string& key, bool value);
+    // authority: BELIEVED (plan effects) or CONFIRMED (perception)
+    void setFact(const std::string& key, bool value,
+                 const std::string& source = "",
+                 FactAuthority authority = FactAuthority::BELIEVED);
     bool getFact(const std::string& key) const;
+    FactMetadata getFactMetadata(const std::string& key) const;
 
     // Index-based access (used by LAPKT projection)
-    void setFact(unsigned fluent_id, bool value);
+    void setFact(unsigned fluent_id, bool value,
+                 const std::string& source = "",
+                 FactAuthority authority = FactAuthority::BELIEVED);
     bool getFact(unsigned fluent_id) const;
+    FactMetadata getFactMetadata(unsigned fluent_id) const;
+
+    // Thread-safe snapshots (RCU semantics)
+    WorldStateSnapshotPtr captureSnapshot() const;
+
+    // Mutation queue for batched perception updates
+    void enqueueMutation(unsigned id, bool value,
+                         const std::string& source,
+                         FactAuthority authority = FactAuthority::CONFIRMED);
+    size_t applyQueuedMutations();
+    bool hasPendingMutations() const;
 
     // PDDL projection
     void projectToSTRIPS(aptk::STRIPS_Problem& prob) const;
@@ -64,6 +81,50 @@ The WorldModel owns all truth:
 ## Error Model
 
 On action failure, the BT does not apply PDDL effects. Ground truth comes from external perception systems calling `setFact()`. The WorldModel never trusts the plan's model of what happened.
+
+## State Authority Semantics
+
+Facts are tagged with authority to distinguish their provenance:
+
+| Authority | Meaning | Source |
+|-----------|---------|--------|
+| `BELIEVED` | Predicted by plan effects | BT `SetWorldPredicate` nodes |
+| `CONFIRMED` | Observed by perception | Perception callbacks, `/detections` topic |
+
+```cpp
+enum class FactAuthority { BELIEVED, CONFIRMED };
+
+struct FactMetadata {
+    FactAuthority authority;
+    uint64_t timestamp_us;   // microseconds since epoch
+    std::string source;      // originator tag
+};
+```
+
+Use `hasAuthorityConflict(id, perceived_value)` to detect when perception disagrees with plan predictions.
+
+## Thread-Safe Snapshots
+
+Concurrent perception callbacks and BT tick threads require synchronisation. WorldModel uses RCU (Read-Copy-Update) semantics:
+
+- **Readers** (BT tick): Call `captureSnapshot()` at tick start, read from immutable `WorldStateSnapshotPtr`
+- **Writers** (perception): Call `setFact()` directly or queue via `enqueueMutation()`
+- **Synchronisation**: `std::shared_mutex` protects state; mutation queue uses separate `std::mutex`
+
+```cpp
+// BT tick thread:
+auto snapshot = wm.captureSnapshot();  // immutable copy
+bool val = snapshot->getFact(fluent_id);
+auto& meta = snapshot->getMetadata(fluent_id);
+
+// Perception thread (option 1 - immediate):
+wm.setFact(key, true, "perception:camera", FactAuthority::CONFIRMED);
+
+// Perception thread (option 2 - batched):
+wm.enqueueMutation(id, true, "perception:lidar", FactAuthority::CONFIRMED);
+// ... later, between BT ticks:
+wm.applyQueuedMutations();  // atomically applies all queued updates
+```
 
 ## Audit Callback
 
