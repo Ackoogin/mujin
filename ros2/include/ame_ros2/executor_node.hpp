@@ -12,7 +12,7 @@
 
 namespace ame_ros2 {
 
-/// ROS2 lifecycle node that owns the BehaviorTree.CPP runtime.
+/// \brief ROS2 lifecycle node that owns the BehaviorTree.CPP runtime.
 ///
 /// BT ticking is driven by a ROS2 timer (tick_rate_hz parameter).
 /// BT world model access uses either direct WorldModel* (in-process mode)
@@ -33,7 +33,7 @@ public:
   explicit ExecutorNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
   using CallbackReturn =
-      rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
+    rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
   CallbackReturn on_configure(const rclcpp_lifecycle::State& prev) override;
   CallbackReturn on_activate(const rclcpp_lifecycle::State& prev) override;
@@ -41,17 +41,17 @@ public:
   CallbackReturn on_cleanup(const rclcpp_lifecycle::State& prev) override;
   CallbackReturn on_shutdown(const rclcpp_lifecycle::State& prev) override;
 
-  /// Load BT XML and begin ticking.
+  /// \brief Loads BT XML and begins ticking.
   /// Called externally or via the /executor/bt_xml subscription.
   void loadAndExecute(const std::string& bt_xml);
 
-  /// For in-process mode: inject WorldModel pointer so BT nodes skip service calls.
+  /// \brief Injects WorldModel pointer for in-process mode.
   void setInProcessWorldModel(ame::WorldModel* wm) {
     inprocess_wm_ = wm;
     component_.setInProcessWorldModel(wm);
   }
 
-  /// Expose factory so callers can register custom action node types.
+  /// \brief Exposes factory for custom action node type registration.
   BT::BehaviorTreeFactory& factory() { return component_.factory(); }
 
   BT::NodeStatus lastStatus() const { return component_.lastStatus(); }

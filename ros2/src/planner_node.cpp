@@ -7,7 +7,7 @@
 namespace ame_ros2 {
 
 PlannerNode::PlannerNode(const rclcpp::NodeOptions& options)
-    : rclcpp_lifecycle::LifecycleNode("planner_node", options)
+  : rclcpp_lifecycle::LifecycleNode("planner_node", options)
 {}
 
 PlannerNode::~PlannerNode() = default;
@@ -25,14 +25,14 @@ PlannerNode::on_configure(const rclcpp_lifecycle::State&) {
   const auto problem_file = get_parameter("domain.problem_file").as_string();
   if (domain_file.empty() || problem_file.empty()) {
     RCLCPP_WARN(
-        get_logger(),
-        "domain.pddl_file / domain.problem_file not set. Planning will only work "
-        "in in-process mode.");
+      get_logger(),
+      "domain.pddl_file / domain.problem_file not set. Planning will only work "
+      "in in-process mode.");
   }
 
   const auto wm_ns = get_parameter("world_model_node").as_string();
   client_query_state_ =
-      create_client<ame_ros2::srv::QueryState>("/" + wm_ns + "/query_state");
+    create_client<ame_ros2::srv::QueryState>("/" + wm_ns + "/query_state");
 
   component_.setParam("domain.pddl_file", domain_file.c_str());
   component_.setParam("domain.problem_file", problem_file.c_str());
@@ -59,13 +59,13 @@ PlannerNode::on_activate(const rclcpp_lifecycle::State&) {
   }
 
   action_server_ = rclcpp_action::create_server<PlanAction>(
-      this,
-      "/ame/plan",
-      [this](const auto& uuid, auto goal) { return handleGoal(uuid, goal); },
-      [this](auto gh) { return handleCancel(gh); },
-      [this](auto gh) { handleAccepted(gh); });
+    this,
+    "/ame/plan",
+    [this](const auto& uuid, auto goal) { return handleGoal(uuid, goal); },
+    [this](auto gh) { return handleCancel(gh); },
+    [this](auto gh) { handleAccepted(gh); });
   pub_bt_xml_ =
-      create_publisher<std_msgs::msg::String>("/executor/bt_xml", rclcpp::QoS(10).reliable());
+    create_publisher<std_msgs::msg::String>("/executor/bt_xml", rclcpp::QoS(10).reliable());
   pub_bt_xml_->on_activate();
 
   RCLCPP_INFO(get_logger(), "PlannerNode activated - action server at /ame/plan");
@@ -95,14 +95,14 @@ PlannerNode::on_shutdown(const rclcpp_lifecycle::State&) {
 }
 
 rclcpp_action::GoalResponse PlannerNode::handleGoal(
-    const rclcpp_action::GoalUUID&,
-    std::shared_ptr<const PlanAction::Goal> goal) {
+  const rclcpp_action::GoalUUID&,
+  std::shared_ptr<const PlanAction::Goal> goal) {
   if (goal->goal_fluents.empty()) {
     RCLCPP_WARN(get_logger(), "Plan goal has no goal_fluents - rejecting");
     return rclcpp_action::GoalResponse::REJECT;
   }
   RCLCPP_INFO(
-      get_logger(), "Accepting plan goal (%zu goal fluents)", goal->goal_fluents.size());
+    get_logger(), "Accepting plan goal (%zu goal fluents)", goal->goal_fluents.size());
   return rclcpp_action::GoalResponse::ACCEPT_AND_EXECUTE;
 }
 
@@ -170,10 +170,10 @@ void PlannerNode::executePlan(std::shared_ptr<GoalHandlePlan> goal_handle) {
   }
 
   RCLCPP_INFO(
-      get_logger(),
-      "Plan found: %zu steps, %.1f ms",
-      execution_result.plan_actions.size(),
-      execution_result.solve_time_ms);
+    get_logger(),
+    "Plan found: %zu steps, %.1f ms",
+    execution_result.plan_actions.size(),
+    execution_result.solve_time_ms);
   goal_handle->succeed(result);
 }
 

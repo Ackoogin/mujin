@@ -508,3 +508,16 @@ sequenceDiagram
     Exec2->>Sub: subscriber_callback(msg)<br/>on executor thread
   end
 ```
+
+---
+
+## 12. Implementation References
+
+| Concept | Implementation |
+|---------|----------------|
+| PCL C API | `include/pcl/pcl_container.h`, `src/pcl/pcl_container.c` |
+| C++ wrapper | `include/pcl/component.hpp` |
+| AME components using PCL | `include/ame/world_model_component.h`, `include/ame/planner_component.h` |
+| ROS2 node wrappers | `ros2/src/world_model_node.cpp`, `ros2/src/planner_node.cpp` |
+| In-process ROS2 example | `ros2/src/combined_main.cpp` — all nodes share one executor, zero-copy |
+| ROS2 integration docs | `doc/architecture/06-ros2.md` |

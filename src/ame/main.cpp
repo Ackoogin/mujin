@@ -1,14 +1,6 @@
-/**
- * ame_test_app — End-to-end vertical slice
- *
- * Demonstrates the complete pipeline:
- *   1. Parse PDDL domain + problem → WorldModel
- *   2. Register BT action mappings (stub implementations)
- *   3. Plan with LAPKT BRFS
- *   4. Compile plan to BT XML
- *   5. Execute BT to completion
- *   6. Verify goal state
- */
+/// \brief AME test app end-to-end vertical slice.
+/// Demonstrates: PDDL parse, action mapping, planning, BT compilation,
+/// execution, and goal-state verification.
 
 #include "ame/pddl_parser.h"
 #include "ame/world_model.h"
@@ -123,7 +115,7 @@ int main() {
 
 #if defined(AME_FOXGLOVE)
     // ---- Observability: start Foxglove bridge (Layer 4) ----
-    ame::FoxgloveBridge foxglove({/*.port=*/8765, /*.server_name=*/"ame"});
+    ame::FoxgloveBridge foxglove({8765, "ame"});
     foxglove.start();
     auto foxglove_wm_sink = foxglove.wmEventSink();
 #endif

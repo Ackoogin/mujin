@@ -10,38 +10,38 @@ namespace ame_ros2 {
 
 RosCheckWorldPredicate::RosCheckWorldPredicate(const std::string& name,
                                                const BT::NodeConfiguration& config)
-    : BT::ConditionNode(name, config)
+  : BT::ConditionNode(name, config)
 {}
 
 BT::PortsList RosCheckWorldPredicate::providedPorts() {
-    return {
-        BT::InputPort<std::string>("predicate"),
-        BT::InputPort<bool>("expected", true, "expected truth value"),
-    };
+  return {
+    BT::InputPort<std::string>("predicate"),
+    BT::InputPort<bool>("expected", true, "expected truth value"),
+  };
 }
 
 BT::NodeStatus RosCheckWorldPredicate::tick() {
-    auto pred = getInput<std::string>("predicate");
-    if (!pred) return BT::NodeStatus::FAILURE;
+  auto pred = getInput<std::string>("predicate");
+  if (!pred) return BT::NodeStatus::FAILURE;
 
-    bool expected = true;
-    getInput("expected", expected);
+  bool expected = true;
+  getInput("expected", expected);
 
-    auto* client = config().blackboard->get<
-        rclcpp::Client<ame_ros2::srv::GetFact>*>("get_fact_client");
-    if (!client) return BT::NodeStatus::FAILURE;
+  auto* client = config().blackboard->get<
+    rclcpp::Client<ame_ros2::srv::GetFact>*>("get_fact_client");
+  if (!client) return BT::NodeStatus::FAILURE;
 
-    auto req  = std::make_shared<ame_ros2::srv::GetFact::Request>();
-    req->key  = pred.value();
+  auto req  = std::make_shared<ame_ros2::srv::GetFact::Request>();
+  req->key  = pred.value();
 
-    auto future = client->async_send_request(req);
-    if (future.wait_for(std::chrono::milliseconds(500)) != std::future_status::ready) {
-        return BT::NodeStatus::FAILURE;
-    }
+  auto future = client->async_send_request(req);
+  if (future.wait_for(std::chrono::milliseconds(500)) != std::future_status::ready) {
+    return BT::NodeStatus::FAILURE;
+  }
 
-    auto res = future.get();
-    return (res->found && res->value == expected)
-        ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+  auto res = future.get();
+  return (res->found && res->value == expected)
+    ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
 // ---------------------------------------------------------------------------
@@ -50,39 +50,39 @@ BT::NodeStatus RosCheckWorldPredicate::tick() {
 
 RosSetWorldPredicate::RosSetWorldPredicate(const std::string& name,
                                            const BT::NodeConfiguration& config)
-    : BT::SyncActionNode(name, config)
+  : BT::SyncActionNode(name, config)
 {}
 
 BT::PortsList RosSetWorldPredicate::providedPorts() {
-    return {
-        BT::InputPort<std::string>("predicate"),
-        BT::InputPort<bool>("value", true, "value to set"),
-    };
+  return {
+    BT::InputPort<std::string>("predicate"),
+    BT::InputPort<bool>("value", true, "value to set"),
+  };
 }
 
 BT::NodeStatus RosSetWorldPredicate::tick() {
-    auto pred = getInput<std::string>("predicate");
-    if (!pred) return BT::NodeStatus::FAILURE;
+  auto pred = getInput<std::string>("predicate");
+  if (!pred) return BT::NodeStatus::FAILURE;
 
-    bool value = true;
-    getInput("value", value);
+  bool value = true;
+  getInput("value", value);
 
-    auto* client = config().blackboard->get<
-        rclcpp::Client<ame_ros2::srv::SetFact>*>("set_fact_client");
-    if (!client) return BT::NodeStatus::FAILURE;
+  auto* client = config().blackboard->get<
+    rclcpp::Client<ame_ros2::srv::SetFact>*>("set_fact_client");
+  if (!client) return BT::NodeStatus::FAILURE;
 
-    auto req     = std::make_shared<ame_ros2::srv::SetFact::Request>();
-    req->key     = pred.value();
-    req->value   = value;
-    req->source  = std::string("SetWorldPredicate:") + name();
+  auto req     = std::make_shared<ame_ros2::srv::SetFact::Request>();
+  req->key     = pred.value();
+  req->value   = value;
+  req->source  = std::string("SetWorldPredicate:") + name();
 
-    auto future = client->async_send_request(req);
-    if (future.wait_for(std::chrono::milliseconds(500)) != std::future_status::ready) {
-        return BT::NodeStatus::FAILURE;
-    }
+  auto future = client->async_send_request(req);
+  if (future.wait_for(std::chrono::milliseconds(500)) != std::future_status::ready) {
+    return BT::NodeStatus::FAILURE;
+  }
 
-    auto res = future.get();
-    return res->success ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+  auto res = future.get();
+  return res->success ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
 }
 
 } // namespace ame_ros2

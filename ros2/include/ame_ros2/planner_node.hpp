@@ -15,7 +15,7 @@
 
 namespace ame_ros2 {
 
-/// ROS2 lifecycle node that runs the LAPKT BRFS planner as an action server.
+/// \brief ROS2 lifecycle node running LAPKT BRFS as an action server.
 ///
 /// Action server (active after on_activate):
 ///   /ame/plan     (ame_ros2/action/Plan)
@@ -37,7 +37,7 @@ public:
   ~PlannerNode();
 
   using CallbackReturn =
-      rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
+    rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
   CallbackReturn on_configure(const rclcpp_lifecycle::State& prev) override;
   CallbackReturn on_activate(const rclcpp_lifecycle::State& prev) override;
@@ -45,7 +45,7 @@ public:
   CallbackReturn on_cleanup(const rclcpp_lifecycle::State& prev) override;
   CallbackReturn on_shutdown(const rclcpp_lifecycle::State& prev) override;
 
-  /// For in-process mode: inject the canonical WorldModel directly.
+  /// \brief Injects canonical WorldModel for in-process mode.
   /// When set, snapshotWorldModel() copies state from this pointer instead of
   /// calling the QueryState service.
   void setInProcessWorldModel(ame::WorldModel* wm) {
@@ -53,7 +53,7 @@ public:
     component_.setInProcessWorldModel(wm);
   }
 
-  /// Expose ActionRegistry so combined_main can register action node types.
+  /// \brief Exposes ActionRegistry for action node type registration.
   ame::ActionRegistry& actionRegistry() { return component_.actionRegistry(); }
 
 private:
@@ -71,14 +71,14 @@ private:
 
   // Action server callbacks
   rclcpp_action::GoalResponse handleGoal(
-      const rclcpp_action::GoalUUID& uuid,
-      std::shared_ptr<const PlanAction::Goal> goal);
+    const rclcpp_action::GoalUUID& uuid,
+    std::shared_ptr<const PlanAction::Goal> goal);
 
   rclcpp_action::CancelResponse handleCancel(std::shared_ptr<GoalHandlePlan> goal_handle);
 
   void handleAccepted(std::shared_ptr<GoalHandlePlan> goal_handle);
 
-  // Runs on a dedicated thread — blocks during BRFS solve.
+  /// \brief Runs on a dedicated thread and blocks during BRFS solve.
   void executePlan(std::shared_ptr<GoalHandlePlan> goal_handle);
 
   ame::WorldStateSnapshot queryWorldState() const;

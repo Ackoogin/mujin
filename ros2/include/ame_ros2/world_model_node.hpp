@@ -12,7 +12,7 @@
 
 namespace ame_ros2 {
 
-/// ROS2 lifecycle node that owns a ame::WorldModel and exposes it via services.
+/// \brief ROS2 lifecycle node owning `ame::WorldModel` and exposing services.
 ///
 /// Services (available after on_configure):
 ///   ~/get_fact      (ame_ros2/srv/GetFact)
@@ -33,7 +33,7 @@ public:
   explicit WorldModelNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
   using CallbackReturn =
-      rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
+    rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
 
   CallbackReturn on_configure(const rclcpp_lifecycle::State& prev) override;
   CallbackReturn on_activate(const rclcpp_lifecycle::State& prev) override;
@@ -41,7 +41,7 @@ public:
   CallbackReturn on_cleanup(const rclcpp_lifecycle::State& prev) override;
   CallbackReturn on_shutdown(const rclcpp_lifecycle::State& prev) override;
 
-  /// Direct access for in-process (combined_main) mode.
+  /// \brief Direct world-model access for in-process mode.
   ame::WorldModel& worldModel() { return component_.worldModel(); }
   const ame::WorldModel& worldModel() const { return component_.worldModel(); }
 
@@ -55,21 +55,21 @@ private:
 
   // Publisher + debounce timer
   rclcpp_lifecycle::LifecyclePublisher<ame_ros2::msg::WorldState>::SharedPtr
-      pub_world_state_;
+    pub_world_state_;
   rclcpp::TimerBase::SharedPtr publish_timer_;
 
   // Service handlers
   void handleGetFact(
-      std::shared_ptr<ame_ros2::srv::GetFact::Request> req,
-      std::shared_ptr<ame_ros2::srv::GetFact::Response> res);
+    std::shared_ptr<ame_ros2::srv::GetFact::Request> req,
+    std::shared_ptr<ame_ros2::srv::GetFact::Response> res);
 
   void handleSetFact(
-      std::shared_ptr<ame_ros2::srv::SetFact::Request> req,
-      std::shared_ptr<ame_ros2::srv::SetFact::Response> res);
+    std::shared_ptr<ame_ros2::srv::SetFact::Request> req,
+    std::shared_ptr<ame_ros2::srv::SetFact::Response> res);
 
   void handleQueryState(
-      std::shared_ptr<ame_ros2::srv::QueryState::Request> req,
-      std::shared_ptr<ame_ros2::srv::QueryState::Response> res);
+    std::shared_ptr<ame_ros2::srv::QueryState::Request> req,
+    std::shared_ptr<ame_ros2::srv::QueryState::Response> res);
 
   void publishWorldState();
 };

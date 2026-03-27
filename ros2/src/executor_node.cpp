@@ -12,7 +12,7 @@
 namespace ame_ros2 {
 
 ExecutorNode::ExecutorNode(const rclcpp::NodeOptions& options)
-    : rclcpp_lifecycle::LifecycleNode("executor_node", options)
+  : rclcpp_lifecycle::LifecycleNode("executor_node", options)
 {}
 
 ExecutorNode::CallbackReturn
@@ -152,7 +152,7 @@ void ExecutorNode::tickOnce() {
   if (!component_.isExecuting()) {
     tick_timer_.reset();
     const std::string status_str =
-        (component_.lastStatus() == BT::NodeStatus::SUCCESS) ? "SUCCESS" : "FAILURE";
+      (component_.lastStatus() == BT::NodeStatus::SUCCESS) ? "SUCCESS" : "FAILURE";
     publishStatus(status_str);
     RCLCPP_INFO(get_logger(), "BT execution finished: %s", status_str.c_str());
   }

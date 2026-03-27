@@ -5,9 +5,9 @@
 
 namespace ame {
 
-// ServiceMessage: generic key-value payload for PYRAMID service requests and
-// responses.  Concrete PYRAMID SDK types map to/from this bag at the adapter
-// layer so that ame_core stays SDK-agnostic.
+/// \brief Generic key-value payload for PYRAMID service requests/responses.
+/// Concrete PYRAMID SDK types map to/from this bag at the adapter layer so
+/// `ame` remains SDK-agnostic.
 struct ServiceMessage {
     std::unordered_map<std::string, std::string> fields;
 
@@ -19,31 +19,31 @@ struct ServiceMessage {
     bool has(const std::string& key) const { return fields.count(key) > 0; }
 };
 
-// Abstract PYRAMID service interface.
-//
-// Implement this to connect to a real PYRAMID SDK backend.  A mock
-// implementation is provided for testing (MockPyramidService).
-//
-// call() should block until the service responds or times out.
-// Returns true on success, false on failure/timeout.
+/// \brief Abstract PYRAMID service interface.
+/// Implement this to connect to a real PYRAMID SDK backend.
 class IPyramidService {
 public:
     virtual ~IPyramidService() = default;
 
+    /// \brief Executes a PYRAMID service operation.
+    /// Should block until response or timeout; returns true on success.
     virtual bool call(const std::string& service_name,
                       const std::string& operation,
                       const ServiceMessage& request,
                       ServiceMessage& response) = 0;
 };
 
-// No-op mock: always succeeds with an empty response.
-// Useful for unit tests and simulation runs without PYRAMID hardware.
+/// \brief No-op mock service for tests and simulation.
 class MockPyramidService : public IPyramidService {
 public:
-    bool call(const std::string& /*service_name*/,
-              const std::string& /*operation*/,
-              const ServiceMessage& /*request*/,
-              ServiceMessage& /*response*/) override {
+    bool call(const std::string& service_name,
+              const std::string& operation,
+              const ServiceMessage& request,
+              ServiceMessage& response) override {
+        (void)service_name;
+        (void)operation;
+        (void)request;
+        (void)response;
         return true;
     }
 };

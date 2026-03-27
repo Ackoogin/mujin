@@ -11,7 +11,7 @@
 
 namespace ame_ros2 {
 
-/// Manages the lifecycle of WorldModelNode, PlannerNode, and ExecutorNode.
+/// \brief Manages lifecycles of WorldModelNode, PlannerNode, and ExecutorNode.
 ///
 /// Sends ChangeState service calls in the correct dependency order:
 ///   startup:  WorldModel → Planner → Executor  (configure then activate each)
@@ -22,20 +22,20 @@ namespace ame_ros2 {
 ///   transition_timeout_ms (int, 5000)
 class AmeLifecycleManager : public rclcpp::Node {
 public:
-    explicit AmeLifecycleManager(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
+  explicit AmeLifecycleManager(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
-    /// Bring all managed nodes through configure → activate.
-    bool startup();
+  /// \brief Brings all managed nodes through configure then activate.
+  bool startup();
 
-    /// Bring all managed nodes through deactivate → cleanup.
-    bool shutdown();
+  /// \brief Brings all managed nodes through deactivate then cleanup.
+  bool shutdown();
 
 private:
-    std::vector<std::string> managed_nodes_;
-    std::chrono::milliseconds transition_timeout_;
+  std::vector<std::string> managed_nodes_;
+  std::chrono::milliseconds transition_timeout_;
 
-    bool changeNodeState(const std::string& node_name, uint8_t transition_id);
-    uint8_t getNodeState(const std::string& node_name);
+  bool changeNodeState(const std::string& node_name, uint8_t transition_id);
+  uint8_t getNodeState(const std::string& node_name);
 };
 
 } // namespace ame_ros2

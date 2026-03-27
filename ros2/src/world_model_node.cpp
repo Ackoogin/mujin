@@ -7,7 +7,7 @@
 namespace ame_ros2 {
 
 WorldModelNode::WorldModelNode(const rclcpp::NodeOptions& options)
-    : rclcpp_lifecycle::LifecycleNode("world_model_node", options)
+  : rclcpp_lifecycle::LifecycleNode("world_model_node", options)
 {}
 
 WorldModelNode::CallbackReturn
@@ -20,7 +20,7 @@ WorldModelNode::on_configure(const rclcpp_lifecycle::State&) {
 
   component_.setParam("domain.pddl_file", get_parameter("domain.pddl_file").as_string().c_str());
   component_.setParam(
-      "domain.problem_file", get_parameter("domain.problem_file").as_string().c_str());
+    "domain.problem_file", get_parameter("domain.problem_file").as_string().c_str());
   component_.setParam("audit_log.enabled", get_parameter("audit_log.enabled").as_bool());
   component_.setParam("audit_log.path", get_parameter("audit_log.path").as_string().c_str());
   component_.setParam("publish_rate_hz", get_parameter("publish_rate_hz").as_double());
@@ -36,25 +36,25 @@ WorldModelNode::on_configure(const rclcpp_lifecycle::State&) {
   using QueryState = ame_ros2::srv::QueryState;
 
   srv_get_fact_ = create_service<GetFact>(
-      "~/get_fact",
-      [this](std::shared_ptr<GetFact::Request> req,
-             std::shared_ptr<GetFact::Response> res) { handleGetFact(req, res); });
+    "~/get_fact",
+    [this](std::shared_ptr<GetFact::Request> req,
+           std::shared_ptr<GetFact::Response> res) { handleGetFact(req, res); });
 
   srv_set_fact_ = create_service<SetFact>(
-      "~/set_fact",
-      [this](std::shared_ptr<SetFact::Request> req,
-             std::shared_ptr<SetFact::Response> res) { handleSetFact(req, res); });
+    "~/set_fact",
+    [this](std::shared_ptr<SetFact::Request> req,
+           std::shared_ptr<SetFact::Response> res) { handleSetFact(req, res); });
 
   srv_query_state_ = create_service<QueryState>(
-      "~/query_state",
-      [this](std::shared_ptr<QueryState::Request> req,
-             std::shared_ptr<QueryState::Response> res) { handleQueryState(req, res); });
+    "~/query_state",
+    [this](std::shared_ptr<QueryState::Request> req,
+           std::shared_ptr<QueryState::Response> res) { handleQueryState(req, res); });
 
   RCLCPP_INFO(
-      get_logger(),
-      "WorldModelNode configured: %u fluents, %u ground actions",
-      component_.worldModel().numFluents(),
-      component_.worldModel().numGroundActions());
+    get_logger(),
+    "WorldModelNode configured: %u fluents, %u ground actions",
+    component_.worldModel().numFluents(),
+    component_.worldModel().numGroundActions());
   return CallbackReturn::SUCCESS;
 }
 
@@ -113,8 +113,8 @@ WorldModelNode::on_shutdown(const rclcpp_lifecycle::State&) {
 }
 
 void WorldModelNode::handleGetFact(
-    std::shared_ptr<ame_ros2::srv::GetFact::Request> req,
-    std::shared_ptr<ame_ros2::srv::GetFact::Response> res) {
+  std::shared_ptr<ame_ros2::srv::GetFact::Request> req,
+  std::shared_ptr<ame_ros2::srv::GetFact::Response> res) {
   const auto result = component_.getFact(req->key);
   res->value = result.value;
   res->found = result.found;
@@ -122,16 +122,16 @@ void WorldModelNode::handleGetFact(
 }
 
 void WorldModelNode::handleSetFact(
-    std::shared_ptr<ame_ros2::srv::SetFact::Request> req,
-    std::shared_ptr<ame_ros2::srv::SetFact::Response> res) {
+  std::shared_ptr<ame_ros2::srv::SetFact::Request> req,
+  std::shared_ptr<ame_ros2::srv::SetFact::Response> res) {
   const auto result = component_.setFact(req->key, req->value, req->source);
   res->success = result.success;
   res->wm_version = result.wm_version;
 }
 
 void WorldModelNode::handleQueryState(
-    std::shared_ptr<ame_ros2::srv::QueryState::Request> req,
-    std::shared_ptr<ame_ros2::srv::QueryState::Response> res) {
+  std::shared_ptr<ame_ros2::srv::QueryState::Request> req,
+  std::shared_ptr<ame_ros2::srv::QueryState::Response> res) {
   const auto snapshot = component_.queryState(req->keys);
   res->wm_version = snapshot.wm_version;
   res->success = snapshot.success;

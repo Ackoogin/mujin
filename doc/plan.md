@@ -1,6 +1,8 @@
-# Implementation Plan
+# Implementation Reference
 
-Minimal vertical slice: UAV search-and-classify example running end-to-end. Architecture is described in `concept.md`; post-slice extensions in `extensions.md`.
+**Status: IMPLEMENTED** — Vertical slice steps 1–8 complete. Extensions 1–6 complete.
+
+This document describes the implemented architecture for the UAV search-and-classify example. See `architecture/` for the full reference; see `TODO.md` for remaining work.
 
 ---
 
@@ -55,186 +57,76 @@ doc/
 
 ---
 
-## Step 1: Project Scaffolding
+## Step 1: Project Scaffolding ✓
 
-**Goal:** Build infrastructure — directories, CMake updates, Google Test integration.
+Build infrastructure — directories, CMake updates, Google Test integration.
 
-- Create `include/ame/`, `src/`, `tests/`, `domains/` directory structure
-- Add Google Test via FetchContent in CMakeLists.txt
-- Add a `tests/CMakeLists.txt` with a test target
-- Update `src/CMakeLists.txt` to glob headers from `include/ame/`
-- Verify build still works with existing `main.cpp`
+- `include/ame/`, `src/`, `tests/`, `domains/` directory structure
+- Google Test via FetchContent
+- Test targets in `tests/CMakeLists.txt`
 
-**Acceptance:** `cmake --build` succeeds, `ctest` runs an empty test suite.
+## Step 2: TypeSystem and WorldModel Core ✓
 
-## Step 2: TypeSystem and WorldModel Core
+Authoritative world model with eager grounding.
 
-**Goal:** Implement the authoritative world model with eager grounding.
+- `TypeSystem`: type hierarchy + object registry
+- `WorldModel`: predicate schemas, eager grounding, dynamic bitset storage, BiMap for fluent index ↔ string key, version counter
+- Tests: `tests/test_world_model.cpp`
 
-**Files:** `include/ame/type_system.h`, `include/ame/world_model.h`, `src/type_system.cpp`, `src/world_model.cpp`
+## Step 3: PDDL Projection (WorldModel → LAPKT) ✓
 
-- `TypeSystem`: type hierarchy (name → parent), object registry (name → type)
-- `WorldModel`:
-  - `registerPredicate(name, param_types)` — stores predicate schemas
-  - `addObject(name, type)` — registers object; triggers eager grounding of all predicates that can bind to this type
-  - Grounded facts stored in a **dynamic bitset** (compact; LAPKT's own `Bit_Set` or `std::vector<uint64_t>`) not `std::vector<bool>`
-  - `BiMap<unsigned, std::string>` for fluent index ↔ string key
-  - `setFact(string_key, bool)` and `getFact(string_key) → bool` for string-based access (BT nodes)
-  - `setFact(fluent_id, bool)` and `getFact(fluent_id) → bool` for index-based access (LAPKT projection)
-  - `version()` — monotonic counter, incremented on any state change
+Project world model state into `STRIPS_Problem` for LAPKT solvers.
 
-**Tests:** `tests/test_world_model.cpp`
-- Register types, objects, predicates
-- Verify eager grounding produces expected fluent count
-- Set/get facts by string key and by index
-- Verify version increments
+- `projectToSTRIPS()`, `currentStateAsSTRIPS()`
+- Action schemas with preconditions, add/delete effects as fluent ID sets
 
-**Acceptance:** All unit tests pass.
+## Step 4: PDDL Parser Integration (FF-Parser) ✓
 
-## Step 3: PDDL Projection (WorldModel → LAPKT)
+Load domain/problem from `.pddl` files via LAPKT's FF-parser.
 
-**Goal:** Project world model state into a `STRIPS_Problem` usable by LAPKT solvers.
+- `include/ame/pddl_parser.h`, `src/pddl_parser.cpp`
+- UAV example: `domains/uav_search/domain.pddl`, `problem.pddl`
 
-**Added to:** `world_model.h/.cpp`
+## Step 5: ActionRegistry ✓
 
-- `projectToSTRIPS(STRIPS_Problem& prob)` — maps fluents, actions, init state, goal state
-- `currentStateAsSTRIPS(const STRIPS_Problem& prob) → State*` — snapshot of current state as LAPKT state vector
-- Action schemas stored in WorldModel or a separate `DomainModel`:
-  - Preconditions, add effects, delete effects (as fluent ID sets)
-  - Used both for STRIPS projection and for causal graph construction
+Map PDDL action names to BT implementations.
 
-**Tests:** `tests/test_world_model.cpp` (extended)
-- Build UAV domain programmatically
-- Project to STRIPS_Problem
-- Verify fluent/action counts match
-- Verify init/goal state correctness
+- `registerAction()`, `registerActionSubTree()`, `registerActionSubTreeFile()`
+- `resolve(action_name, params) → ActionImpl`
 
-**Acceptance:** Round-trip: WorldModel → STRIPS_Problem → State matches expected values.
+## Step 6: BT Node Types ✓
 
-## Step 4: PDDL Parser Integration (FF-Parser)
+World-model-aware BT nodes.
 
-**Goal:** Load domain and problem from `.pddl` files instead of programmatic construction.
+- `CheckWorldPredicate`: ConditionNode querying `WorldModel::getFact()`
+- `SetWorldPredicate`: SyncActionNode calling `WorldModel::setFact()`
 
-**Approach:** Enable LAPKT's FF-parser (`ff_to_aptk`).
+## Step 7: Plan-to-BT Compiler ✓
 
-- Add `libff_parser` as a FetchContent dependency (from `https://github.com/LAPKT-dev/libff_parser`)
-- Add `${LAPKT_SRC}/translate/pddl/ff/ff_to_aptk.cxx` to the `lapkt_core` build
-- Create `include/ame/pddl_parser.h` and `src/pddl_parser.cpp`:
-  - Wraps `aptk::FF_Parser::get_problem_description()`
-  - Populates a `WorldModel` from the parsed `STRIPS_Problem` (reverse projection: extract types, objects, predicates, facts from the grounded problem)
-- Write UAV example domain files: `domains/uav_search/domain.pddl`, `domains/uav_search/problem.pddl`
+Convert LAPKT plan into executable BT XML.
 
-**Fallback:** If `libff_parser` integration proves problematic, implement a minimal PDDL tokenizer for STRIPS-level domains.
+- **CausalGraph**: effect-precondition edges + delete-conflict tracking
+- **Flow Extraction**: topological sort, independent flows → Parallel
+- **Action Unit Generation**: precondition checks + action + effect updates
+- **Tree Composition**: Sequence/Parallel/join-point patterns
+- Sequential fallback mode for debugging
 
-**Tests:** `tests/test_pddl_parser.cpp`
-- Parse UAV domain + problem
-- Verify WorldModel contains expected types, objects, predicates, initial facts
+## Step 8: End-to-End Vertical Slice ✓
 
-**Acceptance:** `WorldModel` populated identically whether constructed programmatically or parsed from `.pddl` files.
+UAV search-and-classify example running end-to-end.
 
-## Step 5: ActionRegistry
-
-**Goal:** Map PDDL action names to BT implementations.
-
-**Files:** `include/ame/action_registry.h`, `src/action_registry.cpp`
-
-- `registerAction(pddl_name, bt_node_type, reactive=false)` — simple node mapping
-- `registerActionSubTree(pddl_name, subtree_xml_template, reactive=false)` — XML template with `{param0}`, `{param1}` placeholders
-- `registerActionSubTreeFile(pddl_name, xml_path, reactive=false)` — load from file
-- `resolve(action_name, params) → ActionImpl` — returns resolved BT fragment (node type or instantiated XML)
-- `ActionImpl` struct carries: resolved XML string, whether to use `ReactiveSequence` or `Sequence`, the parameter bindings
-
-**Tests:** `tests/test_action_registry.cpp`
-- Register simple action, resolve, verify node type
-- Register template, resolve with params, verify substitution
-- Verify reactive flag propagation
-
-**Acceptance:** All unit tests pass.
-
-## Step 6: BT Node Types
-
-**Goal:** Implement the world-model-aware BT nodes.
-
-**Files:** `include/ame/bt_nodes/check_world_predicate.h`, `include/ame/bt_nodes/set_world_predicate.h`, corresponding `.cpp` files
-
-- `CheckWorldPredicate`: ConditionNode, reads `predicate` port (string key), queries `WorldModel::getFact()`, returns SUCCESS/FAILURE
-- `SetWorldPredicate`: SyncActionNode, reads `predicate` + `value` ports, calls `WorldModel::setFact()`, returns SUCCESS
-- Both receive `WorldModel*` via a shared pointer stored in the root blackboard
-
-**Tests:** Within `tests/test_integration.cpp`
-- Create a tree with CheckWorldPredicate + SetWorldPredicate
-- Verify reading and writing world state through BT ticks
-
-**Acceptance:** Nodes correctly read/write world model state during tree execution.
-
-## Step 7: Plan-to-BT Compiler
-
-**Goal:** Convert a LAPKT plan into executable BT XML.
-
-**Files:** `include/ame/plan_compiler.h`, `src/plan_compiler.cpp`
-
-Sub-components:
-
-1. **CausalGraph** — adjacency list of plan step dependencies. For each pair (i, j) where i < j: if any add-effect of step i is a precondition of step j, add edge i→j. Also track delete-effect conflicts for mutex detection.
-
-2. **Flow Extraction** — topological sort of causal graph. Group into flows: steps with no cross-flow dependencies form separate flows. Steps that depend on multiple flows are join points.
-
-3. **Action Unit Generation** — for each plan step, emit:
-   ```xml
-   <Sequence|ReactiveSequence name="action_name_params">
-       <CheckWorldPredicate predicate="pre1" expected="true"/>
-       ...
-       <resolved BT fragment from ActionRegistry>
-       <SetWorldPredicate predicate="add1" value="true"/>
-       <SetWorldPredicate predicate="del1" value="false"/>
-   </Sequence|ReactiveSequence>
-   ```
-   Sequence vs. ReactiveSequence comes from the ActionRegistry's per-action reactive flag.
-
-4. **Tree Composition** — wrap flows in Parallel/Sequence structure:
-   - Single flow → top-level Sequence
-   - Multiple flows → Parallel node with success_count = flow_count
-   - Shared actions (join points) → blackboard-flag guard pattern
-
-5. **Output** — XML string compatible with `BT::BehaviorTreeFactory::createTreeFromText()`
-
-**Sequential fallback mode:** skip causal graph, emit all steps as a single Sequence. For debugging.
-
-**Tests:** `tests/test_plan_compiler.cpp`
-- Compile a simple 2-action sequential plan → verify Sequence structure
-- Compile a plan with independent actions → verify Parallel structure
-- Compile UAV example → verify expected flow decomposition
-
-**Acceptance:** Compiled BT XML is valid and loadable by BT.CPP factory.
-
-## Step 8: End-to-End Vertical Slice
-
-**Goal:** UAV search-and-classify example running end-to-end.
-
-**File:** `src/main.cpp` (rewrite)
-
-Pipeline:
-1. Parse `domains/uav_search/domain.pddl` + `problem.pddl` → WorldModel
-2. Register BT action mappings (stub implementations that log and succeed)
-3. Project to STRIPS_Problem, solve with LAPKT (BFS(f) or SIW)
+1. Parse PDDL → WorldModel
+2. Register BT action mappings
+3. Solve with LAPKT (BFS(f)/SIW)
 4. Compile plan to BT
-5. Sync world model → blackboard
-6. Tick tree to completion
-7. Verify goal state reached in world model
-
-Also wire up a MissionExecutor-style loop with basic replan-on-failure (inject a failure to demonstrate replanning).
-
-**Tests:** `tests/test_integration.cpp`
-- Full pipeline test with assertions at each stage
-- Test replanning: modify world state mid-execution, verify new plan generated
-
-**Acceptance:** UAV example completes, goal state verified, replan path exercised. `ctest` passes all unit and integration tests.
+5. Execute tree to completion
+6. Verify goal state + replan-on-failure
 
 ---
 
-## Slice-to-Production Gap Analysis
+## Component Reference (Slice vs. Production)
 
-Steps 1–8 deliver a working vertical slice. This section itemises what each component provides in the slice vs. what a production deployment requires. Each gap references the extension that closes it (see `extensions.md`).
+This section documents what each component provides in the vertical slice vs. production needs. Extensions 1–6 are now complete; see `TODO.md` for remaining gaps.
 
 ### WorldModel
 

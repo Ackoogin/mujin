@@ -46,7 +46,7 @@ missing `pcl_executor_invoke_service` function.
 
 ### Tasks
 
-- [ ] Add to `examples/ada/pcl_bindings.ads`:
+- [x] Add to `examples/ada/pcl_bindings.ads`:
   - `Pcl_Socket_Transport` opaque type + access type
   - `Create_Socket_Server` → `pcl_socket_transport_create_server`
   - `Create_Socket_Client` → `pcl_socket_transport_create_client`
@@ -57,7 +57,7 @@ missing `pcl_executor_invoke_service` function.
   - `Set_Transport` → `pcl_executor_set_transport`
   - `Invoke_Service` → `pcl_executor_invoke_service`
 
-- [ ] Add `Pcl_Service_Handler_Access` callback type for completeness (allows
+- [x] Add `Pcl_Service_Handler_Access` callback type for completeness (allows
   Ada-side service registration in future)
 
 ### Files touched
@@ -93,21 +93,21 @@ Inner frame:  msg_type(1) + uuid(16) + version(8 LE) + timestamp(8 LE)
 
 ### Tasks
 
-- [ ] Create `examples/ada/streaming_codec.ads` (spec):
+- [x] Create `examples/ada/streaming_codec.ads` (spec):
   - `type Entity_Update_Frame` record with optional-style fields
   - `function Decode_Batch(Data : System.Address; Len : Interfaces.C.unsigned)
      return Entity_Frame_Array`
   - Little-endian read helpers (`Read_U16_LE`, `Read_U32_LE`, `Read_U64_LE`,
     `Read_F64_LE`)
 
-- [ ] Create `examples/ada/streaming_codec.adb` (body):
+- [x] Create `examples/ada/streaming_codec.adb` (body):
   - Parse batch header (validate `0x03` type byte, read count and timestamp)
   - Loop over per-entity frames: read size prefix, then inner frame
   - For each set bit in `field_mask`, read the corresponding payload
   - Skip fields that are not needed by the client (or decode all for validation)
   - Return array of decoded frames
 
-- [ ] Unit validation:
+- [x] Unit validation:
   - Hard-code a known-good encoded batch (captured from C++ test) and verify
     Ada decode matches expected field values
   - Verify truncated input returns empty array (no crash)
@@ -133,7 +133,7 @@ Inner frame:  msg_type(1) + uuid(16) + version(8 LE) + timestamp(8 LE)
 
 ### Tasks
 
-- [ ] Create `examples/ada/ada_tobj_client.adb`:
+- [x] Create `examples/ada/ada_tobj_client.adb`:
   - Parse command-line args: `--host <host> --port <port>` (default: 127.0.0.1:0)
   - Create executor and socket client transport
   - Set transport on executor
@@ -153,14 +153,14 @@ Inner frame:  msg_type(1) + uuid(16) + version(8 LE) + timestamp(8 LE)
   - Assert at least one entity update frame was received
   - Print summary and exit
 
-- [ ] Create `examples/ada/ada_tobj_client.gpr`:
+- [x] Create `examples/ada/ada_tobj_client.gpr`:
   - Languages: Ada, C
   - Source dirs: `.`, `../../src/pcl` (for `pcl_container.c`, `pcl_executor.c`,
     `pcl_transport_socket.c`, etc.)
   - C compiler switches: `-std=c17 -I../../include -I../../src/pcl`
   - Linker switches: `-lpthread` (POSIX)
 
-- [ ] Minimal JSON builder for the subscribe request:
+- [x] Minimal JSON builder for the subscribe request:
   - Option A: String concatenation (sufficient for a fixed request shape)
   - Option B: Tiny Ada JSON package (future extensibility)
   - Recommend Option A for initial implementation
@@ -193,7 +193,7 @@ Ada client to connect and exercise the flow.
 
 ### Tasks
 
-- [ ] Create `tests/tactical_objects/Test_TacticalObjects_SocketE2E.cpp`:
+- [x] Create `tests/tactical_objects/Test_TacticalObjects_SocketE2E.cpp`:
   - Use ephemeral port (port=0) for the server to avoid conflicts
   - Write the assigned port to a temp file so the Ada client can read it
   - Sequence:
@@ -207,11 +207,11 @@ Ada client to connect and exercise the flow.
     7. Spin executor until shutdown requested or timeout
     8. Destroy transport and executor
 
-- [ ] Alternative: integrate into existing `Test_TacticalObjects_E2E.cpp` as
+- [x] Alternative: integrate into existing `Test_TacticalObjects_E2E.cpp` as
   a second test case (`SocketTransport_AdaClient`) gated behind an
   environment variable or CMake option (since it requires GNAT toolchain)
 
-- [ ] Add CMake target `test_tobj_socket_e2e`:
+- [x] Add CMake target `test_tobj_socket_e2e`:
   - Link against `tactical_objects`, `tactical_objects_component`, `pcl_core`,
     `pcl_transport_socket`
   - Platform link: `pthread` (POSIX) or `ws2_32` (Windows)
@@ -254,7 +254,7 @@ client processes and reports pass/fail.
 
 ### Tasks
 
-- [ ] Create `scripts/test_ada_socket_e2e.sh` (POSIX) /
+- [x] Create `scripts/test_ada_socket_e2e.sh` (POSIX) /
   `scripts/test_ada_socket_e2e.bat` (Windows):
   1. Build Ada client: `gprbuild -P examples/ada/ada_tobj_client.gpr`
   2. Start C++ server in background: `build/tests/test_tobj_socket_e2e &`
@@ -265,7 +265,7 @@ client processes and reports pass/fail.
   7. Signal server to stop (send SIGTERM or wait for timeout exit)
   8. Report pass/fail based on exit codes
 
-- [ ] Add CTest integration (optional, gated on GNAT availability):
+- [x] Add CTest integration (optional, gated on GNAT availability):
   ```cmake
   find_program(GPRBUILD gprbuild)
   if(GPRBUILD)
@@ -287,7 +287,7 @@ and runnable.
 
 ### Tasks
 
-- [ ] Add test case to `Test_TacticalObjects_E2E.cpp`:
+- [x] Add test case to `Test_TacticalObjects_E2E.cpp`:
   `SocketTransport_CppClientReceivesEntityUpdates`
   - Spawn server thread (creates socket server transport, configures tobj,
     creates entity, spins)
@@ -296,7 +296,7 @@ and runnable.
     entity update frames
   - Validates the full socket transport round-trip without requiring Ada
 
-- [ ] This serves as both a standalone test and a reference implementation for
+- [x] This serves as both a standalone test and a reference implementation for
   the Ada client
 
 ### Files touched
