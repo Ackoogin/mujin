@@ -1501,10 +1501,14 @@ class AdaDataModelCodecGenerator:
         self._adb_name = file_base + '.adb'
         # Build map: message name -> codec package name (for qualified calls)
         self._msg_to_codec: Dict[str, str] = {}
+        # Build map: enum name -> codec package name (for qualified calls)
+        self._enum_to_codec: Dict[str, str] = {}
         for other_pf in self._index.files:
             codec_pkg = AdaTypesGenerator._ada_pkg_for_file(other_pf) + '_Codec'
             for m in other_pf.messages:
                 self._msg_to_codec[m.name] = codec_pkg
+            for e in other_pf.enums:
+                self._enum_to_codec[e.name] = codec_pkg
         # Build alias map (scalar wrappers)
         self._aliases: Dict[str, str] = {'Timestamp': 'Long_Float'}
         for msg in self._index.all_messages():
@@ -1645,11 +1649,20 @@ class AdaDataModelCodecGenerator:
 
         if fld.type == 'bool':
             f.write(f'{indent}if Has_Field (J, "{wire}") then\n')
-            f.write(f'{indent}   Result.{ada_fname} := Get (Get (J, "{wire}"));\n')
+            f.write(f'{indent}   declare\n')
+            f.write(f'{indent}      Val : constant JSON_Value := Get (J, "{wire}");\n')
+            f.write(f'{indent}   begin\n')
+            f.write(f'{indent}      Result.{ada_fname} := Get (Val);\n')
+            f.write(f'{indent}   end;\n')
             f.write(f'{indent}end if;\n')
         elif fld.type == 'string' or ada_target == 'Unbounded_String':
             f.write(f'{indent}if Has_Field (J, "{wire}") then\n')
-            f.write(f'{indent}   Result.{ada_fname} := To_Unbounded_String (Get (Get (J, "{wire}")));\n')
+            f.write(f'{indent}   declare\n')
+            f.write(f'{indent}      Val : constant JSON_Value := Get (J, "{wire}");\n')
+            f.write(f'{indent}      Str : constant String := Get (Val);\n')
+            f.write(f'{indent}   begin\n')
+            f.write(f'{indent}      Result.{ada_fname} := To_Unbounded_String (Str);\n')
+            f.write(f'{indent}   end;\n')
             f.write(f'{indent}end if;\n')
         elif fld.type in ('float', 'double') or ada_target in (
                 'Long_Float', 'Float'):
@@ -1672,8 +1685,15 @@ class AdaDataModelCodecGenerator:
         elif (self._index.is_enum_type(fld.type) or
               self._index.is_enum_type(short)):
             enum_ada = _ada_name(short)
+            enum_pkg = self._enum_to_codec.get(short, self._ada_pkg)
+            qual = f'{enum_pkg}.' if enum_pkg != self._ada_pkg else ''
             f.write(f'{indent}if Has_Field (J, "{wire}") then\n')
-            f.write(f'{indent}   Result.{ada_fname} := {enum_ada}_From_String (Get (Get (J, "{wire}")));\n')
+            f.write(f'{indent}   declare\n')
+            f.write(f'{indent}      Val : constant JSON_Value := Get (J, "{wire}");\n')
+            f.write(f'{indent}      Str : constant String := Get (Val);\n')
+            f.write(f'{indent}   begin\n')
+            f.write(f'{indent}      Result.{ada_fname} := {qual}{enum_ada}_From_String (Str);\n')
+            f.write(f'{indent}   end;\n')
             f.write(f'{indent}end if;\n')
 
     def _is_field_scalar_or_enum(self, fld) -> bool:
@@ -1915,7 +1935,8 @@ class AdaDataModelCodecGenerator:
 
             f.write(f'      if Has_Field (J, "{wire}") then\n')
             f.write(f'         declare\n')
-            f.write(f'            Arr : constant JSON_Value := Get (J, "{wire}");\n')
+            f.write(f'            Arr_Val : constant JSON_Value := Get (J, "{wire}");\n')
+            f.write(f'            Arr : constant JSON_Array := Get (Arr_Val);\n')
             f.write(f'            Len : constant Natural := Length (Arr);\n')
             f.write(f'         begin\n')
             f.write(f'            if Len > 0 then\n')
@@ -1925,22 +1946,47 @@ class AdaDataModelCodecGenerator:
                 qpkg = self._msg_to_codec.get(short, self._ada_pkg)
                 qual = f'{qpkg}.' if qpkg != self._ada_pkg else ''
                 f.write(f'                  declare\n')
-                f.write(f'                     Sub : constant String := Write (Get (Arr, I));\n')
+                f.write(f'                     Elem : constant JSON_Value := Get (Arr, I);\n')
+                f.write(f'                     Sub : constant String := Write (Elem);\n')
                 f.write(f'                  begin\n')
                 f.write(f'                     Result.{ada_fname} (I) := {qual}From_Json (Sub, null);\n')
                 f.write(f'                  end;\n')
             elif elem_is_enum:
                 enum_ada = _ada_name(short)
-                f.write(f'                  Result.{ada_fname} (I) := {enum_ada}_From_String (Get (Get (Arr, I)));\n')
+                enum_pkg = self._enum_to_codec.get(short, self._ada_pkg)
+                qual = f'{enum_pkg}.' if enum_pkg != self._ada_pkg else ''
+                f.write(f'                  declare\n')
+                f.write(f'                     Elem : constant JSON_Value := Get (Arr, I);\n')
+                f.write(f'                     Str : constant String := Get (Elem);\n')
+                f.write(f'                  begin\n')
+                f.write(f'                     Result.{ada_fname} (I) := {qual}{enum_ada}_From_String (Str);\n')
+                f.write(f'                  end;\n')
             elif fld.type == 'string' or ada_target == 'Unbounded_String':
-                f.write(f'                  Result.{ada_fname} (I) := To_Unbounded_String (Get (Get (Arr, I)));\n')
+                f.write(f'                  declare\n')
+                f.write(f'                     Elem : constant JSON_Value := Get (Arr, I);\n')
+                f.write(f'                     Str : constant String := Get (Elem);\n')
+                f.write(f'                  begin\n')
+                f.write(f'                     Result.{ada_fname} (I) := To_Unbounded_String (Str);\n')
+                f.write(f'                  end;\n')
             elif fld.type == 'bool' or ada_target == 'Boolean':
-                f.write(f'                  Result.{ada_fname} (I) := Get (Get (Arr, I));\n')
+                f.write(f'                  declare\n')
+                f.write(f'                     Elem : constant JSON_Value := Get (Arr, I);\n')
+                f.write(f'                  begin\n')
+                f.write(f'                     Result.{ada_fname} (I) := Get (Elem);\n')
+                f.write(f'                  end;\n')
             elif ada_target in ('Integer', 'Long_Integer', 'Natural'):
-                f.write(f'                  Result.{ada_fname} (I) := Integer (Get_Long_Float (Get (Arr, I)));\n')
+                f.write(f'                  declare\n')
+                f.write(f'                     Elem : constant JSON_Value := Get (Arr, I);\n')
+                f.write(f'                  begin\n')
+                f.write(f'                     Result.{ada_fname} (I) := Integer (Get_Long_Float (Elem));\n')
+                f.write(f'                  end;\n')
             else:
                 # Default to float
-                f.write(f'                  Result.{ada_fname} (I) := Get_Long_Float (Get (Arr, I));\n')
+                f.write(f'                  declare\n')
+                f.write(f'                     Elem : constant JSON_Value := Get (Arr, I);\n')
+                f.write(f'                  begin\n')
+                f.write(f'                     Result.{ada_fname} (I) := Get_Long_Float (Elem);\n')
+                f.write(f'                  end;\n')
             f.write(f'               end loop;\n')
             f.write(f'            end if;\n')
             f.write(f'         end;\n')

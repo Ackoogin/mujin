@@ -185,14 +185,16 @@ package body Pyramid_Data_Model_Common_Types_Codec is
    begin
       if Has_Field (J, "points") then
          declare
-            Arr : constant JSON_Value := Get (J, "points");
+            Arr_Val : constant JSON_Value := Get (J, "points");
+            Arr : constant JSON_Array := Get (Arr_Val);
             Len : constant Natural := Length (Arr);
          begin
             if Len > 0 then
                Result.Points := new Points_Array (1 .. Len);
                for I in 1 .. Len loop
                   declare
-                     Sub : constant String := Write (Get (Arr, I));
+                     Elem : constant JSON_Value := Get (Arr, I);
+                     Sub : constant String := Write (Elem);
                   begin
                      Result.Points (I) := From_Json (Sub, null);
                   end;
@@ -239,19 +241,39 @@ package body Pyramid_Data_Model_Common_Types_Codec is
          Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
       end if;
       if Has_Field (J, "id") then
-         Result.Id := To_Unbounded_String (Get (Get (J, "id")));
+         declare
+            Val : constant JSON_Value := Get (J, "id");
+            Str : constant String := Get (Val);
+         begin
+            Result.Id := To_Unbounded_String (Str);
+         end;
       end if;
       if Has_Field (J, "source") then
-         Result.Source := To_Unbounded_String (Get (Get (J, "source")));
+         declare
+            Val : constant JSON_Value := Get (J, "source");
+            Str : constant String := Get (Val);
+         begin
+            Result.Source := To_Unbounded_String (Str);
+         end;
       end if;
       if Has_Field (J, "status") then
-         Result.Status := Progress_From_String (Get (Get (J, "status")));
+         declare
+            Val : constant JSON_Value := Get (J, "status");
+            Str : constant String := Get (Val);
+         begin
+            Result.Status := Progress_From_String (Str);
+         end;
       end if;
       if Has_Field (J, "quality") then
          Result.Quality := Get_Long_Float (Get (J, "quality"));
       end if;
       if Has_Field (J, "achieveability") then
-         Result.Achieveability := Feasibility_From_String (Get (Get (J, "achieveability")));
+         declare
+            Val : constant JSON_Value := Get (J, "achieveability");
+            Str : constant String := Get (Val);
+         begin
+            Result.Achieveability := Feasibility_From_String (Str);
+         end;
       end if;
       return Result;
    exception
@@ -288,10 +310,20 @@ package body Pyramid_Data_Model_Common_Types_Codec is
          Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
       end if;
       if Has_Field (J, "id") then
-         Result.Id := To_Unbounded_String (Get (Get (J, "id")));
+         declare
+            Val : constant JSON_Value := Get (J, "id");
+            Str : constant String := Get (Val);
+         begin
+            Result.Id := To_Unbounded_String (Str);
+         end;
       end if;
       if Has_Field (J, "source") then
-         Result.Source := To_Unbounded_String (Get (Get (J, "source")));
+         declare
+            Val : constant JSON_Value := Get (J, "source");
+            Str : constant String := Get (Val);
+         begin
+            Result.Source := To_Unbounded_String (Str);
+         end;
       end if;
       if Has_Field (J, "status") then
          declare
@@ -348,27 +380,48 @@ package body Pyramid_Data_Model_Common_Types_Codec is
          Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
       end if;
       if Has_Field (J, "id") then
-         Result.Id := To_Unbounded_String (Get (Get (J, "id")));
+         declare
+            Val : constant JSON_Value := Get (J, "id");
+            Str : constant String := Get (Val);
+         begin
+            Result.Id := To_Unbounded_String (Str);
+         end;
       end if;
       if Has_Field (J, "source") then
-         Result.Source := To_Unbounded_String (Get (Get (J, "source")));
+         declare
+            Val : constant JSON_Value := Get (J, "source");
+            Str : constant String := Get (Val);
+         begin
+            Result.Source := To_Unbounded_String (Str);
+         end;
       end if;
       if Has_Field (J, "availability") then
-         Result.Availability := Get (Get (J, "availability"));
+         declare
+            Val : constant JSON_Value := Get (J, "availability");
+         begin
+            Result.Availability := Get (Val);
+         end;
       end if;
       if Has_Field (J, "name") then
-         Result.Name := To_Unbounded_String (Get (Get (J, "name")));
+         declare
+            Val : constant JSON_Value := Get (J, "name");
+            Str : constant String := Get (Val);
+         begin
+            Result.Name := To_Unbounded_String (Str);
+         end;
       end if;
       if Has_Field (J, "contraint") then
          declare
-            Arr : constant JSON_Value := Get (J, "contraint");
+            Arr_Val : constant JSON_Value := Get (J, "contraint");
+            Arr : constant JSON_Array := Get (Arr_Val);
             Len : constant Natural := Length (Arr);
          begin
             if Len > 0 then
                Result.Contraint := new Contraint_Array (1 .. Len);
                for I in 1 .. Len loop
                   declare
-                     Sub : constant String := Write (Get (Arr, I));
+                     Elem : constant JSON_Value := Get (Arr, I);
+                     Sub : constant String := Write (Elem);
                   begin
                      Result.Contraint (I) := From_Json (Sub, null);
                   end;
@@ -409,10 +462,20 @@ package body Pyramid_Data_Model_Common_Types_Codec is
          Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
       end if;
       if Has_Field (J, "id") then
-         Result.Id := To_Unbounded_String (Get (Get (J, "id")));
+         declare
+            Val : constant JSON_Value := Get (J, "id");
+            Str : constant String := Get (Val);
+         begin
+            Result.Id := To_Unbounded_String (Str);
+         end;
       end if;
       if Has_Field (J, "source") then
-         Result.Source := To_Unbounded_String (Get (Get (J, "source")));
+         declare
+            Val : constant JSON_Value := Get (J, "source");
+            Str : constant String := Get (Val);
+         begin
+            Result.Source := To_Unbounded_String (Str);
+         end;
       end if;
       return Result;
    exception
@@ -503,7 +566,12 @@ package body Pyramid_Data_Model_Common_Types_Codec is
       Result : Contraint;
    begin
       if Has_Field (J, "name") then
-         Result.Name := To_Unbounded_String (Get (Get (J, "name")));
+         declare
+            Val : constant JSON_Value := Get (J, "name");
+            Str : constant String := Get (Val);
+         begin
+            Result.Name := To_Unbounded_String (Str);
+         end;
       end if;
       if Has_Field (J, "value") then
          Result.Value := Integer (Get_Long_Float (Get (J, "value")));
@@ -526,7 +594,11 @@ package body Pyramid_Data_Model_Common_Types_Codec is
       Result : Ack;
    begin
       if Has_Field (J, "success") then
-         Result.Success := Get (Get (J, "success"));
+         declare
+            Val : constant JSON_Value := Get (J, "success");
+         begin
+            Result.Success := Get (Val);
+         end;
       end if;
       return Result;
    exception
@@ -566,19 +638,29 @@ package body Pyramid_Data_Model_Common_Types_Codec is
    begin
       if Has_Field (J, "id") then
          declare
-            Arr : constant JSON_Value := Get (J, "id");
+            Arr_Val : constant JSON_Value := Get (J, "id");
+            Arr : constant JSON_Array := Get (Arr_Val);
             Len : constant Natural := Length (Arr);
          begin
             if Len > 0 then
                Result.Id := new Id_Array (1 .. Len);
                for I in 1 .. Len loop
-                  Result.Id (I) := To_Unbounded_String (Get (Get (Arr, I)));
+                  declare
+                     Elem : constant JSON_Value := Get (Arr, I);
+                     Str : constant String := Get (Elem);
+                  begin
+                     Result.Id (I) := To_Unbounded_String (Str);
+                  end;
                end loop;
             end if;
          end;
       end if;
       if Has_Field (J, "one_shot") then
-         Result.One_Shot := Get (Get (J, "one_shot"));
+         declare
+            Val : constant JSON_Value := Get (J, "one_shot");
+         begin
+            Result.One_Shot := Get (Val);
+         end;
       end if;
       return Result;
    exception

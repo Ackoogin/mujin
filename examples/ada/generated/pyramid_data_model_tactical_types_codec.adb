@@ -79,20 +79,36 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
          Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
       end if;
       if Has_Field (J, "id") then
-         Result.Id := To_Unbounded_String (Get (Get (J, "id")));
+         declare
+            Val : constant JSON_Value := Get (J, "id");
+            Str : constant String := Get (Val);
+         begin
+            Result.Id := To_Unbounded_String (Str);
+         end;
       end if;
       if Has_Field (J, "entity_source") then
-         Result.Entity_Source := To_Unbounded_String (Get (Get (J, "entity_source")));
+         declare
+            Val : constant JSON_Value := Get (J, "entity_source");
+            Str : constant String := Get (Val);
+         begin
+            Result.Entity_Source := To_Unbounded_String (Str);
+         end;
       end if;
       if Has_Field (J, "source") then
          declare
-            Arr : constant JSON_Value := Get (J, "source");
+            Arr_Val : constant JSON_Value := Get (J, "source");
+            Arr : constant JSON_Array := Get (Arr_Val);
             Len : constant Natural := Length (Arr);
          begin
             if Len > 0 then
                Result.Source := new Source_Array (1 .. Len);
                for I in 1 .. Len loop
-                  Result.Source (I) := Object_Source_From_String (Get (Get (Arr, I)));
+                  declare
+                     Elem : constant JSON_Value := Get (Arr, I);
+                     Str : constant String := Get (Elem);
+                  begin
+                     Result.Source (I) := Object_Source_From_String (Str);
+                  end;
                end loop;
             end if;
          end;
@@ -120,10 +136,20 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
          Result.Length := Get_Long_Float (Get (J, "length"));
       end if;
       if Has_Field (J, "identity") then
-         Result.Identity := Standard_Identity_From_String (Get (Get (J, "identity")));
+         declare
+            Val : constant JSON_Value := Get (J, "identity");
+            Str : constant String := Get (Val);
+         begin
+            Result.Identity := Pyramid_Data_Model_Common_Types_Codec.Standard_Identity_From_String (Str);
+         end;
       end if;
       if Has_Field (J, "dimension") then
-         Result.Dimension := Battle_Dimension_From_String (Get (Get (J, "dimension")));
+         declare
+            Val : constant JSON_Value := Get (J, "dimension");
+            Str : constant String := Get (Val);
+         begin
+            Result.Dimension := Pyramid_Data_Model_Common_Types_Codec.Battle_Dimension_From_String (Str);
+         end;
       end if;
       return Result;
    exception
@@ -192,17 +218,28 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
          end;
       end if;
       if Has_Field (J, "policy") then
-         Result.Policy := Data_Policy_From_String (Get (Get (J, "policy")));
+         declare
+            Val : constant JSON_Value := Get (J, "policy");
+            Str : constant String := Get (Val);
+         begin
+            Result.Policy := Pyramid_Data_Model_Common_Types_Codec.Data_Policy_From_String (Str);
+         end;
       end if;
       if Has_Field (J, "dimension") then
          declare
-            Arr : constant JSON_Value := Get (J, "dimension");
+            Arr_Val : constant JSON_Value := Get (J, "dimension");
+            Arr : constant JSON_Array := Get (Arr_Val);
             Len : constant Natural := Length (Arr);
          begin
             if Len > 0 then
                Result.Dimension := new Dimension_Array (1 .. Len);
                for I in 1 .. Len loop
-                  Result.Dimension (I) := Battle_Dimension_From_String (Get (Get (Arr, I)));
+                  declare
+                     Elem : constant JSON_Value := Get (Arr, I);
+                     Str : constant String := Get (Elem);
+                  begin
+                     Result.Dimension (I) := Pyramid_Data_Model_Common_Types_Codec.Battle_Dimension_From_String (Str);
+                  end;
                end loop;
             end if;
          end;
@@ -300,20 +337,36 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
          end;
       end if;
       if Has_Field (J, "source") then
-         Result.Source := Object_Source_From_String (Get (Get (J, "source")));
+         declare
+            Val : constant JSON_Value := Get (J, "source");
+            Str : constant String := Get (Val);
+         begin
+            Result.Source := Object_Source_From_String (Str);
+         end;
       end if;
       if Has_Field (J, "policy") then
-         Result.Policy := Data_Policy_From_String (Get (Get (J, "policy")));
+         declare
+            Val : constant JSON_Value := Get (J, "policy");
+            Str : constant String := Get (Val);
+         begin
+            Result.Policy := Pyramid_Data_Model_Common_Types_Codec.Data_Policy_From_String (Str);
+         end;
       end if;
       if Has_Field (J, "dimension") then
          declare
-            Arr : constant JSON_Value := Get (J, "dimension");
+            Arr_Val : constant JSON_Value := Get (J, "dimension");
+            Arr : constant JSON_Array := Get (Arr_Val);
             Len : constant Natural := Length (Arr);
          begin
             if Len > 0 then
                Result.Dimension := new Dimension_Array (1 .. Len);
                for I in 1 .. Len loop
-                  Result.Dimension (I) := Battle_Dimension_From_String (Get (Get (Arr, I)));
+                  declare
+                     Elem : constant JSON_Value := Get (Arr, I);
+                     Str : constant String := Get (Elem);
+                  begin
+                     Result.Dimension (I) := Pyramid_Data_Model_Common_Types_Codec.Battle_Dimension_From_String (Str);
+                  end;
                end loop;
             end if;
          end;
@@ -377,13 +430,28 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
          Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
       end if;
       if Has_Field (J, "id") then
-         Result.Id := To_Unbounded_String (Get (Get (J, "id")));
+         declare
+            Val : constant JSON_Value := Get (J, "id");
+            Str : constant String := Get (Val);
+         begin
+            Result.Id := To_Unbounded_String (Str);
+         end;
       end if;
       if Has_Field (J, "source") then
-         Result.Source := To_Unbounded_String (Get (Get (J, "source")));
+         declare
+            Val : constant JSON_Value := Get (J, "source");
+            Str : constant String := Get (Val);
+         begin
+            Result.Source := To_Unbounded_String (Str);
+         end;
       end if;
       if Has_Field (J, "matching_object_id") then
-         Result.Matching_Object_Id := To_Unbounded_String (Get (Get (J, "matching_object_id")));
+         declare
+            Val : constant JSON_Value := Get (J, "matching_object_id");
+            Str : constant String := Get (Val);
+         begin
+            Result.Matching_Object_Id := To_Unbounded_String (Str);
+         end;
       end if;
       return Result;
    exception
