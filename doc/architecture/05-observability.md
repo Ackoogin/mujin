@@ -113,11 +113,21 @@ bridge.stop();
 **Files:** `include/ame/plan_audit_log.h`, `src/plan_audit_log.cpp`
 
 For each planning episode, logs a self-contained JSON object:
+- `episode_id` — unique auto-assigned ID for this episode
+- `parent_episode_id` — causal link to parent phase (0 for top-level episodes)
+- `phase_name` — human-readable label (set by `ExecutePhaseAction`)
 - World model snapshot (init state) that triggered planning
 - Goal fluents
 - LAPKT solver used and solve time (`PlanResult::solve_time_ms`)
 - Ordered action list
 - Compiled BT XML
+
+Hierarchical missions produce a tree of episodes linked by `parent_episode_id`, enabling full traceability from top-level mission phases down to individual sub-plans:
+
+```json
+{"episode_id":1,"parent_episode_id":0,"phase_name":"recon_phase","solver":"BRFS",...}
+{"episode_id":2,"parent_episode_id":1,"phase_name":"search_sub","solver":"BRFS",...}
+```
 
 Output: `ame_plan_audit.jsonl`. Forms a complete mission audit trail.
 
