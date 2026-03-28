@@ -51,26 +51,43 @@ PlanAuditLog::~PlanAuditLog() {
 // Core
 // ---------------------------------------------------------------------------
 
-void PlanAuditLog::recordEpisode(const Episode& ep) {
-    episodes_.push_back(ep);
+uint64_t PlanAuditLog::nextEpisodeId() {
+    return next_episode_id_++;
+}
+
+uint64_t PlanAuditLog::recordEpisode(Episode ep) {
+    if (ep.episode_id == 0) {
+        ep.episode_id = nextEpisodeId();
+    }
+
+    uint64_t id = ep.episode_id;
+    episodes_.push_back(std::move(ep));
+    const auto& stored = episodes_.back();
 
     if (file_.is_open()) {
         std::ostringstream os;
         os << "{"
-           << "\"ts_us\":" << ep.ts_us << ","
-           << "\"solver\":\"" << jsonEscape(ep.solver) << "\","
-           << "\"solve_time_ms\":" << ep.solve_time_ms << ","
-           << "\"success\":" << (ep.success ? "true" : "false") << ","
-           << "\"expanded\":" << ep.expanded << ","
-           << "\"generated\":" << ep.generated << ","
-           << "\"cost\":" << ep.cost << ","
-           << "\"init_facts\":" << jsonStringArray(ep.init_facts) << ","
-           << "\"goal_fluents\":" << jsonStringArray(ep.goal_fluents) << ","
-           << "\"plan_actions\":" << jsonStringArray(ep.plan_actions) << ","
-           << "\"bt_xml\":\"" << jsonEscape(ep.bt_xml) << "\""
+           << "\"episode_id\":" << stored.episode_id << ","
+           << "\"parent_episode_id\":" << stored.parent_episode_id << ",";
+        if (!stored.phase_name.empty()) {
+            os << "\"phase_name\":\"" << jsonEscape(stored.phase_name) << "\",";
+        }
+        os << "\"ts_us\":" << stored.ts_us << ","
+           << "\"solver\":\"" << jsonEscape(stored.solver) << "\","
+           << "\"solve_time_ms\":" << stored.solve_time_ms << ","
+           << "\"success\":" << (stored.success ? "true" : "false") << ","
+           << "\"expanded\":" << stored.expanded << ","
+           << "\"generated\":" << stored.generated << ","
+           << "\"cost\":" << stored.cost << ","
+           << "\"init_facts\":" << jsonStringArray(stored.init_facts) << ","
+           << "\"goal_fluents\":" << jsonStringArray(stored.goal_fluents) << ","
+           << "\"plan_actions\":" << jsonStringArray(stored.plan_actions) << ","
+           << "\"bt_xml\":\"" << jsonEscape(stored.bt_xml) << "\""
            << "}";
         file_ << os.str() << '\n';
     }
+
+    return id;
 }
 
 void PlanAuditLog::flush() {

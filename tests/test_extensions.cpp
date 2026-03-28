@@ -15,8 +15,10 @@
 #include "ame/bt_nodes/check_world_predicate.h"
 #include "ame/bt_nodes/set_world_predicate.h"
 #include "ame/action_registry.h"
+#include "ame/plan_audit_log.h"
 #include "ame/plan_compiler.h"
 #include "ame/planner.h"
+#include "ame/planner_component.h"
 
 #include <behaviortree_cpp/bt_factory.h>
 
@@ -592,21 +594,27 @@ TEST(SnapshotManager, ConcurrentPublishAndRead) {
 // Extension 6: Hierarchical Planning — ExecutePhaseAction
 // =========================================================================
 
-// Stub BT action node (always succeeds) for use in compiled subtrees
+// Stub BT action node (always succeeds) for use in compiled subtrees.
+// Declares param0..param2 to match ports emitted by ActionRegistry::resolve().
 class StubAction : public BT::SyncActionNode {
 public:
     StubAction(const std::string& name, const BT::NodeConfiguration& config)
         : BT::SyncActionNode(name, config) {}
     BT::NodeStatus tick() override {
         auto pred = getInput<std::string>("predicate");
-        if (pred) {
+        if (pred && !pred.value().empty()) {
             auto* wm = config().blackboard->get<ame::WorldModel*>("world_model");
             if (wm) wm->setFact(pred.value(), true, "StubAction");
         }
         return BT::NodeStatus::SUCCESS;
     }
     static BT::PortsList providedPorts() {
-        return { BT::InputPort<std::string>("predicate", "", "fact to set on success") };
+        return {
+            BT::InputPort<std::string>("predicate", "", "fact to set on success"),
+            BT::InputPort<std::string>("param0", "", ""),
+            BT::InputPort<std::string>("param1", "", ""),
+            BT::InputPort<std::string>("param2", "", ""),
+        };
     }
 };
 
@@ -724,6 +732,270 @@ TEST(ExecutePhaseAction, PlanAndExecuteSubGoal) {
         status = tree.tickOnce();
     }
 
-    // Should complete (SUCCESS or FAILURE, but not still RUNNING)
+    EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
+    EXPECT_TRUE(wm.getFact("(searched sector_a)"));
+}
+
+// =========================================================================
+// Extension 6: Hierarchical Planning — Audit Causal Links
+// =========================================================================
+
+TEST(ExecutePhaseAction, AuditLogRecordsEpisodeWithPhaseName) {
+    auto wm = makeUavWorldModel();
+    wm.setFact("(at uav1 sector_a)", true);
+
+    ame::Planner planner;
+    ame::PlanCompiler compiler;
+    ame::ActionRegistry registry;
+    registry.registerAction("move",    "StubAction");
+    registry.registerAction("search",  "StubAction");
+    registry.registerAction("classify","StubAction");
+    ame::PlanAuditLog audit;
+
+    BT::BehaviorTreeFactory factory = makeFullFactory();
+
+    static const char* xml = R"xml(
+        <root BTCPP_format="4">
+            <BehaviorTree ID="MainTree">
+                <ExecutePhaseAction
+                    phase_goals="(searched sector_a)"
+                    phase_name="recon_phase"/>
+            </BehaviorTree>
+        </root>
+    )xml";
+
+    auto tree = factory.createTreeFromText(xml);
+    auto bb = tree.rootBlackboard();
+    bb->set("world_model",     &wm);
+    bb->set("planner",         &planner);
+    bb->set("plan_compiler",   &compiler);
+    bb->set("action_registry", &registry);
+    bb->set("bt_factory",      &factory);
+    bb->set("plan_audit_log",  &audit);
+
+    BT::NodeStatus status = BT::NodeStatus::RUNNING;
+    for (int i = 0; i < 20 && status == BT::NodeStatus::RUNNING; ++i) {
+        status = tree.tickOnce();
+    }
+
     EXPECT_NE(status, BT::NodeStatus::RUNNING);
+
+    // Audit log should have exactly one episode with correct phase name
+    ASSERT_EQ(audit.size(), 1u);
+    const auto& ep = audit.episodes()[0];
+    EXPECT_EQ(ep.phase_name, "recon_phase");
+    EXPECT_TRUE(ep.success);
+    EXPECT_GT(ep.episode_id, 0u);
+    EXPECT_EQ(ep.parent_episode_id, 0u);  // top-level, no parent
+    EXPECT_FALSE(ep.plan_actions.empty());
+    EXPECT_FALSE(ep.bt_xml.empty());
+    // Goal fluents should be recorded
+    ASSERT_EQ(ep.goal_fluents.size(), 1u);
+    EXPECT_EQ(ep.goal_fluents[0], "(searched sector_a)");
+}
+
+TEST(ExecutePhaseAction, AuditLogRecordsCausalLinksForSequentialPhases) {
+    auto wm = makeUavWorldModel();
+    wm.setFact("(at uav1 sector_a)", true);
+
+    ame::Planner planner;
+    ame::PlanCompiler compiler;
+    ame::ActionRegistry registry;
+    registry.registerAction("move",    "StubAction");
+    registry.registerAction("search",  "StubAction");
+    registry.registerAction("classify","StubAction");
+    ame::PlanAuditLog audit;
+
+    BT::BehaviorTreeFactory factory = makeFullFactory();
+
+    // Two sequential phases: search then classify
+    static const char* xml = R"xml(
+        <root BTCPP_format="4">
+            <BehaviorTree ID="MainTree">
+                <Sequence>
+                    <ExecutePhaseAction
+                        phase_goals="(searched sector_a)"
+                        phase_name="search_phase"/>
+                    <ExecutePhaseAction
+                        phase_goals="(classified sector_a)"
+                        phase_name="classify_phase"/>
+                </Sequence>
+            </BehaviorTree>
+        </root>
+    )xml";
+
+    auto tree = factory.createTreeFromText(xml);
+    auto bb = tree.rootBlackboard();
+    bb->set("world_model",     &wm);
+    bb->set("planner",         &planner);
+    bb->set("plan_compiler",   &compiler);
+    bb->set("action_registry", &registry);
+    bb->set("bt_factory",      &factory);
+    bb->set("plan_audit_log",  &audit);
+
+    BT::NodeStatus status = BT::NodeStatus::RUNNING;
+    for (int i = 0; i < 50 && status == BT::NodeStatus::RUNNING; ++i) {
+        status = tree.tickOnce();
+    }
+
+    EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
+
+    // Two episodes recorded (one per phase)
+    ASSERT_EQ(audit.size(), 2u);
+
+    const auto& ep1 = audit.episodes()[0];
+    const auto& ep2 = audit.episodes()[1];
+
+    EXPECT_EQ(ep1.phase_name, "search_phase");
+    EXPECT_EQ(ep2.phase_name, "classify_phase");
+
+    // Each episode gets a unique ID
+    EXPECT_NE(ep1.episode_id, ep2.episode_id);
+    EXPECT_GT(ep1.episode_id, 0u);
+    EXPECT_GT(ep2.episode_id, 0u);
+
+    // Both are top-level (sibling phases, not nested)
+    EXPECT_EQ(ep1.parent_episode_id, 0u);
+    // ep2 inherits parent_episode_id from ep1 since ep1 sets it on the
+    // shared blackboard; this is the expected causal link showing ep2
+    // was preceded by ep1 in the same hierarchical context.
+    EXPECT_EQ(ep2.parent_episode_id, ep1.episode_id);
+}
+
+TEST(ExecutePhaseAction, FailedPlanningRecordsFailureEpisode) {
+    auto wm = makeUavWorldModel();
+    // UAV is at base, no actions registered to reach an impossible goal
+
+    ame::Planner planner;
+    ame::PlanCompiler compiler;
+    ame::ActionRegistry registry;
+    // No actions registered -> planning will fail
+    ame::PlanAuditLog audit;
+
+    BT::BehaviorTreeFactory factory = makeFullFactory();
+
+    static const char* xml = R"xml(
+        <root BTCPP_format="4">
+            <BehaviorTree ID="MainTree">
+                <ExecutePhaseAction
+                    phase_goals="(searched sector_a)"
+                    phase_name="impossible_phase"/>
+            </BehaviorTree>
+        </root>
+    )xml";
+
+    auto tree = factory.createTreeFromText(xml);
+    auto bb = tree.rootBlackboard();
+    bb->set("world_model",     &wm);
+    bb->set("planner",         &planner);
+    bb->set("plan_compiler",   &compiler);
+    bb->set("action_registry", &registry);
+    bb->set("bt_factory",      &factory);
+    bb->set("plan_audit_log",  &audit);
+
+    auto status = tree.tickOnce();
+    EXPECT_EQ(status, BT::NodeStatus::FAILURE);
+
+    // Audit log should record the failed episode
+    ASSERT_EQ(audit.size(), 1u);
+    const auto& ep = audit.episodes()[0];
+    EXPECT_EQ(ep.phase_name, "impossible_phase");
+    EXPECT_FALSE(ep.success);
+    EXPECT_GT(ep.episode_id, 0u);
+}
+
+TEST(PlanAuditLog, EpisodeIdAutoIncrement) {
+    ame::PlanAuditLog audit;
+
+    ame::PlanAuditLog::Episode ep1;
+    ep1.solver = "BRFS";
+    ep1.success = true;
+    ep1.phase_name = "phase_a";
+    uint64_t id1 = audit.recordEpisode(std::move(ep1));
+
+    ame::PlanAuditLog::Episode ep2;
+    ep2.solver = "BRFS";
+    ep2.success = true;
+    ep2.phase_name = "phase_b";
+    uint64_t id2 = audit.recordEpisode(std::move(ep2));
+
+    EXPECT_GT(id1, 0u);
+    EXPECT_GT(id2, 0u);
+    EXPECT_NE(id1, id2);
+
+    ASSERT_EQ(audit.size(), 2u);
+    EXPECT_EQ(audit.episodes()[0].episode_id, id1);
+    EXPECT_EQ(audit.episodes()[1].episode_id, id2);
+}
+
+TEST(PlanAuditLog, ParentEpisodeIdPreserved) {
+    ame::PlanAuditLog audit;
+
+    ame::PlanAuditLog::Episode parent_ep;
+    parent_ep.solver = "BRFS";
+    parent_ep.success = true;
+    parent_ep.phase_name = "parent";
+    uint64_t parent_id = audit.recordEpisode(std::move(parent_ep));
+
+    ame::PlanAuditLog::Episode child_ep;
+    child_ep.solver = "BRFS";
+    child_ep.success = true;
+    child_ep.phase_name = "child";
+    child_ep.parent_episode_id = parent_id;
+    uint64_t child_id = audit.recordEpisode(std::move(child_ep));
+
+    ASSERT_EQ(audit.size(), 2u);
+    EXPECT_EQ(audit.episodes()[1].parent_episode_id, parent_id);
+    EXPECT_NE(child_id, parent_id);
+}
+
+TEST(ExecutePhaseAction, PlannerComponentPath) {
+    auto wm = makeUavWorldModel();
+    wm.setFact("(at uav1 sector_a)", true);
+
+    ame::PlannerComponent component;
+    component.setParam("plan_audit.enabled", false);
+    component.setParam("compiler.parallel", false);
+    component.setInProcessWorldModel(&wm);
+    component.actionRegistry().registerAction("move",    "StubAction");
+    component.actionRegistry().registerAction("search",  "StubAction");
+    component.actionRegistry().registerAction("classify","StubAction");
+    ASSERT_EQ(component.configure(), PCL_OK);
+    ASSERT_EQ(component.activate(), PCL_OK);
+
+    ame::PlanAuditLog audit;
+    BT::BehaviorTreeFactory factory = makeFullFactory();
+
+    static const char* xml = R"xml(
+        <root BTCPP_format="4">
+            <BehaviorTree ID="MainTree">
+                <ExecutePhaseAction
+                    phase_goals="(searched sector_a)"
+                    phase_name="component_phase"/>
+            </BehaviorTree>
+        </root>
+    )xml";
+
+    auto tree = factory.createTreeFromText(xml);
+    auto bb = tree.rootBlackboard();
+    bb->set("world_model",        &wm);
+    bb->set("planner_component",  &component);
+    bb->set("bt_factory",         &factory);
+    bb->set("plan_audit_log",     &audit);
+
+    BT::NodeStatus status = BT::NodeStatus::RUNNING;
+    for (int i = 0; i < 20 && status == BT::NodeStatus::RUNNING; ++i) {
+        status = tree.tickOnce();
+    }
+
+    EXPECT_NE(status, BT::NodeStatus::RUNNING);
+
+    // Audit log should have recorded the episode
+    ASSERT_EQ(audit.size(), 1u);
+    EXPECT_EQ(audit.episodes()[0].phase_name, "component_phase");
+    EXPECT_TRUE(audit.episodes()[0].success);
+
+    EXPECT_EQ(component.deactivate(), PCL_OK);
+    EXPECT_EQ(component.cleanup(), PCL_OK);
+    EXPECT_EQ(component.shutdown(), PCL_OK);
 }
