@@ -168,7 +168,33 @@ Snapshots are immutable and reference-counted — safe to hold across multiple B
     phase_name="recon_phase"/>
 ```
 
-Blackboard keys required: `"world_model"`, `"planner"`, `"plan_compiler"`, `"action_registry"`, `"bt_factory"`. PlanAuditLog (Layer 5) captures sub-planning episodes automatically.
+### Planning Paths
+
+Two planning paths are supported:
+
+1. **Direct** (in-process): requires `"world_model"`, `"planner"`, `"plan_compiler"`, `"action_registry"`, `"bt_factory"` on the blackboard.
+2. **PlannerComponent** (distributed-ready): requires `"planner_component"`, `"world_model"`, `"bt_factory"`. When a `PlannerComponent*` is found on the blackboard, it takes precedence — enabling the same BT node to work in both monolithic and distributed deployments.
+
+### Audit Trail (Causal Links)
+
+When `"plan_audit_log"` (`PlanAuditLog*`) is on the blackboard, `ExecutePhaseAction` records each sub-planning episode with hierarchical metadata:
+
+- `episode_id` — unique ID auto-assigned by `PlanAuditLog`
+- `parent_episode_id` — links to the parent phase's episode (0 = top-level)
+- `phase_name` — human-readable label from the `phase_name` port
+
+After a phase completes, its `episode_id` is written to the blackboard key `"parent_episode_id"`, so any nested `ExecutePhaseAction` nodes in the compiled sub-tree inherit the causal link.
+
+```json
+{"episode_id":1,"parent_episode_id":0,"phase_name":"recon_phase","solver":"BRFS",...}
+{"episode_id":2,"parent_episode_id":1,"phase_name":"search_sub","solver":"BRFS",...}
+```
+
+### Lifecycle
+
+- `onStart()` — parse goals, plan (direct or component), compile BT XML, record audit episode, create sub-tree
+- `onRunning()` — tick the compiled subtree once per BT cycle
+- `onHalted()` — halt and destroy the subtree
 
 ## Temporal Planning (Extension 7) — Future
 

@@ -15,15 +15,18 @@ namespace ame {
 class PlanAuditLog {
 public:
     struct Episode {
-        uint64_t    ts_us;                        // When planning started
+        uint64_t    episode_id = 0;               // Unique ID (auto-assigned by recordEpisode)
+        uint64_t    parent_episode_id = 0;        // 0 = top-level; non-zero = sub-plan of parent
+        std::string phase_name;                   // Human-readable phase label (hierarchical only)
+        uint64_t    ts_us = 0;                    // When planning started
         std::vector<std::string> init_facts;      // Fluent keys that were true
         std::vector<std::string> goal_fluents;    // Goal fluent keys
         std::string solver;                       // Solver name (e.g. "BRFS")
-        double      solve_time_ms;                // Wall-clock solve duration
-        bool        success;
-        unsigned    expanded;                     // Nodes expanded
-        unsigned    generated;                    // Nodes generated
-        float       cost;                         // Plan cost
+        double      solve_time_ms = 0.0;          // Wall-clock solve duration
+        bool        success = false;
+        unsigned    expanded = 0;                 // Nodes expanded
+        unsigned    generated = 0;                // Nodes generated
+        float       cost = 0.0f;                  // Plan cost
         std::vector<std::string> plan_actions;    // Ordered action signatures
         std::string bt_xml;                       // Compiled BT XML
     };
@@ -37,10 +40,15 @@ public:
     ~PlanAuditLog();
 
     /// Record a planning episode.
-    void recordEpisode(const Episode& ep);
+    /// Assigns a unique episode_id before recording if ep.episode_id == 0.
+    /// Returns the assigned episode_id.
+    uint64_t recordEpisode(Episode ep);
 
     /// Flush the file sink.
     void flush();
+
+    /// Allocate the next unique episode ID without recording an episode.
+    uint64_t nextEpisodeId();
 
     /// All episodes recorded so far.
     const std::vector<Episode>& episodes() const { return episodes_; }
@@ -51,6 +59,7 @@ public:
 private:
     std::ofstream file_;
     std::vector<Episode> episodes_;
+    uint64_t next_episode_id_ = 1;
 };
 
 } // namespace ame

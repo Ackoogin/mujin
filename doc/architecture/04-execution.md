@@ -51,9 +51,9 @@ Wraps a sub-tree. On child FAILURE, signals replan via blackboard flag. MissionE
 
 Orchestrates a full plan–compile–execute cycle for a sub-goal set, enabling hierarchical decomposition of complex missions. See [07-extensions.md](07-extensions.md).
 
-### InvokeService (SyncAction)
+### InvokeService (StatefulAction)
 
-Maps PDDL actions to external service calls via the `IPyramidService` abstract interface. See [07-extensions.md](07-extensions.md).
+Async PYRAMID service invocation node. Maps PDDL actions to external service calls via the `IPyramidService` abstract interface with timeout handling and cancellation. See [07-extensions.md](07-extensions.md).
 
 ## MissionExecutor / Replanning
 

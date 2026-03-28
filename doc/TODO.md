@@ -48,12 +48,16 @@ These extensions are intertwined — a single authoritative `WorldModel` accesse
 
 ---
 
-## Extension 6: Hierarchical Planning
+## Extension 6: Hierarchical Planning ✓
 
-- Finalise `ExecutePhaseAction` BT node concept
-- Integrate `PlannerNode` so `ExecutePhaseAction` can invoke ROS2 action call to planner
-- Retrieve dynamically compiled child tree and tick using BT.CPP dynamic sub-tree features
-- Update `PlanAuditLog` to capture causal links between parent phases and sub-trees
+**Status: COMPLETE**
+
+- [x] `ExecutePhaseAction` BT node: plan–compile–execute cycle for sub-goal sets
+- [x] `PlannerComponent` integration: `ExecutePhaseAction` detects `PlannerComponent*` on blackboard, enabling distributed planning via ROS2 action server
+- [x] Dynamic sub-tree: compiled BT XML loaded via `BT::BehaviorTreeFactory::createTreeFromText()` with shared blackboard
+- [x] `PlanAuditLog` causal links: `episode_id`, `parent_episode_id`, `phase_name` fields track parent–child phase relationships
+- [x] Sequential phases: `parent_episode_id` propagated via blackboard for causal chaining
+- [x] Tests: audit trail recording, causal links for sequential phases, failed planning episodes, PlannerComponent path
 
 ---
 
