@@ -33,12 +33,18 @@ These extensions are intertwined — a single authoritative `WorldModel` accesse
 
 ---
 
-## Extension 4: PYRAMID Service Nodes
+## Extension 4: PYRAMID Service Nodes ✓
 
-- Implement `InvokeService` BT node inheriting from `BT::StatefulActionNode`
-- Translate PDDL action bindings (from `ActionRegistry`) into async service requests
-- Handle async wait returning `BT::NodeStatus::RUNNING` until service completes
-- Implement timeout handling and graceful `FAILURE` if SDK service unreachable
+**Status: COMPLETE**
+
+- [x] `InvokeService` BT node converted from `BT::SyncActionNode` to `BT::StatefulActionNode`
+- [x] `IPyramidService` extended with async API: `callAsync()`, `pollResult()`, `cancelCall()`
+- [x] `AsyncCallStatus` enum: `PENDING`, `SUCCESS`, `FAILURE`, `CANCELLED`
+- [x] PDDL action param auto-mapping via `param_names`/`param_values` ports (strips `?` prefix)
+- [x] Async lifecycle: `onStart()` initiates call, `onRunning()` polls, `onHalted()` cancels
+- [x] Configurable timeout via `timeout_ms` port (default 5000ms, 0 = no timeout)
+- [x] `MockPyramidService` updated for async support (immediate completion on first poll)
+- [x] Tests: async RUNNING→SUCCESS, timeout→FAILURE, halt→cancel, param mapping, merge with request_json
 
 ---
 

@@ -160,8 +160,82 @@ TEST(PerceptionBridge, ThreadSafeMultipleWriters) {
 }
 
 // =========================================================================
-// Extension 4: PYRAMID Service Nodes
+// Extension 4: PYRAMID Service Nodes (async StatefulActionNode)
 // =========================================================================
+
+// --- Test service implementations ---
+
+// Async service that fails immediately on poll
+class AlwaysFailService : public ame::IPyramidService {
+public:
+    bool call(const std::string&, const std::string&,
+              const ame::ServiceMessage&, ame::ServiceMessage&) override {
+        return false;
+    }
+    uint64_t callAsync(const std::string&, const std::string&,
+                       const ame::ServiceMessage&) override {
+        return ++next_id_;
+    }
+    ame::AsyncCallStatus pollResult(uint64_t, ame::ServiceMessage&) override {
+        return ame::AsyncCallStatus::FAILURE;
+    }
+    void cancelCall(uint64_t) override {}
+private:
+    uint64_t next_id_ = 0;
+};
+
+// Async service that stays PENDING for a configurable number of polls,
+// then returns SUCCESS with a response.
+class DelayedService : public ame::IPyramidService {
+public:
+    explicit DelayedService(int polls_before_done)
+        : polls_before_done_(polls_before_done) {}
+
+    bool call(const std::string&, const std::string&,
+              const ame::ServiceMessage&, ame::ServiceMessage&) override {
+        return true;
+    }
+
+    uint64_t callAsync(const std::string& service_name,
+                       const std::string& operation,
+                       const ame::ServiceMessage& request) override {
+        last_service_name = service_name;
+        last_operation = operation;
+        last_request = request;
+        poll_count_ = 0;
+        cancelled_ = false;
+        return ++next_id_;
+    }
+
+    ame::AsyncCallStatus pollResult(uint64_t, ame::ServiceMessage& response) override {
+        if (cancelled_) return ame::AsyncCallStatus::CANCELLED;
+        ++poll_count_;
+        if (poll_count_ >= polls_before_done_) {
+            response.set("status", "done");
+            response.set("result", "ok");
+            return ame::AsyncCallStatus::SUCCESS;
+        }
+        return ame::AsyncCallStatus::PENDING;
+    }
+
+    void cancelCall(uint64_t) override {
+        cancelled_ = true;
+        ++cancel_count;
+    }
+
+    std::string last_service_name;
+    std::string last_operation;
+    ame::ServiceMessage last_request;
+    int cancel_count = 0;
+
+private:
+    int polls_before_done_;
+    int poll_count_ = 0;
+    bool cancelled_ = false;
+    uint64_t next_id_ = 0;
+};
+
+// --- ServiceMessage tests ---
 
 TEST(PyramidService, MockAlwaysSucceeds) {
     ame::MockPyramidService svc;
@@ -178,6 +252,20 @@ TEST(PyramidService, ServiceMessageGetSet) {
     EXPECT_TRUE(msg.has("key1"));
     EXPECT_FALSE(msg.has("missing"));
 }
+
+TEST(PyramidService, MockAsyncReturnsSuccess) {
+    ame::MockPyramidService svc;
+    ame::ServiceMessage req;
+    req.set("target", "sector_a");
+    uint64_t id = svc.callAsync("imaging", "capture", req);
+    EXPECT_GT(id, 0u);
+
+    ame::ServiceMessage resp;
+    auto status = svc.pollResult(id, resp);
+    EXPECT_EQ(status, ame::AsyncCallStatus::SUCCESS);
+}
+
+// --- InvokeService async node tests ---
 
 TEST(InvokeServiceNode, SuccessWithMockService) {
     BT::BehaviorTreeFactory factory;
@@ -216,22 +304,11 @@ TEST(InvokeServiceNode, FailureWithNullService) {
     )xml";
 
     auto tree = factory.createTreeFromText(xml);
-    // No "pyramid_service" in blackboard -> should fail gracefully
-    // Note: get<IPyramidService*> will return nullptr
     tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(nullptr));
 
     auto status = tree.tickOnce();
     EXPECT_EQ(status, BT::NodeStatus::FAILURE);
 }
-
-// Concrete failing service for testing failure path
-class AlwaysFailService : public ame::IPyramidService {
-public:
-    bool call(const std::string&, const std::string&,
-              const ame::ServiceMessage&, ame::ServiceMessage&) override {
-        return false;
-    }
-};
 
 TEST(InvokeServiceNode, FailureWhenServiceReturnsFalse) {
     BT::BehaviorTreeFactory factory;
@@ -251,6 +328,184 @@ TEST(InvokeServiceNode, FailureWhenServiceReturnsFalse) {
 
     auto status = tree.tickOnce();
     EXPECT_EQ(status, BT::NodeStatus::FAILURE);
+}
+
+TEST(InvokeServiceNode, AsyncReturnsRunningThenSuccess) {
+    BT::BehaviorTreeFactory factory;
+    factory.registerNodeType<ame::InvokeService>("InvokeService");
+
+    static const char* xml = R"xml(
+        <root BTCPP_format="4">
+            <BehaviorTree ID="MainTree">
+                <InvokeService service_name="nav"
+                               operation="goto"
+                               timeout_ms="0"/>
+            </BehaviorTree>
+        </root>
+    )xml";
+
+    auto tree = factory.createTreeFromText(xml);
+    DelayedService svc(3);  // completes after 3 polls
+    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(&svc));
+
+    // First tick: onStart() -> callAsync + first poll -> PENDING -> RUNNING
+    auto s1 = tree.tickOnce();
+    EXPECT_EQ(s1, BT::NodeStatus::RUNNING);
+
+    // Second tick: onRunning() -> second poll -> PENDING -> RUNNING
+    auto s2 = tree.tickOnce();
+    EXPECT_EQ(s2, BT::NodeStatus::RUNNING);
+
+    // Third tick: onRunning() -> third poll -> SUCCESS
+    auto s3 = tree.tickOnce();
+    EXPECT_EQ(s3, BT::NodeStatus::SUCCESS);
+}
+
+TEST(InvokeServiceNode, TimeoutCausesFailure) {
+    BT::BehaviorTreeFactory factory;
+    factory.registerNodeType<ame::InvokeService>("InvokeService");
+
+    // Very short timeout: 1ms
+    static const char* xml = R"xml(
+        <root BTCPP_format="4">
+            <BehaviorTree ID="MainTree">
+                <InvokeService service_name="nav"
+                               operation="goto"
+                               timeout_ms="1"/>
+            </BehaviorTree>
+        </root>
+    )xml";
+
+    auto tree = factory.createTreeFromText(xml);
+    DelayedService svc(1000);  // would take 1000 polls
+    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(&svc));
+
+    // First tick may or may not timeout (depends on timing)
+    auto s1 = tree.tickOnce();
+    if (s1 == BT::NodeStatus::RUNNING) {
+        // Sleep to ensure timeout elapses
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        auto s2 = tree.tickOnce();
+        EXPECT_EQ(s2, BT::NodeStatus::FAILURE);
+    } else {
+        // Timed out immediately (very fast machine or scheduling)
+        EXPECT_EQ(s1, BT::NodeStatus::FAILURE);
+    }
+    EXPECT_GE(svc.cancel_count, 1);
+}
+
+TEST(InvokeServiceNode, HaltCancelsPendingCall) {
+    BT::BehaviorTreeFactory factory;
+    factory.registerNodeType<ame::InvokeService>("InvokeService");
+
+    static const char* xml = R"xml(
+        <root BTCPP_format="4">
+            <BehaviorTree ID="MainTree">
+                <InvokeService service_name="nav"
+                               operation="goto"
+                               timeout_ms="0"/>
+            </BehaviorTree>
+        </root>
+    )xml";
+
+    auto tree = factory.createTreeFromText(xml);
+    DelayedService svc(100);  // stays pending
+    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(&svc));
+
+    auto s1 = tree.tickOnce();
+    EXPECT_EQ(s1, BT::NodeStatus::RUNNING);
+
+    tree.haltTree();
+    EXPECT_GE(svc.cancel_count, 1);
+}
+
+TEST(InvokeServiceNode, PddlParamAutoMapping) {
+    BT::BehaviorTreeFactory factory;
+    factory.registerNodeType<ame::InvokeService>("InvokeService");
+
+    static const char* xml = R"xml(
+        <root BTCPP_format="4">
+            <BehaviorTree ID="MainTree">
+                <InvokeService service_name="mobility"
+                               operation="move"
+                               param_names="?robot;?from;?to"
+                               param_values="uav1;base;sector_a"
+                               timeout_ms="0"/>
+            </BehaviorTree>
+        </root>
+    )xml";
+
+    auto tree = factory.createTreeFromText(xml);
+    DelayedService svc(1);  // completes on first poll
+    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(&svc));
+
+    auto status = tree.tickOnce();
+    EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
+
+    // Verify the param bindings were translated to the request
+    EXPECT_EQ(svc.last_service_name, "mobility");
+    EXPECT_EQ(svc.last_operation, "move");
+    EXPECT_EQ(svc.last_request.get("robot"), "uav1");
+    EXPECT_EQ(svc.last_request.get("from"), "base");
+    EXPECT_EQ(svc.last_request.get("to"), "sector_a");
+}
+
+TEST(InvokeServiceNode, ParamMappingMergesWithRequestJson) {
+    BT::BehaviorTreeFactory factory;
+    factory.registerNodeType<ame::InvokeService>("InvokeService");
+
+    static const char* xml = R"xml(
+        <root BTCPP_format="4">
+            <BehaviorTree ID="MainTree">
+                <InvokeService service_name="imaging"
+                               operation="capture"
+                               request_json="priority=1;mode=wide"
+                               param_names="?target"
+                               param_values="sector_a"
+                               timeout_ms="0"/>
+            </BehaviorTree>
+        </root>
+    )xml";
+
+    auto tree = factory.createTreeFromText(xml);
+    DelayedService svc(1);
+    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(&svc));
+
+    auto status = tree.tickOnce();
+    EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
+
+    // Both explicit request_json and param bindings should be in the request
+    EXPECT_EQ(svc.last_request.get("priority"), "1");
+    EXPECT_EQ(svc.last_request.get("mode"), "wide");
+    EXPECT_EQ(svc.last_request.get("target"), "sector_a");
+}
+
+TEST(InvokeServiceNode, NoTimeoutMeansNoLimit) {
+    BT::BehaviorTreeFactory factory;
+    factory.registerNodeType<ame::InvokeService>("InvokeService");
+
+    static const char* xml = R"xml(
+        <root BTCPP_format="4">
+            <BehaviorTree ID="MainTree">
+                <InvokeService service_name="nav"
+                               operation="goto"
+                               timeout_ms="0"/>
+            </BehaviorTree>
+        </root>
+    )xml";
+
+    auto tree = factory.createTreeFromText(xml);
+    DelayedService svc(5);  // completes after 5 polls
+    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(&svc));
+
+    // Tick multiple times; should stay RUNNING, not timeout
+    BT::NodeStatus status = BT::NodeStatus::IDLE;
+    for (int i = 0; i < 10; ++i) {
+        status = tree.tickOnce();
+        if (status != BT::NodeStatus::RUNNING) break;
+    }
+    EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
+    EXPECT_EQ(svc.cancel_count, 0);
 }
 
 // =========================================================================
