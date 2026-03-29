@@ -91,6 +91,18 @@ PYBIND11_MODULE(_ame_py, m) {
             "Get available agent IDs")
         .def("num_agents", &ame::WorldModel::numAgents,
             "Get number of registered agents")
+        // Audit callback: fires on every fact state change
+        .def("set_audit_callback", [](ame::WorldModel& wm, py::function callback) {
+            wm.setAuditCallback([callback](uint64_t version, uint64_t ts_us,
+                                           const std::string& fact, bool value,
+                                           const std::string& source) {
+                py::gil_scoped_acquire gil;
+                try {
+                    callback(version, ts_us, fact, value, source);
+                } catch (...) {}
+            });
+        }, py::arg("callback"),
+            "Set callback fired on every WM fact change: (version, ts_us, fact, value, source)")
         // Snapshot for iteration
         .def("all_true_facts", [](const ame::WorldModel& wm) {
             std::vector<std::string> facts;

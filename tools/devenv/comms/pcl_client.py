@@ -7,8 +7,10 @@ operations run in-process.
 
 from __future__ import annotations
 
+import json
 import threading
 import time
+import traceback
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional, List
@@ -62,11 +64,22 @@ class AmePclClient:
         self._planner: Any = None
         self._compiler: Any = None
         self._registry: Any = None
+        self._executor: Any = None
 
         # State tracking
         self._latest_snapshot: Optional[WorldSnapshot] = None
         self._snapshot_callbacks: list[Callable[[WorldSnapshot], None]] = []
         self._plan_feedback_queue: deque[PlanFeedback] = deque(maxlen=100)
+
+        # BT event queue — drained by the UI frame loop
+        self._bt_event_queue: deque[str] = deque(maxlen=2000)
+        # WM audit event queue — drained by the UI frame loop
+        self._wm_event_queue: deque[str] = deque(maxlen=2000)
+
+        # Auto-tick control
+        self._auto_tick_stop = threading.Event()
+        self._auto_tick_thread: Optional[threading.Thread] = None
+        self._tick_count: int = 0
 
         # Domain/problem paths for initialization
         self._domain_path: str = ""
@@ -90,6 +103,7 @@ class AmePclClient:
 
         with self._lock:
             self._wm = _ame_py.WorldModel()
+            self._try_register_audit_callback()
             self._planner = _ame_py.Planner()
             self._compiler = _ame_py.PlanCompiler()
             self._registry = _ame_py.ActionRegistry()
@@ -105,11 +119,13 @@ class AmePclClient:
 
     def stop(self) -> None:
         """Shutdown the client."""
+        self.stop_execution()
         self._connected = False
         self._wm = None
         self._planner = None
         self._compiler = None
         self._registry = None
+        self._executor = None
 
     def on_world_state(self, callback: Callable[[WorldSnapshot], None]) -> None:
         """Register a callback for world state updates."""
@@ -120,10 +136,12 @@ class AmePclClient:
         if not self.available or not self._connected:
             return False
 
+        self.stop_execution()
         with self._lock:
             try:
-                # Create fresh world model
+                self._executor = None  # stale WM pointer; recreated on next load_bt
                 self._wm = _ame_py.WorldModel()
+                self._try_register_audit_callback()
                 _ame_py.parse_pddl(self._wm, domain_path, problem_path)
                 self._domain_path = domain_path
                 self._problem_path = problem_path
@@ -265,55 +283,168 @@ class AmePclClient:
 
     # -- Execution operations --------------------------------------------------
 
+    def _ensure_executor(self) -> None:
+        """Create and wire up the executor if not already done (must hold lock)."""
+        if self._executor is None:
+            self._executor = _ame_py.ExecutorComponent()
+            self._executor.set_inprocess_world_model(self._wm)
+            self._executor.set_event_sink(self._on_bt_event)
+            self._executor.configure()
+            self._executor.activate()
+
+    def _on_bt_event(self, event_json: str) -> None:
+        """Event sink called by C++ executor on every BT node transition."""
+        self._bt_event_queue.append(event_json)
+
+    def drain_bt_events(self) -> list[str]:
+        """Return and clear all queued BT event JSON strings."""
+        items = []
+        while self._bt_event_queue:
+            try:
+                items.append(self._bt_event_queue.popleft())
+            except IndexError:
+                break
+        return items
+
+    def _on_wm_audit(
+        self,
+        version: int,
+        ts_us: int,
+        fact: str,
+        value: bool,
+        source: str,
+    ) -> None:
+        """Audit callback fired by WorldModel on every fact change."""
+        self._wm_event_queue.append(json.dumps({
+            "wm_version": version,
+            "ts_us": ts_us,
+            "fact": fact,
+            "value": value,
+            "source": source,
+        }))
+
+    def drain_wm_events(self) -> list[str]:
+        """Return and clear all queued WM audit event JSON strings."""
+        items = []
+        while self._wm_event_queue:
+            try:
+                items.append(self._wm_event_queue.popleft())
+            except IndexError:
+                break
+        return items
+
+    def load_bt(self, bt_xml: str) -> None:
+        """Load a BT XML ready for ticking (manual or auto). Stops any running execution."""
+        if not self.available or not self._connected:
+            return
+        self.stop_execution()
+        with self._lock:
+            self._ensure_executor()
+            self._tick_count = 0
+            self._executor.load_and_execute(bt_xml)
+
+    def tick_once(self) -> str:
+        """Tick the loaded BT once. Returns status name string."""
+        if self._executor is None:
+            return "IDLE"
+        with self._lock:
+            self._executor.tick_once()
+            status = self._executor.last_status()
+            self._tick_count += 1
+        if not self._executor.is_executing():
+            self._update_snapshot()
+        return str(status).split(".")[-1]
+
+    def start_auto_tick(
+        self,
+        interval_s: float = 0.05,
+        done_callback: Optional[Callable[[bool, str], None]] = None,
+    ) -> None:
+        """Tick the loaded BT automatically in a background thread."""
+        self._auto_tick_stop.clear()
+
+        def _auto() -> None:
+            try:
+                while not self._auto_tick_stop.is_set():
+                    with self._lock:
+                        if self._executor is None or not self._executor.is_executing():
+                            break
+                        self._executor.tick_once()
+                        self._tick_count += 1
+                        still_going = self._executor.is_executing()
+                    if not still_going:
+                        break
+                    time.sleep(interval_s)
+
+                self._update_snapshot()
+                if done_callback and self._executor:
+                    raw = str(self._executor.last_status()).split(".")[-1]
+                    success = (raw == "SUCCESS")
+                    done_callback(success, f"{raw} after {self._tick_count} ticks")
+            except Exception as e:
+                traceback.print_exc()
+                if done_callback:
+                    done_callback(False, str(e))
+
+        self._auto_tick_thread = threading.Thread(target=_auto, daemon=True)
+        self._auto_tick_thread.start()
+
+    def stop_execution(self) -> None:
+        """Stop any running auto-tick thread."""
+        self._auto_tick_stop.set()
+        t = self._auto_tick_thread
+        if t and t.is_alive():
+            t.join(timeout=1.0)
+        self._auto_tick_thread = None
+
+    def is_executing(self) -> bool:
+        return self._executor is not None and self._executor.is_executing()
+
+    def last_bt_status(self) -> str:
+        if self._executor is None:
+            return "IDLE"
+        return str(self._executor.last_status()).split(".")[-1]
+
+    @property
+    def tick_count(self) -> int:
+        return self._tick_count
+
     def execute_bt(
         self,
         bt_xml: str,
         callback: Optional[Callable[[bool, str], None]] = None,
     ) -> None:
-        """Execute a BT XML plan."""
+        """Execute a BT XML plan in one shot (used by Planning tab)."""
         if not self.available or not self._connected:
             if callback:
                 callback(False, "Not connected")
             return
 
-        def _do_execute():
+        def _do_execute() -> None:
             try:
-                # Create executor if needed
-                if not hasattr(self, '_executor') or self._executor is None:
-                    self._executor = _ame_py.ExecutorComponent()
-                    self._executor.set_inprocess_world_model(self._wm)
-                    self._executor.configure()
-                    self._executor.activate()
+                self.stop_execution()
+                with self._lock:
+                    self._ensure_executor()
+                    self._tick_count = 0
+                    self._executor.load_and_execute(bt_xml)
 
-                # Load and execute the BT
-                self._executor.load_and_execute(bt_xml)
-                
-                # Tick until completion
                 max_ticks = 1000
-                tick_count = 0
-                while self._executor.is_executing() and tick_count < max_ticks:
-                    self._executor.tick_once()
-                    tick_count += 1
-                
-                status = self._executor.last_status()
-                if status == _ame_py.NodeStatus.SUCCESS:
-                    if callback:
-                        callback(True, f"SUCCESS after {tick_count} ticks")
-                elif status == _ame_py.NodeStatus.FAILURE:
-                    if callback:
-                        callback(False, f"FAILURE after {tick_count} ticks")
-                else:
-                    if callback:
-                        callback(False, f"Stopped at {status} after {tick_count} ticks")
-                
-                # Update world model snapshot after execution
+                while self._executor.is_executing() and self._tick_count < max_ticks:
+                    with self._lock:
+                        self._executor.tick_once()
+                        self._tick_count += 1
+
                 self._update_snapshot()
-                
+                raw = str(self._executor.last_status()).split(".")[-1]
+                success = (raw == "SUCCESS")
+                if callback:
+                    callback(success, f"{raw} after {self._tick_count} ticks")
+
             except Exception as e:
+                traceback.print_exc()
                 if callback:
                     callback(False, str(e))
 
-        # Run in background thread
         threading.Thread(target=_do_execute, daemon=True).start()
 
     # -- Agent operations ------------------------------------------------------
@@ -343,6 +474,13 @@ class AmePclClient:
             return self._wm.available_agent_ids()
 
     # -- Internal --------------------------------------------------------------
+
+    def _try_register_audit_callback(self) -> None:
+        """Register the WM audit callback if the binding supports it."""
+        try:
+            self._wm.set_audit_callback(self._on_wm_audit)
+        except AttributeError:
+            print("[PCL] set_audit_callback not available — rebuild _ame_py for live WM events")
 
     def _build_snapshot(self) -> WorldSnapshot:
         """Build a WorldSnapshot from current state (must hold lock)."""

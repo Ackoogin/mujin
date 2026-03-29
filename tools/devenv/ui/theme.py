@@ -3,21 +3,21 @@
 import dearpygui.dearpygui as dpg
 
 # High-contrast flat dark + green accent palette
-_BG0        = (8,   10,   9,  255)   # deepest background (near-black)
-_BG1        = (13,  16,  14,  255)   # window bg
-_BG2        = (19,  24,  20,  255)   # child / panel bg
-_BG3        = (27,  34,  29,  255)   # popup / frame bg
-_SURFACE    = (38,  48,  41,  255)   # raised surfaces (buttons, headers)
-_BORDER     = (52,  68,  56,  255)   # separators, table borders
-_MUTED      = (75,  98,  80,  255)   # disabled / placeholder text
+_BG0        = (4,    5,   4,  255)   # deepest background (near-black)
+_BG1        = (10,  12,  11,  255)   # window bg
+_BG2        = (18,  22,  19,  255)   # child / panel bg
+_BG3        = (28,  36,  30,  255)   # popup / frame bg
+_SURFACE    = (45,  58,  48,  255)   # raised surfaces (buttons, headers)
+_BORDER     = (72,  96,  78,  255)   # separators, table borders
+_MUTED      = (110, 145, 118,  255)  # disabled / placeholder text
 
-_GREEN      = (58, 220, 112,  255)   # primary accent (bright)
-_GREEN_DIM  = (40, 170,  84,  255)   # accent pressed / active
-_GREEN_FADE = (30,  95,  55, 190)    # accent hover (translucent)
-_GREEN_SOFT = (36, 130,  65,  255)   # subtle accent (tabs active, titles)
+_GREEN      = (80, 240, 130,  255)   # primary accent (bright)
+_GREEN_DIM  = (55, 195, 100,  255)   # accent pressed / active
+_GREEN_FADE = (40, 120,  70, 210)    # accent hover (translucent)
+_GREEN_SOFT = (50, 165,  85,  255)   # subtle accent (tabs active, titles)
 
-_TEXT       = (228, 245, 232,  255)  # primary text (high contrast)
-_TEXT_DIM   = (105, 138, 112,  255)  # secondary text
+_TEXT       = (245, 255, 248,  255)  # primary text (high contrast)WM
+_TEXT_DIM   = (148, 190, 158,  255)  # secondary text
 
 
 def create_global_theme() -> int:
@@ -135,8 +135,8 @@ def create_danger_button_theme() -> int:
     """Create a red button theme for destructive actions."""
     with dpg.theme() as theme:
         with dpg.theme_component(dpg.mvButton):
-            dpg.add_theme_color(dpg.mvThemeCol_Button,        (100, 22, 22, 255))
-            dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered,  (155, 35, 35, 255))
-            dpg.add_theme_color(dpg.mvThemeCol_ButtonActive,   (80,  15, 15, 255))
+            dpg.add_theme_color(dpg.mvThemeCol_Button,        (130, 28, 28, 255))
+            dpg.add_theme_color(dpg.mvThemeCol_ButtonHovered,  (195, 48, 48, 255))
+            dpg.add_theme_color(dpg.mvThemeCol_ButtonActive,   (100, 18, 18, 255))
             dpg.add_theme_style(dpg.mvStyleVar_FrameRounding, 0)
     return theme

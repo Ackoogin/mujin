@@ -1,0 +1,8 @@
+{"ts_us":1774793646173272,"node":"Sequence","type":"Sequence","prev":"IDLE","status":"RUNNING","tree_id":"MissionPlan","wm_version":5}
+{"ts_us":1774793646173296,"node":"move(uav1,base,sector_a)","type":"Sequence","prev":"IDLE","status":"RUNNING","tree_id":"MissionPlan","wm_version":5}
+{"ts_us":1774793646173307,"node":"CheckWorldPredicate","type":"CheckWorldPredicate","prev":"IDLE","status":"FAILURE","tree_id":"MissionPlan","wm_version":5}
+{"ts_us":1774793646173313,"node":"CheckWorldPredicate","type":"CheckWorldPredicate","prev":"FAILURE","status":"IDLE","tree_id":"MissionPlan","wm_version":5}
+{"ts_us":1774793646173318,"node":"move(uav1,base,sector_a)","type":"Sequence","prev":"RUNNING","status":"FAILURE","tree_id":"MissionPlan","wm_version":5}
+{"ts_us":1774793646173323,"node":"move(uav1,base,sector_a)","type":"Sequence","prev":"FAILURE","status":"IDLE","tree_id":"MissionPlan","wm_version":5}
+{"ts_us":1774793646173327,"node":"Sequence","type":"Sequence","prev":"RUNNING","status":"FAILURE","tree_id":"MissionPlan","wm_version":5}
+{"ts_us":1774793646173331,"node":"Sequence","type":"Sequence","prev":"FAILURE","status":"IDLE","tree_id":"MissionPlan","wm_version":5}

@@ -1,5 +1,8 @@
 #include <ame/executor_component.h>
 
+#include <ame/bt_nodes/check_world_predicate.h>
+#include <ame/bt_nodes/set_world_predicate.h>
+
 #include <stdexcept>
 
 namespace ame {
@@ -66,6 +69,8 @@ void ExecutorComponent::tickOnce() {
 }
 
 pcl_status_t ExecutorComponent::on_configure() {
+  factory_.registerNodeType<CheckWorldPredicate>("CheckWorldPredicate");
+  factory_.registerNodeType<SetWorldPredicate>("SetWorldPredicate");
   return PCL_OK;
 }
 

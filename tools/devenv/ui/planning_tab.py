@@ -332,9 +332,11 @@ class PlanningTab:
         # Store BT XML and enable execute button if plan succeeded
         if result.success and result.bt_xml:
             self._last_bt_xml = result.bt_xml
+            self._app.last_bt_xml = result.bt_xml
             dpg.configure_item(self._execute_button, enabled=True)
         else:
             self._last_bt_xml = ""
+            self._app.last_bt_xml = ""
             dpg.configure_item(self._execute_button, enabled=False)
 
         # Add to history

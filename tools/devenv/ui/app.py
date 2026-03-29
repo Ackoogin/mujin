@@ -73,6 +73,9 @@ class App:
         self._last_plot_refresh = 0.0
         self._plot_refresh_interval = 1.0  # seconds
 
+        # Last compiled BT XML — shared between Planning and Execution tabs
+        self.last_bt_xml: str = ""
+
     def run(self) -> None:
         """Initialise Dear PyGui, build UI, start comms, enter render loop."""
         dpg.create_context()
@@ -211,16 +214,43 @@ class App:
             if self.observability_tab:
                 self.observability_tab.add_wm_event(entry)
 
-        # --- Drain ROS2 plan feedback ---
+        # --- Drain PCL in-process BT events ---
+        pcl_bt_events: list = []
+        if hasattr(self.client, "drain_bt_events"):
+            for raw in self.client.drain_bt_events():
+                pcl_bt_events.append(raw)
+                evt = BTEvent.from_json(raw)
+                if self.execution_tab:
+                    self.execution_tab.add_bt_event(evt)
+                if self.observability_tab:
+                    self.observability_tab.add_bt_event(evt)
+
+        # --- Drain PCL in-process WM audit events ---
+        if hasattr(self.client, "drain_wm_events"):
+            for raw in self.client.drain_wm_events():
+                entry = WMAuditEntry.from_json(raw)
+                if self.world_model_tab:
+                    self.world_model_tab.update_from_wm_event(
+                        entry.fact, entry.value, entry.source, entry.wm_version
+                    )
+                if self.observability_tab:
+                    self.observability_tab.add_wm_event(entry)
+
+        # --- Drain plan feedback ---
         if self.planning_tab:
             self.planning_tab.update_feedback()
 
+        # --- Update execution tab controls (status label, tick counter) ---
+        if self.execution_tab:
+            self.execution_tab.update_controls()
+
         # --- Periodic plot/display refresh (throttled) ---
+        have_bt = bool(bt_events or pcl_bt_events)
         if now - self._last_plot_refresh >= self._plot_refresh_interval:
             self._last_plot_refresh = now
-            if bt_events and self.execution_tab:
+            if have_bt and self.execution_tab:
                 self.execution_tab.refresh_display()
-            if wm_events and self.observability_tab:
+            if (wm_events or pcl_bt_events) and self.observability_tab:
                 self.observability_tab.refresh_plots()
 
         # --- Update status bar ---

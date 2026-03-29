@@ -129,6 +129,8 @@ class ObservabilityTab:
         self._fact_plot_y = dpg.add_plot_axis(
             dpg.mvYAxis, label="Value", parent=self._fact_plot,
         )
+        dpg.set_axis_ticks(self._fact_plot_y, (("FALSE", 0.0), ("TRUE", 1.0)))
+        dpg.set_axis_limits(self._fact_plot_y, -0.1, 1.1)
 
         dpg.add_spacer(height=6)
         dpg.add_text("Change Log:", color=(180, 180, 200))
@@ -210,6 +212,13 @@ class ObservabilityTab:
         )
         dpg.fit_axis_data(self._wm_plot_x)
         dpg.fit_axis_data(self._wm_plot_y)
+
+        # Force integer Y ticks over the observed version range
+        v_min = int(min(ys))
+        v_max = int(max(ys))
+        ticks = tuple((str(v), float(v)) for v in range(v_min, v_max + 1))
+        if ticks:
+            dpg.set_axis_ticks(self._wm_plot_y, ticks)
 
     # -- Internal ------------------------------------------------------------
 
@@ -293,7 +302,7 @@ class ObservabilityTab:
         for e in history:
             val_color = (80, 200, 80, 255) if e.value else (220, 60, 60, 255)
             dpg.add_text(
-                f"v{e.wm_version}  {'TRUE':>5s if e.value else 'FALSE':>5s}"
+                f"v{e.wm_version}  {'TRUE' if e.value else 'FALSE':>5s}"
                 f"  src: {e.source}",
                 parent=self._fact_history_panel,
                 color=val_color,
