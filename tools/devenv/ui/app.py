@@ -229,8 +229,6 @@ class App:
         pcl_wm_events: list = []
         if hasattr(self.client, "drain_wm_events"):
             pcl_wm_events = self.client.drain_wm_events()
-            if pcl_wm_events:
-                print(f"[app] drained {len(pcl_wm_events)} PCL WM events")
             for raw in pcl_wm_events:
                 entry = WMAuditEntry.from_json(raw)
                 if self.world_model_tab:
@@ -249,12 +247,11 @@ class App:
             self.execution_tab.update_controls()
 
         # --- Periodic plot/display refresh (throttled) ---
-        have_bt = bool(bt_events or pcl_bt_events)
         if now - self._last_plot_refresh >= self._plot_refresh_interval:
             self._last_plot_refresh = now
-            if have_bt and self.execution_tab:
+            if self.execution_tab:
                 self.execution_tab.refresh_display()
-            if (wm_events or pcl_wm_events) and self.observability_tab:
+            if self.observability_tab:
                 self.observability_tab.refresh_plots()
 
         # --- Update status bar ---

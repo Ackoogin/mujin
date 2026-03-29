@@ -29,6 +29,9 @@ class ObservabilityTab:
         self._auto_scroll = True
         self._filter_text: str = ""
 
+        # Track event counts at last plot refresh — only refit when new data arrived
+        self._wm_count_at_refresh: int = 0
+
         # Replay
         self._replay = ReplaySession()
         self._replay_time: float = 0.0
@@ -178,7 +181,6 @@ class ObservabilityTab:
         self._add_log_entry(ts, "BT", text, color)
 
     def add_wm_event(self, event: WMAuditEntry) -> None:
-        print(f"[obs] wm_event: {event.fact}={'TRUE' if event.value else 'FALSE'} total={len(self._wm_events)+1}")
         self._wm_events.append(event)
         ts = event.ts_sec
         val_str = "TRUE" if event.value else "FALSE"
@@ -194,10 +196,12 @@ class ObservabilityTab:
         self._add_log_entry(ts, "WM", text, color)
 
     def refresh_plots(self) -> None:
-        """Update WM version plot with current data."""
-        print(f"[obs] refresh_plots called, wm_events={len(self._wm_events)}")
-        if not self._wm_events:
+        """Update WM version plot. Only refits axes when new data has arrived."""
+        n = len(self._wm_events)
+        if not n:
             return
+        new_data = n > self._wm_count_at_refresh
+        self._wm_count_at_refresh = n
 
         t0 = self._wm_events[0].ts_sec
         xs = [e.ts_sec - t0 for e in self._wm_events]
@@ -208,11 +212,11 @@ class ObservabilityTab:
             for child in children:
                 dpg.delete_item(child)
 
-        dpg.add_line_series(
-            xs, ys, label="WM Version", parent=self._wm_plot_y,
-        )
-        dpg.fit_axis_data(self._wm_plot_x)
-        _set_integer_y_axis(self._wm_plot_y, ys)
+        dpg.add_stair_series(xs, ys, label="WM Version", parent=self._wm_plot_y)
+
+        if new_data:
+            dpg.fit_axis_data(self._wm_plot_x)
+            _set_integer_y_axis(self._wm_plot_y, ys)
 
     # -- Internal ------------------------------------------------------------
 
@@ -270,7 +274,6 @@ class ObservabilityTab:
     def _on_fact_selected(self, sender, value, user_data) -> None:
         fact_key = value
         history = [e for e in self._wm_events if e.fact == fact_key]
-        print(f"[obs] fact selected: '{fact_key}', {len(history)} events from {len(self._wm_events)} total")
 
         # Update fact plot
         children = dpg.get_item_children(self._fact_plot_y, 1)

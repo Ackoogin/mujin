@@ -31,6 +31,7 @@ class ExecutionTab:
         self._node_events: dict[str, list[BTEvent]] = defaultdict(list)
         # All events for timeline
         self._all_events: list[BTEvent] = []
+        self._events_at_last_timeline_refresh: int = 0
 
         # --- Control bar widget IDs ---
         self._status_badge: int = 0
@@ -260,6 +261,7 @@ class ExecutionTab:
         self._all_events.clear()
         self._node_statuses.clear()
         self._node_events.clear()
+        self._events_at_last_timeline_refresh = 0
         dpg.set_value(self._event_count_text, "Events: 0")
         self.refresh_display()
 
@@ -417,8 +419,11 @@ class ExecutionTab:
     # ------------------------------------------------------------------
 
     def _update_timeline(self) -> None:
-        if not self._all_events:
+        n = len(self._all_events)
+        if not n:
             return
+        new_data = n > self._events_at_last_timeline_refresh
+        self._events_at_last_timeline_refresh = n
 
         t0 = self._all_events[0].ts_sec
         xs = [e.ts_sec - t0 for e in self._all_events]
@@ -429,7 +434,8 @@ class ExecutionTab:
             for child in children:
                 dpg.delete_item(child)
 
-        dpg.add_line_series(xs, ys, label="WM Version",
-                            parent=self._timeline_y)
-        dpg.fit_axis_data(self._timeline_x)
-        _set_integer_y_axis(self._timeline_y, ys)
+        dpg.add_stair_series(xs, ys, label="WM Version", parent=self._timeline_y)
+
+        if new_data:
+            dpg.fit_axis_data(self._timeline_x)
+            _set_integer_y_axis(self._timeline_y, ys)

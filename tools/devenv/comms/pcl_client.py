@@ -315,7 +315,6 @@ class AmePclClient:
         source: str,
     ) -> None:
         """Audit callback fired by WorldModel on every fact change."""
-        print(f"[PCL audit] v{version} {fact}={'TRUE' if value else 'FALSE'} src={source}")
         self._wm_event_queue.append(json.dumps({
             "wm_version": version,
             "ts_us": ts_us,
@@ -480,7 +479,7 @@ class AmePclClient:
         """Register the WM audit callback if the binding supports it."""
         try:
             self._wm.set_audit_callback(self._on_wm_audit)
-            print("[PCL] WM audit callback registered")
+
         except AttributeError:
             print("[PCL] set_audit_callback not available — rebuild _ame_py for live WM events")
 
