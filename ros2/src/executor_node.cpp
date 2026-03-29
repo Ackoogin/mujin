@@ -17,11 +17,14 @@ ExecutorNode::ExecutorNode(const rclcpp::NodeOptions& options)
 
 ExecutorNode::CallbackReturn
 ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
+  declare_parameter("agent_id", std::string(""));
   declare_parameter("tick_rate_hz", 50.0);
   declare_parameter("bt_log.enabled", true);
   declare_parameter("bt_log.path", std::string("bt_events.jsonl"));
   declare_parameter("bt_log.tree_id", std::string("MissionPlan"));
   declare_parameter("world_model_node", std::string("world_model_node"));
+
+  agent_id_ = get_parameter("agent_id").as_string();
 
   const auto wm_ns = get_parameter("world_model_node").as_string();
   client_get_fact_ = create_client<ame_ros2::srv::GetFact>("/" + wm_ns + "/get_fact");
@@ -34,11 +37,18 @@ ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
 
   registerCoreNodes();
   if (inprocess_wm_) {
-    component_.setBlackboardInitializer({});
+    component_.setBlackboardInitializer([this](const BT::Blackboard::Ptr& blackboard) {
+      if (!agent_id_.empty()) {
+        blackboard->set("current_agent_id", agent_id_);
+      }
+    });
   } else {
     component_.setBlackboardInitializer([this](const BT::Blackboard::Ptr& blackboard) {
       blackboard->set("get_fact_client", client_get_fact_.get());
       blackboard->set("set_fact_client", client_set_fact_.get());
+      if (!agent_id_.empty()) {
+        blackboard->set("current_agent_id", agent_id_);
+      }
     });
   }
 
@@ -47,7 +57,11 @@ ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
     return CallbackReturn::FAILURE;
   }
 
-  RCLCPP_INFO(get_logger(), "ExecutorNode configured");
+  if (!agent_id_.empty()) {
+    RCLCPP_INFO(get_logger(), "ExecutorNode configured for agent '%s'", agent_id_.c_str());
+  } else {
+    RCLCPP_INFO(get_logger(), "ExecutorNode configured");
+  }
   return CallbackReturn::SUCCESS;
 }
 
@@ -58,14 +72,18 @@ ExecutorNode::on_activate(const rclcpp_lifecycle::State&) {
     return CallbackReturn::FAILURE;
   }
 
+  // Build topic prefix based on agent_id
+  std::string topic_prefix = agent_id_.empty() ? "" : ("/" + agent_id_);
+
   auto qos = rclcpp::QoS(50).reliable();
-  pub_bt_events_ = create_publisher<std_msgs::msg::String>("/executor/bt_events", qos);
+  pub_bt_events_ = create_publisher<std_msgs::msg::String>(
+      topic_prefix + "/executor/bt_events", qos);
   pub_status_ = create_publisher<std_msgs::msg::String>(
-      "/executor/status", rclcpp::QoS(1).reliable().transient_local());
+      topic_prefix + "/executor/status", rclcpp::QoS(1).reliable().transient_local());
   pub_bt_events_->on_activate();
   pub_status_->on_activate();
   sub_bt_xml_ = create_subscription<std_msgs::msg::String>(
-      "/executor/bt_xml",
+      topic_prefix + "/executor/bt_xml",
       rclcpp::QoS(10).reliable(),
       [this](const std_msgs::msg::String& msg) {
         try {
@@ -86,7 +104,11 @@ ExecutorNode::on_activate(const rclcpp_lifecycle::State&) {
   });
 
   publishStatus("IDLE");
-  RCLCPP_INFO(get_logger(), "ExecutorNode activated");
+  if (!agent_id_.empty()) {
+    RCLCPP_INFO(get_logger(), "ExecutorNode activated for agent '%s'", agent_id_.c_str());
+  } else {
+    RCLCPP_INFO(get_logger(), "ExecutorNode activated");
+  }
   return CallbackReturn::SUCCESS;
 }
 

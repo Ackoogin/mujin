@@ -50,6 +50,7 @@ add_library(ame_ros2_lib SHARED
     src/world_model_node.cpp
     src/planner_node.cpp
     src/executor_node.cpp
+    src/agent_dispatcher_node.cpp
     src/ros_wm_bridge.cpp
     src/lifecycle_manager.cpp
 )

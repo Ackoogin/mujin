@@ -34,6 +34,13 @@ struct FactMetadata {
     std::string source;          ///< Originator identifier
 };
 
+/// Agent information for multi-agent planning.
+struct AgentInfo {
+    std::string id;           ///< Agent identifier, e.g., "uav1"
+    std::string type;         ///< Agent type, e.g., "uav"
+    bool available = true;    ///< Whether agent can accept new tasks
+};
+
 /// Immutable snapshot of world state for thread-safe reads.
 /// BT executor captures a snapshot at tick start and reads from it.
 class WorldStateData {
@@ -228,6 +235,18 @@ public:
     // Goal management
     void setGoal(const std::vector<std::string>& goal_fluent_keys);
     const std::vector<unsigned>& goalFluentIds() const { return goal_fluent_ids_; }
+
+    // Agent management for multi-agent planning
+    void registerAgent(const std::string& id, const std::string& type);
+    const std::vector<AgentInfo>& agents() const { return agents_; }
+    AgentInfo* getAgent(const std::string& id);
+    const AgentInfo* getAgent(const std::string& id) const;
+    std::vector<std::string> agentIds() const;
+    std::vector<std::string> availableAgentIds() const;
+    size_t numAgents() const { return agents_.size(); }
+
+private:
+    std::vector<AgentInfo> agents_;
 };
 
 } // namespace ame

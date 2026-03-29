@@ -45,6 +45,11 @@ add_executable(test_extensions test_extensions.cpp)
 target_link_libraries(test_extensions PRIVATE ame_core GTest::gtest_main)
 gtest_discover_tests(test_extensions DISCOVERY_MODE PRE_TEST)
 
+# --- Multi-agent planning tests ---
+add_executable(test_multi_agent test_multi_agent.cpp)
+target_link_libraries(test_multi_agent PRIVATE ame_core GTest::gtest_main)
+gtest_discover_tests(test_multi_agent DISCOVERY_MODE PRE_TEST)
+
 # ---------------------------------------------------------------------------
 # PCL (PYRAMID Container Library) tests
 # ---------------------------------------------------------------------------

@@ -311,4 +311,58 @@ std::string PlanCompiler::compile(const std::vector<PlanStep>& plan,
     return xml.str();
 }
 
+std::string PlanCompiler::compile(const std::vector<PlanStep>& plan,
+                                  const WorldModel& wm,
+                                  const ActionRegistry& registry,
+                                  const std::string& agent_id) const {
+    if (plan.empty()) {
+        return "<root BTCPP_format=\"4\">\n"
+               "  <BehaviorTree ID=\"MainTree\">\n"
+               "    <Sequence/>\n"
+               "  </BehaviorTree>\n"
+               "</root>\n";
+    }
+
+    // For agent-scoped plans, we wrap the tree in a SetBlackboard node
+    // to inject the agent context, then use the standard compilation.
+    std::string inner_xml = compile(plan, wm, registry);
+
+    // Extract the content between <BehaviorTree> tags
+    auto bt_start = inner_xml.find("<BehaviorTree");
+    auto bt_end = inner_xml.rfind("</BehaviorTree>");
+    if (bt_start == std::string::npos || bt_end == std::string::npos) {
+        return inner_xml;  // Fallback if parsing fails
+    }
+
+    // Find the end of the opening BehaviorTree tag
+    auto bt_open_end = inner_xml.find('>', bt_start);
+    if (bt_open_end == std::string::npos) {
+        return inner_xml;
+    }
+
+    // Extract the inner content (the actual tree nodes)
+    std::string bt_opening = inner_xml.substr(bt_start, bt_open_end - bt_start + 1);
+    std::string bt_content = inner_xml.substr(bt_open_end + 1, bt_end - bt_open_end - 1);
+
+    // Rebuild with agent context wrapper
+    std::ostringstream xml;
+    xml << "<root BTCPP_format=\"4\">\n";
+    xml << "  " << bt_opening << "\n";
+    xml << "    <Sequence>\n";
+    xml << "      <SetBlackboard output_key=\"executing_agent\" value=\"" << agent_id << "\"/>\n";
+    // Re-indent the inner content
+    std::istringstream content_stream(bt_content);
+    std::string line;
+    while (std::getline(content_stream, line)) {
+        if (!line.empty() && line.find_first_not_of(" \t\n") != std::string::npos) {
+            xml << "  " << line << "\n";
+        }
+    }
+    xml << "    </Sequence>\n";
+    xml << "  </BehaviorTree>\n";
+    xml << "</root>\n";
+
+    return xml.str();
+}
+
 } // namespace ame

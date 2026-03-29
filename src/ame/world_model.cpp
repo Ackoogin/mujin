@@ -23,7 +23,8 @@ WorldModel::WorldModel(const WorldModel& other)
       fluent_names_(other.fluent_names_),
       fluent_index_(other.fluent_index_),
       goal_fluent_ids_(other.goal_fluent_ids_),
-      version_(other.version_) {
+      version_(other.version_),
+      agents_(other.agents_) {
   // Note: mutexes are default-constructed (not copied)
   // audit_callback_ is not copied (intentional - caller should set if needed)
 }
@@ -40,6 +41,7 @@ WorldModel& WorldModel::operator=(const WorldModel& other) {
     fluent_index_ = other.fluent_index_;
     goal_fluent_ids_ = other.goal_fluent_ids_;
     version_ = other.version_;
+    agents_ = other.agents_;
     // Note: mutexes are not copied, audit_callback_ is not copied
   }
   return *this;
@@ -475,6 +477,57 @@ aptk::State* WorldModel::currentStateAsSTRIPS(const aptk::STRIPS_Problem& prob) 
   }
   state->update_hash();
   return state;
+}
+
+// =========================================================================
+// Agent Management
+// =========================================================================
+
+void WorldModel::registerAgent(const std::string& id, const std::string& type) {
+  // Check for duplicate
+  for (const auto& agent : agents_) {
+    if (agent.id == id) {
+      return; // Already registered
+    }
+  }
+  agents_.push_back({id, type, true});
+}
+
+AgentInfo* WorldModel::getAgent(const std::string& id) {
+  for (auto& agent : agents_) {
+    if (agent.id == id) {
+      return &agent;
+    }
+  }
+  return nullptr;
+}
+
+const AgentInfo* WorldModel::getAgent(const std::string& id) const {
+  for (const auto& agent : agents_) {
+    if (agent.id == id) {
+      return &agent;
+    }
+  }
+  return nullptr;
+}
+
+std::vector<std::string> WorldModel::agentIds() const {
+  std::vector<std::string> ids;
+  ids.reserve(agents_.size());
+  for (const auto& agent : agents_) {
+    ids.push_back(agent.id);
+  }
+  return ids;
+}
+
+std::vector<std::string> WorldModel::availableAgentIds() const {
+  std::vector<std::string> ids;
+  for (const auto& agent : agents_) {
+    if (agent.available) {
+      ids.push_back(agent.id);
+    }
+  }
+  return ids;
 }
 
 } // namespace ame

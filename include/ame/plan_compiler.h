@@ -21,6 +21,13 @@ public:
                         const WorldModel& wm,
                         const ActionRegistry& registry) const;
 
+    // Compile with agent context - injects agent_id into the BT blackboard scope.
+    // Used by DelegateToAgent for multi-agent execution.
+    std::string compile(const std::vector<PlanStep>& plan,
+                        const WorldModel& wm,
+                        const ActionRegistry& registry,
+                        const std::string& agent_id) const;
+
     // Sequential fallback: emit all steps as a single Sequence (no causal analysis).
     std::string compileSequential(const std::vector<PlanStep>& plan,
                                   const WorldModel& wm,

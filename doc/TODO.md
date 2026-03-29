@@ -172,11 +172,59 @@ From SACE Stage 8 analysis. See [`autonomy_assurance_plan.md`](autonomy_assuranc
 
 ---
 
+## Multi-Agent Planning ✓
+
+**Status: COMPLETE (Initial Implementation)**
+
+Leader-delegation pattern for multi-agent coordination. See [`multi_agent_implementation_plan.md`](multi_agent_implementation_plan.md).
+
+### Agent Registry ✓
+- [x] `AgentInfo` struct: id, type, availability tracking
+- [x] `WorldModel::registerAgent()`, `getAgent()`, `agentIds()`, `availableAgentIds()`
+- [x] Agent state copied correctly in WorldModel copy constructor/assignment
+
+### Goal Allocation ✓
+- [x] `GoalAllocator` class: sector-based goal grouping, round-robin agent assignment
+- [x] `extractSector()` utility for parsing goal fluents
+- [x] `AgentGoalAssignment` struct for per-agent goal sets
+
+### Agent Delegation BT Node ✓
+- [x] `DelegateToAgent` BT node: plans and executes goals scoped to a specific agent
+- [x] Agent availability management: marks agent busy during execution, restores on completion/halt
+- [x] Agent context injection via blackboard (`current_agent_id`, `executing_agent`)
+
+### PlanCompiler Agent Context ✓
+- [x] `compile(plan, wm, registry, agent_id)` overload injects `SetBlackboard` node
+- [x] Agent ID available to all child action nodes via `executing_agent` blackboard key
+
+### Multi-Agent PDDL Domain ✓
+- [x] `domains/multi_uav_search/domain.pddl`: typed agents, parameterized actions
+- [x] `domains/multi_uav_search/problem.pddl`: 2 UAVs, 4 sectors
+
+### Test Coverage ✓
+- [x] Agent registry: registration, lookup, availability, copy semantics
+- [x] GoalAllocator: round-robin, sector grouping, edge cases
+- [x] Multi-agent planning: joint plans, leader-delegation pattern, plan extraction
+- [x] DelegateToAgent: agent busy marking, non-existent agent, unavailable agent
+- [x] Complex scenario: 2 agents, 4 sectors, full mission (22 tests passing)
+
+### Distributed Execution ✓
+- [x] `ExecutorNode` supports `agent_id` parameter for topic namespacing
+- [x] Agent-scoped topics: `/{agent_id}/executor/bt_xml`, `/{agent_id}/executor/status`
+- [x] `AgentDispatcher` PCL component for coordinating multi-agent plan dispatch
+- [x] `AgentDispatcherNode` ROS2 wrapper with transport callbacks
+- [x] `ame_multi_agent.launch.py` for spawning multiple agent executors
+
+### Future Extensions
+- Dynamic re-allocation on agent failure
+- Coordination constraints (mutex resources, sync barriers)
+
+---
+
 ## Post-Extension (future)
 
 - Plan quality optimisation (anytime search, LPG-style local improvement)
 - Advanced heuristics (landmark-based for larger domains)
-- Multi-agent planning (MA-STRIPS or task allocation)
 - Dynamic object lifecycle (creation/destruction mid-mission)
 - Resource-aware flow scheduling (mutex on shared resources)
 - Gazebo/Isaac Sim integration

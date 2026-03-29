@@ -11,10 +11,13 @@ add_library(ame_core STATIC
     world_model_component.cpp
     planner_component.cpp
     executor_component.cpp
+    goal_allocator.cpp
+    agent_dispatcher.cpp
     bt_nodes/check_world_predicate.cpp
     bt_nodes/set_world_predicate.cpp
     bt_nodes/invoke_service.cpp
     bt_nodes/execute_phase_action.cpp
+    bt_nodes/delegate_to_agent.cpp
     bt_logger.cpp
     wm_audit_log.cpp
     plan_audit_log.cpp

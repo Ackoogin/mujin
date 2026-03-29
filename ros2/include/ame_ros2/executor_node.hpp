@@ -18,11 +18,17 @@ namespace ame_ros2 {
 /// BT world model access uses either direct WorldModel* (in-process mode)
 /// or ROS2 service calls to WorldModelNode (distributed mode).
 ///
+/// For multi-agent deployments, set agent_id to namespace all topics:
+///   /{agent_id}/executor/bt_xml     — subscription for BT XML
+///   /{agent_id}/executor/bt_events  — JSON lines from AmeBTLogger
+///   /{agent_id}/executor/status     — "IDLE"/"RUNNING"/"SUCCESS"/"FAILURE"
+///
 /// Publishers (active after on_activate):
-///   /executor/bt_events  (std_msgs/String) — JSON lines from AmeBTLogger
-///   /executor/status     (std_msgs/String) — "IDLE"/"RUNNING"/"SUCCESS"/"FAILURE"
+///   [prefix]/executor/bt_events  (std_msgs/String) — JSON lines from AmeBTLogger
+///   [prefix]/executor/status     (std_msgs/String) — "IDLE"/"RUNNING"/"SUCCESS"/"FAILURE"
 ///
 /// Parameters:
+///   agent_id             (string, "")     — agent ID for topic namespacing (empty = no prefix)
 ///   tick_rate_hz         (double, 50.0)
 ///   bt_log.enabled       (bool, true)
 ///   bt_log.path          (string, "bt_events.jsonl")
@@ -56,10 +62,14 @@ public:
 
   BT::NodeStatus lastStatus() const { return component_.lastStatus(); }
 
+  /// \brief Returns the agent ID for this executor (empty if not agent-scoped).
+  const std::string& agentId() const { return agent_id_; }
+
 private:
   ame::ExecutorComponent component_;
 
   ame::WorldModel* inprocess_wm_ = nullptr;
+  std::string agent_id_;  ///< Agent ID for topic namespacing
 
   // Tick timer
   rclcpp::TimerBase::SharedPtr tick_timer_;
