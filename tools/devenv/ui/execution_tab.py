@@ -38,6 +38,7 @@ class ExecutionTab:
         self._tick_label: int = 0
         self._mode_combo: int = 0
         self._interval_input: int = 0
+        self._authority_combo: int = 0
         self._load_start_btn: int = 0
         self._stop_btn: int = 0
         self._tick_once_btn: int = 0
@@ -87,6 +88,16 @@ class ExecutionTab:
                         step=0.01,
                         format="%.3f",
                         width=90,
+                    )
+
+                    dpg.add_spacer(width=16)
+
+                    dpg.add_text("Preconditions:", color=(140, 140, 160))
+                    self._authority_combo = dpg.add_combo(
+                        items=["any (planning)", "confirmed (execution)"],
+                        default_value="any (planning)",
+                        width=175,
+                        callback=None,
                     )
 
                     dpg.add_spacer(width=16)
@@ -229,6 +240,10 @@ class ExecutionTab:
         self._bt_xml = bt_xml
         self._render_tree()
 
+        authority_val = dpg.get_value(self._authority_combo)
+        authority = "confirmed" if "confirmed" in authority_val else "any"
+        bt_xml = self._inject_required_authority(bt_xml, authority)
+
         mode = dpg.get_value(self._mode_combo)
         client.load_bt(bt_xml)
 
@@ -264,6 +279,21 @@ class ExecutionTab:
         self._events_at_last_timeline_refresh = 0
         dpg.set_value(self._event_count_text, "Events: 0")
         self.refresh_display()
+
+    # ------------------------------------------------------------------
+    # BT XML transforms
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _inject_required_authority(bt_xml: str, authority: str) -> str:
+        """Return bt_xml with required_authority set on every CheckWorldPredicate node."""
+        try:
+            root = ET.fromstring(bt_xml)
+            for node in root.iter("CheckWorldPredicate"):
+                node.set("required_authority", authority)
+            return ET.tostring(root, encoding="unicode")
+        except ET.ParseError:
+            return bt_xml
 
     # ------------------------------------------------------------------
     # Tree rendering
@@ -303,7 +333,8 @@ class ExecutionTab:
             )
 
     # Attributes that are meaningful to show inline
-    _DISPLAY_ATTRS = {"predicate", "value", "from", "to", "target", "agent"}
+    _DISPLAY_ATTRS = {"predicate", "value", "from", "to", "target", "agent",
+                      "required_authority"}
     # Attributes that are BT-internal / not user-facing
     _SKIP_ATTRS = {"name", "ID", "id"}
 

@@ -80,6 +80,65 @@ TEST(BTNodes, CheckWorldPredicate_ExpectedFalse) {
     EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
 }
 
+TEST(BTNodes, CheckWorldPredicate_RequiredAuthorityConfirmed_FailsOnBelieved) {
+    auto wm = makeSimpleWM();
+    // Set fact with default BELIEVED authority
+    wm.setFact("(at uav1 base)", true, "plan", ame::FactAuthority::BELIEVED);
+
+    auto factory = makeFactory();
+    static const char* xml = R"xml(
+        <root BTCPP_format="4">
+            <BehaviorTree ID="MainTree">
+                <CheckWorldPredicate predicate="(at uav1 base)" required_authority="confirmed"/>
+            </BehaviorTree>
+        </root>
+    )xml";
+    auto tree = factory.createTreeFromText(xml);
+    tree.rootBlackboard()->set("world_model", &wm);
+
+    // Fact is true but only BELIEVED — should fail
+    auto status = tree.tickOnce();
+    EXPECT_EQ(status, BT::NodeStatus::FAILURE);
+}
+
+TEST(BTNodes, CheckWorldPredicate_RequiredAuthorityConfirmed_SucceedsOnConfirmed) {
+    auto wm = makeSimpleWM();
+    wm.setFact("(at uav1 base)", true, "perception", ame::FactAuthority::CONFIRMED);
+
+    auto factory = makeFactory();
+    static const char* xml = R"xml(
+        <root BTCPP_format="4">
+            <BehaviorTree ID="MainTree">
+                <CheckWorldPredicate predicate="(at uav1 base)" required_authority="confirmed"/>
+            </BehaviorTree>
+        </root>
+    )xml";
+    auto tree = factory.createTreeFromText(xml);
+    tree.rootBlackboard()->set("world_model", &wm);
+
+    auto status = tree.tickOnce();
+    EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
+}
+
+TEST(BTNodes, CheckWorldPredicate_RequiredAuthorityAny_AcceptsBelieved) {
+    auto wm = makeSimpleWM();
+    wm.setFact("(at uav1 base)", true, "plan", ame::FactAuthority::BELIEVED);
+
+    auto factory = makeFactory();
+    static const char* xml = R"xml(
+        <root BTCPP_format="4">
+            <BehaviorTree ID="MainTree">
+                <CheckWorldPredicate predicate="(at uav1 base)" required_authority="any"/>
+            </BehaviorTree>
+        </root>
+    )xml";
+    auto tree = factory.createTreeFromText(xml);
+    tree.rootBlackboard()->set("world_model", &wm);
+
+    auto status = tree.tickOnce();
+    EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
+}
+
 TEST(BTNodes, SetWorldPredicate_SetsTrue) {
     auto wm = makeSimpleWM();
     EXPECT_FALSE(wm.getFact("(searched base)"));
