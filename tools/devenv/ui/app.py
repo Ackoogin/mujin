@@ -15,6 +15,8 @@ from ..models.events import BTEvent, WMAuditEntry, WorldSnapshot
 from .theme import (
     create_global_theme,
     create_accent_button_theme,
+    create_primary_window_theme,
+    setup_font,
 )
 from .world_model_tab import WorldModelTab
 from .planning_tab import PlanningTab
@@ -87,7 +89,12 @@ class App:
             height=self.config.ui.window_height,
             min_width=900,
             min_height=600,
+            clear_color=(6, 10, 14, 255),
         )
+
+        # Font
+        font = setup_font()
+        dpg.bind_font(font)
 
         # Global theme
         theme = create_global_theme()
@@ -97,6 +104,7 @@ class App:
         self._build_ui()
 
         dpg.setup_dearpygui()
+        dpg.set_viewport_clear_color((6, 10, 14, 255))
         dpg.show_viewport()
 
         # Start communication clients
@@ -123,40 +131,50 @@ class App:
 
     def _build_ui(self) -> None:
         """Create the primary window with tab bar, status bar."""
-        with dpg.window(tag="primary_window"):
-            # Main tab bar
-            with dpg.tab_bar(tag="main_tabs"):
-                # Tab 1: World Model
-                with dpg.tab(label="  World Model  "):
-                    self.world_model_tab = WorldModelTab(self)
-                    with dpg.child_window(border=False) as container:
-                        self.world_model_tab.build(container)
+        # Reserve height for the status bar so tabs don't push it offscreen.
+        # Status bar ≈ spacer(2) + separator(2) + text line(~22) + padding
+        _STATUS_BAR_H = 34
 
-                # Tab 2: Planning
-                with dpg.tab(label="  Planning  "):
-                    self.planning_tab = PlanningTab(self)
-                    with dpg.child_window(border=False) as container:
-                        self.planning_tab.build(container)
+        with dpg.window(tag="primary_window", no_scrollbar=True):
+            dpg.bind_item_theme("primary_window", create_primary_window_theme())
+            # Main tab bar — content area leaves room for the status bar
+            with dpg.child_window(
+                border=False,
+                height=-_STATUS_BAR_H,
+                tag="tab_content_area",
+            ):
+                with dpg.tab_bar(tag="main_tabs"):
+                    # Tab 1: World Model
+                    with dpg.tab(label="  World Model  "):
+                        self.world_model_tab = WorldModelTab(self)
+                        with dpg.child_window(border=False) as container:
+                            self.world_model_tab.build(container)
 
-                # Tab 3: Execution
-                with dpg.tab(label="  Execution  "):
-                    self.execution_tab = ExecutionTab(self)
-                    with dpg.child_window(border=False) as container:
-                        self.execution_tab.build(container)
+                    # Tab 2: Planning
+                    with dpg.tab(label="  Planning  "):
+                        self.planning_tab = PlanningTab(self)
+                        with dpg.child_window(border=False) as container:
+                            self.planning_tab.build(container)
 
-                # Tab 4: Observability
-                with dpg.tab(label="  Observability  "):
-                    self.observability_tab = ObservabilityTab(self)
-                    with dpg.child_window(border=False) as container:
-                        self.observability_tab.build(container)
+                    # Tab 3: Execution
+                    with dpg.tab(label="  Execution  "):
+                        self.execution_tab = ExecutionTab(self)
+                        with dpg.child_window(border=False) as container:
+                            self.execution_tab.build(container)
 
-                # Tab 5: PDDL Editor
-                with dpg.tab(label="  PDDL Editor  "):
-                    self.pddl_editor_tab = PddlEditorTab(self)
-                    with dpg.child_window(border=False) as container:
-                        self.pddl_editor_tab.build(container)
+                    # Tab 4: Observability
+                    with dpg.tab(label="  Observability  "):
+                        self.observability_tab = ObservabilityTab(self)
+                        with dpg.child_window(border=False) as container:
+                            self.observability_tab.build(container)
 
-            # Status bar at bottom
+                    # Tab 5: PDDL Editor
+                    with dpg.tab(label="  PDDL Editor  "):
+                        self.pddl_editor_tab = PddlEditorTab(self)
+                        with dpg.child_window(border=False) as container:
+                            self.pddl_editor_tab.build(container)
+
+            # Status bar at bottom — always visible
             dpg.add_spacer(height=2)
             dpg.add_separator()
             with dpg.group(horizontal=True):
@@ -165,7 +183,7 @@ class App:
                 )
                 dpg.add_text("  |  ", color=(55, 55, 68))
                 self._ros2_status = dpg.add_text(
-                    "ROS2: --", color=(120, 120, 130)
+                    f"{self._backend_name}: --", color=(120, 120, 130)
                 )
                 dpg.add_text("  |  ", color=(55, 55, 68))
                 self._wm_version_label = dpg.add_text(
@@ -270,19 +288,20 @@ class App:
                 self._foxglove_status, color=(220, 60, 60, 255)
             )
 
-        # ROS2 connection
+        # Backend connection
+        name = self._backend_name
         if self.ros2.connected:
-            dpg.set_value(self._ros2_status, "ROS2: Connected")
+            dpg.set_value(self._ros2_status, f"{name}: Connected")
             dpg.configure_item(
                 self._ros2_status, color=(80, 200, 80, 255)
             )
         elif not self.ros2.available:
-            dpg.set_value(self._ros2_status, "ROS2: Not installed")
+            dpg.set_value(self._ros2_status, f"{name}: Not available")
             dpg.configure_item(
                 self._ros2_status, color=(180, 140, 60, 255)
             )
         else:
-            dpg.set_value(self._ros2_status, "ROS2: Disconnected")
+            dpg.set_value(self._ros2_status, f"{name}: Disconnected")
             dpg.configure_item(
                 self._ros2_status, color=(220, 60, 60, 255)
             )
