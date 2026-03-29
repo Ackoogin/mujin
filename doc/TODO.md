@@ -33,21 +33,31 @@ These extensions are intertwined — a single authoritative `WorldModel` accesse
 
 ---
 
-## Extension 4: PYRAMID Service Nodes
+## Extension 4: PYRAMID Service Nodes ✓
 
-- Implement `InvokeService` BT node inheriting from `BT::StatefulActionNode`
-- Translate PDDL action bindings (from `ActionRegistry`) into async service requests
-- Handle async wait returning `BT::NodeStatus::RUNNING` until service completes
-- Implement timeout handling and graceful `FAILURE` if SDK service unreachable
+**Status: COMPLETE**
+
+- [x] `InvokeService` BT node converted from `BT::SyncActionNode` to `BT::StatefulActionNode`
+- [x] `IPyramidService` extended with async API: `callAsync()`, `pollResult()`, `cancelCall()`
+- [x] `AsyncCallStatus` enum: `PENDING`, `SUCCESS`, `FAILURE`, `CANCELLED`
+- [x] PDDL action param auto-mapping via `param_names`/`param_values` ports (strips `?` prefix)
+- [x] Async lifecycle: `onStart()` initiates call, `onRunning()` polls, `onHalted()` cancels
+- [x] Configurable timeout via `timeout_ms` port (default 5000ms, 0 = no timeout)
+- [x] `MockPyramidService` updated for async support (immediate completion on first poll)
+- [x] Tests: async RUNNING→SUCCESS, timeout→FAILURE, halt→cancel, param mapping, merge with request_json
 
 ---
 
-## Extension 6: Hierarchical Planning
+## Extension 6: Hierarchical Planning ✓
 
-- Finalise `ExecutePhaseAction` BT node concept
-- Integrate `PlannerNode` so `ExecutePhaseAction` can invoke ROS2 action call to planner
-- Retrieve dynamically compiled child tree and tick using BT.CPP dynamic sub-tree features
-- Update `PlanAuditLog` to capture causal links between parent phases and sub-trees
+**Status: COMPLETE**
+
+- [x] `ExecutePhaseAction` BT node: plan–compile–execute cycle for sub-goal sets
+- [x] `PlannerComponent` integration: `ExecutePhaseAction` detects `PlannerComponent*` on blackboard, enabling distributed planning via ROS2 action server
+- [x] Dynamic sub-tree: compiled BT XML loaded via `BT::BehaviorTreeFactory::createTreeFromText()` with shared blackboard
+- [x] `PlanAuditLog` causal links: `episode_id`, `parent_episode_id`, `phase_name` fields track parent–child phase relationships
+- [x] Sequential phases: `parent_episode_id` propagated via blackboard for causal chaining
+- [x] Tests: audit trail recording, causal links for sequential phases, failed planning episodes, PlannerComponent path
 
 ---
 

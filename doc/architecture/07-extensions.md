@@ -49,22 +49,70 @@ if (wm.hasAuthorityConflict(fluent_id, perceived_value)) {
 
 ## PYRAMID Service Nodes (Extension 4)
 
-**Files:** `include/ame/pyramid_service.h`, `include/ame/bt_nodes/invoke_service.h`, `src/bt_nodes/invoke_service.cpp`
+**Files:** `include/ame/pyramid_service.h`, `include/ame/bt_nodes/invoke_service.h`, `src/ame/bt_nodes/invoke_service.cpp`
 
-`InvokeService` BT node maps PDDL actions to PYRAMID SDK service calls via the `IPyramidService` abstract interface. The core library remains SDK-agnostic; concrete adapters implement `IPyramidService::call()`.
+`InvokeService` is a `BT::StatefulActionNode` that maps PDDL actions to asynchronous PYRAMID SDK service calls via the `IPyramidService` abstract interface. The core library remains SDK-agnostic; concrete adapters implement `IPyramidService`.
+
+### Async Lifecycle
+
+```
+onStart()    — Builds request (explicit fields + PDDL param bindings),
+                initiates callAsync(), starts timeout clock
+onRunning()  — Polls pollResult(); returns RUNNING while PENDING,
+                SUCCESS/FAILURE on completion; enforces timeout
+onHalted()   — Cancels the pending async call via cancelCall()
+```
+
+### IPyramidService Interface
 
 ```cpp
-class InvokeService : public BT::SyncActionNode {
+class IPyramidService {
+    // Synchronous (blocking) call — retained for backward compatibility
+    virtual bool call(service_name, operation, request, response) = 0;
+
+    // Async API
+    virtual uint64_t callAsync(service_name, operation, request) = 0;
+    virtual AsyncCallStatus pollResult(request_id, response) = 0;
+    virtual void cancelCall(request_id) = 0;
+};
+```
+
+`AsyncCallStatus` enum: `PENDING`, `SUCCESS`, `FAILURE`, `CANCELLED`.
+
+### InvokeService Ports
+
+```cpp
+class InvokeService : public BT::StatefulActionNode {
     static PortsList providedPorts() {
         return { InputPort<std::string>("service_name"),
                  InputPort<std::string>("operation"),
+                 InputPort<unsigned>("timeout_ms", 5000, "Timeout in ms (0 = none)"),
                  InputPort<std::string>("request_json"),
+                 InputPort<std::string>("param_names"),   // PDDL param auto-mapping
+                 InputPort<std::string>("param_values"),   // PDDL param auto-mapping
                  OutputPort<std::string>("response_json") };
     }
 };
 ```
 
-The blackboard key `"pyramid_service"` must hold an `IPyramidService*`. `MockPyramidService` is provided for testing.
+### PDDL Parameter Auto-Mapping
+
+When `param_names` and `param_values` are provided (semicolon-separated), the node strips leading `?` from PDDL parameter names and merges the name/value pairs into the service request. This enables `ActionRegistry` to automatically translate grounded PDDL parameters into service call fields:
+
+```xml
+<InvokeService service_name="mobility" operation="move"
+               param_names="?robot;?from;?to"
+               param_values="uav1;base;sector_a"/>
+<!-- Request will contain: robot=uav1, from=base, to=sector_a -->
+```
+
+### Timeout Handling
+
+- Default timeout: 5000ms
+- Set `timeout_ms="0"` for no timeout
+- On timeout, `cancelCall()` is invoked and the node returns `FAILURE`
+
+The blackboard key `"pyramid_service"` must hold an `IPyramidService*`. `MockPyramidService` is provided for testing (async calls complete immediately on first poll).
 
 ## Thread Safety (Extension 5)
 
@@ -120,7 +168,33 @@ Snapshots are immutable and reference-counted — safe to hold across multiple B
     phase_name="recon_phase"/>
 ```
 
-Blackboard keys required: `"world_model"`, `"planner"`, `"plan_compiler"`, `"action_registry"`, `"bt_factory"`. PlanAuditLog (Layer 5) captures sub-planning episodes automatically.
+### Planning Paths
+
+Two planning paths are supported:
+
+1. **Direct** (in-process): requires `"world_model"`, `"planner"`, `"plan_compiler"`, `"action_registry"`, `"bt_factory"` on the blackboard.
+2. **PlannerComponent** (distributed-ready): requires `"planner_component"`, `"world_model"`, `"bt_factory"`. When a `PlannerComponent*` is found on the blackboard, it takes precedence — enabling the same BT node to work in both monolithic and distributed deployments.
+
+### Audit Trail (Causal Links)
+
+When `"plan_audit_log"` (`PlanAuditLog*`) is on the blackboard, `ExecutePhaseAction` records each sub-planning episode with hierarchical metadata:
+
+- `episode_id` — unique ID auto-assigned by `PlanAuditLog`
+- `parent_episode_id` — links to the parent phase's episode (0 = top-level)
+- `phase_name` — human-readable label from the `phase_name` port
+
+After a phase completes, its `episode_id` is written to the blackboard key `"parent_episode_id"`, so any nested `ExecutePhaseAction` nodes in the compiled sub-tree inherit the causal link.
+
+```json
+{"episode_id":1,"parent_episode_id":0,"phase_name":"recon_phase","solver":"BRFS",...}
+{"episode_id":2,"parent_episode_id":1,"phase_name":"search_sub","solver":"BRFS",...}
+```
+
+### Lifecycle
+
+- `onStart()` — parse goals, plan (direct or component), compile BT XML, record audit episode, create sub-tree
+- `onRunning()` — tick the compiled subtree once per BT cycle
+- `onHalted()` — halt and destroy the subtree
 
 ## Temporal Planning (Extension 7) — Future
 

@@ -8,9 +8,11 @@ The system takes a formal mission description (PDDL domain and problem files), a
 
 - **Automated planning** — LAPKT breadth-first search solver finds action sequences to achieve mission goals
 - **Parallel execution** — causal analysis identifies independent action flows and executes them concurrently
+- **Hierarchical planning** — `ExecutePhaseAction` decomposes missions into sub-phases, each planned and executed as a dynamic BT sub-tree
+- **External service integration** — `InvokeService` node maps PDDL actions to async PYRAMID service calls with timeout and cancellation
 - **Reactive monitoring** — configurable per-action precondition checking during execution
 - **Replan on failure** — detects action failures, snapshots current state, replans, and resumes
-- **Full observability** — 5-layer audit stack covering BT execution, world state changes, and planning episodes
+- **Full observability** — 5-layer audit stack covering BT execution, world state changes, and planning episodes with hierarchical causal links
 - **Live monitoring** — Foxglove Studio integration via WebSocket for real-time visualization
 - **ROS2 integration** — optional lifecycle node wrappers for distributed robotic deployments
 
@@ -35,6 +37,8 @@ PDDL Domain/Problem
 | **PlanCompiler** | Builds a causal dependency graph from the plan, extracts parallel flows, emits BT XML |
 | **BT.CPP Executor** | Ticks the compiled behaviour tree; BT nodes read/write world state directly |
 | **ActionRegistry** | Maps PDDL action names to BT node types, sub-tree templates, or pre-authored sub-trees |
+| **ExecutePhaseAction** | Hierarchical planning node — plans, compiles, and ticks a sub-tree for a phase goal set |
+| **InvokeService** | Async PYRAMID service node — maps PDDL actions to external service calls with timeout/cancel |
 | **Observability Stack** | 5 layers: TreeObserver stats, structured BT events, WM audit log, Foxglove bridge, plan audit trail |
 
 For full architecture details, see `doc/architecture/` (7 numbered files covering WorldModel, planning, execution, observability, ROS2, and extensions).
@@ -103,7 +107,7 @@ The system replaces the paid Groot2 monitoring tool with an open, layered observ
 | 2 | AmeBTLogger | Structured JSON events for every BT node state transition |
 | 3 | WmAuditLog | Every world model fact change with source tag and timestamp |
 | 4 | FoxgloveBridge | WebSocket server for live Foxglove Studio visualization |
-| 5 | PlanAuditLog | Full planning episodes: initial state, goals, solver, plan, compiled BT XML |
+| 5 | PlanAuditLog | Full planning episodes with hierarchical causal links: initial state, goals, solver, plan, compiled BT XML, parent phase |
 
 Connect Foxglove Studio to `ws://localhost:8765` for real-time monitoring. See `doc/quickstart.md` for setup details.
 
