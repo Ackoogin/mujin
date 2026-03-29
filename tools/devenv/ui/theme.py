@@ -143,7 +143,7 @@ def create_primary_window_theme() -> int:
     """Zero-padding theme for the primary window so it fills the viewport."""
     with dpg.theme() as theme:
         with dpg.theme_component(dpg.mvAll):
-            dpg.add_theme_style(dpg.mvStyleVar_WindowPadding, 0, 0)
+            dpg.add_theme_style(dpg.mvStyleVar_WindowPadding, 6, 6)
             dpg.add_theme_style(dpg.mvStyleVar_WindowBorderSize, 0)
     return theme
 
