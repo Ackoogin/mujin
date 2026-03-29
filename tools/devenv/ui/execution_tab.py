@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 import dearpygui.dearpygui as dpg
 
 from ..config import STATUS_COLOURS
+from ._plot_utils import set_integer_y_axis as _set_integer_y_axis
 from ..models.events import BTEvent
 
 if TYPE_CHECKING:
@@ -431,4 +432,4 @@ class ExecutionTab:
         dpg.add_line_series(xs, ys, label="WM Version",
                             parent=self._timeline_y)
         dpg.fit_axis_data(self._timeline_x)
-        dpg.fit_axis_data(self._timeline_y)
+        _set_integer_y_axis(self._timeline_y, ys)

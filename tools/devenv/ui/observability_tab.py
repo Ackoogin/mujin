@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import dearpygui.dearpygui as dpg
 
 from ..config import STATUS_COLOURS, SOURCE_COLOURS
+from ._plot_utils import set_integer_y_axis as _set_integer_y_axis
 from ..models.events import BTEvent, WMAuditEntry, PlanEpisode
 from ..models.replay import ReplaySession
 
@@ -129,8 +130,6 @@ class ObservabilityTab:
         self._fact_plot_y = dpg.add_plot_axis(
             dpg.mvYAxis, label="Value", parent=self._fact_plot,
         )
-        dpg.set_axis_ticks(self._fact_plot_y, (("FALSE", 0.0), ("TRUE", 1.0)))
-        dpg.set_axis_limits(self._fact_plot_y, -0.1, 1.1)
 
         dpg.add_spacer(height=6)
         dpg.add_text("Change Log:", color=(180, 180, 200))
@@ -179,6 +178,7 @@ class ObservabilityTab:
         self._add_log_entry(ts, "BT", text, color)
 
     def add_wm_event(self, event: WMAuditEntry) -> None:
+        print(f"[obs] wm_event: {event.fact}={'TRUE' if event.value else 'FALSE'} total={len(self._wm_events)+1}")
         self._wm_events.append(event)
         ts = event.ts_sec
         val_str = "TRUE" if event.value else "FALSE"
@@ -195,6 +195,7 @@ class ObservabilityTab:
 
     def refresh_plots(self) -> None:
         """Update WM version plot with current data."""
+        print(f"[obs] refresh_plots called, wm_events={len(self._wm_events)}")
         if not self._wm_events:
             return
 
@@ -211,14 +212,7 @@ class ObservabilityTab:
             xs, ys, label="WM Version", parent=self._wm_plot_y,
         )
         dpg.fit_axis_data(self._wm_plot_x)
-        dpg.fit_axis_data(self._wm_plot_y)
-
-        # Force integer Y ticks over the observed version range
-        v_min = int(min(ys))
-        v_max = int(max(ys))
-        ticks = tuple((str(v), float(v)) for v in range(v_min, v_max + 1))
-        if ticks:
-            dpg.set_axis_ticks(self._wm_plot_y, ticks)
+        _set_integer_y_axis(self._wm_plot_y, ys)
 
     # -- Internal ------------------------------------------------------------
 
@@ -276,6 +270,7 @@ class ObservabilityTab:
     def _on_fact_selected(self, sender, value, user_data) -> None:
         fact_key = value
         history = [e for e in self._wm_events if e.fact == fact_key]
+        print(f"[obs] fact selected: '{fact_key}', {len(history)} events from {len(self._wm_events)} total")
 
         # Update fact plot
         children = dpg.get_item_children(self._fact_plot_y, 1)
@@ -291,7 +286,11 @@ class ObservabilityTab:
                 xs, ys, label=fact_key, parent=self._fact_plot_y,
             )
             dpg.fit_axis_data(self._fact_plot_x)
-            dpg.set_axis_limits(self._fact_plot_y, -0.1, 1.1)
+            dpg.set_axis_limits(self._fact_plot_y, -0.2, 1.2)
+            dpg.set_axis_ticks(
+                self._fact_plot_y,
+                (("FALSE", 0.0), ("TRUE", 1.0)),
+            )
 
         # Update change log panel
         children = dpg.get_item_children(self._fact_history_panel, 1)

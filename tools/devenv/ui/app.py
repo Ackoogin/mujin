@@ -226,8 +226,12 @@ class App:
                     self.observability_tab.add_bt_event(evt)
 
         # --- Drain PCL in-process WM audit events ---
+        pcl_wm_events: list = []
         if hasattr(self.client, "drain_wm_events"):
-            for raw in self.client.drain_wm_events():
+            pcl_wm_events = self.client.drain_wm_events()
+            if pcl_wm_events:
+                print(f"[app] drained {len(pcl_wm_events)} PCL WM events")
+            for raw in pcl_wm_events:
                 entry = WMAuditEntry.from_json(raw)
                 if self.world_model_tab:
                     self.world_model_tab.update_from_wm_event(
@@ -250,7 +254,7 @@ class App:
             self._last_plot_refresh = now
             if have_bt and self.execution_tab:
                 self.execution_tab.refresh_display()
-            if (wm_events or pcl_bt_events) and self.observability_tab:
+            if (wm_events or pcl_wm_events) and self.observability_tab:
                 self.observability_tab.refresh_plots()
 
         # --- Update status bar ---
