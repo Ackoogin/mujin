@@ -12,6 +12,11 @@ class ConnectionConfig:
     plan_action_name: str = "/ame/plan"
     world_state_topic: str = "/world_state"
     bt_events_topic: str = "/executor/bt_events"
+    # Backend selection: "ros2", "pcl", or "none"
+    backend: str = "ros2"
+    # PDDL paths for PCL backend
+    domain_path: str = ""
+    problem_path: str = ""
 
 
 @dataclass

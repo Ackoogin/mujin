@@ -152,3 +152,28 @@ if(WIN32)
         COMMENT "Copying behaviortree_cpp DLL to output directory"
     )
 endif()
+
+# ---------------------------------------------------------------------------
+# Python bindings (optional, requires AME_BUILD_PYTHON=ON)
+# ---------------------------------------------------------------------------
+if(AME_BUILD_PYTHON)
+    pybind11_add_module(_ame_py python/ame_py.cpp)
+    target_link_libraries(_ame_py PRIVATE ame_core)
+    
+    # Install Python module to a predictable location
+    install(TARGETS _ame_py
+        LIBRARY DESTINATION python
+        RUNTIME DESTINATION python
+    )
+    
+    # Copy to build directory for easier testing
+    add_custom_command(TARGET _ame_py POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:_ame_py>
+            ${CMAKE_BINARY_DIR}/python/$<TARGET_FILE_NAME:_ame_py>
+        COMMENT "Copying _ame_py to build/python directory"
+    )
+    
+    # Ensure build/python directory exists
+    file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/python)
+endif()

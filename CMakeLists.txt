@@ -141,6 +141,19 @@ set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+# --- pybind11 (optional Python bindings) ---
+option(AME_BUILD_PYTHON "Build Python bindings for ame_core" OFF)
+
+if(AME_BUILD_PYTHON)
+    FetchContent_Declare(
+        pybind11
+        GIT_REPOSITORY https://github.com/pybind/pybind11.git
+        GIT_TAG        v2.11.1
+        GIT_SHALLOW    TRUE
+    )
+    FetchContent_MakeAvailable(pybind11)
+endif()
+
 # ---------------------------------------------------------------------------
 # PCL — PYRAMID Container Library (pure C, zero dependencies)
 # ---------------------------------------------------------------------------

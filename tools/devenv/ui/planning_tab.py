@@ -20,11 +20,14 @@ class PlanningTab:
         self._app = app
         self._goal_fluents: list[str] = []
         self._plan_history: list[PlanEpisode] = []
+        self._last_bt_xml: str = ""  # Store last generated BT XML
 
         # Widget IDs
         self._goal_input: int = 0
         self._goals_list: int = 0
+        self._fluent_combo: int = 0
         self._plan_button: int = 0
+        self._execute_button: int = 0
         self._feedback_text: int = 0
         self._result_panel: int = 0
         self._steps_table: int = 0
@@ -45,9 +48,23 @@ class PlanningTab:
                         height=200, border=True
                     )
 
+                    # Available fluents picker
                     dpg.add_spacer(height=4)
+                    dpg.add_text("Available Fluents", color=(140, 140, 160))
+                    with dpg.group(horizontal=True):
+                        self._fluent_combo = dpg.add_combo(
+                            items=[], width=-80,
+                            callback=self._on_fluent_selected,
+                        )
+                        dpg.add_button(
+                            label="Refresh", callback=self._on_refresh_fluents,
+                            width=70,
+                        )
+                    
+                    dpg.add_spacer(height=8)
+                    dpg.add_text("Or type manually:", color=(140, 140, 160))
                     self._goal_input = dpg.add_input_text(
-                        width=-1, hint="(searched sector_a)",
+                        width=-1, hint="(predicate arg1 arg2)",
                         on_enter=True, callback=self._on_add_goal,
                     )
                     with dpg.group(horizontal=True):
@@ -64,11 +81,19 @@ class PlanningTab:
                     dpg.add_separator()
                     dpg.add_spacer(height=8)
 
-                    self._plan_button = dpg.add_button(
-                        label="  Plan  ",
-                        callback=self._on_plan,
-                        width=-1, height=40,
-                    )
+                    with dpg.group(horizontal=True):
+                        self._plan_button = dpg.add_button(
+                            label="  Plan  ",
+                            callback=self._on_plan,
+                            width=-1, height=40,
+                        )
+                    with dpg.group(horizontal=True):
+                        self._execute_button = dpg.add_button(
+                            label="Execute Plan",
+                            callback=self._on_execute,
+                            width=-1, height=32,
+                            enabled=False,
+                        )
                     dpg.add_spacer(height=6)
                     self._feedback_text = dpg.add_text(
                         "", color=(120, 120, 130), wrap=380
@@ -167,8 +192,8 @@ class PlanningTab:
         self._refresh_history()
 
     def update_feedback(self) -> None:
-        """Drain plan feedback from ROS2 client and update display."""
-        for fb in self._app.ros2.drain_plan_feedback():
+        """Drain plan feedback from client and update display."""
+        for fb in self._app.client.drain_plan_feedback():
             dpg.set_value(
                 self._feedback_text,
                 f"Expanded: {fb.nodes_expanded}  "
@@ -190,6 +215,48 @@ class PlanningTab:
         self._goal_fluents.clear()
         self._refresh_goals_list()
 
+    def _on_refresh_fluents(self, sender=None, value=None, user_data=None) -> None:
+        """Refresh the available fluents from the world model."""
+        client = self._app.client
+        if not client.connected:
+            dpg.configure_item(self._fluent_combo, items=["(not connected)"])
+            return
+        
+        # Get all fluents from the world model
+        fluents = []
+        snapshot = client.latest_snapshot
+        if snapshot:
+            # Add all fluents (both true and potential goals)
+            for fact in snapshot.facts:
+                fluents.append(fact.key)
+        
+        # Also try to get all fluent names if available
+        if hasattr(client, '_wm') and client._wm:
+            try:
+                for i in range(client._wm.num_fluents()):
+                    name = client._wm.fluent_name(i)
+                    if name not in fluents:
+                        fluents.append(name)
+            except Exception:
+                pass
+        
+        if fluents:
+            dpg.configure_item(self._fluent_combo, items=sorted(fluents))
+        else:
+            dpg.configure_item(self._fluent_combo, items=["(no fluents loaded)"])
+
+    def _on_fluent_selected(self, sender=None, value=None, user_data=None) -> None:
+        """Add selected fluent to goals."""
+        fluent = dpg.get_value(self._fluent_combo)
+        if fluent and not fluent.startswith("(") and fluent not in self._goal_fluents:
+            self._goal_fluents.append(fluent)
+            self._refresh_goals_list()
+        elif fluent and fluent.startswith("(") and ")" in fluent:
+            # It's a valid fluent like "(searched sector_a)"
+            if fluent not in self._goal_fluents:
+                self._goal_fluents.append(fluent)
+                self._refresh_goals_list()
+
     def _on_plan(self, sender=None, value=None, user_data=None) -> None:
         if not self._goal_fluents:
             dpg.set_value(self._feedback_text, "No goals specified.")
@@ -197,10 +264,37 @@ class PlanningTab:
 
         dpg.set_value(self._feedback_text, "Planning...")
         dpg.configure_item(self._plan_button, enabled=False)
-        self._app.ros2.plan(
+        self._app.client.plan(
             self._goal_fluents[:],
             callback=self._on_plan_result,
         )
+
+    def _on_execute(self, sender=None, value=None, user_data=None) -> None:
+        """Execute the last generated plan."""
+        if not self._last_bt_xml:
+            dpg.set_value(self._feedback_text, "No plan to execute.")
+            return
+        
+        client = self._app.client
+        if not client.connected:
+            dpg.set_value(self._feedback_text, "Not connected to backend.")
+            return
+        
+        # Send BT XML to executor
+        if hasattr(client, 'execute_bt'):
+            dpg.set_value(self._feedback_text, "Executing plan...")
+            dpg.configure_item(self._execute_button, enabled=False)
+            client.execute_bt(self._last_bt_xml, callback=self._on_execution_done)
+        else:
+            dpg.set_value(self._feedback_text, "Backend does not support execution.")
+
+    def _on_execution_done(self, success: bool, message: str = "") -> None:
+        """Callback when execution completes."""
+        dpg.configure_item(self._execute_button, enabled=True)
+        if success:
+            dpg.set_value(self._feedback_text, f"Execution complete: {message}")
+        else:
+            dpg.set_value(self._feedback_text, f"Execution failed: {message}")
 
     def _on_plan_result(self, result: PlanResult) -> None:
         dpg.configure_item(self._plan_button, enabled=True)
@@ -234,6 +328,14 @@ class PlanningTab:
 
         # Update BT XML
         dpg.set_value(self._bt_xml_text, result.bt_xml or "(no XML)")
+        
+        # Store BT XML and enable execute button if plan succeeded
+        if result.success and result.bt_xml:
+            self._last_bt_xml = result.bt_xml
+            dpg.configure_item(self._execute_button, enabled=True)
+        else:
+            self._last_bt_xml = ""
+            dpg.configure_item(self._execute_button, enabled=False)
 
         # Add to history
         episode = PlanEpisode(

@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import time
-from typing import Optional
+from typing import Optional, Union
 
 import dearpygui.dearpygui as dpg
 
 from ..config import AppConfig
 from ..comms.foxglove_client import FoxgloveClient
 from ..comms.ros2_client import AmeRos2Client
+from ..comms.pcl_client import AmePclClient
 from ..models.events import BTEvent, WMAuditEntry, WorldSnapshot
 from .theme import (
     create_global_theme,
@@ -33,9 +34,20 @@ class App:
             url=self.config.connection.foxglove_url,
             buffer_size=self.config.ui.event_buffer_size,
         )
-        self.ros2 = AmeRos2Client(
-            node_name=self.config.connection.ros2_node_name,
-        )
+        
+        # Select backend client based on config
+        backend = self.config.connection.backend
+        if backend == "pcl":
+            self.client: Union[AmeRos2Client, AmePclClient] = AmePclClient()
+            self._backend_name = "PCL"
+        else:
+            self.client = AmeRos2Client(
+                node_name=self.config.connection.ros2_node_name,
+            )
+            self._backend_name = "ROS2"
+        
+        # Alias for backward compatibility
+        self.ros2 = self.client
 
         # Tabs (created during build)
         self.world_model_tab: Optional[WorldModelTab] = None
@@ -86,7 +98,15 @@ class App:
 
         # Start communication clients
         self.foxglove.start()
-        self.ros2.start()
+        
+        # Start backend client with appropriate arguments
+        if self.config.connection.backend == "pcl":
+            self.client.start(
+                domain_path=self.config.connection.domain_path,
+                problem_path=self.config.connection.problem_path,
+            )
+        else:
+            self.client.start()
 
         # Register the per-frame callback on the render loop
         while dpg.is_dearpygui_running():

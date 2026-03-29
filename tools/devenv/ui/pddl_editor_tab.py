@@ -214,14 +214,53 @@ class PddlEditorTab:
             dpg.set_value(self._status_text, f"{len(errors)} issue(s)")
 
     def _on_load_to_wm(self, sender=None, value=None, user_data=None) -> None:
-        """Placeholder: load parsed PDDL into the running world model."""
+        """Load parsed PDDL into the running world model."""
         if not self._current_file:
             dpg.set_value(self._status_text, "No file loaded")
             return
-        dpg.set_value(
-            self._status_text,
-            "Load-to-WM requires a running ROS2 WorldModelNode"
-        )
+        
+        # Check if client is connected
+        client = self._app.client
+        if not client.connected:
+            dpg.set_value(self._status_text, "Not connected to backend")
+            return
+        
+        # Determine if this is a domain or problem file
+        current_path = Path(self._current_file)
+        parent_dir = current_path.parent
+        
+        # Look for matching domain/problem pair
+        domain_path = ""
+        problem_path = ""
+        
+        if "domain" in current_path.name.lower():
+            domain_path = str(current_path)
+            # Look for problem file in same directory
+            for f in parent_dir.glob("*.pddl"):
+                if "problem" in f.name.lower():
+                    problem_path = str(f)
+                    break
+        elif "problem" in current_path.name.lower():
+            problem_path = str(current_path)
+            # Look for domain file in same directory
+            for f in parent_dir.glob("*.pddl"):
+                if "domain" in f.name.lower():
+                    domain_path = str(f)
+                    break
+        
+        if not domain_path or not problem_path:
+            dpg.set_value(self._status_text, "Need both domain.pddl and problem.pddl in same folder")
+            return
+        
+        # Reload via client
+        if hasattr(client, 'reload_domain'):
+            success = client.reload_domain(domain_path, problem_path)
+            if success:
+                dpg.set_value(self._status_text, f"Loaded: {parent_dir.name}")
+            else:
+                dpg.set_value(self._status_text, "Failed to load PDDL")
+        else:
+            dpg.set_value(self._status_text, "Backend does not support reload")
 
     @staticmethod
     def _validate_pddl(content: str) -> list[str]:

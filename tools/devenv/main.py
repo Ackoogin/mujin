@@ -27,9 +27,25 @@ def parse_args() -> argparse.Namespace:
         help="Foxglove WebSocket URL (default: ws://localhost:8765)",
     )
     parser.add_argument(
+        "--backend",
+        choices=["ros2", "pcl", "none"],
+        default="ros2",
+        help="Communication backend: ros2 (default), pcl (direct C++ bindings), none (offline)",
+    )
+    parser.add_argument(
         "--no-ros2",
         action="store_true",
-        help="Disable ROS2 client (offline/replay mode only)",
+        help="Deprecated: use --backend none instead",
+    )
+    parser.add_argument(
+        "--domain",
+        default="",
+        help="Path to PDDL domain file (required for pcl backend)",
+    )
+    parser.add_argument(
+        "--problem",
+        default="",
+        help="Path to PDDL problem file (required for pcl backend)",
     )
     parser.add_argument(
         "--width",
@@ -52,10 +68,25 @@ def main() -> None:
     config.ui.window_width = args.width
     config.ui.window_height = args.height
 
+    # Handle backend selection
+    backend = args.backend
     if args.no_ros2:
-        # Prevent rclpy import by marking unavailable
+        # Deprecated flag - treat as "none"
+        backend = "none"
+
+    if backend == "none":
+        # Disable both backends
         import tools.devenv.comms.ros2_client as ros2_mod
         ros2_mod._HAS_RCLPY = False
+        config.connection.backend = "none"
+    elif backend == "pcl":
+        # Use direct PCL bindings
+        config.connection.backend = "pcl"
+        config.connection.domain_path = args.domain
+        config.connection.problem_path = args.problem
+    else:
+        # Default: ros2
+        config.connection.backend = "ros2"
 
     app = App(config)
     app.run()
