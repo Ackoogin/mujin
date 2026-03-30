@@ -254,6 +254,8 @@ PYBIND11_MODULE(_ame_py, m) {
             "Load BT XML and start execution")
         .def("tick_once", &ame::ExecutorComponent::tickOnce,
             "Tick the BT once")
+        .def("halt_execution", &ame::ExecutorComponent::haltExecution,
+            "Halt execution explicitly")
         .def("is_executing", &ame::ExecutorComponent::isExecuting,
             "Check if BT is currently executing")
         .def("last_status", &ame::ExecutorComponent::lastStatus,

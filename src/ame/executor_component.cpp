@@ -60,11 +60,19 @@ void ExecutorComponent::tickOnce() {
   }
 
   last_status_ = tree_->tickOnce();
-  if (last_status_ != BT::NodeStatus::RUNNING) {
-    executing_ = false;
-    if (bt_logger_) {
-      bt_logger_->flush();
-    }
+  if (last_status_ != BT::NodeStatus::RUNNING && bt_logger_) {
+    bt_logger_->flush();
+  }
+}
+
+void ExecutorComponent::haltExecution() {
+  if (tree_) {
+    tree_->haltTree();
+  }
+  executing_ = false;
+  last_status_ = BT::NodeStatus::IDLE;
+  if (bt_logger_) {
+    bt_logger_->flush();
   }
 }
 

@@ -222,6 +222,37 @@ static std::vector<std::vector<unsigned>> extractFlows(const CausalGraph& cg) {
 // Compilation
 // =========================================================================
 
+void PlanCompiler::emitGoalGuardOpen(std::ostringstream& xml,
+                                     const WorldModel& wm,
+                                     const std::string& indent) const {
+    const auto& goal_ids = wm.goalFluentIds();
+    if (goal_ids.empty()) return;
+
+    // ReactiveFallback: if the goal-check child succeeds (all goals met),
+    // the fallback returns SUCCESS without re-running the plan.
+    xml << indent << "<ReactiveFallback>\n";
+
+    // Goal check: a Sequence of CheckWorldPredicate for each goal fluent
+    if (goal_ids.size() == 1) {
+        xml << indent << "  <CheckWorldPredicate predicate=\""
+            << wm.fluentName(goal_ids[0]) << "\"/>\n";
+    } else {
+        xml << indent << "  <Sequence name=\"GoalCheck\">\n";
+        for (auto gid : goal_ids) {
+            xml << indent << "    <CheckWorldPredicate predicate=\""
+                << wm.fluentName(gid) << "\"/>\n";
+        }
+        xml << indent << "  </Sequence>\n";
+    }
+}
+
+void PlanCompiler::emitGoalGuardClose(std::ostringstream& xml,
+                                      const WorldModel& wm,
+                                      const std::string& indent) const {
+    if (wm.goalFluentIds().empty()) return;
+    xml << indent << "</ReactiveFallback>\n";
+}
+
 std::string PlanCompiler::compileSequential(const std::vector<PlanStep>& plan,
                                             const WorldModel& wm,
                                             const ActionRegistry& registry) const {
@@ -229,6 +260,9 @@ std::string PlanCompiler::compileSequential(const std::vector<PlanStep>& plan,
 
     xml << "<root BTCPP_format=\"4\">\n";
     xml << "  <BehaviorTree ID=\"MainTree\">\n";
+
+    emitGoalGuardOpen(xml, wm, "    ");
+
     xml << "    <Sequence>\n";
 
     for (auto& step : plan) {
@@ -243,6 +277,9 @@ std::string PlanCompiler::compileSequential(const std::vector<PlanStep>& plan,
     }
 
     xml << "    </Sequence>\n";
+
+    emitGoalGuardClose(xml, wm, "    ");
+
     xml << "  </BehaviorTree>\n";
     xml << "</root>\n";
 
@@ -277,6 +314,9 @@ std::string PlanCompiler::compile(const std::vector<PlanStep>& plan,
 
     xml << "<root BTCPP_format=\"4\">\n";
     xml << "  <BehaviorTree ID=\"MainTree\">\n";
+
+    emitGoalGuardOpen(xml, wm, "    ");
+
     xml << "    <Parallel success_count=\"" << flows.size()
         << "\" failure_count=\"1\">\n";
 
@@ -305,6 +345,9 @@ std::string PlanCompiler::compile(const std::vector<PlanStep>& plan,
     }
 
     xml << "    </Parallel>\n";
+
+    emitGoalGuardClose(xml, wm, "    ");
+
     xml << "  </BehaviorTree>\n";
     xml << "</root>\n";
 

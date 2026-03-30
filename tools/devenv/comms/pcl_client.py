@@ -351,8 +351,7 @@ class AmePclClient:
             self._executor.tick_once()
             status = self._executor.last_status()
             self._tick_count += 1
-        if not self._executor.is_executing():
-            self._update_snapshot()
+        self._update_snapshot()
         return str(status).split(".")[-1]
 
     def start_auto_tick(
@@ -360,27 +359,27 @@ class AmePclClient:
         interval_s: float = 0.05,
         done_callback: Optional[Callable[[bool, str], None]] = None,
     ) -> None:
-        """Tick the loaded BT automatically in a background thread."""
+        """Tick the loaded BT automatically in a background thread.
+
+        Ticks continuously until stopped — the tree re-evaluates each tick
+        so it reacts to world-model fact changes.
+        """
         self._auto_tick_stop.clear()
 
         def _auto() -> None:
             try:
                 while not self._auto_tick_stop.is_set():
                     with self._lock:
-                        if self._executor is None or not self._executor.is_executing():
+                        if self._executor is None:
                             break
                         self._executor.tick_once()
                         self._tick_count += 1
-                        still_going = self._executor.is_executing()
-                    if not still_going:
-                        break
-                    time.sleep(interval_s)
+                    self._auto_tick_stop.wait(interval_s)
 
                 self._update_snapshot()
                 if done_callback and self._executor:
                     raw = str(self._executor.last_status()).split(".")[-1]
-                    success = (raw == "SUCCESS")
-                    done_callback(success, f"{raw} after {self._tick_count} ticks")
+                    done_callback(True, f"Stopped after {self._tick_count} ticks ({raw})")
             except Exception as e:
                 traceback.print_exc()
                 if done_callback:
@@ -390,12 +389,18 @@ class AmePclClient:
         self._auto_tick_thread.start()
 
     def stop_execution(self) -> None:
-        """Stop any running auto-tick thread."""
+        """Stop any running auto-tick thread and halt the BT."""
         self._auto_tick_stop.set()
         t = self._auto_tick_thread
         if t and t.is_alive():
             t.join(timeout=1.0)
         self._auto_tick_thread = None
+        with self._lock:
+            if self._executor is not None:
+                try:
+                    self._executor.halt_execution()
+                except AttributeError:
+                    pass  # older binding without halt_execution
 
     def is_executing(self) -> bool:
         return self._executor is not None and self._executor.is_executing()
@@ -429,10 +434,13 @@ class AmePclClient:
                     self._executor.load_and_execute(bt_xml)
 
                 max_ticks = 1000
-                while self._executor.is_executing() and self._tick_count < max_ticks:
+                while self._tick_count < max_ticks:
                     with self._lock:
                         self._executor.tick_once()
                         self._tick_count += 1
+                        raw = str(self._executor.last_status()).split(".")[-1]
+                    if raw in ("SUCCESS", "FAILURE"):
+                        break
 
                 self._update_snapshot()
                 raw = str(self._executor.last_status()).split(".")[-1]

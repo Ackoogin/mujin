@@ -25,10 +25,6 @@ TEST(ExecutorComponent, ExecutesPlannerOutputAgainstSharedWorldModel) {
   ame::ExecutorComponent executor_component;
   executor_component.setParam("bt_log.enabled", false);
   executor_component.setInProcessWorldModel(&wm);
-  executor_component.factory().registerNodeType<ame::CheckWorldPredicate>(
-      "CheckWorldPredicate");
-  executor_component.factory().registerNodeType<ame::SetWorldPredicate>(
-      "SetWorldPredicate");
   registerUavStubNodes(executor_component.factory());
 
   std::vector<std::string> events;
@@ -39,8 +35,11 @@ TEST(ExecutorComponent, ExecutesPlannerOutputAgainstSharedWorldModel) {
   ASSERT_EQ(executor_component.activate(), PCL_OK);
   executor_component.loadAndExecute(plan_result.bt_xml);
 
-  for (int i = 0; i < 50 && executor_component.isExecuting(); ++i) {
+  for (int i = 0; i < 50; ++i) {
     executor_component.tickOnce();
+    if (executor_component.lastStatus() == BT::NodeStatus::SUCCESS) {
+      break;
+    }
   }
 
   EXPECT_EQ(executor_component.lastStatus(), BT::NodeStatus::SUCCESS);

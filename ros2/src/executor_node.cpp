@@ -171,10 +171,12 @@ void ExecutorNode::loadAndExecute(const std::string& bt_xml) {
 void ExecutorNode::tickOnce() {
   component_.tickOnce();
 
-  if (!component_.isExecuting()) {
+  auto status = component_.lastStatus();
+  if (status == BT::NodeStatus::SUCCESS || status == BT::NodeStatus::FAILURE) {
     tick_timer_.reset();
+    component_.haltExecution();
     const std::string status_str =
-      (component_.lastStatus() == BT::NodeStatus::SUCCESS) ? "SUCCESS" : "FAILURE";
+      (status == BT::NodeStatus::SUCCESS) ? "SUCCESS" : "FAILURE";
     publishStatus(status_str);
     RCLCPP_INFO(get_logger(), "BT execution finished: %s", status_str.c_str());
   }

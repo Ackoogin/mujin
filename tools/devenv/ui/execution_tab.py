@@ -24,6 +24,7 @@ class ExecutionTab:
 
         # BT structure (parsed from XML)
         self._bt_xml: str = ""
+        self._tree_built_for_xml: str = ""  # XML that the current tree was built from
 
         # Live node statuses: node_name -> latest status
         self._node_statuses: dict[str, str] = {}
@@ -32,6 +33,11 @@ class ExecutionTab:
         # All events for timeline
         self._all_events: list[BTEvent] = []
         self._events_at_last_timeline_refresh: int = 0
+
+        # Widget tracking for in-place status updates (avoid tree rebuild)
+        # Each entry: (lookup_key, widget_id, is_tree_node, display_text)
+        self._tree_widgets: list[tuple[str, int, bool, str]] = []
+        self._statuses_at_last_render: dict[str, str] = {}
 
         # --- Control bar widget IDs ---
         self._status_badge: int = 0
@@ -187,8 +193,12 @@ class ExecutionTab:
         )
 
     def refresh_display(self) -> None:
-        """Rebuild tree display and update timeline (called ~1 Hz)."""
-        self._render_tree()
+        """Update tree statuses in-place and refresh timeline (called ~1 Hz)."""
+        # Only rebuild the full tree when the XML has changed
+        if self._bt_xml != self._tree_built_for_xml:
+            self._render_tree()
+        else:
+            self._update_tree_statuses()
         self._update_timeline()
 
         dpg.set_value(self._event_count_text, f"Events: {len(self._all_events)}")
@@ -276,8 +286,11 @@ class ExecutionTab:
         self._all_events.clear()
         self._node_statuses.clear()
         self._node_events.clear()
+        self._statuses_at_last_render.clear()
         self._events_at_last_timeline_refresh = 0
         dpg.set_value(self._event_count_text, "Events: 0")
+        # Force tree rebuild on next refresh
+        self._tree_built_for_xml = ""
         self.refresh_display()
 
     # ------------------------------------------------------------------
@@ -305,6 +318,10 @@ class ExecutionTab:
             for child in children:
                 dpg.delete_item(child)
 
+        self._tree_widgets.clear()
+        self._statuses_at_last_render.clear()
+        self._tree_built_for_xml = self._bt_xml
+
         if self._bt_xml:
             try:
                 root = ET.fromstring(self._bt_xml)
@@ -319,12 +336,14 @@ class ExecutionTab:
             for name, status in sorted(self._node_statuses.items()):
                 color = STATUS_COLOURS.get(status, (180, 180, 190, 255))
                 with dpg.group(horizontal=True, parent=self._tree_panel):
-                    dpg.add_text(f"[{status:8s}]", color=color)
+                    text_id = dpg.add_text(f"[{status:8s}]", color=color)
                     dpg.add_button(
                         label=name,
                         callback=lambda s, a, u: self._select_node(u),
                         user_data=name,
                     )
+                    self._tree_widgets.append((name, text_id, False, name))
+                    self._statuses_at_last_render[name] = status
         else:
             dpg.add_text(
                 "No BT data. Use 'Load & Start' or run from the Planning tab.",
@@ -373,17 +392,49 @@ class ExecutionTab:
                     node_id,
                     self._get_or_create_color_theme(color)
                 )
+                self._tree_widgets.append((lookup_key, node_id, True, display))
+                self._statuses_at_last_render[lookup_key] = status
                 for child in elem:
                     self._render_xml_node(child, node_id, depth + 1)
         else:
             with dpg.group(horizontal=True, parent=parent):
                 indent = "  " * depth
-                dpg.add_text(f"{indent}[{status:8s}]", color=color)
+                text_id = dpg.add_text(f"{indent}[{status:8s}]", color=color)
                 dpg.add_button(
                     label=display,
                     callback=lambda s, a, u: self._select_node(u),
                     user_data=lookup_key,
                 )
+                self._tree_widgets.append((lookup_key, text_id, False, display))
+                self._statuses_at_last_render[lookup_key] = status
+
+    def _update_tree_statuses(self) -> None:
+        """Update existing tree widget labels/colors in-place (no rebuild)."""
+        if not self._tree_widgets:
+            return
+
+        for lookup_key, widget_id, is_tree_node, display in self._tree_widgets:
+            status = self._node_statuses.get(lookup_key, "IDLE")
+            # Skip if status hasn't changed since last render
+            if self._statuses_at_last_render.get(lookup_key) == status:
+                continue
+            self._statuses_at_last_render[lookup_key] = status
+            color = STATUS_COLOURS.get(status, (120, 120, 130, 255))
+
+            try:
+                if is_tree_node:
+                    dpg.configure_item(
+                        widget_id, label=f"[{status}] {display}"
+                    )
+                    dpg.bind_item_theme(
+                        widget_id,
+                        self._get_or_create_color_theme(color)
+                    )
+                else:
+                    dpg.set_value(widget_id, f"[{status:8s}]")
+                    dpg.configure_item(widget_id, color=color)
+            except Exception:
+                pass  # Widget may have been deleted
 
     _color_themes: dict[tuple, int] = {}
 

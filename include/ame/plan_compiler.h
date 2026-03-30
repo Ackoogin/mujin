@@ -39,6 +39,16 @@ private:
                                const WorldModel& wm,
                                const ActionRegistry& registry) const;
 
+    // Emit ReactiveFallback goal guard around the plan body.
+    // If all goals are already satisfied, the tree returns SUCCESS
+    // without re-executing the plan — safe for continuous ticking.
+    void emitGoalGuardOpen(std::ostringstream& xml,
+                           const WorldModel& wm,
+                           const std::string& indent) const;
+    void emitGoalGuardClose(std::ostringstream& xml,
+                            const WorldModel& wm,
+                            const std::string& indent) const;
+
     // Parse action name from signature "move(uav1,base,sector_a)" -> "move"
     static std::string actionName(const std::string& signature);
 

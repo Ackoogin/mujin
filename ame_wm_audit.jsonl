@@ -1,0 +1,5 @@
+{"wm_version":1,"ts_us":1774856234854367,"fact":"(at uav1 base)","value":true,"source":"planner_init"}
+{"wm_version":2,"ts_us":1774856234856265,"fact":"(at uav1 sector_a)","value":true,"source":"SetWorldPredicate:SetWorldPredicate"}
+{"wm_version":3,"ts_us":1774856234856276,"fact":"(at uav1 base)","value":false,"source":"SetWorldPredicate:SetWorldPredicate"}
+{"wm_version":4,"ts_us":1774856234856324,"fact":"(searched sector_a)","value":true,"source":"SetWorldPredicate:SetWorldPredicate"}
+{"wm_version":5,"ts_us":1774856234856449,"fact":"(classified sector_a)","value":true,"source":"SetWorldPredicate:SetWorldPredicate"}

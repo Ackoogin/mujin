@@ -41,6 +41,9 @@ public:
   /// \brief Tick the current tree once if execution is active.
   void tickOnce();
 
+  /// \brief Stop execution explicitly: halt the tree and reset state.
+  void haltExecution();
+
   /// \brief Current execution state.
   bool isExecuting() const { return executing_; }
 
