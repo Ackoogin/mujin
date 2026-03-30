@@ -69,6 +69,10 @@ add_executable(test_pcl_robustness test_pcl_robustness.cpp)
 target_link_libraries(test_pcl_robustness PRIVATE pcl_core GTest::gtest_main)
 gtest_discover_tests(test_pcl_robustness DISCOVERY_MODE PRE_TEST)
 
+add_executable(test_pcl_streaming test_pcl_streaming.cpp)
+target_link_libraries(test_pcl_streaming PRIVATE pcl_core GTest::gtest_main)
+gtest_discover_tests(test_pcl_streaming DISCOVERY_MODE PRE_TEST)
+
 if(NOT MSVC)
   add_executable(test_pcl_oom test_pcl_oom.cpp)
   target_link_libraries(test_pcl_oom PRIVATE pcl_core GTest::gtest_main)

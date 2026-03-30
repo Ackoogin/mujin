@@ -381,3 +381,114 @@ pcl_status_t pcl_service_respond(pcl_svc_context_t* ctx,
 void pcl_service_context_free(pcl_svc_context_t* ctx) {
   free(ctx);
 }
+
+// -- Streaming service API ------------------------------------------------
+
+pcl_port_t* pcl_container_add_stream_service(pcl_container_t*     c,
+                                             const char*          service_name,
+                                             const char*          type_name,
+                                             pcl_stream_handler_t handler,
+                                             void*                user_data) {
+  pcl_port_t* p;
+  if (!c || !service_name || !type_name || !handler) return NULL;
+  if (!c->configuring) return NULL;
+  if (c->port_count >= PCL_MAX_PORTS) return NULL;
+
+  p = &c->ports[c->port_count++];
+  memset(p, 0, sizeof(*p));
+  p->type             = PCL_PORT_STREAM_SERVICE;
+  p->owner            = c;
+  p->stream_handler   = handler;
+  p->stream_user_data = user_data;
+  snprintf(p->name, sizeof(p->name), "%s", service_name);
+  snprintf(p->type_name, sizeof(p->type_name), "%s", type_name);
+  return p;
+}
+
+pcl_status_t pcl_stream_send(pcl_stream_context_t* ctx, const pcl_msg_t* msg) {
+  if (!ctx || !msg) return PCL_ERR_INVALID;
+  if (ctx->ended) return PCL_ERR_STATE;
+  if (ctx->cancelled) return PCL_ERR_CANCELLED;
+
+  // If transport has stream_send, use it
+  if (ctx->executor && ctx->executor->has_transport &&
+      ctx->executor->transport.stream_send) {
+    return ctx->executor->transport.stream_send(
+        ctx->executor->transport.adapter_ctx, ctx->transport_ctx, msg);
+  }
+
+  // Intra-process: fire callback directly
+  if (ctx->callback) {
+    ctx->callback(msg, false, PCL_OK, ctx->user_data);
+  }
+  return PCL_OK;
+}
+
+pcl_status_t pcl_stream_end(pcl_stream_context_t* ctx) {
+  if (!ctx) return PCL_ERR_INVALID;
+  if (ctx->ended) return PCL_ERR_STATE;
+
+  ctx->ended = 1;
+
+  // If transport has stream_end, use it
+  if (ctx->executor && ctx->executor->has_transport &&
+      ctx->executor->transport.stream_end) {
+    pcl_status_t rc = ctx->executor->transport.stream_end(
+        ctx->executor->transport.adapter_ctx, ctx->transport_ctx, PCL_OK);
+    free(ctx);
+    return rc;
+  }
+
+  // Intra-process: fire callback with end=true
+  if (ctx->callback) {
+    pcl_msg_t empty = {0};
+    ctx->callback(&empty, true, PCL_OK, ctx->user_data);
+  }
+  free(ctx);
+  return PCL_OK;
+}
+
+pcl_status_t pcl_stream_abort(pcl_stream_context_t* ctx, pcl_status_t error_code) {
+  if (!ctx) return PCL_ERR_INVALID;
+  if (ctx->ended) return PCL_ERR_STATE;
+
+  ctx->ended = 1;
+
+  // If transport has stream_end, use it with error
+  if (ctx->executor && ctx->executor->has_transport &&
+      ctx->executor->transport.stream_end) {
+    pcl_status_t rc = ctx->executor->transport.stream_end(
+        ctx->executor->transport.adapter_ctx, ctx->transport_ctx, error_code);
+    free(ctx);
+    return rc;
+  }
+
+  // Intra-process: fire callback with error status
+  if (ctx->callback) {
+    pcl_msg_t empty = {0};
+    ctx->callback(&empty, true, error_code, ctx->user_data);
+  }
+  free(ctx);
+  return PCL_OK;
+}
+
+bool pcl_stream_is_cancelled(const pcl_stream_context_t* ctx) {
+  if (!ctx) return false;
+  return ctx->cancelled != 0;
+}
+
+pcl_status_t pcl_stream_cancel(pcl_stream_context_t* ctx) {
+  if (!ctx) return PCL_ERR_INVALID;
+  if (ctx->ended) return PCL_ERR_STATE;
+
+  ctx->cancelled = 1;
+
+  // If transport has stream_cancel, use it
+  if (ctx->executor && ctx->executor->has_transport &&
+      ctx->executor->transport.stream_cancel) {
+    return ctx->executor->transport.stream_cancel(
+        ctx->executor->transport.adapter_ctx, ctx->transport_ctx);
+  }
+
+  return PCL_OK;
+}

@@ -43,6 +43,22 @@ typedef pcl_status_t (*pcl_service_handler_t)(pcl_container_t*    c,
                                               pcl_svc_context_t*  ctx,
                                               void*               user_data);
 
+/// \brief Streaming service handler — invoked on executor thread.
+///
+/// The handler should save the stream context and return PCL_STREAMING to begin
+/// streaming responses.  Use pcl_stream_send() to send messages, pcl_stream_end()
+/// to finish normally, or pcl_stream_abort() to terminate with an error.
+///
+/// \param c           Container owning the service.
+/// \param request     Incoming request message.
+/// \param stream_ctx  Stream context for sending responses (save and use later).
+/// \param user_data   Caller-supplied context from pcl_container_add_stream_service.
+/// \return PCL_STREAMING to begin streaming, or an error code to reject the request.
+typedef pcl_status_t (*pcl_stream_handler_t)(pcl_container_t*       c,
+                                             const pcl_msg_t*       request,
+                                             pcl_stream_context_t*  stream_ctx,
+                                             void*                  user_data);
+
 // -- Lifecycle callbacks (user implements) --------------------------------
 
 /// \brief Lifecycle and tick callbacks provided by the user.
@@ -170,6 +186,16 @@ pcl_port_t* pcl_container_add_service(pcl_container_t*      c,
                                       pcl_service_handler_t handler,
                                       void*                 user_data);
 
+/// \brief Add a streaming service server port with a stream handler.
+///
+/// The handler is called once per request and should return PCL_STREAMING
+/// to begin streaming responses via pcl_stream_send().
+pcl_port_t* pcl_container_add_stream_service(pcl_container_t*     c,
+                                             const char*          service_name,
+                                             const char*          type_name,
+                                             pcl_stream_handler_t handler,
+                                             void*                user_data);
+
 // -- Publishing ----------------------------------------------------------
 
 /// \brief Publish a message on a publisher port.  Only valid while ACTIVE.
@@ -216,6 +242,55 @@ pcl_status_t pcl_service_respond(pcl_svc_context_t* ctx,
 ///
 /// \param ctx  Context to cancel and free.
 void pcl_service_context_free(pcl_svc_context_t* ctx);
+
+// -- Streaming service API ------------------------------------------------
+
+/// \brief Send a message on an open stream.
+///
+/// Called by a streaming service handler to send a response message.
+/// May be called multiple times to send multiple messages.
+///
+/// \param ctx  Stream context from the handler invocation.
+/// \param msg  Message to send to the client.
+/// \return PCL_OK on success, PCL_ERR_CANCELLED if client cancelled.
+pcl_status_t pcl_stream_send(pcl_stream_context_t* ctx, const pcl_msg_t* msg);
+
+/// \brief End a stream normally.
+///
+/// Signals to the client that the stream is complete.  The context is
+/// freed after this call — do not reuse.
+///
+/// \param ctx  Stream context to end.
+/// \return PCL_OK on success.
+pcl_status_t pcl_stream_end(pcl_stream_context_t* ctx);
+
+/// \brief Abort a stream with an error.
+///
+/// Signals to the client that the stream terminated with an error.
+/// The context is freed after this call — do not reuse.
+///
+/// \param ctx         Stream context to abort.
+/// \param error_code  Error code to send to the client.
+/// \return PCL_OK on success.
+pcl_status_t pcl_stream_abort(pcl_stream_context_t* ctx, pcl_status_t error_code);
+
+/// \brief Check if the client has cancelled the stream.
+///
+/// Streaming handlers should poll this periodically and stop sending
+/// if it returns true.
+///
+/// \param ctx  Stream context to check.
+/// \return True if the client has cancelled the stream.
+bool pcl_stream_is_cancelled(const pcl_stream_context_t* ctx);
+
+/// \brief Cancel an in-flight stream (client-side).
+///
+/// Cancels a stream that was started with pcl_executor_invoke_stream().
+/// The server will be notified and can check via pcl_stream_is_cancelled().
+///
+/// \param ctx  Stream context returned by pcl_executor_invoke_stream().
+/// \return PCL_OK on success.
+pcl_status_t pcl_stream_cancel(pcl_stream_context_t* ctx);
 
 #ifdef __cplusplus
 }

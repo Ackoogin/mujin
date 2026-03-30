@@ -125,6 +125,11 @@ A service handler may defer its response by returning `PCL_PENDING` and saving t
 
 **Rationale**: Service handlers often need to aggregate data from multiple sources or wait for external events before responding.
 
+### PCL.011c - Streaming Service Response
+A streaming service handler may return `PCL_STREAMING` to begin a multi-message response stream. The handler shall use `pcl_stream_send()` to send messages, `pcl_stream_end()` to complete normally, or `pcl_stream_abort()` to terminate with an error. Clients may cancel mid-stream via `pcl_stream_cancel()`, and servers may poll cancellation status via `pcl_stream_is_cancelled()`.
+
+**Rationale**: Query services often need to return large result sets incrementally (like gRPC server streaming).
+
 ## Parameters
 
 ### PCL.012 - Typed Parameter Storage
@@ -391,6 +396,7 @@ Generated bindings shall provide a dispatch function that routes service channel
 | `PCL.011` | `D2` |
 | `PCL.011a` | `D3`, `D5` |
 | `PCL.011b` | `D2`, `D5` |
+| `PCL.011c` | `D2`, `D5` |
 | `PCL.012` | `D1` |
 | `PCL.013` | `D1` |
 | `PCL.014` | `D1` |

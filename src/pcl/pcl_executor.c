@@ -463,6 +463,22 @@ static struct pcl_port_t* find_service(pcl_executor_t* e, const char* name) {
   return NULL;
 }
 
+static struct pcl_port_t* find_stream_service(pcl_executor_t* e, const char* name) {
+  uint32_t ci, pi;
+  for (ci = 0; ci < e->container_count; ++ci) {
+    pcl_container_t* c = e->containers[ci];
+    for (pi = 0; pi < c->port_count; ++pi) {
+      struct pcl_port_t* port = &c->ports[pi];
+      if (port->type == PCL_PORT_STREAM_SERVICE &&
+          strcmp(port->name, name) == 0 &&
+          port->stream_handler != NULL) {
+        return port;
+      }
+    }
+  }
+  return NULL;
+}
+
 pcl_status_t pcl_executor_invoke_service(pcl_executor_t*  e,
                                          const char*      service_name,
                                          const pcl_msg_t* request,
@@ -533,6 +549,66 @@ pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
       free(ctx);
     }
     return rc;
+  }
+}
+
+pcl_status_t pcl_executor_invoke_stream(pcl_executor_t*        e,
+                                        const char*            service_name,
+                                        const pcl_msg_t*       request,
+                                        pcl_stream_msg_fn_t    callback,
+                                        void*                  user_data,
+                                        pcl_stream_context_t** out_ctx) {
+  if (!e || !service_name || !request || !callback) return PCL_ERR_INVALID;
+
+  // If transport has invoke_stream, use it
+  if (e->has_transport && e->transport.invoke_stream) {
+    void* stream_handle = NULL;
+    pcl_status_t rc = e->transport.invoke_stream(
+        e->transport.adapter_ctx, service_name, request,
+        callback, user_data, &stream_handle);
+    if (rc == PCL_OK || rc == PCL_STREAMING) {
+      if (out_ctx) {
+        pcl_stream_context_t* ctx = (pcl_stream_context_t*)calloc(1, sizeof(*ctx));
+        if (ctx) {
+          ctx->executor      = e;
+          ctx->callback      = callback;
+          ctx->user_data     = user_data;
+          ctx->transport_ctx = stream_handle;
+          *out_ctx = ctx;
+        }
+      }
+    }
+    return rc;
+  }
+
+  // Intra-process fallback: invoke streaming service
+  {
+    struct pcl_port_t*    port = find_stream_service(e, service_name);
+    pcl_stream_context_t* ctx;
+    pcl_status_t          rc;
+
+    if (!port) return PCL_ERR_NOT_FOUND;
+
+    // Allocate stream context
+    ctx = (pcl_stream_context_t*)calloc(1, sizeof(*ctx));
+    if (!ctx) return PCL_ERR_NOMEM;
+
+    ctx->executor  = e;
+    ctx->callback  = callback;
+    ctx->user_data = user_data;
+
+    rc = port->stream_handler(port->owner, request, ctx, port->stream_user_data);
+
+    if (rc == PCL_STREAMING) {
+      // Handler saved ctx, will use pcl_stream_send/end/abort
+      if (out_ctx) *out_ctx = ctx;
+      return PCL_OK;
+    } else {
+      // Error or unexpected return — free context
+      free(ctx);
+      if (out_ctx) *out_ctx = NULL;
+      return rc;
+    }
   }
 }
 

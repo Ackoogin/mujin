@@ -50,6 +50,9 @@ struct pcl_port_t {
   pcl_service_handler_t svc_handler;
   void*                 svc_user_data;
 
+  pcl_stream_handler_t  stream_handler;
+  void*                 stream_user_data;
+
   pcl_container_t*      owner;
 };
 
@@ -113,6 +116,17 @@ struct pcl_svc_context_t {
   pcl_resp_cb_fn_t       callback;      // for intra-process: callback to fire
   void*                  user_data;     // for intra-process: user data
   void*                  transport_ctx; // for transport: opaque context (e.g., seq_id)
+};
+
+// -- Stream context for streaming services --------------------------------
+
+struct pcl_stream_context_t {
+  struct pcl_executor_t* executor;
+  pcl_stream_msg_fn_t    callback;      // client callback for stream messages
+  void*                  user_data;     // client user data
+  void*                  transport_ctx; // transport-specific handle
+  volatile int           cancelled;     // set by client cancel
+  volatile int           ended;         // set by server end/abort
 };
 
 struct pcl_container_t {

@@ -86,6 +86,44 @@ typedef struct {
   /// and connections.  May be NULL.
   void (*shutdown)(void* adapter_ctx);
 
+  /// \brief Called to invoke a streaming service (client-side).
+  ///
+  /// The adapter should serialize and send the request, then call the callback
+  /// for each response message.  The callback receives end=true on the final
+  /// message, or an error status if the stream is aborted.
+  ///
+  /// May be NULL if the adapter does not support streaming.
+  pcl_status_t (*invoke_stream)(void*               adapter_ctx,
+                                const char*         service_name,
+                                const pcl_msg_t*    request,
+                                pcl_stream_msg_fn_t callback,
+                                void*               user_data,
+                                void**              stream_handle);
+
+  /// \brief Called to send a stream message (server-side).
+  ///
+  /// The adapter should serialize and send the message to the client.
+  /// May be NULL if the adapter does not support streaming.
+  pcl_status_t (*stream_send)(void*            adapter_ctx,
+                              void*            stream_handle,
+                              const pcl_msg_t* msg);
+
+  /// \brief Called to end or abort a stream (server-side).
+  ///
+  /// If status is PCL_OK, the stream ended normally.  Otherwise, the stream
+  /// was aborted with the given error code.
+  /// May be NULL if the adapter does not support streaming.
+  pcl_status_t (*stream_end)(void*        adapter_ctx,
+                             void*        stream_handle,
+                             pcl_status_t status);
+
+  /// \brief Called to cancel an in-flight stream (client-side).
+  ///
+  /// The adapter should notify the server that the stream is cancelled.
+  /// May be NULL if the adapter does not support streaming.
+  pcl_status_t (*stream_cancel)(void* adapter_ctx,
+                                void* stream_handle);
+
   /// \brief Opaque context owned by the adapter implementation.
   void* adapter_ctx;
 } pcl_transport_t;
@@ -124,6 +162,27 @@ pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
                                        const pcl_msg_t* request,
                                        pcl_resp_cb_fn_t callback,
                                        void*            user_data);
+
+/// \brief Invoke a streaming service through the configured transport.
+///
+/// Routes the request through the transport adapter's invoke_stream function,
+/// or uses intra-process dispatch if no transport is set.
+///
+/// The callback is fired for each response message; end=true on the final one.
+///
+/// \param e            Executor to invoke through.
+/// \param service_name Target streaming service name.
+/// \param request      Request message.
+/// \param callback     Fired for each stream message.
+/// \param user_data    Passed through to callback.
+/// \param out_ctx      Receives stream context for cancellation (may be NULL).
+/// \return PCL_OK on success, error code on failure.
+pcl_status_t pcl_executor_invoke_stream(pcl_executor_t*       e,
+                                        const char*           service_name,
+                                        const pcl_msg_t*      request,
+                                        pcl_stream_msg_fn_t   callback,
+                                        void*                 user_data,
+                                        pcl_stream_context_t** out_ctx);
 
 #ifdef __cplusplus
 }

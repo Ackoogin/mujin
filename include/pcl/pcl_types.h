@@ -15,16 +15,18 @@ extern "C" {
 
 // -- Opaque handles ------------------------------------------------------
 
-typedef struct pcl_executor_t   pcl_executor_t;
-typedef struct pcl_container_t  pcl_container_t;
-typedef struct pcl_port_t       pcl_port_t;
-typedef struct pcl_svc_context_t pcl_svc_context_t;
+typedef struct pcl_executor_t      pcl_executor_t;
+typedef struct pcl_container_t     pcl_container_t;
+typedef struct pcl_port_t          pcl_port_t;
+typedef struct pcl_svc_context_t   pcl_svc_context_t;
+typedef struct pcl_stream_context_t pcl_stream_context_t;
 
 // -- Return codes --------------------------------------------------------
 
 typedef enum {
   PCL_OK              =  0,
   PCL_PENDING         =  1,   // operation deferred (e.g., service will respond later)
+  PCL_STREAMING       =  2,   // stream opened, more data coming
   PCL_ERR_INVALID     = -1,   // NULL handle or bad argument
   PCL_ERR_STATE       = -2,   // wrong lifecycle state for operation
   PCL_ERR_TIMEOUT     = -3,   // deadline exceeded
@@ -32,6 +34,7 @@ typedef enum {
   PCL_ERR_NOMEM       = -5,   // allocation failure
   PCL_ERR_NOT_FOUND   = -6,   // parameter key / port name not found
   PCL_ERR_PORT_CLOSED = -7,   // port not available (container inactive)
+  PCL_ERR_CANCELLED   = -8,   // stream cancelled by peer
 } pcl_status_t;
 
 // -- Lifecycle states ----------------------------------------------------
@@ -46,10 +49,11 @@ typedef enum {
 // -- Port types ----------------------------------------------------------
 
 typedef enum {
-  PCL_PORT_PUBLISHER  = 0,
-  PCL_PORT_SUBSCRIBER = 1,
-  PCL_PORT_SERVICE    = 2,    // request-reply server
-  PCL_PORT_CLIENT     = 3,    // request-reply client
+  PCL_PORT_PUBLISHER       = 0,
+  PCL_PORT_SUBSCRIBER      = 1,
+  PCL_PORT_SERVICE         = 2,  // request-reply server
+  PCL_PORT_CLIENT          = 3,  // request-reply client
+  PCL_PORT_STREAM_SERVICE  = 4,  // streaming server
 } pcl_port_type_t;
 
 // -- Log levels ----------------------------------------------------------
@@ -81,6 +85,16 @@ typedef struct {
 /// \param resp       Response message (borrow — do not retain pointers after return).
 /// \param user_data  Caller-supplied context passed to invoke_remote_async.
 typedef void (*pcl_resp_cb_fn_t)(const pcl_msg_t* resp, void* user_data);
+
+/// \brief Callback fired for each message in a streaming service response.
+/// \param msg        Stream message (borrow — do not retain pointers after return).
+/// \param end        True if this is the final message (stream complete).
+/// \param status     PCL_OK for normal messages, error code on abort/cancel.
+/// \param user_data  Caller-supplied context passed to invoke_stream.
+typedef void (*pcl_stream_msg_fn_t)(const pcl_msg_t* msg,
+                                    bool             end,
+                                    pcl_status_t     status,
+                                    void*            user_data);
 
 #ifdef __cplusplus
 }
