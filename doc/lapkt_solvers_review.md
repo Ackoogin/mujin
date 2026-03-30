@@ -225,6 +225,266 @@ Each phase shares the same `STRIPS_Problem` and `Fwd_Search_Problem` wrapper. Th
 
 ---
 
+## LAPKT Feature Audit
+
+This section audits every LAPKT feature compiled into `lapkt_core` or available via include paths, documenting whether AME actively uses it, compiles it as dead code, or has access to it but does not compile it.
+
+### Audit Summary
+
+| Feature | Category | Compiled | Header Included | Instantiated | Called by AME | Status |
+|---------|----------|:--------:|:---------------:|:------------:|:-------------:|--------|
+| STRIPS_Problem | Model | Yes | Yes | Yes | Yes | **Active** |
+| Action | Model | Yes | Yes | Yes | Yes | **Active** |
+| Fluent | Model | Yes | Yes | Yes | Yes | **Active** |
+| STRIPS_State | Model | Yes | Yes | Yes | Yes | **Active** |
+| Fwd_Search_Problem | Model | Yes | Yes | Yes | Yes | **Active** |
+| Successor Generator (succ_gen) | Model | Yes | Yes | Yes (internal) | Yes (internal) | **Active** |
+| Conditional Effects (cond_eff) | Model | Yes | No | No | No | **Dead code** |
+| Conjunctive Component Problem | Model | Yes | No | No | No | **Dead code** |
+| Fluent Conjunction (fl_conj) | Model | Yes | No | No | No | **Dead code** |
+| Mutex Sets | Model | Yes | No | No | No | **Dead code** |
+| Match Tree | Component | Yes | No | No | No | **Dead code** |
+| Reachability Analysis | Component | Yes | No | No | No | **Dead code** |
+| Watched Literals Successor Gen | Component | Yes | No | No | No | **Dead code** |
+| Landmark Graph Heuristic | Heuristic | Yes | No | No | No | **Dead code** |
+| Bit Array / Bit Set | Utility | Yes | Yes (internal) | Yes (internal) | Yes (internal) | **Active** |
+| Memory / Resources Control | Utility | Yes | Yes (internal) | Yes (internal) | Yes (internal) | **Active** |
+| BRFS Engine | Engine | Header-only | Yes | Yes | Yes | **Active** |
+| IW / SIW Engines | Engine | Header-only | No | No | No | **Available** |
+| BFS(f) / Best-First Engines | Engine | Header-only | No | No | No | **Available** |
+| WA* / RWA* Engines | Engine | Header-only | No | No | No | **Available** |
+| BFWS Engines | Engine | Header-only | No | No | No | **Available** |
+| Novelty Evaluators | Node Eval | Not compiled | No | No | No | **Available** |
+| h_add / h_max / h_FF Heuristics | Node Eval | Not compiled | No | No | No | **Available** |
+
+---
+
+### Active Features (Used by AME)
+
+#### Agnostic Problem Representation (`STRIPS_Problem`, `Fwd_Search_Problem`)
+
+LAPKT's core design principle is the *agnostic interface*: a language-independent problem representation that decouples the planning model from any particular parser or input language. The `STRIPS_Problem` class holds fluents, actions (with preconditions, add effects, delete effects), initial state, and goal specification without any dependency on PDDL syntax.
+
+**How AME uses it:** `WorldModel::projectToSTRIPS()` (`world_model.cpp:438`) constructs a `STRIPS_Problem` programmatically by iterating over AME's internal fluent and ground action registries. This is exactly the intended use of the agnostic interface — AME never passes PDDL text to LAPKT; instead it builds the planning model from its own data structures.
+
+`Fwd_Search_Problem` wraps a `STRIPS_Problem` to provide a forward search model (initial state, goal test, successor generation). All LAPKT search engines are templated on this wrapper.
+
+**What AME gains:** Clean separation between AME's world model and LAPKT internals. The PDDL parser populates the WorldModel, the WorldModel projects to STRIPS, and the planner operates on STRIPS. Each layer can be replaced independently.
+
+**Unused potential:** The agnostic interface also supports SAS+ representations (finite-domain variables instead of Boolean fluents). This could be beneficial if AME moves to more expressive state representations (e.g., numeric fluents for fuel levels or battery charge).
+
+#### Action Representation (`action.cxx`)
+
+LAPKT's `Action` class stores preconditions, add effects, and delete effects as sorted vectors of fluent indices. The static method `STRIPS_Problem::add_action()` creates and registers actions.
+
+**How AME uses it:** `projectToSTRIPS()` calls `STRIPS_Problem::add_action()` for each ground action, passing precondition, add, and delete vectors built from the WorldModel's `GroundAction` struct. After all actions are added, `make_action_tables()` builds internal lookup structures for successor generation.
+
+**What AME gains:** Efficient action applicability testing via LAPKT's internal tables. The `make_action_tables()` call builds match trees and applicability indices that are used by the successor generator during search.
+
+#### State Representation (`strips_state.cxx`)
+
+LAPKT `State` objects are bitset-backed representations of the current set of true fluents, with a hash for open-list membership testing.
+
+**How AME uses it:** `WorldModel::currentStateAsSTRIPS()` (`world_model.cpp:471`) creates a `State` object, sets bits for all currently-true fluents, and calls `update_hash()`. This state is passed to the search engine as the initial state.
+
+**Note:** The state is heap-allocated via raw `new` and ownership is transferred to the engine. This is a LAPKT convention; the engine manages the lifetime.
+
+#### Successor Generator (`succ_gen.cxx`)
+
+The successor generator computes the set of applicable actions for a given state. It is called internally by LAPKT search engines during node expansion.
+
+**How AME uses it:** Implicitly, via `Fwd_Search_Problem`. When the BRFS engine expands a state, it calls the successor generator to enumerate applicable actions. AME does not call the successor generator directly.
+
+**What AME gains:** Efficient applicability testing — the successor generator uses the action tables built by `make_action_tables()` to avoid testing every action against every state.
+
+#### Utility Libraries (`bit_array.cxx`, `bit_set.cxx`, `memory.cxx`, `resources_control.cxx`)
+
+Low-level infrastructure used internally by all LAPKT components. Bit arrays back the state representation; memory utilities manage search node allocation; resources control tracks time and memory usage.
+
+**How AME uses it:** Implicitly, through all LAPKT operations. These are foundational and cannot be removed.
+
+---
+
+### Dead Code (Compiled but Unused)
+
+These features are compiled into the `lapkt_core` static library because the CMakeLists.txt includes them, but no AME code instantiates or calls them. They add a small amount to compile time and binary size but have no runtime cost.
+
+#### Conditional Effects (`cond_eff.cxx`)
+
+**What it provides:** Support for actions whose effects depend on conditions beyond the preconditions. In PDDL, these appear as `(when (condition) (effect))` clauses within an action.
+
+**How AME uses it:** Not at all. `projectToSTRIPS()` passes an empty `Conditional_Effect_Vec` for every action. All AME actions are simple STRIPS — fixed preconditions, fixed effects.
+
+**Potential benefit:** Conditional effects would allow more compact action representations. For example, a `search(robot, sector)` action could have a conditional effect: "if a target is present in the sector, then `target_found` becomes true." Currently, this must be modelled as separate actions or handled at the BT execution level. Enabling conditional effects would require:
+1. Extending `WorldModel::GroundAction` to store conditional effects.
+2. Populating them during PDDL parsing (requires PDDL `:conditional-effects` requirement).
+3. Passing them to `STRIPS_Problem::add_action()` instead of the empty vector.
+
+#### Conjunctive Component Problem (`conj_comp_prob.cxx`)
+
+**What it provides:** Decomposes a planning problem into conjunctive sub-problems — one per goal atom or per connected component of the causal graph. Used internally by some LAPKT solvers for goal serialization.
+
+**How AME uses it:** Not at all. Could be useful if AME implements goal decomposition at the planner level (currently handled by the PlanCompiler's causal graph analysis).
+
+**Potential benefit:** Automated goal serialization for SIW. Rather than SIW picking goals arbitrarily, the conjunctive component analysis could provide an informed ordering based on causal dependencies.
+
+#### Fluent Conjunction (`fl_conj.cxx`)
+
+**What it provides:** Represents conjunctions of fluents as first-class objects. Used by landmark-based heuristics and by some novelty computations that track tuples of atoms.
+
+**How AME uses it:** Not at all. Would become relevant if AME enables the landmark heuristic or novelty-based search.
+
+**Potential benefit:** Required infrastructure for landmark computation and for novelty measures beyond novelty-1. If AME moves to BFS(f) or BFWS, fluent conjunctions will be needed.
+
+#### Mutex Sets (`mutex_set.cxx`)
+
+**What it provides:** Computes and stores sets of mutually exclusive fluents — pairs of atoms that cannot both be true in any reachable state. Derived from the planning graph.
+
+**How AME uses it:** Not at all. The BRFS engine does not use mutex pruning.
+
+**Potential benefit:** Mutex information can be used to:
+1. **Prune the search space** — discard states containing mutex pairs.
+2. **Improve heuristic estimates** — h_max and landmark heuristics can use mutex information for tighter bounds.
+3. **Validate domain models** — detect inconsistencies in PDDL domain definitions (e.g., actions that claim to add two mutually exclusive fluents simultaneously).
+
+Integration would require calling the mutex computation API after `make_action_tables()` and passing mutex sets to heuristic constructors.
+
+#### Match Tree (`match_tree.cxx`)
+
+**What it provides:** A decision-tree data structure for efficient action matching. Given a state, the match tree quickly identifies which actions are applicable by traversing a pre-built tree based on precondition structure, avoiding the need to check every action.
+
+**How AME uses it:** Not directly, but `make_action_tables()` may build match trees internally as part of successor generation setup. The match tree is an optimisation that benefits larger domains with many ground actions.
+
+**Potential benefit:** Already providing value transparently through the successor generator. For domains with hundreds or thousands of ground actions (e.g., multi-robot logistics with many locations), match trees significantly reduce per-node expansion cost.
+
+#### Reachability Analysis (`reachability.cxx`)
+
+**What it provides:** Forward reachability analysis from the initial state using relaxed planning graph expansion. Identifies which fluents and actions are reachable (potentially achievable) and which are unreachable (provably dead).
+
+**How AME uses it:** Not at all.
+
+**Potential benefit:**
+1. **Domain validation** — detect unreachable goals before starting search, providing immediate failure feedback instead of exhaustive exploration.
+2. **Problem simplification** — remove unreachable fluents and inapplicable actions from the STRIPS problem, reducing the effective state space.
+3. **Heuristic computation** — reachability analysis is the foundation of relaxation-based heuristics (h_add, h_max, h_FF). Enabling reachability is a prerequisite for these heuristics.
+4. **Safety assurance** — provably demonstrate that certain dangerous states are unreachable, supporting the SACE/AMLAS safety case (`doc/autonomy_assurance_plan.md`).
+
+#### Watched Literals Successor Generator (`watched_lit_succ_gen.cxx`)
+
+**What it provides:** An alternative successor generation strategy inspired by SAT solver watched literal propagation. Instead of checking all preconditions of every action, it "watches" specific precondition fluents and only re-evaluates an action when a watched fluent changes.
+
+**How AME uses it:** Not at all. The default successor generator is used.
+
+**Potential benefit:** More efficient successor generation for domains with long action precondition lists. The watched literal approach has sub-linear amortised cost per state expansion compared to the basic successor generator's linear cost. Most beneficial for domains with many actions and multi-atom preconditions.
+
+#### Landmark Graph Heuristic (`landmark_graph.cxx`)
+
+**What it provides:** Computes a *landmark graph* — a directed graph of facts and actions that must appear in every valid plan. The landmark count heuristic h_LM counts unsatisfied landmarks as an estimate of remaining plan cost. It is admissible (never overestimates).
+
+**How AME uses it:** Compiled but never instantiated. This is the most immediately useful piece of dead code in the build.
+
+**Potential benefit:**
+1. **Heuristic search** — pair with WA* for bounded sub-optimal plans, or with BFS(f) for novelty-guided heuristic search.
+2. **Plan quality estimation** — landmark count provides a lower bound on remaining actions, useful for progress reporting and timeout decisions.
+3. **Goal ordering** — the landmark graph reveals causal ordering between sub-goals, which could inform SIW's goal serialization or the PlanCompiler's flow decomposition.
+
+---
+
+### Available but Not Compiled
+
+These features exist in the LAPKT source tree (headers are on the include path) but no `.cxx` implementation files are compiled into `lapkt_core`.
+
+#### Novelty Evaluators (`node_eval/novelty/`)
+
+**What they provide:** Functions that compute the novelty w(s) of a state — the size of the smallest tuple of atoms appearing for the first time in s. Used by IW, SIW, BFS(f), and BFWS.
+
+**Status:** Header directory is on the include path (`${LAPKT_SRC}/node_eval/novelty`) but no source files are compiled. Novelty evaluators may be header-only templates (common in LAPKT) or may require compilation — this needs verification at build time.
+
+**Required for:** IW, SIW, BFS(f), BFWS, DFS+, and any novelty-based search.
+
+#### Relaxation-Based Heuristics (`node_eval/heuristic/`)
+
+**What they provide:** h_add (additive), h_max (max-cost), and h_FF (FastForward relaxed plan) heuristics. These estimate the cost-to-go by solving a relaxed version of the problem that ignores delete effects.
+
+**Status:** The heuristic include directory is available but only `landmark_graph.cxx` is compiled. Other heuristic source files (if they exist as `.cxx` rather than header-only templates) are not compiled.
+
+**Required for:** A*, WA*, greedy best-first search, and as secondary heuristics in BFS(f) and BFWS.
+
+#### Search Engines (`engine/`)
+
+**What they provide:** All LAPKT search engine implementations — BRFS, IW, SIW, BFS(f), AT_BFS_f, BFWS, WA*, RWA*, DFS+, and others. LAPKT search engines are C++ template classes, so they are header-only and require no additional compilation.
+
+**Status:** The engine include directory is on the path. Only `brfs.hxx` is currently included by AME code. All other engines are available for immediate use by adding the appropriate `#include` directive.
+
+**Integration pattern:** All engines follow the same template:
+```cpp
+#include <engine_header.hxx>
+using Engine = aptk::search::EngineType<aptk::agnostic::Fwd_Search_Problem>;
+Engine engine(fwd_prob);
+engine.start(init_state);
+engine.find_solution(cost, plan);
+```
+
+---
+
+### LAPKT API Usage Inventory
+
+AME's LAPKT integration is concentrated in exactly two source files:
+
+**`world_model.cpp`** — 12 LAPKT API calls in `projectToSTRIPS()` and `currentStateAsSTRIPS()`:
+- `STRIPS_Problem::add_fluent()` — register fluent names
+- `STRIPS_Problem::add_action()` — register ground actions with pre/add/del
+- `STRIPS_Problem::set_init()` — set initial state fluents
+- `STRIPS_Problem::set_goal()` — set goal fluents
+- `STRIPS_Problem::make_action_tables()` — build internal lookup structures
+- `State(prob)` constructor, `State::set()`, `State::update_hash()` — create initial state
+
+**`planner.cpp`** — 8 LAPKT API calls in `Planner::solve()`:
+- `Fwd_Search_Problem(&strips)` — wrap STRIPS problem for forward search
+- `BRFS engine(fwd_prob)` — instantiate search engine
+- `engine.set_verbose(false)` — suppress LAPKT console output
+- `engine.start(init)` — set initial state for search
+- `engine.find_solution(cost, plan)` — run search
+- `engine.expanded()`, `engine.generated()` — retrieve search statistics
+
+**No other AME files reference LAPKT APIs.** The integration boundary is clean and narrow, making it straightforward to add new solvers or features without affecting the rest of the codebase.
+
+---
+
+### MSVC Compatibility Layer
+
+LAPKT was developed for Linux/GCC and uses POSIX headers that are unavailable on Windows. AME provides shim headers in `cmake/compat/` that are injected before LAPKT's own include paths when building with MSVC:
+
+| POSIX Header | Shim Behaviour |
+|-------------|----------------|
+| `sys/time.h` | Redirects to Windows time APIs |
+| `unistd.h` | Redirects to `<io.h>` and provides minimal POSIX stubs |
+| `sys/resource.h` | Provides minimal stub for resource tracking |
+
+These shims are transparent to AME code and only affect the `lapkt_core` build target. Adding new LAPKT source files may require extending the shims if they use additional POSIX headers.
+
+---
+
+### Build Optimisation Opportunities
+
+**Current state:** 17 LAPKT source files compiled; 7 are dead code (41% of LAPKT compilation).
+
+**Files safe to remove from `lapkt_core` if only BRFS is needed:**
+- `cond_eff.cxx` — empty conditional effects vector is the only reference
+- `conj_comp_prob.cxx` — never instantiated
+- `fl_conj.cxx` — never instantiated
+- `mutex_set.cxx` — never instantiated
+
+**Files to keep even though not directly called:**
+- `match_tree.cxx` — may be used internally by `make_action_tables()`
+- `reachability.cxx` — may be used internally by action table construction
+- `watched_lit_succ_gen.cxx` — may be used as an alternate successor generator internally
+- `landmark_graph.cxx` — recommended for near-term heuristic integration
+
+**Recommendation:** Keep all files compiled. The build cost is negligible, and they will be needed as AME adopts more LAPKT features. Removing them risks build failures when new solvers are added.
+
+---
+
 ## References
 
 - Lipovetzky, N. and Geffner, H. (2012). "Width and Serialization of Classical Planning Problems." ECAI 2012.
