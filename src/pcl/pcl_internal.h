@@ -55,7 +55,65 @@ struct pcl_port_t {
 
 // -- Internal container representation -----------------------------------
 
-struct pcl_executor_t;
+// -- Internal executor representation ------------------------------------
+
+#include "pcl/pcl_transport.h"
+
+#ifdef _WIN32
+#  define WIN32_LEAN_AND_MEAN
+#  include <windows.h>
+typedef CRITICAL_SECTION pcl_mutex_t;
+#else
+#  include <pthread.h>
+typedef pthread_mutex_t pcl_mutex_t;
+#endif
+
+#define PCL_MAX_CONTAINERS 64
+
+typedef struct pcl_pending_msg_t {
+  char*                     topic;
+  char*                     type_name;
+  void*                     data;
+  uint32_t                  size;
+  struct pcl_pending_msg_t* next;
+} pcl_pending_msg_t;
+
+typedef struct pcl_resp_cb_node_t {
+  pcl_resp_cb_fn_t            cb;
+  void*                       user_data;
+  void*                       data;
+  uint32_t                    size;
+  struct pcl_resp_cb_node_t*  next;
+} pcl_resp_cb_node_t;
+
+struct pcl_executor_t {
+  pcl_container_t* containers[PCL_MAX_CONTAINERS];
+  uint32_t         container_count;
+
+  pcl_transport_t  transport;
+  int              has_transport;
+
+  volatile int     shutdown_requested;
+
+  double           prev_time;
+
+  pcl_pending_msg_t* incoming_head;
+  pcl_pending_msg_t* incoming_tail;
+  pcl_mutex_t        incoming_lock;
+
+  pcl_resp_cb_node_t* resp_cb_head;
+  pcl_resp_cb_node_t* resp_cb_tail;
+  pcl_mutex_t         resp_cb_lock;
+};
+
+// -- Service context for deferred responses -------------------------------
+
+struct pcl_svc_context_t {
+  struct pcl_executor_t* executor;
+  pcl_resp_cb_fn_t       callback;      // for intra-process: callback to fire
+  void*                  user_data;     // for intra-process: user data
+  void*                  transport_ctx; // for transport: opaque context (e.g., seq_id)
+};
 
 struct pcl_container_t {
   char              name[128];

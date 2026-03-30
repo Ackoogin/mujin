@@ -25,11 +25,23 @@ typedef void (*pcl_sub_callback_t)(pcl_container_t* c,
                                    const pcl_msg_t*  msg,
                                    void*             user_data);
 
-/// \brief Service handler — invoked on executor thread, must populate response.
-typedef pcl_status_t (*pcl_service_handler_t)(pcl_container_t* c,
-                                              const pcl_msg_t* request,
-                                              pcl_msg_t*       response,
-                                              void*            user_data);
+/// \brief Service handler — invoked on executor thread.
+///
+/// The handler can either:
+/// 1. Populate \p response and return PCL_OK (immediate response).
+/// 2. Save \p ctx and return PCL_PENDING (deferred response via pcl_service_respond).
+///
+/// \param c         Container owning the service.
+/// \param request   Incoming request message.
+/// \param response  Pre-allocated response buffer (populate if returning PCL_OK).
+/// \param ctx       Service context for deferred responses (save if returning PCL_PENDING).
+/// \param user_data Caller-supplied context from pcl_container_add_service.
+/// \return PCL_OK to send \p response immediately, PCL_PENDING to defer.
+typedef pcl_status_t (*pcl_service_handler_t)(pcl_container_t*    c,
+                                              const pcl_msg_t*    request,
+                                              pcl_msg_t*          response,
+                                              pcl_svc_context_t*  ctx,
+                                              void*               user_data);
 
 // -- Lifecycle callbacks (user implements) --------------------------------
 
@@ -162,6 +174,48 @@ pcl_port_t* pcl_container_add_service(pcl_container_t*      c,
 
 /// \brief Publish a message on a publisher port.  Only valid while ACTIVE.
 pcl_status_t pcl_port_publish(pcl_port_t* port, const pcl_msg_t* msg);
+
+// -- Service invocation --------------------------------------------------
+
+/// \brief Invoke a service asynchronously from within a container.
+///
+/// Routes through the executor's configured transport, or falls back to
+/// intra-process dispatch if no transport is set.  The callback fires on
+/// the executor thread (synchronously for intra-process, asynchronously
+/// for remote transports).
+///
+/// \param c            Container making the call (must be added to an executor).
+/// \param service_name Target service name.
+/// \param request      Request message.
+/// \param callback     Fired when the response arrives.
+/// \param user_data    Passed through to callback.
+/// \return PCL_OK on success, PCL_ERR_STATE if container has no executor.
+pcl_status_t pcl_container_invoke_async(pcl_container_t* c,
+                                        const char*      service_name,
+                                        const pcl_msg_t* request,
+                                        pcl_resp_cb_fn_t callback,
+                                        void*            user_data);
+
+// -- Deferred service responses -------------------------------------------
+
+/// \brief Send a deferred service response.
+///
+/// Called by a service handler that previously returned PCL_PENDING.
+/// The context is consumed and freed after this call — do not reuse.
+///
+/// \param ctx       Context saved from the service handler invocation.
+/// \param response  Response message to send to the caller.
+/// \return PCL_OK on success.
+pcl_status_t pcl_service_respond(pcl_svc_context_t* ctx,
+                                 const pcl_msg_t*   response);
+
+/// \brief Cancel a deferred service response without sending.
+///
+/// Frees the context without sending a response.  Use when the service
+/// cannot complete the request (e.g., timeout, shutdown).
+///
+/// \param ctx  Context to cancel and free.
+void pcl_service_context_free(pcl_svc_context_t* ctx);
 
 #ifdef __cplusplus
 }

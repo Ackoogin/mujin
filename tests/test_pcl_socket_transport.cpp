@@ -408,7 +408,7 @@ TEST(PclSocketTransport, AsyncRemoteServiceRoundTrip) {
   svc_cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
     pcl_container_add_service(c, "echo_service", "EchoReq",
         [](pcl_container_t*, const pcl_msg_t* req,
-           pcl_msg_t* resp, void* ud2) -> pcl_status_t {
+           pcl_msg_t* resp, pcl_svc_context_t*, void* ud2) -> pcl_status_t {
           auto* s = static_cast<SvcState*>(ud2);
           s->invoked = true;
           // Echo the request back as response.

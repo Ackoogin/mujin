@@ -30,7 +30,9 @@ typedef struct {
 static pcl_status_t handle_get_fact(pcl_container_t* c,
                                     const pcl_msg_t* request,
                                     pcl_msg_t*       response,
+                                    pcl_svc_context_t* ctx,
                                     void*            ud) {
+  (void)ctx;
   (void)request;
   WmData* d = (WmData*)ud;
   pcl_log(c, PCL_LOG_INFO, "get_fact service called (tick %d)",

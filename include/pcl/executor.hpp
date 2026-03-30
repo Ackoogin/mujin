@@ -83,6 +83,15 @@ public:
     return pcl_executor_post_incoming(handle_, topic, msg);
   }
 
+  /// \brief Invoke a service asynchronously through the configured transport.
+  pcl_status_t invokeAsync(const char*      service_name,
+                           const pcl_msg_t* request,
+                           pcl_resp_cb_fn_t callback,
+                           void*            user_data = nullptr) {
+    return pcl_executor_invoke_async(handle_, service_name, request,
+                                     callback, user_data);
+  }
+
   /// \brief Raw handle access.
   pcl_executor_t* handle() { return handle_; }
   const pcl_executor_t* handle() const { return handle_; }

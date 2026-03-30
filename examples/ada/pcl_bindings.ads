@@ -172,6 +172,14 @@ package Pcl_Bindings is
      Msg   : access constant Pcl_Msg) return Pcl_Status;
   pragma Import(C, Dispatch_Incoming, "pcl_executor_dispatch_incoming");
 
+  function Invoke_Async
+    (Exec         : Pcl_Executor_Access;
+     Service_Name : Interfaces.C.Strings.chars_ptr;
+     Request      : access constant Pcl_Msg;
+     Callback     : Pcl_Resp_Cb_Access;
+     User_Data    : System.Address) return Pcl_Status;
+  pragma Import(C, Invoke_Async, "pcl_executor_invoke_async");
+
   function Publish
     (Exec  : Pcl_Executor_Access;
      Topic : Interfaces.C.Strings.chars_ptr;

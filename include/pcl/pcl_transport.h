@@ -51,6 +51,35 @@ typedef struct {
                             const char* topic,
                             const char* type_name);
 
+  /// \brief Called when a container invokes a remote service asynchronously.
+  ///
+  /// The adapter should serialize and send the request over the wire.
+  /// When the response arrives, the adapter calls the callback on the
+  /// executor thread (via pcl_executor_post_response_cb or directly if
+  /// already on that thread).
+  ///
+  /// May be NULL if the adapter does not support client-side service calls.
+  /// Intra-process adapters may dispatch synchronously and invoke the
+  /// callback before returning.
+  pcl_status_t (*invoke_async)(void*            adapter_ctx,
+                               const char*      service_name,
+                               const pcl_msg_t* request,
+                               pcl_resp_cb_fn_t callback,
+                               void*            user_data);
+
+  /// \brief Called to send a deferred service response.
+  ///
+  /// The adapter should serialize and send the response back to the original
+  /// caller.  For intra-process, this is a no-op (response sent directly).
+  /// May be NULL if the adapter does not support deferred responses.
+  ///
+  /// \param adapter_ctx  Adapter context.
+  /// \param svc_ctx      Service context from the original request.
+  /// \param response     Response message to send.
+  pcl_status_t (*respond)(void*              adapter_ctx,
+                          pcl_svc_context_t* svc_ctx,
+                          const pcl_msg_t*   response);
+
   /// \brief Called once during executor teardown.
   ///
   /// Adapter should release any resources associated with subscriptions
@@ -82,6 +111,19 @@ pcl_status_t pcl_executor_set_transport(pcl_executor_t*        e,
 pcl_status_t pcl_executor_dispatch_incoming(pcl_executor_t*  e,
                                             const char*      topic,
                                             const pcl_msg_t* msg);
+
+/// \brief Invoke a service asynchronously through the configured transport.
+///
+/// Routes the request through the transport adapter's invoke_async function.
+/// Returns PCL_ERR_NOT_FOUND if no transport is set or the transport does not
+/// support client-side service invocation (invoke_async is NULL).
+///
+/// The callback is fired on the executor thread when the response arrives.
+pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
+                                       const char*      service_name,
+                                       const pcl_msg_t* request,
+                                       pcl_resp_cb_fn_t callback,
+                                       void*            user_data);
 
 #ifdef __cplusplus
 }

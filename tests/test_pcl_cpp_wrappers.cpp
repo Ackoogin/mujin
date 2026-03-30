@@ -163,7 +163,8 @@ TEST(PclCppComponent, AddServiceDuringConfigure) {
   protected:
     pcl_status_t on_configure() override {
       svc_port = addService("test/service", "SvcReq",
-          [](pcl_container_t*, const pcl_msg_t*, pcl_msg_t*, void*) -> pcl_status_t {
+          [](pcl_container_t*, const pcl_msg_t*, pcl_msg_t*,
+             pcl_svc_context_t*, void*) -> pcl_status_t {
             return PCL_OK;
           }, this);
       return svc_port ? PCL_OK : PCL_ERR_CALLBACK;

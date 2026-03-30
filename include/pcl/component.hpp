@@ -133,6 +133,20 @@ public:
                                      handler, user_data);
   }
 
+  // -- Service invocation (call from on_tick or callbacks) -------------
+
+  /// \brief Invoke a service asynchronously.
+  ///
+  /// Routes through the executor's transport, or falls back to intra-process
+  /// dispatch.  Callback fires on the executor thread.
+  pcl_status_t invokeAsync(const char*      service_name,
+                           const pcl_msg_t* request,
+                           pcl_resp_cb_fn_t callback,
+                           void*            user_data = nullptr) {
+    return pcl_container_invoke_async(handle_, service_name, request,
+                                      callback, user_data);
+  }
+
   // -- Logging ---------------------------------------------------------
 
   void logDebug(const char* fmt, ...) const {

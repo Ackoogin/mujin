@@ -252,6 +252,7 @@ static void frontend_object_evidence_cb(pcl_container_t*, const pcl_msg_t* msg,
 static pcl_status_t frontend_create_requirement(pcl_container_t*,
                                                  const pcl_msg_t* request,
                                                  pcl_msg_t* response,
+                                                 pcl_svc_context_t*,
                                                  void*) {
   if (!request->data || request->size == 0) return PCL_ERR_INVALID;
 

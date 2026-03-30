@@ -53,29 +53,9 @@ static void pcl_sleep_seconds(double seconds) {
 #endif
 }
 
-// -- Limits --------------------------------------------------------------
-
-#define PCL_MAX_CONTAINERS 64
-
-typedef struct pcl_pending_msg_t {
-  char*                     topic;
-  char*                     type_name;
-  void*                     data;
-  uint32_t                  size;
-  struct pcl_pending_msg_t* next;
-} pcl_pending_msg_t;
-
-typedef struct pcl_resp_cb_node_t {
-  pcl_resp_cb_fn_t            cb;
-  void*                       user_data;
-  void*                       data;
-  uint32_t                    size;
-  struct pcl_resp_cb_node_t*  next;
-} pcl_resp_cb_node_t;
+// -- Mutex helpers -------------------------------------------------------
 
 #ifdef _WIN32
-typedef CRITICAL_SECTION pcl_mutex_t;
-
 static void pcl_mutex_init(pcl_mutex_t* mutex) {
   InitializeCriticalSection(mutex);
 }
@@ -92,8 +72,6 @@ static void pcl_mutex_unlock(pcl_mutex_t* mutex) {
   LeaveCriticalSection(mutex);
 }
 #else
-typedef pthread_mutex_t pcl_mutex_t;
-
 static void pcl_mutex_init(pcl_mutex_t* mutex) {
   pthread_mutex_init(mutex, NULL);
 }
@@ -132,28 +110,6 @@ static void free_pending_msg(pcl_pending_msg_t* pending) {
   free(pending->data);
   free(pending);
 }
-
-// -- Internal executor representation ------------------------------------
-
-struct pcl_executor_t {
-  pcl_container_t* containers[PCL_MAX_CONTAINERS];
-  uint32_t         container_count;
-
-  pcl_transport_t  transport;
-  int              has_transport;
-
-  volatile int     shutdown_requested;
-
-  double           prev_time;
-
-  pcl_pending_msg_t* incoming_head;
-  pcl_pending_msg_t* incoming_tail;
-  pcl_mutex_t        incoming_lock;
-
-  pcl_resp_cb_node_t* resp_cb_head;
-  pcl_resp_cb_node_t* resp_cb_tail;
-  pcl_mutex_t         resp_cb_lock;
-};
 
 // -- Create / destroy ----------------------------------------------------
 
@@ -512,13 +468,15 @@ pcl_status_t pcl_executor_invoke_service(pcl_executor_t*  e,
                                          const pcl_msg_t* request,
                                          pcl_msg_t*       response) {
   struct pcl_port_t* port;
+  pcl_svc_context_t  ctx = {0};
 
   if (!e || !service_name || !request || !response) return PCL_ERR_INVALID;
 
   port = find_service(e, service_name);
   if (!port) return PCL_ERR_NOT_FOUND;
 
-  return port->svc_handler(port->owner, request, response, port->svc_user_data);
+  ctx.executor = e;
+  return port->svc_handler(port->owner, request, response, &ctx, port->svc_user_data);
 }
 
 pcl_status_t pcl_executor_publish(pcl_executor_t*  e,
@@ -529,6 +487,53 @@ pcl_status_t pcl_executor_publish(pcl_executor_t*  e,
     return e->transport.publish(e->transport.adapter_ctx, topic, msg);
   }
   return dispatch_incoming_now(e, topic, msg);
+}
+
+pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
+                                       const char*      service_name,
+                                       const pcl_msg_t* request,
+                                       pcl_resp_cb_fn_t callback,
+                                       void*            user_data) {
+  if (!e || !service_name || !request || !callback) return PCL_ERR_INVALID;
+
+  // If transport has invoke_async, use it
+  if (e->has_transport && e->transport.invoke_async) {
+    return e->transport.invoke_async(e->transport.adapter_ctx, service_name,
+                                     request, callback, user_data);
+  }
+
+  // Intra-process fallback: invoke service, handle immediate or deferred response
+  {
+    struct pcl_port_t* port = find_service(e, service_name);
+    pcl_msg_t          response = {0};
+    pcl_svc_context_t* ctx;
+    pcl_status_t       rc;
+
+    if (!port) return PCL_ERR_NOT_FOUND;
+
+    // Allocate context for potential deferred response
+    ctx = (pcl_svc_context_t*)calloc(1, sizeof(*ctx));
+    if (!ctx) return PCL_ERR_NOMEM;
+
+    ctx->executor  = e;
+    ctx->callback  = callback;
+    ctx->user_data = user_data;
+
+    rc = port->svc_handler(port->owner, request, &response, ctx, port->svc_user_data);
+
+    if (rc == PCL_OK) {
+      // Immediate response — fire callback and free context
+      callback(&response, user_data);
+      free(ctx);
+    } else if (rc == PCL_PENDING) {
+      // Deferred — handler saved ctx, will call pcl_service_respond later
+      rc = PCL_OK;
+    } else {
+      // Error — free context
+      free(ctx);
+    }
+    return rc;
+  }
 }
 
 pcl_status_t pcl_executor_post_response_cb(pcl_executor_t*  e,

@@ -70,6 +70,7 @@ pcl_status_t StandardBridge::on_activate() {
 pcl_status_t StandardBridge::handleCreateRequirement(pcl_container_t*,
                                                       const pcl_msg_t* request,
                                                       pcl_msg_t* response,
+                                                      pcl_svc_context_t*,
                                                       void* user_data) {
   auto* self = static_cast<StandardBridge*>(user_data);
   if (!request->data || request->size == 0) return PCL_ERR_INVALID;

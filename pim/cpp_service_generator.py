@@ -377,11 +377,8 @@ class CppServiceGenerator:
             # Includes
             f.write(f'#include "{types_header}"\n\n')
             f.write('#include <pcl/pcl_container.h>\n')
-            if is_provided:
-                f.write('#include <pcl/pcl_transport_socket.h>\n')
-            else:
-                f.write('#include <pcl/pcl_executor.h>\n')
-                f.write('#include <pcl/pcl_transport_socket.h>\n')
+            f.write('#include <pcl/pcl_executor.h>\n')
+            f.write('#include <pcl/pcl_transport.h>\n')
             f.write('#include <pcl/pcl_types.h>\n\n')
             f.write('#include <string>\n')
             f.write('#include <vector>\n\n')
@@ -521,8 +518,10 @@ class CppServiceGenerator:
                         sp = ' ' * col
                         f.write(f'/// \\brief Invoke {wire_full}'
                                 f' (typed, serialisation handled internally).\n')
+                        f.write(f'///\n')
+                        f.write(f'/// Uses the transport configured on the executor.\n')
                         f.write(f'pcl_status_t {rpc.cpp_invoke_func}'
-                                f'(pcl_socket_transport_t* transport,\n')
+                                f'(pcl_executor_t* executor,\n')
                         f.write(f'{sp}const {req_t}&'
                                 f'{" " * max(1, 22 - len(req_t))}'
                                 f'request,\n')
@@ -614,8 +613,8 @@ class CppServiceGenerator:
                 f.write(f'#include "{ch}"\n')
             f.write('\n')
             f.write('#include <pcl/pcl_container.h>\n')
-            if is_provided:
-                f.write('#include <pcl/pcl_transport_socket.h>\n')
+            f.write('#include <pcl/pcl_executor.h>\n')
+            f.write('#include <pcl/pcl_transport.h>\n')
             f.write('\n#include <cstdlib>\n')
             f.write('#include <cstring>\n')
             f.write('#include <string>\n')
@@ -667,7 +666,7 @@ class CppServiceGenerator:
 
             if is_provided:
                 f.write('pcl_status_t invoke_async('
-                        'pcl_socket_transport_t* transport,\n')
+                        'pcl_executor_t* executor,\n')
                 f.write('                           const char*'
                         '             service_name,\n')
                 f.write('                           const std::string&'
@@ -682,8 +681,8 @@ class CppServiceGenerator:
                 f.write('    msg.size      = static_cast<uint32_t>'
                         '(payload.size());\n')
                 f.write(f'    msg.type_name = "{_DEFAULT_CONTENT_TYPE}";\n')
-                f.write('    return pcl_socket_transport_invoke_remote_async(\n')
-                f.write('        transport, service_name, &msg,'
+                f.write('    return pcl_executor_invoke_async(\n')
+                f.write('        executor, service_name, &msg,'
                         ' callback, user_data);\n')
                 f.write('}\n\n')
 
@@ -718,7 +717,7 @@ class CppServiceGenerator:
             if is_provided:
                 # Typed invoke wrappers — serialize request, then PCL
                 f.write(_SEP + '\n')
-                f.write('// Typed invoke wrappers \u2014 serialise and dispatch via PCL\n')
+                f.write('// Typed invoke wrappers \u2014 serialise and dispatch via executor transport\n')
                 f.write(_SEP + '\n\n')
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
@@ -726,7 +725,7 @@ class CppServiceGenerator:
                         col = 13 + len(rpc.cpp_invoke_func) + 1
                         sp = ' ' * col
                         f.write(f'pcl_status_t {rpc.cpp_invoke_func}'
-                                f'(pcl_socket_transport_t* transport,\n')
+                                f'(pcl_executor_t* executor,\n')
                         f.write(f'{sp}const {req_t}&'
                                 f'{" " * max(1, 22 - len(req_t))}'
                                 f'request,\n')
@@ -737,12 +736,12 @@ class CppServiceGenerator:
                         f.write('{\n')
                         # Serialize — Identifier is std::string, pass through
                         if req_t == 'Identifier':
-                            f.write('    return invoke_async(transport,'
+                            f.write('    return invoke_async(executor,'
                                     f' {rpc.cpp_svc_const},'
                                     f' request, callback, user_data);\n')
                         else:
                             f.write(f'    std::string payload = toJson(request);\n')
-                            f.write('    return invoke_async(transport,'
+                            f.write('    return invoke_async(executor,'
                                     f' {rpc.cpp_svc_const},'
                                     f' payload, callback, user_data);\n')
                         f.write('}\n\n')

@@ -489,6 +489,27 @@ Destroying an executor with queued response callbacks (including those with data
 
 **Verification**: `test_pcl_robustness.cpp::SetTransportNullExecutorReturnsInvalid`.
 
+### REQ_PCL_164 - Invoke Async Routes Through Transport
+`pcl_executor_invoke_async()` shall route the service request through the transport adapter's `invoke_async` function pointer when a transport is set.
+
+**Traces**: PCL.030a
+
+**Verification**: `test_pcl_robustness.cpp::InvokeAsyncRoutesViaTransport`.
+
+### REQ_PCL_165 - Invoke Async Intra-Process Fallback
+`pcl_executor_invoke_async()` shall fall back to intra-process synchronous dispatch when no transport is set or when the transport's `invoke_async` is NULL. The service handler shall be invoked immediately and the callback fired before returning.
+
+**Traces**: PCL.030a, PCL.022
+
+**Verification**: `test_pcl_robustness.cpp::InvokeAsyncIntraProcessFallback`.
+
+### REQ_PCL_166 - Invoke Async Null Arguments
+`pcl_executor_invoke_async()` shall return `PCL_ERR_INVALID` when the executor, service name, request, or callback is NULL.
+
+**Traces**: PCL.030a, PCL.045
+
+**Verification**: `test_pcl_robustness.cpp::InvokeAsyncNullArgsReturnsInvalid`.
+
 ---
 
 ## 12. Logging
@@ -1398,3 +1419,6 @@ A `pcl::Component` added to a `pcl::Executor` shall receive ticks when active an
 | 161 | 035 | test_pcl_socket_transport |
 | 162 | 036 | test_pcl_socket_transport |
 | 163 | 034, 036 | test_pcl_socket_transport |
+| 164 | 030a | test_pcl_robustness |
+| 165 | 030a, 045 | test_pcl_robustness |
+| 166 | 030a, 045 | test_pcl_robustness |

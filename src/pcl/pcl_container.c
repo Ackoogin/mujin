@@ -3,6 +3,7 @@
 #include "pcl_internal.h"
 #include "pcl/pcl_container.h"
 #include "pcl/pcl_executor.h"
+#include "pcl/pcl_transport.h"
 #include "pcl/pcl_log.h"
 
 #include <stdlib.h>
@@ -343,4 +344,40 @@ pcl_status_t pcl_port_publish(pcl_port_t* port, const pcl_msg_t* msg) {
     return pcl_executor_publish(port->owner->executor, port->name, msg);
   }
   return PCL_OK;
+}
+
+pcl_status_t pcl_container_invoke_async(pcl_container_t* c,
+                                        const char*      service_name,
+                                        const pcl_msg_t* request,
+                                        pcl_resp_cb_fn_t callback,
+                                        void*            user_data) {
+  if (!c || !service_name || !request || !callback) return PCL_ERR_INVALID;
+  if (!c->executor) return PCL_ERR_STATE;
+  return pcl_executor_invoke_async(c->executor, service_name, request,
+                                   callback, user_data);
+}
+
+pcl_status_t pcl_service_respond(pcl_svc_context_t* ctx,
+                                 const pcl_msg_t*   response) {
+  if (!ctx || !response) return PCL_ERR_INVALID;
+
+  // If transport has respond function, use it (for remote callers)
+  if (ctx->executor && ctx->executor->has_transport &&
+      ctx->executor->transport.respond) {
+    pcl_status_t rc = ctx->executor->transport.respond(
+        ctx->executor->transport.adapter_ctx, ctx, response);
+    free(ctx);
+    return rc;
+  }
+
+  // Intra-process: fire the callback directly
+  if (ctx->callback) {
+    ctx->callback(response, ctx->user_data);
+  }
+  free(ctx);
+  return PCL_OK;
+}
+
+void pcl_service_context_free(pcl_svc_context_t* ctx) {
+  free(ctx);
 }

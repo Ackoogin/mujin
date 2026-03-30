@@ -111,9 +111,19 @@ When a message arrives on a subscribed topic, the container's subscriber callbac
 **Rationale**: Components need to process incoming data.
 
 ### PCL.011 - Service Handler Dispatch
-When a service request arrives, the container's service handler shall be invoked on the executor thread. The handler populates the response synchronously.
+When a service request arrives at a server, the container's service handler shall be invoked on the executor thread. The handler populates the response synchronously within that invocation.
 
-**Rationale**: Request/reply pattern for synchronous queries and commands.
+**Rationale**: Server-side request/reply handling for queries and commands.
+
+### PCL.011a - Async Service Invocation
+Client-side service invocation may be asynchronous. The client enqueues a request via the transport; the response callback fires on the executor thread when the reply arrives.
+
+**Rationale**: Non-blocking service calls allow the client to continue processing while awaiting responses.
+
+### PCL.011b - Deferred Service Response
+A service handler may defer its response by returning `PCL_PENDING` and saving the service context. The handler shall later call `pcl_service_respond()` to send the response. This enables handlers that need to perform async operations (e.g., call other services) before responding.
+
+**Rationale**: Service handlers often need to aggregate data from multiple sources or wait for external events before responding.
 
 ## Parameters
 
@@ -219,6 +229,11 @@ The executor shall accept a transport adapter before spinning. Passing NULL shal
 The transport adapter shall be able to dispatch incoming messages to subscriber callbacks via `pcl_executor_dispatch_incoming()` when already on the executor thread.
 
 **Rationale**: Transport adapters that run on the executor thread need a synchronous dispatch path.
+
+### PCL.030a - Transport Client Service Invocation
+The transport adapter interface shall include an optional `invoke_async` function pointer for client-side service invocation. The executor shall provide `pcl_executor_invoke_async()` which routes requests through the configured transport.
+
+**Rationale**: Service invocation must be as pluggable as pub/sub to maintain transport abstraction (D3). Components should not be coupled to specific transport implementations when calling services.
 
 ## TCP Socket Transport
 
@@ -374,6 +389,8 @@ Generated bindings shall provide a dispatch function that routes service channel
 | `PCL.009` | `D6` |
 | `PCL.010` | `D2` |
 | `PCL.011` | `D2` |
+| `PCL.011a` | `D3`, `D5` |
+| `PCL.011b` | `D2`, `D5` |
 | `PCL.012` | `D1` |
 | `PCL.013` | `D1` |
 | `PCL.014` | `D1` |
@@ -393,6 +410,7 @@ Generated bindings shall provide a dispatch function that routes service channel
 | `PCL.028` | `D3` |
 | `PCL.029` | `D3` |
 | `PCL.030` | `D3` |
+| `PCL.030a` | `D3` |
 | `PCL.031` | `D3` |
 | `PCL.032` | `D3` |
 | `PCL.033` | `D3` |

@@ -41,42 +41,51 @@ private:
   static pcl_status_t handleCreateObject(pcl_container_t* c,
                                           const pcl_msg_t* request,
                                           pcl_msg_t* response,
+                                          pcl_svc_context_t* ctx,
                                           void* user_data);
   static pcl_status_t handleUpdateObject(pcl_container_t* c,
                                           const pcl_msg_t* request,
                                           pcl_msg_t* response,
+                                          pcl_svc_context_t* ctx,
                                           void* user_data);
   static pcl_status_t handleDeleteObject(pcl_container_t* c,
                                           const pcl_msg_t* request,
                                           pcl_msg_t* response,
+                                          pcl_svc_context_t* ctx,
                                           void* user_data);
   static pcl_status_t handleQuery(pcl_container_t* c,
                                    const pcl_msg_t* request,
                                    pcl_msg_t* response,
+                                   pcl_svc_context_t* ctx,
                                    void* user_data);
   static pcl_status_t handleGetObject(pcl_container_t* c,
                                        const pcl_msg_t* request,
                                        pcl_msg_t* response,
+                                       pcl_svc_context_t* ctx,
                                        void* user_data);
   static pcl_status_t handleUpsertZone(pcl_container_t* c,
                                        const pcl_msg_t* request,
                                        pcl_msg_t* response,
+                                       pcl_svc_context_t* ctx,
                                        void* user_data);
   static pcl_status_t handleRemoveZone(pcl_container_t* c,
                                         const pcl_msg_t* request,
                                         pcl_msg_t* response,
+                                        pcl_svc_context_t* ctx,
                                         void* user_data);
 
   /// \brief Service: register an interest and begin streaming matching entities.
   static pcl_status_t handleSubscribeInterest(pcl_container_t* c,
                                                const pcl_msg_t* request,
                                                pcl_msg_t* response,
+                                               pcl_svc_context_t* ctx,
                                                void* user_data);
 
   /// \brief Service: request a full-snapshot resync for an interest.
   static pcl_status_t handleResync(pcl_container_t* c,
                                     const pcl_msg_t* request,
                                     pcl_msg_t* response,
+                                    pcl_svc_context_t* ctx,
                                     void* user_data);
 
   std::shared_ptr<TacticalObjectsRuntime> runtime_;

@@ -71,6 +71,7 @@ private:
   static pcl_status_t handleCreateRequirement(pcl_container_t* c,
                                                const pcl_msg_t* request,
                                                pcl_msg_t* response,
+                                               pcl_svc_context_t* ctx,
                                                void* user_data);
 
   // ---- on_tick: stream entity matches directly via runtime ----------------

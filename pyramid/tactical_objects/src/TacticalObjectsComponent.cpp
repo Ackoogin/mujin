@@ -165,6 +165,7 @@ static std::string uuidToJsonString(const UUIDKey& k) {
 pcl_status_t TacticalObjectsComponent::handleCreateObject(pcl_container_t*,
                                                           const pcl_msg_t* request,
                                                           pcl_msg_t* response,
+                                                          pcl_svc_context_t*,
                                                           void* user_data) {
   auto* comp = static_cast<TacticalObjectsComponent*>(user_data);
   if (!request->data || request->size == 0) return PCL_ERR_INVALID;
@@ -190,6 +191,7 @@ pcl_status_t TacticalObjectsComponent::handleCreateObject(pcl_container_t*,
 pcl_status_t TacticalObjectsComponent::handleUpdateObject(pcl_container_t*,
                                                           const pcl_msg_t* request,
                                                           pcl_msg_t* response,
+                                                          pcl_svc_context_t*,
                                                           void* user_data) {
   auto* comp = static_cast<TacticalObjectsComponent*>(user_data);
   if (!request->data || request->size == 0) return PCL_ERR_INVALID;
@@ -221,6 +223,7 @@ pcl_status_t TacticalObjectsComponent::handleUpdateObject(pcl_container_t*,
 pcl_status_t TacticalObjectsComponent::handleDeleteObject(pcl_container_t*,
                                                           const pcl_msg_t* request,
                                                           pcl_msg_t* response,
+                                                          pcl_svc_context_t*,
                                                           void* user_data) {
   auto* comp = static_cast<TacticalObjectsComponent*>(user_data);
   if (!request->data || request->size == 0) return PCL_ERR_INVALID;
@@ -251,6 +254,7 @@ pcl_status_t TacticalObjectsComponent::handleDeleteObject(pcl_container_t*,
 pcl_status_t TacticalObjectsComponent::handleQuery(pcl_container_t*,
                                                    const pcl_msg_t* request,
                                                    pcl_msg_t* response,
+                                                   pcl_svc_context_t*,
                                                    void* user_data) {
   auto* comp = static_cast<TacticalObjectsComponent*>(user_data);
   QueryRequest req;
@@ -275,6 +279,7 @@ pcl_status_t TacticalObjectsComponent::handleQuery(pcl_container_t*,
 pcl_status_t TacticalObjectsComponent::handleGetObject(pcl_container_t*,
                                                        const pcl_msg_t* request,
                                                        pcl_msg_t* response,
+                                                       pcl_svc_context_t*,
                                                        void* user_data) {
   auto* comp = static_cast<TacticalObjectsComponent*>(user_data);
   if (!request->data || request->size == 0) return PCL_ERR_INVALID;
@@ -343,6 +348,7 @@ pcl_status_t TacticalObjectsComponent::handleGetObject(pcl_container_t*,
 pcl_status_t TacticalObjectsComponent::handleUpsertZone(pcl_container_t*,
                                                         const pcl_msg_t* request,
                                                         pcl_msg_t* response,
+                                                        pcl_svc_context_t*,
                                                         void* user_data) {
   auto* comp = static_cast<TacticalObjectsComponent*>(user_data);
   if (!request->data || request->size == 0) return PCL_ERR_INVALID;
@@ -368,6 +374,7 @@ pcl_status_t TacticalObjectsComponent::handleUpsertZone(pcl_container_t*,
 pcl_status_t TacticalObjectsComponent::handleRemoveZone(pcl_container_t*,
                                                         const pcl_msg_t* request,
                                                         pcl_msg_t* response,
+                                                        pcl_svc_context_t*,
                                                         void* user_data) {
   auto* comp = static_cast<TacticalObjectsComponent*>(user_data);
   if (!request->data || request->size == 0) return PCL_ERR_INVALID;
@@ -398,6 +405,7 @@ pcl_status_t TacticalObjectsComponent::handleRemoveZone(pcl_container_t*,
 pcl_status_t TacticalObjectsComponent::handleSubscribeInterest(pcl_container_t*,
                                                                 const pcl_msg_t* request,
                                                                 pcl_msg_t* response,
+                                                                pcl_svc_context_t*,
                                                                 void* user_data) {
   auto* comp = static_cast<TacticalObjectsComponent*>(user_data);
   if (!request->data || request->size == 0) return PCL_ERR_INVALID;
@@ -500,6 +508,7 @@ pcl_status_t TacticalObjectsComponent::handleSubscribeInterest(pcl_container_t*,
 pcl_status_t TacticalObjectsComponent::handleResync(pcl_container_t*,
                                                      const pcl_msg_t* request,
                                                      pcl_msg_t* response,
+                                                     pcl_svc_context_t*,
                                                      void* user_data) {
   auto* comp = static_cast<TacticalObjectsComponent*>(user_data);
   if (!request->data || request->size == 0) return PCL_ERR_INVALID;

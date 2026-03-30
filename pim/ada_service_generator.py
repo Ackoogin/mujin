@@ -505,8 +505,9 @@ class AdaServiceGenerator:
                         req_t = rpc.ada_req_type
                         wire_t = schema.INVOKE_WIRE_TYPES.get(req_t)
                         invoke_t = f'{codec_pkg}.{wire_t}' if wire_t else req_t
+                        f.write(f'   --  Invoke via executor transport (transport-agnostic).\n')
                         f.write(f'   procedure {rpc.ada_invoke_name}\n')
-                        f.write(f'     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;\n')
+                        f.write(f'     (Executor  : Pcl_Bindings.Pcl_Executor_Access;\n')
                         f.write(f'      Request   : {invoke_t};\n')
                         f.write(f'      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
                         f.write(f'      User_Data : System.Address := System.Null_Address);\n')
@@ -671,7 +672,7 @@ class AdaServiceGenerator:
                         wire_t = schema.INVOKE_WIRE_TYPES.get(req_t)
                         invoke_t = f'{codec_pkg}.{wire_t}' if wire_t else req_t
                         f.write(f'   procedure {rpc.ada_invoke_name}\n')
-                        f.write(f'     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;\n')
+                        f.write(f'     (Executor  : Pcl_Bindings.Pcl_Executor_Access;\n')
                         f.write(f'      Request   : {invoke_t};\n')
                         f.write(f'      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
                         f.write(f'      User_Data : System.Address := System.Null_Address)\n')
@@ -696,8 +697,8 @@ class AdaServiceGenerator:
                         f.write(f"      Msg.Data      := To_Address (Req_C);\n")
                         f.write(f"      Msg.Size      := Interfaces.C.unsigned (Payload'Length);\n")
                         f.write(f'      Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");\n')
-                        f.write(f'      Status := Pcl_Bindings.Invoke_Remote_Async\n')
-                        f.write(f"        (Transport, Svc_C, Msg'Access, Callback, User_Data);\n")
+                        f.write(f'      Status := Pcl_Bindings.Invoke_Async\n')
+                        f.write(f"        (Executor, Svc_C, Msg'Access, Callback, User_Data);\n")
                         f.write(f'      Interfaces.C.Strings.Free (Req_C);\n')
                         f.write(f'      Interfaces.C.Strings.Free (Svc_C);\n')
                         f.write(f'      Interfaces.C.Strings.Free (Msg.Type_Name);\n')

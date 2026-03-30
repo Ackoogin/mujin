@@ -98,7 +98,8 @@ TEST(PclContainerRobust, ParamGetNullArgs) {
 // -- Port overflow (PCL_MAX_PORTS = 64) ------------------------------
 
 static void sub_nop(pcl_container_t*, const pcl_msg_t*, void*) {}
-static pcl_status_t svc_nop(pcl_container_t*, const pcl_msg_t*, pcl_msg_t*, void*) {
+static pcl_status_t svc_nop(pcl_container_t*, const pcl_msg_t*, pcl_msg_t*,
+                            pcl_svc_context_t*, void*) {
   return PCL_OK;
 }
 
@@ -481,6 +482,182 @@ TEST(PclExecutorRobust, SetTransportAndClear) {
 
 TEST(PclExecutorRobust, SetTransportNullExecutorReturnsInvalid) {
   EXPECT_EQ(pcl_executor_set_transport(nullptr, nullptr), PCL_ERR_INVALID);
+}
+
+// -- Invoke async via transport adapter -------------------------------
+
+///< REQ_PCL_164: pcl_executor_invoke_async routes through transport vtable
+TEST(PclExecutorRobust, InvokeAsyncRoutesViaTransport) {
+  auto* e = pcl_executor_create();
+
+  struct InvokeCtx {
+    bool called = false;
+    const char* svc_name = nullptr;
+  } ctx;
+
+  pcl_transport_t t = {};
+  t.invoke_async = [](void* adapter_ctx, const char* svc,
+                      const pcl_msg_t*, pcl_resp_cb_fn_t,
+                      void*) -> pcl_status_t {
+    auto* c = static_cast<InvokeCtx*>(adapter_ctx);
+    c->called = true;
+    c->svc_name = svc;
+    return PCL_OK;
+  };
+  t.adapter_ctx = &ctx;
+
+  pcl_executor_set_transport(e, &t);
+
+  pcl_msg_t req = {};
+  req.type_name = "test";
+  auto dummy_cb = [](const pcl_msg_t*, void*) {};
+
+  EXPECT_EQ(pcl_executor_invoke_async(e, "my.service", &req, dummy_cb, nullptr),
+            PCL_OK);
+  EXPECT_TRUE(ctx.called);
+  EXPECT_STREQ(ctx.svc_name, "my.service");
+
+  pcl_executor_set_transport(e, nullptr);
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_165: pcl_executor_invoke_async falls back to intra-process dispatch
+TEST(PclExecutorRobust, InvokeAsyncIntraProcessFallback) {
+  // Set up a container with a service handler
+  struct Ctx {
+    bool handler_called = false;
+    bool callback_called = false;
+  } ctx;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    pcl_container_add_service(c, "test.service", "TestType",
+      [](pcl_container_t*, const pcl_msg_t*, pcl_msg_t* resp,
+         pcl_svc_context_t*, void* ud) -> pcl_status_t {
+        static_cast<Ctx*>(ud)->handler_called = true;
+        resp->data = nullptr;
+        resp->size = 0;
+        resp->type_name = "TestResp";
+        return PCL_OK;
+      }, ud);
+    return PCL_OK;
+  };
+
+  auto* c = pcl_container_create("svc_provider", &cbs, &ctx);
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+
+  pcl_msg_t req = {};
+  req.type_name = "test";
+  auto resp_cb = [](const pcl_msg_t*, void* ud) {
+    static_cast<Ctx*>(ud)->callback_called = true;
+  };
+
+  // No transport — should use intra-process dispatch
+  EXPECT_EQ(pcl_executor_invoke_async(e, "test.service", &req, resp_cb, &ctx),
+            PCL_OK);
+  EXPECT_TRUE(ctx.handler_called);
+  EXPECT_TRUE(ctx.callback_called);
+
+  // Service not found — should return NOT_FOUND
+  ctx.handler_called = false;
+  ctx.callback_called = false;
+  EXPECT_EQ(pcl_executor_invoke_async(e, "nonexistent", &req, resp_cb, &ctx),
+            PCL_ERR_NOT_FOUND);
+  EXPECT_FALSE(ctx.callback_called);
+
+  pcl_executor_shutdown_graceful(e, 1000);
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+///< REQ_PCL_166: pcl_executor_invoke_async null args return INVALID
+TEST(PclExecutorRobust, InvokeAsyncNullArgsReturnsInvalid) {
+  auto* e = pcl_executor_create();
+  pcl_msg_t req = {};
+  req.type_name = "test";
+  auto dummy_cb = [](const pcl_msg_t*, void*) {};
+
+  EXPECT_EQ(pcl_executor_invoke_async(nullptr, "svc", &req, dummy_cb, nullptr),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_invoke_async(e, nullptr, &req, dummy_cb, nullptr),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_invoke_async(e, "svc", nullptr, dummy_cb, nullptr),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_invoke_async(e, "svc", &req, nullptr, nullptr),
+            PCL_ERR_INVALID);
+
+  pcl_executor_destroy(e);
+}
+
+// -- Deferred service response ----------------------------------------
+
+TEST(PclExecutorRobust, DeferredServiceResponse) {
+  // Test that a service handler can return PCL_PENDING and respond later
+  struct Ctx {
+    pcl_svc_context_t* saved_ctx = nullptr;
+    bool handler_called = false;
+    bool callback_called = false;
+    int response_value = 0;
+  } ctx;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    pcl_container_add_service(c, "deferred.service", "DeferredType",
+      [](pcl_container_t*, const pcl_msg_t*, pcl_msg_t*,
+         pcl_svc_context_t* svc_ctx, void* ud) -> pcl_status_t {
+        auto* ctx = static_cast<Ctx*>(ud);
+        ctx->handler_called = true;
+        ctx->saved_ctx = svc_ctx;  // Save context for later
+        return PCL_PENDING;        // Defer response
+      }, ud);
+    return PCL_OK;
+  };
+
+  auto* c = pcl_container_create("deferred_svc", &cbs, &ctx);
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+
+  pcl_msg_t req = {};
+  req.type_name = "test";
+  auto resp_cb = [](const pcl_msg_t* resp, void* ud) {
+    auto* ctx = static_cast<Ctx*>(ud);
+    ctx->callback_called = true;
+    if (resp->data && resp->size == sizeof(int)) {
+      ctx->response_value = *static_cast<const int*>(resp->data);
+    }
+  };
+
+  // Invoke — handler should defer
+  EXPECT_EQ(pcl_executor_invoke_async(e, "deferred.service", &req, resp_cb, &ctx),
+            PCL_OK);
+  EXPECT_TRUE(ctx.handler_called);
+  EXPECT_FALSE(ctx.callback_called);  // Not yet — deferred
+  EXPECT_NE(ctx.saved_ctx, nullptr);
+
+  // Now send the deferred response
+  int resp_payload = 42;
+  pcl_msg_t resp = {};
+  resp.data = &resp_payload;
+  resp.size = sizeof(resp_payload);
+  resp.type_name = "DeferredResp";
+
+  EXPECT_EQ(pcl_service_respond(ctx.saved_ctx, &resp), PCL_OK);
+  EXPECT_TRUE(ctx.callback_called);
+  EXPECT_EQ(ctx.response_value, 42);
+
+  pcl_executor_shutdown_graceful(e, 1000);
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+TEST(PclExecutorRobust, ServiceContextFree) {
+  // Test that pcl_service_context_free doesn't crash
+  pcl_service_context_free(nullptr);  // Should handle NULL gracefully
 }
 
 // -- Graceful shutdown timeout ----------------------------------------
@@ -1025,7 +1202,7 @@ TEST(PclLogRobust, UnknownLevelDefaultBranch) {
 // ═══════════════════════════════════════════════════════════════════════
 
 static pcl_status_t svc_echo(pcl_container_t*, const pcl_msg_t* req,
-                              pcl_msg_t* resp, void*) {
+                              pcl_msg_t* resp, pcl_svc_context_t*, void*) {
   resp->data      = req->data;
   resp->size      = req->size;
   resp->type_name = req->type_name;
@@ -1165,7 +1342,7 @@ TEST(PclExecutorRobust, RemoveContainerSuccess) {
 // ═══════════════════════════════════════════════════════════════════════
 
 static pcl_status_t echo_svc_handler(pcl_container_t*, const pcl_msg_t* req,
-                                     pcl_msg_t* resp, void*) {
+                                     pcl_msg_t* resp, pcl_svc_context_t*, void*) {
   resp->data      = req->data;
   resp->size      = req->size;
   resp->type_name = req->type_name;
@@ -1430,4 +1607,330 @@ TEST(PclExecutorRobust, DestroyWithQueuedRespCbWithData) {
   }
   // Destroy without spinning — must not leak or crash.
   pcl_executor_destroy(e);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Parameter set/get success paths (lines 221-223, 232-234, 244, 253, 262, 271)
+// ═══════════════════════════════════════════════════════════════════════
+
+TEST(PclContainerRobust, ParamI64SetGetSuccess) {
+  pcl_callbacks_t cbs = {};
+  auto* c = pcl_container_create("param_i64", &cbs, nullptr);
+
+  EXPECT_EQ(pcl_container_set_param_i64(c, "my_i64", 42), PCL_OK);
+  EXPECT_EQ(pcl_container_get_param_i64(c, "my_i64", 0), 42);
+
+  pcl_container_destroy(c);
+}
+
+TEST(PclContainerRobust, ParamBoolSetGetSuccess) {
+  pcl_callbacks_t cbs = {};
+  auto* c = pcl_container_create("param_bool", &cbs, nullptr);
+
+  EXPECT_EQ(pcl_container_set_param_bool(c, "my_bool", true), PCL_OK);
+  EXPECT_EQ(pcl_container_get_param_bool(c, "my_bool", false), true);
+
+  pcl_container_destroy(c);
+}
+
+TEST(PclContainerRobust, ParamStrSetGetSuccess) {
+  pcl_callbacks_t cbs = {};
+  auto* c = pcl_container_create("param_str", &cbs, nullptr);
+
+  EXPECT_EQ(pcl_container_set_param_str(c, "my_str", "hello"), PCL_OK);
+  EXPECT_STREQ(pcl_container_get_param_str(c, "my_str", "default"), "hello");
+
+  pcl_container_destroy(c);
+}
+
+TEST(PclContainerRobust, ParamF64SetGetSuccess) {
+  pcl_callbacks_t cbs = {};
+  auto* c = pcl_container_create("param_f64", &cbs, nullptr);
+
+  EXPECT_EQ(pcl_container_set_param_f64(c, "my_f64", 3.14), PCL_OK);
+  EXPECT_DOUBLE_EQ(pcl_container_get_param_f64(c, "my_f64", 0.0), 3.14);
+
+  pcl_container_destroy(c);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// pcl_container_invoke_async (lines 349-356)
+// ═══════════════════════════════════════════════════════════════════════
+
+TEST(PclContainerRobust, ContainerInvokeAsyncSuccess) {
+  struct Ctx {
+    bool handler_called = false;
+    bool callback_called = false;
+  } ctx;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    pcl_container_add_service(c, "test.svc", "Type",
+      [](pcl_container_t*, const pcl_msg_t*, pcl_msg_t* resp,
+         pcl_svc_context_t*, void* ud) -> pcl_status_t {
+        static_cast<Ctx*>(ud)->handler_called = true;
+        resp->data = nullptr;
+        resp->size = 0;
+        resp->type_name = "Resp";
+        return PCL_OK;
+      }, ud);
+    return PCL_OK;
+  };
+
+  auto* c = pcl_container_create("invoker", &cbs, &ctx);
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+
+  pcl_msg_t req = {};
+  req.type_name = "Req";
+  auto resp_cb = [](const pcl_msg_t*, void* ud) {
+    static_cast<Ctx*>(ud)->callback_called = true;
+  };
+
+  // Use pcl_container_invoke_async (routes through executor)
+  EXPECT_EQ(pcl_container_invoke_async(c, "test.svc", &req, resp_cb, &ctx), PCL_OK);
+  EXPECT_TRUE(ctx.handler_called);
+  EXPECT_TRUE(ctx.callback_called);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+TEST(PclContainerRobust, ContainerInvokeAsyncNullArgs) {
+  pcl_callbacks_t cbs = {};
+  auto* c = pcl_container_create("invoke_null", &cbs, nullptr);
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+
+  pcl_msg_t req = {};
+  req.type_name = "Req";
+  auto cb = [](const pcl_msg_t*, void*) {};
+
+  // Null args
+  EXPECT_EQ(pcl_container_invoke_async(nullptr, "svc", &req, cb, nullptr), PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_container_invoke_async(c, nullptr, &req, cb, nullptr), PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_container_invoke_async(c, "svc", nullptr, cb, nullptr), PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_container_invoke_async(c, "svc", &req, nullptr, nullptr), PCL_ERR_INVALID);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+TEST(PclContainerRobust, ContainerInvokeAsyncNoExecutor) {
+  pcl_callbacks_t cbs = {};
+  auto* c = pcl_container_create("no_exec", &cbs, nullptr);
+  // Container not added to executor
+
+  pcl_msg_t req = {};
+  req.type_name = "Req";
+  auto cb = [](const pcl_msg_t*, void*) {};
+
+  EXPECT_EQ(pcl_container_invoke_async(c, "svc", &req, cb, nullptr), PCL_ERR_STATE);
+
+  pcl_container_destroy(c);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// pcl_service_respond null safety (lines 360-361)
+// ═══════════════════════════════════════════════════════════════════════
+
+TEST(PclContainerRobust, ServiceRespondNullArgs) {
+  pcl_msg_t resp = {};
+  resp.type_name = "Resp";
+
+  EXPECT_EQ(pcl_service_respond(nullptr, &resp), PCL_ERR_INVALID);
+  // Note: pcl_service_respond with null response also returns INVALID
+  // but we can't easily test that without a valid context
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Shutdown callback (line 160)
+// ═══════════════════════════════════════════════════════════════════════
+
+TEST(PclContainerRobust, ShutdownCallbackInvoked) {
+  struct Ctx { bool shutdown_called = false; } ctx;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_shutdown = [](pcl_container_t*, void* ud) -> pcl_status_t {
+    static_cast<Ctx*>(ud)->shutdown_called = true;
+    return PCL_OK;
+  };
+
+  auto* c = pcl_container_create("shutdown_test", &cbs, &ctx);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+  pcl_container_shutdown(c);
+
+  EXPECT_TRUE(ctx.shutdown_called);
+
+  pcl_container_destroy(c);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Configure failure logging (line 86)
+// ═══════════════════════════════════════════════════════════════════════
+
+TEST(PclContainerRobust, ConfigureFailureLogsError) {
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t*, void*) -> pcl_status_t {
+    return PCL_ERR_CALLBACK;  // Force failure
+  };
+
+  auto* c = pcl_container_create("config_fail", &cbs, nullptr);
+  // This should log an error and return the error code
+  EXPECT_EQ(pcl_container_configure(c), PCL_ERR_CALLBACK);
+
+  pcl_container_destroy(c);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Invoke async with handler returning error (line 533 - free ctx on error)
+// ═══════════════════════════════════════════════════════════════════════
+
+TEST(PclExecutorRobust, InvokeAsyncHandlerReturnsError) {
+  struct Ctx {
+    bool handler_called = false;
+    bool callback_called = false;
+  } ctx;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    pcl_container_add_service(c, "error.svc", "Type",
+      [](pcl_container_t*, const pcl_msg_t*, pcl_msg_t*,
+         pcl_svc_context_t*, void* ud) -> pcl_status_t {
+        static_cast<Ctx*>(ud)->handler_called = true;
+        return PCL_ERR_CALLBACK;  // Return error
+      }, ud);
+    return PCL_OK;
+  };
+
+  auto* c = pcl_container_create("error_handler", &cbs, &ctx);
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+
+  pcl_msg_t req = {};
+  req.type_name = "Req";
+  auto resp_cb = [](const pcl_msg_t*, void* ud) {
+    static_cast<Ctx*>(ud)->callback_called = true;
+  };
+
+  // Handler returns error — callback should NOT be fired
+  EXPECT_EQ(pcl_executor_invoke_async(e, "error.svc", &req, resp_cb, &ctx),
+            PCL_ERR_CALLBACK);
+  EXPECT_TRUE(ctx.handler_called);
+  EXPECT_FALSE(ctx.callback_called);  // Callback not called on error
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// pcl_service_respond with transport respond vtable (lines 366-370)
+// ═══════════════════════════════════════════════════════════════════════
+
+TEST(PclContainerRobust, ServiceRespondWithTransport) {
+  struct TransportCtx {
+    bool respond_called = false;
+    pcl_status_t respond_rc = PCL_OK;
+  } tctx;
+
+  struct Ctx {
+    pcl_svc_context_t* saved_ctx = nullptr;
+    bool handler_called = false;
+  } ctx;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    pcl_container_add_service(c, "deferred.svc", "Type",
+      [](pcl_container_t*, const pcl_msg_t*, pcl_msg_t*,
+         pcl_svc_context_t* svc_ctx, void* ud) -> pcl_status_t {
+        auto* ctx = static_cast<Ctx*>(ud);
+        ctx->handler_called = true;
+        ctx->saved_ctx = svc_ctx;
+        return PCL_PENDING;
+      }, ud);
+    return PCL_OK;
+  };
+
+  auto* c = pcl_container_create("transport_respond", &cbs, &ctx);
+  auto* e = pcl_executor_create();
+
+  // Set up transport with respond function
+  pcl_transport_t t = {};
+  t.respond = [](void* adapter_ctx, pcl_svc_context_t*, const pcl_msg_t*) -> pcl_status_t {
+    auto* tctx = static_cast<TransportCtx*>(adapter_ctx);
+    tctx->respond_called = true;
+    return tctx->respond_rc;
+  };
+  t.adapter_ctx = &tctx;
+  pcl_executor_set_transport(e, &t);
+
+  pcl_executor_add(e, c);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+
+  pcl_msg_t req = {};
+  req.type_name = "Req";
+  auto resp_cb = [](const pcl_msg_t*, void*) {};
+
+  // Invoke — handler defers
+  EXPECT_EQ(pcl_executor_invoke_async(e, "deferred.svc", &req, resp_cb, nullptr), PCL_OK);
+  EXPECT_TRUE(ctx.handler_called);
+  EXPECT_NE(ctx.saved_ctx, nullptr);
+
+  // Send deferred response — should use transport.respond
+  pcl_msg_t resp = {};
+  resp.type_name = "Resp";
+  EXPECT_EQ(pcl_service_respond(ctx.saved_ctx, &resp), PCL_OK);
+  EXPECT_TRUE(tctx.respond_called);
+
+  pcl_executor_set_transport(e, nullptr);
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// pcl_executor_post_incoming fallback to dispatch_incoming_now (line 447)
+// ═══════════════════════════════════════════════════════════════════════
+
+TEST(PclExecutorRobust, DispatchIncomingDirectCall) {
+  // Tests pcl_executor_dispatch_incoming (line 447)
+  struct Ctx { bool sub_called = false; } ctx;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    pcl_container_add_subscriber(c, "dispatch_topic", "Msg",
+      [](pcl_container_t*, const pcl_msg_t*, void* ud) {
+        static_cast<Ctx*>(ud)->sub_called = true;
+      }, ud);
+    return PCL_OK;
+  };
+
+  auto* c = pcl_container_create("dispatch_sub", &cbs, &ctx);
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+
+  pcl_msg_t msg = {};
+  msg.type_name = "Msg";
+  int val = 42;
+  msg.data = &val;
+  msg.size = sizeof(val);
+
+  // Call dispatch_incoming directly (used by transports on executor thread)
+  EXPECT_EQ(pcl_executor_dispatch_incoming(e, "dispatch_topic", &msg), PCL_OK);
+  EXPECT_TRUE(ctx.sub_called);
+
+  // Null safety
+  EXPECT_EQ(pcl_executor_dispatch_incoming(nullptr, "topic", &msg), PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_dispatch_incoming(e, nullptr, &msg), PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_dispatch_incoming(e, "topic", nullptr), PCL_ERR_INVALID);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
 }

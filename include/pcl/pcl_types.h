@@ -15,14 +15,16 @@ extern "C" {
 
 // -- Opaque handles ------------------------------------------------------
 
-typedef struct pcl_executor_t  pcl_executor_t;
-typedef struct pcl_container_t pcl_container_t;
-typedef struct pcl_port_t      pcl_port_t;
+typedef struct pcl_executor_t   pcl_executor_t;
+typedef struct pcl_container_t  pcl_container_t;
+typedef struct pcl_port_t       pcl_port_t;
+typedef struct pcl_svc_context_t pcl_svc_context_t;
 
 // -- Return codes --------------------------------------------------------
 
 typedef enum {
   PCL_OK              =  0,
+  PCL_PENDING         =  1,   // operation deferred (e.g., service will respond later)
   PCL_ERR_INVALID     = -1,   // NULL handle or bad argument
   PCL_ERR_STATE       = -2,   // wrong lifecycle state for operation
   PCL_ERR_TIMEOUT     = -3,   // deadline exceeded
