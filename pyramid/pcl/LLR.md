@@ -1422,12 +1422,12 @@ A `pcl::Component` added to a `pcl::Executor` shall receive ticks when active an
 | 164 | 030a | test_pcl_robustness |
 | 165 | 030a, 045 | test_pcl_robustness |
 | 166 | 030a, 045 | test_pcl_robustness |
-| 167 | 011c | test_pcl_robustness |
-| 168 | 011c | test_pcl_robustness |
-| 169 | 011c | test_pcl_robustness |
-| 170 | 011c, 045 | test_pcl_robustness |
-| 171 | 011c | test_pcl_robustness |
-| 172 | 011c | test_pcl_robustness |
+| 167 | 011c | test_pcl_streaming |
+| 168 | 011c | test_pcl_streaming |
+| 169 | 011c | test_pcl_streaming |
+| 170 | 011c, 045 | test_pcl_streaming |
+| 171 | 011c | test_pcl_streaming |
+| 172 | 011c | test_pcl_streaming |
 
 ---
 
@@ -1438,39 +1438,39 @@ A `pcl::Component` added to a `pcl::Executor` shall receive ticks when active an
 
 **Traces**: PCL.011c
 
-**Verification**: `test_pcl_robustness.cpp::PclStreamingRobust.BasicStreamingSendEnd`.
+**Verification**: `test_pcl_streaming.cpp::PclStreaming.BasicStreamingSendEnd`, `PclStreaming.TransportStreamSendEnd`, `PclStreaming.TransportInvokeStream`.
 
 ### REQ_PCL_168 - Client Stream Cancellation
 `pcl_stream_cancel()` shall set the cancelled flag. `pcl_stream_is_cancelled()` shall return true after cancellation. `pcl_stream_send()` shall return `PCL_ERR_CANCELLED` when cancelled.
 
 **Traces**: PCL.011c
 
-**Verification**: `test_pcl_robustness.cpp::PclStreamingRobust.ClientCancellation`.
+**Verification**: `test_pcl_streaming.cpp::PclStreaming.ClientCancellation`, `PclStreaming.TransportStreamCancel`.
 
 ### REQ_PCL_169 - Server Stream Abort
 `pcl_stream_abort()` shall deliver a final callback with `end=true` and the specified error status.
 
 **Traces**: PCL.011c
 
-**Verification**: `test_pcl_robustness.cpp::PclStreamingRobust.ServerAbort`.
+**Verification**: `test_pcl_streaming.cpp::PclStreaming.ServerAbort`, `PclStreaming.TransportStreamAbort`.
 
 ### REQ_PCL_170 - Stream Service Not Found
 `pcl_executor_invoke_stream()` shall return `PCL_ERR_NOT_FOUND` when no streaming service matches the name.
 
 **Traces**: PCL.011c, PCL.045
 
-**Verification**: `test_pcl_robustness.cpp::PclStreamingRobust.StreamNotFound`.
+**Verification**: `test_pcl_streaming.cpp::PclStreaming.StreamNotFound`, `PclStreaming.HandlerReturnsError`.
 
 ### REQ_PCL_171 - Stream API Null Safety
 All streaming API functions shall return `PCL_ERR_INVALID` or safe defaults when passed NULL arguments.
 
 **Traces**: PCL.011c
 
-**Verification**: `test_pcl_robustness.cpp::PclStreamingRobust.StreamNullSafety`.
+**Verification**: `test_pcl_streaming.cpp::PclStreaming.StreamNullSafety`.
 
 ### REQ_PCL_172 - Add Stream Service During Configure
 `pcl_container_add_stream_service()` shall create a streaming service port during `on_configure` and return a non-NULL port handle.
 
 **Traces**: PCL.011c
 
-**Verification**: `test_pcl_robustness.cpp::PclStreamingRobust.AddStreamServiceDuringConfigure`.
+**Verification**: `test_pcl_streaming.cpp::PclStreaming.AddStreamServiceDuringConfigure`.
