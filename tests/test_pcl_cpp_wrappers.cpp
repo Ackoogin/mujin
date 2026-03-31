@@ -9,6 +9,7 @@
 #include <pcl/executor.hpp>
 
 #include <string>
+#include <thread>
 #include <vector>
 
 // ═══════════════════════════════════════════════════════════════════════════
