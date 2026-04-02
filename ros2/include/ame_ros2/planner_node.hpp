@@ -56,6 +56,15 @@ public:
   /// \brief Exposes ActionRegistry for action node type registration.
   ame::ActionRegistry& actionRegistry() { return component_.actionRegistry(); }
 
+  /// \brief Expose Planner for in-process hierarchical planning.
+  ame::Planner& planner() { return component_.planner(); }
+
+  /// \brief Expose PlanCompiler for in-process hierarchical planning.
+  ame::PlanCompiler& compiler() { return component_.compiler(); }
+
+  /// \brief Expose PlanAuditLog for in-process audit trail (nullptr if disabled).
+  ame::PlanAuditLog* planAuditLog() { return component_.planAuditLog(); }
+
 private:
   ame::PlannerComponent component_;
 
