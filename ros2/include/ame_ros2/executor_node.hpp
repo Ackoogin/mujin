@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ame/executor_component.h>
+#include <ame/pyramid_service.h>
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
@@ -57,6 +58,9 @@ public:
     component_.setInProcessWorldModel(wm);
   }
 
+  /// \brief Injects PYRAMID service for InvokeService BT nodes.
+  void setPyramidService(ame::IPyramidService* svc) { pyramid_service_ = svc; }
+
   /// \brief Exposes factory for custom action node type registration.
   BT::BehaviorTreeFactory& factory() { return component_.factory(); }
 
@@ -69,6 +73,7 @@ private:
   ame::ExecutorComponent component_;
 
   ame::WorldModel* inprocess_wm_ = nullptr;
+  ame::IPyramidService* pyramid_service_ = nullptr;
   std::string agent_id_;  ///< Agent ID for topic namespacing
 
   // Tick timer

@@ -2,6 +2,7 @@
 #include <ame_ros2/ros_wm_bridge.hpp>
 
 #include <ame/bt_nodes/check_world_predicate.h>
+#include <ame/bt_nodes/invoke_service.h>
 #include <ame/bt_nodes/set_world_predicate.h>
 
 #include <std_msgs/msg/string.hpp>
@@ -41,6 +42,9 @@ ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
       if (!agent_id_.empty()) {
         blackboard->set("current_agent_id", agent_id_);
       }
+      if (pyramid_service_) {
+        blackboard->set<ame::IPyramidService*>("pyramid_service", pyramid_service_);
+      }
     });
   } else {
     component_.setBlackboardInitializer([this](const BT::Blackboard::Ptr& blackboard) {
@@ -48,6 +52,9 @@ ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
       blackboard->set("set_fact_client", client_set_fact_.get());
       if (!agent_id_.empty()) {
         blackboard->set("current_agent_id", agent_id_);
+      }
+      if (pyramid_service_) {
+        blackboard->set<ame::IPyramidService*>("pyramid_service", pyramid_service_);
       }
     });
   }
@@ -148,6 +155,9 @@ void ExecutorNode::registerCoreNodes() {
     component_.factory().registerNodeType<RosCheckWorldPredicate>("CheckWorldPredicate");
     component_.factory().registerNodeType<RosSetWorldPredicate>("SetWorldPredicate");
   }
+
+  // PYRAMID service node — works in both in-process and distributed modes
+  component_.factory().registerNodeType<ame::InvokeService>("InvokeService");
 
   core_nodes_registered_ = true;
 }
