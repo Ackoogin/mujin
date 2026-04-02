@@ -89,7 +89,8 @@ WorldModelNode::on_activate(const rclcpp_lifecycle::State&) {
   auto period = std::chrono::milliseconds(static_cast<int>(1000.0 / rate_hz));
 
   publish_timer_ = create_wall_timer(period, [this]() {
-    if (component_.consumeStateDirty()) {
+    size_t applied = component_.worldModel().applyQueuedMutations();
+    if (applied > 0 || component_.consumeStateDirty()) {
       publishWorldState();
     }
   });
@@ -195,8 +196,8 @@ void WorldModelNode::handleDetection(const ame_ros2::msg::Detection::SharedPtr m
           fact_key.c_str(), perceived_value ? "true" : "false");
       }
 
-      wm.setFact(fact_key, true, source, ame::FactAuthority::CONFIRMED);
-      RCLCPP_DEBUG(get_logger(), "Perception set CONFIRMED fact: %s", fact_key.c_str());
+      wm.enqueueMutation(fluent_id, true, source, ame::FactAuthority::CONFIRMED);
+      RCLCPP_DEBUG(get_logger(), "Perception enqueued CONFIRMED fact: %s", fact_key.c_str());
     } catch (const std::exception& e) {
       RCLCPP_WARN(get_logger(), "Failed to set perception fact '%s': %s",
                   fact_key.c_str(), e.what());
