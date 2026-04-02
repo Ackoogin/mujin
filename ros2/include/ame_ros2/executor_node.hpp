@@ -1,6 +1,11 @@
 #pragma once
 
+#include <ame/action_registry.h>
 #include <ame/executor_component.h>
+#include <ame/plan_audit_log.h>
+#include <ame/plan_compiler.h>
+#include <ame/planner.h>
+#include <ame/planner_component.h>
 #include <ame/pyramid_service.h>
 
 #include <rclcpp/rclcpp.hpp>
@@ -61,6 +66,21 @@ public:
   /// \brief Injects PYRAMID service for InvokeService BT nodes.
   void setPyramidService(ame::IPyramidService* svc) { pyramid_service_ = svc; }
 
+  /// \brief Injects planner for in-process hierarchical planning (ExecutePhaseAction).
+  void setPlanner(ame::Planner* p) { planner_ = p; }
+
+  /// \brief Injects plan compiler for in-process hierarchical planning.
+  void setPlanCompiler(ame::PlanCompiler* c) { plan_compiler_ = c; }
+
+  /// \brief Injects action registry for in-process hierarchical planning.
+  void setActionRegistry(ame::ActionRegistry* r) { action_registry_ = r; }
+
+  /// \brief Injects plan audit log for hierarchical phase recording.
+  void setPlanAuditLog(ame::PlanAuditLog* l) { plan_audit_log_ = l; }
+
+  /// \brief Injects PlannerComponent for distributed hierarchical planning.
+  void setPlannerComponent(ame::PlannerComponent* pc) { planner_component_ = pc; }
+
   /// \brief Exposes factory for custom action node type registration.
   BT::BehaviorTreeFactory& factory() { return component_.factory(); }
 
@@ -74,6 +94,11 @@ private:
 
   ame::WorldModel* inprocess_wm_ = nullptr;
   ame::IPyramidService* pyramid_service_ = nullptr;
+  ame::Planner* planner_ = nullptr;
+  ame::PlanCompiler* plan_compiler_ = nullptr;
+  ame::ActionRegistry* action_registry_ = nullptr;
+  ame::PlanAuditLog* plan_audit_log_ = nullptr;
+  ame::PlannerComponent* planner_component_ = nullptr;
   std::string agent_id_;  ///< Agent ID for topic namespacing
 
   // Tick timer
