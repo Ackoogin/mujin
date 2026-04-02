@@ -47,6 +47,17 @@ public:
   /// \brief Register or inspect PDDL-to-BT action mappings.
   const ActionRegistry& actionRegistry() const { return registry_; }
 
+  /// \brief Access the underlying planner for in-process hierarchical planning.
+  Planner& planner() { return planner_; }
+
+  /// \brief Access the plan compiler for in-process hierarchical planning.
+  PlanCompiler& compiler() { return compiler_; }
+
+  /// \brief Access the plan audit log (may be nullptr if disabled).
+  PlanAuditLog* planAuditLog() {
+    return audit_log_.has_value() ? &audit_log_.value() : nullptr;
+  }
+
   /// \brief Solve a goal and compile the resulting plan to BT XML.
   PlannerExecutionResult solveGoal(const std::vector<std::string>& goal_fluents);
 

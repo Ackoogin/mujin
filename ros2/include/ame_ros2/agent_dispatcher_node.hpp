@@ -6,6 +6,8 @@
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include <std_msgs/msg/string.hpp>
 
+#include <ame_ros2/srv/dispatch_goals.hpp>
+
 #include <map>
 #include <memory>
 #include <string>
@@ -65,6 +67,13 @@ private:
     // Subscriptions for agent status
     std::map<std::string, rclcpp::Subscription<std_msgs::msg::String>::SharedPtr> agent_status_subs_;
     std::map<std::string, std::string> agent_statuses_;
+
+    // Service
+    rclcpp::Service<ame_ros2::srv::DispatchGoals>::SharedPtr srv_dispatch_;
+
+    void handleDispatchGoals(
+        std::shared_ptr<ame_ros2::srv::DispatchGoals::Request> req,
+        std::shared_ptr<ame_ros2::srv::DispatchGoals::Response> res);
 
     // Transport callbacks
     bool sendBTToAgent(const std::string& agent_id, const std::string& bt_xml);

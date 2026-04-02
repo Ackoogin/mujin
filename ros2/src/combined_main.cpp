@@ -17,6 +17,8 @@
 #include "ame_ros2/executor_node.hpp"
 #include "ame_ros2/lifecycle_manager.hpp"
 
+#include <ame/pyramid_service.h>
+
 #include <behaviortree_cpp/action_node.h>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
@@ -25,9 +27,9 @@
 #include <thread>
 
 // ---------------------------------------------------------------------------
-// Stub action nodes (same as main.cpp) for the UAV search demo domain.
-// In a real deployment, replace these with implementations that call hardware
-// or PYRAMID services (Extension 4 from extensions.md).
+// Stub action nodes for the UAV search demo domain.
+// These remain registered for backwards compatibility; real deployments
+// should also wire InvokeService via setPyramidService() (Extension 4).
 // ---------------------------------------------------------------------------
 class StubMoveAction : public BT::SyncActionNode {
 public:
@@ -76,9 +78,19 @@ int main(int argc, char** argv) {
   pl_node->setInProcessWorldModel(&wm_node->worldModel());
   ex_node->setInProcessWorldModel(&wm_node->worldModel());
 
+  // Wire PYRAMID service (mock for demo — replace with real adapter)
+  ame::MockPyramidService mock_pyramid;
+  ex_node->setPyramidService(&mock_pyramid);
+
+  // Wire hierarchical planning dependencies for ExecutePhaseAction / DelegateToAgent
+  ex_node->setPlanner(&pl_node->planner());
+  ex_node->setPlanCompiler(&pl_node->compiler());
+  ex_node->setActionRegistry(&pl_node->actionRegistry());
+  ex_node->setPlanAuditLog(pl_node->planAuditLog());
+
   // Register action node types on the ExecutorNode's factory.
   // These must be registered before loadAndExecute() is called.
-  // Replace or extend with real action implementations as needed.
+  // InvokeService, ExecutePhaseAction, and DelegateToAgent are auto-registered.
   ex_node->factory().registerNodeType<StubMoveAction>("StubMoveAction");
   ex_node->factory().registerNodeType<StubSearchAction>("StubSearchAction");
   ex_node->factory().registerNodeType<StubClassifyAction>("StubClassifyAction");

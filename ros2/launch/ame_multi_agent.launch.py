@@ -97,6 +97,17 @@ def generate_launch_description():
             }],
         ),
 
+        # Agent dispatcher for coordinating multi-agent goal dispatch
+        LifecycleNode(
+            package='ame_ros2',
+            executable='agent_dispatcher_node',
+            name='agent_dispatcher_node',
+            output='screen',
+            parameters=[{
+                'world_model_node': 'world_model_node',
+            }],
+        ),
+
         # Lifecycle manager for all nodes
         Node(
             package='ame_ros2',
@@ -107,6 +118,7 @@ def generate_launch_description():
                 'managed_nodes': [
                     'world_model_node',
                     'planner_node',
+                    'agent_dispatcher_node',
                     'executor_node_uav1',
                     'executor_node_uav2',
                 ],

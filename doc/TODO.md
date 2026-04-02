@@ -212,12 +212,30 @@ Leader-delegation pattern for multi-agent coordination. See [`multi_agent_implem
 - [x] `ExecutorNode` supports `agent_id` parameter for topic namespacing
 - [x] Agent-scoped topics: `/{agent_id}/executor/bt_xml`, `/{agent_id}/executor/status`
 - [x] `AgentDispatcher` PCL component for coordinating multi-agent plan dispatch
-- [x] `AgentDispatcherNode` ROS2 wrapper with transport callbacks
-- [x] `ame_multi_agent.launch.py` for spawning multiple agent executors
+- [x] `AgentDispatcherNode` ROS2 wrapper with transport callbacks and `~/dispatch_goals` service
+- [x] `ame_multi_agent.launch.py` for spawning multiple agent executors + dispatcher
 
 ### Future Extensions
 - Dynamic re-allocation on agent failure
 - Coordination constraints (mutex resources, sync barriers)
+
+---
+
+## ROS2 Extension Wiring ✓
+
+**Status: COMPLETE**
+
+Gap analysis revealed that extensions 3-6 and multi-agent delegation were implemented in `ame_core` but incompletely wired into the ROS2 layer. See `ros2_extensions_gap_fix_plan.md` for the original plan.
+
+- [x] `DispatchGoals.srv` and `AgentDispatcherNode` service wiring
+- [x] `InvokeService` registration + `IPyramidService*` injection in `ExecutorNode`
+- [x] `ExecutePhaseAction` registration + blackboard wiring (planner/compiler/registry/audit-log)
+- [x] `DelegateToAgent` registration (shares blackboard keys with `ExecutePhaseAction`)
+- [x] Perception mutation queue fix (`enqueueMutation` + `applyQueuedMutations`)
+- [x] `PlannerNode` accessor exposure (`planner()`, `compiler()`, `planAuditLog()`)
+- [x] `combined_main.cpp` demo updated with all extension dependencies
+- [x] Documentation updates (`06-ros2.md`, `07-extensions.md`, `TODO.md`)
+- [x] `AgentDispatcherNode` standalone executable and multi-agent launch update
 
 ---
 

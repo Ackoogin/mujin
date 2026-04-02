@@ -2,6 +2,9 @@
 #include <ame_ros2/ros_wm_bridge.hpp>
 
 #include <ame/bt_nodes/check_world_predicate.h>
+#include <ame/bt_nodes/delegate_to_agent.h>
+#include <ame/bt_nodes/execute_phase_action.h>
+#include <ame/bt_nodes/invoke_service.h>
 #include <ame/bt_nodes/set_world_predicate.h>
 
 #include <std_msgs/msg/string.hpp>
@@ -36,19 +39,46 @@ ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
   component_.setTickRateHz(get_parameter("tick_rate_hz").as_double());
 
   registerCoreNodes();
+
+  // Common blackboard keys shared by both in-process and distributed modes
+  auto initCommonKeys = [this](const BT::Blackboard::Ptr& blackboard) {
+    if (!agent_id_.empty()) {
+      blackboard->set("current_agent_id", agent_id_);
+    }
+    if (pyramid_service_) {
+      blackboard->set<ame::IPyramidService*>("pyramid_service", pyramid_service_);
+    }
+    // Hierarchical planning (ExecutePhaseAction / DelegateToAgent)
+    blackboard->set<BT::BehaviorTreeFactory*>("bt_factory", &component_.factory());
+    if (inprocess_wm_) {
+      blackboard->set<ame::WorldModel*>("world_model", inprocess_wm_);
+    }
+    if (planner_) {
+      blackboard->set<ame::Planner*>("planner", planner_);
+    }
+    if (plan_compiler_) {
+      blackboard->set<ame::PlanCompiler*>("plan_compiler", plan_compiler_);
+    }
+    if (action_registry_) {
+      blackboard->set<ame::ActionRegistry*>("action_registry", action_registry_);
+    }
+    if (plan_audit_log_) {
+      blackboard->set<ame::PlanAuditLog*>("plan_audit_log", plan_audit_log_);
+    }
+    if (planner_component_) {
+      blackboard->set<ame::PlannerComponent*>("planner_component", planner_component_);
+    }
+  };
+
   if (inprocess_wm_) {
-    component_.setBlackboardInitializer([this](const BT::Blackboard::Ptr& blackboard) {
-      if (!agent_id_.empty()) {
-        blackboard->set("current_agent_id", agent_id_);
-      }
+    component_.setBlackboardInitializer([this, initCommonKeys](const BT::Blackboard::Ptr& blackboard) {
+      initCommonKeys(blackboard);
     });
   } else {
-    component_.setBlackboardInitializer([this](const BT::Blackboard::Ptr& blackboard) {
+    component_.setBlackboardInitializer([this, initCommonKeys](const BT::Blackboard::Ptr& blackboard) {
       blackboard->set("get_fact_client", client_get_fact_.get());
       blackboard->set("set_fact_client", client_set_fact_.get());
-      if (!agent_id_.empty()) {
-        blackboard->set("current_agent_id", agent_id_);
-      }
+      initCommonKeys(blackboard);
     });
   }
 
@@ -148,6 +178,15 @@ void ExecutorNode::registerCoreNodes() {
     component_.factory().registerNodeType<RosCheckWorldPredicate>("CheckWorldPredicate");
     component_.factory().registerNodeType<RosSetWorldPredicate>("SetWorldPredicate");
   }
+
+  // PYRAMID service node — works in both in-process and distributed modes
+  component_.factory().registerNodeType<ame::InvokeService>("InvokeService");
+
+  // Hierarchical planning node
+  component_.factory().registerNodeType<ame::ExecutePhaseAction>("ExecutePhaseAction");
+
+  // Multi-agent delegation node
+  component_.factory().registerNodeType<ame::DelegateToAgent>("DelegateToAgent");
 
   core_nodes_registered_ = true;
 }

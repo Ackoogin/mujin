@@ -1,0 +1,7 @@
+# Trigger multi-agent goal dispatch via AgentDispatcherNode
+string[] goal_fluents          # Top-level mission goals
+string[] agent_ids             # Agents to dispatch to (empty = all available)
+---
+bool     success
+string   error_msg
+string[] dispatched_agents     # Agents that received sub-plans
