@@ -2,6 +2,7 @@
 #include <ame_ros2/ros_wm_bridge.hpp>
 
 #include <ame/bt_nodes/check_world_predicate.h>
+#include <ame/bt_nodes/delegate_to_agent.h>
 #include <ame/bt_nodes/execute_phase_action.h>
 #include <ame/bt_nodes/invoke_service.h>
 #include <ame/bt_nodes/set_world_predicate.h>
@@ -183,6 +184,9 @@ void ExecutorNode::registerCoreNodes() {
 
   // Hierarchical planning node
   component_.factory().registerNodeType<ame::ExecutePhaseAction>("ExecutePhaseAction");
+
+  // Multi-agent delegation node
+  component_.factory().registerNodeType<ame::DelegateToAgent>("DelegateToAgent");
 
   core_nodes_registered_ = true;
 }
