@@ -91,6 +91,9 @@ target_link_libraries(planner_node ame_ros2_lib)
 add_executable(executor_node src/executor_node_main.cpp)
 target_link_libraries(executor_node ame_ros2_lib)
 
+add_executable(agent_dispatcher_node src/agent_dispatcher_node_main.cpp)
+target_link_libraries(agent_dispatcher_node ame_ros2_lib)
+
 # ---------------------------------------------------------------------------
 # Combined in-process executable (all three nodes on one executor)
 # ---------------------------------------------------------------------------
@@ -106,7 +109,7 @@ target_link_libraries(lifecycle_manager ame_ros2_lib)
 # ---------------------------------------------------------------------------
 # Install
 # ---------------------------------------------------------------------------
-install(TARGETS ame_ros2_lib world_model_node planner_node executor_node ame_combined lifecycle_manager
+install(TARGETS ame_ros2_lib world_model_node planner_node executor_node agent_dispatcher_node ame_combined lifecycle_manager
     EXPORT ame_ros2_lib
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib

@@ -50,12 +50,20 @@ AgentDispatcherNode::on_activate(const rclcpp_lifecycle::State&) {
         return CallbackReturn::FAILURE;
     }
 
+    srv_dispatch_ = create_service<ame_ros2::srv::DispatchGoals>(
+        "~/dispatch_goals",
+        [this](std::shared_ptr<ame_ros2::srv::DispatchGoals::Request> req,
+               std::shared_ptr<ame_ros2::srv::DispatchGoals::Response> res) {
+            handleDispatchGoals(req, res);
+        });
+
     RCLCPP_INFO(get_logger(), "AgentDispatcherNode activated");
     return CallbackReturn::SUCCESS;
 }
 
 AgentDispatcherNode::CallbackReturn
 AgentDispatcherNode::on_deactivate(const rclcpp_lifecycle::State&) {
+    srv_dispatch_.reset();
     agent_bt_pubs_.clear();
     agent_status_subs_.clear();
     agent_statuses_.clear();
@@ -148,6 +156,42 @@ std::string AgentDispatcherNode::queryAgentStatus(const std::string& agent_id) {
         return "";
     }
     return it->second;
+}
+
+void AgentDispatcherNode::handleDispatchGoals(
+    std::shared_ptr<ame_ros2::srv::DispatchGoals::Request> req,
+    std::shared_ptr<ame_ros2::srv::DispatchGoals::Response> res) {
+    RCLCPP_INFO(get_logger(), "dispatch_goals called (%zu goals, %zu agents)",
+                req->goal_fluents.size(), req->agent_ids.size());
+
+    if (req->goal_fluents.empty()) {
+        res->success = false;
+        res->error_msg = "No goal fluents provided";
+        return;
+    }
+
+    try {
+        auto results = component_.dispatchGoals(req->goal_fluents);
+
+        res->success = true;
+        for (const auto& result : results) {
+            if (result.success) {
+                res->dispatched_agents.push_back(result.agent_id);
+            } else {
+                RCLCPP_WARN(get_logger(), "Failed to dispatch to agent '%s': %s",
+                            result.agent_id.c_str(), result.error_message.c_str());
+            }
+        }
+
+        if (res->dispatched_agents.empty()) {
+            res->success = false;
+            res->error_msg = "No agents were successfully dispatched";
+        }
+    } catch (const std::exception& e) {
+        RCLCPP_ERROR(get_logger(), "Dispatch failed: %s", e.what());
+        res->success = false;
+        res->error_msg = e.what();
+    }
 }
 
 }  // namespace ame_ros2
