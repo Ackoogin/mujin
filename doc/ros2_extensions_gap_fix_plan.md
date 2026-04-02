@@ -1,6 +1,6 @@
 # ROS2 Extensions Gap-Fix Plan
 
-**Status: NOT STARTED**
+**Status: IMPLEMENTED** (Steps 1-9 complete; Step 10 tests in progress)
 
 Gap analysis revealed that extensions 3-6 and multi-agent delegation are implemented in `ame_core` but incompletely wired into the ROS2 layer. This plan addresses all missing/conflicting elements identified in the review.
 

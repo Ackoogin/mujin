@@ -114,6 +114,10 @@ When `param_names` and `param_values` are provided (semicolon-separated), the no
 
 The blackboard key `"pyramid_service"` must hold an `IPyramidService*`. `MockPyramidService` is provided for testing (async calls complete immediately on first poll).
 
+### ROS2 Integration
+
+`ExecutorNode` auto-registers `InvokeService` and injects `IPyramidService*` via `setPyramidService()`. In-process demos use `MockPyramidService`; production deployments should provide a concrete adapter wrapping the PYRAMID SDK.
+
 ## Thread Safety (Extension 5)
 
 **Files:** `include/ame/world_model.h`, `src/ame/world_model.cpp`
@@ -195,6 +199,37 @@ After a phase completes, its `episode_id` is written to the blackboard key `"par
 - `onStart()` — parse goals, plan (direct or component), compile BT XML, record audit episode, create sub-tree
 - `onRunning()` — tick the compiled subtree once per BT cycle
 - `onHalted()` — halt and destroy the subtree
+
+### ROS2 Integration
+
+`ExecutorNode` auto-registers `ExecutePhaseAction` and exposes setters for the required blackboard keys: `setPlanner()`, `setPlanCompiler()`, `setActionRegistry()`, `setPlanAuditLog()`. In-process mode: `combined_main.cpp` wires these from `PlannerNode` accessors. Distributed mode: inject `PlannerComponent*` via `setPlannerComponent()`.
+
+## Multi-Agent Delegation
+
+**Files:** `include/ame/bt_nodes/delegate_to_agent.h`, `src/bt_nodes/delegate_to_agent.cpp`
+
+`DelegateToAgent` is a `BT::StatefulActionNode` that delegates a set of goals to a specific agent, planning and executing actions scoped to that agent. Supports the PYRAMID leader-delegation pattern where a leader plans at the goal level and delegates sub-goals.
+
+```xml
+<DelegateToAgent agent_id="uav1"
+                 agent_goals="(searched sector_a);(classified sector_a)"/>
+```
+
+### Blackboard Keys
+
+Same as `ExecutePhaseAction`: `world_model`, `planner`, `plan_compiler`, `action_registry`, `bt_factory`, and optionally `plan_audit_log` / `parent_episode_id`.
+
+### Lifecycle
+
+- `onStart()` — mark agent unavailable, parse goals, plan with agent context, compile BT XML, create sub-tree
+- `onRunning()` — tick the compiled subtree once per BT cycle
+- `onHalted()` — halt subtree, restore agent availability
+
+See [`../multi_agent_implementation_plan.md`](../multi_agent_implementation_plan.md) for the full architecture.
+
+### ROS2 Integration
+
+`ExecutorNode` auto-registers `DelegateToAgent`. All required blackboard keys are shared with `ExecutePhaseAction`. For distributed multi-agent execution, `AgentDispatcherNode` provides the `~/dispatch_goals` service and transport layer for dispatching BT XML to remote agent executors.
 
 ## Temporal Planning (Extension 7) — Future
 
