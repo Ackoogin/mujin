@@ -122,7 +122,7 @@ A structured autonomy assurance plan has been developed, mapped to established f
 
 The formal planning model (PDDL) directly supports several assurance activities: hazard analysis can be performed systematically on the action model, plans can be verified against domain constraints, and the complete audit trail provides post-incident evidence.
 
-See `doc/autonomy_assurance_plan.md` for the full assurance plan.
+See `doc/roadmaps/autonomy_assurance_plan.md` for the full assurance plan.
 
 ## Technical Summary
 

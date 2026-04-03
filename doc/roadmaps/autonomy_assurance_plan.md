@@ -17,7 +17,7 @@ Structured around:
 
 ### PDDL Formal Modelling & GSN Argument Mapping
 
-Detailed documentation of how PDDL formal models contribute to each SACE stage, with GSN argument pattern mappings, ISO 21448/34502 impacts, and UAV worked examples, is provided in the **[SACE–PDDL Integration Guide](sace-pddl/00-index.md)** (12 indexed files covering all 8 stages, residual risk management, and cross-stage summary).
+Detailed documentation of how PDDL formal models contribute to each SACE stage, with GSN argument pattern mappings, ISO 21448/34502 impacts, and UAV worked examples, is provided in the **[SACE–PDDL Integration Guide](../sace-pddl/00-index.md)** (12 indexed files covering all 8 stages, residual risk management, and cross-stage summary).
 
 ---
 

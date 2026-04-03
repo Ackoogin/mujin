@@ -49,7 +49,7 @@ Concrete implementation plan for minimal multi-agent support using agent paramet
 
 ### Step 1: Agent Registry in WorldModel
 
-**Files:** `include/ame/world_model.h`, `src/ame/world_model.cpp`
+**Files:** `include/ame/world_model.h`, `src/ame/lib/world_model.cpp`
 
 Add agent tracking to WorldModel:
 
@@ -122,7 +122,7 @@ private:
 
 ### Step 3: Goal Allocator Utility
 
-**Files:** `include/ame/goal_allocator.h` (new), `src/ame/goal_allocator.cpp` (new)
+**Files:** `include/ame/goal_allocator.h` (new), `src/ame/lib/goal_allocator.cpp` (new)
 
 Simple greedy goal allocation from leader to agents:
 
@@ -207,7 +207,7 @@ std::vector<AgentGoalAssignment> GoalAllocator::allocate(
 
 ### Step 4: DelegateToAgent BT Node
 
-**Files:** `include/ame/bt_nodes/delegate_to_agent.h` (new), `src/ame/bt_nodes/delegate_to_agent.cpp` (new)
+**Files:** `include/ame/bt_nodes/delegate_to_agent.h` (new), `src/ame/nodes/delegate_to_agent.cpp` (new)
 
 A BT node that delegates a set of goals to a specific agent, leveraging `ExecutePhaseAction` internally.
 
@@ -326,7 +326,7 @@ BT::NodeStatus DelegateToAgent::onRunning() {
 
 ### Step 5: Parallel Agent Execution Node
 
-**Files:** `include/ame/bt_nodes/parallel_delegation.h` (new), `src/ame/bt_nodes/parallel_delegation.cpp` (new)
+**Files:** `include/ame/bt_nodes/parallel_delegation.h` (new), `src/ame/nodes/parallel_delegation.cpp` (new)
 
 Wrapper that executes multiple `DelegateToAgent` nodes in parallel:
 
@@ -370,7 +370,7 @@ private:
 
 ### Step 6: Update Action BT Nodes with Agent Context
 
-**Files:** `include/ame/bt_nodes/*.h`, `src/ame/bt_nodes/*.cpp`
+**Files:** `include/ame/bt_nodes/*.h`, `src/ame/nodes/*.cpp`
 
 Add `agent_id` input port to action nodes:
 
@@ -401,7 +401,7 @@ BT::NodeStatus tick() override {
 
 ### Step 7: PlanCompiler Agent Context Injection
 
-**Files:** `src/ame/plan_compiler.cpp`
+**Files:** `src/ame/lib/plan_compiler.cpp`
 
 Modify compiler to inject `agent_id` port into generated BT XML:
 
@@ -433,7 +433,7 @@ std::string PlanCompiler::compileAction(const GroundAction& action,
 
 ### Step 8: Agent-Scoped Observability
 
-**Files:** `src/ame/bt_logger.cpp`, `src/ame/plan_audit_log.cpp`
+**Files:** `src/ame/lib/bt_logger.cpp`, `src/ame/lib/plan_audit_log.cpp`
 
 Add agent ID to audit records:
 
@@ -505,24 +505,24 @@ TEST(MultiAgent, EndToEndMultiUAVSearch) {
 | File | Change Type | Status |
 |------|-------------|--------|
 | `include/ame/world_model.h` | Modify | ✓ Implemented |
-| `src/ame/world_model.cpp` | Modify | ✓ Implemented |
+| `src/ame/lib/world_model.cpp` | Modify | ✓ Implemented |
 | `include/ame/goal_allocator.h` | New | ✓ Implemented |
-| `src/ame/goal_allocator.cpp` | New | ✓ Implemented |
+| `src/ame/lib/goal_allocator.cpp` | New | ✓ Implemented |
 | `include/ame/bt_nodes/delegate_to_agent.h` | New | ✓ Implemented |
-| `src/ame/bt_nodes/delegate_to_agent.cpp` | New | ✓ Implemented |
+| `src/ame/nodes/delegate_to_agent.cpp` | New | ✓ Implemented |
 | `include/ame/bt_nodes/parallel_delegation.h` | New | Deferred |
-| `src/ame/bt_nodes/parallel_delegation.cpp` | New | Deferred |
+| `src/ame/nodes/parallel_delegation.cpp` | New | Deferred |
 | `include/ame/plan_compiler.h` | Modify | ✓ Implemented |
-| `src/ame/plan_compiler.cpp` | Modify | ✓ Implemented |
+| `src/ame/lib/plan_compiler.cpp` | Modify | ✓ Implemented |
 | `domains/multi_uav_search/domain.pddl` | New | ✓ Implemented |
 | `domains/multi_uav_search/problem.pddl` | New | ✓ Implemented |
 | `tests/test_multi_agent.cpp` | New | ✓ Implemented (730+ LOC) |
 | `src/ame/CMakeLists.txt` | Modify | ✓ Implemented |
 | `tests/CMakeLists.txt` | Modify | ✓ Implemented |
 | `include/ame/agent_dispatcher.h` | New | ✓ Implemented |
-| `src/ame/agent_dispatcher.cpp` | New | ✓ Implemented |
+| `src/ame/lib/agent_dispatcher.cpp` | New | ✓ Implemented |
 | `ros2/include/ame_ros2/agent_dispatcher_node.hpp` | New | ✓ Implemented |
-| `ros2/src/agent_dispatcher_node.cpp` | New | ✓ Implemented |
+| `ros2/src/nodes/agent_dispatcher_node.cpp` | New | ✓ Implemented |
 | `ros2/launch/ame_multi_agent.launch.py` | New | ✓ Implemented |
 
 ---

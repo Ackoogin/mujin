@@ -409,7 +409,7 @@ All neural integrations follow a **propose-verify** pattern:
 1. **Neural component proposes** — action rankings, plan repairs, goal interpretations, explanations.
 2. **Symbolic component verifies** — LAPKT validates plans against PDDL semantics. WorldModel validates goal fluents exist. Forward simulation validates repair steps.
 
-The symbolic pipeline remains the authority. Neural components are advisory. This is consistent with the safety case documented in `doc/autonomy_assurance_plan.md` and the SACE-PDDL evidence in `doc/sace-pddl/`.
+The symbolic pipeline remains the authority. Neural components are advisory. This is consistent with the safety case documented in `doc/roadmaps/autonomy_assurance_plan.md` and the SACE-PDDL evidence in `doc/sace-pddl/`.
 
 **Audit trail**: Every neural contribution is logged:
 - LLM heuristic scores recorded in `PlanAuditLog` episodes (new field: `heuristic_source`)

@@ -231,8 +231,8 @@ No special service-side handling is needed — the adapter just needs to report 
 |------|------|
 | `include/ame/pyramid_service.h` | `IPyramidService` interface, `ServiceMessage`, `MockPyramidService` |
 | `include/ame/bt_nodes/invoke_service.h` | `InvokeService` BT node declaration |
-| `src/ame/bt_nodes/invoke_service.cpp` | `InvokeService` implementation (param mapping, async lifecycle) |
+| `src/ame/nodes/invoke_service.cpp` | `InvokeService` implementation (param mapping, async lifecycle) |
 | `include/ame/action_registry.h` | `ActionRegistry` — binds PDDL names to BT templates |
-| `src/ame/action_registry.cpp` | Template substitution and resolution |
-| `src/ame/plan_compiler.cpp` | `PlanCompiler` — emits action units with precondition/effect guards |
+| `src/ame/lib/action_registry.cpp` | Template substitution and resolution |
+| `src/ame/lib/plan_compiler.cpp` | `PlanCompiler` — emits action units with precondition/effect guards |
 | `tests/test_extensions.cpp` | Test suite with mock services and param mapping verification |

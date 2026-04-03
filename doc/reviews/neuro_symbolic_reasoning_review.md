@@ -6,11 +6,11 @@ This report reviews the neuro-symbolic reasoning approaches described in the pro
 
 Primary source documents:
 
-- `doc/neuro_symbolic_reasoning.md`
+- `doc/research/neuro_symbolic_reasoning.md`
 - `doc/concept.md`
 - `doc/extensions.md`
-- `doc/plan.md`
-- `doc/autonomy_assurance_plan.md`
+- `doc/roadmaps/plan.md`
+- `doc/roadmaps/autonomy_assurance_plan.md`
 - `README.md`
 - `doc/stakeholder_summary.md`
 
@@ -338,7 +338,7 @@ The review found several documentation issues worth resolving even if no code ch
 
 ### 1. Neuro-symbolic roadmap placement is underspecified
 
-`doc/neuro_symbolic_reasoning.md` proposes an "Extension 8" for neuro-symbolic reasoning, but `doc/extensions.md` currently lists only seven extensions. The roadmap should either:
+`doc/research/neuro_symbolic_reasoning.md` proposes an "Extension 8" for neuro-symbolic reasoning, but `doc/extensions.md` currently lists only seven extensions. The roadmap should either:
 
 - add neuro-symbolic reasoning explicitly as the next extension, or
 - fold it into the existing roadmap with clear dependencies and acceptance criteria
@@ -369,7 +369,7 @@ This matters directly for plan repair, anomaly analysis, and assurance claims.
 
 ## Recommended Adoption Sequence
 
-The sequence proposed in `doc/neuro_symbolic_reasoning.md` is broadly correct. This review refines it as follows.
+The sequence proposed in `doc/research/neuro_symbolic_reasoning.md` is broadly correct. This review refines it as follows.
 
 ### Phase 1 - Start here
 
