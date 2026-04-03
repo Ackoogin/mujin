@@ -2,7 +2,6 @@
 #include "ame_ros2/planner_node.hpp"
 #include "ame_ros2/world_model_node.hpp"
 #include <rclcpp/rclcpp.hpp>
-#include <lifecycle_msgs/msg/transition.hpp>
 #include <chrono>
 
 class PlannerNodeTest : public ::testing::Test {
@@ -21,13 +20,22 @@ protected:
         pl_node_->actionRegistry().registerAction("classify", "StubClassifyAction");
 
         // Lifecycle: configure + activate both nodes
-        wm_node_->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
-        wm_node_->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
-        pl_node_->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
-        pl_node_->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
+        ASSERT_EQ(
+            wm_node_->on_configure(rclcpp_lifecycle::State{}),
+            ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+        ASSERT_EQ(
+            wm_node_->on_activate(rclcpp_lifecycle::State{}),
+            ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+        ASSERT_EQ(
+            pl_node_->on_configure(rclcpp_lifecycle::State{}),
+            ame_ros2::PlannerNode::CallbackReturn::SUCCESS);
+        ASSERT_EQ(
+            pl_node_->on_activate(rclcpp_lifecycle::State{}),
+            ame_ros2::PlannerNode::CallbackReturn::SUCCESS);
 
-        executor_.add_node(wm_node_->get_node_base_interface());
-        executor_.add_node(pl_node_->get_node_base_interface());
+        executor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
+        executor_->add_node(wm_node_->get_node_base_interface());
+        executor_->add_node(pl_node_->get_node_base_interface());
 
         // Build the domain in WorldModelNode's WorldModel
         auto& wm = wm_node_->worldModel();
@@ -54,6 +62,7 @@ protected:
     }
 
     void TearDown() override {
+        executor_.reset();
         wm_node_.reset();
         pl_node_.reset();
         rclcpp::shutdown();
@@ -61,7 +70,7 @@ protected:
 
     std::shared_ptr<ame_ros2::WorldModelNode> wm_node_;
     std::shared_ptr<ame_ros2::PlannerNode>    pl_node_;
-    rclcpp::executors::SingleThreadedExecutor   executor_;
+    std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
 };
 
 TEST_F(PlannerNodeTest, PlanActionSucceeds) {
@@ -87,7 +96,7 @@ TEST_F(PlannerNodeTest, PlanActionSucceeds) {
 
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
     while (!done && std::chrono::steady_clock::now() < deadline) {
-        executor_.spin_some(std::chrono::milliseconds(50));
+        executor_->spin_some(std::chrono::milliseconds(50));
     }
 
     ASSERT_TRUE(done) << "Plan action did not complete";

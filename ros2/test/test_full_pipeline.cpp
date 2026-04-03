@@ -5,7 +5,6 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
-#include <lifecycle_msgs/msg/transition.hpp>
 #include <behaviortree_cpp/action_node.h>
 #include <ame_ros2/executor_node.hpp>
 #include <ame_ros2/planner_node.hpp>
@@ -80,18 +79,29 @@ protected:
     ex_node_->factory().registerNodeType<StubSearchAction>("StubSearchAction");
     ex_node_->factory().registerNodeType<StubClassifyAction>("StubClassifyAction");
 
-    for (auto* node : {
-             static_cast<rclcpp_lifecycle::LifecycleNode*>(wm_node_.get()),
-             static_cast<rclcpp_lifecycle::LifecycleNode*>(pl_node_.get()),
-             static_cast<rclcpp_lifecycle::LifecycleNode*>(ex_node_.get()),
-         }) {
-      node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
-      node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
-    }
+    ASSERT_EQ(
+        wm_node_->on_configure(rclcpp_lifecycle::State{}),
+        ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(
+        wm_node_->on_activate(rclcpp_lifecycle::State{}),
+        ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(
+        pl_node_->on_configure(rclcpp_lifecycle::State{}),
+        ame_ros2::PlannerNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(
+        pl_node_->on_activate(rclcpp_lifecycle::State{}),
+        ame_ros2::PlannerNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(
+        ex_node_->on_configure(rclcpp_lifecycle::State{}),
+        ame_ros2::ExecutorNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(
+        ex_node_->on_activate(rclcpp_lifecycle::State{}),
+        ame_ros2::ExecutorNode::CallbackReturn::SUCCESS);
 
-    executor_.add_node(wm_node_->get_node_base_interface());
-    executor_.add_node(pl_node_->get_node_base_interface());
-    executor_.add_node(ex_node_->get_node_base_interface());
+    executor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
+    executor_->add_node(wm_node_->get_node_base_interface());
+    executor_->add_node(pl_node_->get_node_base_interface());
+    executor_->add_node(ex_node_->get_node_base_interface());
 
     auto& wm = wm_node_->worldModel();
     wm.typeSystem().addType("object");
@@ -129,6 +139,7 @@ protected:
   }
 
   void TearDown() override {
+    executor_.reset();
     ex_node_.reset();
     pl_node_.reset();
     wm_node_.reset();
@@ -138,7 +149,7 @@ protected:
   std::shared_ptr<ame_ros2::WorldModelNode> wm_node_;
   std::shared_ptr<ame_ros2::PlannerNode> pl_node_;
   std::shared_ptr<ame_ros2::ExecutorNode> ex_node_;
-  rclcpp::executors::SingleThreadedExecutor executor_;
+  std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
 };
 
 ///< REQ_ENGINE_004: The ROS2 wrappers shall plan and execute through the BT XML handoff.
@@ -167,7 +178,7 @@ TEST_F(FullPipelineTest, PlanAndExecuteReachesGoal) {
 
   auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
   while (!plan_done && std::chrono::steady_clock::now() < deadline) {
-    executor_.spin_some(std::chrono::milliseconds(50));
+    executor_->spin_some(std::chrono::milliseconds(50));
   }
   ASSERT_TRUE(plan_done) << "Plan action timed out";
   ASSERT_NE(plan_result, nullptr);
@@ -177,7 +188,7 @@ TEST_F(FullPipelineTest, PlanAndExecuteReachesGoal) {
   while (ex_node_->lastStatus() != BT::NodeStatus::SUCCESS &&
          ex_node_->lastStatus() != BT::NodeStatus::FAILURE &&
          std::chrono::steady_clock::now() < deadline) {
-    executor_.spin_some(std::chrono::milliseconds(20));
+    executor_->spin_some(std::chrono::milliseconds(20));
   }
   EXPECT_EQ(ex_node_->lastStatus(), BT::NodeStatus::SUCCESS);
 

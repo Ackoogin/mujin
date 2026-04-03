@@ -15,7 +15,6 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
-#include <lifecycle_msgs/msg/transition.hpp>
 #include <behaviortree_cpp/action_node.h>
 
 #include <chrono>
@@ -93,18 +92,29 @@ protected:
     ex_node_->factory().registerNodeType<StubClassifyAction>("StubClassifyAction");
 
     // Lifecycle transitions
-    for (auto* node : {
-             static_cast<rclcpp_lifecycle::LifecycleNode*>(wm_node_.get()),
-             static_cast<rclcpp_lifecycle::LifecycleNode*>(pl_node_.get()),
-             static_cast<rclcpp_lifecycle::LifecycleNode*>(ex_node_.get()),
-         }) {
-      node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
-      node->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
-    }
+    ASSERT_EQ(
+        wm_node_->on_configure(rclcpp_lifecycle::State{}),
+        ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(
+        wm_node_->on_activate(rclcpp_lifecycle::State{}),
+        ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(
+        pl_node_->on_configure(rclcpp_lifecycle::State{}),
+        ame_ros2::PlannerNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(
+        pl_node_->on_activate(rclcpp_lifecycle::State{}),
+        ame_ros2::PlannerNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(
+        ex_node_->on_configure(rclcpp_lifecycle::State{}),
+        ame_ros2::ExecutorNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(
+        ex_node_->on_activate(rclcpp_lifecycle::State{}),
+        ame_ros2::ExecutorNode::CallbackReturn::SUCCESS);
 
-    executor_.add_node(wm_node_->get_node_base_interface());
-    executor_.add_node(pl_node_->get_node_base_interface());
-    executor_.add_node(ex_node_->get_node_base_interface());
+    executor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
+    executor_->add_node(wm_node_->get_node_base_interface());
+    executor_->add_node(pl_node_->get_node_base_interface());
+    executor_->add_node(ex_node_->get_node_base_interface());
 
     // Build the UAV search domain
     auto& wm = wm_node_->worldModel();
@@ -131,6 +141,7 @@ protected:
   }
 
   void TearDown() override {
+    executor_.reset();
     ex_node_.reset();
     pl_node_.reset();
     wm_node_.reset();
@@ -142,7 +153,7 @@ protected:
     while (ex_node_->lastStatus() != BT::NodeStatus::SUCCESS &&
            ex_node_->lastStatus() != BT::NodeStatus::FAILURE &&
            std::chrono::steady_clock::now() < deadline) {
-      executor_.spin_some(std::chrono::milliseconds(20));
+      executor_->spin_some(std::chrono::milliseconds(20));
     }
   }
 
@@ -150,7 +161,7 @@ protected:
   std::shared_ptr<ame_ros2::WorldModelNode> wm_node_;
   std::shared_ptr<ame_ros2::PlannerNode> pl_node_;
   std::shared_ptr<ame_ros2::ExecutorNode> ex_node_;
-  rclcpp::executors::SingleThreadedExecutor executor_;
+  std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
 };
 
 // ---------------------------------------------------------------------------
@@ -178,14 +189,14 @@ TEST_F(ExtensionWiringTest, InvokeServiceRegisteredAndSucceeds) {
 // ---------------------------------------------------------------------------
 TEST_F(ExtensionWiringTest, ExecutePhaseActionPlansAndExecutes) {
   // BT XML that uses ExecutePhaseAction to achieve a sub-goal
-  static const char* bt_xml = R"(
+  static const char* bt_xml = R"BT(
 <root BTCPP_format="4">
   <BehaviorTree ID="MainTree">
     <ExecutePhaseAction phase_goals="(searched sector_a)"
                         phase_name="search_phase"/>
   </BehaviorTree>
 </root>
-)";
+)BT";
 
   ex_node_->loadAndExecute(bt_xml);
   spinUntilExecutionDone();
@@ -201,14 +212,14 @@ TEST_F(ExtensionWiringTest, DelegateToAgentRegisteredAndExecutes) {
   // Register agent in WorldModel
   wm_node_->worldModel().registerAgent("uav1", "robot");
 
-  static const char* bt_xml = R"(
+  static const char* bt_xml = R"BT(
 <root BTCPP_format="4">
   <BehaviorTree ID="MainTree">
     <DelegateToAgent agent_id="uav1"
                      agent_goals="(searched sector_a)"/>
   </BehaviorTree>
 </root>
-)";
+)BT";
 
   ex_node_->loadAndExecute(bt_xml);
   spinUntilExecutionDone();
@@ -228,8 +239,12 @@ protected:
   void SetUp() override {
     rclcpp::init(0, nullptr);
     node_ = std::make_shared<ame_ros2::WorldModelNode>();
-    node_->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
-    node_->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
+    ASSERT_EQ(
+        node_->on_configure(rclcpp_lifecycle::State{}),
+        ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(
+        node_->on_activate(rclcpp_lifecycle::State{}),
+        ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
 
     auto& wm = node_->worldModel();
     wm.typeSystem().addType("object");
@@ -239,16 +254,18 @@ protected:
     wm.addObject("sector_a", "location");
     wm.registerPredicate("at", {"robot", "location"});
 
-    executor_.add_node(node_->get_node_base_interface());
+    executor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
+    executor_->add_node(node_->get_node_base_interface());
   }
 
   void TearDown() override {
+    executor_.reset();
     node_.reset();
     rclcpp::shutdown();
   }
 
   std::shared_ptr<ame_ros2::WorldModelNode> node_;
-  rclcpp::executors::SingleThreadedExecutor executor_;
+  std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
 };
 
 TEST_F(PerceptionQueueTest, DetectionEnqueuedAndFlushedByTimer) {
@@ -256,7 +273,7 @@ TEST_F(PerceptionQueueTest, DetectionEnqueuedAndFlushedByTimer) {
   auto pub_node = rclcpp::Node::make_shared("test_detection_pub");
   auto pub = pub_node->create_publisher<ame_ros2::msg::Detection>(
     "/detections", rclcpp::SensorDataQoS());
-  executor_.add_node(pub_node);
+  executor_->add_node(pub_node);
 
   ame_ros2::msg::Detection det;
   det.entity_id = "uav1";
@@ -268,14 +285,14 @@ TEST_F(PerceptionQueueTest, DetectionEnqueuedAndFlushedByTimer) {
   pub->publish(det);
 
   // Spin to process the detection callback (enqueues mutation)
-  executor_.spin_some(std::chrono::milliseconds(100));
+  executor_->spin_some(std::chrono::milliseconds(100));
 
   // Fact should NOT yet be set (it's queued, not applied)
   // Note: this depends on timing — the publish timer may or may not have fired.
   // Instead, spin enough for the timer to fire and flush the queue.
   auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
   while (std::chrono::steady_clock::now() < deadline) {
-    executor_.spin_some(std::chrono::milliseconds(50));
+    executor_->spin_some(std::chrono::milliseconds(50));
     if (node_->worldModel().getFact("(at uav1 sector_a)")) {
       break;
     }
@@ -293,29 +310,35 @@ protected:
   void SetUp() override {
     rclcpp::init(0, nullptr);
     dispatcher_ = std::make_shared<ame_ros2::AgentDispatcherNode>();
-    dispatcher_->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
-    dispatcher_->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
+    ASSERT_EQ(
+        dispatcher_->on_configure(rclcpp_lifecycle::State{}),
+        ame_ros2::AgentDispatcherNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(
+        dispatcher_->on_activate(rclcpp_lifecycle::State{}),
+        ame_ros2::AgentDispatcherNode::CallbackReturn::SUCCESS);
 
-    executor_.add_node(dispatcher_->get_node_base_interface());
+    executor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
+    executor_->add_node(dispatcher_->get_node_base_interface());
   }
 
   void TearDown() override {
+    executor_.reset();
     dispatcher_.reset();
     rclcpp::shutdown();
   }
 
   std::shared_ptr<ame_ros2::AgentDispatcherNode> dispatcher_;
-  rclcpp::executors::SingleThreadedExecutor executor_;
+  std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
 };
 
 TEST_F(DispatcherServiceTest, DispatchGoalsServiceExists) {
   auto client_node = rclcpp::Node::make_shared("test_dispatch_client");
   auto client = client_node->create_client<ame_ros2::srv::DispatchGoals>(
     "/agent_dispatcher_node/dispatch_goals");
-  executor_.add_node(client_node);
+  executor_->add_node(client_node);
 
   // Spin briefly to let discovery happen
-  executor_.spin_some(std::chrono::milliseconds(100));
+  executor_->spin_some(std::chrono::milliseconds(100));
 
   EXPECT_TRUE(client->wait_for_service(std::chrono::seconds(2)))
     << "dispatch_goals service not available";
@@ -325,7 +348,7 @@ TEST_F(DispatcherServiceTest, DispatchGoalsRejectsEmptyGoals) {
   auto client_node = rclcpp::Node::make_shared("test_dispatch_client");
   auto client = client_node->create_client<ame_ros2::srv::DispatchGoals>(
     "/agent_dispatcher_node/dispatch_goals");
-  executor_.add_node(client_node);
+  executor_->add_node(client_node);
   ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(2)));
 
   auto req = std::make_shared<ame_ros2::srv::DispatchGoals::Request>();
@@ -335,7 +358,7 @@ TEST_F(DispatcherServiceTest, DispatchGoalsRejectsEmptyGoals) {
   auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
   while (future.wait_for(std::chrono::milliseconds(10)) != std::future_status::ready
          && std::chrono::steady_clock::now() < deadline) {
-    executor_.spin_some(std::chrono::milliseconds(20));
+    executor_->spin_some(std::chrono::milliseconds(20));
   }
 
   ASSERT_EQ(future.wait_for(std::chrono::milliseconds(0)), std::future_status::ready);

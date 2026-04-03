@@ -13,6 +13,8 @@ REM Pin CycloneDDS to one interface (avoids multi-NIC reply confusion with VMwar
 set CYCLONEDDS_URI=file://D:/Dev/repo/mujin/cyclonedds_localhost.xml
 
 REM 1. Add pixi conda Library/bin to PATH (yaml.dll, vcruntime, openssl, etc.)
+set PATH=D:\Dev\ros2-windows\.pixi\envs\default;%PATH%
+set PATH=D:\Dev\ros2-windows\.pixi\envs\default\Scripts;%PATH%
 set PATH=D:\Dev\ros2-windows\.pixi\envs\default\Library\bin;%PATH%
 set PATH=D:\Dev\ros2-windows\.pixi\envs\default\bin;%PATH%
 

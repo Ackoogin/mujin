@@ -23,7 +23,7 @@ try:
     import rclpy
     from rclpy.node import Node
     from rclpy.action import ActionClient as RclpyActionClient
-    from rclpy.callback_group import ReentrantCallbackGroup
+    from rclpy.callback_groups import ReentrantCallbackGroup
 
     _HAS_RCLPY = True
 except ImportError:
@@ -65,6 +65,8 @@ class AmeRos2Client:
         self._thread: Optional[threading.Thread] = None
         self._running = False
         self._connected = False
+        self._pending_calls: deque[tuple[str, tuple[Any, ...]]] = deque()
+        self._dispatch_timer: Any = None
 
         # Latest world state from subscription
         self._latest_snapshot: Optional[WorldSnapshot] = None
@@ -171,16 +173,16 @@ class AmeRos2Client:
     # -- Internal ------------------------------------------------------------
 
     def _call_in_node_thread(self, method_name: str, *args: Any) -> None:
-        """Schedule a method call on the rclpy thread via a timer."""
+        """Schedule a method call on the rclpy thread."""
         if not self._node:
             return
-        # Use a one-shot timer to run on the executor thread
-        def _run():
-            getattr(self, method_name)(*args)
-            # Cancel the timer after first call
-            timer.cancel()
+        self._pending_calls.append((method_name, args))
 
-        timer = self._node.create_timer(0.0, _run)
+    def _drain_pending_calls(self) -> None:
+        """Run queued UI requests on the ROS spin thread."""
+        while self._pending_calls:
+            method_name, args = self._pending_calls.popleft()
+            getattr(self, method_name)(*args)
 
     def _run(self) -> None:
         """Background thread: init rclpy, create node, spin."""
@@ -222,6 +224,7 @@ class AmeRos2Client:
             self._node.create_subscription(
                 WorldState, "/world_state", self._on_world_state_msg, 10
             )
+            self._dispatch_timer = self._node.create_timer(0.01, self._drain_pending_calls)
 
             self._connected = True
         except (ImportError, ModuleNotFoundError):
@@ -254,6 +257,8 @@ class AmeRos2Client:
     def _do_set_fact(
         self, key: str, value: bool, source: str, callback: Any
     ) -> None:
+        if not self._set_fact_cli.wait_for_service(timeout_sec=2.0):
+            return
         req = self._SetFact.Request()
         req.key = key
         req.value = value
@@ -266,6 +271,8 @@ class AmeRos2Client:
         )
 
     def _do_get_fact(self, key: str, callback: Any) -> None:
+        if not self._get_fact_cli.wait_for_service(timeout_sec=2.0):
+            return
         req = self._GetFact.Request()
         req.key = key
         future = self._get_fact_cli.call_async(req)
@@ -278,6 +285,8 @@ class AmeRos2Client:
         )
 
     def _do_query_state(self, keys: list[str], callback: Any) -> None:
+        if not self._query_cli.wait_for_service(timeout_sec=2.0):
+            return
         req = self._QueryState.Request()
         req.keys = keys
         future = self._query_cli.call_async(req)
@@ -293,6 +302,10 @@ class AmeRos2Client:
         future.add_done_callback(_on_done)
 
     def _do_plan(self, goal_fluents: list[str], callback: Any) -> None:
+        if not self._plan_cli.wait_for_server(timeout_sec=2.0):
+            if callback:
+                callback(PlanResult(success=False, error_msg="Plan action server unavailable"))
+            return
         goal_msg = self._Plan.Goal()
         goal_msg.goal_fluents = goal_fluents
         goal_msg.replan = False

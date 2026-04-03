@@ -17,13 +17,11 @@ protected:
     }
 
     // Manually drive lifecycle transitions
-    void configure() {
-        node_->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
-        rclcpp::spin_some(node_->get_node_base_interface());
+    auto configure() {
+        return node_->on_configure(rclcpp_lifecycle::State{});
     }
-    void activate() {
-        node_->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
-        rclcpp::spin_some(node_->get_node_base_interface());
+    auto activate() {
+        return node_->on_activate(rclcpp_lifecycle::State{});
     }
 
     std::shared_ptr<ame_ros2::WorldModelNode> node_;
@@ -31,18 +29,18 @@ protected:
 
 TEST_F(WorldModelNodeTest, ConfiguresWithoutPddlFile) {
     // No PDDL files — should warn but not fail
-    ASSERT_NO_THROW(configure());
+    ASSERT_EQ(configure(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
 }
 
 TEST_F(WorldModelNodeTest, DirectWorldModelAccess) {
-    configure();
+    ASSERT_EQ(configure(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
     // Can access the WorldModel directly (in-process mode)
     auto& wm = node_->worldModel();
     EXPECT_EQ(wm.version(), 0u);
 }
 
 TEST_F(WorldModelNodeTest, SetAndGetFactViaWorldModel) {
-    configure();
+    ASSERT_EQ(configure(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
     auto& wm = node_->worldModel();
 
     // Build minimal domain so the fluent exists
@@ -59,8 +57,8 @@ TEST_F(WorldModelNodeTest, SetAndGetFactViaWorldModel) {
 }
 
 TEST_F(WorldModelNodeTest, GetFactServiceCall) {
-    configure();
-    activate();
+    ASSERT_EQ(configure(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(activate(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
 
     auto& wm = node_->worldModel();
     wm.typeSystem().addType("object");
@@ -103,8 +101,8 @@ TEST_F(WorldModelNodeTest, GetFactServiceCall) {
 }
 
 TEST_F(WorldModelNodeTest, SetFactServiceCall) {
-    configure();
-    activate();
+    ASSERT_EQ(configure(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(activate(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
 
     auto& wm = node_->worldModel();
     wm.typeSystem().addType("object");

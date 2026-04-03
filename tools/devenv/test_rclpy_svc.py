@@ -1,4 +1,4 @@
-"""
+r"""
 Quick rclpy service call test - bypasses the ros2 CLI.
 Run from a shell that has ROS2 + ame_ros2 sourced:
 

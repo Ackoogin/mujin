@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 #include "ame_ros2/executor_node.hpp"
 #include <rclcpp/rclcpp.hpp>
-#include <lifecycle_msgs/msg/transition.hpp>
 #include <behaviortree_cpp/action_node.h>
 #include <chrono>
 
@@ -36,13 +35,19 @@ protected:
         // Register custom action type before configure
         ex_node_->factory().registerNodeType<StubTestAction>("StubTestAction");
 
-        ex_node_->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE);
-        ex_node_->trigger_transition(lifecycle_msgs::msg::Transition::TRANSITION_ACTIVATE);
+        ASSERT_EQ(
+            ex_node_->on_configure(rclcpp_lifecycle::State{}),
+            ame_ros2::ExecutorNode::CallbackReturn::SUCCESS);
+        ASSERT_EQ(
+            ex_node_->on_activate(rclcpp_lifecycle::State{}),
+            ame_ros2::ExecutorNode::CallbackReturn::SUCCESS);
 
-        executor_.add_node(ex_node_->get_node_base_interface());
+        executor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
+        executor_->add_node(ex_node_->get_node_base_interface());
     }
 
     void TearDown() override {
+        executor_.reset();
         ex_node_.reset();
         wm_.reset();
         rclcpp::shutdown();
@@ -50,7 +55,7 @@ protected:
 
     std::unique_ptr<ame::WorldModel>           wm_;
     std::shared_ptr<ame_ros2::ExecutorNode>    ex_node_;
-    rclcpp::executors::SingleThreadedExecutor    executor_;
+    std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
 };
 
 TEST_F(ExecutorNodeTest, LoadAndExecuteSimpleBT) {
@@ -61,7 +66,7 @@ TEST_F(ExecutorNodeTest, LoadAndExecuteSimpleBT) {
     while (ex_node_->lastStatus() == BT::NodeStatus::RUNNING
            && std::chrono::steady_clock::now() < deadline)
     {
-        executor_.spin_some(std::chrono::milliseconds(20));
+        executor_->spin_some(std::chrono::milliseconds(20));
     }
 
     EXPECT_EQ(ex_node_->lastStatus(), BT::NodeStatus::SUCCESS);

@@ -171,10 +171,7 @@ void ExecutorNode::registerCoreNodes() {
     return;
   }
 
-  if (inprocess_wm_) {
-    component_.factory().registerNodeType<ame::CheckWorldPredicate>("CheckWorldPredicate");
-    component_.factory().registerNodeType<ame::SetWorldPredicate>("SetWorldPredicate");
-  } else {
+  if (!inprocess_wm_) {
     component_.factory().registerNodeType<RosCheckWorldPredicate>("CheckWorldPredicate");
     component_.factory().registerNodeType<RosSetWorldPredicate>("SetWorldPredicate");
   }

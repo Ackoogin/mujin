@@ -8,6 +8,8 @@ setlocal
 set SCRIPT_DIR=%~dp0
 set REPO_ROOT=%SCRIPT_DIR%..\..
 set PYTHON=%SCRIPT_DIR%.venv\Scripts\python.exe
+set ROS2_ROOT=D:\Dev\ros2-windows
+set ROS2_PIXI=%ROS2_ROOT%\.pixi\envs\default
 
 if not exist "%PYTHON%" (
     echo Virtual environment not found.  Running setup_venv.bat...
@@ -18,5 +20,11 @@ if not exist "%PYTHON%" (
 REM Pin CycloneDDS to one interface (avoids multi-NIC reply confusion with VMware adapters)
 set CYCLONEDDS_URI=file://D:/Dev/repo/mujin/cyclonedds_localhost.xml
 
+REM Ensure the venv can import ROS2 Python packages and load their native DLLs.
+set PATH=%ROS2_PIXI%;%ROS2_PIXI%\Scripts;%ROS2_PIXI%\Library\bin;%ROS2_ROOT%\Scripts;%ROS2_ROOT%\bin;%REPO_ROOT%\install\ame_ros2\bin;%PATH%
+
 cd /d "%REPO_ROOT%"
+call "%ROS2_ROOT%\setup.bat"
+call "%REPO_ROOT%\install\setup.bat"
+set PYTHONPATH=%ROS2_PIXI%\Lib\site-packages;%PYTHONPATH%
 "%PYTHON%" -m tools.devenv %*
