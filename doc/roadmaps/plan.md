@@ -52,7 +52,7 @@ doc/
     concept.md
     extensions.md
     plan.md
-    quickstart.md                  # Getting started + Foxglove integration
+    guides/quickstart.md           # Getting started + Foxglove integration
 ```
 
 ---

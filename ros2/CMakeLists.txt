@@ -48,12 +48,12 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 # ame_ros2_lib — the three node classes + RosWmBridge + LifecycleManager
 # ---------------------------------------------------------------------------
 add_library(ame_ros2_lib SHARED
-    src/world_model_node.cpp
-    src/planner_node.cpp
-    src/executor_node.cpp
-    src/agent_dispatcher_node.cpp
-    src/ros_wm_bridge.cpp
-    src/lifecycle_manager.cpp
+    src/nodes/world_model_node.cpp
+    src/nodes/planner_node.cpp
+    src/nodes/executor_node.cpp
+    src/nodes/agent_dispatcher_node.cpp
+    src/lib/ros_wm_bridge.cpp
+    src/lib/lifecycle_manager.cpp
 )
 # On Windows, export all symbols so the import library (.lib) is generated.
 set_target_properties(ame_ros2_lib PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
@@ -82,28 +82,28 @@ target_link_libraries(ame_ros2_lib ${cpp_typesupport_target})
 # ---------------------------------------------------------------------------
 # Standalone node executables (distributed deployment)
 # ---------------------------------------------------------------------------
-add_executable(world_model_node src/world_model_node_main.cpp)
+add_executable(world_model_node src/apps/world_model_node_main.cpp)
 target_link_libraries(world_model_node ame_ros2_lib)
 
-add_executable(planner_node src/planner_node_main.cpp)
+add_executable(planner_node src/apps/planner_node_main.cpp)
 target_link_libraries(planner_node ame_ros2_lib)
 
-add_executable(executor_node src/executor_node_main.cpp)
+add_executable(executor_node src/apps/executor_node_main.cpp)
 target_link_libraries(executor_node ame_ros2_lib)
 
-add_executable(agent_dispatcher_node src/agent_dispatcher_node_main.cpp)
+add_executable(agent_dispatcher_node src/apps/agent_dispatcher_node_main.cpp)
 target_link_libraries(agent_dispatcher_node ame_ros2_lib)
 
 # ---------------------------------------------------------------------------
 # Combined in-process executable (all three nodes on one executor)
 # ---------------------------------------------------------------------------
-add_executable(ame_combined src/combined_main.cpp)
+add_executable(ame_combined src/apps/combined_main.cpp)
 target_link_libraries(ame_combined ame_ros2_lib)
 
 # ---------------------------------------------------------------------------
 # Lifecycle manager standalone executable (for distributed launch)
 # ---------------------------------------------------------------------------
-add_executable(lifecycle_manager src/lifecycle_manager_main.cpp)
+add_executable(lifecycle_manager src/apps/lifecycle_manager_main.cpp)
 target_link_libraries(lifecycle_manager ame_ros2_lib)
 
 # ---------------------------------------------------------------------------

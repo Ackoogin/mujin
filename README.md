@@ -41,7 +41,7 @@ PDDL Domain/Problem
 | **InvokeService** | Async PYRAMID service node — maps PDDL actions to external service calls with timeout/cancel |
 | **Observability Stack** | 5 layers: TreeObserver stats, structured BT events, WM audit log, Foxglove bridge, plan audit trail |
 
-For full architecture details, see `doc/architecture/` (7 numbered files covering WorldModel, planning, execution, observability, ROS2, and extensions).
+For full architecture details, see `doc/architecture/` (8 numbered files covering overview, WorldModel, planning, execution, observability, ROS2, extensions roadmap, and the PCL component system).
 
 ## Quick Start
 
@@ -109,7 +109,7 @@ The system replaces the paid Groot2 monitoring tool with an open, layered observ
 | 4 | FoxgloveBridge | WebSocket server for live Foxglove Studio visualization |
 | 5 | PlanAuditLog | Full planning episodes with hierarchical causal links: initial state, goals, solver, plan, compiled BT XML, parent phase |
 
-Connect Foxglove Studio to `ws://localhost:8765` for real-time monitoring. See `doc/quickstart.md` for setup details.
+Connect Foxglove Studio to `ws://localhost:8765` for real-time monitoring. See `doc/guides/quickstart.md` for setup details.
 
 ## ROS2 Integration
 
@@ -119,7 +119,7 @@ The core library (`ame_core`) is ROS-agnostic. The `ros2/` directory contains an
 - **PlannerNode** — stateless action server at `/ame/plan`
 - **ExecutorNode** — ticks BT at 50 Hz, publishes `/executor/bt_events`
 
-Supports both in-process (single executor) and distributed (service-backed) deployment modes from the same code. See `doc/quickstart.md` and `CLAUDE.md` for build instructions.
+Supports both in-process (single executor) and distributed (service-backed) deployment modes from the same code. See `doc/guides/quickstart.md` and `CLAUDE.md` for build instructions.
 
 ## Project Structure
 
@@ -136,19 +136,27 @@ include/ame/           Core library headers
   plan_audit_log.h       Layer 5: plan audit trail
   foxglove_bridge.h      Layer 4: Foxglove WebSocket bridge
   bt_nodes/              BT node implementations
-src/                     Core library source
+src/                     Native source
+  ame/
+    lib/                 Core library implementation files
+    nodes/               BehaviourTree node implementations
+    apps/                Standalone/demo executables
+    bindings/            Python bindings source
+  pcl/                   PCL C API/runtime implementation
 tests/                   73 unit, integration, and e2e tests
 domains/                 PDDL domain and problem files
   uav_search/            UAV search-and-classify example domain
-ros2/                    ROS2 lifecycle node wrappers (ament_cmake)
+ros2/                    ROS2 package (ament_cmake)
+  src/lib/               Shared ROS2 support/runtime glue
+  src/nodes/             Lifecycle node implementations
+  src/apps/              ROS2 executable entrypoints
 doc/                     Documentation
-  architecture/          Consolidated architecture reference (7 numbered files)
-  quickstart.md          Getting started and Foxglove setup
-  TODO.md                Remaining work: temporal planning, hardening, future
-  plan.md                Implementation plan and gap analysis (historical)
-  autonomy_assurance_plan.md   SACE/AMLAS/DSTL safety assurance plan
-  neuro_symbolic_reasoning.md  Neural integration options
-  neuro_symbolic_reasoning_review.md  Review of documented neuro-symbolic approaches
+  architecture/          Consolidated architecture reference (8 numbered files)
+  guides/                Operator/developer runbooks and quickstarts
+  roadmaps/              Plans, TODOs, and implementation roadmaps
+  research/              Research notes and option analyses
+  reviews/               Formal review reports
+  integration/           Integration and schema design docs
 ```
 
 ## Documentation
@@ -156,12 +164,12 @@ doc/                     Documentation
 | Document | Audience | Contents |
 |----------|----------|----------|
 | [Stakeholder Summary](doc/stakeholder_summary.md) | Programme managers, non-technical stakeholders | High-level approach, benefits, and status |
-| [Architecture](doc/architecture/) | Engineers | Full technical architecture (7 numbered files) |
-| [Quick Start](doc/quickstart.md) | Developers | Build, run, test, and Foxglove setup |
-| [Remaining Work](doc/TODO.md) | Engineers, programme leads | Temporal planning, hardening, future work |
-| [Assurance Plan](doc/autonomy_assurance_plan.md) | Safety engineers, assessors | SACE/AMLAS/DSTL autonomy assurance framework |
-| [Neuro-Symbolic Integration](doc/neuro_symbolic_reasoning.md) | Engineers, architects | Options for adding AI/ML capabilities |
-| [Neuro-Symbolic Review Report](doc/neuro_symbolic_reasoning_review.md) | Engineers, architects, programme leads | Review of documented neuro-symbolic approaches, risks, and adoption order |
+| [Architecture](doc/architecture/) | Engineers | Full technical architecture (8 numbered files) |
+| [Quick Start](doc/guides/quickstart.md) | Developers | Build, run, test, and Foxglove setup |
+| [Remaining Work](doc/roadmaps/TODO.md) | Engineers, programme leads | Temporal planning, hardening, future work |
+| [Assurance Plan](doc/roadmaps/autonomy_assurance_plan.md) | Safety engineers, assessors | SACE/AMLAS/DSTL autonomy assurance framework |
+| [Neuro-Symbolic Integration](doc/research/neuro_symbolic_reasoning.md) | Engineers, architects | Options for adding AI/ML capabilities |
+| [Neuro-Symbolic Review Report](doc/reviews/neuro_symbolic_reasoning_review.md) | Engineers, architects, programme leads | Review of documented neuro-symbolic approaches, risks, and adoption order |
 
 ## Dependencies
 

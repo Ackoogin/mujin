@@ -53,7 +53,7 @@ PlanAuditLog (Layer 5) — records each planning episode independently
 |---------|----------|-------------|
 | `ame_core` | WorldModel, Planner, PlanCompiler, ActionRegistry, PddlParser, BT nodes, all loggers | BT.CPP, lapkt_core |
 | `ame_foxglove` | FoxgloveBridge WebSocket server | ame_core, websocketpp, asio |
-| `ame_test_app` | Demo executable (`src/main.cpp`) | ame_core, optionally ame_foxglove |
+| `ame_test_app` | Demo executable (`src/ame/apps/main.cpp`) | ame_core, optionally ame_foxglove |
 | `ame_ros2_lib` | WorldModelNode, PlannerNode, ExecutorNode, RosWmBridge, LifecycleManager | ame_core, rclcpp, rclcpp_action, rclcpp_lifecycle |
 
 `ame_foxglove` is a separate static library so `ame_core` stays dependency-free. Guard any Foxglove code with `#if defined(AME_FOXGLOVE)`.

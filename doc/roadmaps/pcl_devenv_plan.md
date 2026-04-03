@@ -43,12 +43,12 @@ Enable `tools/devenv` to run without ROS2 by providing Python bindings directly 
 
 ## Implementation Steps
 
-### Step 1: Python Bindings (`src/ame/python/`)
+### Step 1: Python Bindings (`src/ame/bindings/`)
 
 Create pybind11 bindings for core components:
 
 ```cpp
-// src/ame/python/ame_py.cpp
+// src/ame/bindings/ame_py.cpp
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <ame/world_model.h>
@@ -252,7 +252,7 @@ python -m tools.devenv --backend pcl
 
 | File | Action | Purpose |
 |------|--------|---------|
-| `src/ame/python/ame_py.cpp` | New | pybind11 bindings |
+| `src/ame/bindings/ame_py.cpp` | New | pybind11 bindings |
 | `src/ame/CMakeLists.txt` | Modify | Add Python target |
 | `tools/devenv/comms/pcl_client.py` | New | Direct PCL client |
 | `tools/devenv/config.py` | Modify | Add backend option |

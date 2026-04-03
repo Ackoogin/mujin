@@ -18,12 +18,12 @@ See `README.md` for a comprehensive project overview, and `doc/stakeholder_summa
 | `README.md` | Project overview, quick start, architecture summary |
 | `doc/stakeholder_summary.md` | High-level approach and status for non-technical stakeholders |
 | `doc/architecture/` | **Consolidated architecture reference** (see below) |
-| `doc/quickstart.md` | Getting started, build, run, Foxglove Studio setup |
-| `doc/plan.md` | Implementation plan and gap analysis (steps 1–8 done) |
-| `doc/TODO.md` | Consolidated remaining work: temporal planning, hardening, future |
-| `doc/temporal_extension_research.md` | **Temporal planner evaluation**: OPTIC, POPF, TFD, Aries, STN, BT.CPP integration |
-| `doc/autonomy_assurance_plan.md` | SACE/AMLAS/DSTL safety assurance framework |
-| `doc/neuro_symbolic_reasoning.md` | Neural/LLM integration options and architecture |
+| `doc/guides/quickstart.md` | Getting started, build, run, Foxglove Studio setup |
+| `doc/roadmaps/plan.md` | Implementation plan and gap analysis (steps 1–8 done) |
+| `doc/roadmaps/TODO.md` | Consolidated remaining work: temporal planning, hardening, future |
+| `doc/research/temporal_extension_research.md` | **Temporal planner evaluation**: OPTIC, POPF, TFD, Aries, STN, BT.CPP integration |
+| `doc/roadmaps/autonomy_assurance_plan.md` | SACE/AMLAS/DSTL safety assurance framework |
+| `doc/research/neuro_symbolic_reasoning.md` | Neural/LLM integration options and architecture |
 
 ### Architecture Reference (`doc/architecture/`)
 
@@ -35,7 +35,7 @@ See `README.md` for a comprehensive project overview, and `doc/stakeholder_summa
 | `04-execution.md` | PlanCompiler algorithm, BT node types, MissionExecutor, replanning |
 | `05-observability.md` | 5-layer observability stack (TreeObserver → FoxgloveBridge → PlanAuditLog) |
 | `06-ros2.md` | ROS2 lifecycle nodes, deployment modes, build/run instructions |
-| `07-extensions.md` | Perception bridge, PYRAMID service, thread safety, hierarchical planning, temporal planning |
+| `07-extensions.md` | Extensions roadmap (future/cross-cutting: temporal + neuro-symbolic) |
 
 ## Build
 
@@ -95,7 +95,7 @@ Produces three JSONL output files in the working directory: `ame_bt_events.jsonl
 
 ## Architecture
 
-The full architecture is documented in `doc/architecture/` (7 numbered files). Key points for development:
+The full architecture is documented in `doc/architecture/` (8 numbered files). Key points for development:
 
 - **WorldModel** (`include/ame/world_model.h`) is the central shared state with eager grounding and audit callbacks. See `doc/architecture/02-world-model.md`.
 - **LAPKT integration**: `Planner::solve()` calls `WorldModel::projectToSTRIPS()`. LAPKT is built from source as `lapkt_core` static library; MSVC compat shims in `cmake/compat/`.
@@ -106,5 +106,5 @@ The full architecture is documented in `doc/architecture/` (7 numbered files). K
 |---------|----------|-------------|
 | `ame_core` | WorldModel, Planner, PlanCompiler, ActionRegistry, PddlParser, BT nodes, all loggers | BT.CPP, lapkt_core |
 | `ame_foxglove` | FoxgloveBridge WebSocket server | ame_core, websocketpp, asio |
-| `ame_test_app` | Demo executable (src/main.cpp) | ame_core, optionally ame_foxglove |
+| `ame_test_app` | Demo executable (src/ame/apps/main.cpp) | ame_core, optionally ame_foxglove |
 | `ame_ros2_lib` | WorldModelNode, PlannerNode, ExecutorNode, RosWmBridge, LifecycleManager | ame_core, rclcpp, rclcpp_action, rclcpp_lifecycle |

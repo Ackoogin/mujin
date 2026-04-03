@@ -49,11 +49,34 @@ Wraps a sub-tree. On child FAILURE, signals replan via blackboard flag. MissionE
 
 ### ExecutePhaseAction (StatefulAction)
 
-Orchestrates a full plan–compile–execute cycle for a sub-goal set, enabling hierarchical decomposition of complex missions. See [07-extensions.md](07-extensions.md).
+Orchestrates a full **plan → compile → execute** cycle for a sub-goal set, enabling hierarchical decomposition within a parent behaviour tree.
+
+- Ports: `phase_goals`, optional `phase_name`
+- Planning paths:
+  1. Direct (`planner`, `plan_compiler`, `action_registry` on blackboard)
+  2. Component path (`planner_component`) for distributed ROS2 deployments
+- Causal audit integration: writes `episode_id`, `parent_episode_id`, and `phase_name` when `plan_audit_log` is available
+- Lifecycle: `onStart()` plan/compile/create subtree; `onRunning()` tick subtree; `onHalted()` halt subtree
 
 ### InvokeService (StatefulAction)
 
-Async PYRAMID service invocation node. Maps PDDL actions to external service calls via the `IPyramidService` abstract interface with timeout handling and cancellation. See [07-extensions.md](07-extensions.md).
+Asynchronous PYRAMID service invocation BT node. Keeps the core SDK-agnostic via `IPyramidService`.
+
+- Request construction: explicit request JSON + optional PDDL parameter auto-mapping (`param_names`/`param_values`)
+- Async lifecycle:
+  - `onStart()` → `callAsync()`
+  - `onRunning()` → `pollResult()` until terminal status
+  - `onHalted()` → `cancelCall()`
+- Timeout control: `timeout_ms` (default 5000, `0` disables timeout)
+- Blackboard dependency: `pyramid_service` must contain `IPyramidService*`
+
+### DelegateToAgent (StatefulAction)
+
+Leader-delegation node for multi-agent execution. Plans and runs a subtree scoped to a specific `agent_id` and `agent_goals`.
+
+- Marks agent unavailable while delegated subtree runs
+- Injects agent context into the compiled subtree blackboard
+- Restores availability on completion or halt
 
 ## MissionExecutor / Replanning
 

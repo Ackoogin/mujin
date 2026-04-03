@@ -80,7 +80,7 @@ Implements the [Foxglove WebSocket protocol](https://github.com/foxglove/ws-prot
 - Streams live BT state transitions and WM fact changes as binary `MessageData` frames
 - Integrates as callback sinks for AmeBTLogger and WmAuditLog
 
-Connect Foxglove Studio to `ws://localhost:8765`. See the [quickstart guide](../quickstart.md) for panel setup.
+Connect Foxglove Studio to `ws://localhost:8765`. See the [quickstart guide](../guides/quickstart.md) for panel setup.
 
 ### Programmatic Usage
 

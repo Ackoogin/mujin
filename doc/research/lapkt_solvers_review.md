@@ -75,7 +75,7 @@ This is adequate for AME's current UAV search-and-classify domain, which is smal
 
 **Benefit to AME:**
 - The most production-appropriate solver strategy. Fast path for easy problems, robust fallback for hard ones.
-- Matches AME's existing roadmap item: "Solver portfolio: try fast heuristic first, fall back to complete search" (`doc/plan.md:162`).
+- Matches AME's existing roadmap item: "Solver portfolio: try fast heuristic first, fall back to complete search" (`doc/roadmaps/plan.md:162`).
 - Used in IPC competition planners and the editor.planning.domains web service (handling over 1M calls).
 
 **Limitations:**
@@ -367,7 +367,7 @@ Integration would require calling the mutex computation API after `make_action_t
 1. **Domain validation** — detect unreachable goals before starting search, providing immediate failure feedback instead of exhaustive exploration.
 2. **Problem simplification** — remove unreachable fluents and inapplicable actions from the STRIPS problem, reducing the effective state space.
 3. **Heuristic computation** — reachability analysis is the foundation of relaxation-based heuristics (h_add, h_max, h_FF). Enabling reachability is a prerequisite for these heuristics.
-4. **Safety assurance** — provably demonstrate that certain dangerous states are unreachable, supporting the SACE/AMLAS safety case (`doc/autonomy_assurance_plan.md`).
+4. **Safety assurance** — provably demonstrate that certain dangerous states are unreachable, supporting the SACE/AMLAS safety case (`doc/roadmaps/autonomy_assurance_plan.md`).
 
 #### Watched Literals Successor Generator (`watched_lit_succ_gen.cxx`)
 

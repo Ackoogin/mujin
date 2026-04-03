@@ -2,27 +2,27 @@
 # ame_core — ROS-agnostic planning + execution library
 # ---------------------------------------------------------------------------
 add_library(ame_core STATIC
-    type_system.cpp
-    world_model.cpp
-    action_registry.cpp
-    plan_compiler.cpp
-    pddl_parser.cpp
-    planner.cpp
-    world_model_component.cpp
-    planner_component.cpp
-    executor_component.cpp
-    goal_allocator.cpp
-    agent_dispatcher.cpp
-    bt_nodes/check_world_predicate.cpp
-    bt_nodes/set_world_predicate.cpp
-    bt_nodes/invoke_service.cpp
-    bt_nodes/execute_phase_action.cpp
-    bt_nodes/delegate_to_agent.cpp
-    bt_logger.cpp
-    wm_audit_log.cpp
-    plan_audit_log.cpp
-    perception_bridge.cpp
-    world_model_snapshot.cpp
+    lib/type_system.cpp
+    lib/world_model.cpp
+    lib/action_registry.cpp
+    lib/plan_compiler.cpp
+    lib/pddl_parser.cpp
+    lib/planner.cpp
+    lib/world_model_component.cpp
+    lib/planner_component.cpp
+    lib/executor_component.cpp
+    lib/goal_allocator.cpp
+    lib/agent_dispatcher.cpp
+    nodes/check_world_predicate.cpp
+    nodes/set_world_predicate.cpp
+    nodes/invoke_service.cpp
+    nodes/execute_phase_action.cpp
+    nodes/delegate_to_agent.cpp
+    lib/bt_logger.cpp
+    lib/wm_audit_log.cpp
+    lib/plan_audit_log.cpp
+    lib/perception_bridge.cpp
+    lib/world_model_snapshot.cpp
 )
 
 target_include_directories(ame_core PUBLIC
@@ -41,7 +41,7 @@ target_link_libraries(ame_core
 # Foxglove WebSocket bridge (optional)
 # ---------------------------------------------------------------------------
 if(AME_FOXGLOVE)
-    add_library(ame_foxglove STATIC foxglove_bridge.cpp)
+    add_library(ame_foxglove STATIC lib/foxglove_bridge.cpp)
 
     target_include_directories(ame_foxglove PUBLIC
         ${CMAKE_SOURCE_DIR}/include
@@ -71,7 +71,7 @@ endif()
 # ---------------------------------------------------------------------------
 # Demo / vertical-slice executable
 # ---------------------------------------------------------------------------
-add_executable(ame_test_app main.cpp)
+add_executable(ame_test_app apps/main.cpp)
 
 target_link_libraries(ame_test_app
     PRIVATE
@@ -157,7 +157,7 @@ endif()
 # Python bindings (optional, requires AME_BUILD_PYTHON=ON)
 # ---------------------------------------------------------------------------
 if(AME_BUILD_PYTHON)
-    pybind11_add_module(_ame_py python/ame_py.cpp)
+    pybind11_add_module(_ame_py bindings/ame_py.cpp)
     target_link_libraries(_ame_py PRIVATE ame_core)
     
     # Install Python module to a predictable location

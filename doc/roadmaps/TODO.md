@@ -63,7 +63,7 @@ These extensions are intertwined — a single authoritative `WorldModel` accesse
 
 ## Extension 7: Temporal Planning (not started)
 
-PDDL 2.1 durative actions with STN conversion. See [`temporal_extension_research.md`](temporal_extension_research.md) for planner evaluation.
+PDDL 2.1 durative actions with STN conversion. See [`../research/temporal_extension_research.md`](../research/temporal_extension_research.md) for planner evaluation.
 
 ### Recommended Approach
 
@@ -90,7 +90,7 @@ PDDL 2.1 durative actions with STN conversion. See [`temporal_extension_research
 
 ## Extension 8: Neuro-Symbolic Integration
 
-Neural components assist, but the symbolic system remains authoritative. See [`neuro_symbolic_reasoning.md`](neuro_symbolic_reasoning.md) and [`neuro_symbolic_reasoning_review.md`](neuro_symbolic_reasoning_review.md).
+Neural components assist, but the symbolic system remains authoritative. See [`../research/neuro_symbolic_reasoning.md`](../research/neuro_symbolic_reasoning.md) and [`../reviews/neuro_symbolic_reasoning_review.md`](../reviews/neuro_symbolic_reasoning_review.md).
 
 ### Pre-requisites
 - **State-Authority Semantics:** Clarify `BELIEVED` (plan effects) vs `CONFIRMED` (perception) facts in WorldModel

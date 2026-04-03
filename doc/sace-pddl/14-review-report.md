@@ -10,9 +10,9 @@ This review covers the current SACE/PDDL approach implemented and documented in 
 - `domains/uav_search_sace/`
 - `src/plan_compiler.cpp`
 - `src/planner.cpp`
-- `ros2/src/planner_node.cpp`
-- `ros2/src/executor_node.cpp`
-- `ros2/src/combined_main.cpp`
+- `ros2/src/nodes/planner_node.cpp`
+- `ros2/src/nodes/executor_node.cpp`
+- `ros2/src/apps/combined_main.cpp`
 
 The review was primarily static. I did not run the C++/ROS2 test suite in this environment because the checked-in preset is Windows/MSVC-specific (`CMakePresets.json:5-9`).
 
@@ -23,7 +23,7 @@ The review was primarily static. I did not run the C++/ROS2 test suite in this e
 **Evidence**
 
 - `src/plan_compiler.cpp:65-80` only emits the concrete BT action node when `registry.hasAction(name)` is true, but it always emits `SetWorldPredicate` nodes for the action effects.
-- `doc/autonomy_assurance_plan.md:209` defines `SR-08`: `ActionRegistry.resolve()` shall fail loudly if no mapping exists.
+- `doc/roadmaps/autonomy_assurance_plan.md:209` defines `SR-08`: `ActionRegistry.resolve()` shall fail loudly if no mapping exists.
 - `tests/test_action_registry.cpp:53-56` verifies that `ActionRegistry::resolve()` throws for unknown actions, but there is no matching `PlanCompiler` test for this path.
 
 **Why this matters**
@@ -41,7 +41,7 @@ That creates false evidence of successful execution. In a SACE context, this is 
 
 - `domains/uav_search_sace/domain_baseline.pddl:77-80` defines `loiter-in-place`.
 - `domains/uav_search_sace/domain_degraded.pddl:79-109` defines `emergency-return-gps`, `emergency-return-inertial`, and `loiter-in-place`.
-- The demo/runtime wiring only registers `move`, `search`, and `classify` in `src/main.cpp:162-165` and `ros2/src/combined_main.cpp:93-95`.
+- The demo/runtime wiring only registers `move`, `search`, and `classify` in `src/ame/apps/main.cpp:162-165` and `ros2/src/apps/combined_main.cpp:93-95`.
 
 So the SACE-specific actions most relevant to degraded recovery are currently the ones most likely to hit this fail-open behavior.
 
@@ -53,10 +53,10 @@ Make `PlanCompiler` fail hard when any planned action is absent from the registr
 
 **Evidence**
 
-- `ros2/src/planner_node.cpp:162-196` compiles `bt_xml` and returns it in the action result.
-- `ros2/src/executor_node.cpp:85-133` only starts execution when `loadAndExecute(bt_xml)` is called.
+- `ros2/src/nodes/planner_node.cpp:162-196` compiles `bt_xml` and returns it in the action result.
+- `ros2/src/nodes/executor_node.cpp:85-133` only starts execution when `loadAndExecute(bt_xml)` is called.
 - `ros2/test/test_full_pipeline.cpp:150-159` performs that call manually in the test harness.
-- `ros2/src/combined_main.cpp:13-18` states that after sending a `/ame/plan` goal, the executor will tick the compiled BT automatically, but no such handoff exists in the production code shown above.
+- `ros2/src/apps/combined_main.cpp:13-18` states that after sending a `/ame/plan` goal, the executor will tick the compiled BT automatically, but no such handoff exists in the production code shown above.
 
 **Why this matters**
 
@@ -76,11 +76,11 @@ Add a runtime orchestrator that consumes `Plan.action` results and calls `Execut
 
 **Evidence**
 
-- `doc/autonomy_assurance_plan.md:169-173` lists replan limit and safe-state fallback as Safe Operating Concept controls.
-- `doc/autonomy_assurance_plan.md:207-210` defines `SR-06` and `SR-09` around replanning limits and always-available safe-state behavior.
+- `doc/roadmaps/autonomy_assurance_plan.md:169-173` lists replan limit and safe-state fallback as Safe Operating Concept controls.
+- `doc/roadmaps/autonomy_assurance_plan.md:207-210` defines `SR-06` and `SR-09` around replanning limits and always-available safe-state behavior.
 - `doc/concept.md:31` describes a `MissionExecutor` with replan-on-failure.
 - `ros2/action/Plan.action:3` exposes a `replan` flag.
-- `ros2/src/planner_node.cpp:79-197` never reads `goal->replan`.
+- `ros2/src/nodes/planner_node.cpp:79-197` never reads `goal->replan`.
 - Repository search found no implementation of `MissionExecutor` or `ReplanOnFailure` in `src/` or `ros2/`.
 
 **Why this matters**
@@ -102,8 +102,8 @@ Either implement the supervisory executor path now, or explicitly downgrade thes
 
 **Evidence**
 
-- `doc/autonomy_assurance_plan.md:168` says bounded planning time is implemented via a `max_iterations` parameter in the LAPKT solver.
-- `doc/autonomy_assurance_plan.md:203` defines `SR-02`: planner shall terminate within N ms or return `NO_PLAN`.
+- `doc/roadmaps/autonomy_assurance_plan.md:168` says bounded planning time is implemented via a `max_iterations` parameter in the LAPKT solver.
+- `doc/roadmaps/autonomy_assurance_plan.md:203` defines `SR-02`: planner shall terminate within N ms or return `NO_PLAN`.
 - `src/planner.cpp:16-65` exposes no timeout, iteration bound, or node-expansion budget.
 - `include/ame/planner.h:21-25` also exposes no configuration surface for such a bound.
 

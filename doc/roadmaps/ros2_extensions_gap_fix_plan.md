@@ -58,7 +58,7 @@ string[] dispatched_agents     # Agents that received sub-plans
 
 ## Step 2: Wire `InvokeService` into `ExecutorNode` (G1)
 
-**Files:** `ros2/src/executor_node.cpp`, `ros2/include/ame_ros2/executor_node.hpp`
+**Files:** `ros2/src/nodes/executor_node.cpp`, `ros2/include/ame_ros2/executor_node.hpp`
 
 The core `InvokeService` BT node requires an `IPyramidService*` on the blackboard under key `"pyramid_service"`. The executor must register the node type and inject the service pointer.
 
@@ -109,7 +109,7 @@ A full ROS2 adapter wrapping PYRAMID SDK calls as ROS2 service clients is a larg
 
 ## Step 3: Wire `ExecutePhaseAction` into `ExecutorNode` (G2)
 
-**Files:** `ros2/src/executor_node.cpp`, `ros2/include/ame_ros2/executor_node.hpp`
+**Files:** `ros2/src/nodes/executor_node.cpp`, `ros2/include/ame_ros2/executor_node.hpp`
 
 `ExecutePhaseAction` requires several blackboard keys. The wiring differs between in-process and distributed modes.
 
@@ -189,7 +189,7 @@ This requires exposing `planner()` and `compiler()` accessors on `PlannerNode`, 
 
 ## Step 4: Wire `DelegateToAgent` into `ExecutorNode` (G3)
 
-**Files:** `ros2/src/executor_node.cpp`
+**Files:** `ros2/src/nodes/executor_node.cpp`
 
 `DelegateToAgent` uses the same blackboard keys as `ExecutePhaseAction` (world_model, planner, plan_compiler, action_registry, bt_factory, plan_audit_log). Since Step 3 already wires those, this step only needs registration.
 
@@ -219,7 +219,7 @@ This is a larger architectural change that should be addressed when distributed 
 
 ## Step 5: Fix perception handler to use mutation queue (G5)
 
-**Files:** `ros2/src/world_model_node.cpp`
+**Files:** `ros2/src/nodes/world_model_node.cpp`
 
 The doc (Extension 5, `07-extensions.md`) describes two perception paths: the ROS2 `/detections` topic and the in-process mutation queue. Currently `handleDetection()` calls `wm.setFact()` directly, which acquires an exclusive write lock. This is correct for single-threaded mode, but the documented pattern recommends `enqueueMutation()` + `applyQueuedMutations()` for the perception path.
 
@@ -265,7 +265,7 @@ wm.enqueueMutation(fluent_id, true, source, ame::FactAuthority::CONFIRMED);
 
 ## Step 6: Update `AgentDispatcherNode` and multi-agent launch (G4, G8)
 
-**Files:** `ros2/src/agent_dispatcher_node.cpp`, `ros2/launch/ame_multi_agent.launch.py`, `ros2/include/ame_ros2/lifecycle_manager.hpp`
+**Files:** `ros2/src/nodes/agent_dispatcher_node.cpp`, `ros2/launch/ame_multi_agent.launch.py`, `ros2/include/ame_ros2/lifecycle_manager.hpp`
 
 ### 6a: Wire `~/dispatch_goals` service in `on_activate()`
 
@@ -349,7 +349,7 @@ This requires corresponding accessors on `PlannerComponent`. Check whether they 
 
 ## Step 8: Update `combined_main.cpp` demo (G1, G2, G3)
 
-**Files:** `ros2/src/combined_main.cpp`
+**Files:** `ros2/src/apps/combined_main.cpp`
 
 Replace or augment the stub actions to demonstrate extension wiring:
 
@@ -385,7 +385,7 @@ Keep the stub actions registered alongside — they're still needed for the UAV 
 1. Change "three lifecycle nodes" to "four lifecycle nodes" in the opening paragraph.
 2. Add `AgentDispatcherNode` section after ExecutorNode:
    ```markdown
-   - **AgentDispatcherNode** (`ros2/src/agent_dispatcher_node.cpp`) — wraps
+   - **AgentDispatcherNode** (`ros2/src/nodes/agent_dispatcher_node.cpp`) — wraps
      `AgentDispatcher` PCL component for multi-agent coordination. Exposes
      `~/dispatch_goals` service. Dynamically creates per-agent publishers
      (`/{agent_id}/executor/bt_xml`) and status subscriptions.
@@ -411,7 +411,7 @@ Keep the stub actions registered alongside — they're still needed for the UAV 
    Distributed mode: inject a `PlannerComponent*` instead.
    ```
 
-### 9c: Update `doc/TODO.md`
+### 9c: Update `doc/roadmaps/TODO.md`
 
 Add a section for this gap-fix work:
 
