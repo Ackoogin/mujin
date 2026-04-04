@@ -105,6 +105,59 @@ pcl_status_t WorldModelComponent::on_shutdown() {
   return PCL_OK;
 }
 
+WorldModelComponent::LoadDomainResult WorldModelComponent::loadDomainFromStrings(
+    const std::string& domain_pddl,
+    const std::string& problem_pddl) {
+  LoadDomainResult result;
+  try {
+    // Snapshot current true facts before replacing schema
+    std::vector<std::pair<std::string, std::string>> preserved_facts;
+    for (unsigned i = 0; i < wm_.numFluents(); ++i) {
+      if (wm_.getFact(i)) {
+        const auto& meta = wm_.getFactMetadata(i);
+        preserved_facts.emplace_back(wm_.fluentName(i), meta.source);
+      }
+    }
+
+    // Parse new domain into a fresh WorldModel
+    WorldModel new_wm;
+    PddlParser::parseFromString(domain_pddl, problem_pddl, new_wm);
+
+    // Re-apply preserved facts that exist in the new domain
+    for (const auto& [key, source] : preserved_facts) {
+      try {
+        new_wm.setFact(key, true, source.empty() ? "domain_reload" : source);
+      } catch (...) {
+        // Fluent no longer exists in new domain — silently drop
+      }
+    }
+
+    // Swap in the new world model
+    wm_ = std::move(new_wm);
+
+    // Re-wire audit callback
+    wm_.setAuditCallback([this](uint64_t ver,
+                                uint64_t ts_us,
+                                const std::string& fact,
+                                bool value,
+                                const std::string& source) {
+      if (audit_log_) {
+        audit_log_->onFactChange(ver, ts_us, fact, value, source);
+      }
+      state_dirty_.store(true);
+    });
+
+    state_dirty_.store(true);
+
+    result.success = true;
+    result.num_fluents = wm_.numFluents();
+    result.num_ground_actions = wm_.numGroundActions();
+  } catch (const std::exception& e) {
+    result.error_msg = e.what();
+  }
+  return result;
+}
+
 void WorldModelComponent::loadDomainFromParams() {
   const auto domain_file = paramStr("domain.pddl_file", "");
   const auto problem_file = paramStr("domain.problem_file", "");

@@ -53,6 +53,12 @@ WorldModelNode::on_configure(const rclcpp_lifecycle::State&) {
     [this](std::shared_ptr<QueryState::Request> req,
            std::shared_ptr<QueryState::Response> res) { handleQueryState(req, res); });
 
+  using LoadDomain = ame_ros2::srv::LoadDomain;
+  srv_load_domain_ = create_service<LoadDomain>(
+    "~/load_domain",
+    [this](std::shared_ptr<LoadDomain::Request> req,
+           std::shared_ptr<LoadDomain::Response> res) { handleLoadDomain(req, res); });
+
   // Perception integration
   perception_confidence_threshold_ = get_parameter("perception.confidence_threshold").as_double();
   if (get_parameter("perception.enabled").as_bool()) {
@@ -116,6 +122,7 @@ WorldModelNode::on_cleanup(const rclcpp_lifecycle::State&) {
   srv_get_fact_.reset();
   srv_set_fact_.reset();
   srv_query_state_.reset();
+  srv_load_domain_.reset();
   component_.cleanup();
   RCLCPP_INFO(get_logger(), "WorldModelNode cleaned up");
   return CallbackReturn::SUCCESS;
@@ -162,6 +169,26 @@ void WorldModelNode::handleQueryState(
     msg.source = fact.source;
     msg.wm_version = fact.wm_version;
     res->facts.push_back(msg);
+  }
+}
+
+void WorldModelNode::handleLoadDomain(
+  std::shared_ptr<ame_ros2::srv::LoadDomain::Request> req,
+  std::shared_ptr<ame_ros2::srv::LoadDomain::Response> res) {
+  RCLCPP_INFO(get_logger(), "load_domain called (domain_id='%s', %zu bytes domain, %zu bytes problem)",
+              req->domain_id.c_str(), req->domain_pddl.size(), req->problem_pddl.size());
+
+  auto result = component_.loadDomainFromStrings(req->domain_pddl, req->problem_pddl);
+  res->success = result.success;
+  res->error_msg = result.error_msg;
+  res->num_fluents = result.num_fluents;
+  res->num_ground_actions = result.num_ground_actions;
+
+  if (result.success) {
+    RCLCPP_INFO(get_logger(), "Domain '%s' loaded into WorldModel: %u fluents, %u ground actions",
+                req->domain_id.c_str(), result.num_fluents, result.num_ground_actions);
+  } else {
+    RCLCPP_ERROR(get_logger(), "Domain load failed: %s", result.error_msg.c_str());
   }
 }
 
