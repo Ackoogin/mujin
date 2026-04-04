@@ -115,11 +115,11 @@ Connect Foxglove Studio to `ws://localhost:8765` for real-time monitoring. See `
 
 The core library (`ame_core`) is ROS-agnostic. The `ros2/` directory contains an `ament_cmake` package with lifecycle node wrappers:
 
-- **WorldModelNode** — owns state, exposes get/set/query services, publishes `/world_state`
-- **PlannerNode** — stateless action server at `/ame/plan`
+- **WorldModelNode** — owns state, exposes get/set/query/load_domain services, publishes `/world_state`
+- **PlannerNode** — action server at `~/plan`, domain loading via `~/load_domain` service
 - **ExecutorNode** — ticks BT at 50 Hz, publishes `/executor/bt_events`
 
-Supports both in-process (single executor) and distributed (service-backed) deployment modes from the same code. See `doc/guides/quickstart.md` and `CLAUDE.md` for build instructions.
+Supports in-process, distributed, multi-agent, and multi-planner deployment modes. Multiple PlannerNode instances can run with different domain models; domains can be loaded from files (deployment) or pushed via service calls (devenv/testing). See `doc/architecture/06-ros2.md` for details.
 
 ## Project Structure
 
