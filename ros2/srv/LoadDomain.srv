@@ -1,0 +1,11 @@
+# Load a PDDL domain and problem into the planner at runtime.
+# Allows domain models to be pushed via service call instead of
+# reading from file paths, enabling backend-driven domain loading.
+string domain_id          # Identifier for this domain (e.g. "logistics", "surveillance")
+string domain_pddl        # Full PDDL domain file content
+string problem_pddl       # Full PDDL problem file content
+---
+bool   success
+string error_msg
+uint32 num_fluents         # Number of grounded fluents after loading
+uint32 num_ground_actions  # Number of grounded actions after loading

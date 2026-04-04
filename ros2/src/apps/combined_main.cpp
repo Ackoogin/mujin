@@ -9,7 +9,7 @@
 ///     -p domain.problem_file:=domains/uav_search/problem.pddl
 ///
 /// After lifecycle startup, send a plan goal:
-///   ros2 action send_goal /ame/plan ame_ros2/action/Plan \
+///   ros2 action send_goal /planner_node/plan ame_ros2/action/Plan \
 ///     "{goal_fluents: ['(searched sector_a)', '(classified sector_a)'], replan: false}"
 
 #include "ame_ros2/world_model_node.hpp"
@@ -122,7 +122,7 @@ int main(int argc, char** argv) {
   });
 
   RCLCPP_INFO(rclcpp::get_logger("ame_combined"),
-              "ame_combined running. Send a Plan action to /ame/plan to start.");
+              "ame_combined running. Send a Plan action to /planner_node/plan to start.");
 
   executor.spin();
 

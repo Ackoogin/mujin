@@ -10,10 +10,27 @@ This separation keeps the planning model and execution model independently repla
 
 `PddlParser` (`include/ame/pddl_parser.h`) loads PDDL domain and problem files into a WorldModel.
 
-- Uses LAPKT's FF-parser (`ff_to_aptk`) as backend
 - Supports STRIPS-level PDDL (`:typing`, `:strips`)
 - Populates types, objects, predicates, initial facts, and goal fluents
 - Example domain: `domains/uav_search/domain.pddl` + `problem.pddl`
+- Two entry points:
+  - `PddlParser::parse(domain_path, problem_path, wm)` — from file paths (deployment)
+  - `PddlParser::parseFromString(domain_pddl, problem_pddl, wm)` — from string content (service-driven loading)
+
+## Domain Loading
+
+Domains can be loaded in two ways:
+
+1. **File-based (deployment):** Set `domain.pddl_file` and `domain.problem_file` parameters. The domain is parsed at configure time.
+2. **Service-based (devenv/testing):** Call `~/load_domain` (`ame_ros2/srv/LoadDomain`) with PDDL content as strings. This allows the backend to push domain models without requiring file access.
+
+Both WorldModelNode and PlannerNode expose `~/load_domain`. The WorldModelNode loads the **union domain** (superset of all predicates/objects). Each PlannerNode loads its **own domain** (subset relevant to its planning task). In a multi-planner setup:
+
+- WorldModelNode: union domain containing all predicates from all planners
+- PlannerNode A: logistics domain (move, load, unload actions)
+- PlannerNode B: surveillance domain (fly, search, classify actions)
+
+When a planner snapshots world state, it queries WorldModelNode for current facts and applies only the ones matching its own predicates. The `LoadDomain` service accepts a `domain_id` field for identification and returns the number of grounded fluents and actions after parsing.
 
 ## Planner (LAPKT Integration)
 

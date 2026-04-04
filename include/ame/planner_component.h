@@ -58,6 +58,26 @@ public:
     return audit_log_.has_value() ? &audit_log_.value() : nullptr;
   }
 
+  /// \brief Load a domain from PDDL strings at runtime.
+  /// Stores the parsed domain template for use in distributed-mode snapshots,
+  /// replacing the need to read domain files from disk.
+  /// Returns {success, error_msg, num_fluents, num_ground_actions}.
+  struct LoadDomainResult {
+    bool success = false;
+    std::string error_msg;
+    unsigned num_fluents = 0;
+    unsigned num_ground_actions = 0;
+  };
+  LoadDomainResult loadDomainFromStrings(const std::string& domain_id,
+                                         const std::string& domain_pddl,
+                                         const std::string& problem_pddl);
+
+  /// \brief Returns the currently loaded domain ID (empty if loaded from files).
+  const std::string& domainId() const { return loaded_domain_id_; }
+
+  /// \brief Returns true if a domain has been loaded (from files or strings).
+  bool hasDomain() const { return loaded_domain_template_ != nullptr; }
+
   /// \brief Solve a goal and compile the resulting plan to BT XML.
   PlannerExecutionResult solveGoal(const std::vector<std::string>& goal_fluents);
 
@@ -82,6 +102,10 @@ private:
   const WorldModel* inprocess_wm_ = nullptr;
   QueryStateCallback query_state_callback_;
   bool compiler_parallel_ = false;
+
+  // Domain loaded at runtime via loadDomainFromStrings()
+  std::string loaded_domain_id_;
+  std::unique_ptr<WorldModel> loaded_domain_template_;
 };
 
 }  // namespace ame

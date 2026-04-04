@@ -57,6 +57,18 @@ public:
   /// \brief Build a snapshot of either all true facts or the requested keys.
   WorldStateSnapshot queryState(const std::vector<std::string>& keys) const;
 
+  /// \brief Load a domain from PDDL strings at runtime, replacing the current
+  /// world model schema. Existing facts whose keys still exist in the new
+  /// domain are preserved; facts with no matching fluent are dropped.
+  struct LoadDomainResult {
+    bool success = false;
+    std::string error_msg;
+    unsigned num_fluents = 0;
+    unsigned num_ground_actions = 0;
+  };
+  LoadDomainResult loadDomainFromStrings(const std::string& domain_pddl,
+                                         const std::string& problem_pddl);
+
   /// \brief Returns true once after the state changes.
   bool consumeStateDirty();
 

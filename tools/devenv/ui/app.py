@@ -45,6 +45,7 @@ class App:
         else:
             self.client = AmeRos2Client(
                 node_name=self.config.connection.ros2_node_name,
+                plan_action_name=self.config.connection.plan_action_name,
             )
             self._backend_name = "ROS2"
         

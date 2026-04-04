@@ -160,7 +160,7 @@ TEST_F(FullPipelineTest, PlanAndExecuteReachesGoal) {
   };
 
   auto action_client =
-      rclcpp_action::create_client<ame_ros2::action::Plan>(pl_node_, "/ame/plan");
+      rclcpp_action::create_client<ame_ros2::action::Plan>(pl_node_, "/planner_node/plan");
   ASSERT_TRUE(action_client->wait_for_action_server(std::chrono::seconds(3)));
 
   auto goal_msg = ame_ros2::action::Plan::Goal();

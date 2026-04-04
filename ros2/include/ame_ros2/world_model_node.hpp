@@ -7,6 +7,7 @@
 
 #include <ame_ros2/msg/world_state.hpp>
 #include <ame_ros2/srv/get_fact.hpp>
+#include <ame_ros2/srv/load_domain.hpp>
 #include <ame_ros2/srv/query_state.hpp>
 #include <ame_ros2/srv/set_fact.hpp>
 #include <ame_ros2/msg/detection.hpp>
@@ -19,13 +20,14 @@ namespace ame_ros2 {
 ///   ~/get_fact      (ame_ros2/srv/GetFact)
 ///   ~/set_fact      (ame_ros2/srv/SetFact)
 ///   ~/query_state   (ame_ros2/srv/QueryState)
+///   ~/load_domain   (ame_ros2/srv/LoadDomain) — reload domain from PDDL strings
 ///
 /// Publisher (active after on_activate):
 ///   /world_state    (ame_ros2/msg/WorldState) — QoS: reliable, transient_local
 ///
 /// Parameters:
-///   domain.pddl_file    (string, "")    — path to PDDL domain file
-///   domain.problem_file (string, "")    — path to PDDL problem file
+///   domain.pddl_file    (string, "")    — path to PDDL domain file (deployment)
+///   domain.problem_file (string, "")    — path to PDDL problem file (deployment)
 ///   audit_log.enabled   (bool, true)
 ///   audit_log.path      (string, "wm_audit.jsonl")
 ///   publish_rate_hz     (double, 10.0)
@@ -55,6 +57,7 @@ private:
   rclcpp::Service<ame_ros2::srv::GetFact>::SharedPtr srv_get_fact_;
   rclcpp::Service<ame_ros2::srv::SetFact>::SharedPtr srv_set_fact_;
   rclcpp::Service<ame_ros2::srv::QueryState>::SharedPtr srv_query_state_;
+  rclcpp::Service<ame_ros2::srv::LoadDomain>::SharedPtr srv_load_domain_;
 
   // Publisher + debounce timer
   rclcpp_lifecycle::LifecyclePublisher<ame_ros2::msg::WorldState>::SharedPtr
@@ -73,6 +76,10 @@ private:
   void handleQueryState(
     std::shared_ptr<ame_ros2::srv::QueryState::Request> req,
     std::shared_ptr<ame_ros2::srv::QueryState::Response> res);
+
+  void handleLoadDomain(
+    std::shared_ptr<ame_ros2::srv::LoadDomain::Request> req,
+    std::shared_ptr<ame_ros2::srv::LoadDomain::Response> res);
 
   void publishWorldState();
 

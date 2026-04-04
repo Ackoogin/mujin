@@ -8,7 +8,7 @@ It uses two parallel connections:
 
 | Connection | Purpose | When active |
 |------------|---------|-------------|
-| **rclpy** (direct ROS2) | World state subscription, `set_fact`/`get_fact`/`query_state` services, `/ame/plan` action | Requires ROS2 + sourced workspace |
+| **rclpy** (direct ROS2) | World state subscription, `set_fact`/`get_fact`/`query_state`/`load_domain` services, `~/plan` action | Requires ROS2 + sourced workspace |
 | **Foxglove WebSocket** `ws://localhost:8765` | BT event streaming, WM audit streaming | Requires `foxglove_bridge` running alongside |
 
 ---
@@ -121,7 +121,7 @@ The status bar at the bottom will show:
 | Tab | ROS2 interaction |
 |-----|-----------------|
 | **World Model** | Displays live `/world_state` facts; Set Fact button calls `world_model_node/set_fact` service |
-| **Planning** | Sends goal to `/ame/plan` action; streams feedback (nodes expanded, elapsed) |
+| **Planning** | Sends goal to `/planner_node/plan` action; streams feedback (nodes expanded, elapsed) |
 | **Execution** | Displays BT node status transitions from Foxglove `/bt_events` stream |
 | **Observability** | Time-series plots of BT events + WM audit entries from Foxglove streams |
 | **PDDL Editor** | Offline only — edit and validate domain/problem files locally |
@@ -136,7 +136,9 @@ The status bar at the bottom will show:
 | `/world_model_node/set_fact` | `ame_ros2/srv/SetFact` | call | Write a predicate value |
 | `/world_model_node/get_fact` | `ame_ros2/srv/GetFact` | call | Read a single predicate |
 | `/world_model_node/query_state` | `ame_ros2/srv/QueryState` | call | Bulk read (empty keys = all true facts) |
-| `/ame/plan` | `ame_ros2/action/Plan` | action goal | Run LAPKT planner; returns BT XML on success |
+| `/planner_node/plan` | `ame_ros2/action/Plan` | action goal | Run LAPKT planner; returns BT XML on success |
+| `/planner_node/load_domain` | `ame_ros2/srv/LoadDomain` | call | Load domain from PDDL strings (devenv/testing) |
+| `/world_model_node/load_domain` | `ame_ros2/srv/LoadDomain` | call | Reload union domain from PDDL strings (devenv/testing) |
 | `/executor/bt_events` | `std_msgs/String` (JSON) | Foxglove stream | Per-tick BT node status transitions |
 | `/detections` | `ame_ros2/msg/Detection` | publish | Inject perception updates into world model |
 
@@ -153,6 +155,12 @@ ros2 service call /world_model_node/set_fact ame_ros2/srv/SetFact ^
   "{key: 'uav_at_base', value: true, source: 'manual'}"
 
 REM Trigger planning
-ros2 action send_goal /ame/plan ame_ros2/action/Plan ^
+ros2 action send_goal /planner_node/plan ame_ros2/action/Plan ^
   "{goal_fluents: ['(searched sector_a)'], replan: false}"
+
+REM Load domain at runtime (devenv/testing — bypasses file paths)
+ros2 service call /world_model_node/load_domain ame_ros2/srv/LoadDomain ^
+  "{domain_id: 'test', domain_pddl: '...', problem_pddl: '...'}"
+ros2 service call /planner_node/load_domain ame_ros2/srv/LoadDomain ^
+  "{domain_id: 'test', domain_pddl: '...', problem_pddl: '...'}"
 ```

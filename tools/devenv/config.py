@@ -9,7 +9,7 @@ class ConnectionConfig:
     foxglove_url: str = "ws://localhost:8765"
     ros2_node_name: str = "ame_devenv"
     wm_node_prefix: str = "/world_model_node"
-    plan_action_name: str = "/ame/plan"
+    plan_action_name: str = "/planner_node/plan"
     world_state_topic: str = "/world_state"
     bt_events_topic: str = "/executor/bt_events"
     # Backend selection: "ros2", "pcl", or "none"
