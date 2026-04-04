@@ -58,9 +58,11 @@ class AmeRos2Client:
     methods become safe no-ops.
     """
 
-    def __init__(self, node_name: str = "ame_devenv"):
+    def __init__(self, node_name: str = "ame_devenv",
+                 plan_action_name: str = "/planner_node/plan"):
         self.available = _HAS_RCLPY
         self._node_name = node_name
+        self._plan_action_name = plan_action_name
         self._node: Any = None
         self._thread: Optional[threading.Thread] = None
         self._running = False
@@ -217,7 +219,7 @@ class AmeRos2Client:
                 QueryState, "/world_model_node/query_state", callback_group=cb_group
             )
             self._plan_cli = RclpyActionClient(
-                self._node, Plan, "/ame/plan", callback_group=cb_group
+                self._node, Plan, self._plan_action_name, callback_group=cb_group
             )
 
             # Subscribe to world state

@@ -18,6 +18,25 @@ void PlannerComponent::setQueryStateCallback(QueryStateCallback callback) {
   query_state_callback_ = std::move(callback);
 }
 
+PlannerComponent::LoadDomainResult PlannerComponent::loadDomainFromStrings(
+    const std::string& domain_id,
+    const std::string& domain_pddl,
+    const std::string& problem_pddl) {
+  LoadDomainResult result;
+  try {
+    auto wm = std::make_unique<WorldModel>();
+    PddlParser::parseFromString(domain_pddl, problem_pddl, *wm);
+    result.num_fluents = wm->numFluents();
+    result.num_ground_actions = wm->numGroundActions();
+    loaded_domain_id_ = domain_id;
+    loaded_domain_template_ = std::move(wm);
+    result.success = true;
+  } catch (const std::exception& e) {
+    result.error_msg = e.what();
+  }
+  return result;
+}
+
 PlannerExecutionResult PlannerComponent::solveGoal(
     const std::vector<std::string>& goal_fluents) {
   PlannerExecutionResult execution_result;
@@ -100,15 +119,22 @@ std::unique_ptr<WorldModel> PlannerComponent::snapshotWorldModel(
     throw std::runtime_error("No world state source configured");
   }
 
-  const auto domain_file = paramStr("domain.pddl_file", "");
-  const auto problem_file = paramStr("domain.problem_file", "");
-  if (domain_file.empty() || problem_file.empty()) {
-    throw std::runtime_error(
-        "domain.pddl_file / domain.problem_file must be set for distributed planning");
+  std::unique_ptr<WorldModel> wm;
+  if (loaded_domain_template_) {
+    // Use the domain loaded at runtime via loadDomainFromStrings()
+    wm = std::make_unique<WorldModel>(*loaded_domain_template_);
+  } else {
+    // Fall back to parsing from file paths
+    const auto domain_file = paramStr("domain.pddl_file", "");
+    const auto problem_file = paramStr("domain.problem_file", "");
+    if (domain_file.empty() || problem_file.empty()) {
+      throw std::runtime_error(
+          "No domain loaded. Call load_domain service or set "
+          "domain.pddl_file / domain.problem_file parameters");
+    }
+    wm = std::make_unique<WorldModel>();
+    PddlParser::parse(domain_file, problem_file, *wm);
   }
-
-  auto wm = std::make_unique<WorldModel>();
-  PddlParser::parse(domain_file, problem_file, *wm);
   for (unsigned i = 0; i < wm->numFluents(); ++i) {
     wm->setFact(i, false, "planner_snapshot_reset");
   }

@@ -47,7 +47,13 @@ PlannerNode::on_configure(const rclcpp_lifecycle::State&) {
     return CallbackReturn::FAILURE;
   }
 
-  RCLCPP_INFO(get_logger(), "PlannerNode configured");
+  // Load domain service — available before activation so backends can push
+  // domain models before the planner is activated.
+  srv_load_domain_ = create_service<ame_ros2::srv::LoadDomain>(
+    "~/load_domain",
+    [this](const auto& req, auto resp) { handleLoadDomain(req, resp); });
+
+  RCLCPP_INFO(get_logger(), "PlannerNode configured (load_domain service ready)");
   return CallbackReturn::SUCCESS;
 }
 
@@ -58,17 +64,25 @@ PlannerNode::on_activate(const rclcpp_lifecycle::State&) {
     return CallbackReturn::FAILURE;
   }
 
+  // Use node-relative name so multiple PlannerNode instances each get
+  // their own action server (e.g. /planner_logistics/plan, /planner_surveillance/plan).
   action_server_ = rclcpp_action::create_server<PlanAction>(
     this,
-    "/ame/plan",
+    "~/plan",
     [this](const auto& uuid, auto goal) { return handleGoal(uuid, goal); },
     [this](auto gh) { return handleCancel(gh); },
     [this](auto gh) { handleAccepted(gh); });
+
+  // BT XML topic: defaults to ~/bt_xml but can be overridden via parameter
+  // (e.g. set to "/executor/bt_xml" for single-planner backward compat)
+  declare_parameter("bt_xml_topic", std::string("~/bt_xml"));
+  const auto bt_xml_topic = get_parameter("bt_xml_topic").as_string();
   pub_bt_xml_ =
-    create_publisher<std_msgs::msg::String>("/executor/bt_xml", rclcpp::QoS(10).reliable());
+    create_publisher<std_msgs::msg::String>(bt_xml_topic, rclcpp::QoS(10).reliable());
   pub_bt_xml_->on_activate();
 
-  RCLCPP_INFO(get_logger(), "PlannerNode activated - action server at /ame/plan");
+  RCLCPP_INFO(get_logger(), "PlannerNode activated - action server at %s/plan",
+              get_fully_qualified_name());
   return CallbackReturn::SUCCESS;
 }
 
@@ -83,6 +97,7 @@ PlannerNode::on_deactivate(const rclcpp_lifecycle::State&) {
 
 PlannerNode::CallbackReturn
 PlannerNode::on_cleanup(const rclcpp_lifecycle::State&) {
+  srv_load_domain_.reset();
   client_query_state_.reset();
   component_.cleanup();
   return CallbackReturn::SUCCESS;
@@ -175,6 +190,30 @@ void PlannerNode::executePlan(std::shared_ptr<GoalHandlePlan> goal_handle) {
     execution_result.plan_actions.size(),
     execution_result.solve_time_ms);
   goal_handle->succeed(result);
+}
+
+void PlannerNode::handleLoadDomain(
+    const std::shared_ptr<ame_ros2::srv::LoadDomain::Request> request,
+    std::shared_ptr<ame_ros2::srv::LoadDomain::Response> response) {
+  RCLCPP_INFO(get_logger(), "Loading domain '%s' (%zu bytes domain, %zu bytes problem)",
+              request->domain_id.c_str(),
+              request->domain_pddl.size(),
+              request->problem_pddl.size());
+
+  auto result = component_.loadDomainFromStrings(
+      request->domain_id, request->domain_pddl, request->problem_pddl);
+
+  response->success = result.success;
+  response->error_msg = result.error_msg;
+  response->num_fluents = result.num_fluents;
+  response->num_ground_actions = result.num_ground_actions;
+
+  if (result.success) {
+    RCLCPP_INFO(get_logger(), "Domain '%s' loaded: %u fluents, %u ground actions",
+                request->domain_id.c_str(), result.num_fluents, result.num_ground_actions);
+  } else {
+    RCLCPP_ERROR(get_logger(), "Domain load failed: %s", result.error_msg.c_str());
+  }
 }
 
 ame::WorldStateSnapshot PlannerNode::queryWorldState() const {

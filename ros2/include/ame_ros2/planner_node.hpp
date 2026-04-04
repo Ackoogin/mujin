@@ -8,6 +8,7 @@
 #include <std_msgs/msg/string.hpp>
 
 #include <ame_ros2/action/plan.hpp>
+#include <ame_ros2/srv/load_domain.hpp>
 #include <ame_ros2/srv/query_state.hpp>
 
 #include <memory>
@@ -18,16 +19,22 @@ namespace ame_ros2 {
 /// \brief ROS2 lifecycle node running LAPKT BRFS as an action server.
 ///
 /// Action server (active after on_activate):
-///   /ame/plan     (ame_ros2/action/Plan)
+///   ~/plan           (ame_ros2/action/Plan)
+///
+/// Services (available after on_configure):
+///   ~/load_domain    (ame_ros2/srv/LoadDomain) — load domain from PDDL strings
 ///
 /// Parameters:
-///   domain.pddl_file       (string, "") — must match WorldModelNode
-///   domain.problem_file    (string, "") — must match WorldModelNode
+///   domain.pddl_file       (string, "") — optional, can use load_domain service instead
+///   domain.problem_file    (string, "") — optional, can use load_domain service instead
 ///   world_model_node       (string, "world_model_node") — namespace for QueryState client
 ///   plan_audit.enabled     (bool, true)
 ///   plan_audit.path        (string, "plan_audit.jsonl")
 ///   compiler.parallel      (bool, false) — use causal-graph compiler
 ///   action_registry.<name> (string) — maps PDDL action name to BT node type
+///
+/// Multiple PlannerNode instances can run concurrently with different node names
+/// and different domain models. Each gets its own action server at ~/plan.
 class PlannerNode : public rclcpp_lifecycle::LifecycleNode {
 public:
   using PlanAction = ame_ros2::action::Plan;
@@ -65,6 +72,9 @@ public:
   /// \brief Expose PlanAuditLog for in-process audit trail (nullptr if disabled).
   ame::PlanAuditLog* planAuditLog() { return component_.planAuditLog(); }
 
+  /// \brief Expose PlannerComponent for in-process domain loading.
+  ame::PlannerComponent& plannerComponent() { return component_; }
+
 private:
   ame::PlannerComponent component_;
 
@@ -77,6 +87,13 @@ private:
 
   // Client to WorldModelNode QueryState service (distributed mode)
   rclcpp::Client<ame_ros2::srv::QueryState>::SharedPtr client_query_state_;
+
+  // Service server for runtime domain loading
+  rclcpp::Service<ame_ros2::srv::LoadDomain>::SharedPtr srv_load_domain_;
+
+  void handleLoadDomain(
+    const std::shared_ptr<ame_ros2::srv::LoadDomain::Request> request,
+    std::shared_ptr<ame_ros2::srv::LoadDomain::Response> response);
 
   // Action server callbacks
   rclcpp_action::GoalResponse handleGoal(

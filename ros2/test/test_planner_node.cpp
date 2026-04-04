@@ -75,7 +75,7 @@ protected:
 
 TEST_F(PlannerNodeTest, PlanActionSucceeds) {
     auto action_client = rclcpp_action::create_client<ame_ros2::action::Plan>(
-        pl_node_, "/ame/plan");
+        pl_node_, "/planner_node/plan");
 
     ASSERT_TRUE(action_client->wait_for_action_server(std::chrono::seconds(3)));
 
