@@ -4,7 +4,7 @@
 
 This document reviews approaches for extending the AME PDDL planning system to support multi-agent problems, and outlines a phased implementation plan.
 
-> **Implementation Note:** The recommended "PDDL + Agent Parameter" approach with leader-delegation has been implemented. See [`roadmaps/multi_agent_implementation_plan.md`](../roadmaps/multi_agent_implementation_plan.md) for details and `tests/test_multi_agent.cpp` for test coverage.
+> **Implementation Note:** The recommended "PDDL + Agent Parameter" approach with leader-delegation has been implemented. See `tests/test_multi_agent.cpp` for test coverage.
 
 ---
 

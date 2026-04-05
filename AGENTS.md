@@ -19,7 +19,6 @@ See `README.md` for a comprehensive project overview, and `doc/stakeholder_summa
 | `doc/stakeholder_summary.md` | High-level approach and status for non-technical stakeholders |
 | `doc/architecture/` | **Consolidated architecture reference** (see below) |
 | `doc/guides/quickstart.md` | Getting started, build, run, Foxglove Studio setup |
-| `doc/roadmaps/plan.md` | Implementation plan and gap analysis (steps 1–8 done) |
 | `doc/roadmaps/TODO.md` | Consolidated remaining work: temporal planning, hardening, future |
 | `doc/research/temporal_extension_research.md` | **Temporal planner evaluation**: OPTIC, POPF, TFD, Aries, STN, BT.CPP integration |
 | `doc/roadmaps/autonomy_assurance_plan.md` | SACE/AMLAS/DSTL safety assurance framework |
