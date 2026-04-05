@@ -84,20 +84,22 @@ The architecture also supports **optional neural integration** (see roadmap) in 
 
 - **Core planning and execution pipeline** — end-to-end from PDDL to plan to behaviour tree execution, with replan-on-failure
 - **Full observability stack** (5 layers) — BT execution events, world state audit trail, plan audit trail, live Foxglove Studio monitoring
-- **ROS2 integration** — lifecycle node wrappers for distributed deployment
-- **Comprehensive test suite** — 73 tests covering all components
-- **UAV search-and-classify example** — working demonstration domain
+- **Perception integration** — external sensors update world state with confidence thresholds, authority conflict detection, and thread-safe mutation queues
+- **PYRAMID service nodes** — async `InvokeService` BT node with timeout and cancellation support
+- **Thread safety** — RCU versioned snapshots, mutation queue for concurrent perception/execution
+- **Hierarchical planning** — multi-phase missions via `ExecutePhaseAction` with causal episode linking
+- **Multi-agent planning** — leader-delegation pattern with agent registry, goal allocation, and per-agent execution
+- **ROS2 integration** — lifecycle node wrappers for distributed deployment, all extensions wired
+- **Comprehensive test suite** — 73+ tests covering all components
+- **UAV search-and-classify example** — working demonstration domain (single and multi-agent)
 
 ### What's Next
 
 | Priority | Feature | Status |
 |----------|---------|--------|
-| 1 | Perception integration (external sensors updating world state) | Ready — core APIs in place, needs ROS2 service wiring |
-| 2 | PYRAMID service node integration | Awaiting SDK availability |
-| 3 | Thread safety for multi-node deployment | Designed, not yet needed |
-| 4 | Hierarchical planning (multi-phase missions) | Future |
-| 5 | Temporal planning (time-bounded actions) | Future |
-| 6 | Neuro-symbolic integration (AI-assisted planning) | Designed — see integration options document |
+| 1 | Temporal planning (PDDL 2.1 durative actions, STN scheduling) | Research complete, implementation not started |
+| 2 | Neuro-symbolic integration (AI-assisted planning) | Designed — see integration options document |
+| 3 | Production hardening (solver portfolio, failure taxonomy, CI/CD) | Planned |
 
 ## Observability and Assurance
 
