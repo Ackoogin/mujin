@@ -75,7 +75,7 @@ This is adequate for AME's current UAV search-and-classify domain, which is smal
 
 **Benefit to AME:**
 - The most production-appropriate solver strategy. Fast path for easy problems, robust fallback for hard ones.
-- Matches AME's existing roadmap item: "Solver portfolio: try fast heuristic first, fall back to complete search" (`doc/roadmaps/plan.md:162`).
+- Matches AME's existing roadmap item: "Solver portfolio: try fast heuristic first, fall back to complete search" (`doc/roadmaps/TODO.md`).
 - Used in IPC competition planners and the editor.planning.domains web service (handling over 1M calls).
 
 **Limitations:**

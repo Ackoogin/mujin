@@ -9,7 +9,6 @@ Primary source documents:
 - `doc/research/neuro_symbolic_reasoning.md`
 - `doc/concept.md`
 - `doc/extensions.md`
-- `doc/roadmaps/plan.md`
 - `doc/roadmaps/autonomy_assurance_plan.md`
 - `README.md`
 - `doc/stakeholder_summary.md`
