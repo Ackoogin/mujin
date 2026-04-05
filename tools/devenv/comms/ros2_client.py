@@ -13,6 +13,7 @@ from __future__ import annotations
 import threading
 import time
 from collections import deque
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
@@ -162,6 +163,52 @@ class AmeRos2Client:
             return
         self._call_in_node_thread("_do_plan", goal_fluents, callback)
 
+    def reload_domain(self, domain_path: str, problem_path: str) -> bool:
+        """Reload PDDL domain and problem via the LoadDomain service.
+
+        Reads the files locally and sends their content to the
+        WorldModelNode's ~/load_domain service.  Returns True on success.
+        """
+        if not self.available or not self._connected:
+            return False
+
+        try:
+            domain_pddl = open(domain_path, "r", encoding="utf-8").read()
+            problem_pddl = open(problem_path, "r", encoding="utf-8").read()
+        except Exception as e:
+            print(f"[ROS2] Failed to read PDDL files: {e}")
+            return False
+
+        if not hasattr(self, "_load_domain_cli") or self._load_domain_cli is None:
+            return False
+
+        if not self._load_domain_cli.wait_for_service(timeout_sec=2.0):
+            print("[ROS2] LoadDomain service not available")
+            return False
+
+        req = self._LoadDomain.Request()
+        req.domain_id = Path(domain_path).parent.name
+        req.domain_pddl = domain_pddl
+        req.problem_pddl = problem_pddl
+
+        future = self._load_domain_cli.call_async(req)
+
+        # Block briefly for the result (called from UI thread)
+        timeout = 5.0
+        start = time.monotonic()
+        while not future.done():
+            if time.monotonic() - start > timeout:
+                print("[ROS2] LoadDomain timed out")
+                return False
+            time.sleep(0.05)
+
+        result = future.result()
+        if result and result.success:
+            return True
+        if result:
+            print(f"[ROS2] LoadDomain failed: {result.error_msg}")
+        return False
+
     def drain_plan_feedback(self) -> list[PlanFeedback]:
         """Drain queued plan feedback for UI display."""
         items = []
@@ -221,6 +268,17 @@ class AmeRos2Client:
             self._plan_cli = RclpyActionClient(
                 self._node, Plan, self._plan_action_name, callback_group=cb_group
             )
+
+            # LoadDomain is optional (requires ame_ros2 rebuild after adding the .srv)
+            self._load_domain_cli = None
+            try:
+                from ame_ros2.srv import LoadDomain
+                self._LoadDomain = LoadDomain
+                self._load_domain_cli = self._node.create_client(
+                    LoadDomain, "/world_model_node/load_domain", callback_group=cb_group
+                )
+            except ImportError:
+                pass
 
             # Subscribe to world state
             self._node.create_subscription(

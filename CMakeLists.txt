@@ -145,6 +145,11 @@ FetchContent_MakeAvailable(googletest)
 option(AME_BUILD_PYTHON "Build Python bindings for ame_core" OFF)
 
 if(AME_BUILD_PYTHON)
+    # Find the interpreter first so pybind11 honours -DPython3_EXECUTABLE
+    find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
+    # Tell pybind11 to use the same interpreter (avoids FindPythonInterp picking up the wrong version)
+    set(PYTHON_EXECUTABLE "${Python3_EXECUTABLE}" CACHE FILEPATH "" FORCE)
+
     FetchContent_Declare(
         pybind11
         GIT_REPOSITORY https://github.com/pybind/pybind11.git
