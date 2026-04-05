@@ -33,7 +33,7 @@ static void invokeCreateAndAssert(pcl_executor_t* e, int i) {
 
 ///< Stress: Rapid create_object service calls.
 ///< TOBJ.038: Thousands of entities. TOBJ.041: Incremental updates.
-///< RESP.006, RESP.013: Scale validation.
+///< PYR-RESP-0734, PYR-RESP-0741: Scale validation.
 TEST(TacticalObjectsComponentRobustness, RapidServiceCalls) {
   TacticalObjectsComponent comp;
   comp.configure();
@@ -50,7 +50,7 @@ TEST(TacticalObjectsComponentRobustness, RapidServiceCalls) {
 
 ///< Stress: Burst of observation ingress via dispatch.
 ///< TOBJ.018: Multi-source ingest. TOBJ.042: Bulk ingest.
-///< RESP.013: Capture object information at scale.
+///< PYR-RESP-0741: Capture object information at scale.
 TEST(TacticalObjectsComponentRobustness, BurstObservationIngress) {
   TacticalObjectsComponent comp;
   comp.configure();
@@ -162,7 +162,7 @@ TEST(TacticalObjectsComponentRobustness, RepeatedLifecycleCycles) {
 
 ///< Stress: Mixed evidence and direct CRUD under executor.
 ///< TOBJ.018: Multi-source ingest. TOBJ.007: Criteria query over combined sources.
-///< RESP.006: Determine potential objects from evidence and direct.
+///< PYR-RESP-0734: Determine potential objects from evidence and direct.
 TEST(TacticalObjectsComponentRobustness, MixedEvidenceAndDirectUnderExecutor) {
   TacticalObjectsComponent comp;
   comp.configure();

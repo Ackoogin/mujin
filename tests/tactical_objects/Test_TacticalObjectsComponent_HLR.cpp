@@ -1,5 +1,5 @@
 /// \file Test_TacticalObjectsComponent_HLR.cpp
-/// \brief PCL component tests with explicit HLR (TOBJ/RESP) traceability.
+/// \brief PCL component tests with explicit HLR (TOBJ/PYR-RESP) traceability.
 /// All assertions are made exclusively through data ports (services and
 /// subscribers) — no direct access to component internals or runtime.
 #include <gtest/gtest.h>
@@ -78,7 +78,7 @@ static nlohmann::json getObjectViaPort(pcl_executor_t* e,
 // ---------------------------------------------------------------------------
 
 ///< TOBJ.004: External ID association. TOBJ.020: Evidence lineage.
-///< TOBJ.022: Entity integration. RESP.007: Object confidence. RESP.009: Relationships.
+///< TOBJ.022: Entity integration. PYR-RESP-0735: Object confidence. PYR-RESP-0737: Relationships.
 ///< Two observations from the same source merge; source_refs and lineage are
 ///< verified entirely through the get_object service port.
 TEST(TacticalObjectsComponentHLR, ExternalIdAndLineageFromCorrelation) {
@@ -133,7 +133,7 @@ TEST(TacticalObjectsComponentHLR, ExternalIdAndLineageFromCorrelation) {
 }
 
 ///< TOBJ.009: Region query. TOBJ.036: Zone relationship queries. TOBJ.040: Spatial indexing.
-///< RESP.006: Determine potential objects at locations.
+///< PYR-RESP-0734: Determine potential objects at locations.
 TEST(TacticalObjectsComponentHLR, RegionQueryViaService) {
   TacticalObjectsComponent comp;
   comp.configure();
@@ -171,7 +171,7 @@ TEST(TacticalObjectsComponentHLR, RegionQueryViaService) {
 }
 
 ///< TOBJ.010: Temporal query. TOBJ.017: State freshness.
-///< RESP.006: Query with freshness filter.
+///< PYR-RESP-0734: Query with freshness filter.
 ///< An observation with observed_at=100.0 sets freshness; query with
 ///< max_age=200 / current_time=150 (age=50) must return the entity.
 TEST(TacticalObjectsComponentHLR, TemporalQueryViaService) {
@@ -200,7 +200,7 @@ TEST(TacticalObjectsComponentHLR, TemporalQueryViaService) {
 }
 
 ///< TOBJ.015: Behavior estimation. TOBJ.016: Operational state.
-///< RESP.010: Estimate object behaviour.
+///< PYR-RESP-0738: Estimate object behaviour.
 TEST(TacticalObjectsComponentHLR, BehaviorAndOperationalStateViaUpdate) {
   TacticalObjectsComponent comp;
   comp.configure();
@@ -231,7 +231,7 @@ TEST(TacticalObjectsComponentHLR, BehaviorAndOperationalStateViaUpdate) {
   EXPECT_EQ(gdata["behavior"].value("operational_state", ""), "airborne");
 }
 
-///< TOBJ.019: Confidence tracking. RESP.007: Determine object information confidence.
+///< TOBJ.019: Confidence tracking. PYR-RESP-0735: Determine object information confidence.
 TEST(TacticalObjectsComponentHLR, ConfidenceFromCorrelation) {
   TacticalObjectsComponent comp;
   comp.configure();
@@ -272,7 +272,7 @@ TEST(TacticalObjectsComponentHLR, ConfidenceFromCorrelation) {
 }
 
 ///< TOBJ.028: Status. TOBJ.029: Echelon. TOBJ.030: Indicator flags. TOBJ.031: Mobility.
-///< RESP.013: Capture classification details.
+///< PYR-RESP-0741: Capture classification details.
 TEST(TacticalObjectsComponentHLR, FullMilitaryClassificationViaCreate) {
   TacticalObjectsComponent comp;
   comp.configure();
@@ -307,7 +307,7 @@ TEST(TacticalObjectsComponentHLR, FullMilitaryClassificationViaCreate) {
 }
 
 ///< TOBJ.032: Source symbol code preservation.
-///< RESP.013: Capture SIDC when provided.
+///< PYR-RESP-0741: Capture SIDC when provided.
 TEST(TacticalObjectsComponentHLR, SourceSidcPreserved) {
   TacticalObjectsComponent comp;
   comp.configure();
@@ -402,7 +402,7 @@ TEST(TacticalObjectsComponentHLR, AllObjectTypesViaCreate) {
 }
 
 ///< TOBJ.008: Query by external source reference.
-///< RESP.006: Matching_Objects by source identifier.
+///< PYR-RESP-0734: Matching_Objects by source identifier.
 TEST(TacticalObjectsComponentHLR, QueryBySourceRef) {
   TacticalObjectsComponent comp;
   comp.configure();

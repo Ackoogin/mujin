@@ -33,7 +33,7 @@ TEST(TacticalObjectsComponent, ActivateSucceeds) {
 ///< REQ_TACTICAL_OBJECTS_035: Observation ingress through subscriber callback.
 ///< TOBJ.018: Multi-source ingest via observation_ingress.
 ///< TOBJ.021: Entity correlation (first obs creates object).
-///< RESP.013: Capture object information from evidence.
+///< PYR-RESP-0741: Capture object information from evidence.
 TEST(TacticalObjectsComponent, EvidenceIngressViaSubscriber) {
   TacticalObjectsComponent comp;
   comp.configure();
@@ -70,7 +70,7 @@ TEST(TacticalObjectsComponent, EvidenceIngressViaSubscriber) {
 ///< TOBJ.002: Object properties (identity, classification, kinematics).
 ///< TOBJ.003: Stable internal UUID.
 ///< TOBJ.025: Battle dimension. TOBJ.026: Affiliation. TOBJ.027: Role.
-///< RESP.013: Capture object information.
+///< PYR-RESP-0741: Capture object information.
 TEST(TacticalObjectsComponent, DirectCreateViaService) {
   TacticalObjectsComponent comp;
   comp.configure();
@@ -163,7 +163,7 @@ TEST(TacticalObjectsComponent, DirectUpdateViaService) {
 
 ///< REQ_TACTICAL_OBJECTS_036: Direct delete is exposed through service handler.
 ///< TOBJ.003: Delete by internal UUID.
-///< RESP.013: Capture object information (delete lifecycle).
+///< PYR-RESP-0741: Capture object information (delete lifecycle).
 TEST(TacticalObjectsComponent, DirectDeleteViaService) {
   TacticalObjectsComponent comp;
   comp.configure();
@@ -230,7 +230,7 @@ TEST(TacticalObjectsComponent, QueryViaService) {
 
 ///< REQ_TACTICAL_OBJECTS_037: Get object via service handler.
 ///< TOBJ.008: Single object query by internal ID.
-///< RESP.006: Specific_Object_Detail retrieval.
+///< PYR-RESP-0734: Specific_Object_Detail retrieval.
 TEST(TacticalObjectsComponent, GetObjectViaService) {
   TacticalObjectsComponent comp;
   comp.configure();
@@ -298,7 +298,7 @@ TEST(TacticalObjectsComponent, ZoneUpsertViaService) {
 
 ///< REQ_TACTICAL_OBJECTS_037: Zone remove via service handler.
 ///< TOBJ.033: Zone lifecycle. TOBJ.034: Zone semantics.
-///< RESP.006: Region-based zone management.
+///< PYR-RESP-0734: Region-based zone management.
 TEST(TacticalObjectsComponent, ZoneRemoveViaService) {
   TacticalObjectsComponent comp;
   comp.configure();

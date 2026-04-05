@@ -1,6 +1,6 @@
 # HLR Requirements Coverage
 
-Traceability of HLR requirements (TOBJ.001–TOBJ.053, RESP.001–RESP.017) to tests against the TacticalObjectsComponent (PCL integration layer).
+Traceability of HLR requirements (`TOBJ.001`–`TOBJ.053`, `PYR-RESP-0729`–`PYR-RESP-0745`) to tests against the TacticalObjectsComponent (PCL integration layer).
 
 ## PCL Component Test Coverage
 
@@ -99,7 +99,7 @@ Tests use requirement tags in comments:
 
 ```
 ///< TOBJ.0XX: Brief description.
-///< RESP.0XX: Responsibility description.
+///< PYR-RESP-####: Responsibility description.
 ```
 
 Run tests with filter to verify a specific requirement:

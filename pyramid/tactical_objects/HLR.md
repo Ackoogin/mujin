@@ -19,57 +19,58 @@ The subject matter of Tactical Objects is objects of tactical importance which e
 
 ## Responsibilities
 
-Responsibilities are taken directly from PYRAMID Technical Standard 5.4.2.60.4. Identifiers are included for HLR traceability.
+Responsibilities are taken directly from PYRAMID Technical Standard `5.4.2.60.4`.
+Identifiers use global responsibility IDs from `pyramid/PYRAMID_COMPONENT_RESPONSIBILITIES.md` (`COMP-060`, `PYR-RESP-0729` to `PYR-RESP-0745`).
 
-### RESP.001 - capture_object_interest_requirement_for_tactical_object
+### PYR-RESP-0729 - capture_object_interest_requirement_for_tactical_object
 - To capture provided Object_Interest_Requirements (e.g. the scope of the information required and the frequency that it is reported) for Tactical_Objects.
 
-### RESP.002 - capture_measurement_criteria_for_tactical_object
+### PYR-RESP-0730 - capture_measurement_criteria_for_tactical_object
 - To capture provided Measurement_Criterion/criteria for Tactical_Objects.
 
-### RESP.003 - capture_tactical_objects_constraints
+### PYR-RESP-0731 - capture_tactical_objects_constraints
 - To capture provided Constraints for Tactical_Objects solutions (e.g. do not process classified information or stop processing information derived from a specified source).
 
-### RESP.004 - identify_whether_requirement_is_achievable
+### PYR-RESP-0732 - identify_whether_requirement_is_achievable
 - To identify whether an Object_Interest_Requirement is still achievable given current or predicted Capability and Constraints.
 
-### RESP.005 - determine_requirement_solution
+### PYR-RESP-0733 - determine_requirement_solution
 - To determine a solution to Object_Interest_Requirements.
 
-### RESP.006 - determine_potential_objects
+### PYR-RESP-0734 - determine_potential_objects
 - To determine the potential for Tactical_Objects to exist at locations.
 
-### RESP.007 - determine_object_information_confidence
+### PYR-RESP-0735 - determine_object_information_confidence
 - To determine a level of confidence in the individual Tactical_Object's characteristics (e.g. behaviour, allegiance and association between tactical objects).
 
-### RESP.008 - determine_additional_information
+### PYR-RESP-0736 - determine_additional_information
 - To determine additional information required to satisfy Object_Interest_Requirements, e.g. improved Tactical_Object confidence required.
 
-### RESP.009 - determine_object_relationships
+### PYR-RESP-0737 - determine_object_relationships
 - To determine the Relationships and dependencies between Tactical_Objects (e.g. if a radar is part of a specific vehicle, or if a specific vehicle is part of this formation and is the flight lead).
 
-### RESP.010 - estimate_object_behaviour
+### PYR-RESP-0738 - estimate_object_behaviour
 - To estimate the Behaviour exhibited by Tactical Objects, including individual Behaviour (e.g. that object is loitering) and Behaviour between Tactical Objects (e.g. that Exploiting Platform is tracking that tank, that Exploiting Platform is landing at that airfield). Behaviour also includes the operational state of a Tactical_Object (e.g. ready for operation, operational on ground, operational in air, or non-operational).
 
-### RESP.011 - identify_progress
+### PYR-RESP-0739 - identify_progress
 - To identify the progress against an Object_Interest_Requirement.
 
-### RESP.012 - determine_quality_of_tactical_object_of_interest
+### PYR-RESP-0740 - determine_quality_of_tactical_object_of_interest
 - To determine the quality of the Tactical_Object_of_Interest provided by Tactical Objects during execution, measured against given Object_Interest_Requirements and Measurement_Criterion/criteria.
 
-### RESP.013 - capture_object_information
+### PYR-RESP-0741 - capture_object_information
 - To capture information about Tactical_Objects, including but not limited to: their allegiance to organisations, kinematic behaviour (e.g. velocity, acceleration or path), location (e.g. at this position, within this region) and classification, including their type (e.g. surface ship or emitter), specific type (e.g. Type-45, Captor radar) and registration (e.g. HMS Daring).
 
-### RESP.014 - capture_object_probability_densities
+### PYR-RESP-0742 - capture_object_probability_densities
 - To capture the probability densities of particular Tactical_Objects within locations.
 
-### RESP.015 - assess_capability
+### PYR-RESP-0743 - assess_capability
 - To assess the Capability to provide Tactical_Object information (e.g. determination and estimation of object characteristics) taking account of system health and observed anomalies (e.g. normal behaviour and impacts due to failures, damage, usage or ageing).
 
-### RESP.016 - identify_missing_information
+### PYR-RESP-0744 - identify_missing_information
 - To identify missing information which could improve the certainty or specificity of the component's Capability (i.e. determination and estimation of object characteristics) assessment.
 
-### RESP.017 - predict_capability_progression
+### PYR-RESP-0745 - predict_capability_progression
 - To predict the progression of the Tactical Objects Capability over time and with use.
 
 ## Services
@@ -436,59 +437,59 @@ Maintain traceability between the source tactical object requirement, any derive
 
 | Requirement | Responsibilities |
 | :--- | :--- |
-| `TOBJ.001` | `RESP.013` |
-| `TOBJ.002` | `RESP.013`, `RESP.007` |
-| `TOBJ.003` | `RESP.013` |
-| `TOBJ.004` | `RESP.013` |
-| `TOBJ.005` | `RESP.001` |
-| `TOBJ.006` | `RESP.001` |
-| `TOBJ.007` | `RESP.006` |
-| `TOBJ.008` | `RESP.006` |
-| `TOBJ.009` | `RESP.006` |
-| `TOBJ.010` | `RESP.006` |
-| `TOBJ.011` | `RESP.009` |
-| `TOBJ.012` | `RESP.009` |
-| `TOBJ.013` | `RESP.009` |
-| `TOBJ.014` | `RESP.009`, `RESP.007` |
-| `TOBJ.015` | `RESP.010` |
-| `TOBJ.016` | `RESP.010` |
-| `TOBJ.017` | `RESP.007`, `RESP.012` |
-| `TOBJ.018` | `RESP.013` |
-| `TOBJ.019` | `RESP.007` |
-| `TOBJ.020` | `RESP.007` |
-| `TOBJ.021` | `RESP.006` |
-| `TOBJ.022` | `RESP.006`, `RESP.007` |
-| `TOBJ.023` | `RESP.006` |
-| `TOBJ.024` | `RESP.003` |
-| `TOBJ.025` | `RESP.013` |
-| `TOBJ.026` | `RESP.013` |
-| `TOBJ.027` | `RESP.013` |
-| `TOBJ.028` | `RESP.013` |
-| `TOBJ.029` | `RESP.013` |
-| `TOBJ.030` | `RESP.013` |
-| `TOBJ.031` | `RESP.013` |
-| `TOBJ.032` | `RESP.013` |
-| `TOBJ.033` | `RESP.006` |
-| `TOBJ.034` | `RESP.006` |
-| `TOBJ.035` | `RESP.006` |
-| `TOBJ.036` | `RESP.006` |
-| `TOBJ.037` | `RESP.006` |
-| `TOBJ.038` | `RESP.006`, `RESP.013` |
-| `TOBJ.039` | `RESP.013` |
-| `TOBJ.040` | `RESP.006` |
-| `TOBJ.041` | `RESP.013` |
-| `TOBJ.042` | `RESP.013` |
-| `TOBJ.043` | `RESP.015` |
-| `TOBJ.044` | `RESP.016` |
-| `TOBJ.045` | `RESP.013` |
-| `TOBJ.046` | `RESP.004` |
-| `TOBJ.047` | `RESP.005` |
-| `TOBJ.048` | `RESP.008` |
-| `TOBJ.049` | `RESP.008`, `RESP.011` |
-| `TOBJ.050` | `RESP.002` |
-| `TOBJ.051` | `RESP.011` |
-| `TOBJ.052` | `RESP.014` |
-| `TOBJ.053` | `RESP.017` |
+| `TOBJ.001` | `PYR-RESP-0741` |
+| `TOBJ.002` | `PYR-RESP-0741`, `PYR-RESP-0735` |
+| `TOBJ.003` | `PYR-RESP-0741` |
+| `TOBJ.004` | `PYR-RESP-0741` |
+| `TOBJ.005` | `PYR-RESP-0729` |
+| `TOBJ.006` | `PYR-RESP-0729` |
+| `TOBJ.007` | `PYR-RESP-0734` |
+| `TOBJ.008` | `PYR-RESP-0734` |
+| `TOBJ.009` | `PYR-RESP-0734` |
+| `TOBJ.010` | `PYR-RESP-0734` |
+| `TOBJ.011` | `PYR-RESP-0737` |
+| `TOBJ.012` | `PYR-RESP-0737` |
+| `TOBJ.013` | `PYR-RESP-0737` |
+| `TOBJ.014` | `PYR-RESP-0737`, `PYR-RESP-0735` |
+| `TOBJ.015` | `PYR-RESP-0738` |
+| `TOBJ.016` | `PYR-RESP-0738` |
+| `TOBJ.017` | `PYR-RESP-0735`, `PYR-RESP-0740` |
+| `TOBJ.018` | `PYR-RESP-0741` |
+| `TOBJ.019` | `PYR-RESP-0735` |
+| `TOBJ.020` | `PYR-RESP-0735` |
+| `TOBJ.021` | `PYR-RESP-0734` |
+| `TOBJ.022` | `PYR-RESP-0734`, `PYR-RESP-0735` |
+| `TOBJ.023` | `PYR-RESP-0734` |
+| `TOBJ.024` | `PYR-RESP-0731` |
+| `TOBJ.025` | `PYR-RESP-0741` |
+| `TOBJ.026` | `PYR-RESP-0741` |
+| `TOBJ.027` | `PYR-RESP-0741` |
+| `TOBJ.028` | `PYR-RESP-0741` |
+| `TOBJ.029` | `PYR-RESP-0741` |
+| `TOBJ.030` | `PYR-RESP-0741` |
+| `TOBJ.031` | `PYR-RESP-0741` |
+| `TOBJ.032` | `PYR-RESP-0741` |
+| `TOBJ.033` | `PYR-RESP-0734` |
+| `TOBJ.034` | `PYR-RESP-0734` |
+| `TOBJ.035` | `PYR-RESP-0734` |
+| `TOBJ.036` | `PYR-RESP-0734` |
+| `TOBJ.037` | `PYR-RESP-0734` |
+| `TOBJ.038` | `PYR-RESP-0734`, `PYR-RESP-0741` |
+| `TOBJ.039` | `PYR-RESP-0741` |
+| `TOBJ.040` | `PYR-RESP-0734` |
+| `TOBJ.041` | `PYR-RESP-0741` |
+| `TOBJ.042` | `PYR-RESP-0741` |
+| `TOBJ.043` | `PYR-RESP-0743` |
+| `TOBJ.044` | `PYR-RESP-0744` |
+| `TOBJ.045` | `PYR-RESP-0741` |
+| `TOBJ.046` | `PYR-RESP-0732` |
+| `TOBJ.047` | `PYR-RESP-0733` |
+| `TOBJ.048` | `PYR-RESP-0736` |
+| `TOBJ.049` | `PYR-RESP-0736`, `PYR-RESP-0739` |
+| `TOBJ.050` | `PYR-RESP-0730` |
+| `TOBJ.051` | `PYR-RESP-0739` |
+| `TOBJ.052` | `PYR-RESP-0742` |
+| `TOBJ.053` | `PYR-RESP-0745` |
 
 ## Implementation Notes
 

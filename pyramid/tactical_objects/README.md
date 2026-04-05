@@ -177,7 +177,7 @@ gcovr --root . --filter "pyramid/tactical_objects/src/.*" \
 |----------|---------|
 | `ARCHITECTURE.md` | Layer diagram, data-flow, worked examples |
 | `DESIGN.md` | Concrete class design driving TDD |
-| `HLR.md` | High-level requirements (TOBJ.001–TOBJ.053, RESP.001–RESP.017) |
+| `HLR.md` | High-level requirements (`TOBJ.001`–`TOBJ.053`, `PYR-RESP-0729`–`PYR-RESP-0745`) |
 | `LLR.md` | Low-level requirements per engine |
 | `HLR_COVERAGE.md` | Requirement → test traceability matrix |
 | `TDD_PLAN.md` | Test-driven development plan and implementation sequence |

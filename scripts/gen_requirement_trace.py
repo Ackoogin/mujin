@@ -2,7 +2,7 @@
 """
 Generate HLR → LLR → test traceability report for tactical_objects.
 
-Reads HLR_COVERAGE.md, LLR.md, and scans test files for ///< REQ_/TOBJ/RESP tags.
+Reads HLR_COVERAGE.md, LLR.md, and scans test files for ///< REQ_/TOBJ/PYR-RESP tags.
 Produces a completeness report showing requirement-to-test mapping.
 """
 
@@ -25,7 +25,7 @@ def parse_hlr_coverage(content: str) -> dict:
         tobj = parts[0]
         desc = parts[1] if len(parts) > 1 else ""
         tests = parts[2] if len(parts) > 2 else ""
-        if tobj.startswith("TOBJ.") or tobj.startswith("RESP."):
+        if tobj.startswith("TOBJ.") or tobj.startswith("RESP.") or tobj.startswith("PYR-RESP-"):
           result[tobj] = {"description": desc, "tests": tests}
     elif in_table and not line.strip():
       in_table = False
@@ -71,7 +71,7 @@ def parse_llr(content: str) -> dict:
 
 
 def scan_test_tags(test_dir: Path) -> dict:
-  """Scan test files for ///< REQ_ TOBJ. RESP. tags."""
+  """Scan test files for ///< REQ_ TOBJ. PYR-RESP/RESP tags."""
   req_to_tests = {}
   tobj_to_tests = {}
   resp_to_tests = {}
@@ -80,14 +80,14 @@ def scan_test_tags(test_dir: Path) -> dict:
     content = f.read_text(encoding="utf-8", errors="replace")
     test_name = f.stem
     for line in content.splitlines():
-      m = re.search(r"///<\s*(REQ_TACTICAL_OBJECTS_\d+|TOBJ\.\d+|RESP\.\d+):", line)
+      m = re.search(r"///<\s*(REQ_TACTICAL_OBJECTS_\d+|TOBJ\.\d+|PYR-RESP-\d+|RESP\.\d+):", line)
       if m:
         tag = m.group(1)
         if tag.startswith("REQ_"):
           req_to_tests.setdefault(tag, []).append(test_name)
         elif tag.startswith("TOBJ."):
           tobj_to_tests.setdefault(tag, []).append(test_name)
-        elif tag.startswith("RESP."):
+        elif tag.startswith("RESP.") or tag.startswith("PYR-RESP-"):
           resp_to_tests.setdefault(tag, []).append(test_name)
 
   return {"req": req_to_tests, "tobj": tobj_to_tests, "resp": resp_to_tests}
@@ -122,7 +122,7 @@ def main():
   llr_tagged = sum(1 for r in llr if r in tags["req"])
   lines.append(f"| Metric | Count |")
   lines.append(f"|--------|-------|")
-  lines.append(f"| HLR (TOBJ/RESP) in HLR_COVERAGE | {hlr_count} |")
+  lines.append(f"| HLR (TOBJ/PYR-RESP) in HLR_COVERAGE | {hlr_count} |")
   lines.append(f"| LLR (REQ_TACTICAL_OBJECTS_*) | {llr_count} |")
   lines.append(f"| LLR with verification test specified | {llr_with_tests} |")
   lines.append(f"| LLR with ///< tag in tests | {llr_tagged} |")
