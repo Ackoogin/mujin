@@ -93,3 +93,7 @@ __pycache__/
 *.pyc
 *.pyo
 examples/ada/obj_test_bindings/pcl_container.c.stderr
+
+# logs
+wm_audit.jsonl
+plan_audit.jsonl
