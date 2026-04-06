@@ -166,6 +166,7 @@ doc/                     Documentation
 | [Stakeholder Summary](doc/stakeholder_summary.md) | Programme managers, non-technical stakeholders | High-level approach, benefits, and status |
 | [Architecture](doc/architecture/) | Engineers | Full technical architecture (8 numbered files) |
 | [Quick Start](doc/guides/quickstart.md) | Developers | Build, run, test, and Foxglove setup |
+| [Planning & Execution User Guide](doc/guides/planning_execution_user_guide.md) | Operators, integrators, developers | User-friendly mission flow, PDDL terms, custom BT nodes/subtrees, PYRAMID integration, and deployment options |
 | [Remaining Work](doc/roadmaps/TODO.md) | Engineers, programme leads | Temporal planning, hardening, future work |
 | [Assurance Plan](doc/roadmaps/autonomy_assurance_plan.md) | Safety engineers, assessors | SACE/AMLAS/DSTL autonomy assurance framework |
 | [Neuro-Symbolic Integration](doc/research/neuro_symbolic_reasoning.md) | Engineers, architects | Options for adding AI/ML capabilities |
