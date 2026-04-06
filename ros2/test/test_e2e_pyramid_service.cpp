@@ -298,6 +298,10 @@ TEST_F(E2EPyramidServiceTest, PlanAndExecuteInvokesPyramidServices) {
   // Plan should contain move + search + classify (at least 3 steps)
   EXPECT_GE(plan_result->plan_actions.size(), 3u);
 
+  // In-process mode: explicitly hand the compiled BT XML to the executor
+  ASSERT_FALSE(plan_result->bt_xml.empty());
+  ex_node_->loadAndExecute(plan_result->bt_xml);
+
   // Wait for BT execution
   spinUntilExecutionDone();
   EXPECT_EQ(ex_node_->lastStatus(), BT::NodeStatus::SUCCESS);
@@ -368,6 +372,10 @@ TEST_F(E2EPyramidServiceTest, PyramidServiceFailurePropagates) {
   spinUntilPlanDone(plan_result, plan_done);
   ASSERT_TRUE(plan_done) << "Plan action timed out";
   ASSERT_TRUE(plan_result->success) << "Planning should still succeed";
+
+  // In-process mode: explicitly hand the compiled BT XML to the executor
+  ASSERT_FALSE(plan_result->bt_xml.empty());
+  ex_node_->loadAndExecute(plan_result->bt_xml);
 
   // BT execution should fail because the PYRAMID service returns FAILURE
   spinUntilExecutionDone();

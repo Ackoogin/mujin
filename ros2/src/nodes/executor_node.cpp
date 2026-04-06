@@ -190,6 +190,7 @@ void ExecutorNode::registerCoreNodes() {
 
 void ExecutorNode::loadAndExecute(const std::string& bt_xml) {
   tick_timer_.reset();
+  final_status_ = BT::NodeStatus::RUNNING;
   component_.loadAndExecute(bt_xml);
   publishStatus("RUNNING");
 
@@ -209,6 +210,7 @@ void ExecutorNode::tickOnce() {
 
   auto status = component_.lastStatus();
   if (status == BT::NodeStatus::SUCCESS || status == BT::NodeStatus::FAILURE) {
+    final_status_ = status;  // Cache before haltExecution resets component
     tick_timer_.reset();
     component_.haltExecution();
     const std::string status_str =
