@@ -1,11 +1,14 @@
-/// \brief E2E test: PDDL plan generation → BT execution → pyramid service call.
+/// \brief E2E test: PDDL plan → BT execution → PYRAMID service calls via InvokeService.
 ///
-/// Builds a domain where a robot must move to a build site and construct a
-/// pyramid.  The "build_pyramid" action is mapped to an InvokeService subtree
-/// that calls a stub PYRAMID service node.  The test verifies the full
-/// pipeline: WorldModel → Planner → PlanCompiler → ExecutorNode → InvokeService
-/// → stub pyramid service, and asserts that the service received the expected
-/// calls with correct parameters.
+/// Uses the standard UAV search-and-classify domain with all PDDL actions
+/// mapped to InvokeService subtree templates (the PYRAMID integration pattern
+/// from doc/guides/pyramid_service_integration_guide.md).  A tracking
+/// IPyramidService stub records every async call so the test can verify that
+/// the correct PYRAMID services were invoked with the right parameters.
+///
+/// Pipeline under test:
+///   WorldModel → Planner (LAPKT) → PlanCompiler → ExecutorNode
+///     → InvokeService BT nodes → IPyramidService stub
 
 #include <gtest/gtest.h>
 
@@ -25,7 +28,7 @@
 #include <vector>
 
 // ---------------------------------------------------------------------------
-// Tracking pyramid service stub — records every async call for verification
+// Tracking PYRAMID service stub — records every async call for verification
 // ---------------------------------------------------------------------------
 struct PyramidCallRecord {
   std::string service_name;
@@ -69,6 +72,17 @@ public:
     return calls_.size();
   }
 
+  std::vector<PyramidCallRecord> callsByOperation(const std::string& op) const {
+    std::lock_guard<std::mutex> lk(mu_);
+    std::vector<PyramidCallRecord> result;
+    for (const auto& c : calls_) {
+      if (c.operation == op) {
+        result.push_back(c);
+      }
+    }
+    return result;
+  }
+
 private:
   mutable std::mutex mu_;
   std::vector<PyramidCallRecord> calls_;
@@ -76,26 +90,32 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Stub BT action for "move" (simple, no pyramid service needed)
+// Failing PYRAMID service stub — all async calls return FAILURE
 // ---------------------------------------------------------------------------
-class StubMoveAction : public BT::SyncActionNode {
+class FailingPyramidService : public ame::IPyramidService {
 public:
-  StubMoveAction(const std::string& n, const BT::NodeConfiguration& c)
-      : BT::SyncActionNode(n, c) {}
-
-  BT::NodeStatus tick() override { return BT::NodeStatus::SUCCESS; }
-
-  static BT::PortsList providedPorts() {
-    return {
-        BT::InputPort<std::string>("param0"),
-        BT::InputPort<std::string>("param1"),
-        BT::InputPort<std::string>("param2"),
-    };
+  bool call(const std::string&, const std::string&,
+            const ame::ServiceMessage&, ame::ServiceMessage&) override {
+    return false;
   }
+
+  uint64_t callAsync(const std::string&, const std::string&,
+                     const ame::ServiceMessage&) override {
+    return ++next_id_;
+  }
+
+  ame::AsyncCallStatus pollResult(uint64_t, ame::ServiceMessage&) override {
+    return ame::AsyncCallStatus::FAILURE;
+  }
+
+  void cancelCall(uint64_t) override {}
+
+private:
+  uint64_t next_id_ = 0;
 };
 
 // ---------------------------------------------------------------------------
-// Test fixture
+// Test fixture — UAV search domain with all actions via PYRAMID InvokeService
 // ---------------------------------------------------------------------------
 class E2EPyramidServiceTest : public ::testing::Test {
 protected:
@@ -110,31 +130,40 @@ protected:
     pl_node_->setInProcessWorldModel(&wm_node_->worldModel());
     ex_node_->setInProcessWorldModel(&wm_node_->worldModel());
 
-    // Wire the tracking pyramid service stub
+    // Wire the tracking PYRAMID service stub
     ex_node_->setPyramidService(&pyramid_stub_);
 
-    // Hierarchical planning dependencies (for ExecutePhaseAction if needed)
+    // Hierarchical planning dependencies
     ex_node_->setPlanner(&pl_node_->planner());
     ex_node_->setPlanCompiler(&pl_node_->compiler());
     ex_node_->setActionRegistry(&pl_node_->actionRegistry());
 
-    // --- Action mappings ---
-    // "move" uses a simple stub BT node
-    pl_node_->actionRegistry().registerAction("move", "StubMoveAction");
+    // --- Map all PDDL actions to PYRAMID InvokeService templates ---
+    // Following the pattern from pyramid_service_integration_guide.md
 
-    // "build_pyramid" is mapped to an InvokeService subtree that calls the
-    // pyramid service with the robot and site parameters forwarded.
-    pl_node_->actionRegistry().registerActionSubTree(
-        "build_pyramid",
-        R"(<InvokeService service_name="construction")"
-        R"( operation="build_pyramid")"
+    // (move ?robot ?from ?to) → mobility/move
+    pl_node_->actionRegistry().registerActionSubTree("move",
+        R"(<InvokeService service_name="mobility" operation="move")"
         R"( timeout_ms="5000")"
-        R"( param_names="?robot;?site")"
+        R"( param_names="?robot;?from;?to")"
+        R"( param_values="{param0};{param1};{param2}"/>)");
+
+    // (search ?robot ?sector) → sensors/area_search
+    pl_node_->actionRegistry().registerActionSubTree("search",
+        R"(<InvokeService service_name="sensors" operation="area_search")"
+        R"( timeout_ms="10000")"
+        R"( param_names="?robot;?sector")"
         R"( param_values="{param0};{param1}"/>)");
 
-    // Register BT node types on executor factory
-    ex_node_->factory().registerNodeType<StubMoveAction>("StubMoveAction");
-    // InvokeService is registered automatically by ExecutorNode
+    // (classify ?robot ?sector) → imaging/classify with extra request fields
+    pl_node_->actionRegistry().registerActionSubTree("classify",
+        R"(<InvokeService service_name="imaging" operation="classify")"
+        R"( timeout_ms="10000")"
+        R"( request_json="confidence_threshold=0.8")"
+        R"( param_names="?robot;?sector")"
+        R"( param_values="{param0};{param1}"/>)");
+
+    // InvokeService is registered automatically by ExecutorNode's registerCoreNodes
 
     // --- Lifecycle transitions ---
     ASSERT_EQ(wm_node_->on_configure(rclcpp_lifecycle::State{}),
@@ -156,43 +185,47 @@ protected:
     executor_->add_node(pl_node_->get_node_base_interface());
     executor_->add_node(ex_node_->get_node_base_interface());
 
-    // --- Build PDDL domain ---
+    // --- Build PDDL domain (standard UAV search) ---
     auto& wm = wm_node_->worldModel();
 
-    // Types
     wm.typeSystem().addType("object");
     wm.typeSystem().addType("location", "object");
-    wm.typeSystem().addType("build_site", "location");
+    wm.typeSystem().addType("sector", "location");
     wm.typeSystem().addType("robot", "object");
 
-    // Objects
-    wm.addObject("builder1", "robot");
+    wm.addObject("uav1", "robot");
     wm.addObject("base", "location");
-    wm.addObject("pyramid_site", "build_site");
+    wm.addObject("sector_a", "sector");
 
-    // Predicates
     wm.registerPredicate("at", {"robot", "location"});
-    wm.registerPredicate("pyramid_built", {"build_site"});
+    wm.registerPredicate("searched", {"sector"});
+    wm.registerPredicate("classified", {"sector"});
 
-    // Actions
     wm.registerAction(
         "move",
         {"?r", "?from", "?to"},
         {"robot", "location", "location"},
-        {"(at ?r ?from)"},          // preconditions
-        {"(at ?r ?to)"},            // add effects
-        {"(at ?r ?from)"});         // delete effects
+        {"(at ?r ?from)"},
+        {"(at ?r ?to)"},
+        {"(at ?r ?from)"});
 
     wm.registerAction(
-        "build_pyramid",
+        "search",
         {"?r", "?s"},
-        {"robot", "build_site"},
-        {"(at ?r ?s)"},             // preconditions: robot must be at site
-        {"(pyramid_built ?s)"},     // add effects
-        {});                        // delete effects
+        {"robot", "sector"},
+        {"(at ?r ?s)"},
+        {"(searched ?s)"},
+        {});
 
-    // Initial state
-    wm.setFact("(at builder1 base)", true, "test_init");
+    wm.registerAction(
+        "classify",
+        {"?r", "?s"},
+        {"robot", "sector"},
+        {"(at ?r ?s)", "(searched ?s)"},
+        {"(classified ?s)"},
+        {});
+
+    wm.setFact("(at uav1 base)", true, "test_init");
   }
 
   void TearDown() override {
@@ -231,17 +264,20 @@ protected:
 };
 
 // ---------------------------------------------------------------------------
-// Test: Plan generates move + build_pyramid, execution calls pyramid service
+// Test: Full pipeline — plan, execute, verify all PYRAMID service calls
 // ---------------------------------------------------------------------------
-TEST_F(E2EPyramidServiceTest, PlanAndExecuteCallsPyramidService) {
-  // Goal: pyramid is built at the site
+TEST_F(E2EPyramidServiceTest, PlanAndExecuteInvokesPyramidServices) {
+  // Goal: search and classify sector_a
   auto action_client =
       rclcpp_action::create_client<ame_ros2::action::Plan>(
           pl_node_, "/planner_node/plan");
   ASSERT_TRUE(action_client->wait_for_action_server(std::chrono::seconds(3)));
 
   auto goal_msg = ame_ros2::action::Plan::Goal();
-  goal_msg.goal_fluents = {"(pyramid_built pyramid_site)"};
+  goal_msg.goal_fluents = {
+      "(searched sector_a)",
+      "(classified sector_a)",
+  };
 
   std::shared_ptr<const ame_ros2::action::Plan::Result> plan_result;
   bool plan_done = false;
@@ -253,70 +289,58 @@ TEST_F(E2EPyramidServiceTest, PlanAndExecuteCallsPyramidService) {
   };
   action_client->async_send_goal(goal_msg, options);
 
-  // Wait for planning to complete
+  // Wait for planning
   spinUntilPlanDone(plan_result, plan_done);
   ASSERT_TRUE(plan_done) << "Plan action timed out";
   ASSERT_NE(plan_result, nullptr);
   ASSERT_TRUE(plan_result->success) << plan_result->error_msg;
 
-  // Plan should contain at least move + build_pyramid
-  EXPECT_GE(plan_result->plan_actions.size(), 2u);
+  // Plan should contain move + search + classify (at least 3 steps)
+  EXPECT_GE(plan_result->plan_actions.size(), 3u);
 
-  // Wait for BT execution to finish
+  // Wait for BT execution
   spinUntilExecutionDone();
   EXPECT_EQ(ex_node_->lastStatus(), BT::NodeStatus::SUCCESS);
 
   // Verify world model goal state
   const auto& wm = wm_node_->worldModel();
-  EXPECT_TRUE(wm.getFact("(pyramid_built pyramid_site)"));
-  EXPECT_TRUE(wm.getFact("(at builder1 pyramid_site)"));
+  EXPECT_TRUE(wm.getFact("(searched sector_a)"));
+  EXPECT_TRUE(wm.getFact("(classified sector_a)"));
+  EXPECT_TRUE(wm.getFact("(at uav1 sector_a)"));
 
-  // Verify the pyramid service stub was called
-  ASSERT_GE(pyramid_stub_.callCount(), 1u);
+  // Verify PYRAMID service calls were made with correct parameters
+  // At least 3 calls: mobility/move, sensors/area_search, imaging/classify
+  ASSERT_GE(pyramid_stub_.callCount(), 3u);
 
-  auto calls = pyramid_stub_.calls();
-  // Find the build_pyramid call
-  bool found_build_call = false;
-  for (const auto& c : calls) {
-    if (c.service_name == "construction" && c.operation == "build_pyramid") {
-      found_build_call = true;
-      // Verify PDDL parameters were forwarded
-      EXPECT_EQ(c.request.get("?robot"), "builder1");
-      EXPECT_EQ(c.request.get("?site"), "pyramid_site");
-    }
-  }
-  EXPECT_TRUE(found_build_call)
-      << "Expected a call to construction/build_pyramid";
+  // Check mobility/move call
+  auto move_calls = pyramid_stub_.callsByOperation("move");
+  ASSERT_GE(move_calls.size(), 1u);
+  EXPECT_EQ(move_calls[0].service_name, "mobility");
+  EXPECT_EQ(move_calls[0].request.get("robot"), "uav1");
+  EXPECT_EQ(move_calls[0].request.get("from"), "base");
+  EXPECT_EQ(move_calls[0].request.get("to"), "sector_a");
+
+  // Check sensors/area_search call
+  auto search_calls = pyramid_stub_.callsByOperation("area_search");
+  ASSERT_EQ(search_calls.size(), 1u);
+  EXPECT_EQ(search_calls[0].service_name, "sensors");
+  EXPECT_EQ(search_calls[0].request.get("robot"), "uav1");
+  EXPECT_EQ(search_calls[0].request.get("sector"), "sector_a");
+
+  // Check imaging/classify call (should include extra request_json fields)
+  auto classify_calls = pyramid_stub_.callsByOperation("classify");
+  ASSERT_EQ(classify_calls.size(), 1u);
+  EXPECT_EQ(classify_calls[0].service_name, "imaging");
+  EXPECT_EQ(classify_calls[0].request.get("robot"), "uav1");
+  EXPECT_EQ(classify_calls[0].request.get("sector"), "sector_a");
+  EXPECT_EQ(classify_calls[0].request.get("confidence_threshold"), "0.8");
 }
 
 // ---------------------------------------------------------------------------
-// Test: Pyramid service failure causes BT execution to fail
+// Test: PYRAMID service failure propagates through the BT to execution failure
 // ---------------------------------------------------------------------------
-
-class FailingPyramidService : public ame::IPyramidService {
-public:
-  bool call(const std::string&, const std::string&,
-            const ame::ServiceMessage&, ame::ServiceMessage&) override {
-    return false;
-  }
-
-  uint64_t callAsync(const std::string&, const std::string&,
-                     const ame::ServiceMessage&) override {
-    return ++next_id_;
-  }
-
-  ame::AsyncCallStatus pollResult(uint64_t, ame::ServiceMessage&) override {
-    return ame::AsyncCallStatus::FAILURE;
-  }
-
-  void cancelCall(uint64_t) override {}
-
-private:
-  uint64_t next_id_ = 0;
-};
-
 TEST_F(E2EPyramidServiceTest, PyramidServiceFailurePropagates) {
-  // Replace the stub with a failing service
+  // Replace the stub with a failing PYRAMID service
   FailingPyramidService failing_service;
   ex_node_->setPyramidService(&failing_service);
 
@@ -326,7 +350,10 @@ TEST_F(E2EPyramidServiceTest, PyramidServiceFailurePropagates) {
   ASSERT_TRUE(action_client->wait_for_action_server(std::chrono::seconds(3)));
 
   auto goal_msg = ame_ros2::action::Plan::Goal();
-  goal_msg.goal_fluents = {"(pyramid_built pyramid_site)"};
+  goal_msg.goal_fluents = {
+      "(searched sector_a)",
+      "(classified sector_a)",
+  };
 
   std::shared_ptr<const ame_ros2::action::Plan::Result> plan_result;
   bool plan_done = false;
@@ -342,10 +369,11 @@ TEST_F(E2EPyramidServiceTest, PyramidServiceFailurePropagates) {
   ASSERT_TRUE(plan_done) << "Plan action timed out";
   ASSERT_TRUE(plan_result->success) << "Planning should still succeed";
 
-  // BT execution should fail because the pyramid service returns FAILURE
+  // BT execution should fail because the PYRAMID service returns FAILURE
   spinUntilExecutionDone();
   EXPECT_EQ(ex_node_->lastStatus(), BT::NodeStatus::FAILURE);
 
-  // Goal should NOT be achieved
-  EXPECT_FALSE(wm_node_->worldModel().getFact("(pyramid_built pyramid_site)"));
+  // Goals should NOT be achieved
+  EXPECT_FALSE(wm_node_->worldModel().getFact("(searched sector_a)"));
+  EXPECT_FALSE(wm_node_->worldModel().getFact("(classified sector_a)"));
 }
