@@ -84,7 +84,10 @@ public:
   /// \brief Exposes factory for custom action node type registration.
   BT::BehaviorTreeFactory& factory() { return component_.factory(); }
 
-  BT::NodeStatus lastStatus() const { return component_.lastStatus(); }
+  /// \brief Returns the cached final status after execution completes.
+  /// While running, delegates to the component; after halt, returns the
+  /// terminal status captured before the component was reset.
+  BT::NodeStatus lastStatus() const { return final_status_; }
 
   /// \brief Returns the agent ID for this executor (empty if not agent-scoped).
   const std::string& agentId() const { return agent_id_; }
@@ -114,6 +117,7 @@ private:
   rclcpp::Client<ame_ros2::srv::SetFact>::SharedPtr client_set_fact_;
 
   bool core_nodes_registered_ = false;
+  BT::NodeStatus final_status_ = BT::NodeStatus::IDLE;
 
   void tickOnce();
   void registerCoreNodes();

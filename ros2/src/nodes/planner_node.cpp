@@ -51,7 +51,10 @@ PlannerNode::on_configure(const rclcpp_lifecycle::State&) {
   // domain models before the planner is activated.
   srv_load_domain_ = create_service<ame_ros2::srv::LoadDomain>(
     "~/load_domain",
-    [this](const auto& req, auto resp) { handleLoadDomain(req, resp); });
+    [this](std::shared_ptr<ame_ros2::srv::LoadDomain::Request> req,
+           std::shared_ptr<ame_ros2::srv::LoadDomain::Response> resp) {
+      handleLoadDomain(req, resp);
+    });
 
   RCLCPP_INFO(get_logger(), "PlannerNode configured (load_domain service ready)");
   return CallbackReturn::SUCCESS;
@@ -82,7 +85,7 @@ PlannerNode::on_activate(const rclcpp_lifecycle::State&) {
   pub_bt_xml_->on_activate();
 
   RCLCPP_INFO(get_logger(), "PlannerNode activated - action server at %s/plan",
-              get_fully_qualified_name());
+              get_node_base_interface()->get_fully_qualified_name());
   return CallbackReturn::SUCCESS;
 }
 

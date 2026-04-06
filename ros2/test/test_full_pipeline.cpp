@@ -184,6 +184,11 @@ TEST_F(FullPipelineTest, PlanAndExecuteReachesGoal) {
   ASSERT_NE(plan_result, nullptr);
   ASSERT_TRUE(plan_result->success) << plan_result->error_msg;
 
+  // In-process mode: explicitly hand the compiled BT XML to the executor
+  // (in distributed mode the planner publishes on a topic the executor subscribes to)
+  ASSERT_FALSE(plan_result->bt_xml.empty());
+  ex_node_->loadAndExecute(plan_result->bt_xml);
+
   deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
   while (ex_node_->lastStatus() != BT::NodeStatus::SUCCESS &&
          ex_node_->lastStatus() != BT::NodeStatus::FAILURE &&
