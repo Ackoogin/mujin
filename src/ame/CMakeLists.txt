@@ -18,6 +18,8 @@ add_library(ame_core STATIC
     nodes/invoke_service.cpp
     nodes/execute_phase_action.cpp
     nodes/delegate_to_agent.cpp
+    nodes/follow_route.cpp
+    lib/spatial_oracle.cpp
     lib/bt_logger.cpp
     lib/wm_audit_log.cpp
     lib/plan_audit_log.cpp

@@ -40,6 +40,11 @@ add_executable(test_observability test_observability.cpp)
 target_link_libraries(test_observability PRIVATE ame_core GTest::gtest_main)
 gtest_discover_tests(test_observability DISCOVERY_MODE PRE_TEST)
 
+# --- E2E spatial routing test (Option E: Hybrid) ---
+add_executable(test_e2e_spatial_routing test_e2e_spatial_routing.cpp)
+target_link_libraries(test_e2e_spatial_routing PRIVATE ame_core GTest::gtest_main)
+gtest_discover_tests(test_e2e_spatial_routing DISCOVERY_MODE PRE_TEST)
+
 # --- Core extensions tests (Extensions 3-6) ---
 add_executable(test_extensions test_extensions.cpp)
 target_link_libraries(test_extensions PRIVATE ame_core GTest::gtest_main)
