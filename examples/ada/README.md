@@ -16,12 +16,39 @@ The example mirrors the C `external_io_bridge_example.c` flow:
 3. the executor drains that queue on its single logic thread,
 4. the subscriber callback runs on the executor thread.
 
-On Windows, the GNAT Community toolchain is MinGW/GCC-based, while the main repo build uses MSVC. Because those static libraries are not link-compatible, the Ada demo uses `gprbuild` to compile the small PCL C sources directly with the same GNU toolchain as the Ada code.
+The Ada examples link against a prebuilt static `pcl_core` library instead of compiling `src/pcl` sources directly.
+
+The Ada projects that compile C units use `-std=c11` for broader toolchain compatibility.
+
+This matches the core CMake PCL targets (`pcl_core`, `pcl_transport_socket`), which are also configured with `C_STANDARD 11`.
+
+By default the `.gpr` files expect:
+
+- `MUJIN_ROOT=../..`
+- `PCL_INCLUDE_DIR=<MUJIN_ROOT>/include`
+- `PCL_LIB_DIR=<MUJIN_ROOT>/build/install/lib`
+- `PCL_LIB_NAME=pcl_core`
+- `PCL_SOCKET_LIB_NAME=pcl_transport_socket` (for generated-service examples)
+
+If your static libraries live elsewhere (or have different basenames), override these with `-X` switches.
+
+On Windows, GNAT (MinGW/GCC) requires GCC-compatible static libraries (`.a`). MSVC-produced `.lib` files from the default CMake/VS build are not link-compatible with GNAT.
 
 Build:
 
 ```sh
 gprbuild -P pcl_sensor_demo.gpr
+```
+
+Example with explicit overrides:
+
+```sh
+gprbuild -P pcl_sensor_demo.gpr \
+  -XMUJIN_ROOT=../.. \
+  -XPCL_INCLUDE_DIR=../../include \
+  -XPCL_LIB_DIR=../../build/install/lib \
+  -XPCL_LIB_NAME=pcl_core \
+  -XPCL_SOCKET_LIB_NAME=pcl_transport_socket
 ```
 
 Build OO tests:

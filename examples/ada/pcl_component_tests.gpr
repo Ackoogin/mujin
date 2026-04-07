@@ -1,8 +1,11 @@
 project Pcl_Component_Tests is
-  Root_Dir := "D:/Dev/repo/ame";
+  Root_Dir := external("MUJIN_ROOT", ".." & "/..");
+  Pcl_Include_Dir := external("PCL_INCLUDE_DIR", Root_Dir & "/include");
+  Pcl_Lib_Dir := external("PCL_LIB_DIR", Root_Dir & "/build/install/lib");
+  Pcl_Lib_Name := external("PCL_LIB_NAME", "pcl_core");
 
   for Languages use ("Ada", "C");
-  for Source_Dirs use (".", "../../src/pcl");
+  for Source_Dirs use (".");
   for Main use ("pcl_component_tests.adb");
 
   for Object_Dir use "obj_tests";
@@ -11,8 +14,24 @@ project Pcl_Component_Tests is
   package Compiler is
     for Default_Switches ("Ada") use ("-g");
     for Default_Switches ("C") use
-      ("-std=c17",
-       "-I" & Root_Dir & "/include",
-       "-I" & Root_Dir & "/src/pcl");
+      ("-std=c11",
+       "-I" & Pcl_Include_Dir);
   end Compiler;
+
+  type OS_Type is ("Windows_NT", "linux", "darwin");
+  OS : OS_Type := external ("OS", "linux");
+
+  package Linker is
+    case OS is
+      when "Windows_NT" =>
+        for Default_Switches ("Ada") use
+          ("-L" & Pcl_Lib_Dir,
+           "-l" & Pcl_Lib_Name,
+           "-lws2_32");
+      when others =>
+        for Default_Switches ("Ada") use
+          ("-L" & Pcl_Lib_Dir,
+           "-l" & Pcl_Lib_Name);
+    end case;
+  end Linker;
 end Pcl_Component_Tests;

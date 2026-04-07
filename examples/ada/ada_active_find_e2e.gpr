@@ -2,10 +2,14 @@ with "gnatcoll";
 
 project Ada_Active_Find_E2E is
   Root_Dir := external("MUJIN_ROOT", ".." & "/..");
+  Pcl_Include_Dir := external("PCL_INCLUDE_DIR", Root_Dir & "/include");
+  Pcl_Lib_Dir := external("PCL_LIB_DIR", Root_Dir & "/build/install/lib");
+  Pcl_Lib_Name := external("PCL_LIB_NAME", "pcl_core");
+  Pcl_Socket_Lib_Name := external("PCL_SOCKET_LIB_NAME", "pcl_transport_socket");
 
   for Languages use ("Ada", "C");
 
-  for Source_Dirs use (".", "generated", "../../src/pcl");
+  for Source_Dirs use (".", "generated");
   for Main use ("ada_active_find_e2e.adb");
 
   for Object_Dir use "obj_active_find";
@@ -14,9 +18,8 @@ project Ada_Active_Find_E2E is
   package Compiler is
     for Default_Switches ("Ada") use ("-g");
     for Default_Switches ("C") use
-      ("-std=c17",
-       "-I" & Root_Dir & "/include",
-       "-I" & Root_Dir & "/src/pcl");
+      ("-std=c11",
+       "-I" & Pcl_Include_Dir);
   end Compiler;
 
   type OS_Type is ("Windows_NT", "linux", "darwin");
@@ -25,9 +28,16 @@ project Ada_Active_Find_E2E is
   package Linker is
     case OS is
       when "Windows_NT" =>
-        for Default_Switches ("Ada") use ("-lws2_32");
+        for Default_Switches ("Ada") use
+          ("-L" & Pcl_Lib_Dir,
+           "-l" & Pcl_Lib_Name,
+           "-l" & Pcl_Socket_Lib_Name,
+           "-lws2_32");
       when others =>
-        null;
+        for Default_Switches ("Ada") use
+          ("-L" & Pcl_Lib_Dir,
+           "-l" & Pcl_Lib_Name,
+           "-l" & Pcl_Socket_Lib_Name);
     end case;
   end Linker;
 end Ada_Active_Find_E2E;
