@@ -36,8 +36,12 @@ shift
 goto parse_args
 :done_args
 
-set "SCRIPT_DIR=%~dp0"
-for %%I in ("%SCRIPT_DIR%..") do set "ROOT_DIR=%%~fI"
+set "SCRIPT_BASE=%~dp0"
+for %%I in ("%SCRIPT_BASE%") do set "SCRIPT_BASE=%%~fI"
+set "ROOT_DIR=%SCRIPT_BASE%"
+if not exist "%ROOT_DIR%\pim\ada_service_generator.py" (
+  for %%I in ("%SCRIPT_BASE%\..") do set "ROOT_DIR=%%~fI"
+)
 
 if "%SERVER_BIN%"=="" set "SERVER_BIN=%ROOT_DIR%\build\tests\Release\tobj_socket_server.exe"
 if "%BRIDGE_BIN%"=="" set "BRIDGE_BIN=%ROOT_DIR%\build\tests\Release\standalone_bridge.exe"
@@ -51,6 +55,32 @@ set "BRIDGE_PORT_FILE=%TEMP%\ame_af_e2e_bport_%RANDOM%.tmp"
 
 echo === Ada ActiveFind E2E Test (3-process: server -^> bridge -^> client) ===
 
+REM Step 0: Generate Ada service stubs from proto (provided + consumed)
+where python >nul 2>&1
+if %errorlevel% equ 0 (
+    set "ADA_GEN_OUT=%ROOT_DIR%\examples\ada\generated"
+    set "GEN_SCRIPT=%ROOT_DIR%\pim\ada_service_generator.py"
+    set "PROTO_DIR=%ROOT_DIR%\proto\pyramid\components\tactical_objects\services"
+    set "DATA_MODEL_DIR=%ROOT_DIR%\proto\pyramid\data_model"
+    echo [driver] Generating Ada types, codecs and service stubs from proto...
+    set "GEN_OK=1"
+    python "!GEN_SCRIPT!" --types "!DATA_MODEL_DIR!" "!ADA_GEN_OUT!"
+    if !errorlevel! neq 0 set "GEN_OK=0"
+    python "!GEN_SCRIPT!" --codec "!DATA_MODEL_DIR!" "!ADA_GEN_OUT!"
+    if !errorlevel! neq 0 set "GEN_OK=0"
+    python "!GEN_SCRIPT!" "!PROTO_DIR!\provided.proto" "!ADA_GEN_OUT!"
+    if !errorlevel! neq 0 set "GEN_OK=0"
+    python "!GEN_SCRIPT!" "!PROTO_DIR!\consumed.proto" "!ADA_GEN_OUT!"
+    if !errorlevel! neq 0 set "GEN_OK=0"
+    if "!GEN_OK!"=="0" (
+        echo [driver] FAIL: Ada service generation failed
+        exit /b 1
+    )
+    echo [driver] Generated stubs in !ADA_GEN_OUT!
+) else (
+    echo [driver] python not found -- skipping Ada stub generation
+)
+
 REM Step 1: Build Ada active-find client if gprbuild is available
 where gprbuild >nul 2>&1
 if %errorlevel% equ 0 (
@@ -58,35 +88,37 @@ if %errorlevel% equ 0 (
     set "ADA_DIR=%ROOT_DIR%\examples\ada"
     set "ADA_PCL_LIB_DIR=%ROOT_DIR%\build\ada_gnat_pcl"
     set "ADA_PCL_BUILD_SCRIPT=%ROOT_DIR%\scripts\build_gnat_pcl_static_libs.bat"
+    set "CAN_BUILD_ADA=1"
     if not exist "!ADA_PCL_LIB_DIR!\libpcl_core.a" (
         echo [driver] Preparing GNAT-compatible PCL static archives...
         call "!ADA_PCL_BUILD_SCRIPT!" "!ADA_PCL_LIB_DIR!"
         if !errorlevel! neq 0 (
             echo [driver] WARNING: failed to build GNAT PCL static archives -- falling back to pre-built binary
-            goto after_ada_build
+            set "CAN_BUILD_ADA=0"
         )
     )
-    if not exist "!ADA_PCL_LIB_DIR!\libpcl_transport_socket.a" (
+    if "!CAN_BUILD_ADA!"=="1" if not exist "!ADA_PCL_LIB_DIR!\libpcl_transport_socket.a" (
         echo [driver] Preparing GNAT-compatible transport static archive...
         call "!ADA_PCL_BUILD_SCRIPT!" "!ADA_PCL_LIB_DIR!"
         if !errorlevel! neq 0 (
             echo [driver] WARNING: failed to build GNAT transport static archive -- falling back to pre-built binary
-            goto after_ada_build
+            set "CAN_BUILD_ADA=0"
         )
     )
-    set "MUJIN_ROOT=%ROOT_DIR%"
-    pushd "!ADA_DIR!"
-    gprbuild -P ada_active_find_e2e.gpr -q ^
-      -XMUJIN_ROOT=!ROOT_DIR! ^
-      -XPCL_INCLUDE_DIR=!ROOT_DIR!\include ^
-      -XPCL_LIB_DIR=!ADA_PCL_LIB_DIR! ^
-      -XPCL_LIB_NAME=pcl_core ^
-      -XPCL_SOCKET_LIB_NAME=pcl_transport_socket >nul 2>&1
-    if !errorlevel! neq 0 (
-        echo [driver] gprbuild failed -- falling back to pre-built binary
+    if "!CAN_BUILD_ADA!"=="1" (
+        set "MUJIN_ROOT=%ROOT_DIR%"
+        pushd "!ADA_DIR!"
+        gprbuild -P ada_active_find_e2e.gpr -q ^
+          -XMUJIN_ROOT=!ROOT_DIR! ^
+          -XPCL_INCLUDE_DIR=!ROOT_DIR!\include ^
+          -XPCL_LIB_DIR=!ADA_PCL_LIB_DIR! ^
+          -XPCL_LIB_NAME=pcl_core ^
+          -XPCL_SOCKET_LIB_NAME=pcl_transport_socket >nul 2>&1
+        if !errorlevel! neq 0 (
+            echo [driver] gprbuild failed -- falling back to pre-built binary
+        )
+        popd
     )
-    popd
-    :after_ada_build
 ) else (
     echo [driver] gprbuild not found -- checking for pre-built client...
 )

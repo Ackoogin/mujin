@@ -304,6 +304,14 @@ endif()
 find_program(GPRBUILD gprbuild)
 if(GPRBUILD)
   set(ADA_SRC_DIR ${CMAKE_SOURCE_DIR}/examples/ada)
+  find_program(ADA_PYTHON NAMES python3 python)
+  if(NOT ADA_PYTHON)
+    message(FATAL_ERROR "Python is required to generate Ada bindings for tests")
+  endif()
+  set(ADA_GEN_SCRIPT ${CMAKE_SOURCE_DIR}/pim/ada_service_generator.py)
+  set(ADA_GEN_OUT ${ADA_SRC_DIR}/generated)
+  set(ADA_DATA_MODEL_DIR ${CMAKE_SOURCE_DIR}/proto/pyramid/data_model)
+  set(ADA_PROTO_SVC_DIR ${CMAKE_SOURCE_DIR}/proto/pyramid/components/tactical_objects/services)
   set(ADA_PCL_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/include" CACHE PATH
       "Include directory for Ada gprbuild PCL headers")
   set(ADA_PCL_LIB_NAME "pcl_core" CACHE STRING
@@ -326,6 +334,10 @@ if(GPRBUILD)
 
   # Build the generated-bindings validation test binary via gprbuild
   add_custom_target(ada_test_generated_bindings_build ALL
+    COMMAND ${ADA_PYTHON} ${ADA_GEN_SCRIPT} --types ${ADA_DATA_MODEL_DIR} ${ADA_GEN_OUT}
+    COMMAND ${ADA_PYTHON} ${ADA_GEN_SCRIPT} --codec ${ADA_DATA_MODEL_DIR} ${ADA_GEN_OUT}
+    COMMAND ${ADA_PYTHON} ${ADA_GEN_SCRIPT} ${ADA_PROTO_SVC_DIR}/provided.proto ${ADA_GEN_OUT}
+    COMMAND ${ADA_PYTHON} ${ADA_GEN_SCRIPT} ${ADA_PROTO_SVC_DIR}/consumed.proto ${ADA_GEN_OUT}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
     COMMAND ${CMAKE_COMMAND} -E env MUJIN_ROOT=${CMAKE_SOURCE_DIR}
             ${GPRBUILD} -p -P ${ADA_SRC_DIR}/test_generated_bindings.gpr
