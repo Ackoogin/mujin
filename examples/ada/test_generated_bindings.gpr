@@ -14,7 +14,7 @@ project Test_Generated_Bindings is
   Pcl_Lib_Name := external("PCL_LIB_NAME", "pcl_core");
   Pcl_Socket_Lib_Name := external("PCL_SOCKET_LIB_NAME", "pcl_transport_socket");
 
-  for Languages use ("Ada", "C");
+  for Languages use ("Ada");
 
   for Source_Dirs use (".", "generated");
   for Main use ("test_generated_bindings.adb");
@@ -23,7 +23,7 @@ project Test_Generated_Bindings is
   for Exec_Dir use "bin";
 
   package Compiler is
-    for Default_Switches ("Ada") use ("-g", "-gnatwa");
+    for Default_Switches ("Ada") use ("-g");
     for Default_Switches ("C") use
       ("-std=c11",
        "-I" & Pcl_Include_Dir);
