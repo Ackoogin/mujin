@@ -8,7 +8,8 @@
 #include "pyramid_data_model_tactical_codec.hpp"
 
 #include <pcl/pcl_container.h>
-#include <pcl/pcl_transport_socket.h>
+#include <pcl/pcl_executor.h>
+#include <pcl/pcl_transport.h>
 
 #include <cstdlib>
 #include <cstring>
@@ -71,7 +72,7 @@ ServiceHandler::handleReadDetail(const Query& /*request*/) {
 
 namespace {
 
-pcl_status_t invoke_async(pcl_socket_transport_t* transport,
+pcl_status_t invoke_async(pcl_executor_t* executor,
                            const char*             service_name,
                            const std::string&      payload,
                            pcl_resp_cb_fn_t        callback,
@@ -81,8 +82,8 @@ pcl_status_t invoke_async(pcl_socket_transport_t* transport,
     msg.data      = payload.data();
     msg.size      = static_cast<uint32_t>(payload.size());
     msg.type_name = "application/json";
-    return pcl_socket_transport_invoke_remote_async(
-        transport, service_name, &msg, callback, user_data);
+    return pcl_executor_invoke_async(
+        executor, service_name, &msg, callback, user_data);
 }
 
 } // namespace
@@ -116,60 +117,60 @@ void subscribeEvidenceRequirements(pcl_container_t*   container,
 }
 
 // ---------------------------------------------------------------------------
-// Typed invoke wrappers — serialise and dispatch via PCL
+// Typed invoke wrappers — serialise and dispatch via executor transport
 // ---------------------------------------------------------------------------
 
-pcl_status_t invokeReadMatch(pcl_socket_transport_t* transport,
+pcl_status_t invokeReadMatch(pcl_executor_t* executor,
                              const Query&                 request,
                              pcl_resp_cb_fn_t        callback,
                              void*                   user_data)
 {
     std::string payload = toJson(request);
-    return invoke_async(transport, kSvcReadMatch, payload, callback, user_data);
+    return invoke_async(executor, kSvcReadMatch, payload, callback, user_data);
 }
 
-pcl_status_t invokeCreateRequirement(pcl_socket_transport_t* transport,
+pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
                                      const ObjectInterestRequirement& request,
                                      pcl_resp_cb_fn_t        callback,
                                      void*                   user_data)
 {
     std::string payload = toJson(request);
-    return invoke_async(transport, kSvcCreateRequirement, payload, callback, user_data);
+    return invoke_async(executor, kSvcCreateRequirement, payload, callback, user_data);
 }
 
-pcl_status_t invokeReadRequirement(pcl_socket_transport_t* transport,
+pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
                                    const Query&                 request,
                                    pcl_resp_cb_fn_t        callback,
                                    void*                   user_data)
 {
     std::string payload = toJson(request);
-    return invoke_async(transport, kSvcReadRequirement, payload, callback, user_data);
+    return invoke_async(executor, kSvcReadRequirement, payload, callback, user_data);
 }
 
-pcl_status_t invokeUpdateRequirement(pcl_socket_transport_t* transport,
+pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
                                      const ObjectInterestRequirement& request,
                                      pcl_resp_cb_fn_t        callback,
                                      void*                   user_data)
 {
     std::string payload = toJson(request);
-    return invoke_async(transport, kSvcUpdateRequirement, payload, callback, user_data);
+    return invoke_async(executor, kSvcUpdateRequirement, payload, callback, user_data);
 }
 
-pcl_status_t invokeDeleteRequirement(pcl_socket_transport_t* transport,
+pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
                                      const Identifier&            request,
                                      pcl_resp_cb_fn_t        callback,
                                      void*                   user_data)
 {
-    return invoke_async(transport, kSvcDeleteRequirement, request, callback, user_data);
+    return invoke_async(executor, kSvcDeleteRequirement, request, callback, user_data);
 }
 
-pcl_status_t invokeReadDetail(pcl_socket_transport_t* transport,
+pcl_status_t invokeReadDetail(pcl_executor_t* executor,
                               const Query&                 request,
                               pcl_resp_cb_fn_t        callback,
                               void*                   user_data)
 {
     std::string payload = toJson(request);
-    return invoke_async(transport, kSvcReadDetail, payload, callback, user_data);
+    return invoke_async(executor, kSvcReadDetail, payload, callback, user_data);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,0 +1,50 @@
+// Auto-generated FlatBuffers schema from tactical.proto
+// Do not edit — regenerate from proto source
+
+namespace pyramid.data_model.tactical;
+
+enum ObjectSource : byte {
+  UNSPECIFIED = 0,
+  RADAR = 1,
+  LOCAL = 2
+}
+
+union LocationUnion {
+  PolyArea,
+  CircleArea,
+  Point
+}
+
+table ObjectDetail {
+  base:Entity;
+  source:[ObjectSource];
+  position:GeodeticPosition;
+  creation_time:Timestamp;
+  quality:Percentage;
+  course:Angle;
+  speed:Speed;
+  length:Length;
+  identity:StandardIdentity;
+  dimension:BattleDimension;
+}
+
+table ObjectEvidenceRequirement {
+  base:Requirement;
+  policy:DataPolicy;
+  dimension:[BattleDimension];
+  location:LocationUnion;
+}
+
+table ObjectInterestRequirement {
+  base:Requirement;
+  source:ObjectSource;
+  policy:DataPolicy;
+  dimension:[BattleDimension];
+  location:LocationUnion;
+}
+
+table ObjectMatch {
+  base:Entity;
+  matching_object_id:Identifier;
+}
+

@@ -133,7 +133,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    end Subscribe_Evidence_Requirements;
 
    procedure Invoke_Read_Match
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address)
@@ -151,15 +151,15 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Msg.Data      := To_Address (Req_C);
       Msg.Size      := Interfaces.C.unsigned (Payload'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
-      Status := Pcl_Bindings.Invoke_Remote_Async
-        (Transport, Svc_C, Msg'Access, Callback, User_Data);
+      Status := Pcl_Bindings.Invoke_Async
+        (Executor, Svc_C, Msg'Access, Callback, User_Data);
       Interfaces.C.Strings.Free (Req_C);
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
    end Invoke_Read_Match;
 
    procedure Invoke_Create_Requirement
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Pyramid.Services.Tactical_Objects.Json_Codec.Create_Requirement_Request;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address)
@@ -177,15 +177,15 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Msg.Data      := To_Address (Req_C);
       Msg.Size      := Interfaces.C.unsigned (Payload'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
-      Status := Pcl_Bindings.Invoke_Remote_Async
-        (Transport, Svc_C, Msg'Access, Callback, User_Data);
+      Status := Pcl_Bindings.Invoke_Async
+        (Executor, Svc_C, Msg'Access, Callback, User_Data);
       Interfaces.C.Strings.Free (Req_C);
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
    end Invoke_Create_Requirement;
 
    procedure Invoke_Read_Requirement
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address)
@@ -203,15 +203,15 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Msg.Data      := To_Address (Req_C);
       Msg.Size      := Interfaces.C.unsigned (Payload'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
-      Status := Pcl_Bindings.Invoke_Remote_Async
-        (Transport, Svc_C, Msg'Access, Callback, User_Data);
+      Status := Pcl_Bindings.Invoke_Async
+        (Executor, Svc_C, Msg'Access, Callback, User_Data);
       Interfaces.C.Strings.Free (Req_C);
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
    end Invoke_Read_Requirement;
 
    procedure Invoke_Update_Requirement
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Pyramid.Services.Tactical_Objects.Json_Codec.Create_Requirement_Request;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address)
@@ -229,15 +229,15 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Msg.Data      := To_Address (Req_C);
       Msg.Size      := Interfaces.C.unsigned (Payload'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
-      Status := Pcl_Bindings.Invoke_Remote_Async
-        (Transport, Svc_C, Msg'Access, Callback, User_Data);
+      Status := Pcl_Bindings.Invoke_Async
+        (Executor, Svc_C, Msg'Access, Callback, User_Data);
       Interfaces.C.Strings.Free (Req_C);
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
    end Invoke_Update_Requirement;
 
    procedure Invoke_Delete_Requirement
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Identifier;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address)
@@ -255,15 +255,15 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Msg.Data      := To_Address (Req_C);
       Msg.Size      := Interfaces.C.unsigned (Payload'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
-      Status := Pcl_Bindings.Invoke_Remote_Async
-        (Transport, Svc_C, Msg'Access, Callback, User_Data);
+      Status := Pcl_Bindings.Invoke_Async
+        (Executor, Svc_C, Msg'Access, Callback, User_Data);
       Interfaces.C.Strings.Free (Req_C);
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
    end Invoke_Delete_Requirement;
 
    procedure Invoke_Read_Detail
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address)
@@ -281,8 +281,8 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Msg.Data      := To_Address (Req_C);
       Msg.Size      := Interfaces.C.unsigned (Payload'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
-      Status := Pcl_Bindings.Invoke_Remote_Async
-        (Transport, Svc_C, Msg'Access, Callback, User_Data);
+      Status := Pcl_Bindings.Invoke_Async
+        (Executor, Svc_C, Msg'Access, Callback, User_Data);
       Interfaces.C.Strings.Free (Req_C);
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);

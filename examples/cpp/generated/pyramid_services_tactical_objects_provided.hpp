@@ -14,7 +14,8 @@
 #include "pyramid_data_model_types.hpp"
 
 #include <pcl/pcl_container.h>
-#include <pcl/pcl_transport_socket.h>
+#include <pcl/pcl_executor.h>
+#include <pcl/pcl_transport.h>
 #include <pcl/pcl_types.h>
 
 #include <string>
@@ -118,37 +119,49 @@ void subscribeEvidenceRequirements(pcl_container_t*  container,
                                    const char*       content_type = "application/json");
 
 /// \brief Invoke matching_objects.read_match (typed, serialisation handled internally).
-pcl_status_t invokeReadMatch(pcl_socket_transport_t* transport,
+///
+/// Uses the transport configured on the executor.
+pcl_status_t invokeReadMatch(pcl_executor_t* executor,
                              const Query&                 request,
                              pcl_resp_cb_fn_t        callback,
                              void*                   user_data = nullptr);
 
 /// \brief Invoke object_of_interest.create_requirement (typed, serialisation handled internally).
-pcl_status_t invokeCreateRequirement(pcl_socket_transport_t* transport,
+///
+/// Uses the transport configured on the executor.
+pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
                                      const ObjectInterestRequirement& request,
                                      pcl_resp_cb_fn_t        callback,
                                      void*                   user_data = nullptr);
 
 /// \brief Invoke object_of_interest.read_requirement (typed, serialisation handled internally).
-pcl_status_t invokeReadRequirement(pcl_socket_transport_t* transport,
+///
+/// Uses the transport configured on the executor.
+pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
                                    const Query&                 request,
                                    pcl_resp_cb_fn_t        callback,
                                    void*                   user_data = nullptr);
 
 /// \brief Invoke object_of_interest.update_requirement (typed, serialisation handled internally).
-pcl_status_t invokeUpdateRequirement(pcl_socket_transport_t* transport,
+///
+/// Uses the transport configured on the executor.
+pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
                                      const ObjectInterestRequirement& request,
                                      pcl_resp_cb_fn_t        callback,
                                      void*                   user_data = nullptr);
 
 /// \brief Invoke object_of_interest.delete_requirement (typed, serialisation handled internally).
-pcl_status_t invokeDeleteRequirement(pcl_socket_transport_t* transport,
+///
+/// Uses the transport configured on the executor.
+pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
                                      const Identifier&            request,
                                      pcl_resp_cb_fn_t        callback,
                                      void*                   user_data = nullptr);
 
 /// \brief Invoke specific_object_detail.read_detail (typed, serialisation handled internally).
-pcl_status_t invokeReadDetail(pcl_socket_transport_t* transport,
+///
+/// Uses the transport configured on the executor.
+pcl_status_t invokeReadDetail(pcl_executor_t* executor,
                               const Query&                 request,
                               pcl_resp_cb_fn_t        callback,
                               void*                   user_data = nullptr);

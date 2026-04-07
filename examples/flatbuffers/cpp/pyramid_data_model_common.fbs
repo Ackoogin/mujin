@@ -1,0 +1,107 @@
+// Auto-generated FlatBuffers schema from common.proto
+// Do not edit — regenerate from proto source
+
+namespace pyramid.data_model.common;
+
+enum Feasibility : byte {
+  UNSPECIFIED = 0,
+  FEASIBLE = 1,
+  NOT_FEASIBLE = 2,
+  PARTIALLY_FEASIBLE = 3,
+  PENDING = 4
+}
+
+enum Progress : byte {
+  UNSPECIFIED = 0,
+  NOT_STARTED = 1,
+  IN_PROGRESS = 2,
+  COMPLETED = 3,
+  CANCELLED = 4,
+  FAILED = 5
+}
+
+enum StandardIdentity : byte {
+  UNSPECIFIED = 0,
+  UNKNOWN = 1,
+  FRIENDLY = 2,
+  HOSTILE = 3,
+  SUSPECT = 4,
+  NEUTRAL = 5,
+  PENDING = 6,
+  JOKER = 7,
+  FAKER = 8,
+  ASSUMED_FRIENDLY = 9
+}
+
+enum BattleDimension : byte {
+  UNSPECIFIED = 0,
+  GROUND = 1,
+  SUBSURFACE = 2,
+  SEA_SURFACE = 3,
+  AIR = 4,
+  UNKNOWN = 5
+}
+
+enum DataPolicy : byte {
+  UNSPECIFIED = 0,
+  QUERY = 1,
+  OBTAIN = 2
+}
+
+table GeodeticPosition {
+  latitude:Angle;
+  longitude:Angle;
+}
+
+table PolyArea {
+  points:[GeodeticPosition];
+}
+
+table Achievement {
+  base:Entity;
+  status:Progress;
+  quality:Percentage;
+  achieveability:Feasibility;
+}
+
+table Requirement {
+  base:Entity;
+  status:Achievement;
+}
+
+table Capability {
+  base:Entity;
+  availability:bool;
+  name:string;
+  contraint:[Contraint];
+}
+
+table Entity {
+  update_time:Timestamp;
+  id:Identifier;
+  source:Identifier;
+}
+
+table CircleArea {
+  position:GeodeticPosition;
+  radius:Length;
+}
+
+table Point {
+  position:GeodeticPosition;
+}
+
+table Contraint {
+  name:string;
+  value:int;
+}
+
+table Ack {
+  success:bool;
+}
+
+table Query {
+  id:[Identifier];
+  one_shot:bool;
+}
+
