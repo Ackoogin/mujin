@@ -8,6 +8,8 @@
 #include "pyramid_data_model_tactical_codec.hpp"
 
 #include <pcl/pcl_container.h>
+#include <pcl/pcl_executor.h>
+#include <pcl/pcl_transport.h>
 
 #include <cstdlib>
 #include <cstring>

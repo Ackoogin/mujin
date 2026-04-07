@@ -1,5 +1,5 @@
 --  Auto-generated service binding specification
---  Generated from: pyramid by ada_service_generator.py
+--  Generated from: services by ada_service_generator.py
 --  Package: Pyramid.Services.Tactical_Objects.Provided
 --
 --  Architecture: component logic > service binding (this) > PCL
@@ -105,38 +105,44 @@ package Pyramid.Services.Tactical_Objects.Provided is
       Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;
       User_Data : System.Address := System.Null_Address);
 
+   --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Read_Match
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address);
 
+   --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Create_Requirement
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Pyramid.Services.Tactical_Objects.Json_Codec.Create_Requirement_Request;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address);
 
+   --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Read_Requirement
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address);
 
+   --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Update_Requirement
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Pyramid.Services.Tactical_Objects.Json_Codec.Create_Requirement_Request;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address);
 
+   --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Delete_Requirement
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Identifier;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address);
 
+   --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Read_Detail
-     (Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address);
