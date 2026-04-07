@@ -45,9 +45,9 @@
 /build_linux/
 /build_pcl_cov/
 /build-coverage/
-/ros2/build/
-/ros2/install/
-/ros2/log/
+/subprojects/AME/ros2/build/
+/subprojects/AME/ros2/install/
+/subprojects/AME/ros2/log/
 
 # Coverage artefacts
 *.gcov
@@ -71,9 +71,12 @@ install/*
 build_errors.log
 
 # Ada build output
-examples/ada/obj_tests/*
-examples/ada/obj/*
-examples/ada/bin/*
+subprojects/PYRAMID/examples/ada/obj_tests/*
+subprojects/PYRAMID/examples/ada/obj/*
+subprojects/PYRAMID/examples/ada/bin/*
+subprojects/PYRAMID/examples/ada/obj_active_find/*
+subprojects/PYRAMID/examples/ada/obj_test_bindings/*
+subprojects/PYRAMID/examples/ada/obj_tobj_client/*
 
 # References
 ref/*
@@ -95,7 +98,8 @@ b__*
 __pycache__/
 *.pyc
 *.pyo
-examples/ada/obj_test_bindings/pcl_container.c.stderr
+subprojects/PYRAMID/examples/ada/obj_test_bindings/pcl_container.c.stderr
+subprojects/AME/tools/devenv/.venv/
 
 # logs
 wm_audit.jsonl

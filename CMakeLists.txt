@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(ame LANGUAGES C CXX)
+project(mujin_workspace LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -7,54 +7,49 @@ set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(MUJIN_WORKSPACE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
+set(PCL_ROOT_DIR "${MUJIN_WORKSPACE_ROOT}/subprojects/PCL")
+set(PYRAMID_ROOT_DIR "${MUJIN_WORKSPACE_ROOT}/subprojects/PYRAMID")
+set(AME_ROOT_DIR "${MUJIN_WORKSPACE_ROOT}/subprojects/AME")
+
 # ---------------------------------------------------------------------------
-# Dependencies via FetchContent
+# Shared third-party dependencies
 # ---------------------------------------------------------------------------
 include(FetchContent)
 
-# --- BehaviorTree.CPP v4 ---
 FetchContent_Declare(
     behaviortree_cpp
     GIT_REPOSITORY https://github.com/BehaviorTree/BehaviorTree.CPP.git
     GIT_TAG        4.6.2
     GIT_SHALLOW    TRUE
 )
-# Disable BT.CPP extras we don't need
 set(BTCPP_EXAMPLES        OFF CACHE BOOL "" FORCE)
 set(BTCPP_UNIT_TESTS      OFF CACHE BOOL "" FORCE)
 set(BTCPP_GROOT_INTERFACE OFF CACHE BOOL "" FORCE)
 set(BTCPP_SQLITE_LOGGING  OFF CACHE BOOL "" FORCE)
 set(BTCPP_SHARED_LIBS     OFF CACHE BOOL "" FORCE)
-
-# Skip BT.CPP install rules to avoid the minitrace export-set error
 set(CMAKE_SKIP_INSTALL_RULES TRUE)
 FetchContent_MakeAvailable(behaviortree_cpp)
 set(CMAKE_SKIP_INSTALL_RULES FALSE)
 
-# --- LAPKT (core only — we build from source, bypassing its own CMake) ---
 FetchContent_Declare(
     lapkt_src
     GIT_REPOSITORY https://github.com/LAPKT-dev/LAPKT-public.git
     GIT_TAG        Devel2.0
     GIT_SHALLOW    TRUE
-    # We do NOT want LAPKT's CMakeLists to run — we build core ourselves
 )
 FetchContent_GetProperties(lapkt_src)
 if(NOT lapkt_src_POPULATED)
     FetchContent_Populate(lapkt_src)
 endif()
 
-# Build LAPKT core as a static library from individual source files.
-# This avoids LAPKT's complex superbuild + pybind11 + Boost dependencies.
 set(LAPKT_SRC ${lapkt_src_SOURCE_DIR}/src)
 
 add_library(lapkt_core STATIC
-    # ltl (utility library)
     ${LAPKT_SRC}/ltl/bit_array.cxx
     ${LAPKT_SRC}/ltl/bit_set.cxx
     ${LAPKT_SRC}/ltl/memory.cxx
     ${LAPKT_SRC}/ltl/resources_control.cxx
-    # model (STRIPS planning model)
     ${LAPKT_SRC}/model/action.cxx
     ${LAPKT_SRC}/model/cond_eff.cxx
     ${LAPKT_SRC}/model/conj_comp_prob.cxx
@@ -65,11 +60,9 @@ add_library(lapkt_core STATIC
     ${LAPKT_SRC}/model/strips_prob.cxx
     ${LAPKT_SRC}/model/strips_state.cxx
     ${LAPKT_SRC}/model/succ_gen.cxx
-    # component (search data structures)
     ${LAPKT_SRC}/component/match_tree.cxx
     ${LAPKT_SRC}/component/reachability.cxx
     ${LAPKT_SRC}/component/watched_lit_succ_gen.cxx
-    # node_eval/heuristic
     ${LAPKT_SRC}/node_eval/heuristic/landmark_graph.cxx
 )
 
@@ -83,29 +76,20 @@ target_include_directories(lapkt_core PUBLIC
     ${LAPKT_SRC}/ltl
 )
 
-# MSVC compatibility: provide shim headers for POSIX includes
-# (sys/time.h, unistd.h, sys/resource.h) that LAPKT expects
 if(MSVC)
     target_include_directories(lapkt_core BEFORE PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/compat
+        ${MUJIN_WORKSPACE_ROOT}/cmake/compat
     )
     target_compile_definitions(lapkt_core PRIVATE WIN32)
-endif()
-
-target_compile_features(lapkt_core PUBLIC cxx_std_17)
-
-# Suppress warnings from third-party code
-if(MSVC)
     target_compile_options(lapkt_core PRIVATE /W0)
 else()
     target_compile_options(lapkt_core PRIVATE -w)
 endif()
 
-# --- Foxglove WebSocket bridge (optional) ---
-option(AME_FOXGLOVE "Enable Foxglove WebSocket bridge for live monitoring" ON)
+target_compile_features(lapkt_core PUBLIC cxx_std_17)
 
+option(AME_FOXGLOVE "Enable Foxglove WebSocket bridge for live monitoring" ON)
 if(AME_FOXGLOVE)
-    # websocketpp — header-only C++ WebSocket library
     FetchContent_Declare(
         websocketpp
         GIT_REPOSITORY https://github.com/zaphoyd/websocketpp.git
@@ -117,7 +101,6 @@ if(AME_FOXGLOVE)
         FetchContent_Populate(websocketpp)
     endif()
 
-    # Standalone Asio — header-only async I/O (no Boost)
     FetchContent_Declare(
         asio
         GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
@@ -130,7 +113,6 @@ if(AME_FOXGLOVE)
     endif()
 endif()
 
-# --- Google Test ---
 FetchContent_Declare(
     googletest
     GIT_REPOSITORY https://github.com/google/googletest.git
@@ -141,13 +123,9 @@ set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-# --- pybind11 (optional Python bindings) ---
 option(AME_BUILD_PYTHON "Build Python bindings for ame_core" OFF)
-
 if(AME_BUILD_PYTHON)
-    # Find the interpreter first so pybind11 honours -DPython3_EXECUTABLE
     find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
-    # Tell pybind11 to use the same interpreter (avoids FindPythonInterp picking up the wrong version)
     set(PYTHON_EXECUTABLE "${Python3_EXECUTABLE}" CACHE FILEPATH "" FORCE)
 
     FetchContent_Declare(
@@ -159,34 +137,11 @@ if(AME_BUILD_PYTHON)
     FetchContent_MakeAvailable(pybind11)
 endif()
 
-# ---------------------------------------------------------------------------
-# PCL — PYRAMID Container Library (pure C, zero dependencies)
-# ---------------------------------------------------------------------------
-add_subdirectory(src/pcl)
-
-# ---------------------------------------------------------------------------
-# PYRAMID core support library
-# ---------------------------------------------------------------------------
-add_subdirectory(pyramid/core)
-
-# ---------------------------------------------------------------------------
-# PYRAMID tactical_objects library
-# ---------------------------------------------------------------------------
-add_subdirectory(pyramid/tactical_objects)
-
-# ---------------------------------------------------------------------------
-# Core library (ROS-agnostic)
-# ---------------------------------------------------------------------------
-add_subdirectory(src/ame)
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
 enable_testing()
-add_subdirectory(tests)
 
 # ---------------------------------------------------------------------------
-# Examples
+# Component subprojects
 # ---------------------------------------------------------------------------
-add_subdirectory(examples)
-
+add_subdirectory(subprojects/PCL)
+add_subdirectory(subprojects/PYRAMID)
+add_subdirectory(subprojects/AME)

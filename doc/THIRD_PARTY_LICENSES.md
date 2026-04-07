@@ -357,3 +357,4 @@ The following tools are referenced in planning documentation but are **not bundl
 | ENHSP | LGPL | Not included |
 
 **Action required if any of the above are added as dependencies:** A legal review must be conducted before integrating any GPL or LGPL component, as this may impose copyleft obligations on the entire AME codebase.
+

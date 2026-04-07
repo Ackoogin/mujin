@@ -1,6 +1,12 @@
-# Autonomous Mission Engine (AME)
+# Mujin Workspace
 
-A **PDDL planning + Behaviour Tree execution** pipeline for autonomous mission planning and execution, with full observability and audit trail support.
+This repository is now organised as a workspace containing three subprojects that can be split into separate repositories later with much less churn:
+
+- `subprojects/PCL` — the low-level PYRAMID Container Library runtime and C/C++ wrappers
+- `subprojects/PYRAMID` — PYRAMID core and tactical-objects components built on top of PCL
+- `subprojects/AME` — the Autonomous Mission Engine planning/execution stack built on top of PCL and PYRAMID
+
+AME remains the headline application in the workspace: a **PDDL planning + Behaviour Tree execution** pipeline for autonomous mission planning and execution, with full observability and audit trail support.
 
 The system takes a formal mission description (PDDL domain and problem files), automatically generates a plan using classical AI planning, compiles that plan into an executable behaviour tree, and runs it — with replanning on failure. Every decision and state change is logged for post-hoc analysis and real-time monitoring.
 
@@ -41,7 +47,7 @@ PDDL Domain/Problem
 | **InvokeService** | Async PYRAMID service node — maps PDDL actions to external service calls with timeout/cancel |
 | **Observability Stack** | 5 layers: TreeObserver stats, structured BT events, WM audit log, Foxglove bridge, plan audit trail |
 
-For full architecture details, see `doc/architecture/` (8 numbered files covering overview, WorldModel, planning, execution, observability, ROS2, extensions roadmap, and the PCL component system).
+For full architecture details, see `subprojects/AME/docs/architecture/` and the component-specific docs under `subprojects/PCL/docs/` and `subprojects/PYRAMID/docs/`.
 
 ## Quick Start
 
@@ -61,7 +67,7 @@ cmake --preset default
 cmake --build build --config Release -j$(nproc)
 
 # Or on Windows with the helper script
-build.bat
+subprojects\AME\scripts\build.bat
 ```
 
 To disable the Foxglove bridge (removes websocketpp/asio dependencies):
@@ -83,10 +89,10 @@ All 73 tests cover: WorldModel, TypeSystem, ActionRegistry, PlanCompiler, Planne
 
 ```bash
 # Linux/macOS
-./build/src/ame_test_app
+./build/subprojects/AME/src/ame_test_app
 
 # Windows
-build\src\Release\ame_test_app.exe
+build\subprojects\AME\src\Release\ame_test_app.exe
 ```
 
 Runs the UAV search-and-classify example end-to-end and produces three JSONL output files:
@@ -109,68 +115,59 @@ The system replaces the paid Groot2 monitoring tool with an open, layered observ
 | 4 | FoxgloveBridge | WebSocket server for live Foxglove Studio visualization |
 | 5 | PlanAuditLog | Full planning episodes with hierarchical causal links: initial state, goals, solver, plan, compiled BT XML, parent phase |
 
-Connect Foxglove Studio to `ws://localhost:8765` for real-time monitoring. See `doc/guides/quickstart.md` for setup details.
+Connect Foxglove Studio to `ws://localhost:8765` for real-time monitoring. See `subprojects/AME/docs/guides/quickstart.md` for setup details.
 
 ## ROS2 Integration
 
-The core library (`ame_core`) is ROS-agnostic. The `ros2/` directory contains an `ament_cmake` package with lifecycle node wrappers:
+The core library (`ame_core`) is ROS-agnostic. The `subprojects/AME/ros2/` directory contains an `ament_cmake` package with lifecycle node wrappers:
 
 - **WorldModelNode** — owns state, exposes get/set/query/load_domain services, publishes `/world_state`
 - **PlannerNode** — action server at `~/plan`, domain loading via `~/load_domain` service
 - **ExecutorNode** — ticks BT at 50 Hz, publishes `/executor/bt_events`
 
-Supports in-process, distributed, multi-agent, and multi-planner deployment modes. Multiple PlannerNode instances can run with different domain models; domains can be loaded from files (deployment) or pushed via service calls (devenv/testing). See `doc/architecture/06-ros2.md` for details.
+Supports in-process, distributed, multi-agent, and multi-planner deployment modes. Multiple PlannerNode instances can run with different domain models; domains can be loaded from files (deployment) or pushed via service calls (devenv/testing). See `subprojects/AME/docs/architecture/06-ros2.md` for details.
 
-## Project Structure
+## Workspace Structure
 
 ```
-include/ame/           Core library headers
-  world_model.h          Authoritative state store
-  type_system.h          Object/type hierarchy
-  action_registry.h      PDDL-to-BT action mapping
-  plan_compiler.h        Plan-to-BT compilation
-  planner.h              LAPKT solver wrapper
-  pddl_parser.h          PDDL file loading
-  bt_logger.h            Layer 2: structured BT event stream
-  wm_audit_log.h         Layer 3: world model audit log
-  plan_audit_log.h       Layer 5: plan audit trail
-  foxglove_bridge.h      Layer 4: Foxglove WebSocket bridge
-  bt_nodes/              BT node implementations
-src/                     Native source
-  ame/
-    lib/                 Core library implementation files
-    nodes/               BehaviourTree node implementations
-    apps/                Standalone/demo executables
-    bindings/            Python bindings source
-  pcl/                   PCL C API/runtime implementation
-tests/                   73 unit, integration, and e2e tests
-domains/                 PDDL domain and problem files
-  uav_search/            UAV search-and-classify example domain
-ros2/                    ROS2 package (ament_cmake)
-  src/lib/               Shared ROS2 support/runtime glue
-  src/nodes/             Lifecycle node implementations
-  src/apps/              ROS2 executable entrypoints
-doc/                     Documentation
-  architecture/          Consolidated architecture reference (8 numbered files)
-  guides/                Operator/developer runbooks and quickstarts
-  roadmaps/              Plans, TODOs, and implementation roadmaps
-  research/              Research notes and option analyses
-  reviews/               Formal review reports
-  integration/           Integration and schema design docs
+subprojects/
+  PCL/
+    include/pcl/         Public PCL headers
+    src/                 PCL C runtime and transport sources
+    tests/               PCL-focused unit and integration tests
+    examples/            Minimal PCL examples
+    docs/                PCL design and component docs
+  PYRAMID/
+    core/                PYRAMID shared runtime/services layer
+    tactical_objects/    Tactical objects libraries and docs
+    tests/               Tactical objects and codec/bridge tests
+    examples/            Ada/C++/codec/codegen examples
+    proto/               Protocol and data-model definitions
+    pim/                 Model/code generation tooling
+    docs/                Service/codegen/tactical-object docs
+  AME/
+    include/ame/         Public AME headers
+    src/                 AME libraries, nodes, app, bindings
+    tests/               AME-focused unit and integration tests
+    domains/             PDDL domains and problems
+    ros2/                ROS2 package and tests
+    docs/                AME architecture, guides, research, assurance docs
+doc/                     Workspace-level coding style and licence docs
+cmake/                   Shared CMake support files
 ```
 
 ## Documentation
 
 | Document | Audience | Contents |
 |----------|----------|----------|
-| [Stakeholder Summary](doc/stakeholder_summary.md) | Programme managers, non-technical stakeholders | High-level approach, benefits, and status |
-| [Architecture](doc/architecture/) | Engineers | Full technical architecture (8 numbered files) |
-| [Quick Start](doc/guides/quickstart.md) | Developers | Build, run, test, and Foxglove setup |
-| [Planning & Execution User Guide](doc/guides/planning_execution_user_guide.md) | Operators, integrators, developers | User-friendly mission flow, PDDL terms, custom BT nodes/subtrees, PYRAMID integration, and deployment options |
-| [Remaining Work](doc/roadmaps/TODO.md) | Engineers, programme leads | Temporal planning, hardening, future work |
-| [Assurance Plan](doc/roadmaps/autonomy_assurance_plan.md) | Safety engineers, assessors | SACE/AMLAS/DSTL autonomy assurance framework |
-| [Neuro-Symbolic Integration](doc/research/neuro_symbolic_reasoning.md) | Engineers, architects | Options for adding AI/ML capabilities |
-| [Neuro-Symbolic Review Report](doc/reviews/neuro_symbolic_reasoning_review.md) | Engineers, architects, programme leads | Review of documented neuro-symbolic approaches, risks, and adoption order |
+| [Stakeholder Summary](subprojects/AME/docs/stakeholder_summary.md) | Programme managers, non-technical stakeholders | High-level approach, benefits, and status |
+| [Architecture](subprojects/AME/docs/architecture/) | Engineers | AME architecture and runtime structure |
+| [Quick Start](subprojects/AME/docs/guides/quickstart.md) | Developers | Build, run, test, and Foxglove setup |
+| [Planning & Execution User Guide](subprojects/AME/docs/guides/planning_execution_user_guide.md) | Operators, integrators, developers | Mission flow, PDDL terms, BT nodes, and PYRAMID integration |
+| [Remaining Work](subprojects/AME/docs/TODO.md) | Engineers, programme leads | Temporal planning, hardening, future work |
+| [Assurance Plan](subprojects/AME/docs/autonomy_assurance_plan.md) | Safety engineers, assessors | SACE/AMLAS/DSTL autonomy assurance framework |
+| [Service Binding Codegen](subprojects/PYRAMID/docs/service_binding_codegen.md) | Engineers | PYRAMID service/codegen pipeline and generated bindings |
+| [PCL Component Design](subprojects/PCL/docs/component_container_design.md) | Engineers | PCL component/container integration design |
 
 ## Dependencies
 
