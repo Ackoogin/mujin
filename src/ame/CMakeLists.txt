@@ -68,6 +68,12 @@ if(AME_FOXGLOVE)
 
     find_package(Threads REQUIRED)
     target_link_libraries(ame_foxglove PRIVATE Threads::Threads)
+
+    install(TARGETS ame_foxglove
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
+    )
 endif()
 
 # ---------------------------------------------------------------------------

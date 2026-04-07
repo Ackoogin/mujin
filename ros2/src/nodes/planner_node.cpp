@@ -258,6 +258,8 @@ ame::WorldStateSnapshot PlannerNode::queryWorldState() const {
     fact.wm_version = msg_fact.wm_version;
     snapshot.facts.push_back(fact);
   }
+  snapshot.goal_fluents.assign(
+    res->goal_fluents.begin(), res->goal_fluents.end());
   return snapshot;
 }
 

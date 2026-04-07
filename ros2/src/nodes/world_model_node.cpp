@@ -170,6 +170,10 @@ void WorldModelNode::handleQueryState(
     msg.wm_version = fact.wm_version;
     res->facts.push_back(msg);
   }
+
+  for (const auto& goal : snapshot.goal_fluents) {
+    res->goal_fluents.push_back(goal);
+  }
 }
 
 void WorldModelNode::handleLoadDomain(

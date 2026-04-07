@@ -70,6 +70,7 @@ class AmeRos2Client:
         self._connected = False
         self._pending_calls: deque[tuple[str, tuple[Any, ...]]] = deque()
         self._dispatch_timer: Any = None
+        self.last_error: str = ""
 
         # Latest world state from subscription
         self._latest_snapshot: Optional[WorldSnapshot] = None
@@ -166,48 +167,78 @@ class AmeRos2Client:
     def reload_domain(self, domain_path: str, problem_path: str) -> bool:
         """Reload PDDL domain and problem via the LoadDomain service.
 
-        Reads the files locally and sends their content to the
-        WorldModelNode's ~/load_domain service.  Returns True on success.
+        Reads the files locally and sends their content to the ROS2 load-domain
+        services. Returns True on success.
         """
         if not self.available or not self._connected:
+            self.last_error = "ROS2 client is not connected"
             return False
 
         try:
             domain_pddl = open(domain_path, "r", encoding="utf-8").read()
             problem_pddl = open(problem_path, "r", encoding="utf-8").read()
         except Exception as e:
-            print(f"[ROS2] Failed to read PDDL files: {e}")
+            self.last_error = f"Failed to read PDDL files: {e}"
+            print(f"[ROS2] {self.last_error}")
             return False
 
-        if not hasattr(self, "_load_domain_cli") or self._load_domain_cli is None:
+        load_clients = []
+        if hasattr(self, "_planner_load_domain_cli") and self._planner_load_domain_cli is not None:
+            load_clients.append(("planner", self._planner_load_domain_cli))
+        if hasattr(self, "_load_domain_cli") and self._load_domain_cli is not None:
+            load_clients.append(("world_model", self._load_domain_cli))
+        if not load_clients:
+            self.last_error = "LoadDomain service client is not available"
             return False
 
-        if not self._load_domain_cli.wait_for_service(timeout_sec=2.0):
-            print("[ROS2] LoadDomain service not available")
+        domain_id = Path(domain_path).parent.name
+        errors: list[str] = []
+        success_count = 0
+        for target_name, client in load_clients:
+            if not client.wait_for_service(timeout_sec=2.0):
+                continue
+
+            req = self._LoadDomain.Request()
+            req.domain_id = domain_id
+            req.domain_pddl = domain_pddl
+            req.problem_pddl = problem_pddl
+
+            future = client.call_async(req)
+
+            timeout = 5.0
+            start = time.monotonic()
+            while not future.done():
+                if time.monotonic() - start > timeout:
+                    errors.append(f"{target_name} load_domain timed out")
+                    break
+                time.sleep(0.05)
+
+            if not future.done():
+                continue
+
+            result = future.result()
+            if not result:
+                errors.append(f"{target_name} load_domain returned no result")
+                continue
+            if not result.success:
+                errors.append(
+                    f"{target_name} load_domain failed: {result.error_msg or 'unknown error'}"
+                )
+                continue
+            success_count += 1
+
+        if errors:
+            self.last_error = "; ".join(errors)
+            print(f"[ROS2] {self.last_error}")
+            return False
+        if success_count == 0:
+            self.last_error = "No load_domain service responded"
+            print(f"[ROS2] {self.last_error}")
             return False
 
-        req = self._LoadDomain.Request()
-        req.domain_id = Path(domain_path).parent.name
-        req.domain_pddl = domain_pddl
-        req.problem_pddl = problem_pddl
-
-        future = self._load_domain_cli.call_async(req)
-
-        # Block briefly for the result (called from UI thread)
-        timeout = 5.0
-        start = time.monotonic()
-        while not future.done():
-            if time.monotonic() - start > timeout:
-                print("[ROS2] LoadDomain timed out")
-                return False
-            time.sleep(0.05)
-
-        result = future.result()
-        if result and result.success:
-            return True
-        if result:
-            print(f"[ROS2] LoadDomain failed: {result.error_msg}")
-        return False
+        self.last_error = ""
+        self.query_state(callback=self._cache_snapshot)
+        return True
 
     def drain_plan_feedback(self) -> list[PlanFeedback]:
         """Drain queued plan feedback for UI display."""
@@ -271,11 +302,15 @@ class AmeRos2Client:
 
             # LoadDomain is optional (requires ame_ros2 rebuild after adding the .srv)
             self._load_domain_cli = None
+            self._planner_load_domain_cli = None
             try:
                 from ame_ros2.srv import LoadDomain
                 self._LoadDomain = LoadDomain
                 self._load_domain_cli = self._node.create_client(
                     LoadDomain, "/world_model_node/load_domain", callback_group=cb_group
+                )
+                self._planner_load_domain_cli = self._node.create_client(
+                    LoadDomain, "/planner_node/load_domain", callback_group=cb_group
                 )
             except ImportError:
                 pass
@@ -307,6 +342,15 @@ class AmeRos2Client:
             facts=facts,
             goal_fluents=list(msg.goal_fluents),
         )
+        self._latest_snapshot = snapshot
+        for cb in self._snapshot_callbacks:
+            try:
+                cb(snapshot)
+            except Exception:
+                pass
+
+    def _cache_snapshot(self, snapshot: WorldSnapshot) -> None:
+        """Store a refreshed snapshot and notify listeners."""
         self._latest_snapshot = snapshot
         for cb in self._snapshot_callbacks:
             try:
@@ -356,7 +400,11 @@ class AmeRos2Client:
                 return
             res = f.result()
             facts = [WorldFact(key=wf.key, value=wf.value) for wf in res.facts]
-            snap = WorldSnapshot(wm_version=res.wm_version, facts=facts)
+            snap = WorldSnapshot(
+                wm_version=res.wm_version,
+                facts=facts,
+                goal_fluents=list(res.goal_fluents),
+            )
             callback(snap)
 
         future.add_done_callback(_on_done)
@@ -369,6 +417,13 @@ class AmeRos2Client:
         goal_msg = self._Plan.Goal()
         goal_msg.goal_fluents = goal_fluents
         goal_msg.replan = False
+        if self._latest_snapshot is not None:
+            self._latest_snapshot.goal_fluents = list(goal_fluents)
+            for cb in self._snapshot_callbacks:
+                try:
+                    cb(self._latest_snapshot)
+                except Exception:
+                    pass
 
         def _on_feedback(feedback_msg):
             fb = feedback_msg.feedback

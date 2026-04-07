@@ -3,5 +3,6 @@
 string[] keys
 ---
 ame_ros2/WorldFact[] facts
+string[]               goal_fluents
 uint64                 wm_version
 bool                   success

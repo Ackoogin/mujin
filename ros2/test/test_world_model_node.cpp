@@ -140,3 +140,39 @@ TEST_F(WorldModelNodeTest, SetFactServiceCall) {
     EXPECT_TRUE(res->success);
     EXPECT_TRUE(wm.getFact("(at uav1 base)"));
 }
+
+TEST_F(WorldModelNodeTest, QueryStateReturnsGoalFluents) {
+    ASSERT_EQ(configure(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(activate(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+
+    auto& wm = node_->worldModel();
+    wm.typeSystem().addType("object");
+    wm.typeSystem().addType("sector", "object");
+    wm.addObject("sector_a", "sector");
+    wm.registerPredicate("searched", {"sector"});
+    wm.setGoal({"(searched sector_a)"});
+
+    auto client_node = rclcpp::Node::make_shared("test_query_client");
+    auto client = client_node->create_client<ame_ros2::srv::QueryState>(
+        "/world_model_node/query_state");
+    ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(2)));
+
+    auto req = std::make_shared<ame_ros2::srv::QueryState::Request>();
+    auto future = client->async_send_request(req);
+
+    rclcpp::executors::SingleThreadedExecutor exec;
+    exec.add_node(node_->get_node_base_interface());
+    exec.add_node(client_node);
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (future.wait_for(std::chrono::milliseconds(10)) != std::future_status::ready
+           && std::chrono::steady_clock::now() < deadline) {
+        exec.spin_some();
+    }
+
+    ASSERT_EQ(future.wait_for(std::chrono::milliseconds(0)), std::future_status::ready);
+    auto res = future.get();
+    ASSERT_TRUE(res->success);
+    ASSERT_EQ(res->goal_fluents.size(), 1u);
+    EXPECT_EQ(res->goal_fluents.front(), "(searched sector_a)");
+}

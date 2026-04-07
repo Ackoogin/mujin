@@ -101,6 +101,14 @@ target_link_libraries(agent_dispatcher_node ame_ros2_lib)
 add_executable(ame_combined src/apps/combined_main.cpp)
 target_link_libraries(ame_combined ame_ros2_lib)
 
+if(TARGET ame::ame_foxglove)
+    add_executable(foxglove_bridge src/apps/foxglove_bridge_main.cpp)
+    target_link_libraries(foxglove_bridge
+        ame_ros2_lib
+        ame::ame_foxglove
+    )
+endif()
+
 # ---------------------------------------------------------------------------
 # Lifecycle manager standalone executable (for distributed launch)
 # ---------------------------------------------------------------------------
@@ -116,6 +124,16 @@ install(TARGETS ame_ros2_lib world_model_node planner_node executor_node agent_d
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION lib/${PROJECT_NAME}
 )
+
+if(TARGET foxglove_bridge)
+    install(TARGETS foxglove_bridge
+        EXPORT ame_ros2_lib
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION lib/${PROJECT_NAME}
+    )
+endif()
+
 install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY launch/ DESTINATION share/${PROJECT_NAME}/launch)
 

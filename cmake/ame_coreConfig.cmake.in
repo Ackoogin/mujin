@@ -27,6 +27,11 @@ find_library(BTCPP_LIBRARY
     NO_DEFAULT_PATH
     REQUIRED
 )
+find_library(AME_FOXGLOVE_LIBRARY
+    NAMES ame_foxglove
+    PATHS "${PACKAGE_PREFIX_DIR}/lib"
+    NO_DEFAULT_PATH
+)
 
 if(NOT TARGET ame::ame_core)
     add_library(ame::lapkt_core STATIC IMPORTED GLOBAL)
@@ -52,4 +57,13 @@ if(NOT TARGET ame::ame_core)
         INTERFACE_INCLUDE_DIRECTORIES "${PACKAGE_PREFIX_DIR}/include"
         INTERFACE_LINK_LIBRARIES "ame::lapkt_core;ame::pcl_core;ame::behaviortree_cpp"
     )
+
+    if(AME_FOXGLOVE_LIBRARY)
+        add_library(ame::ame_foxglove STATIC IMPORTED GLOBAL)
+        set_target_properties(ame::ame_foxglove PROPERTIES
+            IMPORTED_LOCATION "${AME_FOXGLOVE_LIBRARY}"
+            INTERFACE_INCLUDE_DIRECTORIES "${PACKAGE_PREFIX_DIR}/include"
+            INTERFACE_LINK_LIBRARIES "ame::ame_core"
+        )
+    endif()
 endif()

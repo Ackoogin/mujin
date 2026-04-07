@@ -191,6 +191,18 @@ class PlanningTab:
         self._plan_history.append(episode)
         self._refresh_history()
 
+    def sync_from_snapshot(self) -> None:
+        """Mirror goal fluents from the latest backend snapshot."""
+        snapshot = self._app.client.latest_snapshot
+        if not snapshot:
+            return
+
+        if self._goal_fluents != snapshot.goal_fluents:
+            self._goal_fluents = list(snapshot.goal_fluents)
+            self._refresh_goals_list()
+
+        self._refresh_fluent_combo(snapshot)
+
     def update_feedback(self) -> None:
         """Drain plan feedback from client and update display."""
         for fb in self._app.client.drain_plan_feedback():
@@ -221,16 +233,22 @@ class PlanningTab:
         if not client.connected:
             dpg.configure_item(self._fluent_combo, items=["(not connected)"])
             return
-        
-        # Get all fluents from the world model
+
+        self._refresh_fluent_combo(client.latest_snapshot)
+
+    def _refresh_fluent_combo(self, snapshot) -> None:
+        """Refresh the fluent picker from facts, goals, and local PCL metadata."""
         fluents = []
-        snapshot = client.latest_snapshot
         if snapshot:
-            # Add all fluents (both true and potential goals)
             for fact in snapshot.facts:
-                fluents.append(fact.key)
-        
+                if fact.key not in fluents:
+                    fluents.append(fact.key)
+            for goal in snapshot.goal_fluents:
+                if goal not in fluents:
+                    fluents.append(goal)
+
         # Also try to get all fluent names if available
+        client = self._app.client
         if hasattr(client, '_wm') and client._wm:
             try:
                 for i in range(client._wm.num_fluents()):

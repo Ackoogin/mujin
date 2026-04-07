@@ -75,6 +75,7 @@ class App:
         # Plot refresh throttle
         self._last_plot_refresh = 0.0
         self._plot_refresh_interval = 1.0  # seconds
+        self._last_snapshot_signature: tuple[int, int, tuple[str, ...]] | None = None
 
         # Last compiled BT XML — shared between Planning and Execution tabs
         self.last_bt_xml: str = ""
@@ -260,6 +261,20 @@ class App:
         # --- Drain plan feedback ---
         if self.planning_tab:
             self.planning_tab.update_feedback()
+
+        # --- Sync latest backend snapshot into the World Model tab ---
+        snap = self.ros2.latest_snapshot
+        if snap and self.world_model_tab:
+            signature = (
+                snap.wm_version,
+                len(snap.facts),
+                tuple(snap.goal_fluents),
+            )
+            if signature != self._last_snapshot_signature:
+                self.world_model_tab.update_from_snapshot(snap)
+                if self.planning_tab:
+                    self.planning_tab.sync_from_snapshot()
+                self._last_snapshot_signature = signature
 
         # --- Update execution tab controls (status label, tick counter) ---
         if self.execution_tab:

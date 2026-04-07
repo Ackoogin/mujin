@@ -258,7 +258,8 @@ class PddlEditorTab:
             if success:
                 dpg.set_value(self._status_text, f"Loaded: {parent_dir.name}")
             else:
-                dpg.set_value(self._status_text, "Failed to load PDDL")
+                error_msg = getattr(client, "last_error", "") or "Failed to load PDDL"
+                dpg.set_value(self._status_text, error_msg)
         else:
             dpg.set_value(self._status_text, "Backend does not support reload")
 

@@ -4,8 +4,8 @@ REM Usage:
 REM   run_ros2.bat [domain.pddl] [problem.pddl]
 REM Or via pixi: pixi run --manifest-path D:\Dev\ros2-windows\pixi.toml cmd /c D:\Dev\repo\mujin\run_ros2.bat
 
-set DOMAIN=%1
-set PROBLEM=%2
+set DOMAIN=%~1
+set PROBLEM=%~2
 if "%DOMAIN%"=="" set DOMAIN=D:\Dev\repo\mujin\domains\uav_search\domain.pddl
 if "%PROBLEM%"=="" set PROBLEM=D:\Dev\repo\mujin\domains\uav_search\problem.pddl
 

@@ -23,6 +23,7 @@ namespace ame {
 // Server-to-client binary opcodes
 static constexpr uint8_t OP_SERVER_INFO    = 0x01;  // not binary, but JSON text
 static constexpr uint8_t OP_MESSAGE_DATA   = 0x01;  // binary opcode for data
+static constexpr const char* FOXGLOVE_SUBPROTOCOL = "foxglove.websocket.v1";
 
 // JSON Schema for BT events channel
 static const char* BT_EVENT_SCHEMA = R"({
@@ -94,9 +95,24 @@ struct FoxgloveBridge::Impl {
     std::map<ConnectionHdl, std::vector<Subscription>, std::owner_less<ConnectionHdl>> subscriptions;
     uint32_t next_sub_id = 1;
 
+    bool onValidate(ConnectionHdl hdl) {
+        try {
+            auto con = server.get_con_from_hdl(hdl);
+            const auto& requested = con->get_requested_subprotocols();
+            for (const auto& protocol : requested) {
+                if (protocol == FOXGLOVE_SUBPROTOCOL) {
+                    con->select_subprotocol(protocol);
+                    break;
+                }
+            }
+        } catch (...) {}
+        return true;
+    }
+
     void onOpen(ConnectionHdl hdl) {
         std::lock_guard<std::mutex> lk(mutex);
         connections.insert(hdl);
+        std::cout << "  [Foxglove] Client connected\n";
 
         // Send serverInfo (text frame)
         std::ostringstream info;
@@ -141,6 +157,7 @@ struct FoxgloveBridge::Impl {
         std::lock_guard<std::mutex> lk(mutex);
         connections.erase(hdl);
         subscriptions.erase(hdl);
+        std::cout << "  [Foxglove] Client disconnected\n";
     }
 
     void onMessage(ConnectionHdl hdl, WsServer::message_ptr msg) {
@@ -235,6 +252,8 @@ FoxgloveBridge::FoxgloveBridge(const Options& opts)
     impl_->server.init_asio();
     impl_->server.set_reuse_addr(true);
 
+    impl_->server.set_validate_handler(
+        [this](ConnectionHdl hdl) { return impl_->onValidate(hdl); });
     impl_->server.set_open_handler(
         [this](ConnectionHdl hdl) { impl_->onOpen(hdl); });
     impl_->server.set_close_handler(
