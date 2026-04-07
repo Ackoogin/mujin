@@ -1,0 +1,29 @@
+// Auto-generated FlatBuffers schema from base.proto
+// Do not edit — regenerate from proto source
+
+namespace pyramid.data_model.base;
+
+table Angle {
+  radians:double;
+}
+
+table Length {
+  meters:double;
+}
+
+table Timestamp {
+  value:Timestamp;
+}
+
+table Identifier {
+  value:string;
+}
+
+table Speed {
+  meters_per_second:double;
+}
+
+table Percentage {
+  value:double;
+}
+
