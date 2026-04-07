@@ -53,8 +53,22 @@ echo "=== Ada ActiveFind E2E Test (3-process: server → bridge → client) ==="
 # Step 1: Build Ada client if gprbuild is available
 if command -v gprbuild &>/dev/null; then
   echo "[driver] Building Ada active-find client..."
+  ADA_PCL_LIB_DIR="$ROOT_DIR/build/ada_gnat_pcl"
+  if [[ ! -f "$ADA_PCL_LIB_DIR/libpcl_core.a" || ! -f "$ADA_PCL_LIB_DIR/libpcl_transport_socket.a" ]]; then
+    echo "[driver] Preparing GNAT-compatible PCL static archives..."
+    "$ROOT_DIR/scripts/build_gnat_pcl_static_libs.sh" "$ADA_PCL_LIB_DIR" || {
+      echo "[driver] SKIP: unable to build GNAT-compatible PCL static archives"
+      exit 0
+    }
+  fi
+
   (cd "$ROOT_DIR/examples/ada" && \
-    MUJIN_ROOT="$ROOT_DIR" gprbuild -P ada_active_find_e2e.gpr -q 2>&1) || {
+    MUJIN_ROOT="$ROOT_DIR" gprbuild -P ada_active_find_e2e.gpr -q \
+      -XMUJIN_ROOT="$ROOT_DIR" \
+      -XPCL_INCLUDE_DIR="$ROOT_DIR/include" \
+      -XPCL_LIB_DIR="$ADA_PCL_LIB_DIR" \
+      -XPCL_LIB_NAME=pcl_core \
+      -XPCL_SOCKET_LIB_NAME=pcl_transport_socket 2>&1) || {
     echo "[driver] SKIP: gprbuild failed (GNAT toolchain issue)"
     exit 0
   }

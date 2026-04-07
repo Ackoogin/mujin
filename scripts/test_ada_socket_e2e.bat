@@ -78,13 +78,37 @@ where gprbuild >nul 2>&1
 if %errorlevel% equ 0 (
     echo [driver] Building Ada client...
     set "ADA_DIR=%ROOT_DIR%\examples\ada"
+    set "ADA_PCL_LIB_DIR=%ROOT_DIR%\build\ada_gnat_pcl"
+    set "ADA_PCL_BUILD_SCRIPT=%ROOT_DIR%\scripts\build_gnat_pcl_static_libs.bat"
+    if not exist "!ADA_PCL_LIB_DIR!\libpcl_core.a" (
+        echo [driver] Preparing GNAT-compatible PCL static archives...
+        call "!ADA_PCL_BUILD_SCRIPT!" "!ADA_PCL_LIB_DIR!"
+        if !errorlevel! neq 0 (
+            echo [driver] WARNING: failed to build GNAT PCL static archives -- falling back to pre-built binary
+            goto after_ada_build
+        )
+    )
+    if not exist "!ADA_PCL_LIB_DIR!\libpcl_transport_socket.a" (
+        echo [driver] Preparing GNAT-compatible transport static archive...
+        call "!ADA_PCL_BUILD_SCRIPT!" "!ADA_PCL_LIB_DIR!"
+        if !errorlevel! neq 0 (
+            echo [driver] WARNING: failed to build GNAT transport static archive -- falling back to pre-built binary
+            goto after_ada_build
+        )
+    )
     set "MUJIN_ROOT=%ROOT_DIR%"
     pushd "!ADA_DIR!"
-    gprbuild -P ada_tobj_client.gpr -q >nul 2>&1
+    gprbuild -P ada_tobj_client.gpr -q ^
+      -XMUJIN_ROOT=!ROOT_DIR! ^
+      -XPCL_INCLUDE_DIR=!ROOT_DIR!\include ^
+      -XPCL_LIB_DIR=!ADA_PCL_LIB_DIR! ^
+      -XPCL_LIB_NAME=pcl_core ^
+      -XPCL_SOCKET_LIB_NAME=pcl_transport_socket >nul 2>&1
     if !errorlevel! neq 0 (
         echo [driver] gprbuild failed -- falling back to pre-built binary
     )
     popd
+    :after_ada_build
 ) else (
     echo [driver] gprbuild not found -- checking for pre-built client...
 )

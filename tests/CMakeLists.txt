@@ -304,14 +304,44 @@ endif()
 find_program(GPRBUILD gprbuild)
 if(GPRBUILD)
   set(ADA_SRC_DIR ${CMAKE_SOURCE_DIR}/examples/ada)
+  set(ADA_PCL_INCLUDE_DIR "${CMAKE_SOURCE_DIR}/include" CACHE PATH
+      "Include directory for Ada gprbuild PCL headers")
+  set(ADA_PCL_LIB_NAME "pcl_core" CACHE STRING
+      "Base library name for Ada gprbuild core PCL static library")
+  set(ADA_PCL_SOCKET_LIB_NAME "pcl_transport_socket" CACHE STRING
+      "Base library name for Ada gprbuild PCL socket transport static library")
+
+  if(WIN32)
+    set(ADA_PCL_LIB_DIR "${CMAKE_BINARY_DIR}/ada_gnat_pcl" CACHE PATH
+        "Directory containing GNAT-compatible libpcl_core.a and libpcl_transport_socket.a")
+    if(NOT ADA_PCL_LIB_DIR)
+      set(ADA_PCL_LIB_DIR "${CMAKE_BINARY_DIR}/ada_gnat_pcl" CACHE PATH
+          "Directory containing GNAT-compatible libpcl_core.a and libpcl_transport_socket.a" FORCE)
+    endif()
+    set(ADA_PCL_BUILD_SCRIPT "${CMAKE_SOURCE_DIR}/scripts/build_gnat_pcl_static_libs.bat")
+  else()
+    set(ADA_PCL_LIB_DIR "${CMAKE_BINARY_DIR}/src/pcl" CACHE PATH
+        "Directory containing libpcl_core/libpcl_transport_socket for Ada gprbuild")
+  endif()
 
   # Build the generated-bindings validation test binary via gprbuild
   add_custom_target(ada_test_generated_bindings_build ALL
-    COMMAND ${GPRBUILD} -p -P ${ADA_SRC_DIR}/test_generated_bindings.gpr
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
+    COMMAND ${CMAKE_COMMAND} -E env MUJIN_ROOT=${CMAKE_SOURCE_DIR}
+            ${GPRBUILD} -p -P ${ADA_SRC_DIR}/test_generated_bindings.gpr
             -XMUJIN_ROOT=${CMAKE_SOURCE_DIR}
+            -XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR}
+            -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
+            -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
+            -XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME}
     WORKING_DIRECTORY ${ADA_SRC_DIR}
     COMMENT "Building Ada generated-bindings test"
   )
+  if(WIN32)
+    add_custom_command(TARGET ada_test_generated_bindings_build PRE_BUILD
+      COMMAND cmd /c "${ADA_PCL_BUILD_SCRIPT}" "${ADA_PCL_LIB_DIR}"
+      COMMENT "Preparing GNAT-compatible PCL static archives for Ada builds")
+  endif()
 
   # Run: compiles all generated Ada packages AND exercises codec round-trips
   add_test(NAME ada_generated_bindings_roundtrip
