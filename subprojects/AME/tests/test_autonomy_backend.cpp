@@ -40,8 +40,16 @@ ame::WorldModel buildDomain() {
 
 ame::ActionRegistry buildRegistry() {
   ame::ActionRegistry registry;
-  registry.registerAction("move", "StubMoveAction");
-  registry.registerAction("search", "StubSearchAction");
+  registry.registerActionSubTree(
+      "move",
+      "<InvokeService service_name=\"mobility\" operation=\"move\" "
+      "param_names=\"?robot;?from;?to\" "
+      "param_values=\"{param0};{param1};{param2}\" timeout_ms=\"0\"/>");
+  registry.registerActionSubTree(
+      "search",
+      "<InvokeService service_name=\"imaging\" operation=\"search\" "
+      "param_names=\"?robot;?sector\" "
+      "param_values=\"{param0};{param1}\" timeout_ms=\"0\"/>");
   return registry;
 }
 
@@ -64,14 +72,16 @@ TEST(AutonomyBackend, EmitsCommandsAndDecisionRecordFromCurrentStack) {
   EXPECT_GE(records[0].planned_action_signatures.size(), 2u);
 
   auto commands = backend.pullCommands();
-  ASSERT_EQ(commands.size(), 2u);
-  EXPECT_EQ(commands[0].action_name, "move");
-  EXPECT_EQ(commands[1].action_name, "search");
-  EXPECT_FALSE(commands[0].predicted_add_effects.empty());
+  ASSERT_EQ(commands.size(), 1u);
+  EXPECT_EQ(commands[0].service_name, "mobility");
+  EXPECT_EQ(commands[0].operation, "move");
+  EXPECT_EQ(commands[0].request_fields.at("robot"), "uav1");
+  EXPECT_EQ(commands[0].request_fields.at("from"), "base");
+  EXPECT_EQ(commands[0].request_fields.at("to"), "sector_a");
 
   auto snapshot = backend.readSnapshot();
   EXPECT_EQ(snapshot.state, ame::AutonomyBackendState::WAITING_FOR_RESULTS);
-  EXPECT_EQ(snapshot.outstanding_commands.size(), 2u);
+  EXPECT_EQ(snapshot.outstanding_commands.size(), 1u);
 }
 
 TEST(AutonomyBackend, SuccessfulResultsAdvanceWorldStateAndCompleteSession) {
@@ -84,14 +94,19 @@ TEST(AutonomyBackend, SuccessfulResultsAdvanceWorldStateAndCompleteSession) {
   backend.step();
 
   auto commands = backend.pullCommands();
-  ASSERT_EQ(commands.size(), 2u);
+  ASSERT_EQ(commands.size(), 1u);
 
   backend.pushCommandResult({commands[0].command_id, ame::CommandStatus::SUCCEEDED, {}, "dispatcher:move"});
+  backend.step();
+
+  auto second_commands = backend.pullCommands();
+  ASSERT_EQ(second_commands.size(), 1u);
   EXPECT_TRUE(wm.getFact("(at uav1 sector_a)"));
   EXPECT_FALSE(wm.getFact("(at uav1 base)"));
-  EXPECT_EQ(wm.getFactMetadata("(at uav1 sector_a)").authority, ame::FactAuthority::BELIEVED);
+  EXPECT_EQ(second_commands[0].service_name, "imaging");
+  EXPECT_EQ(second_commands[0].operation, "search");
 
-  backend.pushCommandResult({commands[1].command_id, ame::CommandStatus::SUCCEEDED, {}, "dispatcher:search"});
+  backend.pushCommandResult({second_commands[0].command_id, ame::CommandStatus::SUCCEEDED, {}, "dispatcher:search"});
 
   backend.step();
   EXPECT_TRUE(wm.getFact("(searched sector_a)"));
@@ -108,7 +123,7 @@ TEST(AutonomyBackend, ConfirmedObservedUpdatesOverridePredictedEffects) {
   backend.step();
 
   auto commands = backend.pullCommands();
-  ASSERT_EQ(commands.size(), 2u);
+  ASSERT_EQ(commands.size(), 1u);
 
   ame::CommandResult move_result;
   move_result.command_id = commands[0].command_id;
@@ -134,9 +149,10 @@ TEST(AutonomyBackend, FailedCommandTriggersReplanAndNewDecisionRecord) {
   backend.step();
 
   auto commands = backend.pullCommands();
-  ASSERT_EQ(commands.size(), 2u);
+  ASSERT_EQ(commands.size(), 1u);
 
   backend.pushCommandResult({commands[0].command_id, ame::CommandStatus::FAILED_TRANSIENT, {}, "dispatcher:move"});
+  backend.step();
   EXPECT_EQ(backend.readSnapshot().state, ame::AutonomyBackendState::READY);
 
   backend.step();
@@ -145,6 +161,6 @@ TEST(AutonomyBackend, FailedCommandTriggersReplanAndNewDecisionRecord) {
   EXPECT_EQ(records[1].replan_count, 1u);
 
   auto replanned_commands = backend.pullCommands();
-  ASSERT_EQ(replanned_commands.size(), 2u);
+  ASSERT_EQ(replanned_commands.size(), 1u);
   EXPECT_NE(replanned_commands[0].command_id, commands[0].command_id);
 }

@@ -2,11 +2,13 @@
 
 #include "ame/action_registry.h"
 #include "ame/autonomy_backend.h"
+#include "ame/executor_component.h"
 #include "ame/planner.h"
 #include "ame/plan_compiler.h"
 #include "ame/world_model.h"
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -25,6 +27,7 @@ public:
                            const ActionRegistry& action_registry,
                            const Planner& planner = Planner(),
                            const PlanCompiler& plan_compiler = PlanCompiler());
+  ~CurrentAmeBackendAdapter();
 
   AutonomyBackendCapabilities describeCapabilities() const override;
   void start(const SessionRequest& request) override;
@@ -38,6 +41,8 @@ public:
   AutonomyBackendSnapshot readSnapshot() const override;
 
 private:
+  class BackendPyramidServiceProxy;
+
   struct CommandTracking {
     ActionCommand command;
     CommandStatus status = CommandStatus::PENDING;
@@ -48,14 +53,16 @@ private:
   static FactAuthority toWorldModelAuthority(FactAuthorityLevel authority);
 
   void resetTransientQueues();
-  void buildCommandsFromPlan(const std::vector<PlanStep>& steps);
-  void applyPredictedEffects(const ActionCommand& command, const std::string& source);
+  void resetExecutionForReplan();
+  void loadAndStartExecution(const std::string& bt_xml);
   bool goalsSatisfied() const;
 
   WorldModel& world_model_;
   const ActionRegistry& action_registry_;
   Planner planner_;
   PlanCompiler plan_compiler_;
+  ExecutorComponent executor_;
+  std::unique_ptr<BackendPyramidServiceProxy> pyramid_proxy_;
   std::string session_id_;
   PolicyEnvelope policy_;
   AutonomyBackendState state_ = AutonomyBackendState::IDLE;

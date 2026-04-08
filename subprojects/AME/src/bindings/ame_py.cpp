@@ -17,6 +17,8 @@
 #include <ame/pddl_parser.h>
 #include <ame/goal_allocator.h>
 #include <ame/executor_component.h>
+#include <ame/autonomy_backend.h>
+#include <ame/current_ame_backend_adapter.h>
 
 namespace py = pybind11;
 
@@ -31,6 +33,102 @@ PYBIND11_MODULE(_ame_py, m) {
         .value("CONFIRMED", ame::FactAuthority::CONFIRMED)
         .export_values();
 
+    py::enum_<ame::FactAuthorityLevel>(m, "FactAuthorityLevel")
+        .value("BELIEVED", ame::FactAuthorityLevel::BELIEVED)
+        .value("CONFIRMED", ame::FactAuthorityLevel::CONFIRMED)
+        .export_values();
+
+    py::enum_<ame::AutonomyBackendState>(m, "AutonomyBackendState")
+        .value("IDLE", ame::AutonomyBackendState::IDLE)
+        .value("READY", ame::AutonomyBackendState::READY)
+        .value("WAITING_FOR_RESULTS", ame::AutonomyBackendState::WAITING_FOR_RESULTS)
+        .value("COMPLETE", ame::AutonomyBackendState::COMPLETE)
+        .value("FAILED", ame::AutonomyBackendState::FAILED)
+        .value("STOPPED", ame::AutonomyBackendState::STOPPED)
+        .export_values();
+
+    py::enum_<ame::CommandStatus>(m, "CommandStatus")
+        .value("PENDING", ame::CommandStatus::PENDING)
+        .value("RUNNING", ame::CommandStatus::RUNNING)
+        .value("SUCCEEDED", ame::CommandStatus::SUCCEEDED)
+        .value("FAILED_TRANSIENT", ame::CommandStatus::FAILED_TRANSIENT)
+        .value("FAILED_PERMANENT", ame::CommandStatus::FAILED_PERMANENT)
+        .value("CANCELLED", ame::CommandStatus::CANCELLED)
+        .export_values();
+
+    py::enum_<ame::StopMode>(m, "StopMode")
+        .value("DRAIN", ame::StopMode::DRAIN)
+        .value("IMMEDIATE", ame::StopMode::IMMEDIATE)
+        .export_values();
+
+    py::class_<ame::FactUpdate>(m, "FactUpdate")
+        .def(py::init<>())
+        .def_readwrite("key", &ame::FactUpdate::key)
+        .def_readwrite("value", &ame::FactUpdate::value)
+        .def_readwrite("source", &ame::FactUpdate::source)
+        .def_readwrite("authority", &ame::FactUpdate::authority);
+
+    py::class_<ame::StateUpdate>(m, "StateUpdate")
+        .def(py::init<>())
+        .def_readwrite("fact_updates", &ame::StateUpdate::fact_updates);
+
+    py::class_<ame::MissionIntent>(m, "MissionIntent")
+        .def(py::init<>())
+        .def_readwrite("goal_fluents", &ame::MissionIntent::goal_fluents);
+
+    py::class_<ame::PolicyEnvelope>(m, "PolicyEnvelope")
+        .def(py::init<>())
+        .def_readwrite("max_replans", &ame::PolicyEnvelope::max_replans);
+
+    py::class_<ame::SessionRequest>(m, "SessionRequest")
+        .def(py::init<>())
+        .def_readwrite("session_id", &ame::SessionRequest::session_id)
+        .def_readwrite("intent", &ame::SessionRequest::intent)
+        .def_readwrite("policy", &ame::SessionRequest::policy);
+
+    py::class_<ame::AutonomyBackendCapabilities>(m, "AutonomyBackendCapabilities")
+        .def(py::init<>())
+        .def_readwrite("backend_id", &ame::AutonomyBackendCapabilities::backend_id)
+        .def_readwrite("supports_batch_planning", &ame::AutonomyBackendCapabilities::supports_batch_planning)
+        .def_readwrite("supports_external_command_dispatch", &ame::AutonomyBackendCapabilities::supports_external_command_dispatch)
+        .def_readwrite("supports_replanning", &ame::AutonomyBackendCapabilities::supports_replanning);
+
+    py::class_<ame::ActionCommand>(m, "ActionCommand")
+        .def(py::init<>())
+        .def_readwrite("command_id", &ame::ActionCommand::command_id)
+        .def_readwrite("action_name", &ame::ActionCommand::action_name)
+        .def_readwrite("signature", &ame::ActionCommand::signature)
+        .def_readwrite("service_name", &ame::ActionCommand::service_name)
+        .def_readwrite("operation", &ame::ActionCommand::operation)
+        .def_readwrite("request_fields", &ame::ActionCommand::request_fields);
+
+    py::class_<ame::DecisionRecord>(m, "DecisionRecord")
+        .def(py::init<>())
+        .def_readwrite("session_id", &ame::DecisionRecord::session_id)
+        .def_readwrite("backend_id", &ame::DecisionRecord::backend_id)
+        .def_readwrite("world_version", &ame::DecisionRecord::world_version)
+        .def_readwrite("replan_count", &ame::DecisionRecord::replan_count)
+        .def_readwrite("plan_success", &ame::DecisionRecord::plan_success)
+        .def_readwrite("solve_time_ms", &ame::DecisionRecord::solve_time_ms)
+        .def_readwrite("planned_action_signatures", &ame::DecisionRecord::planned_action_signatures)
+        .def_readwrite("compiled_bt_xml", &ame::DecisionRecord::compiled_bt_xml);
+
+    py::class_<ame::CommandResult>(m, "CommandResult")
+        .def(py::init<>())
+        .def_readwrite("command_id", &ame::CommandResult::command_id)
+        .def_readwrite("status", &ame::CommandResult::status)
+        .def_readwrite("observed_updates", &ame::CommandResult::observed_updates)
+        .def_readwrite("source", &ame::CommandResult::source);
+
+    py::class_<ame::AutonomyBackendSnapshot>(m, "AutonomyBackendSnapshot")
+        .def(py::init<>())
+        .def_readwrite("session_id", &ame::AutonomyBackendSnapshot::session_id)
+        .def_readwrite("state", &ame::AutonomyBackendSnapshot::state)
+        .def_readwrite("world_version", &ame::AutonomyBackendSnapshot::world_version)
+        .def_readwrite("replan_count", &ame::AutonomyBackendSnapshot::replan_count)
+        .def_readwrite("outstanding_commands", &ame::AutonomyBackendSnapshot::outstanding_commands)
+        .def_readwrite("decision_history", &ame::AutonomyBackendSnapshot::decision_history);
+
     // -------------------------------------------------------------------------
     // AgentInfo struct
     // -------------------------------------------------------------------------
@@ -40,20 +138,41 @@ PYBIND11_MODULE(_ame_py, m) {
         .def_readwrite("type", &ame::AgentInfo::type)
         .def_readwrite("available", &ame::AgentInfo::available);
 
+    py::class_<ame::FactMetadata>(m, "FactMetadata")
+        .def(py::init<>())
+        .def_readwrite("authority", &ame::FactMetadata::authority)
+        .def_readwrite("timestamp_us", &ame::FactMetadata::timestamp_us)
+        .def_readwrite("source", &ame::FactMetadata::source);
+
     // -------------------------------------------------------------------------
     // WorldModel
     // -------------------------------------------------------------------------
     py::class_<ame::WorldModel>(m, "WorldModel")
         .def(py::init<>())
+        .def("type_system", static_cast<ame::TypeSystem&(ame::WorldModel::*)()>(&ame::WorldModel::typeSystem),
+            py::return_value_policy::reference_internal,
+            "Access the type system")
         // Fact management - use lambda to avoid overload issues
         .def("set_fact", [](ame::WorldModel& wm, const std::string& key, bool value) {
             wm.setFact(key, value);
         }, py::arg("key"), py::arg("value"),
             "Set a fact by string key")
+        .def("set_fact_with_metadata", [](ame::WorldModel& wm,
+                                          const std::string& key,
+                                          bool value,
+                                          const std::string& source,
+                                          ame::FactAuthority authority) {
+            wm.setFact(key, value, source, authority);
+        }, py::arg("key"), py::arg("value"), py::arg("source"), py::arg("authority"),
+            "Set a fact by string key with source and authority")
         .def("get_fact", [](const ame::WorldModel& wm, const std::string& key) {
             return wm.getFact(key);
         }, py::arg("key"),
             "Get a fact value by string key")
+        .def("get_fact_metadata", [](const ame::WorldModel& wm, const std::string& key) {
+            return wm.getFactMetadata(key);
+        }, py::arg("key"),
+            "Get fact metadata by string key")
         .def("version", &ame::WorldModel::version,
             "Get the current world model version")
         .def("num_fluents", &ame::WorldModel::numFluents,
@@ -119,7 +238,7 @@ PYBIND11_MODULE(_ame_py, m) {
     // -------------------------------------------------------------------------
     py::class_<ame::TypeSystem>(m, "TypeSystem")
         .def("add_type", &ame::TypeSystem::addType,
-            py::arg("name"), py::arg("parent") = "object",
+            py::arg("name"), py::arg("parent") = "",
             "Add a type with optional parent");
 
     // -------------------------------------------------------------------------
@@ -154,7 +273,12 @@ PYBIND11_MODULE(_ame_py, m) {
     // ActionRegistry
     // -------------------------------------------------------------------------
     py::class_<ame::ActionRegistry>(m, "ActionRegistry")
-        .def(py::init<>());
+        .def(py::init<>())
+        .def("register_action", &ame::ActionRegistry::registerAction,
+            py::arg("pddl_name"), py::arg("bt_node_type"), py::arg("reactive") = false)
+        .def("register_action_subtree", &ame::ActionRegistry::registerActionSubTree,
+            py::arg("pddl_name"), py::arg("subtree_xml_template"), py::arg("reactive") = false)
+        .def("has_action", &ame::ActionRegistry::hasAction, py::arg("pddl_name"));
 
     // -------------------------------------------------------------------------
     // PlanCompiler
@@ -176,6 +300,23 @@ PYBIND11_MODULE(_ame_py, m) {
             return compiler.compile(plan, wm, registry, agent_id);
         }, py::arg("plan"), py::arg("wm"), py::arg("registry"), py::arg("agent_id"),
             "Compile a plan to BehaviorTree XML with agent context");
+
+    py::class_<ame::CurrentAmeBackendAdapter>(m, "CurrentAmeBackendAdapter")
+        .def(py::init<ame::WorldModel&, const ame::ActionRegistry&, const ame::Planner&, const ame::PlanCompiler&>(),
+            py::arg("world_model"),
+            py::arg("action_registry"),
+            py::arg("planner"),
+            py::arg("plan_compiler"))
+        .def("describe_capabilities", &ame::CurrentAmeBackendAdapter::describeCapabilities)
+        .def("start", &ame::CurrentAmeBackendAdapter::start, py::arg("request"))
+        .def("push_state", &ame::CurrentAmeBackendAdapter::pushState, py::arg("update"))
+        .def("push_intent", &ame::CurrentAmeBackendAdapter::pushIntent, py::arg("intent"))
+        .def("step", &ame::CurrentAmeBackendAdapter::step)
+        .def("pull_commands", &ame::CurrentAmeBackendAdapter::pullCommands)
+        .def("pull_decision_records", &ame::CurrentAmeBackendAdapter::pullDecisionRecords)
+        .def("push_command_result", &ame::CurrentAmeBackendAdapter::pushCommandResult, py::arg("result"))
+        .def("request_stop", &ame::CurrentAmeBackendAdapter::requestStop, py::arg("mode"))
+        .def("read_snapshot", &ame::CurrentAmeBackendAdapter::readSnapshot);
 
     // -------------------------------------------------------------------------
     // GoalAllocator

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace ame {
@@ -81,10 +82,9 @@ struct ActionCommand {
   std::string command_id;
   std::string action_name;
   std::string signature;
-  std::vector<std::string> parameters;
-  std::vector<std::string> expected_preconditions;
-  std::vector<std::string> predicted_add_effects;
-  std::vector<std::string> predicted_del_effects;
+  std::string service_name;
+  std::string operation;
+  std::unordered_map<std::string, std::string> request_fields;
 };
 
 /// \brief Decision/audit record emitted when the backend forms a new plan.

@@ -1,8 +1,159 @@
 #include "ame/current_ame_backend_adapter.h"
 
+#include "ame/bt_nodes/invoke_service.h"
+#include "ame/pyramid_service.h"
+
 #include <stdexcept>
+#include <utility>
 
 namespace ame {
+
+class CurrentAmeBackendAdapter::BackendPyramidServiceProxy : public IPyramidService {
+public:
+  struct PendingCall {
+    ActionCommand command;
+    bool emitted = false;
+    bool has_result = false;
+    AsyncCallStatus result_status = AsyncCallStatus::PENDING;
+    ServiceMessage response;
+  };
+
+  explicit BackendPyramidServiceProxy(std::string session_id)
+      : session_id_(std::move(session_id)) {}
+
+  void reset(std::string session_id) {
+    session_id_ = std::move(session_id);
+    next_request_id_ = 0;
+    pending_calls_.clear();
+    emitted_commands_.clear();
+  }
+
+  std::vector<ActionCommand> drainEmittedCommands() {
+    auto commands = emitted_commands_;
+    emitted_commands_.clear();
+    for (auto& command : commands) {
+      auto it = pending_calls_.find(command.command_id);
+      if (it != pending_calls_.end()) {
+        it->second.emitted = true;
+      }
+    }
+    return commands;
+  }
+
+  void submitResult(const CommandResult& result) {
+    auto it = pending_calls_.find(result.command_id);
+    if (it == pending_calls_.end()) {
+      throw std::invalid_argument("Unknown command_id in proxy result");
+    }
+
+    it->second.has_result = true;
+    it->second.response.fields.clear();
+    for (const auto& update : result.observed_updates) {
+      it->second.response.set(update.key, update.value ? "true" : "false");
+    }
+
+    switch (result.status) {
+      case CommandStatus::PENDING:
+      case CommandStatus::RUNNING:
+        it->second.result_status = AsyncCallStatus::PENDING;
+        break;
+      case CommandStatus::SUCCEEDED:
+        it->second.result_status = AsyncCallStatus::SUCCESS;
+        break;
+      case CommandStatus::FAILED_TRANSIENT:
+      case CommandStatus::FAILED_PERMANENT:
+        it->second.result_status = AsyncCallStatus::FAILURE;
+        break;
+      case CommandStatus::CANCELLED:
+        it->second.result_status = AsyncCallStatus::CANCELLED;
+        break;
+    }
+  }
+
+  bool hasPendingCalls() const {
+    for (const auto& [command_id, call] : pending_calls_) {
+      if (!call.has_result) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  void forgetCompletedCalls() {
+    for (auto it = pending_calls_.begin(); it != pending_calls_.end();) {
+      if (it->second.has_result &&
+          it->second.result_status != AsyncCallStatus::PENDING) {
+        it = pending_calls_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
+  bool call(const std::string&, const std::string&,
+            const ServiceMessage&, ServiceMessage&) override {
+    return false;
+  }
+
+  uint64_t callAsync(const std::string& service_name,
+                     const std::string& operation,
+                     const ServiceMessage& request) override {
+    const auto request_id = ++next_request_id_;
+    ActionCommand command;
+    command.command_id = session_id_ + "/svc/" + std::to_string(request_id);
+    command.action_name = operation;
+    command.signature = service_name + "::" + operation;
+    command.service_name = service_name;
+    command.operation = operation;
+    command.request_fields = request.fields;
+
+    PendingCall pending;
+    pending.command = command;
+    pending_calls_[command.command_id] = pending;
+    emitted_commands_.push_back(command);
+    request_id_to_command_[request_id] = command.command_id;
+    return request_id;
+  }
+
+  AsyncCallStatus pollResult(uint64_t request_id, ServiceMessage& response) override {
+    auto cmd_it = request_id_to_command_.find(request_id);
+    if (cmd_it == request_id_to_command_.end()) {
+      return AsyncCallStatus::FAILURE;
+    }
+
+    auto pending_it = pending_calls_.find(cmd_it->second);
+    if (pending_it == pending_calls_.end()) {
+      return AsyncCallStatus::FAILURE;
+    }
+
+    if (!pending_it->second.has_result) {
+      return AsyncCallStatus::PENDING;
+    }
+
+    response = pending_it->second.response;
+    return pending_it->second.result_status;
+  }
+
+  void cancelCall(uint64_t request_id) override {
+    auto cmd_it = request_id_to_command_.find(request_id);
+    if (cmd_it == request_id_to_command_.end()) {
+      return;
+    }
+    auto pending_it = pending_calls_.find(cmd_it->second);
+    if (pending_it == pending_calls_.end()) {
+      return;
+    }
+    pending_it->second.has_result = true;
+    pending_it->second.result_status = AsyncCallStatus::CANCELLED;
+  }
+
+private:
+  std::string session_id_;
+  uint64_t next_request_id_ = 0;
+  std::unordered_map<uint64_t, std::string> request_id_to_command_;
+  std::unordered_map<std::string, PendingCall> pending_calls_;
+  std::vector<ActionCommand> emitted_commands_;
+};
 
 CurrentAmeBackendAdapter::CurrentAmeBackendAdapter(
     WorldModel& world_model,
@@ -12,7 +163,25 @@ CurrentAmeBackendAdapter::CurrentAmeBackendAdapter(
     : world_model_(world_model),
       action_registry_(action_registry),
       planner_(planner),
-      plan_compiler_(plan_compiler) {}
+      plan_compiler_(plan_compiler),
+      pyramid_proxy_(std::make_unique<BackendPyramidServiceProxy>("")) {
+  executor_.setInProcessWorldModel(&world_model_);
+  executor_.setBlackboardInitializer([this](const BT::Blackboard::Ptr& blackboard) {
+    blackboard->set("pyramid_service",
+                    static_cast<IPyramidService*>(pyramid_proxy_.get()));
+  });
+  executor_.factory().registerNodeType<InvokeService>("InvokeService");
+  if (executor_.configure() != PCL_OK || executor_.activate() != PCL_OK) {
+    throw std::runtime_error("Failed to initialize ExecutorComponent");
+  }
+}
+
+CurrentAmeBackendAdapter::~CurrentAmeBackendAdapter() {
+  executor_.haltExecution();
+  executor_.deactivate();
+  executor_.cleanup();
+  executor_.shutdown();
+}
 
 AutonomyBackendCapabilities CurrentAmeBackendAdapter::describeCapabilities() const {
   return {"ame.current_stack", true, true, true};
@@ -23,11 +192,12 @@ void CurrentAmeBackendAdapter::start(const SessionRequest& request) {
   policy_ = request.policy;
   state_ = AutonomyBackendState::READY;
   replan_count_ = 0;
-  command_counter_ = 0;
   command_tracking_.clear();
   pending_command_queue_.clear();
   pending_decision_records_.clear();
   decision_history_.clear();
+  pyramid_proxy_->reset(session_id_);
+  executor_.haltExecution();
   world_model_.setGoal(request.intent.goal_fluents);
 }
 
@@ -42,12 +212,11 @@ void CurrentAmeBackendAdapter::pushState(const StateUpdate& update) {
 
 void CurrentAmeBackendAdapter::pushIntent(const MissionIntent& intent) {
   world_model_.setGoal(intent.goal_fluents);
+  resetExecutionForReplan();
   if (state_ != AutonomyBackendState::STOPPED &&
       state_ != AutonomyBackendState::FAILED) {
     state_ = AutonomyBackendState::READY;
   }
-  command_tracking_.clear();
-  pending_command_queue_.clear();
 }
 
 void CurrentAmeBackendAdapter::step() {
@@ -62,54 +231,77 @@ void CurrentAmeBackendAdapter::step() {
     return;
   }
 
-  for (const auto& [command_id, tracking] : command_tracking_) {
-    if (tracking.status == CommandStatus::PENDING ||
-        tracking.status == CommandStatus::RUNNING) {
-      state_ = AutonomyBackendState::WAITING_FOR_RESULTS;
+  if (!executor_.isExecuting()) {
+    if (replan_count_ >= policy_.max_replans) {
+      state_ = AutonomyBackendState::FAILED;
       return;
     }
+
+    auto result = planner_.solve(world_model_);
+    DecisionRecord record;
+    record.session_id = session_id_;
+    record.backend_id = describeCapabilities().backend_id;
+    record.world_version = world_model_.version();
+    record.replan_count = replan_count_;
+    record.plan_success = result.success;
+    record.solve_time_ms = result.solve_time_ms;
+    for (const auto& step_result : result.steps) {
+      const auto& action = world_model_.groundActions()[step_result.action_index];
+      record.planned_action_signatures.push_back(action.signature);
+    }
+    record.compiled_bt_xml =
+        plan_compiler_.compileSequential(result.steps, world_model_, action_registry_);
+    pending_decision_records_.push_back(record);
+    decision_history_.push_back(record);
+
+    if (!result.success) {
+      ++replan_count_;
+      if (replan_count_ >= policy_.max_replans) {
+        state_ = AutonomyBackendState::FAILED;
+      }
+      return;
+    }
+
+    loadAndStartExecution(record.compiled_bt_xml);
   }
 
-  if (!pending_command_queue_.empty()) {
+  executor_.tickOnce();
+
+  auto emitted_commands = pyramid_proxy_->drainEmittedCommands();
+  if (!emitted_commands.empty()) {
+    for (const auto& command : emitted_commands) {
+      command_tracking_[command.command_id] = {command, CommandStatus::PENDING};
+      pending_command_queue_.push_back(command);
+    }
     state_ = AutonomyBackendState::WAITING_FOR_RESULTS;
     return;
   }
 
-  if (replan_count_ >= policy_.max_replans) {
-    state_ = AutonomyBackendState::FAILED;
-    return;
-  }
-
-  auto result = planner_.solve(world_model_);
-  DecisionRecord record;
-  record.session_id = session_id_;
-  record.backend_id = describeCapabilities().backend_id;
-  record.world_version = world_model_.version();
-  record.replan_count = replan_count_;
-  record.plan_success = result.success;
-  record.solve_time_ms = result.solve_time_ms;
-
-  for (const auto& step_result : result.steps) {
-    const auto& action = world_model_.groundActions()[step_result.action_index];
-    record.planned_action_signatures.push_back(action.signature);
-  }
-  record.compiled_bt_xml =
-      plan_compiler_.compileSequential(result.steps, world_model_, action_registry_);
-
-  pending_decision_records_.push_back(record);
-  decision_history_.push_back(record);
-
-  if (!result.success) {
-    ++replan_count_;
-    if (replan_count_ >= policy_.max_replans) {
-      state_ = AutonomyBackendState::FAILED;
+  if (executor_.isExecuting()) {
+    if (executor_.lastStatus() == BT::NodeStatus::RUNNING) {
+      state_ = pyramid_proxy_->hasPendingCalls()
+                   ? AutonomyBackendState::WAITING_FOR_RESULTS
+                   : AutonomyBackendState::READY;
+      return;
     }
+  }
+
+  if (executor_.lastStatus() == BT::NodeStatus::SUCCESS) {
+    pyramid_proxy_->forgetCompletedCalls();
+    command_tracking_.clear();
+    state_ = goalsSatisfied() ? AutonomyBackendState::COMPLETE
+                              : AutonomyBackendState::READY;
+    executor_.haltExecution();
     return;
   }
 
-  buildCommandsFromPlan(result.steps);
-  state_ = pending_command_queue_.empty() ? AutonomyBackendState::COMPLETE
-                                          : AutonomyBackendState::WAITING_FOR_RESULTS;
+  if (executor_.lastStatus() == BT::NodeStatus::FAILURE) {
+    ++replan_count_;
+    resetExecutionForReplan();
+    state_ = (replan_count_ >= policy_.max_replans)
+                 ? AutonomyBackendState::FAILED
+                 : AutonomyBackendState::READY;
+  }
 }
 
 std::vector<ActionCommand> CurrentAmeBackendAdapter::pullCommands() {
@@ -131,58 +323,16 @@ void CurrentAmeBackendAdapter::pushCommandResult(const CommandResult& result) {
   }
 
   it->second.status = result.status;
-
   if (!result.observed_updates.empty()) {
     pushState({result.observed_updates});
-  } else if (result.status == CommandStatus::SUCCEEDED) {
-    applyPredictedEffects(it->second.command, result.source);
   }
-
-  if (result.status == CommandStatus::FAILED_PERMANENT) {
-    ++replan_count_;
-    if (replan_count_ >= policy_.max_replans) {
-      state_ = AutonomyBackendState::FAILED;
-      return;
-    }
-    command_tracking_.clear();
-    state_ = AutonomyBackendState::READY;
-    return;
-  }
-
-  if (result.status == CommandStatus::FAILED_TRANSIENT ||
-      result.status == CommandStatus::CANCELLED) {
-    ++replan_count_;
-    if (replan_count_ >= policy_.max_replans) {
-      state_ = AutonomyBackendState::FAILED;
-      return;
-    }
-    command_tracking_.clear();
-    state_ = AutonomyBackendState::READY;
-    return;
-  }
-
-  bool waiting = false;
-  for (const auto& [command_id, tracking] : command_tracking_) {
-    if (tracking.status == CommandStatus::PENDING ||
-        tracking.status == CommandStatus::RUNNING) {
-      waiting = true;
-      break;
-    }
-  }
-
-  if (waiting) {
-    state_ = AutonomyBackendState::WAITING_FOR_RESULTS;
-    return;
-  }
-
-  command_tracking_.clear();
-  state_ = goalsSatisfied() ? AutonomyBackendState::COMPLETE
-                            : AutonomyBackendState::READY;
+  pyramid_proxy_->submitResult(result);
 }
 
 void CurrentAmeBackendAdapter::requestStop(StopMode mode) {
   if (mode == StopMode::IMMEDIATE) {
     resetTransientQueues();
+    executor_.haltExecution();
   }
   state_ = AutonomyBackendState::STOPPED;
 }
@@ -250,46 +400,19 @@ void CurrentAmeBackendAdapter::resetTransientQueues() {
   command_tracking_.clear();
   pending_command_queue_.clear();
   pending_decision_records_.clear();
+  pyramid_proxy_->reset(session_id_);
 }
 
-void CurrentAmeBackendAdapter::buildCommandsFromPlan(
-    const std::vector<PlanStep>& steps) {
+void CurrentAmeBackendAdapter::resetExecutionForReplan() {
+  executor_.haltExecution();
   command_tracking_.clear();
   pending_command_queue_.clear();
-
-  for (const auto& step : steps) {
-    const auto& action = world_model_.groundActions()[step.action_index];
-
-    ActionCommand command;
-    command.command_id = session_id_ + "/cmd/" + std::to_string(++command_counter_);
-    command.action_name = actionName(action.signature);
-    command.signature = action.signature;
-    command.parameters = actionParameters(action.signature);
-
-    for (const auto pre_id : action.preconditions) {
-      command.expected_preconditions.push_back(world_model_.fluentName(pre_id));
-    }
-    for (const auto add_id : action.add_effects) {
-      command.predicted_add_effects.push_back(world_model_.fluentName(add_id));
-    }
-    for (const auto del_id : action.del_effects) {
-      command.predicted_del_effects.push_back(world_model_.fluentName(del_id));
-    }
-
-    command_tracking_[command.command_id] = {command, CommandStatus::PENDING};
-    pending_command_queue_.push_back(command);
-  }
+  pyramid_proxy_->reset(session_id_);
 }
 
-void CurrentAmeBackendAdapter::applyPredictedEffects(const ActionCommand& command,
-                                                     const std::string& source) {
-  const std::string effect_source = source.empty() ? command.command_id : source;
-  for (const auto& fact : command.predicted_add_effects) {
-    world_model_.setFact(fact, true, effect_source, FactAuthority::BELIEVED);
-  }
-  for (const auto& fact : command.predicted_del_effects) {
-    world_model_.setFact(fact, false, effect_source, FactAuthority::BELIEVED);
-  }
+void CurrentAmeBackendAdapter::loadAndStartExecution(const std::string& bt_xml) {
+  pyramid_proxy_->reset(session_id_);
+  executor_.loadAndExecute(bt_xml);
 }
 
 bool CurrentAmeBackendAdapter::goalsSatisfied() const {
