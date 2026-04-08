@@ -1,18 +1,20 @@
 import unittest
 
-from subprojects.AME.autonomy_backend import AmeAutonomyBackend
-from _ame_py import (
-    ActionRegistry,
+from subprojects.AME.autonomy_backend import (
+    AmeAutonomyBackend,
     AutonomyBackendState,
     CommandResult,
     CommandStatus,
-    FactAuthority,
     FactAuthorityLevel,
     FactUpdate,
     MissionIntent,
     PolicyEnvelope,
     SessionRequest,
     StateUpdate,
+)
+from _ame_py import (
+    ActionRegistry,
+    FactAuthority,
     WorldModel,
 )
 
@@ -75,12 +77,11 @@ class TestAutonomyBackendPython(unittest.TestCase):
         registry = build_registry()
         backend = AmeAutonomyBackend(wm, registry)
 
-        request = SessionRequest()
-        request.session_id = "py-session"
-        request.intent = MissionIntent()
-        request.intent.goal_fluents = ["(searched sector_a)"]
-        request.policy = PolicyEnvelope()
-        request.policy.max_replans = 4
+        request = SessionRequest(
+            session_id="py-session",
+            intent=MissionIntent(["(searched sector_a)"]),
+            policy=PolicyEnvelope(max_replans=4),
+        )
         backend.start(request)
         return wm, backend
 
@@ -100,10 +101,11 @@ class TestAutonomyBackendPython(unittest.TestCase):
         self.assertEqual(commands[0].operation, "move")
         self.assertEqual(backend.read_snapshot().state, AutonomyBackendState.WAITING_FOR_RESULTS)
 
-        move_result = CommandResult()
-        move_result.command_id = commands[0].command_id
-        move_result.status = CommandStatus.SUCCEEDED
-        move_result.source = "dispatcher:move"
+        move_result = CommandResult(
+            command_id=commands[0].command_id,
+            status=CommandStatus.SUCCEEDED,
+            source="dispatcher:move",
+        )
         backend.push_command_result(move_result)
 
         backend.step()
@@ -115,10 +117,11 @@ class TestAutonomyBackendPython(unittest.TestCase):
         self.assertFalse(wm.get_fact("(at uav1 base)"))
         self.assertEqual(wm.get_fact_metadata("(at uav1 sector_a)").authority, FactAuthority.BELIEVED)
 
-        search_result = CommandResult()
-        search_result.command_id = commands[0].command_id
-        search_result.status = CommandStatus.SUCCEEDED
-        search_result.source = "dispatcher:search"
+        search_result = CommandResult(
+            command_id=commands[0].command_id,
+            status=CommandStatus.SUCCEEDED,
+            source="dispatcher:search",
+        )
         backend.push_command_result(search_result)
 
         backend.step()
@@ -131,25 +134,24 @@ class TestAutonomyBackendPython(unittest.TestCase):
         backend.step()
         commands = backend.pull_commands()
 
-        move_result = CommandResult()
-        move_result.command_id = commands[0].command_id
-        move_result.status = CommandStatus.SUCCEEDED
-
-        update = FactUpdate()
-        update.key = "(at uav1 sector_a)"
-        update.value = True
-        update.source = "perception:gps"
-        update.authority = FactAuthorityLevel.CONFIRMED
-
-        clear = FactUpdate()
-        clear.key = "(at uav1 base)"
-        clear.value = False
-        clear.source = "perception:gps"
-        clear.authority = FactAuthorityLevel.CONFIRMED
-
-        observed = StateUpdate()
-        observed.fact_updates = [clear, update]
-        move_result.observed_updates = observed.fact_updates
+        move_result = CommandResult(
+            command_id=commands[0].command_id,
+            status=CommandStatus.SUCCEEDED,
+            observed_updates=[
+                FactUpdate(
+                    key="(at uav1 base)",
+                    value=False,
+                    source="perception:gps",
+                    authority=FactAuthorityLevel.CONFIRMED,
+                ),
+                FactUpdate(
+                    key="(at uav1 sector_a)",
+                    value=True,
+                    source="perception:gps",
+                    authority=FactAuthorityLevel.CONFIRMED,
+                ),
+            ],
+        )
 
         backend.push_command_result(move_result)
         metadata = wm.get_fact_metadata("(at uav1 sector_a)")
