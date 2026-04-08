@@ -5,6 +5,7 @@ add_library(ame_core STATIC
     lib/type_system.cpp
     lib/world_model.cpp
     lib/action_registry.cpp
+    lib/autonomy_backend.cpp
     lib/plan_compiler.cpp
     lib/pddl_parser.cpp
     lib/planner.cpp

@@ -10,6 +10,10 @@ add_executable(test_action_registry test_action_registry.cpp)
 target_link_libraries(test_action_registry PRIVATE ame_core GTest::gtest_main)
 gtest_discover_tests(test_action_registry DISCOVERY_MODE PRE_TEST)
 
+add_executable(test_autonomy_backend test_autonomy_backend.cpp)
+target_link_libraries(test_autonomy_backend PRIVATE ame_core GTest::gtest_main)
+gtest_discover_tests(test_autonomy_backend DISCOVERY_MODE PRE_TEST)
+
 add_executable(test_plan_compiler test_plan_compiler.cpp)
 target_link_libraries(test_plan_compiler PRIVATE ame_core GTest::gtest_main)
 gtest_discover_tests(test_plan_compiler DISCOVERY_MODE PRE_TEST)
