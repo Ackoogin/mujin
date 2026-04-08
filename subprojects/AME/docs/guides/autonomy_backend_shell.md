@@ -18,10 +18,12 @@ It wraps:
 - `Planner`
 - `PlanCompiler`
 - `ActionRegistry`
+- `ExecutorComponent`
+- `InvokeService` calls through an `IPyramidService` proxy
 
 It does **not** replace or rewrite those components. Instead, it exposes a stable shell around them:
 
-`state + intent in -> current AME stack -> action commands + decision records out`
+`state + intent in -> current AME stack runs -> PYRAMID commands + decision records out`
 
 ## Why This Exists
 
@@ -59,23 +61,22 @@ Main egress methods:
 
 ## Current Adapter Semantics
 
-`CurrentAmeBackendAdapter` behaves as an **episodic planner-backed command generator**:
+`CurrentAmeBackendAdapter` behaves as a **live planner/compiler/executor wrapper**:
 
 1. `start()` sets the active goals in the wrapped `WorldModel`
 2. `step()` runs the existing `Planner`
 3. the resulting plan is compiled with the existing `PlanCompiler`
-4. the adapter emits:
-   - `DecisionRecord` containing planning metadata and compiled BT XML
-   - `ActionCommand` records derived from the plan's grounded actions
-5. the caller dispatches those commands externally
-6. `pushCommandResult()` feeds execution outcomes back into the backend
-7. on success:
-   - observed fact updates are applied if provided
-   - otherwise predicted action effects are applied as `BELIEVED`
-8. on failure:
+4. the compiled BT is loaded into the existing `ExecutorComponent`
+5. the BT runs as normal
+6. when an `InvokeService` node calls `IPyramidService::callAsync(...)`, the adapter's proxy intercepts that call and emits an `ActionCommand`
+7. the caller dispatches that PYRAMID command externally
+8. `pushCommandResult()` feeds the service result back into the proxy
+9. the running BT resumes naturally via `pollResult(...)`
+10. on failure:
+   - the BT fails through its normal execution path
    - the adapter marks itself ready to replan on the next `step()`
 
-This gives a complete state-ingress / action-egress loop while keeping the existing solver and compiler untouched.
+This means the egress commands are now the **actual PYRAMID service calls invoked by the running behaviour tree**, not a precomputed command list derived directly from the symbolic plan.
 
 ## Example Usage
 
@@ -90,8 +91,16 @@ ame::ActionRegistry registry;
 
 // Domain setup omitted for brevity.
 wm.setFact("(at uav1 base)", true, "init", ame::FactAuthority::CONFIRMED);
-registry.registerAction("move", "MoveAction");
-registry.registerAction("search", "SearchAction");
+registry.registerActionSubTree(
+    "move",
+    "<InvokeService service_name=\"mobility\" operation=\"move\" "
+    "param_names=\"?robot;?from;?to\" "
+    "param_values=\"{param0};{param1};{param2}\" timeout_ms=\"0\"/>");
+registry.registerActionSubTree(
+    "search",
+    "<InvokeService service_name=\"imaging\" operation=\"search\" "
+    "param_names=\"?robot;?sector\" "
+    "param_values=\"{param0};{param1}\" timeout_ms=\"0\"/>");
 
 ame::CurrentAmeBackendAdapter backend(wm, registry);
 
@@ -107,7 +116,11 @@ auto decisions = backend.pullDecisionRecords();
 auto commands = backend.pullCommands();
 
 for (const auto& command : commands) {
-  // External dispatcher / robot middleware executes command.signature.
+  // External dispatcher / robot middleware executes the emitted PYRAMID call.
+  // Example fields:
+  //   command.service_name == "mobility"
+  //   command.operation == "move"
+  //   command.request_fields["robot"] == "uav1"
   backend.pushCommandResult({
       command.command_id,
       ame::CommandStatus::SUCCEEDED,
@@ -119,6 +132,8 @@ for (const auto& command : commands) {
 backend.step();
 auto snapshot = backend.readSnapshot();
 ```
+
+In the current AME adapter, the first `pullCommands()` after planning typically returns the first PYRAMID call the BT actually invokes, not the whole symbolic plan. After the external result is pushed back in, a later `step()` may emit the next PYRAMID call.
 
 ## Example: Using Confirmed Effects
 
@@ -136,7 +151,7 @@ backend.pushCommandResult({
 });
 ```
 
-When observed updates are supplied, they take precedence over predicted plan effects.
+When observed updates are supplied, they are applied back into the wrapped `WorldModel` before the BT continues.
 
 ## Data Objects
 
@@ -154,7 +169,7 @@ When observed updates are supplied, they take precedence over predicted plan eff
 ### Egress
 
 - `ActionCommand`
-  - command id, action name, signature, parameters, predicted effects
+  - command id, action name, signature, `service_name`, `operation`, `request_fields`
 - `DecisionRecord`
   - session metadata, solve time, action signatures, compiled BT XML
 - `AutonomyBackendSnapshot`
@@ -166,23 +181,26 @@ This first implementation is deliberately conservative.
 
 It currently:
 
-- wraps the existing planner/compiler flow, but does not embed the BT runtime behind the shell
-- emits all planned commands as an external batch
-- treats command success without observed updates as predicted `BELIEVED` state change
+- wraps the existing planner/compiler/executor flow and intercepts only `InvokeService`-based external actions
+- assumes external command execution happens through the PYRAMID service boundary
+- does not yet expose richer runtime node-level execution provenance beyond the emitted command records and existing BT logs
+- treats command success without observed updates as service success with no additional state confirmation
 - uses `WorldModel` goals directly as the current mission-intent representation
 - replans at the whole-plan level rather than doing local repair
 
-These are acceptable limitations for a first swap surface because the design goal is not to redesign AME internals. The goal is to provide a stable outer shell that a future backend can also implement.
+These are acceptable limitations for a first swap surface because the design goal is still not to redesign AME internals. The goal is to provide a stable outer shell that a future backend can also implement while preserving the current BT runtime behaviour.
 
 ## Tests
 
 Coverage for the implemented surface lives in:
 
 - `tests/test_autonomy_backend.cpp`
+- `tests/test_autonomy_backend_python.py`
 
 The tests cover:
 
-- command and decision emission from the current stack
+- decision emission from the current stack
+- runtime PYRAMID command emission from the running BT
 - world-state progression from successful command results
 - confirmed observed updates overriding predicted effects
 - failure-driven replanning through the wrapper surface
@@ -193,5 +211,6 @@ If this shell becomes a real integration boundary, likely follow-on work is:
 
 1. add richer session policy fields
 2. expose backend-neutral telemetry sinks
-3. support rolling-horizon or one-command-at-a-time dispatch modes
-4. optionally wrap the BT runtime as an internal execution mode behind the same interface
+3. expose explicit correlation between BT node instance and emitted PYRAMID command
+4. support richer service response payload mapping back into world state or blackboard
+5. support rolling-horizon or one-command-at-a-time dispatch policies above the current BT runtime
