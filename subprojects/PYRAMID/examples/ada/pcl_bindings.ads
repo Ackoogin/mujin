@@ -6,6 +6,8 @@ package Pcl_Bindings is
   type Pcl_Status is new Interfaces.C.int;
 
   PCL_OK              : constant Pcl_Status := 0;
+  PCL_PENDING         : constant Pcl_Status := 1;
+  PCL_STREAMING       : constant Pcl_Status := 2;
   PCL_ERR_INVALID     : constant Pcl_Status := -1;
   PCL_ERR_STATE       : constant Pcl_Status := -2;
   PCL_ERR_TIMEOUT     : constant Pcl_Status := -3;
@@ -13,6 +15,7 @@ package Pcl_Bindings is
   PCL_ERR_NOMEM       : constant Pcl_Status := -5;
   PCL_ERR_NOT_FOUND   : constant Pcl_Status := -6;
   PCL_ERR_PORT_CLOSED : constant Pcl_Status := -7;
+  PCL_ERR_CANCELLED   : constant Pcl_Status := -8;
 
   type Pcl_Executor is limited private;
   type Pcl_Executor_Access is access all Pcl_Executor;
@@ -25,6 +28,10 @@ package Pcl_Bindings is
   type Pcl_Port is limited private;
   type Pcl_Port_Access is access all Pcl_Port;
   pragma Convention(C, Pcl_Port_Access);
+
+  type Pcl_Svc_Context is limited private;
+  type Pcl_Svc_Context_Access is access all Pcl_Svc_Context;
+  pragma Convention(C, Pcl_Svc_Context_Access);
 
   type Pcl_Msg is record
     Data      : System.Address;
@@ -79,6 +86,14 @@ package Pcl_Bindings is
      Msg       : access constant Pcl_Msg;
      User_Data : System.Address);
   pragma Convention(C, Pcl_Sub_Callback_Access);
+
+  type Pcl_Service_Handler_Access is access function
+    (Self      : Pcl_Container_Access;
+     Request   : access constant Pcl_Msg;
+     Response  : access Pcl_Msg;
+     Ctx       : Pcl_Svc_Context_Access;
+     User_Data : System.Address) return Pcl_Status;
+  pragma Convention(C, Pcl_Service_Handler_Access);
 
   function Create_Executor return Pcl_Executor_Access;
   pragma Import(C, Create_Executor, "pcl_executor_create");
@@ -136,6 +151,14 @@ package Pcl_Bindings is
      User_Data : System.Address) return Pcl_Port_Access;
   pragma Import(C, Add_Subscriber, "pcl_container_add_subscriber");
 
+  function Add_Service
+    (Container    : Pcl_Container_Access;
+     Service_Name : Interfaces.C.Strings.chars_ptr;
+     Type_Name    : Interfaces.C.Strings.chars_ptr;
+     Handler      : Pcl_Service_Handler_Access;
+     User_Data    : System.Address) return Pcl_Port_Access;
+  pragma Import(C, Add_Service, "pcl_container_add_service");
+
   -- -- Service invocation -------------------------------------------------
 
   function Invoke_Service
@@ -144,6 +167,14 @@ package Pcl_Bindings is
      Request      : access constant Pcl_Msg;
      Response     : access Pcl_Msg) return Pcl_Status;
   pragma Import(C, Invoke_Service, "pcl_executor_invoke_service");
+
+  function Service_Respond
+    (Ctx      : Pcl_Svc_Context_Access;
+     Response : access constant Pcl_Msg) return Pcl_Status;
+  pragma Import(C, Service_Respond, "pcl_service_respond");
+
+  procedure Service_Context_Free(Ctx : Pcl_Svc_Context_Access);
+  pragma Import(C, Service_Context_Free, "pcl_service_context_free");
 
   -- -- Async service response callback ------------------------------------
 
@@ -233,6 +264,9 @@ private
 
   type Pcl_Port is null record;
   pragma Convention(C, Pcl_Port);
+
+  type Pcl_Svc_Context is null record;
+  pragma Convention(C, Pcl_Svc_Context);
 
   type Pcl_Transport is null record;
   pragma Convention(C, Pcl_Transport);
