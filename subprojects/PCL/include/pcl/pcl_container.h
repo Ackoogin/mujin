@@ -196,6 +196,15 @@ pcl_port_t* pcl_container_add_stream_service(pcl_container_t*     c,
                                              pcl_stream_handler_t handler,
                                              void*                user_data);
 
+/// \brief Configure local/remote routing for a concrete port.
+///
+/// Port routes control whether a publisher sends locally and/or remotely, and
+/// whether subscriber/service ports accept local and/or remote traffic.
+pcl_status_t pcl_port_set_route(pcl_port_t*              port,
+                                uint32_t                 route_mode,
+                                const char* const*       peer_ids,
+                                uint32_t                 peer_count);
+
 // -- Publishing ----------------------------------------------------------
 
 /// \brief Publish a message on a publisher port.  Only valid while ACTIVE.

@@ -105,10 +105,10 @@ public:
 // ---------------------------------------------------------------------------
 
 /// \brief Subscribe to object-evidence publications on kTopicObjectEvidence.
-void subscribeObjectEvidence(pcl_container_t*  container,
-                             pcl_sub_callback_t callback,
-                             void*             user_data = nullptr,
-                             const char*       content_type = "application/json");
+pcl_port_t* subscribeObjectEvidence(pcl_container_t*  container,
+                                    pcl_sub_callback_t callback,
+                                    void*             user_data = nullptr,
+                                    const char*       content_type = "application/json");
 
 /// \brief Publish a typed message on kTopicObjectEvidence.
 ///

@@ -10,6 +10,7 @@ extern "C" {
 #include "pcl/pcl_container.h"
 #include "pcl/pcl_executor.h"
 #include "pcl/pcl_transport.h"
+#include "../src/pcl_internal.h"
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -489,6 +490,76 @@ TEST(PclStreaming, TransportInvokeStream) {
 
   pcl_executor_set_transport(e, nullptr);
   pcl_executor_destroy(e);
+}
+
+TEST(PclStreaming, DirectTransportContextSendEndAbortCancel) {
+  struct TransportCtx {
+    bool stream_send_called = false;
+    bool stream_end_called = false;
+    bool stream_cancel_called = false;
+    pcl_status_t final_status = PCL_OK;
+    void* last_handle = nullptr;
+  } tctx;
+
+  pcl_transport_t transport = {};
+  transport.stream_send = [](void* adapter_ctx, void* handle, const pcl_msg_t*) -> pcl_status_t {
+    auto* tctx = static_cast<TransportCtx*>(adapter_ctx);
+    tctx->stream_send_called = true;
+    tctx->last_handle = handle;
+    return PCL_OK;
+  };
+  transport.stream_end = [](void* adapter_ctx, void* handle, pcl_status_t status) -> pcl_status_t {
+    auto* tctx = static_cast<TransportCtx*>(adapter_ctx);
+    tctx->stream_end_called = true;
+    tctx->final_status = status;
+    tctx->last_handle = handle;
+    return PCL_OK;
+  };
+  transport.stream_cancel = [](void* adapter_ctx, void* handle) -> pcl_status_t {
+    auto* tctx = static_cast<TransportCtx*>(adapter_ctx);
+    tctx->stream_cancel_called = true;
+    tctx->last_handle = handle;
+    return PCL_OK;
+  };
+  transport.adapter_ctx = &tctx;
+
+  pcl_msg_t msg = {};
+  msg.type_name = "Data";
+
+  pcl_stream_context_t send_ctx = {};
+  send_ctx.transport = &transport;
+  send_ctx.transport_ctx = reinterpret_cast<void*>(0x1001);
+  EXPECT_EQ(pcl_stream_send(&send_ctx, &msg), PCL_OK);
+  EXPECT_TRUE(tctx.stream_send_called);
+  EXPECT_EQ(tctx.last_handle, reinterpret_cast<void*>(0x1001));
+
+  pcl_stream_context_t* end_ctx =
+      static_cast<pcl_stream_context_t*>(calloc(1, sizeof(*end_ctx)));
+  ASSERT_NE(end_ctx, nullptr);
+  end_ctx->transport = &transport;
+  end_ctx->transport_ctx = reinterpret_cast<void*>(0x1002);
+  EXPECT_EQ(pcl_stream_end(end_ctx), PCL_OK);
+  EXPECT_TRUE(tctx.stream_end_called);
+  EXPECT_EQ(tctx.final_status, PCL_OK);
+  EXPECT_EQ(tctx.last_handle, reinterpret_cast<void*>(0x1002));
+
+  tctx.stream_end_called = false;
+  pcl_stream_context_t* abort_ctx =
+      static_cast<pcl_stream_context_t*>(calloc(1, sizeof(*abort_ctx)));
+  ASSERT_NE(abort_ctx, nullptr);
+  abort_ctx->transport = &transport;
+  abort_ctx->transport_ctx = reinterpret_cast<void*>(0x1003);
+  EXPECT_EQ(pcl_stream_abort(abort_ctx, PCL_ERR_CALLBACK), PCL_OK);
+  EXPECT_TRUE(tctx.stream_end_called);
+  EXPECT_EQ(tctx.final_status, PCL_ERR_CALLBACK);
+  EXPECT_EQ(tctx.last_handle, reinterpret_cast<void*>(0x1003));
+
+  pcl_stream_context_t cancel_ctx = {};
+  cancel_ctx.transport = &transport;
+  cancel_ctx.transport_ctx = reinterpret_cast<void*>(0x1004);
+  EXPECT_EQ(pcl_stream_cancel(&cancel_ctx), PCL_OK);
+  EXPECT_TRUE(tctx.stream_cancel_called);
+  EXPECT_EQ(tctx.last_handle, reinterpret_cast<void*>(0x1004));
 }
 
 ///< REQ_PCL_170: Handler returns error. PCL.011c.

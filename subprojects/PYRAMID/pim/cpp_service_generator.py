@@ -491,7 +491,7 @@ class CppServiceGenerator:
                 pascal = _snake_to_pascal(key)
                 fname = f'subscribe{pascal}'
                 cname = f'kTopic{pascal}'
-                col = len(f'void {fname}(')
+                col = len(f'pcl_port_t* {fname}(')
                 sp = ' ' * col
                 brief = (f'/// \\brief Subscribe to'
                          f' {_topic_key_to_phrase(key)} publications on'
@@ -502,7 +502,7 @@ class CppServiceGenerator:
                     f.write(f'///        {cname}.\n')
                 else:
                     f.write(brief + '\n')
-                f.write(f'void {fname}(pcl_container_t*  container,\n')
+                f.write(f'pcl_port_t* {fname}(pcl_container_t*  container,\n')
                 f.write(f'{sp}pcl_sub_callback_t callback,\n')
                 f.write(f'{sp}void*             user_data = nullptr,\n')
                 f.write(f'{sp}const char*       content_type'
@@ -519,7 +519,8 @@ class CppServiceGenerator:
                         f.write(f'/// \\brief Invoke {wire_full}'
                                 f' (typed, serialisation handled internally).\n')
                         f.write(f'///\n')
-                        f.write(f'/// Uses the transport configured on the executor.\n')
+                        f.write(f'/// Uses the configured endpoint route, or the legacy\n')
+                        f.write(f'/// executor transport fallback when no route is supplied.\n')
                         f.write(f'pcl_status_t {rpc.cpp_invoke_func}'
                                 f'(pcl_executor_t* executor,\n')
                         f.write(f'{sp}const {req_t}&'
@@ -529,6 +530,8 @@ class CppServiceGenerator:
                                 f'        callback,\n')
                         f.write(f'{sp}void*'
                                 f'                   user_data'
+                                f' = nullptr,\n')
+                        f.write(f'{sp}const pcl_endpoint_route_t* route'
                                 f' = nullptr);\n\n')
             else:
                 # Typed publish helpers
@@ -674,13 +677,22 @@ class CppServiceGenerator:
                 f.write('                           pcl_resp_cb_fn_t'
                         '        callback,\n')
                 f.write('                           void*'
-                        '                   user_data)\n')
+                        '                   user_data,\n')
+                f.write('                           const pcl_endpoint_route_t*'
+                        ' route)\n')
                 f.write('{\n')
                 f.write('    pcl_msg_t msg{};\n')
                 f.write('    msg.data      = payload.data();\n')
                 f.write('    msg.size      = static_cast<uint32_t>'
                         '(payload.size());\n')
                 f.write(f'    msg.type_name = "{_DEFAULT_CONTENT_TYPE}";\n')
+                f.write('    if (route) {\n')
+                f.write('        const pcl_status_t route_rc ='
+                        ' pcl_executor_set_endpoint_route(executor, route);\n')
+                f.write('        if (route_rc != PCL_OK) {\n')
+                f.write('            return route_rc;\n')
+                f.write('        }\n')
+                f.write('    }\n')
                 f.write('    return pcl_executor_invoke_async(\n')
                 f.write('        executor, service_name, &msg,'
                         ' callback, user_data);\n')
@@ -700,14 +712,14 @@ class CppServiceGenerator:
                     pascal = _snake_to_pascal(key)
                     fname = f'subscribe{pascal}'
                     cname = f'kTopic{pascal}'
-                    col = len(f'void {fname}(')
+                    col = len(f'pcl_port_t* {fname}(')
                     sp = ' ' * col
-                    f.write(f'void {fname}(pcl_container_t*   container,\n')
+                    f.write(f'pcl_port_t* {fname}(pcl_container_t*   container,\n')
                     f.write(f'{sp}pcl_sub_callback_t  callback,\n')
                     f.write(f'{sp}void*              user_data,\n')
                     f.write(f'{sp}const char*        content_type)\n')
                     f.write('{\n')
-                    f.write('    pcl_container_add_subscriber(container,\n')
+                    f.write('    return pcl_container_add_subscriber(container,\n')
                     f.write(f'                                 {cname},\n')
                     f.write('                                 content_type,\n')
                     f.write('                                 callback,\n')
@@ -732,18 +744,19 @@ class CppServiceGenerator:
                         f.write(f'{sp}pcl_resp_cb_fn_t'
                                 f'        callback,\n')
                         f.write(f'{sp}void*'
-                                f'                   user_data)\n')
+                                f'                   user_data,\n')
+                        f.write(f'{sp}const pcl_endpoint_route_t* route)\n')
                         f.write('{\n')
                         # Serialize — Identifier is std::string, pass through
                         if req_t == 'Identifier':
                             f.write('    return invoke_async(executor,'
                                     f' {rpc.cpp_svc_const},'
-                                    f' request, callback, user_data);\n')
+                                    f' request, callback, user_data, route);\n')
                         else:
                             f.write(f'    std::string payload = toJson(request);\n')
                             f.write('    return invoke_async(executor,'
                                     f' {rpc.cpp_svc_const},'
-                                    f' payload, callback, user_data);\n')
+                                    f' payload, callback, user_data, route);\n')
                         f.write('}\n\n')
             else:
                 # Publish wrappers (raw string — consumed side still needs

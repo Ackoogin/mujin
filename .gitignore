@@ -57,10 +57,11 @@ coverage.html
 coverage*.html
 coverage_pcl/
 coverage_tactical_objects/
-coverage_pcl_temp/
+coverage_pcl*
 coverage_tobj_temp/
 build-coverage-pcl/
 build-coverage-tactical_objects/
+build-coverage*
 
 # CMake
 CMakeUserPresets.json
@@ -105,3 +106,4 @@ subprojects/AME/tools/devenv/.venv/
 wm_audit.jsonl
 plan_audit.jsonl
 bt_events.jsonl
+

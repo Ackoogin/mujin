@@ -140,6 +140,14 @@ typedef struct {
 pcl_status_t pcl_executor_set_transport(pcl_executor_t*        e,
                                         const pcl_transport_t* transport);
 
+/// \brief Register a named peer transport on an executor.
+///
+/// Multiple peer transports may be registered on the same executor. Endpoint
+/// routes can then target a specific \p peer_id.
+pcl_status_t pcl_executor_register_transport(pcl_executor_t*        e,
+                                             const char*            peer_id,
+                                             const pcl_transport_t* transport);
+
 /// \brief Dispatch an incoming message to the appropriate subscriber callback.
 ///
 /// Called by the transport adapter when a message arrives from the wire and
@@ -149,6 +157,15 @@ pcl_status_t pcl_executor_set_transport(pcl_executor_t*        e,
 pcl_status_t pcl_executor_dispatch_incoming(pcl_executor_t*  e,
                                             const char*      topic,
                                             const pcl_msg_t* msg);
+
+/// \brief Queue an incoming remote message from a named peer.
+///
+/// Like \ref pcl_executor_post_incoming, but the queued message is marked as
+/// remote ingress from \p peer_id so subscriber exposure rules can filter it.
+pcl_status_t pcl_executor_post_remote_incoming(pcl_executor_t*  e,
+                                               const char*      peer_id,
+                                               const char*      topic,
+                                               const pcl_msg_t* msg);
 
 /// \brief Invoke a service asynchronously through the configured transport.
 ///
@@ -162,6 +179,13 @@ pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
                                        const pcl_msg_t* request,
                                        pcl_resp_cb_fn_t callback,
                                        void*            user_data);
+
+/// \brief Configure a per-endpoint route on an executor.
+///
+/// This is primarily used for consumed/client endpoints where there is no
+/// concrete server port object to attach a route to.
+pcl_status_t pcl_executor_set_endpoint_route(pcl_executor_t*         e,
+                                             const pcl_endpoint_route_t* route);
 
 /// \brief Invoke a streaming service through the configured transport.
 ///

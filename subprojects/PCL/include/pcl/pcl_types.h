@@ -21,6 +21,8 @@ typedef struct pcl_port_t          pcl_port_t;
 typedef struct pcl_svc_context_t   pcl_svc_context_t;
 typedef struct pcl_stream_context_t pcl_stream_context_t;
 
+#define PCL_MAX_ENDPOINT_PEERS 8u
+
 // -- Return codes --------------------------------------------------------
 
 typedef enum {
@@ -55,6 +57,30 @@ typedef enum {
   PCL_PORT_CLIENT          = 3,  // request-reply client
   PCL_PORT_STREAM_SERVICE  = 4,  // streaming server
 } pcl_port_type_t;
+
+// -- Endpoint routing ----------------------------------------------------
+
+typedef enum {
+  PCL_ROUTE_NONE   = 0,
+  PCL_ROUTE_LOCAL  = 1 << 0,
+  PCL_ROUTE_REMOTE = 1 << 1,
+} pcl_route_mode_t;
+
+typedef enum {
+  PCL_ENDPOINT_PUBLISHER      = 0,
+  PCL_ENDPOINT_SUBSCRIBER     = 1,
+  PCL_ENDPOINT_PROVIDED       = 2,
+  PCL_ENDPOINT_CONSUMED       = 3,
+  PCL_ENDPOINT_STREAM_PROVIDED = 4,
+} pcl_endpoint_kind_t;
+
+typedef struct {
+  const char*               endpoint_name;
+  pcl_endpoint_kind_t       endpoint_kind;
+  uint32_t                  route_mode;
+  const char* const*        peer_ids;
+  uint32_t                  peer_count;
+} pcl_endpoint_route_t;
 
 // -- Log levels ----------------------------------------------------------
 

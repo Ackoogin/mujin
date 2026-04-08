@@ -240,6 +240,21 @@ The transport adapter interface shall include an optional `invoke_async` functio
 
 **Rationale**: Service invocation must be as pluggable as pub/sub to maintain transport abstraction (D3). Components should not be coupled to specific transport implementations when calling services.
 
+### PCL.030b - Endpoint Routing Configuration
+PCL shall support explicit endpoint routing at startup for publisher, subscriber, provided-service, and consumed-service endpoints. Each endpoint route shall support local-only, remote-only, or local-plus-remote operation.
+
+**Rationale**: Endpoint locality must be deployment configuration, not inferred from whether an interface is `provided` or `consumed`.
+
+### PCL.030c - Named Peer Transport Registration
+The executor shall support registration of multiple named peer transports and shall resolve remote endpoint traffic to a specific peer transport using the configured route.
+
+**Rationale**: Multi-executor mesh and bridge deployments require more than one remote peer per executor.
+
+### PCL.030d - Remote Ingress Filtering
+Subscriber and provided-service endpoints shall accept remote traffic only when their route configuration allows remote delivery, and when the source peer matches any configured peer allow-list.
+
+**Rationale**: Remote exposure must be explicit so local-only endpoints are not accidentally reachable over the network.
+
 ## TCP Socket Transport
 
 ### PCL.031 - Server Mode
@@ -271,6 +286,11 @@ All socket writes shall be performed by a dedicated send thread via a mutex-prot
 The client transport shall support `invoke_remote_async()` which enqueues a service request and fires a callback on the executor thread when the response arrives.
 
 **Rationale**: Non-blocking remote service calls from component logic.
+
+### PCL.036a - Remote Peer Identity
+The reference socket transport shall associate inbound traffic with a configured peer identity and pass that identity into executor routing decisions for remote pub/sub and service dispatch.
+
+**Rationale**: Per-peer routing and exposure control require the transport to preserve the logical source peer across ingress.
 
 ## Logging
 
@@ -377,6 +397,11 @@ Generated bindings shall provide a dispatch function that routes service channel
 
 **Rationale**: Clean mapping from wire protocol to business logic.
 
+### PCL.056 - Public Route Configuration API
+PCL shall expose a public C ABI for configuring endpoint locality and peer selection without editing transport internals manually.
+
+**Rationale**: Local-vs-remote deployment choices should be expressible through stable runtime configuration APIs, not by rewriting transport glue.
+
 ---
 
 ## Design Decision Traceability
@@ -417,12 +442,16 @@ Generated bindings shall provide a dispatch function that routes service channel
 | `PCL.029` | `D3` |
 | `PCL.030` | `D3` |
 | `PCL.030a` | `D3` |
+| `PCL.030b` | `D3` |
+| `PCL.030c` | `D3` |
+| `PCL.030d` | `D2`, `D3`, `D5` |
 | `PCL.031` | `D3` |
 | `PCL.032` | `D3` |
 | `PCL.033` | `D3` |
 | `PCL.034` | `D3` |
 | `PCL.035` | `D2`, `D5` |
 | `PCL.036` | `D3`, `D5` |
+| `PCL.036a` | `D3`, `D5` |
 | `PCL.037` | `D1` |
 | `PCL.038` | `D3` |
 | `PCL.039` | `D1` |
@@ -442,3 +471,4 @@ Generated bindings shall provide a dispatch function that routes service channel
 | `PCL.053` | `D3` |
 | `PCL.054` | `D3` |
 | `PCL.055` | `D3` |
+| `PCL.056` | `D3`, `D4` |

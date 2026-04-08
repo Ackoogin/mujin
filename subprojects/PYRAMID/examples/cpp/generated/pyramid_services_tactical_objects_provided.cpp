@@ -76,12 +76,19 @@ pcl_status_t invoke_async(pcl_executor_t* executor,
                            const char*             service_name,
                            const std::string&      payload,
                            pcl_resp_cb_fn_t        callback,
-                           void*                   user_data)
+                           void*                   user_data,
+                           const pcl_endpoint_route_t* route)
 {
     pcl_msg_t msg{};
     msg.data      = payload.data();
     msg.size      = static_cast<uint32_t>(payload.size());
     msg.type_name = "application/json";
+    if (route) {
+        const pcl_status_t route_rc = pcl_executor_set_endpoint_route(executor, route);
+        if (route_rc != PCL_OK) {
+            return route_rc;
+        }
+    }
     return pcl_executor_invoke_async(
         executor, service_name, &msg, callback, user_data);
 }
@@ -92,24 +99,24 @@ pcl_status_t invoke_async(pcl_executor_t* executor,
 // PCL subscribe wrappers
 // ---------------------------------------------------------------------------
 
-void subscribeEntityMatches(pcl_container_t*   container,
-                            pcl_sub_callback_t  callback,
-                            void*              user_data,
-                            const char*        content_type)
+pcl_port_t* subscribeEntityMatches(pcl_container_t*   container,
+                                   pcl_sub_callback_t  callback,
+                                   void*              user_data,
+                                   const char*        content_type)
 {
-    pcl_container_add_subscriber(container,
+    return pcl_container_add_subscriber(container,
                                  kTopicEntityMatches,
                                  content_type,
                                  callback,
                                  user_data);
 }
 
-void subscribeEvidenceRequirements(pcl_container_t*   container,
-                                   pcl_sub_callback_t  callback,
-                                   void*              user_data,
-                                   const char*        content_type)
+pcl_port_t* subscribeEvidenceRequirements(pcl_container_t*   container,
+                                          pcl_sub_callback_t  callback,
+                                          void*              user_data,
+                                          const char*        content_type)
 {
-    pcl_container_add_subscriber(container,
+    return pcl_container_add_subscriber(container,
                                  kTopicEvidenceRequirements,
                                  content_type,
                                  callback,
@@ -123,54 +130,60 @@ void subscribeEvidenceRequirements(pcl_container_t*   container,
 pcl_status_t invokeReadMatch(pcl_executor_t* executor,
                              const Query&                 request,
                              pcl_resp_cb_fn_t        callback,
-                             void*                   user_data)
+                             void*                   user_data,
+                             const pcl_endpoint_route_t* route)
 {
     std::string payload = toJson(request);
-    return invoke_async(executor, kSvcReadMatch, payload, callback, user_data);
+    return invoke_async(executor, kSvcReadMatch, payload, callback, user_data, route);
 }
 
 pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
                                      const ObjectInterestRequirement& request,
                                      pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data)
+                                     void*                   user_data,
+                                     const pcl_endpoint_route_t* route)
 {
     std::string payload = toJson(request);
-    return invoke_async(executor, kSvcCreateRequirement, payload, callback, user_data);
+    return invoke_async(executor, kSvcCreateRequirement, payload, callback, user_data, route);
 }
 
 pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
                                    const Query&                 request,
                                    pcl_resp_cb_fn_t        callback,
-                                   void*                   user_data)
+                                   void*                   user_data,
+                                   const pcl_endpoint_route_t* route)
 {
     std::string payload = toJson(request);
-    return invoke_async(executor, kSvcReadRequirement, payload, callback, user_data);
+    return invoke_async(executor, kSvcReadRequirement, payload, callback, user_data, route);
 }
 
 pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
                                      const ObjectInterestRequirement& request,
                                      pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data)
+                                     void*                   user_data,
+                                     const pcl_endpoint_route_t* route)
 {
     std::string payload = toJson(request);
-    return invoke_async(executor, kSvcUpdateRequirement, payload, callback, user_data);
+    return invoke_async(executor, kSvcUpdateRequirement, payload, callback, user_data, route);
 }
 
 pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
                                      const Identifier&            request,
                                      pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data)
+                                     void*                   user_data,
+                                     const pcl_endpoint_route_t* route)
 {
-    return invoke_async(executor, kSvcDeleteRequirement, request, callback, user_data);
+    return invoke_async(executor, kSvcDeleteRequirement, request, callback, user_data, route);
 }
 
 pcl_status_t invokeReadDetail(pcl_executor_t* executor,
                               const Query&                 request,
                               pcl_resp_cb_fn_t        callback,
-                              void*                   user_data)
+                              void*                   user_data,
+                              const pcl_endpoint_route_t* route)
 {
     std::string payload = toJson(request);
-    return invoke_async(executor, kSvcReadDetail, payload, callback, user_data);
+    return invoke_async(executor, kSvcReadDetail, payload, callback, user_data, route);
 }
 
 // ---------------------------------------------------------------------------

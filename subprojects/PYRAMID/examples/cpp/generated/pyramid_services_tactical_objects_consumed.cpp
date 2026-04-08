@@ -78,12 +78,12 @@ namespace {
 // PCL subscribe wrapper
 // ---------------------------------------------------------------------------
 
-void subscribeObjectEvidence(pcl_container_t*   container,
-                             pcl_sub_callback_t  callback,
-                             void*              user_data,
-                             const char*        content_type)
+pcl_port_t* subscribeObjectEvidence(pcl_container_t*   container,
+                                    pcl_sub_callback_t  callback,
+                                    void*              user_data,
+                                    const char*        content_type)
 {
-    pcl_container_add_subscriber(container,
+    return pcl_container_add_subscriber(container,
                                  kTopicObjectEvidence,
                                  content_type,
                                  callback,

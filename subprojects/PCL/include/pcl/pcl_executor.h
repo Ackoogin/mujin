@@ -104,6 +104,16 @@ pcl_status_t pcl_executor_invoke_service(pcl_executor_t*  e,
                                          const pcl_msg_t* request,
                                          pcl_msg_t*       response);
 
+/// \brief Invoke a service request that arrived from a specific remote peer.
+///
+/// Remote service exposure rules are applied before dispatching to the local
+/// handler.
+pcl_status_t pcl_executor_invoke_service_remote(pcl_executor_t*  e,
+                                                const char*      peer_id,
+                                                const char*      service_name,
+                                                const pcl_msg_t* request,
+                                                pcl_msg_t*       response);
+
 /// \brief Publish a message to a topic (intra-process dispatch).
 ///
 /// When a container calls pcl_port_publish, the port's owner must have been

@@ -23,17 +23,18 @@ set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 include(GoogleTest)
 
-# -- PCL core library (the three C files we want to cover) ----------------
-set(PCL_ROOT "${CMAKE_SOURCE_DIR}/../..")   # /home/user/ame
+# -- PCL core library -----------------------------------------------------
+set(WORKSPACE_ROOT "${CMAKE_SOURCE_DIR}/../..")
+set(PCL_ROOT "${WORKSPACE_ROOT}/subprojects/PCL")
 
 add_library(pcl_core STATIC
-  ${PCL_ROOT}/src/pcl/pcl_container.c
-  ${PCL_ROOT}/src/pcl/pcl_executor.c
-  ${PCL_ROOT}/src/pcl/pcl_log.c
-  ${PCL_ROOT}/src/pcl/pcl_bridge.c
+  ${PCL_ROOT}/src/pcl_container.c
+  ${PCL_ROOT}/src/pcl_executor.c
+  ${PCL_ROOT}/src/pcl_log.c
+  ${PCL_ROOT}/src/pcl_bridge.c
 )
 target_include_directories(pcl_core PUBLIC  ${PCL_ROOT}/include)
-target_include_directories(pcl_core PRIVATE ${PCL_ROOT}/src/pcl)
+target_include_directories(pcl_core PRIVATE ${PCL_ROOT}/src)
 set_target_properties(pcl_core PROPERTIES
   LINKER_LANGUAGE C
   C_STANDARD 11
@@ -45,10 +46,10 @@ target_link_libraries(pcl_core PRIVATE Threads::Threads)
 
 # -- PCL socket transport library ----------------------------------------
 add_library(pcl_transport_socket STATIC
-  ${PCL_ROOT}/src/pcl/pcl_transport_socket.c
+  ${PCL_ROOT}/src/pcl_transport_socket.c
 )
 target_include_directories(pcl_transport_socket PUBLIC  ${PCL_ROOT}/include)
-target_include_directories(pcl_transport_socket PRIVATE ${PCL_ROOT}/src/pcl)
+target_include_directories(pcl_transport_socket PRIVATE ${PCL_ROOT}/src)
 target_link_libraries(pcl_transport_socket PUBLIC pcl_core)
 if(WIN32)
   target_link_libraries(pcl_transport_socket PUBLIC ws2_32)
@@ -75,7 +76,7 @@ add_pcl_test(test_pcl_streaming   test_pcl_streaming.cpp)
 add_pcl_test(test_pcl_bridge      test_pcl_bridge.cpp)
 add_pcl_test(test_pcl_dining      test_pcl_dining.cpp)
 # Dining test needs internal header to trigger port-overflow branch in bridge.
-target_include_directories(test_pcl_dining PRIVATE ${PCL_ROOT}/src/pcl)
+target_include_directories(test_pcl_dining PRIVATE ${PCL_ROOT}/src)
 
 # Socket transport tests
 add_executable(test_pcl_socket_transport ${PCL_ROOT}/tests/test_pcl_socket_transport.cpp)
@@ -93,13 +94,13 @@ gtest_discover_tests(test_pcl_cpp_wrappers DISCOVERY_MODE PRE_TEST)
 # sharing the same gcda, causes branch-counter overflow (GCC bug #68080) and
 # makes gcovr misreport line 428 as uncovered.
 add_library(pcl_core_oom STATIC
-  ${PCL_ROOT}/src/pcl/pcl_container.c
-  ${PCL_ROOT}/src/pcl/pcl_executor.c
-  ${PCL_ROOT}/src/pcl/pcl_log.c
-  ${PCL_ROOT}/src/pcl/pcl_bridge.c
+  ${PCL_ROOT}/src/pcl_container.c
+  ${PCL_ROOT}/src/pcl_executor.c
+  ${PCL_ROOT}/src/pcl_log.c
+  ${PCL_ROOT}/src/pcl_bridge.c
 )
 target_include_directories(pcl_core_oom PUBLIC  ${PCL_ROOT}/include)
-target_include_directories(pcl_core_oom PRIVATE ${PCL_ROOT}/src/pcl)
+target_include_directories(pcl_core_oom PRIVATE ${PCL_ROOT}/src)
 set_target_properties(pcl_core_oom PROPERTIES
   LINKER_LANGUAGE C
   C_STANDARD 11

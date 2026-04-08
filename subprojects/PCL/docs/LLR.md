@@ -1422,6 +1422,13 @@ A `pcl::Component` added to a `pcl::Executor` shall receive ticks when active an
 | 164 | 030a | test_pcl_robustness |
 | 165 | 030a, 045 | test_pcl_robustness |
 | 166 | 030a, 045 | test_pcl_robustness |
+| 173 | 030b, 030d | test_pcl_executor |
+| 174 | 030b, 030c | test_pcl_executor |
+| 175 | 030b, 030c | test_pcl_executor |
+| 176 | 033, 036a | test_pcl_socket_transport |
+| 177 | 034, 036, 036a | test_pcl_socket_transport |
+| 178 | 030c | test_pcl_executor |
+| 179 | 036a, 056 | test_pcl_socket_transport |
 | 167 | 011c | test_pcl_streaming |
 | 168 | 011c | test_pcl_streaming |
 | 169 | 011c | test_pcl_streaming |
@@ -1431,7 +1438,60 @@ A `pcl::Component` added to a `pcl::Executor` shall receive ticks when active an
 
 ---
 
-## 18. Streaming Services
+## 18. Endpoint Routing
+
+### REQ_PCL_173 - Remote Ingress Honors Subscriber Peer Route
+`pcl_executor_post_remote_incoming()` shall deliver a queued remote message only to subscriber ports whose route allows remote delivery and whose configured peer allow-list matches the source peer.
+
+**Traces**: PCL.030b, PCL.030d
+
+**Verification**: `test_pcl_executor.cpp::RemoteIngressHonorsSubscriberPeerRoute`.
+
+### REQ_PCL_174 - Publisher Route Can Fan Out Local And Remote
+`pcl_port_publish()` on a publisher configured for local-plus-remote routing shall dispatch to matching local subscribers and publish to each configured remote peer transport.
+
+**Traces**: PCL.030b, PCL.030c
+
+**Verification**: `test_pcl_executor.cpp::PublisherRouteCanBeLocalAndRemote`.
+
+### REQ_PCL_175 - Consumed Service Route Uses Named Peer Transport
+`pcl_executor_invoke_async()` shall use the named peer transport selected by a consumed-service endpoint route when the route is configured as remote.
+
+**Traces**: PCL.030b, PCL.030c
+
+**Verification**: `test_pcl_executor.cpp::ConsumedServiceRouteUsesNamedPeerTransport`.
+
+### REQ_PCL_176 - Socket Publish Uses Peer Identity For Remote Delivery
+The socket transport shall tag inbound published messages with its configured peer identity so remote subscriber routes can be filtered by peer.
+
+**Traces**: PCL.033, PCL.036a
+
+**Verification**: `test_pcl_socket_transport.cpp::PublishServerToClientDelivered`, `test_pcl_socket_transport.cpp::PublishClientToServerDelivered`.
+
+### REQ_PCL_177 - Remote Service Round Trip Respects Peer Routes
+The socket transport gateway shall dispatch inbound service requests through remote-aware executor service lookup so that remote provided-service routes and peer allow-lists are enforced.
+
+**Traces**: PCL.034, PCL.036, PCL.036a
+
+**Verification**: `test_pcl_socket_transport.cpp::AsyncRemoteServiceRoundTrip`.
+
+### REQ_PCL_178 - Named Transport Registration Selects Correct Peer
+`pcl_executor_register_transport()` shall register a transport under a peer id and make that transport available to endpoint route resolution for remote publish and invoke operations.
+
+**Traces**: PCL.030c
+
+**Verification**: `test_pcl_executor.cpp::PublisherRouteCanBeLocalAndRemote`, `test_pcl_executor.cpp::ConsumedServiceRouteUsesNamedPeerTransport`.
+
+### REQ_PCL_179 - Socket Transport Peer Identifier Is Configurable
+`pcl_socket_transport_set_peer_id()` shall store a logical peer identifier used for remote ingress and remote service dispatch decisions.
+
+**Traces**: PCL.036a, PCL.056
+
+**Verification**: `test_pcl_socket_transport.cpp::PublishServerToClientDelivered`, `test_pcl_socket_transport.cpp::PublishClientToServerDelivered`, `test_pcl_socket_transport.cpp::AsyncRemoteServiceRoundTrip`.
+
+---
+
+## 19. Streaming Services
 
 ### REQ_PCL_167 - Streaming Service Send and End
 `pcl_stream_send()` shall deliver messages to the client callback with `end=false`. `pcl_stream_end()` shall deliver a final callback with `end=true` and `status=PCL_OK`.

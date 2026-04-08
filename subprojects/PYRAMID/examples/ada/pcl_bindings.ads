@@ -17,6 +17,18 @@ package Pcl_Bindings is
   PCL_ERR_PORT_CLOSED : constant Pcl_Status := -7;
   PCL_ERR_CANCELLED   : constant Pcl_Status := -8;
 
+  PCL_ROUTE_NONE   : constant Interfaces.C.unsigned := 0;
+  PCL_ROUTE_LOCAL  : constant Interfaces.C.unsigned := 1;
+  PCL_ROUTE_REMOTE : constant Interfaces.C.unsigned := 2;
+
+  type Pcl_Endpoint_Kind is
+    (PCL_ENDPOINT_PUBLISHER,
+     PCL_ENDPOINT_SUBSCRIBER,
+     PCL_ENDPOINT_PROVIDED,
+     PCL_ENDPOINT_CONSUMED,
+     PCL_ENDPOINT_STREAM_PROVIDED);
+  pragma Convention(C, Pcl_Endpoint_Kind);
+
   type Pcl_Executor is limited private;
   type Pcl_Executor_Access is access all Pcl_Executor;
   pragma Convention(C, Pcl_Executor_Access);
@@ -39,6 +51,15 @@ package Pcl_Bindings is
     Type_Name : Interfaces.C.Strings.chars_ptr;
   end record;
   pragma Convention(C, Pcl_Msg);
+
+  type Pcl_Endpoint_Route is record
+    Endpoint_Name : Interfaces.C.Strings.chars_ptr;
+    Endpoint_Kind : Pcl_Endpoint_Kind;
+    Route_Mode    : Interfaces.C.unsigned;
+    Peer_Ids      : System.Address;
+    Peer_Count    : Interfaces.C.unsigned;
+  end record;
+  pragma Convention(C, Pcl_Endpoint_Route);
 
   type On_Configure_Access is access function
     (Self      : Pcl_Container_Access;
@@ -124,6 +145,13 @@ package Pcl_Bindings is
                          Msg   : access constant Pcl_Msg) return Pcl_Status;
   pragma Import(C, Post_Incoming, "pcl_executor_post_incoming");
 
+  function Post_Remote_Incoming
+    (Exec    : Pcl_Executor_Access;
+     Peer_Id : Interfaces.C.Strings.chars_ptr;
+     Topic   : Interfaces.C.Strings.chars_ptr;
+     Msg     : access constant Pcl_Msg) return Pcl_Status;
+  pragma Import(C, Post_Remote_Incoming, "pcl_executor_post_remote_incoming");
+
   function Create_Container
     (Name      : Interfaces.C.Strings.chars_ptr;
      Callbacks : access constant Pcl_Callbacks;
@@ -158,6 +186,13 @@ package Pcl_Bindings is
      Handler      : Pcl_Service_Handler_Access;
      User_Data    : System.Address) return Pcl_Port_Access;
   pragma Import(C, Add_Service, "pcl_container_add_service");
+
+  function Port_Set_Route
+    (Port       : Pcl_Port_Access;
+     Route_Mode : Interfaces.C.unsigned;
+     Peer_Ids   : System.Address;
+     Peer_Count : Interfaces.C.unsigned) return Pcl_Status;
+  pragma Import(C, Port_Set_Route, "pcl_port_set_route");
 
   -- -- Service invocation -------------------------------------------------
 
@@ -197,6 +232,12 @@ package Pcl_Bindings is
      Transport : Pcl_Transport_Const_Access) return Pcl_Status;
   pragma Import(C, Set_Transport, "pcl_executor_set_transport");
 
+  function Register_Transport
+    (Exec      : Pcl_Executor_Access;
+     Peer_Id   : Interfaces.C.Strings.chars_ptr;
+     Transport : Pcl_Transport_Const_Access) return Pcl_Status;
+  pragma Import(C, Register_Transport, "pcl_executor_register_transport");
+
   function Dispatch_Incoming
     (Exec  : Pcl_Executor_Access;
      Topic : Interfaces.C.Strings.chars_ptr;
@@ -210,6 +251,11 @@ package Pcl_Bindings is
      Callback     : Pcl_Resp_Cb_Access;
      User_Data    : System.Address) return Pcl_Status;
   pragma Import(C, Invoke_Async, "pcl_executor_invoke_async");
+
+  function Set_Endpoint_Route
+    (Exec  : Pcl_Executor_Access;
+     Route : access constant Pcl_Endpoint_Route) return Pcl_Status;
+  pragma Import(C, Set_Endpoint_Route, "pcl_executor_set_endpoint_route");
 
   function Publish
     (Exec  : Pcl_Executor_Access;
@@ -237,6 +283,11 @@ package Pcl_Bindings is
   function Get_Socket_Transport
     (Ctx : Pcl_Socket_Transport_Access) return Pcl_Transport_Const_Access;
   pragma Import(C, Get_Socket_Transport, "pcl_socket_transport_get_transport");
+
+  function Set_Socket_Peer_Id
+    (Ctx     : Pcl_Socket_Transport_Access;
+     Peer_Id : Interfaces.C.Strings.chars_ptr) return Pcl_Status;
+  pragma Import(C, Set_Socket_Peer_Id, "pcl_socket_transport_set_peer_id");
 
   function Socket_Gateway_Container
     (Ctx : Pcl_Socket_Transport_Access) return Pcl_Container_Access;

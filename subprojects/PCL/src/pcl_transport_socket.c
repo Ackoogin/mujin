@@ -72,6 +72,7 @@ struct pcl_socket_transport_t {
   int               is_server;
   uint16_t          port;
   char              host[256];
+  char              peer_id[64];
   pcl_executor_t*   executor;
   pcl_transport_t   transport;
 
@@ -295,6 +296,19 @@ static pcl_status_t socket_publish(void*            adapter_ctx,
   return rc;
 }
 
+static pcl_status_t socket_invoke_async(void*            adapter_ctx,
+                                        const char*      service_name,
+                                        const pcl_msg_t* request,
+                                        pcl_resp_cb_fn_t callback,
+                                        void*            user_data) {
+  return pcl_socket_transport_invoke_remote_async(
+      (pcl_socket_transport_t*)adapter_ctx,
+      service_name,
+      request,
+      callback,
+      user_data);
+}
+
 // -- Gateway subscriber callback (PCL main thread) ------------------------
 // Invoked when a SVC_REQ arrives from the wire.  Calls the service handler
 // synchronously (fine — runs on executor thread), then enqueues the response
@@ -335,7 +349,11 @@ static void gateway_sub_cb(pcl_container_t* c,
   resp.size      = (uint32_t)sizeof(resp_buf);
   resp.type_name = "SubscribeInterest_Response";
 
-  if (pcl_executor_invoke_service(ctx->executor, svc_name, &req, &resp) != PCL_OK) {
+  if (pcl_executor_invoke_service_remote(ctx->executor,
+                                         ctx->peer_id,
+                                         svc_name,
+                                         &req,
+                                         &resp) != PCL_OK) {
     resp.size = 0;
   }
 
@@ -442,7 +460,7 @@ static void* recv_thread_main(void* arg)
       msg.size      = data_len;
       msg.type_name = type_s;
 
-      pcl_executor_post_incoming(ctx->executor, topic_s, &msg);
+      pcl_executor_post_remote_incoming(ctx->executor, ctx->peer_id, topic_s, &msg);
 
       free(topic_s);
       free(type_s);
@@ -543,6 +561,7 @@ static void socket_transport_create_common(struct pcl_socket_transport_t* ctx,
   memset(&ctx->transport, 0, sizeof(ctx->transport));
   ctx->transport.publish     = socket_publish;
   ctx->transport.subscribe   = socket_subscribe;
+  ctx->transport.invoke_async = socket_invoke_async;
   ctx->transport.shutdown    = socket_shutdown;
   ctx->transport.adapter_ctx = ctx;
 
@@ -556,6 +575,7 @@ static void socket_transport_create_common(struct pcl_socket_transport_t* ctx,
   ctx->next_seq_id  = 1;
   ctx->pending_head = NULL;
   ctx->executor     = executor;
+  snprintf(ctx->peer_id, sizeof(ctx->peer_id), "%s", "default");
 
 #ifdef _WIN32
   InitializeCriticalSection(&ctx->send_lock);
@@ -719,6 +739,13 @@ const pcl_transport_t* pcl_socket_transport_get_transport(pcl_socket_transport_t
   return &ctx->transport;
 }
 
+pcl_status_t pcl_socket_transport_set_peer_id(pcl_socket_transport_t* ctx,
+                                              const char*             peer_id) {
+  if (!ctx || !peer_id || !peer_id[0]) return PCL_ERR_INVALID;
+  snprintf(ctx->peer_id, sizeof(ctx->peer_id), "%s", peer_id);
+  return PCL_OK;
+}
+
 pcl_container_t* pcl_socket_transport_gateway_container(pcl_socket_transport_t* ctx) {
   if (!ctx) return NULL;
   return ctx->gateway;
@@ -836,6 +863,7 @@ void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx_opaque) {
      call transport.shutdown() on the already-freed ctx (use-after-free). */
   if (ctx->executor) {
     pcl_executor_set_transport(ctx->executor, NULL);
+    pcl_executor_register_transport(ctx->executor, ctx->peer_id, NULL);
   }
 
   /* Signal threads to stop */

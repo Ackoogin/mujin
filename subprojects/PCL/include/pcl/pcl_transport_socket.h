@@ -56,6 +56,13 @@ pcl_socket_transport_t* pcl_socket_transport_create_client(const char*      host
                                                            uint16_t         port,
                                                            pcl_executor_t*  executor);
 
+/// \brief Set the logical peer identifier used for endpoint routing.
+///
+/// Use the same identifier when registering the transport with
+/// pcl_executor_register_transport().
+pcl_status_t pcl_socket_transport_set_peer_id(pcl_socket_transport_t* ctx,
+                                              const char*             peer_id);
+
 /// \brief Get the transport vtable for pcl_executor_set_transport.
 const pcl_transport_t* pcl_socket_transport_get_transport(pcl_socket_transport_t* ctx);
 

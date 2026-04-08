@@ -95,6 +95,9 @@ The generated `Provided` package gives you:
 
 ```ada
 with System;
+with Interfaces.C;
+with Interfaces.C.Strings;
+with Pcl_Bindings;
 with Pyramid.Services.Tactical_Objects.Provided;
 
 procedure Example_Server_Wiring is
@@ -137,6 +140,26 @@ begin
    Prov.Register_Services
      (Container => My_Container_Handle,
       Handlers  => Handlers'Access);
+
+   --  Optional: route a generated consumed endpoint to a specific peer.
+   declare
+      Peer      : aliased Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String ("bridge-client");
+      Peer_List : aliased constant System.Address := Peer'Address;
+      Route     : aliased Pcl_Bindings.Pcl_Endpoint_Route :=
+        (Endpoint_Name => Interfaces.C.Strings.New_String
+           (Prov.Svc_Create_Requirement),
+         Endpoint_Kind => Pcl_Bindings.PCL_ENDPOINT_CONSUMED,
+         Route_Mode    => Pcl_Bindings.PCL_ROUTE_REMOTE,
+         Peer_Ids      => Peer_List,
+         Peer_Count    => 1);
+   begin
+      Pcl_Bindings.Set_Endpoint_Route
+        (Exec  => My_Executor_Handle,
+         Route => Route'Access);
+      Interfaces.C.Strings.Free (Route.Endpoint_Name);
+      Interfaces.C.Strings.Free (Peer);
+   end;
 end Example_Server_Wiring;
 ```
 
@@ -145,7 +168,211 @@ In practice:
 1. Write plain Ada business-logic subprograms with the generated typed signatures.
 2. Fill a `Service_Handlers` record with the callbacks your container actually provides.
 3. Call `Register_Services` once during `on_configure`.
+4. Apply `Pcl_Bindings.Port_Set_Route` / `Set_Endpoint_Route` when a generated
+   `provided` or `consumed` endpoint should be local, remote, or both.
 
 This is similar to the generated C++ flow, but not identical. C++ generates a
 `ServiceHandler` base class with virtual `handle*` methods; Ada now uses a
 callback record instead of requiring edits to generated package bodies.
+
+## Routing and Peer Configuration
+
+For Ada, the routing rules are the same as the C API:
+
+- concrete ports use `Pcl_Bindings.Port_Set_Route`
+- consumed/client endpoints use `Pcl_Bindings.Set_Endpoint_Route`
+- remote peers are registered with `Pcl_Bindings.Register_Transport`
+- `provided` and `consumed` do not imply locality on their own
+
+The route modes are:
+
+- `Pcl_Bindings.PCL_ROUTE_LOCAL`
+- `Pcl_Bindings.PCL_ROUTE_REMOTE`
+- `Pcl_Bindings.PCL_ROUTE_LOCAL + Pcl_Bindings.PCL_ROUTE_REMOTE`
+
+### Registering Peer Transports
+
+If one executor needs to talk to multiple peers, create one transport per peer
+and register each under a stable logical peer ID.
+
+```ada
+declare
+   Exec        : constant Pcl_Bindings.Pcl_Executor_Access :=
+     Pcl_Bindings.Create_Executor;
+   Planner_Id  : Interfaces.C.Strings.chars_ptr :=
+     Interfaces.C.Strings.New_String ("planner");
+   Bridge_Id   : Interfaces.C.Strings.chars_ptr :=
+     Interfaces.C.Strings.New_String ("bridge_b");
+   Planner_Host : Interfaces.C.Strings.chars_ptr :=
+     Interfaces.C.Strings.New_String ("127.0.0.1");
+   Bridge_Host  : Interfaces.C.Strings.chars_ptr :=
+     Interfaces.C.Strings.New_String ("127.0.0.1");
+   Planner_Tx  : constant Pcl_Bindings.Pcl_Socket_Transport_Access :=
+     Pcl_Bindings.Create_Socket_Client (Planner_Host, 7001, Exec);
+   Bridge_Tx   : constant Pcl_Bindings.Pcl_Socket_Transport_Access :=
+     Pcl_Bindings.Create_Socket_Client (Bridge_Host, 7002, Exec);
+begin
+   Pcl_Bindings.Set_Socket_Peer_Id (Planner_Tx, Planner_Id);
+   Pcl_Bindings.Set_Socket_Peer_Id (Bridge_Tx, Bridge_Id);
+
+   Pcl_Bindings.Register_Transport
+     (Exec,
+      Planner_Id,
+      Pcl_Bindings.Get_Socket_Transport (Planner_Tx));
+
+   Pcl_Bindings.Register_Transport
+     (Exec,
+      Bridge_Id,
+      Pcl_Bindings.Get_Socket_Transport (Bridge_Tx));
+
+   Interfaces.C.Strings.Free (Planner_Id);
+   Interfaces.C.Strings.Free (Bridge_Id);
+   Interfaces.C.Strings.Free (Planner_Host);
+   Interfaces.C.Strings.Free (Bridge_Host);
+end;
+```
+
+Use peer IDs that describe the remote executor role, not the raw host/port.
+
+### Local `provided`, Remote `consumed`
+
+This is the most common mixed deployment:
+
+- the container implements a local service
+- the same executor calls some other service on a named remote peer
+
+```ada
+declare
+   package Prov renames Pyramid.Services.Tactical_Objects.Provided;
+
+   Peer      : Interfaces.C.Strings.chars_ptr :=
+     Interfaces.C.Strings.New_String ("planner");
+   Peer_List : aliased constant System.Address := Peer'Address;
+   Route     : aliased Pcl_Bindings.Pcl_Endpoint_Route :=
+     (Endpoint_Name => Interfaces.C.Strings.New_String
+        (Prov.Svc_Read_Detail),
+      Endpoint_Kind => Pcl_Bindings.PCL_ENDPOINT_CONSUMED,
+      Route_Mode    => Pcl_Bindings.PCL_ROUTE_REMOTE,
+      Peer_Ids      => Peer_List,
+      Peer_Count    => 1);
+begin
+   --  Local service registration on the container:
+   Prov.Register_Services
+     (Container => My_Container_Handle,
+      Handlers  => Handlers'Access);
+
+   --  Remote consumed route on the executor:
+   Pcl_Bindings.Set_Endpoint_Route
+     (Exec  => My_Executor_Handle,
+      Route => Route'Access);
+
+   Interfaces.C.Strings.Free (Route.Endpoint_Name);
+   Interfaces.C.Strings.Free (Peer);
+end;
+```
+
+`Register_Services` creates the service ports. Without extra route changes, they
+behave as local endpoints.
+
+### Remote `provided`
+
+If a generated `provided` service should be exposed remotely, route the concrete
+service port after registration.
+
+Today that means:
+
+1. register the service with `Register_Services`
+2. retain the returned `Pcl_Port_Access` if you are wiring services manually,
+   or extend your generated helper usage with a post-registration route call
+
+For a hand-written port example:
+
+```ada
+declare
+   Peer      : Interfaces.C.Strings.chars_ptr :=
+     Interfaces.C.Strings.New_String ("bridge_a");
+   Peer_List : aliased constant System.Address := Peer'Address;
+   Service   : constant Pcl_Bindings.Pcl_Port_Access :=
+     Pcl_Bindings.Add_Service
+       (Container    => My_Container_Handle,
+        Service_Name => Interfaces.C.Strings.New_String ("track.update"),
+        Type_Name    => Interfaces.C.Strings.New_String ("application/json"),
+        Handler      => My_Service_Trampoline'Access,
+        User_Data    => System.Null_Address);
+begin
+   Pcl_Bindings.Port_Set_Route
+     (Port       => Service,
+      Route_Mode => Pcl_Bindings.PCL_ROUTE_REMOTE,
+      Peer_Ids   => Peer_List,
+      Peer_Count => 1);
+
+   Interfaces.C.Strings.Free (Peer);
+end;
+```
+
+If you want a local-plus-remote `provided` endpoint, use:
+
+```ada
+Pcl_Bindings.PCL_ROUTE_LOCAL + Pcl_Bindings.PCL_ROUTE_REMOTE
+```
+
+with the same peer list.
+
+### Remote Subscriber Allow-List
+
+A subscriber may be configured to accept traffic only from specific peers.
+
+```ada
+declare
+   Peer      : Interfaces.C.Strings.chars_ptr :=
+     Interfaces.C.Strings.New_String ("bridge_b");
+   Peer_List : aliased constant System.Address := Peer'Address;
+   Port      : constant Pcl_Bindings.Pcl_Port_Access :=
+     Pcl_Bindings.Add_Subscriber
+       (Container => My_Container_Handle,
+        Topic     => Interfaces.C.Strings.New_String ("intel/topic"),
+        Type_Name => Interfaces.C.Strings.New_String ("application/json"),
+        Callback  => My_Subscriber'Access,
+        User_Data => System.Null_Address);
+begin
+   Pcl_Bindings.Port_Set_Route
+     (Port       => Port,
+      Route_Mode => Pcl_Bindings.PCL_ROUTE_REMOTE,
+      Peer_Ids   => Peer_List,
+      Peer_Count => 1);
+
+   Interfaces.C.Strings.Free (Peer);
+end;
+```
+
+Only remote ingress tagged with `"bridge_b"` will reach this subscriber.
+
+### Bridge-Style Executor
+
+For a chained topology:
+
+- executor A <-> bridge executor B <-> executor C
+
+the bridge behavior stays explicit in Ada too. A bridge container in executor B:
+
+- subscribes or serves on one routed endpoint
+- republishes or invokes on another routed endpoint
+
+Typical layout:
+
+- peer `"left"` registered on executor B
+- peer `"right"` registered on executor B
+- incoming subscriber or provided service routed remote from `"left"`
+- outgoing publisher or consumed service routed remote to `"right"`
+
+That means the forwarding policy lives in normal Ada business logic, not hidden
+inside the transport layer.
+
+### Practical Rules
+
+- use `Port_Set_Route` for publishers, subscribers, and provided services
+- use `Set_Endpoint_Route` for consumed unary services
+- use exactly one peer for remote consumed services in v1
+- use stable peer IDs and reuse them consistently between socket transport setup
+  and route tables
+- if no route is configured, concrete generated services are local by default

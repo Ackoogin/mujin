@@ -16,6 +16,7 @@ extern "C" {
 #include "pcl/pcl_executor.h"
 #include "pcl/pcl_transport.h"
 #include "pcl/pcl_log.h"
+#include "../src/pcl_internal.h"
 }
 
 // -- Helpers -------------------------------------------------------------
@@ -1745,6 +1746,13 @@ TEST(PclContainerRobust, ServiceRespondNullArgs) {
   // but we can't easily test that without a valid context
 }
 
+TEST(PclContainerRobust, PortSetRouteRejectsPeersWithoutRemoteMode) {
+  pcl_port_t port = {};
+  const char* peers[] = {"peer_a"};
+
+  EXPECT_EQ(pcl_port_set_route(&port, PCL_ROUTE_LOCAL, peers, 1), PCL_ERR_INVALID);
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // Shutdown callback (line 160)
 // ═══════════════════════════════════════════════════════════════════════
@@ -1891,6 +1899,35 @@ TEST(PclContainerRobust, ServiceRespondWithTransport) {
   pcl_executor_set_transport(e, nullptr);
   pcl_executor_destroy(e);
   pcl_container_destroy(c);
+}
+
+TEST(PclContainerRobust, ServiceRespondWithDirectContextTransport) {
+  struct TransportCtx {
+    bool respond_called = false;
+    void* last_transport_ctx = nullptr;
+  } tctx;
+
+  pcl_transport_t transport = {};
+  transport.respond = [](void* adapter_ctx, pcl_svc_context_t* ctx,
+                         const pcl_msg_t*) -> pcl_status_t {
+    auto* tctx = static_cast<TransportCtx*>(adapter_ctx);
+    tctx->respond_called = true;
+    tctx->last_transport_ctx = ctx->transport_ctx;
+    return PCL_OK;
+  };
+  transport.adapter_ctx = &tctx;
+
+  pcl_svc_context_t* ctx =
+      static_cast<pcl_svc_context_t*>(calloc(1, sizeof(*ctx)));
+  ASSERT_NE(ctx, nullptr);
+  ctx->transport = &transport;
+  ctx->transport_ctx = reinterpret_cast<void*>(0x4321);
+
+  pcl_msg_t resp = {};
+  resp.type_name = "Resp";
+  EXPECT_EQ(pcl_service_respond(ctx, &resp), PCL_OK);
+  EXPECT_TRUE(tctx.respond_called);
+  EXPECT_EQ(tctx.last_transport_ctx, reinterpret_cast<void*>(0x4321));
 }
 
 // ═══════════════════════════════════════════════════════════════════════

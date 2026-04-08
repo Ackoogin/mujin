@@ -31,6 +31,33 @@ static pcl_param_t* find_or_add_param(pcl_container_t* c, const char* key) {
   return p;
 }
 
+static pcl_status_t copy_route_config(pcl_port_t*              port,
+                                      uint32_t                 route_mode,
+                                      const char* const*       peer_ids,
+                                      uint32_t                 peer_count) {
+  uint32_t i;
+
+  if (!port) return PCL_ERR_INVALID;
+  if (route_mode == PCL_ROUTE_NONE) return PCL_ERR_INVALID;
+  if (peer_count > PCL_MAX_ENDPOINT_PEERS) return PCL_ERR_INVALID;
+  if (peer_count > 0u && !peer_ids) return PCL_ERR_INVALID;
+  if ((route_mode & PCL_ROUTE_REMOTE) == 0u && peer_count > 0u) {
+    return PCL_ERR_INVALID;
+  }
+
+  port->route_mode = route_mode;
+  port->route_configured = 1;
+  port->peer_count = peer_count;
+  for (i = 0; i < PCL_MAX_ENDPOINT_PEERS; ++i) {
+    port->peer_ids[i][0] = '\0';
+  }
+  for (i = 0; i < peer_count; ++i) {
+    if (!peer_ids[i]) return PCL_ERR_INVALID;
+    snprintf(port->peer_ids[i], sizeof(port->peer_ids[i]), "%s", peer_ids[i]);
+  }
+  return PCL_OK;
+}
+
 // -- Create / destroy ----------------------------------------------------
 
 pcl_container_t* pcl_container_create(const char*            name,
@@ -285,6 +312,7 @@ pcl_port_t* pcl_container_add_publisher(pcl_container_t* c,
   memset(p, 0, sizeof(*p));
   p->type  = PCL_PORT_PUBLISHER;
   p->owner = c;
+  p->route_mode = PCL_ROUTE_NONE;
   snprintf(p->name, sizeof(p->name), "%s", topic);
   snprintf(p->type_name, sizeof(p->type_name), "%s", type_name);
   return p;
@@ -306,6 +334,7 @@ pcl_port_t* pcl_container_add_subscriber(pcl_container_t* c,
   p->owner         = c;
   p->sub_cb        = cb;
   p->sub_user_data = user_data;
+  p->route_mode    = PCL_ROUTE_NONE;
   snprintf(p->name, sizeof(p->name), "%s", topic);
   snprintf(p->type_name, sizeof(p->type_name), "%s", type_name);
   return p;
@@ -327,6 +356,7 @@ pcl_port_t* pcl_container_add_service(pcl_container_t*      c,
   p->owner         = c;
   p->svc_handler   = handler;
   p->svc_user_data = user_data;
+  p->route_mode    = PCL_ROUTE_NONE;
   snprintf(p->name, sizeof(p->name), "%s", service_name);
   snprintf(p->type_name, sizeof(p->type_name), "%s", type_name);
   return p;
@@ -341,7 +371,7 @@ pcl_status_t pcl_port_publish(pcl_port_t* port, const pcl_msg_t* msg) {
     return PCL_ERR_PORT_CLOSED;
   }
   if (port->owner->executor) {
-    return pcl_executor_publish(port->owner->executor, port->name, msg);
+    return pcl_executor_publish_port(port->owner->executor, port, msg);
   }
   return PCL_OK;
 }
@@ -362,6 +392,13 @@ pcl_status_t pcl_service_respond(pcl_svc_context_t* ctx,
   if (!ctx || !response) return PCL_ERR_INVALID;
 
   // If transport has respond function, use it (for remote callers)
+  if (ctx->transport && ctx->transport->respond) {
+    pcl_status_t rc = ctx->transport->respond(
+        ctx->transport->adapter_ctx, ctx, response);
+    free(ctx);
+    return rc;
+  }
+
   if (ctx->executor && ctx->executor->has_transport &&
       ctx->executor->transport.respond) {
     pcl_status_t rc = ctx->executor->transport.respond(
@@ -400,9 +437,17 @@ pcl_port_t* pcl_container_add_stream_service(pcl_container_t*     c,
   p->owner            = c;
   p->stream_handler   = handler;
   p->stream_user_data = user_data;
+  p->route_mode       = PCL_ROUTE_NONE;
   snprintf(p->name, sizeof(p->name), "%s", service_name);
   snprintf(p->type_name, sizeof(p->type_name), "%s", type_name);
   return p;
+}
+
+pcl_status_t pcl_port_set_route(pcl_port_t*              port,
+                                uint32_t                 route_mode,
+                                const char* const*       peer_ids,
+                                uint32_t                 peer_count) {
+  return copy_route_config(port, route_mode, peer_ids, peer_count);
 }
 
 pcl_status_t pcl_stream_send(pcl_stream_context_t* ctx, const pcl_msg_t* msg) {
@@ -411,6 +456,11 @@ pcl_status_t pcl_stream_send(pcl_stream_context_t* ctx, const pcl_msg_t* msg) {
   if (ctx->cancelled) return PCL_ERR_CANCELLED;
 
   // If transport has stream_send, use it
+  if (ctx->transport && ctx->transport->stream_send) {
+    return ctx->transport->stream_send(
+        ctx->transport->adapter_ctx, ctx->transport_ctx, msg);
+  }
+
   if (ctx->executor && ctx->executor->has_transport &&
       ctx->executor->transport.stream_send) {
     return ctx->executor->transport.stream_send(
@@ -431,6 +481,13 @@ pcl_status_t pcl_stream_end(pcl_stream_context_t* ctx) {
   ctx->ended = 1;
 
   // If transport has stream_end, use it
+  if (ctx->transport && ctx->transport->stream_end) {
+    pcl_status_t rc = ctx->transport->stream_end(
+        ctx->transport->adapter_ctx, ctx->transport_ctx, PCL_OK);
+    free(ctx);
+    return rc;
+  }
+
   if (ctx->executor && ctx->executor->has_transport &&
       ctx->executor->transport.stream_end) {
     pcl_status_t rc = ctx->executor->transport.stream_end(
@@ -455,6 +512,13 @@ pcl_status_t pcl_stream_abort(pcl_stream_context_t* ctx, pcl_status_t error_code
   ctx->ended = 1;
 
   // If transport has stream_end, use it with error
+  if (ctx->transport && ctx->transport->stream_end) {
+    pcl_status_t rc = ctx->transport->stream_end(
+        ctx->transport->adapter_ctx, ctx->transport_ctx, error_code);
+    free(ctx);
+    return rc;
+  }
+
   if (ctx->executor && ctx->executor->has_transport &&
       ctx->executor->transport.stream_end) {
     pcl_status_t rc = ctx->executor->transport.stream_end(
@@ -484,6 +548,11 @@ pcl_status_t pcl_stream_cancel(pcl_stream_context_t* ctx) {
   ctx->cancelled = 1;
 
   // If transport has stream_cancel, use it
+  if (ctx->transport && ctx->transport->stream_cancel) {
+    return ctx->transport->stream_cancel(
+        ctx->transport->adapter_ctx, ctx->transport_ctx);
+  }
+
   if (ctx->executor && ctx->executor->has_transport &&
       ctx->executor->transport.stream_cancel) {
     return ctx->executor->transport.stream_cancel(

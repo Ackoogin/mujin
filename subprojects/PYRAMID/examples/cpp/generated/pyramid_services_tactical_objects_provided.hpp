@@ -106,65 +106,77 @@ public:
 // ---------------------------------------------------------------------------
 
 /// \brief Subscribe to entity-match publications on kTopicEntityMatches.
-void subscribeEntityMatches(pcl_container_t*  container,
-                            pcl_sub_callback_t callback,
-                            void*             user_data = nullptr,
-                            const char*       content_type = "application/json");
-
-/// \brief Subscribe to evidence-requirement publications on
-///        kTopicEvidenceRequirements.
-void subscribeEvidenceRequirements(pcl_container_t*  container,
+pcl_port_t* subscribeEntityMatches(pcl_container_t*  container,
                                    pcl_sub_callback_t callback,
                                    void*             user_data = nullptr,
                                    const char*       content_type = "application/json");
 
+/// \brief Subscribe to evidence-requirement publications on
+///        kTopicEvidenceRequirements.
+pcl_port_t* subscribeEvidenceRequirements(pcl_container_t*  container,
+                                          pcl_sub_callback_t callback,
+                                          void*             user_data = nullptr,
+                                          const char*       content_type = "application/json");
+
 /// \brief Invoke matching_objects.read_match (typed, serialisation handled internally).
 ///
-/// Uses the transport configured on the executor.
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
 pcl_status_t invokeReadMatch(pcl_executor_t* executor,
                              const Query&                 request,
                              pcl_resp_cb_fn_t        callback,
-                             void*                   user_data = nullptr);
+                             void*                   user_data = nullptr,
+                             const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Invoke object_of_interest.create_requirement (typed, serialisation handled internally).
 ///
-/// Uses the transport configured on the executor.
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
 pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
                                      const ObjectInterestRequirement& request,
                                      pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr);
+                                     void*                   user_data = nullptr,
+                                     const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Invoke object_of_interest.read_requirement (typed, serialisation handled internally).
 ///
-/// Uses the transport configured on the executor.
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
 pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
                                    const Query&                 request,
                                    pcl_resp_cb_fn_t        callback,
-                                   void*                   user_data = nullptr);
+                                   void*                   user_data = nullptr,
+                                   const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Invoke object_of_interest.update_requirement (typed, serialisation handled internally).
 ///
-/// Uses the transport configured on the executor.
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
 pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
                                      const ObjectInterestRequirement& request,
                                      pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr);
+                                     void*                   user_data = nullptr,
+                                     const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Invoke object_of_interest.delete_requirement (typed, serialisation handled internally).
 ///
-/// Uses the transport configured on the executor.
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
 pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
                                      const Identifier&            request,
                                      pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr);
+                                     void*                   user_data = nullptr,
+                                     const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Invoke specific_object_detail.read_detail (typed, serialisation handled internally).
 ///
-/// Uses the transport configured on the executor.
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
 pcl_status_t invokeReadDetail(pcl_executor_t* executor,
                               const Query&                 request,
                               pcl_resp_cb_fn_t        callback,
-                              void*                   user_data = nullptr);
+                              void*                   user_data = nullptr,
+                              const pcl_endpoint_route_t* route = nullptr);
 
 // ---------------------------------------------------------------------------
 // Dispatch — deserialises request, calls handler, serialises response.

@@ -229,6 +229,21 @@ struct ThreadInjectedData {
   std::thread::id callback_thread;
 };
 
+struct RoutedSubData {
+  bool received = false;
+};
+
+struct MockTransportState {
+  int publish_count = 0;
+  int invoke_count = 0;
+  std::string last_name;
+};
+
+struct FanoutState {
+  bool received = false;
+  pcl_port_t* pub = nullptr;
+};
+
 static void threaded_sub_callback(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
   auto* data = static_cast<ThreadInjectedData*>(ud);
   data->received = true;
@@ -281,6 +296,408 @@ TEST(PclExecutor, ExternalThreadPostsCopiedMessageToExecutorThread) {
 
   pcl_executor_destroy(e);
   pcl_container_destroy(sub_c);
+}
+
+TEST(PclExecutor, RemoteIngressHonorsSubscriberPeerRoute) {
+  RoutedSubData data;
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    const char* peers[] = {"peer_a"};
+    pcl_port_t* port = pcl_container_add_subscriber(
+        c,
+        "remote/topic",
+        "RemoteMsg",
+        [](pcl_container_t*, const pcl_msg_t*, void* inner_ud) {
+          static_cast<RoutedSubData*>(inner_ud)->received = true;
+        },
+        ud);
+    return pcl_port_set_route(port, PCL_ROUTE_REMOTE, peers, 1);
+  };
+
+  auto* c = pcl_container_create("remote_sub", &cbs, &data);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+
+  auto* e = pcl_executor_create();
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+
+  pcl_msg_t msg = {};
+  msg.data = "x";
+  msg.size = 1;
+  msg.type_name = "RemoteMsg";
+
+  ASSERT_EQ(pcl_executor_post_remote_incoming(e, "peer_b", "remote/topic", &msg), PCL_OK);
+  EXPECT_EQ(pcl_executor_spin_once(e, 0), PCL_ERR_NOT_FOUND);
+  EXPECT_FALSE(data.received);
+
+  ASSERT_EQ(pcl_executor_post_remote_incoming(e, "peer_a", "remote/topic", &msg), PCL_OK);
+  EXPECT_EQ(pcl_executor_spin_once(e, 0), PCL_OK);
+  EXPECT_TRUE(data.received);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+static pcl_status_t mock_publish(void* ctx, const char* topic, const pcl_msg_t*) {
+  auto* state = static_cast<MockTransportState*>(ctx);
+  state->publish_count++;
+  state->last_name = topic ? topic : "";
+  return PCL_OK;
+}
+
+static pcl_status_t mock_invoke_async(void*            ctx,
+                                      const char*      service_name,
+                                      const pcl_msg_t*,
+                                      pcl_resp_cb_fn_t callback,
+                                      void*            user_data) {
+  auto* state = static_cast<MockTransportState*>(ctx);
+  pcl_msg_t resp = {};
+  state->invoke_count++;
+  state->last_name = service_name ? service_name : "";
+  resp.data = nullptr;
+  resp.size = 0;
+  resp.type_name = "Resp";
+  callback(&resp, user_data);
+  return PCL_OK;
+}
+
+TEST(PclExecutor, PublisherRouteCanBeLocalAndRemote) {
+  FanoutState state;
+  MockTransportState transport_state;
+  pcl_transport_t transport = {};
+  transport.publish = mock_publish;
+  transport.adapter_ctx = &transport_state;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto* state = static_cast<FanoutState*>(ud);
+    const char* peers[] = {"peer_a"};
+    pcl_port_t* sub = pcl_container_add_subscriber(
+        c,
+        "fanout/topic",
+        "FanoutMsg",
+        [](pcl_container_t*, const pcl_msg_t*, void* inner_ud) {
+          static_cast<FanoutState*>(inner_ud)->received = true;
+        },
+        ud);
+    pcl_port_t* pub = pcl_container_add_publisher(c, "fanout/topic", "FanoutMsg");
+    if (!sub || !pub) return PCL_ERR_NOMEM;
+    state->pub = pub;
+    if (pcl_port_set_route(sub, PCL_ROUTE_LOCAL, nullptr, 0) != PCL_OK) return PCL_ERR_INVALID;
+    return pcl_port_set_route(pub, PCL_ROUTE_LOCAL | PCL_ROUTE_REMOTE, peers, 1);
+  };
+
+  auto* c = pcl_container_create("fanout", &cbs, &state);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+
+  auto* e = pcl_executor_create();
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+  ASSERT_EQ(pcl_executor_register_transport(e, "peer_a", &transport), PCL_OK);
+
+  pcl_msg_t msg = {};
+  msg.data = "x";
+  msg.size = 1;
+  msg.type_name = "FanoutMsg";
+
+  ASSERT_NE(state.pub, nullptr);
+  EXPECT_EQ(pcl_port_publish(state.pub, &msg), PCL_OK);
+  EXPECT_TRUE(state.received);
+  EXPECT_EQ(transport_state.publish_count, 1);
+  EXPECT_EQ(transport_state.last_name, "fanout/topic");
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+TEST(PclExecutor, ConsumedServiceRouteUsesNamedPeerTransport) {
+  MockTransportState transport_state;
+  pcl_transport_t transport = {};
+  pcl_endpoint_route_t route = {};
+  bool callback_fired = false;
+
+  transport.invoke_async = mock_invoke_async;
+  transport.adapter_ctx = &transport_state;
+
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  ASSERT_EQ(pcl_executor_register_transport(e, "peer_a", &transport), PCL_OK);
+
+  const char* peers[] = {"peer_a"};
+  route.endpoint_name = "remote.echo";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode = PCL_ROUTE_REMOTE;
+  route.peer_ids = peers;
+  route.peer_count = 1;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_OK);
+
+  pcl_msg_t req = {};
+  req.data = "req";
+  req.size = 3;
+  req.type_name = "Req";
+
+  EXPECT_EQ(pcl_executor_invoke_async(
+                e,
+                "remote.echo",
+                &req,
+                [](const pcl_msg_t*, void* ud) {
+                  *static_cast<bool*>(ud) = true;
+                },
+                &callback_fired),
+            PCL_OK);
+  EXPECT_TRUE(callback_fired);
+  EXPECT_EQ(transport_state.invoke_count, 1);
+  EXPECT_EQ(transport_state.last_name, "remote.echo");
+
+  pcl_executor_destroy(e);
+}
+
+TEST(PclExecutor, RegisterTransportReplaceAndRemove) {
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  MockTransportState first_state;
+  MockTransportState second_state;
+  pcl_transport_t first = {};
+  pcl_transport_t second = {};
+
+  first.publish = mock_publish;
+  first.adapter_ctx = &first_state;
+  second.publish = mock_publish;
+  second.adapter_ctx = &second_state;
+
+  ASSERT_EQ(pcl_executor_register_transport(e, "peer_a", &first), PCL_OK);
+  ASSERT_EQ(pcl_executor_register_transport(e, "peer_a", &second), PCL_OK);
+
+  pcl_endpoint_route_t route = {};
+  const char* peers[] = {"peer_a"};
+  route.endpoint_name = "remote.topic";
+  route.endpoint_kind = PCL_ENDPOINT_PUBLISHER;
+  route.route_mode = PCL_ROUTE_REMOTE;
+  route.peer_ids = peers;
+  route.peer_count = 1;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_OK);
+
+  pcl_callbacks_t cbs = {};
+  struct PublishCtx {
+    pcl_port_t* pub = nullptr;
+  } ctx;
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto* ctx = static_cast<PublishCtx*>(ud);
+    const char* peers[] = {"peer_a"};
+    ctx->pub = pcl_container_add_publisher(c, "remote.topic", "Msg");
+    return ctx->pub ? pcl_port_set_route(ctx->pub, PCL_ROUTE_REMOTE, peers, 1)
+                    : PCL_ERR_NOMEM;
+  };
+
+  auto* c = pcl_container_create("replace_transport", &cbs, &ctx);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+
+  pcl_msg_t msg = {};
+  msg.data = "x";
+  msg.size = 1;
+  msg.type_name = "Msg";
+
+  EXPECT_EQ(pcl_port_publish(ctx.pub, &msg), PCL_OK);
+  EXPECT_EQ(first_state.publish_count, 0);
+  EXPECT_EQ(second_state.publish_count, 1);
+
+  ASSERT_EQ(pcl_executor_register_transport(e, "peer_a", nullptr), PCL_OK);
+  EXPECT_EQ(pcl_port_publish(ctx.pub, &msg), PCL_ERR_NOT_FOUND);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+TEST(PclExecutor, RegisterTransportDestroyShutsDownNamedTransport) {
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  bool shutdown_called = false;
+  pcl_transport_t transport = {};
+  transport.shutdown = [](void* ctx) {
+    *static_cast<bool*>(ctx) = true;
+  };
+  transport.adapter_ctx = &shutdown_called;
+
+  ASSERT_EQ(pcl_executor_register_transport(e, "peer_a", &transport), PCL_OK);
+  pcl_executor_destroy(e);
+  EXPECT_TRUE(shutdown_called);
+}
+
+TEST(PclExecutor, SetEndpointRouteRejectsInvalidConfigurations) {
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  const char* peers[] = {"peer_a"};
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "svc";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.peer_ids = peers;
+  route.peer_count = 1;
+
+  route.route_mode = PCL_ROUTE_LOCAL;
+  EXPECT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_ERR_INVALID);
+
+  route.route_mode = PCL_ROUTE_LOCAL | PCL_ROUTE_REMOTE;
+  EXPECT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_ERR_INVALID);
+
+  const char* bad_peers[] = {nullptr};
+  route.route_mode = PCL_ROUTE_REMOTE;
+  route.peer_ids = bad_peers;
+  EXPECT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_ERR_INVALID);
+
+  pcl_executor_destroy(e);
+}
+
+TEST(PclExecutor, InvokeAsyncConsumedRemoteZeroPeersUsesDefaultTransport) {
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  MockTransportState transport_state;
+  pcl_transport_t transport = {};
+  transport.invoke_async = mock_invoke_async;
+  transport.adapter_ctx = &transport_state;
+  ASSERT_EQ(pcl_executor_set_transport(e, &transport), PCL_OK);
+
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "remote.default";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode = PCL_ROUTE_REMOTE;
+  route.peer_ids = nullptr;
+  route.peer_count = 0;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_OK);
+
+  bool callback_fired = false;
+  pcl_msg_t req = {};
+  req.data = "req";
+  req.size = 3;
+  req.type_name = "Req";
+
+  EXPECT_EQ(
+      pcl_executor_invoke_async(
+          e,
+          "remote.default",
+          &req,
+          [](const pcl_msg_t*, void* ud) {
+            *static_cast<bool*>(ud) = true;
+          },
+          &callback_fired),
+      PCL_OK);
+  EXPECT_TRUE(callback_fired);
+  EXPECT_EQ(transport_state.invoke_count, 1);
+  EXPECT_EQ(transport_state.last_name, "remote.default");
+
+  pcl_executor_destroy(e);
+}
+
+TEST(PclExecutor, InvokeAsyncConsumedRemoteWithoutTransportReturnsNotFound) {
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "remote.missing";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode = PCL_ROUTE_REMOTE;
+  route.peer_ids = nullptr;
+  route.peer_count = 0;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_OK);
+
+  pcl_msg_t req = {};
+  req.type_name = "Req";
+  auto cb = [](const pcl_msg_t*, void*) {};
+
+  EXPECT_EQ(pcl_executor_invoke_async(e, "remote.missing", &req, cb, nullptr),
+            PCL_ERR_NOT_FOUND);
+
+  pcl_executor_destroy(e);
+}
+
+TEST(PclExecutor, InvokeAsyncConsumedInvalidRouteModeReturnsInvalid) {
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "remote.invalid";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode = 4u;
+  route.peer_ids = nullptr;
+  route.peer_count = 0;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_OK);
+
+  pcl_msg_t req = {};
+  req.type_name = "Req";
+  auto cb = [](const pcl_msg_t*, void*) {};
+
+  EXPECT_EQ(pcl_executor_invoke_async(e, "remote.invalid", &req, cb, nullptr),
+            PCL_ERR_INVALID);
+
+  pcl_executor_destroy(e);
+}
+
+TEST(PclExecutor, PublisherRemoteWithoutTransportReturnsNotFound) {
+  struct PublishCtx {
+    pcl_port_t* pub = nullptr;
+  } ctx;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto* ctx = static_cast<PublishCtx*>(ud);
+    ctx->pub = pcl_container_add_publisher(c, "remote/only", "Msg");
+    return ctx->pub ? pcl_port_set_route(ctx->pub, PCL_ROUTE_REMOTE, nullptr, 0)
+                    : PCL_ERR_NOMEM;
+  };
+
+  auto* c = pcl_container_create("remote_only_pub", &cbs, &ctx);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+
+  auto* e = pcl_executor_create();
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+
+  pcl_msg_t msg = {};
+  msg.data = "x";
+  msg.size = 1;
+  msg.type_name = "Msg";
+
+  EXPECT_EQ(pcl_port_publish(ctx.pub, &msg), PCL_ERR_NOT_FOUND);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+TEST(PclExecutor, PublisherRemoteNamedPeerWithoutTransportReturnsNotFound) {
+  struct PublishCtx {
+    pcl_port_t* pub = nullptr;
+  } ctx;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto* ctx = static_cast<PublishCtx*>(ud);
+    const char* peers[] = {"peer_a"};
+    ctx->pub = pcl_container_add_publisher(c, "remote/named", "Msg");
+    return ctx->pub ? pcl_port_set_route(ctx->pub, PCL_ROUTE_REMOTE, peers, 1)
+                    : PCL_ERR_NOMEM;
+  };
+
+  auto* c = pcl_container_create("remote_named_pub", &cbs, &ctx);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+
+  auto* e = pcl_executor_create();
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+
+  pcl_msg_t msg = {};
+  msg.data = "x";
+  msg.size = 1;
+  msg.type_name = "Msg";
+
+  EXPECT_EQ(pcl_port_publish(ctx.pub, &msg), PCL_ERR_NOT_FOUND);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
 }
 
 // -- Null Safety ---------------------------------------------------------

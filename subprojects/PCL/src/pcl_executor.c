@@ -11,6 +11,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #ifdef _WIN32
 #  define WIN32_LEAN_AND_MEAN
@@ -107,8 +108,124 @@ static void free_pending_msg(pcl_pending_msg_t* pending) {
   if (!pending) return;
   free(pending->topic);
   free(pending->type_name);
+  free(pending->source_peer_id);
   free(pending->data);
   free(pending);
+}
+
+static pcl_endpoint_kind_t endpoint_kind_from_port_type(pcl_port_type_t type) {
+  switch (type) {
+    case PCL_PORT_PUBLISHER:      return PCL_ENDPOINT_PUBLISHER;
+    case PCL_PORT_SUBSCRIBER:     return PCL_ENDPOINT_SUBSCRIBER;
+    case PCL_PORT_SERVICE:        return PCL_ENDPOINT_PROVIDED;
+    case PCL_PORT_CLIENT:         return PCL_ENDPOINT_CONSUMED;
+    case PCL_PORT_STREAM_SERVICE: return PCL_ENDPOINT_STREAM_PROVIDED;
+    default:                      return PCL_ENDPOINT_PUBLISHER;
+  }
+}
+
+static const pcl_transport_t* find_named_transport(const pcl_executor_t* e,
+                                                   const char*           peer_id) {
+  uint32_t i;
+
+  if (!e || !peer_id) return NULL;
+  for (i = 0; i < e->transport_count; ++i) {
+    if (e->transports[i].in_use &&
+        strcmp(e->transports[i].peer_id, peer_id) == 0) {
+      return &e->transports[i].transport;
+    }
+  }
+  return NULL;
+}
+
+static pcl_endpoint_route_entry_t* find_endpoint_route_entry(pcl_executor_t*        e,
+                                                             const char*            endpoint_name,
+                                                             pcl_endpoint_kind_t    endpoint_kind) {
+  uint32_t i;
+
+  if (!e || !endpoint_name) return NULL;
+  for (i = 0; i < e->endpoint_route_count; ++i) {
+    pcl_endpoint_route_entry_t* entry = &e->endpoint_routes[i];
+    if (entry->in_use &&
+        entry->endpoint_kind == endpoint_kind &&
+        strcmp(entry->endpoint_name, endpoint_name) == 0) {
+      return entry;
+    }
+  }
+  return NULL;
+}
+
+static const pcl_endpoint_route_entry_t* find_endpoint_route_entry_const(
+    const pcl_executor_t*     e,
+    const char*               endpoint_name,
+    pcl_endpoint_kind_t       endpoint_kind) {
+  return find_endpoint_route_entry((pcl_executor_t*)e, endpoint_name, endpoint_kind);
+}
+
+static uint32_t port_route_mode(const pcl_executor_t* e, const pcl_port_t* port) {
+  const pcl_endpoint_route_entry_t* entry;
+
+  if (!port) return PCL_ROUTE_NONE;
+  entry = find_endpoint_route_entry_const(e, port->name,
+                                          endpoint_kind_from_port_type(port->type));
+  if (entry) return entry->route_mode;
+  if (port->route_configured && port->route_mode != PCL_ROUTE_NONE) {
+    return port->route_mode;
+  }
+
+  if (e && e->has_transport) {
+    if (port->type == PCL_PORT_PUBLISHER || port->type == PCL_PORT_CLIENT) {
+      return PCL_ROUTE_REMOTE;
+    }
+    return PCL_ROUTE_LOCAL | PCL_ROUTE_REMOTE;
+  }
+
+  return PCL_ROUTE_LOCAL;
+}
+
+static uint32_t port_peer_count(const pcl_executor_t* e, const pcl_port_t* port) {
+  const pcl_endpoint_route_entry_t* entry;
+  if (!port) return 0u;
+  entry = find_endpoint_route_entry_const(e, port->name,
+                                          endpoint_kind_from_port_type(port->type));
+  return entry ? entry->peer_count : port->peer_count;
+}
+
+static const char* port_peer_id_at(const pcl_executor_t* e,
+                                   const pcl_port_t*     port,
+                                   uint32_t              index) {
+  const pcl_endpoint_route_entry_t* entry;
+
+  if (!port) return NULL;
+  entry = find_endpoint_route_entry_const(e, port->name,
+                                          endpoint_kind_from_port_type(port->type));
+  if (entry) {
+    return (index < entry->peer_count) ? entry->peer_ids[index] : NULL;
+  }
+  return (index < port->peer_count) ? port->peer_ids[index] : NULL;
+}
+
+static int route_accepts(uint32_t route_mode,
+                         uint32_t source_route_mode) {
+  return (route_mode & source_route_mode) != 0u;
+}
+
+static int peer_is_allowed(const pcl_executor_t* e,
+                           const pcl_port_t*     port,
+                           const char*           peer_id) {
+  uint32_t i;
+  uint32_t count;
+
+  if (!peer_id) return 0;
+  count = port_peer_count(e, port);
+  if (count == 0u) return 1;
+  for (i = 0; i < count; ++i) {
+    const char* configured = port_peer_id_at(e, port, i);
+    if (configured && strcmp(configured, peer_id) == 0) {
+      return 1;
+    }
+  }
+  return 0;
 }
 
 // -- Create / destroy ----------------------------------------------------
@@ -134,6 +251,13 @@ void pcl_executor_destroy(pcl_executor_t* e) {
   }
   if (e->has_transport && e->transport.shutdown) {
     e->transport.shutdown(e->transport.adapter_ctx);
+  }
+  for (i = 0; i < e->transport_count; ++i) {
+    if (e->transports[i].in_use &&
+        e->transports[i].transport.shutdown) {
+      e->transports[i].transport.shutdown(
+          e->transports[i].transport.adapter_ctx);
+    }
   }
 
   pcl_mutex_lock(&e->incoming_lock);
@@ -194,35 +318,43 @@ pcl_status_t pcl_executor_remove(pcl_executor_t* e, pcl_container_t* c) {
 
 // -- Intra-process dispatch ----------------------------------------------
 
-static struct pcl_port_t* find_subscriber(pcl_executor_t* e,
-                                          const char* topic) {
+static pcl_status_t dispatch_incoming_now(pcl_executor_t*  e,
+                                          const char*      topic,
+                                          const pcl_msg_t* msg,
+                                          uint32_t         source_route_mode,
+                                          const char*      source_peer_id) {
   uint32_t ci, pi;
+  int delivered = 0;
+
+  if (!e || !topic || !msg) return PCL_ERR_INVALID;
+
   for (ci = 0; ci < e->container_count; ++ci) {
     pcl_container_t* container = e->containers[ci];
     for (pi = 0; pi < container->port_count; ++pi) {
       struct pcl_port_t* port = &container->ports[pi];
-      if (port->type == PCL_PORT_SUBSCRIBER &&
-          strcmp(port->name, topic) == 0 &&
-          port->sub_cb != NULL) {
-        return port;
+      uint32_t route_mode;
+
+      if (port->type != PCL_PORT_SUBSCRIBER ||
+          strcmp(port->name, topic) != 0 ||
+          port->sub_cb == NULL) {
+        continue;
       }
+
+      route_mode = port_route_mode(e, port);
+      if (!route_accepts(route_mode, source_route_mode)) {
+        continue;
+      }
+      if (source_route_mode == PCL_ROUTE_REMOTE &&
+          !peer_is_allowed(e, port, source_peer_id)) {
+        continue;
+      }
+
+      port->sub_cb(port->owner, msg, port->sub_user_data);
+      delivered = 1;
     }
   }
-  return NULL;
-}
 
-static pcl_status_t dispatch_incoming_now(pcl_executor_t*  e,
-                                          const char*      topic,
-                                          const pcl_msg_t* msg) {
-  struct pcl_port_t* sub;
-
-  if (!e || !topic || !msg) return PCL_ERR_INVALID;
-
-  sub = find_subscriber(e, topic);
-  if (!sub) return PCL_ERR_NOT_FOUND;
-
-  sub->sub_cb(sub->owner, msg, sub->sub_user_data);
-  return PCL_OK;
+  return delivered ? PCL_OK : PCL_ERR_NOT_FOUND;
 }
 
 static void drain_resp_cb_queue(pcl_executor_t* e) {
@@ -278,7 +410,12 @@ static pcl_status_t drain_incoming_queue(pcl_executor_t* e) {
     view.size = pending->size;
     view.type_name = pending->type_name;
 
-    rc = dispatch_incoming_now(e, pending->topic, &view);
+    rc = dispatch_incoming_now(e,
+                               pending->topic,
+                               &view,
+                               pending->source_route_mode ? pending->source_route_mode
+                                                          : PCL_ROUTE_LOCAL,
+                               pending->source_peer_id);
     free_pending_msg(pending);
 
     if (rc != PCL_OK) {
@@ -440,22 +577,107 @@ pcl_status_t pcl_executor_set_transport(pcl_executor_t*        e,
   return PCL_OK;
 }
 
+pcl_status_t pcl_executor_register_transport(pcl_executor_t*        e,
+                                             const char*            peer_id,
+                                             const pcl_transport_t* transport) {
+  uint32_t i;
+
+  if (!e || !peer_id) return PCL_ERR_INVALID;
+
+  for (i = 0; i < e->transport_count; ++i) {
+    if (e->transports[i].in_use &&
+        strcmp(e->transports[i].peer_id, peer_id) == 0) {
+      if (transport) {
+        e->transports[i].transport = *transport;
+      } else {
+        memset(&e->transports[i], 0, sizeof(e->transports[i]));
+      }
+      return PCL_OK;
+    }
+  }
+
+  if (!transport) return PCL_OK;
+  if (e->transport_count >= PCL_MAX_TRANSPORTS) return PCL_ERR_NOMEM;
+
+  snprintf(e->transports[e->transport_count].peer_id,
+           sizeof(e->transports[e->transport_count].peer_id),
+           "%s",
+           peer_id);
+  e->transports[e->transport_count].transport = *transport;
+  e->transports[e->transport_count].in_use = 1;
+  e->transport_count++;
+  return PCL_OK;
+}
+
+pcl_status_t pcl_executor_set_endpoint_route(pcl_executor_t*           e,
+                                             const pcl_endpoint_route_t* route) {
+  pcl_endpoint_route_entry_t* entry;
+  uint32_t i;
+
+  if (!e || !route || !route->endpoint_name) return PCL_ERR_INVALID;
+  if (route->route_mode == PCL_ROUTE_NONE) return PCL_ERR_INVALID;
+  if (route->peer_count > PCL_MAX_ENDPOINT_PEERS) return PCL_ERR_INVALID;
+  if ((route->route_mode & PCL_ROUTE_REMOTE) == 0u && route->peer_count > 0u) {
+    return PCL_ERR_INVALID;
+  }
+  if (route->endpoint_kind == PCL_ENDPOINT_CONSUMED &&
+      route->route_mode == (PCL_ROUTE_LOCAL | PCL_ROUTE_REMOTE)) {
+    return PCL_ERR_INVALID;
+  }
+
+  entry = find_endpoint_route_entry(e, route->endpoint_name, route->endpoint_kind);
+  if (!entry) {
+    if (e->endpoint_route_count >= PCL_MAX_ENDPOINT_ROUTES) return PCL_ERR_NOMEM;
+    entry = &e->endpoint_routes[e->endpoint_route_count++];
+    memset(entry, 0, sizeof(*entry));
+    entry->in_use = 1;
+  }
+
+  snprintf(entry->endpoint_name, sizeof(entry->endpoint_name), "%s",
+           route->endpoint_name);
+  entry->endpoint_kind = route->endpoint_kind;
+  entry->route_mode = route->route_mode;
+  entry->peer_count = route->peer_count;
+  for (i = 0; i < PCL_MAX_ENDPOINT_PEERS; ++i) {
+    entry->peer_ids[i][0] = '\0';
+  }
+  for (i = 0; i < route->peer_count; ++i) {
+    if (!route->peer_ids || !route->peer_ids[i]) return PCL_ERR_INVALID;
+    snprintf(entry->peer_ids[i], sizeof(entry->peer_ids[i]), "%s",
+             route->peer_ids[i]);
+  }
+
+  return PCL_OK;
+}
+
 pcl_status_t pcl_executor_dispatch_incoming(pcl_executor_t*  e,
                                             const char*      topic,
                                             const pcl_msg_t* msg) {
   if (!e || !topic || !msg) return PCL_ERR_INVALID;
-  return dispatch_incoming_now(e, topic, msg);
+  return dispatch_incoming_now(e, topic, msg, PCL_ROUTE_LOCAL, NULL);
 }
 
-static struct pcl_port_t* find_service(pcl_executor_t* e, const char* name) {
+static struct pcl_port_t* find_service(pcl_executor_t* e,
+                                       const char*     name,
+                                       uint32_t        source_route_mode,
+                                       const char*     source_peer_id) {
   uint32_t ci, pi;
   for (ci = 0; ci < e->container_count; ++ci) {
     pcl_container_t* c = e->containers[ci];
     for (pi = 0; pi < c->port_count; ++pi) {
       struct pcl_port_t* port = &c->ports[pi];
+      uint32_t route_mode;
       if (port->type == PCL_PORT_SERVICE &&
           strcmp(port->name, name) == 0 &&
           port->svc_handler != NULL) {
+        route_mode = port_route_mode(e, port);
+        if (!route_accepts(route_mode, source_route_mode)) {
+          continue;
+        }
+        if (source_route_mode == PCL_ROUTE_REMOTE &&
+            !peer_is_allowed(e, port, source_peer_id)) {
+          continue;
+        }
         return port;
       }
     }
@@ -488,11 +710,80 @@ pcl_status_t pcl_executor_invoke_service(pcl_executor_t*  e,
 
   if (!e || !service_name || !request || !response) return PCL_ERR_INVALID;
 
-  port = find_service(e, service_name);
+  port = find_service(e, service_name, PCL_ROUTE_LOCAL, NULL);
   if (!port) return PCL_ERR_NOT_FOUND;
 
   ctx.executor = e;
   return port->svc_handler(port->owner, request, response, &ctx, port->svc_user_data);
+}
+
+pcl_status_t pcl_executor_invoke_service_remote(pcl_executor_t*  e,
+                                                const char*      peer_id,
+                                                const char*      service_name,
+                                                const pcl_msg_t* request,
+                                                pcl_msg_t*       response) {
+  struct pcl_port_t*       port;
+  pcl_svc_context_t        ctx = {0};
+  const pcl_transport_t*   transport;
+
+  if (!e || !peer_id || !service_name || !request || !response) {
+    return PCL_ERR_INVALID;
+  }
+
+  port = find_service(e, service_name, PCL_ROUTE_REMOTE, peer_id);
+  if (!port) return PCL_ERR_NOT_FOUND;
+
+  transport = find_named_transport(e, peer_id);
+  if (!transport && e->has_transport) {
+    transport = &e->transport;
+  }
+
+  ctx.executor = e;
+  ctx.transport = transport;
+  snprintf(ctx.peer_id, sizeof(ctx.peer_id), "%s", peer_id);
+  return port->svc_handler(port->owner, request, response, &ctx, port->svc_user_data);
+}
+
+pcl_status_t pcl_executor_publish_port(pcl_executor_t*   e,
+                                       const pcl_port_t* port,
+                                       const pcl_msg_t*  msg) {
+  uint32_t route_mode;
+  pcl_status_t rc = PCL_OK;
+  int delivered = 0;
+
+  if (!e || !port || !msg) return PCL_ERR_INVALID;
+
+  route_mode = port_route_mode(e, port);
+  if (route_mode & PCL_ROUTE_LOCAL) {
+    rc = dispatch_incoming_now(e, port->name, msg, PCL_ROUTE_LOCAL, NULL);
+    if (rc == PCL_OK) delivered = 1;
+  }
+
+  if (route_mode & PCL_ROUTE_REMOTE) {
+    uint32_t i;
+    uint32_t peer_count = port_peer_count(e, port);
+    if (peer_count == 0u) {
+      if (e->has_transport && e->transport.publish) {
+        rc = e->transport.publish(e->transport.adapter_ctx, port->name, msg);
+        if (rc == PCL_OK) delivered = 1;
+      } else if (!delivered) {
+        rc = PCL_ERR_NOT_FOUND;
+      }
+    } else {
+      for (i = 0; i < peer_count; ++i) {
+        const char* peer_id = port_peer_id_at(e, port, i);
+        const pcl_transport_t* transport = find_named_transport(e, peer_id);
+        if (!transport || !transport->publish) {
+          rc = PCL_ERR_NOT_FOUND;
+          continue;
+        }
+        rc = transport->publish(transport->adapter_ctx, port->name, msg);
+        if (rc == PCL_OK) delivered = 1;
+      }
+    }
+  }
+
+  return delivered ? PCL_OK : rc;
 }
 
 pcl_status_t pcl_executor_publish(pcl_executor_t*  e,
@@ -502,7 +793,7 @@ pcl_status_t pcl_executor_publish(pcl_executor_t*  e,
   if (e->has_transport && e->transport.publish) {
     return e->transport.publish(e->transport.adapter_ctx, topic, msg);
   }
-  return dispatch_incoming_now(e, topic, msg);
+  return dispatch_incoming_now(e, topic, msg, PCL_ROUTE_LOCAL, NULL);
 }
 
 pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
@@ -512,7 +803,30 @@ pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
                                        void*            user_data) {
   if (!e || !service_name || !request || !callback) return PCL_ERR_INVALID;
 
-  // If transport has invoke_async, use it
+  {
+    const pcl_endpoint_route_entry_t* route =
+        find_endpoint_route_entry_const(e, service_name, PCL_ENDPOINT_CONSUMED);
+    if (route) {
+      if (route->route_mode == PCL_ROUTE_LOCAL) {
+        /* handled below */
+      } else if (route->route_mode == PCL_ROUTE_REMOTE) {
+        const pcl_transport_t* transport = NULL;
+        if (route->peer_count > 1u) return PCL_ERR_INVALID;
+        if (route->peer_count == 1u) {
+          transport = find_named_transport(e, route->peer_ids[0]);
+        } else if (e->has_transport) {
+          transport = &e->transport;
+        }
+        if (!transport || !transport->invoke_async) return PCL_ERR_NOT_FOUND;
+        return transport->invoke_async(transport->adapter_ctx, service_name,
+                                       request, callback, user_data);
+      } else {
+        return PCL_ERR_INVALID;
+      }
+    }
+  }
+
+  // Legacy executor-wide transport fallback
   if (e->has_transport && e->transport.invoke_async) {
     return e->transport.invoke_async(e->transport.adapter_ctx, service_name,
                                      request, callback, user_data);
@@ -520,7 +834,7 @@ pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
 
   // Intra-process fallback: invoke service, handle immediate or deferred response
   {
-    struct pcl_port_t* port = find_service(e, service_name);
+    struct pcl_port_t* port = find_service(e, service_name, PCL_ROUTE_LOCAL, NULL);
     pcl_msg_t          response = {0};
     pcl_svc_context_t* ctx;
     pcl_status_t       rc;
@@ -573,6 +887,7 @@ pcl_status_t pcl_executor_invoke_stream(pcl_executor_t*        e,
           ctx->executor      = e;
           ctx->callback      = callback;
           ctx->user_data     = user_data;
+          ctx->transport     = &e->transport;
           ctx->transport_ctx = stream_handle;
           *out_ctx = ctx;
         }
@@ -649,9 +964,11 @@ pcl_status_t pcl_executor_post_response_cb(pcl_executor_t*  e,
   return PCL_OK;
 }
 
-pcl_status_t pcl_executor_post_incoming(pcl_executor_t*  e,
-                                        const char*      topic,
-                                        const pcl_msg_t* msg) {
+static pcl_status_t enqueue_incoming_message(pcl_executor_t*  e,
+                                             const char*      topic,
+                                             const pcl_msg_t* msg,
+                                             uint32_t         source_route_mode,
+                                             const char*      source_peer_id) {
   pcl_pending_msg_t* pending;
 
   if (!e || !topic || !msg) return PCL_ERR_INVALID;
@@ -663,8 +980,13 @@ pcl_status_t pcl_executor_post_incoming(pcl_executor_t*  e,
 
   pending->topic = pcl_strdup_local(topic);
   pending->type_name = pcl_strdup_local(msg->type_name);
+  pending->source_route_mode = source_route_mode;
+  if (source_peer_id) {
+    pending->source_peer_id = pcl_strdup_local(source_peer_id);
+  }
 
-  if (!pending->topic || !pending->type_name) {
+  if (!pending->topic || !pending->type_name ||
+      (source_peer_id && !pending->source_peer_id)) {
     free_pending_msg(pending);
     return PCL_ERR_NOMEM;
   }
@@ -689,4 +1011,18 @@ pcl_status_t pcl_executor_post_incoming(pcl_executor_t*  e,
   pcl_mutex_unlock(&e->incoming_lock);
 
   return PCL_OK;
+}
+
+pcl_status_t pcl_executor_post_incoming(pcl_executor_t*  e,
+                                        const char*      topic,
+                                        const pcl_msg_t* msg) {
+  return enqueue_incoming_message(e, topic, msg, PCL_ROUTE_LOCAL, NULL);
+}
+
+pcl_status_t pcl_executor_post_remote_incoming(pcl_executor_t*  e,
+                                               const char*      peer_id,
+                                               const char*      topic,
+                                               const pcl_msg_t* msg) {
+  if (!peer_id) return PCL_ERR_INVALID;
+  return enqueue_incoming_message(e, topic, msg, PCL_ROUTE_REMOTE, peer_id);
 }

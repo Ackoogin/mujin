@@ -134,6 +134,13 @@ struct LoopbackPair {
 
     server_thread.join();
 
+    if (server_transport) {
+      pcl_socket_transport_set_peer_id(server_transport, "client");
+    }
+    if (client_transport) {
+      pcl_socket_transport_set_peer_id(client_transport, "server");
+    }
+
     return server_transport != nullptr && client_transport != nullptr;
   }
 
@@ -255,12 +262,14 @@ TEST(PclSocketTransport, PublishServerToClientDelivered) {
 
   pcl_callbacks_t sub_cbs = {};
   sub_cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
-    pcl_container_add_subscriber(c, "test/topic", "TestMsg",
+    const char* peers[] = {"server"};
+    pcl_port_t* port = pcl_container_add_subscriber(c, "test/topic", "TestMsg",
         [](pcl_container_t*, const pcl_msg_t* msg, void* ud2) {
           auto* s = static_cast<SubState*>(ud2);
           s->payload.assign(static_cast<const char*>(msg->data), msg->size);
           s->received = true;
         }, ud);
+    pcl_port_set_route(port, PCL_ROUTE_REMOTE, peers, 1);
     return PCL_OK;
   };
 
@@ -396,7 +405,9 @@ TEST(PclSocketTransport, AsyncRemoteServiceRoundTrip) {
   // Wire transports.
   pcl_executor_set_transport(pair.server_exec,
       pcl_socket_transport_get_transport(pair.server_transport));
-  pcl_executor_set_transport(pair.client_exec,
+  pcl_executor_register_transport(pair.server_exec, "client",
+      pcl_socket_transport_get_transport(pair.server_transport));
+  pcl_executor_register_transport(pair.client_exec, "server",
       pcl_socket_transport_get_transport(pair.client_transport));
 
   // Register a service on the server side.
@@ -406,7 +417,8 @@ TEST(PclSocketTransport, AsyncRemoteServiceRoundTrip) {
 
   pcl_callbacks_t svc_cbs = {};
   svc_cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
-    pcl_container_add_service(c, "echo_service", "EchoReq",
+    const char* peers[] = {"client"};
+    pcl_port_t* port = pcl_container_add_service(c, "echo_service", "EchoReq",
         [](pcl_container_t*, const pcl_msg_t* req,
            pcl_msg_t* resp, pcl_svc_context_t*, void* ud2) -> pcl_status_t {
           auto* s = static_cast<SvcState*>(ud2);
@@ -416,6 +428,7 @@ TEST(PclSocketTransport, AsyncRemoteServiceRoundTrip) {
           resp->size = req->size;
           return PCL_OK;
         }, ud);
+    pcl_port_set_route(port, PCL_ROUTE_REMOTE, peers, 1);
     return PCL_OK;
   };
 
@@ -444,8 +457,17 @@ TEST(PclSocketTransport, AsyncRemoteServiceRoundTrip) {
   req.size = static_cast<uint32_t>(strlen(req_data));
   req.type_name = "EchoReq";
 
-  pcl_status_t rc = pcl_socket_transport_invoke_remote_async(
-      pair.client_transport, "echo_service", &req,
+  const char* remote_peers[] = {"server"};
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "echo_service";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode = PCL_ROUTE_REMOTE;
+  route.peer_ids = remote_peers;
+  route.peer_count = 1;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(pair.client_exec, &route), PCL_OK);
+
+  pcl_status_t rc = pcl_executor_invoke_async(
+      pair.client_exec, "echo_service", &req,
       [](const pcl_msg_t* resp, void* ud) {
         auto* s = static_cast<RespState*>(ud);
         if (resp && resp->data && resp->size > 0) {
@@ -556,12 +578,14 @@ TEST(PclSocketTransport, PublishClientToServerDelivered) {
 
   pcl_callbacks_t sub_cbs = {};
   sub_cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
-    pcl_container_add_subscriber(c, "uplink/data", "UplinkMsg",
+    const char* peers[] = {"client"};
+    pcl_port_t* port = pcl_container_add_subscriber(c, "uplink/data", "UplinkMsg",
         [](pcl_container_t*, const pcl_msg_t* msg, void* ud2) {
           auto* s = static_cast<SubState*>(ud2);
           s->payload.assign(static_cast<const char*>(msg->data), msg->size);
           s->received = true;
         }, ud);
+    pcl_port_set_route(port, PCL_ROUTE_REMOTE, peers, 1);
     return PCL_OK;
   };
 
@@ -734,7 +758,9 @@ TEST(PclSocketTransport, GatewayServiceDispatchNoMatch) {
   // Wire transports.
   pcl_executor_set_transport(pair.server_exec,
       pcl_socket_transport_get_transport(pair.server_transport));
-  pcl_executor_set_transport(pair.client_exec,
+  pcl_executor_register_transport(pair.server_exec, "client",
+      pcl_socket_transport_get_transport(pair.server_transport));
+  pcl_executor_register_transport(pair.client_exec, "server",
       pcl_socket_transport_get_transport(pair.client_transport));
 
   // Set up gateway on server — but do NOT register any service handler.
@@ -757,8 +783,19 @@ TEST(PclSocketTransport, GatewayServiceDispatchNoMatch) {
   req.size = static_cast<uint32_t>(strlen(data));
   req.type_name = "NoSuchReq";
 
-  pcl_socket_transport_invoke_remote_async(
-      pair.client_transport, "nonexistent_service", &req,
+  {
+    const char* peers[] = {"server"};
+    pcl_endpoint_route_t route = {};
+    route.endpoint_name = "nonexistent_service";
+    route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+    route.route_mode = PCL_ROUTE_REMOTE;
+    route.peer_ids = peers;
+    route.peer_count = 1;
+    ASSERT_EQ(pcl_executor_set_endpoint_route(pair.client_exec, &route), PCL_OK);
+  }
+
+  pcl_executor_invoke_async(
+      pair.client_exec, "nonexistent_service", &req,
       resp_cb, &resp_received);
 
   // Spin both executors — the gateway should process the request and
