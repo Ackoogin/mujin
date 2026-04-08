@@ -2,6 +2,7 @@ import unittest
 
 from subprojects.AME.autonomy_backend import (
     AmeAutonomyBackend,
+    AgentState,
     AutonomyBackendState,
     CommandResult,
     CommandStatus,
@@ -163,8 +164,6 @@ class TestAutonomyBackendPython(unittest.TestCase):
     def test_goal_dispatch_surface(self):
         wm = build_domain()
         wm.set_fact("(at uav1 base)", True)
-        wm.register_agent("uav1", "uav")
-        wm.register_agent("uav2", "uav")
         registry = build_registry()
         backend = AmeAutonomyBackend(wm, registry)
 
@@ -173,6 +172,10 @@ class TestAutonomyBackendPython(unittest.TestCase):
                 session_id="dispatch-session",
                 intent=MissionIntent(["(searched sector_a)"]),
                 policy=PolicyEnvelope(max_replans=3, enable_goal_dispatch=True),
+                available_agents=[
+                    AgentState("uav1", "uav", True),
+                    AgentState("uav2", "uav", True),
+                ],
             )
         )
 
@@ -182,10 +185,12 @@ class TestAutonomyBackendPython(unittest.TestCase):
         self.assertIsInstance(dispatches[0], GoalDispatch)
         self.assertEqual(dispatches[0].agent_id, "uav1")
         self.assertEqual(dispatches[0].goals, ["(searched sector_a)"])
-        self.assertEqual(
-            backend.read_snapshot().state,
-            AutonomyBackendState.WAITING_FOR_RESULTS,
-        )
+        snapshot = backend.read_snapshot()
+        self.assertEqual(len(snapshot.agent_states), 2)
+        self.assertFalse(snapshot.agent_states[0].available)
+        self.assertTrue(snapshot.agent_states[1].available)
+        self.assertEqual(len(snapshot.outstanding_goal_dispatches), 1)
+        self.assertEqual(snapshot.state, AutonomyBackendState.WAITING_FOR_RESULTS)
 
         backend.push_dispatch_result(
             DispatchResult(
@@ -193,6 +198,40 @@ class TestAutonomyBackendPython(unittest.TestCase):
                 status=CommandStatus.SUCCEEDED,
             )
         )
+        done = backend.read_snapshot()
+        self.assertTrue(done.agent_states[0].available)
+        self.assertTrue(done.agent_states[1].available)
+        self.assertEqual(len(done.outstanding_goal_dispatches), 0)
+
+    def test_failed_goal_dispatch_restores_agent_availability(self):
+        wm = build_domain()
+        registry = build_registry()
+        backend = AmeAutonomyBackend(wm, registry)
+
+        backend.start(
+            SessionRequest(
+                session_id="dispatch-fail",
+                intent=MissionIntent(["(searched sector_a)"]),
+                policy=PolicyEnvelope(max_replans=3, enable_goal_dispatch=True),
+                available_agents=[AgentState("uav1", "uav", True)],
+            )
+        )
+
+        backend.step()
+        dispatches = backend.pull_goal_dispatches()
+        self.assertEqual(len(dispatches), 1)
+        self.assertFalse(backend.read_snapshot().agent_states[0].available)
+
+        backend.push_dispatch_result(
+            DispatchResult(
+                dispatch_id=dispatches[0].dispatch_id,
+                status=CommandStatus.FAILED_TRANSIENT,
+            )
+        )
+
+        snapshot = backend.read_snapshot()
+        self.assertTrue(snapshot.agent_states[0].available)
+        self.assertEqual(snapshot.state, AutonomyBackendState.READY)
 
 
 if __name__ == "__main__":

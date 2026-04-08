@@ -58,11 +58,13 @@ private:
   static std::string actionName(const std::string& signature);
   static std::vector<std::string> actionParameters(const std::string& signature);
   static FactAuthority toWorldModelAuthority(FactAuthorityLevel authority);
+  std::vector<AgentState> collectAgentStates() const;
 
   void resetTransientQueues();
   void resetExecutionForReplan();
   void loadAndStartExecution(const std::string& bt_xml);
   bool maybeEmitGoalDispatches();
+  void restoreDispatchedAgents();
   bool goalsSatisfied() const;
 
   WorldModel& world_model_;

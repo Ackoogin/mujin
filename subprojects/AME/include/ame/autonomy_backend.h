@@ -57,6 +57,13 @@ struct MissionIntent {
   std::vector<std::string> goal_fluents;
 };
 
+/// \brief Backend-neutral view of an agent/resource that can accept delegated work.
+struct AgentState {
+  std::string agent_id;
+  std::string agent_type;
+  bool available = true;
+};
+
 /// \brief Policy knobs exposed at the whole-system wrapper boundary.
 struct PolicyEnvelope {
   unsigned max_replans = 3;
@@ -68,6 +75,7 @@ struct SessionRequest {
   std::string session_id;
   MissionIntent intent;
   PolicyEnvelope policy;
+  std::vector<AgentState> available_agents;
 };
 
 /// \brief Declared top-level capabilities of an autonomy backend.
@@ -129,6 +137,7 @@ struct AutonomyBackendSnapshot {
   AutonomyBackendState state = AutonomyBackendState::IDLE;
   uint64_t world_version = 0;
   unsigned replan_count = 0;
+  std::vector<AgentState> agent_states;
   std::vector<ActionCommand> outstanding_commands;
   std::vector<GoalDispatch> outstanding_goal_dispatches;
   std::vector<DecisionRecord> decision_history;

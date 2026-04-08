@@ -2,6 +2,7 @@
 
 from .autonomy_backend import (
     ActionCommand,
+    AgentState,
     AmeAutonomyBackend,
     AutonomyBackend,
     AutonomyBackendCapabilities,
@@ -23,6 +24,7 @@ from .autonomy_backend import (
 
 __all__ = [
     "ActionCommand",
+    "AgentState",
     "AmeAutonomyBackend",
     "AutonomyBackend",
     "AutonomyBackendCapabilities",

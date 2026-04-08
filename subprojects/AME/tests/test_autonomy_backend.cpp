@@ -169,8 +169,6 @@ TEST(AutonomyBackend, FailedCommandTriggersReplanAndNewDecisionRecord) {
 TEST(AutonomyBackend, EmitsGoalDispatchesWhenDelegationEnabled) {
   auto wm = buildDomain();
   wm.setFact("(at uav1 base)", true, "init", ame::FactAuthority::CONFIRMED);
-  wm.registerAgent("uav1", "uav");
-  wm.registerAgent("uav2", "uav");
   auto registry = buildRegistry();
 
   ame::CurrentAmeBackendAdapter backend(wm, registry);
@@ -179,6 +177,10 @@ TEST(AutonomyBackend, EmitsGoalDispatchesWhenDelegationEnabled) {
   request.intent.goal_fluents = {"(searched sector_a)"};
   request.policy.max_replans = 3;
   request.policy.enable_goal_dispatch = true;
+  request.available_agents = {
+      {"uav1", "uav", true},
+      {"uav2", "uav", true},
+  };
   backend.start(request);
 
   backend.step();
@@ -188,5 +190,55 @@ TEST(AutonomyBackend, EmitsGoalDispatchesWhenDelegationEnabled) {
   EXPECT_EQ(dispatches[0].agent_id, "uav1");
   EXPECT_EQ(dispatches[0].goals.size(), 1u);
   EXPECT_EQ(dispatches[0].goals[0], "(searched sector_a)");
-  EXPECT_EQ(backend.readSnapshot().state, ame::AutonomyBackendState::WAITING_FOR_RESULTS);
+  auto snapshot = backend.readSnapshot();
+  ASSERT_EQ(snapshot.agent_states.size(), 2u);
+  EXPECT_EQ(snapshot.agent_states[0].agent_id, "uav1");
+  EXPECT_FALSE(snapshot.agent_states[0].available);
+  EXPECT_EQ(snapshot.agent_states[1].agent_id, "uav2");
+  EXPECT_TRUE(snapshot.agent_states[1].available);
+  ASSERT_EQ(snapshot.outstanding_goal_dispatches.size(), 1u);
+  EXPECT_EQ(snapshot.state, ame::AutonomyBackendState::WAITING_FOR_RESULTS);
+
+  ame::DispatchResult result;
+  result.dispatch_id = dispatches[0].dispatch_id;
+  result.status = ame::CommandStatus::SUCCEEDED;
+  backend.pushDispatchResult(result);
+
+  auto done_snapshot = backend.readSnapshot();
+  ASSERT_EQ(done_snapshot.agent_states.size(), 2u);
+  EXPECT_TRUE(done_snapshot.agent_states[0].available);
+  EXPECT_TRUE(done_snapshot.agent_states[1].available);
+  EXPECT_EQ(done_snapshot.outstanding_goal_dispatches.size(), 0u);
+}
+
+TEST(AutonomyBackend, FailedGoalDispatchRestoresAgentAvailability) {
+  auto wm = buildDomain();
+  auto registry = buildRegistry();
+
+  ame::CurrentAmeBackendAdapter backend(wm, registry);
+  ame::SessionRequest request;
+  request.session_id = "dispatch-fail";
+  request.intent.goal_fluents = {"(searched sector_a)"};
+  request.policy.max_replans = 3;
+  request.policy.enable_goal_dispatch = true;
+  request.available_agents = {
+      {"uav1", "uav", true},
+  };
+  backend.start(request);
+  backend.step();
+
+  auto dispatches = backend.pullGoalDispatches();
+  ASSERT_EQ(dispatches.size(), 1u);
+  ASSERT_EQ(backend.readSnapshot().agent_states.size(), 1u);
+  EXPECT_FALSE(backend.readSnapshot().agent_states[0].available);
+
+  ame::DispatchResult result;
+  result.dispatch_id = dispatches[0].dispatch_id;
+  result.status = ame::CommandStatus::FAILED_TRANSIENT;
+  backend.pushDispatchResult(result);
+
+  auto snapshot = backend.readSnapshot();
+  ASSERT_EQ(snapshot.agent_states.size(), 1u);
+  EXPECT_TRUE(snapshot.agent_states[0].available);
+  EXPECT_EQ(snapshot.state, ame::AutonomyBackendState::READY);
 }

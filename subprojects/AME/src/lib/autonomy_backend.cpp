@@ -201,6 +201,12 @@ void CurrentAmeBackendAdapter::start(const SessionRequest& request) {
   decision_history_.clear();
   pyramid_proxy_->reset(session_id_);
   executor_.haltExecution();
+  for (const auto& agent : request.available_agents) {
+    world_model_.registerAgent(agent.agent_id, agent.agent_type);
+    if (auto* wm_agent = world_model_.getAgent(agent.agent_id)) {
+      wm_agent->available = agent.available;
+    }
+  }
   world_model_.setGoal(request.intent.goal_fluents);
 }
 
@@ -371,6 +377,7 @@ void CurrentAmeBackendAdapter::pushDispatchResult(const DispatchResult& result) 
       result.status == CommandStatus::FAILED_TRANSIENT ||
       result.status == CommandStatus::CANCELLED) {
     ++replan_count_;
+    restoreDispatchedAgents();
     dispatch_tracking_.clear();
     pending_goal_dispatch_queue_.clear();
     state_ = (replan_count_ >= policy_.max_replans)
@@ -392,6 +399,7 @@ void CurrentAmeBackendAdapter::pushDispatchResult(const DispatchResult& result) 
     return;
   }
 
+  restoreDispatchedAgents();
   dispatch_tracking_.clear();
   state_ = goalsSatisfied() ? AutonomyBackendState::COMPLETE
                             : AutonomyBackendState::READY;
@@ -411,6 +419,7 @@ AutonomyBackendSnapshot CurrentAmeBackendAdapter::readSnapshot() const {
   snapshot.state = state_;
   snapshot.world_version = world_model_.version();
   snapshot.replan_count = replan_count_;
+  snapshot.agent_states = collectAgentStates();
   snapshot.decision_history = decision_history_;
   for (const auto& [command_id, tracking] : command_tracking_) {
     if (tracking.status == CommandStatus::PENDING ||
@@ -470,7 +479,16 @@ FactAuthority CurrentAmeBackendAdapter::toWorldModelAuthority(
   return FactAuthority::CONFIRMED;
 }
 
+std::vector<AgentState> CurrentAmeBackendAdapter::collectAgentStates() const {
+  std::vector<AgentState> states;
+  for (const auto& agent : world_model_.agents()) {
+    states.push_back({agent.id, agent.type, agent.available});
+  }
+  return states;
+}
+
 void CurrentAmeBackendAdapter::resetTransientQueues() {
+  restoreDispatchedAgents();
   command_tracking_.clear();
   dispatch_tracking_.clear();
   pending_command_queue_.clear();
@@ -481,6 +499,7 @@ void CurrentAmeBackendAdapter::resetTransientQueues() {
 
 void CurrentAmeBackendAdapter::resetExecutionForReplan() {
   executor_.haltExecution();
+  restoreDispatchedAgents();
   command_tracking_.clear();
   dispatch_tracking_.clear();
   pending_command_queue_.clear();
@@ -519,10 +538,21 @@ bool CurrentAmeBackendAdapter::maybeEmitGoalDispatches() {
     dispatch.dispatch_id = session_id_ + "/dispatch/" + std::to_string(++dispatch_counter_);
     dispatch.agent_id = assignment.agent_id;
     dispatch.goals = assignment.goals;
+    if (auto* agent = world_model_.getAgent(dispatch.agent_id)) {
+      agent->available = false;
+    }
     dispatch_tracking_[dispatch.dispatch_id] = {dispatch, CommandStatus::PENDING};
     pending_goal_dispatch_queue_.push_back(dispatch);
   }
   return true;
+}
+
+void CurrentAmeBackendAdapter::restoreDispatchedAgents() {
+  for (const auto& [dispatch_id, tracking] : dispatch_tracking_) {
+    if (auto* agent = world_model_.getAgent(tracking.dispatch.agent_id)) {
+      agent->available = true;
+    }
+  }
 }
 
 bool CurrentAmeBackendAdapter::goalsSatisfied() const {

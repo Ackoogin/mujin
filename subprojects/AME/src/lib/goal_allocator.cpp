@@ -47,7 +47,6 @@ bool GoalAllocator::goalsShareSector(const std::string& g1, const std::string& g
 std::vector<AgentGoalAssignment> GoalAllocator::allocate(
     const std::vector<std::string>& goals,
     const WorldModel& wm) const {
-    
     auto agents = wm.availableAgentIds();
     if (agents.empty() || goals.empty()) {
         return {};

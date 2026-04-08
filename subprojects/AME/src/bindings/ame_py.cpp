@@ -76,6 +76,12 @@ PYBIND11_MODULE(_ame_py, m) {
         .def(py::init<>())
         .def_readwrite("goal_fluents", &ame::MissionIntent::goal_fluents);
 
+    py::class_<ame::AgentState>(m, "AgentState")
+        .def(py::init<>())
+        .def_readwrite("agent_id", &ame::AgentState::agent_id)
+        .def_readwrite("agent_type", &ame::AgentState::agent_type)
+        .def_readwrite("available", &ame::AgentState::available);
+
     py::class_<ame::PolicyEnvelope>(m, "PolicyEnvelope")
         .def(py::init<>())
         .def_readwrite("max_replans", &ame::PolicyEnvelope::max_replans)
@@ -85,7 +91,8 @@ PYBIND11_MODULE(_ame_py, m) {
         .def(py::init<>())
         .def_readwrite("session_id", &ame::SessionRequest::session_id)
         .def_readwrite("intent", &ame::SessionRequest::intent)
-        .def_readwrite("policy", &ame::SessionRequest::policy);
+        .def_readwrite("policy", &ame::SessionRequest::policy)
+        .def_readwrite("available_agents", &ame::SessionRequest::available_agents);
 
     py::class_<ame::AutonomyBackendCapabilities>(m, "AutonomyBackendCapabilities")
         .def(py::init<>())
@@ -140,6 +147,7 @@ PYBIND11_MODULE(_ame_py, m) {
         .def_readwrite("state", &ame::AutonomyBackendSnapshot::state)
         .def_readwrite("world_version", &ame::AutonomyBackendSnapshot::world_version)
         .def_readwrite("replan_count", &ame::AutonomyBackendSnapshot::replan_count)
+        .def_readwrite("agent_states", &ame::AutonomyBackendSnapshot::agent_states)
         .def_readwrite("outstanding_commands", &ame::AutonomyBackendSnapshot::outstanding_commands)
         .def_readwrite("outstanding_goal_dispatches", &ame::AutonomyBackendSnapshot::outstanding_goal_dispatches)
         .def_readwrite("decision_history", &ame::AutonomyBackendSnapshot::decision_history);
@@ -219,6 +227,10 @@ PYBIND11_MODULE(_ame_py, m) {
         .def("register_agent", &ame::WorldModel::registerAgent,
             py::arg("id"), py::arg("type"),
             "Register an agent")
+        .def("get_agent", static_cast<ame::AgentInfo*(ame::WorldModel::*)(const std::string&)>(&ame::WorldModel::getAgent),
+            py::arg("id"),
+            py::return_value_policy::reference_internal,
+            "Get mutable agent info by id, or None if missing")
         .def("agent_ids", &ame::WorldModel::agentIds,
             "Get all agent IDs")
         .def("available_agent_ids", &ame::WorldModel::availableAgentIds,
@@ -345,9 +357,11 @@ PYBIND11_MODULE(_ame_py, m) {
 
     py::class_<ame::GoalAllocator>(m, "GoalAllocator")
         .def(py::init<>())
-        .def("allocate", &ame::GoalAllocator::allocate,
+        .def("allocate", static_cast<std::vector<ame::AgentGoalAssignment> (ame::GoalAllocator::*)(
+                const std::vector<std::string>&,
+                const ame::WorldModel&) const>(&ame::GoalAllocator::allocate),
             py::arg("goals"), py::arg("wm"),
-            "Allocate goals to available agents");
+            "Allocate goals to available agents from a WorldModel");
 
     // -------------------------------------------------------------------------
     // PDDL Parser - use PddlParser::parse

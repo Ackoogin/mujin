@@ -56,6 +56,13 @@ class MissionIntent:
 
 
 @dataclass(slots=True)
+class AgentState:
+    agent_id: str
+    agent_type: str
+    available: bool = True
+
+
+@dataclass(slots=True)
 class PolicyEnvelope:
     max_replans: int = 3
     enable_goal_dispatch: bool = False
@@ -66,6 +73,7 @@ class SessionRequest:
     session_id: str
     intent: MissionIntent
     policy: PolicyEnvelope = field(default_factory=PolicyEnvelope)
+    available_agents: List[AgentState] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -127,6 +135,7 @@ class AutonomyBackendSnapshot:
     state: AutonomyBackendState
     world_version: int
     replan_count: int
+    agent_states: List[AgentState] = field(default_factory=list)
     outstanding_commands: List[ActionCommand] = field(default_factory=list)
     outstanding_goal_dispatches: List[GoalDispatch] = field(default_factory=list)
     decision_history: List[DecisionRecord] = field(default_factory=list)
@@ -218,11 +227,22 @@ def _to_cpp_policy(policy: PolicyEnvelope):
     return cpp_policy
 
 
+def _to_cpp_agent_state(agent: AgentState):
+    cpp_agent = _ame_py.AgentState()
+    cpp_agent.agent_id = agent.agent_id
+    cpp_agent.agent_type = agent.agent_type
+    cpp_agent.available = agent.available
+    return cpp_agent
+
+
 def _to_cpp_session_request(request: SessionRequest):
     cpp_request = _ame_py.SessionRequest()
     cpp_request.session_id = request.session_id
     cpp_request.intent = _to_cpp_mission_intent(request.intent)
     cpp_request.policy = _to_cpp_policy(request.policy)
+    cpp_request.available_agents = [
+        _to_cpp_agent_state(agent) for agent in request.available_agents
+    ]
     return cpp_request
 
 
@@ -276,6 +296,14 @@ def _from_cpp_goal_dispatch(dispatch) -> GoalDispatch:
     )
 
 
+def _from_cpp_agent_state(agent) -> AgentState:
+    return AgentState(
+        agent_id=agent.agent_id,
+        agent_type=agent.agent_type,
+        available=agent.available,
+    )
+
+
 def _from_cpp_decision_record(record) -> DecisionRecord:
     return DecisionRecord(
         session_id=record.session_id,
@@ -295,6 +323,10 @@ def _from_cpp_snapshot(snapshot) -> AutonomyBackendSnapshot:
         state=AutonomyBackendState[snapshot.state.name],
         world_version=snapshot.world_version,
         replan_count=snapshot.replan_count,
+        agent_states=[
+            _from_cpp_agent_state(agent)
+            for agent in snapshot.agent_states
+        ],
         outstanding_commands=[
             _from_cpp_action_command(command)
             for command in snapshot.outstanding_commands
