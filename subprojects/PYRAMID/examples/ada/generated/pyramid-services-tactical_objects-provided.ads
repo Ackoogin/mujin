@@ -1,13 +1,13 @@
 --  Auto-generated service binding specification
---  Generated from: provided.proto by ada_service_generator.py
+--  Generated from: services by ada_service_generator.py
 --  Package: Pyramid.Services.Tactical_Objects.Provided
 --
 --  Architecture: component logic > service binding (this) > PCL
 --
 --  This package provides:
 --    1. Wire-name constants and topic constants
---    2. EntityActions handler stubs (Handle_*)
---    3. PCL binding procedures (Subscribe_*, Invoke_*, Publish_*)
+--    2. EntityActions callback access types and handler set record
+--    3. PCL binding procedures (Register_Services, Subscribe_*, Invoke_*, Publish_*)
 --    4. Msg_To_String utility for PCL message payloads
 --
 --  JSON serialisation/deserialisation is provided by the companion
@@ -69,27 +69,36 @@ package Pyramid.Services.Tactical_Objects.Provided is
      (Data : System.Address;
       Size : Interfaces.C.unsigned) return String;
 
-   --  -- EntityActions handlers ------------------------------------
-   --  Implement these procedures in the package body.
+   --  -- EntityActions handler callbacks ----------------------------
+   --  Supply these callbacks from your component at registration time.
 
    --  Matching_Objects_Service
-   function Handle_Read_Match
+   type Handle_Read_Match_Access is access function
      (Request : Query) return Object_Match_Array;
    --  Object_Of_Interest_Service
-   procedure Handle_Create_Requirement
+   type Handle_Create_Requirement_Access is access procedure
      (Request  : in  Object_Interest_Requirement;
       Response : out Identifier);
-   function Handle_Read_Requirement
+   type Handle_Read_Requirement_Access is access function
      (Request : Query) return Object_Interest_Requirement_Array;
-   procedure Handle_Update_Requirement
+   type Handle_Update_Requirement_Access is access procedure
      (Request  : in  Object_Interest_Requirement;
       Response : out Ack);
-   procedure Handle_Delete_Requirement
+   type Handle_Delete_Requirement_Access is access procedure
      (Request  : in  Identifier;
       Response : out Ack);
    --  Specific_Object_Detail_Service
-   function Handle_Read_Detail
+   type Handle_Read_Detail_Access is access function
      (Request : Query) return Object_Detail_Array;
+
+   type Service_Handlers is record
+      On_Read_Match : Handle_Read_Match_Access := null;
+      On_Create_Requirement : Handle_Create_Requirement_Access := null;
+      On_Read_Requirement : Handle_Read_Requirement_Access := null;
+      On_Update_Requirement : Handle_Update_Requirement_Access := null;
+      On_Delete_Requirement : Handle_Delete_Requirement_Access := null;
+      On_Read_Detail : Handle_Read_Detail_Access := null;
+   end record;
 
    --  -- PCL binding procedures ------------------------------------
    --  Subscribe/Invoke/Publish wrappers for PCL transport layer.
@@ -104,6 +113,10 @@ package Pyramid.Services.Tactical_Objects.Provided is
      (Container : Pcl_Bindings.Pcl_Container_Access;
       Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;
       User_Data : System.Address := System.Null_Address);
+
+   procedure Register_Services
+     (Container : Pcl_Bindings.Pcl_Container_Access;
+      Handlers  : access constant Service_Handlers := null);
 
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Read_Match
@@ -150,10 +163,11 @@ package Pyramid.Services.Tactical_Objects.Provided is
    --  -- Transport integration point ------------------------------
 
    procedure Dispatch
-     (Channel      : in  Service_Channel;
-      Request_Buf  : in  System.Address;
-      Request_Size : in  Natural;
-      Response_Buf : out System.Address;
-      Response_Size: out Natural);
+     (Handlers      : access constant Service_Handlers := null;
+      Channel       : in  Service_Channel;
+      Request_Buf   : in  System.Address;
+      Request_Size  : in  Natural;
+      Response_Buf  : out System.Address;
+      Response_Size : out Natural);
 
 end Pyramid.Services.Tactical_Objects.Provided;

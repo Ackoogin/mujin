@@ -263,7 +263,8 @@ The packages depend on one hand-authored file that is **not** generated:
 | `Subscribe_Evidence_Requirements` | procedure | Calls `pcl_container_add_subscriber` |
 | `Invoke_Create_Requirement` | procedure | Calls `pcl_socket_transport_invoke_remote_async` |
 | `Invoke_Read_Match` | procedure | ditto |
-| `Handle_*` | procedure stubs | Override in component body |
+| `Service_Handlers` | record type | Callback set supplied by the Ada component |
+| `Register_Services` | procedure | Registers all service ports for a container |
 | `Dispatch` | procedure | Routes raw PCL buffer to typed handler |
 | `Msg_To_String` | function | `(Address, unsigned) → String` |
 
@@ -479,7 +480,7 @@ is purely a configuration decision at the executor level.
 
 **Suitable for**: latency-sensitive, same-machine deployments.
 
-### Option D — Server-side handler subclassing (C++ only)
+### Option D — Server-side handler binding
 
 The generated `ServiceHandler` base class can be subclassed to implement
 the server side of the contract.  The `dispatch()` function routes raw PCL
@@ -499,8 +500,9 @@ class MyHandler : public provided::ServiceHandler {
 External components wanting to implement their own bridge can subclass
 `ServiceHandler` and wire up `dispatch` as the PCL service handler.
 
-**Ada** does not use class-based polymorphism for this; instead, override
-the `Handle_*` procedure stubs in the generated package body.
+**Ada** now uses a generated `Service_Handlers` callback record plus
+`Register_Services(...)`. The component supplies plain typed subprograms and
+the generated package performs the PCL service registration and dispatch.
 
 ### Option E — Bare PCL with manual JSON (no generated bindings)
 
@@ -572,8 +574,8 @@ python subprojects/PYRAMID/pim/cpp_service_generator.py \
 
 - **C++**: Subclass `ServiceHandler`, implement `handle*` methods, pass
   `dispatch` as the PCL service callback.
-- **Ada**: Implement the `Handle_*` procedure stubs in the generated package
-  body; register `Subscribe_*` calls in `On_Configure`.
+- **Ada**: Fill a `Service_Handlers` record with your typed callbacks and call
+  `Register_Services(...)` in `On_Configure`.
 
 ---
 

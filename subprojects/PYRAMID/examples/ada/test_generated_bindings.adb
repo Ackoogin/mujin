@@ -93,9 +93,18 @@ begin
    --  7. Service channel enumeration compiles and is usable
    declare
       Ch : constant Prov.Service_Channel := Prov.Ch_Create_Requirement;
+      Handlers : aliased constant Prov.Service_Handlers :=
+        (On_Read_Match          => null,
+         On_Create_Requirement  => null,
+         On_Read_Requirement    => null,
+         On_Update_Requirement  => null,
+         On_Delete_Requirement  => null,
+         On_Read_Detail         => null);
       pragma Unreferenced (Ch);
+      pragma Unreferenced (Handlers);
    begin
       Check ("ServiceChannel enum usable", True);
+      Check ("ServiceHandlers record usable", True);
    end;
 
    --  8. Dispatch round-trip — CreateRequirement
@@ -108,10 +117,11 @@ begin
       Resp_Size : Natural;
    begin
       Prov.Dispatch
-        (Channel      => Prov.Ch_Create_Requirement,
-         Request_Buf  => Req_Json (Req_Json'First)'Address,
-         Request_Size => Req_Json'Length,
-         Response_Buf => Resp_Buf,
+        (Handlers      => null,
+         Channel       => Prov.Ch_Create_Requirement,
+         Request_Buf   => Req_Json (Req_Json'First)'Address,
+         Request_Size  => Req_Json'Length,
+         Response_Buf  => Resp_Buf,
          Response_Size => Resp_Size);
       Check ("Dispatch CreateRequirement returns buffer",
              Resp_Buf /= System.Null_Address or Resp_Size = 0);

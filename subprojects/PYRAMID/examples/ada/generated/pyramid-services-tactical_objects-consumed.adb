@@ -8,12 +8,27 @@ with System;
 with System.Storage_Elements;
 with Pyramid_Data_Model_Common_Types_Codec;  use Pyramid_Data_Model_Common_Types_Codec;
 with Pyramid_Data_Model_Tactical_Types_Codec;  use Pyramid_Data_Model_Tactical_Types_Codec;
-with Pyramid.Services.Tactical_Objects.Json_Codec;
 
 package body Pyramid.Services.Tactical_Objects.Consumed is
+   use type System.Address;
 
    function To_Address is new
      Ada.Unchecked_Conversion (Interfaces.C.Strings.chars_ptr, System.Address);
+
+   type Service_Handlers_Access is access constant Service_Handlers;
+
+   function To_Handlers is new
+     Ada.Unchecked_Conversion (System.Address, Service_Handlers_Access);
+
+   function Handler_Address
+     (Handlers : access constant Service_Handlers) return System.Address is
+   begin
+      if Handlers = null then
+         return System.Null_Address;
+      end if;
+
+      return Handlers.all'Address;
+   end Handler_Address;
 
    function Msg_To_String
      (Data : System.Address;
@@ -30,61 +45,381 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
    end Msg_To_String;
 
    --  -- Object_Evidence_Service ------------------------------------
-   function Handle_Read_Detail
+   function Default_Handle_Read_Detail
      (Request : Query) return Object_Detail_Array
    is
       pragma Unreferenced (Request);
       Empty : Object_Detail_Array (1 .. 0);
    begin
       return Empty;
-   end Handle_Read_Detail;
+   end Default_Handle_Read_Detail;
 
    --  -- Object_Solution_Evidence_Service ------------------------------------
-   procedure Handle_Create_Requirement
+   procedure Default_Handle_Create_Requirement
      (Request  : in  Object_Evidence_Requirement;
       Response : out Identifier)
    is
       pragma Unreferenced (Request);
    begin
       Response := Null_Unbounded_String;
-   end Handle_Create_Requirement;
+   end Default_Handle_Create_Requirement;
 
-   function Handle_Read_Requirement
+   function Default_Handle_Read_Requirement
      (Request : Query) return Object_Evidence_Requirement_Array
    is
       pragma Unreferenced (Request);
       Empty : Object_Evidence_Requirement_Array (1 .. 0);
    begin
       return Empty;
-   end Handle_Read_Requirement;
+   end Default_Handle_Read_Requirement;
 
-   procedure Handle_Update_Requirement
+   procedure Default_Handle_Update_Requirement
      (Request  : in  Object_Evidence_Requirement;
       Response : out Ack)
    is
       pragma Unreferenced (Request);
    begin
       Response := (Success => True);
-   end Handle_Update_Requirement;
+   end Default_Handle_Update_Requirement;
 
-   procedure Handle_Delete_Requirement
+   procedure Default_Handle_Delete_Requirement
      (Request  : in  Identifier;
       Response : out Ack)
    is
       pragma Unreferenced (Request);
    begin
       Response := (Success => True);
-   end Handle_Delete_Requirement;
+   end Default_Handle_Delete_Requirement;
 
    --  -- Object_Source_Capability_Service ------------------------------------
-   function Handle_Read_Capability
+   function Default_Handle_Read_Capability
      (Request : Query) return Identifier_Array
    is
       pragma Unreferenced (Request);
       Empty : Identifier_Array (1 .. 0);
    begin
       return Empty;
-   end Handle_Read_Capability;
+   end Default_Handle_Read_Capability;
+
+   function Service_Read_Detail
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
+   pragma Convention (C, Service_Read_Detail);
+
+   function Service_Create_Requirement
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
+   pragma Convention (C, Service_Create_Requirement);
+
+   function Service_Read_Requirement
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
+   pragma Convention (C, Service_Read_Requirement);
+
+   function Service_Update_Requirement
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
+   pragma Convention (C, Service_Update_Requirement);
+
+   function Service_Delete_Requirement
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
+   pragma Convention (C, Service_Delete_Requirement);
+
+   function Service_Read_Capability
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
+   pragma Convention (C, Service_Read_Capability);
+
+   procedure Register_Services
+     (Container : Pcl_Bindings.Pcl_Container_Access;
+      Handlers  : access constant Service_Handlers := null)
+   is
+      Handler_Ptr : constant System.Address := Handler_Address (Handlers);
+   begin
+      declare
+         Service_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Svc_Read_Detail);
+         Type_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String ("application/json");
+         Port : Pcl_Bindings.Pcl_Port_Access;
+         pragma Unreferenced (Port);
+      begin
+         Port := Pcl_Bindings.Add_Service
+           (Container    => Container,
+            Service_Name => Service_Name,
+            Type_Name    => Type_Name,
+            Handler      => Service_Read_Detail'Access,
+            User_Data    => Handler_Ptr);
+         Interfaces.C.Strings.Free (Service_Name);
+         Interfaces.C.Strings.Free (Type_Name);
+      end;
+      declare
+         Service_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Svc_Create_Requirement);
+         Type_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String ("application/json");
+         Port : Pcl_Bindings.Pcl_Port_Access;
+         pragma Unreferenced (Port);
+      begin
+         Port := Pcl_Bindings.Add_Service
+           (Container    => Container,
+            Service_Name => Service_Name,
+            Type_Name    => Type_Name,
+            Handler      => Service_Create_Requirement'Access,
+            User_Data    => Handler_Ptr);
+         Interfaces.C.Strings.Free (Service_Name);
+         Interfaces.C.Strings.Free (Type_Name);
+      end;
+      declare
+         Service_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Svc_Read_Requirement);
+         Type_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String ("application/json");
+         Port : Pcl_Bindings.Pcl_Port_Access;
+         pragma Unreferenced (Port);
+      begin
+         Port := Pcl_Bindings.Add_Service
+           (Container    => Container,
+            Service_Name => Service_Name,
+            Type_Name    => Type_Name,
+            Handler      => Service_Read_Requirement'Access,
+            User_Data    => Handler_Ptr);
+         Interfaces.C.Strings.Free (Service_Name);
+         Interfaces.C.Strings.Free (Type_Name);
+      end;
+      declare
+         Service_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Svc_Update_Requirement);
+         Type_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String ("application/json");
+         Port : Pcl_Bindings.Pcl_Port_Access;
+         pragma Unreferenced (Port);
+      begin
+         Port := Pcl_Bindings.Add_Service
+           (Container    => Container,
+            Service_Name => Service_Name,
+            Type_Name    => Type_Name,
+            Handler      => Service_Update_Requirement'Access,
+            User_Data    => Handler_Ptr);
+         Interfaces.C.Strings.Free (Service_Name);
+         Interfaces.C.Strings.Free (Type_Name);
+      end;
+      declare
+         Service_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Svc_Delete_Requirement);
+         Type_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String ("application/json");
+         Port : Pcl_Bindings.Pcl_Port_Access;
+         pragma Unreferenced (Port);
+      begin
+         Port := Pcl_Bindings.Add_Service
+           (Container    => Container,
+            Service_Name => Service_Name,
+            Type_Name    => Type_Name,
+            Handler      => Service_Delete_Requirement'Access,
+            User_Data    => Handler_Ptr);
+         Interfaces.C.Strings.Free (Service_Name);
+         Interfaces.C.Strings.Free (Type_Name);
+      end;
+      declare
+         Service_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Svc_Read_Capability);
+         Type_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String ("application/json");
+         Port : Pcl_Bindings.Pcl_Port_Access;
+         pragma Unreferenced (Port);
+      begin
+         Port := Pcl_Bindings.Add_Service
+           (Container    => Container,
+            Service_Name => Service_Name,
+            Type_Name    => Type_Name,
+            Handler      => Service_Read_Capability'Access,
+            User_Data    => Handler_Ptr);
+         Interfaces.C.Strings.Free (Service_Name);
+         Interfaces.C.Strings.Free (Type_Name);
+      end;
+   end Register_Services;
+
+   function Service_Read_Detail
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status
+   is
+      pragma Unreferenced (Self, Ctx);
+      Handlers_Ptr : constant Service_Handlers_Access :=
+        (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Resp_Buf  : System.Address := System.Null_Address;
+      Resp_Size : Natural := 0;
+   begin
+      Dispatch
+        (Handlers      => Handlers_Ptr,
+         Channel       => Ch_Read_Detail,
+         Request_Buf   => Request.Data,
+         Request_Size  => Natural (Request.Size),
+         Response_Buf  => Resp_Buf,
+         Response_Size => Resp_Size);
+      Response.Data := Resp_Buf;
+      Response.Size := Interfaces.C.unsigned (Resp_Size);
+      Response.Type_Name :=
+        Interfaces.C.Strings.New_String ("application/json");
+      return Pcl_Bindings.PCL_OK;
+   end Service_Read_Detail;
+
+   function Service_Create_Requirement
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status
+   is
+      pragma Unreferenced (Self, Ctx);
+      Handlers_Ptr : constant Service_Handlers_Access :=
+        (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Resp_Buf  : System.Address := System.Null_Address;
+      Resp_Size : Natural := 0;
+   begin
+      Dispatch
+        (Handlers      => Handlers_Ptr,
+         Channel       => Ch_Create_Requirement,
+         Request_Buf   => Request.Data,
+         Request_Size  => Natural (Request.Size),
+         Response_Buf  => Resp_Buf,
+         Response_Size => Resp_Size);
+      Response.Data := Resp_Buf;
+      Response.Size := Interfaces.C.unsigned (Resp_Size);
+      Response.Type_Name :=
+        Interfaces.C.Strings.New_String ("application/json");
+      return Pcl_Bindings.PCL_OK;
+   end Service_Create_Requirement;
+
+   function Service_Read_Requirement
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status
+   is
+      pragma Unreferenced (Self, Ctx);
+      Handlers_Ptr : constant Service_Handlers_Access :=
+        (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Resp_Buf  : System.Address := System.Null_Address;
+      Resp_Size : Natural := 0;
+   begin
+      Dispatch
+        (Handlers      => Handlers_Ptr,
+         Channel       => Ch_Read_Requirement,
+         Request_Buf   => Request.Data,
+         Request_Size  => Natural (Request.Size),
+         Response_Buf  => Resp_Buf,
+         Response_Size => Resp_Size);
+      Response.Data := Resp_Buf;
+      Response.Size := Interfaces.C.unsigned (Resp_Size);
+      Response.Type_Name :=
+        Interfaces.C.Strings.New_String ("application/json");
+      return Pcl_Bindings.PCL_OK;
+   end Service_Read_Requirement;
+
+   function Service_Update_Requirement
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status
+   is
+      pragma Unreferenced (Self, Ctx);
+      Handlers_Ptr : constant Service_Handlers_Access :=
+        (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Resp_Buf  : System.Address := System.Null_Address;
+      Resp_Size : Natural := 0;
+   begin
+      Dispatch
+        (Handlers      => Handlers_Ptr,
+         Channel       => Ch_Update_Requirement,
+         Request_Buf   => Request.Data,
+         Request_Size  => Natural (Request.Size),
+         Response_Buf  => Resp_Buf,
+         Response_Size => Resp_Size);
+      Response.Data := Resp_Buf;
+      Response.Size := Interfaces.C.unsigned (Resp_Size);
+      Response.Type_Name :=
+        Interfaces.C.Strings.New_String ("application/json");
+      return Pcl_Bindings.PCL_OK;
+   end Service_Update_Requirement;
+
+   function Service_Delete_Requirement
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status
+   is
+      pragma Unreferenced (Self, Ctx);
+      Handlers_Ptr : constant Service_Handlers_Access :=
+        (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Resp_Buf  : System.Address := System.Null_Address;
+      Resp_Size : Natural := 0;
+   begin
+      Dispatch
+        (Handlers      => Handlers_Ptr,
+         Channel       => Ch_Delete_Requirement,
+         Request_Buf   => Request.Data,
+         Request_Size  => Natural (Request.Size),
+         Response_Buf  => Resp_Buf,
+         Response_Size => Resp_Size);
+      Response.Data := Resp_Buf;
+      Response.Size := Interfaces.C.unsigned (Resp_Size);
+      Response.Type_Name :=
+        Interfaces.C.Strings.New_String ("application/json");
+      return Pcl_Bindings.PCL_OK;
+   end Service_Delete_Requirement;
+
+   function Service_Read_Capability
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status
+   is
+      pragma Unreferenced (Self, Ctx);
+      Handlers_Ptr : constant Service_Handlers_Access :=
+        (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Resp_Buf  : System.Address := System.Null_Address;
+      Resp_Size : Natural := 0;
+   begin
+      Dispatch
+        (Handlers      => Handlers_Ptr,
+         Channel       => Ch_Read_Capability,
+         Request_Buf   => Request.Data,
+         Request_Size  => Natural (Request.Size),
+         Response_Buf  => Resp_Buf,
+         Response_Size => Resp_Size);
+      Response.Data := Resp_Buf;
+      Response.Size := Interfaces.C.unsigned (Resp_Size);
+      Response.Type_Name :=
+        Interfaces.C.Strings.New_String ("application/json");
+      return Pcl_Bindings.PCL_OK;
+   end Service_Read_Capability;
 
    --  -- PCL binding implementations -------------------------------
 
@@ -123,11 +458,12 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
    end Copy_To_Buf;
 
    procedure Dispatch
-     (Channel      : in  Service_Channel;
-      Request_Buf  : in  System.Address;
-      Request_Size : in  Natural;
-      Response_Buf : out System.Address;
-      Response_Size: out Natural)
+     (Handlers      : access constant Service_Handlers := null;
+      Channel       : in  Service_Channel;
+      Request_Buf   : in  System.Address;
+      Request_Size  : in  Natural;
+      Response_Buf  : out System.Address;
+      Response_Size : out Natural)
    is
       Req_Str : constant String := Msg_To_String (Request_Buf,
         Interfaces.C.unsigned (Request_Size));
@@ -140,7 +476,9 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                Req : constant Query :=
                  From_Json (Req_Str, null);
                Rsp : constant Object_Detail_Array :=
-                 Handle_Read_Detail (Req);
+                 (if Handlers /= null and then Handlers.On_Read_Detail /= null
+                  then Handlers.On_Read_Detail.all (Req)
+                  else Default_Handle_Read_Detail (Req));
             begin
                declare
                   use Ada.Strings.Unbounded;
@@ -164,7 +502,11 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                  From_Json (Req_Str, null);
                Rsp : Identifier;
             begin
-               Handle_Create_Requirement (Req, Rsp);
+               if Handlers /= null and then Handlers.On_Create_Requirement /= null then
+                  Handlers.On_Create_Requirement.all (Req, Rsp);
+               else
+                  Default_Handle_Create_Requirement (Req, Rsp);
+               end if;
                Copy_To_Buf (To_String (Rsp),
                  Response_Buf, Response_Size);
             end;
@@ -173,7 +515,9 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                Req : constant Query :=
                  From_Json (Req_Str, null);
                Rsp : constant Object_Evidence_Requirement_Array :=
-                 Handle_Read_Requirement (Req);
+                 (if Handlers /= null and then Handlers.On_Read_Requirement /= null
+                  then Handlers.On_Read_Requirement.all (Req)
+                  else Default_Handle_Read_Requirement (Req));
             begin
                declare
                   use Ada.Strings.Unbounded;
@@ -197,7 +541,11 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                  From_Json (Req_Str, null);
                Rsp : Ack;
             begin
-               Handle_Update_Requirement (Req, Rsp);
+               if Handlers /= null and then Handlers.On_Update_Requirement /= null then
+                  Handlers.On_Update_Requirement.all (Req, Rsp);
+               else
+                  Default_Handle_Update_Requirement (Req, Rsp);
+               end if;
                Copy_To_Buf (To_Json (Rsp),
                  Response_Buf, Response_Size);
             end;
@@ -207,7 +555,11 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                  To_Unbounded_String (Req_Str);
                Rsp : Ack;
             begin
-               Handle_Delete_Requirement (Req, Rsp);
+               if Handlers /= null and then Handlers.On_Delete_Requirement /= null then
+                  Handlers.On_Delete_Requirement.all (Req, Rsp);
+               else
+                  Default_Handle_Delete_Requirement (Req, Rsp);
+               end if;
                Copy_To_Buf (To_Json (Rsp),
                  Response_Buf, Response_Size);
             end;
@@ -216,7 +568,9 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                Req : constant Query :=
                  From_Json (Req_Str, null);
                Rsp : constant Identifier_Array :=
-                 Handle_Read_Capability (Req);
+                 (if Handlers /= null and then Handlers.On_Read_Capability /= null
+                  then Handlers.On_Read_Capability.all (Req)
+                  else Default_Handle_Read_Capability (Req));
             begin
                declare
                   use Ada.Strings.Unbounded;

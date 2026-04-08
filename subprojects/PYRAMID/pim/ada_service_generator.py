@@ -363,9 +363,31 @@ def _collect_type_pkgs(proto_path: Path,
 
 
 def _collect_codec_pkgs(type_pkgs: List[str]) -> List[str]:
-    """Return data model codec packages needed, derived from the type packages list."""
-    return [_DM_CODEC_PKG_FOR_TYPE_PKG[p] for p in type_pkgs
-            if p in _DM_CODEC_PKG_FOR_TYPE_PKG]
+    """Return codec packages needed for the body, derived from type packages.
+
+    The spec already walks imported/request/response field types to find the
+    correct Ada *type* packages.  The body needs the matching codec packages so
+    `From_Json` / `To_Json` calls resolve in the same namespaces.
+
+    For known data-model packages we preserve the explicit mapping.  For any
+    additional type package discovered by `_collect_type_pkgs`, derive the
+    codec package name using the normal paired-package convention:
+
+      Some_Package_Types -> Some_Package_Types_Codec
+    """
+    needed: List[str] = []
+    for pkg in type_pkgs:
+        codec_pkg = _DM_CODEC_PKG_FOR_TYPE_PKG.get(pkg)
+        if codec_pkg is None:
+            if pkg in _DATA_MODEL_TYPES_PKGS:
+                # Keep existing special handling for built-in base types, which
+                # do not require an imported codec package in generated service
+                # bodies.
+                continue
+            codec_pkg = f'{pkg}_Codec'
+        if codec_pkg not in needed:
+            needed.append(codec_pkg)
+    return needed
 
 
 def _topics_for_proto(
@@ -510,8 +532,8 @@ class AdaServiceGenerator:
             f.write(f'--\n')
             f.write(f'--  This package provides:\n')
             f.write(f'--    1. Wire-name constants and topic constants\n')
-            f.write(f'--    2. EntityActions handler stubs (Handle_*)\n')
-            f.write(f'--    3. PCL binding procedures (Subscribe_*, Invoke_*, Publish_*)\n')
+            f.write(f'--    2. EntityActions callback access types and handler set record\n')
+            f.write(f'--    3. PCL binding procedures (Register_Services, Subscribe_*, Invoke_*, Publish_*)\n')
             f.write(f'--    4. Msg_To_String utility for PCL message payloads\n')
             f.write(f'--\n')
             codec_pkg = _codec_pkg_from_proto(parsed)
@@ -591,9 +613,9 @@ class AdaServiceGenerator:
             f.write(f'      Size : Interfaces.C.unsigned) return String;\n')
             f.write(f'\n')
 
-            # Handler procedure declarations
-            f.write(f'   --  -- EntityActions handlers ------------------------------------\n')
-            f.write(f'   --  Implement these procedures in the package body.\n')
+            # Handler callback declarations
+            f.write(f'   --  -- EntityActions handler callbacks ----------------------------\n')
+            f.write(f'   --  Supply these callbacks from your component at registration time.\n')
             f.write(f'\n')
 
             current_svc = None
@@ -606,13 +628,19 @@ class AdaServiceGenerator:
                 rsp_t = rpc.ada_rsp_type
 
                 if rpc.streaming:
-                    # Streaming handlers return unconstrained arrays via function
-                    f.write(f'   function {rpc.ada_handler}\n')
+                    f.write(f'   type {rpc.ada_handler}_Access is access function\n')
                     f.write(f'     (Request : {req_t}) return {rsp_t};\n')
                 else:
-                    f.write(f'   procedure {rpc.ada_handler}\n')
+                    f.write(f'   type {rpc.ada_handler}_Access is access procedure\n')
                     f.write(f'     (Request  : in  {req_t};\n')
                     f.write(f'      Response : out {rsp_t});\n')
+
+            f.write(f'\n')
+            f.write(f'   type Service_Handlers is record\n')
+            for _, rpc in all_rpcs:
+                field_name = rpc.ada_handler.replace('Handle_', 'On_')
+                f.write(f'      {field_name} : {rpc.ada_handler}_Access := null;\n')
+            f.write(f'   end record;\n')
 
             f.write('\n')
 
@@ -631,6 +659,11 @@ class AdaServiceGenerator:
                 f.write(f'      Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;\n')
                 f.write(f'      User_Data : System.Address := System.Null_Address);\n')
                 f.write(f'\n')
+
+            f.write(f'   procedure Register_Services\n')
+            f.write(f'     (Container : Pcl_Bindings.Pcl_Container_Access;\n')
+            f.write(f'      Handlers  : access constant Service_Handlers := null);\n')
+            f.write(f'\n')
 
             # Invoke helpers for services (provided = client can call them)
             # When a proto request type has a Json_Codec wire type mapping
@@ -664,11 +697,12 @@ class AdaServiceGenerator:
             f.write(f'   --  -- Transport integration point ------------------------------\n')
             f.write(f'\n')
             f.write(f'   procedure Dispatch\n')
-            f.write(f'     (Channel      : in  Service_Channel;\n')
-            f.write(f'      Request_Buf  : in  System.Address;\n')
-            f.write(f'      Request_Size : in  Natural;\n')
-            f.write(f'      Response_Buf : out System.Address;\n')
-            f.write(f'      Response_Size: out Natural);\n')
+            f.write(f'     (Handlers      : access constant Service_Handlers := null;\n')
+            f.write(f'      Channel       : in  Service_Channel;\n')
+            f.write(f'      Request_Buf   : in  System.Address;\n')
+            f.write(f'      Request_Size  : in  Natural;\n')
+            f.write(f'      Response_Buf  : out System.Address;\n')
+            f.write(f'      Response_Size : out Natural);\n')
             f.write(f'\n')
             f.write(f'end {pkg_name};\n')
 
@@ -701,11 +735,27 @@ class AdaServiceGenerator:
                 f.write(f'with {codec_pkg};\n')
             f.write(f'\n')
             f.write(f'package body {pkg_name} is\n')
+            f.write(f'   use type System.Address;\n')
             f.write(f'\n')
 
             # -- Internal helpers ----------------------------------------------
             f.write(f'   function To_Address is new\n')
             f.write(f'     Ada.Unchecked_Conversion (Interfaces.C.Strings.chars_ptr, System.Address);\n')
+            f.write(f'\n')
+            f.write(f'   type Service_Handlers_Access is access constant Service_Handlers;\n')
+            f.write(f'\n')
+            f.write(f'   function To_Handlers is new\n')
+            f.write(f'     Ada.Unchecked_Conversion (System.Address, Service_Handlers_Access);\n')
+            f.write(f'\n')
+            f.write(f'   function Handler_Address\n')
+            f.write(f'     (Handlers : access constant Service_Handlers) return System.Address is\n')
+            f.write(f'   begin\n')
+            f.write(f'      if Handlers = null then\n')
+            f.write(f'         return System.Null_Address;\n')
+            f.write(f'      end if;\n')
+            f.write(f'\n')
+            f.write(f"      return Handlers.all'Address;\n")
+            f.write(f'   end Handler_Address;\n')
             f.write(f'\n')
 
             # -- Msg_To_String -------------------------------------------------
@@ -724,7 +774,7 @@ class AdaServiceGenerator:
             f.write(f'   end Msg_To_String;\n')
             f.write(f'\n')
 
-            # Handler stubs
+            # Default handler implementations
             current_svc = None
             for svc_name, rpc in all_rpcs:
                 if svc_name != current_svc:
@@ -735,8 +785,7 @@ class AdaServiceGenerator:
                 rsp_t = rpc.ada_rsp_type
 
                 if rpc.streaming:
-                    # Streaming handlers: function returning unconstrained array
-                    f.write(f'   function {rpc.ada_handler}\n')
+                    f.write(f'   function Default_{rpc.ada_handler}\n')
                     f.write(f'     (Request : {req_t}) return {rsp_t}\n')
                     f.write(f'   is\n')
                     f.write(f'      pragma Unreferenced (Request);\n')
@@ -744,7 +793,7 @@ class AdaServiceGenerator:
                     f.write(f'   begin\n')
                     f.write(f'      return Empty;\n')
                 else:
-                    f.write(f'   procedure {rpc.ada_handler}\n')
+                    f.write(f'   procedure Default_{rpc.ada_handler}\n')
                     f.write(f'     (Request  : in  {req_t};\n')
                     f.write(f'      Response : out {rsp_t})\n')
                     f.write(f'   is\n')
@@ -762,7 +811,76 @@ class AdaServiceGenerator:
                         f.write(f'   begin\n')
                         f.write(f'      Response := Default_Val;\n')
 
-                f.write(f'   end {rpc.ada_handler};\n')
+                f.write(f'   end Default_{rpc.ada_handler};\n')
+                f.write(f'\n')
+
+            for _, rpc in all_rpcs:
+                callback_name = f'Service_{_camel_to_snake(rpc.name)}'
+                f.write(f'   function {callback_name}\n')
+                f.write(f'     (Self      : Pcl_Bindings.Pcl_Container_Access;\n')
+                f.write(f'      Request   : access constant Pcl_Bindings.Pcl_Msg;\n')
+                f.write(f'      Response  : access Pcl_Bindings.Pcl_Msg;\n')
+                f.write(f'      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;\n')
+                f.write(f'      User_Data : System.Address) return Pcl_Bindings.Pcl_Status;\n')
+                f.write(f'   pragma Convention (C, {callback_name});\n')
+                f.write(f'\n')
+
+            f.write(f'   procedure Register_Services\n')
+            f.write(f'     (Container : Pcl_Bindings.Pcl_Container_Access;\n')
+            f.write(f'      Handlers  : access constant Service_Handlers := null)\n')
+            f.write(f'   is\n')
+            f.write(f'      Handler_Ptr : constant System.Address := Handler_Address (Handlers);\n')
+            f.write(f'   begin\n')
+            for _, rpc in all_rpcs:
+                callback_name = f'Service_{_camel_to_snake(rpc.name)}'
+                f.write(f'      declare\n')
+                f.write(f'         Service_Name : Interfaces.C.Strings.chars_ptr :=\n')
+                f.write(f'           Interfaces.C.Strings.New_String ({rpc.ada_svc_const});\n')
+                f.write(f'         Type_Name : Interfaces.C.Strings.chars_ptr :=\n')
+                f.write(f'           Interfaces.C.Strings.New_String ("application/json");\n')
+                f.write(f'         Port : Pcl_Bindings.Pcl_Port_Access;\n')
+                f.write(f'         pragma Unreferenced (Port);\n')
+                f.write(f'      begin\n')
+                f.write(f'         Port := Pcl_Bindings.Add_Service\n')
+                f.write(f'           (Container    => Container,\n')
+                f.write(f'            Service_Name => Service_Name,\n')
+                f.write(f'            Type_Name    => Type_Name,\n')
+                f.write(f'            Handler      => {callback_name}\'Access,\n')
+                f.write(f'            User_Data    => Handler_Ptr);\n')
+                f.write(f'         Interfaces.C.Strings.Free (Service_Name);\n')
+                f.write(f'         Interfaces.C.Strings.Free (Type_Name);\n')
+                f.write(f'      end;\n')
+            f.write(f'   end Register_Services;\n')
+            f.write(f'\n')
+
+            for _, rpc in all_rpcs:
+                callback_name = f'Service_{_camel_to_snake(rpc.name)}'
+                f.write(f'   function {callback_name}\n')
+                f.write(f'     (Self      : Pcl_Bindings.Pcl_Container_Access;\n')
+                f.write(f'      Request   : access constant Pcl_Bindings.Pcl_Msg;\n')
+                f.write(f'      Response  : access Pcl_Bindings.Pcl_Msg;\n')
+                f.write(f'      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;\n')
+                f.write(f'      User_Data : System.Address) return Pcl_Bindings.Pcl_Status\n')
+                f.write(f'   is\n')
+                f.write(f'      pragma Unreferenced (Self, Ctx);\n')
+                f.write(f'      Handlers_Ptr : constant Service_Handlers_Access :=\n')
+                f.write(f'        (if User_Data = System.Null_Address then null else To_Handlers (User_Data));\n')
+                f.write(f'      Resp_Buf  : System.Address := System.Null_Address;\n')
+                f.write(f'      Resp_Size : Natural := 0;\n')
+                f.write(f'   begin\n')
+                f.write(f'      Dispatch\n')
+                f.write(f'        (Handlers      => Handlers_Ptr,\n')
+                f.write(f'         Channel       => {rpc.ada_channel},\n')
+                f.write(f'         Request_Buf   => Request.Data,\n')
+                f.write(f'         Request_Size  => Natural (Request.Size),\n')
+                f.write(f'         Response_Buf  => Resp_Buf,\n')
+                f.write(f'         Response_Size => Resp_Size);\n')
+                f.write(f'      Response.Data := Resp_Buf;\n')
+                f.write(f'      Response.Size := Interfaces.C.unsigned (Resp_Size);\n')
+                f.write(f'      Response.Type_Name :=\n')
+                f.write(f'        Interfaces.C.Strings.New_String ("application/json");\n')
+                f.write(f'      return Pcl_Bindings.PCL_OK;\n')
+                f.write(f'   end {callback_name};\n')
                 f.write(f'\n')
 
             # -- PCL binding implementations -----------------------------------
@@ -888,11 +1006,12 @@ class AdaServiceGenerator:
             # Dispatch — deserialise request, call handler, serialise response,
             # allocate response buffer via New_String (caller frees with C free).
             f.write(f'   procedure Dispatch\n')
-            f.write(f'     (Channel      : in  Service_Channel;\n')
-            f.write(f'      Request_Buf  : in  System.Address;\n')
-            f.write(f'      Request_Size : in  Natural;\n')
-            f.write(f'      Response_Buf : out System.Address;\n')
-            f.write(f'      Response_Size: out Natural)\n')
+            f.write(f'     (Handlers      : access constant Service_Handlers := null;\n')
+            f.write(f'      Channel       : in  Service_Channel;\n')
+            f.write(f'      Request_Buf   : in  System.Address;\n')
+            f.write(f'      Request_Size  : in  Natural;\n')
+            f.write(f'      Response_Buf  : out System.Address;\n')
+            f.write(f'      Response_Size : out Natural)\n')
             f.write(f'   is\n')
             f.write(f'      Req_Str : constant String := Msg_To_String (Request_Buf,\n')
             f.write(f'        Interfaces.C.unsigned (Request_Size));\n')
@@ -919,7 +1038,10 @@ class AdaServiceGenerator:
                 if rpc.streaming:
                     # Streaming: handler is a function returning unconstrained array
                     f.write(f'               Rsp : constant {rsp_t} :=\n')
-                    f.write(f'                 {handler_fn} (Req);\n')
+                    field_name = handler_fn.replace('Handle_', 'On_')
+                    f.write(f'                 (if Handlers /= null and then Handlers.{field_name} /= null\n')
+                    f.write(f'                  then Handlers.{field_name}.all (Req)\n')
+                    f.write(f'                  else Default_{handler_fn} (Req));\n')
                     f.write(f'            begin\n')
 
                     # Determine element serialiser
@@ -948,7 +1070,12 @@ class AdaServiceGenerator:
                     # Non-streaming: handler is a procedure with out parameter
                     f.write(f'               Rsp : {rsp_t};\n')
                     f.write(f'            begin\n')
-                    f.write(f'               {handler_fn} (Req, Rsp);\n')
+                    field_name = handler_fn.replace('Handle_', 'On_')
+                    f.write(f'               if Handlers /= null and then Handlers.{field_name} /= null then\n')
+                    f.write(f'                  Handlers.{field_name}.all (Req, Rsp);\n')
+                    f.write(f'               else\n')
+                    f.write(f'                  Default_{handler_fn} (Req, Rsp);\n')
+                    f.write(f'               end if;\n')
 
                     # Serialise response and copy to buffer
                     if rsp_t == 'Identifier':
