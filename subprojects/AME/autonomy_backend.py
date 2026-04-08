@@ -58,6 +58,7 @@ class MissionIntent:
 @dataclass(slots=True)
 class PolicyEnvelope:
     max_replans: int = 3
+    enable_goal_dispatch: bool = False
 
 
 @dataclass(slots=True)
@@ -86,6 +87,13 @@ class ActionCommand:
 
 
 @dataclass(slots=True)
+class GoalDispatch:
+    dispatch_id: str
+    agent_id: str
+    goals: List[str] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class DecisionRecord:
     session_id: str
     backend_id: str
@@ -106,12 +114,21 @@ class CommandResult:
 
 
 @dataclass(slots=True)
+class DispatchResult:
+    dispatch_id: str
+    status: CommandStatus
+    observed_updates: List[FactUpdate] = field(default_factory=list)
+    source: str = ""
+
+
+@dataclass(slots=True)
 class AutonomyBackendSnapshot:
     session_id: str
     state: AutonomyBackendState
     world_version: int
     replan_count: int
     outstanding_commands: List[ActionCommand] = field(default_factory=list)
+    outstanding_goal_dispatches: List[GoalDispatch] = field(default_factory=list)
     decision_history: List[DecisionRecord] = field(default_factory=list)
 
 
@@ -146,11 +163,19 @@ class AutonomyBackend(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def pull_goal_dispatches(self) -> List[GoalDispatch]:
+        raise NotImplementedError
+
+    @abstractmethod
     def pull_decision_records(self) -> List[DecisionRecord]:
         raise NotImplementedError
 
     @abstractmethod
     def push_command_result(self, result: CommandResult) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    def push_dispatch_result(self, result: DispatchResult) -> None:
         raise NotImplementedError
 
     @abstractmethod
@@ -189,6 +214,7 @@ def _to_cpp_mission_intent(intent: MissionIntent):
 def _to_cpp_policy(policy: PolicyEnvelope):
     cpp_policy = _ame_py.PolicyEnvelope()
     cpp_policy.max_replans = policy.max_replans
+    cpp_policy.enable_goal_dispatch = policy.enable_goal_dispatch
     return cpp_policy
 
 
@@ -203,6 +229,17 @@ def _to_cpp_session_request(request: SessionRequest):
 def _to_cpp_command_result(result: CommandResult):
     cpp_result = _ame_py.CommandResult()
     cpp_result.command_id = result.command_id
+    cpp_result.status = getattr(_ame_py.CommandStatus, result.status.name)
+    cpp_result.observed_updates = _to_cpp_state_update(
+        StateUpdate(result.observed_updates)
+    ).fact_updates
+    cpp_result.source = result.source
+    return cpp_result
+
+
+def _to_cpp_dispatch_result(result: DispatchResult):
+    cpp_result = _ame_py.DispatchResult()
+    cpp_result.dispatch_id = result.dispatch_id
     cpp_result.status = getattr(_ame_py.CommandStatus, result.status.name)
     cpp_result.observed_updates = _to_cpp_state_update(
         StateUpdate(result.observed_updates)
@@ -231,6 +268,14 @@ def _from_cpp_action_command(command) -> ActionCommand:
     )
 
 
+def _from_cpp_goal_dispatch(dispatch) -> GoalDispatch:
+    return GoalDispatch(
+        dispatch_id=dispatch.dispatch_id,
+        agent_id=dispatch.agent_id,
+        goals=list(dispatch.goals),
+    )
+
+
 def _from_cpp_decision_record(record) -> DecisionRecord:
     return DecisionRecord(
         session_id=record.session_id,
@@ -253,6 +298,10 @@ def _from_cpp_snapshot(snapshot) -> AutonomyBackendSnapshot:
         outstanding_commands=[
             _from_cpp_action_command(command)
             for command in snapshot.outstanding_commands
+        ],
+        outstanding_goal_dispatches=[
+            _from_cpp_goal_dispatch(dispatch)
+            for dispatch in snapshot.outstanding_goal_dispatches
         ],
         decision_history=[
             _from_cpp_decision_record(record)
@@ -300,6 +349,9 @@ class AmeAutonomyBackend(AutonomyBackend):
     def pull_commands(self) -> List[ActionCommand]:
         return [_from_cpp_action_command(c) for c in self._impl.pull_commands()]
 
+    def pull_goal_dispatches(self) -> List[GoalDispatch]:
+        return [_from_cpp_goal_dispatch(d) for d in self._impl.pull_goal_dispatches()]
+
     def pull_decision_records(self) -> List[DecisionRecord]:
         return [
             _from_cpp_decision_record(r)
@@ -308,6 +360,9 @@ class AmeAutonomyBackend(AutonomyBackend):
 
     def push_command_result(self, result: CommandResult) -> None:
         self._impl.push_command_result(_to_cpp_command_result(result))
+
+    def push_dispatch_result(self, result: DispatchResult) -> None:
+        self._impl.push_dispatch_result(_to_cpp_dispatch_result(result))
 
     def request_stop(self, mode: StopMode) -> None:
         self._impl.request_stop(getattr(_ame_py.StopMode, mode.name))

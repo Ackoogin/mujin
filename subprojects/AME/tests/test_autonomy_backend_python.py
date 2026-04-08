@@ -5,8 +5,10 @@ from subprojects.AME.autonomy_backend import (
     AutonomyBackendState,
     CommandResult,
     CommandStatus,
+    DispatchResult,
     FactAuthorityLevel,
     FactUpdate,
+    GoalDispatch,
     MissionIntent,
     PolicyEnvelope,
     SessionRequest,
@@ -157,6 +159,40 @@ class TestAutonomyBackendPython(unittest.TestCase):
         metadata = wm.get_fact_metadata("(at uav1 sector_a)")
         self.assertEqual(metadata.authority, FactAuthority.CONFIRMED)
         self.assertEqual(metadata.source, "perception:gps")
+
+    def test_goal_dispatch_surface(self):
+        wm = build_domain()
+        wm.set_fact("(at uav1 base)", True)
+        wm.register_agent("uav1", "uav")
+        wm.register_agent("uav2", "uav")
+        registry = build_registry()
+        backend = AmeAutonomyBackend(wm, registry)
+
+        backend.start(
+            SessionRequest(
+                session_id="dispatch-session",
+                intent=MissionIntent(["(searched sector_a)"]),
+                policy=PolicyEnvelope(max_replans=3, enable_goal_dispatch=True),
+            )
+        )
+
+        backend.step()
+        dispatches = backend.pull_goal_dispatches()
+        self.assertEqual(len(dispatches), 1)
+        self.assertIsInstance(dispatches[0], GoalDispatch)
+        self.assertEqual(dispatches[0].agent_id, "uav1")
+        self.assertEqual(dispatches[0].goals, ["(searched sector_a)"])
+        self.assertEqual(
+            backend.read_snapshot().state,
+            AutonomyBackendState.WAITING_FOR_RESULTS,
+        )
+
+        backend.push_dispatch_result(
+            DispatchResult(
+                dispatch_id=dispatches[0].dispatch_id,
+                status=CommandStatus.SUCCEEDED,
+            )
+        )
 
 
 if __name__ == "__main__":

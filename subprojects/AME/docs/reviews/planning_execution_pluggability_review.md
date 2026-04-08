@@ -147,6 +147,7 @@ Recommended decision artefact classes:
 - `ActionSequenceIR` for a short finite sequence
 - `DirectActionIR` for immediate action selection
 - `ScheduleIR` for temporal dispatch commitments
+- `GoalDispatchIR` for agent-assignment / delegated tasking outputs
 - `AdvisoryIR` for propose-verify-fallback flows where another authority approves execution
 
 Why this matters:
@@ -389,12 +390,10 @@ The egress side should normalise what the autonomy system commits to the outside
 
 Recommended egress objects:
 
+- `GoalDispatch`
+  - agent assignment + delegated goals for a subordinate agent/backend
 - `ActionCommand`
-  - command id
-  - action type
-  - bound parameters
-  - execution deadline / timeout
-  - resource owner / delegated agent
+  - runtime command emitted by the executing backend, e.g. a PYRAMID service call
 - `CommandBatch`
   - one or more commands ready for dispatch
 - `CommandResult`
@@ -402,11 +401,16 @@ Recommended egress objects:
   - terminal or intermediate status
   - observed effects / result payload
   - failure classification
+- `DispatchResult`
+  - completion/failure outcome for a delegated goal dispatch
 - `DecisionRecord`
-  - why the command or batch was issued
+  - why the dispatch or command batch was issued
   - plan id / policy rule / backend id / confidence
 
-For the current AME implementation, this can be realised by wrapping BT action execution and world-model effects in an adapter that emits external command/outcome records even if the internal executor remains BT.CPP-driven.
+For the current AME implementation, this can be realised by:
+
+- emitting `GoalDispatch` artefacts when operating in leader/delegation mode
+- emitting `ActionCommand` artefacts by intercepting live `InvokeService` / `IPyramidService` calls when operating in local execution mode
 
 ### Internal Mapping for the Current AME Stack
 
@@ -416,7 +420,10 @@ The current system can be wrapped with minimal intrusion:
 - existing planner produces its usual plan
 - existing compiler builds its usual BT
 - existing executor runs its usual tick loop
-- egress adapter converts internal action lifecycle and world-model changes into `ActionCommand` / `CommandResult` / `DecisionRecord`
+- egress adapter converts internal allocation and execution lifecycle into:
+  - `GoalDispatch` / `DispatchResult`
+  - `ActionCommand` / `CommandResult`
+  - `DecisionRecord`
 
 This means the first "whole-system swap surface" can be added **without changing planner, compiler, or executor internals**, only by introducing boundary adapters around them.
 

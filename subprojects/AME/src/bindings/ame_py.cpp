@@ -78,7 +78,8 @@ PYBIND11_MODULE(_ame_py, m) {
 
     py::class_<ame::PolicyEnvelope>(m, "PolicyEnvelope")
         .def(py::init<>())
-        .def_readwrite("max_replans", &ame::PolicyEnvelope::max_replans);
+        .def_readwrite("max_replans", &ame::PolicyEnvelope::max_replans)
+        .def_readwrite("enable_goal_dispatch", &ame::PolicyEnvelope::enable_goal_dispatch);
 
     py::class_<ame::SessionRequest>(m, "SessionRequest")
         .def(py::init<>())
@@ -102,6 +103,12 @@ PYBIND11_MODULE(_ame_py, m) {
         .def_readwrite("operation", &ame::ActionCommand::operation)
         .def_readwrite("request_fields", &ame::ActionCommand::request_fields);
 
+    py::class_<ame::GoalDispatch>(m, "GoalDispatch")
+        .def(py::init<>())
+        .def_readwrite("dispatch_id", &ame::GoalDispatch::dispatch_id)
+        .def_readwrite("agent_id", &ame::GoalDispatch::agent_id)
+        .def_readwrite("goals", &ame::GoalDispatch::goals);
+
     py::class_<ame::DecisionRecord>(m, "DecisionRecord")
         .def(py::init<>())
         .def_readwrite("session_id", &ame::DecisionRecord::session_id)
@@ -120,6 +127,13 @@ PYBIND11_MODULE(_ame_py, m) {
         .def_readwrite("observed_updates", &ame::CommandResult::observed_updates)
         .def_readwrite("source", &ame::CommandResult::source);
 
+    py::class_<ame::DispatchResult>(m, "DispatchResult")
+        .def(py::init<>())
+        .def_readwrite("dispatch_id", &ame::DispatchResult::dispatch_id)
+        .def_readwrite("status", &ame::DispatchResult::status)
+        .def_readwrite("observed_updates", &ame::DispatchResult::observed_updates)
+        .def_readwrite("source", &ame::DispatchResult::source);
+
     py::class_<ame::AutonomyBackendSnapshot>(m, "AutonomyBackendSnapshot")
         .def(py::init<>())
         .def_readwrite("session_id", &ame::AutonomyBackendSnapshot::session_id)
@@ -127,6 +141,7 @@ PYBIND11_MODULE(_ame_py, m) {
         .def_readwrite("world_version", &ame::AutonomyBackendSnapshot::world_version)
         .def_readwrite("replan_count", &ame::AutonomyBackendSnapshot::replan_count)
         .def_readwrite("outstanding_commands", &ame::AutonomyBackendSnapshot::outstanding_commands)
+        .def_readwrite("outstanding_goal_dispatches", &ame::AutonomyBackendSnapshot::outstanding_goal_dispatches)
         .def_readwrite("decision_history", &ame::AutonomyBackendSnapshot::decision_history);
 
     // -------------------------------------------------------------------------
@@ -313,8 +328,10 @@ PYBIND11_MODULE(_ame_py, m) {
         .def("push_intent", &ame::CurrentAmeBackendAdapter::pushIntent, py::arg("intent"))
         .def("step", &ame::CurrentAmeBackendAdapter::step)
         .def("pull_commands", &ame::CurrentAmeBackendAdapter::pullCommands)
+        .def("pull_goal_dispatches", &ame::CurrentAmeBackendAdapter::pullGoalDispatches)
         .def("pull_decision_records", &ame::CurrentAmeBackendAdapter::pullDecisionRecords)
         .def("push_command_result", &ame::CurrentAmeBackendAdapter::pushCommandResult, py::arg("result"))
+        .def("push_dispatch_result", &ame::CurrentAmeBackendAdapter::pushDispatchResult, py::arg("result"))
         .def("request_stop", &ame::CurrentAmeBackendAdapter::requestStop, py::arg("mode"))
         .def("read_snapshot", &ame::CurrentAmeBackendAdapter::readSnapshot);
 

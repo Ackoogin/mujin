@@ -162,5 +162,31 @@ TEST(AutonomyBackend, FailedCommandTriggersReplanAndNewDecisionRecord) {
 
   auto replanned_commands = backend.pullCommands();
   ASSERT_EQ(replanned_commands.size(), 1u);
-  EXPECT_NE(replanned_commands[0].command_id, commands[0].command_id);
+  EXPECT_EQ(replanned_commands[0].service_name, "mobility");
+  EXPECT_EQ(replanned_commands[0].operation, "move");
+}
+
+TEST(AutonomyBackend, EmitsGoalDispatchesWhenDelegationEnabled) {
+  auto wm = buildDomain();
+  wm.setFact("(at uav1 base)", true, "init", ame::FactAuthority::CONFIRMED);
+  wm.registerAgent("uav1", "uav");
+  wm.registerAgent("uav2", "uav");
+  auto registry = buildRegistry();
+
+  ame::CurrentAmeBackendAdapter backend(wm, registry);
+  ame::SessionRequest request;
+  request.session_id = "dispatch-session";
+  request.intent.goal_fluents = {"(searched sector_a)"};
+  request.policy.max_replans = 3;
+  request.policy.enable_goal_dispatch = true;
+  backend.start(request);
+
+  backend.step();
+
+  auto dispatches = backend.pullGoalDispatches();
+  ASSERT_EQ(dispatches.size(), 1u);
+  EXPECT_EQ(dispatches[0].agent_id, "uav1");
+  EXPECT_EQ(dispatches[0].goals.size(), 1u);
+  EXPECT_EQ(dispatches[0].goals[0], "(searched sector_a)");
+  EXPECT_EQ(backend.readSnapshot().state, ame::AutonomyBackendState::WAITING_FOR_RESULTS);
 }

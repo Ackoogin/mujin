@@ -60,6 +60,7 @@ struct MissionIntent {
 /// \brief Policy knobs exposed at the whole-system wrapper boundary.
 struct PolicyEnvelope {
   unsigned max_replans = 3;
+  bool enable_goal_dispatch = false;
 };
 
 /// \brief Session bootstrap parameters for a backend run.
@@ -87,6 +88,13 @@ struct ActionCommand {
   std::unordered_map<std::string, std::string> request_fields;
 };
 
+/// \brief Goal/task dispatch emitted to an assigned agent or subordinate backend.
+struct GoalDispatch {
+  std::string dispatch_id;
+  std::string agent_id;
+  std::vector<std::string> goals;
+};
+
 /// \brief Decision/audit record emitted when the backend forms a new plan.
 struct DecisionRecord {
   std::string session_id;
@@ -107,6 +115,14 @@ struct CommandResult {
   std::string source;
 };
 
+/// \brief Result returned for a previously emitted goal dispatch.
+struct DispatchResult {
+  std::string dispatch_id;
+  CommandStatus status = CommandStatus::PENDING;
+  std::vector<FactUpdate> observed_updates;
+  std::string source;
+};
+
 /// \brief Snapshot of the wrapper-visible backend state.
 struct AutonomyBackendSnapshot {
   std::string session_id;
@@ -114,6 +130,7 @@ struct AutonomyBackendSnapshot {
   uint64_t world_version = 0;
   unsigned replan_count = 0;
   std::vector<ActionCommand> outstanding_commands;
+  std::vector<GoalDispatch> outstanding_goal_dispatches;
   std::vector<DecisionRecord> decision_history;
 };
 
@@ -140,11 +157,17 @@ public:
   /// \brief Pull commands that are ready for external dispatch.
   virtual std::vector<ActionCommand> pullCommands() = 0;
 
+  /// \brief Pull goal dispatches that are ready for external delegation.
+  virtual std::vector<GoalDispatch> pullGoalDispatches() = 0;
+
   /// \brief Pull decision records generated since the previous read.
   virtual std::vector<DecisionRecord> pullDecisionRecords() = 0;
 
   /// \brief Push an externally observed command result back into the backend.
   virtual void pushCommandResult(const CommandResult& result) = 0;
+
+  /// \brief Push an externally observed goal-dispatch result back into the backend.
+  virtual void pushDispatchResult(const DispatchResult& result) = 0;
 
   /// \brief Request stop for the active session.
   virtual void requestStop(StopMode mode) = 0;

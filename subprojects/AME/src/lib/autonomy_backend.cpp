@@ -192,8 +192,11 @@ void CurrentAmeBackendAdapter::start(const SessionRequest& request) {
   policy_ = request.policy;
   state_ = AutonomyBackendState::READY;
   replan_count_ = 0;
+  dispatch_counter_ = 0;
   command_tracking_.clear();
+  dispatch_tracking_.clear();
   pending_command_queue_.clear();
+  pending_goal_dispatch_queue_.clear();
   pending_decision_records_.clear();
   decision_history_.clear();
   pyramid_proxy_->reset(session_id_);
@@ -231,7 +234,25 @@ void CurrentAmeBackendAdapter::step() {
     return;
   }
 
+  bool waiting_on_dispatch = false;
+  for (const auto& [dispatch_id, tracking] : dispatch_tracking_) {
+    if (tracking.status == CommandStatus::PENDING ||
+        tracking.status == CommandStatus::RUNNING) {
+      waiting_on_dispatch = true;
+      break;
+    }
+  }
+  if (waiting_on_dispatch || !pending_goal_dispatch_queue_.empty()) {
+    state_ = AutonomyBackendState::WAITING_FOR_RESULTS;
+    return;
+  }
+
   if (!executor_.isExecuting()) {
+    if (maybeEmitGoalDispatches()) {
+      state_ = AutonomyBackendState::WAITING_FOR_RESULTS;
+      return;
+    }
+
     if (replan_count_ >= policy_.max_replans) {
       state_ = AutonomyBackendState::FAILED;
       return;
@@ -310,6 +331,12 @@ std::vector<ActionCommand> CurrentAmeBackendAdapter::pullCommands() {
   return commands;
 }
 
+std::vector<GoalDispatch> CurrentAmeBackendAdapter::pullGoalDispatches() {
+  auto dispatches = pending_goal_dispatch_queue_;
+  pending_goal_dispatch_queue_.clear();
+  return dispatches;
+}
+
 std::vector<DecisionRecord> CurrentAmeBackendAdapter::pullDecisionRecords() {
   auto records = pending_decision_records_;
   pending_decision_records_.clear();
@@ -327,6 +354,47 @@ void CurrentAmeBackendAdapter::pushCommandResult(const CommandResult& result) {
     pushState({result.observed_updates});
   }
   pyramid_proxy_->submitResult(result);
+}
+
+void CurrentAmeBackendAdapter::pushDispatchResult(const DispatchResult& result) {
+  auto it = dispatch_tracking_.find(result.dispatch_id);
+  if (it == dispatch_tracking_.end()) {
+    throw std::invalid_argument("Unknown dispatch_id in pushDispatchResult");
+  }
+
+  it->second.status = result.status;
+  if (!result.observed_updates.empty()) {
+    pushState({result.observed_updates});
+  }
+
+  if (result.status == CommandStatus::FAILED_PERMANENT ||
+      result.status == CommandStatus::FAILED_TRANSIENT ||
+      result.status == CommandStatus::CANCELLED) {
+    ++replan_count_;
+    dispatch_tracking_.clear();
+    pending_goal_dispatch_queue_.clear();
+    state_ = (replan_count_ >= policy_.max_replans)
+                 ? AutonomyBackendState::FAILED
+                 : AutonomyBackendState::READY;
+    return;
+  }
+
+  bool waiting = false;
+  for (const auto& [dispatch_id, tracking] : dispatch_tracking_) {
+    if (tracking.status == CommandStatus::PENDING ||
+        tracking.status == CommandStatus::RUNNING) {
+      waiting = true;
+      break;
+    }
+  }
+  if (waiting) {
+    state_ = AutonomyBackendState::WAITING_FOR_RESULTS;
+    return;
+  }
+
+  dispatch_tracking_.clear();
+  state_ = goalsSatisfied() ? AutonomyBackendState::COMPLETE
+                            : AutonomyBackendState::READY;
 }
 
 void CurrentAmeBackendAdapter::requestStop(StopMode mode) {
@@ -348,6 +416,12 @@ AutonomyBackendSnapshot CurrentAmeBackendAdapter::readSnapshot() const {
     if (tracking.status == CommandStatus::PENDING ||
         tracking.status == CommandStatus::RUNNING) {
       snapshot.outstanding_commands.push_back(tracking.command);
+    }
+  }
+  for (const auto& [dispatch_id, tracking] : dispatch_tracking_) {
+    if (tracking.status == CommandStatus::PENDING ||
+        tracking.status == CommandStatus::RUNNING) {
+      snapshot.outstanding_goal_dispatches.push_back(tracking.dispatch);
     }
   }
   return snapshot;
@@ -398,7 +472,9 @@ FactAuthority CurrentAmeBackendAdapter::toWorldModelAuthority(
 
 void CurrentAmeBackendAdapter::resetTransientQueues() {
   command_tracking_.clear();
+  dispatch_tracking_.clear();
   pending_command_queue_.clear();
+  pending_goal_dispatch_queue_.clear();
   pending_decision_records_.clear();
   pyramid_proxy_->reset(session_id_);
 }
@@ -406,13 +482,47 @@ void CurrentAmeBackendAdapter::resetTransientQueues() {
 void CurrentAmeBackendAdapter::resetExecutionForReplan() {
   executor_.haltExecution();
   command_tracking_.clear();
+  dispatch_tracking_.clear();
   pending_command_queue_.clear();
+  pending_goal_dispatch_queue_.clear();
   pyramid_proxy_->reset(session_id_);
 }
 
 void CurrentAmeBackendAdapter::loadAndStartExecution(const std::string& bt_xml) {
   pyramid_proxy_->reset(session_id_);
   executor_.loadAndExecute(bt_xml);
+}
+
+bool CurrentAmeBackendAdapter::maybeEmitGoalDispatches() {
+  if (!policy_.enable_goal_dispatch || world_model_.numAgents() == 0) {
+    return false;
+  }
+  if (!dispatch_tracking_.empty() || !pending_goal_dispatch_queue_.empty()) {
+    return true;
+  }
+
+  std::vector<std::string> goals;
+  for (const auto goal_id : world_model_.goalFluentIds()) {
+    goals.push_back(world_model_.fluentName(goal_id));
+  }
+  if (goals.empty()) {
+    return false;
+  }
+
+  auto assignments = goal_allocator_.allocate(goals, world_model_);
+  if (assignments.empty()) {
+    return false;
+  }
+
+  for (const auto& assignment : assignments) {
+    GoalDispatch dispatch;
+    dispatch.dispatch_id = session_id_ + "/dispatch/" + std::to_string(++dispatch_counter_);
+    dispatch.agent_id = assignment.agent_id;
+    dispatch.goals = assignment.goals;
+    dispatch_tracking_[dispatch.dispatch_id] = {dispatch, CommandStatus::PENDING};
+    pending_goal_dispatch_queue_.push_back(dispatch);
+  }
+  return true;
 }
 
 bool CurrentAmeBackendAdapter::goalsSatisfied() const {
