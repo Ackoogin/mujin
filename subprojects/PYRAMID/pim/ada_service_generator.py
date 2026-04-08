@@ -44,6 +44,7 @@ import json_schema as schema
 from proto_parser import (
     parse_proto_tree, ProtoTypeIndex, ProtoMessage, ProtoEnum,
     screaming_to_pascal, camel_to_snake, _PROTO_SCALARS,
+    parse_proto as _pp_parse,
 )
 
 
@@ -252,7 +253,142 @@ _DATA_MODEL_TYPES_PKGS = [
 # Primary (most specific) package — kept for codec / single-package references.
 _DATA_MODEL_TYPES_PKG = _DATA_MODEL_TYPES_PKGS[-1]
 
-def _types_pkg_from_proto(proto_file: ProtoFile) -> str:
+# Data model codec packages: Ada type pkg → Ada codec pkg.
+# No base-types codec; Identifier/Ack/Query use hardcoded Ada stdlib paths.
+_DM_CODEC_PKG_FOR_TYPE_PKG: Dict[str, str] = {
+    'Pyramid_Data_Model_Common_Types':   'Pyramid_Data_Model_Common_Types_Codec',
+    'Pyramid_Data_Model_Tactical_Types': 'Pyramid_Data_Model_Tactical_Types_Codec',
+}
+
+
+def _proto_pkg_of_type(fqn: str) -> Optional[str]:
+    """Extract the proto package from a fully-qualified type name.
+
+    'pyramid.data_model.tactical.TacticalObject' -> 'pyramid.data_model.tactical'
+    'TacticalObject'                              -> None  (unqualified)
+    """
+    if '.' not in fqn:
+        return None
+    return fqn.rsplit('.', 1)[0]
+
+
+def _ada_pkg_from_proto_pkg(proto_pkg: str) -> str:
+    """Convert a proto package name to its Ada type package name.
+
+    Uses the same convention as AdaTypesGenerator._ada_pkg_for_file():
+      pyramid.data_model.tactical -> Pyramid_Data_Model_Tactical_Types
+    """
+    parts = proto_pkg.split('.')
+    ada_parts = ['_'.join(w.capitalize() for w in seg.split('_')) for seg in parts]
+    return '_'.join(ada_parts) + '_Types'
+
+
+def _find_proto_root(proto_path: Path) -> Optional[Path]:
+    """Walk up from *proto_path* to find the proto root directory.
+
+    The root is the first ancestor directory that contains a subdirectory
+    matching the first segment of a proto import (typically 'pyramid').
+    Returns None if not found.
+    """
+    parent = proto_path.parent
+    while parent != parent.parent:
+        if (parent / 'pyramid').is_dir():
+            return parent
+        parent = parent.parent
+    return None
+
+
+def _collect_type_pkgs(proto_path: Path,
+                       all_rpcs: List[Tuple[str, 'ProtoRpc']]) -> List[str]:
+    """Return all Ada type packages required by the service binding.
+
+    Traces two layers:
+      1. The proto package of each RPC request/response type (from the FQN).
+      2. The proto packages of FIELDS within those message types, so that
+         types used by the request/response records are also visible.
+
+    Uses proto_parser to load the service proto and its imports for step 2;
+    degrades gracefully (step-1 results only) when proto files can't be found.
+
+    Returns packages in a deterministic order: known data-model packages first
+    (in _DATA_MODEL_TYPES_PKGS order), then any additional packages sorted.
+    """
+    needed: set = set()
+    rpc_types = {rpc.req for _, rpc in all_rpcs} | {rpc.rsp for _, rpc in all_rpcs}
+
+    # Step 1 — direct packages from fully-qualified type names in the RPC signature.
+    for t in rpc_types:
+        pkg = _proto_pkg_of_type(t)
+        if pkg:
+            needed.add(_ada_pkg_from_proto_pkg(pkg))
+
+    # Step 2 — load proto + imports; trace each RPC message's field types too.
+    try:
+        svc_pf = _pp_parse(proto_path)
+        loaded = [svc_pf]
+
+        proto_root = _find_proto_root(proto_path)
+        if proto_root is not None:
+            for imp in svc_pf.imports:
+                if imp.startswith('google/'):
+                    continue
+                imp_path = proto_root / imp
+                if imp_path.exists():
+                    try:
+                        loaded.append(_pp_parse(imp_path))
+                    except Exception:
+                        pass
+
+        index = ProtoTypeIndex(loaded)
+
+        for t in rpc_types:
+            # Try FQN first, fall back to short name.
+            msg = index.resolve_message(t) or index.resolve_message(t.split('.')[-1])
+            if msg is None:
+                continue
+            for fld in msg.all_fields():
+                if fld.is_scalar or fld.is_map:
+                    continue
+                fld_pkg = _proto_pkg_of_type(fld.type)
+                if fld_pkg:
+                    needed.add(_ada_pkg_from_proto_pkg(fld_pkg))
+    except Exception:
+        pass  # Step-1 results are still valid.
+
+    # Return in a stable order: known data-model packages first (ordered),
+    # then any additional packages (alphabetically sorted).
+    known_ordered = [p for p in _DATA_MODEL_TYPES_PKGS if p in needed]
+    extra = sorted(p for p in needed if p not in set(_DATA_MODEL_TYPES_PKGS))
+    return known_ordered + extra
+
+
+def _collect_codec_pkgs(type_pkgs: List[str]) -> List[str]:
+    """Return data model codec packages needed, derived from the type packages list."""
+    return [_DM_CODEC_PKG_FOR_TYPE_PKG[p] for p in type_pkgs
+            if p in _DM_CODEC_PKG_FOR_TYPE_PKG]
+
+
+def _topics_for_proto(
+        parsed: 'ProtoFile', is_provided: bool
+) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Return (sub_topics, pub_topics) for the service, based on its proto package.
+
+    Topics are only generated for services whose proto package contains a
+    recognised key fragment.  Services with no matching fragment get no topics.
+    """
+    pkg_lower = parsed.package.lower()
+    sub: Dict[str, str] = {}
+    pub: Dict[str, str] = {}
+    # Standard bridge topics are only for the tactical_objects service.
+    if 'tactical_objects' in pkg_lower:
+        if is_provided:
+            sub.update(SUBSCRIBE_TOPICS)
+        else:
+            pub.update(PUBLISH_TOPICS)
+    return sub, pub
+
+
+def _types_pkg_from_proto(proto_file: 'ProtoFile') -> str:
     """Return the primary Ada types package (tactical — includes all types)."""
     return _DATA_MODEL_TYPES_PKG
 
@@ -336,12 +472,16 @@ class AdaServiceGenerator:
             if not all_rpcs:
                 continue
 
+            # Compute needed type/codec packages once for both spec and body.
+            type_pkgs  = _collect_type_pkgs(pf, all_rpcs)
+            codec_pkgs = _collect_codec_pkgs(type_pkgs)
+
             pkg_name = _pkg_name_from_proto(parsed)
             ads_path = output_path / (pkg_name.lower().replace('.', '-') + '.ads')
             adb_path = output_path / (pkg_name.lower().replace('.', '-') + '.adb')
 
-            self._write_spec(ads_path, pkg_name, parsed, all_rpcs)
-            self._write_body(adb_path, pkg_name, parsed, all_rpcs)
+            self._write_spec(ads_path, pkg_name, parsed, all_rpcs, type_pkgs)
+            self._write_body(adb_path, pkg_name, parsed, all_rpcs, codec_pkgs)
             generated_pkgs.append(pkg_name)
             print(f'  Generated {pkg_name}')
 
@@ -350,17 +490,15 @@ class AdaServiceGenerator:
     # -- Spec (.ads) -----------------------------------------------------------
 
     def _write_spec(self, path: Path, pkg_name: str, parsed: ProtoFile,
-                    all_rpcs: List[Tuple[str, ProtoRpc]]):
+                    all_rpcs: List[Tuple[str, ProtoRpc]],
+                    type_pkgs: List[str]):
         entity_types_for_arrays = sorted({
             _proto_type_to_ada(_short_type(rpc.rsp))
             for _, rpc in all_rpcs if rpc.streaming
         })
 
         is_provided = _is_provided(parsed)
-        # Provided bindings: Ada client subscribes to server-published topics
-        # Consumed bindings: Ada client publishes to server-subscribed topics
-        sub_topics  = SUBSCRIBE_TOPICS if is_provided else {}
-        pub_topics  = {} if is_provided else PUBLISH_TOPICS
+        sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
 
         with open(path, 'w') as f:
             f.write(f'--  Auto-generated service binding specification\n')
@@ -381,9 +519,9 @@ class AdaServiceGenerator:
             f.write(f'--  JSON serialisation/deserialisation is provided by the companion\n')
             f.write(f'--  {codec_pkg} package.\n')
             f.write(f'\n')
-            for tp in _DATA_MODEL_TYPES_PKGS:
+            for tp in type_pkgs:
                 f.write(f'with {tp};  use {tp};\n')
-            # Import Json_Codec if any Invoke_* uses wire types
+            # Import Json_Codec only if any Invoke_* uses wire types
             has_wire_types = is_provided and any(
                 schema.INVOKE_WIRE_TYPES.get(rpc.ada_req_type)
                 for svc in parsed.services for rpc in svc.rpcs)
@@ -537,16 +675,13 @@ class AdaServiceGenerator:
     # -- Body (.adb) -----------------------------------------------------------
 
     def _write_body(self, path: Path, pkg_name: str, parsed: ProtoFile,
-                    all_rpcs: List[Tuple[str, ProtoRpc]]):
+                    all_rpcs: List[Tuple[str, ProtoRpc]],
+                    codec_pkgs: List[str]):
         is_provided = _is_provided(parsed)
-        sub_topics  = SUBSCRIBE_TOPICS if is_provided else {}
-        pub_topics  = {} if is_provided else PUBLISH_TOPICS
-
-        # Data model codec packages for serialisation (baked at generation time)
-        _DM_CODEC_PKGS = [
-            'Pyramid_Data_Model_Common_Types_Codec',
-            'Pyramid_Data_Model_Tactical_Types_Codec',
-        ]
+        sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
+        has_wire_types = is_provided and any(
+            schema.INVOKE_WIRE_TYPES.get(rpc.ada_req_type)
+            for svc in parsed.services for rpc in svc.rpcs)
 
         with open(path, 'w') as f:
             f.write(f'--  Auto-generated service binding body\n')
@@ -557,12 +692,13 @@ class AdaServiceGenerator:
             f.write(f'with Interfaces.C.Strings;\n')
             f.write(f'with System;\n')
             f.write(f'with System.Storage_Elements;\n')
-            # Bring codec packages into scope for To_Json / From_Json
-            for cp in _DM_CODEC_PKGS:
+            # Only bring in codec packages for the types this service actually uses
+            for cp in codec_pkgs:
                 f.write(f'with {cp};  use {cp};\n')
-            # Import Json_Codec for wire-type serialisation in Invoke_*
-            codec_pkg = _codec_pkg_from_proto(parsed)
-            f.write(f'with {codec_pkg};\n')
+            # Import service Json_Codec only when Invoke_* procedures need it
+            if has_wire_types:
+                codec_pkg = _codec_pkg_from_proto(parsed)
+                f.write(f'with {codec_pkg};\n')
             f.write(f'\n')
             f.write(f'package body {pkg_name} is\n')
             f.write(f'\n')
@@ -838,6 +974,25 @@ def _ada_tag(key: str) -> str:
     return '_'.join(w.capitalize() for w in key.split('_'))
 
 
+def _needed_data_model_pkgs_for_schemas() -> List[str]:
+    """Return Ada data model type packages needed by json_schema.ALL_SCHEMAS.
+
+    Analyses the enum fields in every schema to derive which data model packages
+    actually define the Ada types referenced in the codec.
+    """
+    needed: set = set()
+    for msg in schema.ALL_SCHEMAS:
+        for fld in msg.fields:
+            if fld.is_enum:
+                spec = schema.ENUM_SPECS[fld.kind]
+                # proto_file is the absolute path; stem gives e.g. 'common'
+                stem = Path(spec.proto_file).stem
+                ada_pkg = f'Pyramid_Data_Model_{stem.capitalize()}_Types'
+                if ada_pkg in _DATA_MODEL_TYPES_PKGS:
+                    needed.add(ada_pkg)
+    return [p for p in _DATA_MODEL_TYPES_PKGS if p in needed]
+
+
 class JsonCodecGenerator:
     """Generates the canonical JSON ser/de package from json_schema.py.
 
@@ -884,7 +1039,7 @@ class JsonCodecGenerator:
             f.write('--  Architecture: component logic > Json_Codec > service binding > PCL\n')
             f.write('\n')
             f.write('with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')
-            for tp in _DATA_MODEL_TYPES_PKGS:
+            for tp in _needed_data_model_pkgs_for_schemas():
                 f.write(f'with {tp};  use {tp};\n')
             f.write('\n')
             f.write(f'package {self.PKG} is\n')
