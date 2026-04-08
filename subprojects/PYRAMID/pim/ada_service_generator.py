@@ -252,7 +252,59 @@ _DATA_MODEL_TYPES_PKGS = [
 # Primary (most specific) package — kept for codec / single-package references.
 _DATA_MODEL_TYPES_PKG = _DATA_MODEL_TYPES_PKGS[-1]
 
-def _types_pkg_from_proto(proto_file: ProtoFile) -> str:
+# Data model codec packages (no base-types codec; Identifier/Ack use Ada stdlib paths).
+_DM_CODEC_PKG_MAP: List[Tuple[str, str]] = [
+    ('.data_model.common.',   'Pyramid_Data_Model_Common_Types_Codec'),
+    ('.data_model.tactical.', 'Pyramid_Data_Model_Tactical_Types_Codec'),
+]
+
+
+def _needed_data_model_pkgs(all_rpcs: List[Tuple[str, 'ProtoRpc']]) -> List[str]:
+    """Return Ada data model type packages actually needed by the RPCs, in declaration order."""
+    needed: set = set()
+    for _, rpc in all_rpcs:
+        for full_type in (rpc.req, rpc.rsp):
+            if '.data_model.base.' in full_type:
+                needed.add('Pyramid_Data_Model_Base_Types')
+            elif '.data_model.common.' in full_type:
+                needed.add('Pyramid_Data_Model_Common_Types')
+            elif '.data_model.tactical.' in full_type:
+                needed.add('Pyramid_Data_Model_Tactical_Types')
+    return [p for p in _DATA_MODEL_TYPES_PKGS if p in needed]
+
+
+def _needed_dm_codec_pkgs(all_rpcs: List[Tuple[str, 'ProtoRpc']]) -> List[str]:
+    """Return data model codec packages actually needed by the RPCs, in declaration order."""
+    needed: set = set()
+    for _, rpc in all_rpcs:
+        for full_type in (rpc.req, rpc.rsp):
+            for fragment, pkg in _DM_CODEC_PKG_MAP:
+                if fragment in full_type:
+                    needed.add(pkg)
+    return [pkg for _, pkg in _DM_CODEC_PKG_MAP if pkg in needed]
+
+
+def _topics_for_proto(
+        parsed: 'ProtoFile', is_provided: bool
+) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Return (sub_topics, pub_topics) for the service, based on its proto package.
+
+    Topics are only generated for services whose proto package contains a
+    recognised key fragment.  Services with no matching fragment get no topics.
+    """
+    pkg_lower = parsed.package.lower()
+    sub: Dict[str, str] = {}
+    pub: Dict[str, str] = {}
+    # Standard bridge topics are only for the tactical_objects service.
+    if 'tactical_objects' in pkg_lower:
+        if is_provided:
+            sub.update(SUBSCRIBE_TOPICS)
+        else:
+            pub.update(PUBLISH_TOPICS)
+    return sub, pub
+
+
+def _types_pkg_from_proto(proto_file: 'ProtoFile') -> str:
     """Return the primary Ada types package (tactical — includes all types)."""
     return _DATA_MODEL_TYPES_PKG
 
@@ -357,10 +409,7 @@ class AdaServiceGenerator:
         })
 
         is_provided = _is_provided(parsed)
-        # Provided bindings: Ada client subscribes to server-published topics
-        # Consumed bindings: Ada client publishes to server-subscribed topics
-        sub_topics  = SUBSCRIBE_TOPICS if is_provided else {}
-        pub_topics  = {} if is_provided else PUBLISH_TOPICS
+        sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
 
         with open(path, 'w') as f:
             f.write(f'--  Auto-generated service binding specification\n')
@@ -381,9 +430,9 @@ class AdaServiceGenerator:
             f.write(f'--  JSON serialisation/deserialisation is provided by the companion\n')
             f.write(f'--  {codec_pkg} package.\n')
             f.write(f'\n')
-            for tp in _DATA_MODEL_TYPES_PKGS:
+            for tp in _needed_data_model_pkgs(all_rpcs):
                 f.write(f'with {tp};  use {tp};\n')
-            # Import Json_Codec if any Invoke_* uses wire types
+            # Import Json_Codec only if any Invoke_* uses wire types
             has_wire_types = is_provided and any(
                 schema.INVOKE_WIRE_TYPES.get(rpc.ada_req_type)
                 for svc in parsed.services for rpc in svc.rpcs)
@@ -539,14 +588,10 @@ class AdaServiceGenerator:
     def _write_body(self, path: Path, pkg_name: str, parsed: ProtoFile,
                     all_rpcs: List[Tuple[str, ProtoRpc]]):
         is_provided = _is_provided(parsed)
-        sub_topics  = SUBSCRIBE_TOPICS if is_provided else {}
-        pub_topics  = {} if is_provided else PUBLISH_TOPICS
-
-        # Data model codec packages for serialisation (baked at generation time)
-        _DM_CODEC_PKGS = [
-            'Pyramid_Data_Model_Common_Types_Codec',
-            'Pyramid_Data_Model_Tactical_Types_Codec',
-        ]
+        sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
+        has_wire_types = is_provided and any(
+            schema.INVOKE_WIRE_TYPES.get(rpc.ada_req_type)
+            for svc in parsed.services for rpc in svc.rpcs)
 
         with open(path, 'w') as f:
             f.write(f'--  Auto-generated service binding body\n')
@@ -557,12 +602,13 @@ class AdaServiceGenerator:
             f.write(f'with Interfaces.C.Strings;\n')
             f.write(f'with System;\n')
             f.write(f'with System.Storage_Elements;\n')
-            # Bring codec packages into scope for To_Json / From_Json
-            for cp in _DM_CODEC_PKGS:
+            # Only bring in codec packages for the types this service actually uses
+            for cp in _needed_dm_codec_pkgs(all_rpcs):
                 f.write(f'with {cp};  use {cp};\n')
-            # Import Json_Codec for wire-type serialisation in Invoke_*
-            codec_pkg = _codec_pkg_from_proto(parsed)
-            f.write(f'with {codec_pkg};\n')
+            # Import service Json_Codec only when Invoke_* procedures need it
+            if has_wire_types:
+                codec_pkg = _codec_pkg_from_proto(parsed)
+                f.write(f'with {codec_pkg};\n')
             f.write(f'\n')
             f.write(f'package body {pkg_name} is\n')
             f.write(f'\n')
@@ -838,6 +884,25 @@ def _ada_tag(key: str) -> str:
     return '_'.join(w.capitalize() for w in key.split('_'))
 
 
+def _needed_data_model_pkgs_for_schemas() -> List[str]:
+    """Return Ada data model type packages needed by json_schema.ALL_SCHEMAS.
+
+    Analyses the enum fields in every schema to derive which data model packages
+    actually define the Ada types referenced in the codec.
+    """
+    needed: set = set()
+    for msg in schema.ALL_SCHEMAS:
+        for fld in msg.fields:
+            if fld.is_enum:
+                spec = schema.ENUM_SPECS[fld.kind]
+                # proto_file is the absolute path; stem gives e.g. 'common'
+                stem = Path(spec.proto_file).stem
+                ada_pkg = f'Pyramid_Data_Model_{stem.capitalize()}_Types'
+                if ada_pkg in _DATA_MODEL_TYPES_PKGS:
+                    needed.add(ada_pkg)
+    return [p for p in _DATA_MODEL_TYPES_PKGS if p in needed]
+
+
 class JsonCodecGenerator:
     """Generates the canonical JSON ser/de package from json_schema.py.
 
@@ -884,7 +949,7 @@ class JsonCodecGenerator:
             f.write('--  Architecture: component logic > Json_Codec > service binding > PCL\n')
             f.write('\n')
             f.write('with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')
-            for tp in _DATA_MODEL_TYPES_PKGS:
+            for tp in _needed_data_model_pkgs_for_schemas():
                 f.write(f'with {tp};  use {tp};\n')
             f.write('\n')
             f.write(f'package {self.PKG} is\n')
