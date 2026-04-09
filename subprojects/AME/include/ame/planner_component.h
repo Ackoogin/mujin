@@ -28,7 +28,22 @@ struct PlannerExecutionResult {
   std::string error_msg;
 };
 
-/// \brief PCL-backed planner component with ROS-agnostic planning logic.
+/// \brief PCL-backed planner component.
+///
+/// Ports created during on_configure():
+///   pub  "bt_xml"      (ame/BTXML)      — compiled BT XML after successful planning
+///   svc  "load_domain" (ame/LoadDomain) — load PDDL domain from strings at runtime
+///   svc  "plan"        (ame/Plan)       — synchronous planning request/response
+///
+/// Planning runs synchronously on the executor thread (no std::thread).
+///
+/// Parameters:
+///   domain.pddl_file     (string, "")
+///   domain.problem_file  (string, "")
+///   plan_audit.enabled   (bool,   true)
+///   plan_audit.path      (string, "plan_audit.jsonl")
+///   compiler.parallel    (bool,   false)
+///   action_registry.<n>  (string) — maps PDDL action name to BT node type
 class PlannerComponent : public pcl::Component {
 public:
   using QueryStateCallback = std::function<WorldStateSnapshot()>;
@@ -41,27 +56,16 @@ public:
   /// \brief Configure distributed state access through a callback.
   void setQueryStateCallback(QueryStateCallback callback);
 
-  /// \brief Register or inspect PDDL-to-BT action mappings.
   ActionRegistry& actionRegistry() { return registry_; }
-
-  /// \brief Register or inspect PDDL-to-BT action mappings.
   const ActionRegistry& actionRegistry() const { return registry_; }
 
-  /// \brief Access the underlying planner for in-process hierarchical planning.
   Planner& planner() { return planner_; }
-
-  /// \brief Access the plan compiler for in-process hierarchical planning.
   PlanCompiler& compiler() { return compiler_; }
 
-  /// \brief Access the plan audit log (may be nullptr if disabled).
   PlanAuditLog* planAuditLog() {
     return audit_log_.has_value() ? &audit_log_.value() : nullptr;
   }
 
-  /// \brief Load a domain from PDDL strings at runtime.
-  /// Stores the parsed domain template for use in distributed-mode snapshots,
-  /// replacing the need to read domain files from disk.
-  /// Returns {success, error_msg, num_fluents, num_ground_actions}.
   struct LoadDomainResult {
     bool success = false;
     std::string error_msg;
@@ -72,13 +76,9 @@ public:
                                          const std::string& domain_pddl,
                                          const std::string& problem_pddl);
 
-  /// \brief Returns the currently loaded domain ID (empty if loaded from files).
   const std::string& domainId() const { return loaded_domain_id_; }
-
-  /// \brief Returns true if a domain has been loaded (from files or strings).
   bool hasDomain() const { return loaded_domain_template_ != nullptr; }
 
-  /// \brief Solve a goal and compile the resulting plan to BT XML.
   PlannerExecutionResult solveGoal(const std::vector<std::string>& goal_fluents);
 
 protected:
@@ -103,9 +103,29 @@ private:
   QueryStateCallback query_state_callback_;
   bool compiler_parallel_ = false;
 
-  // Domain loaded at runtime via loadDomainFromStrings()
   std::string loaded_domain_id_;
   std::unique_ptr<WorldModel> loaded_domain_template_;
+
+  // PCL ports (valid after on_configure)
+  pcl_port_t* pub_bt_xml_ = nullptr;
+
+  // Per-service response buffers (serialised on executor thread)
+  std::string resp_buf_load_domain_;
+  std::string resp_buf_plan_;
+
+  // -- Static PCL service callbacks ----------------------------------------
+
+  static pcl_status_t handleLoadDomainCb(pcl_container_t*,
+                                          const pcl_msg_t* req,
+                                          pcl_msg_t* resp,
+                                          pcl_svc_context_t*,
+                                          void* ud);
+
+  static pcl_status_t handlePlanCb(pcl_container_t*,
+                                    const pcl_msg_t* req,
+                                    pcl_msg_t* resp,
+                                    pcl_svc_context_t*,
+                                    void* ud);
 };
 
 }  // namespace ame

@@ -4,32 +4,22 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
-#include <std_msgs/msg/string.hpp>
-
-#include <ame_ros2/srv/dispatch_goals.hpp>
-
-#include <map>
-#include <memory>
-#include <string>
 
 namespace ame_ros2 {
 
-/// \brief ROS2 lifecycle node that wraps AgentDispatcher for multi-agent coordination.
+/// \brief Thin ROS2 lifecycle wrapper for ame::AgentDispatcher.
 ///
-/// Provides transport layer for dispatching BT XML to remote agent executors
-/// via topic publication and status subscription.
+/// All multi-agent dispatch logic, pub/sub wiring, and port creation live
+/// in the PCL component.  This node only bridges ROS2 lifecycle transitions
+/// and the ROS2 parameter system.
 ///
-/// For each agent, publishes to:
-///   /{agent_id}/executor/bt_xml     — BT XML to execute
+/// The component creates these PCL ports during on_configure():
+///   pub  "{id}/executor/bt_xml"  (ame/BTXML)         — one per agent in roster
+///   sub  "{id}/executor/status"  (ame/Status)        — one per agent in roster
+///   svc  "dispatch_goals"        (ame/DispatchGoals)
 ///
-/// Subscribes to:
-///   /{agent_id}/executor/status     — "IDLE"/"RUNNING"/"SUCCESS"/"FAILURE"
-///
-/// Service (active after on_activate):
-///   ~/dispatch_goals    (ame_ros2/srv/DispatchGoals) — trigger goal dispatch
-///
-/// Parameters:
-///   world_model_node    (string, "world_model_node") — for in-process WM access
+/// Parameters forwarded to PCL component before configure:
+///   agent_ids  (string, "") — comma-separated agent IDs (e.g. "uav1,uav2")
 class AgentDispatcherNode : public rclcpp_lifecycle::LifecycleNode {
 public:
     explicit AgentDispatcherNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
@@ -49,39 +39,10 @@ public:
                                    ame::PlanCompiler* compiler,
                                    ame::ActionRegistry* registry);
 
-    /// \brief Access the underlying component.
     ame::AgentDispatcher& dispatcher() { return component_; }
 
 private:
     ame::AgentDispatcher component_;
-
-    // In-process mode pointers
-    ame::WorldModel* inprocess_wm_ = nullptr;
-    ame::Planner* inprocess_planner_ = nullptr;
-    ame::PlanCompiler* inprocess_compiler_ = nullptr;
-    ame::ActionRegistry* inprocess_registry_ = nullptr;
-
-    // Publishers for each agent (created dynamically)
-    std::map<std::string, rclcpp::Publisher<std_msgs::msg::String>::SharedPtr> agent_bt_pubs_;
-
-    // Subscriptions for agent status
-    std::map<std::string, rclcpp::Subscription<std_msgs::msg::String>::SharedPtr> agent_status_subs_;
-    std::map<std::string, std::string> agent_statuses_;
-
-    // Service
-    rclcpp::Service<ame_ros2::srv::DispatchGoals>::SharedPtr srv_dispatch_;
-
-    void handleDispatchGoals(
-        std::shared_ptr<ame_ros2::srv::DispatchGoals::Request> req,
-        std::shared_ptr<ame_ros2::srv::DispatchGoals::Response> res);
-
-    // Transport callbacks
-    bool sendBTToAgent(const std::string& agent_id, const std::string& bt_xml);
-    std::string queryAgentStatus(const std::string& agent_id);
-
-    // Ensure publisher exists for agent
-    void ensureAgentPublisher(const std::string& agent_id);
-    void ensureAgentStatusSubscription(const std::string& agent_id);
 };
 
 }  // namespace ame_ros2

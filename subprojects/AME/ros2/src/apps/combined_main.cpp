@@ -1,6 +1,14 @@
-/// \brief `ame_combined` in-process single-executor mode.
-/// All nodes share one `SingleThreadedExecutor` and the canonical `WorldModel`
-/// is accessed directly (no service IPC for BT nodes or planner snapshots).
+/// \brief `ame_combined` — in-process single-executor deployment.
+///
+/// Architecture (post-PCL migration):
+///   - A PCL Executor drives all component ticking and message dispatch
+///     in a dedicated background thread.
+///   - A ROS2 SingleThreadedExecutor runs on the main thread and handles
+///     only ROS2 lifecycle transitions driven by AmeLifecycleManager.
+///   - The thin ROS2 lifecycle nodes bridge ROS2 lifecycle transitions to
+///     PCL component configure/activate/deactivate/cleanup/shutdown calls.
+///   - All WorldModel reads/writes, BT ticking, and planning happen on the
+///     PCL executor thread — no cross-thread WorldModel access.
 ///
 /// Usage:
 ///   ros2 run ame_ros2 ame_combined \
@@ -8,9 +16,8 @@
 ///     -p domain.pddl_file:=subprojects/AME/domains/uav_search/domain.pddl \
 ///     -p domain.problem_file:=subprojects/AME/domains/uav_search/problem.pddl
 ///
-/// After lifecycle startup, send a plan goal:
-///   ros2 action send_goal /planner_node/plan ame_ros2/action/Plan \
-///     "{goal_fluents: ['(searched sector_a)', '(classified sector_a)'], replan: false}"
+/// After lifecycle startup, send a plan via the PCL "plan" service
+/// (or extend with a ROS2 transport adapter for ros2 action send_goal).
 
 #include "ame_ros2/world_model_node.hpp"
 #include "ame_ros2/planner_node.hpp"
@@ -18,19 +25,20 @@
 #include "ame_ros2/lifecycle_manager.hpp"
 
 #include <ame/pyramid_service.h>
+#include <pcl/executor.hpp>
 
 #include <behaviortree_cpp/action_node.h>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 
+#include <atomic>
 #include <memory>
 #include <thread>
 
 // ---------------------------------------------------------------------------
-// Stub action nodes for the UAV search demo domain.
-// These remain registered for backwards compatibility; real deployments
-// should also wire InvokeService via setPyramidService() (Extension 4).
+// Stub action nodes for the UAV search demo domain
 // ---------------------------------------------------------------------------
+
 class StubMoveAction : public BT::SyncActionNode {
 public:
   StubMoveAction(const std::string& name, const BT::NodeConfiguration& config)
@@ -65,55 +73,70 @@ public:
   }
 };
 
+// ---------------------------------------------------------------------------
+// main
+// ---------------------------------------------------------------------------
+
 int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
 
-  // Create nodes
+  // -- Create thin ROS2 lifecycle nodes -----------------------------------
   auto wm_node = std::make_shared<ame_ros2::WorldModelNode>();
   auto pl_node = std::make_shared<ame_ros2::PlannerNode>();
   auto ex_node = std::make_shared<ame_ros2::ExecutorNode>();
   auto lm_node = std::make_shared<ame_ros2::AmeLifecycleManager>();
 
-  // Wire in-process mode: direct WorldModel pointer skips service calls
+  // -- Wire in-process dependencies (before configure) --------------------
+  // The thin nodes delegate these to their components immediately.
   pl_node->setInProcessWorldModel(&wm_node->worldModel());
   ex_node->setInProcessWorldModel(&wm_node->worldModel());
 
-  // Wire PYRAMID service (mock for demo — replace with real adapter)
+  // PYRAMID service (mock for demo)
   ame::MockPyramidService mock_pyramid;
   ex_node->setPyramidService(&mock_pyramid);
 
-  // Wire hierarchical planning dependencies for ExecutePhaseAction / DelegateToAgent
+  // Hierarchical planning dependencies
   ex_node->setPlanner(&pl_node->planner());
   ex_node->setPlanCompiler(&pl_node->compiler());
   ex_node->setActionRegistry(&pl_node->actionRegistry());
   ex_node->setPlanAuditLog(pl_node->planAuditLog());
 
-  // Register action node types on the ExecutorNode's factory.
-  // These must be registered before loadAndExecute() is called.
-  // InvokeService, ExecutePhaseAction, and DelegateToAgent are auto-registered.
+  // Register action node types on the ExecutorNode's BT factory
   ex_node->factory().registerNodeType<StubMoveAction>("StubMoveAction");
   ex_node->factory().registerNodeType<StubSearchAction>("StubSearchAction");
   ex_node->factory().registerNodeType<StubClassifyAction>("StubClassifyAction");
 
-  // Also register action mappings in the PlannerNode's ActionRegistry so that
-  // the compiled BT XML uses the correct node type names.
+  // Register PDDL-to-BT action mappings in the PlannerNode's ActionRegistry
   pl_node->actionRegistry().registerAction("move",     "StubMoveAction");
   pl_node->actionRegistry().registerAction("search",   "StubSearchAction");
   pl_node->actionRegistry().registerAction("classify", "StubClassifyAction");
 
-  // Single-threaded executor: all ROS2 callbacks run sequentially.
-  // This is required because WorldModel has no mutex.
-  // The Planner's std::thread uses a local copy of WorldModel, so no race.
-  rclcpp::executors::SingleThreadedExecutor executor;
-  executor.add_node(wm_node->get_node_base_interface());
-  executor.add_node(pl_node->get_node_base_interface());
-  executor.add_node(ex_node->get_node_base_interface());
-  executor.add_node(lm_node->get_node_base_interface());
+  // -- Create PCL executor and register component handles ----------------
+  // The PCL executor drives ticking; components are added here so the
+  // executor knows about them before on_configure is called.
+  pcl::Executor pcl_executor;
+  pcl_executor.add(wm_node->component());
+  pcl_executor.add(pl_node->plannerComponent());
+  pcl_executor.add(ex_node->component());
 
-  // Bring all nodes through configure → activate in a background thread
-  // (so we don't block spin())
+  // -- Build the ROS2 executor --------------------------------------------
+  rclcpp::executors::SingleThreadedExecutor ros_executor;
+  ros_executor.add_node(wm_node->get_node_base_interface());
+  ros_executor.add_node(pl_node->get_node_base_interface());
+  ros_executor.add_node(ex_node->get_node_base_interface());
+  ros_executor.add_node(lm_node->get_node_base_interface());
+
+  // -- Start PCL executor in a background thread -------------------------
+  // The PCL executor will idle until components are activated via
+  // ROS2 lifecycle transitions.
+  std::atomic<bool> pcl_running{true};
+  std::thread pcl_thread([&] {
+    pcl_executor.spin();
+    pcl_running.store(false);
+  });
+
+  // -- Bring all nodes through configure → activate via lifecycle manager --
   std::thread startup_thread([&lm_node]() {
-    // Give the executor a moment to start
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     if (!lm_node->startup()) {
       RCLCPP_ERROR(rclcpp::get_logger("ame_combined"),
@@ -122,10 +145,13 @@ int main(int argc, char** argv) {
   });
 
   RCLCPP_INFO(rclcpp::get_logger("ame_combined"),
-              "ame_combined running. Send a Plan action to /planner_node/plan to start.");
+              "ame_combined running (PCL executor + ROS2 lifecycle).");
 
-  executor.spin();
+  ros_executor.spin();
 
+  // -- Shutdown -----------------------------------------------------------
+  pcl_executor.requestShutdown();
+  pcl_thread.join();
   startup_thread.join();
   rclcpp::shutdown();
   return 0;

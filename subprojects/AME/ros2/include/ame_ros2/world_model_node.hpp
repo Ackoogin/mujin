@@ -5,34 +5,30 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
 
-#include <ame_ros2/msg/world_state.hpp>
-#include <ame_ros2/srv/get_fact.hpp>
-#include <ame_ros2/srv/load_domain.hpp>
-#include <ame_ros2/srv/query_state.hpp>
-#include <ame_ros2/srv/set_fact.hpp>
-#include <ame_ros2/msg/detection.hpp>
-
 namespace ame_ros2 {
 
-/// \brief ROS2 lifecycle node owning `ame::WorldModel` and exposing services.
+/// \brief Thin ROS2 lifecycle wrapper for ame::WorldModelComponent.
 ///
-/// Services (available after on_configure):
-///   ~/get_fact      (ame_ros2/srv/GetFact)
-///   ~/set_fact      (ame_ros2/srv/SetFact)
-///   ~/query_state   (ame_ros2/srv/QueryState)
-///   ~/load_domain   (ame_ros2/srv/LoadDomain) — reload domain from PDDL strings
+/// All business logic and communication (pub/sub/services) live in the
+/// PCL component.  This node only bridges ROS2 lifecycle transitions and
+/// the ROS2 parameter system to the component.
 ///
-/// Publisher (active after on_activate):
-///   /world_state    (ame_ros2/msg/WorldState) — QoS: reliable, transient_local
+/// Communication is provided by PCL ports on the component:
+///   pub  "world_state"  — periodic state snapshot (ame/WorldState)
+///   sub  "detections"   — perception ingress (ame/Detection)
+///   svc  "get_fact"     — GetFact request/response
+///   svc  "set_fact"     — SetFact request/response
+///   svc  "query_state"  — QueryState request/response
+///   svc  "load_domain"  — LoadDomain request/response
 ///
-/// Parameters:
-///   domain.pddl_file    (string, "")    — path to PDDL domain file (deployment)
-///   domain.problem_file (string, "")    — path to PDDL problem file (deployment)
-///   audit_log.enabled   (bool, true)
-///   audit_log.path      (string, "wm_audit.jsonl")
-///   publish_rate_hz     (double, 10.0)
-///   perception.enabled  (bool, true)         — enable /detections subscription
-///   perception.confidence_threshold (double, 0.5) — minimum confidence to accept
+/// Parameters (forwarded to PCL component before configure):
+///   domain.pddl_file                (string, "")
+///   domain.problem_file             (string, "")
+///   audit_log.enabled               (bool,   true)
+///   audit_log.path                  (string, "wm_audit.jsonl")
+///   publish_rate_hz                 (double, 10.0)
+///   perception.enabled              (bool,   true)
+///   perception.confidence_threshold (double, 0.5)
 class WorldModelNode : public rclcpp_lifecycle::LifecycleNode {
 public:
   explicit WorldModelNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
@@ -50,43 +46,11 @@ public:
   ame::WorldModel& worldModel() { return component_.worldModel(); }
   const ame::WorldModel& worldModel() const { return component_.worldModel(); }
 
+  /// \brief Direct component access.
+  ame::WorldModelComponent& component() { return component_; }
+
 private:
   ame::WorldModelComponent component_;
-
-  // Services
-  rclcpp::Service<ame_ros2::srv::GetFact>::SharedPtr srv_get_fact_;
-  rclcpp::Service<ame_ros2::srv::SetFact>::SharedPtr srv_set_fact_;
-  rclcpp::Service<ame_ros2::srv::QueryState>::SharedPtr srv_query_state_;
-  rclcpp::Service<ame_ros2::srv::LoadDomain>::SharedPtr srv_load_domain_;
-
-  // Publisher + debounce timer
-  rclcpp_lifecycle::LifecyclePublisher<ame_ros2::msg::WorldState>::SharedPtr
-    pub_world_state_;
-  rclcpp::TimerBase::SharedPtr publish_timer_;
-
-  // Service handlers
-  void handleGetFact(
-    std::shared_ptr<ame_ros2::srv::GetFact::Request> req,
-    std::shared_ptr<ame_ros2::srv::GetFact::Response> res);
-
-  void handleSetFact(
-    std::shared_ptr<ame_ros2::srv::SetFact::Request> req,
-    std::shared_ptr<ame_ros2::srv::SetFact::Response> res);
-
-  void handleQueryState(
-    std::shared_ptr<ame_ros2::srv::QueryState::Request> req,
-    std::shared_ptr<ame_ros2::srv::QueryState::Response> res);
-
-  void handleLoadDomain(
-    std::shared_ptr<ame_ros2::srv::LoadDomain::Request> req,
-    std::shared_ptr<ame_ros2::srv::LoadDomain::Response> res);
-
-  void publishWorldState();
-
-  // Perception integration
-  void handleDetection(const ame_ros2::msg::Detection::SharedPtr msg);
-  rclcpp::Subscription<ame_ros2::msg::Detection>::SharedPtr sub_detections_;
-  double perception_confidence_threshold_ = 0.5;
 };
 
-} // namespace ame_ros2
+}  // namespace ame_ros2

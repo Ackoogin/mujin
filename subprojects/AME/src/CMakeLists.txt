@@ -9,6 +9,7 @@ add_library(ame_core STATIC
     lib/plan_compiler.cpp
     lib/pddl_parser.cpp
     lib/planner.cpp
+    lib/pcl_msg_json.cpp
     lib/world_model_component.cpp
     lib/planner_component.cpp
     lib/executor_component.cpp
@@ -81,6 +82,16 @@ endif()
 # Demo / vertical-slice executable
 # ---------------------------------------------------------------------------
 add_executable(ame_test_app apps/main.cpp)
+
+# ---------------------------------------------------------------------------
+# Pure-PCL entry point (no ROS2 dependency)
+# ---------------------------------------------------------------------------
+add_executable(ame_pcl_main apps/ame_pcl_main.cpp)
+target_link_libraries(ame_pcl_main PRIVATE ame_core)
+if(AME_FOXGLOVE)
+    target_link_libraries(ame_pcl_main PRIVATE ame_foxglove)
+    target_compile_definitions(ame_pcl_main PRIVATE AME_FOXGLOVE=1)
+endif()
 
 target_link_libraries(ame_test_app
     PRIVATE

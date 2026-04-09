@@ -2,46 +2,31 @@
 
 #include <ame/planner_component.h>
 
-#include <rclcpp_action/rclcpp_action.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
-#include <std_msgs/msg/string.hpp>
-
-#include <ame_ros2/action/plan.hpp>
-#include <ame_ros2/srv/load_domain.hpp>
-#include <ame_ros2/srv/query_state.hpp>
-
-#include <memory>
-#include <thread>
 
 namespace ame_ros2 {
 
-/// \brief ROS2 lifecycle node running LAPKT BRFS as an action server.
+/// \brief Thin ROS2 lifecycle wrapper for ame::PlannerComponent.
 ///
-/// Action server (active after on_activate):
-///   ~/plan           (ame_ros2/action/Plan)
+/// All planning logic, service handling, and port wiring live in the PCL
+/// component.  This node only bridges ROS2 lifecycle transitions and the
+/// ROS2 parameter system.
 ///
-/// Services (available after on_configure):
-///   ~/load_domain    (ame_ros2/srv/LoadDomain) — load domain from PDDL strings
+/// The component creates these PCL ports during on_configure():
+///   pub  "bt_xml"      (ame/BTXML)      — compiled BT XML after plan
+///   svc  "load_domain" (ame/LoadDomain) — load PDDL from strings
+///   svc  "plan"        (ame/Plan)       — synchronous plan request
 ///
-/// Parameters:
-///   domain.pddl_file       (string, "") — optional, can use load_domain service instead
-///   domain.problem_file    (string, "") — optional, can use load_domain service instead
-///   world_model_node       (string, "world_model_node") — namespace for QueryState client
-///   plan_audit.enabled     (bool, true)
-///   plan_audit.path        (string, "plan_audit.jsonl")
-///   compiler.parallel      (bool, false) — use causal-graph compiler
-///   action_registry.<name> (string) — maps PDDL action name to BT node type
-///
-/// Multiple PlannerNode instances can run concurrently with different node names
-/// and different domain models. Each gets its own action server at ~/plan.
+/// Parameters forwarded to the PCL component before configure:
+///   domain.pddl_file    (string, "")
+///   domain.problem_file (string, "")
+///   plan_audit.enabled  (bool,   true)
+///   plan_audit.path     (string, "plan_audit.jsonl")
+///   compiler.parallel   (bool,   false)
 class PlannerNode : public rclcpp_lifecycle::LifecycleNode {
 public:
-  using PlanAction = ame_ros2::action::Plan;
-  using GoalHandlePlan = rclcpp_action::ServerGoalHandle<PlanAction>;
-
   explicit PlannerNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
-  ~PlannerNode();
 
   using CallbackReturn =
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -53,61 +38,20 @@ public:
   CallbackReturn on_shutdown(const rclcpp_lifecycle::State& prev) override;
 
   /// \brief Injects canonical WorldModel for in-process mode.
-  /// When set, snapshotWorldModel() copies state from this pointer instead of
-  /// calling the QueryState service.
   void setInProcessWorldModel(ame::WorldModel* wm) {
     inprocess_wm_ = wm;
     component_.setInProcessWorldModel(wm);
   }
 
-  /// \brief Exposes ActionRegistry for action node type registration.
   ame::ActionRegistry& actionRegistry() { return component_.actionRegistry(); }
-
-  /// \brief Expose Planner for in-process hierarchical planning.
-  ame::Planner& planner() { return component_.planner(); }
-
-  /// \brief Expose PlanCompiler for in-process hierarchical planning.
-  ame::PlanCompiler& compiler() { return component_.compiler(); }
-
-  /// \brief Expose PlanAuditLog for in-process audit trail (nullptr if disabled).
-  ame::PlanAuditLog* planAuditLog() { return component_.planAuditLog(); }
-
-  /// \brief Expose PlannerComponent for in-process domain loading.
+  ame::Planner& planner()               { return component_.planner(); }
+  ame::PlanCompiler& compiler()         { return component_.compiler(); }
+  ame::PlanAuditLog* planAuditLog()     { return component_.planAuditLog(); }
   ame::PlannerComponent& plannerComponent() { return component_; }
 
 private:
   ame::PlannerComponent component_;
-
-  // In-process mode: direct WorldModel pointer (null = use service)
   ame::WorldModel* inprocess_wm_ = nullptr;
-
-  // Action server
-  rclcpp_action::Server<PlanAction>::SharedPtr action_server_;
-  rclcpp_lifecycle::LifecyclePublisher<std_msgs::msg::String>::SharedPtr pub_bt_xml_;
-
-  // Client to WorldModelNode QueryState service (distributed mode)
-  rclcpp::Client<ame_ros2::srv::QueryState>::SharedPtr client_query_state_;
-
-  // Service server for runtime domain loading
-  rclcpp::Service<ame_ros2::srv::LoadDomain>::SharedPtr srv_load_domain_;
-
-  void handleLoadDomain(
-    const std::shared_ptr<ame_ros2::srv::LoadDomain::Request> request,
-    std::shared_ptr<ame_ros2::srv::LoadDomain::Response> response);
-
-  // Action server callbacks
-  rclcpp_action::GoalResponse handleGoal(
-    const rclcpp_action::GoalUUID& uuid,
-    std::shared_ptr<const PlanAction::Goal> goal);
-
-  rclcpp_action::CancelResponse handleCancel(std::shared_ptr<GoalHandlePlan> goal_handle);
-
-  void handleAccepted(std::shared_ptr<GoalHandlePlan> goal_handle);
-
-  /// \brief Runs on a dedicated thread and blocks during BRFS solve.
-  void executePlan(std::shared_ptr<GoalHandlePlan> goal_handle);
-
-  ame::WorldStateSnapshot queryWorldState() const;
 };
 
-} // namespace ame_ros2
+}  // namespace ame_ros2

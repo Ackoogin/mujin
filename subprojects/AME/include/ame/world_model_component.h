@@ -37,15 +37,36 @@ struct WorldStateSnapshot {
   std::vector<std::string> goal_fluents;
 };
 
-/// \brief PCL-backed world model component with ROS-agnostic business logic.
+// Forward declaration (defined in pcl_msg_json.h).
+struct Detection;
+
+/// \brief PCL-backed world model component.
+///
+/// Ports created during on_configure():
+///   pub  "world_state"  (ame/WorldState)   — periodic state snapshot
+///   sub  "detections"   (ame/Detection)    — perception ingress
+///   svc  "get_fact"     (ame/GetFact)
+///   svc  "set_fact"     (ame/SetFact)
+///   svc  "query_state"  (ame/QueryState)
+///   svc  "load_domain"  (ame/LoadDomain)
+///
+/// on_tick() publishes world_state at publish_rate_hz (default 10 Hz)
+/// when the state is dirty.
+///
+/// Parameters:
+///   domain.pddl_file                (string, "")
+///   domain.problem_file             (string, "")
+///   audit_log.enabled               (bool,   true)
+///   audit_log.path                  (string, "wm_audit.jsonl")
+///   publish_rate_hz                 (double, 10.0)
+///   perception.enabled              (bool,   true)
+///   perception.confidence_threshold (double, 0.5)
 class WorldModelComponent : public pcl::Component {
 public:
   WorldModelComponent();
 
   /// \brief Access the canonical world model for in-process integrations.
   WorldModel& worldModel() { return wm_; }
-
-  /// \brief Access the canonical world model for in-process integrations.
   const WorldModel& worldModel() const { return wm_; }
 
   /// \brief Query a single fact by key.
@@ -57,9 +78,6 @@ public:
   /// \brief Build a snapshot of either all true facts or the requested keys.
   WorldStateSnapshot queryState(const std::vector<std::string>& keys) const;
 
-  /// \brief Load a domain from PDDL strings at runtime, replacing the current
-  /// world model schema. Existing facts whose keys still exist in the new
-  /// domain are preserved; facts with no matching fluent are dropped.
   struct LoadDomainResult {
     bool success = false;
     std::string error_msg;
@@ -72,20 +90,65 @@ public:
   /// \brief Returns true once after the state changes.
   bool consumeStateDirty();
 
+  /// \brief Apply a detection to the world model (thread-safe via mutation queue).
+  void applyDetection(const Detection& det);
+
 protected:
   pcl_status_t on_configure() override;
   pcl_status_t on_activate() override;
   pcl_status_t on_deactivate() override;
   pcl_status_t on_cleanup() override;
   pcl_status_t on_shutdown() override;
+  pcl_status_t on_tick(double dt) override;
 
 private:
   void loadDomainFromParams();
   WorldStateSnapshot buildSnapshot(const std::vector<std::string>& keys) const;
+  void rewireAuditCallback();
+
+  // PCL ports (valid after on_configure)
+  pcl_port_t* pub_world_state_ = nullptr;
 
   WorldModel wm_;
   std::optional<WmAuditLog> audit_log_;
   std::atomic<bool> state_dirty_{false};
+  double perception_confidence_threshold_ = 0.5;
+
+  // -- Static PCL callbacks ------------------------------------------------
+
+  static void onDetectionCb(pcl_container_t*, const pcl_msg_t* msg, void* ud);
+
+  static pcl_status_t handleGetFactCb(pcl_container_t*,
+                                       const pcl_msg_t* req,
+                                       pcl_msg_t* resp,
+                                       pcl_svc_context_t*,
+                                       void* ud);
+
+  static pcl_status_t handleSetFactCb(pcl_container_t*,
+                                       const pcl_msg_t* req,
+                                       pcl_msg_t* resp,
+                                       pcl_svc_context_t*,
+                                       void* ud);
+
+  static pcl_status_t handleQueryStateCb(pcl_container_t*,
+                                          const pcl_msg_t* req,
+                                          pcl_msg_t* resp,
+                                          pcl_svc_context_t*,
+                                          void* ud);
+
+  static pcl_status_t handleLoadDomainCb(pcl_container_t*,
+                                          const pcl_msg_t* req,
+                                          pcl_msg_t* resp,
+                                          pcl_svc_context_t*,
+                                          void* ud);
+
+  // Per-callback string buffers (valid for the duration of one service call;
+  // service callbacks are serialised on the executor thread so a single buffer
+  // per service is sufficient).
+  std::string resp_buf_get_fact_;
+  std::string resp_buf_set_fact_;
+  std::string resp_buf_query_state_;
+  std::string resp_buf_load_domain_;
 };
 
 }  // namespace ame

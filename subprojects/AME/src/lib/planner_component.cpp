@@ -1,3 +1,4 @@
+#include <ame/pcl_msg_json.h>
 #include <ame/pddl_parser.h>
 #include <ame/planner_component.h>
 
@@ -26,11 +27,11 @@ PlannerComponent::LoadDomainResult PlannerComponent::loadDomainFromStrings(
   try {
     auto wm = std::make_unique<WorldModel>();
     PddlParser::parseFromString(domain_pddl, problem_pddl, *wm);
-    result.num_fluents = wm->numFluents();
+    result.num_fluents       = wm->numFluents();
     result.num_ground_actions = wm->numGroundActions();
-    loaded_domain_id_ = domain_id;
+    loaded_domain_id_       = domain_id;
     loaded_domain_template_ = std::move(wm);
-    result.success = true;
+    result.success          = true;
   } catch (const std::exception& e) {
     result.error_msg = e.what();
   }
@@ -41,14 +42,14 @@ PlannerExecutionResult PlannerComponent::solveGoal(
     const std::vector<std::string>& goal_fluents) {
   PlannerExecutionResult execution_result;
 
-  auto local_wm = snapshotWorldModel(goal_fluents);
+  auto local_wm   = snapshotWorldModel(goal_fluents);
   auto plan_result = planner_.solve(*local_wm);
 
-  execution_result.success = plan_result.success;
+  execution_result.success       = plan_result.success;
   execution_result.solve_time_ms = plan_result.solve_time_ms;
-  execution_result.expanded = plan_result.expanded;
-  execution_result.generated = plan_result.generated;
-  execution_result.cost = plan_result.cost;
+  execution_result.expanded      = plan_result.expanded;
+  execution_result.generated     = plan_result.generated;
+  execution_result.cost          = plan_result.cost;
 
   if (!plan_result.success) {
     execution_result.error_msg = "No plan found";
@@ -72,39 +73,44 @@ PlannerExecutionResult PlannerComponent::solveGoal(
   return execution_result;
 }
 
+// ---------------------------------------------------------------------------
+// Lifecycle
+// ---------------------------------------------------------------------------
+
 pcl_status_t PlannerComponent::on_configure() {
   compiler_parallel_ = paramBool("compiler.parallel", false);
+  pub_bt_xml_        = nullptr;
 
   audit_log_.reset();
   if (paramBool("plan_audit.enabled", true)) {
     audit_log_.emplace(paramStr("plan_audit.path", "plan_audit.jsonl"));
   }
 
+  pub_bt_xml_ = addPublisher("bt_xml", "ame/BTXML");
+  addService("load_domain", "ame/LoadDomain", handleLoadDomainCb, this);
+  addService("plan",        "ame/Plan",       handlePlanCb,        this);
+
   return PCL_OK;
 }
 
-pcl_status_t PlannerComponent::on_activate() {
-  return PCL_OK;
-}
-
-pcl_status_t PlannerComponent::on_deactivate() {
-  return PCL_OK;
-}
+pcl_status_t PlannerComponent::on_activate()   { return PCL_OK; }
+pcl_status_t PlannerComponent::on_deactivate() { return PCL_OK; }
 
 pcl_status_t PlannerComponent::on_cleanup() {
-  if (audit_log_) {
-    audit_log_->flush();
-  }
+  if (audit_log_) audit_log_->flush();
   audit_log_.reset();
+  pub_bt_xml_ = nullptr;
   return PCL_OK;
 }
 
 pcl_status_t PlannerComponent::on_shutdown() {
-  if (audit_log_) {
-    audit_log_->flush();
-  }
+  if (audit_log_) audit_log_->flush();
   return PCL_OK;
 }
+
+// ---------------------------------------------------------------------------
+// Private helpers
+// ---------------------------------------------------------------------------
 
 std::unique_ptr<WorldModel> PlannerComponent::snapshotWorldModel(
     const std::vector<std::string>& goal_fluents) const {
@@ -121,11 +127,9 @@ std::unique_ptr<WorldModel> PlannerComponent::snapshotWorldModel(
 
   std::unique_ptr<WorldModel> wm;
   if (loaded_domain_template_) {
-    // Use the domain loaded at runtime via loadDomainFromStrings()
     wm = std::make_unique<WorldModel>(*loaded_domain_template_);
   } else {
-    // Fall back to parsing from file paths
-    const auto domain_file = paramStr("domain.pddl_file", "");
+    const auto domain_file  = paramStr("domain.pddl_file",  "");
     const auto problem_file = paramStr("domain.problem_file", "");
     if (domain_file.empty() || problem_file.empty()) {
       throw std::runtime_error(
@@ -135,6 +139,7 @@ std::unique_ptr<WorldModel> PlannerComponent::snapshotWorldModel(
     wm = std::make_unique<WorldModel>();
     PddlParser::parse(domain_file, problem_file, *wm);
   }
+
   for (unsigned i = 0; i < wm->numFluents(); ++i) {
     wm->setFact(i, false, "planner_snapshot_reset");
   }
@@ -143,14 +148,9 @@ std::unique_ptr<WorldModel> PlannerComponent::snapshotWorldModel(
   if (!snapshot.success) {
     throw std::runtime_error("World state query failed");
   }
-
   for (const auto& fact : snapshot.facts) {
-    try {
-      wm->setFact(fact.key, fact.value, "snapshot");
-    } catch (...) {
-    }
+    try { wm->setFact(fact.key, fact.value, "snapshot"); } catch (...) {}
   }
-
   wm->setGoal(goal_fluents);
   return wm;
 }
@@ -159,22 +159,20 @@ void PlannerComponent::recordAuditEpisode(
     const WorldModel& local_wm,
     const PlanResult& plan_result,
     const PlannerExecutionResult& execution_result) {
-  if (!audit_log_) {
-    return;
-  }
+  if (!audit_log_) return;
 
   PlanAuditLog::Episode episode;
   episode.ts_us = static_cast<uint64_t>(
       std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::system_clock::now().time_since_epoch())
           .count());
-  episode.solver = "BRFS";
+  episode.solver        = "BRFS";
   episode.solve_time_ms = plan_result.solve_time_ms;
-  episode.success = plan_result.success;
-  episode.expanded = plan_result.expanded;
-  episode.generated = plan_result.generated;
-  episode.cost = plan_result.cost;
-  episode.bt_xml = execution_result.bt_xml;
+  episode.success       = plan_result.success;
+  episode.expanded      = plan_result.expanded;
+  episode.generated     = plan_result.generated;
+  episode.cost          = plan_result.cost;
+  episode.bt_xml        = execution_result.bt_xml;
 
   for (unsigned i = 0; i < local_wm.numFluents(); ++i) {
     if (local_wm.getFact(i)) {
@@ -190,6 +188,65 @@ void PlannerComponent::recordAuditEpisode(
 
   audit_log_->recordEpisode(episode);
   audit_log_->flush();
+}
+
+// ---------------------------------------------------------------------------
+// Static PCL service callbacks
+// ---------------------------------------------------------------------------
+
+pcl_status_t PlannerComponent::handleLoadDomainCb(pcl_container_t*,
+                                                    const pcl_msg_t* req,
+                                                    pcl_msg_t* resp,
+                                                    pcl_svc_context_t*,
+                                                    void* ud) {
+  auto* self  = static_cast<PlannerComponent*>(ud);
+  auto  lreq  = ame_unpack_load_domain_request(req);
+  auto  result = self->loadDomainFromStrings(
+      lreq.domain_id, lreq.domain_pddl, lreq.problem_pddl);
+
+  LoadDomainResponse lresp;
+  lresp.success            = result.success;
+  lresp.error_msg          = result.error_msg;
+  lresp.num_fluents        = result.num_fluents;
+  lresp.num_ground_actions = result.num_ground_actions;
+  self->resp_buf_load_domain_ = ame_pack_load_domain_response(lresp);
+  ame_make_pcl_msg(self->resp_buf_load_domain_, "ame/LoadDomain_Response", *resp);
+  return PCL_OK;
+}
+
+pcl_status_t PlannerComponent::handlePlanCb(pcl_container_t*,
+                                             const pcl_msg_t* req,
+                                             pcl_msg_t* resp,
+                                             pcl_svc_context_t*,
+                                             void* ud) {
+  auto* self  = static_cast<PlannerComponent*>(ud);
+  auto  preq  = ame_unpack_plan_request(req);
+
+  PlanResponse presp;
+  try {
+    auto result = self->solveGoal(preq.goal_fluents);
+    presp.success       = result.success;
+    presp.bt_xml        = result.bt_xml;
+    presp.plan_actions  = result.plan_actions;
+    presp.solve_time_ms = result.solve_time_ms;
+    presp.error_msg     = result.error_msg;
+
+    // Publish compiled BT XML on the bt_xml topic
+    if (result.success && self->pub_bt_xml_) {
+      pcl_msg_t bt_msg;
+      bt_msg.data      = result.bt_xml.c_str();
+      bt_msg.size      = static_cast<uint32_t>(result.bt_xml.size());
+      bt_msg.type_name = "ame/BTXML";
+      pcl_port_publish(self->pub_bt_xml_, &bt_msg);
+    }
+  } catch (const std::exception& e) {
+    presp.success   = false;
+    presp.error_msg = e.what();
+  }
+
+  self->resp_buf_plan_ = ame_pack_plan_response(presp);
+  ame_make_pcl_msg(self->resp_buf_plan_, "ame/Plan_Response", *resp);
+  return PCL_OK;
 }
 
 }  // namespace ame
