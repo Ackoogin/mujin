@@ -1,12 +1,9 @@
-include(FetchContent)
-FetchContent_Declare(
-    nlohmann_json
-    GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG        v3.11.3
-    GIT_SHALLOW    TRUE
+add_library(nlohmann_json INTERFACE)
+add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
+target_include_directories(nlohmann_json
+    INTERFACE
+        "${PYRAMID_ROOT_DIR}/core/external"
 )
-set(JSON_BuildTests OFF CACHE INTERNAL "")
-FetchContent_MakeAvailable(nlohmann_json)
 
 add_library(tactical_objects)
 add_library(pyramid::tactical_objects ALIAS tactical_objects)
