@@ -1,18 +1,26 @@
 #include <ame_ros2/agent_dispatcher_node.hpp>
 
+#include <ame/agent_dispatcher.h>
+
 namespace ame_ros2 {
 
 AgentDispatcherNode::AgentDispatcherNode(const rclcpp::NodeOptions& options)
-    : rclcpp_lifecycle::LifecycleNode("agent_dispatcher_node", options) {}
+    : rclcpp_lifecycle::LifecycleNode("agent_dispatcher_node", options)
+    , component_(std::make_unique<ame::AgentDispatcher>())
+{}
+
+AgentDispatcherNode::~AgentDispatcherNode() = default;
+
+ame::AgentDispatcher& AgentDispatcherNode::dispatcher() { return *component_; }
 
 AgentDispatcherNode::CallbackReturn
 AgentDispatcherNode::on_configure(const rclcpp_lifecycle::State&) {
     declare_parameter("agent_ids", std::string(""));
 
-    component_.setParam("agent_ids",
+    component_->setParam("agent_ids",
                         get_parameter("agent_ids").as_string().c_str());
 
-    if (component_.configure() != PCL_OK) {
+    if (component_->configure() != PCL_OK) {
         RCLCPP_ERROR(get_logger(), "Failed to configure AgentDispatcher");
         return CallbackReturn::FAILURE;
     }
@@ -23,7 +31,7 @@ AgentDispatcherNode::on_configure(const rclcpp_lifecycle::State&) {
 
 AgentDispatcherNode::CallbackReturn
 AgentDispatcherNode::on_activate(const rclcpp_lifecycle::State&) {
-    if (component_.activate() != PCL_OK) {
+    if (component_->activate() != PCL_OK) {
         RCLCPP_ERROR(get_logger(), "Failed to activate AgentDispatcher");
         return CallbackReturn::FAILURE;
     }
@@ -33,19 +41,19 @@ AgentDispatcherNode::on_activate(const rclcpp_lifecycle::State&) {
 
 AgentDispatcherNode::CallbackReturn
 AgentDispatcherNode::on_deactivate(const rclcpp_lifecycle::State&) {
-    component_.deactivate();
+    component_->deactivate();
     return CallbackReturn::SUCCESS;
 }
 
 AgentDispatcherNode::CallbackReturn
 AgentDispatcherNode::on_cleanup(const rclcpp_lifecycle::State&) {
-    component_.cleanup();
+    component_->cleanup();
     return CallbackReturn::SUCCESS;
 }
 
 AgentDispatcherNode::CallbackReturn
 AgentDispatcherNode::on_shutdown(const rclcpp_lifecycle::State&) {
-    component_.shutdown();
+    component_->shutdown();
     return CallbackReturn::SUCCESS;
 }
 
@@ -54,10 +62,10 @@ void AgentDispatcherNode::setInProcessDependencies(
     ame::Planner* planner,
     ame::PlanCompiler* compiler,
     ame::ActionRegistry* registry) {
-    component_.setWorldModel(wm);
-    component_.setPlanner(planner);
-    component_.setPlanCompiler(compiler);
-    component_.setActionRegistry(registry);
+    component_->setWorldModel(wm);
+    component_->setPlanner(planner);
+    component_->setPlanCompiler(compiler);
+    component_->setActionRegistry(registry);
 }
 
 }  // namespace ame_ros2

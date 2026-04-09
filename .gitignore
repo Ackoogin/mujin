@@ -107,3 +107,6 @@ wm_audit.jsonl
 plan_audit.jsonl
 bt_events.jsonl
 
+subprojects/AME/scripts/build/*
+subprojects/AME/scripts/install/*
+subprojects/AME/scripts/log/*

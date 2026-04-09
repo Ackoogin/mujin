@@ -14,13 +14,15 @@
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
-#include <rclcpp_action/rclcpp_action.hpp>
 #include <behaviortree_cpp/action_node.h>
 
 #include <ame_ros2/executor_node.hpp>
 #include <ame_ros2/planner_node.hpp>
 #include <ame_ros2/world_model_node.hpp>
+#include <ame/executor_component.h>
+#include <ame/planner_component.h>
 #include <ame/pyramid_service.h>
+#include <ame/world_model.h>
 
 #include <chrono>
 #include <mutex>
@@ -236,21 +238,11 @@ protected:
     rclcpp::shutdown();
   }
 
-  void spinUntilPlanDone(
-      std::shared_ptr<const ame_ros2::action::Plan::Result>& result,
-      bool& done,
-      std::chrono::seconds timeout = std::chrono::seconds(30)) {
-    auto deadline = std::chrono::steady_clock::now() + timeout;
-    while (!done && std::chrono::steady_clock::now() < deadline) {
-      executor_->spin_some(std::chrono::milliseconds(50));
-    }
-  }
-
   void spinUntilExecutionDone(
       std::chrono::seconds timeout = std::chrono::seconds(10)) {
     auto deadline = std::chrono::steady_clock::now() + timeout;
-    while (ex_node_->lastStatus() != BT::NodeStatus::SUCCESS &&
-           ex_node_->lastStatus() != BT::NodeStatus::FAILURE &&
+    while (ex_node_->component().lastStatus() != BT::NodeStatus::SUCCESS &&
+           ex_node_->component().lastStatus() != BT::NodeStatus::FAILURE &&
            std::chrono::steady_clock::now() < deadline) {
       executor_->spin_some(std::chrono::milliseconds(20));
     }
@@ -267,44 +259,21 @@ protected:
 // Test: Full pipeline — plan, execute, verify all PYRAMID service calls
 // ---------------------------------------------------------------------------
 TEST_F(E2EPyramidServiceTest, PlanAndExecuteInvokesPyramidServices) {
-  // Goal: search and classify sector_a
-  auto action_client =
-      rclcpp_action::create_client<ame_ros2::action::Plan>(
-          pl_node_, "/planner_node/plan");
-  ASSERT_TRUE(action_client->wait_for_action_server(std::chrono::seconds(3)));
-
-  auto goal_msg = ame_ros2::action::Plan::Goal();
-  goal_msg.goal_fluents = {
+  // Plan in-process (PlannerNode's action server was replaced by PCL service;
+  // use solveGoal() directly for fast in-process testing).
+  auto plan_result = pl_node_->plannerComponent().solveGoal({
       "(searched sector_a)",
       "(classified sector_a)",
-  };
+  });
+  ASSERT_TRUE(plan_result.success) << plan_result.error_msg;
+  EXPECT_GE(plan_result.plan_actions.size(), 3u);
+  ASSERT_FALSE(plan_result.bt_xml.empty());
 
-  std::shared_ptr<const ame_ros2::action::Plan::Result> plan_result;
-  bool plan_done = false;
-
-  auto options = rclcpp_action::Client<ame_ros2::action::Plan>::SendGoalOptions();
-  options.result_callback = [&](auto wrapped) {
-    plan_result = wrapped.result;
-    plan_done = true;
-  };
-  action_client->async_send_goal(goal_msg, options);
-
-  // Wait for planning
-  spinUntilPlanDone(plan_result, plan_done);
-  ASSERT_TRUE(plan_done) << "Plan action timed out";
-  ASSERT_NE(plan_result, nullptr);
-  ASSERT_TRUE(plan_result->success) << plan_result->error_msg;
-
-  // Plan should contain move + search + classify (at least 3 steps)
-  EXPECT_GE(plan_result->plan_actions.size(), 3u);
-
-  // In-process mode: explicitly hand the compiled BT XML to the executor
-  ASSERT_FALSE(plan_result->bt_xml.empty());
-  ex_node_->loadAndExecute(plan_result->bt_xml);
+  ex_node_->component().loadAndExecute(plan_result.bt_xml);
 
   // Wait for BT execution
   spinUntilExecutionDone();
-  EXPECT_EQ(ex_node_->lastStatus(), BT::NodeStatus::SUCCESS);
+  EXPECT_EQ(ex_node_->component().lastStatus(), BT::NodeStatus::SUCCESS);
 
   // Verify world model goal state
   const auto& wm = wm_node_->worldModel();
@@ -348,38 +317,18 @@ TEST_F(E2EPyramidServiceTest, PyramidServiceFailurePropagates) {
   FailingPyramidService failing_service;
   ex_node_->setPyramidService(&failing_service);
 
-  auto action_client =
-      rclcpp_action::create_client<ame_ros2::action::Plan>(
-          pl_node_, "/planner_node/plan");
-  ASSERT_TRUE(action_client->wait_for_action_server(std::chrono::seconds(3)));
-
-  auto goal_msg = ame_ros2::action::Plan::Goal();
-  goal_msg.goal_fluents = {
+  auto plan_result = pl_node_->plannerComponent().solveGoal({
       "(searched sector_a)",
       "(classified sector_a)",
-  };
+  });
+  ASSERT_TRUE(plan_result.success) << "Planning should still succeed";
+  ASSERT_FALSE(plan_result.bt_xml.empty());
 
-  std::shared_ptr<const ame_ros2::action::Plan::Result> plan_result;
-  bool plan_done = false;
-
-  auto options = rclcpp_action::Client<ame_ros2::action::Plan>::SendGoalOptions();
-  options.result_callback = [&](auto wrapped) {
-    plan_result = wrapped.result;
-    plan_done = true;
-  };
-  action_client->async_send_goal(goal_msg, options);
-
-  spinUntilPlanDone(plan_result, plan_done);
-  ASSERT_TRUE(plan_done) << "Plan action timed out";
-  ASSERT_TRUE(plan_result->success) << "Planning should still succeed";
-
-  // In-process mode: explicitly hand the compiled BT XML to the executor
-  ASSERT_FALSE(plan_result->bt_xml.empty());
-  ex_node_->loadAndExecute(plan_result->bt_xml);
+  ex_node_->component().loadAndExecute(plan_result.bt_xml);
 
   // BT execution should fail because the PYRAMID service returns FAILURE
   spinUntilExecutionDone();
-  EXPECT_EQ(ex_node_->lastStatus(), BT::NodeStatus::FAILURE);
+  EXPECT_EQ(ex_node_->component().lastStatus(), BT::NodeStatus::FAILURE);
 
   // Goals should NOT be achieved
   EXPECT_FALSE(wm_node_->worldModel().getFact("(searched sector_a)"));

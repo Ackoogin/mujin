@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "ame_ros2/planner_node.hpp"
 #include "ame_ros2/world_model_node.hpp"
+#include <ame/action_registry.h>
 #include <rclcpp/rclcpp.hpp>
 #include <chrono>
 

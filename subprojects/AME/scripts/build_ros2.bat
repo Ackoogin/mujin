@@ -10,22 +10,24 @@ REM   build_ros2.bat ros2-only    -- only colcon build (ame_core must already be
 set SCRIPT_DIR=%~dp0
 for %%I in ("%SCRIPT_DIR%\..\..\..") do set AME_ROOT=%%~fI
 
-REM 1. VS 2022 build tools environment
-call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
-
-REM 2. Add pixi conda Library/bin to PATH (yaml, spdlog, openssl, etc.)
+REM 1. Add pixi conda Library/bin to PATH *before* vcvars to avoid 8191-char CMD PATH limit
 set PATH=D:\Dev\ros2-windows\.pixi\envs\default\Library\bin;%PATH%
+
+REM 2. VS 2022 build tools environment
+call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
 
 if "%1"=="ros2-only" goto ros2_build
 
 echo.
 echo === Step 1: Build and install ame_core ===
+pushd %AME_ROOT%
 cmake --preset default -DCMAKE_INSTALL_PREFIX=%AME_ROOT%\build\install
-if errorlevel 1 goto error
+if errorlevel 1 ( popd & goto error )
 cmake --build %AME_ROOT%\build --config Release -j%NUMBER_OF_PROCESSORS%
-if errorlevel 1 goto error
+if errorlevel 1 ( popd & goto error )
 cmake --install %AME_ROOT%\build --config Release
-if errorlevel 1 goto error
+if errorlevel 1 ( popd & goto error )
+popd
 
 if "%1"=="core-only" goto done
 

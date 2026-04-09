@@ -1,7 +1,10 @@
 #include <gtest/gtest.h>
 #include "ame_ros2/executor_node.hpp"
+#include <ame/executor_component.h>
+#include <ame/world_model.h>
 #include <rclcpp/rclcpp.hpp>
 #include <behaviortree_cpp/action_node.h>
+#include <behaviortree_cpp/bt_factory.h>
 #include <chrono>
 
 // Minimal stub action for the test BT
@@ -59,15 +62,15 @@ protected:
 };
 
 TEST_F(ExecutorNodeTest, LoadAndExecuteSimpleBT) {
-    ex_node_->loadAndExecute(SIMPLE_BT_XML);
+    ex_node_->component().loadAndExecute(SIMPLE_BT_XML);
 
     // Spin until the BT completes (should be immediate for stubs)
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (ex_node_->lastStatus() == BT::NodeStatus::RUNNING
+    while (ex_node_->component().lastStatus() == BT::NodeStatus::RUNNING
            && std::chrono::steady_clock::now() < deadline)
     {
         executor_->spin_some(std::chrono::milliseconds(20));
     }
 
-    EXPECT_EQ(ex_node_->lastStatus(), BT::NodeStatus::SUCCESS);
+    EXPECT_EQ(ex_node_->component().lastStatus(), BT::NodeStatus::SUCCESS);
 }

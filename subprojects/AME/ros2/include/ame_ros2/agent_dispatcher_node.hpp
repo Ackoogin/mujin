@@ -1,9 +1,18 @@
 #pragma once
 
-#include <ame/agent_dispatcher.h>
+#include <memory>
 
-#include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <rclcpp/node_options.hpp>
+
+// Forward-declare AME types — full headers are not needed by ROS2 consumers
+namespace ame {
+  class AgentDispatcher;
+  class WorldModel;
+  class Planner;
+  class PlanCompiler;
+  class ActionRegistry;
+}
 
 namespace ame_ros2 {
 
@@ -23,6 +32,7 @@ namespace ame_ros2 {
 class AgentDispatcherNode : public rclcpp_lifecycle::LifecycleNode {
 public:
     explicit AgentDispatcherNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
+    ~AgentDispatcherNode();
 
     using CallbackReturn =
         rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -39,10 +49,12 @@ public:
                                    ame::PlanCompiler* compiler,
                                    ame::ActionRegistry* registry);
 
-    ame::AgentDispatcher& dispatcher() { return component_; }
+    /// \brief Direct component access.
+    /// Callers must #include <ame/agent_dispatcher.h> to use the returned reference.
+    ame::AgentDispatcher& dispatcher();
 
 private:
-    ame::AgentDispatcher component_;
+    std::unique_ptr<ame::AgentDispatcher> component_;
 };
 
 }  // namespace ame_ros2

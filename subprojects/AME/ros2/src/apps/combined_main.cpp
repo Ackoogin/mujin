@@ -24,10 +24,15 @@
 #include "ame_ros2/executor_node.hpp"
 #include "ame_ros2/lifecycle_manager.hpp"
 
+#include <ame/action_registry.h>
+#include <ame/executor_component.h>
+#include <ame/planner_component.h>
 #include <ame/pyramid_service.h>
+#include <ame/world_model_component.h>
 #include <pcl/executor.hpp>
 
 #include <behaviortree_cpp/action_node.h>
+#include <behaviortree_cpp/bt_factory.h>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 

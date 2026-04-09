@@ -1,9 +1,15 @@
 #pragma once
 
-#include <ame/world_model_component.h>
+#include <memory>
 
-#include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <rclcpp/node_options.hpp>
+
+// Forward-declare AME types — full headers are not needed by ROS2 consumers
+namespace ame {
+  class WorldModelComponent;
+  class WorldModel;
+}
 
 namespace ame_ros2 {
 
@@ -32,6 +38,7 @@ namespace ame_ros2 {
 class WorldModelNode : public rclcpp_lifecycle::LifecycleNode {
 public:
   explicit WorldModelNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
+  ~WorldModelNode();
 
   using CallbackReturn =
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -43,14 +50,16 @@ public:
   CallbackReturn on_shutdown(const rclcpp_lifecycle::State& prev) override;
 
   /// \brief Direct world-model access for in-process mode.
-  ame::WorldModel& worldModel() { return component_.worldModel(); }
-  const ame::WorldModel& worldModel() const { return component_.worldModel(); }
+  /// Callers must #include <ame/world_model.h> to use the returned reference.
+  ame::WorldModel& worldModel();
+  const ame::WorldModel& worldModel() const;
 
-  /// \brief Direct component access.
-  ame::WorldModelComponent& component() { return component_; }
+  /// \brief Direct component access for in-process mode.
+  /// Callers must #include <ame/world_model_component.h> to use the returned reference.
+  ame::WorldModelComponent& component();
 
 private:
-  ame::WorldModelComponent component_;
+  std::unique_ptr<ame::WorldModelComponent> component_;
 };
 
 }  // namespace ame_ros2

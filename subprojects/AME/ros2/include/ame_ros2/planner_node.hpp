@@ -1,9 +1,19 @@
 #pragma once
 
-#include <ame/planner_component.h>
+#include <memory>
 
-#include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <rclcpp/node_options.hpp>
+
+// Forward-declare AME types — full headers are not needed by ROS2 consumers
+namespace ame {
+  class PlannerComponent;
+  class WorldModel;
+  class ActionRegistry;
+  class Planner;
+  class PlanCompiler;
+  class PlanAuditLog;
+}
 
 namespace ame_ros2 {
 
@@ -27,6 +37,7 @@ namespace ame_ros2 {
 class PlannerNode : public rclcpp_lifecycle::LifecycleNode {
 public:
   explicit PlannerNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
+  ~PlannerNode();
 
   using CallbackReturn =
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -38,19 +49,18 @@ public:
   CallbackReturn on_shutdown(const rclcpp_lifecycle::State& prev) override;
 
   /// \brief Injects canonical WorldModel for in-process mode.
-  void setInProcessWorldModel(ame::WorldModel* wm) {
-    inprocess_wm_ = wm;
-    component_.setInProcessWorldModel(wm);
-  }
+  void setInProcessWorldModel(ame::WorldModel* wm);
 
-  ame::ActionRegistry& actionRegistry() { return component_.actionRegistry(); }
-  ame::Planner& planner()               { return component_.planner(); }
-  ame::PlanCompiler& compiler()         { return component_.compiler(); }
-  ame::PlanAuditLog* planAuditLog()     { return component_.planAuditLog(); }
-  ame::PlannerComponent& plannerComponent() { return component_; }
+  /// \brief Component and sub-object accessors for in-process mode.
+  /// Callers must #include the relevant <ame/...> headers to use these references.
+  ame::ActionRegistry& actionRegistry();
+  ame::Planner& planner();
+  ame::PlanCompiler& compiler();
+  ame::PlanAuditLog* planAuditLog();
+  ame::PlannerComponent& plannerComponent();
 
 private:
-  ame::PlannerComponent component_;
+  std::unique_ptr<ame::PlannerComponent> component_;
   ame::WorldModel* inprocess_wm_ = nullptr;
 };
 

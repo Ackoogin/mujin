@@ -11,7 +11,14 @@
 #include <ame_ros2/world_model_node.hpp>
 #include <ame_ros2/agent_dispatcher_node.hpp>
 
+#include <ame/agent_dispatcher.h>
+#include <ame/action_registry.h>
+#include <ame/executor_component.h>
+#include <ame/pcl_msg_json.h>
 #include <ame/pyramid_service.h>
+
+#include <pcl/executor.hpp>
+#include <pcl/pcl_executor.h>
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
@@ -150,8 +157,8 @@ protected:
 
   void spinUntilExecutionDone(std::chrono::seconds timeout = std::chrono::seconds(10)) {
     auto deadline = std::chrono::steady_clock::now() + timeout;
-    while (ex_node_->lastStatus() != BT::NodeStatus::SUCCESS &&
-           ex_node_->lastStatus() != BT::NodeStatus::FAILURE &&
+    while (ex_node_->component().lastStatus() != BT::NodeStatus::SUCCESS &&
+           ex_node_->component().lastStatus() != BT::NodeStatus::FAILURE &&
            std::chrono::steady_clock::now() < deadline) {
       executor_->spin_some(std::chrono::milliseconds(20));
     }
@@ -178,10 +185,10 @@ TEST_F(ExtensionWiringTest, InvokeServiceRegisteredAndSucceeds) {
 </root>
 )";
 
-  ex_node_->loadAndExecute(bt_xml);
+  ex_node_->component().loadAndExecute(bt_xml);
   spinUntilExecutionDone();
 
-  EXPECT_EQ(ex_node_->lastStatus(), BT::NodeStatus::SUCCESS);
+  EXPECT_EQ(ex_node_->component().lastStatus(), BT::NodeStatus::SUCCESS);
 }
 
 // ---------------------------------------------------------------------------
@@ -198,10 +205,10 @@ TEST_F(ExtensionWiringTest, ExecutePhaseActionPlansAndExecutes) {
 </root>
 )BT";
 
-  ex_node_->loadAndExecute(bt_xml);
+  ex_node_->component().loadAndExecute(bt_xml);
   spinUntilExecutionDone();
 
-  EXPECT_EQ(ex_node_->lastStatus(), BT::NodeStatus::SUCCESS);
+  EXPECT_EQ(ex_node_->component().lastStatus(), BT::NodeStatus::SUCCESS);
   EXPECT_TRUE(wm_node_->worldModel().getFact("(searched sector_a)"));
 }
 
@@ -221,10 +228,10 @@ TEST_F(ExtensionWiringTest, DelegateToAgentRegisteredAndExecutes) {
 </root>
 )BT";
 
-  ex_node_->loadAndExecute(bt_xml);
+  ex_node_->component().loadAndExecute(bt_xml);
   spinUntilExecutionDone();
 
-  EXPECT_EQ(ex_node_->lastStatus(), BT::NodeStatus::SUCCESS);
+  EXPECT_EQ(ex_node_->component().lastStatus(), BT::NodeStatus::SUCCESS);
   EXPECT_TRUE(wm_node_->worldModel().getFact("(searched sector_a)"));
   // Agent should be available again after delegation completes
   EXPECT_TRUE(wm_node_->worldModel().getAgent("uav1")->available);
@@ -236,133 +243,88 @@ TEST_F(ExtensionWiringTest, DelegateToAgentRegisteredAndExecutes) {
 
 class PerceptionQueueTest : public ::testing::Test {
 protected:
-  void SetUp() override {
-    rclcpp::init(0, nullptr);
-    node_ = std::make_shared<ame_ros2::WorldModelNode>();
-    ASSERT_EQ(
-        node_->on_configure(rclcpp_lifecycle::State{}),
-        ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
-    ASSERT_EQ(
-        node_->on_activate(rclcpp_lifecycle::State{}),
-        ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
-
-    auto& wm = node_->worldModel();
-    wm.typeSystem().addType("object");
-    wm.typeSystem().addType("robot", "object");
-    wm.typeSystem().addType("location", "object");
-    wm.addObject("uav1", "robot");
-    wm.addObject("sector_a", "location");
-    wm.registerPredicate("at", {"robot", "location"});
-
-    executor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
-    executor_->add_node(node_->get_node_base_interface());
-  }
-
-  void TearDown() override {
-    executor_.reset();
-    node_.reset();
-    rclcpp::shutdown();
-  }
-
-  std::shared_ptr<ame_ros2::WorldModelNode> node_;
-  std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
+  void SetUp() override { rclcpp::init(0, nullptr); }
+  void TearDown() override { rclcpp::shutdown(); }
 };
 
-TEST_F(PerceptionQueueTest, DetectionEnqueuedAndFlushedByTimer) {
-  // Publish a detection message
-  auto pub_node = rclcpp::Node::make_shared("test_detection_pub");
-  auto pub = pub_node->create_publisher<ame_ros2::msg::Detection>(
-    "/detections", rclcpp::SensorDataQoS());
-  executor_->add_node(pub_node);
+TEST_F(PerceptionQueueTest, DetectionEnqueuedAndFlushedByTick) {
+  // Detections now arrive via PCL subscriber (not ROS2 pub/sub).
+  // Create a PCL executor, add the component before configure, then verify
+  // that postIncoming + spinOnce causes the mutation to be applied.
+  auto node = std::make_shared<ame_ros2::WorldModelNode>();
+  node->component().setParam("perception.enabled", true);
+  node->component().setParam("audit_log.enabled",  false);
+  node->component().setParam("publish_rate_hz",    1000.0);  // tick fires on first spinOnce
 
-  ame_ros2::msg::Detection det;
-  det.entity_id = "uav1";
-  det.entity_type = "robot";
-  det.property_keys = {"at"};
+  pcl::Executor pcl_exec;
+  pcl_exec.add(node->component());
+
+  ASSERT_EQ(node->on_configure(rclcpp_lifecycle::State{}),
+            ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+
+  auto& wm = node->worldModel();
+  wm.typeSystem().addType("object");
+  wm.typeSystem().addType("robot", "object");
+  wm.typeSystem().addType("location", "object");
+  wm.addObject("uav1", "robot");
+  wm.addObject("sector_a", "location");
+  wm.registerPredicate("at", {"robot", "location"});
+
+  ASSERT_EQ(node->on_activate(rclcpp_lifecycle::State{}),
+            ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+
+  ame::Detection det;
+  det.confidence      = 0.9f;
+  det.sensor_source   = "camera_front";
+  det.entity_id       = "uav1";
+  det.property_keys   = {"at"};
   det.property_values = {"sector_a"};
-  det.confidence = 0.9f;
-  det.sensor_source = "camera_front";
-  pub->publish(det);
 
-  // Spin to process the detection callback (enqueues mutation)
-  executor_->spin_some(std::chrono::milliseconds(100));
+  std::string det_json = ame::ame_pack_detection(det);
+  pcl_msg_t msg{};
+  msg.data      = det_json.c_str();
+  msg.size      = static_cast<uint32_t>(det_json.size());
+  msg.type_name = "ame/Detection";
+  ASSERT_EQ(pcl_exec.postIncoming("detections", &msg), PCL_OK);
 
-  // Fact should NOT yet be set (it's queued, not applied)
-  // Note: this depends on timing — the publish timer may or may not have fired.
-  // Instead, spin enough for the timer to fire and flush the queue.
-  auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
-  while (std::chrono::steady_clock::now() < deadline) {
-    executor_->spin_some(std::chrono::milliseconds(50));
-    if (node_->worldModel().getFact("(at uav1 sector_a)")) {
-      break;
-    }
-  }
+  // spinOnce: dispatches subscriber callback (enqueueMutation), then calls on_tick
+  // (applyQueuedMutations) — tick fires because 1000 Hz period <= initial dt=0.001s.
+  pcl_exec.spinOnce(0);
 
-  EXPECT_TRUE(node_->worldModel().getFact("(at uav1 sector_a)"));
+  EXPECT_TRUE(wm.getFact("(at uav1 sector_a)"));
 }
 
 // ---------------------------------------------------------------------------
-// Test: AgentDispatcherNode creates dispatch_goals service
+// Test: AgentDispatcherNode exposes dispatch_goals via PCL service
 // ---------------------------------------------------------------------------
 
-class DispatcherServiceTest : public ::testing::Test {
-protected:
-  void SetUp() override {
-    rclcpp::init(0, nullptr);
-    dispatcher_ = std::make_shared<ame_ros2::AgentDispatcherNode>();
-    ASSERT_EQ(
-        dispatcher_->on_configure(rclcpp_lifecycle::State{}),
-        ame_ros2::AgentDispatcherNode::CallbackReturn::SUCCESS);
-    ASSERT_EQ(
-        dispatcher_->on_activate(rclcpp_lifecycle::State{}),
-        ame_ros2::AgentDispatcherNode::CallbackReturn::SUCCESS);
+TEST(DispatcherServiceTest, DispatchGoalsServiceExistsInPcl) {
+  rclcpp::init(0, nullptr);
 
-    executor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
-    executor_->add_node(dispatcher_->get_node_base_interface());
-  }
+  auto dispatcher = std::make_shared<ame_ros2::AgentDispatcherNode>();
+  pcl::Executor pcl_exec;
+  pcl_exec.add(dispatcher->dispatcher());
 
-  void TearDown() override {
-    executor_.reset();
-    dispatcher_.reset();
-    rclcpp::shutdown();
-  }
+  ASSERT_EQ(dispatcher->on_configure(rclcpp_lifecycle::State{}),
+            ame_ros2::AgentDispatcherNode::CallbackReturn::SUCCESS);
+  ASSERT_EQ(dispatcher->on_activate(rclcpp_lifecycle::State{}),
+            ame_ros2::AgentDispatcherNode::CallbackReturn::SUCCESS);
 
-  std::shared_ptr<ame_ros2::AgentDispatcherNode> dispatcher_;
-  std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
-};
+  // Verify the PCL dispatch_goals service is reachable (empty goals → failure response)
+  std::string req_json = ame::ame_pack_dispatch_goals_request({});
+  pcl_msg_t req_msg{};
+  req_msg.data      = req_json.c_str();
+  req_msg.size      = static_cast<uint32_t>(req_json.size());
+  req_msg.type_name = "ame/DispatchGoals_Request";
+  pcl_msg_t resp_msg{};
 
-TEST_F(DispatcherServiceTest, DispatchGoalsServiceExists) {
-  auto client_node = rclcpp::Node::make_shared("test_dispatch_client");
-  auto client = client_node->create_client<ame_ros2::srv::DispatchGoals>(
-    "/agent_dispatcher_node/dispatch_goals");
-  executor_->add_node(client_node);
+  pcl_status_t rc = pcl_executor_invoke_service(
+      pcl_exec.handle(), "dispatch_goals", &req_msg, &resp_msg);
+  EXPECT_EQ(rc, PCL_OK);
 
-  // Spin briefly to let discovery happen
-  executor_->spin_some(std::chrono::milliseconds(100));
+  auto resp = ame::ame_unpack_dispatch_goals_response(&resp_msg);
+  EXPECT_FALSE(resp.success);
+  EXPECT_FALSE(resp.error_msg.empty());
 
-  EXPECT_TRUE(client->wait_for_service(std::chrono::seconds(2)))
-    << "dispatch_goals service not available";
-}
-
-TEST_F(DispatcherServiceTest, DispatchGoalsRejectsEmptyGoals) {
-  auto client_node = rclcpp::Node::make_shared("test_dispatch_client");
-  auto client = client_node->create_client<ame_ros2::srv::DispatchGoals>(
-    "/agent_dispatcher_node/dispatch_goals");
-  executor_->add_node(client_node);
-  ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(2)));
-
-  auto req = std::make_shared<ame_ros2::srv::DispatchGoals::Request>();
-  // Empty goal_fluents
-  auto future = client->async_send_request(req);
-
-  auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-  while (future.wait_for(std::chrono::milliseconds(10)) != std::future_status::ready
-         && std::chrono::steady_clock::now() < deadline) {
-    executor_->spin_some(std::chrono::milliseconds(20));
-  }
-
-  ASSERT_EQ(future.wait_for(std::chrono::milliseconds(0)), std::future_status::ready);
-  auto res = future.get();
-  EXPECT_FALSE(res->success);
-  EXPECT_FALSE(res->error_msg.empty());
+  rclcpp::shutdown();
 }

@@ -1,17 +1,23 @@
 #pragma once
 
-#include <ame/action_registry.h>
-#include <ame/executor_component.h>
-#include <ame/plan_audit_log.h>
-#include <ame/plan_compiler.h>
-#include <ame/planner.h>
-#include <ame/planner_component.h>
-#include <ame/pyramid_service.h>
+#include <memory>
+#include <string>
 
-#include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <rclcpp/node_options.hpp>
 
-#include <behaviortree_cpp/bt_factory.h>
+// Forward-declare AME and BT types — full headers are not needed by ROS2 consumers
+namespace ame {
+  class ExecutorComponent;
+  class WorldModel;
+  class IPyramidService;
+  class Planner;
+  class PlanCompiler;
+  class ActionRegistry;
+  class PlanAuditLog;
+  class PlannerComponent;
+}
+namespace BT { class BehaviorTreeFactory; }
 
 namespace ame_ros2 {
 
@@ -35,6 +41,7 @@ namespace ame_ros2 {
 class ExecutorNode : public rclcpp_lifecycle::LifecycleNode {
 public:
   explicit ExecutorNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
+  ~ExecutorNode();
 
   using CallbackReturn =
     rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn;
@@ -46,40 +53,39 @@ public:
   CallbackReturn on_shutdown(const rclcpp_lifecycle::State& prev) override;
 
   /// \brief Injects WorldModel pointer for in-process mode.
-  void setInProcessWorldModel(ame::WorldModel* wm) {
-    inprocess_wm_ = wm;
-    component_.setInProcessWorldModel(wm);
-  }
+  void setInProcessWorldModel(ame::WorldModel* wm);
 
   /// \brief Injects PYRAMID service for InvokeService BT nodes.
-  void setPyramidService(ame::IPyramidService* svc) { pyramid_service_ = svc; }
+  void setPyramidService(ame::IPyramidService* svc);
 
   /// \brief Injects planner for in-process hierarchical planning.
-  void setPlanner(ame::Planner* p) { planner_ = p; }
+  void setPlanner(ame::Planner* p);
 
   /// \brief Injects plan compiler for in-process hierarchical planning.
-  void setPlanCompiler(ame::PlanCompiler* c) { plan_compiler_ = c; }
+  void setPlanCompiler(ame::PlanCompiler* c);
 
   /// \brief Injects action registry for in-process hierarchical planning.
-  void setActionRegistry(ame::ActionRegistry* r) { action_registry_ = r; }
+  void setActionRegistry(ame::ActionRegistry* r);
 
   /// \brief Injects plan audit log for hierarchical phase recording.
-  void setPlanAuditLog(ame::PlanAuditLog* l) { plan_audit_log_ = l; }
+  void setPlanAuditLog(ame::PlanAuditLog* l);
 
   /// \brief Injects PlannerComponent for distributed hierarchical planning.
-  void setPlannerComponent(ame::PlannerComponent* pc) { planner_component_ = pc; }
+  void setPlannerComponent(ame::PlannerComponent* pc);
 
   /// \brief Exposes factory for custom action node type registration.
-  BT::BehaviorTreeFactory& factory() { return component_.factory(); }
+  /// Callers must #include <behaviortree_cpp/bt_factory.h> to use the returned reference.
+  BT::BehaviorTreeFactory& factory();
 
   /// \brief Returns the agent ID for this executor.
-  const std::string& agentId() const { return agent_id_; }
+  const std::string& agentId() const;
 
   /// \brief Direct component access.
-  ame::ExecutorComponent& component() { return component_; }
+  /// Callers must #include <ame/executor_component.h> to use the returned reference.
+  ame::ExecutorComponent& component();
 
 private:
-  ame::ExecutorComponent component_;
+  std::unique_ptr<ame::ExecutorComponent> component_;
 
   ame::WorldModel*       inprocess_wm_      = nullptr;
   ame::IPyramidService*  pyramid_service_   = nullptr;

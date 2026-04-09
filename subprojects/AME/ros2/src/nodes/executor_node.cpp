@@ -1,6 +1,8 @@
 #include <ame_ros2/executor_node.hpp>
 #include <ame_ros2/ros_wm_bridge.hpp>
 
+#include <ame/executor_component.h>
+#include <ame/planner_component.h>
 #include <ame/bt_nodes/check_world_predicate.h>
 #include <ame/bt_nodes/delegate_to_agent.h>
 #include <ame/bt_nodes/execute_phase_action.h>
@@ -11,7 +13,26 @@ namespace ame_ros2 {
 
 ExecutorNode::ExecutorNode(const rclcpp::NodeOptions& options)
   : rclcpp_lifecycle::LifecycleNode("executor_node", options)
+  , component_(std::make_unique<ame::ExecutorComponent>())
 {}
+
+ExecutorNode::~ExecutorNode() = default;
+
+void ExecutorNode::setInProcessWorldModel(ame::WorldModel* wm) {
+  inprocess_wm_ = wm;
+  component_->setInProcessWorldModel(wm);
+}
+
+void ExecutorNode::setPyramidService(ame::IPyramidService* svc) { pyramid_service_ = svc; }
+void ExecutorNode::setPlanner(ame::Planner* p)                   { planner_ = p; }
+void ExecutorNode::setPlanCompiler(ame::PlanCompiler* c)         { plan_compiler_ = c; }
+void ExecutorNode::setActionRegistry(ame::ActionRegistry* r)     { action_registry_ = r; }
+void ExecutorNode::setPlanAuditLog(ame::PlanAuditLog* l)         { plan_audit_log_ = l; }
+void ExecutorNode::setPlannerComponent(ame::PlannerComponent* pc){ planner_component_ = pc; }
+
+BT::BehaviorTreeFactory& ExecutorNode::factory()  { return component_->factory(); }
+const std::string& ExecutorNode::agentId() const   { return agent_id_; }
+ame::ExecutorComponent& ExecutorNode::component()  { return *component_; }
 
 ExecutorNode::CallbackReturn
 ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
@@ -23,23 +44,23 @@ ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
 
   agent_id_ = get_parameter("agent_id").as_string();
 
-  component_.setParam("agent_id",       agent_id_.c_str());
-  component_.setParam("tick_rate_hz",   get_parameter("tick_rate_hz").as_double());
-  component_.setParam("bt_log.enabled", get_parameter("bt_log.enabled").as_bool());
-  component_.setParam("bt_log.path",    get_parameter("bt_log.path").as_string().c_str());
-  component_.setParam("bt_log.tree_id", get_parameter("bt_log.tree_id").as_string().c_str());
+  component_->setParam("agent_id",       agent_id_.c_str());
+  component_->setParam("tick_rate_hz",   get_parameter("tick_rate_hz").as_double());
+  component_->setParam("bt_log.enabled", get_parameter("bt_log.enabled").as_bool());
+  component_->setParam("bt_log.path",    get_parameter("bt_log.path").as_string().c_str());
+  component_->setParam("bt_log.tree_id", get_parameter("bt_log.tree_id").as_string().c_str());
 
   registerCoreNodes();
 
   // Wire blackboard initializer with in-process dependencies
-  component_.setBlackboardInitializer([this](const BT::Blackboard::Ptr& bb) {
+  component_->setBlackboardInitializer([this](const BT::Blackboard::Ptr& bb) {
     if (!agent_id_.empty()) {
       bb->set("current_agent_id", agent_id_);
     }
     if (pyramid_service_) {
       bb->set<ame::IPyramidService*>("pyramid_service", pyramid_service_);
     }
-    bb->set<BT::BehaviorTreeFactory*>("bt_factory", &component_.factory());
+    bb->set<BT::BehaviorTreeFactory*>("bt_factory", &component_->factory());
     if (inprocess_wm_) {
       bb->set<ame::WorldModel*>("world_model", inprocess_wm_);
     }
@@ -60,7 +81,7 @@ ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
     }
   });
 
-  if (component_.configure() != PCL_OK) {
+  if (component_->configure() != PCL_OK) {
     RCLCPP_ERROR(get_logger(), "Failed to configure ExecutorComponent");
     return CallbackReturn::FAILURE;
   }
@@ -75,7 +96,7 @@ ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
 
 ExecutorNode::CallbackReturn
 ExecutorNode::on_activate(const rclcpp_lifecycle::State&) {
-  if (component_.activate() != PCL_OK) {
+  if (component_->activate() != PCL_OK) {
     RCLCPP_ERROR(get_logger(), "Failed to activate ExecutorComponent");
     return CallbackReturn::FAILURE;
   }
@@ -85,19 +106,19 @@ ExecutorNode::on_activate(const rclcpp_lifecycle::State&) {
 
 ExecutorNode::CallbackReturn
 ExecutorNode::on_deactivate(const rclcpp_lifecycle::State&) {
-  component_.deactivate();
+  component_->deactivate();
   return CallbackReturn::SUCCESS;
 }
 
 ExecutorNode::CallbackReturn
 ExecutorNode::on_cleanup(const rclcpp_lifecycle::State&) {
-  component_.cleanup();
+  component_->cleanup();
   return CallbackReturn::SUCCESS;
 }
 
 ExecutorNode::CallbackReturn
 ExecutorNode::on_shutdown(const rclcpp_lifecycle::State&) {
-  component_.shutdown();
+  component_->shutdown();
   return CallbackReturn::SUCCESS;
 }
 
@@ -105,12 +126,12 @@ void ExecutorNode::registerCoreNodes() {
   if (core_nodes_registered_) return;
 
   if (!inprocess_wm_) {
-    component_.factory().registerNodeType<RosCheckWorldPredicate>("CheckWorldPredicate");
-    component_.factory().registerNodeType<RosSetWorldPredicate>("SetWorldPredicate");
+    component_->factory().registerNodeType<RosCheckWorldPredicate>("CheckWorldPredicate");
+    component_->factory().registerNodeType<RosSetWorldPredicate>("SetWorldPredicate");
   }
-  component_.factory().registerNodeType<ame::InvokeService>("InvokeService");
-  component_.factory().registerNodeType<ame::ExecutePhaseAction>("ExecutePhaseAction");
-  component_.factory().registerNodeType<ame::DelegateToAgent>("DelegateToAgent");
+  component_->factory().registerNodeType<ame::InvokeService>("InvokeService");
+  component_->factory().registerNodeType<ame::ExecutePhaseAction>("ExecutePhaseAction");
+  component_->factory().registerNodeType<ame::DelegateToAgent>("DelegateToAgent");
 
   core_nodes_registered_ = true;
 }

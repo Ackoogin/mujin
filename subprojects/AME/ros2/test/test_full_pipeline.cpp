@@ -6,9 +6,13 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <behaviortree_cpp/action_node.h>
+#include <behaviortree_cpp/bt_factory.h>
 #include <ame_ros2/executor_node.hpp>
 #include <ame_ros2/planner_node.hpp>
 #include <ame_ros2/world_model_node.hpp>
+#include <ame/action_registry.h>
+#include <ame/executor_component.h>
+#include <ame/world_model.h>
 
 #include <chrono>
 
