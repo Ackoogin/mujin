@@ -1,0 +1,12 @@
+project Test_Pyramid_UUIDs is
+  for Languages use ("Ada");
+  for Source_Dirs use (".", "generated");
+  for Main use ("test_pyramid_uuids.adb");
+
+  for Object_Dir use "obj_test_pyramid_uuids";
+  for Exec_Dir use "bin";
+
+  package Compiler is
+    for Default_Switches ("Ada") use ("-g");
+  end Compiler;
+end Test_Pyramid_UUIDs;

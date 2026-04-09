@@ -175,6 +175,106 @@ This is similar to the generated C++ flow, but not identical. C++ generates a
 `ServiceHandler` base class with virtual `handle*` methods; Ada now uses a
 callback record instead of requiring edits to generated package bodies.
 
+### Triggering a Generated Service in a Local Test with `Post_Incoming`
+
+If you want a lightweight Ada test that exercises the generated service
+registration and decode path without sockets, you can queue a request directly
+ onto the executor with `Pcl_Bindings.Post_Incoming`, then drain it with
+`Spin_Once`.
+
+This is useful when the test only needs to prove:
+
+- the service was registered under the expected wire name
+- the generated trampoline decoded the JSON request
+- the typed Ada handler was invoked on the executor thread
+
+```ada
+with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
+with Interfaces.C;
+with Interfaces.C.Strings;
+with Pcl_Bindings;
+with Pyramid.Services.Tactical_Objects.Json_Codec;
+with Pyramid.Services.Tactical_Objects.Provided;
+
+procedure Example_Service_Post_Incoming_Test is
+   package Codec renames Pyramid.Services.Tactical_Objects.Json_Codec;
+   package Prov renames Pyramid.Services.Tactical_Objects.Provided;
+
+   Exec      : constant Pcl_Bindings.Pcl_Executor_Access :=
+     Pcl_Bindings.Create_Executor;
+   Container : Pcl_Bindings.Pcl_Container_Access := My_Container_Handle;
+
+   Handler_Called : Boolean := False;
+   Last_Id        : Unbounded_String := Null_Unbounded_String;
+
+   procedure Create_Requirement
+     (Request  : in  Object_Interest_Requirement;
+      Response : out Identifier)
+   is
+   begin
+      Handler_Called := True;
+      Last_Id := Request.Id;
+      Response := To_Unbounded_String ("created-by-test");
+   end Create_Requirement;
+
+   Handlers : aliased constant Prov.Service_Handlers :=
+     (On_Read_Match          => null,
+      On_Create_Requirement  => Create_Requirement'Access,
+      On_Read_Requirement    => null,
+      On_Update_Requirement  => null,
+      On_Delete_Requirement  => null,
+      On_Read_Detail         => null);
+
+   Request_Value : constant Codec.Create_Requirement_Request :=
+     (Policy      => Policy_Obtain,
+      Identity    => Identity_Hostile,
+      Dimension   => Dimension_Sea_Surface,
+      Min_Lat_Rad => 0.1,
+      Max_Lat_Rad => 0.2,
+      Min_Lon_Rad => 0.3,
+      Max_Lon_Rad => 0.4);
+
+   Request_Json : aliased constant String := Codec.To_Json (Request_Value);
+   Type_Name    : Interfaces.C.Strings.chars_ptr :=
+     Interfaces.C.Strings.New_String ("application/json");
+   Service_Name : Interfaces.C.Strings.chars_ptr :=
+     Interfaces.C.Strings.New_String (Prov.Svc_Create_Requirement);
+
+   Msg : aliased constant Pcl_Bindings.Pcl_Msg :=
+     (Data      => Request_Json'Address,
+      Size      => Interfaces.C.unsigned (Request_Json'Length),
+      Type_Name => Type_Name);
+begin
+   Prov.Register_Services
+     (Container => Container,
+      Handlers  => Handlers'Access);
+
+   Pcl_Bindings.Add_Container (Exec, Container);
+   Pcl_Bindings.Configure (Container);
+   Pcl_Bindings.Activate (Container);
+
+   --  Queue the request as if it arrived from an external source.
+   Pcl_Bindings.Post_Incoming
+     (Exec  => Exec,
+      Topic => Service_Name,
+      Msg   => Msg'Access);
+
+   --  Drain one executor cycle so the generated service handler runs.
+   Pcl_Bindings.Spin_Once (Exec, 0);
+
+   pragma Assert (Handler_Called);
+
+   Interfaces.C.Strings.Free (Service_Name);
+   Interfaces.C.Strings.Free (Type_Name);
+   Pcl_Bindings.Destroy_Executor (Exec);
+end Example_Service_Post_Incoming_Test;
+```
+
+`Post_Incoming` is best for testing ingress and dispatch. If the test needs to
+assert on the returned response body as well, prefer
+`Pcl_Bindings.Invoke_Service`, which performs a synchronous local service call
+and gives you the response `Pcl_Msg`.
+
 ## Routing and Peer Configuration
 
 For Ada, the routing rules are the same as the C API:
