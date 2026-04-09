@@ -31,12 +31,59 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from proto_parser import parse_proto_tree, ProtoTypeIndex
 import codec_backends
-from backends.codec_dispatch_generator import (
-    generate_cpp_dispatch, generate_ada_dispatch,
-)
+import cpp_codegen
+import ada_codegen
 
 # Importing the backends package auto-registers all backends
 import backends  # noqa: F401
+
+
+def _generate_json_cpp(proto_dir: Path, output_dir: Path) -> int:
+    total = 0
+    data_model_dir = proto_dir / 'pyramid' / 'data_model'
+    if data_model_dir.exists():
+        gen = cpp_codegen.CppTypesGenerator(data_model_dir)
+        gen.generate(str(output_dir))
+        total += 1
+        dm_files = parse_proto_tree(data_model_dir)
+        dm_index = ProtoTypeIndex(dm_files)
+        for pf in dm_files:
+            cpp_codegen.CppDataModelCodecGenerator(pf, dm_index).generate(str(output_dir))
+            total += 1
+
+    for proto_path in sorted(proto_dir.rglob('*.proto')):
+        parsed = cpp_codegen.parse_proto(proto_path)
+        if not parsed.services:
+            continue
+        cpp_codegen.CppWireTypesGenerator(parsed).generate(str(output_dir))
+        cpp_codegen.CppJsonCodecGenerator(parsed).generate(str(output_dir))
+        cpp_codegen.CppServiceGenerator(str(proto_path)).generate(str(output_dir))
+        total += 3
+    return total
+
+
+def _generate_json_ada(proto_dir: Path, output_dir: Path) -> int:
+    total = 0
+    data_model_dir = proto_dir / 'pyramid' / 'data_model'
+    if data_model_dir.exists():
+        gen = ada_codegen.AdaTypesGenerator(data_model_dir)
+        gen.generate(str(output_dir))
+        total += 1
+        dm_files = parse_proto_tree(data_model_dir)
+        dm_index = ProtoTypeIndex(dm_files)
+        for pf in dm_files:
+            ada_codegen.AdaDataModelCodecGenerator(pf, dm_index).generate(str(output_dir))
+            total += 1
+
+    for proto_path in sorted(proto_dir.rglob('*.proto')):
+        parsed = ada_codegen.parse_proto(proto_path)
+        if not parsed.services:
+            continue
+        ada_codegen.WireTypesGenerator(parsed).generate(str(output_dir))
+        ada_codegen.JsonCodecGenerator(parsed).generate(str(output_dir))
+        ada_codegen.AdaServiceGenerator(str(proto_path)).generate(str(output_dir))
+        total += 3
+    return total
 
 
 def main():
@@ -107,31 +154,27 @@ def main():
     print(f'Languages: {", ".join(sorted(langs))}')
     print()
 
-    results = codec_backends.generate_all(
-        index, output_dir,
-        languages=list(langs),
-        backends=backend_names,
-    )
-
     total = 0
-    for backend_name, files in results.items():
-        print(f'  {backend_name}: {len(files)} files generated')
-        for fp in files:
-            print(f'    {fp}')
-        total += len(files)
+    remaining_backends = list(backend_names)
+    if 'json' in remaining_backends:
+        print('  json: generating unified data-model, wire-model, and service bindings')
+        if 'cpp' in langs:
+            total += _generate_json_cpp(proto_dir, output_dir)
+        if 'ada' in langs:
+            total += _generate_json_ada(proto_dir, output_dir)
+        remaining_backends.remove('json')
 
-    # Generate codec dispatch layer (always, routes between backends)
-    print('\nGenerating codec dispatch layer...')
-    dispatch_dir = output_dir / 'dispatch'
-    dispatch_files = []
-    if 'cpp' in langs:
-        dispatch_files.extend(generate_cpp_dispatch(index, dispatch_dir / 'cpp'))
-    if 'ada' in langs:
-        dispatch_files.extend(generate_ada_dispatch(index, dispatch_dir / 'ada'))
-    print(f'  dispatch: {len(dispatch_files)} files generated')
-    for fp in dispatch_files:
-        print(f'    {fp}')
-    total += len(dispatch_files)
+    if remaining_backends:
+        results = codec_backends.generate_all(
+            index, output_dir,
+            languages=list(langs),
+            backends=remaining_backends,
+        )
+        for backend_name, files in results.items():
+            print(f'  {backend_name}: {len(files)} files generated')
+            for fp in files:
+                print(f'    {fp}')
+            total += len(files)
 
     print(f'\nDone — {total} files generated in {output_dir}/')
 

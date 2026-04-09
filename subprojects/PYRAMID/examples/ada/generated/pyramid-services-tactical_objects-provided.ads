@@ -1,5 +1,5 @@
 --  Auto-generated service binding specification
---  Generated from: provided.proto by ada_service_generator.py
+--  Generated from: provided.proto by generate_bindings.py
 --  Package: Pyramid.Services.Tactical_Objects.Provided
 --
 --  Architecture: component logic > service binding (this) > PCL
@@ -13,10 +13,10 @@
 --  JSON serialisation/deserialisation is provided by the companion
 --  Pyramid.Services.Tactical_Objects.Json_Codec package.
 
-with Pyramid_Data_Model_Base_Types;  use Pyramid_Data_Model_Base_Types;
-with Pyramid_Data_Model_Common_Types;  use Pyramid_Data_Model_Common_Types;
-with Pyramid_Data_Model_Tactical_Types;  use Pyramid_Data_Model_Tactical_Types;
-with Pyramid.Services.Tactical_Objects.Json_Codec;
+with Pyramid.Data_Model.Base.Types;  use Pyramid.Data_Model.Base.Types;
+with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;
+with Pyramid.Data_Model.Tactical.Types;  use Pyramid.Data_Model.Tactical.Types;
+with Pyramid.Services.Tactical_Objects.Wire_Types;
 with Pcl_Bindings;
 with Interfaces.C;
 with System;
@@ -107,58 +107,67 @@ package Pyramid.Services.Tactical_Objects.Provided is
    procedure Subscribe_Entity_Matches
      (Container : Pcl_Bindings.Pcl_Container_Access;
       Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;
-      User_Data : System.Address := System.Null_Address);
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json");
 
    procedure Subscribe_Evidence_Requirements
      (Container : Pcl_Bindings.Pcl_Container_Access;
       Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;
-      User_Data : System.Address := System.Null_Address);
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json");
 
    procedure Register_Services
      (Container : Pcl_Bindings.Pcl_Container_Access;
-      Handlers  : access constant Service_Handlers := null);
+      Handlers  : access constant Service_Handlers := null;
+      Content_Type : String := "application/json");
 
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Read_Match
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address);
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json");
 
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Create_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Pyramid.Services.Tactical_Objects.Json_Codec.Create_Requirement_Request;
+      Request   : Pyramid.Services.Tactical_Objects.Wire_Types.Create_Requirement_Request;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address);
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json");
 
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Read_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address);
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json");
 
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Update_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Pyramid.Services.Tactical_Objects.Json_Codec.Create_Requirement_Request;
+      Request   : Pyramid.Services.Tactical_Objects.Wire_Types.Create_Requirement_Request;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address);
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json");
 
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Delete_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Identifier;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address);
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json");
 
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Read_Detail
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address);
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json");
 
    --  -- Transport integration point ------------------------------
 
@@ -167,6 +176,7 @@ package Pyramid.Services.Tactical_Objects.Provided is
       Channel       : in  Service_Channel;
       Request_Buf   : in  System.Address;
       Request_Size  : in  Natural;
+      Content_Type  : in  String := "application/json";
       Response_Buf  : out System.Address;
       Response_Size : out Natural);
 

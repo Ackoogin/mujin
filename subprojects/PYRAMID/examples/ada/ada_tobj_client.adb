@@ -12,11 +12,12 @@
 --  Usage: ada_tobj_client --host 127.0.0.1 --port 19123
 
 with Ada.Command_Line;
+with Ada.Strings.Unbounded;      use Ada.Strings.Unbounded;
 with Ada.Text_IO;
 with Interfaces.C;
 with Interfaces.C.Strings;
 with Pcl_Bindings;
-with Pyramid_Data_Model_Common_Types;  use Pyramid_Data_Model_Common_Types;
+with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;
 with Tobj_Interest_Client;
 with System;
 
@@ -48,6 +49,10 @@ procedure Ada_Tobj_Client is
          elsif Argument (I) = "--port" and then I + 1 <= Argument_Count then
             Port_Val := Interfaces.C.unsigned_short'Value (Argument (I + 1));
             I := I + 2;
+         elsif Argument (I) = "--content-type" and then I + 1 <= Argument_Count then
+            Tobj_Interest_Client.Content_Type :=
+              To_Unbounded_String (Argument (I + 1));
+            I := I + 2;
          else
             I := I + 1;
          end if;
@@ -73,7 +78,8 @@ procedure Ada_Tobj_Client is
 begin
    Parse_Args;
    Log ("Connecting to " & Interfaces.C.Strings.Value (Host_Str) &
-        ":" & Interfaces.C.unsigned_short'Image (Port_Val));
+        ":" & Interfaces.C.unsigned_short'Image (Port_Val) &
+        " content-type=" & To_String (Tobj_Interest_Client.Content_Type));
 
    -- -- Create executor --------------------------------------------------------
 

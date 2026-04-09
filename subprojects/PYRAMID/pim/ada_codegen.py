@@ -245,9 +245,9 @@ def _is_provided(proto_file: ProtoFile) -> bool:
 # All data model type packages, ordered base → common → tactical so that
 # `use` clauses in dependent order work correctly.
 _DATA_MODEL_TYPES_PKGS = [
-    'Pyramid_Data_Model_Base_Types',
-    'Pyramid_Data_Model_Common_Types',
-    'Pyramid_Data_Model_Tactical_Types',
+    'Pyramid.Data_Model.Base.Types',
+    'Pyramid.Data_Model.Common.Types',
+    'Pyramid.Data_Model.Tactical.Types',
 ]
 
 # Primary (most specific) package — kept for codec / single-package references.
@@ -256,8 +256,8 @@ _DATA_MODEL_TYPES_PKG = _DATA_MODEL_TYPES_PKGS[-1]
 # Data model codec packages: Ada type pkg → Ada codec pkg.
 # No base-types codec; Identifier/Ack/Query use hardcoded Ada stdlib paths.
 _DM_CODEC_PKG_FOR_TYPE_PKG: Dict[str, str] = {
-    'Pyramid_Data_Model_Common_Types':   'Pyramid_Data_Model_Common_Types_Codec',
-    'Pyramid_Data_Model_Tactical_Types': 'Pyramid_Data_Model_Tactical_Types_Codec',
+    'Pyramid.Data_Model.Common.Types':   'Pyramid.Data_Model.Common.Types_Codec',
+    'Pyramid.Data_Model.Tactical.Types': 'Pyramid.Data_Model.Tactical.Types_Codec',
 }
 
 
@@ -276,11 +276,11 @@ def _ada_pkg_from_proto_pkg(proto_pkg: str) -> str:
     """Convert a proto package name to its Ada type package name.
 
     Uses the same convention as AdaTypesGenerator._ada_pkg_for_file():
-      pyramid.data_model.tactical -> Pyramid_Data_Model_Tactical_Types
+      pyramid.data_model.tactical -> Pyramid.Data_Model.Tactical.Types
     """
     parts = proto_pkg.split('.')
     ada_parts = ['_'.join(w.capitalize() for w in seg.split('_')) for seg in parts]
-    return '_'.join(ada_parts) + '_Types'
+    return '.'.join(ada_parts + ['Types'])
 
 
 def _find_proto_root(proto_path: Path) -> Optional[Path]:
@@ -415,6 +415,20 @@ def _types_pkg_from_proto(proto_file: 'ProtoFile') -> str:
     return _DATA_MODEL_TYPES_PKG
 
 
+def _wire_types_pkg_from_proto(proto_file: ProtoFile) -> str:
+    """Derive the service-local wire types package from proto package."""
+    parts = proto_file.package.split('.')
+    if parts and parts[-1].lower() in ('provided', 'consumed'):
+        parts = parts[:-1]
+    skip = {'pyramid', 'components', 'data_model', 'base', 'services'}
+    meaningful = [p for p in parts if p.lower() not in skip]
+    ada_parts = ['Pyramid', 'Services']
+    for p in meaningful:
+        ada_parts.append('_'.join(w.capitalize() for w in p.split('_')))
+    ada_parts.append('Wire_Types')
+    return '.'.join(ada_parts)
+
+
 def _codec_pkg_from_proto(proto_file: ProtoFile) -> str:
     """Derive Ada JSON codec package name from proto package.
 
@@ -430,6 +444,20 @@ def _codec_pkg_from_proto(proto_file: ProtoFile) -> str:
     for p in meaningful:
         ada_parts.append('_'.join(w.capitalize() for w in p.split('_')))
     ada_parts.append('Json_Codec')
+    return '.'.join(ada_parts)
+
+
+def _flatbuffers_codec_pkg_from_proto(proto_file: ProtoFile) -> str:
+    """Derive Ada FlatBuffers codec package name from proto package."""
+    parts = proto_file.package.split('.')
+    if parts and parts[-1].lower() in ('provided', 'consumed'):
+        parts = parts[:-1]
+    skip = {'pyramid', 'components', 'data_model', 'base', 'services'}
+    meaningful = [p for p in parts if p.lower() not in skip]
+    ada_parts = ['Pyramid', 'Services']
+    for p in meaningful:
+        ada_parts.append('_'.join(w.capitalize() for w in p.split('_')))
+    ada_parts.append('Flatbuffers_Codec')
     return '.'.join(ada_parts)
 
 
@@ -525,7 +553,7 @@ class AdaServiceGenerator:
         with open(path, 'w') as f:
             f.write(f'--  Auto-generated service binding specification\n')
             f.write(f'--  Generated from: {self._proto_input.name}'
-                    f' by ada_service_generator.py\n')
+                    f' by generate_bindings.py\n')
             f.write(f'--  Package: {pkg_name}\n')
             f.write(f'--\n')
             f.write(f'--  Architecture: component logic > service binding (this) > PCL\n')
@@ -537,18 +565,22 @@ class AdaServiceGenerator:
             f.write(f'--    4. Msg_To_String utility for PCL message payloads\n')
             f.write(f'--\n')
             codec_pkg = _codec_pkg_from_proto(parsed)
-            types_pkg = _types_pkg_from_proto(parsed)
+            wire_types_pkg = _wire_types_pkg_from_proto(parsed)
             f.write(f'--  JSON serialisation/deserialisation is provided by the companion\n')
             f.write(f'--  {codec_pkg} package.\n')
             f.write(f'\n')
             for tp in type_pkgs:
                 f.write(f'with {tp};  use {tp};\n')
-            # Import Json_Codec only if any Invoke_* uses wire types
-            has_wire_types = is_provided and any(
-                schema.INVOKE_WIRE_TYPES.get(rpc.ada_req_type)
-                for svc in parsed.services for rpc in svc.rpcs)
+            # Import service wire types whenever Invoke_* or typed Publish_*
+            # overloads depend on them.
+            has_wire_types = (
+                any(schema.INVOKE_WIRE_TYPES_ADA.get(rpc.ada_req_type)
+                    for svc in parsed.services for rpc in svc.rpcs)
+                or any(schema.TOPIC_WIRE_TYPES_ADA.get(key)
+                       for key in pub_topics)
+            )
             if has_wire_types:
-                f.write(f'with {codec_pkg};\n')
+                f.write(f'with {wire_types_pkg};\n')
             f.write(f'with Pcl_Bindings;\n')
             f.write(f'with Interfaces.C;\n')
             f.write(f'with System;\n')
@@ -657,12 +689,14 @@ class AdaServiceGenerator:
                 f.write(f'   procedure {ada_name}\n')
                 f.write(f'     (Container : Pcl_Bindings.Pcl_Container_Access;\n')
                 f.write(f'      Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;\n')
-                f.write(f'      User_Data : System.Address := System.Null_Address);\n')
+                f.write(f'      User_Data : System.Address := System.Null_Address;\n')
+                f.write(f'      Content_Type : String := "application/json");\n')
                 f.write(f'\n')
 
             f.write(f'   procedure Register_Services\n')
             f.write(f'     (Container : Pcl_Bindings.Pcl_Container_Access;\n')
-            f.write(f'      Handlers  : access constant Service_Handlers := null);\n')
+            f.write(f'      Handlers  : access constant Service_Handlers := null;\n')
+            f.write(f'      Content_Type : String := "application/json");\n')
             f.write(f'\n')
 
             # Invoke helpers for services (provided = client can call them)
@@ -674,23 +708,32 @@ class AdaServiceGenerator:
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
                         req_t = rpc.ada_req_type
-                        wire_t = schema.INVOKE_WIRE_TYPES.get(req_t)
-                        invoke_t = f'{codec_pkg}.{wire_t}' if wire_t else req_t
+                        wire_t = schema.INVOKE_WIRE_TYPES_ADA.get(req_t)
+                        invoke_t = f'{wire_types_pkg}.{wire_t}' if wire_t else req_t
                         f.write(f'   --  Invoke via executor transport (transport-agnostic).\n')
                         f.write(f'   procedure {rpc.ada_invoke_name}\n')
                         f.write(f'     (Executor  : Pcl_Bindings.Pcl_Executor_Access;\n')
                         f.write(f'      Request   : {invoke_t};\n')
                         f.write(f'      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
-                        f.write(f'      User_Data : System.Address := System.Null_Address);\n')
+                        f.write(f'      User_Data : System.Address := System.Null_Address;\n')
+                        f.write(f'      Content_Type : String := "application/json");\n')
                         f.write(f'\n')
 
             # Publish helpers for consumed topics (Ada client publishes to server)
             for key in pub_topics:
                 ada_name = 'Publish_' + '_'.join(
                     w.capitalize() for w in key.split('_'))
+                wire_t = schema.TOPIC_WIRE_TYPES_ADA.get(key)
+                if wire_t:
+                    f.write(f'   procedure {ada_name}\n')
+                    f.write(f'     (Exec    : Pcl_Bindings.Pcl_Executor_Access;\n')
+                    f.write(f'      Payload : {wire_types_pkg}.{wire_t};\n')
+                    f.write(f'      Content_Type : String := "application/json");\n')
+                    f.write(f'\n')
                 f.write(f'   procedure {ada_name}\n')
                 f.write(f'     (Exec    : Pcl_Bindings.Pcl_Executor_Access;\n')
-                f.write(f'      Payload : String);\n')
+                f.write(f'      Payload : String;\n')
+                f.write(f'      Content_Type : String := "application/json");\n')
                 f.write(f'\n')
 
             # Dispatch procedure
@@ -701,6 +744,7 @@ class AdaServiceGenerator:
             f.write(f'      Channel       : in  Service_Channel;\n')
             f.write(f'      Request_Buf   : in  System.Address;\n')
             f.write(f'      Request_Size  : in  Natural;\n')
+            f.write(f'      Content_Type  : in  String := "application/json";\n')
             f.write(f'      Response_Buf  : out System.Address;\n')
             f.write(f'      Response_Size : out Natural);\n')
             f.write(f'\n')
@@ -713,9 +757,12 @@ class AdaServiceGenerator:
                     codec_pkgs: List[str]):
         is_provided = _is_provided(parsed)
         sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
-        has_wire_types = is_provided and any(
-            schema.INVOKE_WIRE_TYPES.get(rpc.ada_req_type)
-            for svc in parsed.services for rpc in svc.rpcs)
+        has_wire_types = (
+            any(schema.INVOKE_WIRE_TYPES_ADA.get(rpc.ada_req_type)
+                for svc in parsed.services for rpc in svc.rpcs)
+            or any(schema.TOPIC_WIRE_TYPES_ADA.get(key)
+                   for key in pub_topics)
+        )
 
         with open(path, 'w') as f:
             f.write(f'--  Auto-generated service binding body\n')
@@ -733,9 +780,11 @@ class AdaServiceGenerator:
             if has_wire_types:
                 codec_pkg = _codec_pkg_from_proto(parsed)
                 f.write(f'with {codec_pkg};\n')
+            f.write(f'with {_flatbuffers_codec_pkg_from_proto(parsed)};\n')
             f.write(f'\n')
             f.write(f'package body {pkg_name} is\n')
             f.write(f'   use type System.Address;\n')
+            f.write(f'   use type Interfaces.C.Strings.chars_ptr;\n')
             f.write(f'\n')
 
             # -- Internal helpers ----------------------------------------------
@@ -772,6 +821,37 @@ class AdaServiceGenerator:
             f.write(f'   begin\n')
             f.write(f'      return String (Chars);\n')
             f.write(f'   end Msg_To_String;\n')
+            f.write(f'\n')
+
+            f.write(f'   package Flatbuffers_Codec renames {_flatbuffers_codec_pkg_from_proto(parsed)};\n')
+            f.write(f'\n')
+            f.write(f'   function Encode_Transport_Payload\n')
+            f.write(f'     (Payload      : String;\n')
+            f.write(f'      Content_Type : String) return String\n')
+            f.write(f'   is\n')
+            f.write(f'   begin\n')
+            f.write(f'      if Content_Type = "" or else Content_Type = "application/json" then\n')
+            f.write(f'         return Payload;\n')
+            f.write(f'      elsif Content_Type = "application/flatbuffers" then\n')
+            f.write(f'         return Flatbuffers_Codec.Encode_Payload (Payload);\n')
+            f.write(f'      end if;\n')
+            f.write(f'\n')
+            f.write(f'      raise Constraint_Error with "Unsupported content type: " & Content_Type;\n')
+            f.write(f'   end Encode_Transport_Payload;\n')
+            f.write(f'\n')
+            f.write(f'   function Decode_Transport_Payload\n')
+            f.write(f'     (Payload      : String;\n')
+            f.write(f'      Content_Type : String) return String\n')
+            f.write(f'   is\n')
+            f.write(f'   begin\n')
+            f.write(f'      if Content_Type = "" or else Content_Type = "application/json" then\n')
+            f.write(f'         return Payload;\n')
+            f.write(f'      elsif Content_Type = "application/flatbuffers" then\n')
+            f.write(f'         return Flatbuffers_Codec.Decode_Payload (Payload);\n')
+            f.write(f'      else\n')
+            f.write(f'         raise Constraint_Error with "Unsupported content type: " & Content_Type;\n')
+            f.write(f'      end if;\n')
+            f.write(f'   end Decode_Transport_Payload;\n')
             f.write(f'\n')
 
             # Default handler implementations
@@ -827,7 +907,8 @@ class AdaServiceGenerator:
 
             f.write(f'   procedure Register_Services\n')
             f.write(f'     (Container : Pcl_Bindings.Pcl_Container_Access;\n')
-            f.write(f'      Handlers  : access constant Service_Handlers := null)\n')
+            f.write(f'      Handlers  : access constant Service_Handlers := null;\n')
+            f.write(f'      Content_Type : String := "application/json")\n')
             f.write(f'   is\n')
             f.write(f'      Handler_Ptr : constant System.Address := Handler_Address (Handlers);\n')
             f.write(f'   begin\n')
@@ -837,7 +918,7 @@ class AdaServiceGenerator:
                 f.write(f'         Service_Name : Interfaces.C.Strings.chars_ptr :=\n')
                 f.write(f'           Interfaces.C.Strings.New_String ({rpc.ada_svc_const});\n')
                 f.write(f'         Type_Name : Interfaces.C.Strings.chars_ptr :=\n')
-                f.write(f'           Interfaces.C.Strings.New_String ("application/json");\n')
+                f.write(f'           Interfaces.C.Strings.New_String (Content_Type);\n')
                 f.write(f'         Port : Pcl_Bindings.Pcl_Port_Access;\n')
                 f.write(f'         pragma Unreferenced (Port);\n')
                 f.write(f'      begin\n')
@@ -865,6 +946,10 @@ class AdaServiceGenerator:
                 f.write(f'      pragma Unreferenced (Self, Ctx);\n')
                 f.write(f'      Handlers_Ptr : constant Service_Handlers_Access :=\n')
                 f.write(f'        (if User_Data = System.Null_Address then null else To_Handlers (User_Data));\n')
+                f.write(f'      Req_Type  : constant String :=\n')
+                f.write(f'        (if Request.Type_Name = Interfaces.C.Strings.Null_Ptr\n')
+                f.write(f'         then "application/json"\n')
+                f.write(f'         else Interfaces.C.Strings.Value (Request.Type_Name));\n')
                 f.write(f'      Resp_Buf  : System.Address := System.Null_Address;\n')
                 f.write(f'      Resp_Size : Natural := 0;\n')
                 f.write(f'   begin\n')
@@ -873,13 +958,20 @@ class AdaServiceGenerator:
                 f.write(f'         Channel       => {rpc.ada_channel},\n')
                 f.write(f'         Request_Buf   => Request.Data,\n')
                 f.write(f'         Request_Size  => Natural (Request.Size),\n')
+                f.write(f'         Content_Type  => Req_Type,\n')
                 f.write(f'         Response_Buf  => Resp_Buf,\n')
                 f.write(f'         Response_Size => Resp_Size);\n')
                 f.write(f'      Response.Data := Resp_Buf;\n')
                 f.write(f'      Response.Size := Interfaces.C.unsigned (Resp_Size);\n')
                 f.write(f'      Response.Type_Name :=\n')
-                f.write(f'        Interfaces.C.Strings.New_String ("application/json");\n')
+                f.write(f'        Interfaces.C.Strings.New_String (Req_Type);\n')
                 f.write(f'      return Pcl_Bindings.PCL_OK;\n')
+                f.write(f'   exception\n')
+                f.write(f'      when others =>\n')
+                f.write(f'         Response.Data := System.Null_Address;\n')
+                f.write(f'         Response.Size := 0;\n')
+                f.write(f'         Response.Type_Name := Interfaces.C.Strings.Null_Ptr;\n')
+                f.write(f'         return Pcl_Bindings.PCL_ERR_INVALID;\n')
                 f.write(f'   end {callback_name};\n')
                 f.write(f'\n')
 
@@ -897,12 +989,13 @@ class AdaServiceGenerator:
                 f.write(f'   procedure {ada_name}\n')
                 f.write(f'     (Container : Pcl_Bindings.Pcl_Container_Access;\n')
                 f.write(f'      Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;\n')
-                f.write(f'      User_Data : System.Address := System.Null_Address)\n')
+                f.write(f'      User_Data : System.Address := System.Null_Address;\n')
+                f.write(f'      Content_Type : String := "application/json")\n')
                 f.write(f'   is\n')
                 f.write(f'      Topic  : Interfaces.C.Strings.chars_ptr :=\n')
                 f.write(f'        Interfaces.C.Strings.New_String ({const_name});\n')
                 f.write(f'      Type_N : Interfaces.C.Strings.chars_ptr :=\n')
-                f.write(f'        Interfaces.C.Strings.New_String ("application/json");\n')
+                f.write(f'        Interfaces.C.Strings.New_String (Content_Type);\n')
                 f.write(f'      Port   : Pcl_Bindings.Pcl_Port_Access;\n')
                 f.write(f'      pragma Unreferenced (Port);\n')
                 f.write(f'   begin\n')
@@ -923,23 +1016,25 @@ class AdaServiceGenerator:
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
                         req_t = rpc.ada_req_type
-                        wire_t = schema.INVOKE_WIRE_TYPES.get(req_t)
-                        invoke_t = f'{codec_pkg}.{wire_t}' if wire_t else req_t
+                        wire_t = schema.INVOKE_WIRE_TYPES_ADA.get(req_t)
+                        invoke_t = f'{_wire_types_pkg_from_proto(parsed)}.{wire_t}' if wire_t else req_t
                         f.write(f'   procedure {rpc.ada_invoke_name}\n')
                         f.write(f'     (Executor  : Pcl_Bindings.Pcl_Executor_Access;\n')
                         f.write(f'      Request   : {invoke_t};\n')
                         f.write(f'      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
-                        f.write(f'      User_Data : System.Address := System.Null_Address)\n')
+                        f.write(f'      User_Data : System.Address := System.Null_Address;\n')
+                        f.write(f'      Content_Type : String := "application/json")\n')
                         f.write(f'   is\n')
                         f.write(f'      use type Pcl_Bindings.Pcl_Status;\n')
                         # Serialize request to JSON string — use Json_Codec
                         # for wire types, data model codec for base types.
                         if req_t == 'Identifier':
-                            f.write(f'      Payload : constant String := To_String (Request);\n')
+                            f.write(f'      Json_Payload : constant String := To_String (Request);\n')
                         elif wire_t:
-                            f.write(f'      Payload : constant String := {codec_pkg}.To_Json (Request);\n')
+                            f.write(f'      Json_Payload : constant String := {codec_pkg}.To_Json (Request);\n')
                         else:
-                            f.write(f'      Payload : constant String := To_Json (Request);\n')
+                            f.write(f'      Json_Payload : constant String := To_Json (Request);\n')
+                        f.write(f'      Payload : constant String := Encode_Transport_Payload (Json_Payload, Content_Type);\n')
                         f.write(f'      Req_C  : Interfaces.C.Strings.chars_ptr :=\n')
                         f.write(f'        Interfaces.C.Strings.New_String (Payload);\n')
                         f.write(f'      Svc_C  : Interfaces.C.Strings.chars_ptr :=\n')
@@ -950,7 +1045,7 @@ class AdaServiceGenerator:
                         f.write(f'   begin\n')
                         f.write(f"      Msg.Data      := To_Address (Req_C);\n")
                         f.write(f"      Msg.Size      := Interfaces.C.unsigned (Payload'Length);\n")
-                        f.write(f'      Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");\n')
+                        f.write(f'      Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);\n')
                         f.write(f'      Status := Pcl_Bindings.Invoke_Async\n')
                         f.write(f"        (Executor, Svc_C, Msg'Access, Callback, User_Data);\n")
                         f.write(f'      Interfaces.C.Strings.Free (Req_C);\n')
@@ -965,10 +1060,23 @@ class AdaServiceGenerator:
                     w.capitalize() for w in key.split('_'))
                 const_name = 'Topic_' + '_'.join(
                     w.capitalize() for w in key.split('_'))
+                wire_t = schema.TOPIC_WIRE_TYPES_ADA.get(key)
+
+                if wire_t:
+                    f.write(f'   procedure {ada_name}\n')
+                    f.write(f'     (Exec    : Pcl_Bindings.Pcl_Executor_Access;\n')
+                    f.write(f'      Payload : {_wire_types_pkg_from_proto(parsed)}.{wire_t};\n')
+                    f.write(f'      Content_Type : String := "application/json")\n')
+                    f.write(f'   is\n')
+                    f.write(f'   begin\n')
+                    f.write(f'      {ada_name} (Exec, Encode_Transport_Payload ({codec_pkg}.To_Json (Payload), Content_Type), Content_Type);\n')
+                    f.write(f'   end {ada_name};\n')
+                    f.write(f'\n')
 
                 f.write(f'   procedure {ada_name}\n')
                 f.write(f'     (Exec    : Pcl_Bindings.Pcl_Executor_Access;\n')
-                f.write(f'      Payload : String)\n')
+                f.write(f'      Payload : String;\n')
+                f.write(f'      Content_Type : String := "application/json")\n')
                 f.write(f'   is\n')
                 f.write(f'      use type Pcl_Bindings.Pcl_Status;\n')
                 f.write(f'      Payload_C : Interfaces.C.Strings.chars_ptr :=\n')
@@ -981,7 +1089,7 @@ class AdaServiceGenerator:
                 f.write(f'   begin\n')
                 f.write(f"      Msg.Data      := To_Address (Payload_C);\n")
                 f.write(f"      Msg.Size      := Interfaces.C.unsigned (Payload'Length);\n")
-                f.write(f'      Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");\n')
+                f.write(f'      Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);\n')
                 f.write(f"      Status := Pcl_Bindings.Publish (Exec, Topic_C, Msg'Access);\n")
                 f.write(f'      Interfaces.C.Strings.Free (Payload_C);\n')
                 f.write(f'      Interfaces.C.Strings.Free (Topic_C);\n')
@@ -1010,11 +1118,13 @@ class AdaServiceGenerator:
             f.write(f'      Channel       : in  Service_Channel;\n')
             f.write(f'      Request_Buf   : in  System.Address;\n')
             f.write(f'      Request_Size  : in  Natural;\n')
+            f.write(f'      Content_Type  : in  String := "application/json";\n')
             f.write(f'      Response_Buf  : out System.Address;\n')
             f.write(f'      Response_Size : out Natural)\n')
             f.write(f'   is\n')
-            f.write(f'      Req_Str : constant String := Msg_To_String (Request_Buf,\n')
-            f.write(f'        Interfaces.C.unsigned (Request_Size));\n')
+            f.write(f'      Req_Str : constant String := Decode_Transport_Payload\n')
+            f.write(f'        (Msg_To_String (Request_Buf, Interfaces.C.unsigned (Request_Size)),\n')
+            f.write(f'         Content_Type);\n')
             f.write(f'   begin\n')
             f.write(f'      Response_Buf  := System.Null_Address;\n')
             f.write(f'      Response_Size := 0;\n')
@@ -1063,7 +1173,7 @@ class AdaServiceGenerator:
                     f.write(f'                     Append (Acc, {elem_ser});\n')
                     f.write(f'                  end loop;\n')
                     f.write(f'                  Append (Acc, "]");\n')
-                    f.write(f'                  Copy_To_Buf (To_String (Acc),\n')
+                    f.write(f'                  Copy_To_Buf (Encode_Transport_Payload (To_String (Acc), Content_Type),\n')
                     f.write(f'                    Response_Buf, Response_Size);\n')
                     f.write(f'               end;\n')
                 else:
@@ -1079,10 +1189,10 @@ class AdaServiceGenerator:
 
                     # Serialise response and copy to buffer
                     if rsp_t == 'Identifier':
-                        f.write(f'               Copy_To_Buf (To_String (Rsp),\n')
+                        f.write(f'               Copy_To_Buf (Encode_Transport_Payload (To_String (Rsp), Content_Type),\n')
                         f.write(f'                 Response_Buf, Response_Size);\n')
                     else:
-                        f.write(f'               Copy_To_Buf (To_Json (Rsp),\n')
+                        f.write(f'               Copy_To_Buf (Encode_Transport_Payload (To_Json (Rsp), Content_Type),\n')
                         f.write(f'                 Response_Buf, Response_Size);\n')
 
                 f.write(f'            end;\n')
@@ -1114,10 +1224,48 @@ def _needed_data_model_pkgs_for_schemas() -> List[str]:
                 spec = schema.ENUM_SPECS[fld.kind]
                 # proto_file is the absolute path; stem gives e.g. 'common'
                 stem = Path(spec.proto_file).stem
-                ada_pkg = f'Pyramid_Data_Model_{stem.capitalize()}_Types'
+                ada_pkg = f'Pyramid.Data_Model.{stem.capitalize()}.Types'
                 if ada_pkg in _DATA_MODEL_TYPES_PKGS:
                     needed.add(ada_pkg)
     return [p for p in _DATA_MODEL_TYPES_PKGS if p in needed]
+
+
+class WireTypesGenerator:
+    """Generates the service-local wire model package from json_schema.py."""
+
+    def __init__(self, proto_file: ProtoFile):
+        self.PKG = _wire_types_pkg_from_proto(proto_file)
+
+    def generate(self, output_dir: str):
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        ads = out / (self.PKG.lower().replace('.', '-') + '.ads')
+        self._write_spec(ads)
+        _ensure_parent_packages(out, [self.PKG])
+        print(f'  Generated {self.PKG}')
+
+    def _write_spec(self, path: Path):
+        with open(path, 'w') as f:
+            f.write('--  Auto-generated service wire types specification\n')
+            f.write(f'--  Package: {self.PKG}\n')
+            f.write('--  Generated from pim/json_schema.py\n\n')
+            f.write('with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')
+            for tp in _needed_data_model_pkgs_for_schemas():
+                f.write(f'with {tp};  use {tp};\n')
+            f.write('\n')
+            f.write(f'package {self.PKG} is\n\n')
+            for msg in schema.ALL_SCHEMAS:
+                f.write(f'   --  {msg.wire_description}\n')
+                f.write(f'   type {msg.ada_name} is record\n')
+                for fld in msg.fields:
+                    comment = f'  --  {fld.description}' if fld.description else ''
+                    req_tag = '' if fld.required else '  --  optional'
+                    tag = comment or req_tag
+                    f.write(f'      {fld.ada_field_name:<24}: {fld.ada_type} := {fld.ada_default};{tag}\n')
+                f.write(f'   end record;\n\n')
+            f.write('   type Entity_Match_Array is\n')
+            f.write('     array (Positive range <>) of Entity_Match;\n\n')
+            f.write(f'end {self.PKG};\n')
 
 
 class JsonCodecGenerator:
@@ -1134,7 +1282,7 @@ class JsonCodecGenerator:
 
     def __init__(self, proto_file: ProtoFile):
         self.PKG = _codec_pkg_from_proto(proto_file)
-        self._types_pkg = _types_pkg_from_proto(proto_file)
+        self._wire_types_pkg = _wire_types_pkg_from_proto(proto_file)
 
     def generate(self, output_dir: str):
         out = Path(output_dir)
@@ -1154,7 +1302,7 @@ class JsonCodecGenerator:
         with open(path, 'w') as f:
             f.write('--  Auto-generated JSON codec specification\n')
             f.write(f'--  Package: {self.PKG}\n')
-            f.write('--  Generated by ada_service_generator.py (JsonCodecGenerator)\n')
+            f.write('--  Generated by generate_bindings.py (JsonCodecGenerator)\n')
             f.write('--  Schema source: pim/json_schema.py\n')
             f.write('--\n')
             f.write('--  Canonical JSON wire format for the pyramid standard bridge protocol.\n')
@@ -1166,28 +1314,11 @@ class JsonCodecGenerator:
             f.write('--  Architecture: component logic > Json_Codec > service binding > PCL\n')
             f.write('\n')
             f.write('with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')
+            f.write(f'with {self._wire_types_pkg};  use {self._wire_types_pkg};\n')
             for tp in _needed_data_model_pkgs_for_schemas():
                 f.write(f'with {tp};  use {tp};\n')
             f.write('\n')
             f.write(f'package {self.PKG} is\n')
-            f.write('\n')
-
-            # -- Record type declarations --------------------------------------
-            for msg in schema.ALL_SCHEMAS:
-                f.write(f'   --  -- {msg.ada_name} {"─" * max(1, 60 - len(msg.ada_name))}\n')
-                f.write(f'   --  {msg.wire_description}\n')
-                f.write(f'   type {msg.ada_name} is record\n')
-                for fld in msg.fields:
-                    comment = f'  --  {fld.description}' if fld.description else ''
-                    req_tag = '' if fld.required else '  --  optional'
-                    tag = comment or req_tag
-                    f.write(f'      {fld.ada_field_name:<24}: {fld.ada_type} := {fld.ada_default};{tag}\n')
-                f.write(f'   end record;\n')
-                f.write(f'\n')
-
-            # Array type for entity matches
-            f.write('   type Entity_Match_Array is\n')
-            f.write('     array (Positive range <>) of Entity_Match;\n')
             f.write('\n')
 
             # -- Serialisation functions ---------------------------------------
@@ -1230,6 +1361,7 @@ class JsonCodecGenerator:
             f.write('--  Auto-generated JSON codec body\n')
             f.write(f'--  Package body: {self.PKG}\n')
             f.write('\n')
+            f.write(f'with {self._wire_types_pkg};  use {self._wire_types_pkg};\n')
             f.write('with GNATCOLL.JSON;  use GNATCOLL.JSON;\n')
             f.write('\n')
             f.write(f'package body {self.PKG} is\n')
@@ -1496,23 +1628,26 @@ class AdaTypesGenerator:
     def generate(self, output_dir: str) -> None:
         out = Path(output_dir)
         out.mkdir(parents=True, exist_ok=True)
+        generated_pkgs: List[str] = []
         for pf in self._index.files:
             ada_pkg = self._ada_pkg_for_file(pf)
             file_base = ada_pkg.lower().replace('.', '-')
             ads = out / (file_base + '.ads')
             self._write_ads_for_file(ads, pf, ada_pkg)
+            generated_pkgs.append(ada_pkg)
             print(f'  Generated {ada_pkg}')
+        _ensure_parent_packages(out, generated_pkgs)
 
     @staticmethod
     def _ada_pkg_for_file(pf) -> str:
         """Derive Ada package name from a proto file's package.
 
-        pyramid.data_model.common -> Pyramid_Data_Model_Common_Types
+        pyramid.data_model.common -> Pyramid.Data_Model.Common.Types
         """
         parts = pf.package.split('.')
         ada_parts = ['_'.join(w.capitalize() for w in seg.split('_'))
                      for seg in parts]
-        return '_'.join(ada_parts) + '_Types'
+        return '.'.join(ada_parts + ['Types'])
 
     def _with_clauses_for_file(self, pf) -> List[str]:
         """Return Ada 'with Pkg; use Pkg;' lines for imports from the index."""
@@ -1703,7 +1838,7 @@ class AdaTypesGenerator:
         with open(path, 'w') as f:
             f.write('--  Auto-generated types specification\n')
             f.write(f'--  Generated from: {pf.path.name}'
-                    f' by ada_service_generator.py --types\n')
+                    f' by generate_bindings.py (types)\n')
             f.write(f'--  Package: {ada_pkg}\n\n')
             f.write('with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')
             for wc in with_clauses:
@@ -1805,9 +1940,30 @@ class AdaDataModelCodecGenerator:
     def generate(self, output_dir: str) -> None:
         out = Path(output_dir)
         out.mkdir(parents=True, exist_ok=True)
+        if not self._has_generated_content():
+            print(f'  Skipped empty codec package {self._ada_pkg}')
+            return
         self._write_spec(out / self._ads_name)
         self._write_body(out / self._adb_name)
+        _ensure_parent_packages(out, [self._ada_pkg])
         print(f'  Generated {self._ada_pkg}')
+
+    def _has_generated_content(self) -> bool:
+        """Return True when this proto file needs a codec package.
+
+        We only need to emit a ``*_Codec`` package when the file contributes at
+        least one real public codec/helper declaration:
+
+        - enum string converters for enums defined in the file
+        - To_Json / From_Json routines for non-alias messages defined in the file
+
+        Files that contain only scalar-wrapper aliases, services, or no
+        messages/enums at all produce empty packages today; skip those entirely.
+        """
+        alias_names = set(self._aliases.keys())
+        has_structs = any(m.name not in alias_names for m in self._pf.messages)
+        has_enums = bool(self._pf.enums)
+        return has_structs or has_enums
 
     def _inline_base_fields(self, msg):
         """Expand 'base' fields inline, same logic as AdaTypesGenerator."""
@@ -1835,7 +1991,7 @@ class AdaDataModelCodecGenerator:
         with open(path, 'w') as f:
             f.write('--  Auto-generated data model JSON codec specification\n')
             f.write(f'--  Generated from: {self._pf.path.name}'
-                    f' by ada_service_generator.py --codec\n')
+                    f' by generate_bindings.py (codec)\n')
             f.write(f'--  Package: {self._ada_pkg}\n\n')
             f.write('with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')
             f.write(f'with {self._types_pkg};  use {self._types_pkg};\n')

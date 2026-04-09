@@ -23,6 +23,7 @@
 ///                          [--timeout SECS]
 #include <TacticalObjectsCodec.h>
 #include <StreamingCodec.h>
+#include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 #include <pcl/pcl_executor.h>
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_transport_socket.h>
@@ -43,6 +44,7 @@
 
 using namespace tactical_objects;
 using json = nlohmann::json;
+namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
 
 // ---------------------------------------------------------------------------
 // Globals
@@ -50,6 +52,8 @@ using json = nlohmann::json;
 
 static std::atomic<bool> g_shutdown{false};
 static void signal_handler(int) { g_shutdown.store(true); }
+static constexpr const char* kJsonContentType = "application/json";
+static constexpr const char* kFlatBuffersContentType = "application/flatbuffers";
 
 // ---------------------------------------------------------------------------
 // Shared state between callbacks and main loop
@@ -81,9 +85,48 @@ struct BridgeState {
 
   // Response buffer for service handler (frontend thread)
   std::string resp_buf;
+  std::string frontend_content_type = kJsonContentType;
 };
 
 static BridgeState g_bridge;
+
+static bool is_flatbuffers_content_type(const char* content_type) {
+  return content_type &&
+         std::strcmp(content_type, kFlatBuffersContentType) == 0;
+}
+
+static const char* normalize_content_type(const char* content_type) {
+  return is_flatbuffers_content_type(content_type)
+             ? kFlatBuffersContentType
+             : kJsonContentType;
+}
+
+static std::string encode_frontend_payload(const std::string& payload,
+                                           const char* content_type) {
+  if (is_flatbuffers_content_type(content_type)) {
+    return flatbuffers_codec::wrapPayload(payload);
+  }
+  return payload;
+}
+
+static bool decode_frontend_payload(const pcl_msg_t* msg, std::string& payload) {
+  if (!msg || !msg->data || msg->size == 0) {
+    return false;
+  }
+
+  try {
+    const auto* bytes = static_cast<const char*>(msg->data);
+    if ((msg->size >= 4 && std::memcmp(bytes, "PWFB", 4) == 0)
+        || is_flatbuffers_content_type(msg->type_name)) {
+      payload = flatbuffers_codec::unwrapPayload(msg->data, msg->size);
+    } else {
+      payload.assign(bytes, msg->size);
+    }
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Standard ↔ Internal enum converters (same as StandardBridge.cpp)
@@ -155,10 +198,12 @@ static void backend_entity_updates_cb(pcl_container_t*, const pcl_msg_t* msg,
 
   if (arr.empty()) return;
 
-  std::string payload = arr.dump();
+  std::string payload = encode_frontend_payload(
+      arr.dump(), g_bridge.frontend_content_type.c_str());
   std::lock_guard<std::mutex> lock(g_bridge.mu);
   g_bridge.to_frontend.push_back(
-      {"standard.entity_matches", "application/json", std::move(payload)});
+      {"standard.entity_matches", g_bridge.frontend_content_type,
+       std::move(payload)});
 }
 
 // ---------------------------------------------------------------------------
@@ -169,10 +214,12 @@ static void backend_evidence_reqs_cb(pcl_container_t*, const pcl_msg_t* msg,
                                      void*) {
   if (!msg || !msg->data || msg->size == 0) return;
 
-  std::string payload(static_cast<const char*>(msg->data), msg->size);
+  std::string payload = encode_frontend_payload(
+      std::string(static_cast<const char*>(msg->data), msg->size),
+      g_bridge.frontend_content_type.c_str());
   std::lock_guard<std::mutex> lock(g_bridge.mu);
   g_bridge.to_frontend.push_back(
-      {"standard.evidence_requirements", "application/json",
+      {"standard.evidence_requirements", g_bridge.frontend_content_type,
        std::move(payload)});
 }
 
@@ -196,9 +243,8 @@ static pcl_status_t backend_on_configure(pcl_container_t* c, void*) {
 
 static void frontend_object_evidence_cb(pcl_container_t*, const pcl_msg_t* msg,
                                         void*) {
-  if (!msg || !msg->data || msg->size == 0) return;
-
-  std::string str(static_cast<const char*>(msg->data), msg->size);
+  std::string str;
+  if (!decode_frontend_payload(msg, str)) return;
   json j;
   try {
     j = json::parse(str);
@@ -254,9 +300,10 @@ static pcl_status_t frontend_create_requirement(pcl_container_t*,
                                                  pcl_msg_t* response,
                                                  pcl_svc_context_t*,
                                                  void*) {
-  if (!request->data || request->size == 0) return PCL_ERR_INVALID;
-
-  std::string str(static_cast<const char*>(request->data), request->size);
+  std::string str;
+  if (!decode_frontend_payload(request, str)) return PCL_ERR_INVALID;
+  const char* frontend_content_type = normalize_content_type(
+      request ? request->type_name : nullptr);
   json req_j;
   try {
     req_j = json::parse(str);
@@ -323,10 +370,11 @@ static pcl_status_t frontend_create_requirement(pcl_container_t*,
       resp_cb, &ctx);
 
   if (rc != PCL_OK) {
-    g_bridge.resp_buf = "{\"error\":\"enqueue failed\"}";
+    g_bridge.resp_buf = encode_frontend_payload(
+        "{\"error\":\"enqueue failed\"}", frontend_content_type);
     response->data      = g_bridge.resp_buf.data();
     response->size      = static_cast<uint32_t>(g_bridge.resp_buf.size());
-    response->type_name = "application/json";
+    response->type_name = frontend_content_type;
     return PCL_OK;
   }
 
@@ -340,10 +388,11 @@ static pcl_status_t frontend_create_requirement(pcl_container_t*,
   }
 
   if (!ctx.done.load()) {
-    g_bridge.resp_buf = "{\"error\":\"subscribe_interest timeout\"}";
+    g_bridge.resp_buf = encode_frontend_payload(
+        "{\"error\":\"subscribe_interest timeout\"}", frontend_content_type);
     response->data      = g_bridge.resp_buf.data();
     response->size      = static_cast<uint32_t>(g_bridge.resp_buf.size());
-    response->type_name = "application/json";
+    response->type_name = frontend_content_type;
     return PCL_OK;
   }
 
@@ -363,7 +412,9 @@ static pcl_status_t frontend_create_requirement(pcl_container_t*,
     std::lock_guard<std::mutex> lock(g_bridge.mu);
     for (const auto& ev : iresp["evidence_requirements"]) {
       g_bridge.to_frontend.push_back(
-          {"standard.evidence_requirements", "application/json", ev.dump()});
+          {"standard.evidence_requirements", g_bridge.frontend_content_type,
+           encode_frontend_payload(
+               ev.dump(), g_bridge.frontend_content_type.c_str())});
     }
   }
 
@@ -374,10 +425,11 @@ static pcl_status_t frontend_create_requirement(pcl_container_t*,
     std_resp["solution_id"] = iresp["solution_id"];
   }
 
-  g_bridge.resp_buf    = std_resp.dump();
+  g_bridge.resp_buf    = encode_frontend_payload(
+      std_resp.dump(), frontend_content_type);
   response->data       = g_bridge.resp_buf.data();
   response->size       = static_cast<uint32_t>(g_bridge.resp_buf.size());
-  response->type_name  = "application/json";
+  response->type_name  = frontend_content_type;
   return PCL_OK;
 }
 
@@ -387,17 +439,17 @@ static pcl_status_t frontend_create_requirement(pcl_container_t*,
 
 static pcl_status_t frontend_on_configure(pcl_container_t* c, void*) {
   pcl_container_add_subscriber(c, "standard.object_evidence",
-                               "application/json",
+                               kJsonContentType,
                                frontend_object_evidence_cb, nullptr);
   pcl_container_add_service(c, "object_of_interest.create_requirement",
-                            "application/json",
+                            kJsonContentType,
                             frontend_create_requirement, nullptr);
   g_bridge.pub_entity_matches =
       pcl_container_add_publisher(c, "standard.entity_matches",
-                                  "application/json");
+                                  kJsonContentType);
   g_bridge.pub_evidence_reqs =
       pcl_container_add_publisher(c, "standard.evidence_requirements",
-                                  "application/json");
+                                  kJsonContentType);
   return PCL_OK;
 }
 
@@ -423,6 +475,8 @@ int main(int argc, char* argv[]) {
       port_file = argv[++i];
     } else if (std::strcmp(argv[i], "--timeout") == 0 && i + 1 < argc) {
       timeout_secs = std::atoi(argv[++i]);
+    } else if (std::strcmp(argv[i], "--frontend-content-type") == 0 && i + 1 < argc) {
+      g_bridge.frontend_content_type = normalize_content_type(argv[++i]);
     }
   }
 

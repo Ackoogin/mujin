@@ -6,12 +6,14 @@ with Ada.Unchecked_Conversion;
 with Interfaces.C.Strings;
 with System;
 with System.Storage_Elements;
-with Pyramid_Data_Model_Common_Types_Codec;  use Pyramid_Data_Model_Common_Types_Codec;
-with Pyramid_Data_Model_Tactical_Types_Codec;  use Pyramid_Data_Model_Tactical_Types_Codec;
+with Pyramid.Data_Model.Common.Types_Codec;  use Pyramid.Data_Model.Common.Types_Codec;
+with Pyramid.Data_Model.Tactical.Types_Codec;  use Pyramid.Data_Model.Tactical.Types_Codec;
 with Pyramid.Services.Tactical_Objects.Json_Codec;
+with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
 
 package body Pyramid.Services.Tactical_Objects.Provided is
    use type System.Address;
+   use type Interfaces.C.Strings.chars_ptr;
 
    function To_Address is new
      Ada.Unchecked_Conversion (Interfaces.C.Strings.chars_ptr, System.Address);
@@ -44,6 +46,36 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    begin
       return String (Chars);
    end Msg_To_String;
+
+   package Flatbuffers_Codec renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
+
+   function Encode_Transport_Payload
+     (Payload      : String;
+      Content_Type : String) return String
+   is
+   begin
+      if Content_Type = "" or else Content_Type = "application/json" then
+         return Payload;
+      elsif Content_Type = "application/flatbuffers" then
+         return Flatbuffers_Codec.Encode_Payload (Payload);
+      end if;
+
+      raise Constraint_Error with "Unsupported content type: " & Content_Type;
+   end Encode_Transport_Payload;
+
+   function Decode_Transport_Payload
+     (Payload      : String;
+      Content_Type : String) return String
+   is
+   begin
+      if Content_Type = "" or else Content_Type = "application/json" then
+         return Payload;
+      elsif Content_Type = "application/flatbuffers" then
+         return Flatbuffers_Codec.Decode_Payload (Payload);
+      else
+         raise Constraint_Error with "Unsupported content type: " & Content_Type;
+      end if;
+   end Decode_Transport_Payload;
 
    --  -- Matching_Objects_Service ------------------------------------
    function Default_Handle_Read_Match
@@ -152,7 +184,8 @@ package body Pyramid.Services.Tactical_Objects.Provided is
 
    procedure Register_Services
      (Container : Pcl_Bindings.Pcl_Container_Access;
-      Handlers  : access constant Service_Handlers := null)
+      Handlers  : access constant Service_Handlers := null;
+      Content_Type : String := "application/json")
    is
       Handler_Ptr : constant System.Address := Handler_Address (Handlers);
    begin
@@ -160,7 +193,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Service_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Svc_Read_Match);
          Type_Name : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String ("application/json");
+           Interfaces.C.Strings.New_String (Content_Type);
          Port : Pcl_Bindings.Pcl_Port_Access;
          pragma Unreferenced (Port);
       begin
@@ -177,7 +210,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Service_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Svc_Create_Requirement);
          Type_Name : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String ("application/json");
+           Interfaces.C.Strings.New_String (Content_Type);
          Port : Pcl_Bindings.Pcl_Port_Access;
          pragma Unreferenced (Port);
       begin
@@ -194,7 +227,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Service_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Svc_Read_Requirement);
          Type_Name : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String ("application/json");
+           Interfaces.C.Strings.New_String (Content_Type);
          Port : Pcl_Bindings.Pcl_Port_Access;
          pragma Unreferenced (Port);
       begin
@@ -211,7 +244,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Service_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Svc_Update_Requirement);
          Type_Name : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String ("application/json");
+           Interfaces.C.Strings.New_String (Content_Type);
          Port : Pcl_Bindings.Pcl_Port_Access;
          pragma Unreferenced (Port);
       begin
@@ -228,7 +261,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Service_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Svc_Delete_Requirement);
          Type_Name : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String ("application/json");
+           Interfaces.C.Strings.New_String (Content_Type);
          Port : Pcl_Bindings.Pcl_Port_Access;
          pragma Unreferenced (Port);
       begin
@@ -245,7 +278,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Service_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Svc_Read_Detail);
          Type_Name : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String ("application/json");
+           Interfaces.C.Strings.New_String (Content_Type);
          Port : Pcl_Bindings.Pcl_Port_Access;
          pragma Unreferenced (Port);
       begin
@@ -270,6 +303,10 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       pragma Unreferenced (Self, Ctx);
       Handlers_Ptr : constant Service_Handlers_Access :=
         (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Req_Type  : constant String :=
+        (if Request.Type_Name = Interfaces.C.Strings.Null_Ptr
+         then "application/json"
+         else Interfaces.C.Strings.Value (Request.Type_Name));
       Resp_Buf  : System.Address := System.Null_Address;
       Resp_Size : Natural := 0;
    begin
@@ -278,13 +315,20 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Channel       => Ch_Read_Match,
          Request_Buf   => Request.Data,
          Request_Size  => Natural (Request.Size),
+         Content_Type  => Req_Type,
          Response_Buf  => Resp_Buf,
          Response_Size => Resp_Size);
       Response.Data := Resp_Buf;
       Response.Size := Interfaces.C.unsigned (Resp_Size);
       Response.Type_Name :=
-        Interfaces.C.Strings.New_String ("application/json");
+        Interfaces.C.Strings.New_String (Req_Type);
       return Pcl_Bindings.PCL_OK;
+   exception
+      when others =>
+         Response.Data := System.Null_Address;
+         Response.Size := 0;
+         Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
+         return Pcl_Bindings.PCL_ERR_INVALID;
    end Service_Read_Match;
 
    function Service_Create_Requirement
@@ -297,6 +341,10 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       pragma Unreferenced (Self, Ctx);
       Handlers_Ptr : constant Service_Handlers_Access :=
         (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Req_Type  : constant String :=
+        (if Request.Type_Name = Interfaces.C.Strings.Null_Ptr
+         then "application/json"
+         else Interfaces.C.Strings.Value (Request.Type_Name));
       Resp_Buf  : System.Address := System.Null_Address;
       Resp_Size : Natural := 0;
    begin
@@ -305,13 +353,20 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Channel       => Ch_Create_Requirement,
          Request_Buf   => Request.Data,
          Request_Size  => Natural (Request.Size),
+         Content_Type  => Req_Type,
          Response_Buf  => Resp_Buf,
          Response_Size => Resp_Size);
       Response.Data := Resp_Buf;
       Response.Size := Interfaces.C.unsigned (Resp_Size);
       Response.Type_Name :=
-        Interfaces.C.Strings.New_String ("application/json");
+        Interfaces.C.Strings.New_String (Req_Type);
       return Pcl_Bindings.PCL_OK;
+   exception
+      when others =>
+         Response.Data := System.Null_Address;
+         Response.Size := 0;
+         Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
+         return Pcl_Bindings.PCL_ERR_INVALID;
    end Service_Create_Requirement;
 
    function Service_Read_Requirement
@@ -324,6 +379,10 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       pragma Unreferenced (Self, Ctx);
       Handlers_Ptr : constant Service_Handlers_Access :=
         (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Req_Type  : constant String :=
+        (if Request.Type_Name = Interfaces.C.Strings.Null_Ptr
+         then "application/json"
+         else Interfaces.C.Strings.Value (Request.Type_Name));
       Resp_Buf  : System.Address := System.Null_Address;
       Resp_Size : Natural := 0;
    begin
@@ -332,13 +391,20 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Channel       => Ch_Read_Requirement,
          Request_Buf   => Request.Data,
          Request_Size  => Natural (Request.Size),
+         Content_Type  => Req_Type,
          Response_Buf  => Resp_Buf,
          Response_Size => Resp_Size);
       Response.Data := Resp_Buf;
       Response.Size := Interfaces.C.unsigned (Resp_Size);
       Response.Type_Name :=
-        Interfaces.C.Strings.New_String ("application/json");
+        Interfaces.C.Strings.New_String (Req_Type);
       return Pcl_Bindings.PCL_OK;
+   exception
+      when others =>
+         Response.Data := System.Null_Address;
+         Response.Size := 0;
+         Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
+         return Pcl_Bindings.PCL_ERR_INVALID;
    end Service_Read_Requirement;
 
    function Service_Update_Requirement
@@ -351,6 +417,10 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       pragma Unreferenced (Self, Ctx);
       Handlers_Ptr : constant Service_Handlers_Access :=
         (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Req_Type  : constant String :=
+        (if Request.Type_Name = Interfaces.C.Strings.Null_Ptr
+         then "application/json"
+         else Interfaces.C.Strings.Value (Request.Type_Name));
       Resp_Buf  : System.Address := System.Null_Address;
       Resp_Size : Natural := 0;
    begin
@@ -359,13 +429,20 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Channel       => Ch_Update_Requirement,
          Request_Buf   => Request.Data,
          Request_Size  => Natural (Request.Size),
+         Content_Type  => Req_Type,
          Response_Buf  => Resp_Buf,
          Response_Size => Resp_Size);
       Response.Data := Resp_Buf;
       Response.Size := Interfaces.C.unsigned (Resp_Size);
       Response.Type_Name :=
-        Interfaces.C.Strings.New_String ("application/json");
+        Interfaces.C.Strings.New_String (Req_Type);
       return Pcl_Bindings.PCL_OK;
+   exception
+      when others =>
+         Response.Data := System.Null_Address;
+         Response.Size := 0;
+         Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
+         return Pcl_Bindings.PCL_ERR_INVALID;
    end Service_Update_Requirement;
 
    function Service_Delete_Requirement
@@ -378,6 +455,10 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       pragma Unreferenced (Self, Ctx);
       Handlers_Ptr : constant Service_Handlers_Access :=
         (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Req_Type  : constant String :=
+        (if Request.Type_Name = Interfaces.C.Strings.Null_Ptr
+         then "application/json"
+         else Interfaces.C.Strings.Value (Request.Type_Name));
       Resp_Buf  : System.Address := System.Null_Address;
       Resp_Size : Natural := 0;
    begin
@@ -386,13 +467,20 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Channel       => Ch_Delete_Requirement,
          Request_Buf   => Request.Data,
          Request_Size  => Natural (Request.Size),
+         Content_Type  => Req_Type,
          Response_Buf  => Resp_Buf,
          Response_Size => Resp_Size);
       Response.Data := Resp_Buf;
       Response.Size := Interfaces.C.unsigned (Resp_Size);
       Response.Type_Name :=
-        Interfaces.C.Strings.New_String ("application/json");
+        Interfaces.C.Strings.New_String (Req_Type);
       return Pcl_Bindings.PCL_OK;
+   exception
+      when others =>
+         Response.Data := System.Null_Address;
+         Response.Size := 0;
+         Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
+         return Pcl_Bindings.PCL_ERR_INVALID;
    end Service_Delete_Requirement;
 
    function Service_Read_Detail
@@ -405,6 +493,10 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       pragma Unreferenced (Self, Ctx);
       Handlers_Ptr : constant Service_Handlers_Access :=
         (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Req_Type  : constant String :=
+        (if Request.Type_Name = Interfaces.C.Strings.Null_Ptr
+         then "application/json"
+         else Interfaces.C.Strings.Value (Request.Type_Name));
       Resp_Buf  : System.Address := System.Null_Address;
       Resp_Size : Natural := 0;
    begin
@@ -413,13 +505,20 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Channel       => Ch_Read_Detail,
          Request_Buf   => Request.Data,
          Request_Size  => Natural (Request.Size),
+         Content_Type  => Req_Type,
          Response_Buf  => Resp_Buf,
          Response_Size => Resp_Size);
       Response.Data := Resp_Buf;
       Response.Size := Interfaces.C.unsigned (Resp_Size);
       Response.Type_Name :=
-        Interfaces.C.Strings.New_String ("application/json");
+        Interfaces.C.Strings.New_String (Req_Type);
       return Pcl_Bindings.PCL_OK;
+   exception
+      when others =>
+         Response.Data := System.Null_Address;
+         Response.Size := 0;
+         Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
+         return Pcl_Bindings.PCL_ERR_INVALID;
    end Service_Read_Detail;
 
    --  -- PCL binding implementations -------------------------------
@@ -427,12 +526,13 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    procedure Subscribe_Entity_Matches
      (Container : Pcl_Bindings.Pcl_Container_Access;
       Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;
-      User_Data : System.Address := System.Null_Address)
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json")
    is
       Topic  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Topic_Entity_Matches);
       Type_N : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String ("application/json");
+        Interfaces.C.Strings.New_String (Content_Type);
       Port   : Pcl_Bindings.Pcl_Port_Access;
       pragma Unreferenced (Port);
    begin
@@ -449,12 +549,13 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    procedure Subscribe_Evidence_Requirements
      (Container : Pcl_Bindings.Pcl_Container_Access;
       Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;
-      User_Data : System.Address := System.Null_Address)
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json")
    is
       Topic  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Topic_Evidence_Requirements);
       Type_N : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String ("application/json");
+        Interfaces.C.Strings.New_String (Content_Type);
       Port   : Pcl_Bindings.Pcl_Port_Access;
       pragma Unreferenced (Port);
    begin
@@ -472,10 +573,12 @@ package body Pyramid.Services.Tactical_Objects.Provided is
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address)
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json")
    is
       use type Pcl_Bindings.Pcl_Status;
-      Payload : constant String := To_Json (Request);
+      Json_Payload : constant String := To_Json (Request);
+      Payload : constant String := Encode_Transport_Payload (Json_Payload, Content_Type);
       Req_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Payload);
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
@@ -486,7 +589,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    begin
       Msg.Data      := To_Address (Req_C);
       Msg.Size      := Interfaces.C.unsigned (Payload'Length);
-      Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
+      Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
       Status := Pcl_Bindings.Invoke_Async
         (Executor, Svc_C, Msg'Access, Callback, User_Data);
       Interfaces.C.Strings.Free (Req_C);
@@ -496,12 +599,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
 
    procedure Invoke_Create_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Pyramid.Services.Tactical_Objects.Json_Codec.Create_Requirement_Request;
+      Request   : Pyramid.Services.Tactical_Objects.Wire_Types.Create_Requirement_Request;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address)
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json")
    is
       use type Pcl_Bindings.Pcl_Status;
-      Payload : constant String := Pyramid.Services.Tactical_Objects.Json_Codec.To_Json (Request);
+      Json_Payload : constant String := Pyramid.Services.Tactical_Objects.Json_Codec.To_Json (Request);
+      Payload : constant String := Encode_Transport_Payload (Json_Payload, Content_Type);
       Req_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Payload);
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
@@ -512,7 +617,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    begin
       Msg.Data      := To_Address (Req_C);
       Msg.Size      := Interfaces.C.unsigned (Payload'Length);
-      Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
+      Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
       Status := Pcl_Bindings.Invoke_Async
         (Executor, Svc_C, Msg'Access, Callback, User_Data);
       Interfaces.C.Strings.Free (Req_C);
@@ -524,10 +629,12 @@ package body Pyramid.Services.Tactical_Objects.Provided is
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address)
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json")
    is
       use type Pcl_Bindings.Pcl_Status;
-      Payload : constant String := To_Json (Request);
+      Json_Payload : constant String := To_Json (Request);
+      Payload : constant String := Encode_Transport_Payload (Json_Payload, Content_Type);
       Req_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Payload);
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
@@ -538,7 +645,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    begin
       Msg.Data      := To_Address (Req_C);
       Msg.Size      := Interfaces.C.unsigned (Payload'Length);
-      Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
+      Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
       Status := Pcl_Bindings.Invoke_Async
         (Executor, Svc_C, Msg'Access, Callback, User_Data);
       Interfaces.C.Strings.Free (Req_C);
@@ -548,12 +655,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
 
    procedure Invoke_Update_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Pyramid.Services.Tactical_Objects.Json_Codec.Create_Requirement_Request;
+      Request   : Pyramid.Services.Tactical_Objects.Wire_Types.Create_Requirement_Request;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address)
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json")
    is
       use type Pcl_Bindings.Pcl_Status;
-      Payload : constant String := Pyramid.Services.Tactical_Objects.Json_Codec.To_Json (Request);
+      Json_Payload : constant String := Pyramid.Services.Tactical_Objects.Json_Codec.To_Json (Request);
+      Payload : constant String := Encode_Transport_Payload (Json_Payload, Content_Type);
       Req_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Payload);
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
@@ -564,7 +673,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    begin
       Msg.Data      := To_Address (Req_C);
       Msg.Size      := Interfaces.C.unsigned (Payload'Length);
-      Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
+      Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
       Status := Pcl_Bindings.Invoke_Async
         (Executor, Svc_C, Msg'Access, Callback, User_Data);
       Interfaces.C.Strings.Free (Req_C);
@@ -576,10 +685,12 @@ package body Pyramid.Services.Tactical_Objects.Provided is
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Identifier;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address)
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json")
    is
       use type Pcl_Bindings.Pcl_Status;
-      Payload : constant String := To_String (Request);
+      Json_Payload : constant String := To_String (Request);
+      Payload : constant String := Encode_Transport_Payload (Json_Payload, Content_Type);
       Req_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Payload);
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
@@ -590,7 +701,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    begin
       Msg.Data      := To_Address (Req_C);
       Msg.Size      := Interfaces.C.unsigned (Payload'Length);
-      Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
+      Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
       Status := Pcl_Bindings.Invoke_Async
         (Executor, Svc_C, Msg'Access, Callback, User_Data);
       Interfaces.C.Strings.Free (Req_C);
@@ -602,10 +713,12 @@ package body Pyramid.Services.Tactical_Objects.Provided is
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address)
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json")
    is
       use type Pcl_Bindings.Pcl_Status;
-      Payload : constant String := To_Json (Request);
+      Json_Payload : constant String := To_Json (Request);
+      Payload : constant String := Encode_Transport_Payload (Json_Payload, Content_Type);
       Req_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Payload);
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
@@ -616,7 +729,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    begin
       Msg.Data      := To_Address (Req_C);
       Msg.Size      := Interfaces.C.unsigned (Payload'Length);
-      Msg.Type_Name := Interfaces.C.Strings.New_String ("application/json");
+      Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
       Status := Pcl_Bindings.Invoke_Async
         (Executor, Svc_C, Msg'Access, Callback, User_Data);
       Interfaces.C.Strings.Free (Req_C);
@@ -641,11 +754,13 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Channel       : in  Service_Channel;
       Request_Buf   : in  System.Address;
       Request_Size  : in  Natural;
+      Content_Type  : in  String := "application/json";
       Response_Buf  : out System.Address;
       Response_Size : out Natural)
    is
-      Req_Str : constant String := Msg_To_String (Request_Buf,
-        Interfaces.C.unsigned (Request_Size));
+      Req_Str : constant String := Decode_Transport_Payload
+        (Msg_To_String (Request_Buf, Interfaces.C.unsigned (Request_Size)),
+         Content_Type);
    begin
       Response_Buf  := System.Null_Address;
       Response_Size := 0;
@@ -671,7 +786,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
                      Append (Acc, To_Json (Rsp (I)));
                   end loop;
                   Append (Acc, "]");
-                  Copy_To_Buf (To_String (Acc),
+                  Copy_To_Buf (Encode_Transport_Payload (To_String (Acc), Content_Type),
                     Response_Buf, Response_Size);
                end;
             end;
@@ -686,7 +801,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
                else
                   Default_Handle_Create_Requirement (Req, Rsp);
                end if;
-               Copy_To_Buf (To_String (Rsp),
+               Copy_To_Buf (Encode_Transport_Payload (To_String (Rsp), Content_Type),
                  Response_Buf, Response_Size);
             end;
          when Ch_Read_Requirement =>
@@ -710,7 +825,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
                      Append (Acc, To_Json (Rsp (I)));
                   end loop;
                   Append (Acc, "]");
-                  Copy_To_Buf (To_String (Acc),
+                  Copy_To_Buf (Encode_Transport_Payload (To_String (Acc), Content_Type),
                     Response_Buf, Response_Size);
                end;
             end;
@@ -725,7 +840,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
                else
                   Default_Handle_Update_Requirement (Req, Rsp);
                end if;
-               Copy_To_Buf (To_Json (Rsp),
+               Copy_To_Buf (Encode_Transport_Payload (To_Json (Rsp), Content_Type),
                  Response_Buf, Response_Size);
             end;
          when Ch_Delete_Requirement =>
@@ -739,7 +854,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
                else
                   Default_Handle_Delete_Requirement (Req, Rsp);
                end if;
-               Copy_To_Buf (To_Json (Rsp),
+               Copy_To_Buf (Encode_Transport_Payload (To_Json (Rsp), Content_Type),
                  Response_Buf, Response_Size);
             end;
          when Ch_Read_Detail =>
@@ -763,7 +878,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
                      Append (Acc, To_Json (Rsp (I)));
                   end loop;
                   Append (Acc, "]");
-                  Copy_To_Buf (To_String (Acc),
+                  Copy_To_Buf (Encode_Transport_Payload (To_String (Acc), Content_Type),
                     Response_Buf, Response_Size);
                end;
             end;

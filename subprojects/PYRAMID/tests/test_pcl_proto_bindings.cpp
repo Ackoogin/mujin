@@ -16,6 +16,7 @@
 #include "pyramid_services_tactical_objects_consumed.hpp"
 #include "pyramid_services_tactical_objects_provided.hpp"
 #include "pyramid_services_tactical_objects_json_codec.hpp"
+#include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 #include "pyramid_data_model_types.hpp"
 
 extern "C" {
@@ -33,6 +34,7 @@ extern "C" {
 namespace prov = pyramid::services::tactical_objects::provided;
 namespace cons = pyramid::services::tactical_objects::consumed;
 namespace codec = pyramid::services::tactical_objects::json_codec;
+namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
 namespace types = pyramid::data_model;
 
 // ===========================================================================
@@ -460,6 +462,50 @@ TEST(ProtoBindingsConsumed, DispatchAllChannelsNoCrash) {
     }
 }
 
+TEST(ProtoBindingsProvided, DispatchAllChannelsFlatBuffersNoCrash) {
+    prov::ServiceHandler handler;
+    const prov::ServiceChannel channels[] = {
+        prov::ServiceChannel::ReadMatch,
+        prov::ServiceChannel::CreateRequirement,
+        prov::ServiceChannel::ReadRequirement,
+        prov::ServiceChannel::UpdateRequirement,
+        prov::ServiceChannel::DeleteRequirement,
+        prov::ServiceChannel::ReadDetail,
+    };
+
+    const std::string empty_req = flatbuffers_codec::wrapPayload("{}");
+    for (auto ch : channels) {
+        void* resp_buf = nullptr;
+        size_t resp_size = 0;
+        EXPECT_NO_FATAL_FAILURE(
+            prov::dispatch(handler, ch, empty_req.data(), empty_req.size(),
+                           "application/flatbuffers", &resp_buf, &resp_size));
+        if (resp_buf) std::free(resp_buf);
+    }
+}
+
+TEST(ProtoBindingsConsumed, DispatchAllChannelsFlatBuffersNoCrash) {
+    cons::ServiceHandler handler;
+    const cons::ServiceChannel channels[] = {
+        cons::ServiceChannel::ReadDetail,
+        cons::ServiceChannel::CreateRequirement,
+        cons::ServiceChannel::ReadRequirement,
+        cons::ServiceChannel::UpdateRequirement,
+        cons::ServiceChannel::DeleteRequirement,
+        cons::ServiceChannel::ReadCapability,
+    };
+
+    const std::string empty_req = flatbuffers_codec::wrapPayload("{}");
+    for (auto ch : channels) {
+        void* resp_buf = nullptr;
+        size_t resp_size = 0;
+        EXPECT_NO_FATAL_FAILURE(
+            cons::dispatch(handler, ch, empty_req.data(), empty_req.size(),
+                           "application/flatbuffers", &resp_buf, &resp_size));
+        if (resp_buf) std::free(resp_buf);
+    }
+}
+
 // ===========================================================================
 // Typed dispatch — round-trip through handler with real serialization
 // ===========================================================================
@@ -491,10 +537,41 @@ TEST(ProtoBindingsProvided, DispatchCreateRequirementRoundTrip) {
     // Handler should have received deserialized request
     EXPECT_EQ(handler.captured_req.policy, types::DataPolicy::Obtain);
 
-    // Response should be the identifier string
+    // Response should use the service wire response shape
     ASSERT_NE(resp_buf, nullptr);
     std::string resp_str(static_cast<const char*>(resp_buf), resp_size);
-    EXPECT_EQ(resp_str, "new-id-42");
+    auto resp = codec::createRequirementResponseFromJson(resp_str);
+    EXPECT_EQ(resp.interest_id, "new-id-42");
+    std::free(resp_buf);
+}
+
+TEST(ProtoBindingsProvided, DispatchCreateRequirementFlatBuffersRoundTrip) {
+    struct CapturingHandler : public prov::ServiceHandler {
+        types::ObjectInterestRequirement captured_req;
+        types::Identifier
+        handleCreateRequirement(const types::ObjectInterestRequirement& req) override {
+            captured_req = req;
+            return "new-id-42";
+        }
+    };
+
+    CapturingHandler handler;
+    nlohmann::json j;
+    j["policy"] = "DATA_POLICY_OBTAIN";
+    const std::string req_payload = flatbuffers_codec::wrapPayload(j.dump());
+
+    void* resp_buf = nullptr;
+    size_t resp_size = 0;
+    prov::dispatch(handler, prov::ServiceChannel::CreateRequirement,
+                   req_payload.data(), req_payload.size(),
+                   "application/flatbuffers", &resp_buf, &resp_size);
+
+    EXPECT_EQ(handler.captured_req.policy, types::DataPolicy::Obtain);
+
+    ASSERT_NE(resp_buf, nullptr);
+    auto resp = codec::createRequirementResponseFromJson(
+        flatbuffers_codec::unwrapPayload(resp_buf, resp_size));
+    EXPECT_EQ(resp.interest_id, "new-id-42");
     std::free(resp_buf);
 }
 
@@ -555,6 +632,38 @@ TEST(ProtoBindingsConsumed, DispatchUpdateRequirementRoundTrip) {
     ASSERT_NE(resp_buf, nullptr);
     std::string resp_str(static_cast<const char*>(resp_buf), resp_size);
     auto ack_j = nlohmann::json::parse(resp_str);
+    EXPECT_TRUE(ack_j["success"].get<bool>());
+    std::free(resp_buf);
+}
+
+TEST(ProtoBindingsConsumed, DispatchUpdateRequirementFlatBuffersRoundTrip) {
+    struct AckHandler : public cons::ServiceHandler {
+        types::ObjectEvidenceRequirement captured_req;
+        types::Ack
+        handleUpdateRequirement(const types::ObjectEvidenceRequirement& req) override {
+            captured_req = req;
+            return types::kAckOk;
+        }
+    };
+
+    AckHandler handler;
+    nlohmann::json j;
+    j["policy"] = "DATA_POLICY_QUERY";
+    j["base"] = nlohmann::json::object();
+    j["status"] = nlohmann::json::object();
+    const std::string req_payload = flatbuffers_codec::wrapPayload(j.dump());
+
+    void* resp_buf = nullptr;
+    size_t resp_size = 0;
+    cons::dispatch(handler, cons::ServiceChannel::UpdateRequirement,
+                   req_payload.data(), req_payload.size(),
+                   "application/flatbuffers", &resp_buf, &resp_size);
+
+    EXPECT_EQ(handler.captured_req.policy, types::DataPolicy::Query);
+
+    ASSERT_NE(resp_buf, nullptr);
+    auto ack_j = nlohmann::json::parse(
+        flatbuffers_codec::unwrapPayload(resp_buf, resp_size));
     EXPECT_TRUE(ack_j["success"].get<bool>());
     std::free(resp_buf);
 }

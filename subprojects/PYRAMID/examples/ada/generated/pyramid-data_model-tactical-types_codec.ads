@@ -1,11 +1,11 @@
 --  Auto-generated data model JSON codec specification
---  Generated from: tactical.proto by ada_service_generator.py --codec
---  Package: Pyramid_Data_Model_Tactical_Types_Codec
+--  Generated from: tactical.proto by generate_bindings.py (codec)
+--  Package: Pyramid.Data_Model.Tactical.Types_Codec
 
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
-with Pyramid_Data_Model_Tactical_Types;  use Pyramid_Data_Model_Tactical_Types;
+with Pyramid.Data_Model.Tactical.Types;  use Pyramid.Data_Model.Tactical.Types;
 
-package Pyramid_Data_Model_Tactical_Types_Codec is
+package Pyramid.Data_Model.Tactical.Types_Codec is
 
    function To_String (V : Object_Source) return String;
    function Object_Source_From_String (S : String) return Object_Source;
@@ -19,4 +19,4 @@ package Pyramid_Data_Model_Tactical_Types_Codec is
    function To_Json (Msg : Object_Match) return String;
    function From_Json (S : String; Tag : access Object_Match) return Object_Match;
 
-end Pyramid_Data_Model_Tactical_Types_Codec;
+end Pyramid.Data_Model.Tactical.Types_Codec;

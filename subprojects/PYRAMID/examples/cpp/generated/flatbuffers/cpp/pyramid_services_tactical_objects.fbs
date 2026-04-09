@@ -1,0 +1,79 @@
+// Auto-generated tactical service FlatBuffers schema
+// Generated from pim/json_schema.py
+
+namespace pyramid.services.tactical_objects;
+
+enum StandardIdentity : byte {
+  Unspecified = 0,
+  Unknown = 1,
+  Friendly = 2,
+  Hostile = 3,
+  Suspect = 4,
+  Neutral = 5,
+  Pending = 6,
+  Joker = 7,
+  Faker = 8,
+  AssumedFriendly = 9
+}
+
+enum BattleDimension : byte {
+  Unspecified = 0,
+  Ground = 1,
+  Subsurface = 2,
+  SeaSurface = 3,
+  Air = 4,
+  Unknown = 5
+}
+
+enum DataPolicy : byte {
+  Unspecified = 0,
+  Query = 1,
+  Obtain = 2
+}
+
+table CreateRequirementRequest {
+  policy:DataPolicy;
+  identity:StandardIdentity;
+  dimension:BattleDimension;
+  min_lat_rad:double;
+  max_lat_rad:double;
+  min_lon_rad:double;
+  max_lon_rad:double;
+}
+
+table CreateRequirementResponse {
+  interest_id:string;
+}
+
+table EntityMatch {
+  object_id:string;
+  identity:StandardIdentity;
+  dimension:BattleDimension;
+  latitude_rad:double;
+  longitude_rad:double;
+  confidence:double;
+}
+
+table EntityMatchArrayHolder {
+  items:[EntityMatch];
+}
+
+table ObjectEvidence {
+  identity:StandardIdentity;
+  dimension:BattleDimension;
+  latitude_rad:double;
+  longitude_rad:double;
+  confidence:double;
+  observed_at:double;
+}
+
+table EvidenceRequirement {
+  id:string;
+  policy:DataPolicy;
+  dimension:BattleDimension;
+  min_lat_rad:double;
+  max_lat_rad:double;
+  min_lon_rad:double;
+  max_lon_rad:double;
+}
+

@@ -6,10 +6,14 @@
 --  Architecture: component logic (this) > Json_Codec > service binding > PCL
 
 with Pcl_Bindings;
-with Pyramid_Data_Model_Common_Types;
+with Ada.Strings.Unbounded;
+with Pyramid.Data_Model.Common.Types;
 with System;
 
 package Tobj_Interest_Client is
+
+   Content_Type : Ada.Strings.Unbounded.Unbounded_String :=
+     Ada.Strings.Unbounded.To_Unbounded_String ("application/json");
 
    --  Component state (written by callbacks on the executor thread)
    Matches_Received     : Natural := 0;
@@ -40,10 +44,10 @@ package Tobj_Interest_Client is
    --  Takes typed enum values — JSON serialisation is done by Json_Codec.
    procedure Send_Create_Requirement
      (Transport   : Pcl_Bindings.Pcl_Socket_Transport_Access;
-      Policy      : Pyramid_Data_Model_Common_Types.Data_Policy;
-      Identity    : Pyramid_Data_Model_Common_Types.Standard_Identity;
-      Dimension   : Pyramid_Data_Model_Common_Types.Battle_Dimension :=
-                      Pyramid_Data_Model_Common_Types.Dimension_Unspecified;
+      Policy      : Pyramid.Data_Model.Common.Types.Data_Policy;
+      Identity    : Pyramid.Data_Model.Common.Types.Standard_Identity;
+      Dimension   : Pyramid.Data_Model.Common.Types.Battle_Dimension :=
+                     Pyramid.Data_Model.Common.Types.Dimension_Unspecified;
       Min_Lat_Rad : Long_Float := 0.0;
       Max_Lat_Rad : Long_Float := 0.0;
       Min_Lon_Rad : Long_Float := 0.0;

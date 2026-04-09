@@ -20,6 +20,7 @@ BRIDGE_BIN="${WORKSPACE_ROOT}/build/subprojects/PYRAMID/tests/standalone_bridge"
 CLIENT_BIN="${PYRAMID_ROOT}/examples/ada/bin/ada_active_find_e2e"
 BACKEND_PORT=19235
 FRONTEND_PORT=19236
+CONTENT_TYPE="application/json"
 PORT_FILE=$(mktemp /tmp/tobj_port.XXXXXX)
 BRIDGE_PORT_FILE=$(mktemp /tmp/bridge_port.XXXXXX)
 TIMEOUT=25
@@ -32,6 +33,7 @@ while [[ $# -gt 0 ]]; do
     --client-bin) CLIENT_BIN="$2"; shift 2 ;;
     --backend-port) BACKEND_PORT="$2"; shift 2 ;;
     --frontend-port) FRONTEND_PORT="$2"; shift 2 ;;
+    --content-type) CONTENT_TYPE="$2"; shift 2 ;;
     *)            shift ;;
   esac
 done
@@ -50,6 +52,14 @@ cleanup() {
 trap cleanup EXIT
 
 echo "=== Ada ActiveFind E2E Test (3-process: server → bridge → client) ==="
+
+# Step 0: Generate Ada bindings from proto
+if command -v python3 &>/dev/null || command -v python &>/dev/null; then
+  echo "[driver] Generating Ada bindings from proto..."
+  bash "$PYRAMID_ROOT/scripts/generate_bindings.sh" --ada
+else
+  echo "[driver] python not found — skipping Ada stub generation"
+fi
 
 # Step 1: Build Ada client if gprbuild is available
 if command -v gprbuild &>/dev/null; then
@@ -126,7 +136,7 @@ sleep 0.2
 echo "[driver] Starting standalone bridge (backend=$ACTUAL_BACKEND_PORT, frontend=$FRONTEND_PORT)..."
 "$BRIDGE_BIN" --backend-host 127.0.0.1 --backend-port "$ACTUAL_BACKEND_PORT" \
               --frontend-port "$FRONTEND_PORT" --port-file "$BRIDGE_PORT_FILE" \
-              --timeout "$TIMEOUT" &
+              --frontend-content-type "$CONTENT_TYPE" --timeout "$TIMEOUT" &
 BRIDGE_PID=$!
 
 # Step 6: Wait for bridge port file
@@ -151,7 +161,8 @@ sleep 0.2
 
 # Step 8: Start Ada active-find client (connects to bridge)
 echo "[driver] Starting Ada active-find client (→ bridge port $ACTUAL_FRONTEND_PORT)..."
-"$CLIENT_BIN" --host 127.0.0.1 --port "$ACTUAL_FRONTEND_PORT"
+"$CLIENT_BIN" --host 127.0.0.1 --port "$ACTUAL_FRONTEND_PORT" \
+              --content-type "$CONTENT_TYPE"
 CLIENT_EXIT=$?
 
 # Step 9: Stop bridge and server

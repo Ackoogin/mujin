@@ -1,12 +1,12 @@
 --  Auto-generated types specification
---  Generated from: tactical.proto by ada_service_generator.py --types
---  Package: Pyramid_Data_Model_Tactical_Types
+--  Generated from: tactical.proto by generate_bindings.py (types)
+--  Package: Pyramid.Data_Model.Tactical.Types
 
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
-with Pyramid_Data_Model_Base_Types;  use Pyramid_Data_Model_Base_Types;
-with Pyramid_Data_Model_Common_Types;  use Pyramid_Data_Model_Common_Types;
+with Pyramid.Data_Model.Base.Types;  use Pyramid.Data_Model.Base.Types;
+with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;
 
-package Pyramid_Data_Model_Tactical_Types is
+package Pyramid.Data_Model.Tactical.Types is
 
 
    type Object_Source is
@@ -70,4 +70,4 @@ package Pyramid_Data_Model_Tactical_Types is
       Matching_Object_Id : Unbounded_String := Null_Unbounded_String;
    end record;
 
-end Pyramid_Data_Model_Tactical_Types;
+end Pyramid.Data_Model.Tactical.Types;

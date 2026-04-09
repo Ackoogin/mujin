@@ -1,11 +1,11 @@
 --  Auto-generated data model JSON codec body
---  Package: Pyramid_Data_Model_Tactical_Types_Codec
+--  Package: Pyramid.Data_Model.Tactical.Types_Codec
 
 with GNATCOLL.JSON;  use GNATCOLL.JSON;
-with Pyramid_Data_Model_Common_Types_Codec;
+with Pyramid.Data_Model.Common.Types_Codec;
 pragma Warnings (Off);
 
-package body Pyramid_Data_Model_Tactical_Types_Codec is
+package body Pyramid.Data_Model.Tactical.Types_Codec is
 
    function To_String (V : Object_Source) return String is
    begin
@@ -51,7 +51,7 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
          Append (Result, "]");
       end if;
       Comma;
-      Append (Result, """position"":" & Pyramid_Data_Model_Common_Types_Codec.To_Json (Msg.Position));
+      Append (Result, """position"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Position));
       Comma;
       Append (Result, """creation_time"":" & Long_Float'Image (Msg.Creation_Time));
       Comma;
@@ -117,7 +117,7 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
          declare
             Sub : constant String := Write (Get (J, "position"));
          begin
-            Result.Position := Pyramid_Data_Model_Common_Types_Codec.From_Json (Sub, null);
+            Result.Position := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
          end;
       end if;
       if Has_Field (J, "creation_time") then
@@ -140,7 +140,7 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
             Val : constant JSON_Value := Get (J, "identity");
             Str : constant String := Get (Val);
          begin
-            Result.Identity := Pyramid_Data_Model_Common_Types_Codec.Standard_Identity_From_String (Str);
+            Result.Identity := Pyramid.Data_Model.Common.Types_Codec.Standard_Identity_From_String (Str);
          end;
       end if;
       if Has_Field (J, "dimension") then
@@ -148,7 +148,7 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
             Val : constant JSON_Value := Get (J, "dimension");
             Str : constant String := Get (Val);
          begin
-            Result.Dimension := Pyramid_Data_Model_Common_Types_Codec.Battle_Dimension_From_String (Str);
+            Result.Dimension := Pyramid.Data_Model.Common.Types_Codec.Battle_Dimension_From_String (Str);
          end;
       end if;
       return Result;
@@ -166,9 +166,9 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
       end Comma;
    begin
       Comma;
-      Append (Result, """base"":" & Pyramid_Data_Model_Common_Types_Codec.To_Json (Msg.Base));
+      Append (Result, """base"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Base));
       Comma;
-      Append (Result, """status"":" & Pyramid_Data_Model_Common_Types_Codec.To_Json (Msg.Status));
+      Append (Result, """status"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Status));
       Comma;
       Append (Result, """policy"":" & """ & To_String (Msg.Policy) & """);
       if Msg.Dimension /= null then
@@ -184,15 +184,15 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
       end if;
       if Msg.Has_Val_Poly_Area then
          Comma;
-         Append (Result, """poly_area"":" & Pyramid_Data_Model_Common_Types_Codec.To_Json (Msg.Val_Poly_Area));
+         Append (Result, """poly_area"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Val_Poly_Area));
       end if;
       if Msg.Has_Val_Circle_Area then
          Comma;
-         Append (Result, """circle_area"":" & Pyramid_Data_Model_Common_Types_Codec.To_Json (Msg.Val_Circle_Area));
+         Append (Result, """circle_area"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Val_Circle_Area));
       end if;
       if Msg.Has_Val_Point then
          Comma;
-         Append (Result, """point"":" & Pyramid_Data_Model_Common_Types_Codec.To_Json (Msg.Val_Point));
+         Append (Result, """point"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Val_Point));
       end if;
       Append (Result, "}");
       return To_String (Result);
@@ -207,14 +207,14 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
          declare
             Sub : constant String := Write (Get (J, "base"));
          begin
-            Result.Base := Pyramid_Data_Model_Common_Types_Codec.From_Json (Sub, null);
+            Result.Base := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
          end;
       end if;
       if Has_Field (J, "status") then
          declare
             Sub : constant String := Write (Get (J, "status"));
          begin
-            Result.Status := Pyramid_Data_Model_Common_Types_Codec.From_Json (Sub, null);
+            Result.Status := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
          end;
       end if;
       if Has_Field (J, "policy") then
@@ -222,7 +222,7 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
             Val : constant JSON_Value := Get (J, "policy");
             Str : constant String := Get (Val);
          begin
-            Result.Policy := Pyramid_Data_Model_Common_Types_Codec.Data_Policy_From_String (Str);
+            Result.Policy := Pyramid.Data_Model.Common.Types_Codec.Data_Policy_From_String (Str);
          end;
       end if;
       if Has_Field (J, "dimension") then
@@ -238,7 +238,7 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
                      Elem : constant JSON_Value := Get (Arr, I);
                      Str : constant String := Get (Elem);
                   begin
-                     Result.Dimension (I) := Pyramid_Data_Model_Common_Types_Codec.Battle_Dimension_From_String (Str);
+                     Result.Dimension (I) := Pyramid.Data_Model.Common.Types_Codec.Battle_Dimension_From_String (Str);
                   end;
                end loop;
             end if;
@@ -249,7 +249,7 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
          declare
             Sub : constant String := Write (Get (J, "poly_area"));
          begin
-            Result.Val_Poly_Area := Pyramid_Data_Model_Common_Types_Codec.From_Json (Sub, null);
+            Result.Val_Poly_Area := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
          end;
       end if;
       if Has_Field (J, "circle_area") then
@@ -257,7 +257,7 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
          declare
             Sub : constant String := Write (Get (J, "circle_area"));
          begin
-            Result.Val_Circle_Area := Pyramid_Data_Model_Common_Types_Codec.From_Json (Sub, null);
+            Result.Val_Circle_Area := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
          end;
       end if;
       if Has_Field (J, "point") then
@@ -265,7 +265,7 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
          declare
             Sub : constant String := Write (Get (J, "point"));
          begin
-            Result.Val_Point := Pyramid_Data_Model_Common_Types_Codec.From_Json (Sub, null);
+            Result.Val_Point := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
          end;
       end if;
       return Result;
@@ -283,9 +283,9 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
       end Comma;
    begin
       Comma;
-      Append (Result, """base"":" & Pyramid_Data_Model_Common_Types_Codec.To_Json (Msg.Base));
+      Append (Result, """base"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Base));
       Comma;
-      Append (Result, """status"":" & Pyramid_Data_Model_Common_Types_Codec.To_Json (Msg.Status));
+      Append (Result, """status"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Status));
       Comma;
       Append (Result, """source"":" & """ & To_String (Msg.Source) & """);
       Comma;
@@ -303,15 +303,15 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
       end if;
       if Msg.Has_Val_Poly_Area then
          Comma;
-         Append (Result, """poly_area"":" & Pyramid_Data_Model_Common_Types_Codec.To_Json (Msg.Val_Poly_Area));
+         Append (Result, """poly_area"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Val_Poly_Area));
       end if;
       if Msg.Has_Val_Circle_Area then
          Comma;
-         Append (Result, """circle_area"":" & Pyramid_Data_Model_Common_Types_Codec.To_Json (Msg.Val_Circle_Area));
+         Append (Result, """circle_area"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Val_Circle_Area));
       end if;
       if Msg.Has_Val_Point then
          Comma;
-         Append (Result, """point"":" & Pyramid_Data_Model_Common_Types_Codec.To_Json (Msg.Val_Point));
+         Append (Result, """point"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Val_Point));
       end if;
       Append (Result, "}");
       return To_String (Result);
@@ -326,14 +326,14 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
          declare
             Sub : constant String := Write (Get (J, "base"));
          begin
-            Result.Base := Pyramid_Data_Model_Common_Types_Codec.From_Json (Sub, null);
+            Result.Base := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
          end;
       end if;
       if Has_Field (J, "status") then
          declare
             Sub : constant String := Write (Get (J, "status"));
          begin
-            Result.Status := Pyramid_Data_Model_Common_Types_Codec.From_Json (Sub, null);
+            Result.Status := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
          end;
       end if;
       if Has_Field (J, "source") then
@@ -349,7 +349,7 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
             Val : constant JSON_Value := Get (J, "policy");
             Str : constant String := Get (Val);
          begin
-            Result.Policy := Pyramid_Data_Model_Common_Types_Codec.Data_Policy_From_String (Str);
+            Result.Policy := Pyramid.Data_Model.Common.Types_Codec.Data_Policy_From_String (Str);
          end;
       end if;
       if Has_Field (J, "dimension") then
@@ -365,7 +365,7 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
                      Elem : constant JSON_Value := Get (Arr, I);
                      Str : constant String := Get (Elem);
                   begin
-                     Result.Dimension (I) := Pyramid_Data_Model_Common_Types_Codec.Battle_Dimension_From_String (Str);
+                     Result.Dimension (I) := Pyramid.Data_Model.Common.Types_Codec.Battle_Dimension_From_String (Str);
                   end;
                end loop;
             end if;
@@ -376,7 +376,7 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
          declare
             Sub : constant String := Write (Get (J, "poly_area"));
          begin
-            Result.Val_Poly_Area := Pyramid_Data_Model_Common_Types_Codec.From_Json (Sub, null);
+            Result.Val_Poly_Area := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
          end;
       end if;
       if Has_Field (J, "circle_area") then
@@ -384,7 +384,7 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
          declare
             Sub : constant String := Write (Get (J, "circle_area"));
          begin
-            Result.Val_Circle_Area := Pyramid_Data_Model_Common_Types_Codec.From_Json (Sub, null);
+            Result.Val_Circle_Area := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
          end;
       end if;
       if Has_Field (J, "point") then
@@ -392,7 +392,7 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
          declare
             Sub : constant String := Write (Get (J, "point"));
          begin
-            Result.Val_Point := Pyramid_Data_Model_Common_Types_Codec.From_Json (Sub, null);
+            Result.Val_Point := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
          end;
       end if;
       return Result;
@@ -458,4 +458,4 @@ package body Pyramid_Data_Model_Tactical_Types_Codec is
       when others => return Result;
    end From_Json;
 
-end Pyramid_Data_Model_Tactical_Types_Codec;
+end Pyramid.Data_Model.Tactical.Types_Codec;

@@ -9,7 +9,7 @@ project Ada_Active_Find_E2E is
 
   for Languages use ("Ada", "C");
 
-  for Source_Dirs use (".", "generated");
+  for Source_Dirs use (".", "generated", "generated/flatbuffers/ada");
   for Main use ("ada_active_find_e2e.adb");
 
   for Object_Dir use "obj_active_find";

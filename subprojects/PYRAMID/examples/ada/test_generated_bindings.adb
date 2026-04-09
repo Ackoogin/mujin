@@ -11,21 +11,23 @@ with Ada.Strings.Unbounded;      use Ada.Strings.Unbounded;
 with System;
 
 --  Generated data model types
-with Pyramid_Data_Model_Base_Types;     use Pyramid_Data_Model_Base_Types;
-with Pyramid_Data_Model_Common_Types;   use Pyramid_Data_Model_Common_Types;
-with Pyramid_Data_Model_Tactical_Types; use Pyramid_Data_Model_Tactical_Types;
+with Pyramid.Data_Model.Base.Types;     use Pyramid.Data_Model.Base.Types;
+with Pyramid.Data_Model.Common.Types;   use Pyramid.Data_Model.Common.Types;
+with Pyramid.Data_Model.Tactical.Types; use Pyramid.Data_Model.Tactical.Types;
 
 --  Generated data model codecs
-with Pyramid_Data_Model_Common_Types_Codec;    use Pyramid_Data_Model_Common_Types_Codec;
-with Pyramid_Data_Model_Tactical_Types_Codec;  use Pyramid_Data_Model_Tactical_Types_Codec;
+with Pyramid.Data_Model.Common.Types_Codec;    use Pyramid.Data_Model.Common.Types_Codec;
+with Pyramid.Data_Model.Tactical.Types_Codec;  use Pyramid.Data_Model.Tactical.Types_Codec;
 
 --  Generated service bindings (validates with clauses and typed interfaces)
 with Pyramid.Services.Tactical_Objects.Provided;
 with Pyramid.Services.Tactical_Objects.Consumed;
+with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
 
 procedure Test_Generated_Bindings is
    package Prov renames Pyramid.Services.Tactical_Objects.Provided;
    package Cons renames Pyramid.Services.Tactical_Objects.Consumed;
+   package Flat renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
 
    Pass_Count : Natural := 0;
    Fail_Count : Natural := 0;
@@ -124,6 +126,35 @@ begin
          Response_Buf  => Resp_Buf,
          Response_Size => Resp_Size);
       Check ("Dispatch CreateRequirement returns buffer",
+             Resp_Buf /= System.Null_Address or Resp_Size = 0);
+   end;
+
+   --  9. Backend flatbuffers envelope round-trip
+   declare
+      Payload : constant String := "{""policy"":""DATA_POLICY_QUERY""}";
+      Encoded : constant String := Flat.Encode_Payload (Payload);
+      Decoded : constant String := Flat.Decode_Payload (Encoded);
+   begin
+      Check ("Flatbuffers envelope round-trip", Decoded = Payload);
+   end;
+
+   --  10. Dispatch round-trip — CreateRequirement over flatbuffers envelope
+   declare
+      use type System.Address;
+      Req_Json   : constant String := "{""policy"":""DATA_POLICY_OBTAIN""}";
+      Req_Flat   : constant String := Flat.Encode_Payload (Req_Json);
+      Resp_Buf   : System.Address;
+      Resp_Size  : Natural;
+   begin
+      Prov.Dispatch
+        (Handlers      => null,
+         Channel       => Prov.Ch_Create_Requirement,
+         Request_Buf   => Req_Flat (Req_Flat'First)'Address,
+         Request_Size  => Req_Flat'Length,
+         Content_Type  => Flat.Content_Type,
+         Response_Buf  => Resp_Buf,
+         Response_Size => Resp_Size);
+      Check ("Dispatch CreateRequirement flatbuffers returns buffer",
              Resp_Buf /= System.Null_Address or Resp_Size = 0);
    end;
 

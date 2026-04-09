@@ -4,20 +4,27 @@
 --  Uses generated service bindings and Json_Codec for all serialisation.
 
 with Ada.Text_IO;
+with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 with Interfaces.C;
+with Interfaces.C.Strings;
 with Pyramid.Services.Tactical_Objects.Provided;
 with Pyramid.Services.Tactical_Objects.Consumed;
+with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
 with Pyramid.Services.Tactical_Objects.Json_Codec;
-with Pyramid_Data_Model_Common_Types;  use Pyramid_Data_Model_Common_Types;
+with Pyramid.Services.Tactical_Objects.Wire_Types;
+with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;
 with System;
 
 package body Tobj_Evidence_Provider is
 
    package Provided renames Pyramid.Services.Tactical_Objects.Provided;
    package Consumed renames Pyramid.Services.Tactical_Objects.Consumed;
+   package Flat     renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
    package Codec    renames Pyramid.Services.Tactical_Objects.Json_Codec;
+   package Wire     renames Pyramid.Services.Tactical_Objects.Wire_Types;
 
    use type Interfaces.C.unsigned;
+   use type Interfaces.C.Strings.chars_ptr;
    use type Pcl_Bindings.Pcl_Executor_Access;
    use type System.Address;
 
@@ -31,6 +38,19 @@ package body Tobj_Evidence_Provider is
                             "[evidence_provider] " & Msg);
       Ada.Text_IO.Flush (Ada.Text_IO.Standard_Error);
    end Log;
+
+   function Decode_Wire_Payload
+     (Msg : access constant Pcl_Bindings.Pcl_Msg) return String
+   is
+      Payload : constant String := Provided.Msg_To_String (Msg.Data, Msg.Size);
+   begin
+      if Payload'Length >= 4
+        and then Payload (Payload'First .. Payload'First + 3) = "PWFB"
+      then
+         return Flat.Decode_Payload (Payload);
+      end if;
+      return Payload;
+   end Decode_Wire_Payload;
 
    -- -- On_Configure ----------------------------------------------------------
 
@@ -62,9 +82,8 @@ package body Tobj_Evidence_Provider is
       Evidence_Req_Received := True;
 
       declare
-         Body_Str : constant String :=
-           Provided.Msg_To_String (Msg.Data, Msg.Size);
-         Req      : constant Codec.Evidence_Requirement :=
+         Body_Str : constant String := Decode_Wire_Payload (Msg);
+         Req      : constant Wire.Evidence_Requirement :=
            Codec.From_Json (Body_Str);
          pragma Unreferenced (Req);
       begin
@@ -75,7 +94,7 @@ package body Tobj_Evidence_Provider is
       --  Position: 51.0N 0.0E in radians; HOSTILE; SEA_SURFACE dimension.
       if Exec_Handle /= null and then not Observation_Sent then
          declare
-            Obs : Codec.Object_Evidence;
+            Obs : Wire.Object_Evidence;
          begin
             Obs.Identity      := Identity_Hostile;
             Obs.Dimension     := Dimension_SeaSurface;
@@ -84,15 +103,12 @@ package body Tobj_Evidence_Provider is
             Obs.Confidence    := 0.9;
             Obs.Observed_At   := 0.5;
 
-            declare
-               Obs_Json : constant String := Codec.To_Json (Obs);
-            begin
-               Log ("Publishing standard observation to " &
-                    Consumed.Topic_Object_Evidence);
-               Consumed.Publish_Object_Evidence (Exec_Handle, Obs_Json);
-               Observation_Sent := True;
-               Log ("Standard observation published");
-            end;
+            Log ("Publishing standard observation to " &
+                 Consumed.Topic_Object_Evidence);
+            Consumed.Publish_Object_Evidence
+              (Exec_Handle, Obs, To_String (Content_Type));
+            Observation_Sent := True;
+            Log ("Standard observation published");
          end;
       end if;
    end On_Evidence_Requirement;

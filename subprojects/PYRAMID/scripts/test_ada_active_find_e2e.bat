@@ -15,7 +15,16 @@ set "BRIDGE_BIN="
 set "CLIENT_BIN="
 set "BACKEND_PORT=19235"
 set "FRONTEND_PORT=19236"
+set "CONTENT_TYPE=application/json"
 set "TIMEOUT_SEC=25"
+for %%I in ("%~f0") do set "SCRIPT_BASE=%%~dpI"
+
+if not defined PYRAMID_ROOT (
+    for %%I in ("%SCRIPT_BASE%..") do set "PYRAMID_ROOT=%%~fI"
+)
+if not defined WORKSPACE_ROOT (
+    for %%I in ("%PYRAMID_ROOT%\..\..") do set "WORKSPACE_ROOT=%%~fI"
+)
 
 REM Parse arguments
 :parse_args
@@ -25,21 +34,18 @@ if /i "%~1"=="--bridge-bin" (set "BRIDGE_BIN=%~2" & shift & shift & goto parse_a
 if /i "%~1"=="--client-bin" (set "CLIENT_BIN=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--backend-port" (set "BACKEND_PORT=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--frontend-port" (set "FRONTEND_PORT=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="--content-type" (set "CONTENT_TYPE=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--timeout" (set "TIMEOUT_SEC=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="-ServerBin" (set "SERVER_BIN=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="-BridgeBin" (set "BRIDGE_BIN=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="-ClientBin" (set "CLIENT_BIN=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="-BackendPort" (set "BACKEND_PORT=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="-FrontendPort" (set "FRONTEND_PORT=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="-ContentType" (set "CONTENT_TYPE=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="-Timeout" (set "TIMEOUT_SEC=%~2" & shift & shift & goto parse_args)
 shift
 goto parse_args
 :done_args
-
-set "SCRIPT_BASE=%~dp0"
-for %%I in ("%SCRIPT_BASE%") do set "SCRIPT_BASE=%%~fI"
-for %%I in ("%SCRIPT_BASE%\..") do set "PYRAMID_ROOT=%%~fI"
-for %%I in ("%PYRAMID_ROOT%\..\..") do set "WORKSPACE_ROOT=%%~fI"
 
 if "%SERVER_BIN%"=="" set "SERVER_BIN=%WORKSPACE_ROOT%\build\subprojects\PYRAMID\tests\Release\tobj_socket_server.exe"
 if "%BRIDGE_BIN%"=="" set "BRIDGE_BIN=%WORKSPACE_ROOT%\build\subprojects\PYRAMID\tests\Release\standalone_bridge.exe"
@@ -56,25 +62,12 @@ echo === Ada ActiveFind E2E Test (3-process: server -^> bridge -^> client) ===
 REM Step 0: Generate Ada service stubs from proto (provided + consumed)
 where python >nul 2>&1
 if %errorlevel% equ 0 (
-    set "ADA_GEN_OUT=%PYRAMID_ROOT%\examples\ada\generated"
-    set "GEN_SCRIPT=%PYRAMID_ROOT%\pim\ada_service_generator.py"
-    set "PROTO_DIR=%PYRAMID_ROOT%\proto\pyramid\components\tactical_objects\services"
-    set "DATA_MODEL_DIR=%PYRAMID_ROOT%\proto\pyramid\data_model"
-    echo [driver] Generating Ada types, codecs and service stubs from proto...
-    set "GEN_OK=1"
-    python "!GEN_SCRIPT!" --types "!DATA_MODEL_DIR!" "!ADA_GEN_OUT!"
-    if !errorlevel! neq 0 set "GEN_OK=0"
-    python "!GEN_SCRIPT!" --codec "!DATA_MODEL_DIR!" "!ADA_GEN_OUT!"
-    if !errorlevel! neq 0 set "GEN_OK=0"
-    python "!GEN_SCRIPT!" "!PROTO_DIR!\provided.proto" "!ADA_GEN_OUT!"
-    if !errorlevel! neq 0 set "GEN_OK=0"
-    python "!GEN_SCRIPT!" "!PROTO_DIR!\consumed.proto" "!ADA_GEN_OUT!"
-    if !errorlevel! neq 0 set "GEN_OK=0"
-    if "!GEN_OK!"=="0" (
+    echo [driver] Generating Ada bindings from proto...
+    call "%PYRAMID_ROOT%\scripts\generate_bindings.bat" --ada
+    if !errorlevel! neq 0 (
         echo [driver] FAIL: Ada service generation failed
         exit /b 1
     )
-    echo [driver] Generated stubs in !ADA_GEN_OUT!
 ) else (
     echo [driver] python not found -- skipping Ada stub generation
 )
@@ -168,7 +161,7 @@ timeout /t 1 /nobreak >nul 2>&1
 
 REM Step 5: Start standalone bridge
 echo [driver] Starting standalone bridge (backend=%ACTUAL_BACKEND_PORT%, frontend=%FRONTEND_PORT%)...
-start /b "" "%BRIDGE_BIN%" --backend-host 127.0.0.1 --backend-port %ACTUAL_BACKEND_PORT% --frontend-port %FRONTEND_PORT% --port-file "%BRIDGE_PORT_FILE%" --timeout %TIMEOUT_SEC% >nul 2>&1
+start /b "" "%BRIDGE_BIN%" --backend-host 127.0.0.1 --backend-port %ACTUAL_BACKEND_PORT% --frontend-port %FRONTEND_PORT% --port-file "%BRIDGE_PORT_FILE%" --frontend-content-type "%CONTENT_TYPE%" --timeout %TIMEOUT_SEC% >nul 2>&1
 
 REM Step 6: Wait for bridge port file (up to 5 seconds)
 echo [driver] Waiting for bridge to write port file...
@@ -196,7 +189,7 @@ timeout /t 1 /nobreak >nul 2>&1
 
 REM Step 8: Start Ada active-find client (connects to bridge)
 echo [driver] Starting Ada active-find client (-^> bridge port %ACTUAL_FRONTEND_PORT%)...
-"%CLIENT_BIN%" --host 127.0.0.1 --port %ACTUAL_FRONTEND_PORT%
+"%CLIENT_BIN%" --host 127.0.0.1 --port %ACTUAL_FRONTEND_PORT% --content-type "%CONTENT_TYPE%"
 set "CLIENT_EXIT=%errorlevel%"
 
 REM Step 9: Cleanup

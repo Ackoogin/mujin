@@ -420,13 +420,17 @@ ALL_SCHEMAS: List[MessageSchema] = [
     EVIDENCE_REQUIREMENT,
 ]
 
-# Maps proto Ada request type → Json_Codec wire type Ada name.
-# Used by the service binding generator: Invoke_* procedures accept the
-# wire type and serialise with Json_Codec.To_Json, avoiding the data model
-# codec stubs.  Types NOT in this map use To_Json(Request) as-is (base types
-# like Query, Identifier, Ack whose codecs are complete).
-INVOKE_WIRE_TYPES: Dict[str, str] = {
+# Maps domain request types to service-local wire types.
+# Used by service binding generators so Invoke_* procedures accept the wire
+# model while handler callbacks still work with the canonical data model.
+#
+# Keys are the language-local request type names seen by the generators.
+INVOKE_WIRE_TYPES_ADA: Dict[str, str] = {
     'Object_Interest_Requirement': 'Create_Requirement_Request',
+}
+
+INVOKE_WIRE_TYPES_CPP: Dict[str, str] = {
+    'ObjectInterestRequirement': 'CreateRequirementRequest',
 }
 
 # ── Standard topic names ──────────────────────────────────────────────────────
@@ -439,4 +443,16 @@ SUBSCRIBE_TOPICS = {
 # Topics the Ada/C++ client PUBLISHES to (server subscribes to these):
 PUBLISH_TOPICS = {
     'object_evidence': 'standard.object_evidence',
+}
+
+TOPIC_WIRE_TYPES_ADA: Dict[str, str] = {
+    'object_evidence': 'Object_Evidence',
+    'entity_matches': 'Entity_Match_Array',
+    'evidence_requirements': 'Evidence_Requirement',
+}
+
+TOPIC_WIRE_TYPES_CPP: Dict[str, str] = {
+    'object_evidence': 'ObjectEvidence',
+    'entity_matches': 'EntityMatchArray',
+    'evidence_requirements': 'EvidenceRequirement',
 }

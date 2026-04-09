@@ -101,6 +101,7 @@ add_executable(test_pcl_proto_bindings
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_json_codec.cpp
+    ${PROTO_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_data_model_common_codec.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_data_model_tactical_codec.cpp
 )
@@ -122,6 +123,7 @@ add_executable(test_codec_dispatch_e2e
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_json_codec.cpp
+    ${PROTO_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_data_model_common_codec.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_data_model_tactical_codec.cpp
 )
@@ -138,6 +140,19 @@ if(NOT WIN32)
 endif()
 gtest_discover_tests(test_codec_dispatch_e2e DISCOVERY_MODE PRE_TEST)
 
+if(WIN32)
+    add_test(NAME generated_bindings_flatbuffers_dispatch
+        COMMAND ${CMAKE_COMMAND}
+                -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_generated_codec_dispatch.bat
+                -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+else()
+    add_test(NAME generated_bindings_flatbuffers_dispatch
+        COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_generated_codec_dispatch.sh)
+endif()
+set_tests_properties(generated_bindings_flatbuffers_dispatch PROPERTIES
+    LABELS "generated;codec;dispatch"
+    TIMEOUT 120)
+
 add_executable(tobj_socket_server ${TOBJ_TEST_DIR}/tobj_socket_server.cpp)
 target_link_libraries(tobj_socket_server PRIVATE
     tactical_objects tactical_objects_component
@@ -148,15 +163,55 @@ if(NOT WIN32)
     target_link_libraries(tobj_socket_server PRIVATE pthread)
 endif()
 
-add_executable(standalone_bridge ${TOBJ_TEST_DIR}/standalone_bridge.cpp)
+add_executable(standalone_bridge
+    ${TOBJ_TEST_DIR}/standalone_bridge.cpp
+    ${PROTO_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.cpp
+)
 target_link_libraries(standalone_bridge PRIVATE
     tactical_objects tactical_objects_component
     pcl_core pcl_transport_socket
 )
-target_include_directories(standalone_bridge PRIVATE ${PCL_ROOT_DIR}/src)
+target_include_directories(standalone_bridge PRIVATE
+    ${PCL_ROOT_DIR}/src
+    ${PROTO_BINDINGS_DIR}
+)
 if(NOT WIN32)
     target_link_libraries(standalone_bridge PRIVATE pthread)
 endif()
+
+if(WIN32)
+    add_test(NAME tobj_cpp_bridge_client_e2e
+        COMMAND ${CMAKE_COMMAND}
+                -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_cpp_bridge_client.bat
+                -DSERVER_BIN=$<TARGET_FILE:tobj_socket_server>
+                -DBRIDGE_BIN=$<TARGET_FILE:standalone_bridge>
+                -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
+                -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+    add_test(NAME tobj_cpp_bridge_client_flatbuffers_e2e
+        COMMAND ${CMAKE_COMMAND}
+                -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_cpp_bridge_client.bat
+                -DSERVER_BIN=$<TARGET_FILE:tobj_socket_server>
+                -DBRIDGE_BIN=$<TARGET_FILE:standalone_bridge>
+                -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
+                -DSCRIPT_ARGS=--content-type;application/flatbuffers
+                -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+else()
+    add_test(NAME tobj_cpp_bridge_client_e2e
+        COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_bridge_client.sh
+                --server-bin $<TARGET_FILE:tobj_socket_server>
+                --bridge-bin $<TARGET_FILE:standalone_bridge>
+                --client-bin $<TARGET_FILE:tactical_objects_test_client>)
+    add_test(NAME tobj_cpp_bridge_client_flatbuffers_e2e
+        COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_bridge_client.sh
+                --server-bin $<TARGET_FILE:tobj_socket_server>
+                --bridge-bin $<TARGET_FILE:standalone_bridge>
+                --client-bin $<TARGET_FILE:tactical_objects_test_client>
+                --content-type application/flatbuffers)
+endif()
+set_tests_properties(
+    tobj_cpp_bridge_client_e2e
+    tobj_cpp_bridge_client_flatbuffers_e2e
+    PROPERTIES LABELS "cross_language;integration;codec" TIMEOUT 30)
 
 find_program(GPRBUILD gprbuild)
 if(GPRBUILD)
@@ -165,10 +220,9 @@ if(GPRBUILD)
     if(NOT ADA_PYTHON)
         message(FATAL_ERROR "Python is required to generate Ada bindings for tests")
     endif()
-    set(ADA_GEN_SCRIPT ${PYRAMID_ROOT_DIR}/pim/ada_service_generator.py)
+    set(BINDINGS_GEN_SCRIPT ${PYRAMID_ROOT_DIR}/pim/generate_bindings.py)
     set(ADA_GEN_OUT ${ADA_SRC_DIR}/generated)
-    set(ADA_DATA_MODEL_DIR ${PYRAMID_ROOT_DIR}/proto/pyramid/data_model)
-    set(ADA_PROTO_SVC_DIR ${PYRAMID_ROOT_DIR}/proto/pyramid/components/tactical_objects/services)
+    set(PYRAMID_PROTO_ROOT ${PYRAMID_ROOT_DIR}/proto)
     set(ADA_PCL_INCLUDE_DIR "${PCL_ROOT_DIR}/include" CACHE PATH
         "Include directory for Ada gprbuild PCL headers")
     set(ADA_PCL_LIB_NAME "pcl_core" CACHE STRING
@@ -186,10 +240,7 @@ if(GPRBUILD)
     endif()
 
     add_custom_target(ada_test_generated_bindings_build ALL
-        COMMAND ${ADA_PYTHON} ${ADA_GEN_SCRIPT} --types ${ADA_DATA_MODEL_DIR} ${ADA_GEN_OUT}
-        COMMAND ${ADA_PYTHON} ${ADA_GEN_SCRIPT} --codec ${ADA_DATA_MODEL_DIR} ${ADA_GEN_OUT}
-        COMMAND ${ADA_PYTHON} ${ADA_GEN_SCRIPT} ${ADA_PROTO_SVC_DIR}/provided.proto ${ADA_GEN_OUT}
-        COMMAND ${ADA_PYTHON} ${ADA_GEN_SCRIPT} ${ADA_PROTO_SVC_DIR}/consumed.proto ${ADA_GEN_OUT}
+        COMMAND ${ADA_PYTHON} ${BINDINGS_GEN_SCRIPT} ${PYRAMID_PROTO_ROOT} ${ADA_GEN_OUT} --languages ada --backends json,flatbuffers
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
         COMMAND ${CMAKE_COMMAND} -E env MUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
                 ${GPRBUILD} -p -P ${ADA_SRC_DIR}/test_generated_bindings.gpr
@@ -248,5 +299,26 @@ if(GPRBUILD)
     endif()
     set_tests_properties(tobj_ada_active_find_e2e PROPERTIES
         LABELS "cross_language;integration"
+        TIMEOUT 40)
+
+    if(WIN32)
+        add_test(NAME tobj_ada_active_find_flatbuffers_e2e
+            COMMAND ${CMAKE_COMMAND}
+                    -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_e2e.bat
+                    -DSERVER_BIN=$<TARGET_FILE:tobj_socket_server>
+                    -DBRIDGE_BIN=$<TARGET_FILE:standalone_bridge>
+                    -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_active_find_e2e
+                    -DSCRIPT_ARGS=--content-type;application/flatbuffers
+                    -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+    else()
+        add_test(NAME tobj_ada_active_find_flatbuffers_e2e
+            COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_e2e.sh
+                    --server-bin $<TARGET_FILE:tobj_socket_server>
+                    --bridge-bin $<TARGET_FILE:standalone_bridge>
+                    --client-bin ${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_active_find_e2e
+                    --content-type application/flatbuffers)
+    endif()
+    set_tests_properties(tobj_ada_active_find_flatbuffers_e2e PROPERTIES
+        LABELS "cross_language;integration;codec"
         TIMEOUT 40)
 endif()

@@ -1,5 +1,5 @@
 // Auto-generated data model JSON codec header
-// Generated from: common.proto by cpp_service_generator.py --codec
+// Generated from: common.proto by generate_bindings.py (codec)
 // Namespace: pyramid::data_model::common
 #pragma once
 

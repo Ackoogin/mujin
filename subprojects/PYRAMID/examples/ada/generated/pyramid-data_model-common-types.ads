@@ -1,11 +1,11 @@
 --  Auto-generated types specification
---  Generated from: common.proto by ada_service_generator.py --types
---  Package: Pyramid_Data_Model_Common_Types
+--  Generated from: common.proto by generate_bindings.py (types)
+--  Package: Pyramid.Data_Model.Common.Types
 
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
-with Pyramid_Data_Model_Base_Types;  use Pyramid_Data_Model_Base_Types;
+with Pyramid.Data_Model.Base.Types;  use Pyramid.Data_Model.Base.Types;
 
-package Pyramid_Data_Model_Common_Types is
+package Pyramid.Data_Model.Common.Types is
 
 
    type Feasibility is
@@ -121,4 +121,4 @@ package Pyramid_Data_Model_Common_Types is
       One_Shot : Boolean := False;
    end record;
 
-end Pyramid_Data_Model_Common_Types;
+end Pyramid.Data_Model.Common.Types;

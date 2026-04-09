@@ -1,5 +1,6 @@
 #include "pyramid_services_tactical_objects_json_codec.hpp"
 #include "pyramid_services_tactical_objects_provided.hpp"
+#include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
@@ -16,13 +17,15 @@
 namespace {
 
 namespace JsonCodec = pyramid::services::tactical_objects::json_codec;
+namespace FlatCodec = pyramid::services::tactical_objects::flatbuffers_codec;
 namespace Provided = pyramid::services::tactical_objects::provided;
 using namespace pyramid::data_model;
 
 struct ClientState {
-  std::atomic<bool> response_ready{false};
-  std::atomic<bool> interest_id_received{false};
-  std::atomic<int> match_count{0};
+    std::atomic<bool> response_ready{false};
+    std::atomic<bool> interest_id_received{false};
+    std::atomic<int> match_count{0};
+    std::string content_type = "application/json";
 };
 
 void onEntityMatches(pcl_container_t*, const pcl_msg_t* msg, void* user_data) {
@@ -31,7 +34,12 @@ void onEntityMatches(pcl_container_t*, const pcl_msg_t* msg, void* user_data) {
     return;
   }
 
-  const std::string payload(static_cast<const char*>(msg->data), msg->size);
+  std::string payload(static_cast<const char*>(msg->data), msg->size);
+  if ((msg->size >= 4 && std::memcmp(msg->data, "PWFB", 4) == 0) ||
+      (msg->type_name &&
+       std::strcmp(msg->type_name, FlatCodec::kContentType) == 0)) {
+    payload = FlatCodec::unwrapPayload(payload);
+  }
   const auto matches = JsonCodec::entityMatchesFromJson(payload);
   state->match_count.store(static_cast<int>(matches.size()));
 
@@ -49,7 +57,12 @@ void onCreateRequirementResponse(const pcl_msg_t* resp, void* user_data) {
     return;
   }
 
-  const std::string payload(static_cast<const char*>(resp->data), resp->size);
+  std::string payload(static_cast<const char*>(resp->data), resp->size);
+  if ((resp->size >= 4 && std::memcmp(resp->data, "PWFB", 4) == 0) ||
+      (resp->type_name &&
+       std::strcmp(resp->type_name, FlatCodec::kContentType) == 0)) {
+    payload = FlatCodec::unwrapPayload(payload);
+  }
   std::fprintf(stderr,
                "[tactical_objects_test_client] create_requirement response: %s\n",
                payload.c_str());
@@ -71,6 +84,7 @@ int main(int argc, char* argv[]) {
   const char* host = "127.0.0.1";
   uint16_t port = 19123;
   int timeout_ms = 4000;
+  std::string content_type = "application/json";
 
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--host") == 0 && i + 1 < argc) {
@@ -79,6 +93,8 @@ int main(int argc, char* argv[]) {
       port = static_cast<uint16_t>(std::atoi(argv[++i]));
     } else if (std::strcmp(argv[i], "--timeout-ms") == 0 && i + 1 < argc) {
       timeout_ms = std::atoi(argv[++i]);
+    } else if (std::strcmp(argv[i], "--content-type") == 0 && i + 1 < argc) {
+      content_type = argv[++i];
     }
   }
 
@@ -101,6 +117,7 @@ int main(int argc, char* argv[]) {
   pcl_executor_set_transport(exec, pcl_socket_transport_get_transport(transport));
 
   ClientState state;
+  state.content_type = content_type;
   pcl_callbacks_t callbacks{};
   callbacks.on_configure = onConfigure;
   pcl_container_t* container =
@@ -125,7 +142,11 @@ int main(int argc, char* argv[]) {
   request.min_lon_rad = -1.0 * 0.017453292519943295;
   request.max_lon_rad = 1.0 * 0.017453292519943295;
 
-  const std::string request_payload = JsonCodec::toJson(request);
+  std::string request_payload = JsonCodec::toJson(request);
+  if (state.content_type == FlatCodec::kContentType) {
+    request_payload = FlatCodec::wrapPayload(request_payload);
+  }
+
   pcl_msg_t request_msg{};
   request_msg.data = request_payload.data();
   request_msg.size = static_cast<uint32_t>(request_payload.size());

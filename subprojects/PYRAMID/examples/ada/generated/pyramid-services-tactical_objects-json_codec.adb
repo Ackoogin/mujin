@@ -1,6 +1,7 @@
 --  Auto-generated JSON codec body
 --  Package body: Pyramid.Services.Tactical_Objects.Json_Codec
 
+with Pyramid.Services.Tactical_Objects.Wire_Types;  use Pyramid.Services.Tactical_Objects.Wire_Types;
 with GNATCOLL.JSON;  use GNATCOLL.JSON;
 
 package body Pyramid.Services.Tactical_Objects.Json_Codec is

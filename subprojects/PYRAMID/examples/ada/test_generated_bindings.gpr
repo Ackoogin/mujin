@@ -16,7 +16,7 @@ project Test_Generated_Bindings is
 
   for Languages use ("Ada");
 
-  for Source_Dirs use (".", "generated");
+  for Source_Dirs use (".", "generated", "generated/flatbuffers/ada");
   for Main use ("test_generated_bindings.adb");
 
   for Object_Dir use "obj_test_bindings";

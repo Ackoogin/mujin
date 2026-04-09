@@ -1,5 +1,5 @@
 // Auto-generated service binding header
-// Generated from: services by cpp_service_generator
+// Generated from: provided.proto by generate_bindings.py
 // Namespace: pyramid::services::tactical_objects::provided
 //
 // Architecture: component logic > service binding (this) > PCL
@@ -12,6 +12,8 @@
 #pragma once
 
 #include "pyramid_data_model_types.hpp"
+
+#include "pyramid_services_tactical_objects_wire_types.hpp"
 
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
@@ -74,6 +76,7 @@ using pyramid::data_model::ObjectDetail;
 using pyramid::data_model::ObjectInterestRequirement;
 using pyramid::data_model::ObjectMatch;
 using pyramid::data_model::Query;
+namespace wire_types = pyramid::services::tactical_objects::wire_types;
 
 class ServiceHandler {
 public:
@@ -126,17 +129,19 @@ pcl_status_t invokeReadMatch(pcl_executor_t* executor,
                              const Query&                 request,
                              pcl_resp_cb_fn_t        callback,
                              void*                   user_data = nullptr,
-                             const pcl_endpoint_route_t* route = nullptr);
+                             const pcl_endpoint_route_t* route = nullptr,
+                             const char*       content_type = "application/json");
 
 /// \brief Invoke object_of_interest.create_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
 pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
-                                     const ObjectInterestRequirement& request,
+                                     const wire_types::CreateRequirementRequest& request,
                                      pcl_resp_cb_fn_t        callback,
                                      void*                   user_data = nullptr,
-                                     const pcl_endpoint_route_t* route = nullptr);
+                                     const pcl_endpoint_route_t* route = nullptr,
+                                     const char*       content_type = "application/json");
 
 /// \brief Invoke object_of_interest.read_requirement (typed, serialisation handled internally).
 ///
@@ -146,17 +151,19 @@ pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
                                    const Query&                 request,
                                    pcl_resp_cb_fn_t        callback,
                                    void*                   user_data = nullptr,
-                                   const pcl_endpoint_route_t* route = nullptr);
+                                   const pcl_endpoint_route_t* route = nullptr,
+                                   const char*       content_type = "application/json");
 
 /// \brief Invoke object_of_interest.update_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
 pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
-                                     const ObjectInterestRequirement& request,
+                                     const wire_types::CreateRequirementRequest& request,
                                      pcl_resp_cb_fn_t        callback,
                                      void*                   user_data = nullptr,
-                                     const pcl_endpoint_route_t* route = nullptr);
+                                     const pcl_endpoint_route_t* route = nullptr,
+                                     const char*       content_type = "application/json");
 
 /// \brief Invoke object_of_interest.delete_requirement (typed, serialisation handled internally).
 ///
@@ -166,7 +173,8 @@ pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
                                      const Identifier&            request,
                                      pcl_resp_cb_fn_t        callback,
                                      void*                   user_data = nullptr,
-                                     const pcl_endpoint_route_t* route = nullptr);
+                                     const pcl_endpoint_route_t* route = nullptr,
+                                     const char*       content_type = "application/json");
 
 /// \brief Invoke specific_object_detail.read_detail (typed, serialisation handled internally).
 ///
@@ -176,7 +184,8 @@ pcl_status_t invokeReadDetail(pcl_executor_t* executor,
                               const Query&                 request,
                               pcl_resp_cb_fn_t        callback,
                               void*                   user_data = nullptr,
-                              const pcl_endpoint_route_t* route = nullptr);
+                              const pcl_endpoint_route_t* route = nullptr,
+                              const char*       content_type = "application/json");
 
 // ---------------------------------------------------------------------------
 // Dispatch — deserialises request, calls handler, serialises response.
@@ -188,7 +197,18 @@ void dispatch(ServiceHandler& handler,
               ServiceChannel  channel,
               const void*     request_buf,
               size_t          request_size,
+              const char*     content_type,
               void**          response_buf,
               size_t*         response_size);
+
+inline void dispatch(ServiceHandler& handler,
+                     ServiceChannel  channel,
+                     const void*     request_buf,
+                     size_t          request_size,
+                     void**          response_buf,
+                     size_t*         response_size)
+{
+    dispatch(handler, channel, request_buf, request_size, "application/json", response_buf, response_size);
+}
 
 } // namespace pyramid::services::tactical_objects::provided

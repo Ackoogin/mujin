@@ -1,10 +1,3 @@
-add_library(nlohmann_json INTERFACE)
-add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
-target_include_directories(nlohmann_json
-    INTERFACE
-        "${PYRAMID_ROOT_DIR}/core/external"
-)
-
 add_library(tactical_objects)
 add_library(pyramid::tactical_objects ALIAS tactical_objects)
 
@@ -65,6 +58,8 @@ target_compile_features(tactical_objects_component PUBLIC cxx_std_14)
 add_executable(tactical_objects_app
     src/apps/tactical_objects_main.cpp
     ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_services_tactical_objects_consumed.cpp
+    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_services_tactical_objects_json_codec.cpp
+    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.cpp
     ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_common_codec.cpp
     ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_tactical_codec.cpp
 )
@@ -73,6 +68,7 @@ add_executable(tactical_objects_test_client
     src/apps/tactical_objects_test_client.cpp
     ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_services_tactical_objects_json_codec.cpp
     ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_services_tactical_objects_provided.cpp
+    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.cpp
     ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_common_codec.cpp
     ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_tactical_codec.cpp
 )

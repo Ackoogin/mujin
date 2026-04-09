@@ -13,6 +13,9 @@ if(NOT DEFINED SCRIPT)
 endif()
 
 string(REPLACE "/" "\\" NATIVE_SCRIPT "${SCRIPT}")
+get_filename_component(SCRIPT_DIR "${SCRIPT}" DIRECTORY)
+get_filename_component(PYRAMID_ROOT "${SCRIPT_DIR}/.." ABSOLUTE)
+get_filename_component(WORKSPACE_ROOT "${PYRAMID_ROOT}/../.." ABSOLUTE)
 
 set(extra_args)
 if(DEFINED SERVER_BIN)
@@ -30,9 +33,15 @@ endif()
 if(DEFINED TIMEOUT_VAL)
   list(APPEND extra_args --timeout "${TIMEOUT_VAL}")
 endif()
+if(DEFINED SCRIPT_ARGS)
+  list(APPEND extra_args ${SCRIPT_ARGS})
+endif()
 
 execute_process(
-  COMMAND cmd /c "${NATIVE_SCRIPT}" ${extra_args}
+  COMMAND ${CMAKE_COMMAND} -E env
+          PYRAMID_ROOT=${PYRAMID_ROOT}
+          WORKSPACE_ROOT=${WORKSPACE_ROOT}
+          cmd /c call "${NATIVE_SCRIPT}" ${extra_args}
   RESULT_VARIABLE result
 )
 

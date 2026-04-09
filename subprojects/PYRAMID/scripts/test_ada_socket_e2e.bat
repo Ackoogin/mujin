@@ -18,6 +18,14 @@ set "SERVER_BIN="
 set "CLIENT_BIN="
 set "PORT=19234"
 set "TIMEOUT_SEC=15"
+for %%I in ("%~f0") do set "SCRIPT_BASE=%%~dpI"
+
+if not defined PYRAMID_ROOT (
+    for %%I in ("%SCRIPT_BASE%..") do set "PYRAMID_ROOT=%%~fI"
+)
+if not defined WORKSPACE_ROOT (
+    for %%I in ("%PYRAMID_ROOT%\..\..") do set "WORKSPACE_ROOT=%%~fI"
+)
 
 REM Parse arguments
 :parse_args
@@ -34,11 +42,6 @@ shift
 goto parse_args
 :done_args
 
-set "SCRIPT_BASE=%~dp0"
-for %%I in ("%SCRIPT_BASE%") do set "SCRIPT_BASE=%%~fI"
-for %%I in ("%SCRIPT_BASE%\..") do set "PYRAMID_ROOT=%%~fI"
-for %%I in ("%PYRAMID_ROOT%\..\..") do set "WORKSPACE_ROOT=%%~fI"
-
 if "%SERVER_BIN%"=="" set "SERVER_BIN=%WORKSPACE_ROOT%\build\subprojects\PYRAMID\tests\Release\tobj_socket_server.exe"
 if "%CLIENT_BIN%"=="" (
     set "CLIENT_BIN=%PYRAMID_ROOT%\examples\ada\bin\ada_tobj_client.exe"
@@ -53,25 +56,12 @@ echo === Ada Socket E2E Test ===
 REM Step 0: Generate Ada service stubs from proto (provided + consumed)
 where python >nul 2>&1
 if %errorlevel% equ 0 (
-    set "ADA_GEN_OUT=%PYRAMID_ROOT%\examples\ada\generated"
-    set "GEN_SCRIPT=%PYRAMID_ROOT%\pim\ada_service_generator.py"
-    set "PROTO_DIR=%PYRAMID_ROOT%\proto\pyramid\components\tactical_objects\services"
-    set "DATA_MODEL_DIR=%PYRAMID_ROOT%\proto\pyramid\data_model"
-    echo [driver] Generating Ada types, codecs and service stubs from proto...
-    set "GEN_OK=1"
-    python "!GEN_SCRIPT!" --types "!DATA_MODEL_DIR!" "!ADA_GEN_OUT!"
-    if !errorlevel! neq 0 set "GEN_OK=0"
-    python "!GEN_SCRIPT!" --codec "!DATA_MODEL_DIR!" "!ADA_GEN_OUT!"
-    if !errorlevel! neq 0 set "GEN_OK=0"
-    python "!GEN_SCRIPT!" "!PROTO_DIR!\provided.proto" "!ADA_GEN_OUT!"
-    if !errorlevel! neq 0 set "GEN_OK=0"
-    python "!GEN_SCRIPT!" "!PROTO_DIR!\consumed.proto" "!ADA_GEN_OUT!"
-    if !errorlevel! neq 0 set "GEN_OK=0"
-    if "!GEN_OK!"=="0" (
+    echo [driver] Generating Ada bindings from proto...
+    call "%PYRAMID_ROOT%\scripts\generate_bindings.bat" --ada
+    if !errorlevel! neq 0 (
         echo [driver] FAIL: Ada service generation failed
         exit /b 1
     )
-    echo [driver] Generated stubs in !ADA_GEN_OUT!
 ) else (
     echo [driver] python not found -- skipping Ada stub generation
 )

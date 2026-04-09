@@ -1,12 +1,12 @@
 with Ada.Strings.Unbounded;
 with Interfaces;
-with Pyramid_Data_Model_Base_Types;
+with Pyramid.Data_Model.Base.Types;
 
 package Pyramid.UUIDs is
 
    Invalid_UUID : exception;
 
-   subtype Identifier is Pyramid_Data_Model_Base_Types.Identifier;
+   subtype Identifier is Pyramid.Data_Model.Base.Types.Identifier;
 
    subtype Byte is Interfaces.Unsigned_8;
    type Byte_Array is array (Natural range <>) of Byte;

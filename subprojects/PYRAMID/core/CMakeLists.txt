@@ -27,11 +27,9 @@ target_include_directories(pyramid_core
 )
 
 # Specify dependencies (if any)
-# target_link_libraries(pyramid_core
-#     PUBLIC
-#         # Public dependencies
-#     PRIVATE
-#         # Private dependencies
-# )
+target_link_libraries(pyramid_core
+    PUBLIC
+        nlohmann_json::nlohmann_json
+)
 
 target_compile_features(pyramid_core PUBLIC cxx_std_14)

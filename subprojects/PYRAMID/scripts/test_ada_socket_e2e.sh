@@ -47,16 +47,8 @@ echo "=== Ada Socket E2E Test ==="
 
 # Step 0: Generate Ada service stubs from proto (provided + consumed)
 if command -v python3 &>/dev/null || command -v python &>/dev/null; then
-  PY=$(command -v python3 || command -v python)
-  GEN_SCRIPT="$PYRAMID_ROOT/pim/ada_service_generator.py"
-  ADA_GEN_OUT="$PYRAMID_ROOT/examples/ada/generated"
-  DATA_MODEL_DIR="$PYRAMID_ROOT/proto/pyramid/data_model"
-  PROTO_SVC_DIR="$PYRAMID_ROOT/proto/pyramid/components/tactical_objects/services"
-  echo "[driver] Generating Ada types, codecs and service stubs from proto..."
-  "$PY" "$GEN_SCRIPT" --types "$DATA_MODEL_DIR" "$ADA_GEN_OUT" 2>&1 || true
-  "$PY" "$GEN_SCRIPT" --codec "$DATA_MODEL_DIR" "$ADA_GEN_OUT" 2>&1 || true
-  "$PY" "$GEN_SCRIPT" "$PROTO_SVC_DIR/provided.proto" "$ADA_GEN_OUT" 2>&1 || true
-  "$PY" "$GEN_SCRIPT" "$PROTO_SVC_DIR/consumed.proto" "$ADA_GEN_OUT" 2>&1 || true
+  echo "[driver] Generating Ada bindings from proto..."
+  bash "$PYRAMID_ROOT/scripts/generate_bindings.sh" --ada
 else
   echo "[driver] python not found — skipping Ada stub generation"
 fi

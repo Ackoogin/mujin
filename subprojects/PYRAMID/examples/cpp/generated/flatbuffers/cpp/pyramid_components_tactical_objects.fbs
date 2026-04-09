@@ -1,0 +1,230 @@
+// Auto-generated FlatBuffers schema from tactical_objects.proto
+// Do not edit — regenerate from proto source
+
+namespace pyramid.components.tactical_objects;
+
+enum ObjectType : byte {
+  UNSPECIFIED = 0,
+  PLATFORM = 1,
+  PERSON = 2,
+  EQUIPMENT = 3,
+  UNIT = 4,
+  FORMATION = 5,
+  INSTALLATION = 6,
+  FEATURE = 7,
+  ROUTE = 8,
+  POINT = 9,
+  AREA = 10,
+  ZONE = 11
+}
+
+enum Affiliation : byte {
+  UNSPECIFIED = 0,
+  FRIENDLY = 1,
+  HOSTILE = 2,
+  NEUTRAL = 3,
+  UNKNOWN = 4,
+  ASSUMED_FRIEND = 5,
+  SUSPECT = 6,
+  JOKER = 7,
+  FAKER = 8,
+  PENDING = 9
+}
+
+enum BattleDimension : byte {
+  UNSPECIFIED = 0,
+  GROUND = 1,
+  AIR = 2,
+  SEA_SURFACE = 3,
+  SUBSURFACE = 4,
+  SPACE = 5,
+  SOF = 6
+}
+
+enum MilStatus : byte {
+  UNSPECIFIED = 0,
+  PRESENT = 1,
+  ANTICIPATED = 2,
+  PLANNED = 3,
+  KNOWN = 4
+}
+
+enum Echelon : byte {
+  UNSPECIFIED = 0,
+  TEAM = 1,
+  SQUAD = 2,
+  SECTION = 3,
+  PLATOON = 4,
+  COMPANY = 5,
+  BATTALION = 6,
+  REGIMENT = 7,
+  BRIGADE = 8,
+  DIVISION = 9,
+  CORPS = 10,
+  ARMY = 11,
+  ARMY_GROUP = 12
+}
+
+enum Mobility : byte {
+  UNSPECIFIED = 0,
+  NONE = 1,
+  WHEELED = 2,
+  TRACKED = 3,
+  TOWED = 4,
+  RAIL = 5,
+  OVER_SNOW = 6,
+  SLED = 7,
+  BARGE = 8,
+  AMPHIBIOUS = 9
+}
+
+enum ZoneType : byte {
+  UNSPECIFIED = 0,
+  AOI = 1,
+  PATROL_AREA = 2,
+  RESTRICTED_AREA = 3,
+  NO_GO_AREA = 4,
+  KILL_BOX = 5,
+  PHASE_LINE = 6,
+  BOUNDARY = 7,
+  ROUTE_CORRIDOR = 8,
+  SENSOR_COVERAGE_AREA = 9
+}
+
+enum LifecycleStatus : byte {
+  UNSPECIFIED = 0,
+  ACTIVE = 1,
+  STALE = 2,
+  RETIRED = 3
+}
+
+enum Provenance : byte {
+  UNSPECIFIED = 0,
+  CORRELATED = 1,
+  DIRECT = 2
+}
+
+table Position {
+  lat:double;
+  lon:double;
+  alt:double;
+}
+
+table Velocity {
+  north:double;
+  east:double;
+  down:double;
+}
+
+table BoundingBox {
+  min_lat:double;
+  max_lat:double;
+  min_lon:double;
+  max_lon:double;
+}
+
+table SourceRef {
+  source_system:string;
+  source_entity_id:string;
+  source_track_id:string;
+  first_seen:double;
+  last_seen:double;
+}
+
+table MilClassProfile {
+  battle_dim:BattleDimension;
+  affiliation:Affiliation;
+  role:string;
+  status:MilStatus;
+  echelon:Echelon;
+  mobility:Mobility;
+  hq:bool;
+  task_force:bool;
+  feint_dummy:bool;
+  installation:bool;
+  source_sidc:string;
+}
+
+table ZoneGeometry {
+  geometry_type:ZoneType;
+  vertices:[Position];
+  center:Position;
+  radius_m:double;
+}
+
+table TacticalObject {
+  id:Identifier;
+  type:ObjectType;
+  position:Position;
+  velocity:Velocity;
+  affiliation:Affiliation;
+  mil_class:MilClassProfile;
+  identity_name:string;
+  source_refs:[SourceRef];
+  version:ulong;
+  lifecycle_status:LifecycleStatus;
+  operational_state:string;
+  behavior_pattern:string;
+}
+
+table TacticalObjectQuery {
+  base:Query;
+  by_type:ObjectType;
+  by_affiliation:Affiliation;
+  by_region:BoundingBox;
+  max_age_seconds:double;
+  by_source_system:string;
+  by_source_entity_id:string;
+}
+
+table Zone {
+  id:Identifier;
+  zone_type:ZoneType;
+  geometry:ZoneGeometry;
+  active_from:double;
+  active_until:double;
+  priority:int;
+  owner:string;
+  semantics:string;
+}
+
+table Observation {
+  observation_id:Identifier;
+  received_at:double;
+  observed_at:double;
+  source_ref:SourceRef;
+  object_hint_type:ObjectType;
+  position:Position;
+  velocity:Velocity;
+  classification_hint:string;
+  affiliation_hint:Affiliation;
+  confidence:double;
+  uncertainty_radius_m:double;
+  source_sidc:string;
+  lineage_parent_ids:[Identifier];
+}
+
+table EntityUpdateFrame {
+  message_type:uint;
+  entity_id:Identifier;
+  version:ulong;
+  timestamp:double;
+  field_mask:uint;
+  position:Position;
+  velocity:Velocity;
+  affiliation:Affiliation;
+  object_type:ObjectType;
+  confidence:double;
+  lifecycle_status:LifecycleStatus;
+  mil_class:MilClassProfile;
+  behavior_pattern:string;
+  operational_state:string;
+  identity_name:string;
+}
+
+table InterestCriteria {
+  by_type:ObjectType;
+  by_affiliation:Affiliation;
+  by_region:BoundingBox;
+}
+

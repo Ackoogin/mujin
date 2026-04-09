@@ -287,8 +287,36 @@ def _namespace_from_proto(proto_file: ProtoFile) -> Tuple[str, str, str, str]:
     return full_ns, file_prefix, svc_base_ns, _DATA_MODEL_TYPES_NS
 
 
+def _wire_types_ns_from_proto(proto_file: ProtoFile) -> str:
+    """Return the service-local wire model namespace."""
+    _, _, svc_base_ns, _ = _namespace_from_proto(proto_file)
+    return svc_base_ns + '::wire_types'
+
+
+def _wire_types_header_from_proto(proto_file: ProtoFile) -> str:
+    """Return the generated service-local wire model header name."""
+    _, _, svc_base_ns, _ = _namespace_from_proto(proto_file)
+    return '_'.join(svc_base_ns.split('::')) + '_wire_types.hpp'
+
+
 def _is_provided(proto_file: ProtoFile) -> bool:
     return 'provided' in proto_file.package.lower()
+
+
+def _wire_request_type_for_rpc_cpp(rpc: ProtoRpc) -> Optional[str]:
+    """Return the service-local wire request type for an RPC when one exists."""
+    if rpc.cpp_req_type == 'ObjectInterestRequirement':
+        return 'CreateRequirementRequest'
+    if rpc.cpp_req_type == 'ObjectEvidenceRequirement':
+        return 'EvidenceRequirement'
+    return None
+
+
+def _wire_response_type_for_rpc_cpp(rpc: ProtoRpc) -> Optional[str]:
+    """Return the service-local wire response type for an RPC when one exists."""
+    if rpc.name == 'CreateRequirement' and rpc.cpp_rsp_type == 'Identifier':
+        return 'CreateRequirementResponse'
+    return None
 
 
 # -- Code generation -----------------------------------------------------------
@@ -340,11 +368,21 @@ class CppServiceGenerator:
                       types_header: str, parsed: ProtoFile,
                       all_rpcs: List[Tuple[str, ProtoRpc]]):
         is_provided = _is_provided(parsed)
+        wire_types_ns = _wire_types_ns_from_proto(parsed)
+        wire_types_header = _wire_types_header_from_proto(parsed)
         sub_topics = SUBSCRIBE_TOPICS if is_provided else {}
         pub_topics = {} if is_provided else PUBLISH_TOPICS
         all_topics = dict(sub_topics)
         all_topics.update(pub_topics)
         topic_set = all_topics
+        has_wire_types = (
+            any(_wire_request_type_for_rpc_cpp(rpc)
+                for _svc, rpc in all_rpcs)
+            or any(_wire_response_type_for_rpc_cpp(rpc)
+                   for _svc, rpc in all_rpcs)
+            or any(schema.TOPIC_WIRE_TYPES_CPP.get(key)
+                   for key in topic_set)
+        )
 
         # Collect raw type names (no BASE_TYPE_MAP) for using declarations
         raw_types = sorted({
@@ -357,7 +395,7 @@ class CppServiceGenerator:
             # File-level comment block
             f.write('// Auto-generated service binding header\n')
             f.write(f'// Generated from: {self._proto_input.name}'
-                    f' by cpp_service_generator\n')
+                    f' by generate_bindings.py\n')
             f.write(f'// Namespace: {full_ns}\n')
             f.write('//\n')
             f.write('// Architecture: component logic > service binding (this) > PCL\n')
@@ -376,6 +414,8 @@ class CppServiceGenerator:
 
             # Includes
             f.write(f'#include "{types_header}"\n\n')
+            if has_wire_types:
+                f.write(f'#include "{wire_types_header}"\n\n')
             f.write('#include <pcl/pcl_container.h>\n')
             f.write('#include <pcl/pcl_executor.h>\n')
             f.write('#include <pcl/pcl_transport.h>\n')
@@ -452,6 +492,8 @@ class CppServiceGenerator:
 
             for t in raw_types:
                 f.write(f'using {types_ns}::{t};\n')
+            if has_wire_types:
+                f.write(f'namespace wire_types = {wire_types_ns};\n')
             f.write('\n')
 
             f.write('class ServiceHandler {\n')
@@ -513,7 +555,9 @@ class CppServiceGenerator:
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
                         wire_full = f'{svc.wire_prefix}.{rpc.wire_name}'
-                        req_t = rpc.cpp_req_type
+                        req_t = _wire_request_type_for_rpc_cpp(rpc) or rpc.cpp_req_type
+                        req_decl_t = (f'wire_types::{req_t}'
+                                      if req_t != rpc.cpp_req_type else req_t)
                         col = 13 + len(rpc.cpp_invoke_func) + 1
                         sp = ' ' * col
                         f.write(f'/// \\brief Invoke {wire_full}'
@@ -523,8 +567,8 @@ class CppServiceGenerator:
                         f.write(f'/// executor transport fallback when no route is supplied.\n')
                         f.write(f'pcl_status_t {rpc.cpp_invoke_func}'
                                 f'(pcl_executor_t* executor,\n')
-                        f.write(f'{sp}const {req_t}&'
-                                f'{" " * max(1, 22 - len(req_t))}'
+                        f.write(f'{sp}const {req_decl_t}&'
+                                f'{" " * max(1, 22 - len(req_decl_t))}'
                                 f'request,\n')
                         f.write(f'{sp}pcl_resp_cb_fn_t'
                                 f'        callback,\n')
@@ -532,27 +576,32 @@ class CppServiceGenerator:
                                 f'                   user_data'
                                 f' = nullptr,\n')
                         f.write(f'{sp}const pcl_endpoint_route_t* route'
-                                f' = nullptr);\n\n')
+                                f' = nullptr,\n')
+                        f.write(f'{sp}const char*       content_type'
+                                f' = "{_DEFAULT_CONTENT_TYPE}");\n\n')
             else:
                 # Typed publish helpers
                 for key, _wire in topic_set.items():
                     pascal = _snake_to_pascal(key)
                     fname = f'publish{pascal}'
                     cname = f'kTopic{pascal}'
-                    # Determine published message type from topic.
-                    # For now, use a generic template approach since the
-                    # topic -> message type mapping isn't in the proto.
                     col = 13 + len(fname) + 1
                     sp = ' ' * col
+                    wire_t = schema.TOPIC_WIRE_TYPES_CPP.get(key)
+                    wire_decl_t = f'wire_types::{wire_t}' if wire_t else None
                     f.write(f'/// \\brief Publish a typed message on'
                             f' {cname}.\n')
                     f.write('///\n')
                     f.write(f'/// \\p publisher must be the pcl_port_t*'
                             f' returned by addPublisher for\n')
                     f.write(f'/// {cname}, obtained during on_configure.\n')
-                    # Emit one overload per distinct publish payload type.
-                    # For now use ObjectDetail as the primary publish type.
-                    # TODO: derive from topic schema mapping.
+                    if wire_decl_t:
+                        f.write(f'pcl_status_t {fname}'
+                                f'(pcl_port_t*        publisher,\n')
+                        f.write(f'{sp}const {wire_decl_t}& payload,\n')
+                        f.write(f'{sp}const char*        content_type'
+                                f' = "{_DEFAULT_CONTENT_TYPE}");\n')
+                        f.write('\n')
                     f.write(f'pcl_status_t {fname}'
                             f'(pcl_port_t*        publisher,\n')
                     f.write(f'{sp}const std::string& payload,\n')
@@ -572,8 +621,18 @@ class CppServiceGenerator:
             f.write('              ServiceChannel  channel,\n')
             f.write('              const void*     request_buf,\n')
             f.write('              size_t          request_size,\n')
+            f.write('              const char*     content_type,\n')
             f.write('              void**          response_buf,\n')
             f.write('              size_t*         response_size);\n\n')
+            f.write('inline void dispatch(ServiceHandler& handler,\n')
+            f.write('                     ServiceChannel  channel,\n')
+            f.write('                     const void*     request_buf,\n')
+            f.write('                     size_t          request_size,\n')
+            f.write('                     void**          response_buf,\n')
+            f.write('                     size_t*         response_size)\n')
+            f.write('{\n')
+            f.write(f'    dispatch(handler, channel, request_buf, request_size, "{_DEFAULT_CONTENT_TYPE}", response_buf, response_size);\n')
+            f.write('}\n\n')
 
             # Namespace close
             f.write(f'}} // namespace {full_ns}\n')
@@ -584,11 +643,37 @@ class CppServiceGenerator:
                     types_ns: str, parsed: ProtoFile,
                     all_rpcs: List[Tuple[str, ProtoRpc]]):
         is_provided = _is_provided(parsed)
+        wire_types_ns = _wire_types_ns_from_proto(parsed)
+        svc_base_ns = _namespace_from_proto(parsed)[2]
+        json_codec_ns = _namespace_from_proto(parsed)[2] + '::json_codec'
+        json_codec_header = '_'.join(_namespace_from_proto(parsed)[2].split('::')) + '_json_codec.hpp'
+        flatbuffers_codec_ns = svc_base_ns + '::flatbuffers_codec'
+        flatbuffers_codec_header = 'flatbuffers/cpp/' + '_'.join(svc_base_ns.split('::')) + '_flatbuffers_codec.hpp'
         sub_topics = SUBSCRIBE_TOPICS if is_provided else {}
         pub_topics = {} if is_provided else PUBLISH_TOPICS
         all_topics = dict(sub_topics)
         all_topics.update(pub_topics)
         topic_set = all_topics
+        has_wire_types = (
+            any(_wire_request_type_for_rpc_cpp(rpc)
+                for _svc, rpc in all_rpcs)
+            or any(_wire_response_type_for_rpc_cpp(rpc)
+                   for _svc, rpc in all_rpcs)
+            or any(schema.TOPIC_WIRE_TYPES_CPP.get(key)
+                   for key in topic_set)
+        )
+        needs_create_req_mapping = any(
+            _wire_request_type_for_rpc_cpp(rpc) == 'CreateRequirementRequest'
+            for _svc, rpc in all_rpcs
+        )
+        needs_evidence_req_mapping = any(
+            _wire_request_type_for_rpc_cpp(rpc) == 'EvidenceRequirement'
+            for _svc, rpc in all_rpcs
+        )
+        needs_create_rsp_mapping = any(
+            _wire_response_type_for_rpc_cpp(rpc) == 'CreateRequirementResponse'
+            for _svc, rpc in all_rpcs
+        )
         hpp_name = file_prefix + '.hpp'
 
         # Determine which data model codec namespaces to use
@@ -605,11 +690,19 @@ class CppServiceGenerator:
             # File-level comment block
             f.write('// Auto-generated service binding implementation\n')
             f.write(f'// Generated from: {self._proto_input.name}'
-                    f' by cpp_service_generator\n')
+                    f' by generate_bindings.py\n')
             f.write(f'// Namespace: {full_ns}\n\n')
 
             # Includes
             f.write(f'#include "{hpp_name}"\n\n')
+            if has_wire_types:
+                f.write(f'#include "{json_codec_header}"\n')
+                f.write('#if __has_include("' + flatbuffers_codec_header + '")\n')
+                f.write(f'#include "{flatbuffers_codec_header}"\n')
+                f.write('#define PYRAMID_HAVE_SERVICE_FLATBUFFERS 1\n')
+                f.write('#else\n')
+                f.write('#define PYRAMID_HAVE_SERVICE_FLATBUFFERS 0\n')
+                f.write('#endif\n')
             # Data model codec headers — for serialisation inside
             # invoke/publish/dispatch
             for ch in dm_codec_headers:
@@ -619,6 +712,7 @@ class CppServiceGenerator:
             f.write('#include <pcl/pcl_executor.h>\n')
             f.write('#include <pcl/pcl_transport.h>\n')
             f.write('\n#include <cstdlib>\n')
+            f.write('#include <cstdint>\n')
             f.write('#include <cstring>\n')
             f.write('#include <string>\n')
             f.write('#include <vector>\n\n')
@@ -631,6 +725,12 @@ class CppServiceGenerator:
             for ns in dm_codec_nss:
                 f.write(f'using {ns}::toJson;\n')
                 f.write(f'using {ns}::fromJson;\n')
+            if has_wire_types:
+                f.write(f'namespace wire_types = {wire_types_ns};\n')
+                f.write(f'namespace json_codec = {json_codec_ns};\n')
+                f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
+                f.write(f'namespace flatbuffers_codec = {flatbuffers_codec_ns};\n')
+                f.write('#endif\n')
             f.write('\n')
 
             # ---- msgToString -------------------------------------------------
@@ -667,6 +767,74 @@ class CppServiceGenerator:
             f.write(_SEP + '\n\n')
             f.write('namespace {\n\n')
 
+            f.write('constexpr const char* kJsonContentType = "application/json";\n')
+            f.write('constexpr const char* kFlatBuffersContentType = "application/flatbuffers";\n\n')
+            f.write('bool is_json_content_type(const char* content_type)\n')
+            f.write('{\n')
+            f.write('    return !content_type || std::strcmp(content_type, kJsonContentType) == 0;\n')
+            f.write('}\n\n')
+
+            f.write('bool is_flatbuffers_content_type(const char* content_type)\n')
+            f.write('{\n')
+            f.write('    return content_type && std::strcmp(content_type, kFlatBuffersContentType) == 0;\n')
+            f.write('}\n\n')
+
+            f.write('std::string json_request_body(const void* data, size_t size)\n')
+            f.write('{\n')
+            f.write('    if (!data && size != 0) return {};\n')
+            f.write('    return std::string(static_cast<const char*>(data), size);\n')
+            f.write('}\n\n')
+
+            if has_wire_types and needs_create_req_mapping:
+                f.write('ObjectInterestRequirement to_domain_create_requirement_request(\n')
+                f.write('    const wire_types::CreateRequirementRequest& wire_req)\n')
+                f.write('{\n')
+                f.write('    ObjectInterestRequirement result{};\n')
+                f.write('    result.policy = wire_req.policy;\n')
+                f.write('    if (wire_req.dimension != pyramid::data_model::BattleDimension::Unspecified)\n')
+                f.write('        result.dimension.push_back(wire_req.dimension);\n')
+                f.write('    if (wire_req.min_lat_rad != 0.0 || wire_req.max_lat_rad != 0.0\n')
+                f.write('        || wire_req.min_lon_rad != 0.0 || wire_req.max_lon_rad != 0.0) {\n')
+                f.write('        pyramid::data_model::common::PolyArea area{};\n')
+                f.write('        area.points.push_back({wire_req.min_lat_rad, wire_req.min_lon_rad});\n')
+                f.write('        area.points.push_back({wire_req.min_lat_rad, wire_req.max_lon_rad});\n')
+                f.write('        area.points.push_back({wire_req.max_lat_rad, wire_req.max_lon_rad});\n')
+                f.write('        area.points.push_back({wire_req.max_lat_rad, wire_req.min_lon_rad});\n')
+                f.write('        result.poly_area = area;\n')
+                f.write('    }\n')
+                f.write('    return result;\n')
+                f.write('}\n\n')
+
+            if has_wire_types and needs_evidence_req_mapping:
+                f.write('ObjectEvidenceRequirement to_domain_evidence_requirement(\n')
+                f.write('    const wire_types::EvidenceRequirement& wire_req)\n')
+                f.write('{\n')
+                f.write('    ObjectEvidenceRequirement result{};\n')
+                f.write('    result.base.id = wire_req.id;\n')
+                f.write('    result.policy = wire_req.policy;\n')
+                f.write('    if (wire_req.dimension != pyramid::data_model::BattleDimension::Unspecified)\n')
+                f.write('        result.dimension.push_back(wire_req.dimension);\n')
+                f.write('    if (wire_req.min_lat_rad != 0.0 || wire_req.max_lat_rad != 0.0\n')
+                f.write('        || wire_req.min_lon_rad != 0.0 || wire_req.max_lon_rad != 0.0) {\n')
+                f.write('        pyramid::data_model::common::PolyArea area{};\n')
+                f.write('        area.points.push_back({wire_req.min_lat_rad, wire_req.min_lon_rad});\n')
+                f.write('        area.points.push_back({wire_req.min_lat_rad, wire_req.max_lon_rad});\n')
+                f.write('        area.points.push_back({wire_req.max_lat_rad, wire_req.max_lon_rad});\n')
+                f.write('        area.points.push_back({wire_req.max_lat_rad, wire_req.min_lon_rad});\n')
+                f.write('        result.poly_area = area;\n')
+                f.write('    }\n')
+                f.write('    return result;\n')
+                f.write('}\n\n')
+
+            if has_wire_types and needs_create_rsp_mapping:
+                f.write('wire_types::CreateRequirementResponse to_wire_create_requirement_response(\n')
+                f.write('    const Identifier& interest_id)\n')
+                f.write('{\n')
+                f.write('    wire_types::CreateRequirementResponse result{};\n')
+                f.write('    result.interest_id = interest_id;\n')
+                f.write('    return result;\n')
+                f.write('}\n\n')
+
             if is_provided:
                 f.write('pcl_status_t invoke_async('
                         'pcl_executor_t* executor,\n')
@@ -679,13 +847,14 @@ class CppServiceGenerator:
                 f.write('                           void*'
                         '                   user_data,\n')
                 f.write('                           const pcl_endpoint_route_t*'
-                        ' route)\n')
+                        ' route,\n')
+                f.write('                           const char*             content_type)\n')
                 f.write('{\n')
                 f.write('    pcl_msg_t msg{};\n')
                 f.write('    msg.data      = payload.data();\n')
                 f.write('    msg.size      = static_cast<uint32_t>'
                         '(payload.size());\n')
-                f.write(f'    msg.type_name = "{_DEFAULT_CONTENT_TYPE}";\n')
+                f.write('    msg.type_name = content_type;\n')
                 f.write('    if (route) {\n')
                 f.write('        const pcl_status_t route_rc ='
                         ' pcl_executor_set_endpoint_route(executor, route);\n')
@@ -733,34 +902,44 @@ class CppServiceGenerator:
                 f.write(_SEP + '\n\n')
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
-                        req_t = rpc.cpp_req_type
+                        req_t = _wire_request_type_for_rpc_cpp(rpc) or rpc.cpp_req_type
+                        req_decl_t = (f'wire_types::{req_t}'
+                                      if req_t != rpc.cpp_req_type else req_t)
                         col = 13 + len(rpc.cpp_invoke_func) + 1
                         sp = ' ' * col
                         f.write(f'pcl_status_t {rpc.cpp_invoke_func}'
                                 f'(pcl_executor_t* executor,\n')
-                        f.write(f'{sp}const {req_t}&'
-                                f'{" " * max(1, 22 - len(req_t))}'
+                        f.write(f'{sp}const {req_decl_t}&'
+                                f'{" " * max(1, 22 - len(req_decl_t))}'
                                 f'request,\n')
                         f.write(f'{sp}pcl_resp_cb_fn_t'
                                 f'        callback,\n')
                         f.write(f'{sp}void*'
                                 f'                   user_data,\n')
-                        f.write(f'{sp}const pcl_endpoint_route_t* route)\n')
+                        f.write(f'{sp}const pcl_endpoint_route_t* route,\n')
+                        f.write(f'{sp}const char*       content_type)\n')
                         f.write('{\n')
-                        # Serialize — Identifier is std::string, pass through
-                        if req_t == 'Identifier':
-                            f.write('    return invoke_async(executor,'
-                                    f' {rpc.cpp_svc_const},'
-                                    f' request, callback, user_data, route);\n')
+                        if req_decl_t == 'Identifier':
+                            f.write('    std::string payload = request;\n')
+                        elif req_decl_t.startswith('wire_types::'):
+                            f.write('    std::string payload = json_codec::toJson(request);\n')
                         else:
-                            f.write(f'    std::string payload = toJson(request);\n')
-                            f.write('    return invoke_async(executor,'
-                                    f' {rpc.cpp_svc_const},'
-                                    f' payload, callback, user_data, route);\n')
+                            f.write('    std::string payload = toJson(request);\n')
+                        f.write('    if (is_flatbuffers_content_type(content_type)) {\n')
+                        f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
+                        f.write('        payload = flatbuffers_codec::wrapPayload(payload);\n')
+                        f.write('#else\n')
+                        f.write('        return PCL_ERR_INVALID;\n')
+                        f.write('#endif\n')
+                        f.write('    } else if (!is_json_content_type(content_type)) {\n')
+                        f.write('        return PCL_ERR_INVALID;\n')
+                        f.write('    }\n')
+                        f.write('    return invoke_async(executor,'
+                                f' {rpc.cpp_svc_const},'
+                                f' payload, callback, user_data, route, content_type);\n')
                         f.write('}\n\n')
             else:
-                # Publish wrappers (raw string — consumed side still needs
-                # raw for flexibility since publish type isn't in proto)
+                # Publish wrappers
                 n_pubs = len(topic_set)
                 if n_pubs:
                     f.write(_SEP + '\n')
@@ -772,6 +951,25 @@ class CppServiceGenerator:
                         fname = f'publish{pascal}'
                         col = 13 + len(fname) + 1
                         sp = ' ' * col
+                        wire_t = schema.TOPIC_WIRE_TYPES_CPP.get(key)
+                        if wire_t:
+                            f.write(f'pcl_status_t {fname}'
+                                    f'(pcl_port_t*        publisher,\n')
+                            f.write(f'{sp}const wire_types::{wire_t}& payload,\n')
+                            f.write(f'{sp}const char*        content_type)\n')
+                            f.write('{\n')
+                            f.write('    std::string wire_payload = json_codec::toJson(payload);\n')
+                            f.write('    if (is_flatbuffers_content_type(content_type)) {\n')
+                            f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
+                            f.write('        wire_payload = flatbuffers_codec::wrapPayload(wire_payload);\n')
+                            f.write('#else\n')
+                            f.write('        return PCL_ERR_INVALID;\n')
+                            f.write('#endif\n')
+                            f.write('    } else if (!is_json_content_type(content_type)) {\n')
+                            f.write('        return PCL_ERR_INVALID;\n')
+                            f.write('    }\n')
+                            f.write(f'    return {fname}(publisher, wire_payload, content_type);\n')
+                            f.write('}\n\n')
                         f.write(f'pcl_status_t {fname}'
                                 f'(pcl_port_t*        publisher,\n')
                         f.write(f'{sp}const std::string& payload,\n')
@@ -795,13 +993,38 @@ class CppServiceGenerator:
             f.write('              ServiceChannel  channel,\n')
             f.write('              const void*     request_buf,\n')
             f.write('              size_t          request_size,\n')
+            f.write('              const char*     content_type,\n')
             f.write('              void**          response_buf,\n')
             f.write('              size_t*         response_size)\n')
             f.write('{\n')
-            f.write('    std::string req_str('
-                    'static_cast<const char*>(request_buf),'
-                    ' request_size);\n')
-            f.write('    std::string rsp_str;\n\n')
+            f.write('    std::string req_str;\n')
+            f.write('    std::string rsp_payload;\n\n')
+            f.write('    if (is_json_content_type(content_type)) {\n')
+            f.write('        req_str = json_request_body(request_buf, request_size);\n')
+            f.write('        if (request_size != 0 && req_str.empty()) {\n')
+            f.write('            *response_buf = nullptr;\n')
+            f.write('            *response_size = 0;\n')
+            f.write('            return;\n')
+            f.write('        }\n')
+            f.write('    } else if (is_flatbuffers_content_type(content_type)) {\n')
+            f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
+            f.write('        try {\n')
+            f.write('            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);\n')
+            f.write('        } catch (...) {\n')
+            f.write('            *response_buf = nullptr;\n')
+            f.write('            *response_size = 0;\n')
+            f.write('            return;\n')
+            f.write('        }\n')
+            f.write('#else\n')
+            f.write('        *response_buf = nullptr;\n')
+            f.write('        *response_size = 0;\n')
+            f.write('        return;\n')
+            f.write('#endif\n')
+            f.write('    } else {\n')
+            f.write('        *response_buf = nullptr;\n')
+            f.write('        *response_size = 0;\n')
+            f.write('        return;\n')
+            f.write('    }\n\n')
             f.write('    switch (channel) {\n')
 
             for _, rpc in all_rpcs:
@@ -809,10 +1032,18 @@ class CppServiceGenerator:
                 handler_fn = rpc.cpp_handler
                 req_t = rpc.cpp_req_type
                 rsp_t = rpc.cpp_rsp_type
+                wire_req_t = _wire_request_type_for_rpc_cpp(rpc)
+                wire_rsp_t = _wire_response_type_for_rpc_cpp(rpc)
 
                 f.write(f'    case ServiceChannel::{enum_val}: {{\n')
                 # Deserialize request
-                if req_t == 'Identifier':
+                if wire_req_t == 'CreateRequirementRequest':
+                    f.write('        auto wire_req = json_codec::createRequirementRequestFromJson(req_str);\n')
+                    f.write('        auto req = to_domain_create_requirement_request(wire_req);\n')
+                elif wire_req_t == 'EvidenceRequirement':
+                    f.write('        auto wire_req = json_codec::evidenceRequirementFromJson(req_str);\n')
+                    f.write('        auto req = to_domain_evidence_requirement(wire_req);\n')
+                elif req_t == 'Identifier':
                     f.write('        auto& req = req_str;\n')
                 else:
                     f.write(f'        auto req = fromJson(req_str,'
@@ -820,38 +1051,53 @@ class CppServiceGenerator:
                 f.write(f'        auto rsp = handler.{handler_fn}(req);\n')
 
                 # Serialize response
-                if rsp_t.startswith('std::vector<'):
+                if wire_rsp_t == 'CreateRequirementResponse':
+                    f.write('        {\n')
+                    f.write('            auto wire_rsp = to_wire_create_requirement_response(rsp);\n')
+                    f.write('            rsp_payload = json_codec::toJson(wire_rsp);\n')
+                    f.write('        }\n')
+                elif rsp_t.startswith('std::vector<'):
                     # Extract inner type
                     inner = rsp_t[len('std::vector<'):-1]
-                    f.write('        rsp_str = "[";\n')
+                    f.write('        rsp_payload = "[";\n')
                     f.write('        for (size_t i = 0;'
                             ' i < rsp.size(); ++i) {\n')
-                    f.write('            if (i > 0) rsp_str += ",";\n')
+                    f.write('            if (i > 0) rsp_payload += ",";\n')
                     if inner == 'Identifier':
-                        f.write('            rsp_str += "\\\""'
+                        f.write('            rsp_payload += "\\\""'
                                 ' + rsp[i] + "\\\""; \n')
                     else:
-                        f.write('            rsp_str += toJson(rsp[i]);\n')
+                        f.write('            rsp_payload += toJson(rsp[i]);\n')
                     f.write('        }\n')
-                    f.write('        rsp_str += "]";\n')
+                    f.write('        rsp_payload += "]";\n')
                 elif rsp_t == 'Identifier':
-                    f.write('        rsp_str = rsp;\n')
+                    f.write('        rsp_payload = rsp;\n')
                 elif rsp_t == 'Ack':
-                    f.write('        rsp_str = toJson(rsp);\n')
+                    f.write('        rsp_payload = toJson(rsp);\n')
                 else:
-                    f.write('        rsp_str = toJson(rsp);\n')
+                    f.write('        rsp_payload = toJson(rsp);\n')
 
                 f.write('        break;\n')
                 f.write('    }\n')
 
             f.write('    }\n\n')
 
+            f.write('    if (is_flatbuffers_content_type(content_type)) {\n')
+            f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
+            f.write('        rsp_payload = flatbuffers_codec::wrapPayload(rsp_payload);\n')
+            f.write('#else\n')
+            f.write('        *response_buf = nullptr;\n')
+            f.write('        *response_size = 0;\n')
+            f.write('        return;\n')
+            f.write('#endif\n')
+            f.write('    }\n\n')
+
             # Copy to heap buffer
-            f.write('    if (!rsp_str.empty()) {\n')
-            f.write('        *response_size = rsp_str.size();\n')
-            f.write('        *response_buf = std::malloc(rsp_str.size());\n')
-            f.write('        std::memcpy(*response_buf, rsp_str.data(),'
-                    ' rsp_str.size());\n')
+            f.write('    if (!rsp_payload.empty()) {\n')
+            f.write('        *response_size = rsp_payload.size();\n')
+            f.write('        *response_buf = std::malloc(rsp_payload.size());\n')
+            f.write('        std::memcpy(*response_buf, rsp_payload.data(),'
+                    ' rsp_payload.size());\n')
             f.write('    } else {\n')
             f.write('        *response_buf = nullptr;\n')
             f.write('        *response_size = 0;\n')
@@ -860,6 +1106,48 @@ class CppServiceGenerator:
 
             # Namespace close
             f.write(f'}} // namespace {full_ns}\n')
+
+
+class CppWireTypesGenerator:
+    """Generates service-local wire model headers from json_schema.py."""
+
+    def __init__(self, proto_file: ProtoFile):
+        self.TYPES_NS = _namespace_from_proto(proto_file)[3]
+        self.NS = _wire_types_ns_from_proto(proto_file)
+        self.HPP = _wire_types_header_from_proto(proto_file)
+        self._types_header = '_'.join(self.TYPES_NS.split('::')) + '_types.hpp'
+
+    def generate(self, output_dir: str):
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        self._write_header(out / self.HPP)
+        print(f'  Generated {self.NS}')
+
+    def _write_header(self, path: Path):
+        with open(path, 'w') as f:
+            f.write('// Auto-generated service wire types header\n')
+            f.write(f'// Namespace: {self.NS}\n')
+            f.write('// Generated from pim/json_schema.py\n')
+            f.write('#pragma once\n\n')
+            f.write(f'#include "{self._types_header}"\n\n')
+            f.write('#include <string>\n')
+            f.write('#include <vector>\n\n')
+            f.write(f'namespace {self.NS} {{\n\n')
+            f.write(f'using namespace {self.TYPES_NS};\n\n')
+            f.write(_SEP + '\n')
+            f.write('// Wire message structs\n')
+            f.write(_SEP + '\n\n')
+            for msg in schema.ALL_SCHEMAS:
+                f.write(f'// {msg.wire_description}\n')
+                f.write(f'struct {msg.cpp_name} {{\n')
+                for fld in msg.fields:
+                    comment = f'  // {fld.description}' if fld.description else ''
+                    opt_tag = '' if fld.required else '  // optional'
+                    tag = comment or opt_tag
+                    f.write(f'    {fld.cpp_type} {fld.name} = {fld.cpp_default};{tag}\n')
+                f.write('};\n\n')
+            f.write('using EntityMatchArray = std::vector<EntityMatch>;\n\n')
+            f.write(f'}} // namespace {self.NS}\n')
 
 
 class CppJsonCodecGenerator:
@@ -876,11 +1164,12 @@ class CppJsonCodecGenerator:
     def __init__(self, proto_file: ProtoFile):
         _, _, svc_base_ns, types_ns = _namespace_from_proto(proto_file)
         self.TYPES_NS = types_ns
+        self.WIRE_NS  = _wire_types_ns_from_proto(proto_file)
         self.NS       = svc_base_ns + '::json_codec'
         svc_prefix    = '_'.join(svc_base_ns.split('::'))
         self.HPP      = svc_prefix + '_json_codec.hpp'
         self.CPP      = svc_prefix + '_json_codec.cpp'
-        self._types_header = '_'.join(types_ns.split('::')) + '_types.hpp'
+        self._wire_types_header = _wire_types_header_from_proto(proto_file)
 
     def generate(self, output_dir: str):
         out = Path(output_dir)
@@ -897,7 +1186,7 @@ class CppJsonCodecGenerator:
         with open(path, 'w') as f:
             f.write('// Auto-generated JSON codec header\n')
             f.write(f'// Namespace: {self.NS}\n')
-            f.write('// Generated by cpp_service_generator.py (CppJsonCodecGenerator)\n')
+            f.write('// Generated by generate_bindings.py (CppJsonCodecGenerator)\n')
             f.write('// Schema source: pim/json_schema.py\n')
             f.write('//\n')
             f.write('// Canonical JSON wire format for the pyramid standard bridge protocol.\n')
@@ -908,28 +1197,12 @@ class CppJsonCodecGenerator:
             f.write('//\n')
             f.write('// Architecture: component logic > JsonCodec > service binding > PCL\n')
             f.write('#pragma once\n\n')
-            f.write(f'#include "{self._types_header}"\n\n')
+            f.write(f'#include "{self._wire_types_header}"\n\n')
             f.write('#include <string>\n')
             f.write('#include <vector>\n\n')
             f.write(f'namespace {self.NS} {{\n\n')
+            f.write(f'using namespace {self.WIRE_NS};\n')
             f.write(f'using namespace {self.TYPES_NS};\n\n')
-
-            # -- Message struct declarations ------------------------------------
-            f.write(_SEP + '\n')
-            f.write('// Wire message structs\n')
-            f.write(_SEP + '\n\n')
-            for msg in schema.ALL_SCHEMAS:
-                f.write(f'// {msg.wire_description}\n')
-                f.write(f'struct {msg.cpp_name} {{\n')
-                for fld in msg.fields:
-                    comment = f'  // {fld.description}' if fld.description else ''
-                    opt_tag = '' if fld.required else '  // optional'
-                    tag = comment or opt_tag
-                    f.write(f'    {fld.cpp_type} {fld.name} = {fld.cpp_default};{tag}\n')
-                f.write('};\n\n')
-
-            # Array alias for entity matches
-            f.write('using EntityMatchArray = std::vector<EntityMatch>;\n\n')
 
             # -- Serialisation -------------------------------------------------
             f.write(_SEP + '\n')
@@ -1408,7 +1681,7 @@ class CppTypesGenerator:
         with open(path, 'w') as f:
             f.write('// Auto-generated types header\n')
             f.write(f'// Generated from: {pf.path.name}'
-                    f' by cpp_service_generator.py --types\n')
+                    f' by generate_bindings.py (types)\n')
             f.write(f'// Namespace: {ns}\n')
             f.write('#pragma once\n\n')
             f.write('#include <cstdint>\n')
@@ -1514,7 +1787,7 @@ class CppDataModelCodecGenerator:
         with open(path, 'w') as f:
             f.write('// Auto-generated data model JSON codec header\n')
             f.write(f'// Generated from: {self._pf.path.name}'
-                    f' by cpp_service_generator.py --codec\n')
+                    f' by generate_bindings.py (codec)\n')
             f.write(f'// Namespace: {self._ns}\n')
             f.write('#pragma once\n\n')
             f.write(f'#include "{self._types_header}"\n')

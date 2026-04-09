@@ -1,10 +1,10 @@
 --  Auto-generated data model JSON codec body
---  Package: Pyramid_Data_Model_Common_Types_Codec
+--  Package: Pyramid.Data_Model.Common.Types_Codec
 
 with GNATCOLL.JSON;  use GNATCOLL.JSON;
 pragma Warnings (Off);
 
-package body Pyramid_Data_Model_Common_Types_Codec is
+package body Pyramid.Data_Model.Common.Types_Codec is
 
    function To_String (V : Feasibility) return String is
    begin
@@ -667,4 +667,4 @@ package body Pyramid_Data_Model_Common_Types_Codec is
       when others => return Result;
    end From_Json;
 
-end Pyramid_Data_Model_Common_Types_Codec;
+end Pyramid.Data_Model.Common.Types_Codec;

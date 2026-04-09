@@ -7,9 +7,13 @@
 --  Architecture: component logic (this) > service binding > PCL
 
 with Pcl_Bindings;
+with Ada.Strings.Unbounded;
 with System;
 
 package Tobj_Evidence_Provider is
+
+   Content_Type : Ada.Strings.Unbounded.Unbounded_String :=
+     Ada.Strings.Unbounded.To_Unbounded_String ("application/json");
 
    --  Component state (written by callbacks on the executor thread)
    Evidence_Req_Received : Boolean := False;

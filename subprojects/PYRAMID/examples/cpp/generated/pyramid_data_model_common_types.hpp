@@ -1,5 +1,5 @@
 // Auto-generated types header
-// Generated from: common.proto by cpp_service_generator.py --types
+// Generated from: common.proto by generate_bindings.py (types)
 // Namespace: pyramid::data_model::common
 #pragma once
 

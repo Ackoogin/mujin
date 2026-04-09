@@ -1,5 +1,5 @@
 --  Auto-generated service binding specification
---  Generated from: consumed.proto by ada_service_generator.py
+--  Generated from: consumed.proto by generate_bindings.py
 --  Package: Pyramid.Services.Tactical_Objects.Consumed
 --
 --  Architecture: component logic > service binding (this) > PCL
@@ -13,9 +13,10 @@
 --  JSON serialisation/deserialisation is provided by the companion
 --  Pyramid.Services.Tactical_Objects.Json_Codec package.
 
-with Pyramid_Data_Model_Base_Types;  use Pyramid_Data_Model_Base_Types;
-with Pyramid_Data_Model_Common_Types;  use Pyramid_Data_Model_Common_Types;
-with Pyramid_Data_Model_Tactical_Types;  use Pyramid_Data_Model_Tactical_Types;
+with Pyramid.Data_Model.Base.Types;  use Pyramid.Data_Model.Base.Types;
+with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;
+with Pyramid.Data_Model.Tactical.Types;  use Pyramid.Data_Model.Tactical.Types;
+with Pyramid.Services.Tactical_Objects.Wire_Types;
 with Pcl_Bindings;
 with Interfaces.C;
 with System;
@@ -103,11 +104,18 @@ package Pyramid.Services.Tactical_Objects.Consumed is
 
    procedure Register_Services
      (Container : Pcl_Bindings.Pcl_Container_Access;
-      Handlers  : access constant Service_Handlers := null);
+      Handlers  : access constant Service_Handlers := null;
+      Content_Type : String := "application/json");
 
    procedure Publish_Object_Evidence
      (Exec    : Pcl_Bindings.Pcl_Executor_Access;
-      Payload : String);
+      Payload : Pyramid.Services.Tactical_Objects.Wire_Types.Object_Evidence;
+      Content_Type : String := "application/json");
+
+   procedure Publish_Object_Evidence
+     (Exec    : Pcl_Bindings.Pcl_Executor_Access;
+      Payload : String;
+      Content_Type : String := "application/json");
 
    --  -- Transport integration point ------------------------------
 
@@ -116,6 +124,7 @@ package Pyramid.Services.Tactical_Objects.Consumed is
       Channel       : in  Service_Channel;
       Request_Buf   : in  System.Address;
       Request_Size  : in  Natural;
+      Content_Type  : in  String := "application/json";
       Response_Buf  : out System.Address;
       Response_Size : out Natural);
 

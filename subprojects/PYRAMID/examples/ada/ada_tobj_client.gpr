@@ -9,7 +9,7 @@ project Ada_Tobj_Client is
 
   for Languages use ("Ada", "C");
 
-  for Source_Dirs use (".", "generated");
+  for Source_Dirs use (".", "generated", "generated/flatbuffers/ada");
   for Main use ("ada_tobj_client.adb");
 
   --  Proto/Ada-gen service interface (EntityActions-aligned types + stubs)

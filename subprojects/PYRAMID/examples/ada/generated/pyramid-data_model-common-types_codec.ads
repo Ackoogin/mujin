@@ -1,11 +1,11 @@
 --  Auto-generated data model JSON codec specification
---  Generated from: common.proto by ada_service_generator.py --codec
---  Package: Pyramid_Data_Model_Common_Types_Codec
+--  Generated from: common.proto by generate_bindings.py (codec)
+--  Package: Pyramid.Data_Model.Common.Types_Codec
 
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
-with Pyramid_Data_Model_Common_Types;  use Pyramid_Data_Model_Common_Types;
+with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;
 
-package Pyramid_Data_Model_Common_Types_Codec is
+package Pyramid.Data_Model.Common.Types_Codec is
 
    function To_String (V : Feasibility) return String;
    function Feasibility_From_String (S : String) return Feasibility;
@@ -41,4 +41,4 @@ package Pyramid_Data_Model_Common_Types_Codec is
    function To_Json (Msg : Query) return String;
    function From_Json (S : String; Tag : access Query) return Query;
 
-end Pyramid_Data_Model_Common_Types_Codec;
+end Pyramid.Data_Model.Common.Types_Codec;
