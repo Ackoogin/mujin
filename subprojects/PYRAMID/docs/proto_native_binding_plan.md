@@ -9,7 +9,8 @@ It exists because the current implementation drifted toward a
 `json_schema.py`-driven tactical wire model, while the original requirement was
 clear:
 
-- `.proto` is the single source of truth.
+- the MBSE model is the ultimate source of truth
+- generated `.proto` is the canonical interface artifact for downstream tooling
 - Ada and C++ bindings are generated from `.proto`.
 - JSON, FlatBuffers, and Protobuf codecs are generated from the same proto
   contract.
@@ -46,11 +47,50 @@ from a hand-maintained tactical bridge schema.
 
 ---
 
+## Source of Truth Layers
+
+The architecture has two different notions of source, and they should not be
+confused.
+
+## 1. Ultimate semantic source
+
+The ultimate source is the MBSE/SysML model.
+
+That model is what defines the component interfaces conceptually.
+
+In this repository, the extraction step is represented by
+[proto_generator.py](/D:/Dev/repo/mujin/.claude/worktrees/jolly-hugle/subprojects/PYRAMID/pim/proto_generator.py),
+which transforms the parsed model into `.proto` files.
+
+## 2. Canonical engineering contract
+
+Once extracted, `.proto` becomes the canonical contract artifact for all
+downstream generators.
+
+That means:
+
+- service bindings derive from proto
+- codec generation derives from proto
+- transport/protocol projections derive from proto
+- no downstream generator should redefine the service payload contract
+
+This distinction matters:
+
+- MBSE is the real source of interface intent
+- proto is the only source consumed by binding and codec generation
+
+So when this document says "proto is canonical", it means canonical for the
+generation pipeline below the MBSE extraction step.
+
+---
+
 ## Architectural Intent
 
 ### Core rule
 
-`.proto` defines the service contract.
+The MBSE model defines the interface semantically.
+
+Generated `.proto` defines the canonical downstream service contract.
 
 Everything else is generated from it.
 
@@ -79,7 +119,7 @@ bindings.
 
 ## Target Model
 
-## 1. Canonical source
+## 1. Canonical downstream source
 
 The proto files under
 [subprojects/PYRAMID/proto](/D:/Dev/repo/mujin/subprojects/PYRAMID/proto)
@@ -92,7 +132,8 @@ define:
 - enums
 - nested message graphs
 
-These proto definitions are the only canonical model for service generation.
+These proto definitions are the only canonical model consumed by service
+generation below the MBSE extraction step.
 
 ## 2. Generated type layers
 
@@ -137,9 +178,14 @@ But the adapter must not become the source for service bindings.
 
 ## Design Principles
 
-## Single source of truth
+## Single source of truth per layer
 
-Every core service artifact must be derivable from the proto graph.
+At the modeling layer, truth comes from MBSE.
+
+At the code generation layer, truth comes from generated proto.
+
+Every core service artifact below the extraction step must be derivable from
+the proto graph.
 
 ## Backend symmetry
 
@@ -249,6 +295,8 @@ Expected result:
 
 The refactor is complete when all of the following are true:
 
+- MBSE remains the ultimate source of interface intent
+- generated proto is the only downstream contract source for bindings/codecs
 - core service bindings are derived from proto RPC signatures
 - core runtime dispatch does not depend on `json_schema.py`
 - FlatBuffers backend does not hard-code tactical RPC/message knowledge
@@ -266,6 +314,7 @@ The new architecture will be considered correct when:
 
 1. A new service added only in proto can generate Ada and C++ bindings without
    hand-editing tactical schema files.
+   In normal workflow this proto will itself have been regenerated from MBSE.
 2. Adding FlatBuffers support for that service does not require naming the RPCs
    or messages in backend code.
 3. The generated runtime dispatch path can serve JSON and FlatBuffers for the

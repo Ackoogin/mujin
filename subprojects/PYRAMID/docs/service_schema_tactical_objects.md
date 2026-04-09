@@ -9,7 +9,28 @@ The Tactical Objects subsystem currently defines its service contract implicitly
 - A JSON codec (`TacticalObjectsCodec.h`) using nlohmann::json
 - PCL service handlers in `TacticalObjectsComponent.h` that accept opaque `pcl_msg_t` blobs
 
-There is no single, canonical **Interface Definition Language (IDL)** artefact that a downstream consumer (ROS2 node, gRPC client, web dashboard, test harness) can use to generate bindings. Every new transport requires hand-writing a codec.
+There is not yet a single, consistently-used **downstream contract artefact**
+that all generators and transports derive from. In practice, the current code
+mixes C++ structs, hand-written codecs, and bridge-specific payload shaping, so
+new transports still tend to grow hand-written glue.
+
+### Architecture clarification
+
+The intended source-of-truth layering is:
+
+1. **MBSE/SysML model** is the ultimate semantic source of truth.
+2. **Generated `.proto`** is the canonical downstream contract artefact for
+   code generation below the MBSE extraction step.
+3. **Bindings, codecs, and protocol projections** are generated from that
+   `.proto` contract.
+4. **Bridge-specific JSON reshaping** is an adapter concern, not a competing
+   contract definition.
+
+So this document should not be read as choosing between several rival
+"canonical" IDLs. The real design question is which downstream artefact should
+drive transport/codec generation once the MBSE model has been extracted. The
+answer is generated `.proto`, with ROS2, FlatBuffers, JSON, PCL, and similar
+concerns hidden behind generated layers.
 
 ### Prior Art: SysML-to-Code Pipeline
 
@@ -88,7 +109,9 @@ Zones follow a parallel pattern (`upsertZone`/`removeZone`) but are not yet unif
 
 ### Overview
 
-Define all messages and services in `.proto` files. Use protobuf as the canonical schema and generate:
+Define all messages and services in `.proto` files. In the intended
+architecture, those `.proto` files are generated from the SysML/MBSE model and
+then used as the canonical downstream contract artefact for generating:
 
 - C++ structs (via `protoc`)
 - gRPC service stubs (via `protoc` + gRPC plugin)
@@ -298,7 +321,8 @@ Proto files are widely known, well-documented, and have IDE support. The EntityA
 
 ### Overview
 
-Define all messages in ROS2 `.msg`/`.srv`/`.action` files. Use the ROS2 IDL as the canonical schema and generate:
+Define all messages in ROS2 `.msg`/`.srv`/`.action` files and treat ROS2 IDL as
+the primary downstream contract artefact for generation.
 
 - C++ structs (via `rosidl`)
 - gRPC `.proto` files (via a code-generator script, or manual mirroring)
@@ -386,7 +410,7 @@ If the primary consumers are ROS2 nodes, this is the most natural fit. But it cr
 
 ### Overview
 
-Use FlatBuffers (`.fbs`) as the canonical IDL. FlatBuffers supports:
+Use FlatBuffers (`.fbs`) as the primary downstream contract artefact. FlatBuffers supports:
 
 - Zero-copy deserialization (important for high-frequency streaming)
 - gRPC integration (official FlatBuffers gRPC plugin)
@@ -562,7 +586,11 @@ If the team is primarily C++ and wants to avoid adding new IDL files, this is th
 
 ### Overview
 
-Use the existing SysML-to-code generation pipeline as the canonical source of truth. The service schema lives in the SysML model (MagicDraw/Cameo), is exported as XMI, parsed into a JSON intermediate representation, and then code generators produce all targets.
+Use the existing SysML-to-code generation pipeline as the ultimate source of
+truth. The service schema lives in the SysML model (MagicDraw/Cameo), is
+exported as XMI, parsed into a JSON intermediate representation, and then
+`proto_generator.py` emits the canonical downstream `.proto` contract that the
+rest of the generators should consume.
 
 This option leverages the pipeline that already exists and has proven patterns for EntityActions, service inheritance, flow direction, and multi-language output.
 
@@ -745,33 +773,51 @@ Legend: `++` strong, `+` good, `0` neutral, `-` weak, `--` poor
 
 ---
 
-## 9. Decision: Option A/E Hybrid — SysML-Authoritative, Protobuf as IDL
+## 9. Decision: MBSE-Authoritative, Proto-Centric Downstream Generation
 
 **Status:** DECIDED (2026-03-15)
 
 ### Selected approach
 
-Option E+A hybrid: SysML model is the authoritative schema; protobuf (`.proto` files) is the operational IDL used by code generators. The existing SysML-to-code pipeline in `subprojects/PYRAMID/pim/` is the codex that drives generation for all target languages.
+The chosen layering is:
+
+- SysML/MBSE model is the authoritative semantic schema.
+- Generated `.proto` is the canonical downstream contract artefact.
+- Ada, C++, JSON, FlatBuffers, Protobuf, ROS2, PCL, and other projections are
+  generated from that `.proto` contract.
+- Any bridge-specific reshaping remains an adapter layer rather than a
+  competing service definition.
+
+The existing SysML-to-code pipeline in `subprojects/PYRAMID/pim/` therefore
+defines the contract in two stages: model extraction first, then proto-centric
+downstream generation.
 
 ### Key constraints
 
 | Constraint | Rationale |
 |------------|-----------|
 | **No gRPC runtime dependency** | This project must not take a dependency on the gRPC framework (libraries, `grpc++`, gRPC codegen plugins). gRPC adds significant build complexity and is not needed for our transports (PCL, ROS2, socket). |
-| **Protobuf accepted as IDL** | Protobuf's `.proto` files are a reasonable, widely-understood baseline IDL for defining messages and service contracts. We use protobuf as a **schema language**, not as a wire protocol or RPC framework. |
+| **Generated proto is the downstream contract** | Protobuf's `.proto` files are a reasonable, widely-understood contract artefact for defining messages and service contracts after extraction from the model. We use `.proto` as a **schema language**, not as a wire protocol or RPC framework. |
 | **Protobuf must align with SysML CRUD semantics** | The `service` and `rpc` definitions in `.proto` files express EntityActions CRUD operations (Create/Read/Update/Delete) with correct signatures. These are **semantic contracts**, not gRPC endpoint definitions. |
 | **No backward compatibility requirement** | Tactical Objects schema can change freely to match the codex semantics. We are not constrained by existing wire formats or client expectations. |
 
-### What "protobuf as IDL" means in practice
+### What "proto-centric downstream generation" means in practice
 
-The `.proto` files define **what** the service contract is (messages, operations, types). They do **not** imply:
+The generated `.proto` files define **what** the downstream service contract is
+(messages, operations, types). They do **not** imply:
 
 - A gRPC server or client
 - The `grpc++` or `grpc_cpp_plugin` build dependency
 - Protobuf binary wire format on any transport
 - Any gRPC-specific concepts (channels, interceptors, deadlines)
 
-The `service` / `rpc` blocks in `.proto` files are read by our codex generators (`ada_service_generator.py`, `ros2_msg_generator.py`) to produce target-language service stubs with EntityActions CRUD semantics. The generated code uses whatever transport the target platform requires (PCL, ROS2, Ada middleware, etc.).
+The `service` / `rpc` blocks in `.proto` files are read by our generators to
+produce target-language service stubs, transport bindings, and codec surfaces
+with EntityActions CRUD semantics. The generated code uses whatever transport
+the target platform requires (PCL, ROS2, Ada middleware, socket bridge, etc.).
+If a legacy bridge needs reshaped JSON, that translation is generated or
+implemented as an adapter layer on top of the proto-native contract, not as a
+second contract source.
 
 ### Pipeline: SysML model to generated code
 
@@ -807,25 +853,37 @@ The pipeline tooling lives in `subprojects/PYRAMID/pim/` and is checked into thi
                      │               │               │               │
                      ▼               ▼               ▼               ▼
               .proto files     C++14 headers  ╔═════════════╗  Python
-              (IDL only —      (unique_ptr,   ║  Ada types  ║  dataclasses
-               no gRPC)        topo-sorted)   ║[scaffolding]║
+              (canonical       (unique_ptr,   ║  Ada types  ║  dataclasses
+               downstream      topo-sorted)   ║[scaffolding]║
+               contract)
                      │                        ╚═════════════╝
                      │
             ┌--------┼--------------┐
             ▼        ▼              ▼
-         PCL codec  ROS2      Ada middleware
-         (custom)  .msg/.srv  stubs
+         PCL/JSON/  ROS2      Ada middleware
+         FlatBuffers .msg/.srv stubs
+         codecs/bindings
                    (ros2_msg_ (ada_service_
                    generator) generator.py)
 ```
 
-**The key insight:** `.proto` files are **generated from the SysML model** and **checked into the repository** as the operational interface contract. The `service`/`rpc` blocks describe EntityActions CRUD semantics that codex generators consume — they are **not** gRPC endpoint definitions. Day-to-day consumers work with `.proto` files directly. Schema changes flow through the model when architectural changes occur.
+**The key insight:** `.proto` files are **generated from the SysML model** and
+**checked into the repository** as the operational interface contract for all
+downstream generation. The `service`/`rpc` blocks describe EntityActions CRUD
+semantics that generators consume — they are **not** gRPC endpoint definitions.
+Day-to-day consumers can work with `.proto` as the checked-in contract
+artefact, but the architectural source of truth still lives in the MBSE model.
 
 ### Why this hybrid works
 
+See also
+[proto_native_binding_plan.md](/D:/Dev/repo/mujin/subprojects/PYRAMID/docs/proto_native_binding_plan.md)
+for the implementation-oriented migration plan that follows from this
+decision.
+
 | Concern | How it's addressed |
 |---------|-------------------|
-| **G1: Protocol-agnostic** | Protobuf is the IDL; transport adapters are generated per-target |
+| **G1: Protocol-agnostic** | Proto is the downstream contract; transport adapters are generated per-target |
 | **G2: ROS2 compatible** | `proto→msg` script generates `.msg`/`.srv` (same as Option A) |
 | **G3: gRPC compatible** | `.proto` files *could* produce gRPC stubs if needed later, but this is not a current goal |
 | **G4: User-friendly** | Developers work with `.proto` files day-to-day; SysML is for architects |
@@ -852,12 +910,14 @@ Phase 2 — Generate .proto files for Tactical Objects component
 Phase 3 — Write proto→ROS2 converter (ros2_msg_generator.py)
           Generate .msg/.srv from checked-in .proto files
 
-Phase 4 — Integrate protobuf IDL into PCL:
-          • Transport-specific codec generated from .proto definitions
+Phase 4 — Integrate proto-native bindings into transports/codecs:
+          • Transport-specific bindings generated from .proto definitions
+          • JSON, FlatBuffers, and Protobuf codecs operate on the same
+            proto-native logical types
           • TacticalObjectsComponent handlers use generated types
           • Retire hand-rolled StreamingCodec + TacticalObjectsCodec
 
-Phase 5 — Ada services generated from .proto (ada_service_generator.py reads .proto, not JSON IR)
+Phase 5 — Ada and C++ services/codecs generated from .proto
           (gRPC server is NOT a goal — transport remains PCL/ROS2/socket)
 
 Phase 6 — Validate end-to-end:
@@ -869,7 +929,12 @@ Phase 6 — Validate end-to-end:
 ### What we are NOT doing
 
 - **No gRPC server or client.** If external clients need access, we will evaluate transport options separately. gRPC remains an option but is not assumed.
-- **No protobuf binary wire format requirement.** Transports may use protobuf binary encoding if convenient, but this is a transport-layer decision, not an IDL-layer one.
+- **No protobuf binary wire format requirement.** Transports may use protobuf
+  binary encoding if convenient, but this is a transport-layer decision, not a
+  contract-layer one.
+- **No bridge schema as a competing source of truth.** Helper schemas such as
+  `json_schema.py` may exist for compatibility adapters, but they must not
+  redefine the core service contract.
 - **No backward compatibility with existing tactical objects wire format.** The schema is free to change to match codex semantics.
 
 ---
