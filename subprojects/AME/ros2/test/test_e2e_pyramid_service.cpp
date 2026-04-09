@@ -15,6 +15,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp/executors/single_threaded_executor.hpp>
 #include <behaviortree_cpp/action_node.h>
+#include <pcl/executor.hpp>
 
 #include <ame_ros2/executor_node.hpp>
 #include <ame_ros2/planner_node.hpp>
@@ -126,7 +127,9 @@ protected:
 
     wm_node_ = std::make_shared<ame_ros2::WorldModelNode>();
     pl_node_ = std::make_shared<ame_ros2::PlannerNode>();
-    ex_node_ = std::make_shared<ame_ros2::ExecutorNode>();
+    auto ex_opts = rclcpp::NodeOptions().parameter_overrides(
+        {rclcpp::Parameter("tick_rate_hz", 1000.0)});
+    ex_node_ = std::make_shared<ame_ros2::ExecutorNode>(ex_opts);
 
     // In-process wiring (skip ROS2 IPC for fast testing)
     pl_node_->setInProcessWorldModel(&wm_node_->worldModel());
@@ -166,6 +169,9 @@ protected:
         R"( param_values="{param0};{param1}"/>)");
 
     // InvokeService is registered automatically by ExecutorNode's registerCoreNodes
+
+    pcl_exec_ = std::make_unique<pcl::Executor>();
+    pcl_exec_->add(ex_node_->component());
 
     // --- Lifecycle transitions ---
     ASSERT_EQ(wm_node_->on_configure(rclcpp_lifecycle::State{}),
@@ -231,6 +237,7 @@ protected:
   }
 
   void TearDown() override {
+    pcl_exec_.reset();
     executor_.reset();
     ex_node_.reset();
     pl_node_.reset();
@@ -244,7 +251,7 @@ protected:
     while (ex_node_->component().lastStatus() != BT::NodeStatus::SUCCESS &&
            ex_node_->component().lastStatus() != BT::NodeStatus::FAILURE &&
            std::chrono::steady_clock::now() < deadline) {
-      executor_->spin_some(std::chrono::milliseconds(20));
+      pcl_exec_->spinOnce(0);
     }
   }
 
@@ -253,6 +260,7 @@ protected:
   std::shared_ptr<ame_ros2::PlannerNode> pl_node_;
   std::shared_ptr<ame_ros2::ExecutorNode> ex_node_;
   std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
+  std::unique_ptr<pcl::Executor>           pcl_exec_;
 };
 
 // ---------------------------------------------------------------------------

@@ -73,7 +73,9 @@ protected:
 
     wm_node_ = std::make_shared<ame_ros2::WorldModelNode>();
     pl_node_ = std::make_shared<ame_ros2::PlannerNode>();
-    ex_node_ = std::make_shared<ame_ros2::ExecutorNode>();
+    auto ex_opts = rclcpp::NodeOptions().parameter_overrides(
+        {rclcpp::Parameter("tick_rate_hz", 1000.0)});
+    ex_node_ = std::make_shared<ame_ros2::ExecutorNode>(ex_opts);
 
     // In-process wiring
     pl_node_->setInProcessWorldModel(&wm_node_->worldModel());
@@ -97,6 +99,9 @@ protected:
     ex_node_->factory().registerNodeType<StubMoveAction>("StubMoveAction");
     ex_node_->factory().registerNodeType<StubSearchAction>("StubSearchAction");
     ex_node_->factory().registerNodeType<StubClassifyAction>("StubClassifyAction");
+
+    pcl_exec_ = std::make_unique<pcl::Executor>();
+    pcl_exec_->add(ex_node_->component());
 
     // Lifecycle transitions
     ASSERT_EQ(
@@ -148,6 +153,7 @@ protected:
   }
 
   void TearDown() override {
+    pcl_exec_.reset();
     executor_.reset();
     ex_node_.reset();
     pl_node_.reset();
@@ -160,7 +166,7 @@ protected:
     while (ex_node_->component().lastStatus() != BT::NodeStatus::SUCCESS &&
            ex_node_->component().lastStatus() != BT::NodeStatus::FAILURE &&
            std::chrono::steady_clock::now() < deadline) {
-      executor_->spin_some(std::chrono::milliseconds(20));
+      pcl_exec_->spinOnce(0);
     }
   }
 
@@ -169,6 +175,7 @@ protected:
   std::shared_ptr<ame_ros2::PlannerNode> pl_node_;
   std::shared_ptr<ame_ros2::ExecutorNode> ex_node_;
   std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
+  std::unique_ptr<pcl::Executor>           pcl_exec_;
 };
 
 // ---------------------------------------------------------------------------
@@ -251,10 +258,14 @@ TEST_F(PerceptionQueueTest, DetectionEnqueuedAndFlushedByTick) {
   // Detections now arrive via PCL subscriber (not ROS2 pub/sub).
   // Create a PCL executor, add the component before configure, then verify
   // that postIncoming + spinOnce causes the mutation to be applied.
-  auto node = std::make_shared<ame_ros2::WorldModelNode>();
-  node->component().setParam("perception.enabled", true);
-  node->component().setParam("audit_log.enabled",  false);
-  node->component().setParam("publish_rate_hz",    1000.0);  // tick fires on first spinOnce
+  // NodeOptions injects params into ROS2 param system — on_configure reads them,
+  // so these values survive the configure step (unlike setParam before configure).
+  auto node_opts = rclcpp::NodeOptions().parameter_overrides({
+      rclcpp::Parameter("perception.enabled", true),
+      rclcpp::Parameter("audit_log.enabled",  false),
+      rclcpp::Parameter("publish_rate_hz",    1000.0),
+  });
+  auto node = std::make_shared<ame_ros2::WorldModelNode>(node_opts);
 
   pcl::Executor pcl_exec;
   pcl_exec.add(node->component());

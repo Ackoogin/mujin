@@ -6,11 +6,12 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 OUT_DIR="${1:-$ROOT_DIR/build/ada_gnat_pcl}"
 OBJ_DIR="$OUT_DIR/obj"
+FORCE_REBUILD="${2:-0}"
 
 CORE_LIB="$OUT_DIR/libpcl_core.a"
 SOCKET_LIB="$OUT_DIR/libpcl_transport_socket.a"
 
-if [[ -f "$CORE_LIB" && -f "$SOCKET_LIB" ]]; then
+if [[ "$FORCE_REBUILD" != "--force" && -f "$CORE_LIB" && -f "$SOCKET_LIB" ]]; then
   echo "[ada-pcl] GNAT static archives already present in $OUT_DIR"
   exit 0
 fi
@@ -27,15 +28,19 @@ fi
 
 mkdir -p "$OBJ_DIR"
 
+if [[ "$FORCE_REBUILD" == "--force" ]]; then
+  rm -f "$CORE_LIB" "$SOCKET_LIB" "$OBJ_DIR"/*.o
+fi
+
 echo "[ada-pcl] Building GNAT-compatible PCL archives in $OUT_DIR"
 
-CFLAGS=(-std=c11 -O2 -I"$ROOT_DIR/include" -I"$ROOT_DIR/src/pcl")
+CFLAGS=(-std=c11 -O2 -I"$ROOT_DIR/include" -I"$ROOT_DIR/src")
 
-gcc "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl/pcl_container.c" -o "$OBJ_DIR/pcl_container.o"
-gcc "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl/pcl_executor.c" -o "$OBJ_DIR/pcl_executor.o"
-gcc "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl/pcl_log.c" -o "$OBJ_DIR/pcl_log.o"
-gcc "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl/pcl_bridge.c" -o "$OBJ_DIR/pcl_bridge.o"
-gcc "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl/pcl_transport_socket.c" -o "$OBJ_DIR/pcl_transport_socket.o"
+gcc "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_container.c" -o "$OBJ_DIR/pcl_container.o"
+gcc "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_executor.c" -o "$OBJ_DIR/pcl_executor.o"
+gcc "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_log.c" -o "$OBJ_DIR/pcl_log.o"
+gcc "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_bridge.c" -o "$OBJ_DIR/pcl_bridge.o"
+gcc "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_transport_socket.c" -o "$OBJ_DIR/pcl_transport_socket.o"
 
 ar rcs "$CORE_LIB" \
   "$OBJ_DIR/pcl_container.o" \

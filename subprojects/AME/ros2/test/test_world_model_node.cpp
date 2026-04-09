@@ -1,7 +1,11 @@
 #include <gtest/gtest.h>
 #include "ame_ros2/world_model_node.hpp"
+#include <ame/world_model.h>
+#include <ame/world_model_component.h>
+#include <ame/pcl_msg_json.h>
+#include <pcl/executor.hpp>
+#include <pcl/pcl_executor.h>
 #include <rclcpp/rclcpp.hpp>
-#include <lifecycle_msgs/msg/transition.hpp>
 #include <chrono>
 #include <thread>
 
@@ -16,7 +20,6 @@ protected:
         rclcpp::shutdown();
     }
 
-    // Manually drive lifecycle transitions
     auto configure() {
         return node_->on_configure(rclcpp_lifecycle::State{});
     }
@@ -28,13 +31,11 @@ protected:
 };
 
 TEST_F(WorldModelNodeTest, ConfiguresWithoutPddlFile) {
-    // No PDDL files — should warn but not fail
     ASSERT_EQ(configure(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
 }
 
 TEST_F(WorldModelNodeTest, DirectWorldModelAccess) {
     ASSERT_EQ(configure(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
-    // Can access the WorldModel directly (in-process mode)
     auto& wm = node_->worldModel();
     EXPECT_EQ(wm.version(), 0u);
 }
@@ -43,7 +44,6 @@ TEST_F(WorldModelNodeTest, SetAndGetFactViaWorldModel) {
     ASSERT_EQ(configure(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
     auto& wm = node_->worldModel();
 
-    // Build minimal domain so the fluent exists
     wm.typeSystem().addType("object");
     wm.typeSystem().addType("robot", "object");
     wm.typeSystem().addType("location", "object");
@@ -56,9 +56,18 @@ TEST_F(WorldModelNodeTest, SetAndGetFactViaWorldModel) {
     EXPECT_GE(wm.version(), 1u);
 }
 
+// ---------------------------------------------------------------------------
+// PCL service tests — call get_fact / set_fact / query_state via PCL executor
+// ---------------------------------------------------------------------------
+
 TEST_F(WorldModelNodeTest, GetFactServiceCall) {
+    // Register component with PCL executor before configure
+    pcl::Executor pcl_exec;
+    node_->component().setParam("publish_rate_hz", 1000.0);
+    pcl_exec.add(node_->component());
+
     ASSERT_EQ(configure(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
-    ASSERT_EQ(activate(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(activate(),  ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
 
     auto& wm = node_->worldModel();
     wm.typeSystem().addType("object");
@@ -69,40 +78,29 @@ TEST_F(WorldModelNodeTest, GetFactServiceCall) {
     wm.registerPredicate("at", {"robot", "location"});
     wm.setFact("(at uav1 base)", true, "test");
 
-    // Create a client node and call the service
-    auto client_node = rclcpp::Node::make_shared("test_client");
-    auto client = client_node->create_client<ame_ros2::srv::GetFact>(
-        "/world_model_node/get_fact");
+    std::string req_json = ame::ame_pack_get_fact_request("(at uav1 base)");
+    pcl_msg_t req_msg{};
+    req_msg.data      = req_json.c_str();
+    req_msg.size      = static_cast<uint32_t>(req_json.size());
+    req_msg.type_name = "ame/GetFact_Request";
+    pcl_msg_t resp_msg{};
 
-    // Wait for service
-    ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(2)));
+    pcl_status_t rc = pcl_executor_invoke_service(
+        pcl_exec.handle(), "get_fact", &req_msg, &resp_msg);
+    ASSERT_EQ(rc, PCL_OK);
 
-    auto req  = std::make_shared<ame_ros2::srv::GetFact::Request>();
-    req->key  = "(at uav1 base)";
-
-    auto future = client->async_send_request(req);
-
-    // Spin both nodes until the future is ready
-    rclcpp::executors::SingleThreadedExecutor exec;
-    exec.add_node(node_->get_node_base_interface());
-    exec.add_node(client_node);
-
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (future.wait_for(std::chrono::milliseconds(10)) != std::future_status::ready
-           && std::chrono::steady_clock::now() < deadline)
-    {
-        exec.spin_some();
-    }
-
-    ASSERT_EQ(future.wait_for(std::chrono::milliseconds(0)), std::future_status::ready);
-    auto res = future.get();
-    EXPECT_TRUE(res->found);
-    EXPECT_TRUE(res->value);
+    auto result = ame::ame_unpack_get_fact_response(&resp_msg);
+    EXPECT_TRUE(result.found);
+    EXPECT_TRUE(result.value);
 }
 
 TEST_F(WorldModelNodeTest, SetFactServiceCall) {
+    pcl::Executor pcl_exec;
+    node_->component().setParam("publish_rate_hz", 1000.0);
+    pcl_exec.add(node_->component());
+
     ASSERT_EQ(configure(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
-    ASSERT_EQ(activate(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(activate(),  ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
 
     auto& wm = node_->worldModel();
     wm.typeSystem().addType("object");
@@ -112,38 +110,34 @@ TEST_F(WorldModelNodeTest, SetFactServiceCall) {
     wm.addObject("base", "location");
     wm.registerPredicate("at", {"robot", "location"});
 
-    auto client_node = rclcpp::Node::make_shared("test_client");
-    auto client = client_node->create_client<ame_ros2::srv::SetFact>(
-        "/world_model_node/set_fact");
-    ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(2)));
+    ame::SetFactRequest req;
+    req.key    = "(at uav1 base)";
+    req.value  = true;
+    req.source = "test";
 
-    auto req    = std::make_shared<ame_ros2::srv::SetFact::Request>();
-    req->key    = "(at uav1 base)";
-    req->value  = true;
-    req->source = "test";
+    std::string req_json = ame::ame_pack_set_fact_request(req);
+    pcl_msg_t req_msg{};
+    req_msg.data      = req_json.c_str();
+    req_msg.size      = static_cast<uint32_t>(req_json.size());
+    req_msg.type_name = "ame/SetFact_Request";
+    pcl_msg_t resp_msg{};
 
-    auto future = client->async_send_request(req);
+    pcl_status_t rc = pcl_executor_invoke_service(
+        pcl_exec.handle(), "set_fact", &req_msg, &resp_msg);
+    ASSERT_EQ(rc, PCL_OK);
 
-    rclcpp::executors::SingleThreadedExecutor exec;
-    exec.add_node(node_->get_node_base_interface());
-    exec.add_node(client_node);
-
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (future.wait_for(std::chrono::milliseconds(10)) != std::future_status::ready
-           && std::chrono::steady_clock::now() < deadline)
-    {
-        exec.spin_some();
-    }
-
-    ASSERT_EQ(future.wait_for(std::chrono::milliseconds(0)), std::future_status::ready);
-    auto res = future.get();
-    EXPECT_TRUE(res->success);
+    auto result = ame::ame_unpack_set_fact_response(&resp_msg);
+    EXPECT_TRUE(result.success);
     EXPECT_TRUE(wm.getFact("(at uav1 base)"));
 }
 
 TEST_F(WorldModelNodeTest, QueryStateReturnsGoalFluents) {
+    pcl::Executor pcl_exec;
+    node_->component().setParam("publish_rate_hz", 1000.0);
+    pcl_exec.add(node_->component());
+
     ASSERT_EQ(configure(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
-    ASSERT_EQ(activate(), ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(activate(),  ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
 
     auto& wm = node_->worldModel();
     wm.typeSystem().addType("object");
@@ -152,27 +146,19 @@ TEST_F(WorldModelNodeTest, QueryStateReturnsGoalFluents) {
     wm.registerPredicate("searched", {"sector"});
     wm.setGoal({"(searched sector_a)"});
 
-    auto client_node = rclcpp::Node::make_shared("test_query_client");
-    auto client = client_node->create_client<ame_ros2::srv::QueryState>(
-        "/world_model_node/query_state");
-    ASSERT_TRUE(client->wait_for_service(std::chrono::seconds(2)));
+    std::string req_json = ame::ame_pack_query_state_request({});
+    pcl_msg_t req_msg{};
+    req_msg.data      = req_json.c_str();
+    req_msg.size      = static_cast<uint32_t>(req_json.size());
+    req_msg.type_name = "ame/QueryState_Request";
+    pcl_msg_t resp_msg{};
 
-    auto req = std::make_shared<ame_ros2::srv::QueryState::Request>();
-    auto future = client->async_send_request(req);
+    pcl_status_t rc = pcl_executor_invoke_service(
+        pcl_exec.handle(), "query_state", &req_msg, &resp_msg);
+    ASSERT_EQ(rc, PCL_OK);
 
-    rclcpp::executors::SingleThreadedExecutor exec;
-    exec.add_node(node_->get_node_base_interface());
-    exec.add_node(client_node);
-
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (future.wait_for(std::chrono::milliseconds(10)) != std::future_status::ready
-           && std::chrono::steady_clock::now() < deadline) {
-        exec.spin_some();
-    }
-
-    ASSERT_EQ(future.wait_for(std::chrono::milliseconds(0)), std::future_status::ready);
-    auto res = future.get();
-    ASSERT_TRUE(res->success);
-    ASSERT_EQ(res->goal_fluents.size(), 1u);
-    EXPECT_EQ(res->goal_fluents.front(), "(searched sector_a)");
+    auto snap = ame::ame_unpack_query_state_response(&resp_msg);
+    ASSERT_TRUE(snap.success);
+    ASSERT_EQ(snap.goal_fluents.size(), 1u);
+    EXPECT_EQ(snap.goal_fluents.front(), "(searched sector_a)");
 }

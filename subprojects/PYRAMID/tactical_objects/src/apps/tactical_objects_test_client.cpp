@@ -74,7 +74,9 @@ void onCreateRequirementResponse(const pcl_msg_t* resp, void* user_data) {
 }
 
 pcl_status_t onConfigure(pcl_container_t* container, void* user_data) {
-  Provided::subscribeEntityMatches(container, onEntityMatches, user_data);
+  auto* state = static_cast<ClientState*>(user_data);
+  Provided::subscribeEntityMatches(
+      container, onEntityMatches, user_data, state->content_type.c_str());
   return PCL_OK;
 }
 
@@ -150,7 +152,7 @@ int main(int argc, char* argv[]) {
   pcl_msg_t request_msg{};
   request_msg.data = request_payload.data();
   request_msg.size = static_cast<uint32_t>(request_payload.size());
-  request_msg.type_name = "application/json";
+  request_msg.type_name = state.content_type.c_str();
 
   const pcl_status_t invoke_rc = pcl_executor_invoke_async(
       exec, Provided::kSvcCreateRequirement, &request_msg,

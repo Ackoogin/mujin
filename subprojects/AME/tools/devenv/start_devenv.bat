@@ -6,7 +6,8 @@ rem Run setup_venv.bat once first if the .venv directory does not exist.
 setlocal
 
 set SCRIPT_DIR=%~dp0
-set REPO_ROOT=%SCRIPT_DIR%..\..
+REM tools\devenv\ up 4 levels to repo root (devenv -> tools -> AME -> subprojects -> mujin)
+for %%I in ("%SCRIPT_DIR%\..\..\..\..") do set REPO_ROOT=%%~fI
 set PYTHON=%SCRIPT_DIR%.venv\Scripts\python.exe
 set ROS2_ROOT=D:\Dev\ros2-windows
 set ROS2_PIXI=%ROS2_ROOT%\.pixi\envs\default
@@ -26,5 +27,5 @@ set PATH=%ROS2_PIXI%;%ROS2_PIXI%\Scripts;%ROS2_PIXI%\Library\bin;%ROS2_ROOT%\Scr
 cd /d "%REPO_ROOT%"
 call "%ROS2_ROOT%\setup.bat"
 call "%REPO_ROOT%\install\setup.bat"
-set PYTHONPATH=%ROS2_PIXI%\Lib\site-packages;%PYTHONPATH%
+set PYTHONPATH=%REPO_ROOT%\build\python;%ROS2_PIXI%\Lib\site-packages;%PYTHONPATH%
 "%PYTHON%" -m subprojects.AME.tools.devenv %*

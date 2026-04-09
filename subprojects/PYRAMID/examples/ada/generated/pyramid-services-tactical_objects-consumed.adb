@@ -538,19 +538,29 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
       Content_Type : String := "application/json")
    is
       use type Pcl_Bindings.Pcl_Status;
-      Payload_C : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Payload);
+      Payload_C : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
+      Payload_Bytes : aliased constant String := Payload;
       Topic_C   : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Topic_Object_Evidence);
       Msg       : aliased Pcl_Bindings.Pcl_Msg;
       Status    : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
    begin
-      Msg.Data      := To_Address (Payload_C);
-      Msg.Size      := Interfaces.C.unsigned (Payload'Length);
+      if Content_Type = "" or else Content_Type = "application/json" then
+         Payload_C := Interfaces.C.Strings.New_String (Payload);
+         Msg.Data := To_Address (Payload_C);
+      else
+         Msg.Data :=
+           (if Payload_Bytes'Length = 0
+            then System.Null_Address
+            else Payload_Bytes (Payload_Bytes'First)'Address);
+      end if;
+      Msg.Size      := Interfaces.C.unsigned (Payload_Bytes'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
       Status := Pcl_Bindings.Publish (Exec, Topic_C, Msg'Access);
-      Interfaces.C.Strings.Free (Payload_C);
+      if Payload_C /= Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Payload_C);
+      end if;
       Interfaces.C.Strings.Free (Topic_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
    end Publish_Object_Evidence;

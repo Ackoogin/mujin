@@ -41,8 +41,8 @@ package body Tobj_Interest_Client is
    is
       Payload : constant String := Provided.Msg_To_String (Msg.Data, Msg.Size);
    begin
-      if Payload'Length >= 4
-        and then Payload (Payload'First .. Payload'First + 3) = "PWFB"
+      if Msg.Type_Name /= Interfaces.C.Strings.Null_Ptr
+        and then Interfaces.C.Strings.Value (Msg.Type_Name) = Flat.Content_Type
       then
          return Flat.Decode_Payload (Payload);
       end if;
@@ -59,7 +59,8 @@ package body Tobj_Interest_Client is
    begin
       Provided.Subscribe_Entity_Matches
         (Container => Container,
-         Callback  => On_Entity_Matches'Unrestricted_Access);
+         Callback  => On_Entity_Matches'Unrestricted_Access,
+         Content_Type => To_String (Content_Type));
       return Pcl_Bindings.PCL_OK;
    end On_Configure;
 
@@ -152,17 +153,25 @@ package body Tobj_Interest_Client is
            (if To_String (Content_Type) = Flat.Content_Type
             then Flat.Encode_Payload (Json_Payload)
             else Json_Payload);
-         Req_C  : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String (Payload);
+         Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
+         Payload_Bytes : aliased constant String := Payload;
          Svc_C  : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Provided.Svc_Create_Requirement);
          Msg    : aliased Pcl_Bindings.Pcl_Msg;
          Status : Pcl_Bindings.Pcl_Status;
       begin
-         Msg.Data      := To_Address (Req_C);
-         Msg.Size      := Interfaces.C.unsigned (Payload'Length);
-         Msg.Type_Name := Interfaces.C.Strings.New_String
-           (To_String (Content_Type));
+         if To_String (Content_Type) = Flat.Content_Type then
+            Msg.Data :=
+              (if Payload_Bytes'Length = 0
+               then System.Null_Address
+               else Payload_Bytes (Payload_Bytes'First)'Address);
+         else
+            Req_C := Interfaces.C.Strings.New_String (Payload);
+            Msg.Data := To_Address (Req_C);
+        end if;
+        Msg.Size      := Interfaces.C.unsigned (Payload_Bytes'Length);
+        Msg.Type_Name := Interfaces.C.Strings.New_String
+          (To_String (Content_Type));
          Status := Pcl_Bindings.Invoke_Remote_Async
            (Transport, Svc_C, Msg'Access,
             On_Create_Requirement_Response'Unrestricted_Access,
@@ -171,7 +180,9 @@ package body Tobj_Interest_Client is
             Log ("create_requirement invoke failed");
             Svc_Response_Ready := True;
          end if;
-         Interfaces.C.Strings.Free (Req_C);
+         if Req_C /= Interfaces.C.Strings.Null_Ptr then
+            Interfaces.C.Strings.Free (Req_C);
+         end if;
          Interfaces.C.Strings.Free (Svc_C);
          Interfaces.C.Strings.Free (Msg.Type_Name);
       end;

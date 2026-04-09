@@ -1011,15 +1011,7 @@ class CppServiceGenerator:
             f.write('            return;\n')
             f.write('        }\n')
             f.write('    } else if (is_flatbuffers_content_type(content_type)) {\n')
-            f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
-            f.write('        try {\n')
-            f.write('            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);\n')
-            f.write('        } catch (...) {\n')
-            f.write('            *response_buf = nullptr;\n')
-            f.write('            *response_size = 0;\n')
-            f.write('            return;\n')
-            f.write('        }\n')
-            f.write('#else\n')
+            f.write('#if !PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
             f.write('        *response_buf = nullptr;\n')
             f.write('        *response_size = 0;\n')
             f.write('        return;\n')
@@ -1029,6 +1021,7 @@ class CppServiceGenerator:
             f.write('        *response_size = 0;\n')
             f.write('        return;\n')
             f.write('    }\n\n')
+            f.write('    try {\n')
             f.write('    switch (channel) {\n')
 
             for _, rpc in all_rpcs:
@@ -1052,8 +1045,14 @@ class CppServiceGenerator:
                     f.write('            : json_codec::evidenceRequirementFromJson(req_str);\n')
                     f.write('        auto req = to_domain_evidence_requirement(wire_req);\n')
                 elif req_t == 'Identifier':
+                    f.write('        if (is_flatbuffers_content_type(content_type)) {\n')
+                    f.write('            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);\n')
+                    f.write('        }\n')
                     f.write('        auto& req = req_str;\n')
                 else:
+                    f.write('        if (is_flatbuffers_content_type(content_type)) {\n')
+                    f.write('            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);\n')
+                    f.write('        }\n')
                     f.write(f'        auto req = fromJson(req_str,'
                             f' static_cast<{req_t}*>(nullptr));\n')
                 f.write(f'        auto rsp = handler.{handler_fn}(req);\n')
@@ -1093,6 +1092,11 @@ class CppServiceGenerator:
                 f.write('        break;\n')
                 f.write('    }\n')
 
+            f.write('    }\n')
+            f.write('    } catch (...) {\n')
+            f.write('        *response_buf = nullptr;\n')
+            f.write('        *response_size = 0;\n')
+            f.write('        return;\n')
             f.write('    }\n\n')
 
             f.write('    if (is_flatbuffers_content_type(content_type)) {\n')

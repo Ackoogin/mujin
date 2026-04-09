@@ -44,8 +44,8 @@ package body Tobj_Evidence_Provider is
    is
       Payload : constant String := Provided.Msg_To_String (Msg.Data, Msg.Size);
    begin
-      if Payload'Length >= 4
-        and then Payload (Payload'First .. Payload'First + 3) = "PWFB"
+      if Msg.Type_Name /= Interfaces.C.Strings.Null_Ptr
+        and then Interfaces.C.Strings.Value (Msg.Type_Name) = Flat.Content_Type
       then
          return Flat.Decode_Payload (Payload);
       end if;
@@ -62,7 +62,8 @@ package body Tobj_Evidence_Provider is
    begin
       Provided.Subscribe_Evidence_Requirements
         (Container => Container,
-         Callback  => On_Evidence_Requirement'Unrestricted_Access);
+         Callback  => On_Evidence_Requirement'Unrestricted_Access,
+         Content_Type => To_String (Content_Type));
       return Pcl_Bindings.PCL_OK;
    end On_Configure;
 

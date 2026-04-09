@@ -10,8 +10,8 @@ REM   build_ros2.bat ros2-only    -- only colcon build (ame_core must already be
 set SCRIPT_DIR=%~dp0
 for %%I in ("%SCRIPT_DIR%\..\..\..") do set AME_ROOT=%%~fI
 
-REM 1. Add pixi conda Library/bin to PATH *before* vcvars to avoid 8191-char CMD PATH limit
-set PATH=D:\Dev\ros2-windows\.pixi\envs\default\Library\bin;%PATH%
+REM 1. Add ROS2 bin + pixi conda Library/bin to PATH *before* vcvars to avoid 8191-char CMD PATH limit
+set PATH=D:\Dev\ros2-windows\bin;D:\Dev\ros2-windows\.pixi\envs\default\Library\bin;%PATH%
 
 REM 2. VS 2022 build tools environment
 call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"

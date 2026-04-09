@@ -12,24 +12,21 @@
 #include <ame_ros2/world_model_node.hpp>
 #include <ame/action_registry.h>
 #include <ame/executor_component.h>
+#include <ame/planner_component.h>
 #include <ame/world_model.h>
+#include <pcl/executor.hpp>
 
 #include <chrono>
 
-// Stub action nodes with the same signatures as main.cpp.
 class StubMoveAction : public BT::SyncActionNode {
 public:
   StubMoveAction(const std::string& n, const BT::NodeConfiguration& c)
       : BT::SyncActionNode(n, c) {}
-
   BT::NodeStatus tick() override { return BT::NodeStatus::SUCCESS; }
-
   static BT::PortsList providedPorts() {
-    return {
-        BT::InputPort<std::string>("param0"),
-        BT::InputPort<std::string>("param1"),
-        BT::InputPort<std::string>("param2"),
-    };
+    return { BT::InputPort<std::string>("param0"),
+             BT::InputPort<std::string>("param1"),
+             BT::InputPort<std::string>("param2") };
   }
 };
 
@@ -37,14 +34,10 @@ class StubSearchAction : public BT::SyncActionNode {
 public:
   StubSearchAction(const std::string& n, const BT::NodeConfiguration& c)
       : BT::SyncActionNode(n, c) {}
-
   BT::NodeStatus tick() override { return BT::NodeStatus::SUCCESS; }
-
   static BT::PortsList providedPorts() {
-    return {
-        BT::InputPort<std::string>("param0"),
-        BT::InputPort<std::string>("param1"),
-    };
+    return { BT::InputPort<std::string>("param0"),
+             BT::InputPort<std::string>("param1") };
   }
 };
 
@@ -52,14 +45,10 @@ class StubClassifyAction : public BT::SyncActionNode {
 public:
   StubClassifyAction(const std::string& n, const BT::NodeConfiguration& c)
       : BT::SyncActionNode(n, c) {}
-
   BT::NodeStatus tick() override { return BT::NodeStatus::SUCCESS; }
-
   static BT::PortsList providedPorts() {
-    return {
-        BT::InputPort<std::string>("param0"),
-        BT::InputPort<std::string>("param1"),
-    };
+    return { BT::InputPort<std::string>("param0"),
+             BT::InputPort<std::string>("param1") };
   }
 };
 
@@ -70,10 +59,15 @@ protected:
 
     wm_node_ = std::make_shared<ame_ros2::WorldModelNode>();
     pl_node_ = std::make_shared<ame_ros2::PlannerNode>();
-    ex_node_ = std::make_shared<ame_ros2::ExecutorNode>();
+    auto ex_opts = rclcpp::NodeOptions().parameter_overrides(
+        {rclcpp::Parameter("tick_rate_hz", 1000.0)});
+    ex_node_ = std::make_shared<ame_ros2::ExecutorNode>(ex_opts);
 
     pl_node_->setInProcessWorldModel(&wm_node_->worldModel());
     ex_node_->setInProcessWorldModel(&wm_node_->worldModel());
+    ex_node_->setPlanner(&pl_node_->planner());
+    ex_node_->setPlanCompiler(&pl_node_->compiler());
+    ex_node_->setActionRegistry(&pl_node_->actionRegistry());
 
     pl_node_->actionRegistry().registerAction("move", "StubMoveAction");
     pl_node_->actionRegistry().registerAction("search", "StubSearchAction");
@@ -83,24 +77,21 @@ protected:
     ex_node_->factory().registerNodeType<StubSearchAction>("StubSearchAction");
     ex_node_->factory().registerNodeType<StubClassifyAction>("StubClassifyAction");
 
-    ASSERT_EQ(
-        wm_node_->on_configure(rclcpp_lifecycle::State{}),
-        ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
-    ASSERT_EQ(
-        wm_node_->on_activate(rclcpp_lifecycle::State{}),
-        ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
-    ASSERT_EQ(
-        pl_node_->on_configure(rclcpp_lifecycle::State{}),
-        ame_ros2::PlannerNode::CallbackReturn::SUCCESS);
-    ASSERT_EQ(
-        pl_node_->on_activate(rclcpp_lifecycle::State{}),
-        ame_ros2::PlannerNode::CallbackReturn::SUCCESS);
-    ASSERT_EQ(
-        ex_node_->on_configure(rclcpp_lifecycle::State{}),
-        ame_ros2::ExecutorNode::CallbackReturn::SUCCESS);
-    ASSERT_EQ(
-        ex_node_->on_activate(rclcpp_lifecycle::State{}),
-        ame_ros2::ExecutorNode::CallbackReturn::SUCCESS);
+    pcl_exec_ = std::make_unique<pcl::Executor>();
+    pcl_exec_->add(ex_node_->component());
+
+    ASSERT_EQ(wm_node_->on_configure(rclcpp_lifecycle::State{}),
+              ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(wm_node_->on_activate(rclcpp_lifecycle::State{}),
+              ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(pl_node_->on_configure(rclcpp_lifecycle::State{}),
+              ame_ros2::PlannerNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(pl_node_->on_activate(rclcpp_lifecycle::State{}),
+              ame_ros2::PlannerNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(ex_node_->on_configure(rclcpp_lifecycle::State{}),
+              ame_ros2::ExecutorNode::CallbackReturn::SUCCESS);
+    ASSERT_EQ(ex_node_->on_activate(rclcpp_lifecycle::State{}),
+              ame_ros2::ExecutorNode::CallbackReturn::SUCCESS);
 
     executor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
     executor_->add_node(wm_node_->get_node_base_interface());
@@ -118,31 +109,20 @@ protected:
     wm.registerPredicate("at", {"robot", "location"});
     wm.registerPredicate("searched", {"sector"});
     wm.registerPredicate("classified", {"sector"});
-    wm.registerAction(
-        "move",
-        {"?r", "?from", "?to"},
-        {"robot", "location", "location"},
-        {"(at ?r ?from)"},
-        {"(at ?r ?to)"},
-        {"(at ?r ?from)"});
-    wm.registerAction(
-        "search",
-        {"?r", "?s"},
-        {"robot", "sector"},
-        {"(at ?r ?s)"},
-        {"(searched ?s)"},
-        {});
-    wm.registerAction(
-        "classify",
-        {"?r", "?s"},
-        {"robot", "sector"},
-        {"(at ?r ?s)", "(searched ?s)"},
-        {"(classified ?s)"},
-        {});
+    wm.registerAction("move",
+        {"?r","?from","?to"}, {"robot","location","location"},
+        {"(at ?r ?from)"}, {"(at ?r ?to)"}, {"(at ?r ?from)"});
+    wm.registerAction("search",
+        {"?r","?s"}, {"robot","sector"},
+        {"(at ?r ?s)"}, {"(searched ?s)"}, {});
+    wm.registerAction("classify",
+        {"?r","?s"}, {"robot","sector"},
+        {"(at ?r ?s)","(searched ?s)"}, {"(classified ?s)"}, {});
     wm.setFact("(at uav1 base)", true, "planner_init");
   }
 
   void TearDown() override {
+    pcl_exec_.reset();
     executor_.reset();
     ex_node_.reset();
     pl_node_.reset();
@@ -150,56 +130,36 @@ protected:
     rclcpp::shutdown();
   }
 
+  void spinUntilExecutionDone(std::chrono::seconds timeout = std::chrono::seconds(10)) {
+    auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (ex_node_->component().lastStatus() != BT::NodeStatus::SUCCESS &&
+           ex_node_->component().lastStatus() != BT::NodeStatus::FAILURE &&
+           std::chrono::steady_clock::now() < deadline) {
+      pcl_exec_->spinOnce(0);
+    }
+  }
+
   std::shared_ptr<ame_ros2::WorldModelNode> wm_node_;
-  std::shared_ptr<ame_ros2::PlannerNode> pl_node_;
-  std::shared_ptr<ame_ros2::ExecutorNode> ex_node_;
+  std::shared_ptr<ame_ros2::PlannerNode>    pl_node_;
+  std::shared_ptr<ame_ros2::ExecutorNode>   ex_node_;
   std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
+  std::unique_ptr<pcl::Executor>            pcl_exec_;
 };
 
-///< REQ_ENGINE_004: The ROS2 wrappers shall plan and execute through the BT XML handoff.
+/// REQ_ENGINE_004: The ROS2 wrappers shall plan and execute through the BT XML handoff.
 TEST_F(FullPipelineTest, PlanAndExecuteReachesGoal) {
-  const std::vector<std::string> goal_fluents = {
+  // Plan in-process (action server replaced by direct PCL component call)
+  auto plan_result = pl_node_->plannerComponent().solveGoal({
       "(searched sector_a)",
       "(classified sector_a)",
-  };
+  });
+  ASSERT_TRUE(plan_result.success) << plan_result.error_msg;
+  ASSERT_FALSE(plan_result.bt_xml.empty());
 
-  auto action_client =
-      rclcpp_action::create_client<ame_ros2::action::Plan>(pl_node_, "/planner_node/plan");
-  ASSERT_TRUE(action_client->wait_for_action_server(std::chrono::seconds(3)));
+  ex_node_->component().loadAndExecute(plan_result.bt_xml);
+  spinUntilExecutionDone();
 
-  auto goal_msg = ame_ros2::action::Plan::Goal();
-  goal_msg.goal_fluents = goal_fluents;
-
-  std::shared_ptr<const ame_ros2::action::Plan::Result> plan_result;
-  bool plan_done = false;
-
-  auto options = rclcpp_action::Client<ame_ros2::action::Plan>::SendGoalOptions();
-  options.result_callback = [&](auto wrapped) {
-    plan_result = wrapped.result;
-    plan_done = true;
-  };
-  action_client->async_send_goal(goal_msg, options);
-
-  auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
-  while (!plan_done && std::chrono::steady_clock::now() < deadline) {
-    executor_->spin_some(std::chrono::milliseconds(50));
-  }
-  ASSERT_TRUE(plan_done) << "Plan action timed out";
-  ASSERT_NE(plan_result, nullptr);
-  ASSERT_TRUE(plan_result->success) << plan_result->error_msg;
-
-  // In-process mode: explicitly hand the compiled BT XML to the executor
-  // (in distributed mode the planner publishes on a topic the executor subscribes to)
-  ASSERT_FALSE(plan_result->bt_xml.empty());
-  ex_node_->loadAndExecute(plan_result->bt_xml);
-
-  deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-  while (ex_node_->lastStatus() != BT::NodeStatus::SUCCESS &&
-         ex_node_->lastStatus() != BT::NodeStatus::FAILURE &&
-         std::chrono::steady_clock::now() < deadline) {
-    executor_->spin_some(std::chrono::milliseconds(20));
-  }
-  EXPECT_EQ(ex_node_->lastStatus(), BT::NodeStatus::SUCCESS);
+  EXPECT_EQ(ex_node_->component().lastStatus(), BT::NodeStatus::SUCCESS);
 
   const auto& wm = wm_node_->worldModel();
   EXPECT_TRUE(wm.getFact("(searched sector_a)"));

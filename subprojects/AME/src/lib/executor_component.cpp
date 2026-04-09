@@ -145,7 +145,11 @@ pcl_status_t ExecutorComponent::on_tick(double /*dt*/) {
   if (last_status_ == BT::NodeStatus::SUCCESS ||
       last_status_ == BT::NodeStatus::FAILURE) {
     const bool success = (last_status_ == BT::NodeStatus::SUCCESS);
-    haltExecution();
+    // Stop ticking but preserve last_status_ for callers to observe.
+    // Do NOT call haltExecution() here — that would reset last_status_ to IDLE.
+    executing_ = false;
+    if (tree_) tree_->haltTree();
+    if (bt_logger_) bt_logger_->flush();
 
     if (pub_status_) {
       status_buf_ = success ? "SUCCESS" : "FAILURE";

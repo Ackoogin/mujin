@@ -579,20 +579,30 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       use type Pcl_Bindings.Pcl_Status;
       Json_Payload : constant String := To_Json (Request);
       Payload : constant String := Encode_Transport_Payload (Json_Payload, Content_Type);
-      Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Payload);
+      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
+      Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Svc_Read_Match);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
    begin
-      Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Payload'Length);
+      if Content_Type = "" or else Content_Type = "application/json" then
+         Req_C := Interfaces.C.Strings.New_String (Payload);
+         Msg.Data := To_Address (Req_C);
+      else
+         Msg.Data :=
+           (if Payload_Bytes'Length = 0
+            then System.Null_Address
+            else Payload_Bytes (Payload_Bytes'First)'Address);
+      end if;
+      Msg.Size      := Interfaces.C.unsigned (Payload_Bytes'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
       Status := Pcl_Bindings.Invoke_Async
         (Executor, Svc_C, Msg'Access, Callback, User_Data);
-      Interfaces.C.Strings.Free (Req_C);
+      if Req_C /= Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Req_C);
+      end if;
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
    end Invoke_Read_Match;
@@ -607,20 +617,30 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       use type Pcl_Bindings.Pcl_Status;
       Json_Payload : constant String := Pyramid.Services.Tactical_Objects.Json_Codec.To_Json (Request);
       Payload : constant String := Encode_Transport_Payload (Json_Payload, Content_Type);
-      Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Payload);
+      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
+      Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Svc_Create_Requirement);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
    begin
-      Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Payload'Length);
+      if Content_Type = "" or else Content_Type = "application/json" then
+         Req_C := Interfaces.C.Strings.New_String (Payload);
+         Msg.Data := To_Address (Req_C);
+      else
+         Msg.Data :=
+           (if Payload_Bytes'Length = 0
+            then System.Null_Address
+            else Payload_Bytes (Payload_Bytes'First)'Address);
+      end if;
+      Msg.Size      := Interfaces.C.unsigned (Payload_Bytes'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
       Status := Pcl_Bindings.Invoke_Async
         (Executor, Svc_C, Msg'Access, Callback, User_Data);
-      Interfaces.C.Strings.Free (Req_C);
+      if Req_C /= Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Req_C);
+      end if;
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
    end Invoke_Create_Requirement;
@@ -635,20 +655,30 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       use type Pcl_Bindings.Pcl_Status;
       Json_Payload : constant String := To_Json (Request);
       Payload : constant String := Encode_Transport_Payload (Json_Payload, Content_Type);
-      Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Payload);
+      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
+      Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Svc_Read_Requirement);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
    begin
-      Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Payload'Length);
+      if Content_Type = "" or else Content_Type = "application/json" then
+         Req_C := Interfaces.C.Strings.New_String (Payload);
+         Msg.Data := To_Address (Req_C);
+      else
+         Msg.Data :=
+           (if Payload_Bytes'Length = 0
+            then System.Null_Address
+            else Payload_Bytes (Payload_Bytes'First)'Address);
+      end if;
+      Msg.Size      := Interfaces.C.unsigned (Payload_Bytes'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
       Status := Pcl_Bindings.Invoke_Async
         (Executor, Svc_C, Msg'Access, Callback, User_Data);
-      Interfaces.C.Strings.Free (Req_C);
+      if Req_C /= Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Req_C);
+      end if;
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
    end Invoke_Read_Requirement;
@@ -663,20 +693,30 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       use type Pcl_Bindings.Pcl_Status;
       Json_Payload : constant String := Pyramid.Services.Tactical_Objects.Json_Codec.To_Json (Request);
       Payload : constant String := Encode_Transport_Payload (Json_Payload, Content_Type);
-      Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Payload);
+      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
+      Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Svc_Update_Requirement);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
    begin
-      Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Payload'Length);
+      if Content_Type = "" or else Content_Type = "application/json" then
+         Req_C := Interfaces.C.Strings.New_String (Payload);
+         Msg.Data := To_Address (Req_C);
+      else
+         Msg.Data :=
+           (if Payload_Bytes'Length = 0
+            then System.Null_Address
+            else Payload_Bytes (Payload_Bytes'First)'Address);
+      end if;
+      Msg.Size      := Interfaces.C.unsigned (Payload_Bytes'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
       Status := Pcl_Bindings.Invoke_Async
         (Executor, Svc_C, Msg'Access, Callback, User_Data);
-      Interfaces.C.Strings.Free (Req_C);
+      if Req_C /= Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Req_C);
+      end if;
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
    end Invoke_Update_Requirement;
@@ -691,20 +731,30 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       use type Pcl_Bindings.Pcl_Status;
       Json_Payload : constant String := To_String (Request);
       Payload : constant String := Encode_Transport_Payload (Json_Payload, Content_Type);
-      Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Payload);
+      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
+      Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Svc_Delete_Requirement);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
    begin
-      Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Payload'Length);
+      if Content_Type = "" or else Content_Type = "application/json" then
+         Req_C := Interfaces.C.Strings.New_String (Payload);
+         Msg.Data := To_Address (Req_C);
+      else
+         Msg.Data :=
+           (if Payload_Bytes'Length = 0
+            then System.Null_Address
+            else Payload_Bytes (Payload_Bytes'First)'Address);
+      end if;
+      Msg.Size      := Interfaces.C.unsigned (Payload_Bytes'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
       Status := Pcl_Bindings.Invoke_Async
         (Executor, Svc_C, Msg'Access, Callback, User_Data);
-      Interfaces.C.Strings.Free (Req_C);
+      if Req_C /= Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Req_C);
+      end if;
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
    end Invoke_Delete_Requirement;
@@ -719,20 +769,30 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       use type Pcl_Bindings.Pcl_Status;
       Json_Payload : constant String := To_Json (Request);
       Payload : constant String := Encode_Transport_Payload (Json_Payload, Content_Type);
-      Req_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Payload);
+      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
+      Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Svc_Read_Detail);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
    begin
-      Msg.Data      := To_Address (Req_C);
-      Msg.Size      := Interfaces.C.unsigned (Payload'Length);
+      if Content_Type = "" or else Content_Type = "application/json" then
+         Req_C := Interfaces.C.Strings.New_String (Payload);
+         Msg.Data := To_Address (Req_C);
+      else
+         Msg.Data :=
+           (if Payload_Bytes'Length = 0
+            then System.Null_Address
+            else Payload_Bytes (Payload_Bytes'First)'Address);
+      end if;
+      Msg.Size      := Interfaces.C.unsigned (Payload_Bytes'Length);
       Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
       Status := Pcl_Bindings.Invoke_Async
         (Executor, Svc_C, Msg'Access, Callback, User_Data);
-      Interfaces.C.Strings.Free (Req_C);
+      if Req_C /= Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Req_C);
+      end if;
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
    end Invoke_Read_Detail;

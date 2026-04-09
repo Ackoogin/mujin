@@ -25,12 +25,11 @@
 ## 1. System Overview
 
 ```
-  Proto IDL  ──►  subprojects/PYRAMID/pim/ada_service_generator.py  ──►  Ada generated/
-             └──►  subprojects/PYRAMID/pim/cpp_service_generator.py  ──►  C++ generated/
-                         ▲
-             subprojects/PYRAMID/pim/json_schema.py  (canonical wire format & enum specs)
+  Proto IDL  ──►  subprojects/PYRAMID/pim/generate_bindings.py
                          │
-             subprojects/PYRAMID/proto/pyramid/data_model/common.proto  (enum definitions)
+                         ├──► cpp_codegen.py / ada_codegen.py
+                         ├──► backends/flatbuffers_backend.py
+                         └──► json_schema.py  (canonical service wire model)
 ```
 
 The **StandardBridge** (`pyramid/tactical_objects/include/StandardBridge.h`)
@@ -41,7 +40,7 @@ Component Language), a C-ABI transport layer.
 ```
   Ada/C++ client
       │
-      │  JSON over PCL socket / in-process topic
+      │  JSON or FlatBuffers over PCL socket / in-process topic
       ▼
   StandardBridge   ◄──►  TacticalObjectsRuntime (internal binary format)
 ```
@@ -57,6 +56,20 @@ Component Language), a C-ABI transport layer.
 The generated bindings and this document cover only the **standard bridge
 layer**.
 
+### Current status
+
+- Tactical service bindings are generated through the unified entry point
+  `subprojects/PYRAMID/pim/generate_bindings.py`.
+- Tactical runtime codec selection currently supports
+  `application/json` and `application/flatbuffers`.
+- C++ tactical FlatBuffers support uses generated `.fbs` schema files and
+  `flatc` in the CMake build.
+- Ada tactical FlatBuffers support uses generated Ada codec packages over the
+  same schema-derived wire model; it does not currently consume native Ada
+  code emitted by `flatc`.
+- The tactical RPC surface and the Ada/C++ bridge demos run under both JSON
+  and FlatBuffers content types.
+
 ---
 
 ## 2. Generation Pipeline
@@ -66,11 +79,12 @@ layer**.
 | File | Role |
 |------|------|
 | `subprojects/PYRAMID/pim/json_schema.py` | **Canonical authority** — wire field names, message shapes, enum naming rules |
-| `subprojects/PYRAMID/pim/ada_service_generator.py` | Reads `.proto` + `json_schema`, emits Ada packages |
-| `subprojects/PYRAMID/pim/cpp_service_generator.py` | Reads `.proto` + `json_schema`, emits C++ headers/sources |
+| `subprojects/PYRAMID/pim/ada_codegen.py` | Emits Ada data-model, wire-model, and service bindings for the JSON path |
+| `subprojects/PYRAMID/pim/cpp_codegen.py` | Emits C++ data-model, wire-model, and service bindings for the JSON path |
 | `subprojects/PYRAMID/pim/proto_parser.py` | Proto IDL parser — extracts messages, enums, services into `ProtoFile` / `ProtoTypeIndex` |
-| `subprojects/PYRAMID/pim/generate_bindings.py` | Batch entry point — generates all bindings for a component |
-| `subprojects/PYRAMID/pim/codec_backends.py` | Registry of binary codec backends (JSON, FlatBuffers, Protobuf) |
+| `subprojects/PYRAMID/pim/generate_bindings.py` | Unified entry point — generates all enabled bindings for a component |
+| `subprojects/PYRAMID/pim/codec_backends.py` | Registry of pluggable non-JSON backend generators |
+| `subprojects/PYRAMID/pim/backends/flatbuffers_backend.py` | Generates `.fbs`, C++ FlatBuffers codecs, and Ada FlatBuffers codec packages |
 | `subprojects/PYRAMID/proto/pyramid/data_model/common.proto` | Source of enum values (`StandardIdentity`, `BattleDimension`, `DataPolicy`) |
 | `subprojects/PYRAMID/proto/pyramid/data_model/tactical.proto` | Tactical data model types (`ObjectInterestRequirement`, `ObjectMatch`, etc.) |
 | `subprojects/PYRAMID/proto/pyramid/components/tactical_objects/services/provided.proto` | Service contract for client-facing RPCs |
@@ -109,33 +123,31 @@ To add a new enum to the codec, add one `EnumSpec` entry to `ENUM_SPECS` in
 ```bash
 cd <repo_root>
 
-# Ada: data model types from all protos in data_model/
-python subprojects/PYRAMID/pim/ada_service_generator.py --types \
-    subprojects/PYRAMID/proto/pyramid/data_model subprojects/PYRAMID/examples/ada/generated
+# Generate Ada tactical bindings
+python subprojects/PYRAMID/pim/generate_bindings.py \
+    subprojects/PYRAMID/proto \
+    subprojects/PYRAMID/examples/ada/generated \
+    --languages ada \
+    --backends json,flatbuffers
 
-# Ada: data model codecs (To_Json / From_Json per type)
-python subprojects/PYRAMID/pim/ada_service_generator.py --codec \
-    subprojects/PYRAMID/proto/pyramid/data_model subprojects/PYRAMID/examples/ada/generated
+# Generate C++ tactical bindings
+python subprojects/PYRAMID/pim/generate_bindings.py \
+    subprojects/PYRAMID/proto \
+    subprojects/PYRAMID/examples/cpp/generated \
+    --languages cpp \
+    --backends json,flatbuffers
+```
 
-# Ada: bridge-level Json_Codec (json_schema.py format) for one service proto
-python subprojects/PYRAMID/pim/ada_service_generator.py --codec \
-    subprojects/PYRAMID/proto/pyramid/components/tactical_objects/services/provided.proto \
-    subprojects/PYRAMID/examples/ada/generated
+Wrapper scripts are also provided:
 
-# Ada: service binding for one proto
-python subprojects/PYRAMID/pim/ada_service_generator.py \
-    subprojects/PYRAMID/proto/pyramid/components/tactical_objects/services/provided.proto \
-    subprojects/PYRAMID/examples/ada/generated
+```bat
+subprojects\PYRAMID\scripts\generate_bindings.bat --ada
+subprojects\PYRAMID\scripts\generate_bindings.bat --cpp
+```
 
-# C++: codec package only
-python subprojects/PYRAMID/pim/cpp_service_generator.py --codec \
-    subprojects/PYRAMID/proto/pyramid/components/tactical_objects/services/provided.proto \
-    subprojects/PYRAMID/examples/cpp/generated
-
-# C++: service binding for one proto
-python subprojects/PYRAMID/pim/cpp_service_generator.py \
-    subprojects/PYRAMID/proto/pyramid/components/tactical_objects/services/provided.proto \
-    subprojects/PYRAMID/examples/cpp/generated
+```sh
+subprojects/PYRAMID/scripts/generate_bindings.sh --ada
+subprojects/PYRAMID/scripts/generate_bindings.sh --cpp
 ```
 
 ---

@@ -74,21 +74,11 @@ if %errorlevel% equ 0 (
     set "ADA_PCL_LIB_DIR=%WORKSPACE_ROOT%\build\ada_gnat_pcl"
     set "ADA_PCL_BUILD_SCRIPT=%WORKSPACE_ROOT%\subprojects\PCL\scripts\build_gnat_pcl_static_libs.bat"
     set "CAN_BUILD_ADA=1"
-    if not exist "!ADA_PCL_LIB_DIR!\libpcl_core.a" (
-        echo [driver] Preparing GNAT-compatible PCL static archives...
-        call "!ADA_PCL_BUILD_SCRIPT!" "!ADA_PCL_LIB_DIR!"
-        if !errorlevel! neq 0 (
-            echo [driver] WARNING: failed to build GNAT PCL static archives -- falling back to pre-built binary
-            set "CAN_BUILD_ADA=0"
-        )
-    )
-    if "!CAN_BUILD_ADA!"=="1" if not exist "!ADA_PCL_LIB_DIR!\libpcl_transport_socket.a" (
-        echo [driver] Preparing GNAT-compatible transport static archive...
-        call "!ADA_PCL_BUILD_SCRIPT!" "!ADA_PCL_LIB_DIR!"
-        if !errorlevel! neq 0 (
-            echo [driver] WARNING: failed to build GNAT transport static archive -- falling back to pre-built binary
-            set "CAN_BUILD_ADA=0"
-        )
+    echo [driver] Refreshing GNAT-compatible PCL static archives...
+    call "!ADA_PCL_BUILD_SCRIPT!" "!ADA_PCL_LIB_DIR!" --force
+    if !errorlevel! neq 0 (
+        echo [driver] WARNING: failed to build GNAT PCL static archives -- falling back to pre-built binary
+        set "CAN_BUILD_ADA=0"
     )
     if "!CAN_BUILD_ADA!"=="1" (
         set "MUJIN_ROOT=%WORKSPACE_ROOT%"

@@ -68,13 +68,13 @@ if not exist "%GEN_SCRIPT%" (
 
 if "%DO_CPP%"=="1" (
     echo [generate] C++ bindings -> %CPP_OUT%
-    call %PY_CMD% "%GEN_SCRIPT%" "%PROTO_DIR%" "%CPP_OUT%" --languages cpp --backends "%BACKENDS%"
+    %PY_CMD% "%GEN_SCRIPT%" "%PROTO_DIR%" "%CPP_OUT%" --languages cpp --backends "%BACKENDS%"
     if errorlevel 1 exit /b 1
 )
 
 if "%DO_ADA%"=="1" (
     echo [generate] Ada bindings -> %ADA_OUT%
-    call %PY_CMD% "%GEN_SCRIPT%" "%PROTO_DIR%" "%ADA_OUT%" --languages ada --backends "%BACKENDS%"
+    %PY_CMD% "%GEN_SCRIPT%" "%PROTO_DIR%" "%ADA_OUT%" --languages ada --backends "%BACKENDS%"
     if errorlevel 1 exit /b 1
 )
 

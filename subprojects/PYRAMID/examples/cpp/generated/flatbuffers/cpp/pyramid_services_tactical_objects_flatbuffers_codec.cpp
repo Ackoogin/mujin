@@ -1,6 +1,7 @@
 // Auto-generated tactical service FlatBuffers codec
 #include "pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
 #include <utility>
@@ -17,6 +18,19 @@ std::string finish_buffer(flatbuffers::FlatBufferBuilder& builder, OffsetT root)
     return std::string(
         reinterpret_cast<const char*>(builder.GetBufferPointer()),
         builder.GetSize());
+}
+
+template <typename TableT>
+const TableT* verified_root(const void* data, size_t size, const char* type_name) {
+    if (data == nullptr || size == 0) {
+        throw std::runtime_error(std::string("empty ") + type_name + " flatbuffer");
+    }
+    auto* bytes = reinterpret_cast<const std::uint8_t*>(data);
+    flatbuffers::Verifier verifier(bytes, size);
+    if (!verifier.VerifyBuffer<TableT>()) {
+        throw std::runtime_error(std::string("invalid ") + type_name + " flatbuffer");
+    }
+    return flatbuffers::GetRoot<TableT>(bytes);
 }
 
 fbs::CreateRequirementRequestT to_fb(const wire_types::CreateRequirementRequest& msg) {
@@ -158,8 +172,8 @@ std::string unwrapPayload(const void* data, size_t size) {
     if (data == nullptr || size == 0) {
         return {};
     }
-    auto* root = flatbuffers::GetRoot<fbs::JsonPayload>(data);
-    if (!root || !root->payload()) {
+    auto* root = verified_root<fbs::JsonPayload>(data, size, "JsonPayload");
+    if (!root->payload()) {
         throw std::runtime_error("invalid JsonPayload flatbuffer");
     }
     return root->payload()->str();
@@ -172,13 +186,7 @@ std::string toBinary(const wire_types::CreateRequirementRequest& msg) {
 }
 
 wire_types::CreateRequirementRequest fromBinaryCreateRequirementRequest(const void* data, size_t size) {
-    if (data == nullptr || size == 0) {
-        throw std::runtime_error("empty CreateRequirementRequest flatbuffer");
-    }
-    auto* root = flatbuffers::GetRoot<fbs::CreateRequirementRequest>(data);
-    if (!root) {
-        throw std::runtime_error("invalid CreateRequirementRequest flatbuffer");
-    }
+    auto* root = verified_root<fbs::CreateRequirementRequest>(data, size, "CreateRequirementRequest");
     fbs::CreateRequirementRequestT object{};
     root->UnPackTo(&object);
     return from_fb(object);
@@ -191,13 +199,7 @@ std::string toBinary(const wire_types::CreateRequirementResponse& msg) {
 }
 
 wire_types::CreateRequirementResponse fromBinaryCreateRequirementResponse(const void* data, size_t size) {
-    if (data == nullptr || size == 0) {
-        throw std::runtime_error("empty CreateRequirementResponse flatbuffer");
-    }
-    auto* root = flatbuffers::GetRoot<fbs::CreateRequirementResponse>(data);
-    if (!root) {
-        throw std::runtime_error("invalid CreateRequirementResponse flatbuffer");
-    }
+    auto* root = verified_root<fbs::CreateRequirementResponse>(data, size, "CreateRequirementResponse");
     fbs::CreateRequirementResponseT object{};
     root->UnPackTo(&object);
     return from_fb(object);
@@ -210,13 +212,7 @@ std::string toBinary(const wire_types::EntityMatch& msg) {
 }
 
 wire_types::EntityMatch fromBinaryEntityMatch(const void* data, size_t size) {
-    if (data == nullptr || size == 0) {
-        throw std::runtime_error("empty EntityMatch flatbuffer");
-    }
-    auto* root = flatbuffers::GetRoot<fbs::EntityMatch>(data);
-    if (!root) {
-        throw std::runtime_error("invalid EntityMatch flatbuffer");
-    }
+    auto* root = verified_root<fbs::EntityMatch>(data, size, "EntityMatch");
     fbs::EntityMatchT object{};
     root->UnPackTo(&object);
     return from_fb(object);
@@ -229,13 +225,7 @@ std::string toBinary(const wire_types::EntityMatchArray& msg) {
 }
 
 wire_types::EntityMatchArray fromBinaryEntityMatchArray(const void* data, size_t size) {
-    if (data == nullptr || size == 0) {
-        throw std::runtime_error("empty EntityMatchArray flatbuffer");
-    }
-    auto* root = flatbuffers::GetRoot<fbs::EntityMatchArrayHolder>(data);
-    if (!root) {
-        throw std::runtime_error("invalid EntityMatchArray flatbuffer");
-    }
+    auto* root = verified_root<fbs::EntityMatchArrayHolder>(data, size, "EntityMatchArray");
     fbs::EntityMatchArrayHolderT object{};
     root->UnPackTo(&object);
     return from_fb(object);
@@ -248,13 +238,7 @@ std::string toBinary(const wire_types::ObjectEvidence& msg) {
 }
 
 wire_types::ObjectEvidence fromBinaryObjectEvidence(const void* data, size_t size) {
-    if (data == nullptr || size == 0) {
-        throw std::runtime_error("empty ObjectEvidence flatbuffer");
-    }
-    auto* root = flatbuffers::GetRoot<fbs::ObjectEvidence>(data);
-    if (!root) {
-        throw std::runtime_error("invalid ObjectEvidence flatbuffer");
-    }
+    auto* root = verified_root<fbs::ObjectEvidence>(data, size, "ObjectEvidence");
     fbs::ObjectEvidenceT object{};
     root->UnPackTo(&object);
     return from_fb(object);
@@ -267,13 +251,7 @@ std::string toBinary(const wire_types::EvidenceRequirement& msg) {
 }
 
 wire_types::EvidenceRequirement fromBinaryEvidenceRequirement(const void* data, size_t size) {
-    if (data == nullptr || size == 0) {
-        throw std::runtime_error("empty EvidenceRequirement flatbuffer");
-    }
-    auto* root = flatbuffers::GetRoot<fbs::EvidenceRequirement>(data);
-    if (!root) {
-        throw std::runtime_error("invalid EvidenceRequirement flatbuffer");
-    }
+    auto* root = verified_root<fbs::EvidenceRequirement>(data, size, "EvidenceRequirement");
     fbs::EvidenceRequirementT object{};
     root->UnPackTo(&object);
     return from_fb(object);

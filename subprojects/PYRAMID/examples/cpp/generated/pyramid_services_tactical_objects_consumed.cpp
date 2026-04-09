@@ -207,15 +207,7 @@ void dispatch(ServiceHandler& handler,
             return;
         }
     } else if (is_flatbuffers_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        try {
-            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);
-        } catch (...) {
-            *response_buf = nullptr;
-            *response_size = 0;
-            return;
-        }
-#else
+#if !PYRAMID_HAVE_SERVICE_FLATBUFFERS
         *response_buf = nullptr;
         *response_size = 0;
         return;
@@ -226,8 +218,12 @@ void dispatch(ServiceHandler& handler,
         return;
     }
 
+    try {
     switch (channel) {
     case ServiceChannel::ReadDetail: {
+        if (is_flatbuffers_content_type(content_type)) {
+            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);
+        }
         auto req = fromJson(req_str, static_cast<Query*>(nullptr));
         auto rsp = handler.handleReadDetail(req);
         rsp_payload = "[";
@@ -256,6 +252,9 @@ void dispatch(ServiceHandler& handler,
         break;
     }
     case ServiceChannel::ReadRequirement: {
+        if (is_flatbuffers_content_type(content_type)) {
+            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);
+        }
         auto req = fromJson(req_str, static_cast<Query*>(nullptr));
         auto rsp = handler.handleReadRequirement(req);
         rsp_payload = "[";
@@ -276,12 +275,18 @@ void dispatch(ServiceHandler& handler,
         break;
     }
     case ServiceChannel::DeleteRequirement: {
+        if (is_flatbuffers_content_type(content_type)) {
+            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);
+        }
         auto& req = req_str;
         auto rsp = handler.handleDeleteRequirement(req);
         rsp_payload = toJson(rsp);
         break;
     }
     case ServiceChannel::ReadCapability: {
+        if (is_flatbuffers_content_type(content_type)) {
+            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);
+        }
         auto req = fromJson(req_str, static_cast<Query*>(nullptr));
         auto rsp = handler.handleReadCapability(req);
         rsp_payload = "[";
@@ -292,6 +297,11 @@ void dispatch(ServiceHandler& handler,
         rsp_payload += "]";
         break;
     }
+    }
+    } catch (...) {
+        *response_buf = nullptr;
+        *response_size = 0;
+        return;
     }
 
     if (is_flatbuffers_content_type(content_type)) {

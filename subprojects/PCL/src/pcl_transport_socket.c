@@ -363,22 +363,7 @@ static void gateway_sub_cb(pcl_container_t* c,
                                          svc_name,
                                          &req,
                                          &resp) != PCL_OK) {
-    fprintf(stderr,
-            "[pcl_socket] gateway invoke failed peer=%s svc=%s req_type=%s req_size=%u\n",
-            ctx->peer_id,
-            svc_name,
-            req.type_name ? req.type_name : "(null)",
-            req.size);
     resp.size = 0;
-  } else {
-    fprintf(stderr,
-            "[pcl_socket] gateway invoke ok peer=%s svc=%s req_type=%s req_size=%u resp_type=%s resp_size=%u\n",
-            ctx->peer_id,
-            svc_name,
-            req.type_name ? req.type_name : "(null)",
-            req.size,
-            resp.type_name ? resp.type_name : "(null)",
-            resp.size);
   }
 
   resp_type_len = (uint16_t)(resp.type_name ? strlen(resp.type_name) : 0u);
@@ -530,12 +515,6 @@ static void* recv_thread_main(void* arg)
           svc_msg.data      = fwd;
           svc_msg.size      = fwd_len;
           svc_msg.type_name = type_s ? type_s : "pcl_socket_service_request";
-          fprintf(stderr,
-                  "[pcl_socket] recv SVC_REQ seq=%u peer=%s req_type=%s body_size=%u\n",
-                  seq_id,
-                  ctx->peer_id,
-                  svc_msg.type_name ? svc_msg.type_name : "(null)",
-                  svc_msg.size);
           pcl_executor_post_incoming(ctx->executor, PCL_SOCKET_TOPIC_SVC_REQ, &svc_msg);
           free(fwd);
         }
@@ -599,12 +578,6 @@ static void* recv_thread_main(void* arg)
           resp_msg.data = resp_data;
           resp_msg.size = resp_size;
           resp_msg.type_name = type_s;
-          fprintf(stderr,
-                  "[pcl_socket] recv SVC_RESP seq=%u peer=%s resp_type=%s resp_size=%u\n",
-                  seq_id,
-                  ctx->peer_id,
-                  resp_msg.type_name ? resp_msg.type_name : "(null)",
-                  resp_msg.size);
           pcl_executor_post_response_msg(ctx->executor,
                                          pending->cb,
                                          pending->user_data,
@@ -920,15 +893,6 @@ pcl_status_t pcl_socket_transport_invoke_remote_async(
   }
 
   rc = enqueue_outbound_frame(ctx, frame, (uint32_t)(4u + payload_size));
-  if (rc == PCL_OK) {
-    fprintf(stderr,
-            "[pcl_socket] send SVC_REQ seq=%u peer=%s svc=%s req_type=%s req_size=%u\n",
-            seq_id,
-            ctx->peer_id,
-            service_name,
-            request->type_name ? request->type_name : "(null)",
-            request->size);
-  }
   free(frame);
 
   if (rc != PCL_OK) {

@@ -70,6 +70,7 @@ ament_target_dependencies(ame_ros2_lib
     rclcpp_lifecycle
     std_msgs
     lifecycle_msgs
+    ament_index_cpp
 )
 
 target_link_libraries(ame_ros2_lib

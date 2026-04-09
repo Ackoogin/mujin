@@ -2,6 +2,8 @@
 #include "ame_ros2/planner_node.hpp"
 #include "ame_ros2/world_model_node.hpp"
 #include <ame/action_registry.h>
+#include <ame/planner_component.h>
+#include <ame/world_model.h>
 #include <rclcpp/rclcpp.hpp>
 #include <chrono>
 
@@ -12,15 +14,12 @@ protected:
         wm_node_ = std::make_shared<ame_ros2::WorldModelNode>();
         pl_node_ = std::make_shared<ame_ros2::PlannerNode>();
 
-        // In-process mode: inject canonical WorldModel pointer
         pl_node_->setInProcessWorldModel(&wm_node_->worldModel());
 
-        // Register action mappings
         pl_node_->actionRegistry().registerAction("move",     "StubMoveAction");
         pl_node_->actionRegistry().registerAction("search",   "StubSearchAction");
         pl_node_->actionRegistry().registerAction("classify", "StubClassifyAction");
 
-        // Lifecycle: configure + activate both nodes
         ASSERT_EQ(
             wm_node_->on_configure(rclcpp_lifecycle::State{}),
             ame_ros2::WorldModelNode::CallbackReturn::SUCCESS);
@@ -34,11 +33,6 @@ protected:
             pl_node_->on_activate(rclcpp_lifecycle::State{}),
             ame_ros2::PlannerNode::CallbackReturn::SUCCESS);
 
-        executor_ = std::make_unique<rclcpp::executors::SingleThreadedExecutor>();
-        executor_->add_node(wm_node_->get_node_base_interface());
-        executor_->add_node(pl_node_->get_node_base_interface());
-
-        // Build the domain in WorldModelNode's WorldModel
         auto& wm = wm_node_->worldModel();
         wm.typeSystem().addType("object");
         wm.typeSystem().addType("location", "object");
@@ -63,7 +57,6 @@ protected:
     }
 
     void TearDown() override {
-        executor_.reset();
         wm_node_.reset();
         pl_node_.reset();
         rclcpp::shutdown();
@@ -71,38 +64,17 @@ protected:
 
     std::shared_ptr<ame_ros2::WorldModelNode> wm_node_;
     std::shared_ptr<ame_ros2::PlannerNode>    pl_node_;
-    std::unique_ptr<rclcpp::executors::SingleThreadedExecutor> executor_;
 };
 
 TEST_F(PlannerNodeTest, PlanActionSucceeds) {
-    auto action_client = rclcpp_action::create_client<ame_ros2::action::Plan>(
-        pl_node_, "/planner_node/plan");
+    // Planning is now a direct synchronous PCL service call (action server removed).
+    auto result = pl_node_->plannerComponent().solveGoal({
+        "(searched sector_a)",
+        "(classified sector_a)",
+    });
 
-    ASSERT_TRUE(action_client->wait_for_action_server(std::chrono::seconds(3)));
-
-    auto goal = ame_ros2::action::Plan::Goal();
-    goal.goal_fluents = {"(searched sector_a)", "(classified sector_a)"};
-    goal.replan = false;
-
-    std::shared_ptr<ame_ros2::action::Plan::Result const> result_ptr;
-    bool done = false;
-
-    auto send_goal_opts = rclcpp_action::Client<ame_ros2::action::Plan>::SendGoalOptions();
-    send_goal_opts.result_callback = [&](auto wrapped) {
-        result_ptr = wrapped.result;
-        done = true;
-    };
-
-    action_client->async_send_goal(goal, send_goal_opts);
-
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
-    while (!done && std::chrono::steady_clock::now() < deadline) {
-        executor_->spin_some(std::chrono::milliseconds(50));
-    }
-
-    ASSERT_TRUE(done) << "Plan action did not complete";
-    ASSERT_NE(result_ptr, nullptr);
-    EXPECT_TRUE(result_ptr->success);
-    EXPECT_FALSE(result_ptr->bt_xml.empty());
-    EXPECT_FALSE(result_ptr->plan_actions.empty());
+    ASSERT_TRUE(result.success) << result.error_msg;
+    EXPECT_FALSE(result.bt_xml.empty());
+    EXPECT_FALSE(result.plan_actions.empty());
+    EXPECT_GE(result.plan_actions.size(), 3u);  // at least: move, search, classify
 }

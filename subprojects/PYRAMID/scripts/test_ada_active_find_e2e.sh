@@ -65,13 +65,11 @@ fi
 if command -v gprbuild &>/dev/null; then
   echo "[driver] Building Ada active-find client..."
   ADA_PCL_LIB_DIR="$WORKSPACE_ROOT/build/ada_gnat_pcl"
-  if [[ ! -f "$ADA_PCL_LIB_DIR/libpcl_core.a" || ! -f "$ADA_PCL_LIB_DIR/libpcl_transport_socket.a" ]]; then
-    echo "[driver] Preparing GNAT-compatible PCL static archives..."
-    "$WORKSPACE_ROOT/subprojects/PCL/scripts/build_gnat_pcl_static_libs.sh" "$ADA_PCL_LIB_DIR" || {
-      echo "[driver] SKIP: unable to build GNAT-compatible PCL static archives"
-      exit 0
-    }
-  fi
+  echo "[driver] Refreshing GNAT-compatible PCL static archives..."
+  "$WORKSPACE_ROOT/subprojects/PCL/scripts/build_gnat_pcl_static_libs.sh" "$ADA_PCL_LIB_DIR" --force || {
+    echo "[driver] SKIP: unable to build GNAT-compatible PCL static archives"
+    exit 0
+  }
 
   (cd "$PYRAMID_ROOT/examples/ada" && \
     MUJIN_ROOT="$WORKSPACE_ROOT" gprbuild -P ada_active_find_e2e.gpr -q \

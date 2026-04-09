@@ -116,8 +116,7 @@ static bool decode_frontend_payload(const pcl_msg_t* msg, std::string& payload) 
 
   try {
     const auto* bytes = static_cast<const char*>(msg->data);
-    if ((msg->size >= 4 && std::memcmp(bytes, "PWFB", 4) == 0)
-        || is_flatbuffers_content_type(msg->type_name)) {
+    if (is_flatbuffers_content_type(msg->type_name)) {
       payload = flatbuffers_codec::unwrapPayload(msg->data, msg->size);
     } else {
       payload.assign(bytes, msg->size);
@@ -438,18 +437,19 @@ static pcl_status_t frontend_create_requirement(pcl_container_t*,
 // ---------------------------------------------------------------------------
 
 static pcl_status_t frontend_on_configure(pcl_container_t* c, void*) {
+  const char* frontend_type = g_bridge.frontend_content_type.c_str();
   pcl_container_add_subscriber(c, "standard.object_evidence",
-                               kJsonContentType,
+                               frontend_type,
                                frontend_object_evidence_cb, nullptr);
   pcl_container_add_service(c, "object_of_interest.create_requirement",
-                            kJsonContentType,
+                            frontend_type,
                             frontend_create_requirement, nullptr);
   g_bridge.pub_entity_matches =
       pcl_container_add_publisher(c, "standard.entity_matches",
-                                  kJsonContentType);
+                                  frontend_type);
   g_bridge.pub_evidence_reqs =
       pcl_container_add_publisher(c, "standard.evidence_requirements",
-                                  kJsonContentType);
+                                  frontend_type);
   return PCL_OK;
 }
 
