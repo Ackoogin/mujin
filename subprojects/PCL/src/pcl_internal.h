@@ -94,6 +94,7 @@ typedef struct pcl_resp_cb_node_t {
   void*                       user_data;
   void*                       data;
   uint32_t                    size;
+  char*                       type_name;
   struct pcl_resp_cb_node_t*  next;
 } pcl_resp_cb_node_t;
 

@@ -54,7 +54,7 @@ std::string serializeEvidence(const wire_types::ObjectEvidence& ev,
     if (std::strcmp(content_type, "application/json") == 0)
         return json_codec::toJson(ev);
     if (std::strcmp(content_type, "application/flatbuffers") == 0)
-        return flatbuffers_codec::wrapPayload(json_codec::toJson(ev));
+        return flatbuffers_codec::toBinary(ev);
     return {};
 }
 
@@ -69,8 +69,7 @@ bool deserializeEvidence(const void* data,
             return true;
         }
         if (std::strcmp(content_type, "application/flatbuffers") == 0) {
-            out = json_codec::objectEvidenceFromJson(
-                flatbuffers_codec::unwrapPayload(data, size));
+            out = flatbuffers_codec::fromBinaryObjectEvidence(data, size);
             return true;
         }
     } catch (...) {
@@ -213,7 +212,7 @@ TEST(CodecDispatchE2E, ContentTypePropagation) {
     pcl_executor_add(exec, sub_c);
 
     auto ev = makeTestEvidence();
-    auto payload = flatbuffers_codec::wrapPayload(json_codec::toJson(ev));
+    auto payload = flatbuffers_codec::toBinary(ev);
     pcl_status_t rc = cons::publishObjectEvidence(
         state.pub_port, payload, "application/flatbuffers");
     ASSERT_EQ(rc, PCL_OK);
@@ -293,7 +292,7 @@ TEST(CodecDispatchE2E, TwoCodecsTwoPorts) {
         pcl_port_publish(state.json_pub, &msg);
     }
     {
-        auto payload = flatbuffers_codec::wrapPayload(json_codec::toJson(ev));
+        auto payload = flatbuffers_codec::toBinary(ev);
         pcl_msg_t msg{};
         msg.data = payload.data();
         msg.size = static_cast<uint32_t>(payload.size());
@@ -368,8 +367,7 @@ TEST(CodecDispatchE2E, ExplicitCodecFlatBuffers) {
     match.object_id = "obj-1";
     match.identity = types::StandardIdentity::Hostile;
     wire_types::EntityMatchArray matches{match};
-    auto payload = flatbuffers_codec::wrapPayload(
-        "[" + json_codec::toJson(match) + "]");
+    auto payload = flatbuffers_codec::toBinary(matches);
     pcl_msg_t msg{};
     msg.data = payload.data();
     msg.size = static_cast<uint32_t>(payload.size());
@@ -460,7 +458,7 @@ TEST(CodecDispatchE2E, FlatBuffersCreateRequirementDispatchRoundTrip) {
     req.min_lon_rad = 0.3;
     req.max_lon_rad = 0.4;
 
-    auto payload = flatbuffers_codec::wrapPayload(json_codec::toJson(req));
+    auto payload = flatbuffers_codec::toBinary(req);
     void* resp_buf = nullptr;
     size_t resp_size = 0;
     prov::dispatch(handler, prov::ServiceChannel::CreateRequirement,
@@ -468,8 +466,8 @@ TEST(CodecDispatchE2E, FlatBuffersCreateRequirementDispatchRoundTrip) {
                    "application/flatbuffers", &resp_buf, &resp_size);
 
     ASSERT_NE(resp_buf, nullptr);
-    auto resp = json_codec::createRequirementResponseFromJson(
-        flatbuffers_codec::unwrapPayload(resp_buf, resp_size));
+    auto resp = flatbuffers_codec::fromBinaryCreateRequirementResponse(
+        resp_buf, resp_size);
     EXPECT_EQ(handler.captured_req.policy, types::DataPolicy::Query);
     ASSERT_EQ(handler.captured_req.dimension.size(), 1u);
     EXPECT_EQ(handler.captured_req.dimension[0], types::BattleDimension::SeaSurface);

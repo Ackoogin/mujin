@@ -5,6 +5,9 @@
 
 #include "pyramid_services_tactical_objects_wire_types.hpp"
 
+#include "pyramid_services_tactical_objects_generated.h"
+
+#include <flatbuffers/flatbuffers.h>
 #include <cstddef>
 #include <string>
 #include <vector>

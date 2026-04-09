@@ -142,6 +142,19 @@ pcl_status_t pcl_executor_post_response_cb(pcl_executor_t*  e,
                                            const void*      data,
                                            uint32_t         size);
 
+/// \brief Enqueue a full response message for delivery on the executor thread.
+///
+/// Like \ref pcl_executor_post_response_cb, but preserves \p msg->type_name so
+/// async service clients can dispatch on transport-level content type.
+///
+/// \param cb         Callback matching pcl_resp_cb_fn_t.
+/// \param user_data  Passed through to \p cb.
+/// \param msg        Response message to deep-copy (may have NULL data/type_name).
+pcl_status_t pcl_executor_post_response_msg(pcl_executor_t*  e,
+                                            pcl_resp_cb_fn_t cb,
+                                            void*            user_data,
+                                            const pcl_msg_t* msg);
+
 #ifdef __cplusplus
 }
 #endif

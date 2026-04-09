@@ -927,7 +927,10 @@ class CppServiceGenerator:
                             f.write('    std::string payload = toJson(request);\n')
                         f.write('    if (is_flatbuffers_content_type(content_type)) {\n')
                         f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
-                        f.write('        payload = flatbuffers_codec::wrapPayload(payload);\n')
+                        if req_decl_t.startswith('wire_types::'):
+                            f.write('        payload = flatbuffers_codec::toBinary(request);\n')
+                        else:
+                            f.write('        payload = flatbuffers_codec::wrapPayload(payload);\n')
                         f.write('#else\n')
                         f.write('        return PCL_ERR_INVALID;\n')
                         f.write('#endif\n')
@@ -961,7 +964,7 @@ class CppServiceGenerator:
                             f.write('    std::string wire_payload = json_codec::toJson(payload);\n')
                             f.write('    if (is_flatbuffers_content_type(content_type)) {\n')
                             f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
-                            f.write('        wire_payload = flatbuffers_codec::wrapPayload(wire_payload);\n')
+                            f.write('        wire_payload = flatbuffers_codec::toBinary(payload);\n')
                             f.write('#else\n')
                             f.write('        return PCL_ERR_INVALID;\n')
                             f.write('#endif\n')
@@ -999,6 +1002,7 @@ class CppServiceGenerator:
             f.write('{\n')
             f.write('    std::string req_str;\n')
             f.write('    std::string rsp_payload;\n\n')
+            f.write('    bool rsp_is_binary = false;\n\n')
             f.write('    if (is_json_content_type(content_type)) {\n')
             f.write('        req_str = json_request_body(request_buf, request_size);\n')
             f.write('        if (request_size != 0 && req_str.empty()) {\n')
@@ -1038,10 +1042,14 @@ class CppServiceGenerator:
                 f.write(f'    case ServiceChannel::{enum_val}: {{\n')
                 # Deserialize request
                 if wire_req_t == 'CreateRequirementRequest':
-                    f.write('        auto wire_req = json_codec::createRequirementRequestFromJson(req_str);\n')
+                    f.write('        auto wire_req = is_flatbuffers_content_type(content_type)\n')
+                    f.write('            ? flatbuffers_codec::fromBinaryCreateRequirementRequest(request_buf, request_size)\n')
+                    f.write('            : json_codec::createRequirementRequestFromJson(req_str);\n')
                     f.write('        auto req = to_domain_create_requirement_request(wire_req);\n')
                 elif wire_req_t == 'EvidenceRequirement':
-                    f.write('        auto wire_req = json_codec::evidenceRequirementFromJson(req_str);\n')
+                    f.write('        auto wire_req = is_flatbuffers_content_type(content_type)\n')
+                    f.write('            ? flatbuffers_codec::fromBinaryEvidenceRequirement(request_buf, request_size)\n')
+                    f.write('            : json_codec::evidenceRequirementFromJson(req_str);\n')
                     f.write('        auto req = to_domain_evidence_requirement(wire_req);\n')
                 elif req_t == 'Identifier':
                     f.write('        auto& req = req_str;\n')
@@ -1054,7 +1062,12 @@ class CppServiceGenerator:
                 if wire_rsp_t == 'CreateRequirementResponse':
                     f.write('        {\n')
                     f.write('            auto wire_rsp = to_wire_create_requirement_response(rsp);\n')
-                    f.write('            rsp_payload = json_codec::toJson(wire_rsp);\n')
+                    f.write('            if (is_flatbuffers_content_type(content_type)) {\n')
+                    f.write('                rsp_payload = flatbuffers_codec::toBinary(wire_rsp);\n')
+                    f.write('                rsp_is_binary = true;\n')
+                    f.write('            } else {\n')
+                    f.write('                rsp_payload = json_codec::toJson(wire_rsp);\n')
+                    f.write('            }\n')
                     f.write('        }\n')
                 elif rsp_t.startswith('std::vector<'):
                     # Extract inner type
@@ -1084,7 +1097,9 @@ class CppServiceGenerator:
 
             f.write('    if (is_flatbuffers_content_type(content_type)) {\n')
             f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
-            f.write('        rsp_payload = flatbuffers_codec::wrapPayload(rsp_payload);\n')
+            f.write('        if (!rsp_is_binary) {\n')
+            f.write('            rsp_payload = flatbuffers_codec::wrapPayload(rsp_payload);\n')
+            f.write('        }\n')
             f.write('#else\n')
             f.write('        *response_buf = nullptr;\n')
             f.write('        *response_size = 0;\n')
@@ -1133,7 +1148,6 @@ class CppWireTypesGenerator:
             f.write('#include <string>\n')
             f.write('#include <vector>\n\n')
             f.write(f'namespace {self.NS} {{\n\n')
-            f.write(f'using namespace {self.TYPES_NS};\n\n')
             f.write(_SEP + '\n')
             f.write('// Wire message structs\n')
             f.write(_SEP + '\n\n')
@@ -1144,7 +1158,12 @@ class CppWireTypesGenerator:
                     comment = f'  // {fld.description}' if fld.description else ''
                     opt_tag = '' if fld.required else '  // optional'
                     tag = comment or opt_tag
-                    f.write(f'    {fld.cpp_type} {fld.name} = {fld.cpp_default};{tag}\n')
+                    cpp_type = fld.cpp_type
+                    cpp_default = fld.cpp_default
+                    if fld.kind in schema.ENUM_SPECS:
+                        cpp_type = f'pyramid::data_model::{cpp_type}'
+                        cpp_default = f'pyramid::data_model::{fld.cpp_default}'
+                    f.write(f'    {cpp_type} {fld.name} = {cpp_default};{tag}\n')
                 f.write('};\n\n')
             f.write('using EntityMatchArray = std::vector<EntityMatch>;\n\n')
             f.write(f'}} // namespace {self.NS}\n')

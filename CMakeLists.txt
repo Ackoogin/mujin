@@ -123,6 +123,17 @@ set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+FetchContent_Declare(
+    flatbuffers
+    GIT_REPOSITORY https://github.com/google/flatbuffers.git
+    GIT_TAG        v24.3.25
+    GIT_SHALLOW    TRUE
+)
+set(FLATBUFFERS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(FLATBUFFERS_BUILD_FLATLIB OFF CACHE BOOL "" FORCE)
+set(FLATBUFFERS_INSTALL OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(flatbuffers)
+
 option(AME_BUILD_PYTHON "Build Python bindings for ame_core" OFF)
 if(AME_BUILD_PYTHON)
     find_package(Python3 REQUIRED COMPONENTS Interpreter Development)

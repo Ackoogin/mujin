@@ -282,6 +282,7 @@ void pcl_executor_destroy(pcl_executor_t* e) {
     while (node) {
       pcl_resp_cb_node_t* next = node->next;
       free(node->data);
+      free(node->type_name);
       free(node);
       node = next;
     }
@@ -375,11 +376,12 @@ static void drain_resp_cb_queue(pcl_executor_t* e) {
     memset(&resp, 0, sizeof(resp));
     resp.data      = node->data;
     resp.size      = node->size;
-    resp.type_name = NULL;
+    resp.type_name = node->type_name;
 
     node->cb(&resp, node->user_data);
 
     free(node->data);
+    free(node->type_name);
     free(node);
   }
 }
@@ -932,24 +934,46 @@ pcl_status_t pcl_executor_post_response_cb(pcl_executor_t*  e,
                                            void*            user_data,
                                            const void*      data,
                                            uint32_t         size) {
+  pcl_msg_t msg;
+
+  memset(&msg, 0, sizeof(msg));
+  msg.data = data;
+  msg.size = size;
+  msg.type_name = NULL;
+  return pcl_executor_post_response_msg(e, cb, user_data, &msg);
+}
+
+pcl_status_t pcl_executor_post_response_msg(pcl_executor_t*  e,
+                                            pcl_resp_cb_fn_t cb,
+                                            void*            user_data,
+                                            const pcl_msg_t* msg) {
   pcl_resp_cb_node_t* node;
 
-  if (!e || !cb) return PCL_ERR_INVALID;
+  if (!e || !cb || !msg) return PCL_ERR_INVALID;
 
   node = (pcl_resp_cb_node_t*)calloc(1, sizeof(*node));
   if (!node) return PCL_ERR_NOMEM;
 
   node->cb        = cb;
   node->user_data = user_data;
-  node->size      = size;
+  node->size      = msg->size;
 
-  if (size > 0u && data) {
-    node->data = malloc(size);
+  if (msg->size > 0u && msg->data) {
+    node->data = malloc(msg->size);
     if (!node->data) {
       free(node);
       return PCL_ERR_NOMEM;
     }
-    memcpy(node->data, data, size);
+    memcpy(node->data, msg->data, msg->size);
+  }
+
+  if (msg->type_name) {
+    node->type_name = pcl_strdup_local(msg->type_name);
+    if (!node->type_name) {
+      free(node->data);
+      free(node);
+      return PCL_ERR_NOMEM;
+    }
   }
 
   pcl_mutex_lock(&e->resp_cb_lock);

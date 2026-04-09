@@ -161,7 +161,7 @@ pcl_status_t publishObjectEvidence(pcl_port_t*        publisher,
     std::string wire_payload = json_codec::toJson(payload);
     if (is_flatbuffers_content_type(content_type)) {
 #if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        wire_payload = flatbuffers_codec::wrapPayload(wire_payload);
+        wire_payload = flatbuffers_codec::toBinary(payload);
 #else
         return PCL_ERR_INVALID;
 #endif
@@ -196,6 +196,8 @@ void dispatch(ServiceHandler& handler,
 {
     std::string req_str;
     std::string rsp_payload;
+
+    bool rsp_is_binary = false;
 
     if (is_json_content_type(content_type)) {
         req_str = json_request_body(request_buf, request_size);
@@ -237,12 +239,19 @@ void dispatch(ServiceHandler& handler,
         break;
     }
     case ServiceChannel::CreateRequirement: {
-        auto wire_req = json_codec::evidenceRequirementFromJson(req_str);
+        auto wire_req = is_flatbuffers_content_type(content_type)
+            ? flatbuffers_codec::fromBinaryEvidenceRequirement(request_buf, request_size)
+            : json_codec::evidenceRequirementFromJson(req_str);
         auto req = to_domain_evidence_requirement(wire_req);
         auto rsp = handler.handleCreateRequirement(req);
         {
             auto wire_rsp = to_wire_create_requirement_response(rsp);
-            rsp_payload = json_codec::toJson(wire_rsp);
+            if (is_flatbuffers_content_type(content_type)) {
+                rsp_payload = flatbuffers_codec::toBinary(wire_rsp);
+                rsp_is_binary = true;
+            } else {
+                rsp_payload = json_codec::toJson(wire_rsp);
+            }
         }
         break;
     }
@@ -258,7 +267,9 @@ void dispatch(ServiceHandler& handler,
         break;
     }
     case ServiceChannel::UpdateRequirement: {
-        auto wire_req = json_codec::evidenceRequirementFromJson(req_str);
+        auto wire_req = is_flatbuffers_content_type(content_type)
+            ? flatbuffers_codec::fromBinaryEvidenceRequirement(request_buf, request_size)
+            : json_codec::evidenceRequirementFromJson(req_str);
         auto req = to_domain_evidence_requirement(wire_req);
         auto rsp = handler.handleUpdateRequirement(req);
         rsp_payload = toJson(rsp);
@@ -285,7 +296,9 @@ void dispatch(ServiceHandler& handler,
 
     if (is_flatbuffers_content_type(content_type)) {
 #if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        rsp_payload = flatbuffers_codec::wrapPayload(rsp_payload);
+        if (!rsp_is_binary) {
+            rsp_payload = flatbuffers_codec::wrapPayload(rsp_payload);
+        }
 #else
         *response_buf = nullptr;
         *response_size = 0;

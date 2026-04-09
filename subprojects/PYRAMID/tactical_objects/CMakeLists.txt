@@ -78,6 +78,7 @@ target_link_libraries(tactical_objects_app
         tactical_objects
         tactical_objects_component
         pcl_transport_socket
+        pyramid_flatbuffers_support
 )
 
 target_include_directories(tactical_objects_app
@@ -92,6 +93,7 @@ target_link_libraries(tactical_objects_test_client
         pcl_core
         pcl_transport_socket
         nlohmann_json::nlohmann_json
+        pyramid_flatbuffers_support
 )
 
 target_include_directories(tactical_objects_test_client

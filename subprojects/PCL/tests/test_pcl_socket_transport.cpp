@@ -413,6 +413,7 @@ TEST(PclSocketTransport, AsyncRemoteServiceRoundTrip) {
   // Register a service on the server side.
   struct SvcState {
     bool invoked = false;
+    std::string request_type_name;
   } svc_state;
 
   pcl_callbacks_t svc_cbs = {};
@@ -423,9 +424,13 @@ TEST(PclSocketTransport, AsyncRemoteServiceRoundTrip) {
            pcl_msg_t* resp, pcl_svc_context_t*, void* ud2) -> pcl_status_t {
           auto* s = static_cast<SvcState*>(ud2);
           s->invoked = true;
+          if (req->type_name) {
+            s->request_type_name = req->type_name;
+          }
           // Echo the request back as response.
           resp->data = req->data;
           resp->size = req->size;
+          resp->type_name = "application/flatbuffers";
           return PCL_OK;
         }, ud);
     pcl_port_set_route(port, PCL_ROUTE_REMOTE, peers, 1);
@@ -449,13 +454,14 @@ TEST(PclSocketTransport, AsyncRemoteServiceRoundTrip) {
   struct RespState {
     std::atomic<bool> received{false};
     std::string payload;
+    std::string type_name;
   } resp_state;
 
   const char* req_data = "ping";
   pcl_msg_t req = {};
   req.data = req_data;
   req.size = static_cast<uint32_t>(strlen(req_data));
-  req.type_name = "EchoReq";
+  req.type_name = "application/flatbuffers";
 
   const char* remote_peers[] = {"server"};
   pcl_endpoint_route_t route = {};
@@ -473,6 +479,9 @@ TEST(PclSocketTransport, AsyncRemoteServiceRoundTrip) {
         if (resp && resp->data && resp->size > 0) {
           s->payload.assign(static_cast<const char*>(resp->data), resp->size);
         }
+        if (resp && resp->type_name) {
+          s->type_name = resp->type_name;
+        }
         s->received = true;
       },
       &resp_state);
@@ -486,8 +495,10 @@ TEST(PclSocketTransport, AsyncRemoteServiceRoundTrip) {
   }
 
   EXPECT_TRUE(svc_state.invoked) << "Server service handler was not invoked";
+  EXPECT_EQ(svc_state.request_type_name, "application/flatbuffers");
   EXPECT_TRUE(resp_state.received) << "Client did not receive the response";
   EXPECT_EQ(resp_state.payload, "ping");
+  EXPECT_EQ(resp_state.type_name, "application/flatbuffers");
 
   pcl_executor_remove(pair.server_exec, gw);
   pcl_executor_remove(pair.server_exec, svc_c);

@@ -7,11 +7,10 @@ Generates:
   2. C++ wrapper headers for proto-native flatbuffer artefacts
   3. Tactical service-wire FlatBuffers codec artefacts from json_schema.py
 
-The proto-native wrappers are still thin surfaces over `flatc` artefacts.
-For service wire types we generate a self-contained binary codec today so the
-service-binding runtime can dispatch cleanly without adding a new build-time
-FlatBuffers dependency midstream.  The generated `.fbs` schema remains the
-canonical target layout for a future `flatc`-driven implementation.
+Service-wire codecs are generated against real `flatc` output.  The service
+runtime still exposes a generic `wrapPayload` / `unwrapPayload` surface for
+domain-shaped RPCs, but that wrapper is itself a proper FlatBuffers table
+(`JsonPayload`) rather than the old ad hoc "PWFB" prefix envelope.
 """
 
 from pathlib import Path
@@ -37,6 +36,7 @@ _TACTICAL_SERVICE_PACKAGES = frozenset({
 
 _SERVICE_FILE_BASE = 'pyramid_services_tactical_objects'
 _SERVICE_WIRE_HEADER = 'pyramid_services_tactical_objects_wire_types.hpp'
+_SERVICE_GENERATED_HEADER = _SERVICE_FILE_BASE + '_generated.h'
 _SERVICE_CODEC_NS = 'pyramid::services::tactical_objects::flatbuffers_codec'
 _SERVICE_ADA_CODEC_PKG = 'Pyramid.Services.Tactical_Objects.Flatbuffers_Codec'
 _SERVICE_ADA_CODEC_FILE = 'pyramid-services-tactical_objects-flatbuffers_codec'
@@ -296,6 +296,10 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                     f.write(f'  items:[{schema_def.cpp_name}];\n')
                     f.write('}\n\n')
 
+            f.write('table JsonPayload {\n')
+            f.write('  payload:string;\n')
+            f.write('}\n')
+
     def _write_service_cpp_header(self, path: Path):
         with open(path, 'w', encoding='utf-8') as f:
             f.write('// Auto-generated tactical service FlatBuffers codec\n')
@@ -303,6 +307,8 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write('// Generated from pim/json_schema.py\n')
             f.write('#pragma once\n\n')
             f.write(f'#include "{_SERVICE_WIRE_HEADER}"\n\n')
+            f.write(f'#include "{_SERVICE_GENERATED_HEADER}"\n\n')
+            f.write('#include <flatbuffers/flatbuffers.h>\n')
             f.write('#include <cstddef>\n')
             f.write('#include <string>\n')
             f.write('#include <vector>\n\n')
@@ -336,176 +342,128 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
         with open(path, 'w', encoding='utf-8') as f:
             f.write('// Auto-generated tactical service FlatBuffers codec\n')
             f.write(f'#include "{_SERVICE_FILE_BASE}_flatbuffers_codec.hpp"\n\n')
-            f.write('#include <cstdint>\n')
-            f.write('#include <cstring>\n')
+            f.write('#include <memory>\n')
             f.write('#include <stdexcept>\n')
             f.write('#include <utility>\n\n')
             f.write(f'namespace {_SERVICE_CODEC_NS} {{\n\n')
+            f.write('namespace fbs = pyramid::services::tactical_objects;\n\n')
             f.write('namespace {\n\n')
-            f.write('constexpr std::uint32_t kMagic = 0x42465750u;  // "PWFB"\n\n')
-            f.write('enum class MessageTag : std::uint32_t {\n')
-            f.write('    PayloadEnvelope = 0,\n')
-            tag_id = 1
-            for schema_def in service_schema.ALL_SCHEMAS:
-                f.write(f'    {schema_def.cpp_name} = {tag_id},\n')
-                tag_id += 1
-                if schema_def.is_array_response:
-                    f.write(f'    {schema_def.cpp_name}Array = {tag_id},\n')
-                    tag_id += 1
-            f.write('};\n\n')
-
-            f.write('struct Writer {\n')
-            f.write('    std::string data;\n\n')
-            f.write('    void raw(const void* ptr, size_t size) {\n')
-            f.write('        data.append(static_cast<const char*>(ptr), size);\n')
-            f.write('    }\n\n')
-            f.write('    void u8(bool value) {\n')
-            f.write('        const std::uint8_t raw_value = value ? 1u : 0u;\n')
-            f.write('        raw(&raw_value, sizeof(raw_value));\n')
-            f.write('    }\n\n')
-            f.write('    void u32(std::uint32_t value) { raw(&value, sizeof(value)); }\n')
-            f.write('    void i32(std::int32_t value) { raw(&value, sizeof(value)); }\n')
-            f.write('    void f64(double value) { raw(&value, sizeof(value)); }\n\n')
-            f.write('    void str(const std::string& value) {\n')
-            f.write('        u32(static_cast<std::uint32_t>(value.size()));\n')
-            f.write('        raw(value.data(), value.size());\n')
-            f.write('    }\n')
-            f.write('};\n\n')
-
-            f.write('struct Reader {\n')
-            f.write('    const char* data = nullptr;\n')
-            f.write('    size_t size = 0;\n')
-            f.write('    size_t offset = 0;\n\n')
-            f.write('    bool raw(void* dst, size_t n) {\n')
-            f.write('        if (offset + n > size) return false;\n')
-            f.write('        std::memcpy(dst, data + offset, n);\n')
-            f.write('        offset += n;\n')
-            f.write('        return true;\n')
-            f.write('    }\n\n')
-            f.write('    bool u8(bool& value) {\n')
-            f.write('        std::uint8_t raw_value = 0;\n')
-            f.write('        if (!raw(&raw_value, sizeof(raw_value))) return false;\n')
-            f.write('        value = raw_value != 0;\n')
-            f.write('        return true;\n')
-            f.write('    }\n\n')
-            f.write('    bool u32(std::uint32_t& value) { return raw(&value, sizeof(value)); }\n')
-            f.write('    bool i32(std::int32_t& value) { return raw(&value, sizeof(value)); }\n')
-            f.write('    bool f64(double& value) { return raw(&value, sizeof(value)); }\n\n')
-            f.write('    bool str(std::string& value) {\n')
-            f.write('        std::uint32_t len = 0;\n')
-            f.write('        if (!u32(len)) return false;\n')
-            f.write('        if (offset + len > size) return false;\n')
-            f.write('        value.assign(data + offset, len);\n')
-            f.write('        offset += len;\n')
-            f.write('        return true;\n')
-            f.write('    }\n')
-            f.write('};\n\n')
-
-            f.write('void beginMessage(Writer& w, MessageTag tag) {\n')
-            f.write('    w.u32(kMagic);\n')
-            f.write('    w.u32(static_cast<std::uint32_t>(tag));\n')
-            f.write('}\n\n')
-
-            f.write('bool beginMessage(Reader& r, MessageTag expected) {\n')
-            f.write('    std::uint32_t magic = 0;\n')
-            f.write('    std::uint32_t tag = 0;\n')
-            f.write('    return r.u32(magic) && r.u32(tag)\n')
-            f.write('        && magic == kMagic\n')
-            f.write('        && tag == static_cast<std::uint32_t>(expected);\n')
+            f.write('template <typename OffsetT>\n')
+            f.write('std::string finish_buffer(flatbuffers::FlatBufferBuilder& builder, OffsetT root) {\n')
+            f.write('    builder.Finish(root);\n')
+            f.write('    return std::string(\n')
+            f.write('        reinterpret_cast<const char*>(builder.GetBufferPointer()),\n')
+            f.write('        builder.GetSize());\n')
             f.write('}\n\n')
 
             for schema_def in service_schema.ALL_SCHEMAS:
                 cpp_name = schema_def.cpp_name
-                f.write(f'void encode{cpp_name}(Writer& w, const wire_types::{cpp_name}& msg) {{\n')
+                f.write(f'fbs::{cpp_name}T to_fb(const wire_types::{cpp_name}& msg) {{\n')
+                f.write(f'    fbs::{cpp_name}T out{{}};\n')
                 for field in schema_def.fields:
-                    f.write(f'    {_service_encode_stmt(field)}\n')
+                    if field.kind in service_schema.ENUM_SPECS:
+                        f.write(f'    out.{field.name} = static_cast<fbs::{field.cpp_type}>(msg.{field.name});\n')
+                    else:
+                        f.write(f'    out.{field.name} = msg.{field.name};\n')
+                f.write('    return out;\n')
                 f.write('}\n\n')
 
-                f.write(f'bool decode{cpp_name}(Reader& r, wire_types::{cpp_name}& msg) {{\n')
-                f.write('    std::int32_t tmp_i32 = 0;\n')
+                f.write(f'wire_types::{cpp_name} from_fb(const fbs::{cpp_name}T& msg) {{\n')
+                f.write(f'    wire_types::{cpp_name} out{{}};\n')
                 for field in schema_def.fields:
-                    stmt = _service_decode_stmt(field).splitlines()
-                    for line in stmt:
-                        f.write(f'    {line}\n')
-                f.write('    return true;\n')
+                    if field.kind in service_schema.ENUM_SPECS:
+                        f.write(f'    out.{field.name} = static_cast<pyramid::data_model::{field.cpp_type}>(msg.{field.name});\n')
+                    else:
+                        f.write(f'    out.{field.name} = msg.{field.name};\n')
+                f.write('    return out;\n')
                 f.write('}\n\n')
 
                 if schema_def.is_array_response:
                     alias_name = cpp_name + 'Array'
-                    f.write(f'void encode{alias_name}(Writer& w, const wire_types::{alias_name}& msg) {{\n')
-                    f.write('    w.u32(static_cast<std::uint32_t>(msg.size()));\n')
+                    holder_name = cpp_name + 'ArrayHolder'
+                    f.write(f'fbs::{holder_name}T to_fb(const wire_types::{alias_name}& msg) {{\n')
+                    f.write(f'    fbs::{holder_name}T out{{}};\n')
+                    f.write('    out.items.reserve(msg.size());\n')
                     f.write('    for (const auto& item : msg) {\n')
-                    f.write(f'        encode{cpp_name}(w, item);\n')
+                    f.write(f'        out.items.emplace_back(std::make_unique<fbs::{cpp_name}T>(to_fb(item)));\n')
                     f.write('    }\n')
+                    f.write('    return out;\n')
                     f.write('}\n\n')
 
-                    f.write(f'bool decode{alias_name}(Reader& r, wire_types::{alias_name}& msg) {{\n')
-                    f.write('    std::uint32_t count = 0;\n')
-                    f.write('    if (!r.u32(count)) return false;\n')
-                    f.write('    msg.clear();\n')
-                    f.write('    msg.reserve(count);\n')
-                    f.write('    for (std::uint32_t i = 0; i < count; ++i) {\n')
-                    f.write(f'        wire_types::{cpp_name} item{{}};\n')
-                    f.write(f'        if (!decode{cpp_name}(r, item)) return false;\n')
-                    f.write('        msg.push_back(std::move(item));\n')
+                    f.write(f'wire_types::{alias_name} from_fb(const fbs::{holder_name}T& msg) {{\n')
+                    f.write(f'    wire_types::{alias_name} out{{}};\n')
+                    f.write('    out.reserve(msg.items.size());\n')
+                    f.write('    for (const auto& item : msg.items) {\n')
+                    f.write('        if (item) {\n')
+                    f.write('            out.push_back(from_fb(*item));\n')
+                    f.write('        }\n')
                     f.write('    }\n')
-                    f.write('    return true;\n')
+                    f.write('    return out;\n')
                     f.write('}\n\n')
 
-            f.write('template <typename T>\n')
-            f.write('T finishRead(const void* data, size_t size, MessageTag expected,\n')
-            f.write('             bool (*decode_fn)(Reader&, T&)) {\n')
-            f.write('    Reader r{static_cast<const char*>(data), size, 0};\n')
-            f.write('    if (!beginMessage(r, expected))\n')
-            f.write('        throw std::runtime_error("invalid flatbuffers payload header");\n')
-            f.write('    T msg{};\n')
-            f.write('    if (!decode_fn(r, msg) || r.offset != r.size)\n')
-            f.write('        throw std::runtime_error("invalid flatbuffers payload body");\n')
-            f.write('    return msg;\n')
-            f.write('}\n\n')
             f.write('} // namespace\n\n')
 
             f.write('std::string wrapPayload(const std::string& payload) {\n')
-            f.write('    return std::string("PWFB", 4) + payload;\n')
+            f.write('    flatbuffers::FlatBufferBuilder builder(\n')
+            f.write('        static_cast<uint32_t>(payload.size() + 64u));\n')
+            f.write('    auto payload_offset = builder.CreateString(payload);\n')
+            f.write('    fbs::JsonPayloadBuilder root(builder);\n')
+            f.write('    root.add_payload(payload_offset);\n')
+            f.write('    return finish_buffer(builder, root.Finish());\n')
             f.write('}\n\n')
 
             f.write('std::string unwrapPayload(const void* data, size_t size) {\n')
             f.write('    if (data == nullptr || size == 0) {\n')
             f.write('        return {};\n')
             f.write('    }\n')
-            f.write('    const auto* bytes = static_cast<const char*>(data);\n')
-            f.write('    if (size < 4 || std::memcmp(bytes, "PWFB", 4) != 0) {\n')
-            f.write('        throw std::runtime_error("invalid flatbuffers payload envelope");\n')
+            f.write('    auto* root = flatbuffers::GetRoot<fbs::JsonPayload>(data);\n')
+            f.write('    if (!root || !root->payload()) {\n')
+            f.write('        throw std::runtime_error("invalid JsonPayload flatbuffer");\n')
             f.write('    }\n')
-            f.write('    return std::string(bytes + 4, size - 4);\n')
+            f.write('    return root->payload()->str();\n')
             f.write('}\n\n')
 
             for schema_def in service_schema.ALL_SCHEMAS:
                 cpp_name = schema_def.cpp_name
                 f.write(f'std::string toBinary(const wire_types::{cpp_name}& msg) {{\n')
-                f.write('    Writer w;\n')
-                f.write(f'    beginMessage(w, MessageTag::{cpp_name});\n')
-                f.write(f'    encode{cpp_name}(w, msg);\n')
-                f.write('    return w.data;\n')
+                f.write('    flatbuffers::FlatBufferBuilder builder(256);\n')
+                f.write(f'    auto object = to_fb(msg);\n')
+                f.write(f'    return finish_buffer(builder, fbs::{cpp_name}::Pack(builder, &object));\n')
                 f.write('}\n\n')
 
                 f.write(f'wire_types::{cpp_name} fromBinary{cpp_name}(const void* data, size_t size) {{\n')
-                f.write(f'    return finishRead<wire_types::{cpp_name}>(data, size,\n')
-                f.write(f'        MessageTag::{cpp_name}, decode{cpp_name});\n')
+                f.write('    if (data == nullptr || size == 0) {\n')
+                f.write(f'        throw std::runtime_error("empty {cpp_name} flatbuffer");\n')
+                f.write('    }\n')
+                f.write(f'    auto* root = flatbuffers::GetRoot<fbs::{cpp_name}>(data);\n')
+                f.write('    if (!root) {\n')
+                f.write(f'        throw std::runtime_error("invalid {cpp_name} flatbuffer");\n')
+                f.write('    }\n')
+                f.write(f'    fbs::{cpp_name}T object{{}};\n')
+                f.write('    root->UnPackTo(&object);\n')
+                f.write('    return from_fb(object);\n')
                 f.write('}\n\n')
 
                 if schema_def.is_array_response:
                     alias_name = cpp_name + 'Array'
+                    holder_name = cpp_name + 'ArrayHolder'
                     f.write(f'std::string toBinary(const wire_types::{alias_name}& msg) {{\n')
-                    f.write('    Writer w;\n')
-                    f.write(f'    beginMessage(w, MessageTag::{alias_name});\n')
-                    f.write(f'    encode{alias_name}(w, msg);\n')
-                    f.write('    return w.data;\n')
+                    f.write('    flatbuffers::FlatBufferBuilder builder(256);\n')
+                    f.write('    auto object = to_fb(msg);\n')
+                    f.write(f'    return finish_buffer(builder, fbs::{holder_name}::Pack(builder, &object));\n')
                     f.write('}\n\n')
 
                     f.write(f'wire_types::{alias_name} fromBinary{alias_name}(const void* data, size_t size) {{\n')
-                    f.write(f'    return finishRead<wire_types::{alias_name}>(data, size,\n')
-                    f.write(f'        MessageTag::{alias_name}, decode{alias_name});\n')
+                    f.write('    if (data == nullptr || size == 0) {\n')
+                    f.write(f'        throw std::runtime_error("empty {alias_name} flatbuffer");\n')
+                    f.write('    }\n')
+                    f.write(f'    auto* root = flatbuffers::GetRoot<fbs::{holder_name}>(data);\n')
+                    f.write('    if (!root) {\n')
+                    f.write(f'        throw std::runtime_error("invalid {alias_name} flatbuffer");\n')
+                    f.write('    }\n')
+                    f.write(f'    fbs::{holder_name}T object{{}};\n')
+                    f.write('    root->UnPackTo(&object);\n')
+                    f.write('    return from_fb(object);\n')
                     f.write('}\n\n')
 
             f.write(f'}} // namespace {_SERVICE_CODEC_NS}\n')

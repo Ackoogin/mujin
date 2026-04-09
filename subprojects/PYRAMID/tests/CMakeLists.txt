@@ -106,7 +106,9 @@ add_executable(test_pcl_proto_bindings
     ${PROTO_BINDINGS_DIR}/pyramid_data_model_tactical_codec.cpp
 )
 target_link_libraries(test_pcl_proto_bindings PRIVATE
-    pcl_core pcl_transport_socket tactical_objects GTest::gtest_main
+    pcl_core pcl_transport_socket tactical_objects
+    pyramid_flatbuffers_support
+    GTest::gtest_main
 )
 target_include_directories(test_pcl_proto_bindings PRIVATE
     ${PROTO_BINDINGS_DIR}
@@ -128,7 +130,9 @@ add_executable(test_codec_dispatch_e2e
     ${PROTO_BINDINGS_DIR}/pyramid_data_model_tactical_codec.cpp
 )
 target_link_libraries(test_codec_dispatch_e2e PRIVATE
-    pcl_core pcl_transport_socket tactical_objects GTest::gtest_main
+    pcl_core pcl_transport_socket tactical_objects
+    pyramid_flatbuffers_support
+    GTest::gtest_main
 )
 target_include_directories(test_codec_dispatch_e2e PRIVATE
     ${PROTO_BINDINGS_DIR}
@@ -170,6 +174,7 @@ add_executable(standalone_bridge
 target_link_libraries(standalone_bridge PRIVATE
     tactical_objects tactical_objects_component
     pcl_core pcl_transport_socket
+    pyramid_flatbuffers_support
 )
 target_include_directories(standalone_bridge PRIVATE
     ${PCL_ROOT_DIR}/src

@@ -4,8 +4,9 @@
 /// Protocol: [4-byte length big-endian][payload]
 /// Payload type byte (first byte of payload):
 ///   Type 0: PUBLISH   - [0x00][topic_len:2][topic][type_len:2][type_name][data_len:4][data]
-///   Type 1: SVC_REQ   - [0x01][seq_id:4][svc_len:2][svc_name][req_len:4][req_data]
-///   Type 2: SVC_RESP  - [0x02][seq_id:4][resp_len:4][resp_data]
+///   Type 1: SVC_REQ   - [0x01][seq_id:4][svc_len:2][svc_name]
+///                          [type_len:2][type_name][req_len:4][req_data]
+///   Type 2: SVC_RESP  - [0x02][seq_id:4][type_len:2][type_name][resp_len:4][resp_data]
 ///
 /// Server: listens, accepts one client, recv_thread posts PUBLISH → post_incoming,
 ///   SVC_REQ → gateway container invokes service and enqueues SVC_RESP to send_thread.

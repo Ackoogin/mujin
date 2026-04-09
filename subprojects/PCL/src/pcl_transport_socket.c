@@ -320,10 +320,13 @@ static void gateway_sub_cb(pcl_container_t* c,
   struct pcl_socket_transport_t* ctx = (struct pcl_socket_transport_t*)user_data;
   const uint8_t* p;
   uint32_t seq_id, svc_len, req_len;
+  uint16_t req_type_len;
   char     svc_name[256];
+  char     req_type_name[256];
   pcl_msg_t req, resp;
   uint8_t   resp_buf[PCL_SOCKET_MAX_PAYLOAD];
   uint8_t*  frame;
+  uint16_t  resp_type_len;
   uint32_t  payload_size;
   size_t    off;
 
@@ -337,28 +340,52 @@ static void gateway_sub_cb(pcl_container_t* c,
   if (svc_len >= sizeof(svc_name)) return;
   memcpy(svc_name, p, svc_len);
   svc_name[svc_len] = '\0';                    p += svc_len;
+  req_type_len = read_u16_be(p);               p += 2;
+  if (req_type_len >= sizeof(req_type_name)) return;
+  if (req_type_len > 0u) {
+    memcpy(req_type_name, p, req_type_len);
+  }
+  req_type_name[req_type_len] = '\0';          p += req_type_len;
   req_len = read_u32_be(p);                    p += 4;
 
   memset(&req, 0, sizeof(req));
   req.data      = (req_len > 0u) ? (const void*)p : NULL;
   req.size      = req_len;
-  req.type_name = "SubscribeInterest_Request";
+  req.type_name = (req_type_len > 0u) ? req_type_name : NULL;
 
   memset(&resp, 0, sizeof(resp));
   resp.data      = resp_buf;
   resp.size      = (uint32_t)sizeof(resp_buf);
-  resp.type_name = "SubscribeInterest_Response";
+  resp.type_name = NULL;
 
   if (pcl_executor_invoke_service_remote(ctx->executor,
                                          ctx->peer_id,
                                          svc_name,
                                          &req,
                                          &resp) != PCL_OK) {
+    fprintf(stderr,
+            "[pcl_socket] gateway invoke failed peer=%s svc=%s req_type=%s req_size=%u\n",
+            ctx->peer_id,
+            svc_name,
+            req.type_name ? req.type_name : "(null)",
+            req.size);
     resp.size = 0;
+  } else {
+    fprintf(stderr,
+            "[pcl_socket] gateway invoke ok peer=%s svc=%s req_type=%s req_size=%u resp_type=%s resp_size=%u\n",
+            ctx->peer_id,
+            svc_name,
+            req.type_name ? req.type_name : "(null)",
+            req.size,
+            resp.type_name ? resp.type_name : "(null)",
+            resp.size);
   }
 
-  /* frame: [4:payload_size][1:type=SVC_RESP][4:seq_id][4:resp_size][resp_data] */
-  payload_size = 1u + 4u + 4u + resp.size;
+  resp_type_len = (uint16_t)(resp.type_name ? strlen(resp.type_name) : 0u);
+
+  /* frame: [4:payload_size][1:type=SVC_RESP][4:seq_id]
+            [2:type_len][type_name][4:resp_size][resp_data] */
+  payload_size = 1u + 4u + 2u + resp_type_len + 4u + resp.size;
   frame = (uint8_t*)malloc(4u + payload_size);
   if (!frame) return;
 
@@ -366,6 +393,11 @@ static void gateway_sub_cb(pcl_container_t* c,
   write_u32_be(frame + off, payload_size);      off += 4;
   frame[off++] = PCL_SOCKET_MSG_SVC_RESP;
   write_u32_be(frame + off, seq_id);            off += 4;
+  write_u16_be(frame + off, resp_type_len);     off += 2;
+  if (resp_type_len > 0u && resp.type_name) {
+    memcpy(frame + off, resp.type_name, resp_type_len);
+  }
+  off += resp_type_len;
   write_u32_be(frame + off, resp.size);         off += 4;
   if (resp.size > 0u && resp.data) {
     memcpy(frame + off, resp.data, resp.size);
@@ -467,36 +499,81 @@ static void* recv_thread_main(void* arg)
       free(payload);
 
     } else if (payload[0] == PCL_SOCKET_MSG_SVC_REQ && ctx->is_server) {
-      /* [0x01][4:seq_id][2:svc_len][svc_name][4:req_len][req_data]
-         Strip the type byte; forward [seq_id][svc_len][svc_name][req_len][req_data]
+      /* [0x01][4:seq_id][2:svc_len][svc_name][2:type_len][type_name][4:req_len][req_data]
+         Strip the type byte; forward
+         [seq_id][svc_len][svc_name][type_len][type_name][req_len][req_data]
          as the message body for the gateway's __pcl_svc_req subscriber. */
-      if (payload_len >= 1u + 4u + 2u + 4u) {
+      if (payload_len >= 1u + 4u + 2u + 2u + 4u) {
+        uint16_t  svc_len  = read_u16_be(payload + 5);
+        uint16_t  type_len = 0u;
         uint32_t  fwd_len = payload_len - 1u;
         uint8_t*  fwd     = (uint8_t*)malloc(fwd_len);
+        char*     type_s   = NULL;
+
+        if (payload_len >= 1u + 4u + 2u + svc_len + 2u) {
+          type_len = read_u16_be(payload + 7u + svc_len);
+          if (payload_len >= 1u + 4u + 2u + svc_len + 2u + type_len + 4u &&
+              type_len > 0u) {
+            type_s = (char*)malloc((size_t)type_len + 1u);
+            if (type_s) {
+              memcpy(type_s, payload + 9u + svc_len, type_len);
+              type_s[type_len] = '\0';
+            }
+          }
+        }
+
         if (fwd) {
           pcl_msg_t svc_msg;
+          uint32_t seq_id = read_u32_be(payload + 1u);
           memcpy(fwd, payload + 1, fwd_len);
           memset(&svc_msg, 0, sizeof(svc_msg));
           svc_msg.data      = fwd;
           svc_msg.size      = fwd_len;
-          svc_msg.type_name = "SubscribeInterest_Request";
+          svc_msg.type_name = type_s ? type_s : "pcl_socket_service_request";
+          fprintf(stderr,
+                  "[pcl_socket] recv SVC_REQ seq=%u peer=%s req_type=%s body_size=%u\n",
+                  seq_id,
+                  ctx->peer_id,
+                  svc_msg.type_name ? svc_msg.type_name : "(null)",
+                  svc_msg.size);
           pcl_executor_post_incoming(ctx->executor, PCL_SOCKET_TOPIC_SVC_REQ, &svc_msg);
           free(fwd);
         }
+        free(type_s);
       }
       free(payload);
 
     } else if (payload[0] == PCL_SOCKET_MSG_SVC_RESP && !ctx->is_server) {
-      /* [0x02][4:seq_id][4:resp_len][resp_data]
+      /* [0x02][4:seq_id][2:type_len][type_name][4:resp_len][resp_data]
          Match seq_id to a pending async call and deliver via post_response_cb. */
-      if (payload_len >= 1u + 4u + 4u) {
+      if (payload_len >= 1u + 4u + 2u + 4u) {
         uint32_t           seq_id    = read_u32_be(payload + 1);
-        uint32_t           resp_size = read_u32_be(payload + 5);
-        const void*        resp_data = (resp_size > 0u &&
-                                        payload_len >= 9u + resp_size)
-                                       ? (const void*)(payload + 9) : NULL;
+        uint16_t           type_len  = read_u16_be(payload + 5);
+        const char*        type_data = (const char*)(payload + 7);
+        uint32_t           resp_size;
+        const void*        resp_data;
+        char*              type_s    = NULL;
         pcl_svc_pending_t* pending   = NULL;
         pcl_svc_pending_t** pp;
+
+        if (payload_len < 1u + 4u + 2u + type_len + 4u) {
+          free(payload);
+          continue;
+        }
+        resp_size = read_u32_be(payload + 7u + type_len);
+        resp_data = (resp_size > 0u &&
+                     payload_len >= 11u + type_len + resp_size)
+                        ? (const void*)(payload + 11u + type_len)
+                        : NULL;
+        if (type_len > 0u) {
+          type_s = (char*)malloc((size_t)type_len + 1u);
+          if (!type_s) {
+            free(payload);
+            continue;
+          }
+          memcpy(type_s, type_data, type_len);
+          type_s[type_len] = '\0';
+        }
 
 #ifdef _WIN32
         EnterCriticalSection(&ctx->pending_lock);
@@ -517,13 +594,24 @@ static void* recv_thread_main(void* arg)
 #endif
 
         if (pending) {
-          pcl_executor_post_response_cb(ctx->executor,
-                                        pending->cb,
-                                        pending->user_data,
-                                        resp_data,
-                                        resp_size);
+          pcl_msg_t resp_msg;
+          memset(&resp_msg, 0, sizeof(resp_msg));
+          resp_msg.data = resp_data;
+          resp_msg.size = resp_size;
+          resp_msg.type_name = type_s;
+          fprintf(stderr,
+                  "[pcl_socket] recv SVC_RESP seq=%u peer=%s resp_type=%s resp_size=%u\n",
+                  seq_id,
+                  ctx->peer_id,
+                  resp_msg.type_name ? resp_msg.type_name : "(null)",
+                  resp_msg.size);
+          pcl_executor_post_response_msg(ctx->executor,
+                                         pending->cb,
+                                         pending->user_data,
+                                         &resp_msg);
           free(pending);
         }
+        free(type_s);
       }
       free(payload);
 
@@ -762,7 +850,7 @@ pcl_status_t pcl_socket_transport_invoke_remote_async(
 
   struct pcl_socket_transport_t* ctx = (struct pcl_socket_transport_t*)ctx_opaque;
   pcl_svc_pending_t* pending;
-  uint16_t  svc_len;
+  uint16_t  svc_len, req_type_len;
   uint32_t  req_len, seq_id, payload_size;
   uint8_t*  frame;
   size_t    off;
@@ -776,15 +864,17 @@ pcl_status_t pcl_socket_transport_invoke_remote_async(
   if (!pending) return PCL_ERR_NOMEM;
 
   svc_len      = (uint16_t)strlen(service_name);
+  req_type_len = (uint16_t)(request->type_name ? strlen(request->type_name) : 0u);
   req_len      = request->size;
-  payload_size = 1u + 4u + 2u + svc_len + 4u + req_len;
+  payload_size = 1u + 4u + 2u + svc_len + 2u + req_type_len + 4u + req_len;
 
   if (payload_size > PCL_SOCKET_MAX_PAYLOAD) {
     free(pending);
     return PCL_ERR_NOMEM;
   }
 
-  /* frame: [4:payload_size][1:type=SVC_REQ][4:seq_id][2:svc_len][svc_name][4:req_len][req_data] */
+  /* frame: [4:payload_size][1:type=SVC_REQ][4:seq_id][2:svc_len][svc_name]
+            [2:type_len][type_name][4:req_len][req_data] */
   frame = (uint8_t*)malloc(4u + payload_size);
   if (!frame) {
     free(pending);
@@ -819,12 +909,26 @@ pcl_status_t pcl_socket_transport_invoke_remote_async(
   write_u32_be(frame + off, seq_id);                    off += 4;
   write_u16_be(frame + off, svc_len);                   off += 2;
   memcpy(frame + off, service_name, svc_len);           off += svc_len;
+  write_u16_be(frame + off, req_type_len);              off += 2;
+  if (req_type_len > 0u && request->type_name) {
+    memcpy(frame + off, request->type_name, req_type_len);
+  }
+  off += req_type_len;
   write_u32_be(frame + off, req_len);                   off += 4;
   if (req_len > 0u && request->data) {
     memcpy(frame + off, request->data, req_len);
   }
 
   rc = enqueue_outbound_frame(ctx, frame, (uint32_t)(4u + payload_size));
+  if (rc == PCL_OK) {
+    fprintf(stderr,
+            "[pcl_socket] send SVC_REQ seq=%u peer=%s svc=%s req_type=%s req_size=%u\n",
+            seq_id,
+            ctx->peer_id,
+            service_name,
+            request->type_name ? request->type_name : "(null)",
+            request->size);
+  }
   free(frame);
 
   if (rc != PCL_OK) {

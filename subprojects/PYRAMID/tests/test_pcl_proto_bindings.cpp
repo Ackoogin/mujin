@@ -556,9 +556,9 @@ TEST(ProtoBindingsProvided, DispatchCreateRequirementFlatBuffersRoundTrip) {
     };
 
     CapturingHandler handler;
-    nlohmann::json j;
-    j["policy"] = "DATA_POLICY_OBTAIN";
-    const std::string req_payload = flatbuffers_codec::wrapPayload(j.dump());
+    codec::CreateRequirementRequest req;
+    req.policy = codec::DataPolicy::Obtain;
+    const std::string req_payload = flatbuffers_codec::toBinary(req);
 
     void* resp_buf = nullptr;
     size_t resp_size = 0;
@@ -569,8 +569,8 @@ TEST(ProtoBindingsProvided, DispatchCreateRequirementFlatBuffersRoundTrip) {
     EXPECT_EQ(handler.captured_req.policy, types::DataPolicy::Obtain);
 
     ASSERT_NE(resp_buf, nullptr);
-    auto resp = codec::createRequirementResponseFromJson(
-        flatbuffers_codec::unwrapPayload(resp_buf, resp_size));
+    auto resp = flatbuffers_codec::fromBinaryCreateRequirementResponse(
+        resp_buf, resp_size);
     EXPECT_EQ(resp.interest_id, "new-id-42");
     std::free(resp_buf);
 }
@@ -647,11 +647,9 @@ TEST(ProtoBindingsConsumed, DispatchUpdateRequirementFlatBuffersRoundTrip) {
     };
 
     AckHandler handler;
-    nlohmann::json j;
-    j["policy"] = "DATA_POLICY_QUERY";
-    j["base"] = nlohmann::json::object();
-    j["status"] = nlohmann::json::object();
-    const std::string req_payload = flatbuffers_codec::wrapPayload(j.dump());
+    codec::EvidenceRequirement req;
+    req.policy = codec::DataPolicy::Query;
+    const std::string req_payload = flatbuffers_codec::toBinary(req);
 
     void* resp_buf = nullptr;
     size_t resp_size = 0;

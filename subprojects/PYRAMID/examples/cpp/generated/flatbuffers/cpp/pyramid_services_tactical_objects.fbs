@@ -77,3 +77,6 @@ table EvidenceRequirement {
   max_lon_rad:double;
 }
 
+table JsonPayload {
+  payload:string;
+}
