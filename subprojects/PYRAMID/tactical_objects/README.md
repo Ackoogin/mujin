@@ -106,12 +106,33 @@ cmake --preset default
 cmake --build build --config Release -j%NUMBER_OF_PROCESSORS%
 ```
 
-Two CMake targets are produced:
+Three CMake targets are produced:
 
 | Target | Contents |
 |--------|----------|
 | `tactical_objects` | Pure domain runtime + codec; no PCL dependency |
 | `tactical_objects_component` | PCL component wrapper; depends on `tactical_objects` + `pcl_core` |
+| `tactical_objects_app` | Standalone node with split boundaries: remote socket-facing provided bridge plus local consumed-side PYRAMID bridge |
+
+Build just the standalone app:
+
+```bat
+cmake --build build --config Release --target tactical_objects_app
+build\subprojects\PYRAMID\tactical_objects\Release\tactical_objects_app.exe --port 19123
+```
+
+Topology:
+
+- Remote/provided side: `StandardBridge` runs on the socket-facing executor and exposes `object_of_interest.create_requirement` plus standard match streaming to the client node
+- Local/consumed side: a separate local bridge runs with `TacticalObjectsComponent` and accepts `standard.object_evidence` plus forwards internal evidence requirements to local PYRAMID services
+- Optional smoke input: add `--demo-evidence` to simulate a local node publishing `standard.object_evidence`
+
+Remote smoke-test client:
+
+```bat
+cmake --build build --config Release --target tactical_objects_test_client
+build\subprojects\PYRAMID\tactical_objects\Release\tactical_objects_test_client.exe --host 127.0.0.1 --port 19123
+```
 
 ---
 

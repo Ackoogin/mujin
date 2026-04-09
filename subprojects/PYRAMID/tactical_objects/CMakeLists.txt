@@ -61,3 +61,49 @@ target_link_libraries(tactical_objects_component PUBLIC
   pcl_core
 )
 target_compile_features(tactical_objects_component PUBLIC cxx_std_14)
+
+# ---------------------------------------------------------------------------
+# tactical_objects_app - standalone runtime demo
+# ---------------------------------------------------------------------------
+add_executable(tactical_objects_app
+    src/apps/tactical_objects_main.cpp
+    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_services_tactical_objects_consumed.cpp
+    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_common_codec.cpp
+    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_tactical_codec.cpp
+)
+
+add_executable(tactical_objects_test_client
+    src/apps/tactical_objects_test_client.cpp
+    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_services_tactical_objects_json_codec.cpp
+    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_services_tactical_objects_provided.cpp
+    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_common_codec.cpp
+    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_tactical_codec.cpp
+)
+
+target_link_libraries(tactical_objects_app
+    PRIVATE
+        tactical_objects
+        tactical_objects_component
+        pcl_transport_socket
+)
+
+target_include_directories(tactical_objects_app
+    PRIVATE
+        ${PYRAMID_ROOT_DIR}/examples/cpp/generated
+)
+
+target_compile_features(tactical_objects_app PRIVATE cxx_std_14)
+
+target_link_libraries(tactical_objects_test_client
+    PRIVATE
+        pcl_core
+        pcl_transport_socket
+        nlohmann_json::nlohmann_json
+)
+
+target_include_directories(tactical_objects_test_client
+    PRIVATE
+        ${PYRAMID_ROOT_DIR}/examples/cpp/generated
+)
+
+target_compile_features(tactical_objects_test_client PRIVATE cxx_std_14)

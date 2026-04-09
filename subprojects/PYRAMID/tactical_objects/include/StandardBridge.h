@@ -58,7 +58,8 @@ class StandardBridge : public pcl::Component {
 public:
   /// \param runtime  Reference to the TacticalObjectsRuntime (owned by TacticalObjectsComponent).
   /// \param exec     The shared PCL executor (needed to call subscribe_interest locally).
-  StandardBridge(TacticalObjectsRuntime& runtime, pcl_executor_t* exec);
+  StandardBridge(TacticalObjectsRuntime& runtime, pcl_executor_t* exec,
+                 bool expose_consumed_interface = true);
 
 protected:
   pcl_status_t on_configure() override;
@@ -98,6 +99,7 @@ private:
 
   TacticalObjectsRuntime& runtime_;
   pcl_executor_t*         exec_;
+  bool                    expose_consumed_interface_ = true;
 
   pcl_port_t* pub_entity_matches_   = nullptr;
   pcl_port_t* pub_evidence_reqs_    = nullptr;

@@ -22,6 +22,7 @@ using json = nlohmann::json;
 
 static const char* SVC_CREATE_REQUIREMENT     = "object_of_interest.create_requirement";
 static const char* SVC_SUBSCRIBE_INTEREST     = "subscribe_interest";
+static const char* SVC_CREATE_EVIDENCE_REQ    = "object_solution_evidence.create_requirement";
 
 static const char* TOPIC_STD_ENTITY_MATCHES   = "standard.entity_matches";
 static const char* TOPIC_STD_EVIDENCE_REQS    = "standard.evidence_requirements";
@@ -33,10 +34,12 @@ static const char* TYPE_JSON   = "application/json";
 // Constructor
 // ---------------------------------------------------------------------------
 
-StandardBridge::StandardBridge(TacticalObjectsRuntime& runtime, pcl_executor_t* exec)
+StandardBridge::StandardBridge(TacticalObjectsRuntime& runtime, pcl_executor_t* exec,
+                               bool expose_consumed_interface)
   : pcl::Component("standard_bridge"),
     runtime_(runtime),
-    exec_(exec)
+    exec_(exec),
+    expose_consumed_interface_(expose_consumed_interface)
 {}
 
 // ---------------------------------------------------------------------------
@@ -49,12 +52,14 @@ pcl_status_t StandardBridge::on_configure() {
     return PCL_ERR_CALLBACK;
   }
 
-  // Subscribe to standard input topic from Ada clients
-  addSubscriber(TOPIC_STD_OBJECT_EVIDENCE, TYPE_JSON, onStandardObjectEvidence, this);
-
-  // Publishers for standard output topics
+  // Publisher for standard output matches
   pub_entity_matches_ = addPublisher(TOPIC_STD_ENTITY_MATCHES,  TYPE_JSON);
-  pub_evidence_reqs_  = addPublisher(TOPIC_STD_EVIDENCE_REQS,   TYPE_JSON);
+
+  if (expose_consumed_interface_) {
+    // Subscribe to standard input topic from local PYRAMID evidence providers.
+    addSubscriber(TOPIC_STD_OBJECT_EVIDENCE, TYPE_JSON, onStandardObjectEvidence, this);
+    pub_evidence_reqs_  = addPublisher(TOPIC_STD_EVIDENCE_REQS, TYPE_JSON);
+  }
 
   return PCL_OK;
 }
@@ -189,18 +194,40 @@ pcl_status_t StandardBridge::handleCreateRequirement(pcl_container_t*,
     }
   }
 
-  // For ActiveFind: publish evidence_requirements directly (can't rely on PCL pub/sub
-  // to route from TacticalObjectsComponent when a socket transport is active).
-  if (iresp_j.contains("evidence_requirements") &&
-      iresp_j["evidence_requirements"].is_array() &&
-      self->pub_evidence_reqs_) {
+  // For ActiveFind: forward evidence requirements to the local PYRAMID consumed
+  // service and optionally publish the standard topic for in-process consumers.
+  if (self->expose_consumed_interface_ &&
+      iresp_j.contains("evidence_requirements") &&
+      iresp_j["evidence_requirements"].is_array()) {
     for (const auto& ev : iresp_j["evidence_requirements"]) {
       std::string ev_str = ev.dump();
-      pcl_msg_t ev_msg   = {};
-      ev_msg.data        = ev_str.data();
-      ev_msg.size        = static_cast<uint32_t>(ev_str.size());
-      ev_msg.type_name   = TYPE_JSON;
-      pcl_port_publish(self->pub_evidence_reqs_, &ev_msg);
+
+      pcl_msg_t ev_req = {};
+      ev_req.data = ev_str.data();
+      ev_req.size = static_cast<uint32_t>(ev_str.size());
+      ev_req.type_name = TYPE_JSON;
+
+      char ev_resp_raw[1024] = {};
+      pcl_msg_t ev_resp = {};
+      ev_resp.data = ev_resp_raw;
+      ev_resp.size = sizeof(ev_resp_raw);
+      ev_resp.type_name = TYPE_JSON;
+
+      const pcl_status_t evidence_rc =
+          pcl_executor_invoke_service(self->exec_, SVC_CREATE_EVIDENCE_REQ, &ev_req, &ev_resp);
+      if (evidence_rc != PCL_OK) {
+        pcl_log(nullptr, PCL_LOG_WARN,
+                "[StandardBridge] local consumed service %s unavailable",
+                SVC_CREATE_EVIDENCE_REQ);
+      }
+
+      if (self->pub_evidence_reqs_) {
+        pcl_msg_t ev_msg   = {};
+        ev_msg.data        = ev_str.data();
+        ev_msg.size        = static_cast<uint32_t>(ev_str.size());
+        ev_msg.type_name   = TYPE_JSON;
+        pcl_port_publish(self->pub_evidence_reqs_, &ev_msg);
+      }
     }
   }
 
@@ -233,6 +260,11 @@ pcl_status_t StandardBridge::on_tick(double dt) {
     StreamFrame sf = runtime_.assembleStreamFrame(interest_id, handle, dt);
     if (sf.updates.empty() && sf.deletes.empty()) continue;
 
+    pcl_log(nullptr, PCL_LOG_INFO,
+            "[StandardBridge] assembleStreamFrame interest=%s updates=%zu deletes=%zu",
+            TacticalObjectsCodec::encodeUUID(interest_id).get<std::string>().c_str(),
+            sf.updates.size(), sf.deletes.size());
+
     json arr = json::array();
     for (const auto& upd : sf.updates) {
       if (upd.message_type == STREAM_MSG_ENTITY_DELETE) continue;
@@ -258,6 +290,10 @@ pcl_status_t StandardBridge::on_tick(double dt) {
     }
 
     if (arr.empty()) continue;
+
+    pcl_log(nullptr, PCL_LOG_INFO,
+            "[StandardBridge] publishing %zu standard.entity_matches entries",
+            arr.size());
 
     pub_buf_          = arr.dump();
     pcl_msg_t out     = {};
@@ -321,6 +357,9 @@ void StandardBridge::onStandardObjectEvidence(pcl_container_t*,
 
   ObservationBatch batch;
   batch.observations.push_back(obs);
+  pcl_log(nullptr, PCL_LOG_INFO,
+          "[StandardBridge] processing standard.object_evidence identity=%s dimension=%s lat=%f lon=%f",
+          identity.c_str(), dimension.c_str(), obs.position.lat, obs.position.lon);
   self->runtime_.processObservationBatch(batch);
 }
 
