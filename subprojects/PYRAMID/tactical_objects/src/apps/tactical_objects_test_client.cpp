@@ -1,10 +1,13 @@
 #include "pyramid_services_tactical_objects_json_codec.hpp"
 #include "pyramid_services_tactical_objects_provided.hpp"
+#include "pyramid_data_model_tactical_codec.hpp"
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
 #include <pcl/pcl_transport_socket.h>
+
+#include <nlohmann/json.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -19,6 +22,8 @@ namespace {
 namespace JsonCodec = pyramid::services::tactical_objects::json_codec;
 namespace FlatCodec = pyramid::services::tactical_objects::flatbuffers_codec;
 namespace Provided = pyramid::services::tactical_objects::provided;
+namespace TacticalCodec = pyramid::data_model::tactical;
+namespace Common = pyramid::data_model::common;
 using namespace pyramid::data_model;
 
 struct ClientState {
@@ -67,8 +72,15 @@ void onCreateRequirementResponse(const pcl_msg_t* resp, void* user_data) {
                "[tactical_objects_test_client] create_requirement response: %s\n",
                payload.c_str());
 
-  const auto response = JsonCodec::createRequirementResponseFromJson(payload);
-  if (!response.interest_id.empty()) {
+  try {
+    const auto response = nlohmann::json::parse(payload);
+    if (response.is_string() && !response.get<std::string>().empty()) {
+      state->interest_id_received.store(true);
+    }
+  } catch (...) {
+  }
+
+  if (state->interest_id_received.load()) {
     state->interest_id_received.store(true);
   }
 }
@@ -135,16 +147,15 @@ int main(int argc, char* argv[]) {
   pcl_container_activate(container);
   pcl_executor_add(exec, container);
 
-  JsonCodec::CreateRequirementRequest request;
+  ObjectInterestRequirement request;
+  request.source = ObjectSource::Local;
   request.policy = DataPolicy::Obtain;
-  request.identity = StandardIdentity::Hostile;
-  request.dimension = BattleDimension::Unspecified;
-  request.min_lat_rad = 50.0 * 0.017453292519943295;
-  request.max_lat_rad = 52.0 * 0.017453292519943295;
-  request.min_lon_rad = -1.0 * 0.017453292519943295;
-  request.max_lon_rad = 1.0 * 0.017453292519943295;
+  request.dimension.push_back(BattleDimension::Unspecified);
+  request.point = Common::Point{};
+  request.point->position.latitude = 50.0 * 0.017453292519943295;
+  request.point->position.longitude = -1.0 * 0.017453292519943295;
 
-  std::string request_payload = JsonCodec::toJson(request);
+  std::string request_payload = TacticalCodec::toJson(request);
   if (state.content_type == FlatCodec::kContentType) {
     request_payload = FlatCodec::wrapPayload(request_payload);
   }

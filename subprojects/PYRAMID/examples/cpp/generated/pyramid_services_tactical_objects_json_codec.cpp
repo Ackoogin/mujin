@@ -83,24 +83,6 @@ DataPolicy dataPolicyFromString(const std::string& s) {
 // Serialisation (toJson)
 // ---------------------------------------------------------------------------
 
-std::string toJson(const CreateRequirementRequest& msg) {
-    nlohmann::json obj;
-    obj["policy"] = toString(msg.policy);
-    obj["identity"] = toString(msg.identity);
-    if (msg.dimension != BattleDimension::Unspecified) obj["dimension"] = toString(msg.dimension);
-    if (msg.min_lat_rad != 0.0) obj["min_lat_rad"] = msg.min_lat_rad;
-    if (msg.max_lat_rad != 0.0) obj["max_lat_rad"] = msg.max_lat_rad;
-    if (msg.min_lon_rad != 0.0) obj["min_lon_rad"] = msg.min_lon_rad;
-    if (msg.max_lon_rad != 0.0) obj["max_lon_rad"] = msg.max_lon_rad;
-    return obj.dump();
-}
-
-std::string toJson(const CreateRequirementResponse& msg) {
-    nlohmann::json obj;
-    if (!msg.interest_id.empty()) obj["interest_id"] = msg.interest_id;
-    return obj.dump();
-}
-
 std::string toJson(const EntityMatch& msg) {
     nlohmann::json obj;
     obj["object_id"] = msg.object_id;
@@ -138,38 +120,6 @@ std::string toJson(const EvidenceRequirement& msg) {
 // ---------------------------------------------------------------------------
 // Deserialisation (fromJson)
 // ---------------------------------------------------------------------------
-
-CreateRequirementRequest createRequirementRequestFromJson(const std::string& s) {
-    CreateRequirementRequest result;
-    try {
-        auto j = nlohmann::json::parse(s);
-        if (j.contains("policy"))
-            result.policy = dataPolicyFromString(j["policy"].get<std::string>());
-        if (j.contains("identity"))
-            result.identity = standardIdentityFromString(j["identity"].get<std::string>());
-        if (j.contains("dimension"))
-            result.dimension = battleDimensionFromString(j["dimension"].get<std::string>());
-        if (j.contains("min_lat_rad"))
-            result.min_lat_rad = j["min_lat_rad"].get<double>();
-        if (j.contains("max_lat_rad"))
-            result.max_lat_rad = j["max_lat_rad"].get<double>();
-        if (j.contains("min_lon_rad"))
-            result.min_lon_rad = j["min_lon_rad"].get<double>();
-        if (j.contains("max_lon_rad"))
-            result.max_lon_rad = j["max_lon_rad"].get<double>();
-    } catch (...) {}
-    return result;
-}
-
-CreateRequirementResponse createRequirementResponseFromJson(const std::string& s) {
-    CreateRequirementResponse result;
-    try {
-        auto j = nlohmann::json::parse(s);
-        if (j.contains("interest_id"))
-            result.interest_id = j["interest_id"].get<std::string>();
-    } catch (...) {}
-    return result;
-}
 
 EntityMatch entityMatchFromJson(const std::string& s) {
     EntityMatch result;

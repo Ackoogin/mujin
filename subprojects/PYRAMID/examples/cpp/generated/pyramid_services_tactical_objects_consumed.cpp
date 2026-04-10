@@ -21,6 +21,7 @@
 #include <cstdlib>
 #include <cstdint>
 #include <cstring>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
@@ -74,7 +75,7 @@ ServiceHandler::handleDeleteRequirement(const Identifier& /*request*/) {
     return pyramid::data_model::kAckOk;
 }
 
-std::vector<Identifier>
+std::vector<Capability>
 ServiceHandler::handleReadCapability(const Query& /*request*/) {
     return {};
 }
@@ -104,32 +105,27 @@ std::string json_request_body(const void* data, size_t size)
     return std::string(static_cast<const char*>(data), size);
 }
 
-ObjectEvidenceRequirement to_domain_evidence_requirement(
-    const wire_types::EvidenceRequirement& wire_req)
+std::string encode_identifier_payload(const Identifier& value)
 {
-    ObjectEvidenceRequirement result{};
-    result.base.id = wire_req.id;
-    result.policy = wire_req.policy;
-    if (wire_req.dimension != pyramid::data_model::BattleDimension::Unspecified)
-        result.dimension.push_back(wire_req.dimension);
-    if (wire_req.min_lat_rad != 0.0 || wire_req.max_lat_rad != 0.0
-        || wire_req.min_lon_rad != 0.0 || wire_req.max_lon_rad != 0.0) {
-        pyramid::data_model::common::PolyArea area{};
-        area.points.push_back({wire_req.min_lat_rad, wire_req.min_lon_rad});
-        area.points.push_back({wire_req.min_lat_rad, wire_req.max_lon_rad});
-        area.points.push_back({wire_req.max_lat_rad, wire_req.max_lon_rad});
-        area.points.push_back({wire_req.max_lat_rad, wire_req.min_lon_rad});
-        result.poly_area = area;
-    }
-    return result;
+    return nlohmann::json(value).dump();
 }
 
-wire_types::CreateRequirementResponse to_wire_create_requirement_response(
-    const Identifier& interest_id)
+Identifier decode_identifier_payload(const std::string& payload)
 {
-    wire_types::CreateRequirementResponse result{};
-    result.interest_id = interest_id;
-    return result;
+    if (payload.empty()) {
+        return {};
+    }
+    try {
+        auto j = nlohmann::json::parse(payload);
+        if (j.is_string()) {
+            return j.get<std::string>();
+        }
+        if (j.is_object() && j.contains("uuid") && j["uuid"].is_string()) {
+            return j["uuid"].get<std::string>();
+        }
+    } catch (...) {
+    }
+    return payload;
 }
 
 } // namespace
@@ -221,80 +217,96 @@ void dispatch(ServiceHandler& handler,
     try {
     switch (channel) {
     case ServiceChannel::ReadDetail: {
-        if (is_flatbuffers_content_type(content_type)) {
-            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);
-        }
-        auto req = fromJson(req_str, static_cast<Query*>(nullptr));
+        auto req = is_flatbuffers_content_type(content_type)
+            ? flatbuffers_codec::fromBinaryQuery(request_buf, request_size)
+            : fromJson(req_str, static_cast<Query*>(nullptr));
         auto rsp = handler.handleReadDetail(req);
-        rsp_payload = "[";
-        for (size_t i = 0; i < rsp.size(); ++i) {
-            if (i > 0) rsp_payload += ",";
-            rsp_payload += toJson(rsp[i]);
+        if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            rsp_payload = "[";
+            for (size_t i = 0; i < rsp.size(); ++i) {
+                if (i > 0) rsp_payload += ",";
+                rsp_payload += toJson(rsp[i]);
+            }
+            rsp_payload += "]";
         }
-        rsp_payload += "]";
         break;
     }
     case ServiceChannel::CreateRequirement: {
-        auto wire_req = is_flatbuffers_content_type(content_type)
-            ? flatbuffers_codec::fromBinaryEvidenceRequirement(request_buf, request_size)
-            : json_codec::evidenceRequirementFromJson(req_str);
-        auto req = to_domain_evidence_requirement(wire_req);
+        auto req = is_flatbuffers_content_type(content_type)
+            ? flatbuffers_codec::fromBinaryObjectEvidenceRequirement(request_buf, request_size)
+            : fromJson(req_str, static_cast<ObjectEvidenceRequirement*>(nullptr));
         auto rsp = handler.handleCreateRequirement(req);
-        {
-            auto wire_rsp = to_wire_create_requirement_response(rsp);
-            if (is_flatbuffers_content_type(content_type)) {
-                rsp_payload = flatbuffers_codec::toBinary(wire_rsp);
-                rsp_is_binary = true;
-            } else {
-                rsp_payload = json_codec::toJson(wire_rsp);
-            }
+        if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            rsp_payload = encode_identifier_payload(rsp);
         }
         break;
     }
     case ServiceChannel::ReadRequirement: {
-        if (is_flatbuffers_content_type(content_type)) {
-            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);
-        }
-        auto req = fromJson(req_str, static_cast<Query*>(nullptr));
+        auto req = is_flatbuffers_content_type(content_type)
+            ? flatbuffers_codec::fromBinaryQuery(request_buf, request_size)
+            : fromJson(req_str, static_cast<Query*>(nullptr));
         auto rsp = handler.handleReadRequirement(req);
-        rsp_payload = "[";
-        for (size_t i = 0; i < rsp.size(); ++i) {
-            if (i > 0) rsp_payload += ",";
-            rsp_payload += toJson(rsp[i]);
+        if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            rsp_payload = "[";
+            for (size_t i = 0; i < rsp.size(); ++i) {
+                if (i > 0) rsp_payload += ",";
+                rsp_payload += toJson(rsp[i]);
+            }
+            rsp_payload += "]";
         }
-        rsp_payload += "]";
         break;
     }
     case ServiceChannel::UpdateRequirement: {
-        auto wire_req = is_flatbuffers_content_type(content_type)
-            ? flatbuffers_codec::fromBinaryEvidenceRequirement(request_buf, request_size)
-            : json_codec::evidenceRequirementFromJson(req_str);
-        auto req = to_domain_evidence_requirement(wire_req);
+        auto req = is_flatbuffers_content_type(content_type)
+            ? flatbuffers_codec::fromBinaryObjectEvidenceRequirement(request_buf, request_size)
+            : fromJson(req_str, static_cast<ObjectEvidenceRequirement*>(nullptr));
         auto rsp = handler.handleUpdateRequirement(req);
-        rsp_payload = toJson(rsp);
+        if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            rsp_payload = toJson(rsp);
+        }
         break;
     }
     case ServiceChannel::DeleteRequirement: {
-        if (is_flatbuffers_content_type(content_type)) {
-            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);
-        }
-        auto& req = req_str;
+        auto req = is_flatbuffers_content_type(content_type)
+            ? flatbuffers_codec::fromBinaryIdentifier(request_buf, request_size)
+            : decode_identifier_payload(req_str);
         auto rsp = handler.handleDeleteRequirement(req);
-        rsp_payload = toJson(rsp);
+        if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            rsp_payload = toJson(rsp);
+        }
         break;
     }
     case ServiceChannel::ReadCapability: {
-        if (is_flatbuffers_content_type(content_type)) {
-            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);
-        }
-        auto req = fromJson(req_str, static_cast<Query*>(nullptr));
+        auto req = is_flatbuffers_content_type(content_type)
+            ? flatbuffers_codec::fromBinaryQuery(request_buf, request_size)
+            : fromJson(req_str, static_cast<Query*>(nullptr));
         auto rsp = handler.handleReadCapability(req);
-        rsp_payload = "[";
-        for (size_t i = 0; i < rsp.size(); ++i) {
-            if (i > 0) rsp_payload += ",";
-            rsp_payload += "\"" + rsp[i] + "\""; 
+        if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            rsp_payload = "[";
+            for (size_t i = 0; i < rsp.size(); ++i) {
+                if (i > 0) rsp_payload += ",";
+                rsp_payload += toJson(rsp[i]);
+            }
+            rsp_payload += "]";
         }
-        rsp_payload += "]";
         break;
     }
     }
@@ -306,9 +318,7 @@ void dispatch(ServiceHandler& handler,
 
     if (is_flatbuffers_content_type(content_type)) {
 #if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        if (!rsp_is_binary) {
-            rsp_payload = flatbuffers_codec::wrapPayload(rsp_payload);
-        }
+        (void) rsp_is_binary;
 #else
         *response_buf = nullptr;
         *response_size = 0;

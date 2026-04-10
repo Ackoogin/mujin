@@ -40,6 +40,7 @@ import backends  # noqa: F401
 
 def _generate_json_cpp(proto_dir: Path, output_dir: Path) -> int:
     total = 0
+    generated_bridge_pkgs = set()
     data_model_dir = proto_dir / 'pyramid' / 'data_model'
     if data_model_dir.exists():
         gen = cpp_codegen.CppTypesGenerator(data_model_dir)
@@ -53,17 +54,26 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path) -> int:
 
     for proto_path in sorted(proto_dir.rglob('*.proto')):
         parsed = cpp_codegen.parse_proto(proto_path)
-        if not parsed.services:
+        if not parsed.services or '.services.' not in f'.{parsed.package}.':
             continue
-        cpp_codegen.CppWireTypesGenerator(parsed).generate(str(output_dir))
-        cpp_codegen.CppJsonCodecGenerator(parsed).generate(str(output_dir))
         cpp_codegen.CppServiceGenerator(str(proto_path)).generate(str(output_dir))
-        total += 3
+        total += 1
+
+        is_provided = cpp_codegen._is_provided(parsed)
+        sub_topics, pub_topics = cpp_codegen._topics_for_proto(parsed, is_provided)
+        if sub_topics or pub_topics:
+            bridge_pkg = cpp_codegen._namespace_from_proto(parsed)[2]
+            if bridge_pkg not in generated_bridge_pkgs:
+                cpp_codegen.CppWireTypesGenerator(parsed).generate(str(output_dir))
+                cpp_codegen.CppJsonCodecGenerator(parsed).generate(str(output_dir))
+                generated_bridge_pkgs.add(bridge_pkg)
+                total += 2
     return total
 
 
 def _generate_json_ada(proto_dir: Path, output_dir: Path) -> int:
     total = 0
+    generated_bridge_pkgs = set()
     data_model_dir = proto_dir / 'pyramid' / 'data_model'
     if data_model_dir.exists():
         gen = ada_codegen.AdaTypesGenerator(data_model_dir)
@@ -77,12 +87,20 @@ def _generate_json_ada(proto_dir: Path, output_dir: Path) -> int:
 
     for proto_path in sorted(proto_dir.rglob('*.proto')):
         parsed = ada_codegen.parse_proto(proto_path)
-        if not parsed.services:
+        if not parsed.services or '.services.' not in f'.{parsed.package}.':
             continue
-        ada_codegen.WireTypesGenerator(parsed).generate(str(output_dir))
-        ada_codegen.JsonCodecGenerator(parsed).generate(str(output_dir))
         ada_codegen.AdaServiceGenerator(str(proto_path)).generate(str(output_dir))
-        total += 3
+        total += 1
+
+        is_provided = ada_codegen._is_provided(parsed)
+        sub_topics, pub_topics = ada_codegen._topics_for_proto(parsed, is_provided)
+        if sub_topics or pub_topics:
+            bridge_pkg = ada_codegen._wire_types_pkg_from_proto(parsed)
+            if bridge_pkg not in generated_bridge_pkgs:
+                ada_codegen.WireTypesGenerator(parsed).generate(str(output_dir))
+                ada_codegen.JsonCodecGenerator(parsed).generate(str(output_dir))
+                generated_bridge_pkgs.add(bridge_pkg)
+                total += 2
     return total
 
 

@@ -1,4 +1,4 @@
-// Auto-generated tactical service FlatBuffers codec
+// Auto-generated service FlatBuffers codec
 #include "pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 
 #include <cstdint>
@@ -33,39 +33,485 @@ const TableT* verified_root(const void* data, size_t size, const char* type_name
     return flatbuffers::GetRoot<TableT>(bytes);
 }
 
-fbs::CreateRequirementRequestT to_fb(const wire_types::CreateRequirementRequest& msg) {
-    fbs::CreateRequirementRequestT out{};
-    out.policy = static_cast<fbs::DataPolicy>(msg.policy);
+fbs::GeodeticPositionT to_fb(const pyramid::data_model::GeodeticPosition& msg) {
+    fbs::GeodeticPositionT out{};
+    out.latitude = msg.latitude;
+    out.longitude = msg.longitude;
+    return out;
+}
+
+pyramid::data_model::GeodeticPosition from_fb(const fbs::GeodeticPositionT& msg, pyramid::data_model::GeodeticPosition* /*tag*/) {
+    pyramid::data_model::GeodeticPosition out{};
+    out.latitude = msg.latitude;
+    out.longitude = msg.longitude;
+    return out;
+}
+
+fbs::PolyAreaT to_fb(const pyramid::data_model::PolyArea& msg) {
+    fbs::PolyAreaT out{};
+    out.points.reserve(msg.points.size());
+    for (const auto& item : msg.points) {
+        out.points.emplace_back(std::make_unique<fbs::GeodeticPositionT>(to_fb(item)));
+    }
+    return out;
+}
+
+pyramid::data_model::PolyArea from_fb(const fbs::PolyAreaT& msg, pyramid::data_model::PolyArea* /*tag*/) {
+    pyramid::data_model::PolyArea out{};
+    out.points.reserve(msg.points.size());
+    for (const auto& item : msg.points) {
+        if (item) {
+            out.points.push_back(from_fb(*item, static_cast<pyramid::data_model::GeodeticPosition*>(nullptr)));
+        }
+    }
+    return out;
+}
+
+fbs::AchievementT to_fb(const pyramid::data_model::Achievement& msg) {
+    fbs::AchievementT out{};
+    out.has_update_time = msg.update_time.has_value();
+    if (msg.update_time.has_value()) {
+        out.update_time = msg.update_time.value();
+    }
+    out.id = msg.id;
+    out.source = msg.source;
+    out.status = static_cast<fbs::Progress>(msg.status);
+    out.has_quality = msg.quality.has_value();
+    if (msg.quality.has_value()) {
+        out.quality = msg.quality.value();
+    }
+    out.achieveability = static_cast<fbs::Feasibility>(msg.achieveability);
+    return out;
+}
+
+pyramid::data_model::Achievement from_fb(const fbs::AchievementT& msg, pyramid::data_model::Achievement* /*tag*/) {
+    pyramid::data_model::Achievement out{};
+    if (msg.has_update_time) {
+        out.update_time = msg.update_time;
+    }
+    out.id = msg.id;
+    out.source = msg.source;
+    out.status = static_cast<pyramid::data_model::Progress>(msg.status);
+    if (msg.has_quality) {
+        out.quality = msg.quality;
+    }
+    out.achieveability = static_cast<pyramid::data_model::Feasibility>(msg.achieveability);
+    return out;
+}
+
+fbs::EntityT to_fb(const pyramid::data_model::Entity& msg) {
+    fbs::EntityT out{};
+    out.has_update_time = msg.update_time.has_value();
+    if (msg.update_time.has_value()) {
+        out.update_time = msg.update_time.value();
+    }
+    out.id = msg.id;
+    out.source = msg.source;
+    return out;
+}
+
+pyramid::data_model::Entity from_fb(const fbs::EntityT& msg, pyramid::data_model::Entity* /*tag*/) {
+    pyramid::data_model::Entity out{};
+    if (msg.has_update_time) {
+        out.update_time = msg.update_time;
+    }
+    out.id = msg.id;
+    out.source = msg.source;
+    return out;
+}
+
+fbs::CircleAreaT to_fb(const pyramid::data_model::CircleArea& msg) {
+    fbs::CircleAreaT out{};
+    out.position = std::make_unique<fbs::GeodeticPositionT>(to_fb(msg.position));
+    out.radius = msg.radius;
+    return out;
+}
+
+pyramid::data_model::CircleArea from_fb(const fbs::CircleAreaT& msg, pyramid::data_model::CircleArea* /*tag*/) {
+    pyramid::data_model::CircleArea out{};
+    if (msg.position) out.position = from_fb(*msg.position, static_cast<pyramid::data_model::GeodeticPosition*>(nullptr));
+    out.radius = msg.radius;
+    return out;
+}
+
+fbs::PointT to_fb(const pyramid::data_model::Point& msg) {
+    fbs::PointT out{};
+    out.position = std::make_unique<fbs::GeodeticPositionT>(to_fb(msg.position));
+    return out;
+}
+
+pyramid::data_model::Point from_fb(const fbs::PointT& msg, pyramid::data_model::Point* /*tag*/) {
+    pyramid::data_model::Point out{};
+    if (msg.position) out.position = from_fb(*msg.position, static_cast<pyramid::data_model::GeodeticPosition*>(nullptr));
+    return out;
+}
+
+fbs::ContraintT to_fb(const pyramid::data_model::Contraint& msg) {
+    fbs::ContraintT out{};
+    out.name = msg.name;
+    out.value = msg.value;
+    return out;
+}
+
+pyramid::data_model::Contraint from_fb(const fbs::ContraintT& msg, pyramid::data_model::Contraint* /*tag*/) {
+    pyramid::data_model::Contraint out{};
+    out.name = msg.name;
+    out.value = msg.value;
+    return out;
+}
+
+fbs::AckT to_fb(const pyramid::data_model::Ack& msg) {
+    fbs::AckT out{};
+    out.success = msg.success;
+    return out;
+}
+
+pyramid::data_model::Ack from_fb(const fbs::AckT& msg, pyramid::data_model::Ack* /*tag*/) {
+    pyramid::data_model::Ack out{};
+    out.success = msg.success;
+    return out;
+}
+
+fbs::QueryT to_fb(const pyramid::data_model::Query& msg) {
+    fbs::QueryT out{};
+    out.id = msg.id;
+    out.has_one_shot = msg.one_shot.has_value();
+    if (msg.one_shot.has_value()) {
+        out.one_shot = msg.one_shot.value();
+    }
+    return out;
+}
+
+pyramid::data_model::Query from_fb(const fbs::QueryT& msg, pyramid::data_model::Query* /*tag*/) {
+    pyramid::data_model::Query out{};
+    out.id = msg.id;
+    if (msg.has_one_shot) {
+        out.one_shot = msg.one_shot;
+    }
+    return out;
+}
+
+fbs::ObjectDetailT to_fb(const pyramid::data_model::ObjectDetail& msg) {
+    fbs::ObjectDetailT out{};
+    out.has_update_time = msg.update_time.has_value();
+    if (msg.update_time.has_value()) {
+        out.update_time = msg.update_time.value();
+    }
+    out.id = msg.id;
+    out.entity_source = msg.entity_source;
+    out.source.reserve(msg.source.size());
+    for (const auto& item : msg.source) {
+        out.source.push_back(static_cast<fbs::ObjectSource>(item));
+    }
+    out.position = std::make_unique<fbs::GeodeticPositionT>(to_fb(msg.position));
+    out.creation_time = msg.creation_time;
+    out.has_quality = msg.quality.has_value();
+    if (msg.quality.has_value()) {
+        out.quality = msg.quality.value();
+    }
+    out.has_course = msg.course.has_value();
+    if (msg.course.has_value()) {
+        out.course = msg.course.value();
+    }
+    out.has_speed = msg.speed.has_value();
+    if (msg.speed.has_value()) {
+        out.speed = msg.speed.value();
+    }
+    out.has_length = msg.length.has_value();
+    if (msg.length.has_value()) {
+        out.length = msg.length.value();
+    }
     out.identity = static_cast<fbs::StandardIdentity>(msg.identity);
     out.dimension = static_cast<fbs::BattleDimension>(msg.dimension);
-    out.min_lat_rad = msg.min_lat_rad;
-    out.max_lat_rad = msg.max_lat_rad;
-    out.min_lon_rad = msg.min_lon_rad;
-    out.max_lon_rad = msg.max_lon_rad;
     return out;
 }
 
-wire_types::CreateRequirementRequest from_fb(const fbs::CreateRequirementRequestT& msg) {
-    wire_types::CreateRequirementRequest out{};
-    out.policy = static_cast<pyramid::data_model::DataPolicy>(msg.policy);
+pyramid::data_model::ObjectDetail from_fb(const fbs::ObjectDetailT& msg, pyramid::data_model::ObjectDetail* /*tag*/) {
+    pyramid::data_model::ObjectDetail out{};
+    if (msg.has_update_time) {
+        out.update_time = msg.update_time;
+    }
+    out.id = msg.id;
+    out.entity_source = msg.entity_source;
+    out.source.reserve(msg.source.size());
+    for (const auto& item : msg.source) {
+        out.source.push_back(static_cast<pyramid::data_model::ObjectSource>(item));
+    }
+    if (msg.position) out.position = from_fb(*msg.position, static_cast<pyramid::data_model::GeodeticPosition*>(nullptr));
+    out.creation_time = msg.creation_time;
+    if (msg.has_quality) {
+        out.quality = msg.quality;
+    }
+    if (msg.has_course) {
+        out.course = msg.course;
+    }
+    if (msg.has_speed) {
+        out.speed = msg.speed;
+    }
+    if (msg.has_length) {
+        out.length = msg.length;
+    }
     out.identity = static_cast<pyramid::data_model::StandardIdentity>(msg.identity);
     out.dimension = static_cast<pyramid::data_model::BattleDimension>(msg.dimension);
-    out.min_lat_rad = msg.min_lat_rad;
-    out.max_lat_rad = msg.max_lat_rad;
-    out.min_lon_rad = msg.min_lon_rad;
-    out.max_lon_rad = msg.max_lon_rad;
     return out;
 }
 
-fbs::CreateRequirementResponseT to_fb(const wire_types::CreateRequirementResponse& msg) {
-    fbs::CreateRequirementResponseT out{};
-    out.interest_id = msg.interest_id;
+fbs::ObjectEvidenceRequirementT to_fb(const pyramid::data_model::ObjectEvidenceRequirement& msg) {
+    fbs::ObjectEvidenceRequirementT out{};
+    out.base = std::make_unique<fbs::EntityT>(to_fb(msg.base));
+    out.status = std::make_unique<fbs::AchievementT>(to_fb(msg.status));
+    out.policy = static_cast<fbs::DataPolicy>(msg.policy);
+    out.dimension.reserve(msg.dimension.size());
+    for (const auto& item : msg.dimension) {
+        out.dimension.push_back(static_cast<fbs::BattleDimension>(item));
+    }
+    if (msg.poly_area.has_value()) {
+        out.poly_area = std::make_unique<fbs::PolyAreaT>(to_fb(msg.poly_area.value()));
+    }
+    if (msg.circle_area.has_value()) {
+        out.circle_area = std::make_unique<fbs::CircleAreaT>(to_fb(msg.circle_area.value()));
+    }
+    if (msg.point.has_value()) {
+        out.point = std::make_unique<fbs::PointT>(to_fb(msg.point.value()));
+    }
     return out;
 }
 
-wire_types::CreateRequirementResponse from_fb(const fbs::CreateRequirementResponseT& msg) {
-    wire_types::CreateRequirementResponse out{};
-    out.interest_id = msg.interest_id;
+pyramid::data_model::ObjectEvidenceRequirement from_fb(const fbs::ObjectEvidenceRequirementT& msg, pyramid::data_model::ObjectEvidenceRequirement* /*tag*/) {
+    pyramid::data_model::ObjectEvidenceRequirement out{};
+    if (msg.base) out.base = from_fb(*msg.base, static_cast<pyramid::data_model::Entity*>(nullptr));
+    if (msg.status) out.status = from_fb(*msg.status, static_cast<pyramid::data_model::Achievement*>(nullptr));
+    out.policy = static_cast<pyramid::data_model::DataPolicy>(msg.policy);
+    out.dimension.reserve(msg.dimension.size());
+    for (const auto& item : msg.dimension) {
+        out.dimension.push_back(static_cast<pyramid::data_model::BattleDimension>(item));
+    }
+    if (msg.poly_area) {
+        out.poly_area = from_fb(*msg.poly_area, static_cast<pyramid::data_model::PolyArea*>(nullptr));
+    }
+    if (msg.circle_area) {
+        out.circle_area = from_fb(*msg.circle_area, static_cast<pyramid::data_model::CircleArea*>(nullptr));
+    }
+    if (msg.point) {
+        out.point = from_fb(*msg.point, static_cast<pyramid::data_model::Point*>(nullptr));
+    }
+    return out;
+}
+
+fbs::ObjectInterestRequirementT to_fb(const pyramid::data_model::ObjectInterestRequirement& msg) {
+    fbs::ObjectInterestRequirementT out{};
+    out.base = std::make_unique<fbs::EntityT>(to_fb(msg.base));
+    out.status = std::make_unique<fbs::AchievementT>(to_fb(msg.status));
+    out.has_source = msg.source.has_value();
+    if (msg.source.has_value()) {
+        out.source = static_cast<fbs::ObjectSource>(msg.source.value());
+    }
+    out.policy = static_cast<fbs::DataPolicy>(msg.policy);
+    out.dimension.reserve(msg.dimension.size());
+    for (const auto& item : msg.dimension) {
+        out.dimension.push_back(static_cast<fbs::BattleDimension>(item));
+    }
+    if (msg.poly_area.has_value()) {
+        out.poly_area = std::make_unique<fbs::PolyAreaT>(to_fb(msg.poly_area.value()));
+    }
+    if (msg.circle_area.has_value()) {
+        out.circle_area = std::make_unique<fbs::CircleAreaT>(to_fb(msg.circle_area.value()));
+    }
+    if (msg.point.has_value()) {
+        out.point = std::make_unique<fbs::PointT>(to_fb(msg.point.value()));
+    }
+    return out;
+}
+
+pyramid::data_model::ObjectInterestRequirement from_fb(const fbs::ObjectInterestRequirementT& msg, pyramid::data_model::ObjectInterestRequirement* /*tag*/) {
+    pyramid::data_model::ObjectInterestRequirement out{};
+    if (msg.base) out.base = from_fb(*msg.base, static_cast<pyramid::data_model::Entity*>(nullptr));
+    if (msg.status) out.status = from_fb(*msg.status, static_cast<pyramid::data_model::Achievement*>(nullptr));
+    if (msg.has_source) {
+        out.source = static_cast<pyramid::data_model::ObjectSource>(msg.source);
+    }
+    out.policy = static_cast<pyramid::data_model::DataPolicy>(msg.policy);
+    out.dimension.reserve(msg.dimension.size());
+    for (const auto& item : msg.dimension) {
+        out.dimension.push_back(static_cast<pyramid::data_model::BattleDimension>(item));
+    }
+    if (msg.poly_area) {
+        out.poly_area = from_fb(*msg.poly_area, static_cast<pyramid::data_model::PolyArea*>(nullptr));
+    }
+    if (msg.circle_area) {
+        out.circle_area = from_fb(*msg.circle_area, static_cast<pyramid::data_model::CircleArea*>(nullptr));
+    }
+    if (msg.point) {
+        out.point = from_fb(*msg.point, static_cast<pyramid::data_model::Point*>(nullptr));
+    }
+    return out;
+}
+
+fbs::ObjectMatchT to_fb(const pyramid::data_model::ObjectMatch& msg) {
+    fbs::ObjectMatchT out{};
+    out.has_update_time = msg.update_time.has_value();
+    if (msg.update_time.has_value()) {
+        out.update_time = msg.update_time.value();
+    }
+    out.id = msg.id;
+    out.source = msg.source;
+    out.matching_object_id = msg.matching_object_id;
+    return out;
+}
+
+pyramid::data_model::ObjectMatch from_fb(const fbs::ObjectMatchT& msg, pyramid::data_model::ObjectMatch* /*tag*/) {
+    pyramid::data_model::ObjectMatch out{};
+    if (msg.has_update_time) {
+        out.update_time = msg.update_time;
+    }
+    out.id = msg.id;
+    out.source = msg.source;
+    out.matching_object_id = msg.matching_object_id;
+    return out;
+}
+
+fbs::CapabilityT to_fb(const pyramid::data_model::Capability& msg) {
+    fbs::CapabilityT out{};
+    out.has_update_time = msg.update_time.has_value();
+    if (msg.update_time.has_value()) {
+        out.update_time = msg.update_time.value();
+    }
+    out.id = msg.id;
+    out.source = msg.source;
+    out.availability = msg.availability;
+    out.name = msg.name;
+    out.contraint.reserve(msg.contraint.size());
+    for (const auto& item : msg.contraint) {
+        out.contraint.emplace_back(std::make_unique<fbs::ContraintT>(to_fb(item)));
+    }
+    return out;
+}
+
+pyramid::data_model::Capability from_fb(const fbs::CapabilityT& msg, pyramid::data_model::Capability* /*tag*/) {
+    pyramid::data_model::Capability out{};
+    if (msg.has_update_time) {
+        out.update_time = msg.update_time;
+    }
+    out.id = msg.id;
+    out.source = msg.source;
+    out.availability = msg.availability;
+    out.name = msg.name;
+    out.contraint.reserve(msg.contraint.size());
+    for (const auto& item : msg.contraint) {
+        if (item) {
+            out.contraint.push_back(from_fb(*item, static_cast<pyramid::data_model::Contraint*>(nullptr)));
+        }
+    }
+    return out;
+}
+
+fbs::IdentifierValueT to_fb(const pyramid::data_model::Identifier& msg) {
+    fbs::IdentifierValueT out{};
+    out.value = msg;
+    return out;
+}
+
+pyramid::data_model::Identifier from_fb(const fbs::IdentifierValueT& msg, pyramid::data_model::Identifier* /*tag*/) {
+    return msg.value;
+}
+
+fbs::ObjectDetailArrayHolderT to_fb(const std::vector<pyramid::data_model::ObjectDetail>& msg) {
+    fbs::ObjectDetailArrayHolderT out{};
+    out.items.reserve(msg.size());
+    for (const auto& item : msg) {
+        out.items.emplace_back(std::make_unique<fbs::ObjectDetailT>(to_fb(item)));
+    }
+    return out;
+}
+
+std::vector<pyramid::data_model::ObjectDetail> from_fb(const fbs::ObjectDetailArrayHolderT& msg) {
+    std::vector<pyramid::data_model::ObjectDetail> out{};
+    out.reserve(msg.items.size());
+    for (const auto& item : msg.items) {
+        if (item) {
+            out.push_back(from_fb(*item, static_cast<pyramid::data_model::ObjectDetail*>(nullptr)));
+        }
+    }
+    return out;
+}
+
+fbs::ObjectEvidenceRequirementArrayHolderT to_fb(const std::vector<pyramid::data_model::ObjectEvidenceRequirement>& msg) {
+    fbs::ObjectEvidenceRequirementArrayHolderT out{};
+    out.items.reserve(msg.size());
+    for (const auto& item : msg) {
+        out.items.emplace_back(std::make_unique<fbs::ObjectEvidenceRequirementT>(to_fb(item)));
+    }
+    return out;
+}
+
+std::vector<pyramid::data_model::ObjectEvidenceRequirement> from_fb(const fbs::ObjectEvidenceRequirementArrayHolderT& msg) {
+    std::vector<pyramid::data_model::ObjectEvidenceRequirement> out{};
+    out.reserve(msg.items.size());
+    for (const auto& item : msg.items) {
+        if (item) {
+            out.push_back(from_fb(*item, static_cast<pyramid::data_model::ObjectEvidenceRequirement*>(nullptr)));
+        }
+    }
+    return out;
+}
+
+fbs::CapabilityArrayHolderT to_fb(const std::vector<pyramid::data_model::Capability>& msg) {
+    fbs::CapabilityArrayHolderT out{};
+    out.items.reserve(msg.size());
+    for (const auto& item : msg) {
+        out.items.emplace_back(std::make_unique<fbs::CapabilityT>(to_fb(item)));
+    }
+    return out;
+}
+
+std::vector<pyramid::data_model::Capability> from_fb(const fbs::CapabilityArrayHolderT& msg) {
+    std::vector<pyramid::data_model::Capability> out{};
+    out.reserve(msg.items.size());
+    for (const auto& item : msg.items) {
+        if (item) {
+            out.push_back(from_fb(*item, static_cast<pyramid::data_model::Capability*>(nullptr)));
+        }
+    }
+    return out;
+}
+
+fbs::ObjectMatchArrayHolderT to_fb(const std::vector<pyramid::data_model::ObjectMatch>& msg) {
+    fbs::ObjectMatchArrayHolderT out{};
+    out.items.reserve(msg.size());
+    for (const auto& item : msg) {
+        out.items.emplace_back(std::make_unique<fbs::ObjectMatchT>(to_fb(item)));
+    }
+    return out;
+}
+
+std::vector<pyramid::data_model::ObjectMatch> from_fb(const fbs::ObjectMatchArrayHolderT& msg) {
+    std::vector<pyramid::data_model::ObjectMatch> out{};
+    out.reserve(msg.items.size());
+    for (const auto& item : msg.items) {
+        if (item) {
+            out.push_back(from_fb(*item, static_cast<pyramid::data_model::ObjectMatch*>(nullptr)));
+        }
+    }
+    return out;
+}
+
+fbs::ObjectInterestRequirementArrayHolderT to_fb(const std::vector<pyramid::data_model::ObjectInterestRequirement>& msg) {
+    fbs::ObjectInterestRequirementArrayHolderT out{};
+    out.items.reserve(msg.size());
+    for (const auto& item : msg) {
+        out.items.emplace_back(std::make_unique<fbs::ObjectInterestRequirementT>(to_fb(item)));
+    }
+    return out;
+}
+
+std::vector<pyramid::data_model::ObjectInterestRequirement> from_fb(const fbs::ObjectInterestRequirementArrayHolderT& msg) {
+    std::vector<pyramid::data_model::ObjectInterestRequirement> out{};
+    out.reserve(msg.items.size());
+    for (const auto& item : msg.items) {
+        if (item) {
+            out.push_back(from_fb(*item, static_cast<pyramid::data_model::ObjectInterestRequirement*>(nullptr)));
+        }
+    }
     return out;
 }
 
@@ -80,7 +526,7 @@ fbs::EntityMatchT to_fb(const wire_types::EntityMatch& msg) {
     return out;
 }
 
-wire_types::EntityMatch from_fb(const fbs::EntityMatchT& msg) {
+wire_types::EntityMatch from_fb(const fbs::EntityMatchT& msg, wire_types::EntityMatch* /*tag*/) {
     wire_types::EntityMatch out{};
     out.object_id = msg.object_id;
     out.identity = static_cast<pyramid::data_model::StandardIdentity>(msg.identity);
@@ -105,7 +551,7 @@ wire_types::EntityMatchArray from_fb(const fbs::EntityMatchArrayHolderT& msg) {
     out.reserve(msg.items.size());
     for (const auto& item : msg.items) {
         if (item) {
-            out.push_back(from_fb(*item));
+            out.push_back(from_fb(*item, static_cast<wire_types::EntityMatch*>(nullptr)));
         }
     }
     return out;
@@ -122,7 +568,7 @@ fbs::ObjectEvidenceT to_fb(const wire_types::ObjectEvidence& msg) {
     return out;
 }
 
-wire_types::ObjectEvidence from_fb(const fbs::ObjectEvidenceT& msg) {
+wire_types::ObjectEvidence from_fb(const fbs::ObjectEvidenceT& msg, wire_types::ObjectEvidence* /*tag*/) {
     wire_types::ObjectEvidence out{};
     out.identity = static_cast<pyramid::data_model::StandardIdentity>(msg.identity);
     out.dimension = static_cast<pyramid::data_model::BattleDimension>(msg.dimension);
@@ -145,7 +591,7 @@ fbs::EvidenceRequirementT to_fb(const wire_types::EvidenceRequirement& msg) {
     return out;
 }
 
-wire_types::EvidenceRequirement from_fb(const fbs::EvidenceRequirementT& msg) {
+wire_types::EvidenceRequirement from_fb(const fbs::EvidenceRequirementT& msg, wire_types::EvidenceRequirement* /*tag*/) {
     wire_types::EvidenceRequirement out{};
     out.id = msg.id;
     out.policy = static_cast<pyramid::data_model::DataPolicy>(msg.policy);
@@ -159,48 +605,262 @@ wire_types::EvidenceRequirement from_fb(const fbs::EvidenceRequirementT& msg) {
 
 } // namespace
 
-std::string wrapPayload(const std::string& payload) {
-    flatbuffers::FlatBufferBuilder builder(
-        static_cast<uint32_t>(payload.size() + 64u));
-    auto payload_offset = builder.CreateString(payload);
-    fbs::JsonPayloadBuilder root(builder);
-    root.add_payload(payload_offset);
-    return finish_buffer(builder, root.Finish());
-}
-
-std::string unwrapPayload(const void* data, size_t size) {
-    if (data == nullptr || size == 0) {
-        return {};
-    }
-    auto* root = verified_root<fbs::JsonPayload>(data, size, "JsonPayload");
-    if (!root->payload()) {
-        throw std::runtime_error("invalid JsonPayload flatbuffer");
-    }
-    return root->payload()->str();
-}
-
-std::string toBinary(const wire_types::CreateRequirementRequest& msg) {
+std::string toBinary(const pyramid::data_model::GeodeticPosition& msg) {
     flatbuffers::FlatBufferBuilder builder(256);
     auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::CreateRequirementRequest::Pack(builder, &object));
+    return finish_buffer(builder, fbs::GeodeticPosition::Pack(builder, &object));
 }
 
-wire_types::CreateRequirementRequest fromBinaryCreateRequirementRequest(const void* data, size_t size) {
-    auto* root = verified_root<fbs::CreateRequirementRequest>(data, size, "CreateRequirementRequest");
-    fbs::CreateRequirementRequestT object{};
+pyramid::data_model::GeodeticPosition fromBinaryGeodeticPosition(const void* data, size_t size) {
+    auto* root = verified_root<fbs::GeodeticPosition>(data, size, "GeodeticPosition");
+    fbs::GeodeticPositionT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::GeodeticPosition*>(nullptr));
+}
+
+std::string toBinary(const pyramid::data_model::PolyArea& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::PolyArea::Pack(builder, &object));
+}
+
+pyramid::data_model::PolyArea fromBinaryPolyArea(const void* data, size_t size) {
+    auto* root = verified_root<fbs::PolyArea>(data, size, "PolyArea");
+    fbs::PolyAreaT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::PolyArea*>(nullptr));
+}
+
+std::string toBinary(const pyramid::data_model::Achievement& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::Achievement::Pack(builder, &object));
+}
+
+pyramid::data_model::Achievement fromBinaryAchievement(const void* data, size_t size) {
+    auto* root = verified_root<fbs::Achievement>(data, size, "Achievement");
+    fbs::AchievementT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::Achievement*>(nullptr));
+}
+
+std::string toBinary(const pyramid::data_model::Entity& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::Entity::Pack(builder, &object));
+}
+
+pyramid::data_model::Entity fromBinaryEntity(const void* data, size_t size) {
+    auto* root = verified_root<fbs::Entity>(data, size, "Entity");
+    fbs::EntityT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::Entity*>(nullptr));
+}
+
+std::string toBinary(const pyramid::data_model::CircleArea& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::CircleArea::Pack(builder, &object));
+}
+
+pyramid::data_model::CircleArea fromBinaryCircleArea(const void* data, size_t size) {
+    auto* root = verified_root<fbs::CircleArea>(data, size, "CircleArea");
+    fbs::CircleAreaT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::CircleArea*>(nullptr));
+}
+
+std::string toBinary(const pyramid::data_model::Point& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::Point::Pack(builder, &object));
+}
+
+pyramid::data_model::Point fromBinaryPoint(const void* data, size_t size) {
+    auto* root = verified_root<fbs::Point>(data, size, "Point");
+    fbs::PointT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::Point*>(nullptr));
+}
+
+std::string toBinary(const pyramid::data_model::Contraint& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::Contraint::Pack(builder, &object));
+}
+
+pyramid::data_model::Contraint fromBinaryContraint(const void* data, size_t size) {
+    auto* root = verified_root<fbs::Contraint>(data, size, "Contraint");
+    fbs::ContraintT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::Contraint*>(nullptr));
+}
+
+std::string toBinary(const pyramid::data_model::Ack& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::Ack::Pack(builder, &object));
+}
+
+pyramid::data_model::Ack fromBinaryAck(const void* data, size_t size) {
+    auto* root = verified_root<fbs::Ack>(data, size, "Ack");
+    fbs::AckT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::Ack*>(nullptr));
+}
+
+std::string toBinary(const pyramid::data_model::Query& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::Query::Pack(builder, &object));
+}
+
+pyramid::data_model::Query fromBinaryQuery(const void* data, size_t size) {
+    auto* root = verified_root<fbs::Query>(data, size, "Query");
+    fbs::QueryT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::Query*>(nullptr));
+}
+
+std::string toBinary(const pyramid::data_model::ObjectDetail& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::ObjectDetail::Pack(builder, &object));
+}
+
+pyramid::data_model::ObjectDetail fromBinaryObjectDetail(const void* data, size_t size) {
+    auto* root = verified_root<fbs::ObjectDetail>(data, size, "ObjectDetail");
+    fbs::ObjectDetailT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::ObjectDetail*>(nullptr));
+}
+
+std::string toBinary(const pyramid::data_model::ObjectEvidenceRequirement& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::ObjectEvidenceRequirement::Pack(builder, &object));
+}
+
+pyramid::data_model::ObjectEvidenceRequirement fromBinaryObjectEvidenceRequirement(const void* data, size_t size) {
+    auto* root = verified_root<fbs::ObjectEvidenceRequirement>(data, size, "ObjectEvidenceRequirement");
+    fbs::ObjectEvidenceRequirementT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::ObjectEvidenceRequirement*>(nullptr));
+}
+
+std::string toBinary(const pyramid::data_model::ObjectInterestRequirement& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::ObjectInterestRequirement::Pack(builder, &object));
+}
+
+pyramid::data_model::ObjectInterestRequirement fromBinaryObjectInterestRequirement(const void* data, size_t size) {
+    auto* root = verified_root<fbs::ObjectInterestRequirement>(data, size, "ObjectInterestRequirement");
+    fbs::ObjectInterestRequirementT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::ObjectInterestRequirement*>(nullptr));
+}
+
+std::string toBinary(const pyramid::data_model::ObjectMatch& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::ObjectMatch::Pack(builder, &object));
+}
+
+pyramid::data_model::ObjectMatch fromBinaryObjectMatch(const void* data, size_t size) {
+    auto* root = verified_root<fbs::ObjectMatch>(data, size, "ObjectMatch");
+    fbs::ObjectMatchT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::ObjectMatch*>(nullptr));
+}
+
+std::string toBinary(const pyramid::data_model::Capability& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::Capability::Pack(builder, &object));
+}
+
+pyramid::data_model::Capability fromBinaryCapability(const void* data, size_t size) {
+    auto* root = verified_root<fbs::Capability>(data, size, "Capability");
+    fbs::CapabilityT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::Capability*>(nullptr));
+}
+
+std::string toBinary(const pyramid::data_model::Identifier& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::IdentifierValue::Pack(builder, &object));
+}
+
+pyramid::data_model::Identifier fromBinaryIdentifier(const void* data, size_t size) {
+    auto* root = verified_root<fbs::IdentifierValue>(data, size, "Identifier");
+    fbs::IdentifierValueT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::Identifier*>(nullptr));
+}
+
+std::string toBinary(const std::vector<pyramid::data_model::ObjectDetail>& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::ObjectDetailArrayHolder::Pack(builder, &object));
+}
+
+std::vector<pyramid::data_model::ObjectDetail> fromBinaryObjectDetailArray(const void* data, size_t size) {
+    auto* root = verified_root<fbs::ObjectDetailArrayHolder>(data, size, "ObjectDetailArray");
+    fbs::ObjectDetailArrayHolderT object{};
     root->UnPackTo(&object);
     return from_fb(object);
 }
 
-std::string toBinary(const wire_types::CreateRequirementResponse& msg) {
+std::string toBinary(const std::vector<pyramid::data_model::ObjectEvidenceRequirement>& msg) {
     flatbuffers::FlatBufferBuilder builder(256);
     auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::CreateRequirementResponse::Pack(builder, &object));
+    return finish_buffer(builder, fbs::ObjectEvidenceRequirementArrayHolder::Pack(builder, &object));
 }
 
-wire_types::CreateRequirementResponse fromBinaryCreateRequirementResponse(const void* data, size_t size) {
-    auto* root = verified_root<fbs::CreateRequirementResponse>(data, size, "CreateRequirementResponse");
-    fbs::CreateRequirementResponseT object{};
+std::vector<pyramid::data_model::ObjectEvidenceRequirement> fromBinaryObjectEvidenceRequirementArray(const void* data, size_t size) {
+    auto* root = verified_root<fbs::ObjectEvidenceRequirementArrayHolder>(data, size, "ObjectEvidenceRequirementArray");
+    fbs::ObjectEvidenceRequirementArrayHolderT object{};
+    root->UnPackTo(&object);
+    return from_fb(object);
+}
+
+std::string toBinary(const std::vector<pyramid::data_model::Capability>& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::CapabilityArrayHolder::Pack(builder, &object));
+}
+
+std::vector<pyramid::data_model::Capability> fromBinaryCapabilityArray(const void* data, size_t size) {
+    auto* root = verified_root<fbs::CapabilityArrayHolder>(data, size, "CapabilityArray");
+    fbs::CapabilityArrayHolderT object{};
+    root->UnPackTo(&object);
+    return from_fb(object);
+}
+
+std::string toBinary(const std::vector<pyramid::data_model::ObjectMatch>& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::ObjectMatchArrayHolder::Pack(builder, &object));
+}
+
+std::vector<pyramid::data_model::ObjectMatch> fromBinaryObjectMatchArray(const void* data, size_t size) {
+    auto* root = verified_root<fbs::ObjectMatchArrayHolder>(data, size, "ObjectMatchArray");
+    fbs::ObjectMatchArrayHolderT object{};
+    root->UnPackTo(&object);
+    return from_fb(object);
+}
+
+std::string toBinary(const std::vector<pyramid::data_model::ObjectInterestRequirement>& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::ObjectInterestRequirementArrayHolder::Pack(builder, &object));
+}
+
+std::vector<pyramid::data_model::ObjectInterestRequirement> fromBinaryObjectInterestRequirementArray(const void* data, size_t size) {
+    auto* root = verified_root<fbs::ObjectInterestRequirementArrayHolder>(data, size, "ObjectInterestRequirementArray");
+    fbs::ObjectInterestRequirementArrayHolderT object{};
     root->UnPackTo(&object);
     return from_fb(object);
 }
@@ -215,7 +875,7 @@ wire_types::EntityMatch fromBinaryEntityMatch(const void* data, size_t size) {
     auto* root = verified_root<fbs::EntityMatch>(data, size, "EntityMatch");
     fbs::EntityMatchT object{};
     root->UnPackTo(&object);
-    return from_fb(object);
+    return from_fb(object, static_cast<wire_types::EntityMatch*>(nullptr));
 }
 
 std::string toBinary(const wire_types::EntityMatchArray& msg) {
@@ -241,7 +901,7 @@ wire_types::ObjectEvidence fromBinaryObjectEvidence(const void* data, size_t siz
     auto* root = verified_root<fbs::ObjectEvidence>(data, size, "ObjectEvidence");
     fbs::ObjectEvidenceT object{};
     root->UnPackTo(&object);
-    return from_fb(object);
+    return from_fb(object, static_cast<wire_types::ObjectEvidence*>(nullptr));
 }
 
 std::string toBinary(const wire_types::EvidenceRequirement& msg) {
@@ -254,7 +914,7 @@ wire_types::EvidenceRequirement fromBinaryEvidenceRequirement(const void* data, 
     auto* root = verified_root<fbs::EvidenceRequirement>(data, size, "EvidenceRequirement");
     fbs::EvidenceRequirementT object{};
     root->UnPackTo(&object);
-    return from_fb(object);
+    return from_fb(object, static_cast<wire_types::EvidenceRequirement*>(nullptr));
 }
 
 } // namespace pyramid::services::tactical_objects::flatbuffers_codec

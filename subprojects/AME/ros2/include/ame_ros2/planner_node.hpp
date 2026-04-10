@@ -1,9 +1,15 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 
-#include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include <rclcpp/node_options.hpp>
+#include <rclcpp/service.hpp>
+#include <rclcpp_action/rclcpp_action.hpp>
+#include <rclcpp_lifecycle/lifecycle_node.hpp>
+
+#include <ame_ros2/action/plan.hpp>
+#include <ame_ros2/srv/load_domain.hpp>
 
 // Forward-declare AME types — full headers are not needed by ROS2 consumers
 namespace ame {
@@ -51,6 +57,10 @@ public:
   /// \brief Injects canonical WorldModel for in-process mode.
   void setInProcessWorldModel(ame::WorldModel* wm);
 
+  /// \brief Inject a shared mutex that protects the in-process WorldModel.
+  /// Must be called before on_configure if in-process mode is used.
+  void setWorldModelMutex(std::mutex* wm_mutex) { wm_mutex_ = wm_mutex; }
+
   /// \brief Component and sub-object accessors for in-process mode.
   /// Callers must #include the relevant <ame/...> headers to use these references.
   ame::ActionRegistry& actionRegistry();
@@ -62,6 +72,10 @@ public:
 private:
   std::unique_ptr<ame::PlannerComponent> component_;
   ame::WorldModel* inprocess_wm_ = nullptr;
+  std::mutex* wm_mutex_ = nullptr;  ///< Borrowed from WorldModelComponent (may be null).
+
+  rclcpp_action::Server<ame_ros2::action::Plan>::SharedPtr plan_action_srv_;
+  rclcpp::Service<ame_ros2::srv::LoadDomain>::SharedPtr    svc_load_domain_;
 };
 
 }  // namespace ame_ros2

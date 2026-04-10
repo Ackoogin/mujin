@@ -1,9 +1,9 @@
-"""json_schema.py — Canonical JSON wire format for the pyramid standard bridge.
+"""json_schema.py — Canonical JSON bridge adapter schema for PYRAMID.
 
 This module is the single source of truth for:
-  - Which JSON field names map to which proto message fields
+  - Which bridge-topic JSON field names map to which proto message fields
   - How enum values are represented as strings on the wire
-  - Ada and C++ type/literal names for each message
+  - Ada and C++ type/literal names for each bridge adapter message
 
 Enum values are parsed from the proto IDL files at generation time — no
 enum literals are hardcoded here beyond the per-enum naming conventions
@@ -15,8 +15,13 @@ Wire format sources:
                                              DataPolicy, Entity, Ack, Query)
   - proto/pyramid/data_model/tactical.proto (ObjectDetail,
       ObjectEvidenceRequirement, ObjectInterestRequirement, ObjectMatch)
-  - proto/pyramid/components/tactical_objects/services/provided.proto
-  - proto/pyramid/components/tactical_objects/services/consumed.proto
+
+Important:
+  - The canonical RPC/service contract is the generated .proto from MBSE.
+  - This file exists only for bridge-specific topic adapters that intentionally
+    reshape payloads for a legacy or external JSON protocol.
+  - Core service bindings and RPC request/response payloads must not derive
+    their contract from this file.
 """
 
 import re
@@ -314,44 +319,6 @@ class MessageSchema:
         self.is_array_response = is_array_response
 
 
-# create_requirement request → proto: ObjectInterestRequirement
-# Wire: {"policy": "DATA_POLICY_OBTAIN", "identity": "STANDARD_IDENTITY_HOSTILE",
-#         "dimension": "BATTLE_DIMENSION_SEA_SURFACE",
-#         "min_lat_rad": .., "max_lat_rad": .., "min_lon_rad": .., "max_lon_rad": ..}
-CREATE_REQUIREMENT_REQUEST = MessageSchema(
-    ada_name='Create_Requirement_Request',
-    cpp_name='CreateRequirementRequest',
-    wire_description='object_of_interest.create_requirement request '
-                     '(proto: ObjectInterestRequirement)',
-    fields=[
-        Field('policy',      FieldKind.DATA_POLICY,       required=True),
-        Field('identity',    FieldKind.STANDARD_IDENTITY, required=True),
-        Field('dimension',   FieldKind.BATTLE_DIMENSION,  required=False,
-              description='Optional battle-dimension filter'),
-        Field('min_lat_rad', FieldKind.DOUBLE, required=False,
-              description='Bounding-box south edge, radians'),
-        Field('max_lat_rad', FieldKind.DOUBLE, required=False,
-              description='Bounding-box north edge, radians'),
-        Field('min_lon_rad', FieldKind.DOUBLE, required=False,
-              description='Bounding-box west edge, radians'),
-        Field('max_lon_rad', FieldKind.DOUBLE, required=False,
-              description='Bounding-box east edge, radians'),
-    ],
-)
-
-# create_requirement response → proto: Identifier
-# Wire: {"interest_id": "<uuid>"}
-CREATE_REQUIREMENT_RESPONSE = MessageSchema(
-    ada_name='Create_Requirement_Response',
-    cpp_name='CreateRequirementResponse',
-    wire_description='object_of_interest.create_requirement response '
-                     '(proto: Identifier)',
-    fields=[
-        Field('interest_id', FieldKind.IDENTIFIER, required=False,
-              description='Assigned interest ID; absent when creation failed'),
-    ],
-)
-
 # entity_matches element → proto: ObjectMatch (enriched with position/confidence)
 # Wire: [{"object_id": "..", "identity": "..", "dimension": "..",
 #          "latitude_rad": .., "longitude_rad": .., "confidence": ..}, ...]
@@ -413,25 +380,10 @@ EVIDENCE_REQUIREMENT = MessageSchema(
 
 # All schemas in generation order
 ALL_SCHEMAS: List[MessageSchema] = [
-    CREATE_REQUIREMENT_REQUEST,
-    CREATE_REQUIREMENT_RESPONSE,
     ENTITY_MATCH,
     OBJECT_EVIDENCE,
     EVIDENCE_REQUIREMENT,
 ]
-
-# Maps domain request types to service-local wire types.
-# Used by service binding generators so Invoke_* procedures accept the wire
-# model while handler callbacks still work with the canonical data model.
-#
-# Keys are the language-local request type names seen by the generators.
-INVOKE_WIRE_TYPES_ADA: Dict[str, str] = {
-    'Object_Interest_Requirement': 'Create_Requirement_Request',
-}
-
-INVOKE_WIRE_TYPES_CPP: Dict[str, str] = {
-    'ObjectInterestRequirement': 'CreateRequirementRequest',
-}
 
 # ── Standard topic names ──────────────────────────────────────────────────────
 # Topics the Ada/C++ client SUBSCRIBES to (server publishes these):

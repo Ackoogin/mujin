@@ -59,7 +59,6 @@ BASE_TYPE_MAP = {
     'pyramid.data_model.base.Ack':        'Ack',
     'pyramid.data_model.common.Query':    'Query',
     'pyramid.data_model.common.Ack':      'Ack',
-    'pyramid.data_model.common.Capability': 'Identifier',
 }
 
 # Wire-name service prefix derived from proto service name
@@ -566,19 +565,16 @@ class AdaServiceGenerator:
             f.write(f'--\n')
             codec_pkg = _codec_pkg_from_proto(parsed)
             wire_types_pkg = _wire_types_pkg_from_proto(parsed)
-            f.write(f'--  JSON serialisation/deserialisation is provided by the companion\n')
+            f.write(f'--  RPC request/response payloads use the proto-native data model.\n')
+            f.write(f'--  Bridge-topic adapter codecs, when generated, live in the companion\n')
             f.write(f'--  {codec_pkg} package.\n')
             f.write(f'\n')
             for tp in type_pkgs:
                 f.write(f'with {tp};  use {tp};\n')
-            # Import service wire types whenever Invoke_* or typed Publish_*
-            # overloads depend on them.
-            has_wire_types = (
-                any(schema.INVOKE_WIRE_TYPES_ADA.get(rpc.ada_req_type)
-                    for svc in parsed.services for rpc in svc.rpcs)
-                or any(schema.TOPIC_WIRE_TYPES_ADA.get(key)
-                       for key in pub_topics)
-            )
+            # Import service wire types only when typed Publish_* overloads
+            # depend on bridge/topic adapter payloads.
+            has_wire_types = any(schema.TOPIC_WIRE_TYPES_ADA.get(key)
+                                 for key in pub_topics)
             if has_wire_types:
                 f.write(f'with {wire_types_pkg};\n')
             f.write(f'with Pcl_Bindings;\n')
@@ -700,20 +696,14 @@ class AdaServiceGenerator:
             f.write(f'\n')
 
             # Invoke helpers for services (provided = client can call them)
-            # When a proto request type has a Json_Codec wire type mapping
-            # (INVOKE_WIRE_TYPES), the Invoke procedure accepts the wire type
-            # and serialises via Json_Codec.To_Json.  Otherwise it accepts the
-            # data model type directly.
+            # These use the proto-native data model type directly.
             if is_provided:
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
-                        req_t = rpc.ada_req_type
-                        wire_t = schema.INVOKE_WIRE_TYPES_ADA.get(req_t)
-                        invoke_t = f'{wire_types_pkg}.{wire_t}' if wire_t else req_t
                         f.write(f'   --  Invoke via executor transport (transport-agnostic).\n')
                         f.write(f'   procedure {rpc.ada_invoke_name}\n')
                         f.write(f'     (Executor  : Pcl_Bindings.Pcl_Executor_Access;\n')
-                        f.write(f'      Request   : {invoke_t};\n')
+                        f.write(f'      Request   : {rpc.ada_req_type};\n')
                         f.write(f'      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
                         f.write(f'      User_Data : System.Address := System.Null_Address;\n')
                         f.write(f'      Content_Type : String := "application/json");\n')
@@ -757,12 +747,8 @@ class AdaServiceGenerator:
                     codec_pkgs: List[str]):
         is_provided = _is_provided(parsed)
         sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
-        has_wire_types = (
-            any(schema.INVOKE_WIRE_TYPES_ADA.get(rpc.ada_req_type)
-                for svc in parsed.services for rpc in svc.rpcs)
-            or any(schema.TOPIC_WIRE_TYPES_ADA.get(key)
-                   for key in pub_topics)
-        )
+        has_wire_types = any(schema.TOPIC_WIRE_TYPES_ADA.get(key)
+                             for key in pub_topics)
 
         with open(path, 'w') as f:
             f.write(f'--  Auto-generated service binding body\n')
@@ -776,7 +762,8 @@ class AdaServiceGenerator:
             # Only bring in codec packages for the types this service actually uses
             for cp in codec_pkgs:
                 f.write(f'with {cp};  use {cp};\n')
-            # Import service Json_Codec only when Invoke_* procedures need it
+            # Import service Json_Codec only when typed Publish_* procedures
+            # need bridge/topic adapter payloads.
             if has_wire_types:
                 codec_pkg = _codec_pkg_from_proto(parsed)
                 f.write(f'with {codec_pkg};\n')
@@ -1012,26 +999,18 @@ class AdaServiceGenerator:
 
             # Invoke helpers (provided services) — typed, serialize internally
             if is_provided:
-                codec_pkg = _codec_pkg_from_proto(parsed)
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
-                        req_t = rpc.ada_req_type
-                        wire_t = schema.INVOKE_WIRE_TYPES_ADA.get(req_t)
-                        invoke_t = f'{_wire_types_pkg_from_proto(parsed)}.{wire_t}' if wire_t else req_t
                         f.write(f'   procedure {rpc.ada_invoke_name}\n')
                         f.write(f'     (Executor  : Pcl_Bindings.Pcl_Executor_Access;\n')
-                        f.write(f'      Request   : {invoke_t};\n')
+                        f.write(f'      Request   : {rpc.ada_req_type};\n')
                         f.write(f'      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
                         f.write(f'      User_Data : System.Address := System.Null_Address;\n')
                         f.write(f'      Content_Type : String := "application/json")\n')
                         f.write(f'   is\n')
                         f.write(f'      use type Pcl_Bindings.Pcl_Status;\n')
-                        # Serialize request to JSON string — use Json_Codec
-                        # for wire types, data model codec for base types.
-                        if req_t == 'Identifier':
+                        if rpc.ada_req_type == 'Identifier':
                             f.write(f'      Json_Payload : constant String := To_String (Request);\n')
-                        elif wire_t:
-                            f.write(f'      Json_Payload : constant String := {codec_pkg}.To_Json (Request);\n')
                         else:
                             f.write(f'      Json_Payload : constant String := To_Json (Request);\n')
                         f.write(f'      Payload : constant String := Encode_Transport_Payload (Json_Payload, Content_Type);\n')

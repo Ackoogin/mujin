@@ -33,6 +33,14 @@ target_include_directories(ame_core PUBLIC
     ${AME_ROOT_DIR}/include
 )
 
+if(NOT MUJIN_BUILD_PYRAMID)
+    # Provide a no-op stub so ame_core and its dependants link cleanly
+    # when the PYRAMID subproject is excluded from the build.
+    if(NOT TARGET pyramid_core)
+        add_library(pyramid_core INTERFACE)
+    endif()
+endif()
+
 target_link_libraries(ame_core
     PUBLIC
         behaviortree_cpp

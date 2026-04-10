@@ -8,7 +8,6 @@ with System;
 with System.Storage_Elements;
 with Pyramid.Data_Model.Common.Types_Codec;  use Pyramid.Data_Model.Common.Types_Codec;
 with Pyramid.Data_Model.Tactical.Types_Codec;  use Pyramid.Data_Model.Tactical.Types_Codec;
-with Pyramid.Services.Tactical_Objects.Json_Codec;
 with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
 
 package body Pyramid.Services.Tactical_Objects.Provided is
@@ -609,13 +608,13 @@ package body Pyramid.Services.Tactical_Objects.Provided is
 
    procedure Invoke_Create_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Pyramid.Services.Tactical_Objects.Wire_Types.Create_Requirement_Request;
+      Request   : Object_Interest_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json")
    is
       use type Pcl_Bindings.Pcl_Status;
-      Json_Payload : constant String := Pyramid.Services.Tactical_Objects.Json_Codec.To_Json (Request);
+      Json_Payload : constant String := To_Json (Request);
       Payload : constant String := Encode_Transport_Payload (Json_Payload, Content_Type);
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
@@ -685,13 +684,13 @@ package body Pyramid.Services.Tactical_Objects.Provided is
 
    procedure Invoke_Update_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Pyramid.Services.Tactical_Objects.Wire_Types.Create_Requirement_Request;
+      Request   : Object_Interest_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json")
    is
       use type Pcl_Bindings.Pcl_Status;
-      Json_Payload : constant String := Pyramid.Services.Tactical_Objects.Json_Codec.To_Json (Request);
+      Json_Payload : constant String := To_Json (Request);
       Payload : constant String := Encode_Transport_Payload (Json_Payload, Content_Type);
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;

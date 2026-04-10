@@ -1,48 +1,193 @@
-// Auto-generated tactical service FlatBuffers schema
-// Generated from pim/json_schema.py
+// Auto-generated service FlatBuffers schema
+// Generated from proto service closure for pyramid.components.tactical_objects.services
+// Bridge-topic adapter tables are included for compatibility.
 
 namespace pyramid.services.tactical_objects;
 
-enum StandardIdentity : byte {
-  Unspecified = 0,
-  Unknown = 1,
-  Friendly = 2,
-  Hostile = 3,
-  Suspect = 4,
-  Neutral = 5,
-  Pending = 6,
-  Joker = 7,
-  Faker = 8,
-  AssumedFriendly = 9
+enum Feasibility : int {
+  UNSPECIFIED = 0,
+  FEASIBLE = 1,
+  NOT_FEASIBLE = 2,
+  PARTIALLY_FEASIBLE = 3,
+  PENDING = 4
 }
 
-enum BattleDimension : byte {
-  Unspecified = 0,
-  Ground = 1,
-  Subsurface = 2,
-  SeaSurface = 3,
-  Air = 4,
-  Unknown = 5
+enum Progress : int {
+  UNSPECIFIED = 0,
+  NOT_STARTED = 1,
+  IN_PROGRESS = 2,
+  COMPLETED = 3,
+  CANCELLED = 4,
+  FAILED = 5
 }
 
-enum DataPolicy : byte {
-  Unspecified = 0,
-  Query = 1,
-  Obtain = 2
+enum StandardIdentity : int {
+  UNSPECIFIED = 0,
+  UNKNOWN = 1,
+  FRIENDLY = 2,
+  HOSTILE = 3,
+  SUSPECT = 4,
+  NEUTRAL = 5,
+  PENDING = 6,
+  JOKER = 7,
+  FAKER = 8,
+  ASSUMED_FRIENDLY = 9
 }
 
-table CreateRequirementRequest {
-  policy:DataPolicy;
+enum BattleDimension : int {
+  UNSPECIFIED = 0,
+  GROUND = 1,
+  SUBSURFACE = 2,
+  SEA_SURFACE = 3,
+  AIR = 4,
+  UNKNOWN = 5
+}
+
+enum DataPolicy : int {
+  UNSPECIFIED = 0,
+  QUERY = 1,
+  OBTAIN = 2
+}
+
+enum ObjectSource : int {
+  UNSPECIFIED = 0,
+  RADAR = 1,
+  LOCAL = 2
+}
+
+table GeodeticPosition {
+  latitude:double;
+  longitude:double;
+}
+
+table PolyArea {
+  points:[GeodeticPosition];
+}
+
+table Achievement {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+  status:Progress;
+  has_quality:bool;
+  quality:double;
+  achieveability:Feasibility;
+}
+
+table Entity {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+}
+
+table CircleArea {
+  position:GeodeticPosition;
+  radius:double;
+}
+
+table Point {
+  position:GeodeticPosition;
+}
+
+table Contraint {
+  name:string;
+  value:int;
+}
+
+table Ack {
+  success:bool;
+}
+
+table Query {
+  id:[string];
+  has_one_shot:bool;
+  one_shot:bool;
+}
+
+table ObjectDetail {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  entity_source:string;
+  source:[ObjectSource];
+  position:GeodeticPosition;
+  creation_time:double;
+  has_quality:bool;
+  quality:double;
+  has_course:bool;
+  course:double;
+  has_speed:bool;
+  speed:double;
+  has_length:bool;
+  length:double;
   identity:StandardIdentity;
   dimension:BattleDimension;
-  min_lat_rad:double;
-  max_lat_rad:double;
-  min_lon_rad:double;
-  max_lon_rad:double;
 }
 
-table CreateRequirementResponse {
-  interest_id:string;
+table ObjectEvidenceRequirement {
+  base:Entity;
+  status:Achievement;
+  policy:DataPolicy;
+  dimension:[BattleDimension];
+  poly_area:PolyArea;
+  circle_area:CircleArea;
+  point:Point;
+}
+
+table ObjectInterestRequirement {
+  base:Entity;
+  status:Achievement;
+  has_source:bool;
+  source:ObjectSource;
+  policy:DataPolicy;
+  dimension:[BattleDimension];
+  poly_area:PolyArea;
+  circle_area:CircleArea;
+  point:Point;
+}
+
+table ObjectMatch {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+  matching_object_id:string;
+}
+
+table Capability {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+  availability:bool;
+  name:string;
+  contraint:[Contraint];
+}
+
+table IdentifierValue {
+  value:string;
+}
+
+table ObjectDetailArrayHolder {
+  items:[ObjectDetail];
+}
+
+table ObjectEvidenceRequirementArrayHolder {
+  items:[ObjectEvidenceRequirement];
+}
+
+table CapabilityArrayHolder {
+  items:[Capability];
+}
+
+table ObjectMatchArrayHolder {
+  items:[ObjectMatch];
+}
+
+table ObjectInterestRequirementArrayHolder {
+  items:[ObjectInterestRequirement];
 }
 
 table EntityMatch {
@@ -77,6 +222,3 @@ table EvidenceRequirement {
   max_lon_rad:double;
 }
 
-table JsonPayload {
-  payload:string;
-}

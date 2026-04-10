@@ -14,22 +14,6 @@ namespace pyramid::services::tactical_objects::wire_types {
 // Wire message structs
 // ---------------------------------------------------------------------------
 
-// object_of_interest.create_requirement request (proto: ObjectInterestRequirement)
-struct CreateRequirementRequest {
-    pyramid::data_model::DataPolicy policy = pyramid::data_model::DataPolicy::Unspecified;
-    pyramid::data_model::StandardIdentity identity = pyramid::data_model::StandardIdentity::Unspecified;
-    pyramid::data_model::BattleDimension dimension = pyramid::data_model::BattleDimension::Unspecified;  // Optional battle-dimension filter
-    double min_lat_rad = 0.0;  // Bounding-box south edge, radians
-    double max_lat_rad = 0.0;  // Bounding-box north edge, radians
-    double min_lon_rad = 0.0;  // Bounding-box west edge, radians
-    double max_lon_rad = 0.0;  // Bounding-box east edge, radians
-};
-
-// object_of_interest.create_requirement response (proto: Identifier)
-struct CreateRequirementResponse {
-    std::string interest_id = {};  // Assigned interest ID; absent when creation failed
-};
-
 // element of standard.entity_matches array (proto: ObjectMatch + position/confidence)
 struct EntityMatch {
     std::string object_id = {};

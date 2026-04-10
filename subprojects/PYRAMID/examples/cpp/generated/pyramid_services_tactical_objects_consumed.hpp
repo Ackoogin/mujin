@@ -99,7 +99,7 @@ public:
     handleDeleteRequirement(const Identifier& request);
 
     // Object_Source_Capability_Service
-    virtual std::vector<Identifier>
+    virtual std::vector<Capability>
     handleReadCapability(const Query& request);
 };
 

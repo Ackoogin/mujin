@@ -10,7 +10,8 @@
 --    3. PCL binding procedures (Register_Services, Subscribe_*, Invoke_*, Publish_*)
 --    4. Msg_To_String utility for PCL message payloads
 --
---  JSON serialisation/deserialisation is provided by the companion
+--  RPC request/response payloads use the proto-native data model.
+--  Bridge-topic adapter codecs, when generated, live in the companion
 --  Pyramid.Services.Tactical_Objects.Json_Codec package.
 
 with Pyramid.Data_Model.Base.Types;  use Pyramid.Data_Model.Base.Types;
@@ -37,7 +38,7 @@ package Pyramid.Services.Tactical_Objects.Consumed is
       Ch_Delete_Requirement,
       Ch_Read_Capability);
 
-   type Identifier_Array is array (Positive range <>) of Identifier;
+   type Capability_Array is array (Positive range <>) of Capability;
    type Object_Detail_Array is array (Positive range <>) of Object_Detail;
    type Object_Evidence_Requirement_Array is array (Positive range <>) of Object_Evidence_Requirement;
 
@@ -87,7 +88,7 @@ package Pyramid.Services.Tactical_Objects.Consumed is
       Response : out Ack);
    --  Object_Source_Capability_Service
    type Handle_Read_Capability_Access is access function
-     (Request : Query) return Identifier_Array;
+     (Request : Query) return Capability_Array;
 
    type Service_Handlers is record
       On_Read_Detail : Handle_Read_Detail_Access := null;

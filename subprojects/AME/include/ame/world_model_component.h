@@ -6,6 +6,8 @@
 
 #include <atomic>
 #include <cstdint>
+#include <functional>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <vector>
@@ -69,6 +71,13 @@ public:
   WorldModel& worldModel() { return wm_; }
   const WorldModel& worldModel() const { return wm_; }
 
+  /// \brief Mutex protecting wm_ for cross-thread access (e.g. ROS2 ↔ PCL).
+  std::mutex& worldModelMutex() { return wm_mutex_; }
+
+  /// \brief Register a callback invoked on every world-state publish (from the PCL thread).
+  /// Used by WorldModelNode to bridge PCL state publishes into ROS2 topics.
+  void setWmPublishCallback(std::function<void(const WorldStateSnapshot&)> cb);
+
   /// \brief Query a single fact by key.
   GetFactResult getFact(const std::string& key) const;
 
@@ -109,10 +118,12 @@ private:
   // PCL ports (valid after on_configure)
   pcl_port_t* pub_world_state_ = nullptr;
 
+  mutable std::mutex wm_mutex_;  ///< Guards wm_ for concurrent PCL ↔ ROS2 access.
   WorldModel wm_;
   std::optional<WmAuditLog> audit_log_;
   std::atomic<bool> state_dirty_{false};
   double perception_confidence_threshold_ = 0.5;
+  std::function<void(const WorldStateSnapshot&)> wm_publish_cb_;
 
   // -- Static PCL callbacks ------------------------------------------------
 

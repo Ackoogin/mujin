@@ -54,7 +54,6 @@ BASE_TYPE_MAP = {
     'pyramid.data_model.base.Ack':        'Ack',
     'pyramid.data_model.common.Query':    'Query',
     'pyramid.data_model.common.Ack':      'Ack',
-    'pyramid.data_model.common.Capability': 'Identifier',
 }
 
 # Standard topic names — sourced from json_schema.py as canonical authority.
@@ -303,20 +302,19 @@ def _is_provided(proto_file: ProtoFile) -> bool:
     return 'provided' in proto_file.package.lower()
 
 
-def _wire_request_type_for_rpc_cpp(rpc: ProtoRpc) -> Optional[str]:
-    """Return the service-local wire request type for an RPC when one exists."""
-    if rpc.cpp_req_type == 'ObjectInterestRequirement':
-        return 'CreateRequirementRequest'
-    if rpc.cpp_req_type == 'ObjectEvidenceRequirement':
-        return 'EvidenceRequirement'
-    return None
-
-
-def _wire_response_type_for_rpc_cpp(rpc: ProtoRpc) -> Optional[str]:
-    """Return the service-local wire response type for an RPC when one exists."""
-    if rpc.name == 'CreateRequirement' and rpc.cpp_rsp_type == 'Identifier':
-        return 'CreateRequirementResponse'
-    return None
+def _topics_for_proto(
+        parsed: 'ProtoFile', is_provided: bool
+) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Return (sub_topics, pub_topics) for the service, based on its package."""
+    pkg_lower = parsed.package.lower()
+    sub: Dict[str, str] = {}
+    pub: Dict[str, str] = {}
+    if 'tactical_objects' in pkg_lower:
+        if is_provided:
+            sub.update(SUBSCRIBE_TOPICS)
+        else:
+            pub.update(PUBLISH_TOPICS)
+    return sub, pub
 
 
 # -- Code generation -----------------------------------------------------------
@@ -375,14 +373,8 @@ class CppServiceGenerator:
         all_topics = dict(sub_topics)
         all_topics.update(pub_topics)
         topic_set = all_topics
-        has_wire_types = (
-            any(_wire_request_type_for_rpc_cpp(rpc)
-                for _svc, rpc in all_rpcs)
-            or any(_wire_response_type_for_rpc_cpp(rpc)
-                   for _svc, rpc in all_rpcs)
-            or any(schema.TOPIC_WIRE_TYPES_CPP.get(key)
-                   for key in topic_set)
-        )
+        has_wire_types = any(schema.TOPIC_WIRE_TYPES_CPP.get(key)
+                             for key in pub_topics)
 
         # Collect raw type names (no BASE_TYPE_MAP) for using declarations
         raw_types = sorted({
@@ -555,9 +547,7 @@ class CppServiceGenerator:
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
                         wire_full = f'{svc.wire_prefix}.{rpc.wire_name}'
-                        req_t = _wire_request_type_for_rpc_cpp(rpc) or rpc.cpp_req_type
-                        req_decl_t = (f'wire_types::{req_t}'
-                                      if req_t != rpc.cpp_req_type else req_t)
+                        req_decl_t = rpc.cpp_req_type
                         col = 13 + len(rpc.cpp_invoke_func) + 1
                         sp = ' ' * col
                         f.write(f'/// \\brief Invoke {wire_full}'
@@ -654,26 +644,8 @@ class CppServiceGenerator:
         all_topics = dict(sub_topics)
         all_topics.update(pub_topics)
         topic_set = all_topics
-        has_wire_types = (
-            any(_wire_request_type_for_rpc_cpp(rpc)
-                for _svc, rpc in all_rpcs)
-            or any(_wire_response_type_for_rpc_cpp(rpc)
-                   for _svc, rpc in all_rpcs)
-            or any(schema.TOPIC_WIRE_TYPES_CPP.get(key)
-                   for key in topic_set)
-        )
-        needs_create_req_mapping = any(
-            _wire_request_type_for_rpc_cpp(rpc) == 'CreateRequirementRequest'
-            for _svc, rpc in all_rpcs
-        )
-        needs_evidence_req_mapping = any(
-            _wire_request_type_for_rpc_cpp(rpc) == 'EvidenceRequirement'
-            for _svc, rpc in all_rpcs
-        )
-        needs_create_rsp_mapping = any(
-            _wire_response_type_for_rpc_cpp(rpc) == 'CreateRequirementResponse'
-            for _svc, rpc in all_rpcs
-        )
+        has_wire_types = any(schema.TOPIC_WIRE_TYPES_CPP.get(key)
+                             for key in pub_topics)
         hpp_name = file_prefix + '.hpp'
 
         # Determine which data model codec namespaces to use
@@ -697,12 +669,12 @@ class CppServiceGenerator:
             f.write(f'#include "{hpp_name}"\n\n')
             if has_wire_types:
                 f.write(f'#include "{json_codec_header}"\n')
-                f.write('#if __has_include("' + flatbuffers_codec_header + '")\n')
-                f.write(f'#include "{flatbuffers_codec_header}"\n')
-                f.write('#define PYRAMID_HAVE_SERVICE_FLATBUFFERS 1\n')
-                f.write('#else\n')
-                f.write('#define PYRAMID_HAVE_SERVICE_FLATBUFFERS 0\n')
-                f.write('#endif\n')
+            f.write('#if __has_include("' + flatbuffers_codec_header + '")\n')
+            f.write(f'#include "{flatbuffers_codec_header}"\n')
+            f.write('#define PYRAMID_HAVE_SERVICE_FLATBUFFERS 1\n')
+            f.write('#else\n')
+            f.write('#define PYRAMID_HAVE_SERVICE_FLATBUFFERS 0\n')
+            f.write('#endif\n')
             # Data model codec headers — for serialisation inside
             # invoke/publish/dispatch
             for ch in dm_codec_headers:
@@ -714,6 +686,7 @@ class CppServiceGenerator:
             f.write('\n#include <cstdlib>\n')
             f.write('#include <cstdint>\n')
             f.write('#include <cstring>\n')
+            f.write('#include <nlohmann/json.hpp>\n')
             f.write('#include <string>\n')
             f.write('#include <vector>\n\n')
 
@@ -728,9 +701,9 @@ class CppServiceGenerator:
             if has_wire_types:
                 f.write(f'namespace wire_types = {wire_types_ns};\n')
                 f.write(f'namespace json_codec = {json_codec_ns};\n')
-                f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
-                f.write(f'namespace flatbuffers_codec = {flatbuffers_codec_ns};\n')
-                f.write('#endif\n')
+            f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
+            f.write(f'namespace flatbuffers_codec = {flatbuffers_codec_ns};\n')
+            f.write('#endif\n')
             f.write('\n')
 
             # ---- msgToString -------------------------------------------------
@@ -785,55 +758,28 @@ class CppServiceGenerator:
             f.write('    return std::string(static_cast<const char*>(data), size);\n')
             f.write('}\n\n')
 
-            if has_wire_types and needs_create_req_mapping:
-                f.write('ObjectInterestRequirement to_domain_create_requirement_request(\n')
-                f.write('    const wire_types::CreateRequirementRequest& wire_req)\n')
-                f.write('{\n')
-                f.write('    ObjectInterestRequirement result{};\n')
-                f.write('    result.policy = wire_req.policy;\n')
-                f.write('    if (wire_req.dimension != pyramid::data_model::BattleDimension::Unspecified)\n')
-                f.write('        result.dimension.push_back(wire_req.dimension);\n')
-                f.write('    if (wire_req.min_lat_rad != 0.0 || wire_req.max_lat_rad != 0.0\n')
-                f.write('        || wire_req.min_lon_rad != 0.0 || wire_req.max_lon_rad != 0.0) {\n')
-                f.write('        pyramid::data_model::common::PolyArea area{};\n')
-                f.write('        area.points.push_back({wire_req.min_lat_rad, wire_req.min_lon_rad});\n')
-                f.write('        area.points.push_back({wire_req.min_lat_rad, wire_req.max_lon_rad});\n')
-                f.write('        area.points.push_back({wire_req.max_lat_rad, wire_req.max_lon_rad});\n')
-                f.write('        area.points.push_back({wire_req.max_lat_rad, wire_req.min_lon_rad});\n')
-                f.write('        result.poly_area = area;\n')
-                f.write('    }\n')
-                f.write('    return result;\n')
-                f.write('}\n\n')
+            f.write('std::string encode_identifier_payload(const Identifier& value)\n')
+            f.write('{\n')
+            f.write('    return nlohmann::json(value).dump();\n')
+            f.write('}\n\n')
 
-            if has_wire_types and needs_evidence_req_mapping:
-                f.write('ObjectEvidenceRequirement to_domain_evidence_requirement(\n')
-                f.write('    const wire_types::EvidenceRequirement& wire_req)\n')
-                f.write('{\n')
-                f.write('    ObjectEvidenceRequirement result{};\n')
-                f.write('    result.base.id = wire_req.id;\n')
-                f.write('    result.policy = wire_req.policy;\n')
-                f.write('    if (wire_req.dimension != pyramid::data_model::BattleDimension::Unspecified)\n')
-                f.write('        result.dimension.push_back(wire_req.dimension);\n')
-                f.write('    if (wire_req.min_lat_rad != 0.0 || wire_req.max_lat_rad != 0.0\n')
-                f.write('        || wire_req.min_lon_rad != 0.0 || wire_req.max_lon_rad != 0.0) {\n')
-                f.write('        pyramid::data_model::common::PolyArea area{};\n')
-                f.write('        area.points.push_back({wire_req.min_lat_rad, wire_req.min_lon_rad});\n')
-                f.write('        area.points.push_back({wire_req.min_lat_rad, wire_req.max_lon_rad});\n')
-                f.write('        area.points.push_back({wire_req.max_lat_rad, wire_req.max_lon_rad});\n')
-                f.write('        area.points.push_back({wire_req.max_lat_rad, wire_req.min_lon_rad});\n')
-                f.write('        result.poly_area = area;\n')
-                f.write('    }\n')
-                f.write('    return result;\n')
-                f.write('}\n\n')
-
-            if has_wire_types and needs_create_rsp_mapping:
-                f.write('wire_types::CreateRequirementResponse to_wire_create_requirement_response(\n')
-                f.write('    const Identifier& interest_id)\n')
-                f.write('{\n')
-                f.write('    wire_types::CreateRequirementResponse result{};\n')
-                f.write('    result.interest_id = interest_id;\n')
-                f.write('    return result;\n')
-                f.write('}\n\n')
+            f.write('Identifier decode_identifier_payload(const std::string& payload)\n')
+            f.write('{\n')
+            f.write('    if (payload.empty()) {\n')
+            f.write('        return {};\n')
+            f.write('    }\n')
+            f.write('    try {\n')
+            f.write('        auto j = nlohmann::json::parse(payload);\n')
+            f.write('        if (j.is_string()) {\n')
+            f.write('            return j.get<std::string>();\n')
+            f.write('        }\n')
+            f.write('        if (j.is_object() && j.contains("uuid") && j["uuid"].is_string()) {\n')
+            f.write('            return j["uuid"].get<std::string>();\n')
+            f.write('        }\n')
+            f.write('    } catch (...) {\n')
+            f.write('    }\n')
+            f.write('    return payload;\n')
+            f.write('}\n\n')
 
             if is_provided:
                 f.write('pcl_status_t invoke_async('
@@ -902,9 +848,7 @@ class CppServiceGenerator:
                 f.write(_SEP + '\n\n')
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
-                        req_t = _wire_request_type_for_rpc_cpp(rpc) or rpc.cpp_req_type
-                        req_decl_t = (f'wire_types::{req_t}'
-                                      if req_t != rpc.cpp_req_type else req_t)
+                        req_decl_t = rpc.cpp_req_type
                         col = 13 + len(rpc.cpp_invoke_func) + 1
                         sp = ' ' * col
                         f.write(f'pcl_status_t {rpc.cpp_invoke_func}'
@@ -919,23 +863,20 @@ class CppServiceGenerator:
                         f.write(f'{sp}const pcl_endpoint_route_t* route,\n')
                         f.write(f'{sp}const char*       content_type)\n')
                         f.write('{\n')
-                        if req_decl_t == 'Identifier':
-                            f.write('    std::string payload = request;\n')
-                        elif req_decl_t.startswith('wire_types::'):
-                            f.write('    std::string payload = json_codec::toJson(request);\n')
-                        else:
-                            f.write('    std::string payload = toJson(request);\n')
+                        f.write('    std::string payload;\n')
                         f.write('    if (is_flatbuffers_content_type(content_type)) {\n')
                         f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
-                        if req_decl_t.startswith('wire_types::'):
-                            f.write('        payload = flatbuffers_codec::toBinary(request);\n')
-                        else:
-                            f.write('        payload = flatbuffers_codec::wrapPayload(payload);\n')
+                        f.write('        payload = flatbuffers_codec::toBinary(request);\n')
                         f.write('#else\n')
                         f.write('        return PCL_ERR_INVALID;\n')
                         f.write('#endif\n')
                         f.write('    } else if (!is_json_content_type(content_type)) {\n')
                         f.write('        return PCL_ERR_INVALID;\n')
+                        f.write('    } else {\n')
+                        if req_decl_t == 'Identifier':
+                            f.write('        payload = encode_identifier_payload(request);\n')
+                        else:
+                            f.write('        payload = toJson(request);\n')
                         f.write('    }\n')
                         f.write('    return invoke_async(executor,'
                                 f' {rpc.cpp_svc_const},'
@@ -1029,65 +970,50 @@ class CppServiceGenerator:
                 handler_fn = rpc.cpp_handler
                 req_t = rpc.cpp_req_type
                 rsp_t = rpc.cpp_rsp_type
-                wire_req_t = _wire_request_type_for_rpc_cpp(rpc)
-                wire_rsp_t = _wire_response_type_for_rpc_cpp(rpc)
 
                 f.write(f'    case ServiceChannel::{enum_val}: {{\n')
                 # Deserialize request
-                if wire_req_t == 'CreateRequirementRequest':
-                    f.write('        auto wire_req = is_flatbuffers_content_type(content_type)\n')
-                    f.write('            ? flatbuffers_codec::fromBinaryCreateRequirementRequest(request_buf, request_size)\n')
-                    f.write('            : json_codec::createRequirementRequestFromJson(req_str);\n')
-                    f.write('        auto req = to_domain_create_requirement_request(wire_req);\n')
-                elif wire_req_t == 'EvidenceRequirement':
-                    f.write('        auto wire_req = is_flatbuffers_content_type(content_type)\n')
-                    f.write('            ? flatbuffers_codec::fromBinaryEvidenceRequirement(request_buf, request_size)\n')
-                    f.write('            : json_codec::evidenceRequirementFromJson(req_str);\n')
-                    f.write('        auto req = to_domain_evidence_requirement(wire_req);\n')
-                elif req_t == 'Identifier':
-                    f.write('        if (is_flatbuffers_content_type(content_type)) {\n')
-                    f.write('            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);\n')
-                    f.write('        }\n')
-                    f.write('        auto& req = req_str;\n')
+                if req_t == 'Identifier':
+                    f.write('        auto req = is_flatbuffers_content_type(content_type)\n')
+                    f.write(f'            ? flatbuffers_codec::fromBinary{req_t}(request_buf, request_size)\n')
+                    f.write('            : decode_identifier_payload(req_str);\n')
                 else:
-                    f.write('        if (is_flatbuffers_content_type(content_type)) {\n')
-                    f.write('            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);\n')
-                    f.write('        }\n')
-                    f.write(f'        auto req = fromJson(req_str,'
-                            f' static_cast<{req_t}*>(nullptr));\n')
+                    f.write('        auto req = is_flatbuffers_content_type(content_type)\n')
+                    f.write(f'            ? flatbuffers_codec::fromBinary{req_t}(request_buf, request_size)\n')
+                    f.write(f'            : fromJson(req_str, static_cast<{req_t}*>(nullptr));\n')
                 f.write(f'        auto rsp = handler.{handler_fn}(req);\n')
 
                 # Serialize response
-                if wire_rsp_t == 'CreateRequirementResponse':
-                    f.write('        {\n')
-                    f.write('            auto wire_rsp = to_wire_create_requirement_response(rsp);\n')
-                    f.write('            if (is_flatbuffers_content_type(content_type)) {\n')
-                    f.write('                rsp_payload = flatbuffers_codec::toBinary(wire_rsp);\n')
-                    f.write('                rsp_is_binary = true;\n')
-                    f.write('            } else {\n')
-                    f.write('                rsp_payload = json_codec::toJson(wire_rsp);\n')
-                    f.write('            }\n')
-                    f.write('        }\n')
-                elif rsp_t.startswith('std::vector<'):
-                    # Extract inner type
+                if rsp_t.startswith('std::vector<'):
                     inner = rsp_t[len('std::vector<'):-1]
-                    f.write('        rsp_payload = "[";\n')
-                    f.write('        for (size_t i = 0;'
-                            ' i < rsp.size(); ++i) {\n')
-                    f.write('            if (i > 0) rsp_payload += ",";\n')
+                    f.write('        if (is_flatbuffers_content_type(content_type)) {\n')
+                    f.write('            rsp_payload = flatbuffers_codec::toBinary(rsp);\n')
+                    f.write('            rsp_is_binary = true;\n')
+                    f.write('        } else {\n')
+                    f.write('            rsp_payload = "[";\n')
+                    f.write('            for (size_t i = 0; i < rsp.size(); ++i) {\n')
+                    f.write('                if (i > 0) rsp_payload += ",";\n')
                     if inner == 'Identifier':
-                        f.write('            rsp_payload += "\\\""'
-                                ' + rsp[i] + "\\\""; \n')
+                        f.write('                rsp_payload += encode_identifier_payload(rsp[i]);\n')
                     else:
-                        f.write('            rsp_payload += toJson(rsp[i]);\n')
+                        f.write('                rsp_payload += toJson(rsp[i]);\n')
+                    f.write('            }\n')
+                    f.write('            rsp_payload += "]";\n')
                     f.write('        }\n')
-                    f.write('        rsp_payload += "]";\n')
                 elif rsp_t == 'Identifier':
-                    f.write('        rsp_payload = rsp;\n')
-                elif rsp_t == 'Ack':
-                    f.write('        rsp_payload = toJson(rsp);\n')
+                    f.write('        if (is_flatbuffers_content_type(content_type)) {\n')
+                    f.write('            rsp_payload = flatbuffers_codec::toBinary(rsp);\n')
+                    f.write('            rsp_is_binary = true;\n')
+                    f.write('        } else {\n')
+                    f.write('            rsp_payload = encode_identifier_payload(rsp);\n')
+                    f.write('        }\n')
                 else:
-                    f.write('        rsp_payload = toJson(rsp);\n')
+                    f.write('        if (is_flatbuffers_content_type(content_type)) {\n')
+                    f.write('            rsp_payload = flatbuffers_codec::toBinary(rsp);\n')
+                    f.write('            rsp_is_binary = true;\n')
+                    f.write('        } else {\n')
+                    f.write('            rsp_payload = toJson(rsp);\n')
+                    f.write('        }\n')
 
                 f.write('        break;\n')
                 f.write('    }\n')
@@ -1101,9 +1027,7 @@ class CppServiceGenerator:
 
             f.write('    if (is_flatbuffers_content_type(content_type)) {\n')
             f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
-            f.write('        if (!rsp_is_binary) {\n')
-            f.write('            rsp_payload = flatbuffers_codec::wrapPayload(rsp_payload);\n')
-            f.write('        }\n')
+            f.write('        (void) rsp_is_binary;\n')
             f.write('#else\n')
             f.write('        *response_buf = nullptr;\n')
             f.write('        *response_size = 0;\n')

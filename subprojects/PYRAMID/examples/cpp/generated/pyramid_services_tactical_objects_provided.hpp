@@ -13,8 +13,6 @@
 
 #include "pyramid_data_model_types.hpp"
 
-#include "pyramid_services_tactical_objects_wire_types.hpp"
-
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
 #include <pcl/pcl_transport.h>
@@ -76,7 +74,6 @@ using pyramid::data_model::ObjectDetail;
 using pyramid::data_model::ObjectInterestRequirement;
 using pyramid::data_model::ObjectMatch;
 using pyramid::data_model::Query;
-namespace wire_types = pyramid::services::tactical_objects::wire_types;
 
 class ServiceHandler {
 public:
@@ -137,7 +134,7 @@ pcl_status_t invokeReadMatch(pcl_executor_t* executor,
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
 pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
-                                     const wire_types::CreateRequirementRequest& request,
+                                     const ObjectInterestRequirement& request,
                                      pcl_resp_cb_fn_t        callback,
                                      void*                   user_data = nullptr,
                                      const pcl_endpoint_route_t* route = nullptr,
@@ -159,7 +156,7 @@ pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
 pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
-                                     const wire_types::CreateRequirementRequest& request,
+                                     const ObjectInterestRequirement& request,
                                      pcl_resp_cb_fn_t        callback,
                                      void*                   user_data = nullptr,
                                      const pcl_endpoint_route_t* route = nullptr,

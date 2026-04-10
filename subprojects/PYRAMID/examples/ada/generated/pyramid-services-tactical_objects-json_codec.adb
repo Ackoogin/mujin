@@ -120,38 +120,6 @@ package body Pyramid.Services.Tactical_Objects.Json_Codec is
 
    --  -- To_Json ------------------------------------------------------
 
-   function To_Json (Msg : Create_Requirement_Request) return String is
-      Obj : JSON_Value := Create_Object;
-   begin
-      Set_Field (Obj, "policy", Data_Policy_To_String (Msg.Policy));
-      Set_Field (Obj, "identity", Standard_Identity_To_String (Msg.Identity));
-      if Msg.Dimension /= Dimension_Unspecified then
-         Set_Field (Obj, "dimension", Battle_Dimension_To_String (Msg.Dimension));
-      end if;
-      if Msg.Min_Lat_Rad /= 0.0 then
-         Set_F (Obj, "min_lat_rad", Msg.Min_Lat_Rad);
-      end if;
-      if Msg.Max_Lat_Rad /= 0.0 then
-         Set_F (Obj, "max_lat_rad", Msg.Max_Lat_Rad);
-      end if;
-      if Msg.Min_Lon_Rad /= 0.0 then
-         Set_F (Obj, "min_lon_rad", Msg.Min_Lon_Rad);
-      end if;
-      if Msg.Max_Lon_Rad /= 0.0 then
-         Set_F (Obj, "max_lon_rad", Msg.Max_Lon_Rad);
-      end if;
-      return Write (Obj);
-   end To_Json;
-
-   function To_Json (Msg : Create_Requirement_Response) return String is
-      Obj : JSON_Value := Create_Object;
-   begin
-      if Msg.Interest_Id /= Null_Unbounded_String then
-         Set_Field (Obj, "interest_id", To_String (Msg.Interest_Id));
-      end if;
-      return Write (Obj);
-   end To_Json;
-
    function To_Json (Msg : Entity_Match) return String is
       Obj : JSON_Value := Create_Object;
    begin
@@ -214,48 +182,6 @@ package body Pyramid.Services.Tactical_Objects.Json_Codec is
    end To_Json;
 
    --  -- From_Json ----------------------------------------------------
-
-   function From_Json
-     (S : String) return Create_Requirement_Request
-   is
-      Result : Create_Requirement_Request;
-      J      : JSON_Value;
-      R      : Read_Result;
-   begin
-      R := Read (S);
-      if not R.Success or else R.Value.Kind /= JSON_Object_Type then
-         return Result;
-      end if;
-      J := R.Value;
-      Result.Policy :=
-        Data_Policy_From_String (Get_S (J, "policy"));
-      Result.Identity :=
-        Standard_Identity_From_String (Get_S (J, "identity"));
-      Result.Dimension :=
-        Battle_Dimension_From_String (Get_S (J, "dimension"));
-      Result.Min_Lat_Rad := Get_F (J, "min_lat_rad");
-      Result.Max_Lat_Rad := Get_F (J, "max_lat_rad");
-      Result.Min_Lon_Rad := Get_F (J, "min_lon_rad");
-      Result.Max_Lon_Rad := Get_F (J, "max_lon_rad");
-      return Result;
-   end From_Json;
-
-   function From_Json
-     (S : String) return Create_Requirement_Response
-   is
-      Result : Create_Requirement_Response;
-      J      : JSON_Value;
-      R      : Read_Result;
-   begin
-      R := Read (S);
-      if not R.Success or else R.Value.Kind /= JSON_Object_Type then
-         return Result;
-      end if;
-      J := R.Value;
-      Result.Interest_Id :=
-        To_Unbounded_String (Get_S (J, "interest_id"));
-      return Result;
-   end From_Json;
 
    function From_Json
      (S : String) return Entity_Match

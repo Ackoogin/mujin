@@ -10,13 +10,13 @@
 --    3. PCL binding procedures (Register_Services, Subscribe_*, Invoke_*, Publish_*)
 --    4. Msg_To_String utility for PCL message payloads
 --
---  JSON serialisation/deserialisation is provided by the companion
+--  RPC request/response payloads use the proto-native data model.
+--  Bridge-topic adapter codecs, when generated, live in the companion
 --  Pyramid.Services.Tactical_Objects.Json_Codec package.
 
 with Pyramid.Data_Model.Base.Types;  use Pyramid.Data_Model.Base.Types;
 with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;
 with Pyramid.Data_Model.Tactical.Types;  use Pyramid.Data_Model.Tactical.Types;
-with Pyramid.Services.Tactical_Objects.Wire_Types;
 with Pcl_Bindings;
 with Interfaces.C;
 with System;
@@ -132,7 +132,7 @@ package Pyramid.Services.Tactical_Objects.Provided is
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Create_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Pyramid.Services.Tactical_Objects.Wire_Types.Create_Requirement_Request;
+      Request   : Object_Interest_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
@@ -148,7 +148,7 @@ package Pyramid.Services.Tactical_Objects.Provided is
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Update_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Pyramid.Services.Tactical_Objects.Wire_Types.Create_Requirement_Request;
+      Request   : Object_Interest_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");

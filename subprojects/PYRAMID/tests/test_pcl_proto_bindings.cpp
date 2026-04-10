@@ -16,6 +16,8 @@
 #include "pyramid_services_tactical_objects_consumed.hpp"
 #include "pyramid_services_tactical_objects_provided.hpp"
 #include "pyramid_services_tactical_objects_json_codec.hpp"
+#include "pyramid_data_model_common_codec.hpp"
+#include "pyramid_data_model_tactical_codec.hpp"
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 #include "pyramid_data_model_types.hpp"
 
@@ -36,6 +38,7 @@ namespace cons = pyramid::services::tactical_objects::consumed;
 namespace codec = pyramid::services::tactical_objects::json_codec;
 namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
 namespace types = pyramid::data_model;
+namespace tactical_codec = pyramid::data_model::tactical;
 
 // ===========================================================================
 // Wire-name constant tests
@@ -90,38 +93,32 @@ TEST(ProtoBindingsProvided, MsgToStringEmpty) {
 }
 
 // ===========================================================================
-// JSON codec — CreateRequirementRequest (replaces buildStandardRequirementJson)
+// Proto-native JSON codec — ObjectInterestRequirement
 // ===========================================================================
 
 TEST(ProtoBindingsProvided, CreateRequirementJsonKeys) {
-    codec::CreateRequirementRequest req;
-    req.policy      = codec::DataPolicy::Query;
-    req.identity    = codec::StandardIdentity::Hostile;
-    req.dimension   = codec::BattleDimension::Air;
-    req.min_lat_rad = 0.1;
-    req.max_lat_rad = 0.2;
-    req.min_lon_rad = 0.3;
-    req.max_lon_rad = 0.4;
+    types::ObjectInterestRequirement req;
+    req.policy = types::DataPolicy::Query;
+    req.source = types::ObjectSource::Local;
+    req.dimension.push_back(types::BattleDimension::Air);
 
-    std::string json_str = codec::toJson(req);
+    std::string json_str = tactical_codec::toJson(req);
     auto j = nlohmann::json::parse(json_str);
     EXPECT_TRUE(j.contains("policy"));
-    EXPECT_TRUE(j.contains("identity"));
+    EXPECT_TRUE(j.contains("source"));
     EXPECT_TRUE(j.contains("dimension"));
-    EXPECT_DOUBLE_EQ(j["min_lat_rad"].get<double>(), 0.1);
-    EXPECT_DOUBLE_EQ(j["max_lat_rad"].get<double>(), 0.2);
-    EXPECT_DOUBLE_EQ(j["min_lon_rad"].get<double>(), 0.3);
-    EXPECT_DOUBLE_EQ(j["max_lon_rad"].get<double>(), 0.4);
+    ASSERT_TRUE(j["dimension"].is_array());
+    ASSERT_EQ(j["dimension"].size(), 1u);
 }
 
 TEST(ProtoBindingsProvided, CreateRequirementJsonDefaults) {
-    // Default-constructed request: zero-valued coords are omitted by codec
-    codec::CreateRequirementRequest req;
-    std::string json_str = codec::toJson(req);
+    types::ObjectInterestRequirement req;
+    std::string json_str = tactical_codec::toJson(req);
     auto j = nlohmann::json::parse(json_str);
-    EXPECT_FALSE(j.contains("min_lat_rad"));
-    EXPECT_FALSE(j.contains("max_lat_rad"));
-    EXPECT_FALSE(j.contains("dimension"));
+    EXPECT_FALSE(j.contains("source"));
+    ASSERT_TRUE(j.contains("dimension"));
+    EXPECT_TRUE(j["dimension"].is_array());
+    EXPECT_TRUE(j["dimension"].empty());
 }
 
 // ===========================================================================
@@ -523,10 +520,9 @@ TEST(ProtoBindingsProvided, DispatchCreateRequirementRoundTrip) {
 
     CapturingHandler handler;
 
-    // Build a JSON request with specific fields
-    nlohmann::json j;
-    j["policy"] = "DATA_POLICY_OBTAIN";
-    std::string req_json = j.dump();
+    types::ObjectInterestRequirement req;
+    req.policy = types::DataPolicy::Obtain;
+    std::string req_json = tactical_codec::toJson(req);
 
     void*  resp_buf  = nullptr;
     size_t resp_size = 0;
@@ -537,11 +533,11 @@ TEST(ProtoBindingsProvided, DispatchCreateRequirementRoundTrip) {
     // Handler should have received deserialized request
     EXPECT_EQ(handler.captured_req.policy, types::DataPolicy::Obtain);
 
-    // Response should use the service wire response shape
+    // Response should be the proto-native Identifier payload.
     ASSERT_NE(resp_buf, nullptr);
     std::string resp_str(static_cast<const char*>(resp_buf), resp_size);
-    auto resp = codec::createRequirementResponseFromJson(resp_str);
-    EXPECT_EQ(resp.interest_id, "new-id-42");
+    auto resp = nlohmann::json::parse(resp_str);
+    EXPECT_EQ(resp.get<std::string>(), "new-id-42");
     std::free(resp_buf);
 }
 
@@ -556,9 +552,10 @@ TEST(ProtoBindingsProvided, DispatchCreateRequirementFlatBuffersRoundTrip) {
     };
 
     CapturingHandler handler;
-    codec::CreateRequirementRequest req;
-    req.policy = codec::DataPolicy::Obtain;
-    const std::string req_payload = flatbuffers_codec::toBinary(req);
+    types::ObjectInterestRequirement req;
+    req.policy = types::DataPolicy::Obtain;
+    const std::string req_payload =
+        flatbuffers_codec::wrapPayload(tactical_codec::toJson(req));
 
     void* resp_buf = nullptr;
     size_t resp_size = 0;
@@ -569,9 +566,9 @@ TEST(ProtoBindingsProvided, DispatchCreateRequirementFlatBuffersRoundTrip) {
     EXPECT_EQ(handler.captured_req.policy, types::DataPolicy::Obtain);
 
     ASSERT_NE(resp_buf, nullptr);
-    auto resp = flatbuffers_codec::fromBinaryCreateRequirementResponse(
-        resp_buf, resp_size);
-    EXPECT_EQ(resp.interest_id, "new-id-42");
+    auto resp = nlohmann::json::parse(
+        flatbuffers_codec::unwrapPayload(resp_buf, resp_size));
+    EXPECT_EQ(resp.get<std::string>(), "new-id-42");
     std::free(resp_buf);
 }
 
@@ -615,11 +612,9 @@ TEST(ProtoBindingsConsumed, DispatchUpdateRequirementRoundTrip) {
     };
 
     AckHandler handler;
-    nlohmann::json j;
-    j["policy"] = "DATA_POLICY_QUERY";
-    j["base"] = nlohmann::json::object();
-    j["status"] = nlohmann::json::object();
-    std::string req_json = j.dump();
+    types::ObjectEvidenceRequirement req;
+    req.policy = types::DataPolicy::Query;
+    std::string req_json = tactical_codec::toJson(req);
 
     void*  resp_buf  = nullptr;
     size_t resp_size = 0;
@@ -647,9 +642,10 @@ TEST(ProtoBindingsConsumed, DispatchUpdateRequirementFlatBuffersRoundTrip) {
     };
 
     AckHandler handler;
-    codec::EvidenceRequirement req;
-    req.policy = codec::DataPolicy::Query;
-    const std::string req_payload = flatbuffers_codec::toBinary(req);
+    types::ObjectEvidenceRequirement req;
+    req.policy = types::DataPolicy::Query;
+    const std::string req_payload =
+        flatbuffers_codec::wrapPayload(tactical_codec::toJson(req));
 
     void* resp_buf = nullptr;
     size_t resp_size = 0;

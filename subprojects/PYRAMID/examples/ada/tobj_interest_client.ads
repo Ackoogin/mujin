@@ -3,10 +3,16 @@
 --  Reusable component: subscribes to standard.entity_matches, invokes
 --  object_of_interest.create_requirement via the generated service bindings.
 --
---  Architecture: component logic (this) > Json_Codec > service binding > PCL
+--  Architecture:
+--    component logic (this)
+--    -> proto-native tactical codec for RPC payloads
+--    -> bridge Json_Codec for standard topic adapters
+--    -> service binding
+--    -> PCL
 
 with Pcl_Bindings;
 with Ada.Strings.Unbounded;
+with Pyramid.Data_Model.Base.Types;
 with Pyramid.Data_Model.Common.Types;
 with System;
 

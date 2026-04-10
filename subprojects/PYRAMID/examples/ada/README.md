@@ -193,11 +193,11 @@ with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 with Interfaces.C;
 with Interfaces.C.Strings;
 with Pcl_Bindings;
-with Pyramid.Services.Tactical_Objects.Json_Codec;
+with Pyramid.Data_Model.Tactical.Types_Codec;
 with Pyramid.Services.Tactical_Objects.Provided;
 
 procedure Example_Service_Post_Incoming_Test is
-   package Codec renames Pyramid.Services.Tactical_Objects.Json_Codec;
+   package Tactical_Codec renames Pyramid.Data_Model.Tactical.Types_Codec;
    package Prov renames Pyramid.Services.Tactical_Objects.Provided;
 
    Exec      : constant Pcl_Bindings.Pcl_Executor_Access :=
@@ -225,16 +225,21 @@ procedure Example_Service_Post_Incoming_Test is
       On_Delete_Requirement  => null,
       On_Read_Detail         => null);
 
-   Request_Value : constant Codec.Create_Requirement_Request :=
-     (Policy      => Policy_Obtain,
-      Identity    => Identity_Hostile,
-      Dimension   => Dimension_Sea_Surface,
-      Min_Lat_Rad => 0.1,
-      Max_Lat_Rad => 0.2,
-      Min_Lon_Rad => 0.3,
-      Max_Lon_Rad => 0.4);
+   Request_Value : constant Object_Interest_Requirement :=
+     (Base          => <>,
+      Status        => <>,
+      Source        => Source_Local,
+      Policy        => Policy_Obtain,
+      Dimension     => new Dimension_Array'(1 => Dimension_Sea_Surface),
+      Has_Val_Poly_Area   => False,
+      Val_Poly_Area       => <>,
+      Has_Val_Circle_Area => False,
+      Val_Circle_Area     => <>,
+      Has_Val_Point       => True,
+      Val_Point           => (Position => (Latitude => 0.1, Longitude => 0.3)));
 
-   Request_Json : aliased constant String := Codec.To_Json (Request_Value);
+   Request_Json : aliased constant String :=
+     Tactical_Codec.To_Json (Request_Value);
    Type_Name    : Interfaces.C.Strings.chars_ptr :=
      Interfaces.C.Strings.New_String ("application/json");
    Service_Name : Interfaces.C.Strings.chars_ptr :=

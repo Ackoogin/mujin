@@ -6,8 +6,6 @@
 // Canonical JSON wire format for the pyramid standard bridge protocol.
 // Each message schema maps directly to a proto message type:
 //
-//   CreateRequirementRequest           object_of_interest.create_requirement request (proto: ObjectInterestRequirement)
-//   CreateRequirementResponse          object_of_interest.create_requirement response (proto: Identifier)
 //   EntityMatch                        element of standard.entity_matches array (proto: ObjectMatch + position/confidence)
 //   ObjectEvidence                     standard.object_evidence publish payload (proto: ObjectDetail)
 //   EvidenceRequirement                standard.evidence_requirements subscribe payload (proto: ObjectEvidenceRequirement)
@@ -29,8 +27,6 @@ using namespace pyramid::data_model;
 // Serialisation (toJson)
 // ---------------------------------------------------------------------------
 
-std::string toJson(const CreateRequirementRequest& msg);
-std::string toJson(const CreateRequirementResponse& msg);
 std::string toJson(const EntityMatch& msg);
 std::string toJson(const ObjectEvidence& msg);
 std::string toJson(const EvidenceRequirement& msg);
@@ -39,8 +35,6 @@ std::string toJson(const EvidenceRequirement& msg);
 // Deserialisation (fromJson)
 // ---------------------------------------------------------------------------
 
-CreateRequirementRequest createRequirementRequestFromJson(const std::string& s);
-CreateRequirementResponse createRequirementResponseFromJson(const std::string& s);
 EntityMatch entityMatchFromJson(const std::string& s);
 ObjectEvidence objectEvidenceFromJson(const std::string& s);
 EvidenceRequirement evidenceRequirementFromJson(const std::string& s);

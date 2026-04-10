@@ -7,22 +7,6 @@ with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;
 
 package Pyramid.Services.Tactical_Objects.Wire_Types is
 
-   --  object_of_interest.create_requirement request (proto: ObjectInterestRequirement)
-   type Create_Requirement_Request is record
-      Policy                  : Data_Policy := Policy_Unspecified;
-      Identity                : Standard_Identity := Identity_Unspecified;
-      Dimension               : Battle_Dimension := Dimension_Unspecified;  --  Optional battle-dimension filter
-      Min_Lat_Rad             : Long_Float := 0.0;  --  Bounding-box south edge, radians
-      Max_Lat_Rad             : Long_Float := 0.0;  --  Bounding-box north edge, radians
-      Min_Lon_Rad             : Long_Float := 0.0;  --  Bounding-box west edge, radians
-      Max_Lon_Rad             : Long_Float := 0.0;  --  Bounding-box east edge, radians
-   end record;
-
-   --  object_of_interest.create_requirement response (proto: Identifier)
-   type Create_Requirement_Response is record
-      Interest_Id             : Unbounded_String := Null_Unbounded_String;  --  Assigned interest ID; absent when creation failed
-   end record;
-
    --  element of standard.entity_matches array (proto: ObjectMatch + position/confidence)
    type Entity_Match is record
       Object_Id               : Unbounded_String := Null_Unbounded_String;

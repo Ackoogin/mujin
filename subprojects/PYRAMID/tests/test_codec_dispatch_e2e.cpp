@@ -9,6 +9,8 @@ extern "C" {
 #include <pcl/pcl_types.h>
 }
 
+#include <nlohmann/json.hpp>
+
 #include <atomic>
 #include <cstring>
 #include <string>
@@ -17,6 +19,7 @@ extern "C" {
 #include "pyramid_services_tactical_objects_consumed.hpp"
 #include "pyramid_services_tactical_objects_provided.hpp"
 #include "pyramid_services_tactical_objects_json_codec.hpp"
+#include "pyramid_data_model_tactical_codec.hpp"
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 
 namespace prov = pyramid::services::tactical_objects::provided;
@@ -25,6 +28,7 @@ namespace json_codec = pyramid::services::tactical_objects::json_codec;
 namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
 namespace wire_types = pyramid::services::tactical_objects::wire_types;
 namespace types = pyramid::data_model;
+namespace tactical_codec = pyramid::data_model::tactical;
 
 namespace {
 
@@ -381,10 +385,10 @@ TEST(CodecDispatchE2E, ExplicitCodecFlatBuffers) {
     pcl_container_destroy(c);
 }
 
-TEST(CodecDispatchE2E, JsonCodecSerDeRoundTrip) {
-    wire_types::CreateRequirementRequest req;
+TEST(CodecDispatchE2E, JsonBridgeCodecSerDeRoundTrip) {
+    wire_types::EvidenceRequirement req;
+    req.id = "interest-7";
     req.policy = types::DataPolicy::Obtain;
-    req.identity = types::StandardIdentity::Hostile;
     req.dimension = types::BattleDimension::SeaSurface;
     req.min_lat_rad = 0.873;
     req.max_lat_rad = 0.907;
@@ -392,10 +396,10 @@ TEST(CodecDispatchE2E, JsonCodecSerDeRoundTrip) {
     req.max_lon_rad = 0.017;
 
     auto json_str = json_codec::toJson(req);
-    auto req2 = json_codec::createRequirementRequestFromJson(json_str);
+    auto req2 = json_codec::evidenceRequirementFromJson(json_str);
 
+    EXPECT_EQ(req2.id, "interest-7");
     EXPECT_EQ(req2.policy, types::DataPolicy::Obtain);
-    EXPECT_EQ(req2.identity, types::StandardIdentity::Hostile);
     EXPECT_EQ(req2.dimension, types::BattleDimension::SeaSurface);
     EXPECT_DOUBLE_EQ(req2.min_lat_rad, 0.873);
     EXPECT_DOUBLE_EQ(req2.max_lat_rad, 0.907);
@@ -420,11 +424,10 @@ TEST(CodecDispatchE2E, JsonCreateRequirementDispatchRoundTrip) {
         }
     } handler;
 
-    wire_types::CreateRequirementRequest req;
+    types::ObjectInterestRequirement req;
     req.policy = types::DataPolicy::Obtain;
-    req.identity = types::StandardIdentity::Hostile;
 
-    auto payload = json_codec::toJson(req);
+    auto payload = tactical_codec::toJson(req);
     void* resp_buf = nullptr;
     size_t resp_size = 0;
     prov::dispatch(handler, prov::ServiceChannel::CreateRequirement,
@@ -432,10 +435,10 @@ TEST(CodecDispatchE2E, JsonCreateRequirementDispatchRoundTrip) {
                    "application/json", &resp_buf, &resp_size);
 
     ASSERT_NE(resp_buf, nullptr);
-    auto resp = json_codec::createRequirementResponseFromJson(
+    auto resp = nlohmann::json::parse(
         std::string(static_cast<const char*>(resp_buf), resp_size));
     EXPECT_EQ(handler.captured_req.policy, types::DataPolicy::Obtain);
-    EXPECT_EQ(resp.interest_id, "new-id-42");
+    EXPECT_EQ(resp.get<std::string>(), "new-id-42");
     std::free(resp_buf);
 }
 
@@ -449,16 +452,11 @@ TEST(CodecDispatchE2E, FlatBuffersCreateRequirementDispatchRoundTrip) {
         }
     } handler;
 
-    wire_types::CreateRequirementRequest req;
+    types::ObjectInterestRequirement req;
     req.policy = types::DataPolicy::Query;
-    req.identity = types::StandardIdentity::Hostile;
-    req.dimension = types::BattleDimension::SeaSurface;
-    req.min_lat_rad = 0.1;
-    req.max_lat_rad = 0.2;
-    req.min_lon_rad = 0.3;
-    req.max_lon_rad = 0.4;
+    req.dimension.push_back(types::BattleDimension::SeaSurface);
 
-    auto payload = flatbuffers_codec::toBinary(req);
+    auto payload = flatbuffers_codec::wrapPayload(tactical_codec::toJson(req));
     void* resp_buf = nullptr;
     size_t resp_size = 0;
     prov::dispatch(handler, prov::ServiceChannel::CreateRequirement,
@@ -466,12 +464,11 @@ TEST(CodecDispatchE2E, FlatBuffersCreateRequirementDispatchRoundTrip) {
                    "application/flatbuffers", &resp_buf, &resp_size);
 
     ASSERT_NE(resp_buf, nullptr);
-    auto resp = flatbuffers_codec::fromBinaryCreateRequirementResponse(
-        resp_buf, resp_size);
+    auto resp = nlohmann::json::parse(
+        flatbuffers_codec::unwrapPayload(resp_buf, resp_size));
     EXPECT_EQ(handler.captured_req.policy, types::DataPolicy::Query);
     ASSERT_EQ(handler.captured_req.dimension.size(), 1u);
     EXPECT_EQ(handler.captured_req.dimension[0], types::BattleDimension::SeaSurface);
-    EXPECT_TRUE(handler.captured_req.poly_area.has_value());
-    EXPECT_EQ(resp.interest_id, "new-id-84");
+    EXPECT_EQ(resp.get<std::string>(), "new-id-84");
     std::free(resp_buf);
 }

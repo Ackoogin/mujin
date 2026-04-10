@@ -396,7 +396,7 @@ class AmeRos2Client:
         future = self._query_cli.call_async(req)
 
         def _on_done(f):
-            if not callback or not f.result():
+            if not f.result():
                 return
             res = f.result()
             facts = [WorldFact(key=wf.key, value=wf.value) for wf in res.facts]
@@ -405,7 +405,14 @@ class AmeRos2Client:
                 facts=facts,
                 goal_fluents=list(res.goal_fluents),
             )
-            callback(snap)
+            self._latest_snapshot = snap
+            for cb in self._snapshot_callbacks:
+                try:
+                    cb(snap)
+                except Exception:
+                    pass
+            if callback:
+                callback(snap)
 
         future.add_done_callback(_on_done)
 

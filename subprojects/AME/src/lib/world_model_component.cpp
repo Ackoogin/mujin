@@ -10,7 +10,13 @@ namespace ame {
 WorldModelComponent::WorldModelComponent()
     : pcl::Component("world_model_component") {}
 
+void WorldModelComponent::setWmPublishCallback(
+    std::function<void(const WorldStateSnapshot&)> cb) {
+  wm_publish_cb_ = std::move(cb);
+}
+
 GetFactResult WorldModelComponent::getFact(const std::string& key) const {
+  std::lock_guard<std::mutex> lock(wm_mutex_);
   GetFactResult result;
   result.wm_version = wm_.version();
   try {
@@ -26,6 +32,7 @@ GetFactResult WorldModelComponent::getFact(const std::string& key) const {
 SetFactResult WorldModelComponent::setFact(const std::string& key,
                                            bool value,
                                            const std::string& source) {
+  std::lock_guard<std::mutex> lock(wm_mutex_);
   SetFactResult result;
   try {
     wm_.setFact(key, value, source);
@@ -39,6 +46,7 @@ SetFactResult WorldModelComponent::setFact(const std::string& key,
 
 WorldStateSnapshot WorldModelComponent::queryState(
     const std::vector<std::string>& keys) const {
+  std::lock_guard<std::mutex> lock(wm_mutex_);
   return buildSnapshot(keys);
 }
 
@@ -151,14 +159,27 @@ pcl_status_t WorldModelComponent::on_shutdown() {
 }
 
 pcl_status_t WorldModelComponent::on_tick(double /*dt*/) {
-  const size_t applied = wm_.applyQueuedMutations();
-  if (applied > 0 || consumeStateDirty()) {
+  WorldStateSnapshot snap;
+  bool should_publish = false;
+  {
+    std::lock_guard<std::mutex> lock(wm_mutex_);
+    const size_t applied = wm_.applyQueuedMutations();
+    if (applied > 0 || consumeStateDirty()) {
+      if (pub_world_state_ || wm_publish_cb_) {
+        snap = buildSnapshot({});
+        should_publish = true;
+      }
+    }
+  }
+  if (should_publish) {
     if (pub_world_state_) {
-      auto snap = buildSnapshot({});
       std::string json = ame_pack_world_state(snap);
       pcl_msg_t msg;
       ame_make_pcl_msg(json, "ame/WorldState", msg);
       pcl_port_publish(pub_world_state_, &msg);
+    }
+    if (wm_publish_cb_) {
+      wm_publish_cb_(snap);
     }
   }
   return PCL_OK;
@@ -171,16 +192,20 @@ pcl_status_t WorldModelComponent::on_tick(double /*dt*/) {
 WorldModelComponent::LoadDomainResult WorldModelComponent::loadDomainFromStrings(
     const std::string& domain_pddl,
     const std::string& problem_pddl) {
-  LoadDomainResult result;
-  try {
-    std::vector<std::pair<std::string, std::string>> preserved_facts;
+  // Capture current facts under lock, then parse without holding it.
+  std::vector<std::pair<std::string, std::string>> preserved_facts;
+  {
+    std::lock_guard<std::mutex> lock(wm_mutex_);
     for (unsigned i = 0; i < wm_.numFluents(); ++i) {
       if (wm_.getFact(i)) {
         const auto& meta = wm_.getFactMetadata(i);
         preserved_facts.emplace_back(wm_.fluentName(i), meta.source);
       }
     }
+  }
 
+  LoadDomainResult result;
+  try {
     WorldModel new_wm;
     PddlParser::parseFromString(domain_pddl, problem_pddl, new_wm);
 
@@ -191,6 +216,7 @@ WorldModelComponent::LoadDomainResult WorldModelComponent::loadDomainFromStrings
       }
     }
 
+    std::lock_guard<std::mutex> lock(wm_mutex_);
     wm_ = std::move(new_wm);
     rewireAuditCallback();
     state_dirty_.store(true);

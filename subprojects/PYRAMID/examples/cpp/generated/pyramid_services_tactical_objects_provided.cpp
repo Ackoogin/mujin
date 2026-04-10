@@ -4,7 +4,6 @@
 
 #include "pyramid_services_tactical_objects_provided.hpp"
 
-#include "pyramid_services_tactical_objects_json_codec.hpp"
 #if __has_include("flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp")
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 #define PYRAMID_HAVE_SERVICE_FLATBUFFERS 1
@@ -21,6 +20,7 @@
 #include <cstdlib>
 #include <cstdint>
 #include <cstring>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
@@ -31,8 +31,6 @@ using pyramid::data_model::common::toJson;
 using pyramid::data_model::common::fromJson;
 using pyramid::data_model::tactical::toJson;
 using pyramid::data_model::tactical::fromJson;
-namespace wire_types = pyramid::services::tactical_objects::wire_types;
-namespace json_codec = pyramid::services::tactical_objects::json_codec;
 #if PYRAMID_HAVE_SERVICE_FLATBUFFERS
 namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
 #endif
@@ -104,31 +102,27 @@ std::string json_request_body(const void* data, size_t size)
     return std::string(static_cast<const char*>(data), size);
 }
 
-ObjectInterestRequirement to_domain_create_requirement_request(
-    const wire_types::CreateRequirementRequest& wire_req)
+std::string encode_identifier_payload(const Identifier& value)
 {
-    ObjectInterestRequirement result{};
-    result.policy = wire_req.policy;
-    if (wire_req.dimension != pyramid::data_model::BattleDimension::Unspecified)
-        result.dimension.push_back(wire_req.dimension);
-    if (wire_req.min_lat_rad != 0.0 || wire_req.max_lat_rad != 0.0
-        || wire_req.min_lon_rad != 0.0 || wire_req.max_lon_rad != 0.0) {
-        pyramid::data_model::common::PolyArea area{};
-        area.points.push_back({wire_req.min_lat_rad, wire_req.min_lon_rad});
-        area.points.push_back({wire_req.min_lat_rad, wire_req.max_lon_rad});
-        area.points.push_back({wire_req.max_lat_rad, wire_req.max_lon_rad});
-        area.points.push_back({wire_req.max_lat_rad, wire_req.min_lon_rad});
-        result.poly_area = area;
-    }
-    return result;
+    return nlohmann::json(value).dump();
 }
 
-wire_types::CreateRequirementResponse to_wire_create_requirement_response(
-    const Identifier& interest_id)
+Identifier decode_identifier_payload(const std::string& payload)
 {
-    wire_types::CreateRequirementResponse result{};
-    result.interest_id = interest_id;
-    return result;
+    if (payload.empty()) {
+        return {};
+    }
+    try {
+        auto j = nlohmann::json::parse(payload);
+        if (j.is_string()) {
+            return j.get<std::string>();
+        }
+        if (j.is_object() && j.contains("uuid") && j["uuid"].is_string()) {
+            return j["uuid"].get<std::string>();
+        }
+    } catch (...) {
+    }
+    return payload;
 }
 
 pcl_status_t invoke_async(pcl_executor_t* executor,
@@ -194,27 +188,7 @@ pcl_status_t invokeReadMatch(pcl_executor_t* executor,
                              const pcl_endpoint_route_t* route,
                              const char*       content_type)
 {
-    std::string payload = toJson(request);
-    if (is_flatbuffers_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        payload = flatbuffers_codec::wrapPayload(payload);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (!is_json_content_type(content_type)) {
-        return PCL_ERR_INVALID;
-    }
-    return invoke_async(executor, kSvcReadMatch, payload, callback, user_data, route, content_type);
-}
-
-pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
-                                     const wire_types::CreateRequirementRequest& request,
-                                     pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data,
-                                     const pcl_endpoint_route_t* route,
-                                     const char*       content_type)
-{
-    std::string payload = json_codec::toJson(request);
+    std::string payload;
     if (is_flatbuffers_content_type(content_type)) {
 #if PYRAMID_HAVE_SERVICE_FLATBUFFERS
         payload = flatbuffers_codec::toBinary(request);
@@ -223,6 +197,30 @@ pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
 #endif
     } else if (!is_json_content_type(content_type)) {
         return PCL_ERR_INVALID;
+    } else {
+        payload = toJson(request);
+    }
+    return invoke_async(executor, kSvcReadMatch, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
+                                     const ObjectInterestRequirement& request,
+                                     pcl_resp_cb_fn_t        callback,
+                                     void*                   user_data,
+                                     const pcl_endpoint_route_t* route,
+                                     const char*       content_type)
+{
+    std::string payload;
+    if (is_flatbuffers_content_type(content_type)) {
+#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
+        payload = flatbuffers_codec::toBinary(request);
+#else
+        return PCL_ERR_INVALID;
+#endif
+    } else if (!is_json_content_type(content_type)) {
+        return PCL_ERR_INVALID;
+    } else {
+        payload = toJson(request);
     }
     return invoke_async(executor, kSvcCreateRequirement, payload, callback, user_data, route, content_type);
 }
@@ -234,27 +232,7 @@ pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
                                    const pcl_endpoint_route_t* route,
                                    const char*       content_type)
 {
-    std::string payload = toJson(request);
-    if (is_flatbuffers_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        payload = flatbuffers_codec::wrapPayload(payload);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (!is_json_content_type(content_type)) {
-        return PCL_ERR_INVALID;
-    }
-    return invoke_async(executor, kSvcReadRequirement, payload, callback, user_data, route, content_type);
-}
-
-pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
-                                     const wire_types::CreateRequirementRequest& request,
-                                     pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data,
-                                     const pcl_endpoint_route_t* route,
-                                     const char*       content_type)
-{
-    std::string payload = json_codec::toJson(request);
+    std::string payload;
     if (is_flatbuffers_content_type(content_type)) {
 #if PYRAMID_HAVE_SERVICE_FLATBUFFERS
         payload = flatbuffers_codec::toBinary(request);
@@ -263,6 +241,30 @@ pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
 #endif
     } else if (!is_json_content_type(content_type)) {
         return PCL_ERR_INVALID;
+    } else {
+        payload = toJson(request);
+    }
+    return invoke_async(executor, kSvcReadRequirement, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
+                                     const ObjectInterestRequirement& request,
+                                     pcl_resp_cb_fn_t        callback,
+                                     void*                   user_data,
+                                     const pcl_endpoint_route_t* route,
+                                     const char*       content_type)
+{
+    std::string payload;
+    if (is_flatbuffers_content_type(content_type)) {
+#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
+        payload = flatbuffers_codec::toBinary(request);
+#else
+        return PCL_ERR_INVALID;
+#endif
+    } else if (!is_json_content_type(content_type)) {
+        return PCL_ERR_INVALID;
+    } else {
+        payload = toJson(request);
     }
     return invoke_async(executor, kSvcUpdateRequirement, payload, callback, user_data, route, content_type);
 }
@@ -274,15 +276,17 @@ pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
                                      const pcl_endpoint_route_t* route,
                                      const char*       content_type)
 {
-    std::string payload = request;
+    std::string payload;
     if (is_flatbuffers_content_type(content_type)) {
 #if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        payload = flatbuffers_codec::wrapPayload(payload);
+        payload = flatbuffers_codec::toBinary(request);
 #else
         return PCL_ERR_INVALID;
 #endif
     } else if (!is_json_content_type(content_type)) {
         return PCL_ERR_INVALID;
+    } else {
+        payload = encode_identifier_payload(request);
     }
     return invoke_async(executor, kSvcDeleteRequirement, payload, callback, user_data, route, content_type);
 }
@@ -294,15 +298,17 @@ pcl_status_t invokeReadDetail(pcl_executor_t* executor,
                               const pcl_endpoint_route_t* route,
                               const char*       content_type)
 {
-    std::string payload = toJson(request);
+    std::string payload;
     if (is_flatbuffers_content_type(content_type)) {
 #if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        payload = flatbuffers_codec::wrapPayload(payload);
+        payload = flatbuffers_codec::toBinary(request);
 #else
         return PCL_ERR_INVALID;
 #endif
     } else if (!is_json_content_type(content_type)) {
         return PCL_ERR_INVALID;
+    } else {
+        payload = toJson(request);
     }
     return invoke_async(executor, kSvcReadDetail, payload, callback, user_data, route, content_type);
 }
@@ -346,80 +352,96 @@ void dispatch(ServiceHandler& handler,
     try {
     switch (channel) {
     case ServiceChannel::ReadMatch: {
-        if (is_flatbuffers_content_type(content_type)) {
-            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);
-        }
-        auto req = fromJson(req_str, static_cast<Query*>(nullptr));
+        auto req = is_flatbuffers_content_type(content_type)
+            ? flatbuffers_codec::fromBinaryQuery(request_buf, request_size)
+            : fromJson(req_str, static_cast<Query*>(nullptr));
         auto rsp = handler.handleReadMatch(req);
-        rsp_payload = "[";
-        for (size_t i = 0; i < rsp.size(); ++i) {
-            if (i > 0) rsp_payload += ",";
-            rsp_payload += toJson(rsp[i]);
+        if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            rsp_payload = "[";
+            for (size_t i = 0; i < rsp.size(); ++i) {
+                if (i > 0) rsp_payload += ",";
+                rsp_payload += toJson(rsp[i]);
+            }
+            rsp_payload += "]";
         }
-        rsp_payload += "]";
         break;
     }
     case ServiceChannel::CreateRequirement: {
-        auto wire_req = is_flatbuffers_content_type(content_type)
-            ? flatbuffers_codec::fromBinaryCreateRequirementRequest(request_buf, request_size)
-            : json_codec::createRequirementRequestFromJson(req_str);
-        auto req = to_domain_create_requirement_request(wire_req);
+        auto req = is_flatbuffers_content_type(content_type)
+            ? flatbuffers_codec::fromBinaryObjectInterestRequirement(request_buf, request_size)
+            : fromJson(req_str, static_cast<ObjectInterestRequirement*>(nullptr));
         auto rsp = handler.handleCreateRequirement(req);
-        {
-            auto wire_rsp = to_wire_create_requirement_response(rsp);
-            if (is_flatbuffers_content_type(content_type)) {
-                rsp_payload = flatbuffers_codec::toBinary(wire_rsp);
-                rsp_is_binary = true;
-            } else {
-                rsp_payload = json_codec::toJson(wire_rsp);
-            }
+        if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            rsp_payload = encode_identifier_payload(rsp);
         }
         break;
     }
     case ServiceChannel::ReadRequirement: {
-        if (is_flatbuffers_content_type(content_type)) {
-            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);
-        }
-        auto req = fromJson(req_str, static_cast<Query*>(nullptr));
+        auto req = is_flatbuffers_content_type(content_type)
+            ? flatbuffers_codec::fromBinaryQuery(request_buf, request_size)
+            : fromJson(req_str, static_cast<Query*>(nullptr));
         auto rsp = handler.handleReadRequirement(req);
-        rsp_payload = "[";
-        for (size_t i = 0; i < rsp.size(); ++i) {
-            if (i > 0) rsp_payload += ",";
-            rsp_payload += toJson(rsp[i]);
+        if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            rsp_payload = "[";
+            for (size_t i = 0; i < rsp.size(); ++i) {
+                if (i > 0) rsp_payload += ",";
+                rsp_payload += toJson(rsp[i]);
+            }
+            rsp_payload += "]";
         }
-        rsp_payload += "]";
         break;
     }
     case ServiceChannel::UpdateRequirement: {
-        auto wire_req = is_flatbuffers_content_type(content_type)
-            ? flatbuffers_codec::fromBinaryCreateRequirementRequest(request_buf, request_size)
-            : json_codec::createRequirementRequestFromJson(req_str);
-        auto req = to_domain_create_requirement_request(wire_req);
+        auto req = is_flatbuffers_content_type(content_type)
+            ? flatbuffers_codec::fromBinaryObjectInterestRequirement(request_buf, request_size)
+            : fromJson(req_str, static_cast<ObjectInterestRequirement*>(nullptr));
         auto rsp = handler.handleUpdateRequirement(req);
-        rsp_payload = toJson(rsp);
+        if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            rsp_payload = toJson(rsp);
+        }
         break;
     }
     case ServiceChannel::DeleteRequirement: {
-        if (is_flatbuffers_content_type(content_type)) {
-            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);
-        }
-        auto& req = req_str;
+        auto req = is_flatbuffers_content_type(content_type)
+            ? flatbuffers_codec::fromBinaryIdentifier(request_buf, request_size)
+            : decode_identifier_payload(req_str);
         auto rsp = handler.handleDeleteRequirement(req);
-        rsp_payload = toJson(rsp);
+        if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            rsp_payload = toJson(rsp);
+        }
         break;
     }
     case ServiceChannel::ReadDetail: {
-        if (is_flatbuffers_content_type(content_type)) {
-            req_str = flatbuffers_codec::unwrapPayload(request_buf, request_size);
-        }
-        auto req = fromJson(req_str, static_cast<Query*>(nullptr));
+        auto req = is_flatbuffers_content_type(content_type)
+            ? flatbuffers_codec::fromBinaryQuery(request_buf, request_size)
+            : fromJson(req_str, static_cast<Query*>(nullptr));
         auto rsp = handler.handleReadDetail(req);
-        rsp_payload = "[";
-        for (size_t i = 0; i < rsp.size(); ++i) {
-            if (i > 0) rsp_payload += ",";
-            rsp_payload += toJson(rsp[i]);
+        if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            rsp_payload = "[";
+            for (size_t i = 0; i < rsp.size(); ++i) {
+                if (i > 0) rsp_payload += ",";
+                rsp_payload += toJson(rsp[i]);
+            }
+            rsp_payload += "]";
         }
-        rsp_payload += "]";
         break;
     }
     }
@@ -431,9 +453,7 @@ void dispatch(ServiceHandler& handler,
 
     if (is_flatbuffers_content_type(content_type)) {
 #if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        if (!rsp_is_binary) {
-            rsp_payload = flatbuffers_codec::wrapPayload(rsp_payload);
-        }
+        (void) rsp_is_binary;
 #else
         *response_buf = nullptr;
         *response_size = 0;

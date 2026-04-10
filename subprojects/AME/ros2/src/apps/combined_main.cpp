@@ -94,6 +94,7 @@ int main(int argc, char** argv) {
   // -- Wire in-process dependencies (before configure) --------------------
   // The thin nodes delegate these to their components immediately.
   pl_node->setInProcessWorldModel(&wm_node->worldModel());
+  pl_node->setWorldModelMutex(&wm_node->component().worldModelMutex());
   ex_node->setInProcessWorldModel(&wm_node->worldModel());
 
   // PYRAMID service (mock for demo)

@@ -1,14 +1,19 @@
 --  tobj_interest_client.adb
 --
 --  Component body: subscribes to entity_matches, invokes create_requirement.
---  Uses generated service bindings and Json_Codec for all serialisation.
+--  Uses proto-native tactical codecs for RPC payloads and bridge Json_Codec
+--  only for standard topic adapters.
 
 with Ada.Text_IO;
 with Ada.Unchecked_Conversion;
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
+with GNATCOLL.JSON;  use GNATCOLL.JSON;
 with Interfaces.C;
 with Interfaces.C.Strings;
+with Pyramid.Data_Model.Base.Types;  use Pyramid.Data_Model.Base.Types;
 with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;
+with Pyramid.Data_Model.Tactical.Types;  use Pyramid.Data_Model.Tactical.Types;
+with Pyramid.Data_Model.Tactical.Types_Codec;
 with Pyramid.Services.Tactical_Objects.Provided;
 with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
 with Pyramid.Services.Tactical_Objects.Json_Codec;
@@ -20,6 +25,7 @@ package body Tobj_Interest_Client is
    package Provided renames Pyramid.Services.Tactical_Objects.Provided;
    package Flat     renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
    package Codec    renames Pyramid.Services.Tactical_Objects.Json_Codec;
+   package Tactical renames Pyramid.Data_Model.Tactical.Types_Codec;
    package Wire     renames Pyramid.Services.Tactical_Objects.Wire_Types;
 
    use type Interfaces.C.unsigned;
@@ -48,6 +54,24 @@ package body Tobj_Interest_Client is
       end if;
       return Payload;
    end Decode_Wire_Payload;
+
+   function Decode_Identifier_Payload (Payload : String) return Identifier is
+      J : constant JSON_Value := Read (Payload);
+   begin
+      return To_Unbounded_String (String'(UTF8_String'(Get (J))));
+   exception
+      when others =>
+         begin
+            if Has_Field (J, "uuid") then
+               return To_Unbounded_String
+                 (String'(UTF8_String'(Get (J, "uuid"))));
+            end if;
+         exception
+            when others =>
+               null;
+         end;
+         return Null_Unbounded_String;
+   end Decode_Identifier_Payload;
 
    -- -- On_Configure ----------------------------------------------------------
 
@@ -110,11 +134,11 @@ package body Tobj_Interest_Client is
       then
          declare
             Body_Str : constant String := Decode_Wire_Payload (Resp);
-            R        : constant Wire.Create_Requirement_Response :=
-              Codec.From_Json (Body_Str);
+            Interest_Id : constant Identifier :=
+              Decode_Identifier_Payload (Body_Str);
          begin
             Log ("create_requirement response: " & Body_Str);
-            if R.Interest_Id /= Null_Unbounded_String then
+            if Interest_Id /= Null_Unbounded_String then
                Interest_Id_Received := True;
             end if;
          end;
@@ -135,20 +159,20 @@ package body Tobj_Interest_Client is
       Min_Lon_Rad : Long_Float := 0.0;
       Max_Lon_Rad : Long_Float := 0.0)
    is
-      Req : Wire.Create_Requirement_Request;
+      pragma Unreferenced (Identity, Max_Lat_Rad, Max_Lon_Rad);
+      Req : Object_Interest_Requirement;
       use type Pcl_Bindings.Pcl_Status;
    begin
+      Req.Source      := Source_Local;
       Req.Policy      := Policy;
-      Req.Identity    := Identity;
-      Req.Dimension   := Dimension;
-      Req.Min_Lat_Rad := Min_Lat_Rad;
-      Req.Max_Lat_Rad := Max_Lat_Rad;
-      Req.Min_Lon_Rad := Min_Lon_Rad;
-      Req.Max_Lon_Rad := Max_Lon_Rad;
+      Req.Dimension   := new Dimension_Array'(1 => Dimension);
+      Req.Has_Val_Point := True;
+      Req.Val_Point.Position.Latitude := Min_Lat_Rad;
+      Req.Val_Point.Position.Longitude := Min_Lon_Rad;
 
-      Log ("create_requirement request (typed)");
+      Log ("create_requirement request (proto-native typed)");
       declare
-         Json_Payload : constant String := Codec.To_Json (Req);
+         Json_Payload : constant String := Tactical.To_Json (Req);
          Payload      : constant String :=
            (if To_String (Content_Type) = Flat.Content_Type
             then Flat.Encode_Payload (Json_Payload)

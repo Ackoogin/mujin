@@ -13,8 +13,9 @@ domain-shaped RPCs, but that wrapper is itself a proper FlatBuffers table
 (`JsonPayload`) rather than the old ad hoc "PWFB" prefix envelope.
 """
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 import os
 import sys
@@ -40,6 +41,349 @@ _SERVICE_GENERATED_HEADER = _SERVICE_FILE_BASE + '_generated.h'
 _SERVICE_CODEC_NS = 'pyramid::services::tactical_objects::flatbuffers_codec'
 _SERVICE_ADA_CODEC_PKG = 'Pyramid.Services.Tactical_Objects.Flatbuffers_Codec'
 _SERVICE_ADA_CODEC_FILE = 'pyramid-services-tactical_objects-flatbuffers_codec'
+_ALIAS_FIELD_NAMES = frozenset({
+    'value', 'radians', 'meters', 'meters_per_second', 'seconds',
+})
+
+
+@dataclass
+class FlatFieldSpec:
+    index: int
+    name: str
+    kind: str
+    type_name: str
+    proto_scalar: str = ''
+    repeated: bool = False
+    generated_optional: bool = False
+    generated_presence: bool = False
+    oneof: bool = False
+
+
+@dataclass
+class FlatMessageSpec:
+    name: str
+    cpp_type: str
+    ada_type: str
+    fields: List[FlatFieldSpec]
+    is_alias_root: bool = False
+    alias_scalar: str = ''
+    alias_field_name: str = 'value'
+
+
+@dataclass
+class FlatArraySpec:
+    name: str
+    holder_name: str
+    element_kind: str
+    element_type_name: str
+    element_cpp_type: str
+    element_ada_type: str
+    element_proto_scalar: str = ''
+
+
+@dataclass
+class ServiceCodecGroup:
+    base_package: str
+    file_base: str
+    fbs_namespace: str
+    cpp_codec_ns: str
+    cpp_base_ns: str
+    wire_header: str
+    generated_header: str
+    ada_codec_pkg: str
+    ada_codec_file: str
+    message_specs: List[FlatMessageSpec]
+    array_specs: List[FlatArraySpec]
+    enum_specs: List
+    topic_schemas: List
+
+
+def _service_group_key(package: str) -> Optional[str]:
+    if '.services.' not in f'.{package}.':
+        return None
+    parts = [p for p in package.split('.') if p]
+    if parts and parts[-1].lower() in ('provided', 'consumed'):
+        parts = parts[:-1]
+    return '.'.join(parts)
+
+
+def _service_group_names(base_package: str) -> Tuple[str, str, str, str, str]:
+    parts = [p for p in base_package.split('.') if p]
+    skip = {'pyramid', 'components', 'services', 'data_model', 'base'}
+    meaningful = [p for p in parts if p.lower() not in skip]
+    fbs_namespace = '.'.join(['pyramid', 'services'] + [p.lower() for p in meaningful])
+    cpp_base_ns = fbs_namespace.replace('.', '::')
+    file_base = '_'.join(['pyramid', 'services'] + [p.lower() for p in meaningful])
+    ada_parts = ['Pyramid', 'Services']
+    for part in meaningful:
+        ada_parts.append('_'.join(w.capitalize() for w in part.split('_')))
+    ada_codec_pkg = '.'.join(ada_parts + ['Flatbuffers_Codec'])
+    ada_codec_file = ada_codec_pkg.lower().replace('.', '-')
+    return fbs_namespace, cpp_base_ns, file_base, ada_codec_pkg, ada_codec_file
+
+
+def _service_proto_groups(index: ProtoTypeIndex) -> List[Tuple[str, List[ProtoFile]]]:
+    grouped: Dict[str, List[ProtoFile]] = {}
+    for pf in index.files:
+        if not pf.services:
+            continue
+        key = _service_group_key(pf.package)
+        if not key:
+            continue
+        grouped.setdefault(key, []).append(pf)
+    return sorted(grouped.items(), key=lambda item: item[0])
+
+
+def _alias_info(index: ProtoTypeIndex) -> Dict[str, Tuple[str, str]]:
+    aliases: Dict[str, Tuple[str, str]] = {
+        'Timestamp': ('double', 'value'),
+    }
+    for pf in index.files:
+        for msg in pf.messages:
+            fields = msg.all_fields()
+            if len(fields) != 1 or fields[0].is_repeated:
+                continue
+            fld = fields[0]
+            if fld.type in _PROTO_SCALARS and fld.name in _ALIAS_FIELD_NAMES:
+                aliases[msg.name] = (fld.type, fld.name)
+    return aliases
+
+
+def _resolve_message(index: ProtoTypeIndex, type_name: str):
+    return index.resolve_message(type_name) or index.resolve_message(type_name.split('.')[-1])
+
+
+def _resolve_enum(index: ProtoTypeIndex, type_name: str):
+    return index.resolve_enum(type_name) or index.resolve_enum(type_name.split('.')[-1])
+
+
+def _inline_service_fields(
+        msg, index: ProtoTypeIndex, aliases: Dict[str, Tuple[str, str]]
+) -> Iterable[Tuple[ProtoField, str, bool]]:
+    own_names = {f.name for f in msg.fields if f.name != 'base'}
+    for field in msg.fields:
+        if field.name == 'base' and not field.is_repeated:
+            short = field.type.split('.')[-1]
+            base_msg = _resolve_message(index, field.type)
+            if base_msg and short not in aliases:
+                for bf in base_msg.fields:
+                    name = bf.name
+                    if name in own_names:
+                        name = short.lower() + '_' + name
+                    yield bf, name, False
+                continue
+        yield field, field.name, False
+    for oneof in msg.oneofs:
+        for field in oneof.fields:
+            yield field, field.name, True
+
+
+def _field_kind_and_type(
+        field: ProtoField,
+        index: ProtoTypeIndex,
+        aliases: Dict[str, Tuple[str, str]],
+) -> Tuple[str, str, str]:
+    short = field.type.split('.')[-1]
+    if field.type in _FBS_SCALAR_MAP:
+        kind = 'string' if field.type == 'string' else 'scalar'
+        return kind, _FBS_SCALAR_MAP[field.type], field.type
+    if short in aliases:
+        proto_scalar, _ = aliases[short]
+        kind = 'string' if proto_scalar == 'string' else 'scalar'
+        return kind, _FBS_SCALAR_MAP[proto_scalar], proto_scalar
+    if _resolve_enum(index, field.type):
+        return 'enum', short, ''
+    return 'message', short, ''
+
+
+def _is_generated_string_like(
+        kind: str, proto_scalar: str,
+) -> bool:
+    return kind == 'string' or proto_scalar in ('string', 'bytes')
+
+
+def _message_spec_from_proto(
+        msg,
+        index: ProtoTypeIndex,
+        aliases: Dict[str, Tuple[str, str]],
+) -> FlatMessageSpec:
+    fields: List[FlatFieldSpec] = []
+    field_index = 0
+    for field, name, oneof in _inline_service_fields(msg, index, aliases):
+        kind, type_name, proto_scalar = _field_kind_and_type(field, index, aliases)
+        string_like = _is_generated_string_like(kind, proto_scalar)
+        generated_optional = bool(oneof or field.is_optional)
+        generated_presence = False
+        if generated_optional:
+            if kind == 'message':
+                generated_presence = False
+            elif string_like:
+                generated_optional = False
+            else:
+                generated_presence = True
+        fields.append(FlatFieldSpec(
+            index=field_index,
+            name=name,
+            kind=kind,
+            type_name=type_name,
+            proto_scalar=proto_scalar,
+            repeated=field.is_repeated,
+            generated_optional=generated_optional,
+            generated_presence=generated_presence,
+            oneof=oneof,
+        ))
+        field_index += 1 + (1 if generated_presence else 0)
+    return FlatMessageSpec(
+        name=msg.name,
+        cpp_type=f'pyramid::data_model::{msg.name}',
+        ada_type=camel_to_snake(msg.name),
+        fields=fields,
+    )
+
+
+def _alias_root_spec(short_name: str, aliases: Dict[str, Tuple[str, str]]) -> FlatMessageSpec:
+    proto_scalar, field_name = aliases[short_name]
+    kind = 'string' if proto_scalar == 'string' else 'scalar'
+    type_name = _FBS_SCALAR_MAP[proto_scalar]
+    table_name = f'{short_name}Value'
+    return FlatMessageSpec(
+        name=table_name,
+        cpp_type=f'pyramid::data_model::{short_name}',
+        ada_type=camel_to_snake(short_name),
+        fields=[FlatFieldSpec(
+            index=0,
+            name=field_name,
+            kind=kind,
+            type_name=type_name,
+            proto_scalar=proto_scalar,
+        )],
+        is_alias_root=True,
+        alias_scalar=proto_scalar,
+        alias_field_name=field_name,
+    )
+
+
+def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_files: Sequence[ProtoFile]) -> ServiceCodecGroup:
+    aliases = _alias_info(index)
+    root_types: List[str] = []
+    stream_types: List[str] = []
+    for pf in service_files:
+        for svc in pf.services:
+            for rpc in svc.rpcs:
+                root_types.append(rpc.request_type)
+                root_types.append(rpc.response_type)
+                if rpc.server_streaming:
+                    stream_types.append(rpc.response_type)
+
+    reachable_message_ids: set = set()
+    reachable_enum_ids: set = set()
+    root_aliases: set = set()
+    pending = list(root_types)
+    seen_types = set()
+    while pending:
+        type_name = pending.pop()
+        if type_name in seen_types:
+            continue
+        seen_types.add(type_name)
+        short = type_name.split('.')[-1]
+        if short in aliases:
+            root_aliases.add(short)
+            continue
+        enum = _resolve_enum(index, type_name)
+        if enum:
+            reachable_enum_ids.add(id(enum))
+            continue
+        msg = _resolve_message(index, type_name)
+        if msg is None:
+            continue
+        if id(msg) in reachable_message_ids:
+            continue
+        reachable_message_ids.add(id(msg))
+        for field, _name, _oneof in _inline_service_fields(msg, index, aliases):
+            kind, _type_name, _proto_scalar = _field_kind_and_type(field, index, aliases)
+            if kind == 'enum':
+                enum = _resolve_enum(index, field.type)
+                if enum:
+                    reachable_enum_ids.add(id(enum))
+            elif kind == 'message':
+                pending.append(field.type)
+
+    ordered_enums = []
+    ordered_messages = []
+    for pf in index.files:
+        for enum in pf.enums:
+            if id(enum) in reachable_enum_ids:
+                ordered_enums.append(enum)
+        for msg in pf.messages:
+            if id(msg) in reachable_message_ids:
+                ordered_messages.append(_message_spec_from_proto(msg, index, aliases))
+
+    spec_by_name = {spec.name: spec for spec in ordered_messages}
+    remaining = list(ordered_messages)
+    ordered_messages = []
+    while remaining:
+        progressed = False
+        for spec in list(remaining):
+            deps = {
+                field.type_name for field in spec.fields
+                if field.kind == 'message' and field.type_name in spec_by_name
+            }
+            if deps.issubset({done.name for done in ordered_messages}):
+                ordered_messages.append(spec)
+                remaining.remove(spec)
+                progressed = True
+        if not progressed:
+            ordered_messages.extend(remaining)
+            break
+
+    for alias_name in sorted(root_aliases):
+        ordered_messages.append(_alias_root_spec(alias_name, aliases))
+
+    stream_specs: List[FlatArraySpec] = []
+    seen_arrays = set()
+    for type_name in stream_types:
+        short = type_name.split('.')[-1]
+        if short in seen_arrays:
+            continue
+        seen_arrays.add(short)
+        if short in aliases:
+            proto_scalar, _field_name = aliases[short]
+            stream_specs.append(FlatArraySpec(
+                name=f'{short}Array',
+                holder_name=f'{short}ArrayHolder',
+                element_kind='string' if proto_scalar == 'string' else 'scalar',
+                element_type_name=_FBS_SCALAR_MAP[proto_scalar],
+                element_cpp_type=f'pyramid::data_model::{short}',
+                element_ada_type=camel_to_snake(short),
+                element_proto_scalar=proto_scalar,
+            ))
+        else:
+            stream_specs.append(FlatArraySpec(
+                name=f'{short}Array',
+                holder_name=f'{short}ArrayHolder',
+                element_kind='message',
+                element_type_name=short,
+                element_cpp_type=f'pyramid::data_model::{short}',
+                element_ada_type=camel_to_snake(short),
+            ))
+
+    fbs_namespace, cpp_base_ns, file_base, ada_codec_pkg, ada_codec_file = _service_group_names(base_package)
+    topic_schemas = list(service_schema.ALL_SCHEMAS) if 'tactical_objects' in base_package else []
+    return ServiceCodecGroup(
+        base_package=base_package,
+        file_base=file_base,
+        fbs_namespace=fbs_namespace,
+        cpp_codec_ns=cpp_base_ns + '::flatbuffers_codec',
+        cpp_base_ns=cpp_base_ns,
+        wire_header=file_base + '_wire_types.hpp',
+        generated_header=file_base + '_generated.h',
+        ada_codec_pkg=ada_codec_pkg,
+        ada_codec_file=ada_codec_file,
+        message_specs=ordered_messages,
+        array_specs=stream_specs,
+        enum_specs=ordered_enums,
+        topic_schemas=topic_schemas,
+    )
 
 
 # -- FlatBuffers type mapping -------------------------------------------------
@@ -119,6 +463,17 @@ def _service_decode_stmt(field: service_schema.Field) -> str:
     return f'if (!r.u8({member})) return false;'
 
 
+def _schema_type_for_field(field: FlatFieldSpec) -> str:
+    base = field.type_name
+    if field.repeated:
+        return f'[{base}]'
+    return base
+
+
+def _schema_type_for_array(spec: FlatArraySpec) -> str:
+    return f'[{spec.element_type_name}]'
+
+
 class FlatBuffersBackend(codec_backends.CodecBackend):
 
     @property
@@ -148,13 +503,14 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             self._write_cpp_wrapper(hpp_path, pf)
             generated.append(hpp_path)
 
-        if _has_tactical_service_wire(index):
-            service_fbs = output_dir / (_SERVICE_FILE_BASE + '.fbs')
-            service_hpp = output_dir / (_SERVICE_FILE_BASE + '_flatbuffers_codec.hpp')
-            service_cpp = output_dir / (_SERVICE_FILE_BASE + '_flatbuffers_codec.cpp')
-            self._write_service_fbs_schema(service_fbs)
-            self._write_service_cpp_header(service_hpp)
-            self._write_service_cpp_impl(service_cpp)
+        for base_package, files in _service_proto_groups(index):
+            group = _collect_service_group(index, base_package, files)
+            service_fbs = output_dir / (group.file_base + '.fbs')
+            service_hpp = output_dir / (group.file_base + '_flatbuffers_codec.hpp')
+            service_cpp = output_dir / (group.file_base + '_flatbuffers_codec.cpp')
+            self._write_service_fbs_schema(service_fbs, group)
+            self._write_service_cpp_header(service_hpp, group)
+            self._write_service_cpp_impl(service_cpp, group)
             generated.extend([service_fbs, service_hpp, service_cpp])
 
         return generated
@@ -174,11 +530,12 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             self._write_ada_spec(spec_path, pf)
             generated.append(spec_path)
 
-        if _has_tactical_service_wire(index):
-            spec_path = output_dir / (_SERVICE_ADA_CODEC_FILE + '.ads')
-            body_path = output_dir / (_SERVICE_ADA_CODEC_FILE + '.adb')
-            self._write_service_ada_spec(spec_path)
-            self._write_service_ada_body(body_path)
+        for base_package, files in _service_proto_groups(index):
+            group = _collect_service_group(index, base_package, files)
+            spec_path = output_dir / (group.ada_codec_file + '.ads')
+            body_path = output_dir / (group.ada_codec_file + '.adb')
+            self._write_service_ada_spec(spec_path, group)
+            self._write_service_ada_body(body_path, group)
             generated.extend([spec_path, body_path])
 
         return generated
@@ -270,23 +627,38 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
 
     # -- Tactical service-wire generation ------------------------------------
 
-    def _write_service_fbs_schema(self, path: Path):
+    def _write_service_fbs_schema(self, path: Path, group: ServiceCodecGroup):
         with open(path, 'w', encoding='utf-8') as f:
-            f.write('// Auto-generated tactical service FlatBuffers schema\n')
-            f.write('// Generated from pim/json_schema.py\n\n')
-            f.write('namespace pyramid.services.tactical_objects;\n\n')
+            f.write('// Auto-generated service FlatBuffers schema\n')
+            f.write(f'// Generated from proto service closure for {group.base_package}\n')
+            if group.topic_schemas:
+                f.write('// Bridge-topic adapter tables are included for compatibility.\n')
+            f.write('\n')
+            f.write(f'namespace {group.fbs_namespace};\n\n')
 
-            for spec in _service_enum_specs():
-                entries = spec.table()
-                max_val = max((ordinal for *_rest, ordinal in entries), default=0)
-                int_type = 'byte' if max_val < 128 else 'short' if max_val < 32768 else 'int'
-                f.write(f'enum {spec.cpp_type} : {int_type} {{\n')
-                for i, (_proto, _ada, cpp_lit, ordinal) in enumerate(entries):
-                    comma = ',' if i < len(entries) - 1 else ''
-                    f.write(f'  {cpp_lit} = {ordinal}{comma}\n')
+            for enum in group.enum_specs:
+                f.write(f'enum {enum.name} : int {{\n')
+                for i, value in enumerate(enum.values):
+                    suffix = enum.suffix_of(value.name)
+                    lit = suffix if suffix else value.name
+                    comma = ',' if i < len(enum.values) - 1 else ''
+                    f.write(f'  {lit} = {value.number}{comma}\n')
                 f.write('}\n\n')
 
-            for schema_def in service_schema.ALL_SCHEMAS:
+            for msg in group.message_specs:
+                f.write(f'table {msg.name} {{\n')
+                for field in msg.fields:
+                    if field.generated_presence:
+                        f.write(f'  has_{field.name}:bool;\n')
+                    f.write(f'  {field.name}:{_schema_type_for_field(field)};\n')
+                f.write('}\n\n')
+
+            for array_spec in group.array_specs:
+                f.write(f'table {array_spec.holder_name} {{\n')
+                f.write(f'  items:{_schema_type_for_array(array_spec)};\n')
+                f.write('}\n\n')
+
+            for schema_def in group.topic_schemas:
                 f.write(f'table {schema_def.cpp_name} {{\n')
                 for field in schema_def.fields:
                     f.write(f'  {field.name}:{_service_field_fbs_type(field)};\n')
@@ -296,32 +668,43 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                     f.write(f'  items:[{schema_def.cpp_name}];\n')
                     f.write('}\n\n')
 
-            f.write('table JsonPayload {\n')
-            f.write('  payload:string;\n')
-            f.write('}\n')
-
-    def _write_service_cpp_header(self, path: Path):
+    def _write_service_cpp_header(self, path: Path, group: ServiceCodecGroup):
         with open(path, 'w', encoding='utf-8') as f:
-            f.write('// Auto-generated tactical service FlatBuffers codec\n')
-            f.write(f'// Backend: flatbuffers | Namespace: {_SERVICE_CODEC_NS}\n')
-            f.write('// Generated from pim/json_schema.py\n')
+            f.write('// Auto-generated service FlatBuffers codec\n')
+            f.write(f'// Backend: flatbuffers | Namespace: {group.cpp_codec_ns}\n')
+            f.write(f'// Generated from proto service closure for {group.base_package}\n')
             f.write('#pragma once\n\n')
-            f.write(f'#include "{_SERVICE_WIRE_HEADER}"\n\n')
-            f.write(f'#include "{_SERVICE_GENERATED_HEADER}"\n\n')
+            f.write('#include "pyramid_data_model_types.hpp"\n')
+            if group.topic_schemas:
+                f.write(f'#include "{group.wire_header}"\n')
+            f.write(f'#include "{group.generated_header}"\n\n')
             f.write('#include <flatbuffers/flatbuffers.h>\n')
             f.write('#include <cstddef>\n')
             f.write('#include <string>\n')
             f.write('#include <vector>\n\n')
-            f.write(f'namespace {_SERVICE_CODEC_NS} {{\n\n')
-            f.write('namespace wire_types = pyramid::services::tactical_objects::wire_types;\n\n')
+            f.write(f'namespace {group.cpp_codec_ns} {{\n\n')
+            f.write('namespace data_model = pyramid::data_model;\n')
+            if group.topic_schemas:
+                f.write(f'namespace wire_types = {group.cpp_base_ns}::wire_types;\n')
+            f.write('\n')
             f.write('static constexpr const char* kContentType = "application/flatbuffers";\n\n')
-            f.write('std::string wrapPayload(const std::string& payload);\n')
-            f.write('std::string unwrapPayload(const void* data, size_t size);\n')
-            f.write('inline std::string unwrapPayload(const std::string& payload) {\n')
-            f.write('    return unwrapPayload(payload.data(), payload.size());\n')
-            f.write('}\n\n')
 
-            for schema_def in service_schema.ALL_SCHEMAS:
+            for msg in group.message_specs:
+                short = msg.cpp_type.split('::')[-1]
+                f.write(f'std::string toBinary(const {msg.cpp_type}& msg);\n')
+                f.write(f'{msg.cpp_type} fromBinary{short}(const void* data, size_t size);\n')
+                f.write(f'inline {msg.cpp_type} fromBinary{short}(const std::string& s) {{\n')
+                f.write(f'    return fromBinary{short}(s.data(), s.size());\n')
+                f.write('}\n\n')
+
+            for array_spec in group.array_specs:
+                f.write(f'std::string toBinary(const std::vector<{array_spec.element_cpp_type}>& msg);\n')
+                f.write(f'std::vector<{array_spec.element_cpp_type}> fromBinary{array_spec.name}(const void* data, size_t size);\n')
+                f.write(f'inline std::vector<{array_spec.element_cpp_type}> fromBinary{array_spec.name}(const std::string& s) {{\n')
+                f.write(f'    return fromBinary{array_spec.name}(s.data(), s.size());\n')
+                f.write('}\n\n')
+
+            for schema_def in group.topic_schemas:
                 cpp_name = schema_def.cpp_name
                 f.write(f'std::string toBinary(const wire_types::{cpp_name}& msg);\n')
                 f.write(f'wire_types::{cpp_name} fromBinary{cpp_name}(const void* data, size_t size);\n')
@@ -336,18 +719,18 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                     f.write(f'    return fromBinary{alias_name}(s.data(), s.size());\n')
                     f.write('}\n\n')
 
-            f.write(f'}} // namespace {_SERVICE_CODEC_NS}\n')
+            f.write(f'}} // namespace {group.cpp_codec_ns}\n')
 
-    def _write_service_cpp_impl(self, path: Path):
+    def _write_service_cpp_impl(self, path: Path, group: ServiceCodecGroup):
         with open(path, 'w', encoding='utf-8') as f:
-            f.write('// Auto-generated tactical service FlatBuffers codec\n')
-            f.write(f'#include "{_SERVICE_FILE_BASE}_flatbuffers_codec.hpp"\n\n')
+            f.write('// Auto-generated service FlatBuffers codec\n')
+            f.write(f'#include "{group.file_base}_flatbuffers_codec.hpp"\n\n')
             f.write('#include <cstdint>\n')
             f.write('#include <memory>\n')
             f.write('#include <stdexcept>\n')
             f.write('#include <utility>\n\n')
-            f.write(f'namespace {_SERVICE_CODEC_NS} {{\n\n')
-            f.write('namespace fbs = pyramid::services::tactical_objects;\n\n')
+            f.write(f'namespace {group.cpp_codec_ns} {{\n\n')
+            f.write(f'namespace fbs = {group.fbs_namespace.replace(".", "::")};\n\n')
             f.write('namespace {\n\n')
             f.write('template <typename OffsetT>\n')
             f.write('std::string finish_buffer(flatbuffers::FlatBufferBuilder& builder, OffsetT root) {\n')
@@ -368,106 +751,237 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write('    }\n')
             f.write('    return flatbuffers::GetRoot<TableT>(bytes);\n')
             f.write('}\n\n')
-
-            for schema_def in service_schema.ALL_SCHEMAS:
-                cpp_name = schema_def.cpp_name
-                f.write(f'fbs::{cpp_name}T to_fb(const wire_types::{cpp_name}& msg) {{\n')
-                f.write(f'    fbs::{cpp_name}T out{{}};\n')
-                for field in schema_def.fields:
-                    if field.kind in service_schema.ENUM_SPECS:
-                        f.write(f'    out.{field.name} = static_cast<fbs::{field.cpp_type}>(msg.{field.name});\n')
-                    else:
-                        f.write(f'    out.{field.name} = msg.{field.name};\n')
-                f.write('    return out;\n')
-                f.write('}\n\n')
-
-                f.write(f'wire_types::{cpp_name} from_fb(const fbs::{cpp_name}T& msg) {{\n')
-                f.write(f'    wire_types::{cpp_name} out{{}};\n')
-                for field in schema_def.fields:
-                    if field.kind in service_schema.ENUM_SPECS:
-                        f.write(f'    out.{field.name} = static_cast<pyramid::data_model::{field.cpp_type}>(msg.{field.name});\n')
-                    else:
-                        f.write(f'    out.{field.name} = msg.{field.name};\n')
-                f.write('    return out;\n')
-                f.write('}\n\n')
-
-                if schema_def.is_array_response:
-                    alias_name = cpp_name + 'Array'
-                    holder_name = cpp_name + 'ArrayHolder'
-                    f.write(f'fbs::{holder_name}T to_fb(const wire_types::{alias_name}& msg) {{\n')
-                    f.write(f'    fbs::{holder_name}T out{{}};\n')
-                    f.write('    out.items.reserve(msg.size());\n')
-                    f.write('    for (const auto& item : msg) {\n')
-                    f.write(f'        out.items.emplace_back(std::make_unique<fbs::{cpp_name}T>(to_fb(item)));\n')
-                    f.write('    }\n')
-                    f.write('    return out;\n')
-                    f.write('}\n\n')
-
-                    f.write(f'wire_types::{alias_name} from_fb(const fbs::{holder_name}T& msg) {{\n')
-                    f.write(f'    wire_types::{alias_name} out{{}};\n')
-                    f.write('    out.reserve(msg.items.size());\n')
-                    f.write('    for (const auto& item : msg.items) {\n')
-                    f.write('        if (item) {\n')
-                    f.write('            out.push_back(from_fb(*item));\n')
-                    f.write('        }\n')
-                    f.write('    }\n')
-                    f.write('    return out;\n')
-                    f.write('}\n\n')
-
+            self._emit_service_cpp_proto_helpers(f, group)
+            self._emit_service_cpp_topic_helpers(f, group)
             f.write('} // namespace\n\n')
+            self._emit_service_cpp_proto_exports(f, group)
+            self._emit_service_cpp_topic_exports(f, group)
+            f.write(f'}} // namespace {group.cpp_codec_ns}\n')
 
-            f.write('std::string wrapPayload(const std::string& payload) {\n')
-            f.write('    flatbuffers::FlatBufferBuilder builder(\n')
-            f.write('        static_cast<uint32_t>(payload.size() + 64u));\n')
-            f.write('    auto payload_offset = builder.CreateString(payload);\n')
-            f.write('    fbs::JsonPayloadBuilder root(builder);\n')
-            f.write('    root.add_payload(payload_offset);\n')
-            f.write('    return finish_buffer(builder, root.Finish());\n')
+    def _emit_service_cpp_proto_helpers(self, f, group: ServiceCodecGroup):
+        for msg in group.message_specs:
+            short = msg.cpp_type.split('::')[-1]
+            if msg.is_alias_root:
+                f.write(f'fbs::{msg.name}T to_fb(const {msg.cpp_type}& msg) {{\n')
+                f.write(f'    fbs::{msg.name}T out{{}};\n')
+                f.write(f'    out.{msg.alias_field_name} = msg;\n')
+                f.write('    return out;\n')
+                f.write('}\n\n')
+                f.write(f'{msg.cpp_type} from_fb(const fbs::{msg.name}T& msg, {msg.cpp_type}* /*tag*/) {{\n')
+                f.write(f'    return msg.{msg.alias_field_name};\n')
+                f.write('}\n\n')
+                continue
+
+            f.write(f'fbs::{msg.name}T to_fb(const {msg.cpp_type}& msg) {{\n')
+            f.write(f'    fbs::{msg.name}T out{{}};\n')
+            for field in msg.fields:
+                member = f'msg.{field.name}'
+                if field.repeated:
+                    if field.kind == 'message':
+                        f.write(f'    out.{field.name}.reserve({member}.size());\n')
+                        f.write(f'    for (const auto& item : {member}) {{\n')
+                        f.write(f'        out.{field.name}.emplace_back(std::make_unique<fbs::{field.type_name}T>(to_fb(item)));\n')
+                        f.write('    }\n')
+                    elif field.kind == 'enum':
+                        f.write(f'    out.{field.name}.reserve({member}.size());\n')
+                        f.write(f'    for (const auto& item : {member}) {{\n')
+                        f.write(f'        out.{field.name}.push_back(static_cast<fbs::{field.type_name}>(item));\n')
+                        f.write('    }\n')
+                    else:
+                        f.write(f'    out.{field.name} = {member};\n')
+                elif field.generated_presence:
+                    f.write(f'    out.has_{field.name} = {member}.has_value();\n')
+                    f.write(f'    if ({member}.has_value()) {{\n')
+                    if field.kind == 'enum':
+                        f.write(f'        out.{field.name} = static_cast<fbs::{field.type_name}>({member}.value());\n')
+                    else:
+                        f.write(f'        out.{field.name} = {member}.value();\n')
+                    f.write('    }\n')
+                elif field.generated_optional and field.kind == 'message':
+                    f.write(f'    if ({member}.has_value()) {{\n')
+                    f.write(f'        out.{field.name} = std::make_unique<fbs::{field.type_name}T>(to_fb({member}.value()));\n')
+                    f.write('    }\n')
+                elif field.kind == 'message':
+                    f.write(f'    out.{field.name} = std::make_unique<fbs::{field.type_name}T>(to_fb({member}));\n')
+                elif field.kind == 'enum':
+                    f.write(f'    out.{field.name} = static_cast<fbs::{field.type_name}>({member});\n')
+                else:
+                    f.write(f'    out.{field.name} = {member};\n')
+            f.write('    return out;\n')
             f.write('}\n\n')
 
-            f.write('std::string unwrapPayload(const void* data, size_t size) {\n')
-            f.write('    if (data == nullptr || size == 0) {\n')
-            f.write('        return {};\n')
-            f.write('    }\n')
-            f.write('    auto* root = verified_root<fbs::JsonPayload>(data, size, "JsonPayload");\n')
-            f.write('    if (!root->payload()) {\n')
-            f.write('        throw std::runtime_error("invalid JsonPayload flatbuffer");\n')
-            f.write('    }\n')
-            f.write('    return root->payload()->str();\n')
+            f.write(f'{msg.cpp_type} from_fb(const fbs::{msg.name}T& msg, {msg.cpp_type}* /*tag*/) {{\n')
+            f.write(f'    {msg.cpp_type} out{{}};\n')
+            for field in msg.fields:
+                member = f'msg.{field.name}'
+                if field.repeated:
+                    if field.kind == 'message':
+                        f.write(f'    out.{field.name}.reserve({member}.size());\n')
+                        f.write(f'    for (const auto& item : {member}) {{\n')
+                        f.write('        if (item) {\n')
+                        f.write(f'            out.{field.name}.push_back(from_fb(*item, static_cast<pyramid::data_model::{field.type_name}*>(nullptr)));\n')
+                        f.write('        }\n')
+                        f.write('    }\n')
+                    elif field.kind == 'enum':
+                        f.write(f'    out.{field.name}.reserve({member}.size());\n')
+                        f.write(f'    for (const auto& item : {member}) {{\n')
+                        f.write(f'        out.{field.name}.push_back(static_cast<pyramid::data_model::{field.type_name}>(item));\n')
+                        f.write('    }\n')
+                    else:
+                        f.write(f'    out.{field.name} = {member};\n')
+                elif field.generated_presence:
+                    f.write(f'    if (msg.has_{field.name}) {{\n')
+                    if field.kind == 'enum':
+                        f.write(f'        out.{field.name} = static_cast<pyramid::data_model::{field.type_name}>({member});\n')
+                    else:
+                        f.write(f'        out.{field.name} = {member};\n')
+                    f.write('    }\n')
+                elif field.generated_optional and field.kind == 'message':
+                    f.write(f'    if ({member}) {{\n')
+                    f.write(f'        out.{field.name} = from_fb(*{member}, static_cast<pyramid::data_model::{field.type_name}*>(nullptr));\n')
+                    f.write('    }\n')
+                elif field.kind == 'message':
+                    f.write(f'    if ({member}) out.{field.name} = from_fb(*{member}, static_cast<pyramid::data_model::{field.type_name}*>(nullptr));\n')
+                elif field.kind == 'enum':
+                    f.write(f'    out.{field.name} = static_cast<pyramid::data_model::{field.type_name}>({member});\n')
+                else:
+                    f.write(f'    out.{field.name} = {member};\n')
+            f.write('    return out;\n')
             f.write('}\n\n')
 
-            for schema_def in service_schema.ALL_SCHEMAS:
-                cpp_name = schema_def.cpp_name
-                f.write(f'std::string toBinary(const wire_types::{cpp_name}& msg) {{\n')
-                f.write('    flatbuffers::FlatBufferBuilder builder(256);\n')
-                f.write(f'    auto object = to_fb(msg);\n')
-                f.write(f'    return finish_buffer(builder, fbs::{cpp_name}::Pack(builder, &object));\n')
+        for array_spec in group.array_specs:
+            f.write(f'fbs::{array_spec.holder_name}T to_fb(const std::vector<{array_spec.element_cpp_type}>& msg) {{\n')
+            f.write(f'    fbs::{array_spec.holder_name}T out{{}};\n')
+            if array_spec.element_kind == 'message':
+                short = array_spec.element_cpp_type.split('::')[-1]
+                f.write('    out.items.reserve(msg.size());\n')
+                f.write('    for (const auto& item : msg) {\n')
+                f.write(f'        out.items.emplace_back(std::make_unique<fbs::{short}T>(to_fb(item)));\n')
+                f.write('    }\n')
+            else:
+                f.write('    out.items = msg;\n')
+            f.write('    return out;\n')
+            f.write('}\n\n')
+
+            f.write(f'std::vector<{array_spec.element_cpp_type}> from_fb(const fbs::{array_spec.holder_name}T& msg) {{\n')
+            f.write(f'    std::vector<{array_spec.element_cpp_type}> out{{}};\n')
+            if array_spec.element_kind == 'message':
+                short = array_spec.element_cpp_type.split('::')[-1]
+                f.write('    out.reserve(msg.items.size());\n')
+                f.write('    for (const auto& item : msg.items) {\n')
+                f.write('        if (item) {\n')
+                f.write(f'            out.push_back(from_fb(*item, static_cast<pyramid::data_model::{short}*>(nullptr)));\n')
+                f.write('        }\n')
+                f.write('    }\n')
+            else:
+                f.write('    out = msg.items;\n')
+            f.write('    return out;\n')
+            f.write('}\n\n')
+
+    def _emit_service_cpp_topic_helpers(self, f, group: ServiceCodecGroup):
+        for schema_def in group.topic_schemas:
+            cpp_name = schema_def.cpp_name
+            f.write(f'fbs::{cpp_name}T to_fb(const wire_types::{cpp_name}& msg) {{\n')
+            f.write(f'    fbs::{cpp_name}T out{{}};\n')
+            for field in schema_def.fields:
+                if field.kind in service_schema.ENUM_SPECS:
+                    f.write(f'    out.{field.name} = static_cast<fbs::{field.cpp_type}>(msg.{field.name});\n')
+                else:
+                    f.write(f'    out.{field.name} = msg.{field.name};\n')
+            f.write('    return out;\n')
+            f.write('}\n\n')
+
+            f.write(f'wire_types::{cpp_name} from_fb(const fbs::{cpp_name}T& msg, wire_types::{cpp_name}* /*tag*/) {{\n')
+            f.write(f'    wire_types::{cpp_name} out{{}};\n')
+            for field in schema_def.fields:
+                if field.kind in service_schema.ENUM_SPECS:
+                    f.write(f'    out.{field.name} = static_cast<pyramid::data_model::{field.cpp_type}>(msg.{field.name});\n')
+                else:
+                    f.write(f'    out.{field.name} = msg.{field.name};\n')
+            f.write('    return out;\n')
+            f.write('}\n\n')
+
+            if schema_def.is_array_response:
+                alias_name = cpp_name + 'Array'
+                holder_name = cpp_name + 'ArrayHolder'
+                f.write(f'fbs::{holder_name}T to_fb(const wire_types::{alias_name}& msg) {{\n')
+                f.write(f'    fbs::{holder_name}T out{{}};\n')
+                f.write('    out.items.reserve(msg.size());\n')
+                f.write('    for (const auto& item : msg) {\n')
+                f.write(f'        out.items.emplace_back(std::make_unique<fbs::{cpp_name}T>(to_fb(item)));\n')
+                f.write('    }\n')
+                f.write('    return out;\n')
                 f.write('}\n\n')
 
-                f.write(f'wire_types::{cpp_name} fromBinary{cpp_name}(const void* data, size_t size) {{\n')
-                f.write(f'    auto* root = verified_root<fbs::{cpp_name}>(data, size, "{cpp_name}");\n')
-                f.write(f'    fbs::{cpp_name}T object{{}};\n')
+                f.write(f'wire_types::{alias_name} from_fb(const fbs::{holder_name}T& msg) {{\n')
+                f.write(f'    wire_types::{alias_name} out{{}};\n')
+                f.write('    out.reserve(msg.items.size());\n')
+                f.write('    for (const auto& item : msg.items) {\n')
+                f.write('        if (item) {\n')
+                f.write(f'            out.push_back(from_fb(*item, static_cast<wire_types::{cpp_name}*>(nullptr)));\n')
+                f.write('        }\n')
+                f.write('    }\n')
+                f.write('    return out;\n')
+                f.write('}\n\n')
+
+    def _emit_service_cpp_proto_exports(self, f, group: ServiceCodecGroup):
+        for msg in group.message_specs:
+            short = msg.cpp_type.split('::')[-1]
+            f.write(f'std::string toBinary(const {msg.cpp_type}& msg) {{\n')
+            f.write('    flatbuffers::FlatBufferBuilder builder(256);\n')
+            f.write('    auto object = to_fb(msg);\n')
+            f.write(f'    return finish_buffer(builder, fbs::{msg.name}::Pack(builder, &object));\n')
+            f.write('}\n\n')
+            f.write(f'{msg.cpp_type} fromBinary{short}(const void* data, size_t size) {{\n')
+            f.write(f'    auto* root = verified_root<fbs::{msg.name}>(data, size, "{short}");\n')
+            f.write(f'    fbs::{msg.name}T object{{}};\n')
+            f.write('    root->UnPackTo(&object);\n')
+            f.write(f'    return from_fb(object, static_cast<{msg.cpp_type}*>(nullptr));\n')
+            f.write('}\n\n')
+
+        for array_spec in group.array_specs:
+            f.write(f'std::string toBinary(const std::vector<{array_spec.element_cpp_type}>& msg) {{\n')
+            f.write('    flatbuffers::FlatBufferBuilder builder(256);\n')
+            f.write('    auto object = to_fb(msg);\n')
+            f.write(f'    return finish_buffer(builder, fbs::{array_spec.holder_name}::Pack(builder, &object));\n')
+            f.write('}\n\n')
+            f.write(f'std::vector<{array_spec.element_cpp_type}> fromBinary{array_spec.name}(const void* data, size_t size) {{\n')
+            f.write(f'    auto* root = verified_root<fbs::{array_spec.holder_name}>(data, size, "{array_spec.name}");\n')
+            f.write(f'    fbs::{array_spec.holder_name}T object{{}};\n')
+            f.write('    root->UnPackTo(&object);\n')
+            f.write('    return from_fb(object);\n')
+            f.write('}\n\n')
+
+    def _emit_service_cpp_topic_exports(self, f, group: ServiceCodecGroup):
+        for schema_def in group.topic_schemas:
+            cpp_name = schema_def.cpp_name
+            f.write(f'std::string toBinary(const wire_types::{cpp_name}& msg) {{\n')
+            f.write('    flatbuffers::FlatBufferBuilder builder(256);\n')
+            f.write('    auto object = to_fb(msg);\n')
+            f.write(f'    return finish_buffer(builder, fbs::{cpp_name}::Pack(builder, &object));\n')
+            f.write('}\n\n')
+
+            f.write(f'wire_types::{cpp_name} fromBinary{cpp_name}(const void* data, size_t size) {{\n')
+            f.write(f'    auto* root = verified_root<fbs::{cpp_name}>(data, size, "{cpp_name}");\n')
+            f.write(f'    fbs::{cpp_name}T object{{}};\n')
+            f.write('    root->UnPackTo(&object);\n')
+            f.write(f'    return from_fb(object, static_cast<wire_types::{cpp_name}*>(nullptr));\n')
+            f.write('}\n\n')
+
+            if schema_def.is_array_response:
+                alias_name = cpp_name + 'Array'
+                holder_name = cpp_name + 'ArrayHolder'
+                f.write(f'std::string toBinary(const wire_types::{alias_name}& msg) {{\n')
+                f.write('    flatbuffers::FlatBufferBuilder builder(256);\n')
+                f.write('    auto object = to_fb(msg);\n')
+                f.write(f'    return finish_buffer(builder, fbs::{holder_name}::Pack(builder, &object));\n')
+                f.write('}\n\n')
+                f.write(f'wire_types::{alias_name} fromBinary{alias_name}(const void* data, size_t size) {{\n')
+                f.write(f'    auto* root = verified_root<fbs::{holder_name}>(data, size, "{alias_name}");\n')
+                f.write(f'    fbs::{holder_name}T object{{}};\n')
                 f.write('    root->UnPackTo(&object);\n')
                 f.write('    return from_fb(object);\n')
                 f.write('}\n\n')
-
-                if schema_def.is_array_response:
-                    alias_name = cpp_name + 'Array'
-                    holder_name = cpp_name + 'ArrayHolder'
-                    f.write(f'std::string toBinary(const wire_types::{alias_name}& msg) {{\n')
-                    f.write('    flatbuffers::FlatBufferBuilder builder(256);\n')
-                    f.write('    auto object = to_fb(msg);\n')
-                    f.write(f'    return finish_buffer(builder, fbs::{holder_name}::Pack(builder, &object));\n')
-                    f.write('}\n\n')
-
-                    f.write(f'wire_types::{alias_name} fromBinary{alias_name}(const void* data, size_t size) {{\n')
-                    f.write(f'    auto* root = verified_root<fbs::{holder_name}>(data, size, "{alias_name}");\n')
-                    f.write(f'    fbs::{holder_name}T object{{}};\n')
-                    f.write('    root->UnPackTo(&object);\n')
-                    f.write('    return from_fb(object);\n')
-                    f.write('}\n\n')
-
-            f.write(f'}} // namespace {_SERVICE_CODEC_NS}\n')
 
     # -- Ada thin binding -----------------------------------------------------
 

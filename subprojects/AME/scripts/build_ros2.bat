@@ -10,7 +10,8 @@ REM   build_ros2.bat ros2-only    -- only colcon build (ame_core must already be
 set SCRIPT_DIR=%~dp0
 for %%I in ("%SCRIPT_DIR%\..\..\..") do set AME_ROOT=%%~fI
 
-REM 1. Add ROS2 bin + pixi conda Library/bin to PATH *before* vcvars to avoid 8191-char CMD PATH limit
+REM 1. Add ROS2 bin + pixi conda Library/bin to PATH *before* vcvars to avoid 8191-char CMD PATH limit.
+REM    Python is NOT added here (would overflow); cmake receives it via -DPython3_EXECUTABLE instead.
 set PATH=D:\Dev\ros2-windows\bin;D:\Dev\ros2-windows\.pixi\envs\default\Library\bin;%PATH%
 
 REM 2. VS 2022 build tools environment
@@ -21,7 +22,11 @@ if "%1"=="ros2-only" goto ros2_build
 echo.
 echo === Step 1: Build and install ame_core ===
 pushd %AME_ROOT%
-cmake --preset default -DCMAKE_INSTALL_PREFIX=%AME_ROOT%\build\install
+cmake --preset default ^
+  -DCMAKE_INSTALL_PREFIX=%AME_ROOT%\build\install ^
+  -DPython3_EXECUTABLE=D:\Dev\ros2-windows\.pixi\envs\default\python.exe ^
+  -DCMAKE_DISABLE_FIND_PACKAGE_ament_cmake=ON ^
+  -DMUJIN_BUILD_PYRAMID=OFF
 if errorlevel 1 ( popd & goto error )
 cmake --build %AME_ROOT%\build --config Release -j%NUMBER_OF_PROCESSORS%
 if errorlevel 1 ( popd & goto error )
@@ -40,7 +45,9 @@ pixi run --manifest-path D:\Dev\ros2-windows\pixi.toml colcon build ^
   --packages-select ame_ros2 ^
   --base-paths %AME_ROOT%\subprojects\AME\ros2 ^
   --cmake-force-configure ^
-  --cmake-args "-DCMAKE_PREFIX_PATH=D:/Dev/ros2-windows;D:/Dev/repo/mujin/build/install"
+  --cmake-args ^
+    "-DCMAKE_PREFIX_PATH=D:/Dev/ros2-windows;D:/Dev/repo/mujin/build/install" ^
+    "-DPython3_EXECUTABLE=D:/Dev/ros2-windows/.pixi/envs/default/python.exe"
 if errorlevel 1 goto error
 
 :done

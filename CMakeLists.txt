@@ -154,5 +154,8 @@ enable_testing()
 # Component subprojects
 # ---------------------------------------------------------------------------
 add_subdirectory(subprojects/PCL)
-add_subdirectory(subprojects/PYRAMID)
+option(MUJIN_BUILD_PYRAMID "Build the PYRAMID subproject" ON)
+if(MUJIN_BUILD_PYRAMID)
+    add_subdirectory(subprojects/PYRAMID)
+endif()
 add_subdirectory(subprojects/AME)

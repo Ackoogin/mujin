@@ -6,8 +6,6 @@
 --  Canonical JSON wire format for the pyramid standard bridge protocol.
 --  Each message schema maps directly to a proto message type:
 --
---    Create_Requirement_Request         object_of_interest.create_requirement request (proto: ObjectInterestRequirement)
---    Create_Requirement_Response        object_of_interest.create_requirement response (proto: Identifier)
 --    Entity_Match                       element of standard.entity_matches array (proto: ObjectMatch + position/confidence)
 --    Object_Evidence                    standard.object_evidence publish payload (proto: ObjectDetail)
 --    Evidence_Requirement               standard.evidence_requirements subscribe payload (proto: ObjectEvidenceRequirement)
@@ -22,18 +20,12 @@ package Pyramid.Services.Tactical_Objects.Json_Codec is
 
    --  -- Serialisation (To_Json) -----------------------------------------
 
-   function To_Json (Msg : Create_Requirement_Request) return String;
-   function To_Json (Msg : Create_Requirement_Response) return String;
    function To_Json (Msg : Entity_Match) return String;
    function To_Json (Msg : Object_Evidence) return String;
    function To_Json (Msg : Evidence_Requirement) return String;
 
    --  -- Deserialisation (From_Json) ------------------------------------
 
-   function From_Json
-     (S : String) return Create_Requirement_Request;
-   function From_Json
-     (S : String) return Create_Requirement_Response;
    function From_Json
      (S : String) return Entity_Match;
    function From_Json

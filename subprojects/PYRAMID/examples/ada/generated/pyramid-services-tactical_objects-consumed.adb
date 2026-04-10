@@ -126,10 +126,10 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
 
    --  -- Object_Source_Capability_Service ------------------------------------
    function Default_Handle_Read_Capability
-     (Request : Query) return Identifier_Array
+     (Request : Query) return Capability_Array
    is
       pragma Unreferenced (Request);
-      Empty : Identifier_Array (1 .. 0);
+      Empty : Capability_Array (1 .. 0);
    begin
       return Empty;
    end Default_Handle_Read_Capability;
@@ -689,7 +689,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
             declare
                Req : constant Query :=
                  From_Json (Req_Str, null);
-               Rsp : constant Identifier_Array :=
+               Rsp : constant Capability_Array :=
                  (if Handlers /= null and then Handlers.On_Read_Capability /= null
                   then Handlers.On_Read_Capability.all (Req)
                   else Default_Handle_Read_Capability (Req));
@@ -703,7 +703,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                      if I > Rsp'First then
                         Append (Acc, ",");
                      end if;
-                     Append (Acc, """" & To_String (Rsp (I)) & """");
+                     Append (Acc, To_Json (Rsp (I)));
                   end loop;
                   Append (Acc, "]");
                   Copy_To_Buf (Encode_Transport_Payload (To_String (Acc), Content_Type),
