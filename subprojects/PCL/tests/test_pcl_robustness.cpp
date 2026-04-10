@@ -2235,3 +2235,394 @@ TEST(PclExecutorRobust, DestroyWithPendingServiceRequestsFrees) {
   pcl_executor_destroy(e);
   // Reaching here without crash or assertion failure satisfies the requirement.
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Coverage gap tests — pcl_executor.c lines not yet reached
+// ═══════════════════════════════════════════════════════════════════════
+
+// -- endpoint_kind_from_port_type: CLIENT, STREAM_SERVICE, default --------
+// Lines 121-123: publish_port on STREAM_SERVICE and CLIENT ports routes
+// through port_route_mode → endpoint_kind_from_port_type.
+TEST(PclExecutorRobust, EndpointKindFromPortType_StreamServiceAndClientAndDefault) {
+  // 1. STREAM_SERVICE port via the public API.
+  struct StreamCtx { pcl_port_t* port = nullptr; } sctx;
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto* ctx = static_cast<StreamCtx*>(ud);
+    ctx->port = pcl_container_add_stream_service(c, "ss_topic", "SS",
+      [](pcl_container_t*, const pcl_msg_t*, pcl_stream_context_t* sc,
+         void*) -> pcl_status_t { (void)sc; return PCL_STREAMING; }, nullptr);
+    return ctx->port ? PCL_OK : PCL_ERR_CALLBACK;
+  };
+  auto* c = pcl_container_create("ss_pub_c", &cbs, &sctx);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+
+  pcl_msg_t msg = {};
+  msg.type_name = "SS";
+  // publish_port on STREAM_SERVICE: endpoint_kind_from_port_type hits line 122.
+  pcl_status_t rc = pcl_executor_publish_port(e, sctx.port, &msg);
+  (void)rc;
+
+  // 2. CLIENT port — no public API, craft directly via pcl_internal.h access.
+  struct pcl_port_t client_port = {};
+  client_port.type = PCL_PORT_CLIENT;
+  strncpy(client_port.name, "cl_topic", sizeof(client_port.name) - 1);
+  // publish_port: endpoint_kind_from_port_type hits line 121.
+  rc = pcl_executor_publish_port(e, &client_port, &msg);
+  (void)rc;
+
+  // 3. Unknown/invalid port type hits the default branch (line 123).
+  struct pcl_port_t bad_port = {};
+  bad_port.type = static_cast<pcl_port_type_t>(99);
+  strncpy(bad_port.name, "bad_topic", sizeof(bad_port.name) - 1);
+  rc = pcl_executor_publish_port(e, &bad_port, &msg);
+  (void)rc;
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// -- port_route_mode: REMOTE returned for PUBLISHER when has_transport ----
+// Line 178: port type PUBLISHER or CLIENT + executor has transport → REMOTE.
+TEST(PclExecutorRobust, PortRouteModeReturnsRemoteForPublisherWithTransport) {
+  // Publisher port — with transport, port_route_mode returns REMOTE (line 178).
+  pcl_port_t* pub_port = nullptr;
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto** pp = static_cast<pcl_port_t**>(ud);
+    *pp = pcl_container_add_publisher(c, "tp_topic", "Msg");
+    return *pp ? PCL_OK : PCL_ERR_CALLBACK;
+  };
+  auto* c = pcl_container_create("tp_pub_c", &cbs, &pub_port);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+
+  // Install a transport so that PUBLISHER ports get REMOTE route.
+  struct TCtx { bool called = false; } tctx;
+  pcl_transport_t t = {};
+  t.publish = [](void* ctx, const char*, const pcl_msg_t*) -> pcl_status_t {
+    static_cast<TCtx*>(ctx)->called = true;
+    return PCL_OK;
+  };
+  t.adapter_ctx = &tctx;
+  pcl_executor_set_transport(e, &t);
+
+  pcl_msg_t msg = {};
+  msg.type_name = "Msg";
+  // publish_port: PUBLISHER + has_transport → port_route_mode returns REMOTE (line 178).
+  // REMOTE mode, peer_count=0, has_transport.publish → calls transport.publish.
+  EXPECT_EQ(pcl_executor_publish_port(e, pub_port, &msg), PCL_OK);
+  EXPECT_TRUE(tctx.called);
+
+  pcl_executor_set_transport(e, nullptr);
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// -- dispatch_incoming_now: route_accepts returns false → continue --------
+// Line 365: subscriber exists for topic but source_route_mode is REMOTE while
+// the subscriber accepts only LOCAL (default when no transport).
+TEST(PclExecutorRobust, DispatchIncomingNow_RouteRejectsRemoteMessage) {
+  bool received = false;
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    pcl_container_add_subscriber(c, "local_sub_topic", "Msg",
+      [](pcl_container_t*, const pcl_msg_t*, void* ud) {
+        *static_cast<bool*>(ud) = true;
+      }, ud);
+    return PCL_OK;
+  };
+  auto* c = pcl_container_create("local_sub_c", &cbs, &received);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+
+  // No transport → subscriber default route is LOCAL only.
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+
+  pcl_msg_t msg = {};
+  msg.type_name = "Msg";
+  // Post as REMOTE: route_accepts(LOCAL, REMOTE) = 0 → continue at line 365.
+  EXPECT_EQ(pcl_executor_post_remote_incoming(e, "peer_x", "local_sub_topic", &msg), PCL_OK);
+  // spin_once drains, subscriber's route rejects REMOTE → NOT_FOUND.
+  EXPECT_EQ(pcl_executor_spin_once(e, 0), PCL_ERR_NOT_FOUND);
+  EXPECT_FALSE(received);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// -- drain_svc_req_queue: PCL_PENDING path --------------------------------
+// Line 502: service handler returns PCL_PENDING when invoked via
+// post_service_request; callback is deferred.
+TEST(PclExecutorRobust, PostServiceRequestViaQueue_HandlerPending) {
+  struct Ctx {
+    pcl_svc_context_t* saved_ctx = nullptr;
+    bool handler_called  = false;
+    bool callback_called = false;
+  } ctx;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    pcl_container_add_service(c, "q_pending_svc", "Msg",
+      [](pcl_container_t*, const pcl_msg_t*, pcl_msg_t*,
+         pcl_svc_context_t* sc, void* ud) -> pcl_status_t {
+        auto* ctx = static_cast<Ctx*>(ud);
+        ctx->handler_called = true;
+        ctx->saved_ctx = sc;
+        return PCL_PENDING;
+      }, ud);
+    return PCL_OK;
+  };
+  auto* c = pcl_container_create("q_pending_c", &cbs, &ctx);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+
+  pcl_msg_t req = {};
+  req.type_name = "Msg";
+  ASSERT_EQ(pcl_executor_post_service_request(e, "q_pending_svc", &req,
+    [](const pcl_msg_t*, void* ud) {
+      static_cast<Ctx*>(ud)->callback_called = true;
+    }, &ctx), PCL_OK);
+
+  // spin_once: drain_svc_req_queue calls handler → PCL_PENDING (line 502).
+  // Callback is NOT fired — deferred via pcl_service_respond.
+  ASSERT_EQ(pcl_executor_spin_once(e, 0), PCL_OK);
+  EXPECT_TRUE(ctx.handler_called);
+  EXPECT_FALSE(ctx.callback_called);
+  EXPECT_NE(ctx.saved_ctx, nullptr);
+
+  // Complete the deferred response.
+  pcl_msg_t resp = {};
+  resp.type_name = "Resp";
+  EXPECT_EQ(pcl_service_respond(ctx.saved_ctx, &resp), PCL_OK);
+  EXPECT_TRUE(ctx.callback_called);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// -- drain_svc_req_queue: handler error path ------------------------------
+// Lines 506-508: handler returns an error (not PCL_OK, not PCL_PENDING).
+// Callback is fired with an empty message.
+TEST(PclExecutorRobust, PostServiceRequestViaQueue_HandlerError) {
+  struct Ctx {
+    bool handler_called  = false;
+    bool callback_called = false;
+    uint32_t resp_size   = 99u; // sentinel
+  } ctx;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    pcl_container_add_service(c, "q_error_svc", "Msg",
+      [](pcl_container_t*, const pcl_msg_t*, pcl_msg_t*,
+         pcl_svc_context_t*, void* ud) -> pcl_status_t {
+        static_cast<Ctx*>(ud)->handler_called = true;
+        return PCL_ERR_CALLBACK;
+      }, ud);
+    return PCL_OK;
+  };
+  auto* c = pcl_container_create("q_error_c", &cbs, &ctx);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+
+  pcl_msg_t req = {};
+  req.type_name = "Msg";
+  ASSERT_EQ(pcl_executor_post_service_request(e, "q_error_svc", &req,
+    [](const pcl_msg_t* resp, void* ud) {
+      auto* ctx = static_cast<Ctx*>(ud);
+      ctx->callback_called = true;
+      ctx->resp_size = resp->size;
+    }, &ctx), PCL_OK);
+
+  // spin_once: handler returns error → callback fired with empty msg (lines 506-508).
+  ASSERT_EQ(pcl_executor_spin_once(e, 0), PCL_OK);
+  EXPECT_TRUE(ctx.handler_called);
+  EXPECT_TRUE(ctx.callback_called);
+  EXPECT_EQ(ctx.resp_size, 0u);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// -- find_service: route_accepts returns false for remote source ----------
+// Lines 777, 781: service is LOCAL-only; invoke_service_remote uses REMOTE.
+TEST(PclExecutorRobust, FindService_RouteRejectsRemoteSource) {
+  pcl_port_t* svc_port = nullptr;
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto** pp = static_cast<pcl_port_t**>(ud);
+    *pp = pcl_container_add_service(c, "local_only_svc", "Msg",
+      [](pcl_container_t*, const pcl_msg_t*, pcl_msg_t* r,
+         pcl_svc_context_t*, void*) -> pcl_status_t {
+        r->type_name = "Resp"; return PCL_OK;
+      }, nullptr);
+    return *pp ? PCL_OK : PCL_ERR_CALLBACK;
+  };
+  auto* c = pcl_container_create("lo_svc_c", &cbs, &svc_port);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+
+  // Restrict the service to LOCAL route only.
+  ASSERT_EQ(pcl_port_set_route(svc_port, PCL_ROUTE_LOCAL, nullptr, 0), PCL_OK);
+
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+
+  pcl_msg_t req = {}, resp = {};
+  req.type_name = "Msg";
+  // invoke_service_remote calls find_service(e, name, REMOTE, peer).
+  // Service has LOCAL route → route_accepts(LOCAL, REMOTE) = false → continue (line 781).
+  // No service found → NOT_FOUND.
+  EXPECT_EQ(pcl_executor_invoke_service_remote(e, "a_peer", "local_only_svc", &req, &resp),
+            PCL_ERR_NOT_FOUND);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// -- invoke_service_remote: null args and global transport fallback -------
+// Line 832: null args return INVALID.
+// Line 840: no named transport for peer but global transport exists → fallback.
+TEST(PclExecutorRobust, InvokeServiceRemote_NullArgsAndGlobalTransportFallback) {
+  auto* e = pcl_executor_create();
+  pcl_msg_t req = {}, resp = {};
+  req.type_name = "Msg";
+
+  // Line 832: null args.
+  EXPECT_EQ(pcl_executor_invoke_service_remote(nullptr, "p", "s", &req, &resp),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_invoke_service_remote(e, nullptr, "s", &req, &resp),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_invoke_service_remote(e, "p", nullptr, &req, &resp),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_invoke_service_remote(e, "p", "s", nullptr, &resp),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_invoke_service_remote(e, "p", "s", &req, nullptr),
+            PCL_ERR_INVALID);
+
+  // Line 840: global transport fallback (no named transport matches peer_id).
+  struct SvcCtx2 {
+    bool called = false;
+    const pcl_transport_t* ctx_transport = nullptr;
+    pcl_port_t* port = nullptr;
+  } svc_ctx2;
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto* sc = static_cast<SvcCtx2*>(ud);
+    sc->port = pcl_container_add_service(c, "remote_svc2", "Msg",
+      [](pcl_container_t*, const pcl_msg_t*, pcl_msg_t* r,
+         pcl_svc_context_t* ctx, void* ud) -> pcl_status_t {
+        auto* sc = static_cast<SvcCtx2*>(ud);
+        sc->called = true;
+        sc->ctx_transport = ctx->transport;
+        r->type_name = "Resp";
+        return PCL_OK;
+      }, ud);
+    return sc->port ? PCL_OK : PCL_ERR_CALLBACK;
+  };
+  auto* c = pcl_container_create("remote_svc2_c", &cbs, &svc_ctx2);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+  // Service must accept REMOTE source.
+  ASSERT_EQ(pcl_port_set_route(svc_ctx2.port, PCL_ROUTE_REMOTE, nullptr, 0), PCL_OK);
+  pcl_executor_add(e, c);
+
+  // Global transport (not registered by peer_id).
+  pcl_transport_t t = {};
+  t.adapter_ctx = nullptr;
+  pcl_executor_set_transport(e, &t);
+
+  // find_named_transport("unknown_peer") returns NULL, but has_transport=true
+  // → transport = &e->transport (line 840).
+  EXPECT_EQ(pcl_executor_invoke_service_remote(e, "unknown_peer", "remote_svc2",
+                                               &req, &resp), PCL_OK);
+  EXPECT_TRUE(svc_ctx2.called);
+  EXPECT_NE(svc_ctx2.ctx_transport, nullptr);
+
+  pcl_executor_set_transport(e, nullptr);
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// -- find_service: peer_is_allowed returns false --------------------------
+// Line 781: service has REMOTE route restricted to specific peers;
+// invoke_service_remote uses a peer_id that is NOT in the allowed list.
+TEST(PclExecutorRobust, FindService_PeerNotAllowed) {
+  pcl_port_t* svc_port = nullptr;
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto** pp = static_cast<pcl_port_t**>(ud);
+    *pp = pcl_container_add_service(c, "peer_gated_svc", "Msg",
+      [](pcl_container_t*, const pcl_msg_t*, pcl_msg_t* r,
+         pcl_svc_context_t*, void*) -> pcl_status_t {
+        r->type_name = "Resp"; return PCL_OK;
+      }, nullptr);
+    return *pp ? PCL_OK : PCL_ERR_CALLBACK;
+  };
+  auto* c = pcl_container_create("pg_svc_c", &cbs, &svc_port);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+
+  // Allow REMOTE access only from "allowed_peer".
+  const char* allowed[] = {"allowed_peer"};
+  ASSERT_EQ(pcl_port_set_route(svc_port, PCL_ROUTE_REMOTE, allowed, 1), PCL_OK);
+
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+
+  pcl_msg_t req = {}, resp = {};
+  req.type_name = "Msg";
+  // route_accepts(REMOTE, REMOTE) = true, but peer_is_allowed("bad_peer") = false
+  // → continue at line 781.  No service found → NOT_FOUND.
+  EXPECT_EQ(pcl_executor_invoke_service_remote(e, "bad_peer", "peer_gated_svc",
+                                               &req, &resp), PCL_ERR_NOT_FOUND);
+
+  // Correct peer IS allowed.
+  EXPECT_EQ(pcl_executor_invoke_service_remote(e, "allowed_peer", "peer_gated_svc",
+                                               &req, &resp), PCL_OK);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// -- publish_port: REMOTE mode, no transport, nothing delivered ----------
+// Lines 869-870: route_mode = REMOTE, peer_count = 0, no transport publish.
+TEST(PclExecutorRobust, PublishPort_RemoteModeNoTransportNotDelivered) {
+  pcl_port_t* pub_port = nullptr;
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto** pp = static_cast<pcl_port_t**>(ud);
+    *pp = pcl_container_add_publisher(c, "remote_only_pub", "Msg");
+    return *pp ? PCL_OK : PCL_ERR_CALLBACK;
+  };
+  auto* c = pcl_container_create("ro_pub_c", &cbs, &pub_port);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+  // Restrict publisher to REMOTE-only (no local dispatch).
+  ASSERT_EQ(pcl_port_set_route(pub_port, PCL_ROUTE_REMOTE, nullptr, 0), PCL_OK);
+
+  // No transport set → no REMOTE publish path available.
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+
+  pcl_msg_t msg = {};
+  msg.type_name = "Msg";
+  // route_mode = REMOTE, peer_count = 0, !has_transport, !delivered → NOT_FOUND (lines 869-870).
+  EXPECT_EQ(pcl_executor_publish_port(e, pub_port, &msg), PCL_ERR_NOT_FOUND);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}

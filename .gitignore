@@ -62,6 +62,8 @@ coverage_tobj_temp/
 build-coverage-pcl/
 build-coverage-tactical_objects/
 build-coverage*
+build_cov/*
+coverage.txt
 
 # CMake
 CMakeUserPresets.json
@@ -110,3 +112,5 @@ bt_events.jsonl
 subprojects/AME/scripts/build/*
 subprojects/AME/scripts/install/*
 subprojects/AME/scripts/log/*
+
+
