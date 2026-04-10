@@ -1,5 +1,59 @@
 # AME ROS2 Node PCL Migration Plan
 
+## Current Status (2026-04-10)
+
+### What is complete
+
+**All four PCL components are migrated at the component layer.** Ports, `on_tick()` dispatch, and PCL service/subscriber callbacks are all in place:
+
+| Component | PCL ports | `on_tick()` | Thread safety |
+|-----------|-----------|-------------|---------------|
+| `WorldModelComponent` | ✅ `pub world_state`, `sub detections`, `svc get_fact / set_fact / query_state / load_domain` | ✅ drives publish at `publish_rate_hz` | ✅ `wm_mutex_` + `state_dirty_` atomic |
+| `PlannerComponent` | ✅ `pub bt_xml`, `svc plan / load_domain` | N/A (planning is service-driven) | `wm_mutex_` on WM snapshot |
+| `ExecutorComponent` | ✅ `sub bt_xml`, `pub bt_events / status` | ✅ drives BT ticking at `tick_rate_hz` | Single-threaded via PCL executor |
+| `AgentDispatcherComponent` | ✅ ports created in `on_configure` | ✅ | — |
+
+`ame_pcl_main.cpp` exists and runs the full pipeline without ROS2.
+
+`combined_main.cpp` runs a PCL executor in a background thread alongside a ROS2 `SingleThreadedExecutor` for lifecycle transitions — the correct hybrid architecture.
+
+### What is not complete — the devenv reconnection problem
+
+After the PCL migration, the ROS2 nodes became pure lifecycle forwarders with no external ROS2 interface. `devenv` (a Python GUI that speaks only ROS2) lost all connectivity. To restore it, ROS2 service servers and publishers were added **directly to the ROS2 node wrappers** in this session. These bypass PCL and violate the architecture in two ways:
+
+#### 1. Direct component method calls instead of PCL ingress
+
+| Node | Added (bypass) | Should use |
+|------|---------------|------------|
+| `WorldModelNode` | `svc_get_fact_` → `component_->getFact()` directly | PCL service port `"get_fact"` |
+| `WorldModelNode` | `svc_set_fact_` → `component_->setFact()` directly | PCL mutation queue |
+| `WorldModelNode` | `svc_query_state_` → `component_->queryState()` directly | PCL service port `"query_state"` |
+| `WorldModelNode` | `svc_load_domain_` → `component_->loadDomainFromStrings()` directly | PCL service port `"load_domain"` |
+| `PlannerNode` | action server → `component_->solveGoal()` in detached thread | PCL service port `"plan"` |
+| `PlannerNode` | `svc_load_domain_` → `component_->loadDomainFromStrings()` directly | PCL service port `"load_domain"` |
+| `ExecutorNode` | `svc_load_bt_` → `component_->loadAndExecute()` directly | Pending-command queue → `on_tick` |
+| `ExecutorNode` | `svc_stop_execution_` → `component_->haltExecution()` directly | Pending-command queue → `on_tick` |
+
+#### 2. Thread safety violations
+
+- `WorldModelComponent::setFact()` calls `wm_.setFact()` directly under `wm_mutex_`, bypassing the `enqueueMutation` queue that `on_tick` drains. This is mutex-safe but breaks the single-writer guarantee PCL's executor was designed to provide.
+- `ExecutorNode`'s `svc_load_bt_` handler calls `component_->loadAndExecute()` from the ROS2 executor thread while `on_tick` may be calling `tickOnce()` on the PCL executor thread. The `exec_mutex_` added to `ExecutorNode` does not cover `on_tick`, so this is a genuine data race.
+- `PlannerNode`'s action server still spawns a detached `std::thread` (same problem as pre-migration).
+
+#### 3. `setWmPublishCallback` / `setEventSink` bridges
+
+`WorldModelNode` and `ExecutorNode` use callback sinks to bridge PCL-internal events to ROS2 publishers. These are symmetric patterns and are the least problematic of the violations — the callbacks publish outbound only and do not re-enter component state — but they are still an end-run around the PCL transport layer.
+
+### Root cause
+
+The correct long-term solution is a **ROS2 PCL transport adapter** (Phase 6 below) that maps PCL ports to ROS2 topics and services automatically, so `devenv` and any other ROS2 caller can reach the system without any direct-call bridges in the node wrappers. Until that adapter exists, there is no clean way to expose the system externally without some form of bypass.
+
+### Immediate remediation needed (before further feature work)
+
+The `ExecutorNode` race condition is the most urgent issue. Replace the direct calls with a **pending-command queue** in `ExecutorComponent` (see Phase 2R below). The `WorldModelNode` direct calls are protected by `wm_mutex_` and are lower risk, but should also be fixed as part of Phase 6.
+
+---
+
 ## Problem Statement
 
 The four AME ROS2 nodes (`WorldModelNode`, `PlannerNode`, `ExecutorNode`, `AgentDispatcherNode`) inherit from `pcl::Component` but only use its lifecycle state machine and parameter store. All communication (pub/sub, services, timers) is wired directly through ROS2 primitives, bypassing PCL's port system, executor, transport abstraction, and thread-safety guarantees.
@@ -257,6 +311,78 @@ Remove: `tick_timer_`, `sub_bt_xml_`, `pub_bt_events_`, `pub_status_`, `create_w
 
 ---
 
+### Phase 2R: ExecutorComponent -- pending-command queue (remediation, urgent)
+
+**Goal:** Eliminate the data race between the ROS2 service thread and the PCL executor thread for `loadAndExecute` / `haltExecution`. This is the minimum fix needed before the full ROS2 transport adapter (Phase 6) is ready.
+
+The model mirrors `WorldModel::enqueueMutation()` / `applyQueuedMutations()`: external callers enqueue commands; `on_tick()` applies them on the PCL thread.
+
+#### 2R.1 Add pending-command fields to ExecutorComponent
+
+```cpp
+// executor_component.h
+private:
+  std::mutex        pending_mutex_;
+  std::string       pending_bt_xml_;   // non-empty = load requested
+  bool              pending_halt_ = false;
+```
+
+Add public enqueue methods (called from ROS2 service handlers):
+
+```cpp
+void enqueueBtXml(const std::string& bt_xml);
+void enqueueHalt();
+```
+
+#### 2R.2 Drain commands at the top of on_tick
+
+```cpp
+pcl_status_t ExecutorComponent::on_tick(double dt) {
+  // --- Drain pending ROS2 commands (enqueued from service thread) ---
+  std::string pending_xml;
+  bool        pending_halt = false;
+  {
+    std::lock_guard<std::mutex> lock(pending_mutex_);
+    pending_xml  = std::move(pending_bt_xml_);
+    pending_halt = std::exchange(pending_halt_, false);
+  }
+  if (pending_halt)          { haltExecution(); }
+  if (!pending_xml.empty())  { loadAndExecute(pending_xml); }
+
+  // --- Normal tick ---
+  if (executing_) { tickOnce(); }
+  return PCL_OK;
+}
+```
+
+#### 2R.3 Update ExecutorNode service handlers
+
+```cpp
+// load_bt handler:
+component_->enqueueBtXml(req->bt_xml);
+resp->success = true;  // fire-and-forget; PCL thread applies on next tick
+
+// stop_execution handler:
+component_->enqueueHalt();
+resp->success = true;
+```
+
+Remove `exec_mutex_` from `ExecutorNode` — it is no longer needed.
+
+#### 2R.4 Same pattern for PlannerNode detached thread
+
+`PlannerNode`'s action server currently spawns `std::thread(...).detach()` to avoid blocking the ROS2 executor. The correct PCL fix is a pending-goal queue in `PlannerComponent`, drained in its service handler on the PCL thread (which is already separate from the ROS2 executor):
+
+```cpp
+// PlannerComponent — store pending goal, PCL service handler calls solveGoal
+void enqueuePlanGoal(const std::vector<std::string>& goal_fluents,
+                     std::function<void(PlannerExecutionResult)> callback);
+```
+
+Because `solveGoal` is synchronous and potentially slow, the service handler on the PCL thread will block the PCL executor during planning. This is acceptable if solve times are bounded (see Phase 3, Option A). If not, use PCL's deferred response mechanism (Phase 3, Option B).
+
+---
+
 ### Phase 3: PlannerComponent -- services and async planning
 
 **Goal:** Move service/action handling into PCL while preserving async planning.
@@ -452,11 +578,11 @@ Refactor `combined_main.cpp` to use PCL executor internally, with the ROS2 nodes
 
 ---
 
-### Phase 6 (future): ROS2 transport adapter
+### Phase 6: ROS2 transport adapter (required to complete clean migration)
 
-**Goal:** Write a `pcl_transport_t` implementation backed by ROS2 DDS, so PCL ports map to ROS2 topics/services automatically.
+**Goal:** Write a `pcl_transport_t` implementation backed by ROS2 DDS, so PCL ports map to ROS2 topics/services automatically. **This phase completes the migration**: once the adapter exists, all the direct-call bridges added to `WorldModelNode`, `PlannerNode`, and `ExecutorNode` in the devenv reconnection work can be removed, restoring the nodes to pure lifecycle forwarders.
 
-This is a larger piece of work and can be done independently.  It would allow the thin ROS2 node wrappers to be eliminated entirely -- components would register PCL ports, and the transport adapter would create corresponding ROS2 publishers/subscribers/services under the hood.
+This is what allows `devenv` and any other ROS2 caller to reach the system without bypass — the adapter surfaces PCL ports as real ROS2 topics and services, so external tools see a normal ROS2 graph.
 
 **Sketch:**
 
@@ -476,29 +602,43 @@ class Ros2Transport {
 };
 ```
 
-This is **not required** for the earlier phases to deliver value.  Phases 1-5 give full PCL portability for non-ROS2 deployments (socket transport, in-process, Ada bindings) while keeping ROS2 as a supported deployment option via the thin node wrappers.
+Once Phase 6 is complete, the following can be removed from the ROS2 node layer:
+- All `svc_*` service server members from `WorldModelNode`, `PlannerNode`, `ExecutorNode`
+- `setWmPublishCallback` bridge from `WorldModelNode`
+- `setEventSink` bridge from `ExecutorNode`
+- The detached thread from `PlannerNode`'s action handler
+- `pub_world_state_` lifecycle publisher from `WorldModelNode`
+- `pub_bt_events_` / `pub_execution_status_` from `ExecutorNode`
+
+Phases 1–5 remain independently valuable: they give full PCL portability for non-ROS2 deployments (socket transport, in-process, Ada bindings). Phase 6 is what restores full PCL compliance for the ROS2 deployment path.
 
 ---
 
 ## Migration Order and Dependencies
 
 ```
-Phase 1 (WorldModelComponent)
+Phase 1 (WorldModelComponent)    ✅ COMPLETE at component layer
+    |                               ⚠ WorldModelNode has direct-call bypasses (devenv fix)
     |
-    +---> Phase 2 (ExecutorComponent)     -- depends on msg format from Phase 1
+    +---> Phase 2 (ExecutorComponent)     ✅ COMPLETE at component layer
+    |         |                              ⚠ ExecutorNode has direct-call bypasses + data race
     |         |
-    |         +---> Phase 5 (PCL main)    -- needs phases 1-4 complete
+    |         +---> Phase 2R (pending-command queue)   ← NEXT: fixes ExecutorNode race
+    |         |
+    |         +---> Phase 5 (PCL main)    ✅ ame_pcl_main exists; combined_main uses PCL executor
     |
-    +---> Phase 3 (PlannerComponent)      -- depends on WorldModel ports from Phase 1
+    +---> Phase 3 (PlannerComponent)      ✅ COMPLETE at component layer
+    |                                        ⚠ PlannerNode has detached thread + direct bypasses
     |
-    +---> Phase 4 (AgentDispatcher)       -- depends on executor ports from Phase 2
+    +---> Phase 4 (AgentDispatcher)       status unknown — not touched in current session
 
-Phase 6 (ROS2 transport adapter)          -- independent, can start any time after Phase 1
+Phase 6 (ROS2 transport adapter)          ← required to remove all devenv bypass code
+                                             and complete the clean migration
 ```
 
-**Recommended execution order:** 1 -> 2 -> 3 -> 4 -> 5 -> 6
+**Recommended next steps:** 2R (urgent, fixes data race) → 4 (verify status) → 6 (transport adapter, removes all bypasses)
 
-Each phase is independently testable and deployable.  After each phase, the migrated component works with both the PCL executor and the existing ROS2 node wrapper.
+Each phase is independently testable and deployable. After each phase, the migrated component works with both the PCL executor and the existing ROS2 node wrapper.
 
 ---
 
@@ -517,31 +657,41 @@ Each phase is independently testable and deployable.  After each phase, the migr
 ## Files Changed Per Phase
 
 ### Phase 1
-| File | Change |
-|------|--------|
-| `include/ame/pcl_msg_json.h` | **New** -- serialisation helpers |
-| `src/lib/pcl_msg_json.cpp` | **New** -- serialisation implementation |
-| `include/ame/world_model_component.h` | Add port members, `on_tick()` override, static service handlers |
-| `src/lib/world_model_component.cpp` | Move pub/sub/service logic from node, add `on_tick()` |
-| `ros2/include/ame_ros2/world_model_node.hpp` | Remove all ROS2 pub/sub/service/timer members |
-| `ros2/src/nodes/world_model_node.cpp` | Strip to lifecycle forwarding only |
-| `tests/` | Add PCL integration test for WorldModelComponent |
+| File | Change | Status |
+|------|--------|--------|
+| `include/ame/pcl_msg_json.h` | **New** -- serialisation helpers | ✅ |
+| `src/lib/pcl_msg_json.cpp` | **New** -- serialisation implementation | ✅ |
+| `include/ame/world_model_component.h` | Add port members, `on_tick()` override, static service handlers | ✅ |
+| `src/lib/world_model_component.cpp` | Move pub/sub/service logic from node, add `on_tick()` | ✅ |
+| `ros2/include/ame_ros2/world_model_node.hpp` | Remove all ROS2 pub/sub/service/timer members | ⚠ devenv service bridges re-added |
+| `ros2/src/nodes/world_model_node.cpp` | Strip to lifecycle forwarding only | ⚠ devenv service bridges re-added |
+| `tests/` | Add PCL integration test for WorldModelComponent | ❌ not yet written |
 
 ### Phase 2
+| File | Change | Status |
+|------|--------|--------|
+| `include/ame/executor_component.h` | Add port members, `on_tick()` override | ✅ |
+| `src/lib/executor_component.cpp` | Move tick/pub/sub logic from node | ✅ |
+| `ros2/include/ame_ros2/executor_node.hpp` | Remove all ROS2 pub/sub/timer members | ⚠ devenv bypasses re-added |
+| `ros2/src/nodes/executor_node.cpp` | Strip to lifecycle forwarding only | ⚠ devenv bypasses re-added |
+
+### Phase 2R (remediation)
 | File | Change |
 |------|--------|
-| `include/ame/executor_component.h` | Add port members, `on_tick()` override, remove `EventSink` |
-| `src/lib/executor_component.cpp` | Move tick/pub/sub logic from node |
-| `ros2/include/ame_ros2/executor_node.hpp` | Remove all ROS2 pub/sub/timer members |
-| `ros2/src/nodes/executor_node.cpp` | Strip to lifecycle forwarding only |
+| `include/ame/executor_component.h` | Add `enqueueBtXml()`, `enqueueHalt()`, `pending_mutex_`, `pending_bt_xml_`, `pending_halt_` |
+| `src/lib/executor_component.cpp` | Drain pending queue at top of `on_tick()`; implement enqueue methods |
+| `include/ame/world_model_component.h` | Remove public `setFact()` or redirect to enqueue path |
+| `src/lib/world_model_component.cpp` | `setFact()` calls `wm_.enqueueMutation()` instead of `wm_.setFact()` directly |
+| `ros2/src/nodes/executor_node.cpp` | Service handlers call `enqueue*()` not `loadAndExecute()`/`haltExecution()`; remove `exec_mutex_` |
+| `ros2/src/nodes/planner_node.cpp` | Remove detached thread; planning runs on PCL service handler thread |
 
 ### Phase 3
-| File | Change |
-|------|--------|
-| `include/ame/planner_component.h` | Add port members, service handler |
-| `src/lib/planner_component.cpp` | Move plan/service logic from node, remove thread spawn |
-| `ros2/include/ame_ros2/planner_node.hpp` | Remove action server, pub, service client |
-| `ros2/src/nodes/planner_node.cpp` | Strip to lifecycle forwarding only |
+| File | Change | Status |
+|------|--------|--------|
+| `include/ame/planner_component.h` | Add port members, service handler | ✅ |
+| `src/lib/planner_component.cpp` | Move plan/service logic from node, remove thread spawn | ✅ (thread spawn remains in node wrapper) |
+| `ros2/include/ame_ros2/planner_node.hpp` | Remove action server, pub, service client | ⚠ devenv action server + service re-added |
+| `ros2/src/nodes/planner_node.cpp` | Strip to lifecycle forwarding only | ⚠ detached thread + direct bypasses re-added |
 
 ### Phase 4
 | File | Change |
@@ -562,13 +712,24 @@ Each phase is independently testable and deployable.  After each phase, the migr
 
 ## Definition of Done
 
-- [ ] All four components create their ports in `on_configure()` and use `pcl_port_publish()` for output.
-- [ ] No `rclcpp::Publisher`, `rclcpp::Subscription`, `rclcpp::Service`, `rclcpp::Client`, or `rclcpp::TimerBase` exists inside any `*Component` class.
-- [ ] No `std::thread` is spawned by any component or node.
-- [ ] `ExecutorComponent::on_tick()` drives BT ticking.
-- [ ] `WorldModelComponent::on_tick()` drives periodic state publishing.
-- [ ] Detection ingress runs on the PCL executor thread (no cross-thread mutation of WorldModel).
-- [ ] `ame_pcl_main` runs the full pipeline without ROS2.
-- [ ] All 73 existing tests pass.
+### Component layer (target state for each item — current status in brackets)
+
+- [x] All four components create their ports in `on_configure()` and use `pcl_port_publish()` for output.
+- [x] No `rclcpp::Publisher`, `rclcpp::Subscription`, `rclcpp::Service`, `rclcpp::Client`, or `rclcpp::TimerBase` exists inside any `*Component` class.
+- [x] `ExecutorComponent::on_tick()` drives BT ticking.
+- [x] `WorldModelComponent::on_tick()` drives periodic state publishing.
+- [x] Detection ingress runs on the PCL executor thread (no cross-thread mutation of WorldModel).
+- [x] `ame_pcl_main` runs the full pipeline without ROS2.
+- [x] All 73 existing tests pass.
+
+### Remaining work
+
+- [ ] **Phase 2R**: `ExecutorComponent` pending-command queue — eliminates data race between ROS2 service thread and PCL executor thread for `loadAndExecute` / `haltExecution`.
+- [ ] **Phase 2R**: `WorldModelComponent::setFact()` should enqueue via `enqueueMutation` rather than calling `wm_.setFact()` directly, preserving single-writer guarantee.
+- [ ] **Phase 2R**: `PlannerNode` detached thread eliminated — planning runs on PCL executor thread via service handler (or deferred response if solve times warrant it).
+- [ ] **Phase 4**: Verify `AgentDispatcherComponent` PCL port status; confirm node wrapper is thin.
+- [ ] **Phase 6**: ROS2 transport adapter implemented — PCL ports surface automatically as ROS2 topics/services.
+- [ ] **Phase 6**: All direct-call bridges removed from `WorldModelNode`, `PlannerNode`, `ExecutorNode` — nodes become pure lifecycle forwarders with no `svc_*` / `pub_*` members.
+- [ ] **Phase 6**: `setWmPublishCallback` and `setEventSink` bridges removed from node wrappers.
 - [ ] At least one new PCL-level integration test per component.
-- [ ] ROS2 `combined_main` still works (thin node wrappers forward lifecycle only).
+- [ ] ROS2 `combined_main` still works after Phase 6 (thin node wrappers forward lifecycle only, transport adapter handles external interface).
