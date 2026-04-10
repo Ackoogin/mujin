@@ -23,6 +23,7 @@
 ///                          [--timeout SECS]
 #include <TacticalObjectsCodec.h>
 #include <StreamingCodec.h>
+#include "pyramid_data_model_tactical_codec.hpp"
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 #include <pcl/pcl_executor.h>
 #include <pcl/pcl_container.h>
@@ -30,6 +31,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -45,6 +47,9 @@
 using namespace tactical_objects;
 using json = nlohmann::json;
 namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
+namespace wire_types = pyramid::services::tactical_objects::wire_types;
+namespace data_model = pyramid::data_model;
+namespace tactical_codec = pyramid::data_model::tactical;
 
 // ---------------------------------------------------------------------------
 // Globals
@@ -101,25 +106,182 @@ static const char* normalize_content_type(const char* content_type) {
              : kJsonContentType;
 }
 
-static std::string encode_frontend_payload(const std::string& payload,
-                                           const char* content_type) {
-  if (is_flatbuffers_content_type(content_type)) {
-    return flatbuffers_codec::wrapPayload(payload);
+static data_model::StandardIdentity standardIdentityFromAffiliation(Affiliation a) {
+  switch (a) {
+    case Affiliation::Friendly: return data_model::StandardIdentity::Friendly;
+    case Affiliation::Hostile: return data_model::StandardIdentity::Hostile;
+    case Affiliation::Neutral: return data_model::StandardIdentity::Neutral;
+    case Affiliation::Unknown: return data_model::StandardIdentity::Unknown;
+    case Affiliation::AssumedFriend: return data_model::StandardIdentity::AssumedFriendly;
+    case Affiliation::Suspect: return data_model::StandardIdentity::Suspect;
+    case Affiliation::Joker: return data_model::StandardIdentity::Joker;
+    case Affiliation::Faker: return data_model::StandardIdentity::Faker;
+    case Affiliation::Pending: return data_model::StandardIdentity::Pending;
   }
-  return payload;
+  return data_model::StandardIdentity::Unknown;
 }
 
-static bool decode_frontend_payload(const pcl_msg_t* msg, std::string& payload) {
+static data_model::BattleDimension standardBattleDimension(BattleDimension d) {
+  switch (d) {
+    case BattleDimension::Ground: return data_model::BattleDimension::Ground;
+    case BattleDimension::Air: return data_model::BattleDimension::Air;
+    case BattleDimension::SeaSurface: return data_model::BattleDimension::SeaSurface;
+    case BattleDimension::Subsurface: return data_model::BattleDimension::Subsurface;
+    case BattleDimension::Space: return data_model::BattleDimension::Unknown;
+    case BattleDimension::SOF: return data_model::BattleDimension::Unknown;
+  }
+  return data_model::BattleDimension::Unspecified;
+}
+
+static std::string standardIdentityToString(data_model::StandardIdentity identity) {
+  switch (identity) {
+    case data_model::StandardIdentity::Friendly: return "STANDARD_IDENTITY_FRIENDLY";
+    case data_model::StandardIdentity::Hostile: return "STANDARD_IDENTITY_HOSTILE";
+    case data_model::StandardIdentity::Neutral: return "STANDARD_IDENTITY_NEUTRAL";
+    case data_model::StandardIdentity::Unknown: return "STANDARD_IDENTITY_UNKNOWN";
+    case data_model::StandardIdentity::Suspect: return "STANDARD_IDENTITY_SUSPECT";
+    case data_model::StandardIdentity::Pending: return "STANDARD_IDENTITY_PENDING";
+    case data_model::StandardIdentity::Joker: return "STANDARD_IDENTITY_JOKER";
+    case data_model::StandardIdentity::Faker: return "STANDARD_IDENTITY_FAKER";
+    case data_model::StandardIdentity::AssumedFriendly: return "STANDARD_IDENTITY_ASSUMED_FRIENDLY";
+    case data_model::StandardIdentity::Unspecified: break;
+  }
+  return "STANDARD_IDENTITY_UNSPECIFIED";
+}
+
+static data_model::StandardIdentity standardIdentityFromString(const std::string& identity) {
+  if (identity == "STANDARD_IDENTITY_FRIENDLY") return data_model::StandardIdentity::Friendly;
+  if (identity == "STANDARD_IDENTITY_HOSTILE") return data_model::StandardIdentity::Hostile;
+  if (identity == "STANDARD_IDENTITY_NEUTRAL") return data_model::StandardIdentity::Neutral;
+  if (identity == "STANDARD_IDENTITY_UNKNOWN") return data_model::StandardIdentity::Unknown;
+  if (identity == "STANDARD_IDENTITY_SUSPECT") return data_model::StandardIdentity::Suspect;
+  if (identity == "STANDARD_IDENTITY_PENDING") return data_model::StandardIdentity::Pending;
+  if (identity == "STANDARD_IDENTITY_JOKER") return data_model::StandardIdentity::Joker;
+  if (identity == "STANDARD_IDENTITY_FAKER") return data_model::StandardIdentity::Faker;
+  if (identity == "STANDARD_IDENTITY_ASSUMED_FRIENDLY") return data_model::StandardIdentity::AssumedFriendly;
+  return data_model::StandardIdentity::Unspecified;
+}
+
+static std::string battleDimensionToString(data_model::BattleDimension dimension) {
+  switch (dimension) {
+    case data_model::BattleDimension::Ground: return "BATTLE_DIMENSION_GROUND";
+    case data_model::BattleDimension::Air: return "BATTLE_DIMENSION_AIR";
+    case data_model::BattleDimension::SeaSurface: return "BATTLE_DIMENSION_SEA_SURFACE";
+    case data_model::BattleDimension::Subsurface: return "BATTLE_DIMENSION_SUBSURFACE";
+    case data_model::BattleDimension::Unknown: return "BATTLE_DIMENSION_UNKNOWN";
+    case data_model::BattleDimension::Unspecified: break;
+  }
+  return "BATTLE_DIMENSION_UNSPECIFIED";
+}
+
+static data_model::BattleDimension battleDimensionFromString(const std::string& dimension) {
+  if (dimension == "BATTLE_DIMENSION_GROUND") return data_model::BattleDimension::Ground;
+  if (dimension == "BATTLE_DIMENSION_AIR") return data_model::BattleDimension::Air;
+  if (dimension == "BATTLE_DIMENSION_SEA_SURFACE") return data_model::BattleDimension::SeaSurface;
+  if (dimension == "BATTLE_DIMENSION_SUBSURFACE") return data_model::BattleDimension::Subsurface;
+  if (dimension == "BATTLE_DIMENSION_UNKNOWN") return data_model::BattleDimension::Unknown;
+  return data_model::BattleDimension::Unspecified;
+}
+
+static data_model::DataPolicy dataPolicyFromString(const std::string& policy) {
+  if (policy == "DATA_POLICY_OBTAIN") return data_model::DataPolicy::Obtain;
+  if (policy == "DATA_POLICY_QUERY") return data_model::DataPolicy::Query;
+  return data_model::DataPolicy::Unspecified;
+}
+
+static std::string dataPolicyToString(data_model::DataPolicy policy) {
+  switch (policy) {
+    case data_model::DataPolicy::Obtain: return "DATA_POLICY_OBTAIN";
+    case data_model::DataPolicy::Query: return "DATA_POLICY_QUERY";
+    case data_model::DataPolicy::Unspecified: break;
+  }
+  return "DATA_POLICY_UNSPECIFIED";
+}
+
+static std::string encode_entity_matches_payload(const wire_types::EntityMatchArray& matches,
+                                                 const char* content_type) {
+  if (is_flatbuffers_content_type(content_type)) {
+    return flatbuffers_codec::toBinary(matches);
+  }
+  json arr = json::array();
+  for (const auto& match : matches) {
+    json obj;
+    obj["object_id"] = match.object_id;
+    obj["identity"] = standardIdentityToString(match.identity);
+    if (match.dimension != data_model::BattleDimension::Unspecified) {
+      obj["dimension"] = battleDimensionToString(match.dimension);
+    }
+    obj["latitude_rad"] = match.latitude_rad;
+    obj["longitude_rad"] = match.longitude_rad;
+    obj["confidence"] = match.confidence;
+    arr.push_back(std::move(obj));
+  }
+  return arr.dump();
+}
+
+static std::string encode_evidence_requirement_payload(const wire_types::EvidenceRequirement& req,
+                                                       const char* content_type) {
+  if (is_flatbuffers_content_type(content_type)) {
+    return flatbuffers_codec::toBinary(req);
+  }
+  json obj;
+  if (!req.id.empty()) obj["id"] = req.id;
+  if (req.policy != data_model::DataPolicy::Unspecified) {
+    obj["policy"] = dataPolicyToString(req.policy);
+  }
+  if (req.dimension != data_model::BattleDimension::Unspecified) {
+    obj["dimension"] = battleDimensionToString(req.dimension);
+  }
+  obj["min_lat_rad"] = req.min_lat_rad;
+  obj["max_lat_rad"] = req.max_lat_rad;
+  obj["min_lon_rad"] = req.min_lon_rad;
+  obj["max_lon_rad"] = req.max_lon_rad;
+  return obj.dump();
+}
+
+static std::string encode_identifier_payload(const data_model::Identifier& id,
+                                             const char* content_type) {
+  if (is_flatbuffers_content_type(content_type)) {
+    return flatbuffers_codec::toBinary(id);
+  }
+  return json(id).dump();
+}
+
+static bool decode_object_evidence(const pcl_msg_t* msg, wire_types::ObjectEvidence& evidence) {
   if (!msg || !msg->data || msg->size == 0) {
     return false;
   }
-
   try {
-    const auto* bytes = static_cast<const char*>(msg->data);
     if (is_flatbuffers_content_type(msg->type_name)) {
-      payload = flatbuffers_codec::unwrapPayload(msg->data, msg->size);
+      evidence = flatbuffers_codec::fromBinaryObjectEvidence(msg->data, msg->size);
     } else {
-      payload.assign(bytes, msg->size);
+      const auto j = json::parse(
+          std::string(static_cast<const char*>(msg->data), msg->size));
+      evidence.identity = standardIdentityFromString(j.value("identity", ""));
+      evidence.dimension = battleDimensionFromString(j.value("dimension", ""));
+      evidence.latitude_rad = j.value("latitude_rad", 0.0);
+      evidence.longitude_rad = j.value("longitude_rad", 0.0);
+      evidence.confidence = j.value("confidence", 0.0);
+      evidence.observed_at = j.value("observed_at", 0.0);
+    }
+    return true;
+  } catch (...) {
+    return false;
+  }
+}
+
+static bool decode_create_requirement(const pcl_msg_t* msg,
+                                      data_model::ObjectInterestRequirement& req) {
+  if (!msg || !msg->data || msg->size == 0) {
+    return false;
+  }
+  try {
+    if (is_flatbuffers_content_type(msg->type_name)) {
+      req = flatbuffers_codec::fromBinaryObjectInterestRequirement(msg->data, msg->size);
+    } else {
+      req = tactical_codec::fromJson(
+          std::string(static_cast<const char*>(msg->data), msg->size),
+          static_cast<data_model::ObjectInterestRequirement*>(nullptr));
     }
     return true;
   } catch (...) {
@@ -172,33 +334,33 @@ static void backend_entity_updates_cb(pcl_container_t*, const pcl_msg_t* msg,
   auto frames = StreamingCodec::decodeBatchFrame(
       static_cast<const uint8_t*>(msg->data), msg->size);
 
-  json arr = json::array();
+  wire_types::EntityMatchArray matches;
   for (const auto& upd : frames) {
     if (upd.message_type == STREAM_MSG_ENTITY_DELETE) continue;
 
-    json obj;
-    obj["object_id"] = TacticalObjectsCodec::encodeUUID(upd.entity_id)
-                           .get<std::string>();
+    wire_types::EntityMatch obj;
+    obj.object_id = TacticalObjectsCodec::encodeUUID(upd.entity_id)
+                        .get<std::string>();
     if (upd.affiliation) {
-      obj["identity"] = affiliationToStdIdentity(*upd.affiliation);
+      obj.identity = standardIdentityFromAffiliation(*upd.affiliation);
     }
     if (upd.mil_class) {
-      obj["dimension"] = battleDimToStd(upd.mil_class->battle_dim);
+      obj.dimension = standardBattleDimension(upd.mil_class->battle_dim);
     }
     if (upd.position) {
-      obj["latitude_rad"]  = degToRad(upd.position->lat);
-      obj["longitude_rad"] = degToRad(upd.position->lon);
+      obj.latitude_rad = degToRad(upd.position->lat);
+      obj.longitude_rad = degToRad(upd.position->lon);
     }
     if (upd.confidence) {
-      obj["confidence"] = *upd.confidence;
+      obj.confidence = *upd.confidence;
     }
-    arr.push_back(obj);
+    matches.push_back(obj);
   }
 
-  if (arr.empty()) return;
+  if (matches.empty()) return;
 
-  std::string payload = encode_frontend_payload(
-      arr.dump(), g_bridge.frontend_content_type.c_str());
+  std::string payload = encode_entity_matches_payload(
+      matches, g_bridge.frontend_content_type.c_str());
   std::lock_guard<std::mutex> lock(g_bridge.mu);
   g_bridge.to_frontend.push_back(
       {"standard.entity_matches", g_bridge.frontend_content_type,
@@ -213,9 +375,22 @@ static void backend_evidence_reqs_cb(pcl_container_t*, const pcl_msg_t* msg,
                                      void*) {
   if (!msg || !msg->data || msg->size == 0) return;
 
-  std::string payload = encode_frontend_payload(
-      std::string(static_cast<const char*>(msg->data), msg->size),
-      g_bridge.frontend_content_type.c_str());
+  wire_types::EvidenceRequirement req;
+  try {
+    const auto j = json::parse(
+        std::string(static_cast<const char*>(msg->data), msg->size));
+    req.id = j.value("id", "");
+    req.policy = dataPolicyFromString(j.value("policy", ""));
+    req.dimension = battleDimensionFromString(j.value("dimension", ""));
+    req.min_lat_rad = j.value("min_lat_rad", 0.0);
+    req.max_lat_rad = j.value("max_lat_rad", 0.0);
+    req.min_lon_rad = j.value("min_lon_rad", 0.0);
+    req.max_lon_rad = j.value("max_lon_rad", 0.0);
+  } catch (...) {
+    return;
+  }
+  std::string payload = encode_evidence_requirement_payload(
+      req, g_bridge.frontend_content_type.c_str());
   std::lock_guard<std::mutex> lock(g_bridge.mu);
   g_bridge.to_frontend.push_back(
       {"standard.evidence_requirements", g_bridge.frontend_content_type,
@@ -242,14 +417,8 @@ static pcl_status_t backend_on_configure(pcl_container_t* c, void*) {
 
 static void frontend_object_evidence_cb(pcl_container_t*, const pcl_msg_t* msg,
                                         void*) {
-  std::string str;
-  if (!decode_frontend_payload(msg, str)) return;
-  json j;
-  try {
-    j = json::parse(str);
-  } catch (...) {
-    return;
-  }
+  wire_types::ObjectEvidence evidence;
+  if (!decode_object_evidence(msg, evidence)) return;
 
   // Translate standard observation to internal format (must match
   // TacticalObjectsCodec::decodeObservation expected schema).
@@ -259,20 +428,20 @@ static void frontend_object_evidence_cb(pcl_container_t*, const pcl_msg_t* msg,
   obs["observation_id"] = pyramid::core::uuid::UUIDHelper::toString(
       pyramid::core::uuid::UUIDHelper::generateV4());
   obs["position"] = json::object();
-  obs["position"]["lat"] = radToDeg(j.value("latitude_rad", 0.0));
-  obs["position"]["lon"] = radToDeg(j.value("longitude_rad", 0.0));
+  obs["position"]["lat"] = radToDeg(evidence.latitude_rad);
+  obs["position"]["lon"] = radToDeg(evidence.longitude_rad);
   obs["position"]["alt"] = 0.0;
-  obs["confidence"] = j.value("confidence", 0.0);
-  obs["observed_at"] = j.value("observed_at", 0.0);
+  obs["confidence"] = evidence.confidence;
+  obs["observed_at"] = evidence.observed_at;
   obs["object_hint_type"] = "Platform";
   obs["affiliation_hint"] = "Unknown";
 
-  std::string identity = j.value("identity", "");
+  std::string identity = standardIdentityToString(evidence.identity);
   if (identity == "STANDARD_IDENTITY_HOSTILE")  obs["affiliation_hint"] = "Hostile";
   else if (identity == "STANDARD_IDENTITY_FRIENDLY") obs["affiliation_hint"] = "Friendly";
   else if (identity == "STANDARD_IDENTITY_NEUTRAL")  obs["affiliation_hint"] = "Neutral";
 
-  std::string dimension = j.value("dimension", "");
+  std::string dimension = battleDimensionToString(evidence.dimension);
   if (dimension == "BATTLE_DIMENSION_SEA_SURFACE")
     obs["source_sidc"] = "SHSP------*****";
   else if (dimension == "BATTLE_DIMENSION_AIR")
@@ -299,47 +468,59 @@ static pcl_status_t frontend_create_requirement(pcl_container_t*,
                                                  pcl_msg_t* response,
                                                  pcl_svc_context_t*,
                                                  void*) {
-  std::string str;
-  if (!decode_frontend_payload(request, str)) return PCL_ERR_INVALID;
+  data_model::ObjectInterestRequirement req;
+  if (!decode_create_requirement(request, req)) return PCL_ERR_INVALID;
   const char* frontend_content_type = normalize_content_type(
       request ? request->type_name : nullptr);
-  json req_j;
-  try {
-    req_j = json::parse(str);
-  } catch (...) {
-    return PCL_ERR_INVALID;
-  }
-
-  std::fprintf(stderr, "[bridge] create_requirement: %s\n", str.c_str());
+  std::fprintf(stderr, "[bridge] create_requirement received type=%s\n",
+               frontend_content_type);
 
   // Translate standard → internal subscribe_interest format
   json internal;
 
-  std::string policy = req_j.value("policy", "DATA_POLICY_OBTAIN");
-  internal["query_mode"] = (policy == "DATA_POLICY_OBTAIN")
+  internal["query_mode"] = (req.policy == data_model::DataPolicy::Obtain)
                                ? "active_find"
                                : "read_current";
 
-  std::string identity = req_j.value("identity", "");
-  if (identity == "STANDARD_IDENTITY_HOSTILE")       internal["affiliation"] = "Hostile";
-  else if (identity == "STANDARD_IDENTITY_FRIENDLY") internal["affiliation"] = "Friendly";
-  else if (identity == "STANDARD_IDENTITY_NEUTRAL")  internal["affiliation"] = "Neutral";
-  else if (identity == "STANDARD_IDENTITY_UNKNOWN")  internal["affiliation"] = "Unknown";
+  if (!req.dimension.empty()) {
+    const std::string dimension = battleDimensionToString(req.dimension.front());
+    if (dimension == "BATTLE_DIMENSION_GROUND") internal["battle_dimension"] = "Ground";
+    else if (dimension == "BATTLE_DIMENSION_AIR") internal["battle_dimension"] = "Air";
+    else if (dimension == "BATTLE_DIMENSION_SEA_SURFACE") internal["battle_dimension"] = "SeaSurface";
+    else if (dimension == "BATTLE_DIMENSION_SUBSURFACE") internal["battle_dimension"] = "Subsurface";
+  }
 
-  std::string dimension = req_j.value("dimension", "");
-  if (dimension == "BATTLE_DIMENSION_GROUND")      internal["battle_dimension"] = "Ground";
-  else if (dimension == "BATTLE_DIMENSION_AIR")    internal["battle_dimension"] = "Air";
-  else if (dimension == "BATTLE_DIMENSION_SEA_SURFACE") internal["battle_dimension"] = "SeaSurface";
-  else if (dimension == "BATTLE_DIMENSION_SUBSURFACE")  internal["battle_dimension"] = "Subsurface";
-
-  if (req_j.contains("min_lat_rad")) {
+  auto set_bbox = [&](double min_lat, double max_lat, double min_lon, double max_lon) {
     json area;
-    area["min_lat"] = radToDeg(req_j.value("min_lat_rad", 0.0));
-    area["max_lat"] = radToDeg(req_j.value("max_lat_rad", 0.0));
-    area["min_lon"] = radToDeg(req_j.value("min_lon_rad", 0.0));
-    area["max_lon"] = radToDeg(req_j.value("max_lon_rad", 0.0));
+    area["min_lat"] = radToDeg(min_lat);
+    area["max_lat"] = radToDeg(max_lat);
+    area["min_lon"] = radToDeg(min_lon);
+    area["max_lon"] = radToDeg(max_lon);
     internal["area"] = area;
     internal["expires_at"] = 9999;
+  };
+
+  if (req.point.has_value()) {
+    const auto& p = req.point->position;
+    set_bbox(p.latitude, p.latitude, p.longitude, p.longitude);
+  } else if (req.circle_area.has_value()) {
+    const auto& c = req.circle_area.value();
+    set_bbox(c.position.latitude - c.radius,
+             c.position.latitude + c.radius,
+             c.position.longitude - c.radius,
+             c.position.longitude + c.radius);
+  } else if (req.poly_area.has_value() && !req.poly_area->points.empty()) {
+    double min_lat = req.poly_area->points.front().latitude;
+    double max_lat = min_lat;
+    double min_lon = req.poly_area->points.front().longitude;
+    double max_lon = min_lon;
+    for (const auto& point : req.poly_area->points) {
+      min_lat = std::min(min_lat, point.latitude);
+      max_lat = std::max(max_lat, point.latitude);
+      min_lon = std::min(min_lon, point.longitude);
+      max_lon = std::max(max_lon, point.longitude);
+    }
+    set_bbox(min_lat, max_lat, min_lon, max_lon);
   }
 
   std::string internal_str = internal.dump();
@@ -369,8 +550,7 @@ static pcl_status_t frontend_create_requirement(pcl_container_t*,
       resp_cb, &ctx);
 
   if (rc != PCL_OK) {
-    g_bridge.resp_buf = encode_frontend_payload(
-        "{\"error\":\"enqueue failed\"}", frontend_content_type);
+    g_bridge.resp_buf = encode_identifier_payload({}, frontend_content_type);
     response->data      = g_bridge.resp_buf.data();
     response->size      = static_cast<uint32_t>(g_bridge.resp_buf.size());
     response->type_name = frontend_content_type;
@@ -387,8 +567,7 @@ static pcl_status_t frontend_create_requirement(pcl_container_t*,
   }
 
   if (!ctx.done.load()) {
-    g_bridge.resp_buf = encode_frontend_payload(
-        "{\"error\":\"subscribe_interest timeout\"}", frontend_content_type);
+    g_bridge.resp_buf = encode_identifier_payload({}, frontend_content_type);
     response->data      = g_bridge.resp_buf.data();
     response->size      = static_cast<uint32_t>(g_bridge.resp_buf.size());
     response->type_name = frontend_content_type;
@@ -410,22 +589,27 @@ static pcl_status_t frontend_create_requirement(pcl_container_t*,
       iresp["evidence_requirements"].is_array()) {
     std::lock_guard<std::mutex> lock(g_bridge.mu);
     for (const auto& ev : iresp["evidence_requirements"]) {
+      wire_types::EvidenceRequirement req_payload{};
+      try {
+        req_payload.id = ev.value("id", "");
+        req_payload.policy = dataPolicyFromString(ev.value("policy", ""));
+        req_payload.dimension = battleDimensionFromString(ev.value("dimension", ""));
+        req_payload.min_lat_rad = ev.value("min_lat_rad", 0.0);
+        req_payload.max_lat_rad = ev.value("max_lat_rad", 0.0);
+        req_payload.min_lon_rad = ev.value("min_lon_rad", 0.0);
+        req_payload.max_lon_rad = ev.value("max_lon_rad", 0.0);
+      } catch (...) {
+        continue;
+      }
       g_bridge.to_frontend.push_back(
           {"standard.evidence_requirements", g_bridge.frontend_content_type,
-           encode_frontend_payload(
-               ev.dump(), g_bridge.frontend_content_type.c_str())});
+           encode_evidence_requirement_payload(
+               req_payload, g_bridge.frontend_content_type.c_str())});
     }
   }
 
-  // Build standard response
-  json std_resp;
-  std_resp["interest_id"] = iresp.value("interest_id", "");
-  if (iresp.contains("solution_id")) {
-    std_resp["solution_id"] = iresp["solution_id"];
-  }
-
-  g_bridge.resp_buf    = encode_frontend_payload(
-      std_resp.dump(), frontend_content_type);
+  g_bridge.resp_buf = encode_identifier_payload(
+      iresp.value("interest_id", ""), frontend_content_type);
   response->data       = g_bridge.resp_buf.data();
   response->size       = static_cast<uint32_t>(g_bridge.resp_buf.size());
   response->type_name  = frontend_content_type;

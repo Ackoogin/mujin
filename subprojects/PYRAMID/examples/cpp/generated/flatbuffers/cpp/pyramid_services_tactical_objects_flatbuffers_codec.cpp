@@ -1,8 +1,14 @@
 // Auto-generated service FlatBuffers codec
 #include "pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 
+#include "pyramid_data_model_common_codec.hpp"
+#include "pyramid_data_model_tactical_codec.hpp"
+#include "pyramid_services_tactical_objects_json_codec.hpp"
+#include <cstdlib>
 #include <cstdint>
+#include <cstring>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <utility>
 
@@ -918,3 +924,766 @@ wire_types::EvidenceRequirement fromBinaryEvidenceRequirement(const void* data, 
 }
 
 } // namespace pyramid::services::tactical_objects::flatbuffers_codec
+
+extern "C" {
+
+void pyramid_services_tactical_objects_free_buffer(void* data) {
+    std::free(data);
+}
+
+void* pyramid_services_tactical_objects_GeodeticPosition_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::GeodeticPosition*>(nullptr));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_GeodeticPosition_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryGeodeticPosition(data, size);
+        auto json = pyramid::data_model::common::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_PolyArea_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::PolyArea*>(nullptr));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_PolyArea_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryPolyArea(data, size);
+        auto json = pyramid::data_model::common::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_Achievement_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::Achievement*>(nullptr));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_Achievement_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryAchievement(data, size);
+        auto json = pyramid::data_model::common::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_Entity_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::Entity*>(nullptr));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_Entity_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryEntity(data, size);
+        auto json = pyramid::data_model::common::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_CircleArea_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::CircleArea*>(nullptr));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_CircleArea_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryCircleArea(data, size);
+        auto json = pyramid::data_model::common::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_Point_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::Point*>(nullptr));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_Point_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryPoint(data, size);
+        auto json = pyramid::data_model::common::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_Contraint_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::Contraint*>(nullptr));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_Contraint_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryContraint(data, size);
+        auto json = pyramid::data_model::common::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_Ack_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::Ack*>(nullptr));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_Ack_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryAck(data, size);
+        auto json = pyramid::data_model::common::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_Query_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::Query*>(nullptr));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_Query_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryQuery(data, size);
+        auto json = pyramid::data_model::common::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_ObjectDetail_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::tactical::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::ObjectDetail*>(nullptr));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_ObjectDetail_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryObjectDetail(data, size);
+        auto json = pyramid::data_model::tactical::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_ObjectEvidenceRequirement_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::tactical::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::ObjectEvidenceRequirement*>(nullptr));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_ObjectEvidenceRequirement_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryObjectEvidenceRequirement(data, size);
+        auto json = pyramid::data_model::tactical::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_ObjectInterestRequirement_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::tactical::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::ObjectInterestRequirement*>(nullptr));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_ObjectInterestRequirement_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryObjectInterestRequirement(data, size);
+        auto json = pyramid::data_model::tactical::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_ObjectMatch_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::tactical::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::ObjectMatch*>(nullptr));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_ObjectMatch_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryObjectMatch(data, size);
+        auto json = pyramid::data_model::tactical::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_Capability_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::Capability*>(nullptr));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_Capability_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryCapability(data, size);
+        auto json = pyramid::data_model::common::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_Identifier_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = [&]() { auto j = nlohmann::json::parse(std::string(json ? json : "")); return j.is_string() ? j.get<pyramid::data_model::Identifier>() : pyramid::data_model::Identifier{}; }();
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_Identifier_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryIdentifier(data, size);
+        auto json = nlohmann::json(value).dump();
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_ObjectDetailArray_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto arr = nlohmann::json::parse(std::string(json ? json : "[]"));
+        std::vector<pyramid::data_model::ObjectDetail> values;
+        if (arr.is_array()) {
+            values.reserve(arr.size());
+            for (const auto& item : arr) {
+                values.push_back(pyramid::data_model::tactical::fromJson(item.dump(), static_cast<pyramid::data_model::ObjectDetail*>(nullptr)));
+            }
+        }
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(values);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_ObjectDetailArray_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto values = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryObjectDetailArray(data, size);
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& item : values) {
+            arr.push_back(nlohmann::json::parse(pyramid::data_model::tactical::toJson(item)));
+        }
+        auto json = arr.dump();
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_ObjectEvidenceRequirementArray_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto arr = nlohmann::json::parse(std::string(json ? json : "[]"));
+        std::vector<pyramid::data_model::ObjectEvidenceRequirement> values;
+        if (arr.is_array()) {
+            values.reserve(arr.size());
+            for (const auto& item : arr) {
+                values.push_back(pyramid::data_model::tactical::fromJson(item.dump(), static_cast<pyramid::data_model::ObjectEvidenceRequirement*>(nullptr)));
+            }
+        }
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(values);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_ObjectEvidenceRequirementArray_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto values = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryObjectEvidenceRequirementArray(data, size);
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& item : values) {
+            arr.push_back(nlohmann::json::parse(pyramid::data_model::tactical::toJson(item)));
+        }
+        auto json = arr.dump();
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_CapabilityArray_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto arr = nlohmann::json::parse(std::string(json ? json : "[]"));
+        std::vector<pyramid::data_model::Capability> values;
+        if (arr.is_array()) {
+            values.reserve(arr.size());
+            for (const auto& item : arr) {
+                values.push_back(pyramid::data_model::common::fromJson(item.dump(), static_cast<pyramid::data_model::Capability*>(nullptr)));
+            }
+        }
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(values);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_CapabilityArray_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto values = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryCapabilityArray(data, size);
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& item : values) {
+            arr.push_back(nlohmann::json::parse(pyramid::data_model::common::toJson(item)));
+        }
+        auto json = arr.dump();
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_ObjectMatchArray_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto arr = nlohmann::json::parse(std::string(json ? json : "[]"));
+        std::vector<pyramid::data_model::ObjectMatch> values;
+        if (arr.is_array()) {
+            values.reserve(arr.size());
+            for (const auto& item : arr) {
+                values.push_back(pyramid::data_model::tactical::fromJson(item.dump(), static_cast<pyramid::data_model::ObjectMatch*>(nullptr)));
+            }
+        }
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(values);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_ObjectMatchArray_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto values = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryObjectMatchArray(data, size);
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& item : values) {
+            arr.push_back(nlohmann::json::parse(pyramid::data_model::tactical::toJson(item)));
+        }
+        auto json = arr.dump();
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_ObjectInterestRequirementArray_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto arr = nlohmann::json::parse(std::string(json ? json : "[]"));
+        std::vector<pyramid::data_model::ObjectInterestRequirement> values;
+        if (arr.is_array()) {
+            values.reserve(arr.size());
+            for (const auto& item : arr) {
+                values.push_back(pyramid::data_model::tactical::fromJson(item.dump(), static_cast<pyramid::data_model::ObjectInterestRequirement*>(nullptr)));
+            }
+        }
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(values);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_ObjectInterestRequirementArray_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto values = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryObjectInterestRequirementArray(data, size);
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& item : values) {
+            arr.push_back(nlohmann::json::parse(pyramid::data_model::tactical::toJson(item)));
+        }
+        auto json = arr.dump();
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_EntityMatch_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::services::tactical_objects::json_codec::entityMatchFromJson(std::string(json ? json : ""));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_EntityMatch_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryEntityMatch(data, size);
+        auto json = pyramid::services::tactical_objects::json_codec::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_EntityMatchArray_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::services::tactical_objects::json_codec::entityMatchesFromJson(std::string(json ? json : "[]"));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_EntityMatchArray_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto values = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryEntityMatchArray(data, size);
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& item : values) {
+            arr.push_back(nlohmann::json::parse(pyramid::services::tactical_objects::json_codec::toJson(item)));
+        }
+        auto json = arr.dump();
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_ObjectEvidence_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::services::tactical_objects::json_codec::objectEvidenceFromJson(std::string(json ? json : ""));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_ObjectEvidence_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryObjectEvidence(data, size);
+        auto json = pyramid::services::tactical_objects::json_codec::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_tactical_objects_EvidenceRequirement_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::services::tactical_objects::json_codec::evidenceRequirementFromJson(std::string(json ? json : ""));
+        auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_tactical_objects_EvidenceRequirement_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::tactical_objects::flatbuffers_codec::fromBinaryEvidenceRequirement(data, size);
+        auto json = pyramid::services::tactical_objects::json_codec::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+} // extern "C"

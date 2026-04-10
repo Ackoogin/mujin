@@ -121,9 +121,9 @@ def _ada_to_json_expr(fld: ProtoField, ada_fname: str, index: ProtoTypeIndex) ->
     if fld.type in ('float', 'double'):
         return f"Long_Float'Image (Msg.{ada_fname})"
     if fld.type in ('string', 'bytes'):
-        return f'"\\\"" & To_String (Msg.{ada_fname}) & "\\\"" '
+        return f'"""" & To_String (Msg.{ada_fname}) & """"'
     if index.is_enum_type(fld.type) or index.is_enum_type(fld.short_type):
-        return f'"\\\"" & To_String (Msg.{ada_fname}) & "\\\"" '
+        return f'"""" & To_String (Msg.{ada_fname}) & """"'
     # Nested message — delegate
     return f'To_Json (Msg.{ada_fname})'
 

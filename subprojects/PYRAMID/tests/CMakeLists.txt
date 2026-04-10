@@ -100,13 +100,10 @@ add_executable(test_pcl_proto_bindings
     test_pcl_proto_bindings.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
-    ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_json_codec.cpp
-    ${PROTO_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.cpp
-    ${PROTO_BINDINGS_DIR}/pyramid_data_model_common_codec.cpp
-    ${PROTO_BINDINGS_DIR}/pyramid_data_model_tactical_codec.cpp
 )
 target_link_libraries(test_pcl_proto_bindings PRIVATE
     pcl_core pcl_transport_socket tactical_objects
+    pyramid_generated_codecs
     pyramid_flatbuffers_support
     GTest::gtest_main
 )
@@ -124,13 +121,10 @@ add_executable(test_codec_dispatch_e2e
     test_codec_dispatch_e2e.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
-    ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_json_codec.cpp
-    ${PROTO_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.cpp
-    ${PROTO_BINDINGS_DIR}/pyramid_data_model_common_codec.cpp
-    ${PROTO_BINDINGS_DIR}/pyramid_data_model_tactical_codec.cpp
 )
 target_link_libraries(test_codec_dispatch_e2e PRIVATE
     pcl_core pcl_transport_socket tactical_objects
+    pyramid_generated_codecs
     pyramid_flatbuffers_support
     GTest::gtest_main
 )
@@ -169,11 +163,11 @@ endif()
 
 add_executable(standalone_bridge
     ${TOBJ_TEST_DIR}/standalone_bridge.cpp
-    ${PROTO_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.cpp
 )
 target_link_libraries(standalone_bridge PRIVATE
     tactical_objects tactical_objects_component
     pcl_core pcl_transport_socket
+    pyramid_generated_codecs
     pyramid_flatbuffers_support
 )
 target_include_directories(standalone_bridge PRIVATE
@@ -234,19 +228,28 @@ if(GPRBUILD)
         "Base library name for Ada gprbuild core PCL static library")
     set(ADA_PCL_SOCKET_LIB_NAME "pcl_transport_socket" CACHE STRING
         "Base library name for Ada gprbuild PCL socket transport static library")
+    set(ADA_PYRAMID_GEN_LIB_NAME "pyramid_generated_flatbuffers_codec" CACHE STRING
+        "Base library name for Ada gprbuild generated FlatBuffers codec archive")
 
     if(WIN32)
         set(ADA_PCL_LIB_DIR "${CMAKE_BINARY_DIR}/ada_gnat_pcl" CACHE PATH
             "Directory containing GNAT-compatible libpcl_core.a and libpcl_transport_socket.a")
         set(ADA_PCL_BUILD_SCRIPT "${PCL_ROOT_DIR}/scripts/build_gnat_pcl_static_libs.bat")
+        set(ADA_PYRAMID_GEN_LIB_DIR "${CMAKE_BINARY_DIR}/ada_gnat_pyramid" CACHE PATH
+            "Directory containing GNAT-compatible generated FlatBuffers codec archive")
+        set(ADA_PYRAMID_GEN_BUILD_SCRIPT "${PYRAMID_ROOT_DIR}/scripts/build_gnat_generated_flatbuffers_libs.bat")
     else()
         set(ADA_PCL_LIB_DIR "${CMAKE_BINARY_DIR}/subprojects/PCL/src" CACHE PATH
             "Directory containing libpcl_core/libpcl_transport_socket for Ada gprbuild")
+        set(ADA_PYRAMID_GEN_LIB_DIR "${CMAKE_BINARY_DIR}/ada_gnat_pyramid" CACHE PATH
+            "Directory containing GNAT-compatible generated FlatBuffers codec archive")
+        set(ADA_PYRAMID_GEN_BUILD_SCRIPT "${PYRAMID_ROOT_DIR}/scripts/build_gnat_generated_flatbuffers_libs.sh")
     endif()
 
     add_custom_target(ada_test_generated_bindings_build ALL
         COMMAND ${ADA_PYTHON} ${BINDINGS_GEN_SCRIPT} ${PYRAMID_PROTO_ROOT} ${ADA_GEN_OUT} --languages ada --backends json,flatbuffers
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR}
         COMMAND ${CMAKE_COMMAND} -E env MUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
                 ${GPRBUILD} -p -P ${ADA_SRC_DIR}/test_generated_bindings.gpr
                 -XMUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
@@ -254,6 +257,8 @@ if(GPRBUILD)
                 -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
                 -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
                 -XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME}
+                -XPYRAMID_GEN_LIB_DIR=${ADA_PYRAMID_GEN_LIB_DIR}
+                -XPYRAMID_GEN_LIB_NAME=${ADA_PYRAMID_GEN_LIB_NAME}
         WORKING_DIRECTORY ${ADA_SRC_DIR}
         COMMENT "Building Ada generated-bindings test"
     )
@@ -261,6 +266,13 @@ if(GPRBUILD)
         add_custom_command(TARGET ada_test_generated_bindings_build PRE_BUILD
             COMMAND cmd /c "${ADA_PCL_BUILD_SCRIPT}" "${ADA_PCL_LIB_DIR}"
             COMMENT "Preparing GNAT-compatible PCL static archives for Ada builds")
+        add_custom_command(TARGET ada_test_generated_bindings_build PRE_BUILD
+            COMMAND cmd /c "${ADA_PYRAMID_GEN_BUILD_SCRIPT}" "${ADA_PYRAMID_GEN_LIB_DIR}"
+            COMMENT "Preparing GNAT-compatible generated FlatBuffers archive for Ada builds")
+    else()
+        add_custom_command(TARGET ada_test_generated_bindings_build PRE_BUILD
+            COMMAND bash "${ADA_PYRAMID_GEN_BUILD_SCRIPT}" "${ADA_PYRAMID_GEN_LIB_DIR}"
+            COMMENT "Preparing GNAT-compatible generated FlatBuffers archive for Ada builds")
     endif()
 
     add_test(NAME ada_generated_bindings_roundtrip

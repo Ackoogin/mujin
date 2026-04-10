@@ -1148,15 +1148,15 @@ class CppJsonCodecGenerator:
             f.write('#include <string>\n')
             f.write('#include <vector>\n\n')
             f.write(f'namespace {self.NS} {{\n\n')
-            f.write(f'using namespace {self.WIRE_NS};\n')
-            f.write(f'using namespace {self.TYPES_NS};\n\n')
+            f.write(f'namespace wire_types = {self.WIRE_NS};\n')
+            f.write(f'namespace data_model = {self.TYPES_NS};\n\n')
 
             # -- Serialisation -------------------------------------------------
             f.write(_SEP + '\n')
             f.write('// Serialisation (toJson)\n')
             f.write(_SEP + '\n\n')
             for msg in schema.ALL_SCHEMAS:
-                f.write(f'std::string toJson(const {msg.cpp_name}& msg);\n')
+                f.write(f'std::string toJson(const wire_types::{msg.cpp_name}& msg);\n')
             f.write('\n')
 
             # -- Deserialisation -----------------------------------------------
@@ -1164,19 +1164,19 @@ class CppJsonCodecGenerator:
             f.write('// Deserialisation (fromJson)\n')
             f.write(_SEP + '\n\n')
             for msg in schema.ALL_SCHEMAS:
-                f.write(f'{msg.cpp_name} {_lc_first(msg.cpp_name)}FromJson'
+                f.write(f'wire_types::{msg.cpp_name} {_lc_first(msg.cpp_name)}FromJson'
                         f'(const std::string& s);\n')
             f.write('\n')
             f.write('// Deserialise standard.entity_matches JSON array\n')
-            f.write('EntityMatchArray entityMatchesFromJson(const std::string& s);\n\n')
+            f.write('wire_types::EntityMatchArray entityMatchesFromJson(const std::string& s);\n\n')
 
             # -- Enum string converters ----------------------------------------
             f.write(_SEP + '\n')
             f.write('// Enum string converters\n')
             f.write(_SEP + '\n\n')
             for _kind, spec in schema.ENUM_SPECS.items():
-                t = spec.cpp_type
-                fn = _lc_first(t)
+                t = f'data_model::{spec.cpp_type}'
+                fn = _lc_first(spec.cpp_type)
                 f.write(f'std::string toString({t} v);\n')
                 f.write(f'{t} {fn}FromString(const std::string& s);\n')
             f.write('\n')
@@ -1194,14 +1194,16 @@ class CppJsonCodecGenerator:
             f.write(f'#include "{self.HPP}"\n\n')
             f.write('#include <nlohmann/json.hpp>\n\n')
             f.write(f'namespace {self.NS} {{\n\n')
+            f.write(f'namespace wire_types = {self.WIRE_NS};\n')
+            f.write(f'namespace data_model = {self.TYPES_NS};\n\n')
 
             # -- Enum string converters ----------------------------------------
             f.write(_SEP + '\n')
             f.write('// Enum string converters\n')
             f.write(_SEP + '\n\n')
             for _kind, spec in schema.ENUM_SPECS.items():
-                t   = spec.cpp_type
-                fn  = _lc_first(t)
+                t   = f'data_model::{spec.cpp_type}'
+                fn  = _lc_first(spec.cpp_type)
                 tbl = spec.table()
 
                 # toString
@@ -1225,7 +1227,7 @@ class CppJsonCodecGenerator:
             f.write('// Serialisation (toJson)\n')
             f.write(_SEP + '\n\n')
             for msg in schema.ALL_SCHEMAS:
-                f.write(f'std::string toJson(const {msg.cpp_name}& msg) {{\n')
+                f.write(f'std::string toJson(const wire_types::{msg.cpp_name}& msg) {{\n')
                 f.write(f'    nlohmann::json obj;\n')
                 for fld in msg.fields:
                     jkey = fld.name
@@ -1235,7 +1237,7 @@ class CppJsonCodecGenerator:
                         if fld.required:
                             f.write(f'    obj["{jkey}"] = toString(msg.{jkey});\n')
                         else:
-                            f.write(f'    if (msg.{jkey} != {fld.cpp_default})'
+                            f.write(f'    if (msg.{jkey} != data_model::{fld.cpp_default})'
                                     f' obj["{jkey}"] = toString(msg.{jkey});\n')
                     elif fld.kind in (ek.STRING, ek.IDENTIFIER):
                         if fld.required:
@@ -1260,8 +1262,8 @@ class CppJsonCodecGenerator:
             f.write(_SEP + '\n\n')
             for msg in schema.ALL_SCHEMAS:
                 fname = f'{_lc_first(msg.cpp_name)}FromJson'
-                f.write(f'{msg.cpp_name} {fname}(const std::string& s) {{\n')
-                f.write(f'    {msg.cpp_name} result;\n')
+                f.write(f'wire_types::{msg.cpp_name} {fname}(const std::string& s) {{\n')
+                f.write(f'    wire_types::{msg.cpp_name} result;\n')
                 f.write(f'    try {{\n')
                 f.write(f'        auto j = nlohmann::json::parse(s);\n')
                 for fld in msg.fields:
@@ -1292,14 +1294,14 @@ class CppJsonCodecGenerator:
             f.write(_SEP + '\n')
             f.write('// Array deserialisation\n')
             f.write(_SEP + '\n\n')
-            f.write('EntityMatchArray entityMatchesFromJson(const std::string& s) {\n')
-            f.write('    EntityMatchArray result;\n')
+            f.write('wire_types::EntityMatchArray entityMatchesFromJson(const std::string& s) {\n')
+            f.write('    wire_types::EntityMatchArray result;\n')
             f.write('    try {\n')
             f.write('        auto arr = nlohmann::json::parse(s);\n')
             f.write('        if (!arr.is_array()) return result;\n')
             f.write('        result.reserve(arr.size());\n')
             f.write('        for (const auto& elem : arr) {\n')
-            f.write('            EntityMatch m;\n')
+            f.write('            wire_types::EntityMatch m;\n')
             for fld in schema.ENTITY_MATCH.fields:
                 jkey = fld.name
                 if fld.is_enum:

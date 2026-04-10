@@ -1,6 +1,7 @@
 --  Auto-generated data model JSON codec body
 --  Package: Pyramid.Data_Model.Common.Types_Codec
 
+with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 with GNATCOLL.JSON;  use GNATCOLL.JSON;
 pragma Warnings (Off);
 
@@ -219,15 +220,15 @@ package body Pyramid.Data_Model.Common.Types_Codec is
       Comma;
       Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
       Comma;
-      Append (Result, """id"":" & """ & To_String (Msg.Id) & """);
+      Append (Result, """id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Id) & """");
       Comma;
-      Append (Result, """source"":" & """ & To_String (Msg.Source) & """);
+      Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
       Comma;
-      Append (Result, """status"":" & """ & To_String (Msg.Status) & """);
+      Append (Result, """status"":" & """" & To_String (Msg.Status) & """");
       Comma;
       Append (Result, """quality"":" & Long_Float'Image (Msg.Quality));
       Comma;
-      Append (Result, """achieveability"":" & """ & To_String (Msg.Achieveability) & """);
+      Append (Result, """achieveability"":" & """" & To_String (Msg.Achieveability) & """");
       Append (Result, "}");
       return To_String (Result);
    end To_Json;
@@ -292,9 +293,9 @@ package body Pyramid.Data_Model.Common.Types_Codec is
       Comma;
       Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
       Comma;
-      Append (Result, """id"":" & """ & To_String (Msg.Id) & """);
+      Append (Result, """id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Id) & """");
       Comma;
-      Append (Result, """source"":" & """ & To_String (Msg.Source) & """);
+      Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
       Comma;
       Append (Result, """status"":" & To_Json (Msg.Status));
       Append (Result, "}");
@@ -349,13 +350,13 @@ package body Pyramid.Data_Model.Common.Types_Codec is
       Comma;
       Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
       Comma;
-      Append (Result, """id"":" & """ & To_String (Msg.Id) & """);
+      Append (Result, """id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Id) & """");
       Comma;
-      Append (Result, """source"":" & """ & To_String (Msg.Source) & """);
+      Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
       Comma;
       Append (Result, """availability"":" & (if Msg.Availability then "true" else "false"));
       Comma;
-      Append (Result, """name"":" & """ & To_String (Msg.Name) & """);
+      Append (Result, """name"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Name) & """");
       if Msg.Contraint /= null then
          Comma;
          Append (Result, """contraint"":[");
@@ -446,9 +447,9 @@ package body Pyramid.Data_Model.Common.Types_Codec is
       Comma;
       Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
       Comma;
-      Append (Result, """id"":" & """ & To_String (Msg.Id) & """);
+      Append (Result, """id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Id) & """");
       Comma;
-      Append (Result, """source"":" & """ & To_String (Msg.Source) & """);
+      Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
       Append (Result, "}");
       return To_String (Result);
    end To_Json;
@@ -554,7 +555,7 @@ package body Pyramid.Data_Model.Common.Types_Codec is
    function To_Json (Msg : Contraint) return String is
    begin
       return "{" &
-        """name"":" & """ & To_String (Msg.Name) & """ &
+        """name"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Name) & """" &
         "," &
         """value"":" & Integer'Image (Msg.Value) &
         "}";
@@ -621,7 +622,7 @@ package body Pyramid.Data_Model.Common.Types_Codec is
             if I > Msg.Id'First then
                Append (Result, ",");
             end if;
-            Append (Result, """ & To_String (Msg.Id (I)) & """);
+            Append (Result, """" & Ada.Strings.Unbounded.To_String (Msg.Id (I)) & """");
          end loop;
          Append (Result, "]");
       end if;

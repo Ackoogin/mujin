@@ -46,9 +46,13 @@ target_include_directories(tactical_objects_component PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
+target_include_directories(tactical_objects_component PRIVATE
+  ${PYRAMID_ROOT_DIR}/examples/cpp/generated
+)
 target_link_libraries(tactical_objects_component PUBLIC
   tactical_objects
   pcl_core
+  pyramid_generated_codecs
 )
 target_compile_features(tactical_objects_component PUBLIC cxx_std_14)
 
@@ -58,19 +62,11 @@ target_compile_features(tactical_objects_component PUBLIC cxx_std_14)
 add_executable(tactical_objects_app
     src/apps/tactical_objects_main.cpp
     ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_services_tactical_objects_consumed.cpp
-    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_services_tactical_objects_json_codec.cpp
-    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.cpp
-    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_common_codec.cpp
-    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_tactical_codec.cpp
 )
 
 add_executable(tactical_objects_test_client
     src/apps/tactical_objects_test_client.cpp
-    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_services_tactical_objects_json_codec.cpp
     ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_services_tactical_objects_provided.cpp
-    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.cpp
-    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_common_codec.cpp
-    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_tactical_codec.cpp
 )
 
 target_link_libraries(tactical_objects_app
@@ -78,6 +74,7 @@ target_link_libraries(tactical_objects_app
         tactical_objects
         tactical_objects_component
         pcl_transport_socket
+        pyramid_generated_codecs
         pyramid_flatbuffers_support
 )
 
@@ -93,6 +90,7 @@ target_link_libraries(tactical_objects_test_client
         pcl_core
         pcl_transport_socket
         nlohmann_json::nlohmann_json
+        pyramid_generated_codecs
         pyramid_flatbuffers_support
 )
 

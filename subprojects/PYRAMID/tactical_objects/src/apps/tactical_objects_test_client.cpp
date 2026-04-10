@@ -24,6 +24,7 @@ namespace FlatCodec = pyramid::services::tactical_objects::flatbuffers_codec;
 namespace Provided = pyramid::services::tactical_objects::provided;
 namespace TacticalCodec = pyramid::data_model::tactical;
 namespace Common = pyramid::data_model::common;
+namespace WireTypes = pyramid::services::tactical_objects::wire_types;
 using namespace pyramid::data_model;
 
 struct ClientState {
@@ -39,17 +40,26 @@ void onEntityMatches(pcl_container_t*, const pcl_msg_t* msg, void* user_data) {
     return;
   }
 
-  std::string payload(static_cast<const char*>(msg->data), msg->size);
-  if ((msg->size >= 4 && std::memcmp(msg->data, "PWFB", 4) == 0) ||
-      (msg->type_name &&
-       std::strcmp(msg->type_name, FlatCodec::kContentType) == 0)) {
-    payload = FlatCodec::unwrapPayload(payload);
+  WireTypes::EntityMatchArray matches;
+  std::string payload;
+  try {
+    if (msg->type_name &&
+        std::strcmp(msg->type_name, FlatCodec::kContentType) == 0) {
+      matches = FlatCodec::fromBinaryEntityMatchArray(msg->data, msg->size);
+      payload = "<flatbuffers>";
+    } else {
+      payload.assign(static_cast<const char*>(msg->data), msg->size);
+      matches = JsonCodec::entityMatchesFromJson(payload);
+    }
+  } catch (...) {
+    return;
   }
-  const auto matches = JsonCodec::entityMatchesFromJson(payload);
   state->match_count.store(static_cast<int>(matches.size()));
 
-  std::fprintf(stderr, "[tactical_objects_test_client] standard.entity_matches: %s\n",
-               payload.c_str());
+  std::fprintf(stderr,
+               "[tactical_objects_test_client] standard.entity_matches type=%s count=%d payload=%s\n",
+               msg->type_name ? msg->type_name : "<null>",
+               static_cast<int>(matches.size()), payload.c_str());
 }
 
 void onCreateRequirementResponse(const pcl_msg_t* resp, void* user_data) {
@@ -62,19 +72,22 @@ void onCreateRequirementResponse(const pcl_msg_t* resp, void* user_data) {
     return;
   }
 
-  std::string payload(static_cast<const char*>(resp->data), resp->size);
-  if ((resp->size >= 4 && std::memcmp(resp->data, "PWFB", 4) == 0) ||
-      (resp->type_name &&
-       std::strcmp(resp->type_name, FlatCodec::kContentType) == 0)) {
-    payload = FlatCodec::unwrapPayload(payload);
-  }
-  std::fprintf(stderr,
-               "[tactical_objects_test_client] create_requirement response: %s\n",
-               payload.c_str());
-
   try {
-    const auto response = nlohmann::json::parse(payload);
-    if (response.is_string() && !response.get<std::string>().empty()) {
+    std::string identifier;
+    if (resp->type_name &&
+        std::strcmp(resp->type_name, FlatCodec::kContentType) == 0) {
+      identifier = FlatCodec::fromBinaryIdentifier(resp->data, resp->size);
+    } else {
+      const std::string payload(static_cast<const char*>(resp->data), resp->size);
+      const auto response = nlohmann::json::parse(payload);
+      if (response.is_string()) {
+        identifier = response.get<std::string>();
+      }
+    }
+    std::fprintf(stderr,
+                 "[tactical_objects_test_client] create_requirement identifier: %s\n",
+                 identifier.c_str());
+    if (!identifier.empty()) {
       state->interest_id_received.store(true);
     }
   } catch (...) {
@@ -157,7 +170,7 @@ int main(int argc, char* argv[]) {
 
   std::string request_payload = TacticalCodec::toJson(request);
   if (state.content_type == FlatCodec::kContentType) {
-    request_payload = FlatCodec::wrapPayload(request_payload);
+    request_payload = FlatCodec::toBinary(request);
   }
 
   pcl_msg_t request_msg{};

@@ -140,7 +140,7 @@ begin
    -- -- Send create_requirement (passive query via bridge) ---------------------
 
    Tobj_Interest_Client.Send_Create_Requirement
-     (Transport   => Transport,
+     (Exec        => Exec,
       Policy      => Policy_Query,
       Identity    => Identity_Hostile,
       Dimension   => Dimension_Unspecified,

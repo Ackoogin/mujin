@@ -49,34 +49,6 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
 
    package Flatbuffers_Codec renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
 
-   function Encode_Transport_Payload
-     (Payload      : String;
-      Content_Type : String) return String
-   is
-   begin
-      if Content_Type = "" or else Content_Type = "application/json" then
-         return Payload;
-      elsif Content_Type = "application/flatbuffers" then
-         return Flatbuffers_Codec.Encode_Payload (Payload);
-      end if;
-
-      raise Constraint_Error with "Unsupported content type: " & Content_Type;
-   end Encode_Transport_Payload;
-
-   function Decode_Transport_Payload
-     (Payload      : String;
-      Content_Type : String) return String
-   is
-   begin
-      if Content_Type = "" or else Content_Type = "application/json" then
-         return Payload;
-      elsif Content_Type = "application/flatbuffers" then
-         return Flatbuffers_Codec.Decode_Payload (Payload);
-      else
-         raise Constraint_Error with "Unsupported content type: " & Content_Type;
-      end if;
-   end Decode_Transport_Payload;
-
    --  -- Object_Evidence_Service ------------------------------------
    function Default_Handle_Read_Detail
      (Request : Query) return Object_Detail_Array
@@ -528,8 +500,15 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
       Payload : Pyramid.Services.Tactical_Objects.Wire_Types.Object_Evidence;
       Content_Type : String := "application/json")
    is
+      Json_Payload : constant String := Pyramid.Services.Tactical_Objects.Json_Codec.To_Json (Payload);
+      Wire_Payload : constant String :=
+        (if Content_Type = "" or else Content_Type = "application/json"
+         then Json_Payload
+         elsif Content_Type = "application/flatbuffers"
+         then Flatbuffers_Codec.To_Binary_Object_Evidence (Payload)
+         else raise Constraint_Error with "Unsupported content type: " & Content_Type);
    begin
-      Publish_Object_Evidence (Exec, Encode_Transport_Payload (Pyramid.Services.Tactical_Objects.Json_Codec.To_Json (Payload), Content_Type), Content_Type);
+      Publish_Object_Evidence (Exec, Wire_Payload, Content_Type);
    end Publish_Object_Evidence;
 
    procedure Publish_Object_Evidence
@@ -586,9 +565,8 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
       Response_Buf  : out System.Address;
       Response_Size : out Natural)
    is
-      Req_Str : constant String := Decode_Transport_Payload
-        (Msg_To_String (Request_Buf, Interfaces.C.unsigned (Request_Size)),
-         Content_Type);
+      Request_Payload : constant String :=
+        Msg_To_String (Request_Buf, Interfaces.C.unsigned (Request_Size));
    begin
       Response_Buf  := System.Null_Address;
       Response_Size := 0;
@@ -596,7 +574,11 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
          when Ch_Read_Detail =>
             declare
                Req : constant Query :=
-                 From_Json (Req_Str, null);
+                 (if Content_Type = "" or else Content_Type = "application/json"
+                  then From_Json (Request_Payload, null)
+                  elsif Content_Type = "application/flatbuffers"
+                  then Flatbuffers_Codec.From_Binary_Query (Request_Payload, null)
+                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
                Rsp : constant Object_Detail_Array :=
                  (if Handlers /= null and then Handlers.On_Read_Detail /= null
                   then Handlers.On_Read_Detail.all (Req)
@@ -606,6 +588,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                   use Ada.Strings.Unbounded;
                   Acc : Unbounded_String :=
                     To_Unbounded_String ("[");
+                  Json_Response : String := "";
                begin
                   for I in Rsp'Range loop
                      if I > Rsp'First then
@@ -614,28 +597,49 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                      Append (Acc, To_Json (Rsp (I)));
                   end loop;
                   Append (Acc, "]");
-                  Copy_To_Buf (Encode_Transport_Payload (To_String (Acc), Content_Type),
+                  Json_Response := To_String (Acc);
+                  Copy_To_Buf
+                    ((if Content_Type = "" or else Content_Type = "application/json"
+                      then Json_Response
+                      elsif Content_Type = "application/flatbuffers"
+                      then Flatbuffers_Codec.To_Binary_Object_Detail_Array (Json_Response)
+                      else raise Constraint_Error with "Unsupported content type: " & Content_Type),
                     Response_Buf, Response_Size);
                end;
             end;
          when Ch_Create_Requirement =>
             declare
                Req : constant Object_Evidence_Requirement :=
-                 From_Json (Req_Str, null);
+                 (if Content_Type = "" or else Content_Type = "application/json"
+                  then From_Json (Request_Payload, null)
+                  elsif Content_Type = "application/flatbuffers"
+                  then Flatbuffers_Codec.From_Binary_Object_Evidence_Requirement (Request_Payload, null)
+                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
                Rsp : Identifier;
+               Json_Response : String := "";
             begin
                if Handlers /= null and then Handlers.On_Create_Requirement /= null then
                   Handlers.On_Create_Requirement.all (Req, Rsp);
                else
                   Default_Handle_Create_Requirement (Req, Rsp);
                end if;
-               Copy_To_Buf (Encode_Transport_Payload (To_String (Rsp), Content_Type),
-                 Response_Buf, Response_Size);
+               Json_Response := To_String (Rsp);
+               Copy_To_Buf
+                 ((if Content_Type = "" or else Content_Type = "application/json"
+                   then Json_Response
+                   elsif Content_Type = "application/flatbuffers"
+                   then Flatbuffers_Codec.To_Binary_Identifier (Rsp)
+                   else raise Constraint_Error with "Unsupported content type: " & Content_Type),
+                  Response_Buf, Response_Size);
             end;
          when Ch_Read_Requirement =>
             declare
                Req : constant Query :=
-                 From_Json (Req_Str, null);
+                 (if Content_Type = "" or else Content_Type = "application/json"
+                  then From_Json (Request_Payload, null)
+                  elsif Content_Type = "application/flatbuffers"
+                  then Flatbuffers_Codec.From_Binary_Query (Request_Payload, null)
+                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
                Rsp : constant Object_Evidence_Requirement_Array :=
                  (if Handlers /= null and then Handlers.On_Read_Requirement /= null
                   then Handlers.On_Read_Requirement.all (Req)
@@ -645,6 +649,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                   use Ada.Strings.Unbounded;
                   Acc : Unbounded_String :=
                     To_Unbounded_String ("[");
+                  Json_Response : String := "";
                begin
                   for I in Rsp'Range loop
                      if I > Rsp'First then
@@ -653,42 +658,74 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                      Append (Acc, To_Json (Rsp (I)));
                   end loop;
                   Append (Acc, "]");
-                  Copy_To_Buf (Encode_Transport_Payload (To_String (Acc), Content_Type),
+                  Json_Response := To_String (Acc);
+                  Copy_To_Buf
+                    ((if Content_Type = "" or else Content_Type = "application/json"
+                      then Json_Response
+                      elsif Content_Type = "application/flatbuffers"
+                      then Flatbuffers_Codec.To_Binary_Object_Evidence_Requirement_Array (Json_Response)
+                      else raise Constraint_Error with "Unsupported content type: " & Content_Type),
                     Response_Buf, Response_Size);
                end;
             end;
          when Ch_Update_Requirement =>
             declare
                Req : constant Object_Evidence_Requirement :=
-                 From_Json (Req_Str, null);
+                 (if Content_Type = "" or else Content_Type = "application/json"
+                  then From_Json (Request_Payload, null)
+                  elsif Content_Type = "application/flatbuffers"
+                  then Flatbuffers_Codec.From_Binary_Object_Evidence_Requirement (Request_Payload, null)
+                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
                Rsp : Ack;
+               Json_Response : String := "";
             begin
                if Handlers /= null and then Handlers.On_Update_Requirement /= null then
                   Handlers.On_Update_Requirement.all (Req, Rsp);
                else
                   Default_Handle_Update_Requirement (Req, Rsp);
                end if;
-               Copy_To_Buf (Encode_Transport_Payload (To_Json (Rsp), Content_Type),
-                 Response_Buf, Response_Size);
+               Json_Response := To_Json (Rsp);
+               Copy_To_Buf
+                 ((if Content_Type = "" or else Content_Type = "application/json"
+                   then Json_Response
+                   elsif Content_Type = "application/flatbuffers"
+                   then Flatbuffers_Codec.To_Binary_Ack (Rsp)
+                   else raise Constraint_Error with "Unsupported content type: " & Content_Type),
+                  Response_Buf, Response_Size);
             end;
          when Ch_Delete_Requirement =>
             declare
                Req : constant Identifier :=
-                 To_Unbounded_String (Req_Str);
+                 (if Content_Type = "" or else Content_Type = "application/json"
+                  then To_Unbounded_String (Request_Payload)
+                  elsif Content_Type = "application/flatbuffers"
+                  then Flatbuffers_Codec.From_Binary_Identifier (Request_Payload, null)
+                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
                Rsp : Ack;
+               Json_Response : String := "";
             begin
                if Handlers /= null and then Handlers.On_Delete_Requirement /= null then
                   Handlers.On_Delete_Requirement.all (Req, Rsp);
                else
                   Default_Handle_Delete_Requirement (Req, Rsp);
                end if;
-               Copy_To_Buf (Encode_Transport_Payload (To_Json (Rsp), Content_Type),
-                 Response_Buf, Response_Size);
+               Json_Response := To_Json (Rsp);
+               Copy_To_Buf
+                 ((if Content_Type = "" or else Content_Type = "application/json"
+                   then Json_Response
+                   elsif Content_Type = "application/flatbuffers"
+                   then Flatbuffers_Codec.To_Binary_Ack (Rsp)
+                   else raise Constraint_Error with "Unsupported content type: " & Content_Type),
+                  Response_Buf, Response_Size);
             end;
          when Ch_Read_Capability =>
             declare
                Req : constant Query :=
-                 From_Json (Req_Str, null);
+                 (if Content_Type = "" or else Content_Type = "application/json"
+                  then From_Json (Request_Payload, null)
+                  elsif Content_Type = "application/flatbuffers"
+                  then Flatbuffers_Codec.From_Binary_Query (Request_Payload, null)
+                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
                Rsp : constant Capability_Array :=
                  (if Handlers /= null and then Handlers.On_Read_Capability /= null
                   then Handlers.On_Read_Capability.all (Req)
@@ -698,6 +735,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                   use Ada.Strings.Unbounded;
                   Acc : Unbounded_String :=
                     To_Unbounded_String ("[");
+                  Json_Response : String := "";
                begin
                   for I in Rsp'Range loop
                      if I > Rsp'First then
@@ -706,7 +744,13 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                      Append (Acc, To_Json (Rsp (I)));
                   end loop;
                   Append (Acc, "]");
-                  Copy_To_Buf (Encode_Transport_Payload (To_String (Acc), Content_Type),
+                  Json_Response := To_String (Acc);
+                  Copy_To_Buf
+                    ((if Content_Type = "" or else Content_Type = "application/json"
+                      then Json_Response
+                      elsif Content_Type = "application/flatbuffers"
+                      then Flatbuffers_Codec.To_Binary_Capability_Array (Json_Response)
+                      else raise Constraint_Error with "Unsupported content type: " & Content_Type),
                     Response_Buf, Response_Size);
                end;
             end;

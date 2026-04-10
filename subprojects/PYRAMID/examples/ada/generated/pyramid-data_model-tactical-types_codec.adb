@@ -1,6 +1,7 @@
 --  Auto-generated data model JSON codec body
 --  Package: Pyramid.Data_Model.Tactical.Types_Codec
 
+with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 with GNATCOLL.JSON;  use GNATCOLL.JSON;
 with Pyramid.Data_Model.Common.Types_Codec;
 pragma Warnings (Off);
@@ -36,9 +37,9 @@ package body Pyramid.Data_Model.Tactical.Types_Codec is
       Comma;
       Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
       Comma;
-      Append (Result, """id"":" & """ & To_String (Msg.Id) & """);
+      Append (Result, """id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Id) & """");
       Comma;
-      Append (Result, """entity_source"":" & """ & To_String (Msg.Entity_Source) & """);
+      Append (Result, """entity_source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Entity_Source) & """");
       if Msg.Source /= null then
          Comma;
          Append (Result, """source"":[");
@@ -46,7 +47,7 @@ package body Pyramid.Data_Model.Tactical.Types_Codec is
             if I > Msg.Source'First then
                Append (Result, ",");
             end if;
-            Append (Result, """ & To_String (Msg.Source (I)) & """);
+            Append (Result, """" & To_String (Msg.Source (I)) & """");
          end loop;
          Append (Result, "]");
       end if;
@@ -63,9 +64,9 @@ package body Pyramid.Data_Model.Tactical.Types_Codec is
       Comma;
       Append (Result, """length"":" & Long_Float'Image (Msg.Length));
       Comma;
-      Append (Result, """identity"":" & """ & To_String (Msg.Identity) & """);
+      Append (Result, """identity"":" & """" & Pyramid.Data_Model.Common.Types_Codec.To_String (Msg.Identity) & """");
       Comma;
-      Append (Result, """dimension"":" & """ & To_String (Msg.Dimension) & """);
+      Append (Result, """dimension"":" & """" & Pyramid.Data_Model.Common.Types_Codec.To_String (Msg.Dimension) & """");
       Append (Result, "}");
       return To_String (Result);
    end To_Json;
@@ -170,7 +171,7 @@ package body Pyramid.Data_Model.Tactical.Types_Codec is
       Comma;
       Append (Result, """status"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Status));
       Comma;
-      Append (Result, """policy"":" & """ & To_String (Msg.Policy) & """);
+      Append (Result, """policy"":" & """" & Pyramid.Data_Model.Common.Types_Codec.To_String (Msg.Policy) & """");
       if Msg.Dimension /= null then
          Comma;
          Append (Result, """dimension"":[");
@@ -178,7 +179,7 @@ package body Pyramid.Data_Model.Tactical.Types_Codec is
             if I > Msg.Dimension'First then
                Append (Result, ",");
             end if;
-            Append (Result, """ & To_String (Msg.Dimension (I)) & """);
+            Append (Result, """" & Pyramid.Data_Model.Common.Types_Codec.To_String (Msg.Dimension (I)) & """");
          end loop;
          Append (Result, "]");
       end if;
@@ -287,9 +288,9 @@ package body Pyramid.Data_Model.Tactical.Types_Codec is
       Comma;
       Append (Result, """status"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Status));
       Comma;
-      Append (Result, """source"":" & """ & To_String (Msg.Source) & """);
+      Append (Result, """source"":" & """" & To_String (Msg.Source) & """");
       Comma;
-      Append (Result, """policy"":" & """ & To_String (Msg.Policy) & """);
+      Append (Result, """policy"":" & """" & Pyramid.Data_Model.Common.Types_Codec.To_String (Msg.Policy) & """");
       if Msg.Dimension /= null then
          Comma;
          Append (Result, """dimension"":[");
@@ -297,7 +298,7 @@ package body Pyramid.Data_Model.Tactical.Types_Codec is
             if I > Msg.Dimension'First then
                Append (Result, ",");
             end if;
-            Append (Result, """ & To_String (Msg.Dimension (I)) & """);
+            Append (Result, """" & Pyramid.Data_Model.Common.Types_Codec.To_String (Msg.Dimension (I)) & """");
          end loop;
          Append (Result, "]");
       end if;
@@ -412,11 +413,11 @@ package body Pyramid.Data_Model.Tactical.Types_Codec is
       Comma;
       Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
       Comma;
-      Append (Result, """id"":" & """ & To_String (Msg.Id) & """);
+      Append (Result, """id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Id) & """");
       Comma;
-      Append (Result, """source"":" & """ & To_String (Msg.Source) & """);
+      Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
       Comma;
-      Append (Result, """matching_object_id"":" & """ & To_String (Msg.Matching_Object_Id) & """);
+      Append (Result, """matching_object_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Matching_Object_Id) & """");
       Append (Result, "}");
       return To_String (Result);
    end To_Json;

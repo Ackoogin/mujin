@@ -1,6 +1,8 @@
 #include <StandardBridge.h>
 #include <TacticalObjectsCodec.h>
 #include <StreamingCodec.h>
+#include "pyramid_data_model_types.hpp"
+#include "pyramid_data_model_tactical_codec.hpp"
 #include <uuid/UUIDHelper.h>
 
 #include <nlohmann/json.hpp>
@@ -8,6 +10,7 @@
 #include <pcl/pcl_executor.h>
 #include <pcl/pcl_log.h>
 
+#include <algorithm>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -15,6 +18,7 @@
 namespace tactical_objects {
 
 using json = nlohmann::json;
+namespace tactical_codec = pyramid::data_model::tactical;
 
 // ---------------------------------------------------------------------------
 // Topic / service name constants
@@ -81,66 +85,76 @@ pcl_status_t StandardBridge::handleCreateRequirement(pcl_container_t*,
   if (!request->data || request->size == 0) return PCL_ERR_INVALID;
 
   std::string str(static_cast<const char*>(request->data), request->size);
-  json req_j;
+  tactical_codec::ObjectInterestRequirement req;
   try {
-    req_j = json::parse(str);
+    req = tactical_codec::fromJson(
+        str, static_cast<tactical_codec::ObjectInterestRequirement*>(nullptr));
   } catch (...) {
     return PCL_ERR_INVALID;
   }
 
-  // --- Translate standard fields to internal subscribe_interest format ---
+  // --- Translate proto-native request fields to internal subscribe_interest format ---
 
   json internal;
 
-  // policy → query_mode
-  std::string policy = req_j.value("policy", "DATA_POLICY_OBTAIN");
-  if (policy == "DATA_POLICY_OBTAIN") {
-    internal["query_mode"] = "active_find";
-  } else {
-    internal["query_mode"] = "read_current";
-  }
+  internal["query_mode"] =
+      (req.policy == pyramid::data_model::common::DataPolicy::Obtain)
+          ? "active_find"
+          : "read_current";
 
-  // identity → affiliation (standard string → internal string)
-  std::string identity = req_j.value("identity", "");
-  if (!identity.empty()) {
-    Affiliation a = self->standardIdentityToAffiliation(identity);
-    // Map back to internal string for subscribe_interest
-    switch (a) {
-      case Affiliation::Friendly:     internal["affiliation"] = "Friendly";     break;
-      case Affiliation::Hostile:      internal["affiliation"] = "Hostile";      break;
-      case Affiliation::Neutral:      internal["affiliation"] = "Neutral";      break;
-      case Affiliation::Unknown:      internal["affiliation"] = "Unknown";      break;
-      case Affiliation::AssumedFriend:internal["affiliation"] = "AssumedFriend";break;
-      case Affiliation::Suspect:      internal["affiliation"] = "Suspect";      break;
-      case Affiliation::Joker:        internal["affiliation"] = "Joker";        break;
-      case Affiliation::Faker:        internal["affiliation"] = "Faker";        break;
-      case Affiliation::Pending:      internal["affiliation"] = "Pending";      break;
+  if (!req.dimension.empty()) {
+    switch (req.dimension.front()) {
+      case pyramid::data_model::common::BattleDimension::Ground:
+        internal["battle_dimension"] = "Ground";
+        break;
+      case pyramid::data_model::common::BattleDimension::Air:
+        internal["battle_dimension"] = "Air";
+        break;
+      case pyramid::data_model::common::BattleDimension::SeaSurface:
+        internal["battle_dimension"] = "SeaSurface";
+        break;
+      case pyramid::data_model::common::BattleDimension::Subsurface:
+        internal["battle_dimension"] = "Subsurface";
+        break;
+      case pyramid::data_model::common::BattleDimension::Unknown:
+        internal["battle_dimension"] = "Unknown";
+        break;
+      case pyramid::data_model::common::BattleDimension::Unspecified:
+        break;
     }
   }
 
-  // dimension → battle_dimension (standard string → internal string)
-  std::string dimension = req_j.value("dimension", "");
-  if (!dimension.empty()) {
-    BattleDimension d = self->standardToBattleDim(dimension);
-    switch (d) {
-      case BattleDimension::Ground:    internal["battle_dimension"] = "Ground";    break;
-      case BattleDimension::Air:       internal["battle_dimension"] = "Air";       break;
-      case BattleDimension::SeaSurface:internal["battle_dimension"] = "SeaSurface";break;
-      case BattleDimension::Subsurface:internal["battle_dimension"] = "Subsurface";break;
-      case BattleDimension::Space:     internal["battle_dimension"] = "Space";     break;
-      case BattleDimension::SOF:       internal["battle_dimension"] = "SOF";       break;
-    }
-  }
-
-  // lat/lon radians → degrees for internal bounding box
-  if (req_j.contains("min_lat_rad") || req_j.contains("max_lat_rad")) {
+  auto set_bbox = [&](double min_lat, double max_lat, double min_lon, double max_lon) {
     json area;
-    area["min_lat"] = self->radToDeg(req_j.value("min_lat_rad", 0.0));
-    area["max_lat"] = self->radToDeg(req_j.value("max_lat_rad", 0.0));
-    area["min_lon"] = self->radToDeg(req_j.value("min_lon_rad", 0.0));
-    area["max_lon"] = self->radToDeg(req_j.value("max_lon_rad", 0.0));
+    area["min_lat"] = self->radToDeg(min_lat);
+    area["max_lat"] = self->radToDeg(max_lat);
+    area["min_lon"] = self->radToDeg(min_lon);
+    area["max_lon"] = self->radToDeg(max_lon);
     internal["area"] = area;
     internal["expires_at"] = 9999;
+  };
+
+  if (req.point.has_value()) {
+    const auto& point = req.point.value().position;
+    set_bbox(point.latitude, point.latitude, point.longitude, point.longitude);
+  } else if (req.circle_area.has_value()) {
+    const auto& area = req.circle_area.value();
+    set_bbox(area.position.latitude - area.radius,
+             area.position.latitude + area.radius,
+             area.position.longitude - area.radius,
+             area.position.longitude + area.radius);
+  } else if (req.poly_area.has_value() && !req.poly_area->points.empty()) {
+    double min_lat = req.poly_area->points.front().latitude;
+    double max_lat = min_lat;
+    double min_lon = req.poly_area->points.front().longitude;
+    double max_lon = min_lon;
+    for (const auto& point : req.poly_area->points) {
+      min_lat = std::min(min_lat, point.latitude);
+      max_lat = std::max(max_lat, point.latitude);
+      min_lon = std::min(min_lon, point.longitude);
+      max_lon = std::max(max_lon, point.longitude);
+    }
+    set_bbox(min_lat, max_lat, min_lon, max_lon);
   }
 
   // --- Call internal subscribe_interest via executor ---

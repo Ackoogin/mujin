@@ -64,7 +64,9 @@ class FlatMessageSpec:
     name: str
     cpp_type: str
     ada_type: str
+    full_type: str
     fields: List[FlatFieldSpec]
+    json_codec_ns: str
     is_alias_root: bool = False
     alias_scalar: str = ''
     alias_field_name: str = 'value'
@@ -78,6 +80,8 @@ class FlatArraySpec:
     element_type_name: str
     element_cpp_type: str
     element_ada_type: str
+    element_full_type: str
+    json_codec_ns: str
     element_proto_scalar: str = ''
 
 
@@ -120,6 +124,17 @@ def _service_group_names(base_package: str) -> Tuple[str, str, str, str, str]:
     ada_codec_pkg = '.'.join(ada_parts + ['Flatbuffers_Codec'])
     ada_codec_file = ada_codec_pkg.lower().replace('.', '-')
     return fbs_namespace, cpp_base_ns, file_base, ada_codec_pkg, ada_codec_file
+
+
+def _ada_pkg_from_proto_pkg(proto_pkg: str) -> str:
+    parts = [p for p in proto_pkg.split('.') if p]
+    ada_parts = ['_'.join(w.capitalize() for w in seg.split('_')) for seg in parts]
+    return '.'.join(ada_parts)
+
+
+def _ada_types_pkg_for_full_type(full_type: str) -> str:
+    proto_pkg = full_type.rsplit('.', 1)[0] if '.' in full_type else 'pyramid.data_model.base'
+    return _ada_pkg_from_proto_pkg(proto_pkg) + '.Types'
 
 
 def _service_proto_groups(index: ProtoTypeIndex) -> List[Tuple[str, List[ProtoFile]]]:
@@ -196,6 +211,16 @@ def _field_kind_and_type(
     return 'message', short, ''
 
 
+def _json_codec_namespace_for_type(full_type: str) -> str:
+    if '.common.' in full_type:
+        return 'common'
+    if '.tactical.' in full_type:
+        return 'tactical'
+    if '.base.' in full_type and full_type.split('.')[-1] == 'Identifier':
+        return 'identifier'
+    return 'common'
+
+
 def _is_generated_string_like(
         kind: str, proto_scalar: str,
 ) -> bool:
@@ -204,6 +229,7 @@ def _is_generated_string_like(
 
 def _message_spec_from_proto(
         msg,
+        full_type: str,
         index: ProtoTypeIndex,
         aliases: Dict[str, Tuple[str, str]],
 ) -> FlatMessageSpec:
@@ -237,11 +263,14 @@ def _message_spec_from_proto(
         name=msg.name,
         cpp_type=f'pyramid::data_model::{msg.name}',
         ada_type=camel_to_snake(msg.name),
+        full_type=full_type,
         fields=fields,
+        json_codec_ns=_json_codec_namespace_for_type(full_type),
     )
 
 
-def _alias_root_spec(short_name: str, aliases: Dict[str, Tuple[str, str]]) -> FlatMessageSpec:
+def _alias_root_spec(short_name: str, full_type: str,
+                     aliases: Dict[str, Tuple[str, str]]) -> FlatMessageSpec:
     proto_scalar, field_name = aliases[short_name]
     kind = 'string' if proto_scalar == 'string' else 'scalar'
     type_name = _FBS_SCALAR_MAP[proto_scalar]
@@ -250,6 +279,7 @@ def _alias_root_spec(short_name: str, aliases: Dict[str, Tuple[str, str]]) -> Fl
         name=table_name,
         cpp_type=f'pyramid::data_model::{short_name}',
         ada_type=camel_to_snake(short_name),
+        full_type=full_type,
         fields=[FlatFieldSpec(
             index=0,
             name=field_name,
@@ -257,6 +287,7 @@ def _alias_root_spec(short_name: str, aliases: Dict[str, Tuple[str, str]]) -> Fl
             type_name=type_name,
             proto_scalar=proto_scalar,
         )],
+        json_codec_ns=_json_codec_namespace_for_type(full_type),
         is_alias_root=True,
         alias_scalar=proto_scalar,
         alias_field_name=field_name,
@@ -316,7 +347,8 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
                 ordered_enums.append(enum)
         for msg in pf.messages:
             if id(msg) in reachable_message_ids:
-                ordered_messages.append(_message_spec_from_proto(msg, index, aliases))
+                full_type = f'{pf.package}.{msg.name}' if pf.package else msg.name
+                ordered_messages.append(_message_spec_from_proto(msg, full_type, index, aliases))
 
     spec_by_name = {spec.name: spec for spec in ordered_messages}
     remaining = list(ordered_messages)
@@ -337,7 +369,8 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
             break
 
     for alias_name in sorted(root_aliases):
-        ordered_messages.append(_alias_root_spec(alias_name, aliases))
+        alias_full_type = next((t for t in root_types if t.split('.')[-1] == alias_name), alias_name)
+        ordered_messages.append(_alias_root_spec(alias_name, alias_full_type, aliases))
 
     stream_specs: List[FlatArraySpec] = []
     seen_arrays = set()
@@ -355,6 +388,8 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
                 element_type_name=_FBS_SCALAR_MAP[proto_scalar],
                 element_cpp_type=f'pyramid::data_model::{short}',
                 element_ada_type=camel_to_snake(short),
+                element_full_type=type_name,
+                json_codec_ns=_json_codec_namespace_for_type(type_name),
                 element_proto_scalar=proto_scalar,
             ))
         else:
@@ -365,6 +400,8 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
                 element_type_name=short,
                 element_cpp_type=f'pyramid::data_model::{short}',
                 element_ada_type=camel_to_snake(short),
+                element_full_type=type_name,
+                json_codec_ns=_json_codec_namespace_for_type(type_name),
             ))
 
     fbs_namespace, cpp_base_ns, file_base, ada_codec_pkg, ada_codec_file = _service_group_names(base_package)
@@ -725,8 +762,15 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
         with open(path, 'w', encoding='utf-8') as f:
             f.write('// Auto-generated service FlatBuffers codec\n')
             f.write(f'#include "{group.file_base}_flatbuffers_codec.hpp"\n\n')
+            f.write('#include "pyramid_data_model_common_codec.hpp"\n')
+            f.write('#include "pyramid_data_model_tactical_codec.hpp"\n')
+            if group.topic_schemas:
+                f.write(f'#include "{group.file_base}_json_codec.hpp"\n')
+            f.write('#include <cstdlib>\n')
             f.write('#include <cstdint>\n')
+            f.write('#include <cstring>\n')
             f.write('#include <memory>\n')
+            f.write('#include <nlohmann/json.hpp>\n')
             f.write('#include <stdexcept>\n')
             f.write('#include <utility>\n\n')
             f.write(f'namespace {group.cpp_codec_ns} {{\n\n')
@@ -757,6 +801,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             self._emit_service_cpp_proto_exports(f, group)
             self._emit_service_cpp_topic_exports(f, group)
             f.write(f'}} // namespace {group.cpp_codec_ns}\n')
+            self._emit_service_cpp_json_bridge_exports(f, group)
 
     def _emit_service_cpp_proto_helpers(self, f, group: ServiceCodecGroup):
         for msg in group.message_specs:
@@ -983,6 +1028,199 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                 f.write('    return from_fb(object);\n')
                 f.write('}\n\n')
 
+    def _ffi_symbol(self, group: ServiceCodecGroup, short_name: str, direction: str) -> str:
+        return f'{group.file_base}_{short_name}_{direction}_json'
+
+    def _cpp_json_encode_expr(self, group: ServiceCodecGroup, json_ns: str, cpp_type: str, expr: str) -> str:
+        if json_ns == 'common':
+            return f'pyramid::data_model::common::toJson({expr})'
+        if json_ns == 'tactical':
+            return f'pyramid::data_model::tactical::toJson({expr})'
+        if json_ns == 'identifier':
+            return f'nlohmann::json({expr}).dump()'
+        if json_ns == 'wire':
+            return f'{group.cpp_base_ns}::json_codec::toJson({expr})'
+        raise ValueError(f'Unsupported JSON codec namespace: {json_ns}')
+
+    def _cpp_json_decode_expr(self, group: ServiceCodecGroup, json_ns: str, cpp_type: str, expr: str) -> str:
+        if json_ns == 'common':
+            return f'pyramid::data_model::common::fromJson({expr}, static_cast<{cpp_type}*>(nullptr))'
+        if json_ns == 'tactical':
+            return f'pyramid::data_model::tactical::fromJson({expr}, static_cast<{cpp_type}*>(nullptr))'
+        if json_ns == 'identifier':
+            return (
+                '[&]() { auto j = nlohmann::json::parse(' + expr + '); '
+                f'return j.is_string() ? j.get<{cpp_type}>() : {cpp_type}{{}}; }}()'
+            )
+        if json_ns == 'wire':
+            short = cpp_type.split('::')[-1]
+            snake = short[0].lower() + short[1:]
+            return f'{group.cpp_base_ns}::json_codec::{snake}FromJson({expr})'
+        raise ValueError(f'Unsupported JSON codec namespace: {json_ns}')
+
+    def _emit_service_cpp_json_bridge_exports(self, f, group: ServiceCodecGroup):
+        f.write('\nextern "C" {\n\n')
+        f.write(f'void {group.file_base}_free_buffer(void* data) {{\n')
+        f.write('    std::free(data);\n')
+        f.write('}\n\n')
+
+        for msg in group.message_specs:
+            short = msg.cpp_type.split('::')[-1]
+            to_name = self._ffi_symbol(group, short, 'to_flatbuffer')
+            from_name = self._ffi_symbol(group, short, 'from_flatbuffer')
+            decode_expr = self._cpp_json_decode_expr(group, msg.json_codec_ns, msg.cpp_type, 'std::string(json ? json : "")')
+            encode_expr = self._cpp_json_encode_expr(group, msg.json_codec_ns, msg.cpp_type, 'value')
+            f.write(f'void* {to_name}(const char* json, size_t* size_out) {{\n')
+            f.write('    if (size_out) *size_out = 0;\n')
+            f.write('    try {\n')
+            f.write(f'        auto value = {decode_expr};\n')
+            f.write(f'        auto payload = {group.cpp_codec_ns}::toBinary(value);\n')
+            f.write('        if (size_out) *size_out = payload.size();\n')
+            f.write('        if (payload.empty()) return nullptr;\n')
+            f.write('        void* out = std::malloc(payload.size());\n')
+            f.write('        if (!out) return nullptr;\n')
+            f.write('        std::memcpy(out, payload.data(), payload.size());\n')
+            f.write('        return out;\n')
+            f.write('    } catch (...) {\n')
+            f.write('        return nullptr;\n')
+            f.write('    }\n')
+            f.write('}\n\n')
+            f.write(f'char* {from_name}(const void* data, size_t size) {{\n')
+            f.write('    try {\n')
+            f.write(f'        auto value = {group.cpp_codec_ns}::fromBinary{short}(data, size);\n')
+            f.write(f'        auto json = {encode_expr};\n')
+            f.write('        char* out = static_cast<char*>(std::malloc(json.size() + 1));\n')
+            f.write('        if (!out) return nullptr;\n')
+            f.write('        std::memcpy(out, json.c_str(), json.size() + 1);\n')
+            f.write('        return out;\n')
+            f.write('    } catch (...) {\n')
+            f.write('        return nullptr;\n')
+            f.write('    }\n')
+            f.write('}\n\n')
+
+        for array_spec in group.array_specs:
+            short = array_spec.name
+            to_name = self._ffi_symbol(group, short, 'to_flatbuffer')
+            from_name = self._ffi_symbol(group, short, 'from_flatbuffer')
+            f.write(f'void* {to_name}(const char* json, size_t* size_out) {{\n')
+            f.write('    if (size_out) *size_out = 0;\n')
+            f.write('    try {\n')
+            f.write('        auto arr = nlohmann::json::parse(std::string(json ? json : "[]"));\n')
+            f.write(f'        std::vector<{array_spec.element_cpp_type}> values;\n')
+            f.write('        if (arr.is_array()) {\n')
+            f.write('            values.reserve(arr.size());\n')
+            f.write('            for (const auto& item : arr) {\n')
+            if array_spec.json_codec_ns == 'identifier':
+                f.write(f'                values.push_back(item.is_string() ? item.get<{array_spec.element_cpp_type}>() : {array_spec.element_cpp_type}{{}});\n')
+            else:
+                decode_expr = self._cpp_json_decode_expr(group, array_spec.json_codec_ns, array_spec.element_cpp_type, 'item.dump()')
+                f.write(f'                values.push_back({decode_expr});\n')
+            f.write('            }\n')
+            f.write('        }\n')
+            f.write(f'        auto payload = {group.cpp_codec_ns}::toBinary(values);\n')
+            f.write('        if (size_out) *size_out = payload.size();\n')
+            f.write('        if (payload.empty()) return nullptr;\n')
+            f.write('        void* out = std::malloc(payload.size());\n')
+            f.write('        if (!out) return nullptr;\n')
+            f.write('        std::memcpy(out, payload.data(), payload.size());\n')
+            f.write('        return out;\n')
+            f.write('    } catch (...) {\n')
+            f.write('        return nullptr;\n')
+            f.write('    }\n')
+            f.write('}\n\n')
+            f.write(f'char* {from_name}(const void* data, size_t size) {{\n')
+            f.write('    try {\n')
+            f.write(f'        auto values = {group.cpp_codec_ns}::fromBinary{short}(data, size);\n')
+            f.write('        nlohmann::json arr = nlohmann::json::array();\n')
+            f.write('        for (const auto& item : values) {\n')
+            if array_spec.json_codec_ns == 'identifier':
+                f.write('            arr.push_back(item);\n')
+            else:
+                encode_expr = self._cpp_json_encode_expr(group, array_spec.json_codec_ns, array_spec.element_cpp_type, 'item')
+                f.write(f'            arr.push_back(nlohmann::json::parse({encode_expr}));\n')
+            f.write('        }\n')
+            f.write('        auto json = arr.dump();\n')
+            f.write('        char* out = static_cast<char*>(std::malloc(json.size() + 1));\n')
+            f.write('        if (!out) return nullptr;\n')
+            f.write('        std::memcpy(out, json.c_str(), json.size() + 1);\n')
+            f.write('        return out;\n')
+            f.write('    } catch (...) {\n')
+            f.write('        return nullptr;\n')
+            f.write('    }\n')
+            f.write('}\n\n')
+
+        for schema_def in group.topic_schemas:
+            short = schema_def.cpp_name
+            cpp_type = f'wire_types::{short}'
+            to_name = self._ffi_symbol(group, short, 'to_flatbuffer')
+            from_name = self._ffi_symbol(group, short, 'from_flatbuffer')
+            decode_expr = f'{group.cpp_base_ns}::json_codec::{short[0].lower() + short[1:]}FromJson(std::string(json ? json : ""))'
+            encode_expr = f'{group.cpp_base_ns}::json_codec::toJson(value)'
+            f.write(f'void* {to_name}(const char* json, size_t* size_out) {{\n')
+            f.write('    if (size_out) *size_out = 0;\n')
+            f.write('    try {\n')
+            f.write(f'        auto value = {decode_expr};\n')
+            f.write(f'        auto payload = {group.cpp_codec_ns}::toBinary(value);\n')
+            f.write('        if (size_out) *size_out = payload.size();\n')
+            f.write('        if (payload.empty()) return nullptr;\n')
+            f.write('        void* out = std::malloc(payload.size());\n')
+            f.write('        if (!out) return nullptr;\n')
+            f.write('        std::memcpy(out, payload.data(), payload.size());\n')
+            f.write('        return out;\n')
+            f.write('    } catch (...) {\n')
+            f.write('        return nullptr;\n')
+            f.write('    }\n')
+            f.write('}\n\n')
+            f.write(f'char* {from_name}(const void* data, size_t size) {{\n')
+            f.write('    try {\n')
+            f.write(f'        auto value = {group.cpp_codec_ns}::fromBinary{short}(data, size);\n')
+            f.write(f'        auto json = {encode_expr};\n')
+            f.write('        char* out = static_cast<char*>(std::malloc(json.size() + 1));\n')
+            f.write('        if (!out) return nullptr;\n')
+            f.write('        std::memcpy(out, json.c_str(), json.size() + 1);\n')
+            f.write('        return out;\n')
+            f.write('    } catch (...) {\n')
+            f.write('        return nullptr;\n')
+            f.write('    }\n')
+            f.write('}\n\n')
+            if schema_def.is_array_response:
+                alias_name = short + 'Array'
+                to_name = self._ffi_symbol(group, alias_name, 'to_flatbuffer')
+                from_name = self._ffi_symbol(group, alias_name, 'from_flatbuffer')
+                f.write(f'void* {to_name}(const char* json, size_t* size_out) {{\n')
+                f.write('    if (size_out) *size_out = 0;\n')
+                f.write('    try {\n')
+                f.write(f'        auto value = {group.cpp_base_ns}::json_codec::entityMatchesFromJson(std::string(json ? json : "[]"));\n')
+                f.write(f'        auto payload = {group.cpp_codec_ns}::toBinary(value);\n')
+                f.write('        if (size_out) *size_out = payload.size();\n')
+                f.write('        if (payload.empty()) return nullptr;\n')
+                f.write('        void* out = std::malloc(payload.size());\n')
+                f.write('        if (!out) return nullptr;\n')
+                f.write('        std::memcpy(out, payload.data(), payload.size());\n')
+                f.write('        return out;\n')
+                f.write('    } catch (...) {\n')
+                f.write('        return nullptr;\n')
+                f.write('    }\n')
+                f.write('}\n\n')
+                f.write(f'char* {from_name}(const void* data, size_t size) {{\n')
+                f.write('    try {\n')
+                f.write(f'        auto values = {group.cpp_codec_ns}::fromBinary{alias_name}(data, size);\n')
+                f.write('        nlohmann::json arr = nlohmann::json::array();\n')
+                f.write('        for (const auto& item : values) {\n')
+                f.write(f'            arr.push_back(nlohmann::json::parse({group.cpp_base_ns}::json_codec::toJson(item)));\n')
+                f.write('        }\n')
+                f.write('        auto json = arr.dump();\n')
+                f.write('        char* out = static_cast<char*>(std::malloc(json.size() + 1));\n')
+                f.write('        if (!out) return nullptr;\n')
+                f.write('        std::memcpy(out, json.c_str(), json.size() + 1);\n')
+                f.write('        return out;\n')
+                f.write('    } catch (...) {\n')
+                f.write('        return nullptr;\n')
+                f.write('    }\n')
+                f.write('}\n\n')
+
+        f.write('} // extern "C"\n')
+
     # -- Ada thin binding -----------------------------------------------------
 
     def _write_ada_spec(self, path: Path, pf: ProtoFile):
@@ -1014,136 +1252,237 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
 
             f.write(f'end {pkg_name};\n')
 
-    def _write_service_ada_spec(self, path: Path):
+    def _write_service_ada_spec(self, path: Path, group: ServiceCodecGroup):
         with open(path, 'w', encoding='utf-8') as f:
-            f.write('--  Auto-generated tactical service FlatBuffers codec\n')
+            f.write('--  Auto-generated service FlatBuffers codec\n')
             f.write('--  Backend: flatbuffers\n')
-            f.write('--  Generated from pim/json_schema.py\n\n')
-            f.write(f'package {_SERVICE_ADA_CODEC_PKG} is\n')
+            f.write(f'--  Generated from proto service closure for {group.base_package}\n\n')
+            type_withs = {self._ada_type_pkg_for_message(msg) for msg in group.message_specs}
+            if group.topic_schemas:
+                type_withs.add(self._service_wire_types_pkg(group))
+            for pkg in sorted(type_withs):
+                f.write(f'with {pkg};\n')
+            if type_withs:
+                f.write('\n')
+            f.write(f'package {group.ada_codec_pkg} is\n')
             f.write('   Content_Type : constant String := "application/flatbuffers";\n\n')
-            f.write('   function Encode_Payload (Payload : String) return String;\n')
-            f.write('   function Decode_Payload (Payload : String) return String;\n')
-            f.write(f'end {_SERVICE_ADA_CODEC_PKG};\n')
 
-    def _write_service_ada_body(self, path: Path):
+            for msg in group.message_specs:
+                suffix = camel_to_snake(msg.cpp_type.split('::')[-1])
+                type_ref = self._ada_type_ref_for_message(msg)
+                f.write(f'   function To_Binary_{suffix} (Json : String) return String;\n')
+                f.write(f'   function To_Binary_{suffix} (Msg : {type_ref}) return String;\n')
+                f.write(f'   function From_Binary_{suffix} (Payload : String) return String;\n\n')
+                f.write(f'   function From_Binary_{suffix}\n')
+                f.write(f'     (Payload : String; Tag : access {type_ref}) return {type_ref};\n\n')
+
+            for array_spec in group.array_specs:
+                suffix = camel_to_snake(array_spec.name)
+                f.write(f'   function To_Binary_{suffix} (Json : String) return String;\n')
+                f.write(f'   function From_Binary_{suffix} (Payload : String) return String;\n\n')
+
+            for schema_def in group.topic_schemas:
+                suffix = camel_to_snake(schema_def.cpp_name)
+                wire_type = f'{self._service_wire_types_pkg(group)}.{camel_to_snake(schema_def.cpp_name)}'
+                f.write(f'   function To_Binary_{suffix} (Json : String) return String;\n')
+                f.write(f'   function To_Binary_{suffix} (Msg : {wire_type}) return String;\n')
+                f.write(f'   function From_Binary_{suffix} (Payload : String) return String;\n\n')
+                f.write(f'   function From_Binary_{suffix}\n')
+                f.write(f'     (Payload : String; Tag : access {wire_type}) return {wire_type};\n\n')
+                if schema_def.is_array_response:
+                    alias_suffix = camel_to_snake(schema_def.cpp_name + 'Array')
+                    f.write(f'   function To_Binary_{alias_suffix} (Json : String) return String;\n')
+                    f.write(f'   function From_Binary_{alias_suffix} (Payload : String) return String;\n\n')
+
+            f.write(f'end {group.ada_codec_pkg};\n')
+
+    def _write_service_ada_body(self, path: Path, group: ServiceCodecGroup):
+        specs: List[Tuple[str, str]] = []
+        for msg in group.message_specs:
+            short = msg.cpp_type.split('::')[-1]
+            specs.append((camel_to_snake(short), short))
+        for array_spec in group.array_specs:
+            specs.append((camel_to_snake(array_spec.name), array_spec.name))
+        for schema_def in group.topic_schemas:
+            specs.append((camel_to_snake(schema_def.cpp_name), schema_def.cpp_name))
+            if schema_def.is_array_response:
+                alias_name = schema_def.cpp_name + 'Array'
+                specs.append((camel_to_snake(alias_name), alias_name))
+
         with open(path, 'w', encoding='utf-8') as f:
-            f.write('--  Auto-generated tactical service FlatBuffers codec\n\n')
-            f.write('with Interfaces; use Interfaces;\n\n')
-            f.write(f'package body {_SERVICE_ADA_CODEC_PKG} is\n')
-            f.write('   function Round_Up_4 (Value : Natural) return Natural is\n')
+            f.write('--  Auto-generated service FlatBuffers codec\n\n')
+            f.write('with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')
+            f.write('with Ada.Unchecked_Conversion;\n')
+            f.write('with GNATCOLL.JSON;  use GNATCOLL.JSON;\n')
+            f.write('with Interfaces.C;\n')
+            f.write('with Interfaces.C.Strings;\n')
+            f.write('with System;\n')
+            codec_withs = {self._ada_codec_pkg_for_message(msg) for msg in group.message_specs
+                           if self._ada_codec_pkg_for_message(msg)}
+            if group.topic_schemas:
+                codec_withs.add(self._service_json_codec_pkg(group))
+            for pkg in sorted(codec_withs):
+                f.write(f'with {pkg};\n')
+            f.write('\n')
+            f.write(f'package body {group.ada_codec_pkg} is\n')
+            f.write('   use type Interfaces.C.size_t;\n')
+            f.write('   use type Interfaces.C.Strings.chars_ptr;\n')
+            f.write('   use type System.Address;\n\n')
+            f.write('   function To_Address is new\n')
+            f.write('     Ada.Unchecked_Conversion (Interfaces.C.Strings.chars_ptr, System.Address);\n\n')
+            f.write('   function Copy_From_Buffer\n')
+            f.write('     (Data : System.Address; Size : Interfaces.C.size_t) return String\n')
+            f.write('   is\n')
+            f.write('      type Char_Array is array (1 .. Natural (Size)) of Character;\n')
+            f.write('      pragma Pack (Char_Array);\n')
             f.write('   begin\n')
-            f.write('      return ((Value + 3) / 4) * 4;\n')
-            f.write('   end Round_Up_4;\n\n')
-            f.write('   procedure Put_U16_LE (Buf : in out String; Pos : Positive; Value : Unsigned_16) is\n')
-            f.write('   begin\n')
-            f.write("      Buf (Pos)     := Character'Val (Integer (Value mod 16#100#));\n")
-            f.write("      Buf (Pos + 1) := Character'Val (Integer ((Value / 16#100#) mod 16#100#));\n")
-            f.write('   end Put_U16_LE;\n\n')
-            f.write('   procedure Put_U32_LE (Buf : in out String; Pos : Positive; Value : Unsigned_32) is\n')
-            f.write('      Tmp : Unsigned_32 := Value;\n')
-            f.write('   begin\n')
-            f.write('      for Offset in 0 .. 3 loop\n')
-            f.write("         Buf (Pos + Offset) := Character'Val (Integer (Tmp mod 16#100#));\n")
-            f.write('         Tmp := Tmp / 16#100#;\n')
-            f.write('      end loop;\n')
-            f.write('   end Put_U32_LE;\n\n')
-            f.write('   function Get_U16_LE (Buf : String; Pos : Positive) return Unsigned_16 is\n')
-            f.write('   begin\n')
-            f.write("      return Unsigned_16 (Character'Pos (Buf (Pos)))\n")
-            f.write("        + Unsigned_16 (Character'Pos (Buf (Pos + 1))) * 16#100#;\n")
-            f.write('   end Get_U16_LE;\n\n')
-            f.write('   function Get_U32_LE (Buf : String; Pos : Positive) return Unsigned_32 is\n')
-            f.write('      Result : Unsigned_32 := 0;\n')
-            f.write('   begin\n')
-            f.write('      for Offset in reverse 0 .. 3 loop\n')
-            f.write('         Result := Result * 16#100#\n')
-            f.write("           + Unsigned_32 (Character'Pos (Buf (Pos + Offset)));\n")
-            f.write('      end loop;\n')
-            f.write('      return Result;\n')
-            f.write('   end Get_U32_LE;\n\n')
-            f.write('   function Encode_Payload (Payload : String) return String is\n')
-            f.write("      String_Size   : constant Natural := 4 + Payload'Length + 1;\n")
-            f.write('      String_Padded : constant Natural := Round_Up_4 (String_Size);\n')
-            f.write('      Root_Offset   : constant Natural := 12;\n')
-            f.write('      Table_Size    : constant Natural := 8;\n')
-            f.write('      String_Start  : constant Natural := Root_Offset + Table_Size;\n')
-            f.write('      Result        : String (1 .. String_Start + String_Padded);\n')
-            f.write('   begin\n')
-            f.write("      Result := (others => Character'Val (0));\n")
-            f.write('      Put_U32_LE (Result, 1, Unsigned_32 (Root_Offset));\n')
-            f.write('      Put_U16_LE (Result, 5, 6);\n')
-            f.write('      Put_U16_LE (Result, 7, Unsigned_16 (Table_Size));\n')
-            f.write('      Put_U16_LE (Result, 9, 4);\n')
-            f.write('      Put_U32_LE (Result, Root_Offset + 1, Unsigned_32 (Root_Offset - 4));\n')
-            f.write('      Put_U32_LE (Result, Root_Offset + 5, Unsigned_32 (String_Start - (Root_Offset + 4)));\n')
-            f.write("      Put_U32_LE (Result, String_Start + 1, Unsigned_32 (Payload'Length));\n")
-            f.write("      if Payload'Length > 0 then\n")
-            f.write("         Result (String_Start + 5 .. String_Start + 4 + Payload'Length) := Payload;\n")
+            f.write('      if Data = System.Null_Address or else Size = 0 then\n')
+            f.write('         return "";\n')
             f.write('      end if;\n')
-            f.write("      Result (String_Start + 5 + Payload'Length - 1 + 1) := Character'Val (0);\n")
-            f.write('      return Result;\n')
-            f.write('   end Encode_Payload;\n\n')
-            f.write('   function Decode_Payload (Payload : String) return String is\n')
-            f.write("      procedure Raise_Invalid is\n")
+            f.write('\n')
+            f.write('      declare\n')
+            f.write('         Chars : Char_Array;\n')
+            f.write("         for Chars'Address use Data;\n")
+            f.write('         pragma Import (Ada, Chars);\n')
             f.write('      begin\n')
-            f.write('         raise Constraint_Error with "Invalid tactical flatbuffers payload";\n')
-            f.write('      end Raise_Invalid;\n')
-            f.write('      Root_Offset  : Natural;\n')
-            f.write('      Table_Pos    : Natural;\n')
-            f.write('      VTable_Diff  : Natural;\n')
-            f.write('      VTable_Pos   : Natural;\n')
-            f.write('      Field_Offset : Natural;\n')
-            f.write('      String_Pos   : Natural;\n')
-            f.write('      Str_Len      : Natural;\n')
-            f.write('   begin\n')
-            f.write("      if Payload'Length < 20 then\n")
-            f.write('         Raise_Invalid;\n')
-            f.write("         return \"\";\n")
-            f.write('      end if;\n')
-            f.write("      Root_Offset := Natural (Get_U32_LE (Payload, Payload'First));\n")
-            f.write("      if Root_Offset + 8 > Payload'Length then\n")
-            f.write('         Raise_Invalid;\n')
-            f.write("         return \"\";\n")
-            f.write('      end if;\n')
-            f.write("      Table_Pos := Payload'First + Root_Offset;\n")
-            f.write("      VTable_Diff := Natural (Get_U32_LE (Payload, Table_Pos));\n")
-            f.write("      if VTable_Diff = 0 or else VTable_Diff > Root_Offset then\n")
-            f.write('         Raise_Invalid;\n')
-            f.write("         return \"\";\n")
-            f.write('      end if;\n')
-            f.write('      VTable_Pos := Table_Pos - VTable_Diff;\n')
-            f.write("      if VTable_Pos < Payload'First or else VTable_Pos + 5 > Payload'Last then\n")
-            f.write('         Raise_Invalid;\n')
-            f.write("         return \"\";\n")
-            f.write('      end if;\n')
-            f.write("      if Natural (Get_U16_LE (Payload, VTable_Pos)) < 6 then\n")
-            f.write('         Raise_Invalid;\n')
-            f.write("         return \"\";\n")
-            f.write('      end if;\n')
-            f.write("      Field_Offset := Natural (Get_U16_LE (Payload, VTable_Pos + 4));\n")
-            f.write('      if Field_Offset = 0 then\n')
-            f.write("         return \"\";\n")
-            f.write('      end if;\n')
-            f.write('      if Table_Pos + Field_Offset + 3 > Payload\'Last then\n')
-            f.write('         Raise_Invalid;\n')
-            f.write("         return \"\";\n")
-            f.write('      end if;\n')
-            f.write("      String_Pos := Table_Pos + Field_Offset + Natural (Get_U32_LE (Payload, Table_Pos + Field_Offset));\n")
-            f.write("      if String_Pos + 4 > Payload'Last then\n")
-            f.write('         Raise_Invalid;\n')
-            f.write("         return \"\";\n")
-            f.write('      end if;\n')
-            f.write("      Str_Len := Natural (Get_U32_LE (Payload, String_Pos));\n")
-            f.write("      if String_Pos + 4 + Str_Len > Payload'Last then\n")
-            f.write('         Raise_Invalid;\n')
-            f.write("         return \"\";\n")
-            f.write('      end if;\n')
-            f.write('      if Str_Len = 0 then\n')
-            f.write("         return \"\";\n")
-            f.write('      end if;\n')
-            f.write('      return Payload (String_Pos + 4 .. String_Pos + 3 + Str_Len);\n')
-            f.write('   end Decode_Payload;\n')
-            f.write(f'end {_SERVICE_ADA_CODEC_PKG};\n')
+            f.write('         return String (Chars);\n')
+            f.write('      end;\n')
+            f.write('   end Copy_From_Buffer;\n\n')
+            f.write('   procedure Free_Buffer (Data : System.Address)\n')
+            f.write('     with Import, Convention => C,\n')
+            f.write(f'          External_Name => "{group.file_base}_free_buffer";\n\n')
+
+            for ada_suffix, short_name in specs:
+                to_symbol = self._ffi_symbol(group, short_name, 'to_flatbuffer')
+                from_symbol = self._ffi_symbol(group, short_name, 'from_flatbuffer')
+                imported_to = f'Imported_To_Binary_{ada_suffix}'
+                imported_from = f'Imported_From_Binary_{ada_suffix}'
+                f.write(f'   function {imported_to}\n')
+                f.write('     (Json     : Interfaces.C.Strings.chars_ptr;\n')
+                f.write('      Size_Out : access Interfaces.C.size_t) return System.Address\n')
+                f.write('     with Import, Convention => C,\n')
+                f.write(f'          External_Name => "{to_symbol}";\n\n')
+                f.write(f'   function {imported_from}\n')
+                f.write('     (Data : System.Address; Size : Interfaces.C.size_t)\n')
+                f.write('      return Interfaces.C.Strings.chars_ptr\n')
+                f.write('     with Import, Convention => C,\n')
+                f.write(f'          External_Name => "{from_symbol}";\n\n')
+
+            for ada_suffix, _short_name in specs:
+                imported_to = f'Imported_To_Binary_{ada_suffix}'
+                imported_from = f'Imported_From_Binary_{ada_suffix}'
+                f.write(f'   function To_Binary_{ada_suffix} (Json : String) return String is\n')
+                f.write('      Json_C   : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String (Json);\n')
+                f.write('      Size_Out : aliased Interfaces.C.size_t := 0;\n')
+                f.write(f'      Data     : System.Address := {imported_to} (Json_C, Size_Out\'Access);\n')
+                f.write('   begin\n')
+                f.write('      Interfaces.C.Strings.Free (Json_C);\n')
+                f.write('      if Data = System.Null_Address then\n')
+                f.write(f'         raise Constraint_Error with "FlatBuffers encode failed for {ada_suffix}";\n')
+                f.write('      end if;\n')
+                f.write('\n')
+                f.write('      declare\n')
+                f.write('         Result : constant String := Copy_From_Buffer (Data, Size_Out);\n')
+                f.write('      begin\n')
+                f.write('         Free_Buffer (Data);\n')
+                f.write('         return Result;\n')
+                f.write('      end;\n')
+                f.write(f'   end To_Binary_{ada_suffix};\n\n')
+                f.write(f'   function From_Binary_{ada_suffix} (Payload : String) return String is\n')
+                f.write('      Payload_Bytes : aliased constant String := Payload;\n')
+                f.write(f'      Json_C : Interfaces.C.Strings.chars_ptr := {imported_from}\n')
+                f.write('        ((if Payload_Bytes\'Length = 0\n')
+                f.write('          then System.Null_Address\n')
+                f.write('          else Payload_Bytes (Payload_Bytes\'First)\'Address),\n')
+                f.write('         Interfaces.C.size_t (Payload_Bytes\'Length));\n')
+                f.write('   begin\n')
+                f.write('      if Json_C = Interfaces.C.Strings.Null_Ptr then\n')
+                f.write(f'         raise Constraint_Error with "FlatBuffers decode failed for {ada_suffix}";\n')
+                f.write('      end if;\n')
+                f.write('\n')
+                f.write('      declare\n')
+                f.write('         Result : constant String := Interfaces.C.Strings.Value (Json_C);\n')
+                f.write('      begin\n')
+                f.write('         Free_Buffer (To_Address (Json_C));\n')
+                f.write('         return Result;\n')
+                f.write('      end;\n')
+                f.write(f'   end From_Binary_{ada_suffix};\n\n')
+
+            for msg in group.message_specs:
+                suffix = camel_to_snake(msg.cpp_type.split('::')[-1])
+                type_ref = self._ada_type_ref_for_message(msg)
+                encode_expr = self._ada_json_encode_expr_for_message(msg, 'Msg')
+                f.write(f'   function To_Binary_{suffix} (Msg : {type_ref}) return String is\n')
+                f.write('   begin\n')
+                f.write(f'      return To_Binary_{suffix} ({encode_expr});\n')
+                f.write(f'   end To_Binary_{suffix};\n\n')
+                f.write(f'   function From_Binary_{suffix}\n')
+                f.write(f'     (Payload : String; Tag : access {type_ref}) return {type_ref}\n')
+                f.write('   is\n')
+                f.write('      pragma Unreferenced (Tag);\n')
+                f.write(f'      Json   : constant String := From_Binary_{suffix} (Payload);\n')
+                f.write(f'      Result : {type_ref};\n')
+                f.write('   begin\n')
+                if msg.full_type.endswith('.Identifier'):
+                    f.write('      declare\n')
+                    f.write('         Value : constant JSON_Value := Read (Json);\n')
+                    f.write("         Text  : constant String := String'(UTF8_String'(Get (Value)));\n")
+                    f.write('      begin\n')
+                    f.write('         Result := To_Unbounded_String (Text);\n')
+                    f.write('      end;\n')
+                else:
+                    decode_stmt = self._ada_json_decode_stmt_for_message(msg, 'Json', 'Result')
+                    f.write(f'      {decode_stmt}\n')
+                f.write('      return Result;\n')
+                f.write(f'   end From_Binary_{suffix};\n\n')
+
+            for schema_def in group.topic_schemas:
+                suffix = camel_to_snake(schema_def.cpp_name)
+                wire_type = f'{self._service_wire_types_pkg(group)}.{camel_to_snake(schema_def.cpp_name)}'
+                f.write(f'   function To_Binary_{suffix} (Msg : {wire_type}) return String is\n')
+                f.write('   begin\n')
+                f.write(f'      return To_Binary_{suffix} ({self._service_json_codec_pkg(group)}.To_Json (Msg));\n')
+                f.write(f'   end To_Binary_{suffix};\n\n')
+                f.write(f'   function From_Binary_{suffix}\n')
+                f.write(f'     (Payload : String; Tag : access {wire_type}) return {wire_type}\n')
+                f.write('   is\n')
+                f.write('      pragma Unreferenced (Tag);\n')
+                f.write(f'      Json : constant String := From_Binary_{suffix} (Payload);\n')
+                f.write('   begin\n')
+                f.write(f'      return {self._service_json_codec_pkg(group)}.From_Json (Json);\n')
+                f.write(f'   end From_Binary_{suffix};\n\n')
+
+            f.write(f'end {group.ada_codec_pkg};\n')
+
+    def _service_wire_types_pkg(self, group: ServiceCodecGroup) -> str:
+        return '.'.join(group.ada_codec_pkg.split('.')[:-1] + ['Wire_Types'])
+
+    def _service_json_codec_pkg(self, group: ServiceCodecGroup) -> str:
+        return '.'.join(group.ada_codec_pkg.split('.')[:-1] + ['Json_Codec'])
+
+    def _ada_type_pkg_for_message(self, msg: FlatMessageSpec) -> str:
+        return _ada_types_pkg_for_full_type(msg.full_type)
+
+    def _ada_type_ref_for_message(self, msg: FlatMessageSpec) -> str:
+        return f'{self._ada_type_pkg_for_message(msg)}.{msg.ada_type}'
+
+    def _ada_codec_pkg_for_message(self, msg: FlatMessageSpec) -> str:
+        if msg.full_type.endswith('.Identifier'):
+            return ''
+        type_pkg = self._ada_type_pkg_for_message(msg)
+        if type_pkg.endswith('.Base.Types'):
+            return ''
+        return type_pkg + '_Codec'
+
+    def _ada_json_encode_expr_for_message(self, msg: FlatMessageSpec, accessor: str) -> str:
+        if msg.full_type.endswith('.Identifier'):
+            return f'Ada.Strings.Unbounded.To_String ({accessor})'
+        codec_pkg = self._ada_codec_pkg_for_message(msg)
+        return f'{codec_pkg}.To_Json ({accessor})'
+
+    def _ada_json_decode_stmt_for_message(self, msg: FlatMessageSpec, json_var: str, result_var: str) -> str:
+        codec_pkg = self._ada_codec_pkg_for_message(msg)
+        return f'{result_var} := {codec_pkg}.From_Json ({json_var}, null);'
 
 
 codec_backends.register(FlatBuffersBackend())

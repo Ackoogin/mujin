@@ -42,7 +42,7 @@ package body Tobj_Interest_Client is
    function To_Address is new
      Ada.Unchecked_Conversion (Interfaces.C.Strings.chars_ptr, System.Address);
 
-   function Decode_Wire_Payload
+   function Decode_Entity_Matches_Payload
      (Msg : access constant Pcl_Bindings.Pcl_Msg) return String
    is
       Payload : constant String := Provided.Msg_To_String (Msg.Data, Msg.Size);
@@ -50,10 +50,10 @@ package body Tobj_Interest_Client is
       if Msg.Type_Name /= Interfaces.C.Strings.Null_Ptr
         and then Interfaces.C.Strings.Value (Msg.Type_Name) = Flat.Content_Type
       then
-         return Flat.Decode_Payload (Payload);
+         return Flat.From_Binary_Entity_Match_Array (Payload);
       end if;
       return Payload;
-   end Decode_Wire_Payload;
+   end Decode_Entity_Matches_Payload;
 
    function Decode_Identifier_Payload (Payload : String) return Identifier is
       J : constant JSON_Value := Read (Payload);
@@ -102,7 +102,7 @@ package body Tobj_Interest_Client is
       end if;
 
       declare
-         Body_Str : constant String := Decode_Wire_Payload (Msg);
+         Body_Str : constant String := Decode_Entity_Matches_Payload (Msg);
          Matches  : constant Wire.Entity_Match_Array :=
            Codec.Entity_Matches_From_Json (Body_Str);
       begin
@@ -133,11 +133,14 @@ package body Tobj_Interest_Client is
          Resp.Size > 0
       then
          declare
-            Body_Str : constant String := Decode_Wire_Payload (Resp);
+            Raw_Payload : constant String := Provided.Msg_To_String (Resp.Data, Resp.Size);
             Interest_Id : constant Identifier :=
-              Decode_Identifier_Payload (Body_Str);
+              (if Resp.Type_Name /= Interfaces.C.Strings.Null_Ptr
+                  and then Interfaces.C.Strings.Value (Resp.Type_Name) = Flat.Content_Type
+               then Flat.From_Binary_Identifier (Raw_Payload, null)
+               else Decode_Identifier_Payload (Raw_Payload));
          begin
-            Log ("create_requirement response: " & Body_Str);
+            Log ("create_requirement response id: " & To_String (Interest_Id));
             if Interest_Id /= Null_Unbounded_String then
                Interest_Id_Received := True;
             end if;
@@ -149,7 +152,7 @@ package body Tobj_Interest_Client is
    -- -- Send_Create_Requirement -----------------------------------------------
 
    procedure Send_Create_Requirement
-     (Transport   : Pcl_Bindings.Pcl_Socket_Transport_Access;
+     (Exec        : Pcl_Bindings.Pcl_Executor_Access;
       Policy      : Pyramid.Data_Model.Common.Types.Data_Policy;
       Identity    : Pyramid.Data_Model.Common.Types.Standard_Identity;
       Dimension   : Pyramid.Data_Model.Common.Types.Battle_Dimension :=
@@ -166,17 +169,25 @@ package body Tobj_Interest_Client is
       Req.Source      := Source_Local;
       Req.Policy      := Policy;
       Req.Dimension   := new Dimension_Array'(1 => Dimension);
-      Req.Has_Val_Point := True;
-      Req.Val_Point.Position.Latitude := Min_Lat_Rad;
-      Req.Val_Point.Position.Longitude := Min_Lon_Rad;
+      if Min_Lat_Rad = Max_Lat_Rad and then Min_Lon_Rad = Max_Lon_Rad then
+         Req.Has_Val_Point := True;
+         Req.Val_Point.Position.Latitude := Min_Lat_Rad;
+         Req.Val_Point.Position.Longitude := Min_Lon_Rad;
+      else
+         Req.Has_Val_Poly_Area := True;
+         Req.Val_Poly_Area.Points := new Points_Array'
+           (1 => (Latitude => Min_Lat_Rad, Longitude => Min_Lon_Rad),
+            2 => (Latitude => Min_Lat_Rad, Longitude => Max_Lon_Rad),
+            3 => (Latitude => Max_Lat_Rad, Longitude => Max_Lon_Rad),
+            4 => (Latitude => Max_Lat_Rad, Longitude => Min_Lon_Rad));
+      end if;
 
       Log ("create_requirement request (proto-native typed)");
       declare
-         Json_Payload : constant String := Tactical.To_Json (Req);
          Payload      : constant String :=
            (if To_String (Content_Type) = Flat.Content_Type
-            then Flat.Encode_Payload (Json_Payload)
-            else Json_Payload);
+            then Flat.To_Binary_Object_Interest_Requirement (Req)
+            else Tactical.To_Json (Req));
          Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
          Payload_Bytes : aliased constant String := Payload;
          Svc_C  : Interfaces.C.Strings.chars_ptr :=
@@ -184,6 +195,12 @@ package body Tobj_Interest_Client is
          Msg    : aliased Pcl_Bindings.Pcl_Msg;
          Status : Pcl_Bindings.Pcl_Status;
       begin
+         if To_String (Content_Type) = Flat.Content_Type then
+            Log ("create_requirement payload: [flatbuffers " &
+                 Integer'Image (Payload_Bytes'Length) & " bytes]");
+         else
+            Log ("create_requirement payload: " & Payload);
+         end if;
          if To_String (Content_Type) = Flat.Content_Type then
             Msg.Data :=
               (if Payload_Bytes'Length = 0
@@ -196,8 +213,8 @@ package body Tobj_Interest_Client is
         Msg.Size      := Interfaces.C.unsigned (Payload_Bytes'Length);
         Msg.Type_Name := Interfaces.C.Strings.New_String
           (To_String (Content_Type));
-         Status := Pcl_Bindings.Invoke_Remote_Async
-           (Transport, Svc_C, Msg'Access,
+         Status := Pcl_Bindings.Invoke_Async
+           (Exec, Svc_C, Msg'Access,
             On_Create_Requirement_Response'Unrestricted_Access,
             System.Null_Address);
          if Status /= Pcl_Bindings.PCL_OK then

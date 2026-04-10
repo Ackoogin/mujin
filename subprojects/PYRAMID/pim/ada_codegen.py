@@ -460,6 +460,16 @@ def _flatbuffers_codec_pkg_from_proto(proto_file: ProtoFile) -> str:
     return '.'.join(ada_parts)
 
 
+def _flatbuffers_func_suffix_for_type(full_type: str) -> str:
+    """Return the Ada suffix used by the generated FlatBuffers bridge package."""
+    return _camel_to_snake(_short_type(full_type))
+
+
+def _flatbuffers_func_suffix_for_stream(full_type: str) -> str:
+    """Return the Ada suffix for a streamed response array."""
+    return _camel_to_snake(_short_type(full_type) + 'Array')
+
+
 # -- Parent package stubs ------------------------------------------------------
 
 def _ensure_parent_packages(output_dir: Path, pkg_names: List[str]) -> None:
@@ -812,34 +822,6 @@ class AdaServiceGenerator:
 
             f.write(f'   package Flatbuffers_Codec renames {_flatbuffers_codec_pkg_from_proto(parsed)};\n')
             f.write(f'\n')
-            f.write(f'   function Encode_Transport_Payload\n')
-            f.write(f'     (Payload      : String;\n')
-            f.write(f'      Content_Type : String) return String\n')
-            f.write(f'   is\n')
-            f.write(f'   begin\n')
-            f.write(f'      if Content_Type = "" or else Content_Type = "application/json" then\n')
-            f.write(f'         return Payload;\n')
-            f.write(f'      elsif Content_Type = "application/flatbuffers" then\n')
-            f.write(f'         return Flatbuffers_Codec.Encode_Payload (Payload);\n')
-            f.write(f'      end if;\n')
-            f.write(f'\n')
-            f.write(f'      raise Constraint_Error with "Unsupported content type: " & Content_Type;\n')
-            f.write(f'   end Encode_Transport_Payload;\n')
-            f.write(f'\n')
-            f.write(f'   function Decode_Transport_Payload\n')
-            f.write(f'     (Payload      : String;\n')
-            f.write(f'      Content_Type : String) return String\n')
-            f.write(f'   is\n')
-            f.write(f'   begin\n')
-            f.write(f'      if Content_Type = "" or else Content_Type = "application/json" then\n')
-            f.write(f'         return Payload;\n')
-            f.write(f'      elsif Content_Type = "application/flatbuffers" then\n')
-            f.write(f'         return Flatbuffers_Codec.Decode_Payload (Payload);\n')
-            f.write(f'      else\n')
-            f.write(f'         raise Constraint_Error with "Unsupported content type: " & Content_Type;\n')
-            f.write(f'      end if;\n')
-            f.write(f'   end Decode_Transport_Payload;\n')
-            f.write(f'\n')
 
             # Default handler implementations
             current_svc = None
@@ -1001,6 +983,7 @@ class AdaServiceGenerator:
             if is_provided:
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
+                        req_fb_suffix = _flatbuffers_func_suffix_for_type(rpc.req)
                         f.write(f'   procedure {rpc.ada_invoke_name}\n')
                         f.write(f'     (Executor  : Pcl_Bindings.Pcl_Executor_Access;\n')
                         f.write(f'      Request   : {rpc.ada_req_type};\n')
@@ -1013,7 +996,12 @@ class AdaServiceGenerator:
                             f.write(f'      Json_Payload : constant String := To_String (Request);\n')
                         else:
                             f.write(f'      Json_Payload : constant String := To_Json (Request);\n')
-                        f.write(f'      Payload : constant String := Encode_Transport_Payload (Json_Payload, Content_Type);\n')
+                        f.write(f'      Payload : constant String :=\n')
+                        f.write(f'        (if Content_Type = "" or else Content_Type = "application/json"\n')
+                        f.write(f'         then Json_Payload\n')
+                        f.write(f'         elsif Content_Type = "application/flatbuffers"\n')
+                        f.write(f'         then Flatbuffers_Codec.To_Binary_{req_fb_suffix} (Request)\n')
+                        f.write(f'         else raise Constraint_Error with "Unsupported content type: " & Content_Type);\n')
                         f.write(f'      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;\n')
                         f.write(f'      Payload_Bytes : aliased constant String := Payload;\n')
                         f.write(f'      Svc_C  : Interfaces.C.Strings.chars_ptr :=\n')
@@ -1052,13 +1040,21 @@ class AdaServiceGenerator:
                 wire_t = schema.TOPIC_WIRE_TYPES_ADA.get(key)
 
                 if wire_t:
+                    wire_fb_suffix = _camel_to_snake(wire_t)
                     f.write(f'   procedure {ada_name}\n')
                     f.write(f'     (Exec    : Pcl_Bindings.Pcl_Executor_Access;\n')
                     f.write(f'      Payload : {_wire_types_pkg_from_proto(parsed)}.{wire_t};\n')
                     f.write(f'      Content_Type : String := "application/json")\n')
                     f.write(f'   is\n')
+                    f.write(f'      Json_Payload : constant String := {codec_pkg}.To_Json (Payload);\n')
+                    f.write(f'      Wire_Payload : constant String :=\n')
+                    f.write(f'        (if Content_Type = "" or else Content_Type = "application/json"\n')
+                    f.write(f'         then Json_Payload\n')
+                    f.write(f'         elsif Content_Type = "application/flatbuffers"\n')
+                    f.write(f'         then Flatbuffers_Codec.To_Binary_{wire_fb_suffix} (Payload)\n')
+                    f.write(f'         else raise Constraint_Error with "Unsupported content type: " & Content_Type);\n')
                     f.write(f'   begin\n')
-                    f.write(f'      {ada_name} (Exec, Encode_Transport_Payload ({codec_pkg}.To_Json (Payload), Content_Type), Content_Type);\n')
+                    f.write(f'      {ada_name} (Exec, Wire_Payload, Content_Type);\n')
                     f.write(f'   end {ada_name};\n')
                     f.write(f'\n')
 
@@ -1121,9 +1117,8 @@ class AdaServiceGenerator:
             f.write(f'      Response_Buf  : out System.Address;\n')
             f.write(f'      Response_Size : out Natural)\n')
             f.write(f'   is\n')
-            f.write(f'      Req_Str : constant String := Decode_Transport_Payload\n')
-            f.write(f'        (Msg_To_String (Request_Buf, Interfaces.C.unsigned (Request_Size)),\n')
-            f.write(f'         Content_Type);\n')
+            f.write(f'      Request_Payload : constant String :=\n')
+            f.write(f'        Msg_To_String (Request_Buf, Interfaces.C.unsigned (Request_Size));\n')
             f.write(f'   begin\n')
             f.write(f'      Response_Buf  := System.Null_Address;\n')
             f.write(f'      Response_Size := 0;\n')
@@ -1133,16 +1128,24 @@ class AdaServiceGenerator:
                 req_t = rpc.ada_req_type
                 rsp_t = rpc.ada_rsp_type
                 handler_fn = rpc.ada_handler
+                req_fb_suffix = _flatbuffers_func_suffix_for_type(rpc.req)
+                rsp_fb_suffix = (
+                    _flatbuffers_func_suffix_for_stream(rpc.rsp)
+                    if rpc.streaming else
+                    _flatbuffers_func_suffix_for_type(rpc.rsp)
+                )
                 f.write(f'         when {rpc.ada_channel} =>\n')
                 f.write(f'            declare\n')
-
-                # Deserialise request
                 if req_t == 'Identifier':
-                    f.write(f'               Req : constant Identifier :=\n')
-                    f.write(f'                 To_Unbounded_String (Req_Str);\n')
+                    json_decode = 'To_Unbounded_String (Request_Payload)'
                 else:
-                    f.write(f'               Req : constant {req_t} :=\n')
-                    f.write(f'                 From_Json (Req_Str, null);\n')
+                    json_decode = 'From_Json (Request_Payload, null)'
+                f.write(f'               Req : constant {req_t} :=\n')
+                f.write(f'                 (if Content_Type = "" or else Content_Type = "application/json"\n')
+                f.write(f'                  then {json_decode}\n')
+                f.write(f'                  elsif Content_Type = "application/flatbuffers"\n')
+                f.write(f'                  then Flatbuffers_Codec.From_Binary_{req_fb_suffix} (Request_Payload, null)\n')
+                f.write(f'                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);\n')
 
                 if rpc.streaming:
                     # Streaming: handler is a function returning unconstrained array
@@ -1164,6 +1167,7 @@ class AdaServiceGenerator:
                     f.write(f'                  use Ada.Strings.Unbounded;\n')
                     f.write(f'                  Acc : Unbounded_String :=\n')
                     f.write(f'                    To_Unbounded_String ("[");\n')
+                    f.write(f'                  Json_Response : String := "";\n')
                     f.write(f'               begin\n')
                     f.write(f"                  for I in Rsp'Range loop\n")
                     f.write(f"                     if I > Rsp'First then\n")
@@ -1172,12 +1176,19 @@ class AdaServiceGenerator:
                     f.write(f'                     Append (Acc, {elem_ser});\n')
                     f.write(f'                  end loop;\n')
                     f.write(f'                  Append (Acc, "]");\n')
-                    f.write(f'                  Copy_To_Buf (Encode_Transport_Payload (To_String (Acc), Content_Type),\n')
+                    f.write(f'                  Json_Response := To_String (Acc);\n')
+                    f.write(f'                  Copy_To_Buf\n')
+                    f.write(f'                    ((if Content_Type = "" or else Content_Type = "application/json"\n')
+                    f.write(f'                      then Json_Response\n')
+                    f.write(f'                      elsif Content_Type = "application/flatbuffers"\n')
+                    f.write(f'                      then Flatbuffers_Codec.To_Binary_{rsp_fb_suffix} (Json_Response)\n')
+                    f.write(f'                      else raise Constraint_Error with "Unsupported content type: " & Content_Type),\n')
                     f.write(f'                    Response_Buf, Response_Size);\n')
                     f.write(f'               end;\n')
                 else:
                     # Non-streaming: handler is a procedure with out parameter
                     f.write(f'               Rsp : {rsp_t};\n')
+                    f.write(f'               Json_Response : String := "";\n')
                     f.write(f'            begin\n')
                     field_name = handler_fn.replace('Handle_', 'On_')
                     f.write(f'               if Handlers /= null and then Handlers.{field_name} /= null then\n')
@@ -1188,11 +1199,16 @@ class AdaServiceGenerator:
 
                     # Serialise response and copy to buffer
                     if rsp_t == 'Identifier':
-                        f.write(f'               Copy_To_Buf (Encode_Transport_Payload (To_String (Rsp), Content_Type),\n')
-                        f.write(f'                 Response_Buf, Response_Size);\n')
+                        f.write(f'               Json_Response := To_String (Rsp);\n')
                     else:
-                        f.write(f'               Copy_To_Buf (Encode_Transport_Payload (To_Json (Rsp), Content_Type),\n')
-                        f.write(f'                 Response_Buf, Response_Size);\n')
+                        f.write(f'               Json_Response := To_Json (Rsp);\n')
+                    f.write(f'               Copy_To_Buf\n')
+                    f.write(f'                 ((if Content_Type = "" or else Content_Type = "application/json"\n')
+                    f.write(f'                   then Json_Response\n')
+                    f.write(f'                   elsif Content_Type = "application/flatbuffers"\n')
+                    f.write(f'                   then Flatbuffers_Codec.To_Binary_{rsp_fb_suffix} (Rsp)\n')
+                    f.write(f'                   else raise Constraint_Error with "Unsupported content type: " & Content_Type),\n')
+                    f.write(f'                  Response_Buf, Response_Size);\n')
 
                 f.write(f'            end;\n')
 
@@ -2029,6 +2045,17 @@ class AdaDataModelCodecGenerator:
             return f'{codec_pkg}.To_Json ({accessor})'
         return f'To_Json ({accessor})'
 
+    def _string_to_json_expr(self, accessor: str) -> str:
+        """Return an Ada expression that emits a JSON-quoted string."""
+        return f'"""" & Ada.Strings.Unbounded.To_String ({accessor}) & """"'
+
+    def _enum_to_json_expr(self, fld, accessor: str) -> str:
+        """Return an Ada expression that emits a JSON-quoted enum value."""
+        short = fld.type.split('.')[-1]
+        enum_pkg = self._enum_to_codec.get(short, self._ada_pkg)
+        qual = f'{enum_pkg}.' if enum_pkg != self._ada_pkg else ''
+        return f'"""" & {qual}To_String ({accessor}) & """"'
+
     def _foreign_codec_deps(self) -> List[str]:
         """Return sorted list of foreign codec package names that this
         file's messages reference (for ``with`` clauses)."""
@@ -2043,6 +2070,11 @@ class AdaDataModelCodecGenerator:
                     continue
                 if self._is_field_message(fld):
                     codec = self._msg_to_codec.get(short, '')
+                    if codec and codec != self._ada_pkg:
+                        deps.add(codec)
+                elif (self._index.is_enum_type(fld.type) or
+                      self._index.is_enum_type(short)):
+                    codec = self._enum_to_codec.get(short, '')
                     if codec and codec != self._ada_pkg:
                         deps.add(codec)
         return sorted(deps)
@@ -2061,22 +2093,22 @@ class AdaDataModelCodecGenerator:
         if fld.type in ('float', 'double'):
             return f"Long_Float'Image (Msg.{ada_fname})"
         if fld.type == 'string':
-            return f'"\"" & To_String (Msg.{ada_fname}) & "\""'
+            return self._string_to_json_expr(f'Msg.{ada_fname}')
         short = fld.type.split('.')[-1]
         if self._index.is_enum_type(fld.type) or self._index.is_enum_type(short):
-            return f'"\"" & To_String (Msg.{ada_fname}) & "\""'
+            return self._enum_to_json_expr(fld, f'Msg.{ada_fname}')
         # Alias (unit type collapsed to scalar) — dispatch on target type
         if short in self._aliases:
             ada_target = self._aliases[short]
             if ada_target == 'Unbounded_String':
-                return f'"\"" & To_String (Msg.{ada_fname}) & "\""'
+                return self._string_to_json_expr(f'Msg.{ada_fname}')
             elif ada_target in ('Integer', 'Long_Integer', 'Natural'):
                 return f"Integer'Image (Msg.{ada_fname})"
             elif ada_target == 'Boolean':
                 return f'(if Msg.{ada_fname} then "true" else "false")'
             else:
                 return f"Long_Float'Image (Msg.{ada_fname})"
-        return f'"\"" & To_String (Msg.{ada_fname}) & "\""'
+        return self._string_to_json_expr(f'Msg.{ada_fname}')
 
     def _from_json_stmts(self, f, fld, ada_fname: str, wire: str,
                           indent: str = '      ') -> None:
@@ -2327,11 +2359,13 @@ class AdaDataModelCodecGenerator:
             f.write(f'               Append (Result, ",");\n')
             f.write(f'            end if;\n')
             if elem_is_enum:
-                f.write(f'            Append (Result, "\"" & To_String (Msg.{ada_fname} (I)) & "\"");\n')
+                expr = self._enum_to_json_expr(fld, f'Msg.{ada_fname} (I)')
+                f.write(f'            Append (Result, {expr});\n')
             elif elem_is_scalar:
                 ada_target = self._aliases.get(short, '')
                 if fld.type == 'string' or ada_target == 'Unbounded_String':
-                    f.write(f'            Append (Result, "\"" & To_String (Msg.{ada_fname} (I)) & "\"");\n')
+                    expr = self._string_to_json_expr(f'Msg.{ada_fname} (I)')
+                    f.write(f'            Append (Result, {expr});\n')
                 elif fld.type == 'bool' or ada_target == 'Boolean':
                     f.write(f'            Append (Result, (if Msg.{ada_fname} (I) then "true" else "false"));\n')
                 elif ada_target in ('Integer', 'Long_Integer', 'Natural'):
@@ -2452,6 +2486,7 @@ class AdaDataModelCodecGenerator:
         with open(path, 'w') as f:
             f.write('--  Auto-generated data model JSON codec body\n')
             f.write(f'--  Package: {self._ada_pkg}\n\n')
+            f.write('with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')
             f.write('with GNATCOLL.JSON;  use GNATCOLL.JSON;\n')
             # Import foreign codec packages for cross-file To_Json calls
             for dep in self._foreign_codec_deps():

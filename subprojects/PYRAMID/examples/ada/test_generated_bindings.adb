@@ -129,20 +129,20 @@ begin
              Resp_Buf /= System.Null_Address or Resp_Size = 0);
    end;
 
-   --  9. Backend flatbuffers envelope round-trip
+   --  9. Backend flatbuffers round-trip for a bridge-topic payload
    declare
       Payload : constant String := "{""policy"":""DATA_POLICY_QUERY""}";
-      Encoded : constant String := Flat.Encode_Payload (Payload);
-      Decoded : constant String := Flat.Decode_Payload (Encoded);
+      Encoded : constant String := Flat.To_Binary_Evidence_Requirement (Payload);
+      Decoded : constant String := Flat.From_Binary_Evidence_Requirement (Encoded);
    begin
-      Check ("Flatbuffers envelope round-trip", Decoded = Payload);
+      Check ("Flatbuffers bridge payload round-trip", Decoded = Payload);
    end;
 
-   --  10. Dispatch round-trip — CreateRequirement over flatbuffers envelope
+   --  10. Dispatch round-trip — CreateRequirement over native flatbuffers
    declare
       use type System.Address;
       Req_Json   : constant String := "{""policy"":""DATA_POLICY_OBTAIN""}";
-      Req_Flat   : constant String := Flat.Encode_Payload (Req_Json);
+      Req_Flat   : constant String := Flat.To_Binary_Object_Interest_Requirement (Req_Json);
       Resp_Buf   : System.Address;
       Resp_Size  : Natural;
    begin

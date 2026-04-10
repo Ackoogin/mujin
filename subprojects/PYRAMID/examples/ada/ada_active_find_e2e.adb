@@ -178,7 +178,7 @@ begin
    --  Typed enum values avoid stringly-typed JSON construction here.
 
    Tobj_Interest_Client.Send_Create_Requirement
-     (Transport   => Transport,
+     (Exec        => Exec,
       Policy      => Policy_Obtain,
       Identity    => Identity_Hostile,
       Dimension   => Dimension_SeaSurface,

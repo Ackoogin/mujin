@@ -39,18 +39,19 @@ package body Tobj_Evidence_Provider is
       Ada.Text_IO.Flush (Ada.Text_IO.Standard_Error);
    end Log;
 
-   function Decode_Wire_Payload
-     (Msg : access constant Pcl_Bindings.Pcl_Msg) return String
+   function Decode_Evidence_Requirement
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Wire.Evidence_Requirement
    is
       Payload : constant String := Provided.Msg_To_String (Msg.Data, Msg.Size);
    begin
       if Msg.Type_Name /= Interfaces.C.Strings.Null_Ptr
         and then Interfaces.C.Strings.Value (Msg.Type_Name) = Flat.Content_Type
       then
-         return Flat.Decode_Payload (Payload);
+         return Flat.From_Binary_Evidence_Requirement (Payload, null);
       end if;
-      return Payload;
-   end Decode_Wire_Payload;
+      return Codec.From_Json (Payload);
+   end Decode_Evidence_Requirement;
 
    -- -- On_Configure ----------------------------------------------------------
 
@@ -83,12 +84,13 @@ package body Tobj_Evidence_Provider is
       Evidence_Req_Received := True;
 
       declare
-         Body_Str : constant String := Decode_Wire_Payload (Msg);
-         Req      : constant Wire.Evidence_Requirement :=
-           Codec.From_Json (Body_Str);
-         pragma Unreferenced (Req);
+         Req : constant Wire.Evidence_Requirement := Decode_Evidence_Requirement (Msg);
       begin
-         Log ("evidence requirement: " & Body_Str);
+         Log ("evidence requirement:"
+              & " policy=" & Codec.Data_Policy_To_String (Req.Policy)
+              & " dimension=" & Codec.Battle_Dimension_To_String (Req.Dimension)
+              & " min_lat=" & Long_Float'Image (Req.Min_Lat_Rad)
+              & " max_lat=" & Long_Float'Image (Req.Max_Lat_Rad));
       end;
 
       --  Publish a typed observation using the canonical Json_Codec.

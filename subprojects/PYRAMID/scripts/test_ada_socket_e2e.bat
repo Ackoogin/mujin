@@ -72,13 +72,23 @@ if %errorlevel% equ 0 (
     echo [driver] Building Ada client...
     set "ADA_DIR=%PYRAMID_ROOT%\examples\ada"
     set "ADA_PCL_LIB_DIR=%WORKSPACE_ROOT%\build\ada_gnat_pcl"
+    set "ADA_PYRAMID_LIB_DIR=%WORKSPACE_ROOT%\build\ada_gnat_pyramid"
     set "ADA_PCL_BUILD_SCRIPT=%WORKSPACE_ROOT%\subprojects\PCL\scripts\build_gnat_pcl_static_libs.bat"
+    set "ADA_PYRAMID_BUILD_SCRIPT=%PYRAMID_ROOT%\scripts\build_gnat_generated_flatbuffers_libs.bat"
     set "CAN_BUILD_ADA=1"
     echo [driver] Refreshing GNAT-compatible PCL static archives...
     call "!ADA_PCL_BUILD_SCRIPT!" "!ADA_PCL_LIB_DIR!" --force
     if !errorlevel! neq 0 (
         echo [driver] WARNING: failed to build GNAT PCL static archives -- falling back to pre-built binary
         set "CAN_BUILD_ADA=0"
+    )
+    if "!CAN_BUILD_ADA!"=="1" (
+        echo [driver] Refreshing GNAT-compatible generated FlatBuffers archive...
+        call "!ADA_PYRAMID_BUILD_SCRIPT!" "!ADA_PYRAMID_LIB_DIR!" --force
+        if !errorlevel! neq 0 (
+            echo [driver] WARNING: failed to build GNAT FlatBuffers archive -- falling back to pre-built binary
+            set "CAN_BUILD_ADA=0"
+        )
     )
     if "!CAN_BUILD_ADA!"=="1" (
         set "MUJIN_ROOT=%WORKSPACE_ROOT%"
@@ -88,7 +98,9 @@ if %errorlevel% equ 0 (
           -XPCL_INCLUDE_DIR=!WORKSPACE_ROOT!\subprojects\PCL\include ^
           -XPCL_LIB_DIR=!ADA_PCL_LIB_DIR! ^
           -XPCL_LIB_NAME=pcl_core ^
-          -XPCL_SOCKET_LIB_NAME=pcl_transport_socket >nul 2>&1
+          -XPCL_SOCKET_LIB_NAME=pcl_transport_socket ^
+          -XPYRAMID_GEN_LIB_DIR=!ADA_PYRAMID_LIB_DIR! ^
+          -XPYRAMID_GEN_LIB_NAME=pyramid_generated_flatbuffers_codec >nul 2>&1
         if !errorlevel! neq 0 (
             echo [driver] gprbuild failed -- falling back to pre-built binary
         )

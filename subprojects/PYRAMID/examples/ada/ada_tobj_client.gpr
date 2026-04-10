@@ -6,6 +6,8 @@ project Ada_Tobj_Client is
   Pcl_Lib_Dir := external("PCL_LIB_DIR", Root_Dir & "/build/install/lib");
   Pcl_Lib_Name := external("PCL_LIB_NAME", "pcl_core");
   Pcl_Socket_Lib_Name := external("PCL_SOCKET_LIB_NAME", "pcl_transport_socket");
+  Pyramid_Gen_Lib_Dir := external("PYRAMID_GEN_LIB_DIR", Root_Dir & "/build/ada_gnat_pyramid");
+  Pyramid_Gen_Lib_Name := external("PYRAMID_GEN_LIB_NAME", "pyramid_generated_flatbuffers_codec");
 
   for Languages use ("Ada", "C");
 
@@ -34,14 +36,20 @@ project Ada_Tobj_Client is
       when "Windows_NT" =>
         for Default_Switches ("Ada") use
           ("-L" & Pcl_Lib_Dir,
+           "-L" & Pyramid_Gen_Lib_Dir,
            "-l" & Pcl_Lib_Name,
            "-l" & Pcl_Socket_Lib_Name,
+           "-l" & Pyramid_Gen_Lib_Name,
+           "-lstdc++",
            "-lws2_32");
       when others =>
         for Default_Switches ("Ada") use
           ("-L" & Pcl_Lib_Dir,
+           "-L" & Pyramid_Gen_Lib_Dir,
            "-l" & Pcl_Lib_Name,
-           "-l" & Pcl_Socket_Lib_Name);
+           "-l" & Pcl_Socket_Lib_Name,
+           "-l" & Pyramid_Gen_Lib_Name,
+           "-lstdc++");
     end case;
   end Linker;
 end Ada_Tobj_Client;

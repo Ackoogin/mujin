@@ -37,8 +37,43 @@ namespace prov = pyramid::services::tactical_objects::provided;
 namespace cons = pyramid::services::tactical_objects::consumed;
 namespace codec = pyramid::services::tactical_objects::json_codec;
 namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
+namespace wire_types = pyramid::services::tactical_objects::wire_types;
 namespace types = pyramid::data_model;
 namespace tactical_codec = pyramid::data_model::tactical;
+
+namespace {
+
+std::string makeProvidedFlatbuffersRequest(prov::ServiceChannel ch) {
+    switch (ch) {
+    case prov::ServiceChannel::ReadMatch:
+    case prov::ServiceChannel::ReadRequirement:
+    case prov::ServiceChannel::ReadDetail:
+        return flatbuffers_codec::toBinary(types::Query{});
+    case prov::ServiceChannel::CreateRequirement:
+    case prov::ServiceChannel::UpdateRequirement:
+        return flatbuffers_codec::toBinary(types::ObjectInterestRequirement{});
+    case prov::ServiceChannel::DeleteRequirement:
+        return flatbuffers_codec::toBinary(types::Identifier{});
+    }
+    return {};
+}
+
+std::string makeConsumedFlatbuffersRequest(cons::ServiceChannel ch) {
+    switch (ch) {
+    case cons::ServiceChannel::ReadDetail:
+    case cons::ServiceChannel::ReadRequirement:
+    case cons::ServiceChannel::ReadCapability:
+        return flatbuffers_codec::toBinary(types::Query{});
+    case cons::ServiceChannel::CreateRequirement:
+    case cons::ServiceChannel::UpdateRequirement:
+        return flatbuffers_codec::toBinary(types::ObjectEvidenceRequirement{});
+    case cons::ServiceChannel::DeleteRequirement:
+        return flatbuffers_codec::toBinary(types::Identifier{});
+    }
+    return {};
+}
+
+}  // namespace
 
 // ===========================================================================
 // Wire-name constant tests
@@ -126,9 +161,9 @@ TEST(ProtoBindingsProvided, CreateRequirementJsonDefaults) {
 // ===========================================================================
 
 TEST(ProtoBindingsProvided, EvidenceJsonKeys) {
-    codec::ObjectEvidence ev;
-    ev.identity      = codec::StandardIdentity::Friendly;
-    ev.dimension     = codec::BattleDimension::Ground;
+    wire_types::ObjectEvidence ev;
+    ev.identity      = types::StandardIdentity::Friendly;
+    ev.dimension     = types::BattleDimension::Ground;
     ev.latitude_rad  = 0.785;
     ev.longitude_rad = -1.571;
     ev.confidence    = 0.9;
@@ -146,7 +181,7 @@ TEST(ProtoBindingsProvided, EvidenceJsonKeys) {
 
 TEST(ProtoBindingsProvided, EvidenceJsonDefaultObservedAt) {
     // Default-constructed evidence: observed_at = 0.0 is omitted by codec
-    codec::ObjectEvidence ev;
+    wire_types::ObjectEvidence ev;
     std::string json_str = codec::toJson(ev);
     auto j = nlohmann::json::parse(json_str);
     EXPECT_FALSE(j.contains("observed_at"));
@@ -272,7 +307,7 @@ public:
         return cons::ServiceHandler::handleDeleteRequirement(id);
     }
 
-    std::vector<types::Identifier>
+    std::vector<types::Capability>
     handleReadCapability(const types::Query& q) override {
         read_cap_called = true;
         return cons::ServiceHandler::handleReadCapability(q);
@@ -470,8 +505,8 @@ TEST(ProtoBindingsProvided, DispatchAllChannelsFlatBuffersNoCrash) {
         prov::ServiceChannel::ReadDetail,
     };
 
-    const std::string empty_req = flatbuffers_codec::wrapPayload("{}");
     for (auto ch : channels) {
+        const std::string empty_req = makeProvidedFlatbuffersRequest(ch);
         void* resp_buf = nullptr;
         size_t resp_size = 0;
         EXPECT_NO_FATAL_FAILURE(
@@ -492,8 +527,8 @@ TEST(ProtoBindingsConsumed, DispatchAllChannelsFlatBuffersNoCrash) {
         cons::ServiceChannel::ReadCapability,
     };
 
-    const std::string empty_req = flatbuffers_codec::wrapPayload("{}");
     for (auto ch : channels) {
+        const std::string empty_req = makeConsumedFlatbuffersRequest(ch);
         void* resp_buf = nullptr;
         size_t resp_size = 0;
         EXPECT_NO_FATAL_FAILURE(
@@ -554,8 +589,7 @@ TEST(ProtoBindingsProvided, DispatchCreateRequirementFlatBuffersRoundTrip) {
     CapturingHandler handler;
     types::ObjectInterestRequirement req;
     req.policy = types::DataPolicy::Obtain;
-    const std::string req_payload =
-        flatbuffers_codec::wrapPayload(tactical_codec::toJson(req));
+    const std::string req_payload = flatbuffers_codec::toBinary(req);
 
     void* resp_buf = nullptr;
     size_t resp_size = 0;
@@ -566,9 +600,8 @@ TEST(ProtoBindingsProvided, DispatchCreateRequirementFlatBuffersRoundTrip) {
     EXPECT_EQ(handler.captured_req.policy, types::DataPolicy::Obtain);
 
     ASSERT_NE(resp_buf, nullptr);
-    auto resp = nlohmann::json::parse(
-        flatbuffers_codec::unwrapPayload(resp_buf, resp_size));
-    EXPECT_EQ(resp.get<std::string>(), "new-id-42");
+    auto resp = flatbuffers_codec::fromBinaryIdentifier(resp_buf, resp_size);
+    EXPECT_EQ(resp, "new-id-42");
     std::free(resp_buf);
 }
 
@@ -644,8 +677,7 @@ TEST(ProtoBindingsConsumed, DispatchUpdateRequirementFlatBuffersRoundTrip) {
     AckHandler handler;
     types::ObjectEvidenceRequirement req;
     req.policy = types::DataPolicy::Query;
-    const std::string req_payload =
-        flatbuffers_codec::wrapPayload(tactical_codec::toJson(req));
+    const std::string req_payload = flatbuffers_codec::toBinary(req);
 
     void* resp_buf = nullptr;
     size_t resp_size = 0;
@@ -656,9 +688,8 @@ TEST(ProtoBindingsConsumed, DispatchUpdateRequirementFlatBuffersRoundTrip) {
     EXPECT_EQ(handler.captured_req.policy, types::DataPolicy::Query);
 
     ASSERT_NE(resp_buf, nullptr);
-    auto ack_j = nlohmann::json::parse(
-        flatbuffers_codec::unwrapPayload(resp_buf, resp_size));
-    EXPECT_TRUE(ack_j["success"].get<bool>());
+    auto ack = flatbuffers_codec::fromBinaryAck(resp_buf, resp_size);
+    EXPECT_TRUE(ack.success);
     std::free(resp_buf);
 }
 

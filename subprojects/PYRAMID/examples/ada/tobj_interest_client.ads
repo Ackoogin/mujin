@@ -49,7 +49,7 @@ package Tobj_Interest_Client is
    --  Send a create_requirement request.
    --  Takes typed enum values — JSON serialisation is done by Json_Codec.
    procedure Send_Create_Requirement
-     (Transport   : Pcl_Bindings.Pcl_Socket_Transport_Access;
+     (Exec        : Pcl_Bindings.Pcl_Executor_Access;
       Policy      : Pyramid.Data_Model.Common.Types.Data_Policy;
       Identity    : Pyramid.Data_Model.Common.Types.Standard_Identity;
       Dimension   : Pyramid.Data_Model.Common.Types.Battle_Dimension :=

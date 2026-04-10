@@ -456,7 +456,7 @@ TEST(CodecDispatchE2E, FlatBuffersCreateRequirementDispatchRoundTrip) {
     req.policy = types::DataPolicy::Query;
     req.dimension.push_back(types::BattleDimension::SeaSurface);
 
-    auto payload = flatbuffers_codec::wrapPayload(tactical_codec::toJson(req));
+    auto payload = flatbuffers_codec::toBinary(req);
     void* resp_buf = nullptr;
     size_t resp_size = 0;
     prov::dispatch(handler, prov::ServiceChannel::CreateRequirement,
@@ -464,11 +464,10 @@ TEST(CodecDispatchE2E, FlatBuffersCreateRequirementDispatchRoundTrip) {
                    "application/flatbuffers", &resp_buf, &resp_size);
 
     ASSERT_NE(resp_buf, nullptr);
-    auto resp = nlohmann::json::parse(
-        flatbuffers_codec::unwrapPayload(resp_buf, resp_size));
+    auto resp = flatbuffers_codec::fromBinaryIdentifier(resp_buf, resp_size);
     EXPECT_EQ(handler.captured_req.policy, types::DataPolicy::Query);
     ASSERT_EQ(handler.captured_req.dimension.size(), 1u);
     EXPECT_EQ(handler.captured_req.dimension[0], types::BattleDimension::SeaSurface);
-    EXPECT_EQ(resp.get<std::string>(), "new-id-84");
+    EXPECT_EQ(resp, "new-id-84");
     std::free(resp_buf);
 }

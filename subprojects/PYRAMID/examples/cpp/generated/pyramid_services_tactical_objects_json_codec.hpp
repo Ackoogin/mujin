@@ -20,37 +20,37 @@
 
 namespace pyramid::services::tactical_objects::json_codec {
 
-using namespace pyramid::services::tactical_objects::wire_types;
-using namespace pyramid::data_model;
+namespace wire_types = pyramid::services::tactical_objects::wire_types;
+namespace data_model = pyramid::data_model;
 
 // ---------------------------------------------------------------------------
 // Serialisation (toJson)
 // ---------------------------------------------------------------------------
 
-std::string toJson(const EntityMatch& msg);
-std::string toJson(const ObjectEvidence& msg);
-std::string toJson(const EvidenceRequirement& msg);
+std::string toJson(const wire_types::EntityMatch& msg);
+std::string toJson(const wire_types::ObjectEvidence& msg);
+std::string toJson(const wire_types::EvidenceRequirement& msg);
 
 // ---------------------------------------------------------------------------
 // Deserialisation (fromJson)
 // ---------------------------------------------------------------------------
 
-EntityMatch entityMatchFromJson(const std::string& s);
-ObjectEvidence objectEvidenceFromJson(const std::string& s);
-EvidenceRequirement evidenceRequirementFromJson(const std::string& s);
+wire_types::EntityMatch entityMatchFromJson(const std::string& s);
+wire_types::ObjectEvidence objectEvidenceFromJson(const std::string& s);
+wire_types::EvidenceRequirement evidenceRequirementFromJson(const std::string& s);
 
 // Deserialise standard.entity_matches JSON array
-EntityMatchArray entityMatchesFromJson(const std::string& s);
+wire_types::EntityMatchArray entityMatchesFromJson(const std::string& s);
 
 // ---------------------------------------------------------------------------
 // Enum string converters
 // ---------------------------------------------------------------------------
 
-std::string toString(StandardIdentity v);
-StandardIdentity standardIdentityFromString(const std::string& s);
-std::string toString(BattleDimension v);
-BattleDimension battleDimensionFromString(const std::string& s);
-std::string toString(DataPolicy v);
-DataPolicy dataPolicyFromString(const std::string& s);
+std::string toString(data_model::StandardIdentity v);
+data_model::StandardIdentity standardIdentityFromString(const std::string& s);
+std::string toString(data_model::BattleDimension v);
+data_model::BattleDimension battleDimensionFromString(const std::string& s);
+std::string toString(data_model::DataPolicy v);
+data_model::DataPolicy dataPolicyFromString(const std::string& s);
 
 } // namespace pyramid::services::tactical_objects::json_codec
