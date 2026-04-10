@@ -140,8 +140,9 @@ package Pcl_Bindings is
   procedure Request_Shutdown(Exec : Pcl_Executor_Access);
   pragma Import(C, Request_Shutdown, "pcl_executor_request_shutdown");
 
-  -- Post_Incoming and Post_Service_Request are safe to call from any thread.
-  -- All other executor functions must be called on the executor thread only.
+  -- Post_Incoming is safe to call from any thread.
+  -- All other executor functions must be called on the executor thread only
+  -- except Post_Service_Request (declared below, after Pcl_Resp_Cb_Access).
 
   function Post_Incoming(Exec  : Pcl_Executor_Access;
                          Topic : Interfaces.C.Strings.chars_ptr;
@@ -150,17 +151,6 @@ package Pcl_Bindings is
   --  Queues a pub/sub message for delivery to subscriber callbacks on the
   --  executor thread.  Does NOT reach service (PCL_PORT_SERVICE) ports.
   --  For service calls from external threads use Post_Service_Request.
-
-  function Post_Service_Request
-    (Exec         : Pcl_Executor_Access;
-     Service_Name : Interfaces.C.Strings.chars_ptr;
-     Request      : access constant Pcl_Msg;
-     Callback     : Pcl_Resp_Cb_Access;
-     User_Data    : System.Address) return Pcl_Status;
-  pragma Import(C, Post_Service_Request, "pcl_executor_post_service_request");
-  --  Queues an intra-process service call for execution on the executor
-  --  thread.  Deep-copies the request; Callback fires on the executor thread
-  --  with the response (or an empty message if the service is not found).
 
   function Post_Remote_Incoming
     (Exec    : Pcl_Executor_Access;
@@ -234,6 +224,18 @@ package Pcl_Bindings is
     (Resp      : access constant Pcl_Msg;
      User_Data : System.Address);
   pragma Convention(C, Pcl_Resp_Cb_Access);
+
+  -- Post_Service_Request is safe to call from any thread.
+  function Post_Service_Request
+    (Exec         : Pcl_Executor_Access;
+     Service_Name : Interfaces.C.Strings.chars_ptr;
+     Request      : access constant Pcl_Msg;
+     Callback     : Pcl_Resp_Cb_Access;
+     User_Data    : System.Address) return Pcl_Status;
+  pragma Import(C, Post_Service_Request, "pcl_executor_post_service_request");
+  --  Queues an intra-process service call for execution on the executor
+  --  thread.  Deep-copies the request; Callback fires on the executor thread
+  --  with the response (or an empty message if the service is not found).
 
   -- -- Transport adapter --------------------------------------------------
 
