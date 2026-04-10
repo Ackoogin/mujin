@@ -19,6 +19,46 @@ namespace tactical_objects {
 
 using json = nlohmann::json;
 namespace tactical_codec = pyramid::data_model::tactical;
+namespace data_model = pyramid::data_model;
+
+static data_model::PolyArea make_poly_area(double min_lat_rad,
+                                           double max_lat_rad,
+                                           double min_lon_rad,
+                                           double max_lon_rad) {
+  data_model::PolyArea area;
+  area.points.push_back({min_lat_rad, min_lon_rad});
+  area.points.push_back({min_lat_rad, max_lon_rad});
+  area.points.push_back({max_lat_rad, max_lon_rad});
+  area.points.push_back({max_lat_rad, min_lon_rad});
+  return area;
+}
+
+static data_model::ObjectEvidenceRequirement evidence_requirement_from_internal_json(const json& j) {
+  data_model::ObjectEvidenceRequirement req{};
+  req.base.id = j.value("id", "");
+  req.policy = j.value("policy", "") == "DATA_POLICY_QUERY"
+                   ? data_model::DataPolicy::Query
+                   : data_model::DataPolicy::Obtain;
+  const std::string dimension = j.value("dimension", "");
+  if (dimension == "BATTLE_DIMENSION_GROUND") {
+    req.dimension.push_back(data_model::BattleDimension::Ground);
+  } else if (dimension == "BATTLE_DIMENSION_AIR") {
+    req.dimension.push_back(data_model::BattleDimension::Air);
+  } else if (dimension == "BATTLE_DIMENSION_SEA_SURFACE") {
+    req.dimension.push_back(data_model::BattleDimension::SeaSurface);
+  } else if (dimension == "BATTLE_DIMENSION_SUBSURFACE") {
+    req.dimension.push_back(data_model::BattleDimension::Subsurface);
+  }
+  if (j.contains("min_lat_rad") && j.contains("max_lat_rad") &&
+      j.contains("min_lon_rad") && j.contains("max_lon_rad")) {
+    req.poly_area = make_poly_area(
+        j.value("min_lat_rad", 0.0),
+        j.value("max_lat_rad", 0.0),
+        j.value("min_lon_rad", 0.0),
+        j.value("max_lon_rad", 0.0));
+  }
+  return req;
+}
 
 // ---------------------------------------------------------------------------
 // Topic / service name constants
@@ -214,7 +254,8 @@ pcl_status_t StandardBridge::handleCreateRequirement(pcl_container_t*,
       iresp_j.contains("evidence_requirements") &&
       iresp_j["evidence_requirements"].is_array()) {
     for (const auto& ev : iresp_j["evidence_requirements"]) {
-      std::string ev_str = ev.dump();
+      const auto req = evidence_requirement_from_internal_json(ev);
+      const std::string ev_str = tactical_codec::toJson(req);
 
       pcl_msg_t ev_req = {};
       ev_req.data = ev_str.data();
@@ -283,24 +324,11 @@ pcl_status_t StandardBridge::on_tick(double dt) {
     for (const auto& upd : sf.updates) {
       if (upd.message_type == STREAM_MSG_ENTITY_DELETE) continue;
 
-      json obj;
-      obj["object_id"] = TacticalObjectsCodec::encodeUUID(upd.entity_id).get<std::string>();
-
-      if (upd.affiliation) {
-        obj["identity"] = affiliationToStandardIdentity(*upd.affiliation);
-      }
-      if (upd.mil_class) {
-        obj["dimension"] = battleDimToStandard(upd.mil_class->battle_dim);
-      }
-      if (upd.position) {
-        obj["latitude_rad"]  = degToRad(upd.position->lat);
-        obj["longitude_rad"] = degToRad(upd.position->lon);
-      }
-      if (upd.confidence) {
-        obj["confidence"] = *upd.confidence;
-      }
-
-      arr.push_back(obj);
+      data_model::ObjectMatch obj{};
+      obj.id = TacticalObjectsCodec::encodeUUID(upd.entity_id).get<std::string>();
+      obj.source = "standard_bridge";
+      obj.matching_object_id = obj.id;
+      arr.push_back(nlohmann::json::parse(tactical_codec::toJson(obj)));
     }
 
     if (arr.empty()) continue;
@@ -330,10 +358,11 @@ void StandardBridge::onStandardObjectEvidence(pcl_container_t*,
   auto* self = static_cast<StandardBridge*>(user_data);
   if (!msg->data || msg->size == 0) return;
 
-  std::string str(static_cast<const char*>(msg->data), msg->size);
-  json j;
+  data_model::ObjectDetail detail;
   try {
-    j = json::parse(str);
+    detail = tactical_codec::fromJson(
+        std::string(static_cast<const char*>(msg->data), msg->size),
+        static_cast<data_model::ObjectDetail*>(nullptr));
   } catch (...) {
     return;
   }
@@ -341,24 +370,69 @@ void StandardBridge::onStandardObjectEvidence(pcl_container_t*,
   Observation obs;
   obs.observation_id  = pyramid::core::uuid::UUIDHelper::generateV4();
   obs.received_at     = 0.0;
-  obs.observed_at     = j.value("observed_at", 0.0);
+  obs.observed_at     = detail.creation_time;
   obs.object_hint_type = ObjectType::Platform;
   obs.affiliation_hint = Affiliation::Unknown;
-  obs.confidence       = j.value("confidence", 0.0);
+  obs.confidence       = detail.quality.value_or(0.0);
 
   // Parse standard position (radians → degrees)
-  obs.position.lat = self->radToDeg(j.value("latitude_rad", 0.0));
-  obs.position.lon = self->radToDeg(j.value("longitude_rad", 0.0));
+  obs.position.lat = self->radToDeg(detail.position.latitude);
+  obs.position.lon = self->radToDeg(detail.position.longitude);
   obs.position.alt = 0.0;
 
-  // Parse standard identity
-  std::string identity = j.value("identity", "");
-  if (!identity.empty()) {
-    obs.affiliation_hint = self->standardIdentityToAffiliation(identity);
+  std::string identity = "STANDARD_IDENTITY_UNKNOWN";
+  switch (detail.identity) {
+    case data_model::StandardIdentity::Friendly:
+      identity = "STANDARD_IDENTITY_FRIENDLY";
+      break;
+    case data_model::StandardIdentity::Hostile:
+      identity = "STANDARD_IDENTITY_HOSTILE";
+      break;
+    case data_model::StandardIdentity::Neutral:
+      identity = "STANDARD_IDENTITY_NEUTRAL";
+      break;
+    case data_model::StandardIdentity::Suspect:
+      identity = "STANDARD_IDENTITY_SUSPECT";
+      break;
+    case data_model::StandardIdentity::Pending:
+      identity = "STANDARD_IDENTITY_PENDING";
+      break;
+    case data_model::StandardIdentity::Joker:
+      identity = "STANDARD_IDENTITY_JOKER";
+      break;
+    case data_model::StandardIdentity::Faker:
+      identity = "STANDARD_IDENTITY_FAKER";
+      break;
+    case data_model::StandardIdentity::AssumedFriendly:
+      identity = "STANDARD_IDENTITY_ASSUMED_FRIENDLY";
+      break;
+    case data_model::StandardIdentity::Unknown:
+    case data_model::StandardIdentity::Unspecified:
+      break;
   }
+  obs.affiliation_hint = self->standardIdentityToAffiliation(identity);
 
   // Parse standard dimension → SIDC hint
-  std::string dimension = j.value("dimension", "");
+  std::string dimension = "BATTLE_DIMENSION_UNSPECIFIED";
+  switch (detail.dimension) {
+    case data_model::BattleDimension::Ground:
+      dimension = "BATTLE_DIMENSION_GROUND";
+      break;
+    case data_model::BattleDimension::Air:
+      dimension = "BATTLE_DIMENSION_AIR";
+      break;
+    case data_model::BattleDimension::SeaSurface:
+      dimension = "BATTLE_DIMENSION_SEA_SURFACE";
+      break;
+    case data_model::BattleDimension::Subsurface:
+      dimension = "BATTLE_DIMENSION_SUBSURFACE";
+      break;
+    case data_model::BattleDimension::Unknown:
+      dimension = "BATTLE_DIMENSION_UNKNOWN";
+      break;
+    case data_model::BattleDimension::Unspecified:
+      break;
+  }
   if (dimension == "BATTLE_DIMENSION_SEA_SURFACE") {
     obs.source_sidc = "SHSP------*****";
   } else if (dimension == "BATTLE_DIMENSION_AIR") {

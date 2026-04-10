@@ -15,7 +15,6 @@
 
 #include "pyramid_services_tactical_objects_consumed.hpp"
 #include "pyramid_services_tactical_objects_provided.hpp"
-#include "pyramid_services_tactical_objects_json_codec.hpp"
 #include "pyramid_data_model_common_codec.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
@@ -35,9 +34,7 @@ extern "C" {
 
 namespace prov = pyramid::services::tactical_objects::provided;
 namespace cons = pyramid::services::tactical_objects::consumed;
-namespace codec = pyramid::services::tactical_objects::json_codec;
 namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
-namespace wire_types = pyramid::services::tactical_objects::wire_types;
 namespace types = pyramid::data_model;
 namespace tactical_codec = pyramid::data_model::tactical;
 
@@ -157,34 +154,36 @@ TEST(ProtoBindingsProvided, CreateRequirementJsonDefaults) {
 }
 
 // ===========================================================================
-// JSON codec — ObjectEvidence (replaces buildStandardEvidenceJson)
+// Proto-native JSON codec — ObjectDetail topic payload
 // ===========================================================================
 
 TEST(ProtoBindingsProvided, EvidenceJsonKeys) {
-    wire_types::ObjectEvidence ev;
+    types::ObjectDetail ev;
+    ev.id            = "obj-1";
     ev.identity      = types::StandardIdentity::Friendly;
     ev.dimension     = types::BattleDimension::Ground;
-    ev.latitude_rad  = 0.785;
-    ev.longitude_rad = -1.571;
-    ev.confidence    = 0.9;
-    ev.observed_at   = 0.75;
+    ev.position.latitude  = 0.785;
+    ev.position.longitude = -1.571;
+    ev.quality       = 0.9;
+    ev.creation_time = 0.75;
 
-    std::string json_str = codec::toJson(ev);
+    std::string json_str = tactical_codec::toJson(ev);
     auto j = nlohmann::json::parse(json_str);
+    EXPECT_TRUE(j.contains("id"));
     EXPECT_TRUE(j.contains("identity"));
     EXPECT_TRUE(j.contains("dimension"));
-    EXPECT_DOUBLE_EQ(j["latitude_rad"].get<double>(),  0.785);
-    EXPECT_DOUBLE_EQ(j["longitude_rad"].get<double>(), -1.571);
-    EXPECT_DOUBLE_EQ(j["confidence"].get<double>(),    0.9);
-    EXPECT_DOUBLE_EQ(j["observed_at"].get<double>(),   0.75);
+    ASSERT_TRUE(j.contains("position"));
+    EXPECT_DOUBLE_EQ(j["position"]["latitude"].get<double>(),  0.785);
+    EXPECT_DOUBLE_EQ(j["position"]["longitude"].get<double>(), -1.571);
+    EXPECT_DOUBLE_EQ(j["quality"].get<double>(),    0.9);
+    EXPECT_DOUBLE_EQ(j["creation_time"].get<double>(),   0.75);
 }
 
 TEST(ProtoBindingsProvided, EvidenceJsonDefaultObservedAt) {
-    // Default-constructed evidence: observed_at = 0.0 is omitted by codec
-    wire_types::ObjectEvidence ev;
-    std::string json_str = codec::toJson(ev);
+    types::ObjectDetail ev;
+    std::string json_str = tactical_codec::toJson(ev);
     auto j = nlohmann::json::parse(json_str);
-    EXPECT_FALSE(j.contains("observed_at"));
+    EXPECT_FALSE(j.contains("quality"));
 }
 
 // ===========================================================================

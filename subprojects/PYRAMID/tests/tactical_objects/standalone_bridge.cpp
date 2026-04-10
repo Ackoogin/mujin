@@ -47,7 +47,6 @@
 using namespace tactical_objects;
 using json = nlohmann::json;
 namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
-namespace wire_types = pyramid::services::tactical_objects::wire_types;
 namespace data_model = pyramid::data_model;
 namespace tactical_codec = pyramid::data_model::tactical;
 
@@ -198,45 +197,28 @@ static std::string dataPolicyToString(data_model::DataPolicy policy) {
   return "DATA_POLICY_UNSPECIFIED";
 }
 
-static std::string encode_entity_matches_payload(const wire_types::EntityMatchArray& matches,
+static std::string encode_entity_matches_payload(const std::vector<data_model::ObjectMatch>& matches,
                                                  const char* content_type) {
   if (is_flatbuffers_content_type(content_type)) {
     return flatbuffers_codec::toBinary(matches);
   }
-  json arr = json::array();
+  std::string payload = "[";
+  bool first = true;
   for (const auto& match : matches) {
-    json obj;
-    obj["object_id"] = match.object_id;
-    obj["identity"] = standardIdentityToString(match.identity);
-    if (match.dimension != data_model::BattleDimension::Unspecified) {
-      obj["dimension"] = battleDimensionToString(match.dimension);
-    }
-    obj["latitude_rad"] = match.latitude_rad;
-    obj["longitude_rad"] = match.longitude_rad;
-    obj["confidence"] = match.confidence;
-    arr.push_back(std::move(obj));
+    if (!first) payload += ",";
+    first = false;
+    payload += tactical_codec::toJson(match);
   }
-  return arr.dump();
+  payload += "]";
+  return payload;
 }
 
-static std::string encode_evidence_requirement_payload(const wire_types::EvidenceRequirement& req,
+static std::string encode_evidence_requirement_payload(const data_model::ObjectEvidenceRequirement& req,
                                                        const char* content_type) {
   if (is_flatbuffers_content_type(content_type)) {
     return flatbuffers_codec::toBinary(req);
   }
-  json obj;
-  if (!req.id.empty()) obj["id"] = req.id;
-  if (req.policy != data_model::DataPolicy::Unspecified) {
-    obj["policy"] = dataPolicyToString(req.policy);
-  }
-  if (req.dimension != data_model::BattleDimension::Unspecified) {
-    obj["dimension"] = battleDimensionToString(req.dimension);
-  }
-  obj["min_lat_rad"] = req.min_lat_rad;
-  obj["max_lat_rad"] = req.max_lat_rad;
-  obj["min_lon_rad"] = req.min_lon_rad;
-  obj["max_lon_rad"] = req.max_lon_rad;
-  return obj.dump();
+  return tactical_codec::toJson(req);
 }
 
 static std::string encode_identifier_payload(const data_model::Identifier& id,
@@ -247,27 +229,53 @@ static std::string encode_identifier_payload(const data_model::Identifier& id,
   return json(id).dump();
 }
 
-static bool decode_object_evidence(const pcl_msg_t* msg, wire_types::ObjectEvidence& evidence) {
+static bool decode_object_evidence(const pcl_msg_t* msg, data_model::ObjectDetail& evidence) {
   if (!msg || !msg->data || msg->size == 0) {
     return false;
   }
   try {
     if (is_flatbuffers_content_type(msg->type_name)) {
-      evidence = flatbuffers_codec::fromBinaryObjectEvidence(msg->data, msg->size);
+      evidence = flatbuffers_codec::fromBinaryObjectDetail(msg->data, msg->size);
     } else {
-      const auto j = json::parse(
-          std::string(static_cast<const char*>(msg->data), msg->size));
-      evidence.identity = standardIdentityFromString(j.value("identity", ""));
-      evidence.dimension = battleDimensionFromString(j.value("dimension", ""));
-      evidence.latitude_rad = j.value("latitude_rad", 0.0);
-      evidence.longitude_rad = j.value("longitude_rad", 0.0);
-      evidence.confidence = j.value("confidence", 0.0);
-      evidence.observed_at = j.value("observed_at", 0.0);
+      evidence = tactical_codec::fromJson(
+          std::string(static_cast<const char*>(msg->data), msg->size),
+          static_cast<data_model::ObjectDetail*>(nullptr));
     }
     return true;
   } catch (...) {
     return false;
   }
+}
+
+static data_model::PolyArea make_poly_area(double min_lat_rad,
+                                           double max_lat_rad,
+                                           double min_lon_rad,
+                                           double max_lon_rad) {
+  data_model::PolyArea area;
+  area.points.push_back({min_lat_rad, min_lon_rad});
+  area.points.push_back({min_lat_rad, max_lon_rad});
+  area.points.push_back({max_lat_rad, max_lon_rad});
+  area.points.push_back({max_lat_rad, min_lon_rad});
+  return area;
+}
+
+static data_model::ObjectEvidenceRequirement evidence_requirement_from_internal_json(const json& j) {
+  data_model::ObjectEvidenceRequirement req{};
+  req.base.id = j.value("id", "");
+  req.policy = dataPolicyFromString(j.value("policy", ""));
+  const auto dim = battleDimensionFromString(j.value("dimension", ""));
+  if (dim != data_model::BattleDimension::Unspecified) {
+    req.dimension.push_back(dim);
+  }
+  if (j.contains("min_lat_rad") && j.contains("max_lat_rad") &&
+      j.contains("min_lon_rad") && j.contains("max_lon_rad")) {
+    req.poly_area = make_poly_area(
+        j.value("min_lat_rad", 0.0),
+        j.value("max_lat_rad", 0.0),
+        j.value("min_lon_rad", 0.0),
+        j.value("max_lon_rad", 0.0));
+  }
+  return req;
 }
 
 static bool decode_create_requirement(const pcl_msg_t* msg,
@@ -334,26 +342,13 @@ static void backend_entity_updates_cb(pcl_container_t*, const pcl_msg_t* msg,
   auto frames = StreamingCodec::decodeBatchFrame(
       static_cast<const uint8_t*>(msg->data), msg->size);
 
-  wire_types::EntityMatchArray matches;
+  std::vector<data_model::ObjectMatch> matches;
   for (const auto& upd : frames) {
     if (upd.message_type == STREAM_MSG_ENTITY_DELETE) continue;
 
-    wire_types::EntityMatch obj;
-    obj.object_id = TacticalObjectsCodec::encodeUUID(upd.entity_id)
-                        .get<std::string>();
-    if (upd.affiliation) {
-      obj.identity = standardIdentityFromAffiliation(*upd.affiliation);
-    }
-    if (upd.mil_class) {
-      obj.dimension = standardBattleDimension(upd.mil_class->battle_dim);
-    }
-    if (upd.position) {
-      obj.latitude_rad = degToRad(upd.position->lat);
-      obj.longitude_rad = degToRad(upd.position->lon);
-    }
-    if (upd.confidence) {
-      obj.confidence = *upd.confidence;
-    }
+    data_model::ObjectMatch obj;
+    obj.id = TacticalObjectsCodec::encodeUUID(upd.entity_id).get<std::string>();
+    obj.matching_object_id = obj.id;
     matches.push_back(obj);
   }
 
@@ -375,26 +370,19 @@ static void backend_evidence_reqs_cb(pcl_container_t*, const pcl_msg_t* msg,
                                      void*) {
   if (!msg || !msg->data || msg->size == 0) return;
 
-  wire_types::EvidenceRequirement req;
   try {
     const auto j = json::parse(
         std::string(static_cast<const char*>(msg->data), msg->size));
-    req.id = j.value("id", "");
-    req.policy = dataPolicyFromString(j.value("policy", ""));
-    req.dimension = battleDimensionFromString(j.value("dimension", ""));
-    req.min_lat_rad = j.value("min_lat_rad", 0.0);
-    req.max_lat_rad = j.value("max_lat_rad", 0.0);
-    req.min_lon_rad = j.value("min_lon_rad", 0.0);
-    req.max_lon_rad = j.value("max_lon_rad", 0.0);
+    auto req = evidence_requirement_from_internal_json(j);
+    std::string payload = encode_evidence_requirement_payload(
+        req, g_bridge.frontend_content_type.c_str());
+    std::lock_guard<std::mutex> lock(g_bridge.mu);
+    g_bridge.to_frontend.push_back(
+        {"standard.evidence_requirements", g_bridge.frontend_content_type,
+         std::move(payload)});
   } catch (...) {
     return;
   }
-  std::string payload = encode_evidence_requirement_payload(
-      req, g_bridge.frontend_content_type.c_str());
-  std::lock_guard<std::mutex> lock(g_bridge.mu);
-  g_bridge.to_frontend.push_back(
-      {"standard.evidence_requirements", g_bridge.frontend_content_type,
-       std::move(payload)});
 }
 
 // ---------------------------------------------------------------------------
@@ -417,7 +405,7 @@ static pcl_status_t backend_on_configure(pcl_container_t* c, void*) {
 
 static void frontend_object_evidence_cb(pcl_container_t*, const pcl_msg_t* msg,
                                         void*) {
-  wire_types::ObjectEvidence evidence;
+  data_model::ObjectDetail evidence;
   if (!decode_object_evidence(msg, evidence)) return;
 
   // Translate standard observation to internal format (must match
@@ -428,11 +416,11 @@ static void frontend_object_evidence_cb(pcl_container_t*, const pcl_msg_t* msg,
   obs["observation_id"] = pyramid::core::uuid::UUIDHelper::toString(
       pyramid::core::uuid::UUIDHelper::generateV4());
   obs["position"] = json::object();
-  obs["position"]["lat"] = radToDeg(evidence.latitude_rad);
-  obs["position"]["lon"] = radToDeg(evidence.longitude_rad);
+  obs["position"]["lat"] = radToDeg(evidence.position.latitude);
+  obs["position"]["lon"] = radToDeg(evidence.position.longitude);
   obs["position"]["alt"] = 0.0;
-  obs["confidence"] = evidence.confidence;
-  obs["observed_at"] = evidence.observed_at;
+  obs["confidence"] = evidence.quality.value_or(0.0);
+  obs["observed_at"] = evidence.creation_time;
   obs["object_hint_type"] = "Platform";
   obs["affiliation_hint"] = "Unknown";
 
@@ -589,22 +577,15 @@ static pcl_status_t frontend_create_requirement(pcl_container_t*,
       iresp["evidence_requirements"].is_array()) {
     std::lock_guard<std::mutex> lock(g_bridge.mu);
     for (const auto& ev : iresp["evidence_requirements"]) {
-      wire_types::EvidenceRequirement req_payload{};
       try {
-        req_payload.id = ev.value("id", "");
-        req_payload.policy = dataPolicyFromString(ev.value("policy", ""));
-        req_payload.dimension = battleDimensionFromString(ev.value("dimension", ""));
-        req_payload.min_lat_rad = ev.value("min_lat_rad", 0.0);
-        req_payload.max_lat_rad = ev.value("max_lat_rad", 0.0);
-        req_payload.min_lon_rad = ev.value("min_lon_rad", 0.0);
-        req_payload.max_lon_rad = ev.value("max_lon_rad", 0.0);
+        auto req_payload = evidence_requirement_from_internal_json(ev);
+        g_bridge.to_frontend.push_back(
+            {"standard.evidence_requirements", g_bridge.frontend_content_type,
+             encode_evidence_requirement_payload(
+                 req_payload, g_bridge.frontend_content_type.c_str())});
       } catch (...) {
         continue;
       }
-      g_bridge.to_frontend.push_back(
-          {"standard.evidence_requirements", g_bridge.frontend_content_type,
-           encode_evidence_requirement_payload(
-               req_payload, g_bridge.frontend_content_type.c_str())});
     }
   }
 

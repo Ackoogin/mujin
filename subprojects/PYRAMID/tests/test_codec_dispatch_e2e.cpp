@@ -18,45 +18,46 @@ extern "C" {
 
 #include "pyramid_services_tactical_objects_consumed.hpp"
 #include "pyramid_services_tactical_objects_provided.hpp"
-#include "pyramid_services_tactical_objects_json_codec.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 
 namespace prov = pyramid::services::tactical_objects::provided;
 namespace cons = pyramid::services::tactical_objects::consumed;
-namespace json_codec = pyramid::services::tactical_objects::json_codec;
 namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
-namespace wire_types = pyramid::services::tactical_objects::wire_types;
 namespace types = pyramid::data_model;
 namespace tactical_codec = pyramid::data_model::tactical;
 
 namespace {
 
-wire_types::ObjectEvidence makeTestEvidence() {
-    wire_types::ObjectEvidence ev;
+types::ObjectDetail makeTestEvidence() {
+    types::ObjectDetail ev;
+    ev.id = "obj-1";
     ev.identity = types::StandardIdentity::Hostile;
     ev.dimension = types::BattleDimension::SeaSurface;
-    ev.latitude_rad = 0.8901;
-    ev.longitude_rad = 0.0012;
-    ev.confidence = 0.95;
-    ev.observed_at = 1.5;
+    ev.position.latitude = 0.8901;
+    ev.position.longitude = 0.0012;
+    ev.creation_time = 1.5;
+    ev.quality = 0.95;
     return ev;
 }
 
-void expectEvidenceEqual(const wire_types::ObjectEvidence& a,
-                         const wire_types::ObjectEvidence& b) {
+void expectEvidenceEqual(const types::ObjectDetail& a,
+                         const types::ObjectDetail& b) {
+    EXPECT_EQ(a.id, b.id);
     EXPECT_EQ(a.identity, b.identity);
     EXPECT_EQ(a.dimension, b.dimension);
-    EXPECT_DOUBLE_EQ(a.latitude_rad, b.latitude_rad);
-    EXPECT_DOUBLE_EQ(a.longitude_rad, b.longitude_rad);
-    EXPECT_DOUBLE_EQ(a.confidence, b.confidence);
-    EXPECT_DOUBLE_EQ(a.observed_at, b.observed_at);
+    EXPECT_DOUBLE_EQ(a.position.latitude, b.position.latitude);
+    EXPECT_DOUBLE_EQ(a.position.longitude, b.position.longitude);
+    ASSERT_TRUE(a.quality.has_value());
+    ASSERT_TRUE(b.quality.has_value());
+    EXPECT_DOUBLE_EQ(a.quality.value(), b.quality.value());
+    EXPECT_DOUBLE_EQ(a.creation_time, b.creation_time);
 }
 
-std::string serializeEvidence(const wire_types::ObjectEvidence& ev,
+std::string serializeEvidence(const types::ObjectDetail& ev,
                               const char* content_type) {
     if (std::strcmp(content_type, "application/json") == 0)
-        return json_codec::toJson(ev);
+        return tactical_codec::toJson(ev);
     if (std::strcmp(content_type, "application/flatbuffers") == 0)
         return flatbuffers_codec::toBinary(ev);
     return {};
@@ -65,15 +66,16 @@ std::string serializeEvidence(const wire_types::ObjectEvidence& ev,
 bool deserializeEvidence(const void* data,
                          size_t size,
                          const char* content_type,
-                         wire_types::ObjectEvidence& out) {
+                         types::ObjectDetail& out) {
     try {
         if (std::strcmp(content_type, "application/json") == 0) {
-            out = json_codec::objectEvidenceFromJson(
-                std::string(static_cast<const char*>(data), size));
+            out = tactical_codec::fromJson(
+                std::string(static_cast<const char*>(data), size),
+                static_cast<types::ObjectDetail*>(nullptr));
             return true;
         }
         if (std::strcmp(content_type, "application/flatbuffers") == 0) {
-            out = flatbuffers_codec::fromBinaryObjectEvidence(data, size);
+            out = flatbuffers_codec::fromBinaryObjectDetail(data, size);
             return true;
         }
     } catch (...) {
@@ -88,7 +90,7 @@ struct CodecPubSubState {
 
     std::atomic<int> messages_received{0};
     std::string last_type_name;
-    wire_types::ObjectEvidence received{};
+    types::ObjectDetail received{};
     bool deserialize_ok = false;
 };
 
@@ -116,7 +118,7 @@ pcl_status_t configure_codec_sub(pcl_container_t* c, void* ud) {
 }
 
 void runPubSubRoundTrip(const char* content_type,
-                        const wire_types::ObjectEvidence& evidence) {
+                        const types::ObjectDetail& evidence) {
     CodecPubSubState state;
     state.content_type = content_type;
 
@@ -267,7 +269,7 @@ TEST(CodecDispatchE2E, TwoCodecsTwoPorts) {
             c, "test.json", "application/json",
             [](pcl_container_t*, const pcl_msg_t* msg, void* u) {
                 auto* s = static_cast<State*>(u);
-                wire_types::ObjectEvidence parsed{};
+                types::ObjectDetail parsed{};
                 if (deserializeEvidence(msg->data, msg->size, "application/json", parsed))
                     s->json_count.fetch_add(1);
             }, st);
@@ -275,7 +277,7 @@ TEST(CodecDispatchE2E, TwoCodecsTwoPorts) {
             c, "test.flat", "application/flatbuffers",
             [](pcl_container_t*, const pcl_msg_t* msg, void* u) {
                 auto* s = static_cast<State*>(u);
-                wire_types::ObjectEvidence parsed{};
+                types::ObjectDetail parsed{};
                 if (deserializeEvidence(msg->data, msg->size, "application/flatbuffers", parsed))
                     s->flat_count.fetch_add(1);
             }, st);
@@ -288,7 +290,7 @@ TEST(CodecDispatchE2E, TwoCodecsTwoPorts) {
     pcl_executor_add(exec, sub_c);
 
     {
-        auto payload = json_codec::toJson(ev);
+        auto payload = tactical_codec::toJson(ev);
         pcl_msg_t msg{};
         msg.data = payload.data();
         msg.size = static_cast<uint32_t>(payload.size());
@@ -319,7 +321,7 @@ TEST(CodecDispatchE2E, TwoCodecsTwoPorts) {
 
 TEST(CodecDispatchE2E, BinaryCodecSmallerThanJson) {
     auto ev = makeTestEvidence();
-    auto json_payload = json_codec::toJson(ev);
+    auto json_payload = tactical_codec::toJson(ev);
     auto flat_payload = flatbuffers_codec::toBinary(ev);
 
     EXPECT_LT(flat_payload.size(), json_payload.size());
@@ -338,9 +340,9 @@ TEST(CodecDispatchE2E, DefaultCodecIsJson) {
     pcl_executor_t* exec = pcl_executor_create();
     pcl_executor_add(exec, c);
 
-    wire_types::EntityMatch match{};
-    match.object_id = "obj-1";
-    auto payload = json_codec::toJson(match);
+    types::ObjectMatch match{};
+    match.matching_object_id = "obj-1";
+    auto payload = std::string("[") + tactical_codec::toJson(match) + "]";
     pcl_msg_t msg{};
     msg.data = payload.data();
     msg.size = static_cast<uint32_t>(payload.size());
@@ -367,10 +369,9 @@ TEST(CodecDispatchE2E, ExplicitCodecFlatBuffers) {
     pcl_executor_t* exec = pcl_executor_create();
     pcl_executor_add(exec, c);
 
-    wire_types::EntityMatch match{};
-    match.object_id = "obj-1";
-    match.identity = types::StandardIdentity::Hostile;
-    wire_types::EntityMatchArray matches{match};
+    types::ObjectMatch match{};
+    match.matching_object_id = "obj-1";
+    std::vector<types::ObjectMatch> matches{match};
     auto payload = flatbuffers_codec::toBinary(matches);
     pcl_msg_t msg{};
     msg.data = payload.data();
@@ -385,32 +386,32 @@ TEST(CodecDispatchE2E, ExplicitCodecFlatBuffers) {
     pcl_container_destroy(c);
 }
 
-TEST(CodecDispatchE2E, JsonBridgeCodecSerDeRoundTrip) {
-    wire_types::EvidenceRequirement req;
-    req.id = "interest-7";
+TEST(CodecDispatchE2E, JsonProtoCodecSerDeRoundTrip) {
+    types::ObjectEvidenceRequirement req;
+    req.base.id = "interest-7";
     req.policy = types::DataPolicy::Obtain;
-    req.dimension = types::BattleDimension::SeaSurface;
-    req.min_lat_rad = 0.873;
-    req.max_lat_rad = 0.907;
-    req.min_lon_rad = -0.017;
-    req.max_lon_rad = 0.017;
+    req.dimension.push_back(types::BattleDimension::SeaSurface);
+    req.point = types::Point{};
+    req.point->position.latitude = 0.873;
+    req.point->position.longitude = -0.017;
 
-    auto json_str = json_codec::toJson(req);
-    auto req2 = json_codec::evidenceRequirementFromJson(json_str);
+    auto json_str = tactical_codec::toJson(req);
+    auto req2 = tactical_codec::fromJson(
+        json_str, static_cast<types::ObjectEvidenceRequirement*>(nullptr));
 
-    EXPECT_EQ(req2.id, "interest-7");
+    EXPECT_EQ(req2.base.id, "interest-7");
     EXPECT_EQ(req2.policy, types::DataPolicy::Obtain);
-    EXPECT_EQ(req2.dimension, types::BattleDimension::SeaSurface);
-    EXPECT_DOUBLE_EQ(req2.min_lat_rad, 0.873);
-    EXPECT_DOUBLE_EQ(req2.max_lat_rad, 0.907);
-    EXPECT_DOUBLE_EQ(req2.min_lon_rad, -0.017);
-    EXPECT_DOUBLE_EQ(req2.max_lon_rad, 0.017);
+    ASSERT_EQ(req2.dimension.size(), 1u);
+    EXPECT_EQ(req2.dimension.front(), types::BattleDimension::SeaSurface);
+    ASSERT_TRUE(req2.point.has_value());
+    EXPECT_DOUBLE_EQ(req2.point->position.latitude, 0.873);
+    EXPECT_DOUBLE_EQ(req2.point->position.longitude, -0.017);
 }
 
 TEST(CodecDispatchE2E, FlatBuffersCodecUnitRoundTrip) {
     auto ev = makeTestEvidence();
     auto payload = flatbuffers_codec::toBinary(ev);
-    auto roundtripped = flatbuffers_codec::fromBinaryObjectEvidence(payload);
+    auto roundtripped = flatbuffers_codec::fromBinaryObjectDetail(payload);
     expectEvidenceEqual(roundtripped, ev);
 }
 

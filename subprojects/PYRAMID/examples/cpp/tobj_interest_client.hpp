@@ -2,13 +2,13 @@
 //
 // Interest client component: subscribes to entity_matches, sends
 // create_requirement via the standard bridge.
-// Uses generated service bindings and JsonCodec for all serialisation.
+// Uses generated service bindings and proto-native data-model codecs.
 //
 // Architecture: main > TobjInterestClient (this) > service binding > PCL
 #pragma once
 
 #include "generated/pyramid_services_tactical_objects_provided.hpp"
-#include "generated/pyramid_services_tactical_objects_json_codec.hpp"
+#include "generated/pyramid_data_model_tactical_codec.hpp"
 
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_transport_socket.h>
@@ -18,8 +18,9 @@
 namespace tobj_example {
 
 namespace Provided  = pyramid::services::tactical_objects::provided;
-namespace JsonCodec = pyramid::services::tactical_objects::json_codec;
+namespace TacticalCodec = pyramid::data_model::tactical;
 using namespace pyramid::services::tactical_objects;
+using namespace pyramid::data_model;
 
 /// \brief Shared state visible to the e2e driver.
 struct InterestClientState {
@@ -48,7 +49,7 @@ void onCreateRequirementResponse(const pcl_msg_t* resp, void* user_data);
 /// \brief Build and send a create_requirement via the standard bridge.
 ///
 /// Business logic (which enums to use, bounding box) lives in the caller;
-/// all JSON serialisation is handled by JsonCodec.
+/// all JSON serialisation is handled by the proto-native tactical codec.
 pcl_status_t sendCreateRequirement(
     pcl_socket_transport_t* transport,
     InterestClientState*    state,

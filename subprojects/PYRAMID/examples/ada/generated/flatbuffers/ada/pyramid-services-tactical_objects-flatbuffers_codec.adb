@@ -8,7 +8,6 @@ with Interfaces.C.Strings;
 with System;
 with Pyramid.Data_Model.Common.Types_Codec;
 with Pyramid.Data_Model.Tactical.Types_Codec;
-with Pyramid.Services.Tactical_Objects.Json_Codec;
 
 package body Pyramid.Services.Tactical_Objects.Flatbuffers_Codec is
    use type Interfaces.C.size_t;
@@ -280,54 +279,6 @@ package body Pyramid.Services.Tactical_Objects.Flatbuffers_Codec is
       return Interfaces.C.Strings.chars_ptr
      with Import, Convention => C,
           External_Name => "pyramid_services_tactical_objects_ObjectInterestRequirementArray_from_flatbuffer_json";
-
-   function Imported_To_Binary_Entity_Match
-     (Json     : Interfaces.C.Strings.chars_ptr;
-      Size_Out : access Interfaces.C.size_t) return System.Address
-     with Import, Convention => C,
-          External_Name => "pyramid_services_tactical_objects_EntityMatch_to_flatbuffer_json";
-
-   function Imported_From_Binary_Entity_Match
-     (Data : System.Address; Size : Interfaces.C.size_t)
-      return Interfaces.C.Strings.chars_ptr
-     with Import, Convention => C,
-          External_Name => "pyramid_services_tactical_objects_EntityMatch_from_flatbuffer_json";
-
-   function Imported_To_Binary_Entity_Match_Array
-     (Json     : Interfaces.C.Strings.chars_ptr;
-      Size_Out : access Interfaces.C.size_t) return System.Address
-     with Import, Convention => C,
-          External_Name => "pyramid_services_tactical_objects_EntityMatchArray_to_flatbuffer_json";
-
-   function Imported_From_Binary_Entity_Match_Array
-     (Data : System.Address; Size : Interfaces.C.size_t)
-      return Interfaces.C.Strings.chars_ptr
-     with Import, Convention => C,
-          External_Name => "pyramid_services_tactical_objects_EntityMatchArray_from_flatbuffer_json";
-
-   function Imported_To_Binary_Object_Evidence
-     (Json     : Interfaces.C.Strings.chars_ptr;
-      Size_Out : access Interfaces.C.size_t) return System.Address
-     with Import, Convention => C,
-          External_Name => "pyramid_services_tactical_objects_ObjectEvidence_to_flatbuffer_json";
-
-   function Imported_From_Binary_Object_Evidence
-     (Data : System.Address; Size : Interfaces.C.size_t)
-      return Interfaces.C.Strings.chars_ptr
-     with Import, Convention => C,
-          External_Name => "pyramid_services_tactical_objects_ObjectEvidence_from_flatbuffer_json";
-
-   function Imported_To_Binary_Evidence_Requirement
-     (Json     : Interfaces.C.Strings.chars_ptr;
-      Size_Out : access Interfaces.C.size_t) return System.Address
-     with Import, Convention => C,
-          External_Name => "pyramid_services_tactical_objects_EvidenceRequirement_to_flatbuffer_json";
-
-   function Imported_From_Binary_Evidence_Requirement
-     (Data : System.Address; Size : Interfaces.C.size_t)
-      return Interfaces.C.Strings.chars_ptr
-     with Import, Convention => C,
-          External_Name => "pyramid_services_tactical_objects_EvidenceRequirement_from_flatbuffer_json";
 
    function To_Binary_Geodetic_Position (Json : String) return String is
       Json_C   : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String (Json);
@@ -1089,158 +1040,6 @@ package body Pyramid.Services.Tactical_Objects.Flatbuffers_Codec is
       end;
    end From_Binary_Object_Interest_Requirement_Array;
 
-   function To_Binary_Entity_Match (Json : String) return String is
-      Json_C   : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String (Json);
-      Size_Out : aliased Interfaces.C.size_t := 0;
-      Data     : System.Address := Imported_To_Binary_Entity_Match (Json_C, Size_Out'Access);
-   begin
-      Interfaces.C.Strings.Free (Json_C);
-      if Data = System.Null_Address then
-         raise Constraint_Error with "FlatBuffers encode failed for Entity_Match";
-      end if;
-
-      declare
-         Result : constant String := Copy_From_Buffer (Data, Size_Out);
-      begin
-         Free_Buffer (Data);
-         return Result;
-      end;
-   end To_Binary_Entity_Match;
-
-   function From_Binary_Entity_Match (Payload : String) return String is
-      Payload_Bytes : aliased constant String := Payload;
-      Json_C : Interfaces.C.Strings.chars_ptr := Imported_From_Binary_Entity_Match
-        ((if Payload_Bytes'Length = 0
-          then System.Null_Address
-          else Payload_Bytes (Payload_Bytes'First)'Address),
-         Interfaces.C.size_t (Payload_Bytes'Length));
-   begin
-      if Json_C = Interfaces.C.Strings.Null_Ptr then
-         raise Constraint_Error with "FlatBuffers decode failed for Entity_Match";
-      end if;
-
-      declare
-         Result : constant String := Interfaces.C.Strings.Value (Json_C);
-      begin
-         Free_Buffer (To_Address (Json_C));
-         return Result;
-      end;
-   end From_Binary_Entity_Match;
-
-   function To_Binary_Entity_Match_Array (Json : String) return String is
-      Json_C   : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String (Json);
-      Size_Out : aliased Interfaces.C.size_t := 0;
-      Data     : System.Address := Imported_To_Binary_Entity_Match_Array (Json_C, Size_Out'Access);
-   begin
-      Interfaces.C.Strings.Free (Json_C);
-      if Data = System.Null_Address then
-         raise Constraint_Error with "FlatBuffers encode failed for Entity_Match_Array";
-      end if;
-
-      declare
-         Result : constant String := Copy_From_Buffer (Data, Size_Out);
-      begin
-         Free_Buffer (Data);
-         return Result;
-      end;
-   end To_Binary_Entity_Match_Array;
-
-   function From_Binary_Entity_Match_Array (Payload : String) return String is
-      Payload_Bytes : aliased constant String := Payload;
-      Json_C : Interfaces.C.Strings.chars_ptr := Imported_From_Binary_Entity_Match_Array
-        ((if Payload_Bytes'Length = 0
-          then System.Null_Address
-          else Payload_Bytes (Payload_Bytes'First)'Address),
-         Interfaces.C.size_t (Payload_Bytes'Length));
-   begin
-      if Json_C = Interfaces.C.Strings.Null_Ptr then
-         raise Constraint_Error with "FlatBuffers decode failed for Entity_Match_Array";
-      end if;
-
-      declare
-         Result : constant String := Interfaces.C.Strings.Value (Json_C);
-      begin
-         Free_Buffer (To_Address (Json_C));
-         return Result;
-      end;
-   end From_Binary_Entity_Match_Array;
-
-   function To_Binary_Object_Evidence (Json : String) return String is
-      Json_C   : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String (Json);
-      Size_Out : aliased Interfaces.C.size_t := 0;
-      Data     : System.Address := Imported_To_Binary_Object_Evidence (Json_C, Size_Out'Access);
-   begin
-      Interfaces.C.Strings.Free (Json_C);
-      if Data = System.Null_Address then
-         raise Constraint_Error with "FlatBuffers encode failed for Object_Evidence";
-      end if;
-
-      declare
-         Result : constant String := Copy_From_Buffer (Data, Size_Out);
-      begin
-         Free_Buffer (Data);
-         return Result;
-      end;
-   end To_Binary_Object_Evidence;
-
-   function From_Binary_Object_Evidence (Payload : String) return String is
-      Payload_Bytes : aliased constant String := Payload;
-      Json_C : Interfaces.C.Strings.chars_ptr := Imported_From_Binary_Object_Evidence
-        ((if Payload_Bytes'Length = 0
-          then System.Null_Address
-          else Payload_Bytes (Payload_Bytes'First)'Address),
-         Interfaces.C.size_t (Payload_Bytes'Length));
-   begin
-      if Json_C = Interfaces.C.Strings.Null_Ptr then
-         raise Constraint_Error with "FlatBuffers decode failed for Object_Evidence";
-      end if;
-
-      declare
-         Result : constant String := Interfaces.C.Strings.Value (Json_C);
-      begin
-         Free_Buffer (To_Address (Json_C));
-         return Result;
-      end;
-   end From_Binary_Object_Evidence;
-
-   function To_Binary_Evidence_Requirement (Json : String) return String is
-      Json_C   : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String (Json);
-      Size_Out : aliased Interfaces.C.size_t := 0;
-      Data     : System.Address := Imported_To_Binary_Evidence_Requirement (Json_C, Size_Out'Access);
-   begin
-      Interfaces.C.Strings.Free (Json_C);
-      if Data = System.Null_Address then
-         raise Constraint_Error with "FlatBuffers encode failed for Evidence_Requirement";
-      end if;
-
-      declare
-         Result : constant String := Copy_From_Buffer (Data, Size_Out);
-      begin
-         Free_Buffer (Data);
-         return Result;
-      end;
-   end To_Binary_Evidence_Requirement;
-
-   function From_Binary_Evidence_Requirement (Payload : String) return String is
-      Payload_Bytes : aliased constant String := Payload;
-      Json_C : Interfaces.C.Strings.chars_ptr := Imported_From_Binary_Evidence_Requirement
-        ((if Payload_Bytes'Length = 0
-          then System.Null_Address
-          else Payload_Bytes (Payload_Bytes'First)'Address),
-         Interfaces.C.size_t (Payload_Bytes'Length));
-   begin
-      if Json_C = Interfaces.C.Strings.Null_Ptr then
-         raise Constraint_Error with "FlatBuffers decode failed for Evidence_Requirement";
-      end if;
-
-      declare
-         Result : constant String := Interfaces.C.Strings.Value (Json_C);
-      begin
-         Free_Buffer (To_Address (Json_C));
-         return Result;
-      end;
-   end From_Binary_Evidence_Requirement;
-
    function To_Binary_Geodetic_Position (Msg : Pyramid.Data_Model.Common.Types.Geodetic_Position) return String is
    begin
       return To_Binary_Geodetic_Position (Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg));
@@ -1467,7 +1266,7 @@ package body Pyramid.Services.Tactical_Objects.Flatbuffers_Codec is
 
    function To_Binary_Identifier (Msg : Pyramid.Data_Model.Base.Types.Identifier) return String is
    begin
-      return To_Binary_Identifier (Ada.Strings.Unbounded.To_String (Msg));
+      return To_Binary_Identifier (String'(Write (Create (UTF8_String'(Ada.Strings.Unbounded.To_String (Msg))))));
    end To_Binary_Identifier;
 
    function From_Binary_Identifier
@@ -1485,47 +1284,5 @@ package body Pyramid.Services.Tactical_Objects.Flatbuffers_Codec is
       end;
       return Result;
    end From_Binary_Identifier;
-
-   function To_Binary_Entity_Match (Msg : Pyramid.Services.Tactical_Objects.Wire_Types.Entity_Match) return String is
-   begin
-      return To_Binary_Entity_Match (Pyramid.Services.Tactical_Objects.Json_Codec.To_Json (Msg));
-   end To_Binary_Entity_Match;
-
-   function From_Binary_Entity_Match
-     (Payload : String; Tag : access Pyramid.Services.Tactical_Objects.Wire_Types.Entity_Match) return Pyramid.Services.Tactical_Objects.Wire_Types.Entity_Match
-   is
-      pragma Unreferenced (Tag);
-      Json : constant String := From_Binary_Entity_Match (Payload);
-   begin
-      return Pyramid.Services.Tactical_Objects.Json_Codec.From_Json (Json);
-   end From_Binary_Entity_Match;
-
-   function To_Binary_Object_Evidence (Msg : Pyramid.Services.Tactical_Objects.Wire_Types.Object_Evidence) return String is
-   begin
-      return To_Binary_Object_Evidence (Pyramid.Services.Tactical_Objects.Json_Codec.To_Json (Msg));
-   end To_Binary_Object_Evidence;
-
-   function From_Binary_Object_Evidence
-     (Payload : String; Tag : access Pyramid.Services.Tactical_Objects.Wire_Types.Object_Evidence) return Pyramid.Services.Tactical_Objects.Wire_Types.Object_Evidence
-   is
-      pragma Unreferenced (Tag);
-      Json : constant String := From_Binary_Object_Evidence (Payload);
-   begin
-      return Pyramid.Services.Tactical_Objects.Json_Codec.From_Json (Json);
-   end From_Binary_Object_Evidence;
-
-   function To_Binary_Evidence_Requirement (Msg : Pyramid.Services.Tactical_Objects.Wire_Types.Evidence_Requirement) return String is
-   begin
-      return To_Binary_Evidence_Requirement (Pyramid.Services.Tactical_Objects.Json_Codec.To_Json (Msg));
-   end To_Binary_Evidence_Requirement;
-
-   function From_Binary_Evidence_Requirement
-     (Payload : String; Tag : access Pyramid.Services.Tactical_Objects.Wire_Types.Evidence_Requirement) return Pyramid.Services.Tactical_Objects.Wire_Types.Evidence_Requirement
-   is
-      pragma Unreferenced (Tag);
-      Json : constant String := From_Binary_Evidence_Requirement (Payload);
-   begin
-      return Pyramid.Services.Tactical_Objects.Json_Codec.From_Json (Json);
-   end From_Binary_Evidence_Requirement;
 
 end Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;

@@ -4,7 +4,6 @@
 
 #include "pyramid_services_tactical_objects_consumed.hpp"
 
-#include "pyramid_services_tactical_objects_json_codec.hpp"
 #if __has_include("flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp")
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 #define PYRAMID_HAVE_SERVICE_FLATBUFFERS 1
@@ -32,8 +31,6 @@ using pyramid::data_model::common::toJson;
 using pyramid::data_model::common::fromJson;
 using pyramid::data_model::tactical::toJson;
 using pyramid::data_model::tactical::fromJson;
-namespace wire_types = pyramid::services::tactical_objects::wire_types;
-namespace json_codec = pyramid::services::tactical_objects::json_codec;
 #if PYRAMID_HAVE_SERVICE_FLATBUFFERS
 namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
 #endif
@@ -151,10 +148,10 @@ pcl_port_t* subscribeObjectEvidence(pcl_container_t*   container,
 // ---------------------------------------------------------------------------
 
 pcl_status_t publishObjectEvidence(pcl_port_t*        publisher,
-                                   const wire_types::ObjectEvidence& payload,
+                                   const ObjectDetail& payload,
                                    const char*        content_type)
 {
-    std::string wire_payload = json_codec::toJson(payload);
+    std::string wire_payload;
     if (is_flatbuffers_content_type(content_type)) {
 #if PYRAMID_HAVE_SERVICE_FLATBUFFERS
         wire_payload = flatbuffers_codec::toBinary(payload);
@@ -163,6 +160,8 @@ pcl_status_t publishObjectEvidence(pcl_port_t*        publisher,
 #endif
     } else if (!is_json_content_type(content_type)) {
         return PCL_ERR_INVALID;
+    } else {
+        wire_payload = toJson(payload);
     }
     return publishObjectEvidence(publisher, wire_payload, content_type);
 }

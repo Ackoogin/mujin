@@ -8,7 +8,6 @@ with System;
 with System.Storage_Elements;
 with Pyramid.Data_Model.Common.Types_Codec;  use Pyramid.Data_Model.Common.Types_Codec;
 with Pyramid.Data_Model.Tactical.Types_Codec;  use Pyramid.Data_Model.Tactical.Types_Codec;
-with Pyramid.Services.Tactical_Objects.Json_Codec;
 with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
 
 package body Pyramid.Services.Tactical_Objects.Consumed is
@@ -497,15 +496,15 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
 
    procedure Publish_Object_Evidence
      (Exec    : Pcl_Bindings.Pcl_Executor_Access;
-      Payload : Pyramid.Services.Tactical_Objects.Wire_Types.Object_Evidence;
+      Payload : Object_Detail;
       Content_Type : String := "application/json")
    is
-      Json_Payload : constant String := Pyramid.Services.Tactical_Objects.Json_Codec.To_Json (Payload);
+      Json_Payload : constant String := To_Json (Payload);
       Wire_Payload : constant String :=
         (if Content_Type = "" or else Content_Type = "application/json"
          then Json_Payload
          elsif Content_Type = "application/flatbuffers"
-         then Flatbuffers_Codec.To_Binary_Object_Evidence (Payload)
+         then Flatbuffers_Codec.To_Binary_object_detail (Payload)
          else raise Constraint_Error with "Unsupported content type: " & Content_Type);
    begin
       Publish_Object_Evidence (Exec, Wire_Payload, Content_Type);

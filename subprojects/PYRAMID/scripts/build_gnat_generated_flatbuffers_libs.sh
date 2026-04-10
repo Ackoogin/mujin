@@ -64,7 +64,6 @@ CXXFLAGS=(
 g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_base_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_base_codec.o"
 g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_common_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_common_codec.o"
 g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_tactical_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_tactical_codec.o"
-g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_services_tactical_objects_json_codec.cpp" -o "$OBJ_DIR/pyramid_services_tactical_objects_json_codec.o"
 g++ "${CXXFLAGS[@]}" -c "$GEN_FB_DIR/pyramid_services_tactical_objects_flatbuffers_codec.cpp" -o "$OBJ_DIR/pyramid_services_tactical_objects_flatbuffers_codec.o"
 
 rm -f "$TMP_LIB_FILE"
@@ -73,7 +72,6 @@ ar rcs "$TMP_LIB_FILE" \
   "$OBJ_DIR/pyramid_data_model_base_codec.o" \
   "$OBJ_DIR/pyramid_data_model_common_codec.o" \
   "$OBJ_DIR/pyramid_data_model_tactical_codec.o" \
-  "$OBJ_DIR/pyramid_services_tactical_objects_json_codec.o" \
   "$OBJ_DIR/pyramid_services_tactical_objects_flatbuffers_codec.o"
 
 rm -f "$LIB_FILE"

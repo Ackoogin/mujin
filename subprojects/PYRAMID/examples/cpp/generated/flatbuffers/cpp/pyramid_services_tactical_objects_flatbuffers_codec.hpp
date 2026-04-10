@@ -4,7 +4,6 @@
 #pragma once
 
 #include "pyramid_data_model_types.hpp"
-#include "pyramid_services_tactical_objects_wire_types.hpp"
 #include "pyramid_services_tactical_objects_generated.h"
 
 #include <flatbuffers/flatbuffers.h>
@@ -15,7 +14,6 @@
 namespace pyramid::services::tactical_objects::flatbuffers_codec {
 
 namespace data_model = pyramid::data_model;
-namespace wire_types = pyramid::services::tactical_objects::wire_types;
 
 static constexpr const char* kContentType = "application/flatbuffers";
 
@@ -137,30 +135,6 @@ std::string toBinary(const std::vector<pyramid::data_model::ObjectInterestRequir
 std::vector<pyramid::data_model::ObjectInterestRequirement> fromBinaryObjectInterestRequirementArray(const void* data, size_t size);
 inline std::vector<pyramid::data_model::ObjectInterestRequirement> fromBinaryObjectInterestRequirementArray(const std::string& s) {
     return fromBinaryObjectInterestRequirementArray(s.data(), s.size());
-}
-
-std::string toBinary(const wire_types::EntityMatch& msg);
-wire_types::EntityMatch fromBinaryEntityMatch(const void* data, size_t size);
-inline wire_types::EntityMatch fromBinaryEntityMatch(const std::string& s) {
-    return fromBinaryEntityMatch(s.data(), s.size());
-}
-
-std::string toBinary(const wire_types::EntityMatchArray& msg);
-wire_types::EntityMatchArray fromBinaryEntityMatchArray(const void* data, size_t size);
-inline wire_types::EntityMatchArray fromBinaryEntityMatchArray(const std::string& s) {
-    return fromBinaryEntityMatchArray(s.data(), s.size());
-}
-
-std::string toBinary(const wire_types::ObjectEvidence& msg);
-wire_types::ObjectEvidence fromBinaryObjectEvidence(const void* data, size_t size);
-inline wire_types::ObjectEvidence fromBinaryObjectEvidence(const std::string& s) {
-    return fromBinaryObjectEvidence(s.data(), s.size());
-}
-
-std::string toBinary(const wire_types::EvidenceRequirement& msg);
-wire_types::EvidenceRequirement fromBinaryEvidenceRequirement(const void* data, size_t size);
-inline wire_types::EvidenceRequirement fromBinaryEvidenceRequirement(const std::string& s) {
-    return fromBinaryEvidenceRequirement(s.data(), s.size());
 }
 
 } // namespace pyramid::services::tactical_objects::flatbuffers_codec

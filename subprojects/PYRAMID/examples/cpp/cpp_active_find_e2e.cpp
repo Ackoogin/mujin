@@ -9,7 +9,7 @@
 // Architecture: main (this) > component logic > service binding > PCL
 //
 // Business/test logic (what to request, what to assert) is authored here.
-// All JSON serialisation is handled by the generated JsonCodec.
+// Serialisation is handled by the generated proto-native codecs.
 //
 // Usage: cpp_active_find_e2e [--host 127.0.0.1] [--port 19123]
 

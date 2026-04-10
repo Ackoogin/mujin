@@ -5,7 +5,6 @@
 with Pyramid.Data_Model.Base.Types;
 with Pyramid.Data_Model.Common.Types;
 with Pyramid.Data_Model.Tactical.Types;
-with Pyramid.Services.Tactical_Objects.Wire_Types;
 
 package Pyramid.Services.Tactical_Objects.Flatbuffers_Codec is
    Content_Type : constant String := "application/flatbuffers";
@@ -129,29 +128,5 @@ package Pyramid.Services.Tactical_Objects.Flatbuffers_Codec is
 
    function To_Binary_Object_Interest_Requirement_Array (Json : String) return String;
    function From_Binary_Object_Interest_Requirement_Array (Payload : String) return String;
-
-   function To_Binary_Entity_Match (Json : String) return String;
-   function To_Binary_Entity_Match (Msg : Pyramid.Services.Tactical_Objects.Wire_Types.Entity_Match) return String;
-   function From_Binary_Entity_Match (Payload : String) return String;
-
-   function From_Binary_Entity_Match
-     (Payload : String; Tag : access Pyramid.Services.Tactical_Objects.Wire_Types.Entity_Match) return Pyramid.Services.Tactical_Objects.Wire_Types.Entity_Match;
-
-   function To_Binary_Entity_Match_Array (Json : String) return String;
-   function From_Binary_Entity_Match_Array (Payload : String) return String;
-
-   function To_Binary_Object_Evidence (Json : String) return String;
-   function To_Binary_Object_Evidence (Msg : Pyramid.Services.Tactical_Objects.Wire_Types.Object_Evidence) return String;
-   function From_Binary_Object_Evidence (Payload : String) return String;
-
-   function From_Binary_Object_Evidence
-     (Payload : String; Tag : access Pyramid.Services.Tactical_Objects.Wire_Types.Object_Evidence) return Pyramid.Services.Tactical_Objects.Wire_Types.Object_Evidence;
-
-   function To_Binary_Evidence_Requirement (Json : String) return String;
-   function To_Binary_Evidence_Requirement (Msg : Pyramid.Services.Tactical_Objects.Wire_Types.Evidence_Requirement) return String;
-   function From_Binary_Evidence_Requirement (Payload : String) return String;
-
-   function From_Binary_Evidence_Requirement
-     (Payload : String; Tag : access Pyramid.Services.Tactical_Objects.Wire_Types.Evidence_Requirement) return Pyramid.Services.Tactical_Objects.Wire_Types.Evidence_Requirement;
 
 end Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;

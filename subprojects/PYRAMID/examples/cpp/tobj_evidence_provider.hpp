@@ -2,14 +2,14 @@
 //
 // Evidence provider component: subscribes to evidence_requirements,
 // publishes typed observations via standard.object_evidence.
-// Uses generated service bindings and JsonCodec for all serialisation.
+// Uses generated service bindings and proto-native data-model codecs.
 //
 // Architecture: main > TobjEvidenceProvider (this) > service binding > PCL
 #pragma once
 
 #include "generated/pyramid_services_tactical_objects_provided.hpp"
 #include "generated/pyramid_services_tactical_objects_consumed.hpp"
-#include "generated/pyramid_services_tactical_objects_json_codec.hpp"
+#include "generated/pyramid_data_model_tactical_codec.hpp"
 
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
@@ -19,8 +19,9 @@ namespace tobj_example {
 
 namespace Provided  = pyramid::services::tactical_objects::provided;
 namespace Consumed  = pyramid::services::tactical_objects::consumed;
-namespace JsonCodec = pyramid::services::tactical_objects::json_codec;
+namespace TacticalCodec = pyramid::data_model::tactical;
 using namespace pyramid::services::tactical_objects;
+using namespace pyramid::data_model;
 
 /// \brief Shared state visible to the e2e driver.
 struct EvidenceProviderState {

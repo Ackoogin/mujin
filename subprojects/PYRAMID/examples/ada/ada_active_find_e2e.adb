@@ -9,7 +9,7 @@
 --  Architecture: main (this) > component logic > service binding > PCL
 --
 --  Business/test logic (what to request, what to assert) is authored here.
---  All JSON serialisation is handled by the generated Json_Codec package.
+--  Serialisation is handled by the generated proto-native codecs.
 --
 --  Usage: ada_active_find_e2e --host 127.0.0.1 --port 19123
 
@@ -173,7 +173,7 @@ begin
 
    -- -- Send create_requirement (ActiveFind via bridge) ------------------------
    --
-   --  Business logic: request HOSTILE entities in SEA_SURFACE dimension within
+   --  Business logic: request SEA_SURFACE entities within
    --  a bounding box covering the English Channel (50–52°N, 1°W–1°E).
    --  Typed enum values avoid stringly-typed JSON construction here.
 
@@ -217,7 +217,7 @@ begin
         Boolean'Image (Tobj_Evidence_Provider.Observation_Sent));
    Log ("  Standard entity matches:       " &
         Natural'Image (Tobj_Interest_Client.Matches_Received));
-   Log ("  Found HOSTILE entity:          " &
+   Log ("  Found matching entity:         " &
         Boolean'Image (Tobj_Interest_Client.Found_Hostile_Entity));
 
    if Tobj_Evidence_Provider.Evidence_Req_Received
@@ -226,7 +226,7 @@ begin
      and then Tobj_Interest_Client.Found_Hostile_Entity
    then
       Log ("PASS: Standard ActiveFind flow — evidence provider drove entity " &
-           "creation via bridge, client received HOSTILE via standard.entity_matches");
+           "creation via bridge, client received canonical standard.entity_matches");
       Ada.Command_Line.Set_Exit_Status (0);
    else
       Log ("FAIL: Standard ActiveFind flow incomplete");

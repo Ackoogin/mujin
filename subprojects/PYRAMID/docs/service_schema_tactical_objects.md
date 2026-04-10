@@ -32,6 +32,23 @@ drive transport/codec generation once the MBSE model has been extracted. The
 answer is generated `.proto`, with ROS2, FlatBuffers, JSON, PCL, and similar
 concerns hidden behind generated layers.
 
+### Current implementation status
+
+The tactical implementation is part-way through that direction:
+
+- generated `.proto` is now the canonical source for the tactical RPC binding
+  surface
+- Ada and C++ tactical service bindings are generated from proto-native
+  request/response types
+- runtime codec selection for tactical bindings works for JSON and
+  FlatBuffers
+- C++ FlatBuffers uses generated `.fbs` plus `flatc`
+- standard-bridge topic compatibility now uses the canonical proto-derived
+  PYRAMID payload types
+- Ada FlatBuffers is typed at the generated API surface, but the current
+  backend implementation still crosses a generated C shim that converts
+  through JSON internally
+
 ### Prior Art: SysML-to-Code Pipeline
 
 An existing code generation pipeline transforms SysML/UML models (XMI from MagicDraw/Cameo) into multiple target languages. This pipeline already establishes key patterns that any service schema option must accommodate:
@@ -932,9 +949,8 @@ Phase 6 — Validate end-to-end:
 - **No protobuf binary wire format requirement.** Transports may use protobuf
   binary encoding if convenient, but this is a transport-layer decision, not a
   contract-layer one.
-- **No bridge schema as a competing source of truth.** Helper schemas such as
-  `json_schema.py` may exist for compatibility adapters, but they must not
-  redefine the core service contract.
+- **No bridge schema as a competing source of truth.** Compatibility adapters
+  may exist, but they must not redefine the core service contract.
 - **No backward compatibility with existing tactical objects wire format.** The schema is free to change to match codex semantics.
 
 ---

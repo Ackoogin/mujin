@@ -11,8 +11,7 @@
 --    4. Msg_To_String utility for PCL message payloads
 --
 --  RPC request/response payloads use the proto-native data model.
---  Bridge-topic adapter codecs, when generated, live in the companion
---  Pyramid.Services.Tactical_Objects.Json_Codec package.
+--  Standard topic payloads also use canonical proto-derived types.
 
 with Pyramid.Data_Model.Base.Types;  use Pyramid.Data_Model.Base.Types;
 with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;

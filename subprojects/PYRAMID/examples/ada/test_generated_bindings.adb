@@ -129,13 +129,18 @@ begin
              Resp_Buf /= System.Null_Address or Resp_Size = 0);
    end;
 
-   --  9. Backend flatbuffers round-trip for a bridge-topic payload
+   --  9. Backend flatbuffers round-trip for a proto-native payload
    declare
-      Payload : constant String := "{""policy"":""DATA_POLICY_QUERY""}";
-      Encoded : constant String := Flat.To_Binary_Evidence_Requirement (Payload);
-      Decoded : constant String := Flat.From_Binary_Evidence_Requirement (Encoded);
+      Req : Object_Evidence_Requirement;
    begin
-      Check ("Flatbuffers bridge payload round-trip", Decoded = Payload);
+      Req.Policy := Policy_Query;
+      declare
+         Encoded : constant String := Flat.To_Binary_Object_Evidence_Requirement (Req);
+         Decoded : constant Object_Evidence_Requirement :=
+           Flat.From_Binary_Object_Evidence_Requirement (Encoded, null);
+      begin
+         Check ("Flatbuffers proto payload round-trip", Decoded.Policy = Policy_Query);
+      end;
    end;
 
    --  10. Dispatch round-trip — CreateRequirement over native flatbuffers

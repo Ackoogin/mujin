@@ -1,4 +1,3 @@
-#include "pyramid_services_tactical_objects_json_codec.hpp"
 #include "pyramid_services_tactical_objects_provided.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
@@ -19,12 +18,10 @@
 
 namespace {
 
-namespace JsonCodec = pyramid::services::tactical_objects::json_codec;
 namespace FlatCodec = pyramid::services::tactical_objects::flatbuffers_codec;
 namespace Provided = pyramid::services::tactical_objects::provided;
 namespace TacticalCodec = pyramid::data_model::tactical;
 namespace Common = pyramid::data_model::common;
-namespace WireTypes = pyramid::services::tactical_objects::wire_types;
 using namespace pyramid::data_model;
 
 struct ClientState {
@@ -40,16 +37,23 @@ void onEntityMatches(pcl_container_t*, const pcl_msg_t* msg, void* user_data) {
     return;
   }
 
-  WireTypes::EntityMatchArray matches;
+  std::vector<ObjectMatch> matches;
   std::string payload;
   try {
     if (msg->type_name &&
         std::strcmp(msg->type_name, FlatCodec::kContentType) == 0) {
-      matches = FlatCodec::fromBinaryEntityMatchArray(msg->data, msg->size);
+      matches = FlatCodec::fromBinaryObjectMatchArray(msg->data, msg->size);
       payload = "<flatbuffers>";
     } else {
       payload.assign(static_cast<const char*>(msg->data), msg->size);
-      matches = JsonCodec::entityMatchesFromJson(payload);
+      auto arr = nlohmann::json::parse(payload);
+      if (!arr.is_array()) {
+        return;
+      }
+      for (const auto& item : arr) {
+        matches.push_back(TacticalCodec::fromJson(
+            item.dump(), static_cast<ObjectMatch*>(nullptr)));
+      }
     }
   } catch (...) {
     return;

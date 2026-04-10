@@ -5,8 +5,7 @@
 --
 --  Architecture:
 --    component logic (this)
---    -> proto-native tactical codec for RPC payloads
---    -> bridge Json_Codec for standard topic adapters
+--    -> proto-native tactical codecs
 --    -> service binding
 --    -> PCL
 
@@ -33,7 +32,7 @@ package Tobj_Interest_Client is
       User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
    pragma Convention (C, On_Configure);
 
-   --  Subscriber callback for standard.entity_matches (JSON array)
+   --  Subscriber callback for standard.entity_matches (canonical Object_Match array)
    procedure On_Entity_Matches
      (Container : Pcl_Bindings.Pcl_Container_Access;
       Msg       : access constant Pcl_Bindings.Pcl_Msg;
@@ -47,7 +46,7 @@ package Tobj_Interest_Client is
    pragma Convention (C, On_Create_Requirement_Response);
 
    --  Send a create_requirement request.
-   --  Takes typed enum values — JSON serialisation is done by Json_Codec.
+   --  Takes typed enum values. Serialisation is handled by the generated codecs.
    procedure Send_Create_Requirement
      (Exec        : Pcl_Bindings.Pcl_Executor_Access;
       Policy      : Pyramid.Data_Model.Common.Types.Data_Policy;

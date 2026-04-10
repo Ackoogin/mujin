@@ -5,7 +5,7 @@ FlatBuffers Codec Backend
 Generates:
   1. .fbs schema files from proto definitions (proto message -> FlatBuffers table)
   2. C++ wrapper headers for proto-native flatbuffer artefacts
-  3. Tactical service-wire FlatBuffers codec artefacts from json_schema.py
+  3. Proto-native service FlatBuffers codec artefacts
 
 Service-wire codecs are generated against real `flatc` output.  The service
 runtime still exposes a generic `wrapPayload` / `unwrapPayload` surface for
@@ -23,7 +23,6 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import codec_backends
-import json_schema as service_schema
 from proto_parser import (
     ProtoTypeIndex, ProtoFile, ProtoField,
     camel_to_snake, _PROTO_SCALARS,
@@ -36,7 +35,6 @@ _TACTICAL_SERVICE_PACKAGES = frozenset({
 })
 
 _SERVICE_FILE_BASE = 'pyramid_services_tactical_objects'
-_SERVICE_WIRE_HEADER = 'pyramid_services_tactical_objects_wire_types.hpp'
 _SERVICE_GENERATED_HEADER = _SERVICE_FILE_BASE + '_generated.h'
 _SERVICE_CODEC_NS = 'pyramid::services::tactical_objects::flatbuffers_codec'
 _SERVICE_ADA_CODEC_PKG = 'Pyramid.Services.Tactical_Objects.Flatbuffers_Codec'
@@ -99,7 +97,6 @@ class ServiceCodecGroup:
     message_specs: List[FlatMessageSpec]
     array_specs: List[FlatArraySpec]
     enum_specs: List
-    topic_schemas: List
 
 
 def _service_group_key(package: str) -> Optional[str]:
@@ -405,7 +402,6 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
             ))
 
     fbs_namespace, cpp_base_ns, file_base, ada_codec_pkg, ada_codec_file = _service_group_names(base_package)
-    topic_schemas = list(service_schema.ALL_SCHEMAS) if 'tactical_objects' in base_package else []
     return ServiceCodecGroup(
         base_package=base_package,
         file_base=file_base,
@@ -419,7 +415,6 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
         message_specs=ordered_messages,
         array_specs=stream_specs,
         enum_specs=ordered_enums,
-        topic_schemas=topic_schemas,
     )
 
 
@@ -450,54 +445,6 @@ def _fbs_type(field: ProtoField, index: ProtoTypeIndex) -> str:
 
 def _has_tactical_service_wire(index: ProtoTypeIndex) -> bool:
     return any(pf.package in _TACTICAL_SERVICE_PACKAGES for pf in index.files)
-
-
-def _service_enum_specs() -> Iterable[service_schema.EnumSpec]:
-    seen = set()
-    for spec in service_schema.ENUM_SPECS.values():
-        if spec.cpp_type in seen:
-            continue
-        seen.add(spec.cpp_type)
-        yield spec
-
-
-def _service_field_fbs_type(field: service_schema.Field) -> str:
-    if field.kind in service_schema.ENUM_SPECS:
-        return service_schema.ENUM_SPECS[field.kind].cpp_type
-    return {
-        service_schema.FieldKind.STRING: 'string',
-        service_schema.FieldKind.IDENTIFIER: 'string',
-        service_schema.FieldKind.DOUBLE: 'double',
-        service_schema.FieldKind.BOOL: 'bool',
-    }[field.kind]
-
-
-def _service_encode_stmt(field: service_schema.Field) -> str:
-    member = f'msg.{field.name}'
-    if field.kind in service_schema.ENUM_SPECS:
-        return f'w.i32(static_cast<std::int32_t>({member}));'
-    if field.kind in (service_schema.FieldKind.STRING,
-                      service_schema.FieldKind.IDENTIFIER):
-        return f'w.str({member});'
-    if field.kind == service_schema.FieldKind.DOUBLE:
-        return f'w.f64({member});'
-    return f'w.u8({member});'
-
-
-def _service_decode_stmt(field: service_schema.Field) -> str:
-    member = f'msg.{field.name}'
-    if field.kind in service_schema.ENUM_SPECS:
-        enum_type = f'pyramid::data_model::{field.cpp_type}'
-        return (
-            'if (!r.i32(tmp_i32)) return false;\n'
-            f'    {member} = static_cast<{enum_type}>(tmp_i32);'
-        )
-    if field.kind in (service_schema.FieldKind.STRING,
-                      service_schema.FieldKind.IDENTIFIER):
-        return f'if (!r.str({member})) return false;'
-    if field.kind == service_schema.FieldKind.DOUBLE:
-        return f'if (!r.f64({member})) return false;'
-    return f'if (!r.u8({member})) return false;'
 
 
 def _schema_type_for_field(field: FlatFieldSpec) -> str:
@@ -668,8 +615,6 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
         with open(path, 'w', encoding='utf-8') as f:
             f.write('// Auto-generated service FlatBuffers schema\n')
             f.write(f'// Generated from proto service closure for {group.base_package}\n')
-            if group.topic_schemas:
-                f.write('// Bridge-topic adapter tables are included for compatibility.\n')
             f.write('\n')
             f.write(f'namespace {group.fbs_namespace};\n\n')
 
@@ -695,16 +640,6 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                 f.write(f'  items:{_schema_type_for_array(array_spec)};\n')
                 f.write('}\n\n')
 
-            for schema_def in group.topic_schemas:
-                f.write(f'table {schema_def.cpp_name} {{\n')
-                for field in schema_def.fields:
-                    f.write(f'  {field.name}:{_service_field_fbs_type(field)};\n')
-                f.write('}\n\n')
-                if schema_def.is_array_response:
-                    f.write(f'table {schema_def.cpp_name}ArrayHolder {{\n')
-                    f.write(f'  items:[{schema_def.cpp_name}];\n')
-                    f.write('}\n\n')
-
     def _write_service_cpp_header(self, path: Path, group: ServiceCodecGroup):
         with open(path, 'w', encoding='utf-8') as f:
             f.write('// Auto-generated service FlatBuffers codec\n')
@@ -712,8 +647,6 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write(f'// Generated from proto service closure for {group.base_package}\n')
             f.write('#pragma once\n\n')
             f.write('#include "pyramid_data_model_types.hpp"\n')
-            if group.topic_schemas:
-                f.write(f'#include "{group.wire_header}"\n')
             f.write(f'#include "{group.generated_header}"\n\n')
             f.write('#include <flatbuffers/flatbuffers.h>\n')
             f.write('#include <cstddef>\n')
@@ -721,8 +654,6 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write('#include <vector>\n\n')
             f.write(f'namespace {group.cpp_codec_ns} {{\n\n')
             f.write('namespace data_model = pyramid::data_model;\n')
-            if group.topic_schemas:
-                f.write(f'namespace wire_types = {group.cpp_base_ns}::wire_types;\n')
             f.write('\n')
             f.write('static constexpr const char* kContentType = "application/flatbuffers";\n\n')
 
@@ -741,21 +672,6 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                 f.write(f'    return fromBinary{array_spec.name}(s.data(), s.size());\n')
                 f.write('}\n\n')
 
-            for schema_def in group.topic_schemas:
-                cpp_name = schema_def.cpp_name
-                f.write(f'std::string toBinary(const wire_types::{cpp_name}& msg);\n')
-                f.write(f'wire_types::{cpp_name} fromBinary{cpp_name}(const void* data, size_t size);\n')
-                f.write(f'inline wire_types::{cpp_name} fromBinary{cpp_name}(const std::string& s) {{\n')
-                f.write(f'    return fromBinary{cpp_name}(s.data(), s.size());\n')
-                f.write('}\n\n')
-                if schema_def.is_array_response:
-                    alias_name = cpp_name + 'Array'
-                    f.write(f'std::string toBinary(const wire_types::{alias_name}& msg);\n')
-                    f.write(f'wire_types::{alias_name} fromBinary{alias_name}(const void* data, size_t size);\n')
-                    f.write(f'inline wire_types::{alias_name} fromBinary{alias_name}(const std::string& s) {{\n')
-                    f.write(f'    return fromBinary{alias_name}(s.data(), s.size());\n')
-                    f.write('}\n\n')
-
             f.write(f'}} // namespace {group.cpp_codec_ns}\n')
 
     def _write_service_cpp_impl(self, path: Path, group: ServiceCodecGroup):
@@ -764,8 +680,6 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write(f'#include "{group.file_base}_flatbuffers_codec.hpp"\n\n')
             f.write('#include "pyramid_data_model_common_codec.hpp"\n')
             f.write('#include "pyramid_data_model_tactical_codec.hpp"\n')
-            if group.topic_schemas:
-                f.write(f'#include "{group.file_base}_json_codec.hpp"\n')
             f.write('#include <cstdlib>\n')
             f.write('#include <cstdint>\n')
             f.write('#include <cstring>\n')
@@ -796,10 +710,8 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write('    return flatbuffers::GetRoot<TableT>(bytes);\n')
             f.write('}\n\n')
             self._emit_service_cpp_proto_helpers(f, group)
-            self._emit_service_cpp_topic_helpers(f, group)
             f.write('} // namespace\n\n')
             self._emit_service_cpp_proto_exports(f, group)
-            self._emit_service_cpp_topic_exports(f, group)
             f.write(f'}} // namespace {group.cpp_codec_ns}\n')
             self._emit_service_cpp_json_bridge_exports(f, group)
 
@@ -923,52 +835,6 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write('    return out;\n')
             f.write('}\n\n')
 
-    def _emit_service_cpp_topic_helpers(self, f, group: ServiceCodecGroup):
-        for schema_def in group.topic_schemas:
-            cpp_name = schema_def.cpp_name
-            f.write(f'fbs::{cpp_name}T to_fb(const wire_types::{cpp_name}& msg) {{\n')
-            f.write(f'    fbs::{cpp_name}T out{{}};\n')
-            for field in schema_def.fields:
-                if field.kind in service_schema.ENUM_SPECS:
-                    f.write(f'    out.{field.name} = static_cast<fbs::{field.cpp_type}>(msg.{field.name});\n')
-                else:
-                    f.write(f'    out.{field.name} = msg.{field.name};\n')
-            f.write('    return out;\n')
-            f.write('}\n\n')
-
-            f.write(f'wire_types::{cpp_name} from_fb(const fbs::{cpp_name}T& msg, wire_types::{cpp_name}* /*tag*/) {{\n')
-            f.write(f'    wire_types::{cpp_name} out{{}};\n')
-            for field in schema_def.fields:
-                if field.kind in service_schema.ENUM_SPECS:
-                    f.write(f'    out.{field.name} = static_cast<pyramid::data_model::{field.cpp_type}>(msg.{field.name});\n')
-                else:
-                    f.write(f'    out.{field.name} = msg.{field.name};\n')
-            f.write('    return out;\n')
-            f.write('}\n\n')
-
-            if schema_def.is_array_response:
-                alias_name = cpp_name + 'Array'
-                holder_name = cpp_name + 'ArrayHolder'
-                f.write(f'fbs::{holder_name}T to_fb(const wire_types::{alias_name}& msg) {{\n')
-                f.write(f'    fbs::{holder_name}T out{{}};\n')
-                f.write('    out.items.reserve(msg.size());\n')
-                f.write('    for (const auto& item : msg) {\n')
-                f.write(f'        out.items.emplace_back(std::make_unique<fbs::{cpp_name}T>(to_fb(item)));\n')
-                f.write('    }\n')
-                f.write('    return out;\n')
-                f.write('}\n\n')
-
-                f.write(f'wire_types::{alias_name} from_fb(const fbs::{holder_name}T& msg) {{\n')
-                f.write(f'    wire_types::{alias_name} out{{}};\n')
-                f.write('    out.reserve(msg.items.size());\n')
-                f.write('    for (const auto& item : msg.items) {\n')
-                f.write('        if (item) {\n')
-                f.write(f'            out.push_back(from_fb(*item, static_cast<wire_types::{cpp_name}*>(nullptr)));\n')
-                f.write('        }\n')
-                f.write('    }\n')
-                f.write('    return out;\n')
-                f.write('}\n\n')
-
     def _emit_service_cpp_proto_exports(self, f, group: ServiceCodecGroup):
         for msg in group.message_specs:
             short = msg.cpp_type.split('::')[-1]
@@ -996,37 +862,6 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write('    root->UnPackTo(&object);\n')
             f.write('    return from_fb(object);\n')
             f.write('}\n\n')
-
-    def _emit_service_cpp_topic_exports(self, f, group: ServiceCodecGroup):
-        for schema_def in group.topic_schemas:
-            cpp_name = schema_def.cpp_name
-            f.write(f'std::string toBinary(const wire_types::{cpp_name}& msg) {{\n')
-            f.write('    flatbuffers::FlatBufferBuilder builder(256);\n')
-            f.write('    auto object = to_fb(msg);\n')
-            f.write(f'    return finish_buffer(builder, fbs::{cpp_name}::Pack(builder, &object));\n')
-            f.write('}\n\n')
-
-            f.write(f'wire_types::{cpp_name} fromBinary{cpp_name}(const void* data, size_t size) {{\n')
-            f.write(f'    auto* root = verified_root<fbs::{cpp_name}>(data, size, "{cpp_name}");\n')
-            f.write(f'    fbs::{cpp_name}T object{{}};\n')
-            f.write('    root->UnPackTo(&object);\n')
-            f.write(f'    return from_fb(object, static_cast<wire_types::{cpp_name}*>(nullptr));\n')
-            f.write('}\n\n')
-
-            if schema_def.is_array_response:
-                alias_name = cpp_name + 'Array'
-                holder_name = cpp_name + 'ArrayHolder'
-                f.write(f'std::string toBinary(const wire_types::{alias_name}& msg) {{\n')
-                f.write('    flatbuffers::FlatBufferBuilder builder(256);\n')
-                f.write('    auto object = to_fb(msg);\n')
-                f.write(f'    return finish_buffer(builder, fbs::{holder_name}::Pack(builder, &object));\n')
-                f.write('}\n\n')
-                f.write(f'wire_types::{alias_name} fromBinary{alias_name}(const void* data, size_t size) {{\n')
-                f.write(f'    auto* root = verified_root<fbs::{holder_name}>(data, size, "{alias_name}");\n')
-                f.write(f'    fbs::{holder_name}T object{{}};\n')
-                f.write('    root->UnPackTo(&object);\n')
-                f.write('    return from_fb(object);\n')
-                f.write('}\n\n')
 
     def _ffi_symbol(self, group: ServiceCodecGroup, short_name: str, direction: str) -> str:
         return f'{group.file_base}_{short_name}_{direction}_json'
@@ -1149,76 +984,6 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write('    }\n')
             f.write('}\n\n')
 
-        for schema_def in group.topic_schemas:
-            short = schema_def.cpp_name
-            cpp_type = f'wire_types::{short}'
-            to_name = self._ffi_symbol(group, short, 'to_flatbuffer')
-            from_name = self._ffi_symbol(group, short, 'from_flatbuffer')
-            decode_expr = f'{group.cpp_base_ns}::json_codec::{short[0].lower() + short[1:]}FromJson(std::string(json ? json : ""))'
-            encode_expr = f'{group.cpp_base_ns}::json_codec::toJson(value)'
-            f.write(f'void* {to_name}(const char* json, size_t* size_out) {{\n')
-            f.write('    if (size_out) *size_out = 0;\n')
-            f.write('    try {\n')
-            f.write(f'        auto value = {decode_expr};\n')
-            f.write(f'        auto payload = {group.cpp_codec_ns}::toBinary(value);\n')
-            f.write('        if (size_out) *size_out = payload.size();\n')
-            f.write('        if (payload.empty()) return nullptr;\n')
-            f.write('        void* out = std::malloc(payload.size());\n')
-            f.write('        if (!out) return nullptr;\n')
-            f.write('        std::memcpy(out, payload.data(), payload.size());\n')
-            f.write('        return out;\n')
-            f.write('    } catch (...) {\n')
-            f.write('        return nullptr;\n')
-            f.write('    }\n')
-            f.write('}\n\n')
-            f.write(f'char* {from_name}(const void* data, size_t size) {{\n')
-            f.write('    try {\n')
-            f.write(f'        auto value = {group.cpp_codec_ns}::fromBinary{short}(data, size);\n')
-            f.write(f'        auto json = {encode_expr};\n')
-            f.write('        char* out = static_cast<char*>(std::malloc(json.size() + 1));\n')
-            f.write('        if (!out) return nullptr;\n')
-            f.write('        std::memcpy(out, json.c_str(), json.size() + 1);\n')
-            f.write('        return out;\n')
-            f.write('    } catch (...) {\n')
-            f.write('        return nullptr;\n')
-            f.write('    }\n')
-            f.write('}\n\n')
-            if schema_def.is_array_response:
-                alias_name = short + 'Array'
-                to_name = self._ffi_symbol(group, alias_name, 'to_flatbuffer')
-                from_name = self._ffi_symbol(group, alias_name, 'from_flatbuffer')
-                f.write(f'void* {to_name}(const char* json, size_t* size_out) {{\n')
-                f.write('    if (size_out) *size_out = 0;\n')
-                f.write('    try {\n')
-                f.write(f'        auto value = {group.cpp_base_ns}::json_codec::entityMatchesFromJson(std::string(json ? json : "[]"));\n')
-                f.write(f'        auto payload = {group.cpp_codec_ns}::toBinary(value);\n')
-                f.write('        if (size_out) *size_out = payload.size();\n')
-                f.write('        if (payload.empty()) return nullptr;\n')
-                f.write('        void* out = std::malloc(payload.size());\n')
-                f.write('        if (!out) return nullptr;\n')
-                f.write('        std::memcpy(out, payload.data(), payload.size());\n')
-                f.write('        return out;\n')
-                f.write('    } catch (...) {\n')
-                f.write('        return nullptr;\n')
-                f.write('    }\n')
-                f.write('}\n\n')
-                f.write(f'char* {from_name}(const void* data, size_t size) {{\n')
-                f.write('    try {\n')
-                f.write(f'        auto values = {group.cpp_codec_ns}::fromBinary{alias_name}(data, size);\n')
-                f.write('        nlohmann::json arr = nlohmann::json::array();\n')
-                f.write('        for (const auto& item : values) {\n')
-                f.write(f'            arr.push_back(nlohmann::json::parse({group.cpp_base_ns}::json_codec::toJson(item)));\n')
-                f.write('        }\n')
-                f.write('        auto json = arr.dump();\n')
-                f.write('        char* out = static_cast<char*>(std::malloc(json.size() + 1));\n')
-                f.write('        if (!out) return nullptr;\n')
-                f.write('        std::memcpy(out, json.c_str(), json.size() + 1);\n')
-                f.write('        return out;\n')
-                f.write('    } catch (...) {\n')
-                f.write('        return nullptr;\n')
-                f.write('    }\n')
-                f.write('}\n\n')
-
         f.write('} // extern "C"\n')
 
     # -- Ada thin binding -----------------------------------------------------
@@ -1258,8 +1023,6 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write('--  Backend: flatbuffers\n')
             f.write(f'--  Generated from proto service closure for {group.base_package}\n\n')
             type_withs = {self._ada_type_pkg_for_message(msg) for msg in group.message_specs}
-            if group.topic_schemas:
-                type_withs.add(self._service_wire_types_pkg(group))
             for pkg in sorted(type_withs):
                 f.write(f'with {pkg};\n')
             if type_withs:
@@ -1281,19 +1044,6 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                 f.write(f'   function To_Binary_{suffix} (Json : String) return String;\n')
                 f.write(f'   function From_Binary_{suffix} (Payload : String) return String;\n\n')
 
-            for schema_def in group.topic_schemas:
-                suffix = camel_to_snake(schema_def.cpp_name)
-                wire_type = f'{self._service_wire_types_pkg(group)}.{camel_to_snake(schema_def.cpp_name)}'
-                f.write(f'   function To_Binary_{suffix} (Json : String) return String;\n')
-                f.write(f'   function To_Binary_{suffix} (Msg : {wire_type}) return String;\n')
-                f.write(f'   function From_Binary_{suffix} (Payload : String) return String;\n\n')
-                f.write(f'   function From_Binary_{suffix}\n')
-                f.write(f'     (Payload : String; Tag : access {wire_type}) return {wire_type};\n\n')
-                if schema_def.is_array_response:
-                    alias_suffix = camel_to_snake(schema_def.cpp_name + 'Array')
-                    f.write(f'   function To_Binary_{alias_suffix} (Json : String) return String;\n')
-                    f.write(f'   function From_Binary_{alias_suffix} (Payload : String) return String;\n\n')
-
             f.write(f'end {group.ada_codec_pkg};\n')
 
     def _write_service_ada_body(self, path: Path, group: ServiceCodecGroup):
@@ -1303,11 +1053,6 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             specs.append((camel_to_snake(short), short))
         for array_spec in group.array_specs:
             specs.append((camel_to_snake(array_spec.name), array_spec.name))
-        for schema_def in group.topic_schemas:
-            specs.append((camel_to_snake(schema_def.cpp_name), schema_def.cpp_name))
-            if schema_def.is_array_response:
-                alias_name = schema_def.cpp_name + 'Array'
-                specs.append((camel_to_snake(alias_name), alias_name))
 
         with open(path, 'w', encoding='utf-8') as f:
             f.write('--  Auto-generated service FlatBuffers codec\n\n')
@@ -1319,8 +1064,6 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write('with System;\n')
             codec_withs = {self._ada_codec_pkg_for_message(msg) for msg in group.message_specs
                            if self._ada_codec_pkg_for_message(msg)}
-            if group.topic_schemas:
-                codec_withs.add(self._service_json_codec_pkg(group))
             for pkg in sorted(codec_withs):
                 f.write(f'with {pkg};\n')
             f.write('\n')
@@ -1436,29 +1179,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                 f.write('      return Result;\n')
                 f.write(f'   end From_Binary_{suffix};\n\n')
 
-            for schema_def in group.topic_schemas:
-                suffix = camel_to_snake(schema_def.cpp_name)
-                wire_type = f'{self._service_wire_types_pkg(group)}.{camel_to_snake(schema_def.cpp_name)}'
-                f.write(f'   function To_Binary_{suffix} (Msg : {wire_type}) return String is\n')
-                f.write('   begin\n')
-                f.write(f'      return To_Binary_{suffix} ({self._service_json_codec_pkg(group)}.To_Json (Msg));\n')
-                f.write(f'   end To_Binary_{suffix};\n\n')
-                f.write(f'   function From_Binary_{suffix}\n')
-                f.write(f'     (Payload : String; Tag : access {wire_type}) return {wire_type}\n')
-                f.write('   is\n')
-                f.write('      pragma Unreferenced (Tag);\n')
-                f.write(f'      Json : constant String := From_Binary_{suffix} (Payload);\n')
-                f.write('   begin\n')
-                f.write(f'      return {self._service_json_codec_pkg(group)}.From_Json (Json);\n')
-                f.write(f'   end From_Binary_{suffix};\n\n')
-
             f.write(f'end {group.ada_codec_pkg};\n')
-
-    def _service_wire_types_pkg(self, group: ServiceCodecGroup) -> str:
-        return '.'.join(group.ada_codec_pkg.split('.')[:-1] + ['Wire_Types'])
-
-    def _service_json_codec_pkg(self, group: ServiceCodecGroup) -> str:
-        return '.'.join(group.ada_codec_pkg.split('.')[:-1] + ['Json_Codec'])
 
     def _ada_type_pkg_for_message(self, msg: FlatMessageSpec) -> str:
         return _ada_types_pkg_for_full_type(msg.full_type)
@@ -1476,7 +1197,11 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
 
     def _ada_json_encode_expr_for_message(self, msg: FlatMessageSpec, accessor: str) -> str:
         if msg.full_type.endswith('.Identifier'):
-            return f'Ada.Strings.Unbounded.To_String ({accessor})'
+            return (
+                'String\'(Write (Create (UTF8_String\'('
+                f'Ada.Strings.Unbounded.To_String ({accessor})'
+                '))))'
+            )
         codec_pkg = self._ada_codec_pkg_for_message(msg)
         return f'{codec_pkg}.To_Json ({accessor})'
 

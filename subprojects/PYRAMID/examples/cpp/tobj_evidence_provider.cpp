@@ -1,7 +1,7 @@
 // tobj_evidence_provider.cpp
 //
 // Component body: subscribes to evidence_requirements, publishes observations.
-// Uses generated service bindings and JsonCodec for all serialisation.
+// Uses generated service bindings and proto-native data-model codecs.
 
 #include "tobj_evidence_provider.hpp"
 
@@ -37,21 +37,23 @@ void onEvidenceRequirement(pcl_container_t* /*c*/, const pcl_msg_t* msg,
     std::string body = Provided::msgToString(msg->data, msg->size);
     log(("evidence requirement: " + body).c_str());
 
-    auto req = JsonCodec::evidenceRequirementFromJson(body);
+    auto req = TacticalCodec::fromJson(
+        body, static_cast<ObjectEvidenceRequirement*>(nullptr));
     (void)req;  // parsed for completeness; not needed to build the response
 
     if (!state->observation_sent.load() && state->executor) {
         // Business logic: publish a typed observation.
         // Position: 51.0°N 0.0°E; HOSTILE; SEA_SURFACE dimension.
-        JsonCodec::ObjectEvidence obs;
+        ObjectDetail obs;
+        obs.id            = "obj-1";
         obs.identity      = StandardIdentity::Hostile;
         obs.dimension     = BattleDimension::SeaSurface;
-        obs.latitude_rad  = 51.0 * kDegToRad;
-        obs.longitude_rad = 0.0;
-        obs.confidence    = 0.9;
-        obs.observed_at   = 0.5;
+        obs.position.latitude  = 51.0 * kDegToRad;
+        obs.position.longitude = 0.0;
+        obs.quality       = 0.9;
+        obs.creation_time = 0.5;
 
-        std::string obs_json = JsonCodec::toJson(obs);
+        std::string obs_json = TacticalCodec::toJson(obs);
         log(("Publishing standard observation on "
              + std::string(Consumed::kTopicObjectEvidence)).c_str());
 

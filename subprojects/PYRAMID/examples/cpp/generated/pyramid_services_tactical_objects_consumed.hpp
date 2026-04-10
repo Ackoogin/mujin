@@ -13,8 +13,6 @@
 
 #include "pyramid_data_model_types.hpp"
 
-#include "pyramid_services_tactical_objects_wire_types.hpp"
-
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
 #include <pcl/pcl_transport.h>
@@ -75,7 +73,6 @@ using pyramid::data_model::Identifier;
 using pyramid::data_model::ObjectDetail;
 using pyramid::data_model::ObjectEvidenceRequirement;
 using pyramid::data_model::Query;
-namespace wire_types = pyramid::services::tactical_objects::wire_types;
 
 class ServiceHandler {
 public:
@@ -118,7 +115,7 @@ pcl_port_t* subscribeObjectEvidence(pcl_container_t*  container,
 /// \p publisher must be the pcl_port_t* returned by addPublisher for
 /// kTopicObjectEvidence, obtained during on_configure.
 pcl_status_t publishObjectEvidence(pcl_port_t*        publisher,
-                                   const wire_types::ObjectEvidence& payload,
+                                   const ObjectDetail& payload,
                                    const char*        content_type = "application/json");
 
 pcl_status_t publishObjectEvidence(pcl_port_t*        publisher,

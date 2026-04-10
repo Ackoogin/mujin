@@ -66,7 +66,6 @@ set "CXXFLAGS=-std=c++17 -O2 -I%GEN_DIR% -I%GEN_FB_DIR% -I%BUILD_FB_DIR% -I%FLAT
 g++ %CXXFLAGS% -c "%GEN_DIR%\pyramid_data_model_base_codec.cpp" -o "%OBJ_DIR%\pyramid_data_model_base_codec.o" || exit /b 1
 g++ %CXXFLAGS% -c "%GEN_DIR%\pyramid_data_model_common_codec.cpp" -o "%OBJ_DIR%\pyramid_data_model_common_codec.o" || exit /b 1
 g++ %CXXFLAGS% -c "%GEN_DIR%\pyramid_data_model_tactical_codec.cpp" -o "%OBJ_DIR%\pyramid_data_model_tactical_codec.o" || exit /b 1
-g++ %CXXFLAGS% -c "%GEN_DIR%\pyramid_services_tactical_objects_json_codec.cpp" -o "%OBJ_DIR%\pyramid_services_tactical_objects_json_codec.o" || exit /b 1
 g++ %CXXFLAGS% -c "%GEN_FB_DIR%\pyramid_services_tactical_objects_flatbuffers_codec.cpp" -o "%OBJ_DIR%\pyramid_services_tactical_objects_flatbuffers_codec.o" || exit /b 1
 
 if exist "%TMP_LIB_FILE%" del /f /q "%TMP_LIB_FILE%" >nul 2>&1
@@ -75,7 +74,6 @@ ar rcs "%TMP_LIB_FILE%" ^
   "%OBJ_DIR%\pyramid_data_model_base_codec.o" ^
   "%OBJ_DIR%\pyramid_data_model_common_codec.o" ^
   "%OBJ_DIR%\pyramid_data_model_tactical_codec.o" ^
-  "%OBJ_DIR%\pyramid_services_tactical_objects_json_codec.o" ^
   "%OBJ_DIR%\pyramid_services_tactical_objects_flatbuffers_codec.o" || exit /b 1
 
 if exist "%LIB_FILE%" del /f /q "%LIB_FILE%" >nul 2>&1

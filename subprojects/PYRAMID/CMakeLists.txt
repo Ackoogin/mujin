@@ -38,7 +38,6 @@ target_include_directories(pyramid_flatbuffers_support
 )
 
 add_library(pyramid_generated_codecs STATIC
-    "${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_services_tactical_objects_json_codec.cpp"
     "${PYRAMID_ROOT_DIR}/examples/cpp/generated/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.cpp"
     "${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_common_codec.cpp"
     "${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_tactical_codec.cpp"

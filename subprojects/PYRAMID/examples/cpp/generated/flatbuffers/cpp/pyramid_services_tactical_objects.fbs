@@ -1,6 +1,5 @@
 // Auto-generated service FlatBuffers schema
 // Generated from proto service closure for pyramid.components.tactical_objects.services
-// Bridge-topic adapter tables are included for compatibility.
 
 namespace pyramid.services.tactical_objects;
 
@@ -188,37 +187,5 @@ table ObjectMatchArrayHolder {
 
 table ObjectInterestRequirementArrayHolder {
   items:[ObjectInterestRequirement];
-}
-
-table EntityMatch {
-  object_id:string;
-  identity:StandardIdentity;
-  dimension:BattleDimension;
-  latitude_rad:double;
-  longitude_rad:double;
-  confidence:double;
-}
-
-table EntityMatchArrayHolder {
-  items:[EntityMatch];
-}
-
-table ObjectEvidence {
-  identity:StandardIdentity;
-  dimension:BattleDimension;
-  latitude_rad:double;
-  longitude_rad:double;
-  confidence:double;
-  observed_at:double;
-}
-
-table EvidenceRequirement {
-  id:string;
-  policy:DataPolicy;
-  dimension:BattleDimension;
-  min_lat_rad:double;
-  max_lat_rad:double;
-  min_lon_rad:double;
-  max_lon_rad:double;
 }
 

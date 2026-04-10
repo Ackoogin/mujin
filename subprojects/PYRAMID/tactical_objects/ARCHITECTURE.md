@@ -97,13 +97,13 @@ type system (`Affiliation`, `Position` in degrees, `BattleDimension`
 with domain-specific ordinals, flat JSON fields).  External clients
 speak the PYRAMID standard format (`STANDARD_IDENTITY_HOSTILE`,
 `BATTLE_DIMENSION_SEA_SURFACE`, positions in radians, etc.) as defined
-by the PIM-generated `Json_Codec`.  The bridge converts between the two
+by the proto-native generated PYRAMID bindings and codecs. The bridge converts between the two
 so that neither side needs to change.
 
 ```
 External Clients (Ada / gRPC)
-    │  PYRAMID standard JSON (Json_Codec wire format)
-    │  e.g. {"policy":"DATA_POLICY_OBTAIN","identity":"STANDARD_IDENTITY_HOSTILE",...}
+    │  PYRAMID standard payloads
+    │  JSON or FlatBuffers over generated proto-native bindings
     ▼
 ┌──────────────────────────────────────────────────────┐
 │  StandardBridge                                       │

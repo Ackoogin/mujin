@@ -26,9 +26,6 @@ Architecture: component logic > service binding (this layer) > PCL
 Usage:
     python cpp_service_generator.py <file.proto> <output_dir>
     python cpp_service_generator.py <proto_dir/>  <output_dir>
-
-    # Also generate the JSON codec files:
-    python cpp_service_generator.py --codec <file.proto> <output_dir>
 """
 
 import sys
@@ -36,11 +33,11 @@ import re
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import json_schema as schema
 from proto_parser import (
     parse_proto_tree, ProtoTypeIndex, ProtoMessage, ProtoEnum,
     screaming_to_pascal, _PROTO_SCALARS,
 )
+from standard_topics import topic_spec, topics_for_service
 
 
 # -- EntityActions operation set -----------------------------------------------
@@ -56,11 +53,8 @@ BASE_TYPE_MAP = {
     'pyramid.data_model.common.Ack':      'Ack',
 }
 
-# Standard topic names — sourced from json_schema.py as canonical authority.
-# Provided side: client subscribes to these (server publishes).
-SUBSCRIBE_TOPICS = schema.SUBSCRIBE_TOPICS   # entity_matches, evidence_requirements
-# Consumed side: client publishes to these (server subscribes).
-PUBLISH_TOPICS   = schema.PUBLISH_TOPICS     # object_evidence
+# Standard topic names — tactical_objects bridge-facing topics aligned
+# directly to canonical proto-derived PYRAMID payloads.
 
 _SEP = '// ' + '-' * 75
 
@@ -286,18 +280,6 @@ def _namespace_from_proto(proto_file: ProtoFile) -> Tuple[str, str, str, str]:
     return full_ns, file_prefix, svc_base_ns, _DATA_MODEL_TYPES_NS
 
 
-def _wire_types_ns_from_proto(proto_file: ProtoFile) -> str:
-    """Return the service-local wire model namespace."""
-    _, _, svc_base_ns, _ = _namespace_from_proto(proto_file)
-    return svc_base_ns + '::wire_types'
-
-
-def _wire_types_header_from_proto(proto_file: ProtoFile) -> str:
-    """Return the generated service-local wire model header name."""
-    _, _, svc_base_ns, _ = _namespace_from_proto(proto_file)
-    return '_'.join(svc_base_ns.split('::')) + '_wire_types.hpp'
-
-
 def _is_provided(proto_file: ProtoFile) -> bool:
     return 'provided' in proto_file.package.lower()
 
@@ -306,15 +288,7 @@ def _topics_for_proto(
         parsed: 'ProtoFile', is_provided: bool
 ) -> Tuple[Dict[str, str], Dict[str, str]]:
     """Return (sub_topics, pub_topics) for the service, based on its package."""
-    pkg_lower = parsed.package.lower()
-    sub: Dict[str, str] = {}
-    pub: Dict[str, str] = {}
-    if 'tactical_objects' in pkg_lower:
-        if is_provided:
-            sub.update(SUBSCRIBE_TOPICS)
-        else:
-            pub.update(PUBLISH_TOPICS)
-    return sub, pub
+    return topics_for_service(parsed.package, is_provided)
 
 
 # -- Code generation -----------------------------------------------------------
@@ -366,15 +340,10 @@ class CppServiceGenerator:
                       types_header: str, parsed: ProtoFile,
                       all_rpcs: List[Tuple[str, ProtoRpc]]):
         is_provided = _is_provided(parsed)
-        wire_types_ns = _wire_types_ns_from_proto(parsed)
-        wire_types_header = _wire_types_header_from_proto(parsed)
-        sub_topics = SUBSCRIBE_TOPICS if is_provided else {}
-        pub_topics = {} if is_provided else PUBLISH_TOPICS
+        sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
         all_topics = dict(sub_topics)
         all_topics.update(pub_topics)
         topic_set = all_topics
-        has_wire_types = any(schema.TOPIC_WIRE_TYPES_CPP.get(key)
-                             for key in pub_topics)
 
         # Collect raw type names (no BASE_TYPE_MAP) for using declarations
         raw_types = sorted({
@@ -406,8 +375,6 @@ class CppServiceGenerator:
 
             # Includes
             f.write(f'#include "{types_header}"\n\n')
-            if has_wire_types:
-                f.write(f'#include "{wire_types_header}"\n\n')
             f.write('#include <pcl/pcl_container.h>\n')
             f.write('#include <pcl/pcl_executor.h>\n')
             f.write('#include <pcl/pcl_transport.h>\n')
@@ -484,8 +451,6 @@ class CppServiceGenerator:
 
             for t in raw_types:
                 f.write(f'using {types_ns}::{t};\n')
-            if has_wire_types:
-                f.write(f'namespace wire_types = {wire_types_ns};\n')
             f.write('\n')
 
             f.write('class ServiceHandler {\n')
@@ -577,21 +542,20 @@ class CppServiceGenerator:
                     cname = f'kTopic{pascal}'
                     col = 13 + len(fname) + 1
                     sp = ' ' * col
-                    wire_t = schema.TOPIC_WIRE_TYPES_CPP.get(key)
-                    wire_decl_t = f'wire_types::{wire_t}' if wire_t else None
+                    spec = topic_spec(key)
+                    wire_decl_t = spec.cpp_payload_type
                     f.write(f'/// \\brief Publish a typed message on'
                             f' {cname}.\n')
                     f.write('///\n')
                     f.write(f'/// \\p publisher must be the pcl_port_t*'
                             f' returned by addPublisher for\n')
                     f.write(f'/// {cname}, obtained during on_configure.\n')
-                    if wire_decl_t:
-                        f.write(f'pcl_status_t {fname}'
-                                f'(pcl_port_t*        publisher,\n')
-                        f.write(f'{sp}const {wire_decl_t}& payload,\n')
-                        f.write(f'{sp}const char*        content_type'
-                                f' = "{_DEFAULT_CONTENT_TYPE}");\n')
-                        f.write('\n')
+                    f.write(f'pcl_status_t {fname}'
+                            f'(pcl_port_t*        publisher,\n')
+                    f.write(f'{sp}const {wire_decl_t}& payload,\n')
+                    f.write(f'{sp}const char*        content_type'
+                            f' = "{_DEFAULT_CONTENT_TYPE}");\n')
+                    f.write('\n')
                     f.write(f'pcl_status_t {fname}'
                             f'(pcl_port_t*        publisher,\n')
                     f.write(f'{sp}const std::string& payload,\n')
@@ -633,19 +597,13 @@ class CppServiceGenerator:
                     types_ns: str, parsed: ProtoFile,
                     all_rpcs: List[Tuple[str, ProtoRpc]]):
         is_provided = _is_provided(parsed)
-        wire_types_ns = _wire_types_ns_from_proto(parsed)
         svc_base_ns = _namespace_from_proto(parsed)[2]
-        json_codec_ns = _namespace_from_proto(parsed)[2] + '::json_codec'
-        json_codec_header = '_'.join(_namespace_from_proto(parsed)[2].split('::')) + '_json_codec.hpp'
         flatbuffers_codec_ns = svc_base_ns + '::flatbuffers_codec'
         flatbuffers_codec_header = 'flatbuffers/cpp/' + '_'.join(svc_base_ns.split('::')) + '_flatbuffers_codec.hpp'
-        sub_topics = SUBSCRIBE_TOPICS if is_provided else {}
-        pub_topics = {} if is_provided else PUBLISH_TOPICS
+        sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
         all_topics = dict(sub_topics)
         all_topics.update(pub_topics)
         topic_set = all_topics
-        has_wire_types = any(schema.TOPIC_WIRE_TYPES_CPP.get(key)
-                             for key in pub_topics)
         hpp_name = file_prefix + '.hpp'
 
         # Determine which data model codec namespaces to use
@@ -667,8 +625,6 @@ class CppServiceGenerator:
 
             # Includes
             f.write(f'#include "{hpp_name}"\n\n')
-            if has_wire_types:
-                f.write(f'#include "{json_codec_header}"\n')
             f.write('#if __has_include("' + flatbuffers_codec_header + '")\n')
             f.write(f'#include "{flatbuffers_codec_header}"\n')
             f.write('#define PYRAMID_HAVE_SERVICE_FLATBUFFERS 1\n')
@@ -698,9 +654,6 @@ class CppServiceGenerator:
             for ns in dm_codec_nss:
                 f.write(f'using {ns}::toJson;\n')
                 f.write(f'using {ns}::fromJson;\n')
-            if has_wire_types:
-                f.write(f'namespace wire_types = {wire_types_ns};\n')
-                f.write(f'namespace json_codec = {json_codec_ns};\n')
             f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
             f.write(f'namespace flatbuffers_codec = {flatbuffers_codec_ns};\n')
             f.write('#endif\n')
@@ -895,25 +848,39 @@ class CppServiceGenerator:
                         fname = f'publish{pascal}'
                         col = 13 + len(fname) + 1
                         sp = ' ' * col
-                        wire_t = schema.TOPIC_WIRE_TYPES_CPP.get(key)
-                        if wire_t:
-                            f.write(f'pcl_status_t {fname}'
-                                    f'(pcl_port_t*        publisher,\n')
-                            f.write(f'{sp}const wire_types::{wire_t}& payload,\n')
-                            f.write(f'{sp}const char*        content_type)\n')
-                            f.write('{\n')
-                            f.write('    std::string wire_payload = json_codec::toJson(payload);\n')
-                            f.write('    if (is_flatbuffers_content_type(content_type)) {\n')
-                            f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
-                            f.write('        wire_payload = flatbuffers_codec::toBinary(payload);\n')
-                            f.write('#else\n')
-                            f.write('        return PCL_ERR_INVALID;\n')
-                            f.write('#endif\n')
-                            f.write('    } else if (!is_json_content_type(content_type)) {\n')
-                            f.write('        return PCL_ERR_INVALID;\n')
-                            f.write('    }\n')
-                            f.write(f'    return {fname}(publisher, wire_payload, content_type);\n')
-                            f.write('}\n\n')
+                        spec = topic_spec(key)
+                        f.write(f'pcl_status_t {fname}'
+                                f'(pcl_port_t*        publisher,\n')
+                        f.write(f'{sp}const {spec.cpp_payload_type}& payload,\n')
+                        f.write(f'{sp}const char*        content_type)\n')
+                        f.write('{\n')
+                        f.write('    std::string wire_payload;\n')
+                        f.write('    if (is_flatbuffers_content_type(content_type)) {\n')
+                        f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
+                        f.write('        wire_payload = flatbuffers_codec::toBinary(payload);\n')
+                        f.write('#else\n')
+                        f.write('        return PCL_ERR_INVALID;\n')
+                        f.write('#endif\n')
+                        f.write('    } else if (!is_json_content_type(content_type)) {\n')
+                        f.write('        return PCL_ERR_INVALID;\n')
+                        f.write('    } else {\n')
+                        if spec.is_array:
+                            f.write('        wire_payload = "[";\n')
+                            f.write('        bool first = true;\n')
+                            f.write('        for (const auto& item : payload) {\n')
+                            f.write('            if (!first) wire_payload += ",";\n')
+                            f.write('            first = false;\n')
+                            f.write('            wire_payload += toJson(item);\n')
+                            f.write('        }\n')
+                            f.write('        wire_payload += "]";\n')
+                        else:
+                            if spec.short_type == 'Identifier':
+                                f.write('        wire_payload = encode_identifier_payload(payload);\n')
+                            else:
+                                f.write('        wire_payload = toJson(payload);\n')
+                        f.write('    }\n')
+                        f.write(f'    return {fname}(publisher, wire_payload, content_type);\n')
+                        f.write('}\n\n')
                         f.write(f'pcl_status_t {fname}'
                                 f'(pcl_port_t*        publisher,\n')
                         f.write(f'{sp}const std::string& payload,\n')
@@ -1049,282 +1016,6 @@ class CppServiceGenerator:
 
             # Namespace close
             f.write(f'}} // namespace {full_ns}\n')
-
-
-class CppWireTypesGenerator:
-    """Generates service-local wire model headers from json_schema.py."""
-
-    def __init__(self, proto_file: ProtoFile):
-        self.TYPES_NS = _namespace_from_proto(proto_file)[3]
-        self.NS = _wire_types_ns_from_proto(proto_file)
-        self.HPP = _wire_types_header_from_proto(proto_file)
-        self._types_header = '_'.join(self.TYPES_NS.split('::')) + '_types.hpp'
-
-    def generate(self, output_dir: str):
-        out = Path(output_dir)
-        out.mkdir(parents=True, exist_ok=True)
-        self._write_header(out / self.HPP)
-        print(f'  Generated {self.NS}')
-
-    def _write_header(self, path: Path):
-        with open(path, 'w') as f:
-            f.write('// Auto-generated service wire types header\n')
-            f.write(f'// Namespace: {self.NS}\n')
-            f.write('// Generated from pim/json_schema.py\n')
-            f.write('#pragma once\n\n')
-            f.write(f'#include "{self._types_header}"\n\n')
-            f.write('#include <string>\n')
-            f.write('#include <vector>\n\n')
-            f.write(f'namespace {self.NS} {{\n\n')
-            f.write(_SEP + '\n')
-            f.write('// Wire message structs\n')
-            f.write(_SEP + '\n\n')
-            for msg in schema.ALL_SCHEMAS:
-                f.write(f'// {msg.wire_description}\n')
-                f.write(f'struct {msg.cpp_name} {{\n')
-                for fld in msg.fields:
-                    comment = f'  // {fld.description}' if fld.description else ''
-                    opt_tag = '' if fld.required else '  // optional'
-                    tag = comment or opt_tag
-                    cpp_type = fld.cpp_type
-                    cpp_default = fld.cpp_default
-                    if fld.kind in schema.ENUM_SPECS:
-                        cpp_type = f'pyramid::data_model::{cpp_type}'
-                        cpp_default = f'pyramid::data_model::{fld.cpp_default}'
-                    f.write(f'    {cpp_type} {fld.name} = {cpp_default};{tag}\n')
-                f.write('};\n\n')
-            f.write('using EntityMatchArray = std::vector<EntityMatch>;\n\n')
-            f.write(f'}} // namespace {self.NS}\n')
-
-
-class CppJsonCodecGenerator:
-    """Generates the canonical JSON ser/de header+impl from json_schema.py.
-
-    Output file names and namespaces are derived from the supplied .proto file.
-    Types from the parent namespace are brought in via  using namespace.
-
-    Usage:
-        gen = CppJsonCodecGenerator(proto_file)
-        gen.generate('/path/to/output_dir')
-    """
-
-    def __init__(self, proto_file: ProtoFile):
-        _, _, svc_base_ns, types_ns = _namespace_from_proto(proto_file)
-        self.TYPES_NS = types_ns
-        self.WIRE_NS  = _wire_types_ns_from_proto(proto_file)
-        self.NS       = svc_base_ns + '::json_codec'
-        svc_prefix    = '_'.join(svc_base_ns.split('::'))
-        self.HPP      = svc_prefix + '_json_codec.hpp'
-        self.CPP      = svc_prefix + '_json_codec.cpp'
-        self._wire_types_header = _wire_types_header_from_proto(proto_file)
-
-    def generate(self, output_dir: str):
-        out = Path(output_dir)
-        out.mkdir(parents=True, exist_ok=True)
-        self._write_header(out / self.HPP)
-        self._write_impl(out / self.CPP)
-        print(f'  Generated {self.NS}')
-
-    # -- Header ----------------------------------------------------------------
-
-    def _write_header(self, path: Path):
-        ek = schema.FieldKind
-
-        with open(path, 'w') as f:
-            f.write('// Auto-generated JSON codec header\n')
-            f.write(f'// Namespace: {self.NS}\n')
-            f.write('// Generated by generate_bindings.py (CppJsonCodecGenerator)\n')
-            f.write('// Schema source: pim/json_schema.py\n')
-            f.write('//\n')
-            f.write('// Canonical JSON wire format for the pyramid standard bridge protocol.\n')
-            f.write('// Each message schema maps directly to a proto message type:\n')
-            f.write('//\n')
-            for msg in schema.ALL_SCHEMAS:
-                f.write(f'//   {msg.cpp_name:<34} {msg.wire_description}\n')
-            f.write('//\n')
-            f.write('// Architecture: component logic > JsonCodec > service binding > PCL\n')
-            f.write('#pragma once\n\n')
-            f.write(f'#include "{self._wire_types_header}"\n\n')
-            f.write('#include <string>\n')
-            f.write('#include <vector>\n\n')
-            f.write(f'namespace {self.NS} {{\n\n')
-            f.write(f'namespace wire_types = {self.WIRE_NS};\n')
-            f.write(f'namespace data_model = {self.TYPES_NS};\n\n')
-
-            # -- Serialisation -------------------------------------------------
-            f.write(_SEP + '\n')
-            f.write('// Serialisation (toJson)\n')
-            f.write(_SEP + '\n\n')
-            for msg in schema.ALL_SCHEMAS:
-                f.write(f'std::string toJson(const wire_types::{msg.cpp_name}& msg);\n')
-            f.write('\n')
-
-            # -- Deserialisation -----------------------------------------------
-            f.write(_SEP + '\n')
-            f.write('// Deserialisation (fromJson)\n')
-            f.write(_SEP + '\n\n')
-            for msg in schema.ALL_SCHEMAS:
-                f.write(f'wire_types::{msg.cpp_name} {_lc_first(msg.cpp_name)}FromJson'
-                        f'(const std::string& s);\n')
-            f.write('\n')
-            f.write('// Deserialise standard.entity_matches JSON array\n')
-            f.write('wire_types::EntityMatchArray entityMatchesFromJson(const std::string& s);\n\n')
-
-            # -- Enum string converters ----------------------------------------
-            f.write(_SEP + '\n')
-            f.write('// Enum string converters\n')
-            f.write(_SEP + '\n\n')
-            for _kind, spec in schema.ENUM_SPECS.items():
-                t = f'data_model::{spec.cpp_type}'
-                fn = _lc_first(spec.cpp_type)
-                f.write(f'std::string toString({t} v);\n')
-                f.write(f'{t} {fn}FromString(const std::string& s);\n')
-            f.write('\n')
-
-            f.write(f'}} // namespace {self.NS}\n')
-
-    # -- Implementation --------------------------------------------------------
-
-    def _write_impl(self, path: Path):
-        ek = schema.FieldKind
-
-        with open(path, 'w') as f:
-            f.write('// Auto-generated JSON codec implementation\n')
-            f.write(f'// Namespace: {self.NS}\n\n')
-            f.write(f'#include "{self.HPP}"\n\n')
-            f.write('#include <nlohmann/json.hpp>\n\n')
-            f.write(f'namespace {self.NS} {{\n\n')
-            f.write(f'namespace wire_types = {self.WIRE_NS};\n')
-            f.write(f'namespace data_model = {self.TYPES_NS};\n\n')
-
-            # -- Enum string converters ----------------------------------------
-            f.write(_SEP + '\n')
-            f.write('// Enum string converters\n')
-            f.write(_SEP + '\n\n')
-            for _kind, spec in schema.ENUM_SPECS.items():
-                t   = f'data_model::{spec.cpp_type}'
-                fn  = _lc_first(spec.cpp_type)
-                tbl = spec.table()
-
-                # toString
-                f.write(f'std::string toString({t} v) {{\n')
-                f.write(f'    switch (v) {{\n')
-                for proto_str, _ada, cpp_lit, _ord in tbl:
-                    f.write(f'        case {t}::{cpp_lit}: return "{proto_str}";\n')
-                f.write(f'    }}\n')
-                f.write(f'    return "{tbl[0][0]}";\n')  # fallback = first (Unspecified)
-                f.write(f'}}\n\n')
-
-                # fromString
-                f.write(f'{t} {fn}FromString(const std::string& s) {{\n')
-                for proto_str, _ada, cpp_lit, _ord in tbl:
-                    f.write(f'    if (s == "{proto_str}") return {t}::{cpp_lit};\n')
-                f.write(f'    return {t}::{spec.default_cpp};\n')
-                f.write(f'}}\n\n')
-
-            # -- toJson implementations ----------------------------------------
-            f.write(_SEP + '\n')
-            f.write('// Serialisation (toJson)\n')
-            f.write(_SEP + '\n\n')
-            for msg in schema.ALL_SCHEMAS:
-                f.write(f'std::string toJson(const wire_types::{msg.cpp_name}& msg) {{\n')
-                f.write(f'    nlohmann::json obj;\n')
-                for fld in msg.fields:
-                    jkey = fld.name
-                    if fld.is_enum:
-                        spec = schema.ENUM_SPECS[fld.kind]
-                        fn   = _lc_first(spec.cpp_type)
-                        if fld.required:
-                            f.write(f'    obj["{jkey}"] = toString(msg.{jkey});\n')
-                        else:
-                            f.write(f'    if (msg.{jkey} != data_model::{fld.cpp_default})'
-                                    f' obj["{jkey}"] = toString(msg.{jkey});\n')
-                    elif fld.kind in (ek.STRING, ek.IDENTIFIER):
-                        if fld.required:
-                            f.write(f'    obj["{jkey}"] = msg.{jkey};\n')
-                        else:
-                            f.write(f'    if (!msg.{jkey}.empty())'
-                                    f' obj["{jkey}"] = msg.{jkey};\n')
-                    elif fld.kind == ek.DOUBLE:
-                        if fld.required:
-                            f.write(f'    obj["{jkey}"] = msg.{jkey};\n')
-                        else:
-                            f.write(f'    if (msg.{jkey} != 0.0)'
-                                    f' obj["{jkey}"] = msg.{jkey};\n')
-                    elif fld.kind == ek.BOOL:
-                        f.write(f'    obj["{jkey}"] = msg.{jkey};\n')
-                f.write(f'    return obj.dump();\n')
-                f.write(f'}}\n\n')
-
-            # -- fromJson implementations ---------------------------------------
-            f.write(_SEP + '\n')
-            f.write('// Deserialisation (fromJson)\n')
-            f.write(_SEP + '\n\n')
-            for msg in schema.ALL_SCHEMAS:
-                fname = f'{_lc_first(msg.cpp_name)}FromJson'
-                f.write(f'wire_types::{msg.cpp_name} {fname}(const std::string& s) {{\n')
-                f.write(f'    wire_types::{msg.cpp_name} result;\n')
-                f.write(f'    try {{\n')
-                f.write(f'        auto j = nlohmann::json::parse(s);\n')
-                for fld in msg.fields:
-                    jkey = fld.name
-                    if fld.is_enum:
-                        spec = schema.ENUM_SPECS[fld.kind]
-                        fn   = _lc_first(spec.cpp_type)
-                        f.write(f'        if (j.contains("{jkey}"))\n')
-                        f.write(f'            result.{jkey} = {fn}FromString('
-                                f'j["{jkey}"].get<std::string>());\n')
-                    elif fld.kind in (ek.STRING, ek.IDENTIFIER):
-                        f.write(f'        if (j.contains("{jkey}"))\n')
-                        f.write(f'            result.{jkey} = '
-                                f'j["{jkey}"].get<std::string>();\n')
-                    elif fld.kind == ek.DOUBLE:
-                        f.write(f'        if (j.contains("{jkey}"))\n')
-                        f.write(f'            result.{jkey} = '
-                                f'j["{jkey}"].get<double>();\n')
-                    elif fld.kind == ek.BOOL:
-                        f.write(f'        if (j.contains("{jkey}"))\n')
-                        f.write(f'            result.{jkey} = '
-                                f'j["{jkey}"].get<bool>();\n')
-                f.write(f'    }} catch (...) {{}}\n')
-                f.write(f'    return result;\n')
-                f.write(f'}}\n\n')
-
-            # -- entityMatchesFromJson -----------------------------------------
-            f.write(_SEP + '\n')
-            f.write('// Array deserialisation\n')
-            f.write(_SEP + '\n\n')
-            f.write('wire_types::EntityMatchArray entityMatchesFromJson(const std::string& s) {\n')
-            f.write('    wire_types::EntityMatchArray result;\n')
-            f.write('    try {\n')
-            f.write('        auto arr = nlohmann::json::parse(s);\n')
-            f.write('        if (!arr.is_array()) return result;\n')
-            f.write('        result.reserve(arr.size());\n')
-            f.write('        for (const auto& elem : arr) {\n')
-            f.write('            wire_types::EntityMatch m;\n')
-            for fld in schema.ENTITY_MATCH.fields:
-                jkey = fld.name
-                if fld.is_enum:
-                    spec = schema.ENUM_SPECS[fld.kind]
-                    fn   = _lc_first(spec.cpp_type)
-                    f.write(f'            if (elem.contains("{jkey}"))\n')
-                    f.write(f'                m.{jkey} = {fn}FromString('
-                            f'elem["{jkey}"].get<std::string>());\n')
-                elif fld.kind in (ek.STRING, ek.IDENTIFIER):
-                    f.write(f'            if (elem.contains("{jkey}"))\n')
-                    f.write(f'                m.{jkey} = '
-                            f'elem["{jkey}"].get<std::string>();\n')
-                elif fld.kind == ek.DOUBLE:
-                    f.write(f'            if (elem.contains("{jkey}"))\n')
-                    f.write(f'                m.{jkey} = '
-                            f'elem["{jkey}"].get<double>();\n')
-            f.write('            result.push_back(std::move(m));\n')
-            f.write('        }\n')
-            f.write('    } catch (...) {}\n')
-            f.write('    return result;\n')
-            f.write('}\n\n')
-
-            f.write(f'}} // namespace {self.NS}\n')
 
 
 def _lc_first(s: str) -> str:
@@ -2057,10 +1748,9 @@ def main():
                 gen.generate(sys.argv[3])
             print('\n\u2713 C++ data model codecs generated')
         else:
-            parsed = parse_proto(codec_path)
-            gen = CppJsonCodecGenerator(parsed)
-            gen.generate(sys.argv[3])
-            print('\n\u2713 C++ JSON codec generated')
+            print('ERROR: service-local bridge JSON codecs were removed; use generate_bindings.py for proto-native generation',
+                  file=sys.stderr)
+            sys.exit(1)
         return
 
     if len(sys.argv) < 3:

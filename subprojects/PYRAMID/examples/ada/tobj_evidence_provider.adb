@@ -1,7 +1,7 @@
 --  tobj_evidence_provider.adb
 --
 --  Component body: subscribes to evidence_requirements, publishes observations.
---  Uses generated service bindings and Json_Codec for all serialisation.
+--  Uses generated service bindings and proto-native tactical codecs.
 
 with Ada.Text_IO;
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
@@ -10,9 +10,10 @@ with Interfaces.C.Strings;
 with Pyramid.Services.Tactical_Objects.Provided;
 with Pyramid.Services.Tactical_Objects.Consumed;
 with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
-with Pyramid.Services.Tactical_Objects.Json_Codec;
-with Pyramid.Services.Tactical_Objects.Wire_Types;
 with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;
+with Pyramid.Data_Model.Common.Types_Codec;
+with Pyramid.Data_Model.Tactical.Types;  use Pyramid.Data_Model.Tactical.Types;
+with Pyramid.Data_Model.Tactical.Types_Codec;
 with System;
 
 package body Tobj_Evidence_Provider is
@@ -20,8 +21,8 @@ package body Tobj_Evidence_Provider is
    package Provided renames Pyramid.Services.Tactical_Objects.Provided;
    package Consumed renames Pyramid.Services.Tactical_Objects.Consumed;
    package Flat     renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
-   package Codec    renames Pyramid.Services.Tactical_Objects.Json_Codec;
-   package Wire     renames Pyramid.Services.Tactical_Objects.Wire_Types;
+   package Common   renames Pyramid.Data_Model.Common.Types_Codec;
+   package Tactical renames Pyramid.Data_Model.Tactical.Types_Codec;
 
    use type Interfaces.C.unsigned;
    use type Interfaces.C.Strings.chars_ptr;
@@ -41,16 +42,16 @@ package body Tobj_Evidence_Provider is
 
    function Decode_Evidence_Requirement
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
-      return Wire.Evidence_Requirement
+      return Object_Evidence_Requirement
    is
       Payload : constant String := Provided.Msg_To_String (Msg.Data, Msg.Size);
    begin
       if Msg.Type_Name /= Interfaces.C.Strings.Null_Ptr
         and then Interfaces.C.Strings.Value (Msg.Type_Name) = Flat.Content_Type
       then
-         return Flat.From_Binary_Evidence_Requirement (Payload, null);
+         return Flat.From_Binary_Object_Evidence_Requirement (Payload, null);
       end if;
-      return Codec.From_Json (Payload);
+      return Tactical.From_Json (Payload, null);
    end Decode_Evidence_Requirement;
 
    -- -- On_Configure ----------------------------------------------------------
@@ -84,27 +85,31 @@ package body Tobj_Evidence_Provider is
       Evidence_Req_Received := True;
 
       declare
-         Req : constant Wire.Evidence_Requirement := Decode_Evidence_Requirement (Msg);
+         Req : constant Object_Evidence_Requirement := Decode_Evidence_Requirement (Msg);
+         Dimension_Str : constant String :=
+           (if Req.Dimension = null or else Req.Dimension'Length = 0
+            then "DIMENSION_UNSPECIFIED"
+            else Common.To_String (Req.Dimension (Req.Dimension'First)));
       begin
          Log ("evidence requirement:"
-              & " policy=" & Codec.Data_Policy_To_String (Req.Policy)
-              & " dimension=" & Codec.Battle_Dimension_To_String (Req.Dimension)
-              & " min_lat=" & Long_Float'Image (Req.Min_Lat_Rad)
-              & " max_lat=" & Long_Float'Image (Req.Max_Lat_Rad));
+              & " policy=" & Common.To_String (Req.Policy)
+              & " dimension=" & Dimension_Str
+              & " id=" & To_String (Req.Base.Id));
       end;
 
-      --  Publish a typed observation using the canonical Json_Codec.
+      --  Publish a typed canonical Object_Detail observation.
       --  Position: 51.0N 0.0E in radians; HOSTILE; SEA_SURFACE dimension.
       if Exec_Handle /= null and then not Observation_Sent then
          declare
-            Obs : Wire.Object_Evidence;
+            Obs : Object_Detail;
          begin
+            Obs.Id            := To_Unbounded_String ("obj-1");
             Obs.Identity      := Identity_Hostile;
             Obs.Dimension     := Dimension_SeaSurface;
-            Obs.Latitude_Rad  := 51.0 * (3.14159265358979323846 / 180.0);
-            Obs.Longitude_Rad := 0.0;
-            Obs.Confidence    := 0.9;
-            Obs.Observed_At   := 0.5;
+            Obs.Position.Latitude  := 51.0 * (3.14159265358979323846 / 180.0);
+            Obs.Position.Longitude := 0.0;
+            Obs.Quality       := 0.9;
+            Obs.Creation_Time := 0.5;
 
             Log ("Publishing standard observation to " &
                  Consumed.Topic_Object_Evidence);

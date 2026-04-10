@@ -1,8 +1,7 @@
 --  tobj_interest_client.adb
 --
 --  Component body: subscribes to entity_matches, invokes create_requirement.
---  Uses proto-native tactical codecs for RPC payloads and bridge Json_Codec
---  only for standard topic adapters.
+--  Uses proto-native tactical codecs for both RPC and standard topic payloads.
 
 with Ada.Text_IO;
 with Ada.Unchecked_Conversion;
@@ -16,17 +15,13 @@ with Pyramid.Data_Model.Tactical.Types;  use Pyramid.Data_Model.Tactical.Types;
 with Pyramid.Data_Model.Tactical.Types_Codec;
 with Pyramid.Services.Tactical_Objects.Provided;
 with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
-with Pyramid.Services.Tactical_Objects.Json_Codec;
-with Pyramid.Services.Tactical_Objects.Wire_Types;
 with System;
 
 package body Tobj_Interest_Client is
 
    package Provided renames Pyramid.Services.Tactical_Objects.Provided;
    package Flat     renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
-   package Codec    renames Pyramid.Services.Tactical_Objects.Json_Codec;
    package Tactical renames Pyramid.Data_Model.Tactical.Types_Codec;
-   package Wire     renames Pyramid.Services.Tactical_Objects.Wire_Types;
 
    use type Interfaces.C.unsigned;
    use type Interfaces.C.Strings.chars_ptr;
@@ -50,10 +45,33 @@ package body Tobj_Interest_Client is
       if Msg.Type_Name /= Interfaces.C.Strings.Null_Ptr
         and then Interfaces.C.Strings.Value (Msg.Type_Name) = Flat.Content_Type
       then
-         return Flat.From_Binary_Entity_Match_Array (Payload);
+         return Flat.From_Binary_Object_Match_Array (Payload);
       end if;
       return Payload;
    end Decode_Entity_Matches_Payload;
+
+   function Decode_Entity_Matches
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Provided.Object_Match_Array
+   is
+      Body_Str : constant String := Decode_Entity_Matches_Payload (Msg);
+      R        : constant Read_Result := Read (Body_Str);
+   begin
+      if not R.Success or else R.Value.Kind /= JSON_Array_Type then
+         return (1 .. 0 => <>);
+      end if;
+
+      declare
+         Arr    : constant JSON_Array := Get (R.Value);
+         Result : Provided.Object_Match_Array (1 .. GNATCOLL.JSON.Length (Arr));
+      begin
+         for I in 1 .. GNATCOLL.JSON.Length (Arr) loop
+            Result (I) :=
+              Tactical.From_Json (Write (Get (Arr, I)), null);
+         end loop;
+         return Result;
+      end;
+   end Decode_Entity_Matches;
 
    function Decode_Identifier_Payload (Payload : String) return Identifier is
       J : constant JSON_Value := Read (Payload);
@@ -103,19 +121,17 @@ package body Tobj_Interest_Client is
 
       declare
          Body_Str : constant String := Decode_Entity_Matches_Payload (Msg);
-         Matches  : constant Wire.Entity_Match_Array :=
-           Codec.Entity_Matches_From_Json (Body_Str);
+         Matches  : constant Provided.Object_Match_Array :=
+           Decode_Entity_Matches (Msg);
       begin
          Log ("standard.entity_matches: " & Body_Str);
          for I in Matches'Range loop
             Log ("  entity[" & Natural'Image (I) & "]"
-                 & " id="       & To_String (Matches (I).Object_Id)
-                 & " identity=" & Codec.Standard_Identity_To_String
-                                    (Matches (I).Identity));
+                 & " id=" & To_String (Matches (I).Id)
+                 & " matching_object_id=" &
+                   To_String (Matches (I).Matching_Object_Id));
             Matches_Received := Matches_Received + 1;
-            if Matches (I).Identity = Identity_Hostile then
-               Found_Hostile_Entity := True;
-            end if;
+            Found_Hostile_Entity := True;
          end loop;
       end;
    end On_Entity_Matches;
