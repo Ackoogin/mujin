@@ -9,6 +9,8 @@
 #include <ame/bt_nodes/invoke_service.h>
 #include <ame/bt_nodes/set_world_predicate.h>
 
+#include <behaviortree_cpp/basic_types.h>
+
 namespace ame_ros2 {
 
 ExecutorNode::ExecutorNode(const rclcpp::NodeOptions& options)
@@ -86,6 +88,68 @@ ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
     return CallbackReturn::FAILURE;
   }
 
+  // -- ROS2 service servers -------------------------------------------------
+  svc_load_bt_ = create_service<ame_ros2::srv::LoadBt>(
+      "~/load_bt",
+      [this](const ame_ros2::srv::LoadBt::Request::SharedPtr req,
+             ame_ros2::srv::LoadBt::Response::SharedPtr resp) {
+        RCLCPP_INFO(get_logger(), "load_bt: %zu bytes of BT XML", req->bt_xml.size());
+        try {
+          std::lock_guard<std::mutex> lock(exec_mutex_);
+          component_->loadAndExecute(req->bt_xml);
+          resp->success = true;
+          RCLCPP_INFO(get_logger(), "load_bt: executing");
+        } catch (const std::exception& e) {
+          resp->success   = false;
+          resp->error_msg = e.what();
+          RCLCPP_ERROR(get_logger(), "load_bt: FAILED — %s", e.what());
+        }
+      });
+
+  svc_stop_execution_ = create_service<ame_ros2::srv::StopExecution>(
+      "~/stop_execution",
+      [this](const ame_ros2::srv::StopExecution::Request::SharedPtr,
+             ame_ros2::srv::StopExecution::Response::SharedPtr resp) {
+        RCLCPP_INFO(get_logger(), "stop_execution");
+        std::lock_guard<std::mutex> lock(exec_mutex_);
+        component_->haltExecution();
+        resp->success = true;
+      });
+
+  // -- ROS2 publishers ------------------------------------------------------
+  // Use a large queue for events so fast BT ticking doesn't drop messages.
+  pub_bt_events_ = create_publisher<std_msgs::msg::String>(
+      "~/bt_events", rclcpp::QoS(200));
+  pub_execution_status_ = create_publisher<std_msgs::msg::String>(
+      "~/execution_status", rclcpp::QoS(10).transient_local());
+
+  // Publish initial IDLE status
+  {
+    std_msgs::msg::String msg;
+    msg.data = "IDLE";
+    pub_execution_status_->publish(msg);
+  }
+
+  // Wire ExecutorComponent event sink → ROS2 bt_events topic + status topic
+  component_->setEventSink([this](const std::string& json_line) {
+    if (pub_bt_events_) {
+      std_msgs::msg::String msg;
+      msg.data = json_line;
+      pub_bt_events_->publish(msg);
+    }
+    if (pub_execution_status_) {
+      const auto s = component_->lastStatus();
+      std_msgs::msg::String status_msg;
+      switch (s) {
+        case BT::NodeStatus::RUNNING: status_msg.data = "RUNNING"; break;
+        case BT::NodeStatus::SUCCESS: status_msg.data = "SUCCESS"; break;
+        case BT::NodeStatus::FAILURE: status_msg.data = "FAILURE"; break;
+        default:                      status_msg.data = "IDLE";    break;
+      }
+      pub_execution_status_->publish(status_msg);
+    }
+  });
+
   if (!agent_id_.empty()) {
     RCLCPP_INFO(get_logger(), "ExecutorNode configured for agent '%s'", agent_id_.c_str());
   } else {
@@ -112,6 +176,11 @@ ExecutorNode::on_deactivate(const rclcpp_lifecycle::State&) {
 
 ExecutorNode::CallbackReturn
 ExecutorNode::on_cleanup(const rclcpp_lifecycle::State&) {
+  component_->setEventSink({});
+  svc_load_bt_.reset();
+  svc_stop_execution_.reset();
+  pub_bt_events_.reset();
+  pub_execution_status_.reset();
   component_->cleanup();
   return CallbackReturn::SUCCESS;
 }

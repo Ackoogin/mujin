@@ -1,10 +1,17 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <string>
 
-#include <rclcpp_lifecycle/lifecycle_node.hpp>
 #include <rclcpp/node_options.hpp>
+#include <rclcpp/publisher.hpp>
+#include <rclcpp/service.hpp>
+#include <rclcpp_lifecycle/lifecycle_node.hpp>
+#include <std_msgs/msg/string.hpp>
+
+#include <ame_ros2/srv/load_bt.hpp>
+#include <ame_ros2/srv/stop_execution.hpp>
 
 // Forward-declare AME and BT types — full headers are not needed by ROS2 consumers
 namespace ame {
@@ -98,6 +105,17 @@ private:
 
   bool core_nodes_registered_ = false;
   void registerCoreNodes();
+
+  // ROS2 service servers — allow devenv / external callers to drive execution.
+  rclcpp::Service<ame_ros2::srv::LoadBt>::SharedPtr        svc_load_bt_;
+  rclcpp::Service<ame_ros2::srv::StopExecution>::SharedPtr  svc_stop_execution_;
+
+  // ROS2 publishers — stream BT events and status to external observers.
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_bt_events_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr pub_execution_status_;
+
+  // Protects concurrent service calls (load vs stop).
+  std::mutex exec_mutex_;
 };
 
 }  // namespace ame_ros2

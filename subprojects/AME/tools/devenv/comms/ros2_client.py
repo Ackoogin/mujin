@@ -79,6 +79,13 @@ class AmeRos2Client:
         # Plan feedback queue
         self._plan_feedback_queue: deque[PlanFeedback] = deque(maxlen=100)
 
+        # Execution state (driven by executor_node topics)
+        self._bt_status: str = "IDLE"
+        self._bt_executing: bool = False
+        self._bt_tick_count: int = 0
+        self._bt_event_queue: deque[str] = deque(maxlen=2000)
+        self._done_callback: Optional[Callable[[bool, str], None]] = None
+
     @property
     def connected(self) -> bool:
         return self._connected
@@ -250,6 +257,56 @@ class AmeRos2Client:
                 break
         return items
 
+    # -- Execution control ----------------------------------------------------
+
+    def load_bt(self, bt_xml: str) -> None:
+        """Call ~/load_bt service to load and start a BT on the executor."""
+        if not self.available or not self._connected:
+            return
+        self._bt_tick_count = 0
+        self._bt_status = "IDLE"
+        self._bt_executing = False
+        self._call_in_node_thread("_do_load_bt", bt_xml)
+
+    def start_auto_tick(
+        self,
+        interval_s: float = 0.05,
+        done_callback: Optional[Callable[[bool, str], None]] = None,
+    ) -> None:
+        """In ROS2 mode, the PCL executor drives ticking automatically.
+        Registers done_callback to be called when execution reaches SUCCESS/FAILURE."""
+        self._done_callback = done_callback
+
+    def stop_execution(self) -> None:
+        """Call ~/stop_execution service to halt the running BT."""
+        if not self.available or not self._connected:
+            return
+        self._call_in_node_thread("_do_stop_execution")
+
+    def tick_once(self) -> None:
+        """No-op in ROS2 mode — PCL executor drives ticking automatically."""
+        pass
+
+    def is_executing(self) -> bool:
+        return self._bt_executing
+
+    def last_bt_status(self) -> str:
+        return self._bt_status
+
+    @property
+    def tick_count(self) -> int:
+        return self._bt_tick_count
+
+    def drain_bt_events(self) -> list[str]:
+        """Drain queued BT event JSON lines for UI display."""
+        items = []
+        while self._bt_event_queue:
+            try:
+                items.append(self._bt_event_queue.popleft())
+            except IndexError:
+                break
+        return items
+
     # -- Internal ------------------------------------------------------------
 
     def _call_in_node_thread(self, method_name: str, *args: Any) -> None:
@@ -313,6 +370,38 @@ class AmeRos2Client:
                     LoadDomain, "/planner_node/load_domain", callback_group=cb_group
                 )
             except ImportError:
+                pass
+
+            # Execution service clients
+            self._load_bt_cli = None
+            self._stop_execution_cli = None
+            try:
+                from ame_ros2.srv import LoadBt, StopExecution
+                from std_msgs.msg import String as StdString
+                self._LoadBt = LoadBt
+                self._StopExecution = StopExecution
+                self._load_bt_cli = self._node.create_client(
+                    LoadBt, "/executor_node/load_bt", callback_group=cb_group
+                )
+                self._stop_execution_cli = self._node.create_client(
+                    StopExecution, "/executor_node/stop_execution", callback_group=cb_group
+                )
+                # Subscribe to BT events and execution status from executor_node
+                self._node.create_subscription(
+                    StdString, "/executor_node/bt_events",
+                    self._on_bt_event_msg, rclpy.qos.QoSProfile(depth=200),
+                    callback_group=cb_group,
+                )
+                self._node.create_subscription(
+                    StdString, "/executor_node/execution_status",
+                    self._on_execution_status_msg,
+                    rclpy.qos.QoSProfile(
+                        depth=10,
+                        durability=rclpy.qos.DurabilityPolicy.TRANSIENT_LOCAL,
+                    ),
+                    callback_group=cb_group,
+                )
+            except (ImportError, Exception):
                 pass
 
             # Subscribe to world state
@@ -415,6 +504,45 @@ class AmeRos2Client:
                 callback(snap)
 
         future.add_done_callback(_on_done)
+
+    def _on_bt_event_msg(self, msg: Any) -> None:
+        """Handle incoming BT event JSON line from executor_node."""
+        self._bt_event_queue.append(msg.data)
+        self._bt_tick_count += 1
+
+    def _on_execution_status_msg(self, msg: Any) -> None:
+        """Handle execution status update from executor_node."""
+        old_status = self._bt_status
+        self._bt_status = msg.data
+        self._bt_executing = (msg.data == "RUNNING")
+        # Fire done callback when transitioning from RUNNING to terminal state
+        if old_status == "RUNNING" and msg.data in ("SUCCESS", "FAILURE"):
+            if self._done_callback:
+                cb = self._done_callback
+                self._done_callback = None
+                try:
+                    cb(msg.data == "SUCCESS", msg.data)
+                except Exception:
+                    pass
+
+    def _do_load_bt(self, bt_xml: str) -> None:
+        if not self._load_bt_cli or not self._load_bt_cli.wait_for_service(timeout_sec=2.0):
+            return
+        req = self._LoadBt.Request()
+        req.bt_xml = bt_xml
+        future = self._load_bt_cli.call_async(req)
+        future.add_done_callback(
+            lambda f: (
+                None if (not f.result() or f.result().success)
+                else print(f"[ROS2] load_bt failed: {f.result().error_msg}")
+            )
+        )
+
+    def _do_stop_execution(self) -> None:
+        if not self._stop_execution_cli or not self._stop_execution_cli.wait_for_service(timeout_sec=2.0):
+            return
+        req = self._StopExecution.Request()
+        self._stop_execution_cli.call_async(req)
 
     def _do_plan(self, goal_fluents: list[str], callback: Any) -> None:
         if not self._plan_cli.wait_for_server(timeout_sec=2.0):

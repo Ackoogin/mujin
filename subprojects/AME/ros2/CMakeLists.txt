@@ -41,6 +41,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
     "srv/QueryState.srv"
     "srv/DispatchGoals.srv"
     "srv/LoadDomain.srv"
+    "srv/LoadBt.srv"
+    "srv/StopExecution.srv"
     "action/Plan.action"
     DEPENDENCIES std_msgs
 )
