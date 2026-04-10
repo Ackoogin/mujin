@@ -1534,3 +1534,49 @@ All streaming API functions shall return `PCL_ERR_INVALID` or safe defaults when
 **Traces**: PCL.011c
 
 **Verification**: `test_pcl_streaming.cpp::PclStreaming.AddStreamServiceDuringConfigure`.
+
+---
+
+## 17. Cross-Thread Local Service Request Queuing
+
+### REQ_PCL_180 - Post Service Request Deep Copies Request
+`pcl_executor_post_service_request()` shall deep-copy the service name, type name, and request payload bytes before returning so the caller may release or reuse its buffers immediately.
+
+**Traces**: PCL.057
+
+**Verification**: `test_pcl_robustness.cpp::PostServiceRequestDeepCopiesRequest` posts a request then overwrites the source buffer and verifies the handler receives the original bytes.
+
+### REQ_PCL_181 - Post Service Request Fires Handler On Executor Thread
+The service handler and response callback enqueued by `pcl_executor_post_service_request()` shall both execute on the executor thread during the next `pcl_executor_spin_once` or `pcl_executor_spin` cycle.
+
+**Traces**: PCL.057
+
+**Verification**: `test_pcl_robustness.cpp::PostServiceRequestFiresHandlerOnExecutorThread` posts from a background thread and records the thread ID in the handler; asserts it matches the spin thread.
+
+### REQ_PCL_182 - Post Service Request Service Not Found Fires Empty Callback
+When the named service is not registered, `pcl_executor_post_service_request()` shall still enqueue the request. During drain, the response callback shall be fired with an empty (zero-size, NULL-data) message so the caller is not silently abandoned.
+
+**Traces**: PCL.057
+
+**Verification**: `test_pcl_robustness.cpp::PostServiceRequestNotFoundFiresEmptyCallback`.
+
+### REQ_PCL_183 - Post Service Request Multiple Queued Fire In Order
+Multiple requests queued via `pcl_executor_post_service_request()` before a spin shall all be drained and their callbacks fired in FIFO order during that spin.
+
+**Traces**: PCL.057
+
+**Verification**: `test_pcl_robustness.cpp::PostServiceRequestMultipleQueuedFireInOrder`.
+
+### REQ_PCL_184 - Post Service Request Null Safety
+`pcl_executor_post_service_request()` shall return `PCL_ERR_INVALID` for NULL executor, NULL service name, NULL request, or NULL callback.
+
+**Traces**: PCL.057, PCL.045
+
+**Verification**: `test_pcl_robustness.cpp::PostServiceRequestNullSafety`.
+
+### REQ_PCL_185 - Destroy With Pending Service Requests Frees Memory
+Destroying an executor that has queued service requests (not yet drained) shall free all pending nodes without crashing.
+
+**Traces**: PCL.057, PCL.046
+
+**Verification**: `test_pcl_robustness.cpp::DestroyWithPendingServiceRequestsFrees`.

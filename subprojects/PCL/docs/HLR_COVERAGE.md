@@ -60,6 +60,7 @@ Each test traces to one or more LLRs (REQ_PCL_NNN). Each LLR traces to one or mo
 | PCL.025 | Cross-thread message posting | 049, 050, 051, 052, 053, 055, 056 | test_pcl_executor, test_pcl_robustness | ExternalThreadPostsCopiedMessageToExecutorThread, PostIncomingBadInputs, PostIncomingZeroSizeNoData, DestroyWithPendingMessagesFrees, ConcurrentPostFromManyThreads, PostDuringActiveSpinNoCorruption |
 | PCL.026 | Ingress queue drain | 054 | test_pcl_robustness | ProducerConsumerWithSubscriber |
 | PCL.027 | Async response delivery | 057, 058, 059, 060, 061 | test_pcl_robustness | PostResponseCbWithDataFiresOnSpin, PostResponseCbNoData, PostResponseCbMultipleOnQueue, PostResponseCbNullSafety, DestroyWithQueuedRespCbWithData |
+| PCL.057 | Cross-thread local service request queuing | 180, 181, 182, 183, 184, 185 | test_pcl_robustness | PostServiceRequestDeepCopiesRequest, PostServiceRequestFiresHandlerOnExecutorThread, PostServiceRequestNotFoundFiresEmptyCallback, PostServiceRequestMultipleQueuedFireInOrder, PostServiceRequestNullSafety, DestroyWithPendingServiceRequestsFrees |
 
 ## Transport Adapter Coverage
 

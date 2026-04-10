@@ -239,6 +239,7 @@ pcl_executor_t* pcl_executor_create(void) {
   e->prev_time          = 0.0;
   pcl_mutex_init(&e->incoming_lock);
   pcl_mutex_init(&e->resp_cb_lock);
+  pcl_mutex_init(&e->svc_req_lock);
   return e;
 }
 
@@ -288,6 +289,24 @@ void pcl_executor_destroy(pcl_executor_t* e) {
     }
   }
   pcl_mutex_destroy(&e->resp_cb_lock);
+
+  {
+    pcl_pending_svc_req_t* node;
+    pcl_mutex_lock(&e->svc_req_lock);
+    node = e->svc_req_head;
+    e->svc_req_head = NULL;
+    e->svc_req_tail = NULL;
+    pcl_mutex_unlock(&e->svc_req_lock);
+    while (node) {
+      pcl_pending_svc_req_t* next = node->next;
+      free(node->service_name);
+      free(node->type_name);
+      free(node->data);
+      free(node);
+      node = next;
+    }
+  }
+  pcl_mutex_destroy(&e->svc_req_lock);
   pcl_mutex_destroy(&e->incoming_lock);
   free(e);
 }
@@ -428,6 +447,85 @@ static pcl_status_t drain_incoming_queue(pcl_executor_t* e) {
   return PCL_OK;
 }
 
+/* Forward declaration — find_service is defined later in this translation unit. */
+static struct pcl_port_t* find_service(pcl_executor_t* e,
+                                       const char*     name,
+                                       uint32_t        source_route_mode,
+                                       const char*     source_peer_id);
+
+// -- Service request queue drain -----------------------------------------
+// Runs on the executor thread.  For each queued request:
+//   1. Locate the service port (local route only).
+//   2. Invoke the handler synchronously on the executor thread.
+//   3. Fire the response callback — also on the executor thread.
+// If the service is not found, the callback is still fired with an empty
+// message so the caller is never silently abandoned.
+
+static void drain_svc_req_queue(pcl_executor_t* e) {
+  for (;;) {
+    pcl_pending_svc_req_t* node;
+
+    pcl_mutex_lock(&e->svc_req_lock);
+    node = e->svc_req_head;
+    if (node) {
+      e->svc_req_head = node->next;
+      if (!e->svc_req_head) e->svc_req_tail = NULL;
+    }
+    pcl_mutex_unlock(&e->svc_req_lock);
+
+    if (!node) break;
+
+    {
+      pcl_msg_t req;
+      memset(&req, 0, sizeof(req));
+      req.data      = node->data;
+      req.size      = node->size;
+      req.type_name = node->type_name;
+
+      struct pcl_port_t* port = find_service(e, node->service_name,
+                                             PCL_ROUTE_LOCAL, NULL);
+      if (port) {
+        pcl_svc_context_t* ctx = (pcl_svc_context_t*)calloc(1, sizeof(*ctx));
+        if (ctx) {
+          pcl_msg_t    resp = {0};
+          pcl_status_t rc;
+
+          ctx->executor  = e;
+          ctx->callback  = node->callback;
+          ctx->user_data = node->user_data;
+
+          rc = port->svc_handler(port->owner, &req, &resp,
+                                 ctx, port->svc_user_data);
+          if (rc == PCL_OK) {
+            node->callback(&resp, node->user_data);
+            free(ctx);
+          } else if (rc == PCL_PENDING) {
+            /* handler saved ctx; will fire callback via pcl_service_respond */
+          } else {
+            /* handler error — notify caller with empty response */
+            pcl_msg_t empty = {0};
+            node->callback(&empty, node->user_data);
+            free(ctx);
+          }
+        } else {
+          /* OOM allocating context — notify caller */
+          pcl_msg_t empty = {0};
+          node->callback(&empty, node->user_data);
+        }
+      } else {
+        /* Service not registered — notify caller so it is not silently abandoned */
+        pcl_msg_t empty = {0};
+        node->callback(&empty, node->user_data);
+      }
+    }
+
+    free(node->service_name);
+    free(node->type_name);
+    free(node->data);
+    free(node);
+  }
+}
+
 // -- Tick one container --------------------------------------------------
 
 static void tick_container(pcl_container_t* c, double dt) {
@@ -484,6 +582,7 @@ pcl_status_t pcl_executor_spin(pcl_executor_t* e) {
       return rc;
     }
 
+    drain_svc_req_queue(e);
     drain_resp_cb_queue(e);
 
     for (i = 0; i < e->container_count; ++i) {
@@ -517,6 +616,7 @@ pcl_status_t pcl_executor_spin_once(pcl_executor_t* e, uint32_t timeout_ms) {
   rc = drain_incoming_queue(e);
   if (rc != PCL_OK) return rc;
 
+  drain_svc_req_queue(e);
   drain_resp_cb_queue(e);
 
   for (i = 0; i < e->container_count; ++i) {
@@ -1049,4 +1149,57 @@ pcl_status_t pcl_executor_post_remote_incoming(pcl_executor_t*  e,
                                                const pcl_msg_t* msg) {
   if (!peer_id) return PCL_ERR_INVALID;
   return enqueue_incoming_message(e, topic, msg, PCL_ROUTE_REMOTE, peer_id);
+}
+
+pcl_status_t pcl_executor_post_service_request(pcl_executor_t*  e,
+                                               const char*      service_name,
+                                               const pcl_msg_t* request,
+                                               pcl_resp_cb_fn_t callback,
+                                               void*            user_data) {
+  pcl_pending_svc_req_t* node;
+
+  if (!e || !service_name || !request || !callback) return PCL_ERR_INVALID;
+
+  node = (pcl_pending_svc_req_t*)calloc(1, sizeof(*node));
+  if (!node) return PCL_ERR_NOMEM;
+
+  node->service_name = pcl_strdup_local(service_name);
+  if (!node->service_name) {
+    free(node);
+    return PCL_ERR_NOMEM;
+  }
+
+  if (request->type_name) {
+    node->type_name = pcl_strdup_local(request->type_name);
+    if (!node->type_name) {
+      free(node->service_name);
+      free(node);
+      return PCL_ERR_NOMEM;
+    }
+  }
+
+  if (request->size > 0u && request->data) {
+    node->data = malloc(request->size);
+    if (!node->data) {
+      free(node->service_name);
+      free(node->type_name);
+      free(node);
+      return PCL_ERR_NOMEM;
+    }
+    memcpy(node->data, request->data, request->size);
+  }
+  node->size      = request->size;
+  node->callback  = callback;
+  node->user_data = user_data;
+
+  pcl_mutex_lock(&e->svc_req_lock);
+  if (e->svc_req_tail) {
+    e->svc_req_tail->next = node;
+  } else {
+    e->svc_req_head = node;
+  }
+  e->svc_req_tail = node;
+  pcl_mutex_unlock(&e->svc_req_lock);
+
+  return PCL_OK;
 }

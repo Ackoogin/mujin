@@ -218,6 +218,11 @@ The executor shall support `pcl_executor_post_response_cb()` for delivering asyn
 
 **Rationale**: Non-blocking async service invocation requires a response delivery mechanism.
 
+### PCL.057 - Cross-Thread Local Service Request Queuing
+The executor shall provide `pcl_executor_post_service_request()` for external threads to safely enqueue an intra-process service call. The function shall deep-copy the service name, type name, and request payload before returning. The service handler and response callback shall both execute on the executor thread during the next spin cycle.
+
+**Rationale**: D5 forbids external threads from calling component callbacks directly. Without this function there is no thread-safe path for an external producer to trigger a local service handler — callers were forced to use `pcl_executor_invoke_service()` which bypasses the threading model when called off the executor thread.
+
 ## Transport Adapter
 
 ### PCL.028 - Transport Adapter Interface
@@ -438,6 +443,7 @@ PCL shall expose a public C ABI for configuring endpoint locality and peer selec
 | `PCL.025` | `D5` |
 | `PCL.026` | `D2`, `D5` |
 | `PCL.027` | `D5` |
+| `PCL.057` | `D2`, `D5` |
 | `PCL.028` | `D3` |
 | `PCL.029` | `D3` |
 | `PCL.030` | `D3` |

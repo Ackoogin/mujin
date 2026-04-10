@@ -175,18 +175,65 @@ This is similar to the generated C++ flow, but not identical. C++ generates a
 `ServiceHandler` base class with virtual `handle*` methods; Ada now uses a
 callback record instead of requiring edits to generated package bodies.
 
-### Triggering a Generated Service in a Local Test with `Post_Incoming`
+### Triggering a Generated Service in a Local Test
 
-If you want a lightweight Ada test that exercises the generated service
-registration and decode path without sockets, you can queue a request directly
- onto the executor with `Pcl_Bindings.Post_Incoming`, then drain it with
-`Spin_Once`.
+There are two correct patterns depending on what you need to test.
 
-This is useful when the test only needs to prove:
+#### Option A — `Invoke_Service` (synchronous, single-threaded tests)
+
+`Pcl_Bindings.Invoke_Service` calls the service handler directly and returns
+the response.  It is the right choice when your test drives `Spin_Once`
+yourself and there is no concurrent executor thread — the threading model
+only applies when another thread is spinning.
+
+```ada
+declare
+   Req_Json : aliased constant String := Tactical_Codec.To_Json (Request_Value);
+   Type_C   : Interfaces.C.Strings.chars_ptr :=
+     Interfaces.C.Strings.New_String ("application/json");
+   Svc_C    : Interfaces.C.Strings.chars_ptr :=
+     Interfaces.C.Strings.New_String (Prov.Svc_Create_Requirement);
+   Req_Msg  : aliased Pcl_Bindings.Pcl_Msg :=
+     (Data      => Req_Json'Address,
+      Size      => Interfaces.C.unsigned (Req_Json'Length),
+      Type_Name => Type_C);
+   Resp_Buf : aliased String (1 .. 4096) := (others => ' ');
+   Resp_Msg : aliased Pcl_Bindings.Pcl_Msg :=
+     (Data      => Resp_Buf'Address,
+      Size      => Resp_Buf'Length,
+      Type_Name => Interfaces.C.Strings.Null_Ptr);
+   Rc : Pcl_Bindings.Pcl_Status;
+begin
+   Rc := Pcl_Bindings.Invoke_Service
+     (Exec         => Exec,
+      Service_Name => Svc_C,
+      Request      => Req_Msg'Access,
+      Response     => Resp_Msg'Access);
+   pragma Assert (Rc = Pcl_Bindings.PCL_OK);
+   --  Resp_Buf now holds the encoded response.
+   Interfaces.C.Strings.Free (Svc_C);
+   Interfaces.C.Strings.Free (Type_C);
+end;
+```
+
+#### Option B — `Post_Service_Request` (cross-thread safe, callback-style)
+
+Use `Pcl_Bindings.Post_Service_Request` when a thread other than the executor
+thread needs to trigger a service call.  The request is deep-copied and
+enqueued; the service handler and your response callback both run on the
+executor thread during the next `Spin_Once` cycle.
+
+This is useful when the test needs to prove:
 
 - the service was registered under the expected wire name
-- the generated trampoline decoded the JSON request
+- the generated trampoline decoded the request correctly
 - the typed Ada handler was invoked on the executor thread
+- the threading model (D2/D5) is respected end-to-end
+
+> **Note:** `Post_Incoming` does **not** work for service calls.  It only
+> dispatches to subscriber (`PCL_PORT_SUBSCRIBER`) ports.  Service ports
+> (`PCL_PORT_SERVICE`) are reached only through `Invoke_Service` or
+> `Post_Service_Request`.
 
 ```ada
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
@@ -196,7 +243,7 @@ with Pcl_Bindings;
 with Pyramid.Data_Model.Tactical.Types_Codec;
 with Pyramid.Services.Tactical_Objects.Provided;
 
-procedure Example_Service_Post_Incoming_Test is
+procedure Example_Service_Post_Request_Test is
    package Tactical_Codec renames Pyramid.Data_Model.Tactical.Types_Codec;
    package Prov renames Pyramid.Services.Tactical_Objects.Provided;
 
@@ -204,8 +251,8 @@ procedure Example_Service_Post_Incoming_Test is
      Pcl_Bindings.Create_Executor;
    Container : Pcl_Bindings.Pcl_Container_Access := My_Container_Handle;
 
-   Handler_Called : Boolean := False;
-   Last_Id        : Unbounded_String := Null_Unbounded_String;
+   Handler_Called   : Boolean := False;
+   Callback_Called  : Boolean := False;
 
    procedure Create_Requirement
      (Request  : in  Object_Interest_Requirement;
@@ -213,7 +260,6 @@ procedure Example_Service_Post_Incoming_Test is
    is
    begin
       Handler_Called := True;
-      Last_Id := Request.Id;
       Response := To_Unbounded_String ("created-by-test");
    end Create_Requirement;
 
@@ -224,6 +270,15 @@ procedure Example_Service_Post_Incoming_Test is
       On_Update_Requirement  => null,
       On_Delete_Requirement  => null,
       On_Read_Detail         => null);
+
+   procedure Response_Cb
+     (Resp      : access constant Pcl_Bindings.Pcl_Msg;
+      User_Data : System.Address)
+   is
+      pragma Unreferenced (Resp, User_Data);
+   begin
+      Callback_Called := True;
+   end Response_Cb;
 
    Request_Value : constant Object_Interest_Requirement :=
      (Base          => <>,
@@ -258,27 +313,24 @@ begin
    Pcl_Bindings.Configure (Container);
    Pcl_Bindings.Activate (Container);
 
-   --  Queue the request as if it arrived from an external source.
-   Pcl_Bindings.Post_Incoming
-     (Exec  => Exec,
-      Topic => Service_Name,
-      Msg   => Msg'Access);
+   --  Enqueue a service call from this thread (safe from any thread).
+   Pcl_Bindings.Post_Service_Request
+     (Exec         => Exec,
+      Service_Name => Service_Name,
+      Request      => Msg'Access,
+      Callback     => Response_Cb'Access,
+      User_Data    => System.Null_Address);
 
-   --  Drain one executor cycle so the generated service handler runs.
+   --  Drain one executor cycle: handler and callback both fire here.
    Pcl_Bindings.Spin_Once (Exec, 0);
 
    pragma Assert (Handler_Called);
+   pragma Assert (Callback_Called);
 
    Interfaces.C.Strings.Free (Service_Name);
    Interfaces.C.Strings.Free (Type_Name);
    Pcl_Bindings.Destroy_Executor (Exec);
-end Example_Service_Post_Incoming_Test;
-```
-
-`Post_Incoming` is best for testing ingress and dispatch. If the test needs to
-assert on the returned response body as well, prefer
-`Pcl_Bindings.Invoke_Service`, which performs a synchronous local service call
-and gives you the response `Pcl_Msg`.
+end Example_Service_Post_Request_Test;
 
 ## Routing and Peer Configuration
 

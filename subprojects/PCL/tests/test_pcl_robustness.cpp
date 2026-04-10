@@ -1971,3 +1971,267 @@ TEST(PclExecutorRobust, DispatchIncomingDirectCall) {
   pcl_executor_destroy(e);
   pcl_container_destroy(c);
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// pcl_executor_post_service_request — REQ_PCL_180 through REQ_PCL_185
+// ═══════════════════════════════════════════════════════════════════════
+
+// -- Shared helpers for service-request tests ---------------------------
+
+struct SvcReqCtx {
+  int              received_value  = 0;
+  bool             handler_called  = false;
+  bool             callback_called = false;
+  std::thread::id  handler_thread;
+  std::thread::id  callback_thread;
+};
+
+static pcl_status_t capture_svc_handler(pcl_container_t*,
+                                        const pcl_msg_t* req,
+                                        pcl_msg_t*       resp,
+                                        pcl_svc_context_t*, void* ud) {
+  auto* ctx = static_cast<SvcReqCtx*>(ud);
+  ctx->handler_called = true;
+  ctx->handler_thread = std::this_thread::get_id();
+  if (req->data && req->size >= sizeof(int)) {
+    memcpy(&ctx->received_value, req->data, sizeof(int));
+  }
+  resp->data      = req->data;   // points into node's deep copy — valid during callback
+  resp->size      = req->size;
+  resp->type_name = req->type_name;
+  return PCL_OK;
+}
+
+static pcl_container_t* make_svc_container(const char* name,
+                                           const char* svc_name,
+                                           void*       svc_user_data) {
+  struct Cfg { const char* svc; void* ud; };
+  static Cfg cfg;   // one test at a time is sufficient here
+  cfg = { svc_name, svc_user_data };
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto* cc = static_cast<Cfg*>(ud);
+    pcl_container_add_service(c, cc->svc, "Msg", capture_svc_handler, cc->ud);
+    return PCL_OK;
+  };
+  auto* cont = pcl_container_create(name, &cbs, &cfg);
+  pcl_container_configure(cont);
+  pcl_container_activate(cont);
+  return cont;
+}
+
+// REQ_PCL_180 — deep-copies request; handler receives original bytes.
+TEST(PclExecutorRobust, PostServiceRequestDeepCopiesRequest) {
+  ///< REQ_PCL_180: Post Service Request Deep Copies Request
+  SvcReqCtx svc_ctx;
+  auto* c = make_svc_container("deep_copy_svc", "deep_copy", &svc_ctx);
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+
+  int payload = 42;
+  pcl_msg_t req = {};
+  req.data      = &payload;
+  req.size      = sizeof(payload);
+  req.type_name = "Msg";
+
+  bool callback_called = false;
+  ASSERT_EQ(pcl_executor_post_service_request(e, "deep_copy", &req,
+    [](const pcl_msg_t*, void* ud) { *static_cast<bool*>(ud) = true; },
+    &callback_called), PCL_OK);
+
+  // Overwrite source buffer immediately — executor must have copied it.
+  payload = 99;
+
+  ASSERT_EQ(pcl_executor_spin_once(e, 0), PCL_OK);
+  EXPECT_TRUE(svc_ctx.handler_called);
+  EXPECT_EQ(svc_ctx.received_value, 42);
+  EXPECT_TRUE(callback_called);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// REQ_PCL_181 — handler and callback both run on the executor (spin) thread.
+TEST(PclExecutorRobust, PostServiceRequestFiresHandlerOnExecutorThread) {
+  ///< REQ_PCL_181: Post Service Request Fires Handler On Executor Thread
+  SvcReqCtx svc_ctx;
+  auto* c = make_svc_container("thread_svc", "thread_check", &svc_ctx);
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+
+  struct CbCtx { std::thread::id tid; bool called = false; } cb_ctx;
+
+  int payload = 1;
+  pcl_msg_t req = {};
+  req.data      = &payload;
+  req.size      = sizeof(payload);
+  req.type_name = "Msg";
+
+  // Post from a background thread.
+  pcl_status_t post_rc = PCL_ERR_INVALID;
+  std::thread producer([&]() {
+    post_rc = pcl_executor_post_service_request(e, "thread_check", &req,
+      [](const pcl_msg_t*, void* ud) {
+        auto* ctx = static_cast<CbCtx*>(ud);
+        ctx->called = true;
+        ctx->tid    = std::this_thread::get_id();
+      }, &cb_ctx);
+  });
+  producer.join();
+  ASSERT_EQ(post_rc, PCL_OK);
+
+  // Spin on this (main) thread — both handler and callback must run here.
+  const std::thread::id spin_tid = std::this_thread::get_id();
+  ASSERT_EQ(pcl_executor_spin_once(e, 0), PCL_OK);
+
+  EXPECT_TRUE(svc_ctx.handler_called);
+  EXPECT_EQ(svc_ctx.handler_thread, spin_tid);
+  EXPECT_TRUE(cb_ctx.called);
+  EXPECT_EQ(cb_ctx.tid, spin_tid);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// REQ_PCL_182 — service not found; callback still fires with empty message.
+TEST(PclExecutorRobust, PostServiceRequestNotFoundFiresEmptyCallback) {
+  ///< REQ_PCL_182: Post Service Request Service Not Found Fires Empty Callback
+  struct CbCtx { bool called = false; uint32_t size = 1; const void* data = nullptr; } cb_ctx;
+  // Deliberately non-null size sentinel — empty response must set it to 0.
+  cb_ctx.size = 1;
+
+  auto* e = pcl_executor_create();
+
+  int dummy = 0;
+  pcl_msg_t req = {};
+  req.data      = &dummy;
+  req.size      = sizeof(dummy);
+  req.type_name = "Msg";
+
+  ASSERT_EQ(pcl_executor_post_service_request(e, "no_such_service", &req,
+    [](const pcl_msg_t* resp, void* ud) {
+      auto* ctx = static_cast<CbCtx*>(ud);
+      ctx->called = true;
+      ctx->size   = resp->size;
+      ctx->data   = resp->data;
+    }, &cb_ctx), PCL_OK);
+
+  ASSERT_EQ(pcl_executor_spin_once(e, 0), PCL_OK);
+  EXPECT_TRUE(cb_ctx.called);
+  EXPECT_EQ(cb_ctx.size, 0u);
+  EXPECT_EQ(cb_ctx.data, nullptr);
+
+  pcl_executor_destroy(e);
+}
+
+// REQ_PCL_183 — multiple requests queued before spin fire in FIFO order.
+TEST(PclExecutorRobust, PostServiceRequestMultipleQueuedFireInOrder) {
+  ///< REQ_PCL_183: Post Service Request Multiple Queued Fire In Order
+  struct OrderCtx {
+    std::vector<int> handler_order;
+    std::vector<int> callback_order;
+  } ord;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    pcl_container_add_service(c, "ordered_svc", "Msg",
+      [](pcl_container_t*, const pcl_msg_t* req, pcl_msg_t* resp,
+         pcl_svc_context_t*, void* ud) -> pcl_status_t {
+        auto* o = static_cast<OrderCtx*>(ud);
+        int v = 0;
+        if (req->data && req->size >= sizeof(int)) memcpy(&v, req->data, sizeof(int));
+        o->handler_order.push_back(v);
+        resp->data      = req->data;
+        resp->size      = req->size;
+        resp->type_name = req->type_name;
+        return PCL_OK;
+      }, ud);
+    return PCL_OK;
+  };
+  auto* cont = pcl_container_create("ordered_cont", &cbs, &ord);
+  pcl_container_configure(cont);
+  pcl_container_activate(cont);
+
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, cont);
+
+  // Callback captures the int from the response and records it.
+  auto cb = [](const pcl_msg_t* resp, void* ud) {
+    auto* o = static_cast<OrderCtx*>(ud);
+    int v = 0;
+    if (resp->data && resp->size >= sizeof(int)) memcpy(&v, resp->data, sizeof(int));
+    o->callback_order.push_back(v);
+  };
+
+  int v1 = 10, v2 = 20, v3 = 30;
+  pcl_msg_t r1 = {}, r2 = {}, r3 = {};
+  r1.data = &v1; r1.size = sizeof(v1); r1.type_name = "Msg";
+  r2.data = &v2; r2.size = sizeof(v2); r2.type_name = "Msg";
+  r3.data = &v3; r3.size = sizeof(v3); r3.type_name = "Msg";
+
+  ASSERT_EQ(pcl_executor_post_service_request(e, "ordered_svc", &r1, cb, &ord), PCL_OK);
+  ASSERT_EQ(pcl_executor_post_service_request(e, "ordered_svc", &r2, cb, &ord), PCL_OK);
+  ASSERT_EQ(pcl_executor_post_service_request(e, "ordered_svc", &r3, cb, &ord), PCL_OK);
+
+  ASSERT_EQ(pcl_executor_spin_once(e, 0), PCL_OK);
+
+  ASSERT_EQ(ord.handler_order.size(), 3u);
+  EXPECT_EQ(ord.handler_order[0], 10);
+  EXPECT_EQ(ord.handler_order[1], 20);
+  EXPECT_EQ(ord.handler_order[2], 30);
+
+  ASSERT_EQ(ord.callback_order.size(), 3u);
+  EXPECT_EQ(ord.callback_order[0], 10);
+  EXPECT_EQ(ord.callback_order[1], 20);
+  EXPECT_EQ(ord.callback_order[2], 30);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(cont);
+}
+
+// REQ_PCL_184 — null arguments return PCL_ERR_INVALID.
+TEST(PclExecutorRobust, PostServiceRequestNullSafety) {
+  ///< REQ_PCL_184: Post Service Request Null Safety
+  auto* e  = pcl_executor_create();
+  auto  cb = [](const pcl_msg_t*, void*) {};
+  int   d  = 0;
+  pcl_msg_t req = {};
+  req.data = &d; req.size = sizeof(d); req.type_name = "Msg";
+
+  EXPECT_EQ(pcl_executor_post_service_request(nullptr, "svc", &req, cb, nullptr),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_post_service_request(e, nullptr, &req, cb, nullptr),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_post_service_request(e, "svc", nullptr, cb, nullptr),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_post_service_request(e, "svc", &req, nullptr, nullptr),
+            PCL_ERR_INVALID);
+
+  pcl_executor_destroy(e);
+}
+
+// REQ_PCL_185 — destroy with queued (unspun) requests frees all memory.
+TEST(PclExecutorRobust, DestroyWithPendingServiceRequestsFrees) {
+  ///< REQ_PCL_185: Destroy With Pending Service Requests Frees Memory
+  auto* e = pcl_executor_create();
+
+  auto cb = [](const pcl_msg_t*, void*) {
+    ADD_FAILURE() << "callback must not fire after executor is destroyed";
+  };
+
+  // Queue several requests but never spin — destroy must free them cleanly.
+  for (int i = 0; i < 5; ++i) {
+    int d = i;
+    pcl_msg_t req = {};
+    req.data      = &d;
+    req.size      = sizeof(d);
+    req.type_name = "Msg";
+    ASSERT_EQ(pcl_executor_post_service_request(e, "phantom_svc", &req, cb, nullptr),
+              PCL_OK);
+  }
+
+  // No spin — destructor must drain the queue without invoking callbacks.
+  pcl_executor_destroy(e);
+  // Reaching here without crash or assertion failure satisfies the requirement.
+}

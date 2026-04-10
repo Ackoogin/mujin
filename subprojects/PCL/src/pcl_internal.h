@@ -98,6 +98,18 @@ typedef struct pcl_resp_cb_node_t {
   struct pcl_resp_cb_node_t*  next;
 } pcl_resp_cb_node_t;
 
+/// Pending intra-process service request queued from an external thread.
+/// Drained and dispatched to the service handler on the executor thread.
+typedef struct pcl_pending_svc_req_t {
+  char*                          service_name; ///< deep copy
+  char*                          type_name;    ///< deep copy, may be NULL
+  void*                          data;         ///< deep copy, may be NULL
+  uint32_t                       size;
+  pcl_resp_cb_fn_t               callback;     ///< fired on executor thread
+  void*                          user_data;
+  struct pcl_pending_svc_req_t*  next;
+} pcl_pending_svc_req_t;
+
 typedef struct {
   char            peer_id[64];
   pcl_transport_t transport;
@@ -135,6 +147,12 @@ struct pcl_executor_t {
   pcl_resp_cb_node_t* resp_cb_head;
   pcl_resp_cb_node_t* resp_cb_tail;
   pcl_mutex_t         resp_cb_lock;
+
+  /// Queue of intra-process service requests posted from external threads.
+  /// Guarded by svc_req_lock; drained exclusively on the executor thread.
+  pcl_pending_svc_req_t* svc_req_head;
+  pcl_pending_svc_req_t* svc_req_tail;
+  pcl_mutex_t            svc_req_lock;
 };
 
 // -- Service context for deferred responses -------------------------------
