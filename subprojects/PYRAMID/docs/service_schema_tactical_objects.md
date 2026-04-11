@@ -63,14 +63,14 @@ Current state:
 |--------------|-------------------------|-------|
 | `json` | active and usable | proto-native type codecs are the live JSON path |
 | `flatbuffers` | active and usable | C++ is native; Ada is typed and may use a generated shim internally |
-| `protobuf` | not yet standardized | generated artifacts exist, but full runtime integration is still pending |
+| `protobuf` | active on PCL | runtime selection now supports `application/protobuf` alongside JSON and FlatBuffers |
 
 ### Transport backend status
 
 | Transport backend | Tactical Objects status | Notes |
 |------------------|-------------------------|-------|
 | `pcl` | active baseline | current proving path |
-| `grpc` | partial / generated only | not yet an end-to-end tactical runtime path |
+| `grpc` | projected / optional build | transport adapter now reuses the generated Tactical Objects `dispatch(...)` path over protobuf; build still depends on local gRPC toolchain availability |
 | `shared_memory` | planned | intended next transport proving target after Protobuf/PCL tightening |
 | `ros2` | planned | later projection, not part of the current proving path |
 
@@ -157,11 +157,11 @@ Use this quick table in future reviews:
 | Proto-native C++ bindings | yes |
 | JSON runtime selection on PCL | yes |
 | FlatBuffers runtime selection on PCL | yes |
-| Protobuf runtime selection on PCL | not yet |
+| Protobuf runtime selection on PCL | yes |
 | C++ native FlatBuffers | yes |
 | Ada typed FlatBuffers API | yes |
 | Ada fully native FlatBuffers internals | not required yet |
-| gRPC end-to-end Tactical path | not yet |
+| gRPC Tactical projection code | yes, optional build |
 | shared-memory Tactical path | not yet |
 
 ## What To Avoid
@@ -174,4 +174,3 @@ The Tactical Objects work should not regress into any of the following:
 - codec-specific handler interfaces
 - backend hardcoding of Tactical Objects payload semantics that should be
   derived from proto
-

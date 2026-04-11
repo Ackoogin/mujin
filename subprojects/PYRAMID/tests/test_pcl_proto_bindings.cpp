@@ -18,6 +18,7 @@
 #include "pyramid_data_model_common_codec.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
+#include "pyramid_services_tactical_objects_protobuf_codec.hpp"
 #include "pyramid_data_model_types.hpp"
 
 extern "C" {
@@ -35,6 +36,7 @@ extern "C" {
 namespace prov = pyramid::services::tactical_objects::provided;
 namespace cons = pyramid::services::tactical_objects::consumed;
 namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
+namespace protobuf_codec = pyramid::services::tactical_objects::protobuf_codec;
 namespace types = pyramid::data_model;
 namespace tactical_codec = pyramid::data_model::tactical;
 
@@ -66,6 +68,36 @@ std::string makeConsumedFlatbuffersRequest(cons::ServiceChannel ch) {
         return flatbuffers_codec::toBinary(types::ObjectEvidenceRequirement{});
     case cons::ServiceChannel::DeleteRequirement:
         return flatbuffers_codec::toBinary(types::Identifier{});
+    }
+    return {};
+}
+
+std::string makeProvidedProtobufRequest(prov::ServiceChannel ch) {
+    switch (ch) {
+    case prov::ServiceChannel::ReadMatch:
+    case prov::ServiceChannel::ReadRequirement:
+    case prov::ServiceChannel::ReadDetail:
+        return protobuf_codec::toBinary(types::Query{});
+    case prov::ServiceChannel::CreateRequirement:
+    case prov::ServiceChannel::UpdateRequirement:
+        return protobuf_codec::toBinary(types::ObjectInterestRequirement{});
+    case prov::ServiceChannel::DeleteRequirement:
+        return protobuf_codec::toBinary(types::Identifier{});
+    }
+    return {};
+}
+
+std::string makeConsumedProtobufRequest(cons::ServiceChannel ch) {
+    switch (ch) {
+    case cons::ServiceChannel::ReadDetail:
+    case cons::ServiceChannel::ReadRequirement:
+    case cons::ServiceChannel::ReadCapability:
+        return protobuf_codec::toBinary(types::Query{});
+    case cons::ServiceChannel::CreateRequirement:
+    case cons::ServiceChannel::UpdateRequirement:
+        return protobuf_codec::toBinary(types::ObjectEvidenceRequirement{});
+    case cons::ServiceChannel::DeleteRequirement:
+        return protobuf_codec::toBinary(types::Identifier{});
     }
     return {};
 }
@@ -537,6 +569,50 @@ TEST(ProtoBindingsConsumed, DispatchAllChannelsFlatBuffersNoCrash) {
     }
 }
 
+TEST(ProtoBindingsProvided, DispatchAllChannelsProtobufNoCrash) {
+    prov::ServiceHandler handler;
+    const prov::ServiceChannel channels[] = {
+        prov::ServiceChannel::ReadMatch,
+        prov::ServiceChannel::CreateRequirement,
+        prov::ServiceChannel::ReadRequirement,
+        prov::ServiceChannel::UpdateRequirement,
+        prov::ServiceChannel::DeleteRequirement,
+        prov::ServiceChannel::ReadDetail,
+    };
+
+    for (auto ch : channels) {
+        const std::string empty_req = makeProvidedProtobufRequest(ch);
+        void* resp_buf = nullptr;
+        size_t resp_size = 0;
+        EXPECT_NO_FATAL_FAILURE(
+            prov::dispatch(handler, ch, empty_req.data(), empty_req.size(),
+                           "application/protobuf", &resp_buf, &resp_size));
+        if (resp_buf) std::free(resp_buf);
+    }
+}
+
+TEST(ProtoBindingsConsumed, DispatchAllChannelsProtobufNoCrash) {
+    cons::ServiceHandler handler;
+    const cons::ServiceChannel channels[] = {
+        cons::ServiceChannel::ReadDetail,
+        cons::ServiceChannel::CreateRequirement,
+        cons::ServiceChannel::ReadRequirement,
+        cons::ServiceChannel::UpdateRequirement,
+        cons::ServiceChannel::DeleteRequirement,
+        cons::ServiceChannel::ReadCapability,
+    };
+
+    for (auto ch : channels) {
+        const std::string empty_req = makeConsumedProtobufRequest(ch);
+        void* resp_buf = nullptr;
+        size_t resp_size = 0;
+        EXPECT_NO_FATAL_FAILURE(
+            cons::dispatch(handler, ch, empty_req.data(), empty_req.size(),
+                           "application/protobuf", &resp_buf, &resp_size));
+        if (resp_buf) std::free(resp_buf);
+    }
+}
+
 // ===========================================================================
 // Typed dispatch — round-trip through handler with real serialization
 // ===========================================================================
@@ -688,6 +764,62 @@ TEST(ProtoBindingsConsumed, DispatchUpdateRequirementFlatBuffersRoundTrip) {
 
     ASSERT_NE(resp_buf, nullptr);
     auto ack = flatbuffers_codec::fromBinaryAck(resp_buf, resp_size);
+    EXPECT_TRUE(ack.success);
+    std::free(resp_buf);
+}
+
+TEST(ProtoBindingsProvided, DispatchCreateRequirementProtobufRoundTrip) {
+    struct CapturingHandler : public prov::ServiceHandler {
+        types::ObjectInterestRequirement captured_req;
+        types::Identifier
+        handleCreateRequirement(const types::ObjectInterestRequirement& req) override {
+            captured_req = req;
+            return "new-id-4242";
+        }
+    };
+
+    CapturingHandler handler;
+    types::ObjectInterestRequirement req;
+    req.policy = types::DataPolicy::Obtain;
+    const std::string req_payload = protobuf_codec::toBinary(req);
+
+    void* resp_buf = nullptr;
+    size_t resp_size = 0;
+    prov::dispatch(handler, prov::ServiceChannel::CreateRequirement,
+                   req_payload.data(), req_payload.size(),
+                   "application/protobuf", &resp_buf, &resp_size);
+
+    EXPECT_EQ(handler.captured_req.policy, types::DataPolicy::Obtain);
+    ASSERT_NE(resp_buf, nullptr);
+    auto resp = protobuf_codec::fromBinaryIdentifier(resp_buf, resp_size);
+    EXPECT_EQ(resp, "new-id-4242");
+    std::free(resp_buf);
+}
+
+TEST(ProtoBindingsConsumed, DispatchUpdateRequirementProtobufRoundTrip) {
+    struct AckHandler : public cons::ServiceHandler {
+        types::ObjectEvidenceRequirement captured_req;
+        types::Ack
+        handleUpdateRequirement(const types::ObjectEvidenceRequirement& req) override {
+            captured_req = req;
+            return types::kAckOk;
+        }
+    };
+
+    AckHandler handler;
+    types::ObjectEvidenceRequirement req;
+    req.policy = types::DataPolicy::Query;
+    const std::string req_payload = protobuf_codec::toBinary(req);
+
+    void* resp_buf = nullptr;
+    size_t resp_size = 0;
+    cons::dispatch(handler, cons::ServiceChannel::UpdateRequirement,
+                   req_payload.data(), req_payload.size(),
+                   "application/protobuf", &resp_buf, &resp_size);
+
+    EXPECT_EQ(handler.captured_req.policy, types::DataPolicy::Query);
+    ASSERT_NE(resp_buf, nullptr);
+    auto ack = protobuf_codec::fromBinaryAck(resp_buf, resp_size);
     EXPECT_TRUE(ack.success);
     std::free(resp_buf);
 }

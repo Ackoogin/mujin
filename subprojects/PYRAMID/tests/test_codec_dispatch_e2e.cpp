@@ -20,10 +20,12 @@ extern "C" {
 #include "pyramid_services_tactical_objects_provided.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
+#include "pyramid_services_tactical_objects_protobuf_codec.hpp"
 
 namespace prov = pyramid::services::tactical_objects::provided;
 namespace cons = pyramid::services::tactical_objects::consumed;
 namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
+namespace protobuf_codec = pyramid::services::tactical_objects::protobuf_codec;
 namespace types = pyramid::data_model;
 namespace tactical_codec = pyramid::data_model::tactical;
 
@@ -60,6 +62,8 @@ std::string serializeEvidence(const types::ObjectDetail& ev,
         return tactical_codec::toJson(ev);
     if (std::strcmp(content_type, "application/flatbuffers") == 0)
         return flatbuffers_codec::toBinary(ev);
+    if (std::strcmp(content_type, "application/protobuf") == 0)
+        return protobuf_codec::toBinary(ev);
     return {};
 }
 
@@ -76,6 +80,10 @@ bool deserializeEvidence(const void* data,
         }
         if (std::strcmp(content_type, "application/flatbuffers") == 0) {
             out = flatbuffers_codec::fromBinaryObjectDetail(data, size);
+            return true;
+        }
+        if (std::strcmp(content_type, "application/protobuf") == 0) {
+            out = protobuf_codec::fromBinaryObjectDetail(data, size);
             return true;
         }
     } catch (...) {
@@ -190,6 +198,10 @@ TEST(CodecDispatchE2E, JsonPubSubRoundTrip) {
 
 TEST(CodecDispatchE2E, FlatBuffersPubSubRoundTrip) {
     runPubSubRoundTrip("application/flatbuffers", makeTestEvidence());
+}
+
+TEST(CodecDispatchE2E, ProtobufPubSubRoundTrip) {
+    runPubSubRoundTrip("application/protobuf", makeTestEvidence());
 }
 
 TEST(CodecDispatchE2E, ContentTypePropagation) {
@@ -470,5 +482,35 @@ TEST(CodecDispatchE2E, FlatBuffersCreateRequirementDispatchRoundTrip) {
     ASSERT_EQ(handler.captured_req.dimension.size(), 1u);
     EXPECT_EQ(handler.captured_req.dimension[0], types::BattleDimension::SeaSurface);
     EXPECT_EQ(resp, "new-id-84");
+    std::free(resp_buf);
+}
+
+TEST(CodecDispatchE2E, ProtobufCreateRequirementDispatchRoundTrip) {
+    struct CapturingHandler : public prov::ServiceHandler {
+        types::ObjectInterestRequirement captured_req;
+        types::Identifier handleCreateRequirement(
+            const types::ObjectInterestRequirement& req) override {
+            captured_req = req;
+            return "new-id-168";
+        }
+    } handler;
+
+    types::ObjectInterestRequirement req;
+    req.policy = types::DataPolicy::Obtain;
+    req.dimension.push_back(types::BattleDimension::Air);
+
+    auto payload = protobuf_codec::toBinary(req);
+    void* resp_buf = nullptr;
+    size_t resp_size = 0;
+    prov::dispatch(handler, prov::ServiceChannel::CreateRequirement,
+                   payload.data(), payload.size(),
+                   "application/protobuf", &resp_buf, &resp_size);
+
+    ASSERT_NE(resp_buf, nullptr);
+    auto resp = protobuf_codec::fromBinaryIdentifier(resp_buf, resp_size);
+    EXPECT_EQ(handler.captured_req.policy, types::DataPolicy::Obtain);
+    ASSERT_EQ(handler.captured_req.dimension.size(), 1u);
+    EXPECT_EQ(handler.captured_req.dimension[0], types::BattleDimension::Air);
+    EXPECT_EQ(resp, "new-id-168");
     std::free(resp_buf);
 }
