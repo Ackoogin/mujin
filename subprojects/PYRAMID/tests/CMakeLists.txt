@@ -247,7 +247,28 @@ if(GPRBUILD)
     endif()
 
     add_custom_target(ada_test_generated_bindings_build ALL
-        COMMAND ${ADA_PYTHON} ${BINDINGS_GEN_SCRIPT} ${PYRAMID_PROTO_ROOT} ${ADA_GEN_OUT} --languages ada --backends json,flatbuffers
+        COMMAND ${ADA_PYTHON} ${BINDINGS_GEN_SCRIPT} ${PYRAMID_PROTO_ROOT} ${ADA_GEN_OUT} --languages ada --backends json,flatbuffers,protobuf,grpc
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${ADA_GEN_OUT}/protobuf/ada/pyramid_components_tactical_objects-protobuf_codec.ads
+                ${ADA_GEN_OUT}/protobuf/ada/pyramid-components-tactical_objects-protobuf_codec.ads
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${ADA_GEN_OUT}/protobuf/ada/pyramid_data_model_base-protobuf_codec.ads
+                ${ADA_GEN_OUT}/protobuf/ada/pyramid-data_model-base-protobuf_codec.ads
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${ADA_GEN_OUT}/protobuf/ada/pyramid_data_model_common-protobuf_codec.ads
+                ${ADA_GEN_OUT}/protobuf/ada/pyramid-data_model-common-protobuf_codec.ads
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${ADA_GEN_OUT}/protobuf/ada/pyramid_data_model_tactical-protobuf_codec.ads
+                ${ADA_GEN_OUT}/protobuf/ada/pyramid-data_model-tactical-protobuf_codec.ads
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${ADA_GEN_OUT}/grpc/ada/pyramid_components_tactical_objects-grpc_transport.ads
+                ${ADA_GEN_OUT}/grpc/ada/pyramid-components-tactical_objects-grpc_transport.ads
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${ADA_GEN_OUT}/grpc/ada/pyramid_components_tactical_objects_services_consumed-grpc_transport.ads
+                ${ADA_GEN_OUT}/grpc/ada/pyramid-components-tactical_objects-services-consumed-grpc_transport.ads
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${ADA_GEN_OUT}/grpc/ada/pyramid_components_tactical_objects_services_provided-grpc_transport.ads
+                ${ADA_GEN_OUT}/grpc/ada/pyramid-components-tactical_objects-services-provided-grpc_transport.ads
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR}
         COMMAND ${CMAKE_COMMAND} -E env MUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
@@ -338,4 +359,20 @@ if(GPRBUILD)
     set_tests_properties(tobj_ada_active_find_flatbuffers_e2e PROPERTIES
         LABELS "cross_language;integration;codec"
         TIMEOUT 40)
+endif()
+
+if(TARGET pyramid_grpc_transport)
+    add_executable(test_grpc_transport_smoke
+        test_grpc_transport_smoke.cpp
+    )
+    target_link_libraries(test_grpc_transport_smoke PRIVATE
+        pyramid_grpc_transport
+        pyramid_protobuf_support
+        GTest::gtest_main
+    )
+    target_include_directories(test_grpc_transport_smoke PRIVATE
+        ${PYRAMID_ROOT_DIR}/examples/grpc/cpp
+        ${PYRAMID_PROTOBUF_GEN_DIR}
+    )
+    gtest_discover_tests(test_grpc_transport_smoke DISCOVERY_MODE PRE_TEST)
 endif()

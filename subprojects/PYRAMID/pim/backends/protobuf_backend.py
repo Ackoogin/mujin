@@ -137,6 +137,7 @@ class ProtobufBackend(codec_backends.CodecBackend):
             f.write(f'--  Protobuf has no native Ada support; serialisation is\n')
             f.write(f'--  delegated to the C++ implementation via pragma Import.\n\n')
             f.write(f'with Interfaces.C; use Interfaces.C;\n')
+            f.write(f'with Interfaces.C.Strings;\n')
             f.write(f'with System;\n\n')
             f.write(f'package {pkg_name} is\n\n')
             f.write(f'   Content_Type : constant String := "application/protobuf";\n\n')

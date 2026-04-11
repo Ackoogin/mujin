@@ -23,14 +23,26 @@ with Pyramid.Data_Model.Tactical.Types_Codec;  use Pyramid.Data_Model.Tactical.T
 with Pyramid.Services.Tactical_Objects.Provided;
 with Pyramid.Services.Tactical_Objects.Consumed;
 with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
+with Pyramid.Data_Model.Common.Protobuf_Codec;
+with Pyramid.Data_Model.Tactical.Protobuf_Codec;
+with Pyramid.Components.Tactical_Objects.Services.Provided.GRPC_Transport;
+with Pyramid.Components.Tactical_Objects.Services.Consumed.GRPC_Transport;
 
 procedure Test_Generated_Bindings is
    package Prov renames Pyramid.Services.Tactical_Objects.Provided;
    package Cons renames Pyramid.Services.Tactical_Objects.Consumed;
    package Flat renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
+   package Common_Proto renames Pyramid.Data_Model.Common.Protobuf_Codec;
+   package Tactical_Proto renames Pyramid.Data_Model.Tactical.Protobuf_Codec;
+   package Provided_Grpc renames
+     Pyramid.Components.Tactical_Objects.Services.Provided.GRPC_Transport;
+   package Consumed_Grpc renames
+     Pyramid.Components.Tactical_Objects.Services.Consumed.GRPC_Transport;
 
    Pass_Count : Natural := 0;
    Fail_Count : Natural := 0;
+
+   use type System.Address;
 
    procedure Check (Name : String; Ok : Boolean) is
    begin
@@ -162,6 +174,18 @@ begin
       Check ("Dispatch CreateRequirement flatbuffers returns buffer",
              Resp_Buf /= System.Null_Address or Resp_Size = 0);
    end;
+
+   --  11. Protobuf codec specs are generated and visible to Ada
+   Check ("Common protobuf content type",
+          Common_Proto.Content_Type = "application/protobuf");
+   Check ("Tactical protobuf content type",
+          Tactical_Proto.Content_Type = "application/protobuf");
+
+   --  12. gRPC transport specs are generated and visible to Ada
+   Check ("Provided gRPC transport spec visible",
+          Provided_Grpc.Stop_Server'Address /= System.Null_Address);
+   Check ("Consumed gRPC transport spec visible",
+          Consumed_Grpc.Stop_Server'Address /= System.Null_Address);
 
    --  Summary
    New_Line;

@@ -279,6 +279,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write(f'--  This package defines the Ada-side interface; actual gRPC\n')
             f.write(f'--  communication is delegated to C++ via pragma Import.\n\n')
             f.write(f'with Interfaces.C; use Interfaces.C;\n')
+            f.write(f'with Interfaces.C.Strings;\n')
             f.write(f'with System;\n\n')
             f.write(f'package {pkg_name} is\n\n')
 
