@@ -1,134 +1,186 @@
-# Protocol-Agnostic Service Patterns Implementation Plan
+# Protocol-Agnostic Service Plan
 
-## Scope
-- In scope: packages/automtk-tactical-objects, automtk-tasks,
-  automtk-objectives, automtk-sensors-component, automtk-guidance,
-  automtk-fusion, automtk-sensor-products, automtk-msgs.
-- Out of scope: packages/automtk-components (scheduled for deletion).
+## Intent
 
-## Goals
-1. Standardize request/response and streaming semantics across components.
-2. Disambiguate client UPDATE commands vs component status updates.
-3. Keep topic patterns protocol-agnostic (ROS2, gRPC, in-process pubsub).
-4. Maintain backward compatibility where feasible with a deprecation window.
+PYRAMID components should define one canonical interface and then project it
+into multiple codecs and transports without component authors maintaining
+protocol-specific glue.
 
-## Non-goals
-- Implement ROS2 services/actions in this phase (only plan for it).
-- Modify integration bridges unrelated to component services.
+The canonical interface below MBSE extraction is the generated `.proto`
+contract.
 
-## Standard Message Model
-### Envelope (existing)
-- operation: CREATE, READ, UPDATE, DELETE
-- message_id: unique per message (required)
-- correlation_id: request message_id that this is responding to
-- source_component: publisher identity
-- timestamp, payload_type
+## Invariants
 
-### Requirement fields (existing)
-- requirement_id: stable resource identifier
-- status: PENDING, ACCEPTED, IN_PROGRESS, COMPLETED, FAILED, CANCELLED, REJECTED
-- progress, result_json, failure_reason, parameters
+The following rules are mandatory:
 
-### Direction and intent
-Disambiguate by topic direction:
-- Input topic: commands (CREATE, UPDATE, DELETE)
-- Status topic: feedback and result (READ for progress, DELETE for final)
+1. component logic sees one proto-native typed surface
+2. codec choice must not change handler signatures
+3. transport choice must not change handler signatures
+4. no backend may redefine payload types after `.proto` generation
+5. adapters may translate delivery behavior, but not contract meaning
 
-## Standard Topic Taxonomy (per component namespace)
-### State Updates (pub/sub)
-- ~/state (or component-specific noun, for example ~/track)
-- CRUD encoded in envelope.operation and lifecycle fields
+## Standard Terms
 
-### Requirements (streaming)
-- ~/requirement/input (client -> component)
-  - CREATE: create requirement
-  - UPDATE: update requirement parameters
-  - DELETE: cancel requirement
-- ~/requirement/status (component -> client)
-  - READ: progress or interim status
-  - DELETE: final result (COMPLETED/FAILED/CANCELLED/REJECTED)
+- `proto-native typed surface`: the generated typed API used by handlers and
+  clients
+- `codec backend`: payload encoding choice
+- `transport backend`: delivery mechanism
+- `Ada shim`: generated internal glue used when Ada delegates to C/C++
 
-### Queries (request/response)
-- Prefer ROS2 services or gRPC unary calls
-- If pub/sub only, use:
-  - ~/query/input (READ request)
-  - ~/query/response (READ response, correlation_id set)
+## Handler Contract
 
-## Correlation Rules
-1. Every input request has a message_id.
-2. Every status update uses correlation_id:
-   - For CREATE: correlation_id = create.message_id
-   - For UPDATE: correlation_id = update.message_id
-   - For DELETE: correlation_id = cancel.message_id
-3. requirement_id is stable across updates and status.
-4. If server generates requirement_id, include it in the first status reply.
+The desired shape is:
 
-## Component-Level Implementation Plan
-### 1) Tactical Objects
-- Align requirement streaming to use ~/requirement/input and ~/requirement/status.
-- Ensure status feedback uses READ for ACCEPTED/IN_PROGRESS, DELETE for final.
-- Keep ~/state for CREATE/UPDATE/DELETE lifecycle events.
-- Deprecate ~/requirement (publish) topic after compatibility window.
+```text
+component logic
+  -> generated typed handler interface
+  -> generated codec dispatch
+  -> generated transport projection
+```
 
-### 2) Tasks
-- Already uses ~/requirement/input and ~/requirement/status.
-- Ensure UPDATE from client is handled and correlated to status responses.
-- Confirm READ feedback for ACCEPTED/IN_PROGRESS and DELETE for final.
-- Add explicit handling of UPDATE in requirement parser if missing.
+The typed handler layer is the stable boundary. Backends vary around it, not
+through it.
 
-### 3) Objectives
-- Already uses ~/objective/input and ~/objective/status.
-- Mirror tasks requirement semantics (READ feedback, DELETE final).
-- Add UPDATE handling for objective amendments and correlation.
+### Handler responsibilities
 
-### 4) Sensors Component
-- Already uses ~/tasking/input and ~/tasking/status.
-- Treat UPDATE on input as parameter change for active tasking.
-- Ensure READ feedback uses correlation_id from the triggering request.
-- Add CANCEL support via DELETE on input.
+Handlers own:
 
-### 5) Guidance
-- Already uses ~/trajectory/input and ~/trajectory/status.
-- Add UPDATE handling for trajectory adjustments.
-- Ensure READ feedback and DELETE final result semantics.
+- domain logic
+- validation at the business-logic level
+- interpretation of request intent
+- construction of typed responses
 
-### 6) Fusion
-- Split ~/fusion_requirement into:
-  - ~/requirement/input (command)
-  - ~/requirement/status (feedback)
-- Publish solutions on ~/solution (state update, CREATE/UPDATE).
-- Support CREATE/UPDATE/DELETE on input and correlate status.
+Handlers do not own:
 
-### 7) Sensor Products
-- State-only component: keep ~/track, ~/detection, ~/classification.
-- No requirement streaming; queries can be service or request/response topics.
+- raw payload decoding
+- `content_type` dispatch
+- transport framing
+- protocol-specific channel or endpoint naming
 
-## ROS2 and gRPC Mapping
-### ROS2
-- Use Services for queries (READ request/response).
-- Use Actions for requirements (goal/feedback/result).
-- Keep pub/sub for state updates and capability/constraint topics.
+## Runtime Selection Model
 
-### gRPC
-- Unary RPCs for queries and create/update/cancel.
-- Server streaming for requirement status.
-- Bidirectional streaming optional for high-rate updates.
+### Codec selection
 
-## Backward Compatibility Strategy
-1. Publish to both old and new topics for one release.
-2. Log deprecation warnings for old topics.
-3. Remove old topics after adoption period.
+Codec selection is by `content_type`.
 
-## Testing Plan
-1. Unit tests for requirement parsing and correlation_id usage.
-2. Integration tests per component:
-   - Send CREATE, verify READ feedback and DELETE final.
-   - Send UPDATE, verify correlated feedback.
-   - Send DELETE, verify CANCELLED final result.
-3. ROS2 integration tests for actions/services where applicable.
+That means:
 
-## Open Questions
-1. Should requirement_id be client-provided only, or can server generate?
-2. Do we need a revision or version field for concurrent updates?
-3. Should status feedback be throttled to avoid flooding subscribers?
+- `application/json`
+- `application/flatbuffers`
+- `application/protobuf`
+
+The dispatch layer:
+
+1. decodes incoming bytes according to `content_type`
+2. invokes the typed handler
+3. encodes the response with the same selected codec unless the transport
+   explicitly defines a different rule
+
+### Transport selection
+
+Transport selection is by generated transport binding.
+
+That means:
+
+- `pcl`
+- `grpc`
+- `shared_memory`
+- later `ros2`
+
+The transport layer owns framing and delivery, but it must reuse the same
+typed handler contract.
+
+## Transport Matrix
+
+| Transport backend | Payload model | Preferred codecs | Ada strategy | Notes |
+|------------------|---------------|------------------|--------------|-------|
+| `pcl` | proto-native typed surface | JSON, FlatBuffers, Protobuf | native binding or generated shim | baseline transport |
+| `grpc` | proto-native typed surface | Protobuf first, JSON only if needed for debug tooling | generated shim acceptable | transport projection, not a second contract |
+| `shared_memory` | proto-native typed surface | FlatBuffers, Protobuf; JSON for debug only | generated shim acceptable | transport projection with explicit frame/header |
+| `ros2` | proto-native typed surface | transport-defined ROS2 projection | optional later | later projection, not a competing IDL |
+
+## Shared-Memory Transport Rules
+
+Shared memory is a transport backend, not a codec backend.
+
+It must:
+
+- carry the same proto-native request/response/topic payloads
+- reuse codec backends for payload encoding and decoding
+- support request/reply RPC and pub/sub
+- include explicit framing metadata
+
+The standard shared-memory frame/header should carry:
+
+- endpoint or service name
+- operation or channel identifier
+- `content_type`
+- payload size
+- correlation or request id for RPC
+
+Preferred codec pairings for shared memory are:
+
+- `application/flatbuffers`
+- `application/protobuf`
+
+`application/json` is allowed for debug and compatibility, not as the default
+production choice.
+
+## Ada Policy
+
+Ada must always expose typed proto-native APIs.
+
+For non-JSON backends and transports:
+
+- a generated C/C++ shim is acceptable
+- an internal JSON bridge inside that shim is acceptable short-term
+- the public Ada surface must remain typed
+- the selected on-wire codec must remain the real backend codec
+
+This policy applies to:
+
+- FlatBuffers
+- Protobuf
+- gRPC projection
+- shared-memory projection
+
+## Endpoint And Naming Rules
+
+Transport backends may differ in how they address endpoints, but the naming
+source must still be the proto service contract.
+
+That means:
+
+- service names derive from generated service groups
+- topic names derive from canonical standard-topic mappings
+- request/response operation identity derives from the proto service and RPC
+  definition
+
+No transport backend should invent a second naming taxonomy for the logical
+contract.
+
+## Acceptance Criteria
+
+The protocol-agnostic service model is in place when:
+
+- the same handler implementation can be projected to at least two transports
+- the same payload contract can be encoded by at least two codecs
+- component code contains no transport-specific payload translation
+- component code contains no codec-specific branching
+- backend-specific logic is confined to generated layers
+
+## Tactical Objects Proving Sequence
+
+Tactical Objects is the proving-ground component for this model.
+
+The proving order should be:
+
+1. PCL + JSON
+2. PCL + FlatBuffers
+3. PCL + Protobuf
+4. shared_memory + FlatBuffers
+5. shared_memory + Protobuf
+6. gRPC + Protobuf
+
+The same generated typed surface should remain stable throughout that sequence.
 
