@@ -212,6 +212,20 @@ set_tests_properties(
     tobj_cpp_bridge_client_flatbuffers_e2e
     PROPERTIES LABELS "cross_language;integration;codec" TIMEOUT 30)
 
+if(WIN32 AND TARGET pyramid_grpc_transport)
+    add_library(pyramid_grpc_ada_interop_shim SHARED
+        grpc_ada_interop_shim.cpp
+    )
+    target_link_libraries(pyramid_grpc_ada_interop_shim PRIVATE
+        pyramid_grpc_transport
+        pyramid_protobuf_support
+    )
+    target_include_directories(pyramid_grpc_ada_interop_shim PRIVATE
+        ${PYRAMID_ROOT_DIR}/examples/grpc/cpp
+        ${PYRAMID_PROTOBUF_GEN_DIR}
+    )
+endif()
+
 find_program(GPRBUILD gprbuild)
 if(GPRBUILD)
     set(ADA_SRC_DIR ${PYRAMID_ROOT_DIR}/examples/ada)
@@ -359,6 +373,24 @@ if(GPRBUILD)
     set_tests_properties(tobj_ada_active_find_flatbuffers_e2e PROPERTIES
         LABELS "cross_language;integration;codec"
         TIMEOUT 40)
+
+    if(WIN32 AND TARGET pyramid_grpc_transport)
+        add_custom_target(ada_grpc_cpp_interop_build ALL
+            COMMAND ${CMAKE_COMMAND} -E env MUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
+                    ${GPRBUILD} -p -P ${ADA_SRC_DIR}/ada_grpc_cpp_interop_e2e.gpr
+            WORKING_DIRECTORY ${ADA_SRC_DIR}
+            COMMENT "Building Ada gRPC C++ interop test"
+        )
+        add_dependencies(ada_grpc_cpp_interop_build pyramid_grpc_ada_interop_shim)
+
+        add_test(NAME tobj_ada_grpc_cpp_interop_e2e
+            COMMAND ${ADA_SRC_DIR}/bin/ada_grpc_cpp_interop_e2e
+                    --dll $<TARGET_FILE:pyramid_grpc_ada_interop_shim>
+                    --address 127.0.0.1:50111)
+        set_tests_properties(tobj_ada_grpc_cpp_interop_e2e PROPERTIES
+            LABELS "cross_language;integration;grpc"
+            TIMEOUT 20)
+    endif()
 endif()
 
 if(TARGET pyramid_grpc_transport)
