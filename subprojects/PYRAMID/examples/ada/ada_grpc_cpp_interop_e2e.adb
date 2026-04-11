@@ -10,18 +10,16 @@ procedure Ada_Grpc_Cpp_Interop_E2E is
    use type Interfaces.C.Strings.chars_ptr;
    use type System.Address;
 
-   type Module_Handle is new System.Address;
-
    function Load_Library_A (Name : Interfaces.C.Strings.chars_ptr)
-     return Module_Handle
+     return System.Address
      with Import, Convention => C, External_Name => "LoadLibraryA";
 
    function Get_Proc_Address
-     (Module : Module_Handle; Name : Interfaces.C.Strings.chars_ptr)
+     (Module : System.Address; Name : Interfaces.C.Strings.chars_ptr)
       return System.Address
      with Import, Convention => C, External_Name => "GetProcAddress";
 
-   function Free_Library (Module : Module_Handle) return Interfaces.C.int
+   function Free_Library (Module : System.Address) return Interfaces.C.int
      with Import, Convention => C, External_Name => "FreeLibrary";
 
    type Start_Server_Access is access procedure
@@ -31,30 +29,40 @@ procedure Ada_Grpc_Cpp_Interop_E2E is
    type Stop_Server_Access is access procedure;
    pragma Convention (C, Stop_Server_Access);
 
-   type Invoke_Create_Requirement_Access is access procedure
-     (Channel  : System.Address;
-      Request  : System.Address;
-      Response : System.Address);
-   pragma Convention (C, Invoke_Create_Requirement_Access);
+   type Invoke_Create_Requirement_Json_Access is access function
+     (Channel : Interfaces.C.Strings.chars_ptr;
+      Request : Interfaces.C.Strings.chars_ptr)
+      return Interfaces.C.Strings.chars_ptr;
+   pragma Convention (C, Invoke_Create_Requirement_Json_Access);
 
-   function To_Start_Server is new Ada.Unchecked_Conversion
-     (System.Address, Start_Server_Access);
-   function To_Stop_Server is new Ada.Unchecked_Conversion
-     (System.Address, Stop_Server_Access);
-   function To_Invoke_Create_Requirement is new Ada.Unchecked_Conversion
-     (System.Address, Invoke_Create_Requirement_Access);
-   function To_Address is new Ada.Unchecked_Conversion
-     (Interfaces.C.Strings.chars_ptr, System.Address);
+   type Free_String_Access is access procedure
+     (Value : Interfaces.C.Strings.chars_ptr);
+   pragma Convention (C, Free_String_Access);
 
-   Response_Buffer : aliased Interfaces.C.char_array (0 .. 255) :=
-     (others => Interfaces.C.nul);
+   function To_Invoke_Create_Requirement_Json is new Ada.Unchecked_Conversion
+     (System.Address, Invoke_Create_Requirement_Json_Access);
+   function To_Free_String is new Ada.Unchecked_Conversion
+     (System.Address, Free_String_Access);
 
    Dll_Path : Interfaces.C.Strings.chars_ptr :=
      Interfaces.C.Strings.New_String ("");
    Address_C : Interfaces.C.Strings.chars_ptr :=
      Interfaces.C.Strings.New_String ("127.0.0.1:50101");
-   Policy_C : Interfaces.C.Strings.chars_ptr :=
-     Interfaces.C.Strings.New_String ("DATA_POLICY_OBTAIN");
+   Request_Json_C : Interfaces.C.Strings.chars_ptr :=
+     Interfaces.C.Strings.New_String
+       ("{""base"":{""id"":""ada-grpc-interest"",""source"":""ada-grpc-source""," &
+        """update_time"":12.5}," &
+        """status"":{""id"":""ada-grpc-achievement"",""source"":""ada-grpc-planner""," &
+        """update_time"":13.0,""status"":""PROGRESS_IN_PROGRESS"",""quality"":0.75," &
+        """achieveability"":""FEASIBILITY_FEASIBLE""}," &
+        """source"":""OBJECT_SOURCE_RADAR""," &
+        """policy"":""DATA_POLICY_OBTAIN""," &
+        """dimension"":[""BATTLE_DIMENSION_SEA_SURFACE"",""BATTLE_DIMENSION_AIR""]," &
+        """poly_area"":{""points"":[{""latitude"":0.872664625997,""longitude"":-0.01745329252}," &
+        "{""latitude"":0.872664625997,""longitude"":0.01745329252}," &
+        "{""latitude"":0.907571211037,""longitude"":0.01745329252}," &
+        "{""latitude"":0.907571211037,""longitude"":-0.01745329252}]}}");
+   Expected_Response : constant String := "grpc-interest-ada-grpc-interest-4-2";
 
    procedure Log (Msg : String) is
    begin
@@ -62,10 +70,16 @@ procedure Ada_Grpc_Cpp_Interop_E2E is
         (Ada.Text_IO.Standard_Error, "[ada_grpc_cpp_interop] " & Msg);
    end Log;
 
-   function Buffer_To_String return String is
+   function Normalise_Json_String (Value : String) return String is
    begin
-      return Interfaces.C.To_Ada (Response_Buffer);
-   end Buffer_To_String;
+      if Value'Length >= 2
+        and then Value (Value'First) = '"'
+        and then Value (Value'Last) = '"'
+      then
+         return Value (Value'First + 1 .. Value'Last - 1);
+      end if;
+      return Value;
+   end Normalise_Json_String;
 
    procedure Parse_Args is
       use Ada.Command_Line;
@@ -104,71 +118,71 @@ begin
    end;
 
    declare
-      Module : constant Module_Handle := Load_Library_A (Dll_Path);
-      Freed : Interfaces.C.int;
-      Start_Server : Start_Server_Access;
-      Stop_Server : Stop_Server_Access;
-      Invoke_Create_Requirement : Invoke_Create_Requirement_Access;
-      Start_Name : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String ("pyramid_grpc_server_start");
-      Stop_Name : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String ("pyramid_grpc_server_stop");
+      Module : constant System.Address := Load_Library_A (Dll_Path);
+      Invoke_Create_Requirement_Json : Invoke_Create_Requirement_Json_Access;
+      Free_String : Free_String_Access;
       Invoke_Name : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String
-          ("grpc_object_of_interest_service_create_requirement");
+          ("grpc_provided_object_of_interest_service_create_requirement_json");
+      Free_Name : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String
+          ("pyramid_services_tactical_objects_grpc_free_string");
    begin
-      if Module = Module_Handle (System.Null_Address) then
+      if Module = System.Null_Address then
          Log ("FAIL: could not load shim DLL");
          Ada.Command_Line.Set_Exit_Status (1);
          return;
       end if;
 
-      Start_Server := To_Start_Server (Get_Proc_Address (Module, Start_Name));
-      Stop_Server := To_Stop_Server (Get_Proc_Address (Module, Stop_Name));
-      Invoke_Create_Requirement :=
-        To_Invoke_Create_Requirement (Get_Proc_Address (Module, Invoke_Name));
+      Invoke_Create_Requirement_Json :=
+        To_Invoke_Create_Requirement_Json (Get_Proc_Address (Module, Invoke_Name));
+      Free_String := To_Free_String (Get_Proc_Address (Module, Free_Name));
 
-      Interfaces.C.Strings.Free (Start_Name);
-      Interfaces.C.Strings.Free (Stop_Name);
       Interfaces.C.Strings.Free (Invoke_Name);
+      Interfaces.C.Strings.Free (Free_Name);
 
-      if Start_Server = null
-        or else Stop_Server = null
-        or else Invoke_Create_Requirement = null
-      then
-         Log ("FAIL: required gRPC exports were not found");
+      if Invoke_Create_Requirement_Json = null then
+         Log ("FAIL: invoke export was not found");
          Ada.Command_Line.Set_Exit_Status (1);
          return;
       end if;
 
-      Log ("Starting C++ gRPC server via shim");
-      Start_Server (Address_C);
+      if Free_String = null then
+         Log ("FAIL: free export was not found");
+         Ada.Command_Line.Set_Exit_Status (1);
+         return;
+      end if;
 
       delay 0.05;
-      Response_Buffer := (others => Interfaces.C.nul);
-      Invoke_Create_Requirement
-        (Channel  => To_Address (Address_C),
-         Request  => To_Address (Policy_C),
-         Response => Response_Buffer'Address);
-
       declare
-         Response_Text : constant String := Buffer_To_String;
+         Response_Ptr : constant Interfaces.C.Strings.chars_ptr :=
+           Invoke_Create_Requirement_Json
+             (Channel => Address_C,
+              Request => Request_Json_C);
+         Response_Text : constant String :=
+           (if Response_Ptr = Interfaces.C.Strings.Null_Ptr
+            then ""
+            else Interfaces.C.Strings.Value (Response_Ptr));
+         Normalised_Response : constant String :=
+           Normalise_Json_String (Response_Text);
       begin
          Log ("Received response: " & Response_Text);
-         if Response_Text = "ada-grpc-interest-42" then
+         if Normalised_Response = Expected_Response then
             Log ("PASS: Ada invoked the C++ gRPC transport successfully");
             Ada.Command_Line.Set_Exit_Status (0);
          else
             Log ("FAIL: unexpected response");
             Ada.Command_Line.Set_Exit_Status (1);
          end if;
+
+         if Response_Ptr /= Interfaces.C.Strings.Null_Ptr then
+            Free_String (Response_Ptr);
+         end if;
       end;
 
-      Stop_Server.all;
       Interfaces.C.Strings.Free (Dll_Path);
       Interfaces.C.Strings.Free (Address_C);
-      Interfaces.C.Strings.Free (Policy_C);
-      Freed := Free_Library (Module);
-      pragma Unreferenced (Freed);
+      Interfaces.C.Strings.Free (Request_Json_C);
+      pragma Unreferenced (Module);
    end;
 end Ada_Grpc_Cpp_Interop_E2E;

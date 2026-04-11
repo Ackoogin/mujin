@@ -44,6 +44,23 @@ if(NOT WIN32)
 endif()
 gtest_discover_tests(test_pcl_socket_transport DISCOVERY_MODE PRE_TEST)
 
+add_executable(pcl_shm_peer_helper pcl_shm_peer_helper.cpp)
+target_link_libraries(pcl_shm_peer_helper PRIVATE pcl_core pcl_transport_shared_memory)
+if(NOT WIN32)
+    target_link_libraries(pcl_shm_peer_helper PRIVATE pthread)
+endif()
+
+add_executable(test_pcl_shared_memory_transport test_pcl_shared_memory_transport.cpp)
+target_link_libraries(test_pcl_shared_memory_transport PRIVATE pcl_core pcl_transport_shared_memory GTest::gtest_main)
+if(NOT WIN32)
+    target_link_libraries(test_pcl_shared_memory_transport PRIVATE pthread)
+endif()
+add_dependencies(test_pcl_shared_memory_transport pcl_shm_peer_helper)
+target_compile_definitions(test_pcl_shared_memory_transport PRIVATE
+    PCL_SHM_PEER_HELPER_PATH="$<TARGET_FILE:pcl_shm_peer_helper>"
+)
+gtest_discover_tests(test_pcl_shared_memory_transport DISCOVERY_MODE PRE_TEST)
+
 add_executable(test_pcl_cpp_wrappers test_pcl_cpp_wrappers.cpp)
 target_link_libraries(test_pcl_cpp_wrappers PRIVATE pcl_core GTest::gtest_main)
 gtest_discover_tests(test_pcl_cpp_wrappers DISCOVERY_MODE PRE_TEST)

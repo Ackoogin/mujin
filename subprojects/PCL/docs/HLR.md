@@ -297,6 +297,21 @@ The reference socket transport shall associate inbound traffic with a configured
 
 **Rationale**: Per-peer routing and exposure control require the transport to preserve the logical source peer across ingress.
 
+### PCL.036b - Inter-Process Shared Memory Bus
+The shared-memory transport shall support multiple local processes joining the same named bus through an OS shared-memory region containing participant mailboxes.
+
+**Rationale**: A host-local deployment needs a pluggable transport with lower overhead than sockets while still preserving the PCL transport abstraction.
+
+### PCL.036c - Shared Memory Publish Fan-Out
+The shared-memory transport shall fan out published messages from one participant to the other participants on the same named bus and preserve the source participant identity for remote ingress filtering.
+
+**Rationale**: A central-bus topology must deliver the same remote pub/sub semantics as other transports without devolving into point-to-point links.
+
+### PCL.036d - Shared Memory Async Remote Service Invocation
+The shared-memory transport shall support async remote service invocation across processes by routing requests to the unique advertised provider on the bus and delivering responses back to the caller on the executor thread.
+
+**Rationale**: Request/reply traffic must be transport-pluggable just like pub/sub, including across process boundaries on the same host.
+
 ## Logging
 
 ### PCL.037 - Printf-Style Logging
@@ -458,6 +473,9 @@ PCL shall expose a public C ABI for configuring endpoint locality and peer selec
 | `PCL.035` | `D2`, `D5` |
 | `PCL.036` | `D3`, `D5` |
 | `PCL.036a` | `D3`, `D5` |
+| `PCL.036b` | `D3`, `D5` |
+| `PCL.036c` | `D3`, `D5` |
+| `PCL.036d` | `D3`, `D5` |
 | `PCL.037` | `D1` |
 | `PCL.038` | `D3` |
 | `PCL.039` | `D1` |

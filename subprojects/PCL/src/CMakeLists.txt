@@ -56,8 +56,32 @@ set_target_properties(pcl_transport_socket PROPERTIES
   C_EXTENSIONS OFF
 )
 
+# ---------------------------------------------------------------------------
+# pcl_transport_shared_memory — central shared-memory bus transport
+# ---------------------------------------------------------------------------
+add_library(pcl_transport_shared_memory STATIC
+  pcl_transport_shared_memory.c
+)
+
+target_include_directories(pcl_transport_shared_memory PUBLIC
+  ${PCL_ROOT_DIR}/include
+)
+
+target_include_directories(pcl_transport_shared_memory PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_link_libraries(pcl_transport_shared_memory PUBLIC pcl_core)
+
+set_target_properties(pcl_transport_shared_memory PROPERTIES
+  LINKER_LANGUAGE C
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+)
+
 # Install
-install(TARGETS pcl_core pcl_transport_socket
+install(TARGETS pcl_core pcl_transport_socket pcl_transport_shared_memory
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
 )

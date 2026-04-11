@@ -34,7 +34,8 @@ if(DEFINED TIMEOUT_VAL)
   list(APPEND extra_args --timeout "${TIMEOUT_VAL}")
 endif()
 if(DEFINED SCRIPT_ARGS)
-  list(APPEND extra_args ${SCRIPT_ARGS})
+  string(REPLACE "|" ";" parsed_script_args "${SCRIPT_ARGS}")
+  list(APPEND extra_args ${parsed_script_args})
 endif()
 
 execute_process(

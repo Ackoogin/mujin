@@ -183,9 +183,11 @@ begin
 
    --  12. gRPC transport specs are generated and visible to Ada
    Check ("Provided gRPC transport spec visible",
-          Provided_Grpc.Stop_Server'Address /= System.Null_Address);
+          Provided_Grpc.Invoke_Create_Requirement_Json'Address /=
+            System.Null_Address);
    Check ("Consumed gRPC transport spec visible",
-          Consumed_Grpc.Stop_Server'Address /= System.Null_Address);
+          Consumed_Grpc.Invoke_Create_Requirement_Json'Address /=
+            System.Null_Address);
 
    --  Summary
    New_Line;

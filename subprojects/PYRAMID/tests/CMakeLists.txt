@@ -213,14 +213,14 @@ set_tests_properties(
     PROPERTIES LABELS "cross_language;integration;codec" TIMEOUT 30)
 
 if(WIN32 AND TARGET pyramid_grpc_transport)
-    add_library(pyramid_grpc_ada_interop_shim SHARED
-        grpc_ada_interop_shim.cpp
+    add_executable(tobj_grpc_server
+        tobj_grpc_server.cpp
     )
-    target_link_libraries(pyramid_grpc_ada_interop_shim PRIVATE
+    target_link_libraries(tobj_grpc_server PRIVATE
         pyramid_grpc_transport
         pyramid_protobuf_support
     )
-    target_include_directories(pyramid_grpc_ada_interop_shim PRIVATE
+    target_include_directories(tobj_grpc_server PRIVATE
         ${PYRAMID_ROOT_DIR}/examples/grpc/cpp
         ${PYRAMID_PROTOBUF_GEN_DIR}
     )
@@ -381,15 +381,27 @@ if(GPRBUILD)
             WORKING_DIRECTORY ${ADA_SRC_DIR}
             COMMENT "Building Ada gRPC C++ interop test"
         )
-        add_dependencies(ada_grpc_cpp_interop_build pyramid_grpc_ada_interop_shim)
+        add_dependencies(ada_grpc_cpp_interop_build pyramid_grpc_c_shim)
 
         add_test(NAME tobj_ada_grpc_cpp_interop_e2e
-            COMMAND ${ADA_SRC_DIR}/bin/ada_grpc_cpp_interop_e2e
-                    --dll $<TARGET_FILE:pyramid_grpc_ada_interop_shim>
-                    --address 127.0.0.1:50111)
+            COMMAND ${CMAKE_COMMAND}
+                    -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_ada_grpc_cpp_interop_e2e.bat
+                    -DSERVER_BIN=$<TARGET_FILE:tobj_grpc_server>
+                    -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_grpc_cpp_interop_e2e
+                    -DSCRIPT_ARGS=--dll-bin|$<TARGET_FILE:pyramid_grpc_c_shim>|--address|127.0.0.1:50111
+                    -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
         set_tests_properties(tobj_ada_grpc_cpp_interop_e2e PROPERTIES
             LABELS "cross_language;integration;grpc"
-            TIMEOUT 20)
+            TIMEOUT 30)
+
+        add_test(NAME tobj_master_conformance_e2e
+                    COMMAND ${CMAKE_COMMAND}
+                    -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_tobj_master_conformance.bat
+                    -DSCRIPT_ARGS=--socket-server-bin|$<TARGET_FILE:tobj_socket_server>|--bridge-bin|$<TARGET_FILE:standalone_bridge>|--socket-client-bin|${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_active_find_e2e|--grpc-server-bin|$<TARGET_FILE:tobj_grpc_server>|--grpc-client-bin|${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_grpc_cpp_interop_e2e|--grpc-dll-bin|$<TARGET_FILE:pyramid_grpc_c_shim>
+                    -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+        set_tests_properties(tobj_master_conformance_e2e PROPERTIES
+            LABELS "cross_language;integration;conformance;codec;grpc"
+            TIMEOUT 120)
     endif()
 endif()
 

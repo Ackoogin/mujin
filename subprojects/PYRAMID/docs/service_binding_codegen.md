@@ -61,24 +61,23 @@ From the proto contract, the active generation flow produces:
 - Ada proto-native JSON codecs for generated types
 - Ada service bindings
 - Ada FlatBuffers codec packages
+- Ada gRPC transport import specs over canonical C ABI entry points
 - C++ data-model types
 - C++ proto-native JSON codecs for generated types
 - C++ service bindings
 - C++ FlatBuffers codecs and `.fbs` schemas
+- C++ gRPC transport projections
+- canonical C ABI gRPC shim libraries for Ada interop
 
-Tactical Objects is the most complete proving-ground path.
+Tactical Objects is still the main proving-ground path, but current backend and
+transport status now lives in:
 
-## Current Backend Status
+- [service_schema_tactical_objects.md](/D:/Dev/repo/mujin/subprojects/PYRAMID/docs/service_schema_tactical_objects.md)
 
-| Backend | Kind | Public surface | Current implementation status |
-|--------|------|----------------|-------------------------------|
-| `json` | codec | typed proto-native Ada/C++ APIs | active baseline |
-| `flatbuffers` | codec | typed proto-native Ada/C++ APIs | active, still tightening |
-| `protobuf` | codec | generated artifacts exist, not yet fully standardized | partial |
-| `pcl` | transport | active generated binding/runtime path | active baseline |
-| `grpc` | transport | generated transport artifacts exist | partial / not integrated end-to-end |
-| `shared_memory` | transport | planned transport projection | not implemented yet |
-| `ros2` | transport | planned projection | not implemented yet |
+This page stays focused on generator architecture and emitted artifacts so we do
+not maintain a second drifting status table here. That status page now also
+tracks the live Ada/C++ master conformance matrix for the currently implemented
+transport and codec combinations.
 
 ## JSON Model
 
@@ -122,18 +121,9 @@ The main backend implementation lives in:
 
 ## Protobuf Model
 
-Protobuf generation exists, but it is not yet at the same standard as JSON and
-FlatBuffers.
-
-The target standard is:
-
-- generated C++ wrappers around `protoc` output
-- PCL runtime dispatch using `application/protobuf`
-- typed Ada APIs matching the JSON and FlatBuffers public surface
-- generated C/C++ shim support for Ada if needed
-
-Until that work is complete, Protobuf should be treated as partial rather than
-fully standardized.
+Protobuf is generated through the same registry/backend model as the other
+codecs. For current Tactical Objects proof status, use the Tactical Objects
+status page rather than this generator reference.
 
 ## Transport Model
 
@@ -155,12 +145,20 @@ Transport code owns:
 - routing
 - framing
 - delivery semantics
+- thread handoff from external I/O threads to the PCL executor-owned
+  business-logic context
 
 Transport code does not own:
 
 - the payload model
 - handler signatures
 - backend-specific type systems
+
+Transport projections must preserve the PCL threading rule: external transport
+threads do wire work only, and business logic is invoked only on the executor
+thread selected by the binding. For the current Tactical Objects gRPC path,
+ingress hands off through `pcl_executor_post_service_request(...)`; the
+transport does not own a parallel business-logic thread.
 
 ## Runtime Selection Rules
 
@@ -183,7 +181,9 @@ The current Ada policy is:
 - the public API must always be typed and proto-native
 - JSON is expected to remain native at the Ada layer
 - FlatBuffers and Protobuf may use generated C/C++ shims internally
-- shared-memory and gRPC Ada support may also use generated shims initially
+- gRPC Ada support currently uses generated canonical C ABI shims under
+  `examples/grpc/cpp`
+- shared-memory Ada support may also use generated shims initially
 
 This policy is a short-term implementation choice, not a change to the public
 contract.
@@ -195,9 +195,16 @@ The most important active Tactical Objects generated outputs include:
 - [pyramid-services-tactical_objects-provided.ads](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/ada/generated/pyramid-services-tactical_objects-provided.ads)
 - [pyramid-services-tactical_objects-consumed.ads](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/ada/generated/pyramid-services-tactical_objects-consumed.ads)
 - [pyramid-services-tactical_objects-flatbuffers_codec.ads](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/ada/generated/flatbuffers/ada/pyramid-services-tactical_objects-flatbuffers_codec.ads)
+- [pyramid-components-tactical_objects-services-provided-grpc_transport.ads](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/ada/generated/grpc/ada/pyramid-components-tactical_objects-services-provided-grpc_transport.ads)
+- [pyramid-data_model-tactical-protobuf_codec.ads](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/ada/generated/protobuf/ada/pyramid-data_model-tactical-protobuf_codec.ads)
 - [pyramid_services_tactical_objects_provided.hpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/cpp/generated/pyramid_services_tactical_objects_provided.hpp)
 - [pyramid_services_tactical_objects_consumed.hpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/cpp/generated/pyramid_services_tactical_objects_consumed.hpp)
 - [pyramid_services_tactical_objects_flatbuffers_codec.hpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/cpp/generated/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp)
+- [pyramid_services_tactical_objects_protobuf_codec.hpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/protobuf/cpp/pyramid_services_tactical_objects_protobuf_codec.hpp)
+- [pyramid_components_tactical_objects_services_provided_grpc_transport.hpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/grpc/cpp/pyramid_components_tactical_objects_services_provided_grpc_transport.hpp)
+- [pyramid_components_tactical_objects_services_provided_grpc_c_api.hpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/grpc/cpp/pyramid_components_tactical_objects_services_provided_grpc_c_api.hpp)
+- [pyramid_components_tactical_objects_services_consumed_grpc_c_api.hpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/grpc/cpp/pyramid_components_tactical_objects_services_consumed_grpc_c_api.hpp)
+- [pyramid_services_tactical_objects_grpc_c_api_support.hpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/grpc/cpp/pyramid_services_tactical_objects_grpc_c_api_support.hpp)
 
 ## Near-Term Standardization Work
 
@@ -205,7 +212,7 @@ The next generator changes should focus on:
 
 1. making backend metadata explicit in the registry
 2. treating JSON as a fully standardized backend within that registry model
-3. bringing Protobuf to the same standard as JSON and FlatBuffers
-4. adding transport backends for gRPC and shared memory without changing the
-   proto-native typed surface
-
+3. reducing remaining Ada filename/package compatibility glue in generated
+   non-JSON backends
+4. adding shared-memory transport without changing the proto-native typed
+   surface

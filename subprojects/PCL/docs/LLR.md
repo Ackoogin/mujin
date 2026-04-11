@@ -1429,6 +1429,10 @@ A `pcl::Component` added to a `pcl::Executor` shall receive ticks when active an
 | 177 | 034, 036, 036a | test_pcl_socket_transport |
 | 178 | 030c | test_pcl_executor |
 | 179 | 036a, 056 | test_pcl_socket_transport |
+| 186 | 036b, 036c | test_pcl_shared_memory_transport |
+| 187 | 036b, 036c | test_pcl_shared_memory_transport |
+| 188 | 036b, 036d | test_pcl_shared_memory_transport |
+| 189 | 036d, 045 | test_pcl_shared_memory_transport |
 | 167 | 011c | test_pcl_streaming |
 | 168 | 011c | test_pcl_streaming |
 | 169 | 011c | test_pcl_streaming |
@@ -1491,7 +1495,39 @@ The socket transport gateway shall dispatch inbound service requests through rem
 
 ---
 
-## 19. Streaming Services
+## 19. Shared Memory Transport
+
+### REQ_PCL_186 - Inter-Process Publish Parent To Child Delivered
+The shared-memory transport shall deliver a published message from one process to a subscriber hosted in a different process on the same named bus.
+
+**Traces**: PCL.036b, PCL.036c
+
+**Verification**: `test_pcl_shared_memory_transport.cpp::InterProcessPublishParentToChildDelivered`.
+
+### REQ_PCL_187 - Inter-Process Publish Child To Parent Delivered
+The shared-memory transport shall deliver a published message from a helper child process to a subscriber hosted in the parent test process, preserving the source participant identity for peer filtering.
+
+**Traces**: PCL.036b, PCL.036c
+
+**Verification**: `test_pcl_shared_memory_transport.cpp::InterProcessPublishChildToParentDelivered`.
+
+### REQ_PCL_188 - Inter-Process Async Service Round Trip
+The shared-memory transport shall route an async remote service request across processes to the unique advertised provider and deliver the response callback on the caller's executor thread.
+
+**Traces**: PCL.036b, PCL.036d
+
+**Verification**: `test_pcl_shared_memory_transport.cpp::InterProcessAsyncServiceRoundTrip`.
+
+### REQ_PCL_189 - Shared Memory Invoke Async Without Provider Returns Not Found
+`pcl_executor_invoke_async()` shall return `PCL_ERR_NOT_FOUND` when the shared-memory bus does not advertise any provider for the requested remote service.
+
+**Traces**: PCL.036d, PCL.045
+
+**Verification**: `test_pcl_shared_memory_transport.cpp::InvokeAsyncReturnsNotFoundWithoutProvider`.
+
+---
+
+## 20. Streaming Services
 
 ### REQ_PCL_167 - Streaming Service Send and End
 `pcl_stream_send()` shall deliver messages to the client callback with `end=false`. `pcl_stream_end()` shall deliver a final callback with `end=true` and `status=PCL_OK`.

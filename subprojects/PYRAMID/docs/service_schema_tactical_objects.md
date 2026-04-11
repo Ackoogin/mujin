@@ -1,176 +1,240 @@
-# Tactical Objects Service Schema Status
+# Tactical Objects Backend And Transport Status
 
 ## Purpose
 
-This document records Tactical Objects as the proving-ground component for the
-proto-native backend and transport model.
+This is the single current-status document for Tactical Objects as the
+proving-ground component for PYRAMID's proto-native binding, codec, and
+transport model.
 
-The goal is not to define a second contract. The contract is already the
-generated `.proto` model. This document exists to show:
+If a roadmap or generator note disagrees with this page, this page wins for
+current implementation status.
+
+## Canonical Scope
+
+This page answers:
 
 - what Tactical Objects currently proves
-- what is still partial
-- what backend and transport milestones remain
+- which backend and transport paths are implemented
+- which proofs are covered by standalone tests today
+- what remains partial or still planned
 
-## Source-Of-Truth Clarification
+It does not redefine the contract. The contract remains:
 
-The Tactical Objects source-of-truth layering is:
+1. MBSE / SysML semantics
+2. generated `.proto`
+3. generated bindings, codecs, and transport projections
 
-1. MBSE / SysML model is the ultimate semantic source
-2. generated `.proto` is the canonical downstream contract artifact
-3. generated bindings, codec backends, and transport backends derive from that
-   `.proto`
+No Tactical Objects-specific schema should be introduced below the generated
+`.proto` layer.
 
-No Tactical Objects-specific bridge schema is part of the core generation path.
+## Related Docs
 
-## Canonical External Model
+The doc split is now:
 
-Externally, Tactical Objects should present canonical PYRAMID payloads.
+- this page: current Tactical Objects status and proving-ground roadmap
+- `service_binding_codegen.md`: generator architecture and implementation
+  reference
+- `standard_alignment_plan.md`: legacy standard-bridge alignment context only
 
-For the standard topics used today:
+The older overlapping plan docs have been reduced to redirect notes so there is
+one current status page rather than several drifting ones.
+
+## Contract And Model Rules
+
+Tactical Objects continues to prove the following rules:
+
+- handlers operate on one proto-native typed surface
+- codec choice must not change handler signatures
+- transport choice must not change handler signatures
+- generated transports may project the same handler contract in different ways
+- bridge-local payload models are not part of the core generation story
+
+Externally, the canonical standard-topic payloads remain:
 
 - `standard.entity_matches` -> `ObjectMatch[]`
 - `standard.object_evidence` -> `ObjectDetail`
-- `standard.evidence_requirements` -> `ObjectEvidenceRequirement`
+- `standard.evidence_requirements` -> `ObjectEvidenceRequirement[]`
 
-The bridge role is:
-
-- Tactical Objects internals
-- to canonical PYRAMID proto-derived external types
-
-It is not:
-
-- a second service schema
-- a second payload model
-- a competing source of truth
-
-## Current Tactical Objects Status
+## Current Status
 
 ### Service bindings
 
 Current state:
 
-- Tactical Objects Ada and C++ service bindings are proto-native
-- runtime codec selection works for:
-  - `application/json`
-  - `application/flatbuffers`
-- the old Tactical Objects service-local `Json_Codec` and `Wire_Types`
-  artifacts are gone
+- Ada and C++ Tactical Objects service bindings are proto-native
+- generated service dispatch is the live runtime seam for backend selection
+- the old Tactical Objects-local service `Json_Codec` / `Wire_Types` path is no
+  longer the active model
 
-### Codec backend status
+### Codec backends
 
-| Codec backend | Tactical Objects status | Notes |
-|--------------|-------------------------|-------|
-| `json` | active and usable | proto-native type codecs are the live JSON path |
-| `flatbuffers` | active and usable | C++ is native; Ada is typed and may use a generated shim internally |
-| `protobuf` | active on PCL | runtime selection now supports `application/protobuf` alongside JSON and FlatBuffers |
+| Codec backend | Status | Notes |
+|---------------|--------|-------|
+| `json` | active | baseline typed path on PCL |
+| `flatbuffers` | active | C++ native, Ada typed API with generated shim allowance |
+| `protobuf` | active on PCL | runtime dispatch supports `application/protobuf` alongside JSON and FlatBuffers |
 
-### Transport backend status
+### Transport backends
 
-| Transport backend | Tactical Objects status | Notes |
-|------------------|-------------------------|-------|
-| `pcl` | active baseline | current proving path |
-| `grpc` | projected / optional build | transport adapter now reuses the generated Tactical Objects `dispatch(...)` path over protobuf; build still depends on local gRPC toolchain availability |
-| `shared_memory` | planned | intended next transport proving target after Protobuf/PCL tightening |
-| `ros2` | planned | later projection, not part of the current proving path |
+| Transport backend | Status | Notes |
+|-------------------|--------|-------|
+| `pcl` | active baseline | current production proving path |
+| `grpc` | active projection, optional build | generated C++ transport reuses Tactical Objects `dispatch(...)` over protobuf |
+| `shared_memory` | PCL foundation active | inter-process central named-bus transport exists at the PCL layer with standalone coverage; Tactical Objects-specific projection is still next |
+| `ros2` | planned | not part of the current Tactical Objects proving path |
 
-## Ada Status
+### Ada status
 
-Ada policy for Tactical Objects is currently:
+Current Ada policy is:
 
-- public Ada APIs are typed and proto-native
-- JSON remains a straightforward native Ada path
-- FlatBuffers may use a generated C/C++ shim internally
-- an internal JSON bridge inside that shim is acceptable for now
-- the same policy is expected to apply to Protobuf and shared-memory transport
-  support when those are added
+- public Ada APIs remain typed and proto-native
+- JSON is a straightforward Ada path
+- FlatBuffers, Protobuf, and gRPC may use generated C/C++ shims internally
+- this is an implementation detail, not a contract exception
 
-This is an implementation choice, not a contract-layer exception.
+## Implemented Proofs
 
-## Backend And Transport Targets
+### PCL + Protobuf
 
-### JSON
+Implemented and passing:
 
-Tactical Objects must continue to prove that JSON is just one backend over the
-proto-native typed surface.
+- generated protobuf codec support for Tactical Objects payloads
+- PCL runtime dispatch using `application/protobuf`
+- standalone protobuf dispatch and round-trip tests for generated bindings
 
-Definition of done:
+Relevant tests:
 
-- JSON participates in the same backend-selection story as the other codecs
-- no JSON-specific service payload model exists
+- `test_pcl_proto_bindings`
+- `test_codec_dispatch_e2e`
 
-### FlatBuffers
+### gRPC + C++
 
-Tactical Objects must continue proving:
+Implemented and passing:
 
-- full proto-native RPC/topic coverage over `application/flatbuffers`
-- C++ native implementation via generated `.fbs` and `flatc`
-- Ada typed APIs over the same contract
+- generated provided/consumed Tactical Objects gRPC transport projection
+- optional build through local `gRPC` / `grpc_cpp_plugin`
+- standalone C++ unary round-trip proof through generated gRPC transport
+- gRPC worker threads no longer call Tactical Objects business logic directly;
+  generated transport ingress posts requests onto the real PCL executor via
+  `pcl_executor_post_service_request(...)`, so handler execution stays on the
+  executor thread rather than on transport-owned threads
+- the standalone smoke test now asserts executor-thread execution for the
+  service handler path
 
-### Protobuf
+Relevant test:
 
-Tactical Objects is the first target for bringing Protobuf to standard.
+- `test_grpc_transport_smoke`
 
-Definition of done:
+### gRPC + Ada to C++
 
-- full PCL runtime support for `application/protobuf`
-- typed Ada and C++ APIs matching the JSON/FlatBuffers surface
-- cross-language Ada/C++ proof over the same contract
+Implemented and passing on Windows:
 
-### gRPC
+- generated Ada protobuf and gRPC specs build successfully
+- Ada can drive a real standalone C++ Tactical Objects gRPC server process
+  through the canonical generated/canonical gRPC C ABI symbol surface
+- the gRPC call path uses the shared `pyramid_grpc_c_shim` library under
+  `examples/grpc/cpp`, not a test-local shim
+- the current gRPC interop test now sends a mid-complexity
+  `ObjectInterestRequirement` request over protobuf rather than a policy-only
+  probe
 
-Tactical Objects should eventually prove that the same handler implementation
-can be projected to both:
+Relevant tests:
 
-- `pcl`
-- `grpc`
+- `ada_generated_bindings_roundtrip`
+- `tobj_ada_grpc_cpp_interop_e2e`
 
-without handwritten payload translation.
+### Master Cross-Language Conformance
 
-### Shared memory
+Implemented and passing on Windows:
 
-Tactical Objects should also prove:
+- one master conformance driver now exercises all currently available
+  Tactical Objects Ada/C++ transport and codec combinations
+- the matrix currently covered is:
+  - socket + JSON
+  - socket + FlatBuffers
+  - gRPC + Protobuf
+- shared-memory is intentionally not in the master matrix yet because the
+  Tactical Objects-specific projection is not implemented yet at that layer
+- socket + Protobuf is not in the master matrix because there is not yet a
+  standalone Tactical Objects socket/protobuf bridge path
 
-- request/reply RPC over shared memory
-- pub/sub over shared memory
-- FlatBuffers and Protobuf as preferred shared-memory codecs
-- same handler implementation reusable across PCL and shared memory
+Relevant test:
 
-## Tactical Objects Milestone Order
+- `tobj_master_conformance_e2e`
 
-The intended proving order is:
+### PCL + Shared Memory Bus
 
-1. keep JSON stable as the semantic baseline
-2. keep FlatBuffers stable and complete full coverage
-3. bring Protobuf to the same standard on PCL
-4. add shared-memory transport using FlatBuffers and Protobuf
-5. add gRPC transport projection
-6. generalize the same machinery to other PYRAMID components
+Implemented and passing:
 
-## Status Table For Reviews
+- pluggable shared-memory-style PCL transport with a central named bus
+- bus fan-out pub/sub between multiple participants
+- async remote service routing with deferred response support
+- peer-filter enforcement on remote subscribers
 
-Use this quick table in future reviews:
+Relevant test:
+
+- `test_pcl_shared_memory_transport`
+
+## Important Boundary
+
+The new Protobuf and gRPC proving path does not depend on the standard bridge.
+
+That means:
+
+- Protobuf and gRPC coverage is now validated through standalone generated
+  binding and transport tests
+- the standard bridge remains separate legacy context
+- new codec and transport work should not be forced through bridge-specific
+  flows unless that is the explicit target under test
+
+## Current Gaps
+
+The following areas are still incomplete:
+
+- Tactical Objects shared-memory transport projection
+- socket/protobuf cross-process Tactical Objects projection
+- fully Ada-native gRPC runtime without generated C/C++ shim support
+- generalization of the same backend/transport proof level to other PYRAMID
+  components
+
+## Milestone Order
+
+The current Tactical Objects proving order is:
+
+1. keep JSON stable as the baseline typed path
+2. keep FlatBuffers stable and complete
+3. keep Protobuf stable on PCL
+4. keep gRPC projection buildable and exercised by standalone tests
+5. layer Tactical Objects shared-memory projection onto the new PCL bus transport
+6. generalize the same machinery beyond Tactical Objects
+
+## Review Checklist
+
+Use this table in reviews:
 
 | Capability | Status |
-|-----------|--------|
+|------------|--------|
 | Proto-native Ada bindings | yes |
 | Proto-native C++ bindings | yes |
 | JSON runtime selection on PCL | yes |
 | FlatBuffers runtime selection on PCL | yes |
 | Protobuf runtime selection on PCL | yes |
-| C++ native FlatBuffers | yes |
-| Ada typed FlatBuffers API | yes |
-| Ada fully native FlatBuffers internals | not required yet |
-| gRPC Tactical projection code | yes, optional build |
-| shared-memory Tactical path | not yet |
+| Standalone protobuf binding tests | yes |
+| C++ gRPC transport smoke test | yes |
+| Ada generated protobuf/grpc spec build proof | yes |
+| Ada to C++ gRPC interop proof | yes, Windows |
+| Master Ada/C++ transport/codec conformance matrix | yes, Windows |
+| PCL shared-memory bus transport | yes |
+| shared-memory Tactical path | foundation only |
 
 ## What To Avoid
 
-The Tactical Objects work should not regress into any of the following:
+Do not regress Tactical Objects into:
 
-- a Tactical Objects-only service schema
-- a bridge-local wire type system
+- a Tactical Objects-only schema below `.proto`
 - transport-specific handler interfaces
 - codec-specific handler interfaces
-- backend hardcoding of Tactical Objects payload semantics that should be
-  derived from proto
+- bridge-local payload types becoming the contract source of truth
+- reintroducing the standard bridge as a requirement for protobuf/grpc proving
+- transport-owned threads invoking business logic directly instead of handing
+  work off to the PCL executor thread

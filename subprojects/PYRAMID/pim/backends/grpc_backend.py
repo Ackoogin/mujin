@@ -270,38 +270,37 @@ class GrpcBackend(codec_backends.CodecBackend):
     def _write_ada_spec(self, path: Path, pf: ProtoFile, index: ProtoTypeIndex):
         pkg_parts = [p.capitalize() for p in pf.package.split('.') if p]
         pkg_name = '.'.join(pkg_parts) + '.GRPC_Transport'
+        package_role = pf.package.split('.')[-1]
 
         with open(path, 'w') as f:
             f.write(f'--  Auto-generated gRPC transport spec — do not edit\n')
             f.write(f'--  Backend: grpc | Package: {pkg_name}\n')
             f.write(f'--\n')
-            f.write(f'--  gRPC transport for Ada requires C++ interop via grpc_core.\n')
-            f.write(f'--  This package defines the Ada-side interface; actual gRPC\n')
-            f.write(f'--  communication is delegated to C++ via pragma Import.\n\n')
+            f.write(f'--  gRPC transport for Ada uses the generated canonical C ABI shim.\n')
+            f.write(f'--  Requests and responses are JSON strings; the shim performs\n')
+            f.write(f'--  protobuf encoding/decoding and gRPC client calls in C++.\n\n')
             f.write(f'with Interfaces.C; use Interfaces.C;\n')
             f.write(f'with Interfaces.C.Strings;\n')
             f.write(f'with System;\n\n')
             f.write(f'package {pkg_name} is\n\n')
+            f.write(f'   Content_Type : constant String := "application/grpc";\n\n')
 
             for svc in pf.services:
-                ada_svc = camel_to_snake(svc.name)
                 f.write(f'   --  {svc.name}\n\n')
                 for rpc in svc.rpcs:
                     ada_rpc = camel_to_snake(rpc.name)
-                    f.write(f'   procedure Invoke_{ada_rpc}\n')
-                    f.write(f'     (Channel  : System.Address;\n')
-                    f.write(f'      Request  : System.Address;\n')
-                    f.write(f'      Response : System.Address)\n')
+                    svc_name = camel_to_lower_snake(svc.name)
+                    rpc_name = camel_to_lower_snake(rpc.name)
+                    f.write(f'   function Invoke_{ada_rpc}_Json\n')
+                    f.write(f'     (Channel      : Interfaces.C.Strings.chars_ptr;\n')
+                    f.write(f'      Request_Json : Interfaces.C.Strings.chars_ptr)\n')
+                    f.write(f'      return Interfaces.C.Strings.chars_ptr\n')
                     f.write(f'     with Import, Convention => C,\n')
-                    f.write(f'          External_Name => "grpc_{camel_to_lower_snake(svc.name)}_{camel_to_lower_snake(rpc.name)}";\n\n')
+                    f.write(f'          External_Name => "grpc_{package_role}_{svc_name}_{rpc_name}_json";\n\n')
 
-            f.write(f'   --  Server lifecycle\n\n')
-            f.write(f'   procedure Start_Server (Address : Interfaces.C.Strings.chars_ptr)\n')
+            f.write(f'   procedure Free_String (Value : Interfaces.C.Strings.chars_ptr)\n')
             f.write(f'     with Import, Convention => C,\n')
-            f.write(f'          External_Name => "grpc_server_start";\n\n')
-            f.write(f'   procedure Stop_Server\n')
-            f.write(f'     with Import, Convention => C,\n')
-            f.write(f'          External_Name => "grpc_server_stop";\n\n')
+            f.write(f'          External_Name => "pyramid_services_tactical_objects_grpc_free_string";\n\n')
 
             f.write(f'end {pkg_name};\n')
 

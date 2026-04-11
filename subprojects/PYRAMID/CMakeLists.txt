@@ -286,12 +286,32 @@ if(PYRAMID_ENABLE_GRPC)
             PUBLIC
                 gRPC::grpc++
                 protobuf::libprotobuf
+                pcl_core
                 pyramid_generated_codecs
         )
         target_include_directories(pyramid_grpc_transport
             PUBLIC
                 "${PCL_ROOT_DIR}/include"
                 "${PYRAMID_ROOT_DIR}/examples/cpp/generated"
+                "${PYRAMID_ROOT_DIR}/examples/grpc/cpp"
+                "${PYRAMID_PROTOBUF_GEN_DIR}"
+        )
+
+        add_library(pyramid_grpc_c_shim SHARED
+            "${PYRAMID_ROOT_DIR}/examples/grpc/cpp/pyramid_services_tactical_objects_grpc_c_api_support.cpp"
+            "${PYRAMID_ROOT_DIR}/examples/grpc/cpp/pyramid_components_tactical_objects_services_provided_grpc_c_api.cpp"
+            "${PYRAMID_ROOT_DIR}/examples/grpc/cpp/pyramid_components_tactical_objects_services_consumed_grpc_c_api.cpp"
+        )
+        add_dependencies(pyramid_grpc_c_shim pyramid_grpc_codegen pyramid_protobuf_codegen)
+        target_link_libraries(pyramid_grpc_c_shim
+            PUBLIC
+                gRPC::grpc++
+                protobuf::libprotobuf
+                pyramid_grpc_transport
+                pyramid_protobuf_support
+        )
+        target_include_directories(pyramid_grpc_c_shim
+            PUBLIC
                 "${PYRAMID_ROOT_DIR}/examples/grpc/cpp"
                 "${PYRAMID_PROTOBUF_GEN_DIR}"
         )
