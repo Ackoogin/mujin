@@ -34,6 +34,8 @@ The doc split is now:
 - this page: current Tactical Objects status and proving-ground roadmap
 - `service_binding_codegen.md`: generator architecture and implementation
   reference
+- `ros2_transport_semantics.md`: canonical ROS2 topic/service/stream mapping
+  rules
 - `standard_alignment_plan.md`: legacy standard-bridge alignment context only
 
 The older overlapping plan docs have been reduced to redirect notes so there is
@@ -81,7 +83,7 @@ Current state:
 | `pcl` | active baseline | current production proving path |
 | `grpc` | active projection, optional build | generated C++ transport reuses Tactical Objects `dispatch(...)` over protobuf |
 | `shared_memory` | PCL foundation active | inter-process central named-bus transport exists at the PCL layer with standalone coverage; Tactical Objects-specific projection is still next |
-| `ros2` | planned | not part of the current Tactical Objects proving path |
+| `ros2` | runtime binding active | generated Tactical Objects ROS2 transport projection, generic ROS2 envelope package, and standalone `rclcpp` runtime proof |
 
 ### Ada status
 
@@ -175,6 +177,31 @@ Relevant test:
 
 - `test_pcl_shared_memory_transport`
 
+### ROS2 Runtime Binding
+
+Implemented and passing:
+
+- generated Tactical Objects ROS2 transport projection for provided and
+  consumed service packages
+- generic ROS2 runtime package `pyramid_ros2_transport` for envelope/service
+  bindings
+- canonical ROS2 mapping for:
+  - topics: `/pyramid/topic/...`
+  - unary services: `/pyramid/service/...`
+  - streaming services: `/pyramid/stream/.../{open,frames,cancel}`
+- standalone fake-adapter proof for ROS2 topic ingress, unary service ingress,
+  and streaming service ingress
+- standalone `rclcpp` runtime proof for ROS2 topic ingress, unary service
+  ingress, streaming service ingress, and outbound PCL publish to ROS2 topic
+- ROS2 ingress threads do not call Tactical Objects business logic directly;
+  the shared support layer hands off onto the PCL executor before subscriber or
+  service handler execution
+
+Relevant test:
+
+- `test_ros2_transport_semantics`
+- `test_rclcpp_runtime_adapter`
+
 ## Important Boundary
 
 The new Protobuf and gRPC proving path does not depend on the standard bridge.
@@ -193,6 +220,8 @@ The following areas are still incomplete:
 
 - Tactical Objects shared-memory transport projection
 - socket/protobuf cross-process Tactical Objects projection
+- Ada ROS2 runtime beyond generated endpoint constants/specs
+- ROS2 action mapping for long-running / feedback-style workflows
 - fully Ada-native gRPC runtime without generated C/C++ shim support
 - generalization of the same backend/transport proof level to other PYRAMID
   components
@@ -205,8 +234,11 @@ The current Tactical Objects proving order is:
 2. keep FlatBuffers stable and complete
 3. keep Protobuf stable on PCL
 4. keep gRPC projection buildable and exercised by standalone tests
-5. layer Tactical Objects shared-memory projection onto the new PCL bus transport
-6. generalize the same machinery beyond Tactical Objects
+5. keep ROS2 runtime binding stable and extend it beyond the current envelope
+   service/topic model where needed
+6. layer Tactical Objects shared-memory projection onto the new PCL bus
+   transport
+7. generalize the same machinery beyond Tactical Objects
 
 ## Review Checklist
 
@@ -225,6 +257,8 @@ Use this table in reviews:
 | Ada to C++ gRPC interop proof | yes, Windows |
 | Master Ada/C++ transport/codec conformance matrix | yes, Windows |
 | PCL shared-memory bus transport | yes |
+| ROS2 semantic transport projection | yes |
+| ROS2 `rclcpp` runtime binding | yes, Windows |
 | shared-memory Tactical path | foundation only |
 
 ## What To Avoid

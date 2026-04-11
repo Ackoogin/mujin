@@ -6,9 +6,9 @@ Defines the abstract CodecBackend interface that all serialisation backends
 implement, plus a registry for discovering and invoking them.
 
 Each backend generates language-specific (C++, Ada) code for serialising and
-deserialising proto messages using a particular wire format.  The generated
-code plugs into the existing PCL service binding layer — or, in the case of
-the gRPC backend, provides an alternative transport entirely.
+deserialising proto messages using a particular wire format, or for projecting
+the service contract onto a transport such as gRPC or ROS2. The generated code
+plugs into the existing PCL service binding layer.
 
 No backend has hardcoded knowledge of specific proto message types; everything
 is driven from the ProtoFile / ProtoTypeIndex parsed by proto_parser.py.
@@ -27,7 +27,7 @@ class CodecBackend(ABC):
     @property
     @abstractmethod
     def name(self) -> str:
-        """Short identifier: 'json', 'flatbuffers', 'protobuf', 'grpc'."""
+        """Short identifier: 'json', 'flatbuffers', 'protobuf', 'grpc', 'ros2'."""
         ...
 
     @property

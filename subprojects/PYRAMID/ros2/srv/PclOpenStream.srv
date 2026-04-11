@@ -1,0 +1,7 @@
+string content_type
+string correlation_id
+uint8[] payload
+---
+bool accepted
+int32 status
+string correlation_id

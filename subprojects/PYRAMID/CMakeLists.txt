@@ -2,6 +2,7 @@ set(PYRAMID_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}")
 
 option(PYRAMID_ENABLE_PROTOBUF "Enable protobuf codecs for PYRAMID" ON)
 option(PYRAMID_ENABLE_GRPC "Enable gRPC transport projection for PYRAMID" OFF)
+option(PYRAMID_ENABLE_ROS2 "Enable ROS2 semantic transport projection for PYRAMID" ON)
 set(PYRAMID_GRPC_TAG "v1.72.0" CACHE STRING "gRPC git tag to fetch when PYRAMID_ENABLE_GRPC is ON")
 
 add_library(nlohmann_json INTERFACE)
@@ -316,6 +317,24 @@ if(PYRAMID_ENABLE_GRPC)
                 "${PYRAMID_PROTOBUF_GEN_DIR}"
         )
     endif()
+endif()
+
+if(PYRAMID_ENABLE_ROS2)
+    add_library(pyramid_ros2_transport STATIC
+        "${PYRAMID_ROOT_DIR}/examples/ros2/cpp/pyramid_ros2_transport_support.cpp"
+        "${PYRAMID_ROOT_DIR}/examples/ros2/cpp/pyramid_components_tactical_objects_ros2_transport.cpp"
+        "${PYRAMID_ROOT_DIR}/examples/ros2/cpp/pyramid_components_tactical_objects_services_consumed_ros2_transport.cpp"
+        "${PYRAMID_ROOT_DIR}/examples/ros2/cpp/pyramid_components_tactical_objects_services_provided_ros2_transport.cpp"
+    )
+    target_link_libraries(pyramid_ros2_transport
+        PUBLIC
+            pcl_core
+    )
+    target_include_directories(pyramid_ros2_transport
+        PUBLIC
+            "${PCL_ROOT_DIR}/include"
+            "${PYRAMID_ROOT_DIR}/examples/ros2/cpp"
+    )
 endif()
 
 add_subdirectory(core)

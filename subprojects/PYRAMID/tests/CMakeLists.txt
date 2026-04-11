@@ -420,3 +420,17 @@ if(TARGET pyramid_grpc_transport)
     )
     gtest_discover_tests(test_grpc_transport_smoke DISCOVERY_MODE PRE_TEST)
 endif()
+
+if(TARGET pyramid_ros2_transport)
+    add_executable(test_ros2_transport_semantics
+        test_ros2_transport_semantics.cpp
+    )
+    target_link_libraries(test_ros2_transport_semantics PRIVATE
+        pyramid_ros2_transport
+        GTest::gtest_main
+    )
+    target_include_directories(test_ros2_transport_semantics PRIVATE
+        ${PYRAMID_ROOT_DIR}/examples/ros2/cpp
+    )
+    gtest_discover_tests(test_ros2_transport_semantics DISCOVERY_MODE PRE_TEST)
+endif()

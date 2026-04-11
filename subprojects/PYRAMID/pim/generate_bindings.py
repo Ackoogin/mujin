@@ -2,8 +2,9 @@
 """
 Unified Codec Binding Generator
 
-Parses .proto files and generates all codec backends (JSON, FlatBuffers,
-Protobuf, gRPC) for all target languages (C++, Ada) in a single invocation.
+Parses .proto files and generates all codec/transport backends (JSON,
+FlatBuffers, Protobuf, gRPC, ROS2) for all target languages (C++, Ada) in a
+single invocation.
 
 No hardcoded knowledge of specific data models — everything is derived from
 the proto IDL as the single source of truth.
@@ -99,7 +100,7 @@ def main():
     parser.add_argument(
         '--backends', '-b',
         help='Comma-separated list of backends (default: all). '
-             'Available: json, flatbuffers, protobuf, grpc',
+             'Available: json, flatbuffers, protobuf, grpc, ros2',
     )
     parser.add_argument(
         '--languages', '-l',

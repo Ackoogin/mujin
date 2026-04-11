@@ -30,6 +30,8 @@ The backend registry lives under:
 
 - [codec_backends.py](/D:/Dev/repo/mujin/subprojects/PYRAMID/pim/codec_backends.py)
 - [backends/](/D:/Dev/repo/mujin/subprojects/PYRAMID/pim/backends)
+- [ros2_transport_semantics.md](/D:/Dev/repo/mujin/subprojects/PYRAMID/docs/ros2_transport_semantics.md)
+  for the transport-specific ROS2 mapping rules
 
 ## Standard Terms
 
@@ -62,12 +64,17 @@ From the proto contract, the active generation flow produces:
 - Ada service bindings
 - Ada FlatBuffers codec packages
 - Ada gRPC transport import specs over canonical C ABI entry points
+- Ada ROS2 transport constant packages
 - C++ data-model types
 - C++ proto-native JSON codecs for generated types
 - C++ service bindings
 - C++ FlatBuffers codecs and `.fbs` schemas
 - C++ gRPC transport projections
+- C++ ROS2 transport projections
 - canonical C ABI gRPC shim libraries for Ada interop
+- shared ROS2 transport support helpers for PCL-to-ROS2 semantic mapping
+- ROS2 ament runtime package `pyramid_ros2_transport` for direct `rclcpp`
+  execution
 
 Tactical Objects is still the main proving-ground path, but current backend and
 transport status now lives in:
@@ -137,7 +144,7 @@ The planned transport projections are:
 
 - `grpc`
 - `shared_memory`
-- later `ros2`
+- `ros2`
 
 Transport code owns:
 
@@ -158,7 +165,9 @@ Transport projections must preserve the PCL threading rule: external transport
 threads do wire work only, and business logic is invoked only on the executor
 thread selected by the binding. For the current Tactical Objects gRPC path,
 ingress hands off through `pcl_executor_post_service_request(...)`; the
-transport does not own a parallel business-logic thread.
+transport does not own a parallel business-logic thread. The current ROS2
+semantic transport support uses the same rule for both topic ingress and
+service ingress.
 
 ## Runtime Selection Rules
 
@@ -183,6 +192,8 @@ The current Ada policy is:
 - FlatBuffers and Protobuf may use generated C/C++ shims internally
 - gRPC Ada support currently uses generated canonical C ABI shims under
   `examples/grpc/cpp`
+- ROS2 Ada support currently consists of generated endpoint constants/specs;
+  a direct Ada ROS2 runtime is not implemented yet
 - shared-memory Ada support may also use generated shims initially
 
 This policy is a short-term implementation choice, not a change to the public
@@ -196,6 +207,7 @@ The most important active Tactical Objects generated outputs include:
 - [pyramid-services-tactical_objects-consumed.ads](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/ada/generated/pyramid-services-tactical_objects-consumed.ads)
 - [pyramid-services-tactical_objects-flatbuffers_codec.ads](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/ada/generated/flatbuffers/ada/pyramid-services-tactical_objects-flatbuffers_codec.ads)
 - [pyramid-components-tactical_objects-services-provided-grpc_transport.ads](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/ada/generated/grpc/ada/pyramid-components-tactical_objects-services-provided-grpc_transport.ads)
+- [pyramid_components_tactical_objects_services_provided-ros2_transport.ads](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/ada/generated/ros2/ada/pyramid_components_tactical_objects_services_provided-ros2_transport.ads)
 - [pyramid-data_model-tactical-protobuf_codec.ads](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/ada/generated/protobuf/ada/pyramid-data_model-tactical-protobuf_codec.ads)
 - [pyramid_services_tactical_objects_provided.hpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/cpp/generated/pyramid_services_tactical_objects_provided.hpp)
 - [pyramid_services_tactical_objects_consumed.hpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/cpp/generated/pyramid_services_tactical_objects_consumed.hpp)
@@ -205,6 +217,10 @@ The most important active Tactical Objects generated outputs include:
 - [pyramid_components_tactical_objects_services_provided_grpc_c_api.hpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/grpc/cpp/pyramid_components_tactical_objects_services_provided_grpc_c_api.hpp)
 - [pyramid_components_tactical_objects_services_consumed_grpc_c_api.hpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/grpc/cpp/pyramid_components_tactical_objects_services_consumed_grpc_c_api.hpp)
 - [pyramid_services_tactical_objects_grpc_c_api_support.hpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/grpc/cpp/pyramid_services_tactical_objects_grpc_c_api_support.hpp)
+- [pyramid_ros2_transport_support.hpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/ros2/cpp/pyramid_ros2_transport_support.hpp)
+- [pyramid_components_tactical_objects_services_provided_ros2_transport.hpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/ros2/cpp/pyramid_components_tactical_objects_services_provided_ros2_transport.hpp)
+- [rclcpp_runtime_adapter.hpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/ros2/include/pyramid_ros2_transport/rclcpp_runtime_adapter.hpp)
+- [subprojects/PYRAMID/ros2/CMakeLists.txt](/D:/Dev/repo/mujin/subprojects/PYRAMID/ros2/CMakeLists.txt)
 
 ## Near-Term Standardization Work
 
@@ -214,5 +230,8 @@ The next generator changes should focus on:
 2. treating JSON as a fully standardized backend within that registry model
 3. reducing remaining Ada filename/package compatibility glue in generated
    non-JSON backends
-4. adding shared-memory transport without changing the proto-native typed
+4. preserving parity between generated ROS2 projections and the
+   `pyramid_ros2_transport` runtime package without changing the proto-native
+   typed surface
+5. adding shared-memory transport without changing the proto-native typed
    surface
