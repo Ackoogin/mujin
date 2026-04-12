@@ -96,60 +96,66 @@ if(NOT WIN32)
 endif()
 gtest_discover_tests(test_tobj_socket_e2e DISCOVERY_MODE PRE_TEST)
 
-add_executable(test_pcl_proto_bindings
-    test_pcl_proto_bindings.cpp
-    ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
-    ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
-)
-target_link_libraries(test_pcl_proto_bindings PRIVATE
-    pcl_core pcl_transport_socket tactical_objects
-    pyramid_generated_codecs
-    pyramid_flatbuffers_support
-    GTest::gtest_main
-)
-target_include_directories(test_pcl_proto_bindings PRIVATE
-    ${PROTO_BINDINGS_DIR}
-    ${PYRAMID_ROOT_DIR}/tactical_objects/include
-    ${PYRAMID_ROOT_DIR}/core/include
-)
-if(NOT WIN32)
-    target_link_libraries(test_pcl_proto_bindings PRIVATE pthread)
+if(PYRAMID_ENABLE_PROTOBUF)
+    add_executable(test_pcl_proto_bindings
+        test_pcl_proto_bindings.cpp
+        ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
+        ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
+    )
+    target_link_libraries(test_pcl_proto_bindings PRIVATE
+        pcl_core pcl_transport_socket tactical_objects
+        pyramid_generated_codecs
+        pyramid_flatbuffers_support
+        GTest::gtest_main
+    )
+    target_include_directories(test_pcl_proto_bindings PRIVATE
+        ${PROTO_BINDINGS_DIR}
+        ${PYRAMID_ROOT_DIR}/tactical_objects/include
+        ${PYRAMID_ROOT_DIR}/core/include
+    )
+    if(NOT WIN32)
+        target_link_libraries(test_pcl_proto_bindings PRIVATE pthread)
+    endif()
+    gtest_discover_tests(test_pcl_proto_bindings DISCOVERY_MODE PRE_TEST)
 endif()
-gtest_discover_tests(test_pcl_proto_bindings DISCOVERY_MODE PRE_TEST)
 
-add_executable(test_codec_dispatch_e2e
-    test_codec_dispatch_e2e.cpp
-    ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
-    ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
-)
-target_link_libraries(test_codec_dispatch_e2e PRIVATE
-    pcl_core pcl_transport_socket tactical_objects
-    pyramid_generated_codecs
-    pyramid_flatbuffers_support
-    GTest::gtest_main
-)
-target_include_directories(test_codec_dispatch_e2e PRIVATE
-    ${PROTO_BINDINGS_DIR}
-    ${PYRAMID_ROOT_DIR}/tactical_objects/include
-    ${PYRAMID_ROOT_DIR}/core/include
-)
-if(NOT WIN32)
-    target_link_libraries(test_codec_dispatch_e2e PRIVATE pthread)
+if(PYRAMID_ENABLE_PROTOBUF)
+    add_executable(test_codec_dispatch_e2e
+        test_codec_dispatch_e2e.cpp
+        ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
+        ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
+    )
+    target_link_libraries(test_codec_dispatch_e2e PRIVATE
+        pcl_core pcl_transport_socket tactical_objects
+        pyramid_generated_codecs
+        pyramid_flatbuffers_support
+        GTest::gtest_main
+    )
+    target_include_directories(test_codec_dispatch_e2e PRIVATE
+        ${PROTO_BINDINGS_DIR}
+        ${PYRAMID_ROOT_DIR}/tactical_objects/include
+        ${PYRAMID_ROOT_DIR}/core/include
+    )
+    if(NOT WIN32)
+        target_link_libraries(test_codec_dispatch_e2e PRIVATE pthread)
+    endif()
+    gtest_discover_tests(test_codec_dispatch_e2e DISCOVERY_MODE PRE_TEST)
 endif()
-gtest_discover_tests(test_codec_dispatch_e2e DISCOVERY_MODE PRE_TEST)
 
-if(WIN32)
-    add_test(NAME generated_bindings_flatbuffers_dispatch
-        COMMAND ${CMAKE_COMMAND}
-                -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_generated_codec_dispatch.bat
-                -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
-else()
-    add_test(NAME generated_bindings_flatbuffers_dispatch
-        COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_generated_codec_dispatch.sh)
+if(PYRAMID_ENABLE_PROTOBUF)
+    if(WIN32)
+        add_test(NAME generated_bindings_flatbuffers_dispatch
+            COMMAND ${CMAKE_COMMAND}
+                    -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_generated_codec_dispatch.bat
+                    -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+    else()
+        add_test(NAME generated_bindings_flatbuffers_dispatch
+            COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_generated_codec_dispatch.sh)
+    endif()
+    set_tests_properties(generated_bindings_flatbuffers_dispatch PROPERTIES
+        LABELS "generated;codec;dispatch"
+        TIMEOUT 120)
 endif()
-set_tests_properties(generated_bindings_flatbuffers_dispatch PROPERTIES
-    LABELS "generated;codec;dispatch"
-    TIMEOUT 120)
 
 add_executable(tobj_socket_server ${TOBJ_TEST_DIR}/tobj_socket_server.cpp)
 target_link_libraries(tobj_socket_server PRIVATE
@@ -227,7 +233,8 @@ if(WIN32 AND TARGET pyramid_grpc_transport)
 endif()
 
 find_program(GPRBUILD gprbuild)
-if(GPRBUILD)
+set(PYRAMID_PROTO_ROOT ${PYRAMID_ROOT_DIR}/proto)
+if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     set(ADA_SRC_DIR ${PYRAMID_ROOT_DIR}/examples/ada)
     find_program(ADA_PYTHON NAMES python3 python)
     if(NOT ADA_PYTHON)
@@ -235,7 +242,6 @@ if(GPRBUILD)
     endif()
     set(BINDINGS_GEN_SCRIPT ${PYRAMID_ROOT_DIR}/pim/generate_bindings.py)
     set(ADA_GEN_OUT ${ADA_SRC_DIR}/generated)
-    set(PYRAMID_PROTO_ROOT ${PYRAMID_ROOT_DIR}/proto)
     set(ADA_PCL_INCLUDE_DIR "${PCL_ROOT_DIR}/include" CACHE PATH
         "Include directory for Ada gprbuild PCL headers")
     set(ADA_PCL_LIB_NAME "pcl_core" CACHE STRING

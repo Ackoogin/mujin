@@ -1,6 +1,12 @@
 set(PYRAMID_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}")
 
-option(PYRAMID_ENABLE_PROTOBUF "Enable protobuf codecs for PYRAMID" ON)
+set(PYRAMID_PROTO_DIR "${PYRAMID_ROOT_DIR}/proto")
+if(EXISTS "${PYRAMID_PROTO_DIR}")
+    option(PYRAMID_ENABLE_PROTOBUF "Enable protobuf codecs for PYRAMID" ON)
+else()
+    option(PYRAMID_ENABLE_PROTOBUF "Enable protobuf codecs for PYRAMID" OFF)
+    message(STATUS "PYRAMID: proto directory not found, disabling protobuf support")
+endif()
 option(PYRAMID_ENABLE_GRPC "Enable gRPC transport projection for PYRAMID" OFF)
 option(PYRAMID_ENABLE_ROS2 "Enable ROS2 semantic transport projection for PYRAMID" ON)
 set(PYRAMID_GRPC_TAG "v1.72.0" CACHE STRING "gRPC git tag to fetch when PYRAMID_ENABLE_GRPC is ON")
@@ -100,8 +106,9 @@ if(PYRAMID_ENABLE_PROTOBUF)
         FetchContent_Declare(
             protobuf
             GIT_REPOSITORY https://github.com/protocolbuffers/protobuf.git
-            GIT_TAG        v32.1
+            GIT_TAG        v3.21.12
             GIT_SHALLOW    TRUE
+            SOURCE_SUBDIR  cmake
         )
         set(protobuf_BUILD_TESTS OFF CACHE BOOL "" FORCE)
         set(protobuf_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -121,7 +128,6 @@ if(PYRAMID_ENABLE_PROTOBUF)
         find_program(PYRAMID_PROTOC NAMES protoc REQUIRED)
     endif()
 
-    set(PYRAMID_PROTO_DIR "${PYRAMID_ROOT_DIR}/proto")
     set(PYRAMID_PROTOBUF_GEN_DIR "${CMAKE_BINARY_DIR}/generated/protobuf")
     set(PYRAMID_PROTO_IMPORT_DIRS "${PYRAMID_PROTO_DIR}")
     if(DEFINED protobuf_SOURCE_DIR AND EXISTS "${protobuf_SOURCE_DIR}/src/google/protobuf/timestamp.proto")
