@@ -195,6 +195,55 @@ TEST(PclSocketTransport, ServerNullExecutorReturnsNull) {
   restore_logs();
 }
 
+///< REQ_PCL_164: Server with port=0 assigns ephemeral port via getsockname. PCL.031.
+// Covers pcl_transport_socket.c lines 693, 697-698 (getsockname branch for port==0).
+TEST(PclSocketTransport, ServerEphemeralPortAssigned) {
+  silence_logs();
+#ifdef _WIN32
+  WSADATA wsa;
+  WSAStartup(MAKEWORD(2, 2), &wsa);
+#endif
+
+  auto* server_exec = pcl_executor_create();
+  auto* client_exec = pcl_executor_create();
+  ASSERT_NE(server_exec, nullptr);
+  ASSERT_NE(client_exec, nullptr);
+
+  // port_ready is written by the server thread before it blocks on accept().
+  volatile uint16_t port_ready = 0;
+  pcl_socket_transport_t* server_transport = nullptr;
+
+  // Launch server with port=0 — it binds, calls getsockname, then blocks on accept.
+  std::thread server_thread([&]() {
+    server_transport = pcl_socket_transport_create_server_ex(
+        0, server_exec, &port_ready);
+  });
+
+  // Spin until the ephemeral port is known (port_ready written before accept).
+  for (int i = 0; i < 200 && port_ready == 0; ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  ASSERT_NE(port_ready, 0) << "Ephemeral port was not assigned within 2 s";
+
+  // Connect the client using the OS-assigned port.
+  auto* client_transport = pcl_socket_transport_create_client(
+      "127.0.0.1", port_ready, client_exec);
+  ASSERT_NE(client_transport, nullptr);
+
+  server_thread.join();
+  ASSERT_NE(server_transport, nullptr);
+
+  // get_port() must reflect the ephemeral port.
+  EXPECT_EQ(pcl_socket_transport_get_port(server_transport), port_ready);
+  EXPECT_EQ(pcl_socket_transport_get_port(nullptr), 0);
+
+  pcl_socket_transport_destroy(client_transport);
+  pcl_socket_transport_destroy(server_transport);
+  pcl_executor_destroy(client_exec);
+  pcl_executor_destroy(server_exec);
+  restore_logs();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // REQ_PCL_117–119 — Client Mode (PCL.032)
 // ═══════════════════════════════════════════════════════════════════════════

@@ -44,6 +44,31 @@ typedef struct pcl_socket_transport_t pcl_socket_transport_t;
 pcl_socket_transport_t* pcl_socket_transport_create_server(uint16_t        port,
                                                            pcl_executor_t* executor);
 
+/// \brief Like pcl_socket_transport_create_server but exposes the bound port
+///        before blocking on accept.
+///
+/// When \p port is 0 and the OS assigns an ephemeral port, \p port_ready (if
+/// non-NULL) is written with the assigned port number immediately after
+/// getsockname — before the blocking accept() call.  A concurrent thread can
+/// spin on \p port_ready and use the value to call
+/// pcl_socket_transport_create_client once it becomes non-zero.
+///
+/// \param port        TCP port to listen on (0 = pick ephemeral).
+/// \param executor    Executor for post_incoming and invoke_service.
+/// \param port_ready  Output pointer written before accept() blocks.  May be NULL.
+/// \return Handle, or NULL on failure.
+pcl_socket_transport_t* pcl_socket_transport_create_server_ex(
+    uint16_t           port,
+    pcl_executor_t*    executor,
+    volatile uint16_t* port_ready);
+
+/// \brief Return the TCP port the transport is bound to.
+///
+/// For servers created with port=0, returns the ephemeral port assigned by
+/// the OS.  For client transports, returns the port passed to create_client.
+/// Returns 0 for a NULL handle.
+uint16_t pcl_socket_transport_get_port(const pcl_socket_transport_t* ctx);
+
 /// \brief Create a client-mode transport that connects to host:port.
 ///
 /// Spawns recv_thread and send_thread on success.

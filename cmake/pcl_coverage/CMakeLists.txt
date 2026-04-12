@@ -74,6 +74,8 @@ add_pcl_test(test_pcl_log         test_pcl_log.cpp)
 add_pcl_test(test_pcl_robustness  test_pcl_robustness.cpp)
 add_pcl_test(test_pcl_streaming   test_pcl_streaming.cpp)
 add_pcl_test(test_pcl_bridge      test_pcl_bridge.cpp)
+# Bridge test needs internal header (PCL_MAX_PORTS) to trigger port-overflow branch.
+target_include_directories(test_pcl_bridge PRIVATE ${PCL_ROOT}/src)
 add_pcl_test(test_pcl_dining      test_pcl_dining.cpp)
 # Dining test needs internal header to trigger port-overflow branch in bridge.
 target_include_directories(test_pcl_dining PRIVATE ${PCL_ROOT}/src)

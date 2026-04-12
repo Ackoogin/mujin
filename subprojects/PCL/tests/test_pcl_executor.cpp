@@ -4,6 +4,7 @@
 
 #include <thread>
 #include <chrono>
+#include <utility>
 
 extern "C" {
 #include "pcl/pcl_executor.h"
@@ -696,6 +697,187 @@ TEST(PclExecutor, PublisherRemoteNamedPeerWithoutTransportReturnsNotFound) {
 
   EXPECT_EQ(pcl_port_publish(ctx.pub, &msg), PCL_ERR_NOT_FOUND);
 
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// -- Coverage gap-fill tests ---------------------------------------------
+
+// set_transport with NULL clears the transport (else-branch in pcl_executor_set_transport).
+TEST(PclExecutor, SetTransportClearNull) {
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  bool shutdown_called = false;
+  pcl_transport_t t = {};
+  t.shutdown = [](void* ctx) { *static_cast<bool*>(ctx) = true; };
+  t.adapter_ctx = &shutdown_called;
+
+  ASSERT_EQ(pcl_executor_set_transport(e, &t), PCL_OK);
+  // Clear transport — exercises the else branch and return PCL_OK after it.
+  ASSERT_EQ(pcl_executor_set_transport(e, nullptr), PCL_OK);
+  // Shutdown was NOT called through set_transport; the transport is just cleared.
+  EXPECT_FALSE(shutdown_called);
+
+  pcl_executor_destroy(e);
+}
+
+// Calling set_endpoint_route twice with the same endpoint name/kind exercises
+// the update-existing-entry code path (find_endpoint_route_entry returns non-NULL).
+TEST(PclExecutor, UpdateExistingEndpointRoute) {
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "update.svc";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode    = PCL_ROUTE_REMOTE;
+  route.peer_ids      = nullptr;
+  route.peer_count    = 0;
+
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_OK);
+
+  // Second call with the same endpoint — exercises the update (non-NULL entry) path.
+  const char* peers[] = {"peer_x"};
+  route.peer_ids   = peers;
+  route.peer_count = 1;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_OK);
+
+  pcl_executor_destroy(e);
+}
+
+// invoke_async with no transport and no endpoint route falls back to the
+// intra-process service lookup path, allocates a svc_context, fires the
+// callback inline (PCL_OK immediate-response path).
+TEST(PclExecutor, InvokeAsyncIntraProcessImmediateResponse) {
+  static int response_val = 42;
+  auto svc_handler = [](pcl_container_t*, const pcl_msg_t*,
+                         pcl_msg_t* resp,
+                         pcl_svc_context_t*, void*) -> pcl_status_t {
+    resp->data = &response_val;
+    resp->size = sizeof(response_val);
+    return PCL_OK;
+  };
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto h = *static_cast<decltype(svc_handler)*>(ud);
+    return pcl_container_add_service(c, "inproc.svc", "Msg", h, nullptr)
+               ? PCL_OK : PCL_ERR_NOMEM;
+  };
+
+  auto* e = pcl_executor_create();
+  auto* c = pcl_container_create("svc_node", &cbs, &svc_handler);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+  pcl_executor_add(e, c);
+
+  // No transport, no endpoint route — goes to intra-process calloc path.
+  bool cb_fired = false;
+  int  cb_val   = 0;
+  pcl_msg_t req = {};
+  req.type_name = "Msg";
+
+  auto cb = [](const pcl_msg_t* resp, void* ud) {
+    auto* pair = static_cast<std::pair<bool*, int*>*>(ud);
+    *pair->first = true;
+    if (resp->data && resp->size == sizeof(int))
+      *pair->second = *static_cast<const int*>(resp->data);
+  };
+  std::pair<bool*, int*> cb_ctx{&cb_fired, &cb_val};
+
+  EXPECT_EQ(pcl_executor_invoke_async(e, "inproc.svc", &req, cb, &cb_ctx), PCL_OK);
+  EXPECT_TRUE(cb_fired);
+  EXPECT_EQ(cb_val, 42);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// invoke_async intra-process with a service that returns PCL_PENDING exercises
+// the deferred-response branch (the svc_context_t is saved and not freed here).
+TEST(PclExecutor, InvokeAsyncIntraProcessPendingResponse) {
+  static pcl_svc_context_t* saved_ctx = nullptr;
+
+  auto svc_handler = [](pcl_container_t*, const pcl_msg_t*,
+                         pcl_msg_t*, pcl_svc_context_t* ctx, void*) -> pcl_status_t {
+    saved_ctx = ctx;
+    return PCL_PENDING;
+  };
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto h = *static_cast<decltype(svc_handler)*>(ud);
+    return pcl_container_add_service(c, "defer.svc", "Msg", h, nullptr)
+               ? PCL_OK : PCL_ERR_NOMEM;
+  };
+
+  auto* e = pcl_executor_create();
+  auto* c = pcl_container_create("defer_node", &cbs, &svc_handler);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+  pcl_executor_add(e, c);
+
+  bool cb_fired = false;
+  pcl_msg_t req = {};
+  req.type_name = "Msg";
+
+  EXPECT_EQ(pcl_executor_invoke_async(e, "defer.svc", &req,
+    [](const pcl_msg_t*, void* ud) { *static_cast<bool*>(ud) = true; },
+    &cb_fired), PCL_OK);
+  EXPECT_FALSE(cb_fired);  // deferred — not yet fired
+  ASSERT_NE(saved_ctx, nullptr);
+
+  // Deliver the deferred response and clean up.
+  pcl_msg_t resp = {};
+  resp.type_name = "Msg";
+  pcl_service_respond(saved_ctx, &resp);
+  EXPECT_TRUE(cb_fired);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// Publisher port with a transport set and no specific endpoint route causes
+// port_route_mode to return PCL_ROUTE_REMOTE (has_transport + PUBLISHER type).
+TEST(PclExecutor, PublishPortRouteRemoteWithTransport) {
+  struct PubCtx { pcl_port_t* pub = nullptr; } pctx;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto* ctx = static_cast<PubCtx*>(ud);
+    ctx->pub = pcl_container_add_publisher(c, "remote.topic", "Msg");
+    return ctx->pub ? PCL_OK : PCL_ERR_NOMEM;
+  };
+
+  auto* c = pcl_container_create("pub_node", &cbs, &pctx);
+  pcl_container_configure(c);
+  pcl_container_activate(c);
+
+  auto* e = pcl_executor_create();
+  pcl_executor_add(e, c);
+
+  // Set a transport with a publish function — now has_transport == 1.
+  int pub_count = 0;
+  pcl_transport_t t = {};
+  t.publish = [](void* ctx, const char*, const pcl_msg_t*) -> pcl_status_t {
+    (*static_cast<int*>(ctx))++;
+    return PCL_OK;
+  };
+  t.adapter_ctx = &pub_count;
+  ASSERT_EQ(pcl_executor_set_transport(e, &t), PCL_OK);
+
+  // No endpoint route configured — port_route_mode returns PCL_ROUTE_REMOTE
+  // because has_transport is true and port type is PUBLISHER.
+  pcl_msg_t msg = {};
+  msg.data = "x";
+  msg.size = 1;
+  msg.type_name = "Msg";
+
+  EXPECT_EQ(pcl_port_publish(pctx.pub, &msg), PCL_OK);
+  EXPECT_EQ(pub_count, 1);
+
+  pcl_executor_set_transport(e, nullptr);
   pcl_executor_destroy(e);
   pcl_container_destroy(c);
 }

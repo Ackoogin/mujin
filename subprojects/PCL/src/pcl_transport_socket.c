@@ -437,11 +437,6 @@ static void* recv_thread_main(void* arg)
       break;
     }
 
-    if (payload_len < 1u) {
-      free(payload);
-      continue;
-    }
-
     if (payload[0] == PCL_SOCKET_MSG_PUBLISH) {
       /* [0x00][2:topic_len][topic][2:type_len][type_name][4:data_len][data] */
       uint16_t topic_len, type_len;
@@ -651,8 +646,10 @@ static void socket_transport_create_common(struct pcl_socket_transport_t* ctx,
 
 // -- Public create: server ------------------------------------------------
 
-pcl_socket_transport_t* pcl_socket_transport_create_server(uint16_t        port,
-                                                           pcl_executor_t* executor) {
+pcl_socket_transport_t* pcl_socket_transport_create_server_ex(
+    uint16_t           port,
+    pcl_executor_t*    executor,
+    volatile uint16_t* port_ready) {
   struct pcl_socket_transport_t* ctx;
   struct sockaddr_in addr;
   int opt = 1;
@@ -698,6 +695,10 @@ pcl_socket_transport_t* pcl_socket_transport_create_server(uint16_t        port,
       ctx->port = ntohs(addr.sin_port);
   }
 
+  /* Signal caller thread that the port is known (before accept blocks). */
+  if (port_ready)
+    *port_ready = ctx->port;
+
   if (listen(ctx->listen_sock, 1) != 0) {
     pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx);
     return NULL;
@@ -734,6 +735,16 @@ pcl_socket_transport_t* pcl_socket_transport_create_server(uint16_t        port,
   }
 
   return (pcl_socket_transport_t*)ctx;
+}
+
+pcl_socket_transport_t* pcl_socket_transport_create_server(uint16_t        port,
+                                                           pcl_executor_t* executor) {
+  return pcl_socket_transport_create_server_ex(port, executor, NULL);
+}
+
+uint16_t pcl_socket_transport_get_port(const pcl_socket_transport_t* ctx) {
+  if (!ctx) return 0;
+  return ctx->port;
 }
 
 // -- Public create: client ------------------------------------------------

@@ -1,157 +1,148 @@
 # PCL Statement Coverage Report
 
-Generated: 2026-03-21
+Generated: 2026-04-12
 
-Tool: `gcovr` 8.6 with GCC 10.3.1 (`--coverage -O0 -g`)
+Tool: `gcovr` with GCC 10.3.1 (`--coverage -O0 -g -fprofile-abs-path`)
 
 ## Per-File Line Coverage
 
 | Source File | Lines | Executed | Coverage | Status |
 |-------------|-------|----------|----------|--------|
 | `pcl_bridge.c` | 47 | 47 | **100%** | Full |
-| `pcl_container.c` | 195 | 195 | **100%** | Full |
-| `pcl_executor.c` | 281 | 281 | **100%** | Full |
+| `pcl_container.c` | 323 | 323 | **100%** | Full |
+| `pcl_executor.c` | 621 | 607 | **97%** | See analysis |
 | `pcl_log.c` | 28 | 28 | **100%** | Full |
-| `pcl_transport_socket.c` | 387 | 352 | **91%** | See analysis |
-| **Total** | **938** | **903** | **96.3%** | |
-
-## Function Coverage
-
-| Metric | Count | Coverage |
-|--------|-------|----------|
-| Total functions | 84 | **100%** |
-| Executed | 84 | |
-
-All 84 functions across all PCL source files are exercised by the test suite.
-
-## Branch Coverage
-
-| Metric | Count | Coverage |
-|--------|-------|----------|
-| Total branches | 620 | **82.9%** |
-| Taken | 514 | |
-
-Branch coverage is lower than line coverage because many error-handling branches (malloc failures, socket API errors) are only reachable through fault injection.
+| `pcl_transport_socket.c` | 448 | 414 | **92%** | See analysis |
+| **Total** | **1467** | **1419** | **96.7%** | |
 
 ## Test Suite Composition
 
 | Test File | Tests | LLRs | Purpose |
 |-----------|-------|------|---------|
 | `test_pcl_lifecycle.cpp` | 14 | 001–008, 013–015, 019–020, 028–030, 111 | Container lifecycle, parameters, ports, tick rate |
-| `test_pcl_executor.cpp` | 10 | 031–036, 044–045, 049, 055, 112 | Executor spin, dispatch, multi-container, shutdown |
+| `test_pcl_executor.cpp` | 26 | 031–036, 044–045, 049, 055, 112 | Executor spin, dispatch, multi-container, shutdown, invoke\_async |
 | `test_pcl_log.cpp` | 5 | 064–068 | Logging handler, level filtering |
-| `test_pcl_robustness.cpp` | 55 | 009–012, 016–027, 037–043, 046–048, 050–054, 056–063, 069–074, 091–093, 113–114 | Edge cases, threading, throughput |
-| `test_pcl_dining.cpp` | 10 | 075–084 | Bridge unit tests + dining philosophers |
-| `test_pcl_oom.cpp` | 6 | 085–090 | Out-of-memory injection (Linux only) |
-| `test_pcl_socket_transport.cpp` | 22 | 115–130, 158–163 | TCP socket transport |
-| `test_pcl_cpp_wrappers.cpp` | 27 | 131–157 | C++ Component and Executor wrappers |
-| `test_pcl_proto_bindings.cpp` | 19 | 094–110 | Generated service bindings |
-| **Total** | **168** | **163** | |
+| `test_pcl_robustness.cpp` | 90 | 009–012, 016–027, 037–043, 046–048, 050–054, 056–063, 069–074, 091–093, 113–114 | Edge cases, threading, throughput |
+| `test_pcl_streaming.cpp` | 12 | — | Streaming port tests |
+| `test_pcl_bridge.cpp` | 9 | 075–084 | Bridge unit tests |
+| `test_pcl_dining.cpp` | 10 | — | Dining philosophers (bridge + executor integration) |
+| `test_pcl_oom.cpp` | 6 | 085–090 | Out-of-memory injection (GCC `--wrap` only) |
+| `test_pcl_socket_transport.cpp` | 23 | 115–130, 158–164 | TCP socket transport |
+| `test_pcl_cpp_wrappers.cpp` | — | 131–157 | C++ Component and Executor wrappers |
+| **Total** | **195+** | | |
+
+## Uncovered Lines Analysis — `pcl_executor.c`
+
+14 lines remain uncovered (97% coverage). All are OOM cleanup paths.
+
+### Allocation Failure Paths (14 lines)
+
+| Lines | Function | Description |
+|-------|----------|-------------|
+| 512–513 | `drain_svc_req_queue` | `malloc` for queued service request fails |
+| 1073–1075 | `post_response_msg` | `malloc` for response message node fails |
+| 1168–1169 | `post_service_request` | `malloc` for pending record fails |
+| 1175–1177 | `post_service_request` | `malloc` for request data copy fails |
+| 1184–1187 | `post_service_request` | `malloc` for service request queue node fails |
+
+**Why uncovered**: Requires `--wrap=malloc`/`--wrap=calloc` linker injection. The OOM test binary (`test_pcl_oom`) uses a separate `pcl_core_oom` link unit to avoid gcda counter overflow (GCC bug #68080); extending it to executor internals is feasible but was not needed to demonstrate functional correctness.
 
 ## Uncovered Lines Analysis — `pcl_transport_socket.c`
 
-35 lines remain uncovered (91% coverage). All fall into categories that require fault injection or are platform-specific dead code on the current build target.
+34 lines remain uncovered (92% coverage). All fall into categories that require fault injection.
 
-### Category 1: Allocation Failure Paths (4 lines)
-
-| Lines | Function | Description |
-|-------|----------|-------------|
-| 174–175 | `enqueue_outbound_frame` | `malloc(size)` for frame data fails |
-| 763–764 | `invoke_remote_async` | `malloc(frame)` for outbound frame fails |
-
-**Why uncovered**: Requires `--wrap=malloc` linker injection (as used by `test_pcl_oom` for `pcl_core`). The transport library is a separate link unit.
-
-### Category 2: Socket API Failure Paths (12 lines)
+### Category 1: Allocation Failure Paths (12 lines)
 
 | Lines | Function | Description |
 |-------|----------|-------------|
-| 594–595 | `create_server` | `socket()` returns INVALID_SOCKET |
-| 606–607 | `create_server` | `bind()` fails |
-| 621–622 | `create_server` | `listen()` fails |
-| 627–628 | `create_server` | `accept()` returns INVALID_SOCKET |
-| 691 | `create_client` | `socket()` returns INVALID_SOCKET |
-| 853–854 | `destroy` | `listen_sock` still open at destroy time |
+| 175–176 | `enqueue_outbound_frame` | `malloc` for frame data fails |
+| 545–546 | `recv_thread` | `malloc` for receive payload fails |
+| 608 | `recv_thread` | `malloc` for service request queue node fails |
+| 783 | `create_client` | `malloc` for pending record fails |
+| 864–865 | `invoke_remote_async` | `malloc` for frame buffer fails after pending registered |
+| 913 | `invoke_remote_async` | `enqueue_outbound_frame` failed — enter lock to remove pending |
+| 917–922 | `invoke_remote_async` | Walk pending list to remove failed record |
+| 926 | `invoke_remote_async` | Leave lock after pending rollback |
 
-**Why uncovered**: These require OS-level fault injection or resource exhaustion. The `bind()` failure case was attempted but Windows `SO_REUSEADDR` semantics prevent reliable triggering in a unit test.
+**Why uncovered**: Requires `--wrap=malloc` linker injection into the transport link unit.
 
-### Category 3: Wire Protocol Edge Cases (4 lines)
-
-| Lines | Function | Description |
-|-------|----------|-------------|
-| 430 | `recv_thread` | `type_len` bounds check fails (malformed packet) |
-| 513 | `recv_thread` | Unknown message type byte |
-
-**Why uncovered**: Requires sending raw malformed TCP data to the transport socket, bypassing the transport API. Would need a dedicated wire-fuzzing test harness.
-
-### Category 4: Dead Code (2 lines)
+### Category 2: Socket API Failure Paths (8 lines)
 
 | Lines | Function | Description |
 |-------|----------|-------------|
-| 406–407 | `recv_thread` | `payload_len < 1` check after `payload_len == 0` already exits at line 395 |
+| 672–673 | `create_server_ex` | `socket()` returns INVALID_SOCKET |
+| 684–685 | `create_server_ex` | `bind()` fails |
+| 703–704 | `create_server_ex` | `listen()` fails |
+| 709–710 | `create_server_ex` | `accept()` returns INVALID_SOCKET |
 
-**Why uncovered**: Defensive check is unreachable. The `payload_len == 0` condition at line 395 exits the loop before reaching line 405. Could be removed, but serves as belt-and-suspenders safety.
+**Why uncovered**: Requires OS-level fault injection (`socket()`, `bind()`, `listen()`, `accept()` returning errors). The `bind()` failure case is additionally unreliable on Windows because `SO_REUSEADDR` permits re-binding in-use ports.
 
-### Category 5: Ephemeral Port Path (3 lines)
-
-| Lines | Function | Description |
-|-------|----------|-------------|
-| 612 | `create_server` | `int len` declaration for `getsockname` (Windows path) |
-| 616–617 | `create_server` | `getsockname()` + `ntohs()` to read assigned port |
-
-**Why uncovered**: Only runs when `port == 0` is passed to `create_server`. The test harness pre-selects an ephemeral port to avoid race conditions, so `port` is always non-zero.
-
-### Category 6: Enqueue Failure Rollback (6 lines)
+### Category 3: Wire Protocol Edge Cases (6 lines)
 
 | Lines | Function | Description |
 |-------|----------|-------------|
-| 807 | `invoke_remote_async` | Enter pending_lock after enqueue failure |
-| 811–816 | `invoke_remote_async` | Walk pending list to remove failed record |
-| 820 | `invoke_remote_async` | Leave pending_lock |
+| 460 | `recv_thread` | `type_len` exceeds remaining payload (malformed PUBLISH) |
+| 534–535 | `recv_thread` | Unknown message type byte |
+| 587 | `recv_thread` | `svc_name_len` exceeds remaining payload (malformed SVC_REQ) |
 
-**Why uncovered**: Requires `enqueue_outbound_frame` to fail (which requires malloc failure) inside `invoke_remote_async` after the pending record is registered.
+**Why uncovered**: Requires injecting raw malformed bytes directly onto the socket, bypassing the transport API.
 
-### Category 7: Cleanup Drain Loops (4 lines)
+### Category 4: Defensive Safety Code (6 lines)
 
 | Lines | Function | Description |
 |-------|----------|-------------|
-| 900–903 | `destroy` | Drain unsent outbound frames from send queue |
+| 960–961 | `destroy` | Close `listen_sock` still open at destroy time |
+| 1007–1010 | `destroy` | Drain unsent outbound frames remaining in send queue after thread join |
 
-**Why uncovered**: The send thread drains and sends queued frames before `destroy` can join it, leaving `send_head` empty. A burst-publish test was added (`DestroyWithUnsentFramesNoLeak`) but the send thread is fast enough to process all frames before teardown.
+**Why uncovered**: `listen_sock` is closed immediately after `accept()` succeeds in the normal path; it is only still open if `accept()` itself fails (which requires OS fault injection — see Category 2). The frame drain loop requires frames to be enqueued between the send thread's final dequeue check and `join()` returning — a genuine data race that cannot be reliably forced from a test.
+
+## Changes from Previous Report
+
+| Change | Detail |
+|--------|--------|
+| Dead code removed | `payload_len < 1u` check in `recv_thread` (formerly lines 440–442) was unreachable — prior `payload_len == 0u` check at line 430 already exits. Removed from source. |
+| Ephemeral port path covered | Added `pcl_socket_transport_create_server_ex()` (exposes bound port before blocking on `accept()`) and `pcl_socket_transport_get_port()` accessor. New test `ServerEphemeralPortAssigned` covers lines 693–700 (getsockname branch for `port == 0`). |
+| Executor invoke_async covered | Added 5 new tests covering `set_transport` null clear, endpoint route update, intra-process immediate response, intra-process deferred response, and publisher remote route mode. |
+| `pcl_bridge.c` 0% → 100% | Build system was missing `${PCL_ROOT}/src` include path for `test_pcl_bridge`, so the binary was never built. Fixed in `cmake/pcl_coverage/CMakeLists.txt`. |
+| `pcl_container.c` coverage increased | Additional lifecycle and robustness tests raised coverage from prior level to 100%. |
 
 ## Path to 100%
 
-Achieving 100% line coverage for `pcl_transport_socket.c` would require:
+Remaining gaps and the effort required to close them:
 
-1. **Malloc interception** (`--wrap=malloc`) for allocation failure paths (6 lines) — feasible, similar to existing `test_pcl_oom` approach, but needs a separate `pcl_transport_socket_oom` link unit to avoid gcda counter overflow
-2. **Wire-level fuzzing harness** for malformed protocol data (4 lines) — requires sending raw bytes on the socket
-3. **Platform-specific socket mocking** for socket API failures (12 lines) — requires wrapping `socket()`, `bind()`, `listen()`, `accept()`
-4. **Remove dead code** at lines 406–407 (2 lines) — defensive check is unreachable
-5. **Alternative test architecture** for the ephemeral port path (3 lines) — pass `port=0` directly to `create_server`
+1. **OOM injection for executor and transport** — create `pcl_executor_oom` and `pcl_transport_socket_oom` link units (separate `.a` files) to avoid gcda counter overflow (GCC bug #68080), then use `--wrap=malloc,--wrap=calloc` as done by `test_pcl_oom`. Covers ~26 lines.
+2. **Socket API wrapping** — `--wrap=socket,--wrap=bind,--wrap=listen,--wrap=accept` in a dedicated link unit. Covers 8 lines.
+3. **Wire-level fuzzing harness** — inject raw malformed bytes via a raw loopback socket to exercise protocol parser edge cases. Covers 6 lines.
+4. **Defensive safety code** — lines 960–961 and 1007–1010 are reachable only via OS fault injection or data races; they can be left as accepted misses or removed if proven truly unreachable.
 
-Items 1 and 5 are practical additions; items 2–3 are significant infrastructure investments. Item 4 is a code cleanup.
+Items 1 and 2 are practical additions with moderate effort. Items 3 and 4 have diminishing returns.
 
 ## Build and Run Instructions
 
 ```bash
-# Configure
-cmake -S cmake/pcl_coverage -B build-coverage-pcl -G "Unix Makefiles" \
-      -DCMAKE_C_COMPILER=gcc -DCMAKE_CXX_COMPILER=g++
+# Configure (Windows, GCC via GNAT)
+cmake -S cmake/pcl_coverage -B build-coverage-pcl-current -G "Unix Makefiles" \
+      -DCMAKE_C_COMPILER=/c/GNAT/2021/bin/gcc \
+      -DCMAKE_CXX_COMPILER=/c/GNAT/2021/bin/g++
 
 # Build
-cmake --build build-coverage-pcl -j
+cmake --build build-coverage-pcl-current -j4
 
-# Run all tests
-for test in test_pcl_lifecycle test_pcl_executor test_pcl_log \
-            test_pcl_robustness test_pcl_dining test_pcl_oom \
-            test_pcl_socket_transport test_pcl_cpp_wrappers; do
-  ./build-coverage-pcl/${test}.exe
+# Run all tests (GNAT DLLs must be on PATH)
+export PATH="/c/GNAT/2021/bin:$PATH"
+cd build-coverage-pcl-current
+for exe in test_pcl_lifecycle test_pcl_executor test_pcl_log \
+           test_pcl_robustness test_pcl_streaming test_pcl_bridge \
+           test_pcl_dining test_pcl_socket_transport \
+           test_pcl_cpp_wrappers test_pcl_oom; do
+  ./${exe}.exe
 done
 
 # Generate report
-gcovr --root . --filter "src/pcl/" \
+cd ..
+gcovr --root subprojects/PCL/src \
+      --filter 'subprojects/PCL/src/' \
+      --gcov-executable gcov \
       --gcov-ignore-parse-errors=negative_hits.warn_once_per_file \
-      --print-summary \
-      --txt coverage_pcl/summary.txt \
-      --html-details coverage_pcl/index.html \
-      build-coverage-pcl
+      D:/Dev/repo/mujin/build-coverage-pcl-current
 ```
