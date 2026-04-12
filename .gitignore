@@ -89,12 +89,11 @@ ref/*
 out/
 
 # Ada build output
-*ali
-*o
-*bexch
-*stderr
-*stdout
-*deps
+*.ali
+*.bexch
+*.stderr
+*.stdout
+*.deps
 b__*
 
 # Python

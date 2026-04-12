@@ -150,7 +150,8 @@ static int send_all(PCL_SOCKET_T sock, const void* buf, size_t len) {
 #ifdef _WIN32
     int r = send(sock, (const char*)buf + sent, (int)(len - sent), 0);
 #else
-    ssize_t r = send(sock, (const char*)buf + sent, len - sent, 0);
+    /* Use MSG_NOSIGNAL to prevent SIGPIPE on closed connection */
+    ssize_t r = send(sock, (const char*)buf + sent, len - sent, MSG_NOSIGNAL);
 #endif
     if (r <= 0) return -1;
     sent += (size_t)r;
