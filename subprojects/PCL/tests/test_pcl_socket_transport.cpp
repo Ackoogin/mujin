@@ -12,6 +12,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstring>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -870,5 +871,309 @@ TEST(PclSocketTransport, GatewayServiceDispatchNoMatch) {
 
   pcl_executor_remove(pair.server_exec, gw);
   pair.destroy();
+  restore_logs();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Connection semantics: retry, state callbacks, auto-reconnect, keepalive
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Helper: thread-safe log of connection-state transitions.
+struct StateLog {
+  std::mutex                      mtx;
+  std::vector<pcl_socket_state_t> states;
+
+  static void callback(pcl_socket_state_t state, void* ud) {
+    auto* self = static_cast<StateLog*>(ud);
+    std::lock_guard<std::mutex> lock(self->mtx);
+    self->states.push_back(state);
+  }
+
+  std::vector<pcl_socket_state_t> snapshot() {
+    std::lock_guard<std::mutex> lock(mtx);
+    return states;
+  }
+
+  bool contains(pcl_socket_state_t s) {
+    std::lock_guard<std::mutex> lock(mtx);
+    for (auto x : states) if (x == s) return true;
+    return false;
+  }
+};
+
+/// Helper: pick a free TCP loopback port.
+static uint16_t pick_free_port() {
+#ifdef _WIN32
+  WSADATA wsa;
+  WSAStartup(MAKEWORD(2, 2), &wsa);
+  SOCKET tmp = socket(AF_INET, SOCK_STREAM, 0);
+  if (tmp == INVALID_SOCKET) return 0;
+#else
+  int tmp = socket(AF_INET, SOCK_STREAM, 0);
+  if (tmp < 0) return 0;
+#endif
+  struct sockaddr_in addr = {};
+  addr.sin_family      = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  addr.sin_port        = 0;
+  if (bind(tmp, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
+#ifdef _WIN32
+    closesocket(tmp);
+#else
+    close(tmp);
+#endif
+    return 0;
+  }
+#ifdef _WIN32
+  int len = (int)sizeof(addr);
+#else
+  socklen_t len = sizeof(addr);
+#endif
+  getsockname(tmp, (struct sockaddr*)&addr, &len);
+  uint16_t port = ntohs(addr.sin_port);
+#ifdef _WIN32
+  closesocket(tmp);
+#else
+  close(tmp);
+#endif
+  return port;
+}
+
+/// Client configured with zero opts must behave like legacy create_client
+/// and fail immediately when the server is not listening.
+TEST(PclSocketTransport, ClientExSingleShotFailsFast) {
+  silence_logs();
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  pcl_socket_client_opts_t opts = {};  // all zero => single-shot, no retry
+  auto start = std::chrono::steady_clock::now();
+  auto* t = pcl_socket_transport_create_client_ex("127.0.0.1", 1, e, &opts);
+  auto elapsed = std::chrono::steady_clock::now() - start;
+
+  EXPECT_EQ(t, nullptr);
+  EXPECT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(),
+            1000);
+
+  pcl_executor_destroy(e);
+  restore_logs();
+}
+
+/// Client with retry enabled must connect to a server that starts late.
+TEST(PclSocketTransport, ClientExRetryConnectsToDelayedServer) {
+  silence_logs();
+  uint16_t port = pick_free_port();
+  ASSERT_NE(port, 0);
+
+  auto* server_exec = pcl_executor_create();
+  auto* client_exec = pcl_executor_create();
+  ASSERT_NE(server_exec, nullptr);
+  ASSERT_NE(client_exec, nullptr);
+
+  // Launch the client first — it must retry until the server shows up.
+  StateLog log;
+  pcl_socket_client_opts_t opts = {};
+  opts.connect_timeout_ms = 10000;  // 10 s deadline
+  opts.max_retries        = 100;
+  opts.state_cb           = &StateLog::callback;
+  opts.state_cb_data      = &log;
+
+  pcl_socket_transport_t* client = nullptr;
+  std::thread client_thread([&]() {
+    client = pcl_socket_transport_create_client_ex("127.0.0.1", port,
+                                                   client_exec, &opts);
+  });
+
+  // Stall so the client exercises at least one backoff cycle.
+  std::this_thread::sleep_for(std::chrono::milliseconds(400));
+
+  // Now start the server; create_server blocks on accept.
+  pcl_socket_transport_t* server = nullptr;
+  std::thread server_thread([&]() {
+    server = pcl_socket_transport_create_server(port, server_exec);
+  });
+
+  client_thread.join();
+  server_thread.join();
+
+  ASSERT_NE(client, nullptr) << "Client failed to retry-connect";
+  ASSERT_NE(server, nullptr);
+  EXPECT_EQ(pcl_socket_transport_get_state(client),
+            PCL_SOCKET_STATE_CONNECTED);
+  EXPECT_TRUE(log.contains(PCL_SOCKET_STATE_CONNECTING));
+  EXPECT_TRUE(log.contains(PCL_SOCKET_STATE_CONNECTED));
+
+  pcl_socket_transport_destroy(client);
+  pcl_socket_transport_destroy(server);
+  pcl_executor_destroy(client_exec);
+  pcl_executor_destroy(server_exec);
+  restore_logs();
+}
+
+/// Retry with a short timeout eventually gives up and returns NULL.
+TEST(PclSocketTransport, ClientExRetryHonoursTimeout) {
+  silence_logs();
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  StateLog log;
+  pcl_socket_client_opts_t opts = {};
+  opts.connect_timeout_ms = 300;  // short deadline, no server will appear
+  opts.max_retries        = 1000;
+  opts.state_cb           = &StateLog::callback;
+  opts.state_cb_data      = &log;
+
+  auto start = std::chrono::steady_clock::now();
+  auto* t = pcl_socket_transport_create_client_ex("127.0.0.1", 1, e, &opts);
+  auto elapsed = std::chrono::steady_clock::now() - start;
+
+  EXPECT_EQ(t, nullptr);
+  // Should bail within ~1 s (deadline 300 ms + one in-flight backoff slice).
+  EXPECT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(),
+            2000);
+  EXPECT_TRUE(log.contains(PCL_SOCKET_STATE_CONNECTING));
+  EXPECT_TRUE(log.contains(PCL_SOCKET_STATE_DISCONNECTED));
+
+  pcl_executor_destroy(e);
+  restore_logs();
+}
+
+/// get_state tracks the transport's connection state and handles NULL safely.
+TEST(PclSocketTransport, GetStateReportsConnected) {
+  silence_logs();
+  LoopbackPair pair;
+  ASSERT_TRUE(pair.create());
+
+  EXPECT_EQ(pcl_socket_transport_get_state(pair.server_transport),
+            PCL_SOCKET_STATE_CONNECTED);
+  EXPECT_EQ(pcl_socket_transport_get_state(pair.client_transport),
+            PCL_SOCKET_STATE_CONNECTED);
+  EXPECT_EQ(pcl_socket_transport_get_state(nullptr),
+            PCL_SOCKET_STATE_DISCONNECTED);
+
+  pair.destroy();
+  restore_logs();
+}
+
+/// State callback fires for the initial CONNECTING → CONNECTED transition.
+TEST(PclSocketTransport, StateCallbackFiresOnInitialConnect) {
+  silence_logs();
+  uint16_t port = pick_free_port();
+  ASSERT_NE(port, 0);
+
+  auto* server_exec = pcl_executor_create();
+  auto* client_exec = pcl_executor_create();
+
+  pcl_socket_transport_t* server = nullptr;
+  std::thread server_thread([&]() {
+    server = pcl_socket_transport_create_server(port, server_exec);
+  });
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  StateLog log;
+  pcl_socket_client_opts_t opts = {};
+  opts.state_cb      = &StateLog::callback;
+  opts.state_cb_data = &log;
+
+  auto* client = pcl_socket_transport_create_client_ex("127.0.0.1", port,
+                                                       client_exec, &opts);
+  server_thread.join();
+
+  ASSERT_NE(client, nullptr);
+  auto states = log.snapshot();
+  ASSERT_GE(states.size(), 2u);
+  EXPECT_EQ(states.front(), PCL_SOCKET_STATE_CONNECTING);
+  EXPECT_EQ(states.back(),  PCL_SOCKET_STATE_CONNECTED);
+
+  pcl_socket_transport_destroy(client);
+  pcl_socket_transport_destroy(server);
+  pcl_executor_destroy(client_exec);
+  pcl_executor_destroy(server_exec);
+  restore_logs();
+}
+
+/// Auto-reconnect: client survives a server restart on the same port.
+TEST(PclSocketTransport, AutoReconnectAfterServerRestart) {
+  silence_logs();
+  uint16_t port = pick_free_port();
+  ASSERT_NE(port, 0);
+
+  auto* server_exec = pcl_executor_create();
+  auto* client_exec = pcl_executor_create();
+
+  // Phase 1: establish initial connection.
+  pcl_socket_transport_t* server = nullptr;
+  std::thread server_thread([&]() {
+    server = pcl_socket_transport_create_server(port, server_exec);
+  });
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  StateLog log;
+  pcl_socket_client_opts_t opts = {};
+  opts.connect_timeout_ms = 5000;
+  opts.max_retries        = 50;
+  opts.auto_reconnect     = 1;
+  opts.state_cb           = &StateLog::callback;
+  opts.state_cb_data      = &log;
+
+  auto* client = pcl_socket_transport_create_client_ex("127.0.0.1", port,
+                                                       client_exec, &opts);
+  server_thread.join();
+  ASSERT_NE(client, nullptr);
+  ASSERT_NE(server, nullptr);
+  EXPECT_EQ(pcl_socket_transport_get_state(client),
+            PCL_SOCKET_STATE_CONNECTED);
+
+  // Phase 2: kill the server. recv_thread on the client detects the drop
+  // and enters the reconnect loop.
+  pcl_socket_transport_destroy(server);
+  server = nullptr;
+  pcl_executor_destroy(server_exec);
+  server_exec = nullptr;
+
+  // Wait for client to transition to DISCONNECTED.
+  for (int i = 0; i < 200; ++i) {
+    if (log.contains(PCL_SOCKET_STATE_DISCONNECTED)) break;
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  EXPECT_TRUE(log.contains(PCL_SOCKET_STATE_DISCONNECTED))
+      << "Client did not observe disconnect";
+
+  // Phase 3: bring the server back on the same port.
+  server_exec = pcl_executor_create();
+  std::thread server_thread2([&]() {
+    server = pcl_socket_transport_create_server(port, server_exec);
+  });
+
+  // Phase 4: wait for the client to reconnect.
+  bool reconnected = false;
+  for (int i = 0; i < 400; ++i) {
+    if (pcl_socket_transport_get_state(client) ==
+        PCL_SOCKET_STATE_CONNECTED) {
+      reconnected = true;
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  server_thread2.join();
+
+  EXPECT_TRUE(reconnected) << "Client did not auto-reconnect";
+  EXPECT_NE(server, nullptr);
+
+  // Must have seen at least one DISCONNECTED → CONNECTING → CONNECTED cycle.
+  auto states = log.snapshot();
+  size_t disconnects = 0, reconnects = 0;
+  for (size_t i = 0; i < states.size(); ++i) {
+    if (states[i] == PCL_SOCKET_STATE_DISCONNECTED) disconnects++;
+    if (i > 0 && states[i]     == PCL_SOCKET_STATE_CONNECTED &&
+                 states[i - 1] == PCL_SOCKET_STATE_CONNECTING) reconnects++;
+  }
+  EXPECT_GE(disconnects, 1u);
+  EXPECT_GE(reconnects,  2u);  // initial + post-restart
+
+  pcl_socket_transport_destroy(client);
+  pcl_socket_transport_destroy(server);
+  pcl_executor_destroy(client_exec);
+  pcl_executor_destroy(server_exec);
   restore_logs();
 }

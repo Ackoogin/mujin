@@ -32,10 +32,12 @@
 #else
 #  include <sys/socket.h>
 #  include <netinet/in.h>
+#  include <netinet/tcp.h>
 #  include <arpa/inet.h>
 #  include <netdb.h>
 #  include <unistd.h>
 #  include <errno.h>
+#  include <time.h>
 #  include <pthread.h>
 #  define PCL_SOCKET_T int
 #  define PCL_INVALID_SOCKET (-1)
@@ -104,6 +106,14 @@ struct pcl_socket_transport_t {
   pcl_svc_pending_t*    pending_head;
 
   pcl_container_t*  gateway;
+
+  /* Connection options (client-only, populated by create_client_ex) */
+  uint32_t              connect_timeout_ms;
+  uint32_t              max_retries;
+  int                   auto_reconnect;
+  pcl_socket_state_cb_t state_cb;
+  void*                 state_cb_data;
+  volatile int          conn_state;  /* pcl_socket_state_t */
 };
 
 // -- Byte-order helpers ---------------------------------------------------
@@ -126,6 +136,84 @@ static void write_u32_be(uint8_t* p, uint32_t v) {
   p[1] = (uint8_t)(v >> 16);
   p[2] = (uint8_t)(v >> 8);
   p[3] = (uint8_t)(v & 0xFF);
+}
+
+// -- Sleep / connect / keepalive helpers ----------------------------------
+
+static void pcl_sleep_ms(uint32_t ms) {
+#ifdef _WIN32
+  Sleep(ms);
+#else
+  struct timespec ts;
+  ts.tv_sec  = (time_t)(ms / 1000u);
+  ts.tv_nsec = (long)((ms % 1000u) * 1000000L);
+  nanosleep(&ts, NULL);
+#endif
+}
+
+/// \brief Enable TCP keepalive on a connected socket.
+///
+/// On Linux we tune the probe timers so silent peer death is detected
+/// within ~8 s; Windows uses the system defaults (~2 h idle, but still
+/// detects dead peers eventually) unless SIO_KEEPALIVE_VALS is configured.
+static void enable_keepalive(PCL_SOCKET_T sock) {
+  int on = 1;
+  if (sock == PCL_INVALID_SOCKET) return;
+  setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, (const char*)&on, sizeof(on));
+#if !defined(_WIN32) && defined(TCP_KEEPIDLE)
+  {
+    int idle  = 5;  /* seconds before first probe */
+    int intvl = 1;  /* seconds between probes */
+    int cnt   = 3;  /* probes before declaring dead */
+    setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE,  &idle,  sizeof(idle));
+    setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &intvl, sizeof(intvl));
+    setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT,   &cnt,   sizeof(cnt));
+  }
+#endif
+}
+
+/// \brief Resolve host:port via getaddrinfo and attempt a TCP connect.
+///
+/// Tries each returned address in order (supports IPv4 and IPv6) and
+/// returns the first successfully connected socket, or PCL_INVALID_SOCKET.
+static PCL_SOCKET_T try_connect_addrinfo(const char* host, uint16_t port) {
+  struct addrinfo  hints;
+  struct addrinfo* result = NULL;
+  struct addrinfo* rp;
+  char             port_str[8];
+  PCL_SOCKET_T     sock = PCL_INVALID_SOCKET;
+
+  if (!host) return PCL_INVALID_SOCKET;
+
+  snprintf(port_str, sizeof(port_str), "%u", (unsigned)port);
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family   = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_protocol = IPPROTO_TCP;
+
+  if (getaddrinfo(host, port_str, &hints, &result) != 0 || !result)
+    return PCL_INVALID_SOCKET;
+
+  for (rp = result; rp != NULL; rp = rp->ai_next) {
+    sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+    if (sock == PCL_INVALID_SOCKET) continue;
+
+#ifdef _WIN32
+    if (connect(sock, rp->ai_addr, (int)rp->ai_addrlen) == 0) break;
+#else
+    if (connect(sock, rp->ai_addr, (socklen_t)rp->ai_addrlen) == 0) break;
+#endif
+    pcl_close_socket(sock);
+    sock = PCL_INVALID_SOCKET;
+  }
+
+  freeaddrinfo(result);
+  return sock;
+}
+
+static void fire_state_cb(struct pcl_socket_transport_t* ctx,
+                          pcl_socket_state_t             state) {
+  if (ctx && ctx->state_cb) ctx->state_cb(state, ctx->state_cb_data);
 }
 
 // -- Socket I/O helpers ---------------------------------------------------
@@ -425,6 +513,7 @@ static void* recv_thread_main(void* arg)
 
   ctx->recv_running = 1;
 
+  for (;;) { /* outer: reconnect loop (single iteration for server mode) */
   while (!ctx->recv_stop && ctx->client_sock != PCL_INVALID_SOCKET) {
     if (recv_all(ctx->client_sock, len_buf, 4) != 0) break;
     payload_len = read_u32_be(len_buf);
@@ -589,6 +678,52 @@ static void* recv_thread_main(void* arg)
     }
   }
 
+  /* ---- Auto-reconnect (client only) ----
+     If we exited the recv loop because of a teardown, or because we are
+     a server, or reconnect is disabled, fall through and exit the thread.
+     Otherwise close the dead socket and loop trying to re-establish it. */
+  if (ctx->recv_stop || ctx->is_server || !ctx->auto_reconnect) break;
+
+  if (ctx->client_sock != PCL_INVALID_SOCKET) {
+    shutdown(ctx->client_sock, SHUT_RDWR);
+    pcl_close_socket(ctx->client_sock);
+    ctx->client_sock = PCL_INVALID_SOCKET;
+  }
+  ctx->conn_state = PCL_SOCKET_STATE_DISCONNECTED;
+  fire_state_cb(ctx, PCL_SOCKET_STATE_DISCONNECTED);
+
+  {
+    uint32_t delay_ms   = 100u;
+    int      reconnected = 0;
+    while (!ctx->recv_stop) {
+      PCL_SOCKET_T s;
+      ctx->conn_state = PCL_SOCKET_STATE_CONNECTING;
+      fire_state_cb(ctx, PCL_SOCKET_STATE_CONNECTING);
+
+      s = try_connect_addrinfo(ctx->host, ctx->port);
+      if (s != PCL_INVALID_SOCKET) {
+        enable_keepalive(s);
+        ctx->client_sock = s;
+        ctx->conn_state  = PCL_SOCKET_STATE_CONNECTED;
+        fire_state_cb(ctx, PCL_SOCKET_STATE_CONNECTED);
+        reconnected = 1;
+        break;
+      }
+      /* Sleep in 50 ms slices so teardown unblocks promptly. */
+      {
+        uint32_t elapsed = 0u;
+        while (elapsed < delay_ms && !ctx->recv_stop) {
+          pcl_sleep_ms(50u);
+          elapsed += 50u;
+        }
+      }
+      if (delay_ms < 2000u) delay_ms *= 2u;
+      if (delay_ms > 2000u) delay_ms  = 2000u;
+    }
+    if (!reconnected) break;
+  }
+  } /* end outer reconnect loop */
+
   ctx->recv_running = 0;
 
 #ifdef _WIN32
@@ -632,6 +767,12 @@ static void socket_transport_create_common(struct pcl_socket_transport_t* ctx,
   ctx->next_seq_id  = 1;
   ctx->pending_head = NULL;
   ctx->executor     = executor;
+  ctx->connect_timeout_ms = 0;
+  ctx->max_retries        = 0;
+  ctx->auto_reconnect     = 0;
+  ctx->state_cb           = NULL;
+  ctx->state_cb_data      = NULL;
+  ctx->conn_state         = PCL_SOCKET_STATE_DISCONNECTED;
   snprintf(ctx->peer_id, sizeof(ctx->peer_id), "%s", "default");
 
 #ifdef _WIN32
@@ -711,6 +852,9 @@ pcl_socket_transport_t* pcl_socket_transport_create_server_ex(
     return NULL;
   }
 
+  enable_keepalive(ctx->client_sock);
+  ctx->conn_state = PCL_SOCKET_STATE_CONNECTED;
+
   pcl_close_socket(ctx->listen_sock);
   ctx->listen_sock = PCL_INVALID_SOCKET;
 
@@ -750,12 +894,15 @@ uint16_t pcl_socket_transport_get_port(const pcl_socket_transport_t* ctx) {
 
 // -- Public create: client ------------------------------------------------
 
-pcl_socket_transport_t* pcl_socket_transport_create_client(const char*      host,
-                                                           uint16_t         port,
-                                                           pcl_executor_t*  executor) {
+pcl_socket_transport_t* pcl_socket_transport_create_client_ex(
+    const char*                     host,
+    uint16_t                        port,
+    pcl_executor_t*                 executor,
+    const pcl_socket_client_opts_t* opts) {
+
   struct pcl_socket_transport_t* ctx;
-  struct sockaddr_in addr;
-  struct hostent*    he;
+  uint32_t max_retries = opts ? opts->max_retries        : 0u;
+  uint32_t timeout_ms  = opts ? opts->connect_timeout_ms : 0u;
 
   if (!host || !executor) return NULL;
 
@@ -771,22 +918,52 @@ pcl_socket_transport_t* pcl_socket_transport_create_client(const char*      host
   snprintf(ctx->host, sizeof(ctx->host), "%s", host);
   socket_transport_create_common(ctx, executor);
 
-  he = gethostbyname(host);
-  if (!he) { pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL; }
+  if (opts) {
+    ctx->connect_timeout_ms = opts->connect_timeout_ms;
+    ctx->max_retries        = opts->max_retries;
+    ctx->auto_reconnect     = opts->auto_reconnect;
+    ctx->state_cb           = opts->state_cb;
+    ctx->state_cb_data      = opts->state_cb_data;
+  }
 
-  memset(&addr, 0, sizeof(addr));
-  addr.sin_family = AF_INET;
-  addr.sin_port   = htons(port);
-  memcpy(&addr.sin_addr, he->h_addr_list[0], (size_t)he->h_length);
+  ctx->conn_state = PCL_SOCKET_STATE_CONNECTING;
+  fire_state_cb(ctx, PCL_SOCKET_STATE_CONNECTING);
 
-  ctx->client_sock = socket(AF_INET, SOCK_STREAM, 0);
+  /* Initial connect with exponential backoff (100/200/400/... capped at 2 s).
+     If both max_retries and timeout_ms are zero, behave like legacy
+     create_client: exactly one attempt, fail-fast on refused. */
+  {
+    uint32_t attempt    = 0u;
+    uint32_t delay_ms   = 100u;
+    uint32_t elapsed_ms = 0u;
+    int      single_shot = (max_retries == 0u && timeout_ms == 0u);
+
+    for (;;) {
+      ctx->client_sock = try_connect_addrinfo(host, port);
+      if (ctx->client_sock != PCL_INVALID_SOCKET) break;
+
+      if (single_shot) break;
+      attempt++;
+      if (max_retries > 0u && attempt > max_retries)   break;
+      if (timeout_ms  > 0u && elapsed_ms >= timeout_ms) break;
+
+      pcl_sleep_ms(delay_ms);
+      elapsed_ms += delay_ms;
+      if (delay_ms < 2000u) delay_ms *= 2u;
+      if (delay_ms > 2000u) delay_ms  = 2000u;
+    }
+  }
+
   if (ctx->client_sock == PCL_INVALID_SOCKET) {
-    pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL;
+    ctx->conn_state = PCL_SOCKET_STATE_DISCONNECTED;
+    fire_state_cb(ctx, PCL_SOCKET_STATE_DISCONNECTED);
+    pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx);
+    return NULL;
   }
 
-  if (connect(ctx->client_sock, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
-    pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL;
-  }
+  enable_keepalive(ctx->client_sock);
+  ctx->conn_state = PCL_SOCKET_STATE_CONNECTED;
+  fire_state_cb(ctx, PCL_SOCKET_STATE_CONNECTED);
 
 #ifdef _WIN32
   ctx->recv_thread = CreateThread(NULL, 0, recv_thread_main, ctx, 0, NULL);
@@ -803,6 +980,12 @@ pcl_socket_transport_t* pcl_socket_transport_create_client(const char*      host
 #endif
 
   return (pcl_socket_transport_t*)ctx;
+}
+
+pcl_socket_transport_t* pcl_socket_transport_create_client(const char*      host,
+                                                           uint16_t         port,
+                                                           pcl_executor_t*  executor) {
+  return pcl_socket_transport_create_client_ex(host, port, executor, NULL);
 }
 
 // -- Accessors ------------------------------------------------------------
@@ -822,6 +1005,11 @@ pcl_status_t pcl_socket_transport_set_peer_id(pcl_socket_transport_t* ctx,
 pcl_container_t* pcl_socket_transport_gateway_container(pcl_socket_transport_t* ctx) {
   if (!ctx) return NULL;
   return ctx->gateway;
+}
+
+pcl_socket_state_t pcl_socket_transport_get_state(const pcl_socket_transport_t* ctx) {
+  if (!ctx) return PCL_SOCKET_STATE_DISCONNECTED;
+  return (pcl_socket_state_t)ctx->conn_state;
 }
 
 // -- Async service invocation (client only) -------------------------------
