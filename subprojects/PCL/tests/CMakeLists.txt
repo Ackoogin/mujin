@@ -44,6 +44,13 @@ if(NOT WIN32)
 endif()
 gtest_discover_tests(test_pcl_socket_transport DISCOVERY_MODE PRE_TEST)
 
+add_executable(test_pcl_udp_transport test_pcl_udp_transport.cpp)
+target_link_libraries(test_pcl_udp_transport PRIVATE pcl_core pcl_transport_udp GTest::gtest_main)
+if(NOT WIN32)
+    target_link_libraries(test_pcl_udp_transport PRIVATE pthread)
+endif()
+gtest_discover_tests(test_pcl_udp_transport DISCOVERY_MODE PRE_TEST)
+
 add_executable(pcl_shm_peer_helper pcl_shm_peer_helper.cpp)
 target_link_libraries(pcl_shm_peer_helper PRIVATE pcl_core pcl_transport_shared_memory)
 if(NOT WIN32)

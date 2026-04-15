@@ -30,6 +30,32 @@ extern "C" {
 /// \brief Opaque socket transport handle.
 typedef struct pcl_socket_transport_t pcl_socket_transport_t;
 
+/// \brief Connection state for a socket transport.
+typedef enum {
+  PCL_SOCKET_STATE_CONNECTING   = 0,  ///< TCP connect in progress or retrying.
+  PCL_SOCKET_STATE_CONNECTED    = 1,  ///< TCP session established.
+  PCL_SOCKET_STATE_DISCONNECTED = 2   ///< Connection lost (or not yet attempted).
+} pcl_socket_state_t;
+
+/// \brief Callback fired when the connection state changes.
+///
+/// Invoked from the creating thread during initial connect and from
+/// recv_thread during auto-reconnect.  Implementations must be
+/// thread-safe.
+typedef void (*pcl_socket_state_cb_t)(pcl_socket_state_t state,
+                                      void*              user_data);
+
+/// \brief Options for pcl_socket_transport_create_client_ex.
+///
+/// Zero-initialise for legacy single-attempt behaviour.
+typedef struct {
+  uint32_t              connect_timeout_ms;  ///< Total deadline for initial connect (0 = unlimited).
+  uint32_t              max_retries;         ///< Max retry attempts (0 = no retry).
+  int                   auto_reconnect;      ///< Non-zero to auto-reconnect after disconnect.
+  pcl_socket_state_cb_t state_cb;            ///< Optional state-change callback (may be NULL).
+  void*                 state_cb_data;       ///< Opaque pointer passed to state_cb.
+} pcl_socket_client_opts_t;
+
 /// \brief Create a server-mode transport that listens on the given port.
 ///
 /// Blocks until one client connects, then spawns recv_thread and send_thread.
@@ -71,6 +97,10 @@ uint16_t pcl_socket_transport_get_port(const pcl_socket_transport_t* ctx);
 
 /// \brief Create a client-mode transport that connects to host:port.
 ///
+/// Single-attempt connect; fails immediately if the server is not
+/// listening.  For retry-on-refused / auto-reconnect semantics use
+/// \ref pcl_socket_transport_create_client_ex.
+///
 /// Spawns recv_thread and send_thread on success.
 /// Caller must pcl_executor_set_transport after creation.
 ///
@@ -81,6 +111,43 @@ uint16_t pcl_socket_transport_get_port(const pcl_socket_transport_t* ctx);
 pcl_socket_transport_t* pcl_socket_transport_create_client(const char*      host,
                                                            uint16_t         port,
                                                            pcl_executor_t*  executor);
+
+/// \brief Create a client-mode transport with retry, backoff, and state callbacks.
+///
+/// The initial connect retries with exponential backoff (100 ms, 200 ms,
+/// 400 ms, ..., capped at 2 s) subject to \p opts->max_retries and
+/// \p opts->connect_timeout_ms.  If both are zero the behaviour matches
+/// \ref pcl_socket_transport_create_client (single attempt).
+///
+/// When \p opts->auto_reconnect is non-zero, recv_thread transparently
+/// reconnects using the same backoff policy whenever the socket drops,
+/// so the caller never has to re-create the transport after a remote
+/// restart.  Pending outbound frames enqueued while disconnected are
+/// dropped (pub/sub semantics); in-flight async service calls never
+/// receive a response.
+///
+/// If \p opts->state_cb is non-NULL it fires on every state transition
+/// (CONNECTING → CONNECTED → DISCONNECTED → CONNECTING → ...).
+///
+/// TCP keepalive is enabled on the socket so silent peer death is
+/// detected within a few seconds.
+///
+/// \param host      Server hostname or IP string.
+/// \param port      Server TCP port.
+/// \param executor  Executor for post_incoming and post_response_cb.
+/// \param opts      Connection options, or NULL for legacy defaults.
+/// \return Handle, or NULL on failure (initial connect exhausted retries).
+pcl_socket_transport_t* pcl_socket_transport_create_client_ex(
+    const char*                     host,
+    uint16_t                        port,
+    pcl_executor_t*                 executor,
+    const pcl_socket_client_opts_t* opts);
+
+/// \brief Query the current connection state.
+///
+/// Safe to call from any thread.  Returns PCL_SOCKET_STATE_DISCONNECTED
+/// for a NULL handle.
+pcl_socket_state_t pcl_socket_transport_get_state(const pcl_socket_transport_t* ctx);
 
 /// \brief Set the logical peer identifier used for endpoint routing.
 ///

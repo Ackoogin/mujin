@@ -57,6 +57,30 @@ set_target_properties(pcl_transport_socket PROPERTIES
 )
 
 # ---------------------------------------------------------------------------
+# pcl_transport_udp — UDP datagram transport (pub/sub only, no RPC)
+# ---------------------------------------------------------------------------
+add_library(pcl_transport_udp STATIC
+  pcl_transport_udp.c
+)
+
+target_include_directories(pcl_transport_udp PUBLIC
+  ${PCL_ROOT_DIR}/include
+)
+
+target_link_libraries(pcl_transport_udp PUBLIC pcl_core)
+
+if(WIN32)
+  target_link_libraries(pcl_transport_udp PRIVATE ws2_32)
+endif()
+
+set_target_properties(pcl_transport_udp PROPERTIES
+  LINKER_LANGUAGE C
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+)
+
+# ---------------------------------------------------------------------------
 # pcl_transport_shared_memory — central shared-memory bus transport
 # ---------------------------------------------------------------------------
 add_library(pcl_transport_shared_memory STATIC
@@ -81,7 +105,7 @@ set_target_properties(pcl_transport_shared_memory PROPERTIES
 )
 
 # Install
-install(TARGETS pcl_core pcl_transport_socket pcl_transport_shared_memory
+install(TARGETS pcl_core pcl_transport_socket pcl_transport_udp pcl_transport_shared_memory
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
 )
