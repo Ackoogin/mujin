@@ -297,6 +297,17 @@ The reference socket transport shall associate inbound traffic with a configured
 
 **Rationale**: Per-peer routing and exposure control require the transport to preserve the logical source peer across ingress.
 
+### PCL.036e - Robust Client Connect Semantics
+The socket transport shall offer an extended client-create API that provides:
+(a) bounded retry with exponential backoff for the initial connect,
+(b) a connection-state callback exposing `CONNECTING`/`CONNECTED`/`DISCONNECTED` transitions,
+(c) transparent auto-reconnect by the receive thread after a dropped connection, and
+(d) TCP keepalive on all connected sockets for timely detection of silent peer death.
+Host resolution shall use `getaddrinfo` (thread-safe, IPv6-capable).
+The legacy single-shot client create shall remain available as a thin wrapper so existing call sites are unaffected.
+
+**Rationale**: Production deployments cannot assume strict start order between peers, and peers may restart. Fail-fast semantics force every caller to implement retry plumbing, which is error-prone and often done incorrectly. Centralising the robust connect path in the transport keeps component logic focused on application behaviour while still detecting genuine unreachable peers within a bounded deadline.
+
 ### PCL.036b - Inter-Process Shared Memory Bus
 The shared-memory transport shall support multiple local processes joining the same named bus through an OS shared-memory region containing participant mailboxes.
 
@@ -311,6 +322,15 @@ The shared-memory transport shall fan out published messages from one participan
 The shared-memory transport shall support async remote service invocation across processes by routing requests to the unique advertised provider on the bus and delivering responses back to the caller on the executor thread.
 
 **Rationale**: Request/reply traffic must be transport-pluggable just like pub/sub, including across process boundaries on the same host.
+
+### PCL.036f - UDP Datagram Transport (Pub/Sub Only)
+PCL shall ship a connectionless UDP datagram transport for best-effort publish/subscribe traffic.
+Each datagram shall carry exactly one PUBLISH message serialised without a length prefix (UDP preserves message boundaries).
+The transport shall deliberately not expose `invoke_async`, `respond`, `serve`, or `invoke_stream`: service RPC and streaming services remain exclusive to reliable transports.
+Each transport instance shall bind a local UDP port and publish to a single configured remote peer; multi-peer fan-out is achieved by instantiating one transport per peer and registering each with `pcl_executor_register_transport()`.
+Inbound datagrams shall be posted as remote ingress from the configured logical peer ID so existing per-endpoint peer allow-lists apply unchanged.
+
+**Rationale**: High-rate telemetry, sensor feeds, and state broadcasts often tolerate occasional loss but cannot afford TCP framing overhead or head-of-line blocking. A separate UDP transport keeps semantics explicit (pub/sub-only, best-effort) and prevents accidental use for reliability-sensitive RPC.
 
 ## Logging
 

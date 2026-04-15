@@ -292,6 +292,127 @@ pcl_socket_transport_set_peer_id(server, "planner_client");
 
 That peer ID is what PCL uses for remote ingress filtering.
 
+### 8.1. Robust Client Connect (retry, state callback, auto-reconnect)
+
+The legacy `pcl_socket_transport_create_client(...)` is a **single-shot**
+connect: if the server is not yet listening, it returns NULL and the
+caller has no transport.  For production deployments where start order
+is not guaranteed and peers may restart, use
+`pcl_socket_transport_create_client_ex(...)` with a
+`pcl_socket_client_opts_t`:
+
+| Field | Meaning |
+|-------|---------|
+| `connect_timeout_ms` | Total deadline for the initial connect. `0` = unlimited (if `max_retries` > 0) or single-shot (if `max_retries` == 0). |
+| `max_retries` | Maximum retry attempts on refused/unreachable. `0` = no retry. |
+| `auto_reconnect` | Non-zero = recv_thread transparently reconnects after a drop using the same backoff policy. |
+| `state_cb` | Optional `pcl_socket_state_cb_t` fired on every state transition. |
+| `state_cb_data` | Opaque pointer passed to `state_cb`. |
+
+Connection retries use exponential backoff starting at 100 ms and
+doubling up to a 2 s cap.  TCP keepalive is enabled on every connected
+socket so silent peer death is detected within ~8 s on Linux.
+
+Example: planner client that survives planner restarts.
+
+```c
+static void on_planner_state(pcl_socket_state_t state, void* ud) {
+  (void)ud;
+  switch (state) {
+    case PCL_SOCKET_STATE_CONNECTING:    log_info("planner: connecting");    break;
+    case PCL_SOCKET_STATE_CONNECTED:     log_info("planner: up");            break;
+    case PCL_SOCKET_STATE_DISCONNECTED:  log_warn("planner: link dropped");  break;
+  }
+}
+
+pcl_socket_client_opts_t opts = {
+    .connect_timeout_ms = 30000,  // up to 30 s for the planner to boot
+    .max_retries        = 1000,
+    .auto_reconnect     = 1,      // keep reconnecting after drops
+    .state_cb           = on_planner_state,
+    .state_cb_data      = NULL,
+};
+
+pcl_socket_transport_t* to_planner =
+    pcl_socket_transport_create_client_ex("127.0.0.1", 7001, exec, &opts);
+if (!to_planner) {
+  // Only returned as NULL if initial connect exhausted all retries.
+  fatal("planner unreachable");
+}
+pcl_socket_transport_set_peer_id(to_planner, "planner");
+```
+
+### 8.2. Semantics During Disconnect
+
+While the client is reconnecting (`state == PCL_SOCKET_STATE_DISCONNECTED`
+or `PCL_SOCKET_STATE_CONNECTING`):
+
+- **Publish** frames are dequeued by `send_thread` and silently dropped
+  (pub/sub best-effort semantics; the wire is simply unavailable).
+- **Async service calls** remain on the pending list but will not receive
+  a response — application code should apply its own timeouts.
+- **Inbound messages** cannot arrive until the link is re-established.
+
+Applications that need stronger guarantees should gate calls on
+`pcl_socket_transport_get_state(...)` or act on the state callback.
+
+### 8.3. Zero-Change Upgrade Path
+
+`pcl_socket_transport_create_client(host, port, exec)` is preserved as a
+thin wrapper around `create_client_ex(..., NULL)` and retains the exact
+legacy behaviour: single attempt, fail-fast on refused, no reconnect,
+no callbacks.  Existing call sites need no changes.
+
+## 8.4. UDP Datagram Transport
+
+For high-rate telemetry and state broadcasts where occasional loss is
+acceptable and the framing overhead of TCP is not, PCL also ships a
+UDP datagram transport in `pcl/pcl_transport_udp.h`.  It implements the
+same `pcl_transport_t` vtable but deliberately exposes only pub/sub —
+`invoke_async`, `respond`, `serve`, and `invoke_stream` are all NULL,
+so the executor returns `PCL_ERR_NOT_FOUND` for unsupported RPC calls
+rather than silently accepting unreliable service traffic.
+
+Wire format (single datagram — UDP preserves boundaries, so no
+length prefix is needed):
+
+```
+[1:type=PUBLISH=0x00][2:topic_len][topic]
+[2:type_len][type_name][4:data_len][data]
+```
+
+Each `pcl_udp_transport_t` instance binds one local UDP port and
+publishes to one configured remote peer.  For multi-peer fan-out,
+instantiate one UDP transport per peer and register each separately
+with `pcl_executor_register_transport(...)`.
+
+Example — telemetry sender and receiver on the same host:
+
+```c
+/* Receiver */
+pcl_udp_transport_t* rx =
+    pcl_udp_transport_create(9100, "127.0.0.1", 9200, rx_exec);
+pcl_udp_transport_set_peer_id(rx, "sensor_head");
+pcl_executor_register_transport(
+    rx_exec, "sensor_head", pcl_udp_transport_get_transport(rx));
+
+/* Sender (on another process) */
+pcl_udp_transport_t* tx =
+    pcl_udp_transport_create(9200, "127.0.0.1", 9100, tx_exec);
+pcl_udp_transport_set_peer_id(tx, "collector");
+pcl_executor_set_transport(tx_exec, pcl_udp_transport_get_transport(tx));
+```
+
+### Constraints
+
+- Pub/sub only — use the TCP transport for service RPC and streaming.
+- Payload cap of 1400 bytes per published message (below the standard
+  Ethernet MTU so IP fragmentation is rare); oversized publishes return
+  `PCL_ERR_NOMEM`.
+- Best-effort delivery — application code must tolerate drops, or wrap
+  the channel with its own sequencing/retransmit layer.
+- IPv4 only in v1; IPv6 support is a straightforward extension.
+
 ## 9. Bridge and Chained Topologies
 
 PCL does not do automatic multi-hop forwarding.
@@ -381,8 +502,9 @@ If a publisher does not fan out remotely, check:
 ## 13. Current Limitations
 
 - consumed unary service routes are explicit local or explicit remote, not local+remote
-- the reference socket transport is still one connection per transport object
+- the reference socket transport is still one connection per transport object (auto-reconnect refreshes the same peer endpoint; multi-client fan-in still requires one server transport per peer)
 - multi-hop routing is not automatic
 - route configuration is API-driven today, not file-driven in core PCL
+- the UDP transport is pub/sub only — service RPC (`invoke_async`, `respond`) and streaming services are not supported over UDP; use the socket (TCP) transport for those
 
 Those are deliberate v1 constraints to keep routing behavior explicit and testable.

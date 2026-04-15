@@ -1053,6 +1053,104 @@ When the gateway receives a service request for which no handler is registered, 
 
 **Verification**: `test_pcl_socket_transport.cpp::GatewayServiceDispatchNoMatch`.
 
+### REQ_PCL_190 - Client Extended Create With Null Opts Preserves Single-Shot Semantics
+`pcl_socket_transport_create_client_ex()` with all-zero `pcl_socket_client_opts_t` (or NULL) shall perform a single connection attempt and return NULL immediately when the server is not listening, matching legacy `create_client` behaviour.
+
+**Traces**: PCL.032, PCL.036e
+
+**Verification**: `test_pcl_socket_transport.cpp::ClientExSingleShotFailsFast`.
+
+### REQ_PCL_191 - Client Extended Create Retries Connect With Backoff
+`pcl_socket_transport_create_client_ex()` shall retry the TCP connect with exponential backoff (starting at 100 ms, doubling up to a 2 s cap) until it succeeds, `max_retries` is exceeded, or `connect_timeout_ms` elapses. A server that starts after the client begins connecting shall be reachable within the deadline.
+
+**Traces**: PCL.032, PCL.036e
+
+**Verification**: `test_pcl_socket_transport.cpp::ClientExRetryConnectsToDelayedServer`.
+
+### REQ_PCL_192 - Client Extended Create Honours Connect Timeout
+When `connect_timeout_ms` is set and no server responds, `pcl_socket_transport_create_client_ex()` shall return NULL within a bounded window close to the configured deadline and fire the state callback with `DISCONNECTED`.
+
+**Traces**: PCL.032, PCL.036e, PCL.045
+
+**Verification**: `test_pcl_socket_transport.cpp::ClientExRetryHonoursTimeout`.
+
+### REQ_PCL_193 - Connection State Accessor
+`pcl_socket_transport_get_state()` shall return the current `pcl_socket_state_t` of a live transport and `PCL_SOCKET_STATE_DISCONNECTED` for a NULL handle.
+
+**Traces**: PCL.031, PCL.032, PCL.036e, PCL.045
+
+**Verification**: `test_pcl_socket_transport.cpp::GetStateReportsConnected`.
+
+### REQ_PCL_194 - State Callback Fires On Initial Connect
+When `pcl_socket_client_opts_t::state_cb` is non-NULL, it shall be invoked with `CONNECTING` before the first connect attempt and with `CONNECTED` after a successful attempt.
+
+**Traces**: PCL.032, PCL.036e
+
+**Verification**: `test_pcl_socket_transport.cpp::StateCallbackFiresOnInitialConnect`.
+
+### REQ_PCL_195 - Client Auto-Reconnects After Server Restart
+When `pcl_socket_client_opts_t::auto_reconnect` is non-zero, the receive thread shall detect a dropped connection, fire the state callback with `DISCONNECTED`, then attempt to reconnect with the same backoff policy. A server restarted on the same port shall cause `get_state()` to return `CONNECTED` again without the caller re-creating the transport.
+
+**Traces**: PCL.031, PCL.032, PCL.036e
+
+**Verification**: `test_pcl_socket_transport.cpp::AutoReconnectAfterServerRestart`.
+
+### REQ_PCL_196 - Client Resolves Hosts Via getaddrinfo
+`pcl_socket_transport_create_client_ex()` shall resolve the `host` argument via `getaddrinfo` (thread-safe, IPv6-aware) and attempt each returned address in order until one succeeds.
+
+**Traces**: PCL.032, PCL.036e
+
+**Verification**: Existing client connect tests against `"127.0.0.1"` exercise the getaddrinfo path via `ClientCreationAndDestroy` and `ClientExRetryConnectsToDelayedServer`.
+
+### REQ_PCL_197 - TCP Keepalive Enabled On Connected Sockets
+Every connected TCP socket (client-connect and server-accept) shall have `SO_KEEPALIVE` enabled. On Linux, `TCP_KEEPIDLE`, `TCP_KEEPINTVL`, and `TCP_KEEPCNT` shall be tuned so silent peer death is detected within approximately eight seconds.
+
+**Traces**: PCL.031, PCL.032, PCL.036e
+
+**Verification**: Implicit — covered by `AutoReconnectAfterServerRestart` which depends on timely peer-death detection.
+
+### REQ_PCL_198 - UDP Transport Creation
+`pcl_udp_transport_create(local_port, remote_host, remote_port, executor)` shall bind a UDP socket on `local_port` (0 = ephemeral), resolve `remote_host:remote_port`, spawn a receive thread, and expose a `pcl_transport_t` vtable with `publish`, `subscribe`, and `shutdown` populated. It shall return NULL for NULL `remote_host` or NULL `executor`.
+
+**Traces**: PCL.036f, PCL.045
+
+**Verification**: `test_pcl_udp_transport.cpp::CreateAndDestroy`, `NullArgsReturnNull`, `DestroyNullIsNoOp`.
+
+### REQ_PCL_199 - UDP Transport Peer Identity Configurable
+`pcl_udp_transport_set_peer_id()` shall set the logical peer ID used when posting inbound datagrams to the executor. It shall reject NULL or empty peer IDs with `PCL_ERR_INVALID`.
+
+**Traces**: PCL.036f, PCL.036a
+
+**Verification**: `test_pcl_udp_transport.cpp::SetPeerIdRoundTrip`.
+
+### REQ_PCL_200 - UDP Publish Round-Trip Delivers Message To Subscriber
+When the sender's transport publishes a `pcl_msg_t`, the receiver's subscriber (with `PCL_ROUTE_REMOTE` and the sender's peer ID in its allow list) shall receive the message with byte-identical payload and topic after at most a few publish attempts (UDP is best-effort).
+
+**Traces**: PCL.036f
+
+**Verification**: `test_pcl_udp_transport.cpp::PublishDeliveredToSubscriber`.
+
+### REQ_PCL_201 - UDP Subscriber Peer Allow-List Enforced
+Inbound datagrams shall be posted via `pcl_executor_post_remote_incoming()` with the configured peer ID, so subscriber peer allow-lists drop traffic from foreign peers.
+
+**Traces**: PCL.036f, PCL.030d
+
+**Verification**: `test_pcl_udp_transport.cpp::SubscriberPeerFilterDropsForeignIngress`.
+
+### REQ_PCL_202 - UDP Publish Rejects Oversized Payloads
+Publishing a message whose serialised payload exceeds `PCL_UDP_MAX_PAYLOAD` (1400 bytes) shall return `PCL_ERR_NOMEM` without sending a datagram, preventing silent truncation or IP-layer fragmentation.
+
+**Traces**: PCL.036f
+
+**Verification**: `test_pcl_udp_transport.cpp::OversizedPublishReturnsNomem`.
+
+### REQ_PCL_203 - UDP Transport Does Not Expose Service RPC Or Streaming Vtable Entries
+The UDP transport's `pcl_transport_t` shall leave `invoke_async`, `respond`, `serve`, and `invoke_stream` NULL so the executor returns `PCL_ERR_NOT_FOUND` for unsupported request/reply or streaming calls rather than silently accepting unreliable RPC.
+
+**Traces**: PCL.036f
+
+**Verification**: `test_pcl_udp_transport.cpp::NoServiceRpcSupport`.
+
 ---
 
 ## 17. C++ Component Wrapper

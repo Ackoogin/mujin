@@ -27,7 +27,8 @@ Tool: `gcovr` with GCC 10.3.1 (`--coverage -O0 -g -fprofile-abs-path`)
 | `test_pcl_bridge.cpp` | 9 | 075–084 | Bridge unit tests |
 | `test_pcl_dining.cpp` | 10 | — | Dining philosophers (bridge + executor integration) |
 | `test_pcl_oom.cpp` | 6 | 085–090 | Out-of-memory injection (GCC `--wrap` only) |
-| `test_pcl_socket_transport.cpp` | 23 | 115–130, 158–164 | TCP socket transport |
+| `test_pcl_socket_transport.cpp` | 29 | 115–130, 158–164, 190–197 | TCP socket transport (+ robust connect, keepalive, auto-reconnect) |
+| `test_pcl_udp_transport.cpp` | 8 | 198–203 | UDP datagram transport (pub/sub only) |
 | `test_pcl_cpp_wrappers.cpp` | — | 131–157 | C++ Component and Executor wrappers |
 | **Total** | **195+** | | |
 

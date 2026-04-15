@@ -85,6 +85,13 @@ Each test traces to one or more LLRs (REQ_PCL_NNN). Each LLR traces to one or mo
 | PCL.035 | Non-blocking send | 125, 161 | test_pcl_socket_transport | PublishIsNonBlocking, DestroyWithUnsentFramesNoLeak |
 | PCL.036 | Async remote service invocation | 126, 127, 128, 160, 162, 163 | test_pcl_socket_transport | AsyncRemoteServiceRoundTrip, InvokeRemoteAsyncNullArgs, InvokeRemoteAsyncOnServerReturnsInvalid, DestroyWithPendingAsyncCallNoLeak, InvokeRemoteAsyncOversizedPayloadReturnsNomem, GatewayServiceDispatchNoMatch |
 | PCL.036a | Remote peer identity | 176, 177, 179 | test_pcl_socket_transport | PublishServerToClientDelivered, PublishClientToServerDelivered, AsyncRemoteServiceRoundTrip |
+| PCL.036e | Robust client connect semantics | 190, 191, 192, 193, 194, 195, 196, 197 | test_pcl_socket_transport | ClientExSingleShotFailsFast, ClientExRetryConnectsToDelayedServer, ClientExRetryHonoursTimeout, GetStateReportsConnected, StateCallbackFiresOnInitialConnect, AutoReconnectAfterServerRestart |
+
+## UDP Transport Coverage
+
+| PCL (HLR) | Description | LLR(s) | Test File(s) | Test(s) |
+|------------|-------------|--------|-------------|---------|
+| PCL.036f | UDP datagram transport (pub/sub only) | 198, 199, 200, 201, 202, 203 | test_pcl_udp_transport | CreateAndDestroy, NullArgsReturnNull, SetPeerIdRoundTrip, DestroyNullIsNoOp, PublishDeliveredToSubscriber, SubscriberPeerFilterDropsForeignIngress, OversizedPublishReturnsNomem, NoServiceRpcSupport |
 
 ## Routing API Coverage
 
@@ -149,7 +156,8 @@ Each test traces to one or more LLRs (REQ_PCL_NNN). Each LLR traces to one or mo
 | Executor | 11 (018–024, 030a–030d) | 20 (031–043, 164–166, 173–175, 178) | test_pcl_executor, test_pcl_robustness |
 | Cross-Thread Ingress | 3 (025–027) | 13 (049–061) | test_pcl_executor, test_pcl_robustness |
 | Transport Adapter | 3 (028–030) | 2 (062–063) | test_pcl_robustness |
-| TCP Socket Transport | 7 (031–036a) | 25 (115–130, 158–163, 176, 177, 179) | test_pcl_socket_transport |
+| TCP Socket Transport | 8 (031–036a, 036e) | 33 (115–130, 158–163, 176, 177, 179, 190–197) | test_pcl_socket_transport |
+| UDP Datagram Transport | 1 (036f) | 6 (198–203) | test_pcl_udp_transport |
 | Logging | 4 (037–040) | 11 (064–074) | test_pcl_log, test_pcl_robustness |
 | Bridge | 4 (041–044) | 9 (075–083) | test_pcl_dining |
 | Integration | — | 1 (084) | test_pcl_dining |
@@ -161,7 +169,7 @@ Each test traces to one or more LLRs (REQ_PCL_NNN). Each LLR traces to one or mo
 | Service Bindings | 6 (050–055) | 17 (094–110) | test_pcl_proto_bindings |
 | Routing API | 1 (056) | 1 (179) | test_pcl_socket_transport |
 | Null Safety | — | 4 (111–114) | test_pcl_lifecycle, test_pcl_executor, test_pcl_robustness |
-| **Total** | **60** | **179** | **9 test files** |
+| **Total** | **62** | **193** | **10 test files** |
 
 ## Test File Registry
 
@@ -173,7 +181,8 @@ Each test traces to one or more LLRs (REQ_PCL_NNN). Each LLR traces to one or mo
 | `test_pcl_dining.cpp` | Bridge unit tests + dining philosophers integration | 075–084 | 11 |
 | `test_pcl_oom.cpp` | Out-of-memory injection for allocation failure branches | 085–090 | 6 |
 | `test_pcl_robustness.cpp` | 100% code coverage: overflow, threading, throughput, edge cases | 009–012, 016–018, 021–027, 037–043, 046–048, 050–054, 056–063, 069–074, 091–093, 113–114 | 55 |
-| `test_pcl_socket_transport.cpp` | TCP socket transport: server/client, wire protocol, gateway, async service | 115–130, 158–163 | 22 |
+| `test_pcl_socket_transport.cpp` | TCP socket transport: server/client, wire protocol, gateway, async service, robust connect, keepalive, auto-reconnect | 115–130, 158–163, 190–197 | 29 |
+| `test_pcl_udp_transport.cpp` | UDP datagram transport: create/destroy, publish round-trip, peer filter, oversized payload, no-RPC | 198–203 | 8 |
 | `test_pcl_cpp_wrappers.cpp` | C++ wrappers: pcl::Component lifecycle/params/ports, pcl::Executor spin/shutdown | 131–157 | 27 |
 | `test_pcl_proto_bindings.cpp` | C++ service bindings: wire names, handlers, dispatch, JSON builders | 094–110 | 19 |
 
@@ -203,6 +212,6 @@ build\tests\Release\test_pcl_cpp_wrappers.exe --gtest_filter=PclCppComponent*
 
 ## Requirements Coverage Status
 
-All 60 HLRs (PCL.001–PCL.056) are covered by 179 LLRs across 9 test files (165 tests total). Every test traces to at least one LLR, and every LLR traces to at least one HLR, providing complete end-to-end traceability.
+All 62 HLRs (PCL.001–PCL.056, including PCL.036e and PCL.036f) are covered by 193 LLRs across 10 test files (180 tests total). Every test traces to at least one LLR, and every LLR traces to at least one HLR, providing complete end-to-end traceability.
 
 Statement coverage: **96.3%** line coverage, **100%** function coverage across all PCL source files. See `coverage_pcl/summary.txt` for per-file details.
