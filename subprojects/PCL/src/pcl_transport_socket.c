@@ -31,11 +31,13 @@
 #  define pcl_close_socket closesocket
 #else
 #  include <sys/socket.h>
+#  include <sys/select.h>
 #  include <netinet/in.h>
 #  include <netinet/tcp.h>
 #  include <arpa/inet.h>
 #  include <netdb.h>
 #  include <unistd.h>
+#  include <fcntl.h>
 #  include <errno.h>
 #  include <time.h>
 #  include <pthread.h>
@@ -151,6 +153,17 @@ static void pcl_sleep_ms(uint32_t ms) {
 #endif
 }
 
+/// \brief Monotonic milliseconds since some fixed epoch.
+static uint64_t pcl_now_ms(void) {
+#ifdef _WIN32
+  return (uint64_t)GetTickCount64();
+#else
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (uint64_t)ts.tv_sec * 1000ull + (uint64_t)(ts.tv_nsec / 1000000);
+#endif
+}
+
 /// \brief Enable TCP keepalive on a connected socket.
 ///
 /// On Linux we tune the probe timers so silent peer death is detected
@@ -172,16 +185,87 @@ static void enable_keepalive(PCL_SOCKET_T sock) {
 #endif
 }
 
-/// \brief Resolve host:port via getaddrinfo and attempt a TCP connect.
+/// \brief Set a socket to blocking or non-blocking mode.
+static int set_nonblocking(PCL_SOCKET_T sock, int nonblocking) {
+#ifdef _WIN32
+  u_long mode = nonblocking ? 1u : 0u;
+  return (ioctlsocket(sock, FIONBIO, &mode) == 0) ? 0 : -1;
+#else
+  int flags = fcntl(sock, F_GETFL, 0);
+  if (flags < 0) return -1;
+  if (nonblocking) flags |=  O_NONBLOCK;
+  else             flags &= ~O_NONBLOCK;
+  return fcntl(sock, F_SETFL, flags);
+#endif
+}
+
+/// \brief Non-blocking connect with select-based timeout.
 ///
-/// Tries each returned address in order (supports IPv4 and IPv6) and
-/// returns the first successfully connected socket, or PCL_INVALID_SOCKET.
-static PCL_SOCKET_T try_connect_addrinfo(const char* host, uint16_t port) {
+/// Returns 0 on success, -1 on failure or timeout. On success the socket is
+/// left in blocking mode so subsequent recv/send behave normally.
+static int connect_with_timeout(PCL_SOCKET_T           sock,
+                                const struct sockaddr* addr,
+                                size_t                 addrlen,
+                                uint32_t               timeout_ms) {
+  fd_set         wfds, efds;
+  struct timeval tv;
+  int            so_err = 0;
+#ifdef _WIN32
+  int so_err_len = (int)sizeof(so_err);
+  int cr;
+#else
+  socklen_t so_err_len = sizeof(so_err);
+  int       cr;
+#endif
+
+  if (set_nonblocking(sock, 1) != 0) return -1;
+
+#ifdef _WIN32
+  cr = connect(sock, addr, (int)addrlen);
+  if (cr == 0) { set_nonblocking(sock, 0); return 0; }
+  if (WSAGetLastError() != WSAEWOULDBLOCK) return -1;
+#else
+  cr = connect(sock, addr, (socklen_t)addrlen);
+  if (cr == 0) { set_nonblocking(sock, 0); return 0; }
+  if (errno != EINPROGRESS) return -1;
+#endif
+
+  FD_ZERO(&wfds); FD_SET(sock, &wfds);
+  FD_ZERO(&efds); FD_SET(sock, &efds);
+  tv.tv_sec  = (long)(timeout_ms / 1000u);
+  tv.tv_usec = (long)((timeout_ms % 1000u) * 1000u);
+
+#ifdef _WIN32
+  cr = select(0, NULL, &wfds, &efds, &tv);
+#else
+  cr = select((int)sock + 1, NULL, &wfds, &efds, &tv);
+#endif
+  if (cr <= 0) return -1;  /* 0 == timeout, <0 == error */
+
+  if (getsockopt(sock, SOL_SOCKET, SO_ERROR, (char*)&so_err, &so_err_len) != 0)
+    return -1;
+  if (so_err != 0) return -1;
+
+  (void)set_nonblocking(sock, 0);
+  return 0;
+}
+
+/// \brief Resolve host:port via getaddrinfo and attempt a TCP connect,
+///        honouring a total timeout across all returned addresses.
+///
+/// Tries each returned address in order (supports IPv4 and IPv6). Each
+/// attempt is bounded by the remaining slice of \p total_timeout_ms so
+/// a stalled SYN on one address cannot exhaust the whole budget. Pass
+/// \p total_timeout_ms == 0 for the legacy blocking behaviour.
+static PCL_SOCKET_T try_connect_addrinfo(const char* host,
+                                         uint16_t    port,
+                                         uint32_t    total_timeout_ms) {
   struct addrinfo  hints;
   struct addrinfo* result = NULL;
   struct addrinfo* rp;
   char             port_str[8];
   PCL_SOCKET_T     sock = PCL_INVALID_SOCKET;
+  uint64_t         start_ms = pcl_now_ms();
 
   if (!host) return PCL_INVALID_SOCKET;
 
@@ -195,14 +279,27 @@ static PCL_SOCKET_T try_connect_addrinfo(const char* host, uint16_t port) {
     return PCL_INVALID_SOCKET;
 
   for (rp = result; rp != NULL; rp = rp->ai_next) {
+    uint32_t per_attempt_ms;
+
+    /* Compute remaining budget.  Zero => no total timeout, use 2 s per
+       attempt so the non-blocking path still dominates blackholed SYNs. */
+    if (total_timeout_ms == 0u) {
+      per_attempt_ms = 2000u;
+    } else {
+      uint64_t elapsed = pcl_now_ms() - start_ms;
+      if (elapsed >= (uint64_t)total_timeout_ms) break;
+      per_attempt_ms = (uint32_t)((uint64_t)total_timeout_ms - elapsed);
+    }
+
     sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
     if (sock == PCL_INVALID_SOCKET) continue;
 
-#ifdef _WIN32
-    if (connect(sock, rp->ai_addr, (int)rp->ai_addrlen) == 0) break;
-#else
-    if (connect(sock, rp->ai_addr, (socklen_t)rp->ai_addrlen) == 0) break;
-#endif
+    if (connect_with_timeout(sock, rp->ai_addr,
+                             (size_t)rp->ai_addrlen,
+                             per_attempt_ms) == 0) {
+      break;
+    }
+
     pcl_close_socket(sock);
     sock = PCL_INVALID_SOCKET;
   }
@@ -681,7 +778,24 @@ static void* recv_thread_main(void* arg)
   /* ---- Auto-reconnect (client only) ----
      If we exited the recv loop because of a teardown, or because we are
      a server, or reconnect is disabled, fall through and exit the thread.
-     Otherwise close the dead socket and loop trying to re-establish it. */
+     Otherwise close the dead socket and loop trying to re-establish it.
+
+     Regardless of reconnect policy, a client whose socket died here is no
+     longer connected: update conn_state and fire the state callback before
+     falling through so callers polling pcl_socket_transport_get_state() or
+     relying on the callback observe the drop. */
+  if (!ctx->is_server &&
+      ctx->conn_state == PCL_SOCKET_STATE_CONNECTED &&
+      !ctx->recv_stop) {
+    if (ctx->client_sock != PCL_INVALID_SOCKET) {
+      shutdown(ctx->client_sock, SHUT_RDWR);
+      pcl_close_socket(ctx->client_sock);
+      ctx->client_sock = PCL_INVALID_SOCKET;
+    }
+    ctx->conn_state = PCL_SOCKET_STATE_DISCONNECTED;
+    fire_state_cb(ctx, PCL_SOCKET_STATE_DISCONNECTED);
+  }
+
   if (ctx->recv_stop || ctx->is_server || !ctx->auto_reconnect) break;
 
   if (ctx->client_sock != PCL_INVALID_SOCKET) {
@@ -689,8 +803,6 @@ static void* recv_thread_main(void* arg)
     pcl_close_socket(ctx->client_sock);
     ctx->client_sock = PCL_INVALID_SOCKET;
   }
-  ctx->conn_state = PCL_SOCKET_STATE_DISCONNECTED;
-  fire_state_cb(ctx, PCL_SOCKET_STATE_DISCONNECTED);
 
   {
     uint32_t delay_ms   = 100u;
@@ -700,7 +812,7 @@ static void* recv_thread_main(void* arg)
       ctx->conn_state = PCL_SOCKET_STATE_CONNECTING;
       fire_state_cb(ctx, PCL_SOCKET_STATE_CONNECTING);
 
-      s = try_connect_addrinfo(ctx->host, ctx->port);
+      s = try_connect_addrinfo(ctx->host, ctx->port, 2000u);
       if (s != PCL_INVALID_SOCKET) {
         enable_keepalive(s);
         ctx->client_sock = s;
@@ -931,24 +1043,46 @@ pcl_socket_transport_t* pcl_socket_transport_create_client_ex(
 
   /* Initial connect with exponential backoff (100/200/400/... capped at 2 s).
      If both max_retries and timeout_ms are zero, behave like legacy
-     create_client: exactly one attempt, fail-fast on refused. */
+     create_client: exactly one attempt, fail-fast on refused.
+
+     Each try_connect_addrinfo call is bounded by the remaining budget (or
+     2 s if no total timeout was set) so a blackholed SYN cannot exceed the
+     caller's documented connect_timeout_ms by more than one slice.  The
+     budget uses actual wall-clock elapsed so fast failures (RST/refused)
+     do not prematurely consume the deadline. */
   {
-    uint32_t attempt    = 0u;
-    uint32_t delay_ms   = 100u;
-    uint32_t elapsed_ms = 0u;
+    uint32_t attempt     = 0u;
+    uint32_t delay_ms    = 100u;
+    uint64_t start_ms    = pcl_now_ms();
     int      single_shot = (max_retries == 0u && timeout_ms == 0u);
 
     for (;;) {
-      ctx->client_sock = try_connect_addrinfo(host, port);
+      uint32_t per_attempt_ms;
+      uint64_t elapsed;
+
+      elapsed = pcl_now_ms() - start_ms;
+      if (timeout_ms > 0u && elapsed >= (uint64_t)timeout_ms) break;
+
+      if (single_shot) {
+        per_attempt_ms = 2000u;
+      } else if (timeout_ms > 0u) {
+        per_attempt_ms = (uint32_t)((uint64_t)timeout_ms - elapsed);
+      } else {
+        per_attempt_ms = 2000u;
+      }
+
+      ctx->client_sock = try_connect_addrinfo(host, port, per_attempt_ms);
       if (ctx->client_sock != PCL_INVALID_SOCKET) break;
 
       if (single_shot) break;
       attempt++;
-      if (max_retries > 0u && attempt > max_retries)   break;
-      if (timeout_ms  > 0u && elapsed_ms >= timeout_ms) break;
+      if (max_retries > 0u && attempt > max_retries) break;
+
+      /* Re-check budget before sleeping so we don't sleep past the deadline. */
+      elapsed = pcl_now_ms() - start_ms;
+      if (timeout_ms > 0u && elapsed >= (uint64_t)timeout_ms) break;
 
       pcl_sleep_ms(delay_ms);
-      elapsed_ms += delay_ms;
       if (delay_ms < 2000u) delay_ms *= 2u;
       if (delay_ms > 2000u) delay_ms  = 2000u;
     }

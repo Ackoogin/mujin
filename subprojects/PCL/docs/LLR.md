@@ -1151,6 +1151,20 @@ The UDP transport's `pcl_transport_t` shall leave `invoke_async`, `respond`, `se
 
 **Verification**: `test_pcl_udp_transport.cpp::NoServiceRpcSupport`.
 
+### REQ_PCL_204 - Non-Reconnecting Client Reports Disconnected After Peer Drop
+When a TCP client created with `auto_reconnect == 0` observes its peer closing the socket, `pcl_socket_transport_get_state()` shall transition to `PCL_SOCKET_STATE_DISCONNECTED` and the registered state callback shall fire with that value, regardless of whether the transport will attempt to re-establish the connection.
+
+**Traces**: PCL.036e
+
+**Verification**: `test_pcl_socket_transport.cpp::NonReconnectingClientReportsDisconnectedAfterServerClose`.
+
+### REQ_PCL_205 - Connect Attempts Bounded By Connect Timeout Budget
+Each TCP connect attempt performed by `pcl_socket_transport_create_client_ex()` shall be bounded by the remaining `connect_timeout_ms` budget (or a 2-second slice when no total timeout is set), so a single SYN to a blackholed host cannot exceed the caller's deadline by more than one per-attempt slice. When the total budget is exhausted the function shall return NULL.
+
+**Traces**: PCL.036e
+
+**Verification**: `test_pcl_socket_transport.cpp::ClientExRespectsTimeoutOnBlackholedHost`.
+
 ---
 
 ## 17. C++ Component Wrapper

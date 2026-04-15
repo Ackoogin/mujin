@@ -85,7 +85,7 @@ Each test traces to one or more LLRs (REQ_PCL_NNN). Each LLR traces to one or mo
 | PCL.035 | Non-blocking send | 125, 161 | test_pcl_socket_transport | PublishIsNonBlocking, DestroyWithUnsentFramesNoLeak |
 | PCL.036 | Async remote service invocation | 126, 127, 128, 160, 162, 163 | test_pcl_socket_transport | AsyncRemoteServiceRoundTrip, InvokeRemoteAsyncNullArgs, InvokeRemoteAsyncOnServerReturnsInvalid, DestroyWithPendingAsyncCallNoLeak, InvokeRemoteAsyncOversizedPayloadReturnsNomem, GatewayServiceDispatchNoMatch |
 | PCL.036a | Remote peer identity | 176, 177, 179 | test_pcl_socket_transport | PublishServerToClientDelivered, PublishClientToServerDelivered, AsyncRemoteServiceRoundTrip |
-| PCL.036e | Robust client connect semantics | 190, 191, 192, 193, 194, 195, 196, 197 | test_pcl_socket_transport | ClientExSingleShotFailsFast, ClientExRetryConnectsToDelayedServer, ClientExRetryHonoursTimeout, GetStateReportsConnected, StateCallbackFiresOnInitialConnect, AutoReconnectAfterServerRestart |
+| PCL.036e | Robust client connect semantics | 190, 191, 192, 193, 194, 195, 196, 197, 204, 205 | test_pcl_socket_transport | ClientExSingleShotFailsFast, ClientExRetryConnectsToDelayedServer, ClientExRetryHonoursTimeout, GetStateReportsConnected, StateCallbackFiresOnInitialConnect, AutoReconnectAfterServerRestart, NonReconnectingClientReportsDisconnectedAfterServerClose, ClientExRespectsTimeoutOnBlackholedHost |
 
 ## UDP Transport Coverage
 
@@ -212,6 +212,6 @@ build\tests\Release\test_pcl_cpp_wrappers.exe --gtest_filter=PclCppComponent*
 
 ## Requirements Coverage Status
 
-All 62 HLRs (PCL.001–PCL.056, including PCL.036e and PCL.036f) are covered by 193 LLRs across 10 test files (180 tests total). Every test traces to at least one LLR, and every LLR traces to at least one HLR, providing complete end-to-end traceability.
+All 62 HLRs (PCL.001–PCL.056, including PCL.036e and PCL.036f) are covered by 195 LLRs across 10 test files (182 tests total). Every test traces to at least one LLR, and every LLR traces to at least one HLR, providing complete end-to-end traceability.
 
 Statement coverage: **96.3%** line coverage, **100%** function coverage across all PCL source files. See `coverage_pcl/summary.txt` for per-file details.

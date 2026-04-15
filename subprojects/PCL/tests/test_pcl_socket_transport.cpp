@@ -1177,3 +1177,89 @@ TEST(PclSocketTransport, AutoReconnectAfterServerRestart) {
   pcl_executor_destroy(server_exec);
   restore_logs();
 }
+
+/// Regression: a non-reconnecting client that loses its peer must report
+/// DISCONNECTED via both pcl_socket_transport_get_state() and the state
+/// callback. Pre-fix, recv_thread_main broke out of the loop without
+/// updating conn_state when auto_reconnect was disabled.
+TEST(PclSocketTransport, NonReconnectingClientReportsDisconnectedAfterServerClose) {
+  silence_logs();
+  uint16_t port = pick_free_port();
+  ASSERT_NE(port, 0);
+
+  auto* server_exec = pcl_executor_create();
+  auto* client_exec = pcl_executor_create();
+
+  pcl_socket_transport_t* server = nullptr;
+  std::thread server_thread([&]() {
+    server = pcl_socket_transport_create_server(port, server_exec);
+  });
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  StateLog log;
+  pcl_socket_client_opts_t opts = {};
+  opts.auto_reconnect = 0;
+  opts.state_cb       = &StateLog::callback;
+  opts.state_cb_data  = &log;
+
+  auto* client = pcl_socket_transport_create_client_ex("127.0.0.1", port,
+                                                       client_exec, &opts);
+  server_thread.join();
+  ASSERT_NE(client, nullptr);
+  ASSERT_NE(server, nullptr);
+  EXPECT_EQ(pcl_socket_transport_get_state(client),
+            PCL_SOCKET_STATE_CONNECTED);
+
+  // Kill the server; the client's recv_thread will observe the drop.
+  pcl_socket_transport_destroy(server);
+  server = nullptr;
+
+  // Poll get_state() — must flip to DISCONNECTED even though reconnect is off.
+  bool disconnected = false;
+  for (int i = 0; i < 200; ++i) {
+    if (pcl_socket_transport_get_state(client) ==
+        PCL_SOCKET_STATE_DISCONNECTED) {
+      disconnected = true;
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
+  EXPECT_TRUE(disconnected)
+      << "get_state() never reported DISCONNECTED for non-reconnecting client";
+  EXPECT_TRUE(log.contains(PCL_SOCKET_STATE_DISCONNECTED))
+      << "state_cb never fired with DISCONNECTED";
+
+  pcl_socket_transport_destroy(client);
+  pcl_executor_destroy(client_exec);
+  pcl_executor_destroy(server_exec);
+  restore_logs();
+}
+
+/// Regression: a connect attempt to a blackholed IP (RFC 5737 TEST-NET-1)
+/// must honour connect_timeout_ms. Pre-fix, try_connect_addrinfo called
+/// blocking connect() with no timeout and could hang for the OS default
+/// (tens of seconds) on a single attempt.
+TEST(PclSocketTransport, ClientExRespectsTimeoutOnBlackholedHost) {
+  silence_logs();
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  pcl_socket_client_opts_t opts = {};
+  opts.connect_timeout_ms = 500;   // total budget
+  opts.max_retries        = 100;   // allow many retries within the budget
+
+  auto start = std::chrono::steady_clock::now();
+  // 192.0.2.1 — RFC 5737 TEST-NET-1, guaranteed non-routable in production.
+  auto* t = pcl_socket_transport_create_client_ex("192.0.2.1", 9, e, &opts);
+  auto elapsed = std::chrono::steady_clock::now() - start;
+
+  EXPECT_EQ(t, nullptr);
+  // Must bail close to the deadline. A slack of 2 s covers one in-flight
+  // per-attempt slice + scheduling jitter while still being far below the
+  // pre-fix ~20–75 s blocking-connect worst case.
+  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
+  EXPECT_LT(ms, 2500) << "Actual elapsed=" << ms << " ms";
+
+  pcl_executor_destroy(e);
+  restore_logs();
+}
