@@ -1,0 +1,151 @@
+// Auto-generated FlatBuffers schema from autonomy.proto
+// Do not edit — regenerate from proto source
+
+namespace pyramid.data_model.autonomy;
+
+enum AutonomyBackendState : byte {
+  UNSPECIFIED = 0,
+  IDLE = 1,
+  READY = 2,
+  WAITING_FOR_RESULTS = 3,
+  COMPLETE = 4,
+  FAILED = 5,
+  STOPPED = 6
+}
+
+enum CommandStatus : byte {
+  UNSPECIFIED = 0,
+  PENDING = 1,
+  RUNNING = 2,
+  SUCCEEDED = 3,
+  FAILED_TRANSIENT = 4,
+  FAILED_PERMANENT = 5,
+  CANCELLED = 6
+}
+
+enum StopMode : byte {
+  UNSPECIFIED = 0,
+  DRAIN = 1,
+  IMMEDIATE = 2
+}
+
+enum FactAuthorityLevel : byte {
+  UNSPECIFIED = 0,
+  BELIEVED = 1,
+  CONFIRMED = 2
+}
+
+table FactUpdate {
+  key:string;
+  value:bool;
+  source:string;
+  authority:FactAuthorityLevel;
+}
+
+table StateUpdate {
+  base:Entity;
+  fact_updates:[FactUpdate];
+}
+
+table MissionIntent {
+  base:Entity;
+  goal_fluents:[string];
+}
+
+table AgentState {
+  agent_id:string;
+  agent_type:string;
+  available:bool;
+}
+
+table PolicyEnvelope {
+  max_replans:uint;
+  enable_goal_dispatch:bool;
+}
+
+table Session {
+  base:Entity;
+  intent:MissionIntent;
+  policy:PolicyEnvelope;
+  available_agents:[AgentState];
+}
+
+table Capabilities {
+  base:Entity;
+  backend_id:string;
+  supports_batch_planning:bool;
+  supports_external_command_dispatch:bool;
+  supports_replanning:bool;
+}
+
+table StringKeyValue {
+  key:string;
+  value:string;
+}
+
+table Command {
+  base:Entity;
+  command_id:string;
+  action_name:string;
+  signature:string;
+  service_name:string;
+  operation:string;
+  request_fields:[StringKeyValue];
+}
+
+table GoalDispatch {
+  base:Entity;
+  dispatch_id:string;
+  agent_id:string;
+  goals:[string];
+}
+
+table DecisionRecord {
+  base:Entity;
+  session_id:string;
+  backend_id:string;
+  world_version:ulong;
+  replan_count:uint;
+  plan_success:bool;
+  solve_time_ms:double;
+  planned_action_signatures:[string];
+  compiled_bt_xml:string;
+}
+
+table CommandResult {
+  base:Entity;
+  command_id:string;
+  status:CommandStatus;
+  observed_updates:[FactUpdate];
+  source:string;
+}
+
+table DispatchResult {
+  base:Entity;
+  dispatch_id:string;
+  status:CommandStatus;
+  observed_updates:[FactUpdate];
+  source:string;
+}
+
+table SessionSnapshot {
+  base:Entity;
+  session_id:string;
+  state:AutonomyBackendState;
+  world_version:ulong;
+  replan_count:uint;
+  agent_states:[AgentState];
+  outstanding_commands:[Command];
+  outstanding_goal_dispatches:[GoalDispatch];
+  decision_history:[DecisionRecord];
+}
+
+table SessionStepRequest {
+  session_id:Identifier;
+}
+
+table SessionStopRequest {
+  session_id:Identifier;
+  mode:StopMode;
+}
+
