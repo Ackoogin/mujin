@@ -39,7 +39,7 @@ Progress tracked against the 6-phase plan below.
 |-------|-------------|--------|
 | 1 | Bridge component (StandardBridge) | **COMPLETE** |
 | 2 | Enum ordinal alignment (Affiliation, BattleDimension) | **COMPLETE** |
-| 3 | Position alignment (radians) | pending |
+| 3 | Position alignment (radians) | **COMPLETE** |
 | 4 | Interest/Evidence model alignment | pending |
 | 5 | Service name alignment | pending |
 | 6 | Remove bridge (now identity-only) | pending |
@@ -67,6 +67,29 @@ lockstep.
 
 **Wire-format impact**: binary streaming ordinals changed.  Any existing
 recorded binary data or live clients must upgrade together.
+
+### Phase 3 — Position alignment (radians) ✅
+
+Internal `Position.lat/lon` and `BoundingBox` fields now store radians instead
+of degrees, matching the PYRAMID standard `GeodeticPosition.Angle.radians` wire
+format.
+
+Changes made:
+- `GeoMath.h`: `haversineMeters` and `circleBoundingBox` no longer call
+  `degToRad()` — positions are already in radians.
+- `SpatialIndex.h`: default `cell_size_rad = 0.017453292519943295` (1°).
+- `CorrelationEngine.h/.cpp`: `gate_radius_deg` renamed to `gate_radius_rad`
+  (default 0.5° in rad); `gate_m` now computed via `EARTH_RADIUS_M`.
+- `StandardBridge.h`: `degToRad`/`radToDeg` helpers removed (now identity).
+- `StandardBridge.cpp`: `onStandardObjectEvidence` copies latitude/longitude
+  directly; `set_bbox` passes radian values straight through to JSON.
+- `tactical_objects_main.cpp`: local `radToDeg` removed; `latitude_rad` /
+  `longitude_rad` JSON fields assigned directly to `Position`.
+- All 7 test suites updated with `constexpr double DEG = PI / 180.0` and all
+  degree literals converted (107 tests, all passing).
+
+**Bridge impact**: `radToDeg`/`degToRad` conversions removed from bridge.
+The bridge is now a pure type-mapping layer for position (no unit conversion).
 
 ---
 

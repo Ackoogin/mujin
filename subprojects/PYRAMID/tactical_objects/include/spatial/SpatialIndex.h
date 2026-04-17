@@ -12,8 +12,8 @@ namespace tactical_objects {
 /// \brief Grid-based spatial index over WGS84 lat/lon.
 class SpatialIndex {
 public:
-  /// \brief Construct with a configurable cell size in degrees.
-  explicit SpatialIndex(double cell_size_deg = 1.0);
+  /// \brief Construct with a configurable cell size in radians.
+  explicit SpatialIndex(double cell_size_rad = 0.017453292519943295);
 
   /// \brief Insert an entity at a position.
   void insert(const UUIDKey& id, const Position& pos);

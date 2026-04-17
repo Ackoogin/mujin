@@ -84,10 +84,6 @@ private:
   /// standard.object_evidence (JSON) → processObservationBatch
   static void onStandardObjectEvidence(pcl_container_t* c, const pcl_msg_t* msg, void* user_data);
 
-  // ---- Position conversion -------------------------------------------------
-  static double degToRad(double deg) { return deg * 0.017453292519943295; }
-  static double radToDeg(double rad) { return rad * 57.29577951308232; }
-
   // ---- Member state --------------------------------------------------------
 
   TacticalObjectsRuntime& runtime_;

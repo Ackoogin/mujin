@@ -12,6 +12,8 @@
 using namespace tactical_objects;
 using namespace pyramid::core::uuid;
 
+static constexpr double DEG = 3.14159265358979323846 / 180.0;
+
 // ---------------------------------------------------------------------------
 // Port helpers
 // ---------------------------------------------------------------------------
@@ -91,7 +93,7 @@ TEST(TacticalObjectsComponentHLR, ExternalIdAndLineageFromCorrelation) {
   ObservationBatch batch1;
   Observation obs1;
   obs1.observation_id = UUIDHelper::generateV4();
-  obs1.position = Position{51.5, -0.1, 0};
+  obs1.position = Position{51.5 * DEG, -0.1 * DEG, 0};
   obs1.confidence = 0.9;
   obs1.affiliation_hint = Affiliation::Hostile;
   obs1.source_ref.source_system = "radar";
@@ -102,7 +104,7 @@ TEST(TacticalObjectsComponentHLR, ExternalIdAndLineageFromCorrelation) {
   ObservationBatch batch2;
   Observation obs2;
   obs2.observation_id = UUIDHelper::generateV4();
-  obs2.position = Position{51.5001, -0.0999, 0};
+  obs2.position = Position{51.5001 * DEG, -0.0999 * DEG, 0};
   obs2.confidence = 0.85;
   obs2.affiliation_hint = Affiliation::Hostile;
   obs2.source_ref.source_system = "radar";
@@ -145,17 +147,17 @@ TEST(TacticalObjectsComponentHLR, RegionQueryViaService) {
 
   ObjectDefinition def;
   def.type = ObjectType::Platform;
-  def.position = Position{51.5, 0.0, 0};
+  def.position = Position{51.5 * DEG, 0.0, 0};
   def.affiliation = Affiliation::Friendly;
   std::string id1_str = createObjectViaPort(exec.handle(), def, cbuf, sizeof(cbuf));
   ASSERT_FALSE(id1_str.empty());
 
-  def.position = Position{52.5, 1.0, 0};
+  def.position = Position{52.5 * DEG, 1.0 * DEG, 0};
   std::string id2_str = createObjectViaPort(exec.handle(), def, cbuf, sizeof(cbuf));
   ASSERT_FALSE(id2_str.empty());
 
   QueryRequest qreq;
-  qreq.by_region = BoundingBox{51.0, 52.0, -0.5, 0.5};
+  qreq.by_region = BoundingBox{51.0 * DEG, 52.0 * DEG, -0.5 * DEG, 0.5 * DEG};
   char qbuf[4096];
   auto jr = queryViaPort(exec.handle(), qreq, qbuf, sizeof(qbuf));
   ASSERT_GE(jr["entries"].size(), 1u);
@@ -185,7 +187,7 @@ TEST(TacticalObjectsComponentHLR, TemporalQueryViaService) {
   ObservationBatch batch;
   Observation obs;
   obs.observation_id = UUIDHelper::generateV4();
-  obs.position = Position{51.5, 0.0, 0};
+  obs.position = Position{51.5 * DEG, 0.0, 0};
   obs.observed_at = 100.0;
   obs.confidence = 0.8;
   batch.observations.push_back(obs);
@@ -210,7 +212,7 @@ TEST(TacticalObjectsComponentHLR, BehaviorAndOperationalStateViaUpdate) {
 
   ObjectDefinition def;
   def.type = ObjectType::Platform;
-  def.position = Position{51.5, 0.0, 0};
+  def.position = Position{51.5 * DEG, 0.0, 0};
   char cbuf[1024];
   std::string id_str = createObjectViaPort(exec.handle(), def, cbuf, sizeof(cbuf));
   ASSERT_FALSE(id_str.empty());
@@ -242,7 +244,7 @@ TEST(TacticalObjectsComponentHLR, ConfidenceFromCorrelation) {
   ObservationBatch batch;
   Observation obs;
   obs.observation_id = UUIDHelper::generateV4();
-  obs.position = Position{51.5, -0.1, 0};
+  obs.position = Position{51.5 * DEG, -0.1 * DEG, 0};
   obs.confidence = 0.75;
   obs.affiliation_hint = Affiliation::Neutral;
   obs.source_ref.source_system = "sensor";
@@ -282,7 +284,7 @@ TEST(TacticalObjectsComponentHLR, FullMilitaryClassificationViaCreate) {
 
   ObjectDefinition def;
   def.type = ObjectType::Unit;
-  def.position = Position{51.5, 0.0, 0};
+  def.position = Position{51.5 * DEG, 0.0, 0};
   def.affiliation = Affiliation::Friendly;
   def.mil_class.battle_dim = BattleDimension::Ground;
   def.mil_class.affiliation = Affiliation::Friendly;
@@ -318,7 +320,7 @@ TEST(TacticalObjectsComponentHLR, SourceSidcPreserved) {
   ObservationBatch batch;
   Observation obs;
   obs.observation_id = UUIDHelper::generateV4();
-  obs.position = Position{51.5, -0.1, 0};
+  obs.position = Position{51.5 * DEG, -0.1 * DEG, 0};
   obs.confidence = 0.8;
   obs.source_sidc = "SFGPUCIZ----";
   obs.source_ref.source_system = "tracks";
@@ -391,7 +393,7 @@ TEST(TacticalObjectsComponentHLR, AllObjectTypesViaCreate) {
   for (ObjectType t : types) {
     ObjectDefinition def;
     def.type = t;
-    def.position = Position{51.0, 0.0, 0};
+    def.position = Position{51.0 * DEG, 0.0, 0};
     std::string id_str = createObjectViaPort(exec.handle(), def, cbuf, sizeof(cbuf));
     ASSERT_FALSE(id_str.empty());
   }
@@ -413,7 +415,7 @@ TEST(TacticalObjectsComponentHLR, QueryBySourceRef) {
   ObservationBatch batch;
   Observation obs;
   obs.observation_id = UUIDHelper::generateV4();
-  obs.position = Position{51.5, -0.1, 0};
+  obs.position = Position{51.5 * DEG, -0.1 * DEG, 0};
   obs.confidence = 0.8;
   obs.source_ref.source_system = "tracker-a";
   obs.source_ref.source_entity_id = "ext-42";

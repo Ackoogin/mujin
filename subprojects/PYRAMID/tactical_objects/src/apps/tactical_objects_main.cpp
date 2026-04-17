@@ -93,8 +93,8 @@ private:
     obs.affiliation_hint = tactical_objects::Affiliation::Unknown;
     obs.confidence = j.value("confidence", 0.0);
 
-    obs.position.lat = radToDeg(j.value("latitude_rad", 0.0));
-    obs.position.lon = radToDeg(j.value("longitude_rad", 0.0));
+    obs.position.lat = j.value("latitude_rad", 0.0);
+    obs.position.lon = j.value("longitude_rad", 0.0);
     obs.position.alt = 0.0;
 
     const std::string identity = j.value("identity", "");
@@ -160,10 +160,6 @@ private:
       self->logWarn("Local consumed service %s unavailable",
                     consumed::kSvcCreateRequirement);
     }
-  }
-
-  static double radToDeg(double rad) {
-    return rad * 57.29577951308232;
   }
 
   tactical_objects::TacticalObjectsRuntime& runtime_;

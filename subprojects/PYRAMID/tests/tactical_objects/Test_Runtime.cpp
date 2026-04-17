@@ -5,15 +5,17 @@
 using namespace tactical_objects;
 using namespace pyramid::core::uuid;
 
+static constexpr double DEG = 3.14159265358979323846 / 180.0;
+
 class RuntimeTest : public ::testing::Test {
 protected:
   TacticalObjectsRuntime rt;
 
-  ObjectDefinition makePlatform(double lat, double lon,
+  ObjectDefinition makePlatform(double lat_deg, double lon_deg,
                                 Affiliation aff = Affiliation::Unknown) {
     ObjectDefinition def;
     def.type = ObjectType::Platform;
-    def.position = Position{lat, lon, 0};
+    def.position = Position{lat_deg * DEG, lon_deg * DEG, 0};
     def.affiliation = aff;
     def.mil_class.affiliation = aff;
     return def;
@@ -31,11 +33,11 @@ TEST_F(RuntimeTest, CreateObjectReturnsValidUUID) {
 TEST_F(RuntimeTest, UpdateObjectModifiesPosition) {
   auto id = rt.createObject(makePlatform(51.5, -0.1));
   ObjectUpdate upd;
-  upd.position = Position{52.0, 1.0, 0};
+  upd.position = Position{52.0 * DEG, 1.0 * DEG, 0};
   ASSERT_TRUE(rt.updateObject(id, upd));
   auto* kc = rt.store()->kinematics().get(id);
   ASSERT_NE(kc, nullptr);
-  ASSERT_DOUBLE_EQ(kc->position.lat, 52.0);
+  ASSERT_DOUBLE_EQ(kc->position.lat, 52.0 * DEG);
 }
 
 ///< REQ_TACTICAL_OBJECTS_028: Direct CRUD delete removes entity.
@@ -55,7 +57,7 @@ TEST_F(RuntimeTest, DeleteNonExistentReturnsFalse) {
 TEST_F(RuntimeTest, CorrelationDelegation) {
   Observation obs;
   obs.observation_id = UUIDHelper::generateV4();
-  obs.position = Position{51.5, -0.1, 0};
+  obs.position = Position{51.5 * DEG, -0.1 * DEG, 0};
   obs.confidence = 0.8;
   obs.affiliation_hint = Affiliation::Hostile;
   obs.source_ref.source_system = "radar";
@@ -72,7 +74,7 @@ TEST_F(RuntimeTest, TacticalObjectSolutionDetermination) {
   crit.query_mode = QueryMode::ActiveFind;
   crit.object_type = ObjectType::Platform;
   crit.affiliation = Affiliation::Hostile;
-  crit.area = BoundingBox{50.0, 52.0, -2.0, 2.0};
+  crit.area = BoundingBox{50.0 * DEG, 52.0 * DEG, -2.0 * DEG, 2.0 * DEG};
   crit.time_window_start = 1000.0;
   crit.time_window_end = 2000.0;
 
@@ -87,7 +89,7 @@ TEST_F(RuntimeTest, TacticalObjectSolutionDetermination) {
   ASSERT_TRUE(solution.intended_object_type.has_value());
   EXPECT_EQ(*solution.intended_object_type, ObjectType::Platform);
   ASSERT_TRUE(solution.area_of_interest.has_value());
-  EXPECT_DOUBLE_EQ(solution.area_of_interest->min_lat, 50.0);
+  EXPECT_DOUBLE_EQ(solution.area_of_interest->min_lat, 50.0 * DEG);
   EXPECT_GT(solution.predicted_quality, 0.0);
   // Active-find generates derived evidence requirements
   EXPECT_FALSE(solution.evidence_requirements.empty());
@@ -108,10 +110,10 @@ TEST_F(RuntimeTest, QueryDelegation) {
 TEST_F(RuntimeTest, ZoneDelegation) {
   ZoneDefinition def;
   def.zone_type = ZoneType::AOI;
-  def.geometry.center = Position{51.0, 0.0, 0};
+  def.geometry.center = Position{51.0 * DEG, 0.0, 0};
   def.geometry.radius_m = 5000.0;
   auto zid = rt.createZone(def);
-  ASSERT_TRUE(rt.isInsideZone(Position{51.0, 0.0, 0}, zid));
+  ASSERT_TRUE(rt.isInsideZone(Position{51.0 * DEG, 0.0, 0}, zid));
 }
 
 ///< REQ_TACTICAL_OBJECTS_033: Runtime delegates milclass operations.
@@ -132,7 +134,7 @@ TEST_F(RuntimeTest, BothPathsQueryableTogether) {
 
   Observation obs;
   obs.observation_id = UUIDHelper::generateV4();
-  obs.position = Position{52.0, 0.0, 0};
+  obs.position = Position{52.0 * DEG, 0.0, 0};
   obs.confidence = 0.8;
   obs.affiliation_hint = Affiliation::Hostile;
   obs.source_ref.source_system = "radar";
@@ -160,7 +162,7 @@ TEST_F(RuntimeTest, BatchCorrelationDeterminism) {
     for (int i = 0; i < 3; ++i) {
       Observation obs;
       obs.observation_id = UUIDHelper::generateV4();
-      obs.position = Position{51.0 + i * 0.5, -0.1 + i * 0.5, 0};
+      obs.position = Position{(51.0 + i * 0.5) * DEG, (-0.1 + i * 0.5) * DEG, 0};
       obs.confidence = 0.7;
       obs.affiliation_hint = Affiliation::Neutral;
       obs.source_ref.source_system = "s" + std::to_string(i);
@@ -249,12 +251,12 @@ TEST_F(RuntimeTest, UpdateObjectCreatesKinematicsWhenAbsent) {
   ASSERT_EQ(rt.store()->kinematics().get(id), nullptr);
 
   ObjectUpdate upd;
-  upd.position = Position{53.0, 2.0, 0};
+  upd.position = Position{53.0 * DEG, 2.0 * DEG, 0};
   ASSERT_TRUE(rt.updateObject(id, upd));
 
   const auto* kc = rt.store()->kinematics().get(id);
   ASSERT_NE(kc, nullptr);
-  ASSERT_DOUBLE_EQ(kc->position.lat, 53.0);
+  ASSERT_DOUBLE_EQ(kc->position.lat, 53.0 * DEG);
 }
 
 ///< REQ_TACTICAL_OBJECTS_027: updateObject with mil_class field.
@@ -327,11 +329,11 @@ TEST_F(RuntimeTest, DeriveSymbolKeyDelegates) {
 TEST_F(RuntimeTest, EvaluateZoneTransitionDelegates) {
   ZoneDefinition def;
   def.zone_type = ZoneType::AOI;
-  def.geometry.center = Position{51.0, 0.0, 0};
+  def.geometry.center = Position{51.0 * DEG, 0.0, 0};
   def.geometry.radius_m = 5000.0;
   auto zid = rt.createZone(def);
 
   auto obj_id = rt.createObject(makePlatform(51.0, 0.0));
-  auto rel = rt.evaluateZoneTransition(obj_id, zid, Position{51.0, 0.0, 0}, 0.0);
+  auto rel = rt.evaluateZoneTransition(obj_id, zid, Position{51.0 * DEG, 0.0, 0}, 0.0);
   ASSERT_EQ(rel, ZoneRelationship::Entering);
 }

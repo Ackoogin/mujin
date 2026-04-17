@@ -157,10 +157,10 @@ pcl_status_t StandardBridge::handleCreateRequirement(pcl_container_t*,
 
   auto set_bbox = [&](double min_lat, double max_lat, double min_lon, double max_lon) {
     json area;
-    area["min_lat"] = self->radToDeg(min_lat);
-    area["max_lat"] = self->radToDeg(max_lat);
-    area["min_lon"] = self->radToDeg(min_lon);
-    area["max_lon"] = self->radToDeg(max_lon);
+    area["min_lat"] = min_lat;
+    area["max_lat"] = max_lat;
+    area["min_lon"] = min_lon;
+    area["max_lon"] = max_lon;
     internal["area"] = area;
     internal["expires_at"] = 9999;
   };
@@ -366,9 +366,8 @@ void StandardBridge::onStandardObjectEvidence(pcl_container_t*,
   obs.affiliation_hint = Affiliation::Unknown;
   obs.confidence       = detail.quality.value_or(0.0);
 
-  // Parse standard position (radians → degrees)
-  obs.position.lat = self->radToDeg(detail.position.latitude);
-  obs.position.lon = self->radToDeg(detail.position.longitude);
+  obs.position.lat = detail.position.latitude;
+  obs.position.lon = detail.position.longitude;
   obs.position.alt = 0.0;
 
   // Ordinals now match — direct cast from generated StandardIdentity to internal Affiliation.

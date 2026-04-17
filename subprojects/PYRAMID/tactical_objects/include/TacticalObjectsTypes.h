@@ -148,9 +148,9 @@ struct UUIDKey {
 };
 
 struct Position {
-  double lat = 0.0;
-  double lon = 0.0;
-  double alt = 0.0;
+  double lat = 0.0;  // radians
+  double lon = 0.0;  // radians
+  double alt = 0.0;  // metres
 };
 
 struct Velocity {
@@ -168,10 +168,10 @@ struct SourceRef {
 };
 
 struct BoundingBox {
-  double min_lat = 0.0;
-  double max_lat = 0.0;
-  double min_lon = 0.0;
-  double max_lon = 0.0;
+  double min_lat = 0.0;  // radians
+  double max_lat = 0.0;  // radians
+  double min_lon = 0.0;  // radians
+  double max_lon = 0.0;  // radians
 
   bool contains(double lat, double lon) const {
     return lat >= min_lat && lat <= max_lat &&

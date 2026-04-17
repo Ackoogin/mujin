@@ -12,6 +12,8 @@
 using namespace tactical_objects;
 using namespace pyramid::core::uuid;
 
+static constexpr double DEG = 3.14159265358979323846 / 180.0;
+
 ///< REQ_TACTICAL_OBJECTS_033: All ports created during on_configure.
 ///< TOBJ.045: Snapshot and event access via PCL lifecycle.
 TEST(TacticalObjectsComponent, ConfigureCreatesAllPorts) {
@@ -45,7 +47,7 @@ TEST(TacticalObjectsComponent, EvidenceIngressViaSubscriber) {
   ObservationBatch batch;
   Observation obs;
   obs.observation_id = UUIDHelper::generateV4();
-  obs.position = Position{51.5, -0.1, 0};
+  obs.position = Position{51.5 * DEG, -0.1 * DEG, 0};
   obs.confidence = 0.8;
   obs.affiliation_hint = Affiliation::Hostile;
   obs.source_ref.source_system = "radar";
@@ -81,7 +83,7 @@ TEST(TacticalObjectsComponent, DirectCreateViaService) {
 
   ObjectDefinition def;
   def.type = ObjectType::Platform;
-  def.position = Position{51.5, -0.1, 0};
+  def.position = Position{51.5 * DEG, -0.1 * DEG, 0};
   def.affiliation = Affiliation::Friendly;
   def.mil_class.battle_dim = BattleDimension::Ground;
   def.mil_class.role = "infantry";
@@ -127,7 +129,7 @@ TEST(TacticalObjectsComponent, DirectUpdateViaService) {
 
   ObjectDefinition def;
   def.type = ObjectType::Platform;
-  def.position = Position{51.5, -0.1, 0};
+  def.position = Position{51.5 * DEG, -0.1 * DEG, 0};
   def.affiliation = Affiliation::Friendly;
   auto j_create = TacticalObjectsCodec::encodeObjectDefinition(def);
   std::string req_str = j_create.dump();
@@ -199,7 +201,7 @@ TEST(TacticalObjectsComponent, QueryViaService) {
   comp.runtime().createObject(ObjectDefinition());
   Observation obs;
   obs.observation_id = UUIDHelper::generateV4();
-  obs.position = Position{52.0, 0.0, 0};
+  obs.position = Position{52.0 * DEG, 0.0, 0};
   obs.confidence = 0.7;
   obs.affiliation_hint = Affiliation::Neutral;
   obs.source_ref.source_system = "radar";
@@ -275,7 +277,7 @@ TEST(TacticalObjectsComponent, ZoneUpsertViaService) {
 
   ZoneDefinition def;
   def.zone_type = ZoneType::AOI;
-  def.geometry.center = Position{51.0, 0.0, 0};
+  def.geometry.center = Position{51.0 * DEG, 0.0, 0};
   def.geometry.radius_m = 5000.0;
   auto j_req = TacticalObjectsCodec::encodeZoneDefinition(def);
   std::string req_str = j_req.dump();
@@ -306,7 +308,7 @@ TEST(TacticalObjectsComponent, ZoneRemoveViaService) {
 
   ZoneDefinition def;
   def.zone_type = ZoneType::AOI;
-  def.geometry.center = Position{51.0, 0.0, 0};
+  def.geometry.center = Position{51.0 * DEG, 0.0, 0};
   def.geometry.radius_m = 5000.0;
   auto zid = comp.runtime().createZone(def);
 
@@ -620,7 +622,7 @@ TEST(TacticalObjectsComponent, SubscribeInterestViaService) {
   nlohmann::json j_req;
   j_req["object_type"] = "Platform";
   j_req["affiliation"] = "Hostile";
-  j_req["area"] = nlohmann::json::object({{"min_lat", 50.0}, {"max_lat", 52.0}, {"min_lon", -1.0}, {"max_lon", 1.0}});
+  j_req["area"] = nlohmann::json::object({{"min_lat", 50.0 * DEG}, {"max_lat", 52.0 * DEG}, {"min_lon", -1.0 * DEG}, {"max_lon", 1.0 * DEG}});
   j_req["behavior_pattern"] = "patrol";
   j_req["minimum_confidence"] = 0.7;
   j_req["expires_at"] = 9999.0;
@@ -657,7 +659,7 @@ TEST(TacticalObjectsComponent, ResyncViaService) {
 
   ObjectDefinition def;
   def.type = ObjectType::Platform;
-  def.position = Position{51.0, 0.0, 0};
+  def.position = Position{51.0 * DEG, 0.0, 0};
   def.affiliation = Affiliation::Hostile;
   comp.runtime().createObject(def);
 
@@ -779,7 +781,7 @@ TEST(TacticalObjectsComponent, ChunkingWithMaxEntitiesPerFrame) {
 
   ObjectDefinition def;
   def.type = ObjectType::Platform;
-  def.position = Position{51.0, 0.0, 0};
+  def.position = Position{51.0 * DEG, 0.0, 0};
   def.affiliation = Affiliation::Hostile;
 
   for (int i = 0; i < 5; ++i) {
@@ -825,7 +827,7 @@ TEST(TacticalObjectsComponent, SubscribeCreateTickPublishes) {
 
   ObjectDefinition def;
   def.type = ObjectType::Platform;
-  def.position = Position{51.0, 0.0, 0};
+  def.position = Position{51.0 * DEG, 0.0, 0};
   def.affiliation = Affiliation::Hostile;
   auto j_create = TacticalObjectsCodec::encodeObjectDefinition(def);
   std::string create_str = j_create.dump();
@@ -867,7 +869,7 @@ TEST(TacticalObjectsComponent, DeletedEntityPublishesDeleteFrame) {
 
   ObjectDefinition def;
   def.type = ObjectType::Platform;
-  def.position = Position{51.0, 0.0, 0};
+  def.position = Position{51.0 * DEG, 0.0, 0};
   def.affiliation = Affiliation::Hostile;
   auto j_create = TacticalObjectsCodec::encodeObjectDefinition(def);
   std::string create_str = j_create.dump();
@@ -1102,9 +1104,9 @@ TEST(TacticalObjectsComponent, MultipleChunksSecondIteration) {
   def.position    = Position{51.0, 0.0, 0};
   def.affiliation = Affiliation::Hostile;
   auto id1 = comp.runtime().createObject(def);
-  def.position.lat = 52.0;
+  def.position.lat = 52.0 * DEG;
   auto id2 = comp.runtime().createObject(def);
-  def.position.lat = 53.0;
+  def.position.lat = 53.0 * DEG;
   auto id3 = comp.runtime().createObject(def);
 
   // First tick: new subscriber, full scan produces 3 updates (1 chunk each
@@ -1115,11 +1117,11 @@ TEST(TacticalObjectsComponent, MultipleChunksSecondIteration) {
 
   // Mark all 3 dirty again so the next (non-new-subscriber) tick processes them.
   ObjectUpdate upd;
-  upd.position = Position{51.5, 0.0, 0};
+  upd.position = Position{51.5 * DEG, 0.0, 0};
   comp.runtime().updateObject(id1, upd);
-  upd.position = Position{52.5, 0.0, 0};
+  upd.position = Position{52.5 * DEG, 0.0, 0};
   comp.runtime().updateObject(id2, upd);
-  upd.position = Position{53.5, 0.0, 0};
+  upd.position = Position{53.5 * DEG, 0.0, 0};
   comp.runtime().updateObject(id3, upd);
 
   // Second tick: NOT new subscriber, dirty_entities has 3 entries →
