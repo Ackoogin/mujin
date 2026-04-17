@@ -42,7 +42,7 @@ Progress tracked against the 6-phase plan below.
 | 3 | Position alignment (radians) | **COMPLETE** |
 | 4 | Interest/Evidence model alignment | **COMPLETE** |
 | 5 | Service name alignment | **COMPLETE** |
-| 6 | Remove bridge (now identity-only) | pending |
+| 6 | Remove bridge (now identity-only) | **COMPLETE** |
 
 ### Phase 1 — Bridge ✅
 
@@ -67,6 +67,41 @@ lockstep.
 
 **Wire-format impact**: binary streaming ordinals changed.  Any existing
 recorded binary data or live clients must upgrade together.
+
+### Phase 6 — Remove bridge (now identity-only) ✅
+
+The bridge is not literally removed — it remains as a permanent thin adapter —
+but Phase 6 verifies that every remaining translation is an inherent schema
+difference (not a historical impedance mismatch) and eliminates the last
+avoidable conversion.
+
+**Last string-conversion chain removed:**
+The `handleCreateRequirement` switch that mapped `BattleDimension` ordinals to
+string names ("Air", "Ground", …) is replaced with a single
+`internal["battle_dimension"] = static_cast<int>(dim)` emit.
+`handleSubscribeInterest` now accepts integer ordinals in addition to strings
+(integer branch tried first; string branch retained for backward compatibility).
+This is a direct consequence of the Phase 2 ordinal alignment.
+
+**Residual bridge contract — inherent schema differences, cannot be removed:**
+
+| Translation | Reason it is permanent |
+|-------------|------------------------|
+| `DataPolicy::Obtain` ↔ `query_mode = "active_find"` | Semantic equivalence between two different naming schemes (`policy` vs `query_mode`); no shared ordinal |
+| `PolyArea`/`CircleArea`/`Point` oneof ↔ flat `BoundingBox` | Standard uses geometry abstraction; internal uses axis-aligned bbox; changing would alter correlation/spatial engine contracts |
+| Binary `EntityUpdateFrame` stream ↔ `ObjectMatch[]` JSON | Streaming binary for performance; standard is JSON for interoperability; wire-format unification would break zero-copy path |
+| `ObjectDetail` ↔ `Observation` (inbound evidence) | Standard observation type has rich provenance; internal `Observation` maps to correlation engine vocabulary |
+
+All remaining translations are justified by the schema boundary between the
+PYRAMID standard IDL and the internal domain model. The bridge is the correct
+and permanent home for this mapping.
+
+**Changes made:**
+- `TacticalObjectsComponent.cpp` (`handleSubscribeInterest`): added integer
+  ordinal branch for `battle_dimension` (tries integer, falls back to string).
+- `StandardBridge.cpp` (`handleCreateRequirement`): 10-line switch replaced
+  with `internal["battle_dimension"] = static_cast<int>(dim)` (3 lines),
+  conditioned on `dim != 0` (Unspecified = no filter).
 
 ### Phase 5 — Service name alignment ✅
 

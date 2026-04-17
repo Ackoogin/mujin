@@ -138,16 +138,9 @@ pcl_status_t StandardBridge::handleCreateRequirement(pcl_container_t*,
           : "read_current";
 
   if (!req.dimension.empty()) {
-    // Ordinals now match — direct cast to internal BattleDimension.
-    switch (static_cast<BattleDimension>(static_cast<int>(req.dimension.front()))) {
-      case BattleDimension::Ground:     internal["battle_dimension"] = "Ground";     break;
-      case BattleDimension::Air:        internal["battle_dimension"] = "Air";        break;
-      case BattleDimension::SeaSurface: internal["battle_dimension"] = "SeaSurface"; break;
-      case BattleDimension::Subsurface: internal["battle_dimension"] = "Subsurface"; break;
-      case BattleDimension::Space:      internal["battle_dimension"] = "Space";      break;
-      case BattleDimension::SOF:        internal["battle_dimension"] = "SOF";        break;
-      default: break;  // Unspecified / Unknown: no dimension filter
-    }
+    // Ordinals aligned (Phase 2) — emit integer directly; internal now accepts both.
+    int dim = static_cast<int>(req.dimension.front());
+    if (dim != 0) internal["battle_dimension"] = dim;
   }
 
   auto set_bbox = [&](double min_lat, double max_lat, double min_lon, double max_lon) {

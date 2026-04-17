@@ -441,10 +441,15 @@ pcl_status_t TacticalObjectsComponent::handleSubscribeInterest(pcl_container_t*,
     } catch (...) {}
   }
   if (j.contains("battle_dimension") && !j["battle_dimension"].is_null()) {
-    try {
-      criteria.battle_dimension = TacticalObjectsCodec::battleDimensionFromString(
-          j["battle_dimension"].get<std::string>());
-    } catch (...) {}
+    // Accept integer ordinals (standard aligned) or legacy string names.
+    if (j["battle_dimension"].is_number()) {
+      criteria.battle_dimension = static_cast<BattleDimension>(j["battle_dimension"].get<int>());
+    } else {
+      try {
+        criteria.battle_dimension = TacticalObjectsCodec::battleDimensionFromString(
+            j["battle_dimension"].get<std::string>());
+      } catch (...) {}
+    }
   }
   if (j.contains("area") && j["area"].is_object()) {
     BoundingBox bb;
