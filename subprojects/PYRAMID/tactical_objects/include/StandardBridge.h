@@ -75,6 +75,20 @@ private:
                                                pcl_svc_context_t* ctx,
                                                void* user_data);
 
+  /// Handle "matching_objects.read_match" → query → translate → ObjectMatch[]
+  static pcl_status_t handleReadMatch(pcl_container_t* c,
+                                      const pcl_msg_t* request,
+                                      pcl_msg_t* response,
+                                      pcl_svc_context_t* ctx,
+                                      void* user_data);
+
+  /// Handle "specific_object_detail.read_detail" → runtime lookup → ObjectDetail[]
+  static pcl_status_t handleReadDetail(pcl_container_t* c,
+                                       const pcl_msg_t* request,
+                                       pcl_msg_t* response,
+                                       pcl_svc_context_t* ctx,
+                                       void* user_data);
+
   // ---- on_tick: stream entity matches directly via runtime ----------------
 
   pcl_status_t on_tick(double dt) override;

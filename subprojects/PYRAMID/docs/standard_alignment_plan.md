@@ -41,7 +41,7 @@ Progress tracked against the 6-phase plan below.
 | 2 | Enum ordinal alignment (Affiliation, BattleDimension) | **COMPLETE** |
 | 3 | Position alignment (radians) | **COMPLETE** |
 | 4 | Interest/Evidence model alignment | **COMPLETE** |
-| 5 | Service name alignment | pending |
+| 5 | Service name alignment | **COMPLETE** |
 | 6 | Remove bridge (now identity-only) | pending |
 
 ### Phase 1 — Bridge ✅
@@ -67,6 +67,46 @@ lockstep.
 
 **Wire-format impact**: binary streaming ordinals changed.  Any existing
 recorded binary data or live clients must upgrade together.
+
+### Phase 5 — Service name alignment ✅
+
+`StandardBridge` now exposes the two standard read services, completing the
+provided-interface surface alongside the already-standard
+`object_of_interest.create_requirement`.
+
+Services added to `StandardBridge`:
+- **`matching_objects.read_match`** — accepts standard `Query` JSON
+  (`{"id": ["<uuid>", ...]}` or empty for all); calls the internal `query`
+  service via the shared executor; translates each `QueryResultEntry` into an
+  `ObjectMatch` (`id`, `matching_object_id`, `source = "tactical_objects"`)
+  and returns a JSON array.
+- **`specific_object_detail.read_detail`** — accepts standard `Query` JSON;
+  for each requested UUID looks up the entity directly in the runtime (position
+  is already in radians per Phase 3); builds an `ObjectDetail` (`id`,
+  `position.latitude/longitude`, `quality`) and returns a JSON array.
+
+Changes made:
+- `StandardBridge.h`: declared `handleReadMatch` and `handleReadDetail`.
+- `StandardBridge.cpp`: added `SVC_READ_MATCH`, `SVC_READ_DETAIL`, and
+  `SVC_QUERY` constants; registered both new services in `on_configure`;
+  implemented both handlers.
+- `Test_TacticalObjectsComponent.cpp`: added `#include <StandardBridge.h>`;
+  added `StandardReadMatchReturnsMatchArray` and
+  `StandardReadDetailReturnsDetailArray` tests — each creates a `StandardBridge`
+  in the executor alongside `TacticalObjectsComponent` and verifies the
+  full request→response translation.
+
+**Standard interface now complete (provided side):**
+
+| Standard wire name | Internal call |
+|--------------------|---------------|
+| `object_of_interest.create_requirement` | `subscribe_interest` |
+| `matching_objects.read_match` | `query` |
+| `specific_object_detail.read_detail` | runtime `getRecord` + `kinematics` |
+
+**Wire-format impact**: no change to existing services or binary codec.
+
+---
 
 ### Phase 4 — Interest/Evidence model alignment ✅
 

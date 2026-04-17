@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <TacticalObjectsComponent.h>
 #include <TacticalObjectsCodec.h>
+#include <StandardBridge.h>
 #include <pcl/executor.hpp>
 #include <pcl/pcl_executor.h>
 #include <uuid/UUIDHelper.h>
@@ -1185,4 +1186,112 @@ TEST(TacticalObjectsComponent, SubscribeInterestInvalidTypeFieldsCoverCatchBlock
     pcl_msg_t resp = {}; char buf[512]; resp.data = buf; resp.size = sizeof(buf);
     EXPECT_EQ(pcl_executor_invoke_service(exec.handle(), "subscribe_interest", &req, &resp), PCL_OK);
   }
+}
+
+///< REQ_TACTICAL_OBJECTS_026: matching_objects.read_match returns ObjectMatch array.
+TEST(TacticalObjectsComponent, StandardReadMatchReturnsMatchArray) {
+  static constexpr double DEG = 3.14159265358979323846 / 180.0;
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  StandardBridge bridge(comp.runtime(), exec.handle(), false);
+  bridge.configure();
+  bridge.activate();
+  exec.add(bridge);
+
+  // Create an object so query returns a result
+  ObjectDefinition def;
+  def.type       = ObjectType::Platform;
+  def.position   = Position{51.0 * DEG, 0.0, 0};
+  def.affiliation = Affiliation::Hostile;
+  auto j_create  = TacticalObjectsCodec::encodeObjectDefinition(def);
+  std::string create_str = j_create.dump();
+  char create_resp_buf[512];
+  pcl_msg_t create_req = {}, create_resp = {};
+  create_req.data = create_str.data();
+  create_req.size = static_cast<uint32_t>(create_str.size());
+  create_req.type_name = "application/json";
+  create_resp.data = create_resp_buf;
+  create_resp.size = sizeof(create_resp_buf);
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "create_object", &create_req, &create_resp), PCL_OK);
+
+  // Invoke standard read_match with empty Query (returns all)
+  char resp_buf[8192];
+  pcl_msg_t req = {}, resp = {};
+  req.data = nullptr;
+  req.size = 0;
+  req.type_name = "application/json";
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "matching_objects.read_match", &req, &resp), PCL_OK);
+
+  std::string resp_str(static_cast<const char*>(resp.data), resp.size);
+  auto jr = nlohmann::json::parse(resp_str);
+  ASSERT_TRUE(jr.is_array());
+  ASSERT_GE(jr.size(), 1u);
+  EXPECT_TRUE(jr[0].contains("id"));
+  EXPECT_TRUE(jr[0].contains("matching_object_id"));
+  EXPECT_EQ(jr[0].value("source", ""), "tactical_objects");
+}
+
+///< REQ_TACTICAL_OBJECTS_026: specific_object_detail.read_detail returns ObjectDetail array.
+TEST(TacticalObjectsComponent, StandardReadDetailReturnsDetailArray) {
+  static constexpr double DEG = 3.14159265358979323846 / 180.0;
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  StandardBridge bridge(comp.runtime(), exec.handle(), false);
+  bridge.configure();
+  bridge.activate();
+  exec.add(bridge);
+
+  // Create an object
+  ObjectDefinition def;
+  def.type       = ObjectType::Platform;
+  def.position   = Position{52.0 * DEG, 1.0 * DEG, 0};
+  def.affiliation = Affiliation::Friendly;
+  auto j_create  = TacticalObjectsCodec::encodeObjectDefinition(def);
+  std::string create_str = j_create.dump();
+  char create_resp_buf[512];
+  pcl_msg_t create_req = {}, create_resp = {};
+  create_req.data = create_str.data();
+  create_req.size = static_cast<uint32_t>(create_str.size());
+  create_req.type_name = "application/json";
+  create_resp.data = create_resp_buf;
+  create_resp.size = sizeof(create_resp_buf);
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "create_object", &create_req, &create_resp), PCL_OK);
+  std::string create_resp_str(static_cast<const char*>(create_resp.data), create_resp.size);
+  auto created = nlohmann::json::parse(create_resp_str);
+  std::string object_id = created.value("object_id", "");
+  ASSERT_FALSE(object_id.empty());
+
+  // Query by id via specific_object_detail.read_detail
+  nlohmann::json q_req;
+  q_req["id"] = nlohmann::json::array({object_id});
+  std::string q_str = q_req.dump();
+  char resp_buf[8192];
+  pcl_msg_t req = {}, resp = {};
+  req.data = q_str.data();
+  req.size = static_cast<uint32_t>(q_str.size());
+  req.type_name = "application/json";
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "specific_object_detail.read_detail", &req, &resp), PCL_OK);
+
+  std::string resp_str(static_cast<const char*>(resp.data), resp.size);
+  auto jr = nlohmann::json::parse(resp_str);
+  ASSERT_TRUE(jr.is_array());
+  ASSERT_EQ(jr.size(), 1u);
+  EXPECT_EQ(jr[0].value("id", ""), object_id);
+  // Position should be in radians — verify roughly correct
+  EXPECT_NEAR(jr[0]["position"].value("latitude", 0.0), 52.0 * DEG, 1e-10);
+  EXPECT_NEAR(jr[0]["position"].value("longitude", 0.0), 1.0 * DEG, 1e-10);
 }

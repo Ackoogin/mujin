@@ -57,7 +57,10 @@ static data_model::ObjectEvidenceRequirement evidence_requirement_from_internal_
 // ---------------------------------------------------------------------------
 
 static const char* SVC_CREATE_REQUIREMENT     = "object_of_interest.create_requirement";
+static const char* SVC_READ_MATCH             = "matching_objects.read_match";
+static const char* SVC_READ_DETAIL            = "specific_object_detail.read_detail";
 static const char* SVC_SUBSCRIBE_INTEREST     = "subscribe_interest";
+static const char* SVC_QUERY                  = "query";
 static const char* SVC_CREATE_EVIDENCE_REQ    = "object_solution_evidence.create_requirement";
 
 static const char* TOPIC_STD_ENTITY_MATCHES   = "standard.entity_matches";
@@ -83,10 +86,10 @@ StandardBridge::StandardBridge(TacticalObjectsRuntime& runtime, pcl_executor_t* 
 // ---------------------------------------------------------------------------
 
 pcl_status_t StandardBridge::on_configure() {
-  // Provided standard service
-  if (!addService(SVC_CREATE_REQUIREMENT, TYPE_JSON, handleCreateRequirement, this)) {
-    return PCL_ERR_CALLBACK;
-  }
+  // Provided standard services
+  if (!addService(SVC_CREATE_REQUIREMENT, TYPE_JSON, handleCreateRequirement, this)) return PCL_ERR_CALLBACK;
+  if (!addService(SVC_READ_MATCH,         TYPE_JSON, handleReadMatch,         this)) return PCL_ERR_CALLBACK;
+  if (!addService(SVC_READ_DETAIL,        TYPE_JSON, handleReadDetail,        this)) return PCL_ERR_CALLBACK;
 
   // Publisher for standard output matches
   pub_entity_matches_ = addPublisher(TOPIC_STD_ENTITY_MATCHES,  TYPE_JSON);
@@ -277,6 +280,115 @@ pcl_status_t StandardBridge::handleCreateRequirement(pcl_container_t*,
   }
 
   self->resp_buf_     = std_resp.dump();
+  response->data      = self->resp_buf_.data();
+  response->size      = static_cast<uint32_t>(self->resp_buf_.size());
+  response->type_name = TYPE_JSON;
+  return PCL_OK;
+}
+
+// ---------------------------------------------------------------------------
+// Service: matching_objects.read_match
+// ---------------------------------------------------------------------------
+
+pcl_status_t StandardBridge::handleReadMatch(pcl_container_t*, const pcl_msg_t* request,
+                                              pcl_msg_t* response, pcl_svc_context_t*,
+                                              void* user_data) {
+  auto* self = static_cast<StandardBridge*>(user_data);
+
+  // Parse standard Query — extract optional id[] filter list
+  std::vector<std::string> filter_ids;
+  if (request->data && request->size > 0) {
+    try {
+      auto q = json::parse(std::string(static_cast<const char*>(request->data), request->size));
+      if (q.contains("id") && q["id"].is_array()) {
+        for (const auto& item : q["id"]) filter_ids.push_back(item.get<std::string>());
+      }
+    } catch (...) {}
+  }
+
+  json result_arr = json::array();
+
+  auto call_query = [&](const std::string& payload) {
+    char raw[65536] = {};
+    pcl_msg_t ireq{}, iresp{};
+    ireq.data      = payload.empty() ? nullptr : static_cast<const void*>(payload.data());
+    ireq.size      = static_cast<uint32_t>(payload.size());
+    ireq.type_name = TYPE_JSON;
+    iresp.data     = raw;
+    iresp.size     = sizeof(raw);
+    if (pcl_executor_invoke_service(self->exec_, SVC_QUERY, &ireq, &iresp) != PCL_OK) return;
+    try {
+      auto jr = json::parse(std::string(static_cast<const char*>(iresp.data), iresp.size));
+      for (const auto& entry : jr.value("entries", json::array())) {
+        std::string id_str = entry.value("id", "");
+        if (id_str.empty()) continue;
+        data_model::ObjectMatch m{};
+        m.id = id_str;
+        m.matching_object_id = id_str;
+        m.source = "tactical_objects";
+        result_arr.push_back(json::parse(tactical_codec::toJson(m)));
+      }
+    } catch (...) {}
+  };
+
+  if (filter_ids.empty()) {
+    call_query("");
+  } else {
+    for (const auto& id_str : filter_ids) {
+      call_query(json{{"by_uuid", id_str}}.dump());
+    }
+  }
+
+  self->resp_buf_     = result_arr.dump();
+  response->data      = self->resp_buf_.data();
+  response->size      = static_cast<uint32_t>(self->resp_buf_.size());
+  response->type_name = TYPE_JSON;
+  return PCL_OK;
+}
+
+// ---------------------------------------------------------------------------
+// Service: specific_object_detail.read_detail
+// ---------------------------------------------------------------------------
+
+pcl_status_t StandardBridge::handleReadDetail(pcl_container_t*, const pcl_msg_t* request,
+                                               pcl_msg_t* response, pcl_svc_context_t*,
+                                               void* user_data) {
+  auto* self = static_cast<StandardBridge*>(user_data);
+
+  std::vector<std::string> ids;
+  if (request->data && request->size > 0) {
+    try {
+      auto q = json::parse(std::string(static_cast<const char*>(request->data), request->size));
+      if (q.contains("id") && q["id"].is_array()) {
+        for (const auto& item : q["id"]) ids.push_back(item.get<std::string>());
+      }
+    } catch (...) {}
+  }
+
+  json result_arr = json::array();
+  for (const auto& id_str : ids) {
+    auto parsed = pyramid::core::uuid::UUIDHelper::fromString(id_str);
+    if (!parsed.second) continue;
+    UUIDKey obj_id(parsed.first);
+
+    if (!self->runtime_.getRecord(obj_id)) continue;
+
+    data_model::ObjectDetail detail{};
+    detail.id = id_str;
+
+    const auto* kc = self->runtime_.store()->kinematics().get(obj_id);
+    if (kc) {
+      detail.position.latitude  = kc->position.lat;  // radians — standard format
+      detail.position.longitude = kc->position.lon;
+    }
+
+    const auto* qc = self->runtime_.store()->quality().get(obj_id);
+    if (qc) detail.quality = qc->confidence;
+
+    result_arr.push_back(json::parse(tactical_codec::toJson(detail)));
+  }
+
+  self->resp_buf_     = result_arr.dump();
   response->data      = self->resp_buf_.data();
   response->size      = static_cast<uint32_t>(self->resp_buf_.size());
   response->type_name = TYPE_JSON;
