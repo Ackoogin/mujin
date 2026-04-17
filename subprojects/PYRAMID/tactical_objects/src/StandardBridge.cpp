@@ -36,18 +36,10 @@ static data_model::PolyArea make_poly_area(double min_lat_rad,
 static data_model::ObjectEvidenceRequirement evidence_requirement_from_internal_json(const json& j) {
   data_model::ObjectEvidenceRequirement req{};
   req.base.id = j.value("id", "");
-  req.policy = j.value("policy", "") == "DATA_POLICY_QUERY"
-                   ? data_model::DataPolicy::Query
-                   : data_model::DataPolicy::Obtain;
-  const std::string dimension = j.value("dimension", "");
-  if (dimension == "BATTLE_DIMENSION_GROUND") {
-    req.dimension.push_back(data_model::BattleDimension::Ground);
-  } else if (dimension == "BATTLE_DIMENSION_AIR") {
-    req.dimension.push_back(data_model::BattleDimension::Air);
-  } else if (dimension == "BATTLE_DIMENSION_SEA_SURFACE") {
-    req.dimension.push_back(data_model::BattleDimension::SeaSurface);
-  } else if (dimension == "BATTLE_DIMENSION_SUBSURFACE") {
-    req.dimension.push_back(data_model::BattleDimension::Subsurface);
+  req.policy  = static_cast<data_model::DataPolicy>(j.value("policy", 0));
+  int dim_int = j.value("dimension", 0);
+  if (dim_int != 0) {
+    req.dimension.push_back(static_cast<data_model::BattleDimension>(dim_int));
   }
   if (j.contains("min_lat_rad") && j.contains("max_lat_rad") &&
       j.contains("min_lon_rad") && j.contains("max_lon_rad")) {

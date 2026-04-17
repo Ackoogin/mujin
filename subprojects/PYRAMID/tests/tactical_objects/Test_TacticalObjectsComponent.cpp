@@ -911,11 +911,15 @@ TEST(TacticalObjectsComponent, SubscribeInterestActiveFindReturnsEvidenceRequire
   pcl::Executor exec;
   exec.add(comp);
 
+  static constexpr double DEG = 3.14159265358979323846 / 180.0;
   nlohmann::json j_req;
   j_req["query_mode"]       = "active_find";
   j_req["object_type"]      = "Platform";
   j_req["affiliation"]      = "Hostile";
   j_req["battle_dimension"] = "Air";
+  j_req["area"] = nlohmann::json::object({
+      {"min_lat", 50.0 * DEG}, {"max_lat", 52.0 * DEG},
+      {"min_lon", -1.0 * DEG}, {"max_lon", 1.0 * DEG}});
   j_req["expires_at"]       = 9999.0;
 
   std::string req_str = j_req.dump();
@@ -937,14 +941,18 @@ TEST(TacticalObjectsComponent, SubscribeInterestActiveFindReturnsEvidenceRequire
   ASSERT_TRUE(jr.contains("interest_id"));
   ASSERT_TRUE(jr.contains("solution_id"));
   ASSERT_TRUE(jr.contains("evidence_requirements"));
+  ASSERT_FALSE(jr["evidence_requirements"].empty());
 
-  // The evidence requirements should mention battle_dimension (covers line 88 in InterestManager).
-  bool found = false;
+  // Each requirement must have aligned id, policy, dimension, and area fields.
   for (auto& ev : jr["evidence_requirements"]) {
-    std::string desc = ev.value("evidence_description", "");
-    if (desc.find("battle_dimension") != std::string::npos) found = true;
+    EXPECT_TRUE(ev.contains("id"));
+    EXPECT_FALSE(ev.value("id", std::string{}).empty());
+    EXPECT_EQ(ev.value("policy", -1), 1);           // DataPolicy::Query = 1
+    EXPECT_EQ(ev.value("dimension", -1), 4);         // BattleDimension::Air = 4
+    EXPECT_TRUE(ev.contains("min_lat_rad"));
+    EXPECT_NEAR(ev.value("min_lat_rad", 0.0), 50.0 * DEG, 1e-12);
+    EXPECT_NEAR(ev.value("max_lat_rad", 0.0), 52.0 * DEG, 1e-12);
   }
-  EXPECT_TRUE(found);
 }
 
 ///< Coverage: subscribe_interest with query_mode="read_current" sets ReadCurrent (line 422).

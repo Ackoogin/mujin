@@ -40,7 +40,7 @@ Progress tracked against the 6-phase plan below.
 | 1 | Bridge component (StandardBridge) | **COMPLETE** |
 | 2 | Enum ordinal alignment (Affiliation, BattleDimension) | **COMPLETE** |
 | 3 | Position alignment (radians) | **COMPLETE** |
-| 4 | Interest/Evidence model alignment | pending |
+| 4 | Interest/Evidence model alignment | **COMPLETE** |
 | 5 | Service name alignment | pending |
 | 6 | Remove bridge (now identity-only) | pending |
 
@@ -67,6 +67,32 @@ lockstep.
 
 **Wire-format impact**: binary streaming ordinals changed.  Any existing
 recorded binary data or live clients must upgrade together.
+
+### Phase 4 — Interest/Evidence model alignment ✅
+
+`DerivedEvidenceRequirement` JSON serialization in `TacticalObjectsComponent`
+enriched to carry all fields the bridge needs; bridge updated to integer-based
+parsing leveraging aligned ordinals from Phase 2.
+
+Changes made:
+- `TacticalObjectsComponent.cpp` (`handleSubscribeInterest`): evidence requirement
+  JSON now emits `"id"` (was `"requirement_id"`), `"policy"` as integer ordinal
+  (1 = `DataPolicy::Query`), `"dimension"` as integer ordinal when
+  `criteria.battle_dimension` is set, and `"min/max_lat/lon_rad"` area fields
+  when `criteria.area` is set.
+- `StandardBridge.cpp` (`evidence_requirement_from_internal_json`): replaced
+  string-based policy/dimension parsing with direct `static_cast` using aligned
+  ordinals (Phase 2 guarantee); function is now 8 lines vs 18.
+- `Test_TacticalObjectsComponent.cpp`
+  (`SubscribeInterestActiveFindReturnsEvidenceRequirements`): updated to supply
+  an AOI in the subscribe request and assert that each returned evidence
+  requirement carries `id`, `policy=1`, `dimension=4` (Air), and
+  `min_lat_rad ≈ 50°` — verifying the full round-trip.
+
+**Bridge impact**: `evidence_requirement_from_internal_json` is now a thin
+`static_cast` mapping; string-comparison chains removed.
+
+---
 
 ### Phase 3 — Position alignment (radians) ✅
 
