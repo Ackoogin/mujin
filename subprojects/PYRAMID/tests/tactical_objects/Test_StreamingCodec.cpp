@@ -28,7 +28,8 @@ static ObjectStore makeStoreWithEntity(UUIDKey id,
 // ---------------------------------------------------------------------------
 
 TEST(StreamingCodec, AffiliationOrdinalRoundTrip) {
-  for (int i = 0; i <= static_cast<int>(Affiliation::Pending); ++i) {
+  // AssumedFriend is the highest ordinal (=9); ordinals 0-9 are all consecutive.
+  for (int i = 0; i <= static_cast<int>(Affiliation::AssumedFriend); ++i) {
     auto a = static_cast<Affiliation>(i);
     EXPECT_EQ(a, StreamingCodec::ordinalToAffiliation(StreamingCodec::affiliationToOrdinal(a)));
   }

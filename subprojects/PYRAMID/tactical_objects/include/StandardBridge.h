@@ -84,13 +84,6 @@ private:
   /// standard.object_evidence (JSON) → processObservationBatch
   static void onStandardObjectEvidence(pcl_container_t* c, const pcl_msg_t* msg, void* user_data);
 
-  // ---- Enum converters (standard ↔ internal strings) ----------------------
-
-  static std::string affiliationToStandardIdentity(Affiliation a);
-  static Affiliation  standardIdentityToAffiliation(const std::string& s);
-  static std::string  battleDimToStandard(BattleDimension d);
-  static BattleDimension standardToBattleDim(const std::string& s);
-
   // ---- Position conversion -------------------------------------------------
   static double degToRad(double deg) { return deg * 0.017453292519943295; }
   static double radToDeg(double rad) { return rad * 57.29577951308232; }

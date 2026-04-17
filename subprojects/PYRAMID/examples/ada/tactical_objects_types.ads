@@ -198,33 +198,34 @@ package Tactical_Objects_Types is
 
   -- =========================================================================
   --  Legacy types: kept for Streaming_Codec wire-format decode compatibility.
-  --  C++ StreamingCodec ordinals differ from standard proto ordinals for
-  --  Affiliation and ObjectType.
+  --  Ordinals now match PYRAMID standard proto (StandardIdentity / BattleDimension)
+  --  after Phase 2 alignment.
   -- =========================================================================
 
-  --  Affiliation — ordinal matches C++ StreamingCodec.affiliationToOrdinal
+  --  Affiliation — ordinals match pyramid.data_model.common.StandardIdentity
+  --  (Phase 2 aligned with C++ StreamingCodec.affiliationToOrdinal)
   type Affiliation is
     (Affiliation_Unspecified,  --  0
-     Friendly,                  --  1
-     Hostile,                   --  2
-     Neutral,                   --  3
-     Unknown,                   --  4
-     Assumed_Friend,            --  5
-     Suspect,                   --  6
+     Unknown,                   --  1
+     Friendly,                  --  2
+     Hostile,                   --  3
+     Suspect,                   --  4
+     Neutral,                   --  5
+     Pending,                   --  6
      Joker,                     --  7
      Faker,                     --  8
-     Pending);                  --  9
+     Assumed_Friend);           --  9
   for Affiliation use
     (Affiliation_Unspecified => 0,
-     Friendly      => 1,
-     Hostile       => 2,
-     Neutral       => 3,
-     Unknown       => 4,
-     Assumed_Friend => 5,
-     Suspect       => 6,
+     Unknown       => 1,
+     Friendly      => 2,
+     Hostile       => 3,
+     Suspect       => 4,
+     Neutral       => 5,
+     Pending       => 6,
      Joker         => 7,
      Faker         => 8,
-     Pending       => 9);
+     Assumed_Friend => 9);
 
   --  ObjectType — ordinal matches C++ StreamingCodec.objectTypeToOrdinal
   type Object_Type is

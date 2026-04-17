@@ -31,7 +31,46 @@ Ada types in `subprojects/PYRAMID/examples/ada/tactical_objects_types.ads`.
 3. Streaming binary performance (0-copy batch frames) is preserved.
 4. Migration is incremental — each step is independently testable.
 
-## 3. Options
+## 3. Option C — Hybrid (selected)
+
+Progress tracked against the 6-phase plan below.
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | Bridge component (StandardBridge) | **COMPLETE** |
+| 2 | Enum ordinal alignment (Affiliation, BattleDimension) | **COMPLETE** |
+| 3 | Position alignment (radians) | pending |
+| 4 | Interest/Evidence model alignment | pending |
+| 5 | Service name alignment | pending |
+| 6 | Remove bridge (now identity-only) | pending |
+
+### Phase 1 — Bridge ✅
+
+`StandardBridge` (C++) deployed as a PCL component that sits between
+external PYRAMID consumers and the internal `TacticalObjectsComponent`.
+
+- Provided: `object_of_interest.create_requirement` (JSON, PYRAMID standard)
+- Provided: `standard.object_evidence` subscriber (JSON, PYRAMID standard)
+- Published: `standard.entity_matches` (JSON, PYRAMID standard)
+- All internal services and binary streaming unchanged.
+
+Constraint honoured: generated types (`pyramid::data_model::*`) appear only
+in `StandardBridge.cpp` — no generated types in business logic.
+
+### Phase 2 — Enum ordinal alignment ✅
+
+`Affiliation` and `BattleDimension` C++ enums reordered with explicit ordinals
+to match PYRAMID standard proto values.  The bridge enum string converters
+are removed; the bridge now uses direct `static_cast` between aligned enums.
+Ada `Ordinal_To_Affiliation` and `tactical_objects_types.ads` updated in
+lockstep.
+
+**Wire-format impact**: binary streaming ordinals changed.  Any existing
+recorded binary data or live clients must upgrade together.
+
+---
+
+## Options (for reference)
 
 ---
 

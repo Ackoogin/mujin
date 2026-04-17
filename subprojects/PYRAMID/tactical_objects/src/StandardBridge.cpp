@@ -143,24 +143,15 @@ pcl_status_t StandardBridge::handleCreateRequirement(pcl_container_t*,
           : "read_current";
 
   if (!req.dimension.empty()) {
-    switch (req.dimension.front()) {
-      case pyramid::data_model::common::BattleDimension::Ground:
-        internal["battle_dimension"] = "Ground";
-        break;
-      case pyramid::data_model::common::BattleDimension::Air:
-        internal["battle_dimension"] = "Air";
-        break;
-      case pyramid::data_model::common::BattleDimension::SeaSurface:
-        internal["battle_dimension"] = "SeaSurface";
-        break;
-      case pyramid::data_model::common::BattleDimension::Subsurface:
-        internal["battle_dimension"] = "Subsurface";
-        break;
-      case pyramid::data_model::common::BattleDimension::Unknown:
-        internal["battle_dimension"] = "Unknown";
-        break;
-      case pyramid::data_model::common::BattleDimension::Unspecified:
-        break;
+    // Ordinals now match — direct cast to internal BattleDimension.
+    switch (static_cast<BattleDimension>(static_cast<int>(req.dimension.front()))) {
+      case BattleDimension::Ground:     internal["battle_dimension"] = "Ground";     break;
+      case BattleDimension::Air:        internal["battle_dimension"] = "Air";        break;
+      case BattleDimension::SeaSurface: internal["battle_dimension"] = "SeaSurface"; break;
+      case BattleDimension::Subsurface: internal["battle_dimension"] = "Subsurface"; break;
+      case BattleDimension::Space:      internal["battle_dimension"] = "Space";      break;
+      case BattleDimension::SOF:        internal["battle_dimension"] = "SOF";        break;
+      default: break;  // Unspecified / Unknown: no dimension filter
     }
   }
 
@@ -380,129 +371,26 @@ void StandardBridge::onStandardObjectEvidence(pcl_container_t*,
   obs.position.lon = self->radToDeg(detail.position.longitude);
   obs.position.alt = 0.0;
 
-  std::string identity = "STANDARD_IDENTITY_UNKNOWN";
-  switch (detail.identity) {
-    case data_model::StandardIdentity::Friendly:
-      identity = "STANDARD_IDENTITY_FRIENDLY";
-      break;
-    case data_model::StandardIdentity::Hostile:
-      identity = "STANDARD_IDENTITY_HOSTILE";
-      break;
-    case data_model::StandardIdentity::Neutral:
-      identity = "STANDARD_IDENTITY_NEUTRAL";
-      break;
-    case data_model::StandardIdentity::Suspect:
-      identity = "STANDARD_IDENTITY_SUSPECT";
-      break;
-    case data_model::StandardIdentity::Pending:
-      identity = "STANDARD_IDENTITY_PENDING";
-      break;
-    case data_model::StandardIdentity::Joker:
-      identity = "STANDARD_IDENTITY_JOKER";
-      break;
-    case data_model::StandardIdentity::Faker:
-      identity = "STANDARD_IDENTITY_FAKER";
-      break;
-    case data_model::StandardIdentity::AssumedFriendly:
-      identity = "STANDARD_IDENTITY_ASSUMED_FRIENDLY";
-      break;
-    case data_model::StandardIdentity::Unknown:
-    case data_model::StandardIdentity::Unspecified:
-      break;
-  }
-  obs.affiliation_hint = self->standardIdentityToAffiliation(identity);
+  // Ordinals now match — direct cast from generated StandardIdentity to internal Affiliation.
+  obs.affiliation_hint = static_cast<Affiliation>(static_cast<int>(detail.identity));
 
-  // Parse standard dimension → SIDC hint
-  std::string dimension = "BATTLE_DIMENSION_UNSPECIFIED";
-  switch (detail.dimension) {
-    case data_model::BattleDimension::Ground:
-      dimension = "BATTLE_DIMENSION_GROUND";
-      break;
-    case data_model::BattleDimension::Air:
-      dimension = "BATTLE_DIMENSION_AIR";
-      break;
-    case data_model::BattleDimension::SeaSurface:
-      dimension = "BATTLE_DIMENSION_SEA_SURFACE";
-      break;
-    case data_model::BattleDimension::Subsurface:
-      dimension = "BATTLE_DIMENSION_SUBSURFACE";
-      break;
-    case data_model::BattleDimension::Unknown:
-      dimension = "BATTLE_DIMENSION_UNKNOWN";
-      break;
-    case data_model::BattleDimension::Unspecified:
-      break;
-  }
-  if (dimension == "BATTLE_DIMENSION_SEA_SURFACE") {
-    obs.source_sidc = "SHSP------*****";
-  } else if (dimension == "BATTLE_DIMENSION_AIR") {
-    obs.source_sidc = "SHAP------*****";
-  } else if (dimension == "BATTLE_DIMENSION_SUBSURFACE") {
-    obs.source_sidc = "SHUP------*****";
-  } else if (dimension == "BATTLE_DIMENSION_GROUND") {
-    obs.source_sidc = "SHGP------*****";
+  // Ordinals now match — direct cast from generated BattleDimension to internal BattleDimension.
+  auto dim = static_cast<BattleDimension>(static_cast<int>(detail.dimension));
+  switch (dim) {
+    case BattleDimension::SeaSurface: obs.source_sidc = "SHSP------*****"; break;
+    case BattleDimension::Air:        obs.source_sidc = "SHAP------*****"; break;
+    case BattleDimension::Subsurface: obs.source_sidc = "SHUP------*****"; break;
+    case BattleDimension::Ground:     obs.source_sidc = "SHGP------*****"; break;
+    default: break;
   }
 
   ObservationBatch batch;
   batch.observations.push_back(obs);
   pcl_log(nullptr, PCL_LOG_INFO,
-          "[StandardBridge] processing standard.object_evidence identity=%s dimension=%s lat=%f lon=%f",
-          identity.c_str(), dimension.c_str(), obs.position.lat, obs.position.lon);
+          "[StandardBridge] processing standard.object_evidence identity=%d dim=%d lat=%f lon=%f",
+          static_cast<int>(obs.affiliation_hint), static_cast<int>(dim),
+          obs.position.lat, obs.position.lon);
   self->runtime_.processObservationBatch(batch);
-}
-
-// ---------------------------------------------------------------------------
-// Enum converters
-// ---------------------------------------------------------------------------
-
-std::string StandardBridge::affiliationToStandardIdentity(Affiliation a) {
-  switch (a) {
-    case Affiliation::Friendly:      return "STANDARD_IDENTITY_FRIENDLY";
-    case Affiliation::Hostile:       return "STANDARD_IDENTITY_HOSTILE";
-    case Affiliation::Neutral:       return "STANDARD_IDENTITY_NEUTRAL";
-    case Affiliation::Unknown:       return "STANDARD_IDENTITY_UNKNOWN";
-    case Affiliation::AssumedFriend: return "STANDARD_IDENTITY_ASSUMED_FRIENDLY";
-    case Affiliation::Suspect:       return "STANDARD_IDENTITY_SUSPECT";
-    case Affiliation::Joker:         return "STANDARD_IDENTITY_JOKER";
-    case Affiliation::Faker:         return "STANDARD_IDENTITY_FAKER";
-    case Affiliation::Pending:       return "STANDARD_IDENTITY_PENDING";
-  }
-  return "STANDARD_IDENTITY_UNKNOWN";
-}
-
-Affiliation StandardBridge::standardIdentityToAffiliation(const std::string& s) {
-  if (s == "STANDARD_IDENTITY_FRIENDLY")         return Affiliation::Friendly;
-  if (s == "STANDARD_IDENTITY_HOSTILE")           return Affiliation::Hostile;
-  if (s == "STANDARD_IDENTITY_NEUTRAL")           return Affiliation::Neutral;
-  if (s == "STANDARD_IDENTITY_UNKNOWN")           return Affiliation::Unknown;
-  if (s == "STANDARD_IDENTITY_ASSUMED_FRIENDLY")  return Affiliation::AssumedFriend;
-  if (s == "STANDARD_IDENTITY_SUSPECT")           return Affiliation::Suspect;
-  if (s == "STANDARD_IDENTITY_JOKER")             return Affiliation::Joker;
-  if (s == "STANDARD_IDENTITY_FAKER")             return Affiliation::Faker;
-  if (s == "STANDARD_IDENTITY_PENDING")           return Affiliation::Pending;
-  return Affiliation::Unknown;
-}
-
-std::string StandardBridge::battleDimToStandard(BattleDimension d) {
-  switch (d) {
-    case BattleDimension::Ground:    return "BATTLE_DIMENSION_GROUND";
-    case BattleDimension::Air:       return "BATTLE_DIMENSION_AIR";
-    case BattleDimension::SeaSurface:return "BATTLE_DIMENSION_SEA_SURFACE";
-    case BattleDimension::Subsurface:return "BATTLE_DIMENSION_SUBSURFACE";
-    case BattleDimension::Space:     return "BATTLE_DIMENSION_SPACE";
-    case BattleDimension::SOF:       return "BATTLE_DIMENSION_SOF";
-  }
-  return "BATTLE_DIMENSION_GROUND";
-}
-
-BattleDimension StandardBridge::standardToBattleDim(const std::string& s) {
-  if (s == "BATTLE_DIMENSION_GROUND")      return BattleDimension::Ground;
-  if (s == "BATTLE_DIMENSION_AIR")         return BattleDimension::Air;
-  if (s == "BATTLE_DIMENSION_SEA_SURFACE") return BattleDimension::SeaSurface;
-  if (s == "BATTLE_DIMENSION_SUBSURFACE")  return BattleDimension::Subsurface;
-  if (s == "BATTLE_DIMENSION_SPACE")       return BattleDimension::Space;
-  if (s == "BATTLE_DIMENSION_SOF")         return BattleDimension::SOF;
-  return BattleDimension::Ground;
 }
 
 } // namespace tactical_objects
