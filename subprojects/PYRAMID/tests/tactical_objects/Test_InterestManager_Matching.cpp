@@ -7,6 +7,8 @@
 using namespace tactical_objects;
 using namespace pyramid::core::uuid;
 
+static constexpr double DEG = 3.14159265358979323846 / 180.0;
+
 // ---------------------------------------------------------------------------
 // matchesInterest — per-dimension tests
 // ---------------------------------------------------------------------------
@@ -77,7 +79,7 @@ TEST(InterestManagerMatching, AreaFilterMatchesCorrectly) {
   UUIDKey id = store.createObject(ObjectType::Platform);
 
   KinematicsComponent kc;
-  kc.position = {51.0, 0.0, 0.0};  // inside bbox
+  kc.position = {51.0 * DEG, 0.0, 0.0};  // inside bbox
   store.kinematics().set(id, kc);
 
   const auto* rec = store.getRecord(id);
@@ -88,14 +90,14 @@ TEST(InterestManagerMatching, AreaFilterMatchesCorrectly) {
   // Entity inside bbox
   {
     InterestCriteria crit;
-    crit.area = BoundingBox{50.0, 52.0, -1.0, 1.0};
+    crit.area = BoundingBox{50.0 * DEG, 52.0 * DEG, -1.0 * DEG, 1.0 * DEG};
     EXPECT_TRUE(mgr.matchesInterest(crit, *rec, store));
   }
 
   // Entity outside bbox
   {
     InterestCriteria crit;
-    crit.area = BoundingBox{10.0, 20.0, 10.0, 20.0};
+    crit.area = BoundingBox{10.0 * DEG, 20.0 * DEG, 10.0 * DEG, 20.0 * DEG};
     EXPECT_FALSE(mgr.matchesInterest(crit, *rec, store));
   }
 }
@@ -199,7 +201,7 @@ TEST(InterestManagerMatching, MatchingInterestsReturnsCorrectIds) {
   store.milclass().set(id, mc);
 
   KinematicsComponent kc;
-  kc.position = {51.0, 0.0, 0.0};
+  kc.position = {51.0 * DEG, 0.0, 0.0};
   store.kinematics().set(id, kc);
 
   const auto* rec = store.getRecord(id);
@@ -220,7 +222,7 @@ TEST(InterestManagerMatching, MatchingInterestsReturnsCorrectIds) {
   // Interest 3: Hostile + area match — should match
   InterestCriteria crit3;
   crit3.affiliation = Affiliation::Hostile;
-  crit3.area = BoundingBox{50.0, 52.0, -1.0, 1.0};
+  crit3.area = BoundingBox{50.0 * DEG, 52.0 * DEG, -1.0 * DEG, 1.0 * DEG};
   auto i3 = mgr.registerInterest(crit3);
 
   // Interest 4: cancelled — should never appear

@@ -31,7 +31,237 @@ Ada types in `subprojects/PYRAMID/examples/ada/tactical_objects_types.ads`.
 3. Streaming binary performance (0-copy batch frames) is preserved.
 4. Migration is incremental — each step is independently testable.
 
-## 3. Options
+### Production Alignment Status
+
+The original 6-phase plan captured the internal model-alignment work, but it
+did not guarantee that the **shipped executable path** (`tactical_objects_app`)
+was actually exposing the generated proto contract. The follow-on work below is
+the production-facing completion plan for that gap.
+
+| Workstream | Intent | Status |
+|-----------|--------|--------|
+| Shipped provided interface uses generated bindings | `tactical_objects_app` serves the proto-defined provided services via generated dispatch/codecs | **COMPLETE** |
+| Interest lifecycle surface is complete | `create/read/update/delete requirement` all exposed on the shipped path | **COMPLETE** |
+| Rich standard object model | `read_detail` populates the standard `ObjectDetail` fields from the internal store, not just `id/position/quality` | **COMPLETE** |
+| Multi-codec frontend | Standard interface selectable as JSON or FlatBuffers on the shipped path | **COMPLETE** |
+| Protobuf frontend parity | Same shipped-path validation for protobuf transport/content-type | **COMPLETE** |
+| Real-app interop coverage | Automated tests exercise `tactical_objects_app`, not only the standalone test bridge | **IN PROGRESS** |
+
+### Delivered In This Change
+
+- `StandardBridge` on the shipped path now uses the generated tactical-objects
+  provided/consumed bindings for service dispatch and payload encoding.
+- `tactical_objects_app` now hosts the standard interface directly using a
+  selectable frontend codec (`application/json` or `application/flatbuffers`),
+  instead of relying on a manual local-consumed bridge.
+- The provided interface now exposes the full standard interest lifecycle:
+  `object_of_interest.create_requirement`, `.read_requirement`,
+  `.update_requirement`, `.delete_requirement`, plus
+  `matching_objects.read_match` and `specific_object_detail.read_detail`.
+- `specific_object_detail.read_detail` now maps the internal business model onto
+  the richer standard `ObjectDetail` view:
+  `update_time`, `entity_source`, `source[]`, `position`, `creation_time`,
+  `quality`, `course`, `speed`, `identity`, and `dimension`.
+- A direct app/client test driver has been added so the real executable path can
+  be exercised in JSON, FlatBuffers, and protobuf modes.
+- The generated tactical-objects service bindings now correctly detect and wire
+  protobuf codecs at compile time, so the shipped app/client path can use the
+  generated protobuf transport end to end instead of silently compiling that
+  path out.
+
+### Remaining Work
+
+- Extend the real-app automated coverage to the Ada active-find path so the
+  production executable, not only the standalone bridge harness, is the default
+  interop target.
+- Decide whether `standard.entity_matches` remains the standard high-rate
+  projection of the internal binary stream, or whether an additional
+  bulk-detail/batch-detail standard path is needed for consumers that want more
+  than `ObjectMatch` without paying repeated `read_detail` round-trips.
+
+## 3. Option C — Hybrid (selected)
+
+Progress tracked against the 6-phase plan below.
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | Bridge component (StandardBridge) | **COMPLETE** |
+| 2 | Enum ordinal alignment (Affiliation, BattleDimension) | **COMPLETE** |
+| 3 | Position alignment (radians) | **COMPLETE** |
+| 4 | Interest/Evidence model alignment | **COMPLETE** |
+| 5 | Service name alignment | **COMPLETE** |
+| 6 | Remove bridge (now identity-only) | **COMPLETE** |
+
+### Phase 1 — Bridge ✅
+
+`StandardBridge` (C++) deployed as a PCL component that sits between
+external PYRAMID consumers and the internal `TacticalObjectsComponent`.
+
+- Provided: `object_of_interest.create_requirement` (JSON, PYRAMID standard)
+- Provided: `standard.object_evidence` subscriber (JSON, PYRAMID standard)
+- Published: `standard.entity_matches` (JSON, PYRAMID standard)
+- All internal services and binary streaming unchanged.
+
+Constraint honoured: generated types (`pyramid::data_model::*`) appear only
+in `StandardBridge.cpp` — no generated types in business logic.
+
+### Phase 2 — Enum ordinal alignment ✅
+
+`Affiliation` and `BattleDimension` C++ enums reordered with explicit ordinals
+to match PYRAMID standard proto values.  The bridge enum string converters
+are removed; the bridge now uses direct `static_cast` between aligned enums.
+Ada `Ordinal_To_Affiliation` and `tactical_objects_types.ads` updated in
+lockstep.
+
+**Wire-format impact**: binary streaming ordinals changed.  Any existing
+recorded binary data or live clients must upgrade together.
+
+### Phase 6 — Remove bridge (now identity-only) ✅
+
+This milestone should be read as **historical internal-alignment progress**, not
+as proof that the shipped path was done. The bridge is not literally removed —
+it remains as the protocol adapter between the internal runtime and the
+generated standard contract — but after the production migration work above it
+is now a generated-binding-based adapter rather than a hand-written JSON bridge.
+
+### Progress Update — 2026-04-18
+
+- The shipped `tactical_objects_app` path is now validated with the generated
+  bindings across all three supported frontend codecs:
+  `application/json`, `application/flatbuffers`, and
+  `application/protobuf`.
+- The focused protobuf gap turned out to be in the generated service-binding
+  implementation, not in the tactical-object business mapping itself:
+  the generated tactical-objects binding `.cpp` files had protobuf branches,
+  but they did not include the protobuf codec header or define the
+  `PYRAMID_HAVE_SERVICE_PROTOBUF` feature macro, which meant protobuf support
+  was compiled out on the shipped path.
+- The generator has been updated so future regenerated tactical-objects service
+  bindings detect protobuf codecs in the same way they already detect
+  FlatBuffers codecs.
+- A direct real-app protobuf integration test now complements the existing
+  JSON and FlatBuffers app/client tests.
+
+**Last string-conversion chain removed:**
+The `handleCreateRequirement` switch that mapped `BattleDimension` ordinals to
+string names ("Air", "Ground", …) is replaced with a single
+`internal["battle_dimension"] = static_cast<int>(dim)` emit.
+`handleSubscribeInterest` now accepts integer ordinals in addition to strings
+(integer branch tried first; string branch retained for backward compatibility).
+This is a direct consequence of the Phase 2 ordinal alignment.
+
+**Residual bridge contract — inherent schema differences, cannot be removed:**
+
+| Translation | Reason it is permanent |
+|-------------|------------------------|
+| `DataPolicy::Obtain` ↔ `query_mode = "active_find"` | Semantic equivalence between two different naming schemes (`policy` vs `query_mode`); no shared ordinal |
+| `PolyArea`/`CircleArea`/`Point` oneof ↔ flat `BoundingBox` | Standard uses geometry abstraction; internal uses axis-aligned bbox; changing would alter correlation/spatial engine contracts |
+| Binary `EntityUpdateFrame` stream ↔ `ObjectMatch[]` JSON | Streaming binary for performance; standard is JSON for interoperability; wire-format unification would break zero-copy path |
+| `ObjectDetail` ↔ `Observation` (inbound evidence) | Standard observation type has rich provenance; internal `Observation` maps to correlation engine vocabulary |
+
+All remaining translations are justified by the schema boundary between the
+PYRAMID standard IDL and the internal domain model. The bridge is the correct
+and permanent home for this mapping.
+
+**Changes made:**
+- `TacticalObjectsComponent.cpp` (`handleSubscribeInterest`): added integer
+  ordinal branch for `battle_dimension` (tries integer, falls back to string).
+- `StandardBridge.cpp` (`handleCreateRequirement`): 10-line switch replaced
+  with `internal["battle_dimension"] = static_cast<int>(dim)` (3 lines),
+  conditioned on `dim != 0` (Unspecified = no filter).
+
+### Phase 5 — Service name alignment ✅
+
+`StandardBridge` now exposes the two standard read services, completing the
+provided-interface surface alongside the already-standard
+`object_of_interest.create_requirement`.
+
+Services added to `StandardBridge`:
+- **`matching_objects.read_match`** — accepts standard `Query` JSON
+  (`{"id": ["<uuid>", ...]}` or empty for all); calls the internal `query`
+  service via the shared executor; translates each `QueryResultEntry` into an
+  `ObjectMatch` (`id`, `matching_object_id`, `source = "tactical_objects"`)
+  and returns a JSON array.
+- **`specific_object_detail.read_detail`** — accepts standard `Query` JSON;
+  for each requested UUID looks up the entity directly in the runtime (position
+  is already in radians per Phase 3); builds an `ObjectDetail` (`id`,
+  `position.latitude/longitude`, `quality`) and returns a JSON array.
+
+Changes made:
+- `StandardBridge.h`: declared `handleReadMatch` and `handleReadDetail`.
+- `StandardBridge.cpp`: added `SVC_READ_MATCH`, `SVC_READ_DETAIL`, and
+  `SVC_QUERY` constants; registered both new services in `on_configure`;
+  implemented both handlers.
+- `Test_TacticalObjectsComponent.cpp`: added `#include <StandardBridge.h>`;
+  added `StandardReadMatchReturnsMatchArray` and
+  `StandardReadDetailReturnsDetailArray` tests — each creates a `StandardBridge`
+  in the executor alongside `TacticalObjectsComponent` and verifies the
+  full request→response translation.
+
+**Standard interface now complete (provided side):**
+
+| Standard wire name | Internal call |
+|--------------------|---------------|
+| `object_of_interest.create_requirement` | `subscribe_interest` |
+| `matching_objects.read_match` | `query` |
+| `specific_object_detail.read_detail` | runtime `getRecord` + `kinematics` |
+
+**Wire-format impact**: no change to existing services or binary codec.
+
+---
+
+### Phase 4 — Interest/Evidence model alignment ✅
+
+`DerivedEvidenceRequirement` JSON serialization in `TacticalObjectsComponent`
+enriched to carry all fields the bridge needs; bridge updated to integer-based
+parsing leveraging aligned ordinals from Phase 2.
+
+Changes made:
+- `TacticalObjectsComponent.cpp` (`handleSubscribeInterest`): evidence requirement
+  JSON now emits `"id"` (was `"requirement_id"`), `"policy"` as integer ordinal
+  (1 = `DataPolicy::Query`), `"dimension"` as integer ordinal when
+  `criteria.battle_dimension` is set, and `"min/max_lat/lon_rad"` area fields
+  when `criteria.area` is set.
+- `StandardBridge.cpp` (`evidence_requirement_from_internal_json`): replaced
+  string-based policy/dimension parsing with direct `static_cast` using aligned
+  ordinals (Phase 2 guarantee); function is now 8 lines vs 18.
+- `Test_TacticalObjectsComponent.cpp`
+  (`SubscribeInterestActiveFindReturnsEvidenceRequirements`): updated to supply
+  an AOI in the subscribe request and assert that each returned evidence
+  requirement carries `id`, `policy=1`, `dimension=4` (Air), and
+  `min_lat_rad ≈ 50°` — verifying the full round-trip.
+
+**Bridge impact**: `evidence_requirement_from_internal_json` is now a thin
+`static_cast` mapping; string-comparison chains removed.
+
+---
+
+### Phase 3 — Position alignment (radians) ✅
+
+Internal `Position.lat/lon` and `BoundingBox` fields now store radians instead
+of degrees, matching the PYRAMID standard `GeodeticPosition.Angle.radians` wire
+format.
+
+Changes made:
+- `GeoMath.h`: `haversineMeters` and `circleBoundingBox` no longer call
+  `degToRad()` — positions are already in radians.
+- `SpatialIndex.h`: default `cell_size_rad = 0.017453292519943295` (1°).
+- `CorrelationEngine.h/.cpp`: `gate_radius_deg` renamed to `gate_radius_rad`
+  (default 0.5° in rad); `gate_m` now computed via `EARTH_RADIUS_M`.
+- `StandardBridge.h`: `degToRad`/`radToDeg` helpers removed (now identity).
+- `StandardBridge.cpp`: `onStandardObjectEvidence` copies latitude/longitude
+  directly; `set_bbox` passes radian values straight through to JSON.
+- `tactical_objects_main.cpp`: local `radToDeg` removed; `latitude_rad` /
+  `longitude_rad` JSON fields assigned directly to `Position`.
+- All 7 test suites updated with `constexpr double DEG = PI / 180.0` and all
+  degree literals converted (107 tests, all passing).
+
+**Bridge impact**: `radToDeg`/`degToRad` conversions removed from bridge.
+The bridge is now a pure type-mapping layer for position (no unit conversion).
+
+---
+
+## Options (for reference)
 
 ---
 
@@ -372,4 +602,3 @@ If the timeline is extremely compressed and internal consumers can tolerate
 breakage, Option A is faster end-to-end. If standard compliance is the
 only external requirement and internal migration is not needed, Option B
 alone is sufficient.
-

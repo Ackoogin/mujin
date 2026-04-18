@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <TacticalObjectsComponent.h>
 #include <TacticalObjectsCodec.h>
+#include <StandardBridge.h>
 #include <pcl/executor.hpp>
 #include <pcl/pcl_executor.h>
 #include <uuid/UUIDHelper.h>
@@ -11,6 +12,8 @@
 
 using namespace tactical_objects;
 using namespace pyramid::core::uuid;
+
+static constexpr double DEG = 3.14159265358979323846 / 180.0;
 
 ///< REQ_TACTICAL_OBJECTS_033: All ports created during on_configure.
 ///< TOBJ.045: Snapshot and event access via PCL lifecycle.
@@ -45,7 +48,7 @@ TEST(TacticalObjectsComponent, EvidenceIngressViaSubscriber) {
   ObservationBatch batch;
   Observation obs;
   obs.observation_id = UUIDHelper::generateV4();
-  obs.position = Position{51.5, -0.1, 0};
+  obs.position = Position{51.5 * DEG, -0.1 * DEG, 0};
   obs.confidence = 0.8;
   obs.affiliation_hint = Affiliation::Hostile;
   obs.source_ref.source_system = "radar";
@@ -81,7 +84,7 @@ TEST(TacticalObjectsComponent, DirectCreateViaService) {
 
   ObjectDefinition def;
   def.type = ObjectType::Platform;
-  def.position = Position{51.5, -0.1, 0};
+  def.position = Position{51.5 * DEG, -0.1 * DEG, 0};
   def.affiliation = Affiliation::Friendly;
   def.mil_class.battle_dim = BattleDimension::Ground;
   def.mil_class.role = "infantry";
@@ -127,7 +130,7 @@ TEST(TacticalObjectsComponent, DirectUpdateViaService) {
 
   ObjectDefinition def;
   def.type = ObjectType::Platform;
-  def.position = Position{51.5, -0.1, 0};
+  def.position = Position{51.5 * DEG, -0.1 * DEG, 0};
   def.affiliation = Affiliation::Friendly;
   auto j_create = TacticalObjectsCodec::encodeObjectDefinition(def);
   std::string req_str = j_create.dump();
@@ -199,7 +202,7 @@ TEST(TacticalObjectsComponent, QueryViaService) {
   comp.runtime().createObject(ObjectDefinition());
   Observation obs;
   obs.observation_id = UUIDHelper::generateV4();
-  obs.position = Position{52.0, 0.0, 0};
+  obs.position = Position{52.0 * DEG, 0.0, 0};
   obs.confidence = 0.7;
   obs.affiliation_hint = Affiliation::Neutral;
   obs.source_ref.source_system = "radar";
@@ -275,7 +278,7 @@ TEST(TacticalObjectsComponent, ZoneUpsertViaService) {
 
   ZoneDefinition def;
   def.zone_type = ZoneType::AOI;
-  def.geometry.center = Position{51.0, 0.0, 0};
+  def.geometry.center = Position{51.0 * DEG, 0.0, 0};
   def.geometry.radius_m = 5000.0;
   auto j_req = TacticalObjectsCodec::encodeZoneDefinition(def);
   std::string req_str = j_req.dump();
@@ -306,7 +309,7 @@ TEST(TacticalObjectsComponent, ZoneRemoveViaService) {
 
   ZoneDefinition def;
   def.zone_type = ZoneType::AOI;
-  def.geometry.center = Position{51.0, 0.0, 0};
+  def.geometry.center = Position{51.0 * DEG, 0.0, 0};
   def.geometry.radius_m = 5000.0;
   auto zid = comp.runtime().createZone(def);
 
@@ -620,7 +623,7 @@ TEST(TacticalObjectsComponent, SubscribeInterestViaService) {
   nlohmann::json j_req;
   j_req["object_type"] = "Platform";
   j_req["affiliation"] = "Hostile";
-  j_req["area"] = nlohmann::json::object({{"min_lat", 50.0}, {"max_lat", 52.0}, {"min_lon", -1.0}, {"max_lon", 1.0}});
+  j_req["area"] = nlohmann::json::object({{"min_lat", 50.0 * DEG}, {"max_lat", 52.0 * DEG}, {"min_lon", -1.0 * DEG}, {"max_lon", 1.0 * DEG}});
   j_req["behavior_pattern"] = "patrol";
   j_req["minimum_confidence"] = 0.7;
   j_req["expires_at"] = 9999.0;
@@ -657,7 +660,7 @@ TEST(TacticalObjectsComponent, ResyncViaService) {
 
   ObjectDefinition def;
   def.type = ObjectType::Platform;
-  def.position = Position{51.0, 0.0, 0};
+  def.position = Position{51.0 * DEG, 0.0, 0};
   def.affiliation = Affiliation::Hostile;
   comp.runtime().createObject(def);
 
@@ -779,7 +782,7 @@ TEST(TacticalObjectsComponent, ChunkingWithMaxEntitiesPerFrame) {
 
   ObjectDefinition def;
   def.type = ObjectType::Platform;
-  def.position = Position{51.0, 0.0, 0};
+  def.position = Position{51.0 * DEG, 0.0, 0};
   def.affiliation = Affiliation::Hostile;
 
   for (int i = 0; i < 5; ++i) {
@@ -825,7 +828,7 @@ TEST(TacticalObjectsComponent, SubscribeCreateTickPublishes) {
 
   ObjectDefinition def;
   def.type = ObjectType::Platform;
-  def.position = Position{51.0, 0.0, 0};
+  def.position = Position{51.0 * DEG, 0.0, 0};
   def.affiliation = Affiliation::Hostile;
   auto j_create = TacticalObjectsCodec::encodeObjectDefinition(def);
   std::string create_str = j_create.dump();
@@ -867,7 +870,7 @@ TEST(TacticalObjectsComponent, DeletedEntityPublishesDeleteFrame) {
 
   ObjectDefinition def;
   def.type = ObjectType::Platform;
-  def.position = Position{51.0, 0.0, 0};
+  def.position = Position{51.0 * DEG, 0.0, 0};
   def.affiliation = Affiliation::Hostile;
   auto j_create = TacticalObjectsCodec::encodeObjectDefinition(def);
   std::string create_str = j_create.dump();
@@ -909,11 +912,15 @@ TEST(TacticalObjectsComponent, SubscribeInterestActiveFindReturnsEvidenceRequire
   pcl::Executor exec;
   exec.add(comp);
 
+  static constexpr double DEG = 3.14159265358979323846 / 180.0;
   nlohmann::json j_req;
   j_req["query_mode"]       = "active_find";
   j_req["object_type"]      = "Platform";
   j_req["affiliation"]      = "Hostile";
   j_req["battle_dimension"] = "Air";
+  j_req["area"] = nlohmann::json::object({
+      {"min_lat", 50.0 * DEG}, {"max_lat", 52.0 * DEG},
+      {"min_lon", -1.0 * DEG}, {"max_lon", 1.0 * DEG}});
   j_req["expires_at"]       = 9999.0;
 
   std::string req_str = j_req.dump();
@@ -935,14 +942,18 @@ TEST(TacticalObjectsComponent, SubscribeInterestActiveFindReturnsEvidenceRequire
   ASSERT_TRUE(jr.contains("interest_id"));
   ASSERT_TRUE(jr.contains("solution_id"));
   ASSERT_TRUE(jr.contains("evidence_requirements"));
+  ASSERT_FALSE(jr["evidence_requirements"].empty());
 
-  // The evidence requirements should mention battle_dimension (covers line 88 in InterestManager).
-  bool found = false;
+  // Each requirement must have aligned id, policy, dimension, and area fields.
   for (auto& ev : jr["evidence_requirements"]) {
-    std::string desc = ev.value("evidence_description", "");
-    if (desc.find("battle_dimension") != std::string::npos) found = true;
+    EXPECT_TRUE(ev.contains("id"));
+    EXPECT_FALSE(ev.value("id", std::string{}).empty());
+    EXPECT_EQ(ev.value("policy", -1), 1);           // DataPolicy::Query = 1
+    EXPECT_EQ(ev.value("dimension", -1), 4);         // BattleDimension::Air = 4
+    EXPECT_TRUE(ev.contains("min_lat_rad"));
+    EXPECT_NEAR(ev.value("min_lat_rad", 0.0), 50.0 * DEG, 1e-12);
+    EXPECT_NEAR(ev.value("max_lat_rad", 0.0), 52.0 * DEG, 1e-12);
   }
-  EXPECT_TRUE(found);
 }
 
 ///< Coverage: subscribe_interest with query_mode="read_current" sets ReadCurrent (line 422).
@@ -1102,9 +1113,9 @@ TEST(TacticalObjectsComponent, MultipleChunksSecondIteration) {
   def.position    = Position{51.0, 0.0, 0};
   def.affiliation = Affiliation::Hostile;
   auto id1 = comp.runtime().createObject(def);
-  def.position.lat = 52.0;
+  def.position.lat = 52.0 * DEG;
   auto id2 = comp.runtime().createObject(def);
-  def.position.lat = 53.0;
+  def.position.lat = 53.0 * DEG;
   auto id3 = comp.runtime().createObject(def);
 
   // First tick: new subscriber, full scan produces 3 updates (1 chunk each
@@ -1115,11 +1126,11 @@ TEST(TacticalObjectsComponent, MultipleChunksSecondIteration) {
 
   // Mark all 3 dirty again so the next (non-new-subscriber) tick processes them.
   ObjectUpdate upd;
-  upd.position = Position{51.5, 0.0, 0};
+  upd.position = Position{51.5 * DEG, 0.0, 0};
   comp.runtime().updateObject(id1, upd);
-  upd.position = Position{52.5, 0.0, 0};
+  upd.position = Position{52.5 * DEG, 0.0, 0};
   comp.runtime().updateObject(id2, upd);
-  upd.position = Position{53.5, 0.0, 0};
+  upd.position = Position{53.5 * DEG, 0.0, 0};
   comp.runtime().updateObject(id3, upd);
 
   // Second tick: NOT new subscriber, dirty_entities has 3 entries →
@@ -1175,4 +1186,112 @@ TEST(TacticalObjectsComponent, SubscribeInterestInvalidTypeFieldsCoverCatchBlock
     pcl_msg_t resp = {}; char buf[512]; resp.data = buf; resp.size = sizeof(buf);
     EXPECT_EQ(pcl_executor_invoke_service(exec.handle(), "subscribe_interest", &req, &resp), PCL_OK);
   }
+}
+
+///< REQ_TACTICAL_OBJECTS_026: matching_objects.read_match returns ObjectMatch array.
+TEST(TacticalObjectsComponent, StandardReadMatchReturnsMatchArray) {
+  static constexpr double DEG = 3.14159265358979323846 / 180.0;
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  StandardBridge bridge(comp.runtime(), exec.handle(), false);
+  bridge.configure();
+  bridge.activate();
+  exec.add(bridge);
+
+  // Create an object so query returns a result
+  ObjectDefinition def;
+  def.type       = ObjectType::Platform;
+  def.position   = Position{51.0 * DEG, 0.0, 0};
+  def.affiliation = Affiliation::Hostile;
+  auto j_create  = TacticalObjectsCodec::encodeObjectDefinition(def);
+  std::string create_str = j_create.dump();
+  char create_resp_buf[512];
+  pcl_msg_t create_req = {}, create_resp = {};
+  create_req.data = create_str.data();
+  create_req.size = static_cast<uint32_t>(create_str.size());
+  create_req.type_name = "application/json";
+  create_resp.data = create_resp_buf;
+  create_resp.size = sizeof(create_resp_buf);
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "create_object", &create_req, &create_resp), PCL_OK);
+
+  // Invoke standard read_match with empty Query (returns all)
+  char resp_buf[8192];
+  pcl_msg_t req = {}, resp = {};
+  req.data = nullptr;
+  req.size = 0;
+  req.type_name = "application/json";
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "matching_objects.read_match", &req, &resp), PCL_OK);
+
+  std::string resp_str(static_cast<const char*>(resp.data), resp.size);
+  auto jr = nlohmann::json::parse(resp_str);
+  ASSERT_TRUE(jr.is_array());
+  ASSERT_GE(jr.size(), 1u);
+  EXPECT_TRUE(jr[0].contains("id"));
+  EXPECT_TRUE(jr[0].contains("matching_object_id"));
+  EXPECT_EQ(jr[0].value("source", ""), "tactical_objects");
+}
+
+///< REQ_TACTICAL_OBJECTS_026: specific_object_detail.read_detail returns ObjectDetail array.
+TEST(TacticalObjectsComponent, StandardReadDetailReturnsDetailArray) {
+  static constexpr double DEG = 3.14159265358979323846 / 180.0;
+  TacticalObjectsComponent comp;
+  comp.configure();
+  comp.activate();
+
+  pcl::Executor exec;
+  exec.add(comp);
+
+  StandardBridge bridge(comp.runtime(), exec.handle(), false);
+  bridge.configure();
+  bridge.activate();
+  exec.add(bridge);
+
+  // Create an object
+  ObjectDefinition def;
+  def.type       = ObjectType::Platform;
+  def.position   = Position{52.0 * DEG, 1.0 * DEG, 0};
+  def.affiliation = Affiliation::Friendly;
+  auto j_create  = TacticalObjectsCodec::encodeObjectDefinition(def);
+  std::string create_str = j_create.dump();
+  char create_resp_buf[512];
+  pcl_msg_t create_req = {}, create_resp = {};
+  create_req.data = create_str.data();
+  create_req.size = static_cast<uint32_t>(create_str.size());
+  create_req.type_name = "application/json";
+  create_resp.data = create_resp_buf;
+  create_resp.size = sizeof(create_resp_buf);
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "create_object", &create_req, &create_resp), PCL_OK);
+  std::string create_resp_str(static_cast<const char*>(create_resp.data), create_resp.size);
+  auto created = nlohmann::json::parse(create_resp_str);
+  std::string object_id = created.value("object_id", "");
+  ASSERT_FALSE(object_id.empty());
+
+  // Query by id via specific_object_detail.read_detail
+  nlohmann::json q_req;
+  q_req["id"] = nlohmann::json::array({object_id});
+  std::string q_str = q_req.dump();
+  char resp_buf[8192];
+  pcl_msg_t req = {}, resp = {};
+  req.data = q_str.data();
+  req.size = static_cast<uint32_t>(q_str.size());
+  req.type_name = "application/json";
+  resp.data = resp_buf;
+  resp.size = sizeof(resp_buf);
+  ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "specific_object_detail.read_detail", &req, &resp), PCL_OK);
+
+  std::string resp_str(static_cast<const char*>(resp.data), resp.size);
+  auto jr = nlohmann::json::parse(resp_str);
+  ASSERT_TRUE(jr.is_array());
+  ASSERT_EQ(jr.size(), 1u);
+  EXPECT_EQ(jr[0].value("id", ""), object_id);
+  // Position should be in radians — verify roughly correct
+  EXPECT_NEAR(jr[0]["position"].value("latitude", 0.0), 52.0 * DEG, 1e-10);
+  EXPECT_NEAR(jr[0]["position"].value("longitude", 0.0), 1.0 * DEG, 1e-10);
 }

@@ -53,17 +53,18 @@ ObjectType TacticalObjectsCodec::stringToObjectType(const std::string& s) {
 
 std::string TacticalObjectsCodec::affiliationToString(Affiliation a) {
   switch (a) {
-    case Affiliation::Friendly: return "Friendly";
-    case Affiliation::Hostile: return "Hostile";
-    case Affiliation::Neutral: return "Neutral";
-    case Affiliation::Unknown: return "Unknown";
-    case Affiliation::AssumedFriend: return "AssumedFriend";
-    case Affiliation::Suspect: return "Suspect";
-    case Affiliation::Joker: return "Joker";
-    case Affiliation::Faker: return "Faker";
-    case Affiliation::Pending: return "Pending";
-    default: return "Unknown";
+    case Affiliation::Unspecified:  return "Unknown";
+    case Affiliation::Unknown:      return "Unknown";
+    case Affiliation::Friendly:     return "Friendly";
+    case Affiliation::Hostile:      return "Hostile";
+    case Affiliation::Neutral:      return "Neutral";
+    case Affiliation::AssumedFriend:return "AssumedFriend";
+    case Affiliation::Suspect:      return "Suspect";
+    case Affiliation::Joker:        return "Joker";
+    case Affiliation::Faker:        return "Faker";
+    case Affiliation::Pending:      return "Pending";
   }
+  return "Unknown";
 }
 
 Affiliation TacticalObjectsCodec::stringToAffiliation(const std::string& s) {
@@ -107,14 +108,16 @@ ZoneType TacticalObjectsCodec::stringToZoneType(const std::string& s) {
 
 std::string TacticalObjectsCodec::battleDimToString(BattleDimension b) {
   switch (b) {
-    case BattleDimension::Ground: return "Ground";
-    case BattleDimension::Air: return "Air";
-    case BattleDimension::SeaSurface: return "SeaSurface";
-    case BattleDimension::Subsurface: return "Subsurface";
-    case BattleDimension::Space: return "Space";
-    case BattleDimension::SOF: return "SOF";
-    default: return "Ground";
+    case BattleDimension::Unspecified: return "Ground";
+    case BattleDimension::Ground:      return "Ground";
+    case BattleDimension::Subsurface:  return "Subsurface";
+    case BattleDimension::SeaSurface:  return "SeaSurface";
+    case BattleDimension::Air:         return "Air";
+    case BattleDimension::Unknown:     return "Unknown";
+    case BattleDimension::Space:       return "Space";
+    case BattleDimension::SOF:         return "SOF";
   }
+  return "Ground";
 }
 
 BattleDimension TacticalObjectsCodec::stringToBattleDim(const std::string& s) {
@@ -123,6 +126,7 @@ BattleDimension TacticalObjectsCodec::stringToBattleDim(const std::string& s) {
   if (s == "Subsurface") return BattleDimension::Subsurface;
   if (s == "Space") return BattleDimension::Space;
   if (s == "SOF") return BattleDimension::SOF;
+  if (s == "Unknown") return BattleDimension::Unknown;
   return BattleDimension::Ground;
 }
 

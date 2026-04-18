@@ -91,6 +91,10 @@ public:
   /// \brief Cancel an active interest.
   bool cancelInterest(const UUIDKey& interest_id);
 
+  /// \brief Update an existing interest in place.
+  bool updateInterest(const UUIDKey& interest_id, const InterestCriteria& criteria,
+                      double expires_at = 0.0);
+
   /// \brief Supersede an interest with a replacement.
   UUIDKey supersedeInterest(const UUIDKey& old_id, const InterestCriteria& new_criteria,
                             double now = 0.0, double expires_at = 0.0);

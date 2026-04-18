@@ -157,20 +157,22 @@ package body Tactical_Objects_Service is
   end Build_Active_Find_Request_Json;
 
   -- -- Ordinal conversions (C++ StreamingCodec wire-format ordinals) ----------
+  --  Ordinals match pyramid.data_model.common.StandardIdentity after Phase 2.
 
   function Ordinal_To_Affiliation
     (V : Streaming_Codec.Byte) return Affiliation is
   begin
     case V is
-      when 0      => return Friendly;
-      when 1      => return Hostile;
-      when 2      => return Neutral;
-      when 3      => return Unknown;
-      when 4      => return Assumed_Friend;
-      when 5      => return Suspect;
-      when 6      => return Joker;
-      when 7      => return Faker;
-      when 8      => return Pending;
+      when 0      => return Affiliation_Unspecified;
+      when 1      => return Unknown;
+      when 2      => return Friendly;
+      when 3      => return Hostile;
+      when 4      => return Suspect;
+      when 5      => return Neutral;
+      when 6      => return Pending;
+      when 7      => return Joker;
+      when 8      => return Faker;
+      when 9      => return Assumed_Friend;
       when others => return Affiliation_Unspecified;
     end case;
   end Ordinal_To_Affiliation;

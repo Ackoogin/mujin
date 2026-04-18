@@ -1,7 +1,6 @@
 #pragma once
 
 #include <TacticalObjectsRuntime.h>
-#include <StreamingCodec.h>
 #include <pcl/component.hpp>
 
 #include <string>
@@ -10,108 +9,81 @@
 
 namespace tactical_objects {
 
-/// \brief PYRAMID-to-Internal translation layer.
-///
-/// "Standard" here refers to the PYRAMID standard data model — the external
-/// wire format defined in the proto IDL and serialised by the PIM-generated
-/// Json_Codec.  This bridge translates between that format and the internal
-/// TacticalObjects types so that neither external clients nor the internal
-/// component need to change.
-///
-/// External consumers (Ada clients, future gRPC clients) call:
-///   - Service  "object_of_interest.create_requirement"  (JSON, PYRAMID standard)
-///   - Topic    "standard.object_evidence"               (JSON, PYRAMID standard)
-///
-/// The bridge translates and delegates to:
-///   - Service  "subscribe_interest"       (JSON, internal)
-///   - Runtime  processObservationBatch()  (direct in-process call)
-///
-/// Internal outputs forwarded as PYRAMID standard topics:
-///   - "entity_updates"           (binary)  → "standard.entity_matches"  (JSON)
-///   - "evidence_requirements"    (JSON)    → "standard.evidence_requirements" (JSON)
-///
-/// Standard JSON formats:
-///
-///   create_requirement input:
-///     { "policy":    "DATA_POLICY_OBTAIN" | "DATA_POLICY_QUERY",
-///       "identity":  "STANDARD_IDENTITY_HOSTILE" | ... ,
-///       "dimension": "BATTLE_DIMENSION_SEA_SURFACE" | ... ,
-///       "min_lat_rad": <double>,  "max_lat_rad": <double>,
-///       "min_lon_rad": <double>,  "max_lon_rad": <double> }
-///
-///   standard.entity_matches output (array):
-///     [ { "object_id":     "<uuid>",
-///         "identity":      "STANDARD_IDENTITY_HOSTILE" | ... ,
-///         "dimension":     "BATTLE_DIMENSION_SEA_SURFACE" | ... ,
-///         "latitude_rad":  <double>,
-///         "longitude_rad": <double>,
-///         "confidence":    <double> }, ... ]
-///
-///   standard.object_evidence input:
-///     { "identity":      "STANDARD_IDENTITY_HOSTILE" | ... ,
-///       "dimension":     "BATTLE_DIMENSION_SEA_SURFACE" | ... ,
-///       "latitude_rad":  <double>,
-///       "longitude_rad": <double>,
-///       "confidence":    <double> }
+class BridgeServiceHandler;
 
+/// \brief Proto-facing bridge hosted inside the tactical objects app.
+///
+/// The runtime still owns the internal business logic and binary entity-update
+/// stream. This component exposes the generated PYRAMID tactical-objects
+/// provided/consumed interface on top of that runtime using the generated
+/// codecs/bindings, with a selectable frontend codec (`application/json`,
+/// `application/flatbuffers`, or `application/protobuf`).
 class StandardBridge : public pcl::Component {
 public:
-  /// \param runtime  Reference to the TacticalObjectsRuntime (owned by TacticalObjectsComponent).
-  /// \param exec     The shared PCL executor (needed to call subscribe_interest locally).
   StandardBridge(TacticalObjectsRuntime& runtime, pcl_executor_t* exec,
+                 std::string frontend_content_type = "application/json",
                  bool expose_consumed_interface = true);
 
 protected:
   pcl_status_t on_configure() override;
   pcl_status_t on_activate() override;
-
-private:
-  // ---- PCL service handler ------------------------------------------------
-
-  /// Handle "object_of_interest.create_requirement" → translate → subscribe_interest
-  static pcl_status_t handleCreateRequirement(pcl_container_t* c,
-                                               const pcl_msg_t* request,
-                                               pcl_msg_t* response,
-                                               pcl_svc_context_t* ctx,
-                                               void* user_data);
-
-  // ---- on_tick: stream entity matches directly via runtime ----------------
-
   pcl_status_t on_tick(double dt) override;
 
-  // ---- PCL subscriber callbacks -------------------------------------------
+private:
+  static pcl_status_t handleCreateRequirement(pcl_container_t* c,
+                                              const pcl_msg_t* request,
+                                              pcl_msg_t* response,
+                                              pcl_svc_context_t* ctx,
+                                              void* user_data);
+  static pcl_status_t handleReadRequirement(pcl_container_t* c,
+                                            const pcl_msg_t* request,
+                                            pcl_msg_t* response,
+                                            pcl_svc_context_t* ctx,
+                                            void* user_data);
+  static pcl_status_t handleUpdateRequirement(pcl_container_t* c,
+                                              const pcl_msg_t* request,
+                                              pcl_msg_t* response,
+                                              pcl_svc_context_t* ctx,
+                                              void* user_data);
+  static pcl_status_t handleDeleteRequirement(pcl_container_t* c,
+                                              const pcl_msg_t* request,
+                                              pcl_msg_t* response,
+                                              pcl_svc_context_t* ctx,
+                                              void* user_data);
+  static pcl_status_t handleReadMatch(pcl_container_t* c,
+                                      const pcl_msg_t* request,
+                                      pcl_msg_t* response,
+                                      pcl_svc_context_t* ctx,
+                                      void* user_data);
+  static pcl_status_t handleReadDetail(pcl_container_t* c,
+                                       const pcl_msg_t* request,
+                                       pcl_msg_t* response,
+                                       pcl_svc_context_t* ctx,
+                                       void* user_data);
 
-  /// standard.object_evidence (JSON) → processObservationBatch
-  static void onStandardObjectEvidence(pcl_container_t* c, const pcl_msg_t* msg, void* user_data);
+  static void onStandardObjectEvidence(pcl_container_t* c, const pcl_msg_t* msg,
+                                       void* user_data);
 
-  // ---- Enum converters (standard ↔ internal strings) ----------------------
+  pcl_status_t dispatchProvidedService(int channel, const pcl_msg_t* request,
+                                       pcl_msg_t* response);
+  void publishEntityMatches(const std::vector<std::string>& entity_ids);
+  void publishEvidenceRequirement(const std::string& payload);
+  bool supportsContentType(const char* content_type) const;
 
-  static std::string affiliationToStandardIdentity(Affiliation a);
-  static Affiliation  standardIdentityToAffiliation(const std::string& s);
-  static std::string  battleDimToStandard(BattleDimension d);
-  static BattleDimension standardToBattleDim(const std::string& s);
-
-  // ---- Position conversion -------------------------------------------------
-  static double degToRad(double deg) { return deg * 0.017453292519943295; }
-  static double radToDeg(double rad) { return rad * 57.29577951308232; }
-
-  // ---- Member state --------------------------------------------------------
+  friend class BridgeServiceHandler;
 
   TacticalObjectsRuntime& runtime_;
-  pcl_executor_t*         exec_;
-  bool                    expose_consumed_interface_ = true;
+  pcl_executor_t* exec_ = nullptr;
+  std::string frontend_content_type_;
+  bool expose_consumed_interface_ = true;
 
-  pcl_port_t* pub_entity_matches_   = nullptr;
-  pcl_port_t* pub_evidence_reqs_    = nullptr;
+  pcl_port_t* pub_entity_matches_ = nullptr;
+  pcl_port_t* pub_evidence_reqs_ = nullptr;
 
-  /// Registered interests: (interest_id, subscription_handle) pairs.
-  /// Populated in handleCreateRequirement; consumed in on_tick.
   std::vector<std::pair<UUIDKey, SubscriptionHandle>> interests_;
 
-  /// Reusable response buffer for handleCreateRequirement.
-  std::string resp_buf_;
-  /// Reusable publish buffer for on_tick entity matches.
-  std::string pub_buf_;
+  std::string response_buffer_;
+  std::string publish_buffer_;
 };
 
 } // namespace tactical_objects

@@ -26,25 +26,31 @@ enum class ObjectType {
   Zone
 };
 
+// Ordinals match pyramid.data_model.common.StandardIdentity proto values.
 enum class Affiliation {
-  Friendly,
-  Hostile,
-  Neutral,
-  Unknown,
-  AssumedFriend,
-  Suspect,
-  Joker,
-  Faker,
-  Pending
+  Unspecified   = 0,  // no standard equivalent
+  Unknown       = 1,  // STANDARD_IDENTITY_UNKNOWN
+  Friendly      = 2,  // STANDARD_IDENTITY_FRIENDLY
+  Hostile       = 3,  // STANDARD_IDENTITY_HOSTILE
+  Suspect       = 4,  // STANDARD_IDENTITY_SUSPECT
+  Neutral       = 5,  // STANDARD_IDENTITY_NEUTRAL
+  Pending       = 6,  // STANDARD_IDENTITY_PENDING
+  Joker         = 7,  // STANDARD_IDENTITY_JOKER
+  Faker         = 8,  // STANDARD_IDENTITY_FAKER
+  AssumedFriend = 9   // STANDARD_IDENTITY_ASSUMED_FRIENDLY
 };
 
+// Ordinals match pyramid.data_model.common.BattleDimension proto values.
+// Space and SOF are domain extensions with no standard equivalent.
 enum class BattleDimension {
-  Ground,
-  Air,
-  SeaSurface,
-  Subsurface,
-  Space,
-  SOF
+  Unspecified  = 0,  // no standard equivalent
+  Ground       = 1,  // BATTLE_DIMENSION_GROUND
+  Subsurface   = 2,  // BATTLE_DIMENSION_SUBSURFACE
+  SeaSurface   = 3,  // BATTLE_DIMENSION_SEA_SURFACE
+  Air          = 4,  // BATTLE_DIMENSION_AIR
+  Unknown      = 5,  // BATTLE_DIMENSION_UNKNOWN
+  Space        = 6,  // domain extension
+  SOF          = 7   // domain extension
 };
 
 enum class MilStatus {
@@ -142,9 +148,9 @@ struct UUIDKey {
 };
 
 struct Position {
-  double lat = 0.0;
-  double lon = 0.0;
-  double alt = 0.0;
+  double lat = 0.0;  // radians
+  double lon = 0.0;  // radians
+  double alt = 0.0;  // metres
 };
 
 struct Velocity {
@@ -162,10 +168,10 @@ struct SourceRef {
 };
 
 struct BoundingBox {
-  double min_lat = 0.0;
-  double max_lat = 0.0;
-  double min_lon = 0.0;
-  double max_lon = 0.0;
+  double min_lat = 0.0;  // radians
+  double max_lat = 0.0;  // radians
+  double min_lon = 0.0;  // radians
+  double max_lon = 0.0;  // radians
 
   bool contains(double lat, double lon) const {
     return lat >= min_lat && lat <= max_lat &&

@@ -441,10 +441,15 @@ pcl_status_t TacticalObjectsComponent::handleSubscribeInterest(pcl_container_t*,
     } catch (...) {}
   }
   if (j.contains("battle_dimension") && !j["battle_dimension"].is_null()) {
-    try {
-      criteria.battle_dimension = TacticalObjectsCodec::battleDimensionFromString(
-          j["battle_dimension"].get<std::string>());
-    } catch (...) {}
+    // Accept integer ordinals (standard aligned) or legacy string names.
+    if (j["battle_dimension"].is_number()) {
+      criteria.battle_dimension = static_cast<BattleDimension>(j["battle_dimension"].get<int>());
+    } else {
+      try {
+        criteria.battle_dimension = TacticalObjectsCodec::battleDimensionFromString(
+            j["battle_dimension"].get<std::string>());
+      } catch (...) {}
+    }
   }
   if (j.contains("area") && j["area"].is_object()) {
     BoundingBox bb;
@@ -480,9 +485,20 @@ pcl_status_t TacticalObjectsComponent::handleSubscribeInterest(pcl_container_t*,
     json ev_reqs = json::array();
     for (const auto& der : solution.evidence_requirements) {
       json ev;
-      ev["requirement_id"]     = uuidToJsonString(der.requirement_id);
-      ev["source_interest_id"] = uuidToJsonString(der.source_interest_id);
+      ev["id"]                   = uuidToJsonString(der.requirement_id);
+      ev["source_interest_id"]   = uuidToJsonString(der.source_interest_id);
       ev["evidence_description"] = der.evidence_description;
+      ev["policy"]               = 1;  // DataPolicy::Query ordinal
+      if (der.criteria.battle_dimension.has_value()) {
+        ev["dimension"] = static_cast<int>(*der.criteria.battle_dimension);
+      }
+      if (der.criteria.area.has_value()) {
+        const auto& a = *der.criteria.area;
+        ev["min_lat_rad"] = a.min_lat;
+        ev["max_lat_rad"] = a.max_lat;
+        ev["min_lon_rad"] = a.min_lon;
+        ev["max_lon_rad"] = a.max_lon;
+      }
       ev_reqs.push_back(ev);
 
       // Publish to evidence_requirements topic (Object_Solution_Evidence service)

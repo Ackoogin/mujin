@@ -24,6 +24,8 @@
 using namespace tactical_objects;
 using namespace pyramid::core::uuid;
 
+static constexpr double DEG = 3.14159265358979323846 / 180.0;
+
 static const char* TOPIC_OBSERVATION_INGRESS = "observation_ingress";
 static const char* TOPIC_ENTITY_UPDATES     = "entity_updates";
 
@@ -116,7 +118,7 @@ TEST(TacticalObjectsE2E, AdaClientZoneInterestReceivesEntityEvidence) {
   sub_req["object_type"] = "Platform";
   sub_req["affiliation"] = "Hostile";
   sub_req["area"] = nlohmann::json::object({
-      {"min_lat", 50.0}, {"max_lat", 52.0}, {"min_lon", -1.0}, {"max_lon", 1.0}});
+      {"min_lat", 50.0 * DEG}, {"max_lat", 52.0 * DEG}, {"min_lon", -1.0 * DEG}, {"max_lon", 1.0 * DEG}});
   sub_req["expires_at"] = 9999.0;
   std::string sub_str = sub_req.dump();
   pcl_msg_t req = {};
@@ -138,7 +140,7 @@ TEST(TacticalObjectsE2E, AdaClientZoneInterestReceivesEntityEvidence) {
 
   ObjectDefinition def;
   def.type       = ObjectType::Platform;
-  def.position   = Position{51.0, 0.0, 0};
+  def.position   = Position{51.0 * DEG, 0.0, 0};
   def.affiliation = Affiliation::Hostile;
   auto j_create  = TacticalObjectsCodec::encodeObjectDefinition(def);
   std::string create_str = j_create.dump();
@@ -220,7 +222,7 @@ static void e2e_provider_evidence_req_cb(pcl_container_t*, const pcl_msg_t* msg,
   Observation obs;
   obs.observation_id = UUIDHelper::generateV4();
   obs.observed_at = 0.5;
-  obs.position = Position{51.0, 0.0, 0};
+  obs.position = Position{51.0 * DEG, 0.0, 0};
   obs.confidence = 0.9;
   obs.object_hint_type = ObjectType::Platform;
   
@@ -303,7 +305,7 @@ TEST(TacticalObjectsE2E, ActiveFindSolutionDrivesEvidenceProvider) {
   sub_req["affiliation"] = "Hostile";
   sub_req["battle_dimension"] = "SeaSurface";
   sub_req["area"] = nlohmann::json::object({
-      {"min_lat", 50.0}, {"max_lat", 52.0}, {"min_lon", -1.0}, {"max_lon", 1.0}});
+      {"min_lat", 50.0 * DEG}, {"max_lat", 52.0 * DEG}, {"min_lon", -1.0 * DEG}, {"max_lon", 1.0 * DEG}});
   sub_req["expires_at"] = 9999.0;
   
   std::string sub_str = sub_req.dump();

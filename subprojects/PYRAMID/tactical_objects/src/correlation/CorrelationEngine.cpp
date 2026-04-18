@@ -24,7 +24,7 @@ double CorrelationEngine::scoreCandidate(const Observation& obs, const UUIDKey& 
   const auto* kc = store_->kinematics().get(candidate);
   if (kc) {
     double dist = geo::haversineMeters(obs.position, kc->position);
-    double gate_m = config_.gate_radius_deg * 111000.0;
+    double gate_m = config_.gate_radius_rad * geo::EARTH_RADIUS_M;
     if (dist > gate_m) return 0.0;
     double spatial_score = 1.0 - (dist / gate_m);
     score += spatial_score * 0.4;
@@ -152,10 +152,10 @@ UUIDKey CorrelationEngine::splitEntity(const Observation& obs, const UUIDKey& so
 
 CorrelationResult CorrelationEngine::processObservation(const Observation& obs) {
   auto candidates = spatial_->queryRegion(
-    obs.position.lat - config_.gate_radius_deg,
-    obs.position.lat + config_.gate_radius_deg,
-    obs.position.lon - config_.gate_radius_deg,
-    obs.position.lon + config_.gate_radius_deg);
+    obs.position.lat - config_.gate_radius_rad,
+    obs.position.lat + config_.gate_radius_rad,
+    obs.position.lon - config_.gate_radius_rad,
+    obs.position.lon + config_.gate_radius_rad);
 
   double best_score = 0.0;
   UUIDKey best_candidate;

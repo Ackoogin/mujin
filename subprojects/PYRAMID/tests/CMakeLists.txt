@@ -218,6 +218,49 @@ set_tests_properties(
     tobj_cpp_bridge_client_flatbuffers_e2e
     PROPERTIES LABELS "cross_language;integration;codec" TIMEOUT 30)
 
+if(WIN32)
+    add_test(NAME tobj_cpp_app_client_e2e
+        COMMAND ${CMAKE_COMMAND}
+                -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.bat
+                -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
+                -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
+                -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+    add_test(NAME tobj_cpp_app_client_flatbuffers_e2e
+        COMMAND ${CMAKE_COMMAND}
+                -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.bat
+                -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
+                -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
+                -DSCRIPT_ARGS=--content-type|application/flatbuffers
+                -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+    add_test(NAME tobj_cpp_app_client_protobuf_e2e
+        COMMAND ${CMAKE_COMMAND}
+                -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.bat
+                -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
+                -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
+                -DSCRIPT_ARGS=--content-type|application/protobuf
+                -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+else()
+    add_test(NAME tobj_cpp_app_client_e2e
+        COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
+                --app-bin $<TARGET_FILE:tactical_objects_app>
+                --client-bin $<TARGET_FILE:tactical_objects_test_client>)
+    add_test(NAME tobj_cpp_app_client_flatbuffers_e2e
+        COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
+                --app-bin $<TARGET_FILE:tactical_objects_app>
+                --client-bin $<TARGET_FILE:tactical_objects_test_client>
+                --content-type application/flatbuffers)
+    add_test(NAME tobj_cpp_app_client_protobuf_e2e
+        COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
+                --app-bin $<TARGET_FILE:tactical_objects_app>
+                --client-bin $<TARGET_FILE:tactical_objects_test_client>
+                --content-type application/protobuf)
+endif()
+set_tests_properties(
+    tobj_cpp_app_client_e2e
+    tobj_cpp_app_client_flatbuffers_e2e
+    tobj_cpp_app_client_protobuf_e2e
+    PROPERTIES LABELS "cross_language;integration;codec" TIMEOUT 30)
+
 if(WIN32 AND TARGET pyramid_grpc_transport)
     add_executable(tobj_grpc_server
         tobj_grpc_server.cpp

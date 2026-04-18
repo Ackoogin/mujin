@@ -6,7 +6,7 @@
 #
 # Required: -DSCRIPT=path/to/script.bat
 # Optional: -DSERVER_BIN=...  -DCLIENT_BIN=...  -DBRIDGE_BIN=...
-#           -DPORT=...  -DTIMEOUT_VAL=...
+#           -DAPP_BIN=...  -DPORT=...  -DTIMEOUT_VAL=...
 
 if(NOT DEFINED SCRIPT)
   message(FATAL_ERROR "SCRIPT not defined")
@@ -26,6 +26,9 @@ if(DEFINED BRIDGE_BIN)
 endif()
 if(DEFINED CLIENT_BIN)
   list(APPEND extra_args --client-bin "${CLIENT_BIN}")
+endif()
+if(DEFINED APP_BIN)
+  list(APPEND extra_args --app-bin "${APP_BIN}")
 endif()
 if(DEFINED PORT)
   list(APPEND extra_args --port "${PORT}")

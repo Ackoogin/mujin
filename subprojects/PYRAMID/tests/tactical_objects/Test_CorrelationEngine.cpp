@@ -5,10 +5,12 @@
 using namespace tactical_objects;
 using namespace pyramid::core::uuid;
 
+static constexpr double DEG = 3.14159265358979323846 / 180.0;
+
 class CorrelationEngineTest : public ::testing::Test {
 protected:
   std::shared_ptr<ObjectStore> store = std::make_shared<ObjectStore>();
-  std::shared_ptr<SpatialIndex> spatial = std::make_shared<SpatialIndex>(1.0);
+  std::shared_ptr<SpatialIndex> spatial = std::make_shared<SpatialIndex>(DEG);
   std::shared_ptr<MilClassEngine> milclass = std::make_shared<MilClassEngine>(store);
 
   Observation makeObs(double lat, double lon, Affiliation aff = Affiliation::Unknown,
@@ -33,7 +35,7 @@ protected:
 ///< REQ_TACTICAL_OBJECTS_005: First observation creates a new entity.
 TEST_F(CorrelationEngineTest, FirstObservationCreatesEntity) {
   CorrelationEngine engine(store, spatial, milclass);
-  auto obs = makeObs(51.5, -0.1, Affiliation::Hostile, 0.8);
+  auto obs = makeObs(51.5 * DEG, -0.1 * DEG, Affiliation::Hostile, 0.8);
   auto result = engine.processObservation(obs);
   ASSERT_EQ(result.outcome, CorrelationOutcome::Created);
   ASSERT_FALSE(result.object_id.isNull());
@@ -43,14 +45,14 @@ TEST_F(CorrelationEngineTest, FirstObservationCreatesEntity) {
 ///< REQ_TACTICAL_OBJECTS_006: Correlated observation merges into existing entity.
 TEST_F(CorrelationEngineTest, CorrelatedObservationMerges) {
   CorrelationConfig config;
-  config.gate_radius_deg = 0.5;
+  config.gate_radius_rad = 0.5 * DEG;
   config.merge_threshold = 0.3;
   CorrelationEngine engine(store, spatial, milclass, config);
 
-  auto obs1 = makeObs(51.5, -0.1, Affiliation::Hostile, 0.8, "radar", "T001");
+  auto obs1 = makeObs(51.5 * DEG, -0.1 * DEG, Affiliation::Hostile, 0.8, "radar", "T001");
   auto r1 = engine.processObservation(obs1);
 
-  auto obs2 = makeObs(51.5001, -0.1001, Affiliation::Hostile, 0.7, "radar", "T001");
+  auto obs2 = makeObs(51.5001 * DEG, -0.1001 * DEG, Affiliation::Hostile, 0.7, "radar", "T001");
   obs2.observed_at = 1010.0;
   auto r2 = engine.processObservation(obs2);
 
@@ -62,10 +64,10 @@ TEST_F(CorrelationEngineTest, CorrelatedObservationMerges) {
 TEST_F(CorrelationEngineTest, DistantObservationNotCorrelated) {
   CorrelationEngine engine(store, spatial, milclass);
 
-  auto obs1 = makeObs(10.0, 20.0, Affiliation::Neutral);
+  auto obs1 = makeObs(10.0 * DEG, 20.0 * DEG, Affiliation::Neutral);
   auto r1 = engine.processObservation(obs1);
 
-  auto obs2 = makeObs(60.0, 90.0, Affiliation::Neutral);
+  auto obs2 = makeObs(60.0 * DEG, 90.0 * DEG, Affiliation::Neutral);
   auto r2 = engine.processObservation(obs2);
 
   ASSERT_EQ(r2.outcome, CorrelationOutcome::Created);
@@ -75,18 +77,18 @@ TEST_F(CorrelationEngineTest, DistantObservationNotCorrelated) {
 ///< REQ_TACTICAL_OBJECTS_008: Repeated incompatibility triggers a split.
 TEST_F(CorrelationEngineTest, IncompatibleAffiliationSplits) {
   CorrelationConfig config;
-  config.gate_radius_deg = 0.5;
+  config.gate_radius_rad = 0.5 * DEG;
   config.merge_threshold = 0.3;
   config.split_incompatibility_count = 2;
   CorrelationEngine engine(store, spatial, milclass, config);
 
-  auto obs1 = makeObs(51.5, -0.1, Affiliation::Friendly, 0.9, "radar", "T01");
+  auto obs1 = makeObs(51.5 * DEG, -0.1 * DEG, Affiliation::Friendly, 0.9, "radar", "T01");
   auto r1 = engine.processObservation(obs1);
   ASSERT_EQ(r1.outcome, CorrelationOutcome::Created);
 
-  auto obs2 = makeObs(51.5001, -0.1, Affiliation::Hostile, 0.8, "radar", "T01");
+  auto obs2 = makeObs(51.5001 * DEG, -0.1 * DEG, Affiliation::Hostile, 0.8, "radar", "T01");
   engine.processObservation(obs2);
-  auto obs3 = makeObs(51.5002, -0.1, Affiliation::Hostile, 0.8, "radar", "T01");
+  auto obs3 = makeObs(51.5002 * DEG, -0.1 * DEG, Affiliation::Hostile, 0.8, "radar", "T01");
   auto r3 = engine.processObservation(obs3);
 
   ASSERT_EQ(r3.outcome, CorrelationOutcome::Split);
@@ -96,17 +98,17 @@ TEST_F(CorrelationEngineTest, IncompatibleAffiliationSplits) {
 ///< REQ_TACTICAL_OBJECTS_009: Same input produces same score (deterministic).
 TEST_F(CorrelationEngineTest, DeterministicScore) {
   CorrelationConfig config;
-  config.gate_radius_deg = 0.5;
+  config.gate_radius_rad = 0.5 * DEG;
   config.merge_threshold = 0.3;
 
   auto run = [&]() {
     auto s = std::make_shared<ObjectStore>();
-    auto sp = std::make_shared<SpatialIndex>(1.0);
+    auto sp = std::make_shared<SpatialIndex>(DEG);
     auto mc = std::make_shared<MilClassEngine>(s);
     CorrelationEngine eng(s, sp, mc, config);
-    auto obs1 = makeObs(51.5, -0.1, Affiliation::Hostile, 0.8, "radar", "T01");
+    auto obs1 = makeObs(51.5 * DEG, -0.1 * DEG, Affiliation::Hostile, 0.8, "radar", "T01");
     eng.processObservation(obs1);
-    auto obs2 = makeObs(51.5001, -0.1001, Affiliation::Hostile, 0.7, "radar", "T01");
+    auto obs2 = makeObs(51.5001 * DEG, -0.1001 * DEG, Affiliation::Hostile, 0.7, "radar", "T01");
     return eng.processObservation(obs2);
   };
   auto r1 = run();
@@ -117,17 +119,17 @@ TEST_F(CorrelationEngineTest, DeterministicScore) {
 ///< REQ_TACTICAL_OBJECTS_008: Only local candidates are scored (spatial prefilter).
 TEST_F(CorrelationEngineTest, SpatialPrefilterLimitsScoring) {
   CorrelationConfig config;
-  config.gate_radius_deg = 0.5;
+  config.gate_radius_rad = 0.5 * DEG;
   config.merge_threshold = 0.3;
   CorrelationEngine engine(store, spatial, milclass, config);
 
   for (int i = 0; i < 20; ++i) {
-    auto obs = makeObs(static_cast<double>(i) * 5.0, static_cast<double>(i) * 10.0,
+    auto obs = makeObs(static_cast<double>(i) * 5.0 * DEG, static_cast<double>(i) * 10.0 * DEG,
                        Affiliation::Neutral, 0.5, "src-" + std::to_string(i), "T" + std::to_string(i));
     engine.processObservation(obs);
   }
   ASSERT_GE(store->objectCount(), 20u);
-  auto local_obs = makeObs(0.001, 0.001, Affiliation::Neutral, 0.5, "local", "TL");
+  auto local_obs = makeObs(0.001 * DEG, 0.001 * DEG, Affiliation::Neutral, 0.5, "local", "TL");
   auto r = engine.processObservation(local_obs);
   ASSERT_EQ(r.outcome, CorrelationOutcome::Merged);
 }
@@ -135,15 +137,15 @@ TEST_F(CorrelationEngineTest, SpatialPrefilterLimitsScoring) {
 ///< REQ_TACTICAL_OBJECTS_006: Correlated object retains all contributing source refs.
 TEST_F(CorrelationEngineTest, SourceRefsRetained) {
   CorrelationConfig config;
-  config.gate_radius_deg = 0.5;
+  config.gate_radius_rad = 0.5 * DEG;
   config.merge_threshold = 0.3;
   CorrelationEngine engine(store, spatial, milclass, config);
 
-  auto obs1 = makeObs(51.5, -0.1, Affiliation::Hostile, 0.8, "radar", "T01");
+  auto obs1 = makeObs(51.5 * DEG, -0.1 * DEG, Affiliation::Hostile, 0.8, "radar", "T01");
   auto r1 = engine.processObservation(obs1);
-  auto obs2 = makeObs(51.5001, -0.1001, Affiliation::Hostile, 0.7, "ais", "T02");
+  auto obs2 = makeObs(51.5001 * DEG, -0.1001 * DEG, Affiliation::Hostile, 0.7, "ais", "T02");
   engine.processObservation(obs2);
-  auto obs3 = makeObs(51.5002, -0.1002, Affiliation::Hostile, 0.75, "elint", "T03");
+  auto obs3 = makeObs(51.5002 * DEG, -0.1002 * DEG, Affiliation::Hostile, 0.75, "elint", "T03");
   engine.processObservation(obs3);
 
   const auto* cc = store->correlation().get(r1.object_id);
@@ -154,13 +156,13 @@ TEST_F(CorrelationEngineTest, SourceRefsRetained) {
 ///< REQ_TACTICAL_OBJECTS_013: Aggregate confidence from weighted sources.
 TEST_F(CorrelationEngineTest, ConfidenceAggregation) {
   CorrelationConfig config;
-  config.gate_radius_deg = 0.5;
+  config.gate_radius_rad = 0.5 * DEG;
   config.merge_threshold = 0.3;
   CorrelationEngine engine(store, spatial, milclass, config);
 
-  auto obs1 = makeObs(51.5, -0.1, Affiliation::Hostile, 0.9, "radar", "T01");
+  auto obs1 = makeObs(51.5 * DEG, -0.1 * DEG, Affiliation::Hostile, 0.9, "radar", "T01");
   auto r1 = engine.processObservation(obs1);
-  auto obs2 = makeObs(51.5001, -0.1001, Affiliation::Hostile, 0.3, "ais", "T01");
+  auto obs2 = makeObs(51.5001 * DEG, -0.1001 * DEG, Affiliation::Hostile, 0.3, "ais", "T01");
   engine.processObservation(obs2);
 
   const auto* cc = store->correlation().get(r1.object_id);
@@ -172,14 +174,14 @@ TEST_F(CorrelationEngineTest, ConfidenceAggregation) {
 ///< REQ_TACTICAL_OBJECTS_009: Contributing observations tracked in CorrelationComponent.
 TEST_F(CorrelationEngineTest, ContributingObservationsTracked) {
   CorrelationConfig config;
-  config.gate_radius_deg = 0.5;
+  config.gate_radius_rad = 0.5 * DEG;
   config.merge_threshold = 0.3;
   CorrelationEngine engine(store, spatial, milclass, config);
 
-  auto obs1 = makeObs(51.5, -0.1, Affiliation::Hostile, 0.9, "radar", "T01");
+  auto obs1 = makeObs(51.5 * DEG, -0.1 * DEG, Affiliation::Hostile, 0.9, "radar", "T01");
   auto r1 = engine.processObservation(obs1);
 
-  auto obs2 = makeObs(51.5001, -0.1001, Affiliation::Hostile, 0.8, "radar", "T01");
+  auto obs2 = makeObs(51.5001 * DEG, -0.1001 * DEG, Affiliation::Hostile, 0.8, "radar", "T01");
   engine.processObservation(obs2);
 
   const auto* fc = store->correlation().get(r1.object_id);
@@ -194,7 +196,7 @@ TEST_F(CorrelationEngineTest, ContributingObservationsTracked) {
 ///< Coverage: SIDC position 2 == 'P' → BattleDimension::Space
 TEST_F(CorrelationEngineTest, SIDCBattleDimension_Space) {
   CorrelationEngine engine(store, spatial, milclass);
-  auto obs = makeObs(10.0, 10.0);
+  auto obs = makeObs(10.0 * DEG, 10.0 * DEG);
   obs.source_sidc = "SFP";  // position 2 = 'P'
   auto result = engine.processObservation(obs);
   ASSERT_FALSE(result.object_id.isNull());
@@ -206,7 +208,7 @@ TEST_F(CorrelationEngineTest, SIDCBattleDimension_Space) {
 ///< Coverage: SIDC position 2 == 'A' → BattleDimension::Air
 TEST_F(CorrelationEngineTest, SIDCBattleDimension_Air) {
   CorrelationEngine engine(store, spatial, milclass);
-  auto obs = makeObs(11.0, 10.0);
+  auto obs = makeObs(11.0 * DEG, 10.0 * DEG);
   obs.source_sidc = "SFA";
   auto result = engine.processObservation(obs);
   ASSERT_FALSE(result.object_id.isNull());
@@ -218,7 +220,7 @@ TEST_F(CorrelationEngineTest, SIDCBattleDimension_Air) {
 ///< Coverage: SIDC position 2 == 'S' → BattleDimension::SeaSurface
 TEST_F(CorrelationEngineTest, SIDCBattleDimension_SeaSurface) {
   CorrelationEngine engine(store, spatial, milclass);
-  auto obs = makeObs(12.0, 10.0);
+  auto obs = makeObs(12.0 * DEG, 10.0 * DEG);
   obs.source_sidc = "SFS";
   auto result = engine.processObservation(obs);
   ASSERT_FALSE(result.object_id.isNull());
@@ -230,7 +232,7 @@ TEST_F(CorrelationEngineTest, SIDCBattleDimension_SeaSurface) {
 ///< Coverage: SIDC position 2 == 'U' → BattleDimension::Subsurface
 TEST_F(CorrelationEngineTest, SIDCBattleDimension_Subsurface) {
   CorrelationEngine engine(store, spatial, milclass);
-  auto obs = makeObs(13.0, 10.0);
+  auto obs = makeObs(13.0 * DEG, 10.0 * DEG);
   obs.source_sidc = "SFU";
   auto result = engine.processObservation(obs);
   ASSERT_FALSE(result.object_id.isNull());
@@ -242,7 +244,7 @@ TEST_F(CorrelationEngineTest, SIDCBattleDimension_Subsurface) {
 ///< Coverage: SIDC position 2 == 'F' → BattleDimension::SOF
 TEST_F(CorrelationEngineTest, SIDCBattleDimension_SOF) {
   CorrelationEngine engine(store, spatial, milclass);
-  auto obs = makeObs(14.0, 10.0);
+  auto obs = makeObs(14.0 * DEG, 10.0 * DEG);
   obs.source_sidc = "SFF";
   auto result = engine.processObservation(obs);
   ASSERT_FALSE(result.object_id.isNull());
@@ -254,7 +256,7 @@ TEST_F(CorrelationEngineTest, SIDCBattleDimension_SOF) {
 ///< Coverage: SIDC position 2 is unrecognized character → default: break (line 96)
 TEST_F(CorrelationEngineTest, SIDCBattleDimension_UnknownChar) {
   CorrelationEngine engine(store, spatial, milclass);
-  auto obs = makeObs(15.0, 10.0);
+  auto obs = makeObs(15.0 * DEG, 10.0 * DEG);
   obs.source_sidc = "SFX";  // position 2 = 'X' → hits default: break
   auto result = engine.processObservation(obs);
   ASSERT_FALSE(result.object_id.isNull());

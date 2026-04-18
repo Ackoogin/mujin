@@ -1,0 +1,215 @@
+// Auto-generated service FlatBuffers schema
+// Generated from proto service closure for pyramid.components.autonomy_backend.services
+
+namespace pyramid.services.autonomy_backend;
+
+enum AutonomyBackendState : int {
+  UNSPECIFIED = 0,
+  IDLE = 1,
+  READY = 2,
+  WAITING_FOR_RESULTS = 3,
+  COMPLETE = 4,
+  FAILED = 5,
+  STOPPED = 6
+}
+
+enum CommandStatus : int {
+  UNSPECIFIED = 0,
+  PENDING = 1,
+  RUNNING = 2,
+  SUCCEEDED = 3,
+  FAILED_TRANSIENT = 4,
+  FAILED_PERMANENT = 5,
+  CANCELLED = 6
+}
+
+enum StopMode : int {
+  UNSPECIFIED = 0,
+  DRAIN = 1,
+  IMMEDIATE = 2
+}
+
+enum FactAuthorityLevel : int {
+  UNSPECIFIED = 0,
+  BELIEVED = 1,
+  CONFIRMED = 2
+}
+
+table FactUpdate {
+  key:string;
+  value:bool;
+  source:string;
+  authority:FactAuthorityLevel;
+}
+
+table StateUpdate {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+  fact_updates:[FactUpdate];
+}
+
+table MissionIntent {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+  goal_fluents:[string];
+}
+
+table AgentState {
+  agent_id:string;
+  agent_type:string;
+  available:bool;
+}
+
+table PolicyEnvelope {
+  max_replans:uint;
+  enable_goal_dispatch:bool;
+}
+
+table Session {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+  intent:MissionIntent;
+  policy:PolicyEnvelope;
+  available_agents:[AgentState];
+}
+
+table Capabilities {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+  backend_id:string;
+  supports_batch_planning:bool;
+  supports_external_command_dispatch:bool;
+  supports_replanning:bool;
+}
+
+table StringKeyValue {
+  key:string;
+  value:string;
+}
+
+table Command {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+  command_id:string;
+  action_name:string;
+  signature:string;
+  service_name:string;
+  operation:string;
+  request_fields:[StringKeyValue];
+}
+
+table GoalDispatch {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+  dispatch_id:string;
+  agent_id:string;
+  goals:[string];
+}
+
+table DecisionRecord {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+  session_id:string;
+  backend_id:string;
+  world_version:ulong;
+  replan_count:uint;
+  plan_success:bool;
+  solve_time_ms:double;
+  planned_action_signatures:[string];
+  compiled_bt_xml:string;
+}
+
+table CommandResult {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  entity_source:string;
+  command_id:string;
+  status:CommandStatus;
+  observed_updates:[FactUpdate];
+  source:string;
+}
+
+table DispatchResult {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  entity_source:string;
+  dispatch_id:string;
+  status:CommandStatus;
+  observed_updates:[FactUpdate];
+  source:string;
+}
+
+table SessionSnapshot {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+  session_id:string;
+  state:AutonomyBackendState;
+  world_version:ulong;
+  replan_count:uint;
+  agent_states:[AgentState];
+  outstanding_commands:[Command];
+  outstanding_goal_dispatches:[GoalDispatch];
+  decision_history:[DecisionRecord];
+}
+
+table SessionStepRequest {
+  session_id:string;
+}
+
+table SessionStopRequest {
+  session_id:string;
+  mode:StopMode;
+}
+
+table Ack {
+  success:bool;
+}
+
+table Query {
+  id:[string];
+  has_one_shot:bool;
+  one_shot:bool;
+}
+
+table IdentifierValue {
+  value:string;
+}
+
+table CapabilitiesArrayHolder {
+  items:[Capabilities];
+}
+
+table SessionSnapshotArrayHolder {
+  items:[SessionSnapshot];
+}
+
+table CommandArrayHolder {
+  items:[Command];
+}
+
+table GoalDispatchArrayHolder {
+  items:[GoalDispatch];
+}
+
+table DecisionRecordArrayHolder {
+  items:[DecisionRecord];
+}
+

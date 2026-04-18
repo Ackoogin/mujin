@@ -125,6 +125,7 @@ public:
   // --- Engine access ---
 
   std::shared_ptr<ObjectStore> store() { return store_; }
+  std::shared_ptr<const ObjectStore> store() const { return store_; }
   std::shared_ptr<SpatialIndex> spatialIndex() { return spatial_; }
   std::shared_ptr<MilClassEngine> milclassEngine() { return milclass_; }
   std::shared_ptr<CorrelationEngine> correlationEngine() { return correlation_; }

@@ -397,7 +397,7 @@ uint8_t StreamingCodec::affiliationToOrdinal(Affiliation a) {
   return static_cast<uint8_t>(a);
 }
 Affiliation StreamingCodec::ordinalToAffiliation(uint8_t v) {
-  if (v > static_cast<uint8_t>(Affiliation::Pending)) return Affiliation::Unknown;
+  if (v > static_cast<uint8_t>(Affiliation::AssumedFriend)) return Affiliation::Unknown;
   return static_cast<Affiliation>(v);
 }
 

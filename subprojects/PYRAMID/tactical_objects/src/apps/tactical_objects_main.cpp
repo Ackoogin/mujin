@@ -2,9 +2,7 @@
 #include <TacticalObjectsComponent.h>
 
 #include "pyramid_services_tactical_objects_consumed.hpp"
-#include "pyramid_services_tactical_objects_provided.hpp"
 
-#include <nlohmann/json.hpp>
 #include <pcl/component.hpp>
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
@@ -23,8 +21,8 @@
 
 namespace {
 
-using json = nlohmann::json;
 namespace consumed = pyramid::services::tactical_objects::consumed;
+constexpr const char* kJsonContentType = "application/json";
 
 std::atomic<bool> g_shutdown{false};
 
@@ -32,161 +30,30 @@ void signalHandler(int) {
   g_shutdown.store(true);
 }
 
-class LocalConsumedBridge : public pcl::Component {
-public:
-  LocalConsumedBridge(tactical_objects::TacticalObjectsRuntime& runtime,
-                      pcl_executor_t* exec)
-    : pcl::Component("tactical_objects_local_consumed_bridge"),
-      runtime_(runtime),
-      exec_(exec) {}
-
-  void publishDemoEvidence() {
-    if (!exec_) {
-      return;
-    }
-
-    publish_buffer_ = "{\"identity\":\"STANDARD_IDENTITY_HOSTILE\","
-                      "\"dimension\":\"BATTLE_DIMENSION_SEA_SURFACE\","
-                      "\"latitude_rad\":0.8989737191417272,"
-                      "\"longitude_rad\":-0.002230530784048753,"
-                      "\"confidence\":0.95,"
-                      "\"observed_at\":1.0}";
-
-    pcl_msg_t msg{};
-    msg.data = publish_buffer_.data();
-    msg.size = static_cast<uint32_t>(publish_buffer_.size());
-    msg.type_name = "application/json";
-    pcl_executor_post_incoming(exec_, consumed::kTopicObjectEvidence, &msg);
-  }
-
-protected:
-  pcl_status_t on_configure() override {
-    addSubscriber(consumed::kTopicObjectEvidence, "application/json",
-                  onStandardObjectEvidence, this);
-    addSubscriber("evidence_requirements", "application/json",
-                  onInternalEvidenceRequirements, this);
-    evidence_requirements_port_ =
-        addPublisher(provided_evidence_topic_, "application/json");
-    return PCL_OK;
-  }
-
-private:
-  static void onStandardObjectEvidence(pcl_container_t*, const pcl_msg_t* msg,
-                                       void* user_data) {
-    auto* self = static_cast<LocalConsumedBridge*>(user_data);
-    if (!msg || !msg->data || msg->size == 0) {
-      return;
-    }
-
-    std::string str(static_cast<const char*>(msg->data), msg->size);
-    json j;
-    try {
-      j = json::parse(str);
-    } catch (...) {
-      return;
-    }
-
-    tactical_objects::Observation obs;
-    obs.observation_id = pyramid::core::uuid::UUIDHelper::generateV4();
-    obs.observed_at = j.value("observed_at", 0.0);
-    obs.object_hint_type = tactical_objects::ObjectType::Platform;
-    obs.affiliation_hint = tactical_objects::Affiliation::Unknown;
-    obs.confidence = j.value("confidence", 0.0);
-
-    obs.position.lat = radToDeg(j.value("latitude_rad", 0.0));
-    obs.position.lon = radToDeg(j.value("longitude_rad", 0.0));
-    obs.position.alt = 0.0;
-
-    const std::string identity = j.value("identity", "");
-    if (identity == "STANDARD_IDENTITY_HOSTILE") {
-      obs.affiliation_hint = tactical_objects::Affiliation::Hostile;
-    } else if (identity == "STANDARD_IDENTITY_FRIENDLY") {
-      obs.affiliation_hint = tactical_objects::Affiliation::Friendly;
-    } else if (identity == "STANDARD_IDENTITY_NEUTRAL") {
-      obs.affiliation_hint = tactical_objects::Affiliation::Neutral;
-    }
-
-    const std::string dimension = j.value("dimension", "");
-    if (dimension == "BATTLE_DIMENSION_SEA_SURFACE") {
-      obs.source_sidc = "SHSP------*****";
-    } else if (dimension == "BATTLE_DIMENSION_AIR") {
-      obs.source_sidc = "SHAP------*****";
-    } else if (dimension == "BATTLE_DIMENSION_SUBSURFACE") {
-      obs.source_sidc = "SHUP------*****";
-    } else if (dimension == "BATTLE_DIMENSION_GROUND") {
-      obs.source_sidc = "SHGP------*****";
-    }
-
-    tactical_objects::ObservationBatch batch;
-    batch.observations.push_back(obs);
-    self->runtime_.processObservationBatch(batch);
-  }
-
-  static void onInternalEvidenceRequirements(pcl_container_t*, const pcl_msg_t* msg,
-                                             void* user_data) {
-    auto* self = static_cast<LocalConsumedBridge*>(user_data);
-    if (!msg || !msg->data || msg->size == 0) {
-      return;
-    }
-
-    std::string payload(static_cast<const char*>(msg->data), msg->size);
-
-    if (self->evidence_requirements_port_) {
-      pcl_msg_t pub{};
-      pub.data = payload.data();
-      pub.size = static_cast<uint32_t>(payload.size());
-      pub.type_name = "application/json";
-      pcl_port_publish(self->evidence_requirements_port_, &pub);
-    }
-
-    if (!self->exec_) {
-      return;
-    }
-
-    pcl_msg_t req{};
-    req.data = payload.data();
-    req.size = static_cast<uint32_t>(payload.size());
-    req.type_name = "application/json";
-
-    char resp_buf[1024] = {};
-    pcl_msg_t resp{};
-    resp.data = resp_buf;
-    resp.size = sizeof(resp_buf);
-    resp.type_name = "application/json";
-
-    const auto rc = pcl_executor_invoke_service(
-        self->exec_, consumed::kSvcCreateRequirement, &req, &resp);
-    if (rc != PCL_OK) {
-      self->logWarn("Local consumed service %s unavailable",
-                    consumed::kSvcCreateRequirement);
-    }
-  }
-
-  static double radToDeg(double rad) {
-    return rad * 57.29577951308232;
-  }
-
-  tactical_objects::TacticalObjectsRuntime& runtime_;
-  pcl_executor_t* exec_ = nullptr;
-  pcl_port_t* evidence_requirements_port_ = nullptr;
-  std::string publish_buffer_;
-  static constexpr const char* provided_evidence_topic_ = "standard.evidence_requirements";
-};
-
 class LocalEvidenceNodeStub : public pcl::Component {
 public:
-  LocalEvidenceNodeStub() : pcl::Component("tactical_objects_local_node_stub") {}
+  explicit LocalEvidenceNodeStub(std::string content_type)
+      : pcl::Component("tactical_objects_local_node_stub"),
+        content_type_(std::move(content_type)) {}
 
 protected:
   pcl_status_t on_configure() override {
-    addSubscriber("standard.evidence_requirements", "application/json",
+    addSubscriber("standard.evidence_requirements", content_type_.c_str(),
                   onEvidenceRequirements, this);
-    addService(consumed::kSvcCreateRequirement, "application/json",
+    addService(consumed::kSvcCreateRequirement, content_type_.c_str(),
                handleCreateRequirement, this);
     return PCL_OK;
   }
 
 private:
+  class Handler : public consumed::ServiceHandler {
+  public:
+    pyramid::data_model::Identifier
+    handleCreateRequirement(const pyramid::data_model::ObjectEvidenceRequirement&) override {
+      return "stub-evidence-requirement-001";
+    }
+  };
+
   static void onEvidenceRequirements(pcl_container_t*, const pcl_msg_t* msg,
                                      void* user_data) {
     auto* self = static_cast<LocalEvidenceNodeStub*>(user_data);
@@ -195,31 +62,61 @@ private:
     }
 
     const std::string payload(static_cast<const char*>(msg->data), msg->size);
-    self->logInfo("[LocalNodeStub] received standard.evidence_requirements: %s",
-                  payload.c_str());
+    self->logInfo("[LocalNodeStub] received standard.evidence_requirements (%s) size=%u",
+                  msg->type_name ? msg->type_name : "<null>",
+                  static_cast<unsigned>(payload.size()));
   }
 
   static pcl_status_t handleCreateRequirement(pcl_container_t*, const pcl_msg_t* request,
                                               pcl_msg_t* response, pcl_svc_context_t*,
                                               void* user_data) {
     auto* self = static_cast<LocalEvidenceNodeStub*>(user_data);
-    if (!request || !request->data) {
+    if (!request) {
       return PCL_ERR_INVALID;
     }
 
-    const std::string payload(static_cast<const char*>(request->data), request->size);
-    self->logInfo("[LocalNodeStub] service %s called with payload: %s",
-                  consumed::kSvcCreateRequirement, payload.c_str());
+    Handler handler;
+    void* response_buf = nullptr;
+    size_t response_size = 0;
+    consumed::dispatch(handler, consumed::ServiceChannel::CreateRequirement,
+                       request->data, request->size, self->content_type_.c_str(),
+                       &response_buf, &response_size);
 
-    self->response_buffer_ = "\"stub-evidence-requirement-001\"";
-    response->data = self->response_buffer_.data();
+    self->response_buffer_.clear();
+    if (response_buf && response_size > 0) {
+      self->response_buffer_.assign(static_cast<const char*>(response_buf), response_size);
+      std::free(response_buf);
+    }
+
+    response->data = self->response_buffer_.empty()
+                         ? nullptr
+                         : const_cast<char*>(self->response_buffer_.data());
     response->size = static_cast<uint32_t>(self->response_buffer_.size());
-    response->type_name = "application/json";
+    response->type_name = self->content_type_.c_str();
     return PCL_OK;
   }
 
+  std::string content_type_;
   std::string response_buffer_;
 };
+
+void publishDemoEvidence(tactical_objects::TacticalObjectsRuntime& runtime) {
+  tactical_objects::Observation obs;
+  obs.observation_id = pyramid::core::uuid::UUIDHelper::generateV4();
+  obs.observed_at = 1.0;
+  obs.object_hint_type = tactical_objects::ObjectType::Platform;
+  obs.affiliation_hint = tactical_objects::Affiliation::Hostile;
+  obs.position.lat = 0.8989737191417272;
+  obs.position.lon = -0.002230530784048753;
+  obs.position.alt = 0.0;
+  obs.confidence = 0.95;
+  obs.source_ref.source_system = "demo-radar";
+  obs.source_sidc = "SHSP------*****";
+
+  tactical_objects::ObservationBatch batch;
+  batch.observations.push_back(obs);
+  runtime.processObservationBatch(batch);
+}
 
 } // namespace
 
@@ -228,6 +125,7 @@ int main(int argc, char* argv[]) {
   std::string port_file;
   int timeout_secs = 0;
   bool emit_demo_evidence = false;
+  std::string frontend_content_type = kJsonContentType;
 
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
@@ -238,6 +136,10 @@ int main(int argc, char* argv[]) {
       timeout_secs = std::atoi(argv[++i]);
     } else if (std::strcmp(argv[i], "--demo-evidence") == 0) {
       emit_demo_evidence = true;
+    } else if ((std::strcmp(argv[i], "--content-type") == 0 ||
+                std::strcmp(argv[i], "--frontend-content-type") == 0) &&
+               i + 1 < argc) {
+      frontend_content_type = argv[++i];
     }
   }
 
@@ -259,21 +161,14 @@ int main(int argc, char* argv[]) {
   tactical_objects_component.setTickRateHz(100.0);
   pcl_executor_add(local_exec, tactical_objects_component.handle());
 
-  LocalConsumedBridge local_consumed_bridge(
-      tactical_objects_component.runtime(), local_exec);
-  local_consumed_bridge.configure();
-  local_consumed_bridge.activate();
-  local_consumed_bridge.setTickRateHz(100.0);
-  pcl_executor_add(local_exec, local_consumed_bridge.handle());
-
-  LocalEvidenceNodeStub local_node_stub;
+  LocalEvidenceNodeStub local_node_stub(frontend_content_type);
   local_node_stub.configure();
   local_node_stub.activate();
   local_node_stub.setTickRateHz(100.0);
   pcl_executor_add(local_exec, local_node_stub.handle());
 
   tactical_objects::StandardBridge standard_bridge(
-      tactical_objects_component.runtime(), local_exec, false);
+      tactical_objects_component.runtime(), local_exec, frontend_content_type, true);
   standard_bridge.configure();
   standard_bridge.activate();
   standard_bridge.setTickRateHz(100.0);
@@ -305,13 +200,13 @@ int main(int argc, char* argv[]) {
   pcl_executor_add(remote_exec, gateway);
 
   std::fprintf(stderr,
-               "[tactical_objects_app] Remote provided interface is live on port %u.\n",
-               port);
+               "[tactical_objects_app] Remote provided interface is live on port %u (%s).\n",
+               port, frontend_content_type.c_str());
   std::fprintf(stderr,
                "[tactical_objects_app] Local consumed interface is exposed on the local executor.\n");
 
   if (emit_demo_evidence) {
-    local_consumed_bridge.publishDemoEvidence();
+    publishDemoEvidence(tactical_objects_component.runtime());
   }
 
   const auto start = std::chrono::steady_clock::now();
@@ -325,7 +220,7 @@ int main(int argc, char* argv[]) {
       const auto now = std::chrono::steady_clock::now();
       if (std::chrono::duration_cast<std::chrono::milliseconds>(
               now - last_demo_publish).count() >= 1000) {
-        local_consumed_bridge.publishDemoEvidence();
+        publishDemoEvidence(tactical_objects_component.runtime());
         last_demo_publish = now;
       }
     }
