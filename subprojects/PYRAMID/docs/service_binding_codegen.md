@@ -140,11 +140,14 @@ The active transport baseline is:
 
 - `pcl`
 
-The planned transport projections are:
+Additional implemented transport projections are:
 
 - `grpc`
-- `shared_memory`
 - `ros2`
+
+Shared-memory support currently exists at the PCL transport/bus layer. The
+Tactical Objects-specific generated projection onto that bus remains tracked in
+the Tactical Objects status page.
 
 Transport code owns:
 

@@ -10,6 +10,12 @@
 #else
 #define PYRAMID_HAVE_SERVICE_FLATBUFFERS 0
 #endif
+#if __has_include("pyramid_services_autonomy_backend_protobuf_codec.hpp")
+#include "pyramid_services_autonomy_backend_protobuf_codec.hpp"
+#define PYRAMID_HAVE_SERVICE_PROTOBUF 1
+#else
+#define PYRAMID_HAVE_SERVICE_PROTOBUF 0
+#endif
 #include "pyramid_data_model_common_codec.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
 
@@ -33,6 +39,9 @@ using pyramid::data_model::tactical::toJson;
 using pyramid::data_model::tactical::fromJson;
 #if PYRAMID_HAVE_SERVICE_FLATBUFFERS
 namespace flatbuffers_codec = pyramid::services::autonomy_backend::flatbuffers_codec;
+#endif
+#if PYRAMID_HAVE_SERVICE_PROTOBUF
+namespace protobuf_codec = pyramid::services::autonomy_backend::protobuf_codec;
 #endif
 
 // ---------------------------------------------------------------------------

@@ -182,10 +182,29 @@ static data_model::BattleDimension battleDimensionFromString(const std::string& 
   return data_model::BattleDimension::Unspecified;
 }
 
+static data_model::BattleDimension battleDimensionFromOrdinal(int dimension) {
+  switch (dimension) {
+    case 1: return data_model::BattleDimension::Ground;
+    case 2: return data_model::BattleDimension::Subsurface;
+    case 3: return data_model::BattleDimension::SeaSurface;
+    case 4: return data_model::BattleDimension::Air;
+    case 5: return data_model::BattleDimension::Unknown;
+    default: return data_model::BattleDimension::Unspecified;
+  }
+}
+
 static data_model::DataPolicy dataPolicyFromString(const std::string& policy) {
   if (policy == "DATA_POLICY_OBTAIN") return data_model::DataPolicy::Obtain;
   if (policy == "DATA_POLICY_QUERY") return data_model::DataPolicy::Query;
   return data_model::DataPolicy::Unspecified;
+}
+
+static data_model::DataPolicy dataPolicyFromOrdinal(int policy) {
+  switch (policy) {
+    case 1: return data_model::DataPolicy::Query;
+    case 2: return data_model::DataPolicy::Obtain;
+    default: return data_model::DataPolicy::Unspecified;
+  }
 }
 
 static std::string dataPolicyToString(data_model::DataPolicy policy) {
@@ -262,8 +281,15 @@ static data_model::PolyArea make_poly_area(double min_lat_rad,
 static data_model::ObjectEvidenceRequirement evidence_requirement_from_internal_json(const json& j) {
   data_model::ObjectEvidenceRequirement req{};
   req.base.id = j.value("id", "");
-  req.policy = dataPolicyFromString(j.value("policy", ""));
-  const auto dim = battleDimensionFromString(j.value("dimension", ""));
+  if (j.contains("policy") && j["policy"].is_number_integer()) {
+    req.policy = dataPolicyFromOrdinal(j["policy"].get<int>());
+  } else {
+    req.policy = dataPolicyFromString(j.value("policy", ""));
+  }
+  const auto dim =
+      j.contains("dimension") && j["dimension"].is_number_integer()
+          ? battleDimensionFromOrdinal(j["dimension"].get<int>())
+          : battleDimensionFromString(j.value("dimension", ""));
   if (dim != data_model::BattleDimension::Unspecified) {
     req.dimension.push_back(dim);
   }

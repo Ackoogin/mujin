@@ -1,607 +1,204 @@
-# Standard Data-Model Alignment Plan
+# Tactical Objects Standard Alignment
 
-## 1. Problem Statement
+## Purpose
 
-The Tactical Objects component (`pyramid/tactical_objects/`) has an internal
-data model (types, enums, service names, wire format) that diverges from
-the PYRAMID standard proto IDL:
+This document describes the current Tactical Objects alignment with the
+PYRAMID proto interface. It is the stable design reference for the shipped
+component.
 
-| Aspect | Internal (C++) | Standard Proto |
-|--------|---------------|----------------|
-| Identity enum | `Affiliation` (Friendly=0 … Pending=8) | `StandardIdentity` (Unspecified=0, Unknown=1 … AssumedFriendly=9) |
-| Battle dimension | Ground=0, **Air=1**, SeaSurface=2, **Subsurface=3**, Space=4, SOF=5 | Ground=1, **Subsurface=2**, SeaSurface=3, **Air=4**, Unknown=5 |
-| Position | `Position{lat, lon, alt}` (degrees, doubles) | `GeodeticPosition{Angle latitude, Angle longitude}` (radians) |
-| Entity base | ad-hoc `UUIDKey` + per-field optionals | `Entity{update_time, id, source}` (standard base) |
-| Interest model | `InterestCriteria` + `BoundingBox` | `ObjectInterestRequirement` with `PolyArea`/`CircleArea`/`Point` oneof |
-| Evidence model | `DerivedEvidenceRequirement` (internal) | `ObjectEvidenceRequirement` with CRUD service |
-| Service names | `create_object`, `subscribe_interest`, `query`, etc. | `Matching_Objects_Service.ReadMatch`, `Object_Of_Interest_Service.CreateRequirement`, etc. |
-| Object output | `TacticalObject` / `EntityUpdateFrame` (binary batch) | `ObjectDetail` + `ObjectMatch` (proto messages) |
-| Extra types | `MilClassProfile`, `BehaviorComponent`, `ZoneType`, `Echelon`, `Mobility` | Not in standard (domain extensions) |
+## Current State
 
-The standard proto files are now in the repo (`subprojects/PYRAMID/proto/pyramid/data_model/`,
-`subprojects/PYRAMID/proto/pyramid/components/tactical_objects/services/`), with corresponding
-Ada types in `subprojects/PYRAMID/examples/ada/tactical_objects_types.ads`.
+Tactical Objects exposes the PYRAMID tactical-objects proto contract through
+generated service bindings. The shipped executable path is:
 
-## 2. Goals
-
-1. External consumers (Ada clients, future gRPC clients) talk exclusively
-   in standard proto types.
-2. Internal domain engines (correlation, spatial index, mil-class) keep
-   working without regressions.
-3. Streaming binary performance (0-copy batch frames) is preserved.
-4. Migration is incremental — each step is independently testable.
-
-### Production Alignment Status
-
-The original 6-phase plan captured the internal model-alignment work, but it
-did not guarantee that the **shipped executable path** (`tactical_objects_app`)
-was actually exposing the generated proto contract. The follow-on work below is
-the production-facing completion plan for that gap.
-
-| Workstream | Intent | Status |
-|-----------|--------|--------|
-| Shipped provided interface uses generated bindings | `tactical_objects_app` serves the proto-defined provided services via generated dispatch/codecs | **COMPLETE** |
-| Interest lifecycle surface is complete | `create/read/update/delete requirement` all exposed on the shipped path | **COMPLETE** |
-| Rich standard object model | `read_detail` populates the standard `ObjectDetail` fields from the internal store, not just `id/position/quality` | **COMPLETE** |
-| Multi-codec frontend | Standard interface selectable as JSON or FlatBuffers on the shipped path | **COMPLETE** |
-| Protobuf frontend parity | Same shipped-path validation for protobuf transport/content-type | **COMPLETE** |
-| Real-app interop coverage | Automated tests exercise `tactical_objects_app`, not only the standalone test bridge | **COMPLETE** |
-
-### Delivered In This Change
-
-- `StandardBridge` on the shipped path now uses the generated tactical-objects
-  provided/consumed bindings for service dispatch and payload encoding.
-- `tactical_objects_app` now hosts the standard interface directly using a
-  selectable frontend codec (`application/json` or `application/flatbuffers`),
-  instead of relying on a manual local-consumed bridge.
-- The provided interface now exposes the full standard interest lifecycle:
-  `object_of_interest.create_requirement`, `.read_requirement`,
-  `.update_requirement`, `.delete_requirement`, plus
-  `matching_objects.read_match` and `specific_object_detail.read_detail`.
-- `specific_object_detail.read_detail` now maps the internal business model onto
-  the richer standard `ObjectDetail` view:
-  `update_time`, `entity_source`, `source[]`, `position`, `creation_time`,
-  `quality`, `course`, `speed`, `identity`, and `dimension`.
-- A direct app/client test driver has been added so the real executable path can
-  be exercised in JSON, FlatBuffers, and protobuf modes.
-- A direct Ada ActiveFind real-app test driver has been added so the canonical
-  Ada evidence-provider flow runs against `tactical_objects_app`, not only
-  `standalone_bridge`, in JSON and FlatBuffers modes.
-- The generated tactical-objects service bindings now correctly detect and wire
-  protobuf codecs at compile time, so the shipped app/client path can use the
-  generated protobuf transport end to end instead of silently compiling that
-  path out.
-
-### Remaining Work
-
-- Decide whether `standard.entity_matches` remains the standard high-rate
-  projection of the internal binary stream, or whether an additional
-  bulk-detail/batch-detail standard path is needed for consumers that want more
-  than `ObjectMatch` without paying repeated `read_detail` round-trips.
-
-## 3. Option C — Hybrid (selected)
-
-Progress tracked against the 6-phase plan below.
-
-| Phase | Description | Status |
-|-------|-------------|--------|
-| 1 | Bridge component (StandardBridge) | **COMPLETE** |
-| 2 | Enum ordinal alignment (Affiliation, BattleDimension) | **COMPLETE** |
-| 3 | Position alignment (radians) | **COMPLETE** |
-| 4 | Interest/Evidence model alignment | **COMPLETE** |
-| 5 | Service name alignment | **COMPLETE** |
-| 6 | Remove bridge (now identity-only) | **COMPLETE** |
-
-### Phase 1 — Bridge ✅
-
-`StandardBridge` (C++) deployed as a PCL component that sits between
-external PYRAMID consumers and the internal `TacticalObjectsComponent`.
-
-- Provided: `object_of_interest.create_requirement` (JSON, PYRAMID standard)
-- Provided: `standard.object_evidence` subscriber (JSON, PYRAMID standard)
-- Published: `standard.entity_matches` (JSON, PYRAMID standard)
-- All internal services and binary streaming unchanged.
-
-Constraint honoured: generated types (`pyramid::data_model::*`) appear only
-in `StandardBridge.cpp` — no generated types in business logic.
-
-### Phase 2 — Enum ordinal alignment ✅
-
-`Affiliation` and `BattleDimension` C++ enums reordered with explicit ordinals
-to match PYRAMID standard proto values.  The bridge enum string converters
-are removed; the bridge now uses direct `static_cast` between aligned enums.
-Ada `Ordinal_To_Affiliation` and `tactical_objects_types.ads` updated in
-lockstep.
-
-**Wire-format impact**: binary streaming ordinals changed.  Any existing
-recorded binary data or live clients must upgrade together.
-
-### Phase 6 — Remove bridge (now identity-only) ✅
-
-This milestone should be read as **historical internal-alignment progress**, not
-as proof that the shipped path was done. The bridge is not literally removed —
-it remains as the protocol adapter between the internal runtime and the
-generated standard contract — but after the production migration work above it
-is now a generated-binding-based adapter rather than a hand-written JSON bridge.
-
-### Progress Update — 2026-04-18
-
-- The shipped `tactical_objects_app` path is now validated with the generated
-  bindings across all three supported frontend codecs:
-  `application/json`, `application/flatbuffers`, and
-  `application/protobuf`.
-- The focused protobuf gap turned out to be in the generated service-binding
-  implementation, not in the tactical-object business mapping itself:
-  the generated tactical-objects binding `.cpp` files had protobuf branches,
-  but they did not include the protobuf codec header or define the
-  `PYRAMID_HAVE_SERVICE_PROTOBUF` feature macro, which meant protobuf support
-  was compiled out on the shipped path.
-- The generator has been updated so future regenerated tactical-objects service
-  bindings detect protobuf codecs in the same way they already detect
-  FlatBuffers codecs.
-- A direct real-app protobuf integration test now complements the existing
-  JSON and FlatBuffers app/client tests.
-- Direct Ada ActiveFind coverage now also targets `tactical_objects_app` in
-  JSON and FlatBuffers modes, so the evidence-provider flow is no longer
-  validated only through the standalone bridge harness.
-
-**Last string-conversion chain removed:**
-The `handleCreateRequirement` switch that mapped `BattleDimension` ordinals to
-string names ("Air", "Ground", …) is replaced with a single
-`internal["battle_dimension"] = static_cast<int>(dim)` emit.
-`handleSubscribeInterest` now accepts integer ordinals in addition to strings
-(integer branch tried first; string branch retained for backward compatibility).
-This is a direct consequence of the Phase 2 ordinal alignment.
-
-**Residual bridge contract — inherent schema differences, cannot be removed:**
-
-| Translation | Reason it is permanent |
-|-------------|------------------------|
-| `DataPolicy::Obtain` ↔ `query_mode = "active_find"` | Semantic equivalence between two different naming schemes (`policy` vs `query_mode`); no shared ordinal |
-| `PolyArea`/`CircleArea`/`Point` oneof ↔ flat `BoundingBox` | Standard uses geometry abstraction; internal uses axis-aligned bbox; changing would alter correlation/spatial engine contracts |
-| Binary `EntityUpdateFrame` stream ↔ `ObjectMatch[]` JSON | Streaming binary for performance; standard is JSON for interoperability; wire-format unification would break zero-copy path |
-| `ObjectDetail` ↔ `Observation` (inbound evidence) | Standard observation type has rich provenance; internal `Observation` maps to correlation engine vocabulary |
-
-All remaining translations are justified by the schema boundary between the
-PYRAMID standard IDL and the internal domain model. The bridge is the correct
-and permanent home for this mapping.
-
-**Changes made:**
-- `TacticalObjectsComponent.cpp` (`handleSubscribeInterest`): added integer
-  ordinal branch for `battle_dimension` (tries integer, falls back to string).
-- `StandardBridge.cpp` (`handleCreateRequirement`): 10-line switch replaced
-  with `internal["battle_dimension"] = static_cast<int>(dim)` (3 lines),
-  conditioned on `dim != 0` (Unspecified = no filter).
-
-### Phase 5 — Service name alignment ✅
-
-`StandardBridge` now exposes the two standard read services, completing the
-provided-interface surface alongside the already-standard
-`object_of_interest.create_requirement`.
-
-Services added to `StandardBridge`:
-- **`matching_objects.read_match`** — accepts standard `Query` JSON
-  (`{"id": ["<uuid>", ...]}` or empty for all); calls the internal `query`
-  service via the shared executor; translates each `QueryResultEntry` into an
-  `ObjectMatch` (`id`, `matching_object_id`, `source = "tactical_objects"`)
-  and returns a JSON array.
-- **`specific_object_detail.read_detail`** — accepts standard `Query` JSON;
-  for each requested UUID looks up the entity directly in the runtime (position
-  is already in radians per Phase 3); builds an `ObjectDetail` (`id`,
-  `position.latitude/longitude`, `quality`) and returns a JSON array.
-
-Changes made:
-- `StandardBridge.h`: declared `handleReadMatch` and `handleReadDetail`.
-- `StandardBridge.cpp`: added `SVC_READ_MATCH`, `SVC_READ_DETAIL`, and
-  `SVC_QUERY` constants; registered both new services in `on_configure`;
-  implemented both handlers.
-- `Test_TacticalObjectsComponent.cpp`: added `#include <StandardBridge.h>`;
-  added `StandardReadMatchReturnsMatchArray` and
-  `StandardReadDetailReturnsDetailArray` tests — each creates a `StandardBridge`
-  in the executor alongside `TacticalObjectsComponent` and verifies the
-  full request→response translation.
-
-**Standard interface now complete (provided side):**
-
-| Standard wire name | Internal call |
-|--------------------|---------------|
-| `object_of_interest.create_requirement` | `subscribe_interest` |
-| `matching_objects.read_match` | `query` |
-| `specific_object_detail.read_detail` | runtime `getRecord` + `kinematics` |
-
-**Wire-format impact**: no change to existing services or binary codec.
-
----
-
-### Phase 4 — Interest/Evidence model alignment ✅
-
-`DerivedEvidenceRequirement` JSON serialization in `TacticalObjectsComponent`
-enriched to carry all fields the bridge needs; bridge updated to integer-based
-parsing leveraging aligned ordinals from Phase 2.
-
-Changes made:
-- `TacticalObjectsComponent.cpp` (`handleSubscribeInterest`): evidence requirement
-  JSON now emits `"id"` (was `"requirement_id"`), `"policy"` as integer ordinal
-  (1 = `DataPolicy::Query`), `"dimension"` as integer ordinal when
-  `criteria.battle_dimension` is set, and `"min/max_lat/lon_rad"` area fields
-  when `criteria.area` is set.
-- `StandardBridge.cpp` (`evidence_requirement_from_internal_json`): replaced
-  string-based policy/dimension parsing with direct `static_cast` using aligned
-  ordinals (Phase 2 guarantee); function is now 8 lines vs 18.
-- `Test_TacticalObjectsComponent.cpp`
-  (`SubscribeInterestActiveFindReturnsEvidenceRequirements`): updated to supply
-  an AOI in the subscribe request and assert that each returned evidence
-  requirement carries `id`, `policy=1`, `dimension=4` (Air), and
-  `min_lat_rad ≈ 50°` — verifying the full round-trip.
-
-**Bridge impact**: `evidence_requirement_from_internal_json` is now a thin
-`static_cast` mapping; string-comparison chains removed.
-
----
-
-### Phase 3 — Position alignment (radians) ✅
-
-Internal `Position.lat/lon` and `BoundingBox` fields now store radians instead
-of degrees, matching the PYRAMID standard `GeodeticPosition.Angle.radians` wire
-format.
-
-Changes made:
-- `GeoMath.h`: `haversineMeters` and `circleBoundingBox` no longer call
-  `degToRad()` — positions are already in radians.
-- `SpatialIndex.h`: default `cell_size_rad = 0.017453292519943295` (1°).
-- `CorrelationEngine.h/.cpp`: `gate_radius_deg` renamed to `gate_radius_rad`
-  (default 0.5° in rad); `gate_m` now computed via `EARTH_RADIUS_M`.
-- `StandardBridge.h`: `degToRad`/`radToDeg` helpers removed (now identity).
-- `StandardBridge.cpp`: `onStandardObjectEvidence` copies latitude/longitude
-  directly; `set_bbox` passes radian values straight through to JSON.
-- `tactical_objects_main.cpp`: local `radToDeg` removed; `latitude_rad` /
-  `longitude_rad` JSON fields assigned directly to `Position`.
-- All 7 test suites updated with `constexpr double DEG = PI / 180.0` and all
-  degree literals converted (107 tests, all passing).
-
-**Bridge impact**: `radToDeg`/`degToRad` conversions removed from bridge.
-The bridge is now a pure type-mapping layer for position (no unit conversion).
-
----
-
-## Options (for reference)
-
----
-
-### Option A: In-Place Migration (refactor C++ types to standard)
-
-Rewrite `TacticalObjectsTypes.h` and all dependents to use the standard
-enum values, type names, and position representation.
-
-#### Approach
-
-1. **Enum alignment** — change `Affiliation` → `StandardIdentity` with
-   standard ordinals; `BattleDimension` to standard ordinals. Add
-   conversion functions for backward-compatible JSON ingestion.
-2. **Position to GeodeticPosition** — replace `Position{lat,lon,alt}` with
-   `GeodeticPosition{latitude_rad, longitude_rad}`, add `alt_m` extension.
-   Insert `deg2rad` / `rad2deg` at ingestion boundaries.
-3. **Entity base** — add `EntityBase{update_time, id, source}` struct;
-   embed it in `EntityRecord`.
-4. **Service interface rename** — change PCL service names to match
-   standard (`subscribe_interest` → `CreateRequirement`, etc.); update
-   Ada clients simultaneously.
-5. **Interest / Evidence types** — replace `InterestCriteria` +
-   `BoundingBox` with `ObjectInterestRequirement` using `PolyArea` /
-   `CircleArea` / `Point` oneof; replace `DerivedEvidenceRequirement` with
-   `ObjectEvidenceRequirement`.
-6. **StreamingCodec ordinals** — update `affiliationToOrdinal` /
-   `ordinalToAffiliation` etc. to emit standard ordinals; update Ada
-   `streaming_codec.adb` in lockstep.
-7. **Output types** — rename `EntityUpdateFrame` fields to match
-   `ObjectDetail`; add `ObjectMatch` as a lightweight reference frame.
-
-#### Pros
-
-- Single source of truth — no translation layer to maintain.
-- Cleaner long-term; new contributors see standard names everywhere.
-- Tests directly validate standard compliance.
-
-#### Cons
-
-- **High blast radius**: touches every file in `pyramid/tactical_objects/`
-  plus Ada codecs, e2e tests, and all 50+ C++ unit tests.
-- **Wire-format break**: streaming binary ordinals change; any existing
-  recorded data or live clients see garbled enums until upgraded.
-- **Position units break**: every spatial calculation (correlation gate,
-  bounding-box, zone geometry) must switch to radians or insert
-  conversions at every call-site.
-- **MilClassProfile / BehaviorComponent**: these domain extensions have no
-  standard equivalent. Must either remove them (losing capability) or
-  carry them as non-standard extensions with no proto coverage.
-- **Risk of regression**: correlation, spatial, interest-matching engines
-  are performance-sensitive and well-tested; restructuring types risks
-  subtle bugs.
-
-#### Estimated effort
-
-Large — 15+ files, ~2000 LOC delta, full test rewrite.
-
----
-
-### Option B: Bridge Component (adapter between standard and internal)
-
-Add a `StandardBridge` translation layer that sits between external
-consumers and the internal `TacticalObjectsComponent`. External callers
-see standard proto types; internally everything stays as-is.
-
-#### Approach
-
-```
-┌──────────────────────────────────────────────────────────┐
-│  External Clients (Ada, gRPC, future)                    │
-│  speak: ObjectInterestRequirement, ObjectDetail, etc.    │
-└───────────────┬──────────────────────────────────────────┘
-                │ standard proto types
-                ▼
-┌──────────────────────────────────────────────────────────┐
-│  StandardBridge (new C++ library)                         │
-│                                                           │
-│  Provided services → internal service calls:              │
-│    CreateRequirement  →  subscribe_interest               │
-│    ReadMatch          →  entity_updates subscriber        │
-│    ReadDetail         →  get_object / query               │
-│                                                           │
-│  Consumed service adapters:                               │
-│    evidence_requirements → CreateEvidenceRequirement      │
-│    observation_ingress   → ReadDetail (Object_Evidence)   │
-│                                                           │
-│  Type conversions:                                        │
-│    StandardIdentity ↔ Affiliation (ordinal mapping)       │
-│    GeodeticPosition ↔ Position   (rad ↔ deg)              │
-│    ObjectInterestReq ↔ InterestCriteria                   │
-│    ObjectDetail ↔ EntityUpdateFrame (field subset)        │
-│    ObjectMatch ← (entity_id, interest_id)                 │
-│    BattleDimension standard ↔ internal ordinals           │
-└───────────────┬──────────────────────────────────────────┘
-                │ internal types (unchanged)
-                ▼
-┌──────────────────────────────────────────────────────────┐
-│  TacticalObjectsComponent (unchanged)                     │
-│  ObjectStore, CorrelationEngine, SpatialIndex, etc.       │
-│  Internal services: create_object, subscribe_interest … │
-│  Binary streaming: EntityUpdateFrame (internal ordinals)  │
-└──────────────────────────────────────────────────────────┘
+```text
+remote client
+  -> PCL socket transport
+  -> tactical_objects_app
+  -> StandardBridge
+  -> TacticalObjectsRuntime
 ```
 
-1. **`StandardBridge` class** — a PCL container that registers the
-   standard service names and delegates to internal services.
-2. **Enum mapping functions** — bidirectional:
-   ```cpp
-   StandardIdentity affiliationToStandardIdentity(Affiliation a);
-   Affiliation standardIdentityToAffiliation(StandardIdentity si);
-   BattleDimension_Standard internalDimToStandard(BattleDimension d);
-   BattleDimension standardDimToInternal(BattleDimension_Standard d);
-   ```
-3. **Position conversion**:
-   ```cpp
-   GeodeticPosition positionToGeodetic(const Position& p);  // deg→rad
-   Position geodeticToPosition(const GeodeticPosition& g);  // rad→deg
-   ```
-4. **Interest conversion**: `ObjectInterestRequirement` → `InterestCriteria`
-   (map PolyArea vertices to BoundingBox, or extend InterestCriteria to
-   accept polygon).
-5. **Output conversion**: On entity_updates receipt, decode
-   `EntityUpdateFrame` → build `ObjectDetail` + `ObjectMatch` in standard
-   types, re-encode and forward to standard subscribers.
-6. **Consumed-side adapters**: When internal `evidence_requirements`
-   publishes, bridge converts `DerivedEvidenceRequirement` →
-   `ObjectEvidenceRequirement` in standard format.
-7. **Ada clients** choose which interface to use:
-   - Existing Ada e2e tests: keep calling internal services (no change).
-   - New standard clients: call through the bridge.
+`StandardBridge` is the production adapter between the generated PYRAMID
+service interface and the internal Tactical Objects business model. It is not a
+hand-written wire protocol. It registers the generated provided service names,
+uses generated dispatch/codecs for request and response payloads, and maps
+typed standard data-model objects into the runtime's domain model.
 
-#### Pros
+The internal runtime remains the owner of business logic:
 
-- **Zero risk to internals**: correlation, streaming, spatial — all
-  untouched, all existing tests pass as-is.
-- **Incremental**: bridge can be built and tested independently; old
-  clients keep working; new clients use standard interface.
-- **Domain extensions preserved**: `MilClassProfile`, `BehaviorComponent`,
-  `ZoneEngine` stay fully functional internally; bridge exposes only the
-  standard subset externally.
-- **Wire-format stable**: binary streaming ordinals unchanged; existing
-  recorded data, Foxglove visualizations, etc. continue to work.
-- **Clear boundary**: standard compliance is concentrated in one component
-  (~500 LOC) rather than scattered across the codebase.
+- object storage and component tables
+- correlation and identity/classification state
+- spatial matching and query filtering
+- interest lifecycle and derived evidence requirements
+- high-rate stream subscriber state
 
-#### Cons
+Generated PYRAMID types remain at the external interface boundary and in the
+adapter. The domain runtime continues to use tactical-object domain types where
+they are a better fit for correlation, spatial indexing, history, and MIL-STD
+metadata.
 
-- **Translation overhead**: extra copy on every service call and streaming
-  frame. For entity_updates at 10 Hz × 1000 entities, this adds ~1ms
-  per tick (measured: memcpy + ordinal remapping).
-- **Two sets of names**: developers must know both internal and standard
-  names. Documentation must clarify which layer uses which.
-- **Polygon/circle degradation**: standard `PolyArea` / `CircleArea` →
-  internal `BoundingBox` is a lossy conversion (circumscribed AABB).
-  Until internal engine supports polygon queries natively, precision is
-  reduced.
-- **Maintenance burden**: any new service or type added to the standard
-  requires a corresponding bridge mapping.
+## Provided Interface
 
-#### Estimated effort
+The shipped app exposes these generated provided services:
 
-Medium — 1 new file (~500 LOC), enum/position mappers (~200 LOC),
-tests (~300 LOC). No existing file changes.
+| Generated service | Request | Response | Runtime mapping |
+|-------------------|---------|----------|-----------------|
+| `object_of_interest.create_requirement` | `ObjectInterestRequirement` | `Identifier` | register interest, register stream subscriber, optionally derive evidence requirements |
+| `object_of_interest.read_requirement` | `Query` | `ObjectInterestRequirement[]` | read active interest records |
+| `object_of_interest.update_requirement` | `ObjectInterestRequirement` | `Ack` | update an existing interest and refresh derived requirements |
+| `object_of_interest.delete_requirement` | `Identifier` | `Ack` | cancel interest and remove stream subscriber |
+| `matching_objects.read_match` | `Query` | `ObjectMatch[]` | query runtime objects and project matches |
+| `specific_object_detail.read_detail` | `Query` | `ObjectDetail[]` | read full object detail projection from store components |
 
----
+The shipped app publishes these generated topics:
 
-### Option C: Hybrid — Bridge Now, Incremental Internal Migration Later
+| Topic | Payload | Source |
+|-------|---------|--------|
+| `standard.entity_matches` | `ObjectMatch[]` | runtime stream frames projected to standard matches |
+| `standard.evidence_requirements` | `ObjectEvidenceRequirement` | active-find derived evidence requirements |
 
-Deploy Option B first for immediate standard compliance, then
-incrementally migrate internal types to standard over multiple PRs.
+The shipped app consumes:
 
-#### Approach
+| Topic | Payload | Runtime mapping |
+|-------|---------|-----------------|
+| `standard.object_evidence` | `ObjectDetail` | converted to `ObservationBatch` and processed by the runtime |
 
-**Phase 1 (Bridge)** — same as Option B. Provides immediate standard
-   compliance for external consumers. Existing tests unchanged.
+## Codec Support
 
-**Phase 2 (Enum alignment)** — change internal `Affiliation` →
-   `StandardIdentity`, `BattleDimension` → standard ordinals.
-   Bridge enum mappers become identity functions and are removed.
-   Update StreamingCodec and Ada streaming_codec in lockstep.
+The standard interface can be hosted with a single selected frontend content
+type per app instance:
 
-**Phase 3 (Position alignment)** — change internal `Position` →
-   `GeodeticPosition` (radians). Audit all spatial calculations.
-   Bridge position converters become identity functions and are removed.
+| Content type | Status | Notes |
+|--------------|--------|-------|
+| `application/json` | supported | baseline inspectable wire format |
+| `application/flatbuffers` | supported | wire-efficient binary path for high-rate object data |
+| `application/protobuf` | supported | generated protobuf codec path for C++ PCL clients |
 
-**Phase 4 (Interest/Evidence alignment)** — replace `InterestCriteria`
-   with `ObjectInterestRequirement`, add native polygon query support.
-   Bridge interest converter removed.
+The C++ generated bindings support all three content types on the real app
+path. The current Ada ActiveFind socket client exercises JSON and FlatBuffers.
+Ada protobuf/gRPC coverage is handled by the generated binding and gRPC
+interop tests described in `service_schema_tactical_objects.md`.
 
-**Phase 5 (Service name alignment)** — rename internal PCL services to
-   standard names. Bridge becomes a pass-through and can be removed
-   entirely. Internal services now directly speak standard.
+## Standard To Internal Mapping
 
-**Phase 6 (Remove bridge)** — bridge is now identity-only; remove it.
-   All code speaks standard types natively.
+The current business/runtime model is intentionally compatible with the PYRAMID
+proto surface, but it is not a wholesale replacement of the domain model with
+generated structs. The adapter owns schema-boundary translations.
 
-After each phase, the full test suite (C++ unit + Ada e2e) must pass.
+### Identity And Dimension
 
-#### Pros
+Internal `Affiliation` and `BattleDimension` ordinals are aligned with the
+standard enum values where both models overlap. Unsupported or extension-only
+values are mapped to a safe standard fallback at the boundary.
 
-- **Immediate value**: standard compliance available to external consumers
-  after Phase 1.
-- **Controlled risk**: each phase is small, focused, and independently
-  testable. Regressions are caught early.
-- **Bridge validates mapping**: the bridge's conversion functions serve as
-  executable documentation of the mapping rules, making later phases
-  easier to implement correctly.
-- **No big-bang rewrite**: avoids the risk of Option A's simultaneous
-  changes to every file.
+| Boundary item | Current rule |
+|---------------|--------------|
+| `StandardIdentity` -> `Affiliation` | ordinal cast for aligned values |
+| `Affiliation` -> `StandardIdentity` | ordinal cast for aligned values |
+| `BattleDimension` standard/internal | ordinal cast for aligned values; unsupported values map to `Unknown` |
+| Internal `Space` / `SOF` | retained as domain extensions; not represented in the standard enum |
 
-#### Cons
+### Position And Area
 
-- **Longer total timeline** than Option A (more PRs, more review cycles).
-- **Temporary duplication** during transition (both bridge and internal
-  types exist for some period).
-- **Phase ordering matters**: enum alignment (Phase 2) must happen before
-  service name alignment (Phase 5), because streaming ordinals must be
-  stable before clients switch.
+Internal `Position.lat/lon` and interest `BoundingBox` values are radians, the
+same unit used by the PYRAMID `GeodeticPosition` contract. No degree/radian
+conversion is performed at the standard boundary.
 
-#### Estimated effort
+| Standard input | Internal mapping |
+|----------------|------------------|
+| `Point` | zero-area `BoundingBox` |
+| `CircleArea` | circumscribed `BoundingBox` using center +/- radius |
+| `PolyArea` | axis-aligned `BoundingBox` over all polygon vertices |
 
-Phase 1: Medium (same as Option B).
-Phases 2–6: Small each (~200 LOC per phase), but 5 separate PRs.
+The internal matcher currently uses axis-aligned bounding boxes. Polygon and
+circle geometry are accepted through the standard interface but reduced to the
+runtime's current spatial-query shape.
 
----
+### Interest And Evidence
 
-## 4. Comparison Matrix
+`ObjectInterestRequirement.policy` maps to runtime query mode:
 
-| Criterion | A: In-Place | B: Bridge | C: Hybrid |
-|-----------|:-----------:|:---------:|:---------:|
-| Time to standard compliance | Long | **Short** | **Short** |
-| Risk to existing tests | High | **None** | **None** (Phase 1) |
-| Risk to streaming performance | Medium | Low | Low → None |
-| Wire-format stability | Breaks | **Stable** | Stable → migrates |
-| Long-term code cleanliness | **Best** | Adequate | **Best** |
-| Domain extension support | Loses some | **Full** | **Full** |
-| Maintenance burden | Low | Medium | Low (after Phase 6) |
-| Total LOC change | ~2000 | ~1000 | ~2000 (over 6 phases) |
-| Number of PRs | 1 (large) | 1 (medium) | 6 (small each) |
+| Standard policy | Runtime query mode |
+|-----------------|--------------------|
+| `Query` | `ReadCurrent` |
+| `Obtain` | `ActiveFind` |
 
-## 5. Detailed Type Mapping Reference
+Active-find interests trigger runtime solution determination. Derived evidence
+requirements are projected as standard `ObjectEvidenceRequirement` payloads and
+published on `standard.evidence_requirements`. They are also offered to the
+local consumed service when the app is configured to expose the consumed
+interface.
 
-For any option, these conversions are needed:
+### Object Detail
 
-### 5.1 StandardIdentity ↔ Affiliation
+`specific_object_detail.read_detail` projects runtime component state into the
+standard `ObjectDetail` model:
 
-| Standard Proto (ordinal) | Internal C++ (ordinal) |
-|--------------------------|----------------------|
-| UNSPECIFIED (0) | — (no equivalent, map to Unknown) |
-| UNKNOWN (1) | Unknown (3) |
-| FRIENDLY (2) | Friendly (0) |
-| HOSTILE (3) | Hostile (1) |
-| SUSPECT (4) | Suspect (5) |
-| NEUTRAL (5) | Neutral (2) |
-| PENDING (6) | Pending (8) |
-| JOKER (7) | Joker (6) |
-| FAKER (8) | Faker (7) |
-| ASSUMED_FRIENDLY (9) | AssumedFriend (4) |
+| Standard field | Runtime source |
+|----------------|----------------|
+| `id` | entity UUID |
+| `update_time` | lifecycle last update timestamp |
+| `entity_source` | first correlated/identity source reference |
+| `source[]` | source-system projection, defaulting to local when absent |
+| `position` | kinematics position |
+| `creation_time` | earliest source first-seen timestamp or update-time fallback |
+| `quality` | quality confidence |
+| `course` | derived from velocity east/north |
+| `speed` | velocity magnitude |
+| `identity` | MIL classification affiliation |
+| `dimension` | MIL classification battle dimension |
 
-### 5.2 BattleDimension
+Fields without a runtime source remain unset. Domain extensions such as full
+MIL classification profile, behavior, lifecycle status, relationships, zones,
+and history stay in the internal model unless a standard contract is added for
+them.
 
-| Standard Proto (ordinal) | Internal C++ (ordinal) |
-|--------------------------|----------------------|
-| UNSPECIFIED (0) | — (no equivalent, map to Ground) |
-| GROUND (1) | Ground (0) |
-| SUBSURFACE (2) | Subsurface (3) |
-| SEA_SURFACE (3) | SeaSurface (2) |
-| AIR (4) | Air (1) |
-| UNKNOWN (5) | — (no equivalent) |
+### Object Match Stream
 
-Internal has `Space (4)` and `SOF (5)` with no standard equivalent.
+`standard.entity_matches` is the standard lightweight high-rate projection of
+runtime stream frames. It publishes `ObjectMatch[]` rather than full
+`ObjectDetail[]` to avoid sending large detail payloads on every stream tick.
+Consumers that need full detail should call `specific_object_detail.read_detail`
+for matched identifiers.
 
-### 5.3 Position ↔ GeodeticPosition
+## Deployment Forms
 
-```
-GeodeticPosition.latitude.radians  = Position.lat * (π / 180.0)
-GeodeticPosition.longitude.radians = Position.lon * (π / 180.0)
-// altitude: no standard field; carry as extension or drop
+| Form | Path | Purpose |
+|------|------|---------|
+| Real app | `tactical_objects_app` | Production-style executable with local runtime and remote generated provided interface |
+| Standalone bridge harness | `tests/tactical_objects/standalone_bridge.cpp` | Compatibility/interoperability harness for split-process tests |
+
+The real app is the authoritative production path for Tactical Objects
+standard-interface validation. The standalone harness remains useful for
+transport experiments and compatibility split-process tests, but it is not a
+substitute for real-app coverage.
+
+## Verification
+
+Current focused real-app tests:
+
+| Test | Coverage |
+|------|----------|
+| `tobj_cpp_app_client_e2e` | C++ generated client against `tactical_objects_app`, JSON |
+| `tobj_cpp_app_client_flatbuffers_e2e` | C++ generated client against `tactical_objects_app`, FlatBuffers |
+| `tobj_cpp_app_client_protobuf_e2e` | C++ generated client against `tactical_objects_app`, Protobuf |
+| `tobj_ada_active_find_app_e2e` | Ada ActiveFind/evidence-provider flow against `tactical_objects_app`, JSON |
+| `tobj_ada_active_find_app_flatbuffers_e2e` | Ada ActiveFind/evidence-provider flow against `tactical_objects_app`, FlatBuffers |
+
+The focused real-app verification command is:
+
+```bat
+ctest --test-dir build -C Release -R "tobj_cpp_app_client_(e2e|flatbuffers_e2e|protobuf_e2e)|tobj_ada_active_find_app(_flatbuffers)?_e2e" --output-on-failure
 ```
 
-### 5.4 ObjectInterestRequirement ↔ InterestCriteria
+Broader generated-binding, gRPC, ROS2, and transport status is tracked in
+`service_schema_tactical_objects.md`.
 
-| Standard field | Internal field | Notes |
-|---------------|---------------|-------|
-| base.id | interest_id | UUID |
-| source | — | Not in internal |
-| policy | query_mode | QUERY→ReadCurrent, OBTAIN→ActiveFind |
-| poly_area | area (BoundingBox) | Lossy: AABB of polygon vertices |
-| circle_area | area (BoundingBox) | Lossy: circumscribed AABB |
-| point | area (zero-size BB) | Degenerate bounding box |
-| dimension[] | battle_dimension | Single → first element |
+## Open Design Point
 
-Missing from standard: `affiliation`, `object_type`, `behavior_pattern`,
-`minimum_confidence`, `time_window_*`.  These are domain extensions that
-would need to be carried as `Contraint` name-value pairs or as a
-component-specific proto extension.
-
-### 5.5 ObjectDetail ↔ EntityUpdateFrame
-
-| Standard field | Internal source | Notes |
-|---------------|----------------|-------|
-| base.id | entity_id (UUID) | Direct |
-| base.update_time | timestamp | epoch → Timestamp |
-| base.source | source_refs[0] | First source ref |
-| source[] | provenance | Correlated→RADAR, Direct→LOCAL |
-| position | position | deg→rad conversion |
-| creation_time | first_seen (SourceRef) | Earliest source ref |
-| quality | confidence | Direct (0.0–1.0 → 0.0–100.0 %) |
-| course | — | Not in internal (would derive from velocity heading) |
-| speed | velocity magnitude | √(n²+e²+d²) |
-| length | — | Not in internal |
-| identity | affiliation | Affiliation→StandardIdentity mapping |
-| dimension | battle_dim (MilClass) | Internal→standard ordinal mapping |
-
-Missing from standard: `object_type`, `velocity` vector, `lifecycle_status`,
-`mil_class` (full profile), `behavior`, `identity_name`, `version`.
-
-### 5.6 ObjectMatch ← (entity_id, interest_id)
-
-Constructed by the bridge when an entity matches an interest:
-```
-ObjectMatch.base.id = <bridge-generated match UUID>
-ObjectMatch.matching_object_id = entity_id
-```
-
-## 6. Recommendation
-
-**Option C (Hybrid)** balances immediate delivery with long-term cleanliness:
-
-- Phase 1 delivers standard compliance quickly with zero regression risk.
-- The bridge's conversion functions double as an executable specification
-  of the mapping, making subsequent internal migration safer.
-- Each subsequent phase is small enough for careful review.
-- The end state (Phase 6) is identical to Option A but achieved through
-  controlled incremental steps.
-
-If the timeline is extremely compressed and internal consumers can tolerate
-breakage, Option A is faster end-to-end. If standard compliance is the
-only external requirement and internal migration is not needed, Option B
-alone is sufficient.
+The current standard high-rate stream is `standard.entity_matches`. That keeps
+the mass-send path compact and wire efficient. If consumers need full detail in
+bulk without repeated `read_detail` calls, the next design decision is whether
+to add a standard batch-detail or bulk-detail path rather than overloading the
+match stream with large `ObjectDetail` payloads.

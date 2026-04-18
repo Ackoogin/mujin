@@ -600,6 +600,8 @@ class CppServiceGenerator:
         svc_base_ns = _namespace_from_proto(parsed)[2]
         flatbuffers_codec_ns = svc_base_ns + '::flatbuffers_codec'
         flatbuffers_codec_header = 'flatbuffers/cpp/' + '_'.join(svc_base_ns.split('::')) + '_flatbuffers_codec.hpp'
+        protobuf_codec_ns = svc_base_ns + '::protobuf_codec'
+        protobuf_codec_header = '_'.join(svc_base_ns.split('::')) + '_protobuf_codec.hpp'
         sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
         all_topics = dict(sub_topics)
         all_topics.update(pub_topics)

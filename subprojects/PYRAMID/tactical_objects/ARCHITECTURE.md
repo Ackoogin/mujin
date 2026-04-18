@@ -84,67 +84,84 @@ graph TB
 
 ---
 
-## 2b. StandardBridge — PYRAMID-to-Internal Translation Layer
+## 2b. StandardBridge - Generated PYRAMID Interface Adapter
 
-The `StandardBridge` is an adapter component that sits between external
-clients (Ada, future gRPC) and the internal `TacticalObjectsComponent`.
-The name refers to the **PYRAMID standard** data model — the bridge
-translates from the PYRAMID standard wire format into the component's
-internal types and back.
+`StandardBridge` is the production adapter between the generated PYRAMID
+Tactical Objects service interface and the internal `TacticalObjectsRuntime`.
+It is hosted by `tactical_objects_app` on the socket-facing executor and uses
+the generated provided/consumed service bindings for dispatch and payload
+encoding.
 
-**Why it exists**: The `TacticalObjectsComponent` uses its own internal
-type system (`Affiliation`, `Position` in degrees, `BattleDimension`
-with domain-specific ordinals, flat JSON fields).  External clients
-speak the PYRAMID standard format (`STANDARD_IDENTITY_HOSTILE`,
-`BATTLE_DIMENSION_SEA_SURFACE`, positions in radians, etc.) as defined
-by the proto-native generated PYRAMID bindings and codecs. The bridge converts between the two
-so that neither side needs to change.
+The internal runtime still owns correlation, spatial indexing, interest
+matching, and high-rate stream subscriber state. The bridge owns only the schema
+boundary:
+
+- decode generated standard requests with the selected frontend codec
+- call runtime business logic using internal domain types
+- project runtime objects to generated standard response/topic types
+- encode responses and publications with the same frontend codec
+
+Supported frontend content types are:
+
+- `application/json`
+- `application/flatbuffers`
+- `application/protobuf`
 
 ```
-External Clients (Ada / gRPC)
-    │  PYRAMID standard payloads
-    │  JSON or FlatBuffers over generated proto-native bindings
-    ▼
-┌──────────────────────────────────────────────────────┐
-│  StandardBridge                                       │
-│                                                       │
-│  Service translation:                                 │
-│    create_requirement  →  subscribe_interest           │
-│    (std enums, rad)       (internal enums, deg)       │
-│                                                       │
-│  Topic translation:                                   │
-│    standard.object_evidence  →  observation_ingress    │
-│    entity_updates (binary)   →  standard.entity_matches│
-│    evidence_requirements     →  std evidence_reqs      │
-│                                                       │
-│  Conversions:                                         │
-│    STANDARD_IDENTITY_*  ↔  Affiliation enum            │
-│    BATTLE_DIMENSION_*   ↔  BattleDimension enum        │
-│    radians              ↔  degrees                     │
-│    DATA_POLICY_*        →  query_mode (active_find/    │
-│                               read_current)            │
-└──────────────────┬───────────────────────────────────┘
-                   │  Internal JSON / binary streaming
-                   ▼
-TacticalObjectsComponent (unchanged internal types)
+External Clients (Ada / C++ / generated transports)
+    |  PYRAMID standard payloads
+    |  JSON, FlatBuffers, or Protobuf
+    v
++------------------------------------------------------+
+| tactical_objects_app                                 |
+|                                                      |
+|  StandardBridge                                      |
+|    generated provided services                       |
+|    generated consumed topic/service helpers          |
+|    standard <-> internal schema projection           |
+|                                                      |
+|  TacticalObjectsRuntime                              |
+|    ObjectStore, CorrelationEngine, SpatialIndex,     |
+|    InterestManager, QueryEngine, TacticalHistory     |
++------------------------------------------------------+
 ```
 
-**Two deployment forms**:
+**Provided services exposed by the real app**:
+
+| Generated service | Runtime behavior |
+|-------------------|------------------|
+| `object_of_interest.create_requirement` | register interest and stream subscriber |
+| `object_of_interest.read_requirement` | read active interest records |
+| `object_of_interest.update_requirement` | update interest criteria |
+| `object_of_interest.delete_requirement` | cancel interest |
+| `matching_objects.read_match` | project runtime query results to `ObjectMatch[]` |
+| `specific_object_detail.read_detail` | project runtime component state to `ObjectDetail[]` |
+
+**Topics**:
+
+| Topic | Payload | Direction |
+|-------|---------|-----------|
+| `standard.object_evidence` | `ObjectDetail` | consumed by app |
+| `standard.evidence_requirements` | `ObjectEvidenceRequirement` | published by app |
+| `standard.entity_matches` | `ObjectMatch[]` | published by app |
+
+**Deployment forms**:
 
 | Variant | File | Use case |
 |---------|------|----------|
-| **In-process** | `StandardBridge.h/.cpp` | PCL component co-located with `TacticalObjectsComponent` in the same executor |
-| **Standalone** | `standalone_bridge.cpp` | Separate process with dual TCP transports — backend to the component server, frontend to Ada/test clients |
+| In-process real app | `src/StandardBridge.cpp` + `src/apps/tactical_objects_main.cpp` | Production-style executable and primary validation target |
+| Standalone harness | `tests/tactical_objects/standalone_bridge.cpp` | Split-process compatibility/transport harness |
 
-Both perform identical translations; the standalone variant adds TCP
-transport plumbing and a message forwarding loop between the two
-executors.
+The standalone harness remains useful for interoperability tests, but the
+authoritative production-path signal is the real `tactical_objects_app` test
+coverage.
 
 **Key source files**:
 
-- `include/StandardBridge.h` — in-process bridge header
-- `src/StandardBridge.cpp` — enum converters, service handler, tick-based entity match publishing
-- `tests/tactical_objects/standalone_bridge.cpp` — standalone dual-transport bridge process
+- `include/StandardBridge.h` - adapter interface
+- `src/StandardBridge.cpp` - generated-binding dispatch and standard/internal projections
+- `src/apps/tactical_objects_main.cpp` - real app composition
+- `tests/tactical_objects/standalone_bridge.cpp` - split-process harness
 
 ---
 

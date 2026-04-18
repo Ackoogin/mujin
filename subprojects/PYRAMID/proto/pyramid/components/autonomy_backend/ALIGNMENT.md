@@ -1,259 +1,282 @@
-# Autonomy Backend Proto Alignment
+# Autonomy Backend CRUD Alignment
 
-This document describes the required changes to align the AME autonomy backend
-(`subprojects/AME/include/ame/autonomy_backend.h`, `subprojects/AME/autonomy_backend.py`)
-with the PYRAMID EntityActions CRUD proto definitions.
+This document reviews the current autonomy backend alignment with PYRAMID
+EntityActions CRUD semantics and the canonical Tactical Objects requirement
+pattern.
 
-## Proto Files
+The important distinction is:
 
-| File | Purpose |
-|------|---------|
-| `pyramid/data_model/autonomy.proto` | Enums and entity messages with CRUD addressability |
-| `pyramid/components/autonomy_backend/services/provided.proto` | 9 EntityActions services |
+- CRUD shape alone is not enough.
+- Behaviour should be invoked by placing, updating, or cancelling typed
+  Requirements on component services.
+- Component outputs should be read as entities, products, matches, details,
+  capabilities, progress, and achievement state.
 
-## EntityActions CRUD Structure
+The autonomy backend can still use AME's current session and behaviour-tree
+runtime internally. The external PYRAMID-facing contract should treat the
+backend as a requirement placer/coordinator, not as an ad hoc command bus.
 
-The proto defines 9 services following PYRAMID EntityActions conventions:
+## Reference Contracts
 
-| Service | Flow | Operations | Replaces |
-|---------|------|------------|----------|
-| `Capabilities_Service` | out | Read | `describeCapabilities()` |
-| `Session_Service` | inout | CRUD | `start()`, `readSnapshot()`, `step()`, `requestStop()` |
-| `State_Service` | in | CUD | `pushState()` |
-| `Intent_Service` | in | CUD | `pushIntent()` |
-| `Command_Service` | out | Read | `pullCommands()` |
-| `GoalDispatch_Service` | out | Read | `pullGoalDispatches()` |
-| `DecisionRecord_Service` | out | Read | `pullDecisionRecords()` |
-| `CommandResult_Service` | in | CUD | `pushCommandResult()` |
-| `DispatchResult_Service` | in | CUD | `pushDispatchResult()` |
+| File | Role |
+|------|------|
+| `pyramid/data_model/common.proto` | Defines `Entity`, `Requirement`, `Achievement`, `Capability`, and `Query` |
+| `pyramid/data_model/tactical.proto` | Canonical Tactical Objects entities and requirements |
+| `pyramid/components/tactical_objects/services/provided.proto` | Canonical provided requirement CRUD and read-only products |
+| `pyramid/components/tactical_objects/services/consumed.proto` | Canonical consumed evidence requirement and capability reads |
+| `pyramid/data_model/autonomy.proto` | Current autonomy backend data model projection |
+| `pyramid/components/autonomy_backend/services/provided.proto` | Current autonomy backend CRUD-shaped service projection |
+| `PYRAMID_COMPONENT_RESPONSIBILITIES.md` | Responsibility guidance for requirement capture, solution determination, progress, and quality |
 
-## Required Backend Changes
+## Current Verdict
 
-### 1. Add Entity Base to All Messages (REQUIRED)
+The autonomy backend proto is mechanically close to CRUD alignment, but the
+runtime semantics are only partially aligned with the PYRAMID component model.
 
-All entity messages now include `pyramid.data_model.common.Entity base` for CRUD addressability:
+| Area | Current state | Alignment verdict |
+|------|---------------|-------------------|
+| Proto enum defaults | `autonomy.proto` has explicit `*_UNSPECIFIED = 0` values | Aligned at proto layer |
+| Proto addressability | Autonomy entity messages include `pyramid.data_model.common.Entity base` | Aligned at proto layer |
+| Request fields | `Command.request_fields` is `repeated StringKeyValue` | Aligned at proto layer |
+| C++/Python AME interface | Uses session structs, enum values without explicit unspecified sentinel, no `Entity`/`Requirement` base | Not aligned |
+| Egress reads | `pullCommands()`, `pullGoalDispatches()`, and `pullDecisionRecords()` drain transient queues | Not aligned with idempotent EntityActions reads |
+| Behaviour invocation | `ActionCommand` exposes `service_name`, `operation`, and request fields | CRUD-shaped, but not canonical PYRAMID requirement placement |
+| Runtime execution | BT `InvokeService` calls are intercepted and emitted as `ActionCommand` objects | Useful implementation shim, but should project externally as requirement CRUD |
+| Session lifecycle | `start()`, `step()`, `requestStop()` are mapped to `Create/Update/DeleteSession` in proto | Acceptable shell-control mapping, but not a domain behaviour pattern |
 
-```cpp
-// Before (current)
-struct SessionRequest {
-  std::string session_id;
-  MissionIntent intent;
-  // ...
-};
+## Canonical Tactical Objects Pattern
 
-// After (CRUD-compliant)
-struct Session {
-  Entity base;           // id, source, update_time
-  MissionIntent intent;
-  // ...
-};
-```
+Tactical Objects is the clearest current example of the standard shape.
 
-**Affected types:**
-- `SessionRequest` → `Session` (add `Entity base`)
-- `StateUpdate` (add `Entity base`)
-- `MissionIntent` (add `Entity base`)
-- `AutonomyBackendCapabilities` → `Capabilities` (add `Entity base`)
-- `ActionCommand` → `Command` (add `Entity base`)
-- `GoalDispatch` (add `Entity base`)
-- `DecisionRecord` (add `Entity base`)
-- `CommandResult` (add `Entity base`)
-- `DispatchResult` (add `Entity base`)
-- `AutonomyBackendSnapshot` → `SessionSnapshot` (add `Entity base`)
+Provided services:
 
----
+| Service | Operation | Meaning |
+|---------|-----------|---------|
+| `Object_Of_Interest_Service.CreateRequirement` | create `ObjectInterestRequirement` | Place a requirement for tactical object interest |
+| `Object_Of_Interest_Service.ReadRequirement` | read requirements | Inspect active or historical requirement state |
+| `Object_Of_Interest_Service.UpdateRequirement` | update requirement | Refine or progress the requirement |
+| `Object_Of_Interest_Service.DeleteRequirement` | delete by id | Cancel/remove the requirement |
+| `Matching_Objects_Service.ReadMatch` | read `ObjectMatch` | Read output references matching the requirement |
+| `Specific_Object_Detail_Service.ReadDetail` | read `ObjectDetail` | Read detailed output entities |
 
-### 2. Add `UNSPECIFIED = 0` to All Enums (REQUIRED)
+Consumed services:
 
-Proto3 requires the zero value as default. Add explicit numbering:
+| Service | Operation | Meaning |
+|---------|-----------|---------|
+| `Object_Solution_Evidence_Service.CreateRequirement` | create `ObjectEvidenceRequirement` | Place a derived requirement for evidence |
+| `Object_Source_Capability_Service.ReadCapability` | read `Capability` | Query whether sources can satisfy the need |
+| `Object_Evidence_Service.ReadDetail` | read `ObjectDetail` | Consume evidence products |
 
-```cpp
-enum class AutonomyBackendState {
-  UNSPECIFIED = 0,  // Add sentinel
-  IDLE = 1,
-  READY = 2,
-  WAITING_FOR_RESULTS = 3,
-  COMPLETE = 4,
-  FAILED = 5,
-  STOPPED = 6,
-};
-```
+The data model reinforces the same pattern:
 
-**Affected enums:** `AutonomyBackendState`, `CommandStatus`, `StopMode`, `FactAuthorityLevel`
+- `ObjectInterestRequirement` and `ObjectEvidenceRequirement` inherit
+  `pyramid.data_model.common.Requirement`.
+- `Requirement` carries an `Entity` base and `Achievement` status.
+- `ObjectMatch` and `ObjectDetail` inherit `Entity`.
+- Products are read; requirements are created, updated, or deleted.
 
----
+## Responsibility Guidance
 
-### 3. Convert Pull Operations to Queryable Reads (SEMANTIC CHANGE)
+`PYRAMID_COMPONENT_RESPONSIBILITIES.md` consistently frames component behaviour
+around requirements, solutions, progress, and quality.
 
-**Current behavior:** `pullCommands()`, `pullGoalDispatches()`, `pullDecisionRecords()` are
-**consumptive** - they drain internal queues and return items once.
+For Tactical Objects:
 
-**EntityActions behavior:** `ReadCommand()`, `ReadGoalDispatch()`, `ReadDecisionRecord()` are
-**idempotent** - they query a persistent store and can return the same items multiple times.
+| Responsibility | Alignment implication |
+|----------------|----------------------|
+| `COMP-060-R01` capture object interest requirements | External invocation starts by placing `ObjectInterestRequirement` |
+| `COMP-060-R05` determine requirement solution | The component decides how to satisfy the requirement |
+| `COMP-060-R08` determine additional information | The component may derive further requirements, such as evidence needs |
+| `COMP-060-R11` identify progress | Progress belongs on the requirement/achievement path |
+| `COMP-060-R12` determine quality | Quality is measured against the requirement and criteria |
 
-**Required backend changes:**
+For Tasks:
 
-```cpp
-// Before: Queue-based (consumptive)
-class IAutonomyBackend {
-  virtual std::vector<ActionCommand> pullCommands() = 0;  // Drains queue
-};
+| Responsibility | Alignment implication |
+|----------------|----------------------|
+| `COMP-062-R01` capture task requirements | Top-level mission/tasking should enter as a requirement, not a raw command |
+| `COMP-062-R05` determine implementation solution | AME planning maps naturally to solution determination |
+| `COMP-062-R07` coordinate solution enactment | AME behaviour-tree execution coordinates requirement placement on components |
+| `COMP-062-R08` identify progress of solution | Progress should be observable through requirement/achievement state and output entities |
 
-// After: Store-based (idempotent)
-class IAutonomyBackend {
-  // Query commands matching filter, optionally mark as "read"
-  virtual std::vector<Command> readCommands(const Query& query) = 0;
-  
-  // Explicit acknowledgment to mark commands as processed
-  virtual void acknowledgeCommands(const std::vector<Identifier>& ids) = 0;
-};
-```
+This means the autonomy backend should be treated as a requirement-driven
+coordinator. Its behaviour-tree leaves should place or action component
+requirements, then read resulting entities or achievement state.
 
-**Options for implementation:**
+## Required Alignment Direction
 
-1. **Persistent store with query**: Maintain commands/dispatches/records in a queryable store.
-   Filter by ID, time range, or status. Support `one_shot` vs streaming semantics.
+### 1. Keep session control as backend shell control
 
-2. **Hybrid approach**: Keep queue internally but expose as queryable store externally.
-   Track which items have been "read" separately from the queue.
+`Session_Service` can remain the lifecycle surface for starting, stepping,
+stopping, and inspecting an autonomy backend run:
 
-3. **Add explicit Delete**: Use `DeleteCommand(Identifier)` to acknowledge processing
-   (though this isn't in the current service definition since it's `out` flow).
+| Current AME method | Current proto projection | Status |
+|--------------------|--------------------------|--------|
+| `start(SessionRequest)` | `CreateSession(Session)` | Acceptable shell control |
+| `readSnapshot()` | `ReadSession(Query)` | Needs idempotent/query semantics |
+| `step()` | `UpdateSession(SessionStepRequest)` | Acceptable shell control |
+| `requestStop(StopMode)` | `DeleteSession(SessionStopRequest)` | Acceptable shell control |
 
----
+This surface should not be treated as the general way to invoke domain
+behaviour. It controls the backend run.
 
-### 4. Session Lifecycle Changes (INTERFACE CHANGE)
+### 2. Treat mission intent as a requirement input
 
-**Current interface:**
-```cpp
-void start(const SessionRequest& request);
-void step();
-void requestStop(StopMode mode);
-AutonomyBackendSnapshot readSnapshot() const;
-```
+`MissionIntent` is currently a list of PDDL goal fluents. That is useful inside
+AME, but it is not yet a PYRAMID requirement model.
 
-**EntityActions interface:**
-```cpp
-// Create session (returns session ID)
-Identifier createSession(const Session& session);
+Target alignment:
 
-// Read session snapshots (queryable)
-std::vector<SessionSnapshot> readSession(const Query& query);
+- represent top-level user/system tasking as a typed Requirement when the
+  relevant component contract exists
+- retain PDDL fluents as AME-internal planning representation
+- keep traceability from the PYRAMID `Requirement.base.base.id` to AME goals,
+  plan records, BT execution, derived component requirements, and output
+  entities
 
-// Update session (trigger step)
-void updateSession(const SessionStepRequest& request);
+Until a canonical Tasks/Autonomy requirement proto exists, `MissionIntent`
+should be documented as an adapter-local bootstrap input, not as the final
+standard requirement contract.
 
-// Delete session (stop)
-void deleteSession(const SessionStopRequest& request);
-```
+### 3. Replace external command semantics with requirement placement
 
-**Key differences:**
-- `start()` → `createSession()` returns an `Identifier` (session ID)
-- `step()` → `updateSession()` takes a `SessionStepRequest` with session ID
-- `requestStop()` → `deleteSession()` takes a `SessionStopRequest` with session ID + mode
-- `readSnapshot()` → `readSession()` uses `Query` filter and returns stream
+`ActionCommand` currently says:
 
----
-
-### 5. State/Intent as First-Class Entities (SEMANTIC CHANGE)
-
-**Current interface:**
-```cpp
-void pushState(const StateUpdate& update);   // Fire-and-forget
-void pushIntent(const MissionIntent& intent); // Replaces intent
-```
-
-**EntityActions interface:**
-```cpp
-// State has Create/Update/Delete
-Identifier createState(const StateUpdate& update);
-void updateState(const StateUpdate& update);
-void deleteState(const Identifier& id);
-
-// Intent has Create/Update/Delete
-Identifier createIntent(const MissionIntent& intent);
-void updateIntent(const MissionIntent& intent);
-void deleteIntent(const Identifier& id);
-```
-
-**Implementation notes:**
-- State/Intent updates need IDs for addressability
-- `createState` vs `updateState` distinction: create for new facts, update for changes
-- `deleteState`/`deleteIntent` may not be commonly used but are required for full CRUD
-
----
-
-### 6. Convert `request_fields` Map (REQUIRED)
-
-**Current C++:**
-```cpp
-std::unordered_map<std::string, std::string> request_fields;
-```
-
-**Proto (for PYRAMID compatibility):**
 ```protobuf
-repeated StringKeyValue request_fields = 7;
+message Command {
+  pyramid.data_model.common.Entity base = 1;
+  string command_id = 2;
+  string action_name = 3;
+  string signature = 4;
+  string service_name = 5;
+  string operation = 6;
+  repeated StringKeyValue request_fields = 7;
+}
 ```
 
-**Required change:**
+That is a generic operation call envelope. It can carry "call
+`object_of_interest.create_requirement`", but it does not make the requirement
+the first-class behaviour invocation.
+
+Target alignment:
+
+- BT leaves should issue typed component EntityActions:
+  - create/update/delete `Requirement` entities for work to be done
+  - read output `Entity` products, capabilities, matches, details, or progress
+  - update/delete requirements to refine or cancel behaviour
+- the autonomy backend should persist those placements as requirement/action
+  records with stable identifiers
+- `Command` should either be renamed/reworked as a requirement placement record,
+  or remain an internal/compatibility egress artefact below the PYRAMID standard
+  boundary
+
+For Tactical Objects, an AME action that needs object search should externally
+become:
+
+```text
+Object_Of_Interest_Service.CreateRequirement(ObjectInterestRequirement)
+ReadMatch(Query)
+ReadDetail(Query)
+UpdateRequirement(ObjectInterestRequirement) or DeleteRequirement(Identifier)
+```
+
+not:
+
+```text
+Command(service_name="tactical_objects", operation="search", ...)
+```
+
+### 4. Make reads idempotent and queryable
+
+Current AME egress methods drain vectors:
+
 ```cpp
-struct StringKeyValue { std::string key; std::string value; };
-std::vector<StringKeyValue> request_fields;
+std::vector<ActionCommand> pullCommands();
+std::vector<GoalDispatch> pullGoalDispatches();
+std::vector<DecisionRecord> pullDecisionRecords();
 ```
 
----
+EntityActions `Read*` operations should be idempotent queries over retained
+state. The backend needs stores, not just queues:
 
-### 7. Use Explicit Integer Types (RECOMMENDED)
+| Entity | Store requirement |
+|--------|-------------------|
+| Requirement placements / commands | Query by id, status, target service, session, and read/ack state |
+| Goal dispatches | Query by dispatch id, agent id, status, and session |
+| Decision records | Query by id, session, world version, and planning attempt |
+| Session snapshots | Query current and optionally historical snapshots by session id |
 
-```cpp
-// Before
-unsigned max_replans = 3;
-unsigned replan_count = 0;
+If one-shot delivery is still needed for a transport, it should be an adapter
+policy around `Query.one_shot`, not the only backend state model.
 
-// After
-uint32_t max_replans = 3;
-uint32_t replan_count = 0;
-```
+### 5. Feed results back as entity and requirement state
 
----
+`CommandResult` and `DispatchResult` are currently callback-style ingress
+messages. They can remain useful internally, but externally the aligned pattern
+is:
 
-## Summary: Current vs CRUD Interface
+- requirement `Achievement.status`/quality/achievability changes
+- output entities become readable from the producing component
+- observed world facts are ingested as state/evidence entities with traceable
+  source identifiers
+- cancellation/refinement is expressed as `DeleteRequirement` or
+  `UpdateRequirement`
 
-| Aspect | Current (Session-Based) | CRUD (EntityActions) |
-|--------|------------------------|---------------------|
-| **State model** | Stateful session with queues | Entity stores with CRUD ops |
-| **Session lifecycle** | `start()` / `step()` / `requestStop()` | `Create` / `Update` / `Delete` |
-| **Egress pattern** | `pull*()` drains queue | `Read*()` queries store |
-| **Ingress pattern** | `push*()` fire-and-forget | `Create*()` / `Update*()` with IDs |
-| **Addressability** | Implicit session state | Explicit `Entity base` with IDs |
-| **Idempotency** | Pull is consumptive | Read is idempotent |
+For tactical-object behaviours, the result of actioning a requirement is not
+primarily "command succeeded"; it is the availability and quality of
+`ObjectMatch`, `ObjectDetail`, derived evidence requirements, and the
+requirement achievement state.
 
 ## Implementation Priorities
 
-### Phase 1: Wire Compatibility (Minimal)
-1. Add `UNSPECIFIED = 0` to enums
-2. Add `Entity base` to messages (can be optional initially)
-3. Convert `request_fields` to `vector<StringKeyValue>`
-4. Keep existing `IAutonomyBackend` methods, adapt in transport layer
+### Phase 1: Documented compatibility boundary
 
-### Phase 2: Full CRUD Semantics
-1. Implement queryable stores for Commands, GoalDispatches, DecisionRecords
-2. Add session ID tracking and Query-based reads
-3. Implement Create/Update/Delete distinction for State and Intent
-4. Add explicit acknowledgment flow for processed items
+1. Keep the current AME C++/Python session interface intact.
+2. Treat `Command` as a compatibility egress record, not the canonical standard
+   behaviour invocation model.
+3. Add documentation/tests showing Tactical Objects behaviour invocation as
+   `CreateRequirement` plus read-only product reads.
+4. Preserve traceability from `Command.command_id` to the typed requirement id
+   while the compatibility layer exists.
 
-### Phase 3: Multi-Service Split (Optional)
-1. Split `IAutonomyBackend` into service-aligned interfaces
-2. `ISessionService`, `IStateService`, `ICommandService`, etc.
-3. Enables independent deployment and scaling
+### Phase 2: Queryable stores
 
----
+1. Replace drain-only egress semantics with retained stores behind `Read*`
+   methods.
+2. Support `Query.id` and `Query.one_shot` consistently.
+3. Keep explicit status for pending, running/actioning, achieved, failed, and
+   cancelled requirement placements.
+4. Expose decision records and snapshots as queryable entities.
+
+### Phase 3: Requirement-native BT invocation
+
+1. Make BT `InvokeService` or its replacement construct typed requirement
+   payloads for target component services.
+2. Generate or configure action-to-requirement mappings from the component
+   proto surface, not from arbitrary string operation names.
+3. For Tactical Objects, map search/interest behaviours to
+   `ObjectInterestRequirement` and output reads to `ObjectMatch`/`ObjectDetail`.
+4. Use `UpdateRequirement`/`DeleteRequirement` for refinement and cancellation.
+
+### Phase 4: Standard autonomy/tasking model
+
+1. Introduce or adopt a canonical Tasks/Autonomy requirement proto for top-level
+   mission/tasking.
+2. Map AME `MissionIntent` to that requirement model at the boundary.
+3. Keep PDDL, plans, and BT XML internal unless emitted as decision/audit
+   records.
 
 ## File Locations
 
 | Component | Path |
 |-----------|------|
-| C++ interface | `subprojects/AME/include/ame/autonomy_backend.h` |
-| Python interface | `subprojects/AME/autonomy_backend.py` |
-| Data model proto | `subprojects/PYRAMID/proto/pyramid/data_model/autonomy.proto` |
-| Services proto | `subprojects/PYRAMID/proto/pyramid/components/autonomy_backend/services/provided.proto` |
+| C++ autonomy shell | `subprojects/AME/include/ame/autonomy_backend.h` |
+| Current C++ adapter | `subprojects/AME/include/ame/current_ame_backend_adapter.h` |
+| Current C++ implementation | `subprojects/AME/src/lib/autonomy_backend.cpp` |
+| Python autonomy shell | `subprojects/AME/autonomy_backend.py` |
+| Autonomy data model proto | `subprojects/PYRAMID/proto/pyramid/data_model/autonomy.proto` |
+| Autonomy services proto | `subprojects/PYRAMID/proto/pyramid/components/autonomy_backend/services/provided.proto` |
+| Tactical Objects data model proto | `subprojects/PYRAMID/proto/pyramid/data_model/tactical.proto` |
+| Tactical Objects provided proto | `subprojects/PYRAMID/proto/pyramid/components/tactical_objects/services/provided.proto` |
+| Tactical Objects consumed proto | `subprojects/PYRAMID/proto/pyramid/components/tactical_objects/services/consumed.proto` |
+| PYRAMID responsibilities | `subprojects/PYRAMID/PYRAMID_COMPONENT_RESPONSIBILITIES.md` |

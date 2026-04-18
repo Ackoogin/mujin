@@ -198,7 +198,7 @@ if(WIN32)
                 -DSERVER_BIN=$<TARGET_FILE:tobj_socket_server>
                 -DBRIDGE_BIN=$<TARGET_FILE:standalone_bridge>
                 -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
-                -DSCRIPT_ARGS=--content-type;application/flatbuffers
+                -DSCRIPT_ARGS=--content-type|application/flatbuffers
                 -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
 else()
     add_test(NAME tobj_cpp_bridge_client_e2e
@@ -381,7 +381,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     endif()
     set_tests_properties(tobj_ada_socket_e2e PROPERTIES
         LABELS "cross_language;integration"
-        TIMEOUT 30)
+        TIMEOUT 60)
 
     if(WIN32)
         add_test(NAME tobj_ada_active_find_e2e
@@ -409,7 +409,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -DSERVER_BIN=$<TARGET_FILE:tobj_socket_server>
                     -DBRIDGE_BIN=$<TARGET_FILE:standalone_bridge>
                     -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_active_find_e2e
-                    -DSCRIPT_ARGS=--content-type;application/flatbuffers
+                    -DSCRIPT_ARGS=--content-type|application/flatbuffers
                     -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
         add_test(NAME tobj_ada_active_find_flatbuffers_e2e

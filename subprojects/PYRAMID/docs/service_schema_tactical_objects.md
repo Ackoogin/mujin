@@ -36,7 +36,8 @@ The doc split is now:
   reference
 - `ros2_transport_semantics.md`: canonical ROS2 topic/service/stream mapping
   rules
-- `standard_alignment_plan.md`: legacy standard-bridge alignment context only
+- `standard_alignment_plan.md`: current Tactical Objects standard-interface
+  alignment and real-app design
 
 The older overlapping plan docs have been reduced to redirect notes so there is
 one current status page rather than several drifting ones.
@@ -55,7 +56,7 @@ Externally, the canonical standard-topic payloads remain:
 
 - `standard.entity_matches` -> `ObjectMatch[]`
 - `standard.object_evidence` -> `ObjectDetail`
-- `standard.evidence_requirements` -> `ObjectEvidenceRequirement[]`
+- `standard.evidence_requirements` -> `ObjectEvidenceRequirement` publications
 
 ## Current Status
 
@@ -164,6 +165,28 @@ Relevant test:
 
 - `tobj_master_conformance_e2e`
 
+### Real App Standard Interface
+
+Implemented and passing on Windows:
+
+- `tactical_objects_app` hosts the generated Tactical Objects provided
+  interface through `StandardBridge`
+- the real app path supports JSON, FlatBuffers, and Protobuf for C++ generated
+  clients
+- the Ada ActiveFind/evidence-provider flow runs against the real app in JSON
+  and FlatBuffers modes
+- standalone bridge tests remain useful compatibility coverage, but real-app
+  tests are the production-path signal for Tactical Objects standard-interface
+  regressions
+
+Relevant tests:
+
+- `tobj_cpp_app_client_e2e`
+- `tobj_cpp_app_client_flatbuffers_e2e`
+- `tobj_cpp_app_client_protobuf_e2e`
+- `tobj_ada_active_find_app_e2e`
+- `tobj_ada_active_find_app_flatbuffers_e2e`
+
 ### PCL + Shared Memory Bus
 
 Implemented and passing:
@@ -204,22 +227,21 @@ Relevant test:
 
 ## Important Boundary
 
-The new Protobuf and gRPC proving path does not depend on the standard bridge.
+Generated codec and transport work should be validated at the lowest layer that
+matches the behavior under test:
 
-That means:
-
-- Protobuf and gRPC coverage is now validated through standalone generated
-  binding and transport tests
-- the standard bridge remains separate legacy context
-- new codec and transport work should not be forced through bridge-specific
-  flows unless that is the explicit target under test
+- generated binding and dispatch behavior belongs in generated-binding tests
+- gRPC and ROS2 transport semantics belong in their transport-specific tests
+- Tactical Objects production behavior belongs in `tactical_objects_app`
+  real-app tests
+- `standalone_bridge` is a compatibility harness for split-process scenarios,
+  not the production-path substitute
 
 ## Current Gaps
 
 The following areas are still incomplete:
 
 - Tactical Objects shared-memory transport projection
-- socket/protobuf cross-process Tactical Objects projection
 - Ada ROS2 runtime beyond generated endpoint constants/specs
 - ROS2 action mapping for long-running / feedback-style workflows
 - fully Ada-native gRPC runtime without generated C/C++ shim support
@@ -256,6 +278,8 @@ Use this table in reviews:
 | Ada generated protobuf/grpc spec build proof | yes |
 | Ada to C++ gRPC interop proof | yes, Windows |
 | Master Ada/C++ transport/codec conformance matrix | yes, Windows |
+| Tactical Objects real-app JSON/FlatBuffers/Protobuf C++ path | yes, Windows |
+| Tactical Objects real-app Ada ActiveFind JSON/FlatBuffers path | yes, Windows |
 | PCL shared-memory bus transport | yes |
 | ROS2 semantic transport projection | yes |
 | ROS2 `rclcpp` runtime binding | yes, Windows |

@@ -29,6 +29,7 @@ using namespace tactical_objects;
 static std::atomic<bool> g_shutdown{false};
 
 static void signal_handler(int) { g_shutdown.store(true); }
+static double deg_to_rad(double degrees) { return degrees * 0.017453292519943295; }
 
 int main(int argc, char* argv[]) {
   uint16_t port = 19123;
@@ -115,7 +116,7 @@ int main(int argc, char* argv[]) {
     std::fprintf(stderr, "[server] Creating test entity...\n");
     ObjectDefinition def;
     def.type = ObjectType::Platform;
-    def.position = Position{51.0, 0.0, 0};
+    def.position = Position{deg_to_rad(51.0), 0.0, 0};
     def.affiliation = Affiliation::Hostile;
     auto j = TacticalObjectsCodec::encodeObjectDefinition(def);
     std::string create_str = j.dump();

@@ -43,11 +43,12 @@ auto resp = rt.query(QueryRequest{});
 
 ```
 PCL transport
-    └- TacticalObjectsComponent    (PCL lifecycle + ports + codec)
-           └- TacticalObjectsRuntime  (pure domain logic, testable in isolation)
+    └- tactical_objects_app
+           ├- StandardBridge          generated PYRAMID provided/consumed interface
+           └- TacticalObjectsRuntime  pure domain logic, testable in isolation
                   ├- ObjectStore          ECS sparse-set, UUID-keyed
                   ├- SpatialIndex         WGS84 grid, O(1) region queries
-                  ├- CorrelationEngine    evidence → entity (merge / split / lineage)
+                  ├- CorrelationEngine    evidence -> entity (merge / split / lineage)
                   ├- ZoneEngine           polygon/circle geometry + transition detection
                   ├- MilClassEngine       MIL-STD-2525B field storage + symbol key derivation
                   ├- QueryEngine          compound predicate filter (type / affil / region / age)
@@ -56,11 +57,13 @@ PCL transport
                   └- TacticalHistory      timestamped snapshots, as-of / interval retrieval
 ```
 
-The component layer is intentionally thin — it owns only port wiring, JSON serialisation via `TacticalObjectsCodec`, and the PCL lifecycle. All domain reasoning lives in `TacticalObjectsRuntime` so unit tests can exercise it without a running executor.
+The component layer is intentionally thin. `TacticalObjectsComponent` owns internal port wiring and internal JSON serialisation via `TacticalObjectsCodec`; `StandardBridge` owns the generated PYRAMID service boundary. All domain reasoning lives in `TacticalObjectsRuntime` so unit tests can exercise it without a running executor.
+
+`StandardBridge` is the production standard-interface adapter. It hosts the generated PYRAMID Tactical Objects services and topics using generated dispatch/codecs, then maps standard `ObjectInterestRequirement`, `ObjectEvidenceRequirement`, `ObjectMatch`, and `ObjectDetail` values to and from the internal runtime model.
 
 ---
 
-## PCL ports
+## Internal PCL ports
 
 | Port | Type | Direction | Purpose |
 |------|------|-----------|---------|
@@ -75,6 +78,22 @@ The component layer is intentionally thin — it owns only port wiring, JSON ser
 
 All JSON schemas are defined in `TacticalObjectsCodec` and exercised by `Test_TacticalObjectsCodec.cpp`.
 
+## Standard PYRAMID interface
+
+`tactical_objects_app` exposes the generated Tactical Objects provided interface on its remote socket-facing executor. The app can be started with `--content-type application/json`, `--content-type application/flatbuffers`, or `--content-type application/protobuf`.
+
+| Service/topic | Direction | Payload |
+|---------------|-----------|---------|
+| `object_of_interest.create_requirement` | service | `ObjectInterestRequirement -> Identifier` |
+| `object_of_interest.read_requirement` | service | `Query -> ObjectInterestRequirement[]` |
+| `object_of_interest.update_requirement` | service | `ObjectInterestRequirement -> Ack` |
+| `object_of_interest.delete_requirement` | service | `Identifier -> Ack` |
+| `matching_objects.read_match` | service | `Query -> ObjectMatch[]` |
+| `specific_object_detail.read_detail` | service | `Query -> ObjectDetail[]` |
+| `standard.object_evidence` | consumed topic | `ObjectDetail` |
+| `standard.evidence_requirements` | published topic | `ObjectEvidenceRequirement` |
+| `standard.entity_matches` | published topic | `ObjectMatch[]` |
+
 ---
 
 ## Key types
@@ -88,7 +107,7 @@ Defined in `include/TacticalObjectsTypes.h`:
 | `BattleDimension` | Ground, Air, SeaSurface, Subsurface, Space, SOF |
 | `ZoneType` | AOI, PatrolArea, RestrictedArea, NoGoArea, KillBox, … |
 | `RelationshipType` | Hierarchical, Tactical, Organisational |
-| `Position` | WGS84 lat / lon / alt |
+| `Position` | WGS84 latitude / longitude in radians, altitude in metres |
 | `Observation` | Single sensor report (source ref, position, confidence, SIDC hint) |
 | `ObjectDefinition` | Full object spec for direct creation |
 | `ObjectUpdate` | Partial update (all fields optional) |
@@ -111,8 +130,8 @@ Three CMake targets are produced:
 | Target | Contents |
 |--------|----------|
 | `tactical_objects` | Pure domain runtime + codec; no PCL dependency |
-| `tactical_objects_component` | PCL component wrapper; depends on `tactical_objects` + `pcl_core` |
-| `tactical_objects_app` | Standalone node with split boundaries: remote socket-facing provided bridge plus local consumed-side PYRAMID bridge |
+| `tactical_objects_component` | PCL component wrapper plus generated-binding standard adapter; depends on `tactical_objects` + `pcl_core` |
+| `tactical_objects_app` | Standalone node with local runtime and remote socket-facing generated PYRAMID interface |
 
 Build just the standalone app:
 
@@ -123,9 +142,10 @@ build\subprojects\PYRAMID\tactical_objects\Release\tactical_objects_app.exe --po
 
 Topology:
 
-- Remote/provided side: `StandardBridge` runs on the socket-facing executor and exposes `object_of_interest.create_requirement` plus standard match streaming to the client node
-- Local/consumed side: a separate local bridge runs with `TacticalObjectsComponent` and accepts `standard.object_evidence` plus forwards internal evidence requirements to local PYRAMID services
-- Optional smoke input: add `--demo-evidence` to simulate a local node publishing `standard.object_evidence`
+- Remote/provided side: `StandardBridge` runs on the socket-facing executor and exposes the generated provided services plus standard match/evidence topics.
+- Local/runtime side: `TacticalObjectsRuntime` processes observations, interests, queries, and stream subscribers.
+- Consumed-side stub: the app provides a local generated consumed-service stub for evidence-requirement smoke flows.
+- Optional smoke input: add `--demo-evidence` to inject an internal demo observation into the runtime.
 
 Remote smoke-test client:
 
@@ -134,11 +154,18 @@ cmake --build build --config Release --target tactical_objects_test_client
 build\subprojects\PYRAMID\tactical_objects\Release\tactical_objects_test_client.exe --host 127.0.0.1 --port 19123
 ```
 
+Run the focused real-app standard-interface tests:
+
+```bat
+ctest --test-dir build -C Release -R "tobj_cpp_app_client_(e2e|flatbuffers_e2e|protobuf_e2e)|tobj_ada_active_find_app(_flatbuffers)?_e2e" --output-on-failure
+```
+
 ---
 
 ## Tests
 
-Sixteen test binaries cover the component. Run all of them:
+The Tactical Objects unit/integration binaries are registered as `test_tobj_*`
+targets. Run them with:
 
 ```bat
 ctest --test-dir build --output-on-failure -C Release -R "^test_tobj"
@@ -159,13 +186,18 @@ ctest --test-dir build --output-on-failure -C Release -R "^test_tobj"
 | `test_tobj_history` | Snapshot record, as-of and interval retrieval |
 | `test_tobj_runtime` | `TacticalObjectsRuntime` façade integration |
 | `test_tobj_zone_perf` | Performance: thousands of entities and zones |
+| `test_tobj_streaming_codec` | Binary stream frame codec |
+| `test_tobj_runtime_streaming` | Runtime stream subscriber behaviour |
+| `test_tobj_interest_matching` | Interest matching and active-find behaviour |
+| `test_tobj_e2e` | In-process runtime/component integration |
+| `test_tobj_socket_e2e` | Socket transport integration |
 | `test_tobj_component` | PCL services and subscriber end-to-end |
 | `test_tobj_component_robustness` | Stress, concurrency, and error injection |
 | `test_tobj_component_hlr` | Explicit TOBJ / RESP requirement trace tags |
 
 ### Statement coverage
 
-100% statement coverage is verified with GCC `--coverage` + gcovr. To reproduce:
+Statement coverage can be measured with GCC `--coverage` + gcovr. To reproduce:
 
 ```bash
 cmake -S . -B build-coverage \
@@ -177,7 +209,8 @@ cmake --build build-coverage -j$(nproc) --target tactical_objects tactical_objec
   test_tobj_zone test_tobj_correlation test_tobj_query test_tobj_relationship \
   test_tobj_codec test_tobj_interest test_tobj_history test_tobj_runtime \
   test_tobj_zone_perf test_tobj_component test_tobj_component_robustness \
-  test_tobj_component_hlr
+  test_tobj_component_hlr test_tobj_streaming_codec test_tobj_runtime_streaming \
+  test_tobj_interest_matching test_tobj_e2e test_tobj_socket_e2e
 # run all binaries, then:
 gcovr --root . --filter "pyramid/tactical_objects/src/.*" \
   --object-directory build-coverage \
