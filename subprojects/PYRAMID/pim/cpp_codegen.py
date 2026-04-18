@@ -631,6 +631,12 @@ class CppServiceGenerator:
             f.write('#else\n')
             f.write('#define PYRAMID_HAVE_SERVICE_FLATBUFFERS 0\n')
             f.write('#endif\n')
+            f.write('#if __has_include("' + protobuf_codec_header + '")\n')
+            f.write(f'#include "{protobuf_codec_header}"\n')
+            f.write('#define PYRAMID_HAVE_SERVICE_PROTOBUF 1\n')
+            f.write('#else\n')
+            f.write('#define PYRAMID_HAVE_SERVICE_PROTOBUF 0\n')
+            f.write('#endif\n')
             # Data model codec headers — for serialisation inside
             # invoke/publish/dispatch
             for ch in dm_codec_headers:
@@ -656,6 +662,9 @@ class CppServiceGenerator:
                 f.write(f'using {ns}::fromJson;\n')
             f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
             f.write(f'namespace flatbuffers_codec = {flatbuffers_codec_ns};\n')
+            f.write('#endif\n')
+            f.write('#if PYRAMID_HAVE_SERVICE_PROTOBUF\n')
+            f.write(f'namespace protobuf_codec = {protobuf_codec_ns};\n')
             f.write('#endif\n')
             f.write('\n')
 

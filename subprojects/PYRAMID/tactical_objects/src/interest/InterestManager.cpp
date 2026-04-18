@@ -28,6 +28,21 @@ bool InterestManager::cancelInterest(const UUIDKey& interest_id) {
   return true;
 }
 
+bool InterestManager::updateInterest(const UUIDKey& interest_id,
+                                     const InterestCriteria& criteria,
+                                     double expires_at) {
+  auto it = records_.find(interest_id);
+  if (it == records_.end()) return false;
+
+  it->second.criteria = criteria;
+  it->second.status = InterestStatus::Active;
+  if (expires_at > 0.0) {
+    it->second.expires_at = expires_at;
+  }
+  it->second.derived_requirements.clear();
+  return true;
+}
+
 UUIDKey InterestManager::supersedeInterest(const UUIDKey& old_id,
                                            const InterestCriteria& new_criteria,
                                            double now, double expires_at) {

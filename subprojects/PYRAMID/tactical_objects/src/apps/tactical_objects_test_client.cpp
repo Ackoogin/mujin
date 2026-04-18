@@ -1,6 +1,7 @@
 #include "pyramid_services_tactical_objects_provided.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
+#include "pyramid_services_tactical_objects_protobuf_codec.hpp"
 
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
@@ -19,6 +20,7 @@
 namespace {
 
 namespace FlatCodec = pyramid::services::tactical_objects::flatbuffers_codec;
+namespace ProtobufCodec = pyramid::services::tactical_objects::protobuf_codec;
 namespace Provided = pyramid::services::tactical_objects::provided;
 namespace TacticalCodec = pyramid::data_model::tactical;
 namespace Common = pyramid::data_model::common;
@@ -44,6 +46,10 @@ void onEntityMatches(pcl_container_t*, const pcl_msg_t* msg, void* user_data) {
         std::strcmp(msg->type_name, FlatCodec::kContentType) == 0) {
       matches = FlatCodec::fromBinaryObjectMatchArray(msg->data, msg->size);
       payload = "<flatbuffers>";
+    } else if (msg->type_name &&
+               std::strcmp(msg->type_name, "application/protobuf") == 0) {
+      matches = ProtobufCodec::fromBinaryObjectMatchArray(msg->data, msg->size);
+      payload = "<protobuf>";
     } else {
       payload.assign(static_cast<const char*>(msg->data), msg->size);
       auto arr = nlohmann::json::parse(payload);
@@ -81,6 +87,9 @@ void onCreateRequirementResponse(const pcl_msg_t* resp, void* user_data) {
     if (resp->type_name &&
         std::strcmp(resp->type_name, FlatCodec::kContentType) == 0) {
       identifier = FlatCodec::fromBinaryIdentifier(resp->data, resp->size);
+    } else if (resp->type_name &&
+               std::strcmp(resp->type_name, "application/protobuf") == 0) {
+      identifier = ProtobufCodec::fromBinaryIdentifier(resp->data, resp->size);
     } else {
       const std::string payload(static_cast<const char*>(resp->data), resp->size);
       const auto response = nlohmann::json::parse(payload);
@@ -172,19 +181,9 @@ int main(int argc, char* argv[]) {
   request.point->position.latitude = 50.0 * 0.017453292519943295;
   request.point->position.longitude = -1.0 * 0.017453292519943295;
 
-  std::string request_payload = TacticalCodec::toJson(request);
-  if (state.content_type == FlatCodec::kContentType) {
-    request_payload = FlatCodec::toBinary(request);
-  }
-
-  pcl_msg_t request_msg{};
-  request_msg.data = request_payload.data();
-  request_msg.size = static_cast<uint32_t>(request_payload.size());
-  request_msg.type_name = state.content_type.c_str();
-
-  const pcl_status_t invoke_rc = pcl_executor_invoke_async(
-      exec, Provided::kSvcCreateRequirement, &request_msg,
-      onCreateRequirementResponse, &state);
+  const pcl_status_t invoke_rc = Provided::invokeCreateRequirement(
+      exec, request, onCreateRequirementResponse, &state, nullptr,
+      state.content_type.c_str());
   if (invoke_rc != PCL_OK) {
     std::fprintf(stderr,
                  "[tactical_objects_test_client] Failed to invoke %s\n",

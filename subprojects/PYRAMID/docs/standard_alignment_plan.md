@@ -31,6 +31,54 @@ Ada types in `subprojects/PYRAMID/examples/ada/tactical_objects_types.ads`.
 3. Streaming binary performance (0-copy batch frames) is preserved.
 4. Migration is incremental — each step is independently testable.
 
+### Production Alignment Status
+
+The original 6-phase plan captured the internal model-alignment work, but it
+did not guarantee that the **shipped executable path** (`tactical_objects_app`)
+was actually exposing the generated proto contract. The follow-on work below is
+the production-facing completion plan for that gap.
+
+| Workstream | Intent | Status |
+|-----------|--------|--------|
+| Shipped provided interface uses generated bindings | `tactical_objects_app` serves the proto-defined provided services via generated dispatch/codecs | **COMPLETE** |
+| Interest lifecycle surface is complete | `create/read/update/delete requirement` all exposed on the shipped path | **COMPLETE** |
+| Rich standard object model | `read_detail` populates the standard `ObjectDetail` fields from the internal store, not just `id/position/quality` | **COMPLETE** |
+| Multi-codec frontend | Standard interface selectable as JSON or FlatBuffers on the shipped path | **COMPLETE** |
+| Protobuf frontend parity | Same shipped-path validation for protobuf transport/content-type | **COMPLETE** |
+| Real-app interop coverage | Automated tests exercise `tactical_objects_app`, not only the standalone test bridge | **IN PROGRESS** |
+
+### Delivered In This Change
+
+- `StandardBridge` on the shipped path now uses the generated tactical-objects
+  provided/consumed bindings for service dispatch and payload encoding.
+- `tactical_objects_app` now hosts the standard interface directly using a
+  selectable frontend codec (`application/json` or `application/flatbuffers`),
+  instead of relying on a manual local-consumed bridge.
+- The provided interface now exposes the full standard interest lifecycle:
+  `object_of_interest.create_requirement`, `.read_requirement`,
+  `.update_requirement`, `.delete_requirement`, plus
+  `matching_objects.read_match` and `specific_object_detail.read_detail`.
+- `specific_object_detail.read_detail` now maps the internal business model onto
+  the richer standard `ObjectDetail` view:
+  `update_time`, `entity_source`, `source[]`, `position`, `creation_time`,
+  `quality`, `course`, `speed`, `identity`, and `dimension`.
+- A direct app/client test driver has been added so the real executable path can
+  be exercised in JSON, FlatBuffers, and protobuf modes.
+- The generated tactical-objects service bindings now correctly detect and wire
+  protobuf codecs at compile time, so the shipped app/client path can use the
+  generated protobuf transport end to end instead of silently compiling that
+  path out.
+
+### Remaining Work
+
+- Extend the real-app automated coverage to the Ada active-find path so the
+  production executable, not only the standalone bridge harness, is the default
+  interop target.
+- Decide whether `standard.entity_matches` remains the standard high-rate
+  projection of the internal binary stream, or whether an additional
+  bulk-detail/batch-detail standard path is needed for consumers that want more
+  than `ObjectMatch` without paying repeated `read_detail` round-trips.
+
 ## 3. Option C — Hybrid (selected)
 
 Progress tracked against the 6-phase plan below.
@@ -70,10 +118,29 @@ recorded binary data or live clients must upgrade together.
 
 ### Phase 6 — Remove bridge (now identity-only) ✅
 
-The bridge is not literally removed — it remains as a permanent thin adapter —
-but Phase 6 verifies that every remaining translation is an inherent schema
-difference (not a historical impedance mismatch) and eliminates the last
-avoidable conversion.
+This milestone should be read as **historical internal-alignment progress**, not
+as proof that the shipped path was done. The bridge is not literally removed —
+it remains as the protocol adapter between the internal runtime and the
+generated standard contract — but after the production migration work above it
+is now a generated-binding-based adapter rather than a hand-written JSON bridge.
+
+### Progress Update — 2026-04-18
+
+- The shipped `tactical_objects_app` path is now validated with the generated
+  bindings across all three supported frontend codecs:
+  `application/json`, `application/flatbuffers`, and
+  `application/protobuf`.
+- The focused protobuf gap turned out to be in the generated service-binding
+  implementation, not in the tactical-object business mapping itself:
+  the generated tactical-objects binding `.cpp` files had protobuf branches,
+  but they did not include the protobuf codec header or define the
+  `PYRAMID_HAVE_SERVICE_PROTOBUF` feature macro, which meant protobuf support
+  was compiled out on the shipped path.
+- The generator has been updated so future regenerated tactical-objects service
+  bindings detect protobuf codecs in the same way they already detect
+  FlatBuffers codecs.
+- A direct real-app protobuf integration test now complements the existing
+  JSON and FlatBuffers app/client tests.
 
 **Last string-conversion chain removed:**
 The `handleCreateRequirement` switch that mapped `BattleDimension` ordinals to
@@ -535,4 +602,3 @@ If the timeline is extremely compressed and internal consumers can tolerate
 breakage, Option A is faster end-to-end. If standard compliance is the
 only external requirement and internal migration is not needed, Option B
 alone is sufficient.
-
