@@ -423,6 +423,42 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         LABELS "cross_language;integration;codec"
         TIMEOUT 40)
 
+    if(WIN32)
+        add_test(NAME tobj_ada_active_find_app_e2e
+            COMMAND ${CMAKE_COMMAND}
+                    -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_app_e2e.bat
+                    -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
+                    -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_active_find_e2e
+                    -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+    else()
+        add_test(NAME tobj_ada_active_find_app_e2e
+            COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_app_e2e.sh
+                    --app-bin $<TARGET_FILE:tactical_objects_app>
+                    --client-bin ${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_active_find_e2e)
+    endif()
+    set_tests_properties(tobj_ada_active_find_app_e2e PROPERTIES
+        LABELS "cross_language;integration;real_app"
+        TIMEOUT 40)
+
+    if(WIN32)
+        add_test(NAME tobj_ada_active_find_app_flatbuffers_e2e
+            COMMAND ${CMAKE_COMMAND}
+                    -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_app_e2e.bat
+                    -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
+                    -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_active_find_e2e
+                    -DSCRIPT_ARGS=--content-type|application/flatbuffers
+                    -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+    else()
+        add_test(NAME tobj_ada_active_find_app_flatbuffers_e2e
+            COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_app_e2e.sh
+                    --app-bin $<TARGET_FILE:tactical_objects_app>
+                    --client-bin ${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_active_find_e2e
+                    --content-type application/flatbuffers)
+    endif()
+    set_tests_properties(tobj_ada_active_find_app_flatbuffers_e2e PROPERTIES
+        LABELS "cross_language;integration;codec;real_app"
+        TIMEOUT 40)
+
     if(WIN32 AND TARGET pyramid_grpc_transport)
         add_custom_target(ada_grpc_cpp_interop_build ALL
             COMMAND ${CMAKE_COMMAND} -E env MUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}

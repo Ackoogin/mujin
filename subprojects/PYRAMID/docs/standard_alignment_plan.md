@@ -45,7 +45,7 @@ the production-facing completion plan for that gap.
 | Rich standard object model | `read_detail` populates the standard `ObjectDetail` fields from the internal store, not just `id/position/quality` | **COMPLETE** |
 | Multi-codec frontend | Standard interface selectable as JSON or FlatBuffers on the shipped path | **COMPLETE** |
 | Protobuf frontend parity | Same shipped-path validation for protobuf transport/content-type | **COMPLETE** |
-| Real-app interop coverage | Automated tests exercise `tactical_objects_app`, not only the standalone test bridge | **IN PROGRESS** |
+| Real-app interop coverage | Automated tests exercise `tactical_objects_app`, not only the standalone test bridge | **COMPLETE** |
 
 ### Delivered In This Change
 
@@ -64,6 +64,9 @@ the production-facing completion plan for that gap.
   `quality`, `course`, `speed`, `identity`, and `dimension`.
 - A direct app/client test driver has been added so the real executable path can
   be exercised in JSON, FlatBuffers, and protobuf modes.
+- A direct Ada ActiveFind real-app test driver has been added so the canonical
+  Ada evidence-provider flow runs against `tactical_objects_app`, not only
+  `standalone_bridge`, in JSON and FlatBuffers modes.
 - The generated tactical-objects service bindings now correctly detect and wire
   protobuf codecs at compile time, so the shipped app/client path can use the
   generated protobuf transport end to end instead of silently compiling that
@@ -71,9 +74,6 @@ the production-facing completion plan for that gap.
 
 ### Remaining Work
 
-- Extend the real-app automated coverage to the Ada active-find path so the
-  production executable, not only the standalone bridge harness, is the default
-  interop target.
 - Decide whether `standard.entity_matches` remains the standard high-rate
   projection of the internal binary stream, or whether an additional
   bulk-detail/batch-detail standard path is needed for consumers that want more
@@ -141,6 +141,9 @@ is now a generated-binding-based adapter rather than a hand-written JSON bridge.
   FlatBuffers codecs.
 - A direct real-app protobuf integration test now complements the existing
   JSON and FlatBuffers app/client tests.
+- Direct Ada ActiveFind coverage now also targets `tactical_objects_app` in
+  JSON and FlatBuffers modes, so the evidence-provider flow is no longer
+  validated only through the standalone bridge harness.
 
 **Last string-conversion chain removed:**
 The `handleCreateRequirement` switch that mapped `BattleDimension` ordinals to
