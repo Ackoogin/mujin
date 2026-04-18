@@ -113,7 +113,7 @@ std::string TacticalObjectsCodec::battleDimToString(BattleDimension b) {
     case BattleDimension::Subsurface:  return "Subsurface";
     case BattleDimension::SeaSurface:  return "SeaSurface";
     case BattleDimension::Air:         return "Air";
-    case BattleDimension::Unknown:     return "Ground";
+    case BattleDimension::Unknown:     return "Unknown";
     case BattleDimension::Space:       return "Space";
     case BattleDimension::SOF:         return "SOF";
   }
@@ -126,6 +126,7 @@ BattleDimension TacticalObjectsCodec::stringToBattleDim(const std::string& s) {
   if (s == "Subsurface") return BattleDimension::Subsurface;
   if (s == "Space") return BattleDimension::Space;
   if (s == "SOF") return BattleDimension::SOF;
+  if (s == "Unknown") return BattleDimension::Unknown;
   return BattleDimension::Ground;
 }
 

@@ -60,7 +60,6 @@ static const char* SVC_CREATE_REQUIREMENT     = "object_of_interest.create_requi
 static const char* SVC_READ_MATCH             = "matching_objects.read_match";
 static const char* SVC_READ_DETAIL            = "specific_object_detail.read_detail";
 static const char* SVC_SUBSCRIBE_INTEREST     = "subscribe_interest";
-static const char* SVC_QUERY                  = "query";
 static const char* SVC_CREATE_EVIDENCE_REQ    = "object_solution_evidence.create_requirement";
 
 static const char* TOPIC_STD_ENTITY_MATCHES   = "standard.entity_matches";
@@ -301,34 +300,29 @@ pcl_status_t StandardBridge::handleReadMatch(pcl_container_t*, const pcl_msg_t* 
 
   json result_arr = json::array();
 
-  auto call_query = [&](const std::string& payload) {
-    char raw[65536] = {};
-    pcl_msg_t ireq{}, iresp{};
-    ireq.data      = payload.empty() ? nullptr : static_cast<const void*>(payload.data());
-    ireq.size      = static_cast<uint32_t>(payload.size());
-    ireq.type_name = TYPE_JSON;
-    iresp.data     = raw;
-    iresp.size     = sizeof(raw);
-    if (pcl_executor_invoke_service(self->exec_, SVC_QUERY, &ireq, &iresp) != PCL_OK) return;
-    try {
-      auto jr = json::parse(std::string(static_cast<const char*>(iresp.data), iresp.size));
-      for (const auto& entry : jr.value("entries", json::array())) {
-        std::string id_str = entry.value("id", "");
-        if (id_str.empty()) continue;
-        data_model::ObjectMatch m{};
-        m.id = id_str;
-        m.matching_object_id = id_str;
-        m.source = "tactical_objects";
-        result_arr.push_back(json::parse(tactical_codec::toJson(m)));
-      }
-    } catch (...) {}
+  // Query runtime directly to avoid a fixed-size PCL response buffer that
+  // would silently truncate results in large deployments.
+  auto append_query = [&](const QueryRequest& qreq) {
+    auto qresp = self->runtime_.query(qreq);
+    for (const auto& entry : qresp.entries) {
+      std::string id_str = TacticalObjectsCodec::encodeUUID(entry.id).get<std::string>();
+      data_model::ObjectMatch m{};
+      m.id = id_str;
+      m.matching_object_id = id_str;
+      m.source = "tactical_objects";
+      result_arr.push_back(json::parse(tactical_codec::toJson(m)));
+    }
   };
 
   if (filter_ids.empty()) {
-    call_query("");
+    append_query(QueryRequest{});
   } else {
     for (const auto& id_str : filter_ids) {
-      call_query(json{{"by_uuid", id_str}}.dump());
+      auto parsed = pyramid::core::uuid::UUIDHelper::fromString(id_str);
+      if (!parsed.second) continue;
+      QueryRequest qreq;
+      qreq.by_uuid = UUIDKey(parsed.first);
+      append_query(qreq);
     }
   }
 
