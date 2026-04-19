@@ -16,6 +16,7 @@
 #else
 #define PYRAMID_HAVE_SERVICE_PROTOBUF 0
 #endif
+#include "pyramid_data_model_autonomy_codec.hpp"
 #include "pyramid_data_model_common_codec.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
 
@@ -33,6 +34,8 @@
 namespace pyramid::services::tactical_objects::consumed {
 
 // Bring data model codec functions into scope
+using pyramid::data_model::autonomy::toJson;
+using pyramid::data_model::autonomy::fromJson;
 using pyramid::data_model::common::toJson;
 using pyramid::data_model::common::fromJson;
 using pyramid::data_model::tactical::toJson;

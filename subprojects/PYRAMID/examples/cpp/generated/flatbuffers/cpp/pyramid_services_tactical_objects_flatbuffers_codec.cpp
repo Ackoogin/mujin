@@ -1,6 +1,8 @@
 // Auto-generated service FlatBuffers codec
 #include "pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 
+#include "pyramid_data_model_autonomy_codec.hpp"
+#include "pyramid_data_model_base_codec.hpp"
 #include "pyramid_data_model_common_codec.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
 #include <cstdlib>

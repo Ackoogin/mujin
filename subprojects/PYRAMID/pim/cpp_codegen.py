@@ -638,15 +638,35 @@ class CppServiceGenerator:
         topic_set = all_topics
         hpp_name = file_prefix + '.hpp'
 
-        # Determine which data model codec namespaces to use
-        dm_codec_nss = [
-            'pyramid::data_model::common',
-            'pyramid::data_model::tactical',
-        ]
-        dm_codec_headers = [
-            'pyramid_data_model_common_codec.hpp',
-            'pyramid_data_model_tactical_codec.hpp',
-        ]
+        # Determine which data model codec namespaces to use. Service request
+        # and response payloads can reference any data-model package, so bring
+        # every generated data-model codec into scope rather than hard-coding
+        # the current Tactical Objects subset.
+        dm_codec_nss = []
+        dm_codec_headers = []
+        if self._proto_input.is_dir():
+            data_model_files = [
+                parse_proto(p) for p in self._proto_input.rglob('*.proto')
+            ]
+        else:
+            data_model_files = []
+            for parent in self._proto_input.parents:
+                candidate = parent / 'pyramid' / 'data_model'
+                if candidate.exists():
+                    data_model_files = [
+                        parse_proto(p) for p in candidate.rglob('*.proto')
+                    ]
+                    break
+            if not data_model_files:
+                data_model_files = [parsed]
+        for indexed_pf in data_model_files:
+            if not indexed_pf.package.startswith('pyramid.data_model'):
+                continue
+            if indexed_pf.package == 'pyramid.data_model.base':
+                continue
+            dm_codec_nss.append(indexed_pf.package.replace('.', '::'))
+            dm_codec_headers.append(
+                f'{indexed_pf.package.replace(".", "_")}_codec.hpp')
 
         with open(path, 'w', newline='\n') as f:
             # File-level comment block

@@ -50,6 +50,7 @@ endfunction()
 set(PYRAMID_FLATBUFFERS_SCHEMA_DIR "${PYRAMID_ROOT_DIR}/examples/cpp/generated/flatbuffers/cpp")
 set(PYRAMID_FLATBUFFERS_GEN_DIR "${CMAKE_BINARY_DIR}/generated/flatbuffers/cpp")
 set(PYRAMID_FLATBUFFERS_SCHEMAS
+    "${PYRAMID_FLATBUFFERS_SCHEMA_DIR}/pyramid_services_autonomy_backend.fbs"
     "${PYRAMID_FLATBUFFERS_SCHEMA_DIR}/pyramid_services_tactical_objects.fbs")
 set(PYRAMID_FLATBUFFERS_OUTPUTS)
 foreach(PYRAMID_FLATBUFFERS_SCHEMA IN LISTS PYRAMID_FLATBUFFERS_SCHEMAS)
@@ -78,7 +79,10 @@ target_include_directories(pyramid_flatbuffers_support
 )
 
 add_library(pyramid_generated_codecs STATIC
+    "${PYRAMID_ROOT_DIR}/examples/cpp/generated/flatbuffers/cpp/pyramid_services_autonomy_backend_flatbuffers_codec.cpp"
     "${PYRAMID_ROOT_DIR}/examples/cpp/generated/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.cpp"
+    "${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_autonomy_codec.cpp"
+    "${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_base_codec.cpp"
     "${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_common_codec.cpp"
     "${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_tactical_codec.cpp"
 )
@@ -144,6 +148,7 @@ if(PYRAMID_ENABLE_PROTOBUF)
         "${PYRAMID_PROTO_DIR}/pyramid/data_model/base.proto"
         "${PYRAMID_PROTO_DIR}/pyramid/data_model/common.proto"
         "${PYRAMID_PROTO_DIR}/pyramid/data_model/tactical.proto"
+        "${PYRAMID_PROTO_DIR}/pyramid/data_model/autonomy.proto"
     )
 
     set(PYRAMID_PROTOBUF_OUTPUTS)
@@ -180,6 +185,7 @@ if(PYRAMID_ENABLE_PROTOBUF)
         "${PYRAMID_PROTOBUF_GEN_DIR}/pyramid/data_model/base.pb.cc"
         "${PYRAMID_PROTOBUF_GEN_DIR}/pyramid/data_model/common.pb.cc"
         "${PYRAMID_PROTOBUF_GEN_DIR}/pyramid/data_model/tactical.pb.cc"
+        "${PYRAMID_PROTOBUF_GEN_DIR}/pyramid/data_model/autonomy.pb.cc"
     )
     add_dependencies(pyramid_protobuf_support pyramid_protobuf_codegen)
     target_link_libraries(pyramid_protobuf_support

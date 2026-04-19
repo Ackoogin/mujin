@@ -14,67 +14,25 @@ namespace pyramid::data_model::autonomy::flatbuffers_codec {
 
 static constexpr const char* kContentType = "application/flatbuffers";
 
-inline std::string toBinary(const FactUpdateT& obj) {
+inline std::string toBinary(const RequirementReferenceT& obj) {
     flatbuffers::FlatBufferBuilder builder(1024);
-    auto offset = FactUpdate::Pack(builder, &obj);
+    auto offset = RequirementReference::Pack(builder, &obj);
     builder.Finish(offset);
     return std::string(
         reinterpret_cast<const char*>(builder.GetBufferPointer()),
         builder.GetSize());
 }
 
-inline FactUpdateT fromBinaryFactUpdate(const void* data, size_t size) {
+inline RequirementReferenceT fromBinaryRequirementReference(const void* data, size_t size) {
     (void) size;
-    FactUpdateT result;
-    auto* fb = flatbuffers::GetRoot<FactUpdate>(data);
+    RequirementReferenceT result;
+    auto* fb = flatbuffers::GetRoot<RequirementReference>(data);
     if (fb) fb->UnPackTo(&result);
     return result;
 }
 
-inline FactUpdateT fromBinaryFactUpdate(const std::string& s) {
-    return fromBinaryFactUpdate(s.data(), s.size());
-}
-
-inline std::string toBinary(const StateUpdateT& obj) {
-    flatbuffers::FlatBufferBuilder builder(1024);
-    auto offset = StateUpdate::Pack(builder, &obj);
-    builder.Finish(offset);
-    return std::string(
-        reinterpret_cast<const char*>(builder.GetBufferPointer()),
-        builder.GetSize());
-}
-
-inline StateUpdateT fromBinaryStateUpdate(const void* data, size_t size) {
-    (void) size;
-    StateUpdateT result;
-    auto* fb = flatbuffers::GetRoot<StateUpdate>(data);
-    if (fb) fb->UnPackTo(&result);
-    return result;
-}
-
-inline StateUpdateT fromBinaryStateUpdate(const std::string& s) {
-    return fromBinaryStateUpdate(s.data(), s.size());
-}
-
-inline std::string toBinary(const MissionIntentT& obj) {
-    flatbuffers::FlatBufferBuilder builder(1024);
-    auto offset = MissionIntent::Pack(builder, &obj);
-    builder.Finish(offset);
-    return std::string(
-        reinterpret_cast<const char*>(builder.GetBufferPointer()),
-        builder.GetSize());
-}
-
-inline MissionIntentT fromBinaryMissionIntent(const void* data, size_t size) {
-    (void) size;
-    MissionIntentT result;
-    auto* fb = flatbuffers::GetRoot<MissionIntent>(data);
-    if (fb) fb->UnPackTo(&result);
-    return result;
-}
-
-inline MissionIntentT fromBinaryMissionIntent(const std::string& s) {
-    return fromBinaryMissionIntent(s.data(), s.size());
+inline RequirementReferenceT fromBinaryRequirementReference(const std::string& s) {
+    return fromBinaryRequirementReference(s.data(), s.size());
 }
 
 inline std::string toBinary(const AgentStateT& obj) {
@@ -98,46 +56,109 @@ inline AgentStateT fromBinaryAgentState(const std::string& s) {
     return fromBinaryAgentState(s.data(), s.size());
 }
 
-inline std::string toBinary(const PolicyEnvelopeT& obj) {
+inline std::string toBinary(const PlanningPolicyT& obj) {
     flatbuffers::FlatBufferBuilder builder(1024);
-    auto offset = PolicyEnvelope::Pack(builder, &obj);
+    auto offset = PlanningPolicy::Pack(builder, &obj);
     builder.Finish(offset);
     return std::string(
         reinterpret_cast<const char*>(builder.GetBufferPointer()),
         builder.GetSize());
 }
 
-inline PolicyEnvelopeT fromBinaryPolicyEnvelope(const void* data, size_t size) {
+inline PlanningPolicyT fromBinaryPlanningPolicy(const void* data, size_t size) {
     (void) size;
-    PolicyEnvelopeT result;
-    auto* fb = flatbuffers::GetRoot<PolicyEnvelope>(data);
+    PlanningPolicyT result;
+    auto* fb = flatbuffers::GetRoot<PlanningPolicy>(data);
     if (fb) fb->UnPackTo(&result);
     return result;
 }
 
-inline PolicyEnvelopeT fromBinaryPolicyEnvelope(const std::string& s) {
-    return fromBinaryPolicyEnvelope(s.data(), s.size());
+inline PlanningPolicyT fromBinaryPlanningPolicy(const std::string& s) {
+    return fromBinaryPlanningPolicy(s.data(), s.size());
 }
 
-inline std::string toBinary(const SessionT& obj) {
+inline std::string toBinary(const PlanningGoalT& obj) {
     flatbuffers::FlatBufferBuilder builder(1024);
-    auto offset = Session::Pack(builder, &obj);
+    auto offset = PlanningGoal::Pack(builder, &obj);
     builder.Finish(offset);
     return std::string(
         reinterpret_cast<const char*>(builder.GetBufferPointer()),
         builder.GetSize());
 }
 
-inline SessionT fromBinarySession(const void* data, size_t size) {
+inline PlanningGoalT fromBinaryPlanningGoal(const void* data, size_t size) {
     (void) size;
-    SessionT result;
-    auto* fb = flatbuffers::GetRoot<Session>(data);
+    PlanningGoalT result;
+    auto* fb = flatbuffers::GetRoot<PlanningGoal>(data);
     if (fb) fb->UnPackTo(&result);
     return result;
 }
 
-inline SessionT fromBinarySession(const std::string& s) {
-    return fromBinarySession(s.data(), s.size());
+inline PlanningGoalT fromBinaryPlanningGoal(const std::string& s) {
+    return fromBinaryPlanningGoal(s.data(), s.size());
+}
+
+inline std::string toBinary(const PlanningExecutionRequirementT& obj) {
+    flatbuffers::FlatBufferBuilder builder(1024);
+    auto offset = PlanningExecutionRequirement::Pack(builder, &obj);
+    builder.Finish(offset);
+    return std::string(
+        reinterpret_cast<const char*>(builder.GetBufferPointer()),
+        builder.GetSize());
+}
+
+inline PlanningExecutionRequirementT fromBinaryPlanningExecutionRequirement(const void* data, size_t size) {
+    (void) size;
+    PlanningExecutionRequirementT result;
+    auto* fb = flatbuffers::GetRoot<PlanningExecutionRequirement>(data);
+    if (fb) fb->UnPackTo(&result);
+    return result;
+}
+
+inline PlanningExecutionRequirementT fromBinaryPlanningExecutionRequirement(const std::string& s) {
+    return fromBinaryPlanningExecutionRequirement(s.data(), s.size());
+}
+
+inline std::string toBinary(const WorldFactUpdateT& obj) {
+    flatbuffers::FlatBufferBuilder builder(1024);
+    auto offset = WorldFactUpdate::Pack(builder, &obj);
+    builder.Finish(offset);
+    return std::string(
+        reinterpret_cast<const char*>(builder.GetBufferPointer()),
+        builder.GetSize());
+}
+
+inline WorldFactUpdateT fromBinaryWorldFactUpdate(const void* data, size_t size) {
+    (void) size;
+    WorldFactUpdateT result;
+    auto* fb = flatbuffers::GetRoot<WorldFactUpdate>(data);
+    if (fb) fb->UnPackTo(&result);
+    return result;
+}
+
+inline WorldFactUpdateT fromBinaryWorldFactUpdate(const std::string& s) {
+    return fromBinaryWorldFactUpdate(s.data(), s.size());
+}
+
+inline std::string toBinary(const StateUpdateT& obj) {
+    flatbuffers::FlatBufferBuilder builder(1024);
+    auto offset = StateUpdate::Pack(builder, &obj);
+    builder.Finish(offset);
+    return std::string(
+        reinterpret_cast<const char*>(builder.GetBufferPointer()),
+        builder.GetSize());
+}
+
+inline StateUpdateT fromBinaryStateUpdate(const void* data, size_t size) {
+    (void) size;
+    StateUpdateT result;
+    auto* fb = flatbuffers::GetRoot<StateUpdate>(data);
+    if (fb) fb->UnPackTo(&result);
+    return result;
+}
+
+inline StateUpdateT fromBinaryStateUpdate(const std::string& s) {
+    return fromBinaryStateUpdate(s.data(), s.size());
 }
 
 inline std::string toBinary(const CapabilitiesT& obj) {
@@ -161,193 +182,109 @@ inline CapabilitiesT fromBinaryCapabilities(const std::string& s) {
     return fromBinaryCapabilities(s.data(), s.size());
 }
 
-inline std::string toBinary(const StringKeyValueT& obj) {
+inline std::string toBinary(const PlannedComponentInteractionT& obj) {
     flatbuffers::FlatBufferBuilder builder(1024);
-    auto offset = StringKeyValue::Pack(builder, &obj);
+    auto offset = PlannedComponentInteraction::Pack(builder, &obj);
     builder.Finish(offset);
     return std::string(
         reinterpret_cast<const char*>(builder.GetBufferPointer()),
         builder.GetSize());
 }
 
-inline StringKeyValueT fromBinaryStringKeyValue(const void* data, size_t size) {
+inline PlannedComponentInteractionT fromBinaryPlannedComponentInteraction(const void* data, size_t size) {
     (void) size;
-    StringKeyValueT result;
-    auto* fb = flatbuffers::GetRoot<StringKeyValue>(data);
+    PlannedComponentInteractionT result;
+    auto* fb = flatbuffers::GetRoot<PlannedComponentInteraction>(data);
     if (fb) fb->UnPackTo(&result);
     return result;
 }
 
-inline StringKeyValueT fromBinaryStringKeyValue(const std::string& s) {
-    return fromBinaryStringKeyValue(s.data(), s.size());
+inline PlannedComponentInteractionT fromBinaryPlannedComponentInteraction(const std::string& s) {
+    return fromBinaryPlannedComponentInteraction(s.data(), s.size());
 }
 
-inline std::string toBinary(const CommandT& obj) {
+inline std::string toBinary(const PlanStepT& obj) {
     flatbuffers::FlatBufferBuilder builder(1024);
-    auto offset = Command::Pack(builder, &obj);
+    auto offset = PlanStep::Pack(builder, &obj);
     builder.Finish(offset);
     return std::string(
         reinterpret_cast<const char*>(builder.GetBufferPointer()),
         builder.GetSize());
 }
 
-inline CommandT fromBinaryCommand(const void* data, size_t size) {
+inline PlanStepT fromBinaryPlanStep(const void* data, size_t size) {
     (void) size;
-    CommandT result;
-    auto* fb = flatbuffers::GetRoot<Command>(data);
+    PlanStepT result;
+    auto* fb = flatbuffers::GetRoot<PlanStep>(data);
     if (fb) fb->UnPackTo(&result);
     return result;
 }
 
-inline CommandT fromBinaryCommand(const std::string& s) {
-    return fromBinaryCommand(s.data(), s.size());
+inline PlanStepT fromBinaryPlanStep(const std::string& s) {
+    return fromBinaryPlanStep(s.data(), s.size());
 }
 
-inline std::string toBinary(const GoalDispatchT& obj) {
+inline std::string toBinary(const PlanT& obj) {
     flatbuffers::FlatBufferBuilder builder(1024);
-    auto offset = GoalDispatch::Pack(builder, &obj);
+    auto offset = Plan::Pack(builder, &obj);
     builder.Finish(offset);
     return std::string(
         reinterpret_cast<const char*>(builder.GetBufferPointer()),
         builder.GetSize());
 }
 
-inline GoalDispatchT fromBinaryGoalDispatch(const void* data, size_t size) {
+inline PlanT fromBinaryPlan(const void* data, size_t size) {
     (void) size;
-    GoalDispatchT result;
-    auto* fb = flatbuffers::GetRoot<GoalDispatch>(data);
+    PlanT result;
+    auto* fb = flatbuffers::GetRoot<Plan>(data);
     if (fb) fb->UnPackTo(&result);
     return result;
 }
 
-inline GoalDispatchT fromBinaryGoalDispatch(const std::string& s) {
-    return fromBinaryGoalDispatch(s.data(), s.size());
+inline PlanT fromBinaryPlan(const std::string& s) {
+    return fromBinaryPlan(s.data(), s.size());
 }
 
-inline std::string toBinary(const DecisionRecordT& obj) {
+inline std::string toBinary(const RequirementPlacementT& obj) {
     flatbuffers::FlatBufferBuilder builder(1024);
-    auto offset = DecisionRecord::Pack(builder, &obj);
+    auto offset = RequirementPlacement::Pack(builder, &obj);
     builder.Finish(offset);
     return std::string(
         reinterpret_cast<const char*>(builder.GetBufferPointer()),
         builder.GetSize());
 }
 
-inline DecisionRecordT fromBinaryDecisionRecord(const void* data, size_t size) {
+inline RequirementPlacementT fromBinaryRequirementPlacement(const void* data, size_t size) {
     (void) size;
-    DecisionRecordT result;
-    auto* fb = flatbuffers::GetRoot<DecisionRecord>(data);
+    RequirementPlacementT result;
+    auto* fb = flatbuffers::GetRoot<RequirementPlacement>(data);
     if (fb) fb->UnPackTo(&result);
     return result;
 }
 
-inline DecisionRecordT fromBinaryDecisionRecord(const std::string& s) {
-    return fromBinaryDecisionRecord(s.data(), s.size());
+inline RequirementPlacementT fromBinaryRequirementPlacement(const std::string& s) {
+    return fromBinaryRequirementPlacement(s.data(), s.size());
 }
 
-inline std::string toBinary(const CommandResultT& obj) {
+inline std::string toBinary(const ExecutionRunT& obj) {
     flatbuffers::FlatBufferBuilder builder(1024);
-    auto offset = CommandResult::Pack(builder, &obj);
+    auto offset = ExecutionRun::Pack(builder, &obj);
     builder.Finish(offset);
     return std::string(
         reinterpret_cast<const char*>(builder.GetBufferPointer()),
         builder.GetSize());
 }
 
-inline CommandResultT fromBinaryCommandResult(const void* data, size_t size) {
+inline ExecutionRunT fromBinaryExecutionRun(const void* data, size_t size) {
     (void) size;
-    CommandResultT result;
-    auto* fb = flatbuffers::GetRoot<CommandResult>(data);
+    ExecutionRunT result;
+    auto* fb = flatbuffers::GetRoot<ExecutionRun>(data);
     if (fb) fb->UnPackTo(&result);
     return result;
 }
 
-inline CommandResultT fromBinaryCommandResult(const std::string& s) {
-    return fromBinaryCommandResult(s.data(), s.size());
-}
-
-inline std::string toBinary(const DispatchResultT& obj) {
-    flatbuffers::FlatBufferBuilder builder(1024);
-    auto offset = DispatchResult::Pack(builder, &obj);
-    builder.Finish(offset);
-    return std::string(
-        reinterpret_cast<const char*>(builder.GetBufferPointer()),
-        builder.GetSize());
-}
-
-inline DispatchResultT fromBinaryDispatchResult(const void* data, size_t size) {
-    (void) size;
-    DispatchResultT result;
-    auto* fb = flatbuffers::GetRoot<DispatchResult>(data);
-    if (fb) fb->UnPackTo(&result);
-    return result;
-}
-
-inline DispatchResultT fromBinaryDispatchResult(const std::string& s) {
-    return fromBinaryDispatchResult(s.data(), s.size());
-}
-
-inline std::string toBinary(const SessionSnapshotT& obj) {
-    flatbuffers::FlatBufferBuilder builder(1024);
-    auto offset = SessionSnapshot::Pack(builder, &obj);
-    builder.Finish(offset);
-    return std::string(
-        reinterpret_cast<const char*>(builder.GetBufferPointer()),
-        builder.GetSize());
-}
-
-inline SessionSnapshotT fromBinarySessionSnapshot(const void* data, size_t size) {
-    (void) size;
-    SessionSnapshotT result;
-    auto* fb = flatbuffers::GetRoot<SessionSnapshot>(data);
-    if (fb) fb->UnPackTo(&result);
-    return result;
-}
-
-inline SessionSnapshotT fromBinarySessionSnapshot(const std::string& s) {
-    return fromBinarySessionSnapshot(s.data(), s.size());
-}
-
-inline std::string toBinary(const SessionStepRequestT& obj) {
-    flatbuffers::FlatBufferBuilder builder(1024);
-    auto offset = SessionStepRequest::Pack(builder, &obj);
-    builder.Finish(offset);
-    return std::string(
-        reinterpret_cast<const char*>(builder.GetBufferPointer()),
-        builder.GetSize());
-}
-
-inline SessionStepRequestT fromBinarySessionStepRequest(const void* data, size_t size) {
-    (void) size;
-    SessionStepRequestT result;
-    auto* fb = flatbuffers::GetRoot<SessionStepRequest>(data);
-    if (fb) fb->UnPackTo(&result);
-    return result;
-}
-
-inline SessionStepRequestT fromBinarySessionStepRequest(const std::string& s) {
-    return fromBinarySessionStepRequest(s.data(), s.size());
-}
-
-inline std::string toBinary(const SessionStopRequestT& obj) {
-    flatbuffers::FlatBufferBuilder builder(1024);
-    auto offset = SessionStopRequest::Pack(builder, &obj);
-    builder.Finish(offset);
-    return std::string(
-        reinterpret_cast<const char*>(builder.GetBufferPointer()),
-        builder.GetSize());
-}
-
-inline SessionStopRequestT fromBinarySessionStopRequest(const void* data, size_t size) {
-    (void) size;
-    SessionStopRequestT result;
-    auto* fb = flatbuffers::GetRoot<SessionStopRequest>(data);
-    if (fb) fb->UnPackTo(&result);
-    return result;
-}
-
-inline SessionStopRequestT fromBinarySessionStopRequest(const std::string& s) {
-    return fromBinarySessionStopRequest(s.data(), s.size());
+inline ExecutionRunT fromBinaryExecutionRun(const std::string& s) {
+    return fromBinaryExecutionRun(s.data(), s.size());
 }
 
 } // namespace pyramid::data_model::autonomy::flatbuffers_codec

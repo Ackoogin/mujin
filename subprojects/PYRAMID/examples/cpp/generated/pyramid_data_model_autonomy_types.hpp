@@ -13,39 +13,84 @@
 namespace pyramid::data_model::autonomy {
 
 
-enum class AutonomyBackendState : int {
-    Unspecified = 0,
-    Idle = 1,
-    Ready = 2,
-    WaitingForResults = 3,
-    Complete = 4,
-    Failed = 5,
-    Stopped = 6,
-};
-
-enum class CommandStatus : int {
-    Unspecified = 0,
-    Pending = 1,
-    Running = 2,
-    Succeeded = 3,
-    FailedTransient = 4,
-    FailedPermanent = 5,
-    Cancelled = 6,
-};
-
-enum class StopMode : int {
-    Unspecified = 0,
-    Drain = 1,
-    Immediate = 2,
-};
-
 enum class FactAuthorityLevel : int {
     Unspecified = 0,
     Believed = 1,
     Confirmed = 2,
 };
 
-struct FactUpdate {
+enum class PlanningExecutionMode : int {
+    Unspecified = 0,
+    PlanAndExecute = 1,
+    PlanOnly = 2,
+    ExecuteApprovedPlan = 3,
+};
+
+enum class PlanningExecutionState : int {
+    Unspecified = 0,
+    Accepted = 1,
+    Planning = 2,
+    Executing = 3,
+    WaitingForComponents = 4,
+    Achieved = 5,
+    Failed = 6,
+    Cancelled = 7,
+};
+
+enum class RequirementPlacementOperation : int {
+    Unspecified = 0,
+    CreateRequirement = 1,
+    ReadRequirement = 2,
+    UpdateRequirement = 3,
+    DeleteRequirement = 4,
+    ReadProduct = 5,
+    ReadCapability = 6,
+};
+
+struct RequirementReference {
+    std::string requirement_id = {};
+    std::string component_name = {};
+    std::string service_name = {};
+    std::string type_name = {};
+};
+
+struct AgentState {
+    std::string agent_id = {};
+    std::string agent_type = {};
+    bool available = false;
+};
+
+struct PlanningPolicy {
+    uint32_t max_replans = 0;
+    bool enable_replanning = false;
+    uint32_t max_concurrent_placements = 0;
+};
+
+struct PlanningGoal {
+    std::optional<double> update_time;  // from Entity  // optional
+    std::string id = {};  // from Entity  // optional
+    std::string source = {};  // from Entity  // optional
+    std::string name = {};
+    // oneof goal
+    std::optional<RequirementReference> requirement;
+    std::optional<std::string> expression;
+};
+
+struct PlanningExecutionRequirement {
+    pyramid::data_model::common::Entity base = {};  // from Requirement
+    pyramid::data_model::common::Achievement status = {};  // from Requirement
+    std::vector<RequirementReference> upstream_requirement = {};
+    std::vector<PlanningGoal> goal = {};
+    PlanningPolicy policy = {};
+    std::vector<AgentState> available_agents = {};
+    PlanningExecutionMode mode = PlanningExecutionMode::Unspecified;
+    std::string approved_plan_id = {};  // optional
+};
+
+struct WorldFactUpdate {
+    std::optional<double> update_time;  // from Entity  // optional
+    std::string id = {};  // from Entity  // optional
+    std::string entity_source = {};  // from Entity  // optional
     std::string key = {};
     bool value = false;
     std::string source = {};
@@ -56,34 +101,7 @@ struct StateUpdate {
     std::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
-    std::vector<FactUpdate> fact_updates = {};
-};
-
-struct MissionIntent {
-    std::optional<double> update_time;  // from Entity  // optional
-    std::string id = {};  // from Entity  // optional
-    std::string source = {};  // from Entity  // optional
-    std::vector<std::string> goal_fluents = {};
-};
-
-struct AgentState {
-    std::string agent_id = {};
-    std::string agent_type = {};
-    bool available = false;
-};
-
-struct PolicyEnvelope {
-    uint32_t max_replans = 0;
-    bool enable_goal_dispatch = false;
-};
-
-struct Session {
-    std::optional<double> update_time;  // from Entity  // optional
-    std::string id = {};  // from Entity  // optional
-    std::string source = {};  // from Entity  // optional
-    MissionIntent intent = {};
-    PolicyEnvelope policy = {};
-    std::vector<AgentState> available_agents = {};
+    std::vector<WorldFactUpdate> fact_update = {};
 };
 
 struct Capabilities {
@@ -91,92 +109,72 @@ struct Capabilities {
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
     std::string backend_id = {};
-    bool supports_batch_planning = false;
-    bool supports_external_command_dispatch = false;
+    bool supports_plan_only = false;
+    bool supports_plan_and_execute = false;
+    bool supports_execute_approved_plan = false;
     bool supports_replanning = false;
+    bool supports_typed_component_requirement_placement = false;
+    bool supports_state_update_ingress = false;
 };
 
-struct StringKeyValue {
-    std::string key = {};
-    std::string value = {};
+struct PlannedComponentInteraction {
+    std::string target_component = {};
+    std::string target_service = {};
+    std::string target_type = {};
+    RequirementPlacementOperation operation = RequirementPlacementOperation::Unspecified;
 };
 
-struct Command {
+struct PlanStep {
     std::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
-    std::string command_id = {};
+    uint32_t sequence_number = 0;
     std::string action_name = {};
     std::string signature = {};
-    std::string service_name = {};
-    std::string operation = {};
-    std::vector<StringKeyValue> request_fields = {};
+    std::vector<PlannedComponentInteraction> interaction = {};
 };
 
-struct GoalDispatch {
+struct Plan {
     std::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
-    std::string dispatch_id = {};
-    std::string agent_id = {};
-    std::vector<std::string> goals = {};
-};
-
-struct DecisionRecord {
-    std::optional<double> update_time;  // from Entity  // optional
-    std::string id = {};  // from Entity  // optional
-    std::string source = {};  // from Entity  // optional
-    std::string session_id = {};
+    std::string planning_execution_requirement_id = {};
     std::string backend_id = {};
     uint64_t world_version = 0;
     uint32_t replan_count = 0;
     bool plan_success = false;
     double solve_time_ms = 0.0;
-    std::vector<std::string> planned_action_signatures = {};
+    std::vector<PlanStep> step = {};
     std::string compiled_bt_xml = {};
+    std::optional<double> predicted_quality;  // optional
 };
 
-struct CommandResult {
-    std::optional<double> update_time;  // from Entity  // optional
-    std::string id = {};  // from Entity  // optional
-    std::string entity_source = {};  // from Entity  // optional
-    std::string command_id = {};
-    CommandStatus status = CommandStatus::Unspecified;
-    std::vector<FactUpdate> observed_updates = {};
-    std::string source = {};
-};
-
-struct DispatchResult {
-    std::optional<double> update_time;  // from Entity  // optional
-    std::string id = {};  // from Entity  // optional
-    std::string entity_source = {};  // from Entity  // optional
-    std::string dispatch_id = {};
-    CommandStatus status = CommandStatus::Unspecified;
-    std::vector<FactUpdate> observed_updates = {};
-    std::string source = {};
-};
-
-struct SessionSnapshot {
+struct RequirementPlacement {
     std::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
-    std::string session_id = {};
-    AutonomyBackendState state = AutonomyBackendState::Unspecified;
-    uint64_t world_version = 0;
+    std::string planning_execution_requirement_id = {};
+    std::string plan_id = {};
+    std::string plan_step_id = {};
+    std::string target_component = {};
+    std::string target_service = {};
+    std::string target_type = {};
+    RequirementPlacementOperation operation = RequirementPlacementOperation::Unspecified;
+    std::string target_requirement_id = {};
+    std::vector<std::string> related_entity_id = {};
+    pyramid::data_model::common::Progress progress = pyramid::data_model::common::Progress::Unspecified;
+};
+
+struct ExecutionRun {
+    std::optional<double> update_time;  // from Entity  // optional
+    std::string id = {};  // from Entity  // optional
+    std::string source = {};  // from Entity  // optional
+    std::string planning_execution_requirement_id = {};
+    std::string plan_id = {};
+    PlanningExecutionState state = PlanningExecutionState::Unspecified;
+    pyramid::data_model::common::Achievement achievement = {};
     uint32_t replan_count = 0;
-    std::vector<AgentState> agent_states = {};
-    std::vector<Command> outstanding_commands = {};
-    std::vector<GoalDispatch> outstanding_goal_dispatches = {};
-    std::vector<DecisionRecord> decision_history = {};
-};
-
-struct SessionStepRequest {
-    std::string session_id = {};
-};
-
-struct SessionStopRequest {
-    std::string session_id = {};
-    StopMode mode = StopMode::Unspecified;
+    std::vector<RequirementPlacement> outstanding_placement = {};
 };
 
 } // namespace pyramid::data_model::autonomy

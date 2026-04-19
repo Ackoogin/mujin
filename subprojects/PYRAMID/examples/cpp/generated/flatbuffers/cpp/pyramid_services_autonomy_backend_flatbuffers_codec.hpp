@@ -17,22 +17,10 @@ namespace data_model = pyramid::data_model;
 
 static constexpr const char* kContentType = "application/flatbuffers";
 
-std::string toBinary(const pyramid::data_model::FactUpdate& msg);
-pyramid::data_model::FactUpdate fromBinaryFactUpdate(const void* data, size_t size);
-inline pyramid::data_model::FactUpdate fromBinaryFactUpdate(const std::string& s) {
-    return fromBinaryFactUpdate(s.data(), s.size());
-}
-
-std::string toBinary(const pyramid::data_model::StateUpdate& msg);
-pyramid::data_model::StateUpdate fromBinaryStateUpdate(const void* data, size_t size);
-inline pyramid::data_model::StateUpdate fromBinaryStateUpdate(const std::string& s) {
-    return fromBinaryStateUpdate(s.data(), s.size());
-}
-
-std::string toBinary(const pyramid::data_model::MissionIntent& msg);
-pyramid::data_model::MissionIntent fromBinaryMissionIntent(const void* data, size_t size);
-inline pyramid::data_model::MissionIntent fromBinaryMissionIntent(const std::string& s) {
-    return fromBinaryMissionIntent(s.data(), s.size());
+std::string toBinary(const pyramid::data_model::RequirementReference& msg);
+pyramid::data_model::RequirementReference fromBinaryRequirementReference(const void* data, size_t size);
+inline pyramid::data_model::RequirementReference fromBinaryRequirementReference(const std::string& s) {
+    return fromBinaryRequirementReference(s.data(), s.size());
 }
 
 std::string toBinary(const pyramid::data_model::AgentState& msg);
@@ -41,16 +29,28 @@ inline pyramid::data_model::AgentState fromBinaryAgentState(const std::string& s
     return fromBinaryAgentState(s.data(), s.size());
 }
 
-std::string toBinary(const pyramid::data_model::PolicyEnvelope& msg);
-pyramid::data_model::PolicyEnvelope fromBinaryPolicyEnvelope(const void* data, size_t size);
-inline pyramid::data_model::PolicyEnvelope fromBinaryPolicyEnvelope(const std::string& s) {
-    return fromBinaryPolicyEnvelope(s.data(), s.size());
+std::string toBinary(const pyramid::data_model::PlanningPolicy& msg);
+pyramid::data_model::PlanningPolicy fromBinaryPlanningPolicy(const void* data, size_t size);
+inline pyramid::data_model::PlanningPolicy fromBinaryPlanningPolicy(const std::string& s) {
+    return fromBinaryPlanningPolicy(s.data(), s.size());
 }
 
-std::string toBinary(const pyramid::data_model::Session& msg);
-pyramid::data_model::Session fromBinarySession(const void* data, size_t size);
-inline pyramid::data_model::Session fromBinarySession(const std::string& s) {
-    return fromBinarySession(s.data(), s.size());
+std::string toBinary(const pyramid::data_model::PlanningGoal& msg);
+pyramid::data_model::PlanningGoal fromBinaryPlanningGoal(const void* data, size_t size);
+inline pyramid::data_model::PlanningGoal fromBinaryPlanningGoal(const std::string& s) {
+    return fromBinaryPlanningGoal(s.data(), s.size());
+}
+
+std::string toBinary(const pyramid::data_model::WorldFactUpdate& msg);
+pyramid::data_model::WorldFactUpdate fromBinaryWorldFactUpdate(const void* data, size_t size);
+inline pyramid::data_model::WorldFactUpdate fromBinaryWorldFactUpdate(const std::string& s) {
+    return fromBinaryWorldFactUpdate(s.data(), s.size());
+}
+
+std::string toBinary(const pyramid::data_model::StateUpdate& msg);
+pyramid::data_model::StateUpdate fromBinaryStateUpdate(const void* data, size_t size);
+inline pyramid::data_model::StateUpdate fromBinaryStateUpdate(const std::string& s) {
+    return fromBinaryStateUpdate(s.data(), s.size());
 }
 
 std::string toBinary(const pyramid::data_model::Capabilities& msg);
@@ -59,58 +59,40 @@ inline pyramid::data_model::Capabilities fromBinaryCapabilities(const std::strin
     return fromBinaryCapabilities(s.data(), s.size());
 }
 
-std::string toBinary(const pyramid::data_model::StringKeyValue& msg);
-pyramid::data_model::StringKeyValue fromBinaryStringKeyValue(const void* data, size_t size);
-inline pyramid::data_model::StringKeyValue fromBinaryStringKeyValue(const std::string& s) {
-    return fromBinaryStringKeyValue(s.data(), s.size());
+std::string toBinary(const pyramid::data_model::PlannedComponentInteraction& msg);
+pyramid::data_model::PlannedComponentInteraction fromBinaryPlannedComponentInteraction(const void* data, size_t size);
+inline pyramid::data_model::PlannedComponentInteraction fromBinaryPlannedComponentInteraction(const std::string& s) {
+    return fromBinaryPlannedComponentInteraction(s.data(), s.size());
 }
 
-std::string toBinary(const pyramid::data_model::Command& msg);
-pyramid::data_model::Command fromBinaryCommand(const void* data, size_t size);
-inline pyramid::data_model::Command fromBinaryCommand(const std::string& s) {
-    return fromBinaryCommand(s.data(), s.size());
+std::string toBinary(const pyramid::data_model::PlanStep& msg);
+pyramid::data_model::PlanStep fromBinaryPlanStep(const void* data, size_t size);
+inline pyramid::data_model::PlanStep fromBinaryPlanStep(const std::string& s) {
+    return fromBinaryPlanStep(s.data(), s.size());
 }
 
-std::string toBinary(const pyramid::data_model::GoalDispatch& msg);
-pyramid::data_model::GoalDispatch fromBinaryGoalDispatch(const void* data, size_t size);
-inline pyramid::data_model::GoalDispatch fromBinaryGoalDispatch(const std::string& s) {
-    return fromBinaryGoalDispatch(s.data(), s.size());
+std::string toBinary(const pyramid::data_model::Plan& msg);
+pyramid::data_model::Plan fromBinaryPlan(const void* data, size_t size);
+inline pyramid::data_model::Plan fromBinaryPlan(const std::string& s) {
+    return fromBinaryPlan(s.data(), s.size());
 }
 
-std::string toBinary(const pyramid::data_model::DecisionRecord& msg);
-pyramid::data_model::DecisionRecord fromBinaryDecisionRecord(const void* data, size_t size);
-inline pyramid::data_model::DecisionRecord fromBinaryDecisionRecord(const std::string& s) {
-    return fromBinaryDecisionRecord(s.data(), s.size());
+std::string toBinary(const pyramid::data_model::RequirementPlacement& msg);
+pyramid::data_model::RequirementPlacement fromBinaryRequirementPlacement(const void* data, size_t size);
+inline pyramid::data_model::RequirementPlacement fromBinaryRequirementPlacement(const std::string& s) {
+    return fromBinaryRequirementPlacement(s.data(), s.size());
 }
 
-std::string toBinary(const pyramid::data_model::CommandResult& msg);
-pyramid::data_model::CommandResult fromBinaryCommandResult(const void* data, size_t size);
-inline pyramid::data_model::CommandResult fromBinaryCommandResult(const std::string& s) {
-    return fromBinaryCommandResult(s.data(), s.size());
+std::string toBinary(const pyramid::data_model::Achievement& msg);
+pyramid::data_model::Achievement fromBinaryAchievement(const void* data, size_t size);
+inline pyramid::data_model::Achievement fromBinaryAchievement(const std::string& s) {
+    return fromBinaryAchievement(s.data(), s.size());
 }
 
-std::string toBinary(const pyramid::data_model::DispatchResult& msg);
-pyramid::data_model::DispatchResult fromBinaryDispatchResult(const void* data, size_t size);
-inline pyramid::data_model::DispatchResult fromBinaryDispatchResult(const std::string& s) {
-    return fromBinaryDispatchResult(s.data(), s.size());
-}
-
-std::string toBinary(const pyramid::data_model::SessionSnapshot& msg);
-pyramid::data_model::SessionSnapshot fromBinarySessionSnapshot(const void* data, size_t size);
-inline pyramid::data_model::SessionSnapshot fromBinarySessionSnapshot(const std::string& s) {
-    return fromBinarySessionSnapshot(s.data(), s.size());
-}
-
-std::string toBinary(const pyramid::data_model::SessionStepRequest& msg);
-pyramid::data_model::SessionStepRequest fromBinarySessionStepRequest(const void* data, size_t size);
-inline pyramid::data_model::SessionStepRequest fromBinarySessionStepRequest(const std::string& s) {
-    return fromBinarySessionStepRequest(s.data(), s.size());
-}
-
-std::string toBinary(const pyramid::data_model::SessionStopRequest& msg);
-pyramid::data_model::SessionStopRequest fromBinarySessionStopRequest(const void* data, size_t size);
-inline pyramid::data_model::SessionStopRequest fromBinarySessionStopRequest(const std::string& s) {
-    return fromBinarySessionStopRequest(s.data(), s.size());
+std::string toBinary(const pyramid::data_model::Entity& msg);
+pyramid::data_model::Entity fromBinaryEntity(const void* data, size_t size);
+inline pyramid::data_model::Entity fromBinaryEntity(const std::string& s) {
+    return fromBinaryEntity(s.data(), s.size());
 }
 
 std::string toBinary(const pyramid::data_model::Ack& msg);
@@ -125,6 +107,18 @@ inline pyramid::data_model::Query fromBinaryQuery(const std::string& s) {
     return fromBinaryQuery(s.data(), s.size());
 }
 
+std::string toBinary(const pyramid::data_model::PlanningExecutionRequirement& msg);
+pyramid::data_model::PlanningExecutionRequirement fromBinaryPlanningExecutionRequirement(const void* data, size_t size);
+inline pyramid::data_model::PlanningExecutionRequirement fromBinaryPlanningExecutionRequirement(const std::string& s) {
+    return fromBinaryPlanningExecutionRequirement(s.data(), s.size());
+}
+
+std::string toBinary(const pyramid::data_model::ExecutionRun& msg);
+pyramid::data_model::ExecutionRun fromBinaryExecutionRun(const void* data, size_t size);
+inline pyramid::data_model::ExecutionRun fromBinaryExecutionRun(const std::string& s) {
+    return fromBinaryExecutionRun(s.data(), s.size());
+}
+
 std::string toBinary(const pyramid::data_model::Identifier& msg);
 pyramid::data_model::Identifier fromBinaryIdentifier(const void* data, size_t size);
 inline pyramid::data_model::Identifier fromBinaryIdentifier(const std::string& s) {
@@ -137,28 +131,28 @@ inline std::vector<pyramid::data_model::Capabilities> fromBinaryCapabilitiesArra
     return fromBinaryCapabilitiesArray(s.data(), s.size());
 }
 
-std::string toBinary(const std::vector<pyramid::data_model::SessionSnapshot>& msg);
-std::vector<pyramid::data_model::SessionSnapshot> fromBinarySessionSnapshotArray(const void* data, size_t size);
-inline std::vector<pyramid::data_model::SessionSnapshot> fromBinarySessionSnapshotArray(const std::string& s) {
-    return fromBinarySessionSnapshotArray(s.data(), s.size());
+std::string toBinary(const std::vector<pyramid::data_model::PlanningExecutionRequirement>& msg);
+std::vector<pyramid::data_model::PlanningExecutionRequirement> fromBinaryPlanningExecutionRequirementArray(const void* data, size_t size);
+inline std::vector<pyramid::data_model::PlanningExecutionRequirement> fromBinaryPlanningExecutionRequirementArray(const std::string& s) {
+    return fromBinaryPlanningExecutionRequirementArray(s.data(), s.size());
 }
 
-std::string toBinary(const std::vector<pyramid::data_model::Command>& msg);
-std::vector<pyramid::data_model::Command> fromBinaryCommandArray(const void* data, size_t size);
-inline std::vector<pyramid::data_model::Command> fromBinaryCommandArray(const std::string& s) {
-    return fromBinaryCommandArray(s.data(), s.size());
+std::string toBinary(const std::vector<pyramid::data_model::Plan>& msg);
+std::vector<pyramid::data_model::Plan> fromBinaryPlanArray(const void* data, size_t size);
+inline std::vector<pyramid::data_model::Plan> fromBinaryPlanArray(const std::string& s) {
+    return fromBinaryPlanArray(s.data(), s.size());
 }
 
-std::string toBinary(const std::vector<pyramid::data_model::GoalDispatch>& msg);
-std::vector<pyramid::data_model::GoalDispatch> fromBinaryGoalDispatchArray(const void* data, size_t size);
-inline std::vector<pyramid::data_model::GoalDispatch> fromBinaryGoalDispatchArray(const std::string& s) {
-    return fromBinaryGoalDispatchArray(s.data(), s.size());
+std::string toBinary(const std::vector<pyramid::data_model::ExecutionRun>& msg);
+std::vector<pyramid::data_model::ExecutionRun> fromBinaryExecutionRunArray(const void* data, size_t size);
+inline std::vector<pyramid::data_model::ExecutionRun> fromBinaryExecutionRunArray(const std::string& s) {
+    return fromBinaryExecutionRunArray(s.data(), s.size());
 }
 
-std::string toBinary(const std::vector<pyramid::data_model::DecisionRecord>& msg);
-std::vector<pyramid::data_model::DecisionRecord> fromBinaryDecisionRecordArray(const void* data, size_t size);
-inline std::vector<pyramid::data_model::DecisionRecord> fromBinaryDecisionRecordArray(const std::string& s) {
-    return fromBinaryDecisionRecordArray(s.data(), s.size());
+std::string toBinary(const std::vector<pyramid::data_model::RequirementPlacement>& msg);
+std::vector<pyramid::data_model::RequirementPlacement> fromBinaryRequirementPlacementArray(const void* data, size_t size);
+inline std::vector<pyramid::data_model::RequirementPlacement> fromBinaryRequirementPlacementArray(const std::string& s) {
+    return fromBinaryRequirementPlacementArray(s.data(), s.size());
 }
 
 } // namespace pyramid::services::autonomy_backend::flatbuffers_codec

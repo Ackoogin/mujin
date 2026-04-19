@@ -2,7 +2,7 @@
 
 This document describes the internal architecture of the `tactical_objects` component with visual diagrams and end-to-end worked examples.
 
-For high-level requirements see `HLR.md`. For the concrete class design see `DESIGN.md`. For low-level requirements and traceability see `LLR.md`. For the TDD implementation plan see `TDD_PLAN.md`.
+For high-level requirements see `HLR.md`. For the concrete class design see `DESIGN.md`. For low-level requirements and traceability see `LLR.md` and `HLR_COVERAGE.md`.
 
 ---
 

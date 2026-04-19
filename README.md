@@ -166,7 +166,7 @@ cmake/                   Shared CMake support files
 | [Planning & Execution User Guide](subprojects/AME/docs/guides/planning_execution_user_guide.md) | Operators, integrators, developers | Mission flow, PDDL terms, BT nodes, and PYRAMID integration |
 | [Remaining Work](subprojects/AME/docs/TODO.md) | Engineers, programme leads | Temporal planning, hardening, future work |
 | [Assurance Plan](subprojects/AME/docs/autonomy_assurance_plan.md) | Safety engineers, assessors | SACE/AMLAS/DSTL autonomy assurance framework |
-| [Service Binding Codegen](subprojects/PYRAMID/docs/service_binding_codegen.md) | Engineers | PYRAMID service/codegen pipeline and generated bindings |
+| [Generated Bindings](subprojects/PYRAMID/docs/generated_bindings.md) | Engineers | PYRAMID service/codegen pipeline and generated bindings |
 | [PCL Component Design](subprojects/PCL/docs/component_container_design.md) | Engineers | PCL component/container integration design |
 
 ## Dependencies

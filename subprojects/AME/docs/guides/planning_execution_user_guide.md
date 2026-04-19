@@ -4,7 +4,7 @@ This guide explains how to use the AME planning/execution system in practical te
 
 It is written for operators, integrators, and developers who need to run missions and connect real services, without needing to read all architecture internals first.
 
-> This guide consolidates the previous `pyramid_service_integration_guide.md` into one end-to-end workflow.
+> This guide consolidates the previous split PYRAMID service integration notes into one end-to-end workflow.
 
 ---
 

@@ -56,7 +56,7 @@ The relationship between PDDL and GSN is one of **evidence generation to argumen
 
 ## Relationship to Existing Assurance Plan
 
-This document set provides detailed PDDL-specific formal modelling guidance that complements the main [Autonomy Assurance Plan](../roadmaps/autonomy_assurance_plan.md). The assurance plan defines the overall SACE stage structure, hazard register, safety requirements, and DSTL cross-cuts. This document set adds:
+This document set provides detailed PDDL-specific formal modelling guidance that complements the main [Autonomy Assurance Plan](../autonomy_assurance_plan.md). The assurance plan defines the overall SACE stage structure, hazard register, safety requirements, and DSTL cross-cuts. This document set adds:
 
 - Formal PDDL inputs and outputs per stage
 - GSN argument pattern mappings showing where PDDL evidence attaches

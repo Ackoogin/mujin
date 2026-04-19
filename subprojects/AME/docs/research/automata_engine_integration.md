@@ -288,7 +288,7 @@ Phase 4 — Architecture Enrichment (deeper integration)
 
 ## 1. SACE Assurance Applicability to GOAP
 
-Ame's existing [SACE assurance plan](../roadmaps/autonomy_assurance_plan.md) is tightly coupled to the **PDDL + LAPKT + BT.CPP** architecture. Below is a stage-by-stage analysis of how each SACE stage — and its evidence arguments — applies (or must adapt) when the planning algorithm is automata_engine's **GOAP A\*** rather than LAPKT BRFS.
+Ame's existing [SACE assurance plan](../autonomy_assurance_plan.md) is tightly coupled to the **PDDL + LAPKT + BT.CPP** architecture. Below is a stage-by-stage analysis of how each SACE stage — and its evidence arguments — applies (or must adapt) when the planning algorithm is automata_engine's **GOAP A\*** rather than LAPKT BRFS.
 
 ### 1.1 Property Comparison: LAPKT BRFS vs GOAP A\*
 
@@ -316,7 +316,7 @@ Ame's existing [SACE assurance plan](../roadmaps/autonomy_assurance_plan.md) is 
 
 #### Stage 2 — Hazardous Scenarios
 
-The existing hazard table (H1–H9 in `../roadmaps/autonomy_assurance_plan.md`) maps as follows:
+The existing hazard table (H1–H9 in `../autonomy_assurance_plan.md`) maps as follows:
 
 | Hazard | PDDL Argument | GOAP Adaptation |
 |--------|---------------|-----------------|

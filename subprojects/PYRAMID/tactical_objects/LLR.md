@@ -4,7 +4,7 @@ Low-level requirements for `pyramid/tactical_objects`, derived from the high-lev
 
 Each LLR maps to at least one unit or component test. Tests use requirement tags in the form `///< REQ_TACTICAL_OBJECTS_NNN: ...`.
 
-See `TDD_PLAN.md` for the full red/green implementation plan tied to these requirements.
+See `HLR_COVERAGE.md` and the test list in `README.md` for current verification coverage.
 
 ---
 

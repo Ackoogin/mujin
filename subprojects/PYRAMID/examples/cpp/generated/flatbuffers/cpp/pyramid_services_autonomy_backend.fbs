@@ -3,39 +3,91 @@
 
 namespace pyramid.services.autonomy_backend;
 
-enum AutonomyBackendState : int {
-  UNSPECIFIED = 0,
-  IDLE = 1,
-  READY = 2,
-  WAITING_FOR_RESULTS = 3,
-  COMPLETE = 4,
-  FAILED = 5,
-  STOPPED = 6
-}
-
-enum CommandStatus : int {
-  UNSPECIFIED = 0,
-  PENDING = 1,
-  RUNNING = 2,
-  SUCCEEDED = 3,
-  FAILED_TRANSIENT = 4,
-  FAILED_PERMANENT = 5,
-  CANCELLED = 6
-}
-
-enum StopMode : int {
-  UNSPECIFIED = 0,
-  DRAIN = 1,
-  IMMEDIATE = 2
-}
-
 enum FactAuthorityLevel : int {
   UNSPECIFIED = 0,
   BELIEVED = 1,
   CONFIRMED = 2
 }
 
-table FactUpdate {
+enum PlanningExecutionMode : int {
+  UNSPECIFIED = 0,
+  PLAN_AND_EXECUTE = 1,
+  PLAN_ONLY = 2,
+  EXECUTE_APPROVED_PLAN = 3
+}
+
+enum PlanningExecutionState : int {
+  UNSPECIFIED = 0,
+  ACCEPTED = 1,
+  PLANNING = 2,
+  EXECUTING = 3,
+  WAITING_FOR_COMPONENTS = 4,
+  ACHIEVED = 5,
+  FAILED = 6,
+  CANCELLED = 7
+}
+
+enum RequirementPlacementOperation : int {
+  UNSPECIFIED = 0,
+  CREATE_REQUIREMENT = 1,
+  READ_REQUIREMENT = 2,
+  UPDATE_REQUIREMENT = 3,
+  DELETE_REQUIREMENT = 4,
+  READ_PRODUCT = 5,
+  READ_CAPABILITY = 6
+}
+
+enum Feasibility : int {
+  UNSPECIFIED = 0,
+  FEASIBLE = 1,
+  NOT_FEASIBLE = 2,
+  PARTIALLY_FEASIBLE = 3,
+  PENDING = 4
+}
+
+enum Progress : int {
+  UNSPECIFIED = 0,
+  NOT_STARTED = 1,
+  IN_PROGRESS = 2,
+  COMPLETED = 3,
+  CANCELLED = 4,
+  FAILED = 5
+}
+
+table RequirementReference {
+  requirement_id:string;
+  component_name:string;
+  service_name:string;
+  type_name:string;
+}
+
+table AgentState {
+  agent_id:string;
+  agent_type:string;
+  available:bool;
+}
+
+table PlanningPolicy {
+  max_replans:uint;
+  enable_replanning:bool;
+  max_concurrent_placements:uint;
+}
+
+table PlanningGoal {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+  name:string;
+  requirement:RequirementReference;
+  expression:string;
+}
+
+table WorldFactUpdate {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  entity_source:string;
   key:string;
   value:bool;
   source:string;
@@ -47,36 +99,7 @@ table StateUpdate {
   update_time:double;
   id:string;
   source:string;
-  fact_updates:[FactUpdate];
-}
-
-table MissionIntent {
-  has_update_time:bool;
-  update_time:double;
-  id:string;
-  source:string;
-  goal_fluents:[string];
-}
-
-table AgentState {
-  agent_id:string;
-  agent_type:string;
-  available:bool;
-}
-
-table PolicyEnvelope {
-  max_replans:uint;
-  enable_goal_dispatch:bool;
-}
-
-table Session {
-  has_update_time:bool;
-  update_time:double;
-  id:string;
-  source:string;
-  intent:MissionIntent;
-  policy:PolicyEnvelope;
-  available_agents:[AgentState];
+  fact_update:[WorldFactUpdate];
 }
 
 table Capabilities {
@@ -85,98 +108,82 @@ table Capabilities {
   id:string;
   source:string;
   backend_id:string;
-  supports_batch_planning:bool;
-  supports_external_command_dispatch:bool;
+  supports_plan_only:bool;
+  supports_plan_and_execute:bool;
+  supports_execute_approved_plan:bool;
   supports_replanning:bool;
+  supports_typed_component_requirement_placement:bool;
+  supports_state_update_ingress:bool;
 }
 
-table StringKeyValue {
-  key:string;
-  value:string;
+table PlannedComponentInteraction {
+  target_component:string;
+  target_service:string;
+  target_type:string;
+  operation:RequirementPlacementOperation;
 }
 
-table Command {
+table PlanStep {
   has_update_time:bool;
   update_time:double;
   id:string;
   source:string;
-  command_id:string;
+  sequence_number:uint;
   action_name:string;
   signature:string;
-  service_name:string;
-  operation:string;
-  request_fields:[StringKeyValue];
+  interaction:[PlannedComponentInteraction];
 }
 
-table GoalDispatch {
+table Plan {
   has_update_time:bool;
   update_time:double;
   id:string;
   source:string;
-  dispatch_id:string;
-  agent_id:string;
-  goals:[string];
-}
-
-table DecisionRecord {
-  has_update_time:bool;
-  update_time:double;
-  id:string;
-  source:string;
-  session_id:string;
+  planning_execution_requirement_id:string;
   backend_id:string;
   world_version:ulong;
   replan_count:uint;
   plan_success:bool;
   solve_time_ms:double;
-  planned_action_signatures:[string];
+  step:[PlanStep];
   compiled_bt_xml:string;
+  has_predicted_quality:bool;
+  predicted_quality:double;
 }
 
-table CommandResult {
-  has_update_time:bool;
-  update_time:double;
-  id:string;
-  entity_source:string;
-  command_id:string;
-  status:CommandStatus;
-  observed_updates:[FactUpdate];
-  source:string;
-}
-
-table DispatchResult {
-  has_update_time:bool;
-  update_time:double;
-  id:string;
-  entity_source:string;
-  dispatch_id:string;
-  status:CommandStatus;
-  observed_updates:[FactUpdate];
-  source:string;
-}
-
-table SessionSnapshot {
+table RequirementPlacement {
   has_update_time:bool;
   update_time:double;
   id:string;
   source:string;
-  session_id:string;
-  state:AutonomyBackendState;
-  world_version:ulong;
-  replan_count:uint;
-  agent_states:[AgentState];
-  outstanding_commands:[Command];
-  outstanding_goal_dispatches:[GoalDispatch];
-  decision_history:[DecisionRecord];
+  planning_execution_requirement_id:string;
+  plan_id:string;
+  plan_step_id:string;
+  target_component:string;
+  target_service:string;
+  target_type:string;
+  operation:RequirementPlacementOperation;
+  target_requirement_id:string;
+  related_entity_id:[string];
+  progress:Progress;
 }
 
-table SessionStepRequest {
-  session_id:string;
+table Achievement {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+  status:Progress;
+  has_quality:bool;
+  quality:double;
+  achieveability:Feasibility;
 }
 
-table SessionStopRequest {
-  session_id:string;
-  mode:StopMode;
+table Entity {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
 }
 
 table Ack {
@@ -189,6 +196,30 @@ table Query {
   one_shot:bool;
 }
 
+table PlanningExecutionRequirement {
+  base:Entity;
+  status:Achievement;
+  upstream_requirement:[RequirementReference];
+  goal:[PlanningGoal];
+  policy:PlanningPolicy;
+  available_agents:[AgentState];
+  mode:PlanningExecutionMode;
+  approved_plan_id:string;
+}
+
+table ExecutionRun {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+  planning_execution_requirement_id:string;
+  plan_id:string;
+  state:PlanningExecutionState;
+  achievement:Achievement;
+  replan_count:uint;
+  outstanding_placement:[RequirementPlacement];
+}
+
 table IdentifierValue {
   value:string;
 }
@@ -197,19 +228,19 @@ table CapabilitiesArrayHolder {
   items:[Capabilities];
 }
 
-table SessionSnapshotArrayHolder {
-  items:[SessionSnapshot];
+table PlanningExecutionRequirementArrayHolder {
+  items:[PlanningExecutionRequirement];
 }
 
-table CommandArrayHolder {
-  items:[Command];
+table PlanArrayHolder {
+  items:[Plan];
 }
 
-table GoalDispatchArrayHolder {
-  items:[GoalDispatch];
+table ExecutionRunArrayHolder {
+  items:[ExecutionRun];
 }
 
-table DecisionRecordArrayHolder {
-  items:[DecisionRecord];
+table RequirementPlacementArrayHolder {
+  items:[RequirementPlacement];
 }
 

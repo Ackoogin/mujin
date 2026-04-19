@@ -546,7 +546,7 @@ pyramid/tactical_objects/
   LLR.md
   DESIGN.md
   ARCHITECTURE.md
-  TDD_PLAN.md
+  HLR_COVERAGE.md
   include/
     TacticalObjectsComponent.h
     TacticalObjectsRuntime.h
@@ -595,11 +595,10 @@ tests/tactical_objects/
   Test_TacticalObjectsComponent.cpp
 ```
 
-## 8. TDD Strategy
+## 8. Implementation And Verification
 
-See `TDD_PLAN.md` for the full red/green/refactor plan.
-
-See `LLR.md` for the 65 low-level requirements with traceability and verification notes.
+See `LLR.md` for low-level requirements with traceability and verification notes.
+See `HLR_COVERAGE.md` for high-level requirement-to-test coverage.
 
 Implementation order:
 

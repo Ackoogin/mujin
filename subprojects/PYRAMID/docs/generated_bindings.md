@@ -342,10 +342,8 @@ The following are not v1 user guides:
 
 - `docs/review_pyramid_bindings_pluggability.md`: historical review and action
   plan
-- `docs/proto_native_binding_plan.md`: redirect for old references
-- `docs/protocol_agnostic_service_plan.md`: redirect for old references
 - Historical references to `examples/dispatch/*_codec_dispatch.*`: removed
   standalone dispatch candidate
 
-Keep redirects for old links, but update new work to point at this guide and
+Update new work to point at this guide and
 [generated_bindings_status.md](generated_bindings_status.md).

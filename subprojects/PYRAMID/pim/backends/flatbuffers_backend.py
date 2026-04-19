@@ -209,6 +209,8 @@ def _field_kind_and_type(
 
 
 def _json_codec_namespace_for_type(full_type: str) -> str:
+    if '.autonomy.' in full_type:
+        return 'autonomy'
     if '.common.' in full_type:
         return 'common'
     if '.tactical.' in full_type:
@@ -241,7 +243,7 @@ def _message_spec_from_proto(
             if kind == 'message':
                 generated_presence = False
             elif string_like:
-                generated_optional = False
+                generated_optional = bool(oneof)
             else:
                 generated_presence = True
         fields.append(FlatFieldSpec(
@@ -678,6 +680,8 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated service FlatBuffers codec\n')
             f.write(f'#include "{group.file_base}_flatbuffers_codec.hpp"\n\n')
+            f.write('#include "pyramid_data_model_autonomy_codec.hpp"\n')
+            f.write('#include "pyramid_data_model_base_codec.hpp"\n')
             f.write('#include "pyramid_data_model_common_codec.hpp"\n')
             f.write('#include "pyramid_data_model_tactical_codec.hpp"\n')
             f.write('#include <cstdlib>\n')
@@ -758,6 +762,10 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                     f.write(f'    if ({member}.has_value()) {{\n')
                     f.write(f'        out.{field.name} = std::make_unique<fbs::{field.type_name}T>(to_fb({member}.value()));\n')
                     f.write('    }\n')
+                elif field.generated_optional:
+                    f.write(f'    if ({member}.has_value()) {{\n')
+                    f.write(f'        out.{field.name} = {member}.value();\n')
+                    f.write('    }\n')
                 elif field.kind == 'message':
                     f.write(f'    out.{field.name} = std::make_unique<fbs::{field.type_name}T>(to_fb({member}));\n')
                 elif field.kind == 'enum':
@@ -796,6 +804,10 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                 elif field.generated_optional and field.kind == 'message':
                     f.write(f'    if ({member}) {{\n')
                     f.write(f'        out.{field.name} = from_fb(*{member}, static_cast<pyramid::data_model::{field.type_name}*>(nullptr));\n')
+                    f.write('    }\n')
+                elif field.generated_optional:
+                    f.write(f'    if (!{member}.empty()) {{\n')
+                    f.write(f'        out.{field.name} = {member};\n')
                     f.write('    }\n')
                 elif field.kind == 'message':
                     f.write(f'    if ({member}) out.{field.name} = from_fb(*{member}, static_cast<pyramid::data_model::{field.type_name}*>(nullptr));\n')
@@ -867,6 +879,8 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
         return f'{group.file_base}_{short_name}_{direction}_json'
 
     def _cpp_json_encode_expr(self, group: ServiceCodecGroup, json_ns: str, cpp_type: str, expr: str) -> str:
+        if json_ns == 'autonomy':
+            return f'pyramid::data_model::autonomy::toJson({expr})'
         if json_ns == 'common':
             return f'pyramid::data_model::common::toJson({expr})'
         if json_ns == 'tactical':
@@ -878,6 +892,8 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
         raise ValueError(f'Unsupported JSON codec namespace: {json_ns}')
 
     def _cpp_json_decode_expr(self, group: ServiceCodecGroup, json_ns: str, cpp_type: str, expr: str) -> str:
+        if json_ns == 'autonomy':
+            return f'pyramid::data_model::autonomy::fromJson({expr}, static_cast<{cpp_type}*>(nullptr))'
         if json_ns == 'common':
             return f'pyramid::data_model::common::fromJson({expr}, static_cast<{cpp_type}*>(nullptr))'
         if json_ns == 'tactical':

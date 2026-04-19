@@ -1,6 +1,8 @@
 // Auto-generated service FlatBuffers codec
 #include "pyramid_services_autonomy_backend_flatbuffers_codec.hpp"
 
+#include "pyramid_data_model_autonomy_codec.hpp"
+#include "pyramid_data_model_base_codec.hpp"
 #include "pyramid_data_model_common_codec.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
 #include <cstdlib>
@@ -38,75 +40,21 @@ const TableT* verified_root(const void* data, size_t size, const char* type_name
     return flatbuffers::GetRoot<TableT>(bytes);
 }
 
-fbs::FactUpdateT to_fb(const pyramid::data_model::FactUpdate& msg) {
-    fbs::FactUpdateT out{};
-    out.key = msg.key;
-    out.value = msg.value;
-    out.source = msg.source;
-    out.authority = static_cast<fbs::FactAuthorityLevel>(msg.authority);
+fbs::RequirementReferenceT to_fb(const pyramid::data_model::RequirementReference& msg) {
+    fbs::RequirementReferenceT out{};
+    out.requirement_id = msg.requirement_id;
+    out.component_name = msg.component_name;
+    out.service_name = msg.service_name;
+    out.type_name = msg.type_name;
     return out;
 }
 
-pyramid::data_model::FactUpdate from_fb(const fbs::FactUpdateT& msg, pyramid::data_model::FactUpdate* /*tag*/) {
-    pyramid::data_model::FactUpdate out{};
-    out.key = msg.key;
-    out.value = msg.value;
-    out.source = msg.source;
-    out.authority = static_cast<pyramid::data_model::FactAuthorityLevel>(msg.authority);
-    return out;
-}
-
-fbs::StateUpdateT to_fb(const pyramid::data_model::StateUpdate& msg) {
-    fbs::StateUpdateT out{};
-    out.has_update_time = msg.update_time.has_value();
-    if (msg.update_time.has_value()) {
-        out.update_time = msg.update_time.value();
-    }
-    out.id = msg.id;
-    out.source = msg.source;
-    out.fact_updates.reserve(msg.fact_updates.size());
-    for (const auto& item : msg.fact_updates) {
-        out.fact_updates.emplace_back(std::make_unique<fbs::FactUpdateT>(to_fb(item)));
-    }
-    return out;
-}
-
-pyramid::data_model::StateUpdate from_fb(const fbs::StateUpdateT& msg, pyramid::data_model::StateUpdate* /*tag*/) {
-    pyramid::data_model::StateUpdate out{};
-    if (msg.has_update_time) {
-        out.update_time = msg.update_time;
-    }
-    out.id = msg.id;
-    out.source = msg.source;
-    out.fact_updates.reserve(msg.fact_updates.size());
-    for (const auto& item : msg.fact_updates) {
-        if (item) {
-            out.fact_updates.push_back(from_fb(*item, static_cast<pyramid::data_model::FactUpdate*>(nullptr)));
-        }
-    }
-    return out;
-}
-
-fbs::MissionIntentT to_fb(const pyramid::data_model::MissionIntent& msg) {
-    fbs::MissionIntentT out{};
-    out.has_update_time = msg.update_time.has_value();
-    if (msg.update_time.has_value()) {
-        out.update_time = msg.update_time.value();
-    }
-    out.id = msg.id;
-    out.source = msg.source;
-    out.goal_fluents = msg.goal_fluents;
-    return out;
-}
-
-pyramid::data_model::MissionIntent from_fb(const fbs::MissionIntentT& msg, pyramid::data_model::MissionIntent* /*tag*/) {
-    pyramid::data_model::MissionIntent out{};
-    if (msg.has_update_time) {
-        out.update_time = msg.update_time;
-    }
-    out.id = msg.id;
-    out.source = msg.source;
-    out.goal_fluents = msg.goal_fluents;
+pyramid::data_model::RequirementReference from_fb(const fbs::RequirementReferenceT& msg, pyramid::data_model::RequirementReference* /*tag*/) {
+    pyramid::data_model::RequirementReference out{};
+    out.requirement_id = msg.requirement_id;
+    out.component_name = msg.component_name;
+    out.service_name = msg.service_name;
+    out.type_name = msg.type_name;
     return out;
 }
 
@@ -126,50 +74,112 @@ pyramid::data_model::AgentState from_fb(const fbs::AgentStateT& msg, pyramid::da
     return out;
 }
 
-fbs::PolicyEnvelopeT to_fb(const pyramid::data_model::PolicyEnvelope& msg) {
-    fbs::PolicyEnvelopeT out{};
+fbs::PlanningPolicyT to_fb(const pyramid::data_model::PlanningPolicy& msg) {
+    fbs::PlanningPolicyT out{};
     out.max_replans = msg.max_replans;
-    out.enable_goal_dispatch = msg.enable_goal_dispatch;
+    out.enable_replanning = msg.enable_replanning;
+    out.max_concurrent_placements = msg.max_concurrent_placements;
     return out;
 }
 
-pyramid::data_model::PolicyEnvelope from_fb(const fbs::PolicyEnvelopeT& msg, pyramid::data_model::PolicyEnvelope* /*tag*/) {
-    pyramid::data_model::PolicyEnvelope out{};
+pyramid::data_model::PlanningPolicy from_fb(const fbs::PlanningPolicyT& msg, pyramid::data_model::PlanningPolicy* /*tag*/) {
+    pyramid::data_model::PlanningPolicy out{};
     out.max_replans = msg.max_replans;
-    out.enable_goal_dispatch = msg.enable_goal_dispatch;
+    out.enable_replanning = msg.enable_replanning;
+    out.max_concurrent_placements = msg.max_concurrent_placements;
     return out;
 }
 
-fbs::SessionT to_fb(const pyramid::data_model::Session& msg) {
-    fbs::SessionT out{};
+fbs::PlanningGoalT to_fb(const pyramid::data_model::PlanningGoal& msg) {
+    fbs::PlanningGoalT out{};
     out.has_update_time = msg.update_time.has_value();
     if (msg.update_time.has_value()) {
         out.update_time = msg.update_time.value();
     }
     out.id = msg.id;
     out.source = msg.source;
-    out.intent = std::make_unique<fbs::MissionIntentT>(to_fb(msg.intent));
-    out.policy = std::make_unique<fbs::PolicyEnvelopeT>(to_fb(msg.policy));
-    out.available_agents.reserve(msg.available_agents.size());
-    for (const auto& item : msg.available_agents) {
-        out.available_agents.emplace_back(std::make_unique<fbs::AgentStateT>(to_fb(item)));
+    out.name = msg.name;
+    if (msg.requirement.has_value()) {
+        out.requirement = std::make_unique<fbs::RequirementReferenceT>(to_fb(msg.requirement.value()));
+    }
+    if (msg.expression.has_value()) {
+        out.expression = msg.expression.value();
     }
     return out;
 }
 
-pyramid::data_model::Session from_fb(const fbs::SessionT& msg, pyramid::data_model::Session* /*tag*/) {
-    pyramid::data_model::Session out{};
+pyramid::data_model::PlanningGoal from_fb(const fbs::PlanningGoalT& msg, pyramid::data_model::PlanningGoal* /*tag*/) {
+    pyramid::data_model::PlanningGoal out{};
     if (msg.has_update_time) {
         out.update_time = msg.update_time;
     }
     out.id = msg.id;
     out.source = msg.source;
-    if (msg.intent) out.intent = from_fb(*msg.intent, static_cast<pyramid::data_model::MissionIntent*>(nullptr));
-    if (msg.policy) out.policy = from_fb(*msg.policy, static_cast<pyramid::data_model::PolicyEnvelope*>(nullptr));
-    out.available_agents.reserve(msg.available_agents.size());
-    for (const auto& item : msg.available_agents) {
+    out.name = msg.name;
+    if (msg.requirement) {
+        out.requirement = from_fb(*msg.requirement, static_cast<pyramid::data_model::RequirementReference*>(nullptr));
+    }
+    if (!msg.expression.empty()) {
+        out.expression = msg.expression;
+    }
+    return out;
+}
+
+fbs::WorldFactUpdateT to_fb(const pyramid::data_model::WorldFactUpdate& msg) {
+    fbs::WorldFactUpdateT out{};
+    out.has_update_time = msg.update_time.has_value();
+    if (msg.update_time.has_value()) {
+        out.update_time = msg.update_time.value();
+    }
+    out.id = msg.id;
+    out.entity_source = msg.entity_source;
+    out.key = msg.key;
+    out.value = msg.value;
+    out.source = msg.source;
+    out.authority = static_cast<fbs::FactAuthorityLevel>(msg.authority);
+    return out;
+}
+
+pyramid::data_model::WorldFactUpdate from_fb(const fbs::WorldFactUpdateT& msg, pyramid::data_model::WorldFactUpdate* /*tag*/) {
+    pyramid::data_model::WorldFactUpdate out{};
+    if (msg.has_update_time) {
+        out.update_time = msg.update_time;
+    }
+    out.id = msg.id;
+    out.entity_source = msg.entity_source;
+    out.key = msg.key;
+    out.value = msg.value;
+    out.source = msg.source;
+    out.authority = static_cast<pyramid::data_model::FactAuthorityLevel>(msg.authority);
+    return out;
+}
+
+fbs::StateUpdateT to_fb(const pyramid::data_model::StateUpdate& msg) {
+    fbs::StateUpdateT out{};
+    out.has_update_time = msg.update_time.has_value();
+    if (msg.update_time.has_value()) {
+        out.update_time = msg.update_time.value();
+    }
+    out.id = msg.id;
+    out.source = msg.source;
+    out.fact_update.reserve(msg.fact_update.size());
+    for (const auto& item : msg.fact_update) {
+        out.fact_update.emplace_back(std::make_unique<fbs::WorldFactUpdateT>(to_fb(item)));
+    }
+    return out;
+}
+
+pyramid::data_model::StateUpdate from_fb(const fbs::StateUpdateT& msg, pyramid::data_model::StateUpdate* /*tag*/) {
+    pyramid::data_model::StateUpdate out{};
+    if (msg.has_update_time) {
+        out.update_time = msg.update_time;
+    }
+    out.id = msg.id;
+    out.source = msg.source;
+    out.fact_update.reserve(msg.fact_update.size());
+    for (const auto& item : msg.fact_update) {
         if (item) {
-            out.available_agents.push_back(from_fb(*item, static_cast<pyramid::data_model::AgentState*>(nullptr)));
+            out.fact_update.push_back(from_fb(*item, static_cast<pyramid::data_model::WorldFactUpdate*>(nullptr)));
         }
     }
     return out;
@@ -184,9 +194,12 @@ fbs::CapabilitiesT to_fb(const pyramid::data_model::Capabilities& msg) {
     out.id = msg.id;
     out.source = msg.source;
     out.backend_id = msg.backend_id;
-    out.supports_batch_planning = msg.supports_batch_planning;
-    out.supports_external_command_dispatch = msg.supports_external_command_dispatch;
+    out.supports_plan_only = msg.supports_plan_only;
+    out.supports_plan_and_execute = msg.supports_plan_and_execute;
+    out.supports_execute_approved_plan = msg.supports_execute_approved_plan;
     out.supports_replanning = msg.supports_replanning;
+    out.supports_typed_component_requirement_placement = msg.supports_typed_component_requirement_placement;
+    out.supports_state_update_ingress = msg.supports_state_update_ingress;
     return out;
 }
 
@@ -198,297 +211,213 @@ pyramid::data_model::Capabilities from_fb(const fbs::CapabilitiesT& msg, pyramid
     out.id = msg.id;
     out.source = msg.source;
     out.backend_id = msg.backend_id;
-    out.supports_batch_planning = msg.supports_batch_planning;
-    out.supports_external_command_dispatch = msg.supports_external_command_dispatch;
+    out.supports_plan_only = msg.supports_plan_only;
+    out.supports_plan_and_execute = msg.supports_plan_and_execute;
+    out.supports_execute_approved_plan = msg.supports_execute_approved_plan;
     out.supports_replanning = msg.supports_replanning;
+    out.supports_typed_component_requirement_placement = msg.supports_typed_component_requirement_placement;
+    out.supports_state_update_ingress = msg.supports_state_update_ingress;
     return out;
 }
 
-fbs::StringKeyValueT to_fb(const pyramid::data_model::StringKeyValue& msg) {
-    fbs::StringKeyValueT out{};
-    out.key = msg.key;
-    out.value = msg.value;
+fbs::PlannedComponentInteractionT to_fb(const pyramid::data_model::PlannedComponentInteraction& msg) {
+    fbs::PlannedComponentInteractionT out{};
+    out.target_component = msg.target_component;
+    out.target_service = msg.target_service;
+    out.target_type = msg.target_type;
+    out.operation = static_cast<fbs::RequirementPlacementOperation>(msg.operation);
     return out;
 }
 
-pyramid::data_model::StringKeyValue from_fb(const fbs::StringKeyValueT& msg, pyramid::data_model::StringKeyValue* /*tag*/) {
-    pyramid::data_model::StringKeyValue out{};
-    out.key = msg.key;
-    out.value = msg.value;
+pyramid::data_model::PlannedComponentInteraction from_fb(const fbs::PlannedComponentInteractionT& msg, pyramid::data_model::PlannedComponentInteraction* /*tag*/) {
+    pyramid::data_model::PlannedComponentInteraction out{};
+    out.target_component = msg.target_component;
+    out.target_service = msg.target_service;
+    out.target_type = msg.target_type;
+    out.operation = static_cast<pyramid::data_model::RequirementPlacementOperation>(msg.operation);
     return out;
 }
 
-fbs::CommandT to_fb(const pyramid::data_model::Command& msg) {
-    fbs::CommandT out{};
+fbs::PlanStepT to_fb(const pyramid::data_model::PlanStep& msg) {
+    fbs::PlanStepT out{};
     out.has_update_time = msg.update_time.has_value();
     if (msg.update_time.has_value()) {
         out.update_time = msg.update_time.value();
     }
     out.id = msg.id;
     out.source = msg.source;
-    out.command_id = msg.command_id;
+    out.sequence_number = msg.sequence_number;
     out.action_name = msg.action_name;
     out.signature = msg.signature;
-    out.service_name = msg.service_name;
-    out.operation = msg.operation;
-    out.request_fields.reserve(msg.request_fields.size());
-    for (const auto& item : msg.request_fields) {
-        out.request_fields.emplace_back(std::make_unique<fbs::StringKeyValueT>(to_fb(item)));
+    out.interaction.reserve(msg.interaction.size());
+    for (const auto& item : msg.interaction) {
+        out.interaction.emplace_back(std::make_unique<fbs::PlannedComponentInteractionT>(to_fb(item)));
     }
     return out;
 }
 
-pyramid::data_model::Command from_fb(const fbs::CommandT& msg, pyramid::data_model::Command* /*tag*/) {
-    pyramid::data_model::Command out{};
+pyramid::data_model::PlanStep from_fb(const fbs::PlanStepT& msg, pyramid::data_model::PlanStep* /*tag*/) {
+    pyramid::data_model::PlanStep out{};
     if (msg.has_update_time) {
         out.update_time = msg.update_time;
     }
     out.id = msg.id;
     out.source = msg.source;
-    out.command_id = msg.command_id;
+    out.sequence_number = msg.sequence_number;
     out.action_name = msg.action_name;
     out.signature = msg.signature;
-    out.service_name = msg.service_name;
-    out.operation = msg.operation;
-    out.request_fields.reserve(msg.request_fields.size());
-    for (const auto& item : msg.request_fields) {
+    out.interaction.reserve(msg.interaction.size());
+    for (const auto& item : msg.interaction) {
         if (item) {
-            out.request_fields.push_back(from_fb(*item, static_cast<pyramid::data_model::StringKeyValue*>(nullptr)));
+            out.interaction.push_back(from_fb(*item, static_cast<pyramid::data_model::PlannedComponentInteraction*>(nullptr)));
         }
     }
     return out;
 }
 
-fbs::GoalDispatchT to_fb(const pyramid::data_model::GoalDispatch& msg) {
-    fbs::GoalDispatchT out{};
+fbs::PlanT to_fb(const pyramid::data_model::Plan& msg) {
+    fbs::PlanT out{};
     out.has_update_time = msg.update_time.has_value();
     if (msg.update_time.has_value()) {
         out.update_time = msg.update_time.value();
     }
     out.id = msg.id;
     out.source = msg.source;
-    out.dispatch_id = msg.dispatch_id;
-    out.agent_id = msg.agent_id;
-    out.goals = msg.goals;
-    return out;
-}
-
-pyramid::data_model::GoalDispatch from_fb(const fbs::GoalDispatchT& msg, pyramid::data_model::GoalDispatch* /*tag*/) {
-    pyramid::data_model::GoalDispatch out{};
-    if (msg.has_update_time) {
-        out.update_time = msg.update_time;
-    }
-    out.id = msg.id;
-    out.source = msg.source;
-    out.dispatch_id = msg.dispatch_id;
-    out.agent_id = msg.agent_id;
-    out.goals = msg.goals;
-    return out;
-}
-
-fbs::DecisionRecordT to_fb(const pyramid::data_model::DecisionRecord& msg) {
-    fbs::DecisionRecordT out{};
-    out.has_update_time = msg.update_time.has_value();
-    if (msg.update_time.has_value()) {
-        out.update_time = msg.update_time.value();
-    }
-    out.id = msg.id;
-    out.source = msg.source;
-    out.session_id = msg.session_id;
+    out.planning_execution_requirement_id = msg.planning_execution_requirement_id;
     out.backend_id = msg.backend_id;
     out.world_version = msg.world_version;
     out.replan_count = msg.replan_count;
     out.plan_success = msg.plan_success;
     out.solve_time_ms = msg.solve_time_ms;
-    out.planned_action_signatures = msg.planned_action_signatures;
+    out.step.reserve(msg.step.size());
+    for (const auto& item : msg.step) {
+        out.step.emplace_back(std::make_unique<fbs::PlanStepT>(to_fb(item)));
+    }
     out.compiled_bt_xml = msg.compiled_bt_xml;
+    out.has_predicted_quality = msg.predicted_quality.has_value();
+    if (msg.predicted_quality.has_value()) {
+        out.predicted_quality = msg.predicted_quality.value();
+    }
     return out;
 }
 
-pyramid::data_model::DecisionRecord from_fb(const fbs::DecisionRecordT& msg, pyramid::data_model::DecisionRecord* /*tag*/) {
-    pyramid::data_model::DecisionRecord out{};
+pyramid::data_model::Plan from_fb(const fbs::PlanT& msg, pyramid::data_model::Plan* /*tag*/) {
+    pyramid::data_model::Plan out{};
     if (msg.has_update_time) {
         out.update_time = msg.update_time;
     }
     out.id = msg.id;
     out.source = msg.source;
-    out.session_id = msg.session_id;
+    out.planning_execution_requirement_id = msg.planning_execution_requirement_id;
     out.backend_id = msg.backend_id;
     out.world_version = msg.world_version;
     out.replan_count = msg.replan_count;
     out.plan_success = msg.plan_success;
     out.solve_time_ms = msg.solve_time_ms;
-    out.planned_action_signatures = msg.planned_action_signatures;
+    out.step.reserve(msg.step.size());
+    for (const auto& item : msg.step) {
+        if (item) {
+            out.step.push_back(from_fb(*item, static_cast<pyramid::data_model::PlanStep*>(nullptr)));
+        }
+    }
     out.compiled_bt_xml = msg.compiled_bt_xml;
+    if (msg.has_predicted_quality) {
+        out.predicted_quality = msg.predicted_quality;
+    }
     return out;
 }
 
-fbs::CommandResultT to_fb(const pyramid::data_model::CommandResult& msg) {
-    fbs::CommandResultT out{};
-    out.has_update_time = msg.update_time.has_value();
-    if (msg.update_time.has_value()) {
-        out.update_time = msg.update_time.value();
-    }
-    out.id = msg.id;
-    out.entity_source = msg.entity_source;
-    out.command_id = msg.command_id;
-    out.status = static_cast<fbs::CommandStatus>(msg.status);
-    out.observed_updates.reserve(msg.observed_updates.size());
-    for (const auto& item : msg.observed_updates) {
-        out.observed_updates.emplace_back(std::make_unique<fbs::FactUpdateT>(to_fb(item)));
-    }
-    out.source = msg.source;
-    return out;
-}
-
-pyramid::data_model::CommandResult from_fb(const fbs::CommandResultT& msg, pyramid::data_model::CommandResult* /*tag*/) {
-    pyramid::data_model::CommandResult out{};
-    if (msg.has_update_time) {
-        out.update_time = msg.update_time;
-    }
-    out.id = msg.id;
-    out.entity_source = msg.entity_source;
-    out.command_id = msg.command_id;
-    out.status = static_cast<pyramid::data_model::CommandStatus>(msg.status);
-    out.observed_updates.reserve(msg.observed_updates.size());
-    for (const auto& item : msg.observed_updates) {
-        if (item) {
-            out.observed_updates.push_back(from_fb(*item, static_cast<pyramid::data_model::FactUpdate*>(nullptr)));
-        }
-    }
-    out.source = msg.source;
-    return out;
-}
-
-fbs::DispatchResultT to_fb(const pyramid::data_model::DispatchResult& msg) {
-    fbs::DispatchResultT out{};
-    out.has_update_time = msg.update_time.has_value();
-    if (msg.update_time.has_value()) {
-        out.update_time = msg.update_time.value();
-    }
-    out.id = msg.id;
-    out.entity_source = msg.entity_source;
-    out.dispatch_id = msg.dispatch_id;
-    out.status = static_cast<fbs::CommandStatus>(msg.status);
-    out.observed_updates.reserve(msg.observed_updates.size());
-    for (const auto& item : msg.observed_updates) {
-        out.observed_updates.emplace_back(std::make_unique<fbs::FactUpdateT>(to_fb(item)));
-    }
-    out.source = msg.source;
-    return out;
-}
-
-pyramid::data_model::DispatchResult from_fb(const fbs::DispatchResultT& msg, pyramid::data_model::DispatchResult* /*tag*/) {
-    pyramid::data_model::DispatchResult out{};
-    if (msg.has_update_time) {
-        out.update_time = msg.update_time;
-    }
-    out.id = msg.id;
-    out.entity_source = msg.entity_source;
-    out.dispatch_id = msg.dispatch_id;
-    out.status = static_cast<pyramid::data_model::CommandStatus>(msg.status);
-    out.observed_updates.reserve(msg.observed_updates.size());
-    for (const auto& item : msg.observed_updates) {
-        if (item) {
-            out.observed_updates.push_back(from_fb(*item, static_cast<pyramid::data_model::FactUpdate*>(nullptr)));
-        }
-    }
-    out.source = msg.source;
-    return out;
-}
-
-fbs::SessionSnapshotT to_fb(const pyramid::data_model::SessionSnapshot& msg) {
-    fbs::SessionSnapshotT out{};
+fbs::RequirementPlacementT to_fb(const pyramid::data_model::RequirementPlacement& msg) {
+    fbs::RequirementPlacementT out{};
     out.has_update_time = msg.update_time.has_value();
     if (msg.update_time.has_value()) {
         out.update_time = msg.update_time.value();
     }
     out.id = msg.id;
     out.source = msg.source;
-    out.session_id = msg.session_id;
-    out.state = static_cast<fbs::AutonomyBackendState>(msg.state);
-    out.world_version = msg.world_version;
-    out.replan_count = msg.replan_count;
-    out.agent_states.reserve(msg.agent_states.size());
-    for (const auto& item : msg.agent_states) {
-        out.agent_states.emplace_back(std::make_unique<fbs::AgentStateT>(to_fb(item)));
-    }
-    out.outstanding_commands.reserve(msg.outstanding_commands.size());
-    for (const auto& item : msg.outstanding_commands) {
-        out.outstanding_commands.emplace_back(std::make_unique<fbs::CommandT>(to_fb(item)));
-    }
-    out.outstanding_goal_dispatches.reserve(msg.outstanding_goal_dispatches.size());
-    for (const auto& item : msg.outstanding_goal_dispatches) {
-        out.outstanding_goal_dispatches.emplace_back(std::make_unique<fbs::GoalDispatchT>(to_fb(item)));
-    }
-    out.decision_history.reserve(msg.decision_history.size());
-    for (const auto& item : msg.decision_history) {
-        out.decision_history.emplace_back(std::make_unique<fbs::DecisionRecordT>(to_fb(item)));
-    }
+    out.planning_execution_requirement_id = msg.planning_execution_requirement_id;
+    out.plan_id = msg.plan_id;
+    out.plan_step_id = msg.plan_step_id;
+    out.target_component = msg.target_component;
+    out.target_service = msg.target_service;
+    out.target_type = msg.target_type;
+    out.operation = static_cast<fbs::RequirementPlacementOperation>(msg.operation);
+    out.target_requirement_id = msg.target_requirement_id;
+    out.related_entity_id = msg.related_entity_id;
+    out.progress = static_cast<fbs::Progress>(msg.progress);
     return out;
 }
 
-pyramid::data_model::SessionSnapshot from_fb(const fbs::SessionSnapshotT& msg, pyramid::data_model::SessionSnapshot* /*tag*/) {
-    pyramid::data_model::SessionSnapshot out{};
+pyramid::data_model::RequirementPlacement from_fb(const fbs::RequirementPlacementT& msg, pyramid::data_model::RequirementPlacement* /*tag*/) {
+    pyramid::data_model::RequirementPlacement out{};
     if (msg.has_update_time) {
         out.update_time = msg.update_time;
     }
     out.id = msg.id;
     out.source = msg.source;
-    out.session_id = msg.session_id;
-    out.state = static_cast<pyramid::data_model::AutonomyBackendState>(msg.state);
-    out.world_version = msg.world_version;
-    out.replan_count = msg.replan_count;
-    out.agent_states.reserve(msg.agent_states.size());
-    for (const auto& item : msg.agent_states) {
-        if (item) {
-            out.agent_states.push_back(from_fb(*item, static_cast<pyramid::data_model::AgentState*>(nullptr)));
-        }
-    }
-    out.outstanding_commands.reserve(msg.outstanding_commands.size());
-    for (const auto& item : msg.outstanding_commands) {
-        if (item) {
-            out.outstanding_commands.push_back(from_fb(*item, static_cast<pyramid::data_model::Command*>(nullptr)));
-        }
-    }
-    out.outstanding_goal_dispatches.reserve(msg.outstanding_goal_dispatches.size());
-    for (const auto& item : msg.outstanding_goal_dispatches) {
-        if (item) {
-            out.outstanding_goal_dispatches.push_back(from_fb(*item, static_cast<pyramid::data_model::GoalDispatch*>(nullptr)));
-        }
-    }
-    out.decision_history.reserve(msg.decision_history.size());
-    for (const auto& item : msg.decision_history) {
-        if (item) {
-            out.decision_history.push_back(from_fb(*item, static_cast<pyramid::data_model::DecisionRecord*>(nullptr)));
-        }
-    }
+    out.planning_execution_requirement_id = msg.planning_execution_requirement_id;
+    out.plan_id = msg.plan_id;
+    out.plan_step_id = msg.plan_step_id;
+    out.target_component = msg.target_component;
+    out.target_service = msg.target_service;
+    out.target_type = msg.target_type;
+    out.operation = static_cast<pyramid::data_model::RequirementPlacementOperation>(msg.operation);
+    out.target_requirement_id = msg.target_requirement_id;
+    out.related_entity_id = msg.related_entity_id;
+    out.progress = static_cast<pyramid::data_model::Progress>(msg.progress);
     return out;
 }
 
-fbs::SessionStepRequestT to_fb(const pyramid::data_model::SessionStepRequest& msg) {
-    fbs::SessionStepRequestT out{};
-    out.session_id = msg.session_id;
+fbs::AchievementT to_fb(const pyramid::data_model::Achievement& msg) {
+    fbs::AchievementT out{};
+    out.has_update_time = msg.update_time.has_value();
+    if (msg.update_time.has_value()) {
+        out.update_time = msg.update_time.value();
+    }
+    out.id = msg.id;
+    out.source = msg.source;
+    out.status = static_cast<fbs::Progress>(msg.status);
+    out.has_quality = msg.quality.has_value();
+    if (msg.quality.has_value()) {
+        out.quality = msg.quality.value();
+    }
+    out.achieveability = static_cast<fbs::Feasibility>(msg.achieveability);
     return out;
 }
 
-pyramid::data_model::SessionStepRequest from_fb(const fbs::SessionStepRequestT& msg, pyramid::data_model::SessionStepRequest* /*tag*/) {
-    pyramid::data_model::SessionStepRequest out{};
-    out.session_id = msg.session_id;
+pyramid::data_model::Achievement from_fb(const fbs::AchievementT& msg, pyramid::data_model::Achievement* /*tag*/) {
+    pyramid::data_model::Achievement out{};
+    if (msg.has_update_time) {
+        out.update_time = msg.update_time;
+    }
+    out.id = msg.id;
+    out.source = msg.source;
+    out.status = static_cast<pyramid::data_model::Progress>(msg.status);
+    if (msg.has_quality) {
+        out.quality = msg.quality;
+    }
+    out.achieveability = static_cast<pyramid::data_model::Feasibility>(msg.achieveability);
     return out;
 }
 
-fbs::SessionStopRequestT to_fb(const pyramid::data_model::SessionStopRequest& msg) {
-    fbs::SessionStopRequestT out{};
-    out.session_id = msg.session_id;
-    out.mode = static_cast<fbs::StopMode>(msg.mode);
+fbs::EntityT to_fb(const pyramid::data_model::Entity& msg) {
+    fbs::EntityT out{};
+    out.has_update_time = msg.update_time.has_value();
+    if (msg.update_time.has_value()) {
+        out.update_time = msg.update_time.value();
+    }
+    out.id = msg.id;
+    out.source = msg.source;
     return out;
 }
 
-pyramid::data_model::SessionStopRequest from_fb(const fbs::SessionStopRequestT& msg, pyramid::data_model::SessionStopRequest* /*tag*/) {
-    pyramid::data_model::SessionStopRequest out{};
-    out.session_id = msg.session_id;
-    out.mode = static_cast<pyramid::data_model::StopMode>(msg.mode);
+pyramid::data_model::Entity from_fb(const fbs::EntityT& msg, pyramid::data_model::Entity* /*tag*/) {
+    pyramid::data_model::Entity out{};
+    if (msg.has_update_time) {
+        out.update_time = msg.update_time;
+    }
+    out.id = msg.id;
+    out.source = msg.source;
     return out;
 }
 
@@ -523,6 +452,97 @@ pyramid::data_model::Query from_fb(const fbs::QueryT& msg, pyramid::data_model::
     return out;
 }
 
+fbs::PlanningExecutionRequirementT to_fb(const pyramid::data_model::PlanningExecutionRequirement& msg) {
+    fbs::PlanningExecutionRequirementT out{};
+    out.base = std::make_unique<fbs::EntityT>(to_fb(msg.base));
+    out.status = std::make_unique<fbs::AchievementT>(to_fb(msg.status));
+    out.upstream_requirement.reserve(msg.upstream_requirement.size());
+    for (const auto& item : msg.upstream_requirement) {
+        out.upstream_requirement.emplace_back(std::make_unique<fbs::RequirementReferenceT>(to_fb(item)));
+    }
+    out.goal.reserve(msg.goal.size());
+    for (const auto& item : msg.goal) {
+        out.goal.emplace_back(std::make_unique<fbs::PlanningGoalT>(to_fb(item)));
+    }
+    out.policy = std::make_unique<fbs::PlanningPolicyT>(to_fb(msg.policy));
+    out.available_agents.reserve(msg.available_agents.size());
+    for (const auto& item : msg.available_agents) {
+        out.available_agents.emplace_back(std::make_unique<fbs::AgentStateT>(to_fb(item)));
+    }
+    out.mode = static_cast<fbs::PlanningExecutionMode>(msg.mode);
+    out.approved_plan_id = msg.approved_plan_id;
+    return out;
+}
+
+pyramid::data_model::PlanningExecutionRequirement from_fb(const fbs::PlanningExecutionRequirementT& msg, pyramid::data_model::PlanningExecutionRequirement* /*tag*/) {
+    pyramid::data_model::PlanningExecutionRequirement out{};
+    if (msg.base) out.base = from_fb(*msg.base, static_cast<pyramid::data_model::Entity*>(nullptr));
+    if (msg.status) out.status = from_fb(*msg.status, static_cast<pyramid::data_model::Achievement*>(nullptr));
+    out.upstream_requirement.reserve(msg.upstream_requirement.size());
+    for (const auto& item : msg.upstream_requirement) {
+        if (item) {
+            out.upstream_requirement.push_back(from_fb(*item, static_cast<pyramid::data_model::RequirementReference*>(nullptr)));
+        }
+    }
+    out.goal.reserve(msg.goal.size());
+    for (const auto& item : msg.goal) {
+        if (item) {
+            out.goal.push_back(from_fb(*item, static_cast<pyramid::data_model::PlanningGoal*>(nullptr)));
+        }
+    }
+    if (msg.policy) out.policy = from_fb(*msg.policy, static_cast<pyramid::data_model::PlanningPolicy*>(nullptr));
+    out.available_agents.reserve(msg.available_agents.size());
+    for (const auto& item : msg.available_agents) {
+        if (item) {
+            out.available_agents.push_back(from_fb(*item, static_cast<pyramid::data_model::AgentState*>(nullptr)));
+        }
+    }
+    out.mode = static_cast<pyramid::data_model::PlanningExecutionMode>(msg.mode);
+    out.approved_plan_id = msg.approved_plan_id;
+    return out;
+}
+
+fbs::ExecutionRunT to_fb(const pyramid::data_model::ExecutionRun& msg) {
+    fbs::ExecutionRunT out{};
+    out.has_update_time = msg.update_time.has_value();
+    if (msg.update_time.has_value()) {
+        out.update_time = msg.update_time.value();
+    }
+    out.id = msg.id;
+    out.source = msg.source;
+    out.planning_execution_requirement_id = msg.planning_execution_requirement_id;
+    out.plan_id = msg.plan_id;
+    out.state = static_cast<fbs::PlanningExecutionState>(msg.state);
+    out.achievement = std::make_unique<fbs::AchievementT>(to_fb(msg.achievement));
+    out.replan_count = msg.replan_count;
+    out.outstanding_placement.reserve(msg.outstanding_placement.size());
+    for (const auto& item : msg.outstanding_placement) {
+        out.outstanding_placement.emplace_back(std::make_unique<fbs::RequirementPlacementT>(to_fb(item)));
+    }
+    return out;
+}
+
+pyramid::data_model::ExecutionRun from_fb(const fbs::ExecutionRunT& msg, pyramid::data_model::ExecutionRun* /*tag*/) {
+    pyramid::data_model::ExecutionRun out{};
+    if (msg.has_update_time) {
+        out.update_time = msg.update_time;
+    }
+    out.id = msg.id;
+    out.source = msg.source;
+    out.planning_execution_requirement_id = msg.planning_execution_requirement_id;
+    out.plan_id = msg.plan_id;
+    out.state = static_cast<pyramid::data_model::PlanningExecutionState>(msg.state);
+    if (msg.achievement) out.achievement = from_fb(*msg.achievement, static_cast<pyramid::data_model::Achievement*>(nullptr));
+    out.replan_count = msg.replan_count;
+    out.outstanding_placement.reserve(msg.outstanding_placement.size());
+    for (const auto& item : msg.outstanding_placement) {
+        if (item) {
+            out.outstanding_placement.push_back(from_fb(*item, static_cast<pyramid::data_model::RequirementPlacement*>(nullptr)));
+        }
+    }
+    return out;
+}
+
 fbs::IdentifierValueT to_fb(const pyramid::data_model::Identifier& msg) {
     fbs::IdentifierValueT out{};
     out.value = msg;
@@ -553,81 +573,81 @@ std::vector<pyramid::data_model::Capabilities> from_fb(const fbs::CapabilitiesAr
     return out;
 }
 
-fbs::SessionSnapshotArrayHolderT to_fb(const std::vector<pyramid::data_model::SessionSnapshot>& msg) {
-    fbs::SessionSnapshotArrayHolderT out{};
+fbs::PlanningExecutionRequirementArrayHolderT to_fb(const std::vector<pyramid::data_model::PlanningExecutionRequirement>& msg) {
+    fbs::PlanningExecutionRequirementArrayHolderT out{};
     out.items.reserve(msg.size());
     for (const auto& item : msg) {
-        out.items.emplace_back(std::make_unique<fbs::SessionSnapshotT>(to_fb(item)));
+        out.items.emplace_back(std::make_unique<fbs::PlanningExecutionRequirementT>(to_fb(item)));
     }
     return out;
 }
 
-std::vector<pyramid::data_model::SessionSnapshot> from_fb(const fbs::SessionSnapshotArrayHolderT& msg) {
-    std::vector<pyramid::data_model::SessionSnapshot> out{};
+std::vector<pyramid::data_model::PlanningExecutionRequirement> from_fb(const fbs::PlanningExecutionRequirementArrayHolderT& msg) {
+    std::vector<pyramid::data_model::PlanningExecutionRequirement> out{};
     out.reserve(msg.items.size());
     for (const auto& item : msg.items) {
         if (item) {
-            out.push_back(from_fb(*item, static_cast<pyramid::data_model::SessionSnapshot*>(nullptr)));
+            out.push_back(from_fb(*item, static_cast<pyramid::data_model::PlanningExecutionRequirement*>(nullptr)));
         }
     }
     return out;
 }
 
-fbs::CommandArrayHolderT to_fb(const std::vector<pyramid::data_model::Command>& msg) {
-    fbs::CommandArrayHolderT out{};
+fbs::PlanArrayHolderT to_fb(const std::vector<pyramid::data_model::Plan>& msg) {
+    fbs::PlanArrayHolderT out{};
     out.items.reserve(msg.size());
     for (const auto& item : msg) {
-        out.items.emplace_back(std::make_unique<fbs::CommandT>(to_fb(item)));
+        out.items.emplace_back(std::make_unique<fbs::PlanT>(to_fb(item)));
     }
     return out;
 }
 
-std::vector<pyramid::data_model::Command> from_fb(const fbs::CommandArrayHolderT& msg) {
-    std::vector<pyramid::data_model::Command> out{};
+std::vector<pyramid::data_model::Plan> from_fb(const fbs::PlanArrayHolderT& msg) {
+    std::vector<pyramid::data_model::Plan> out{};
     out.reserve(msg.items.size());
     for (const auto& item : msg.items) {
         if (item) {
-            out.push_back(from_fb(*item, static_cast<pyramid::data_model::Command*>(nullptr)));
+            out.push_back(from_fb(*item, static_cast<pyramid::data_model::Plan*>(nullptr)));
         }
     }
     return out;
 }
 
-fbs::GoalDispatchArrayHolderT to_fb(const std::vector<pyramid::data_model::GoalDispatch>& msg) {
-    fbs::GoalDispatchArrayHolderT out{};
+fbs::ExecutionRunArrayHolderT to_fb(const std::vector<pyramid::data_model::ExecutionRun>& msg) {
+    fbs::ExecutionRunArrayHolderT out{};
     out.items.reserve(msg.size());
     for (const auto& item : msg) {
-        out.items.emplace_back(std::make_unique<fbs::GoalDispatchT>(to_fb(item)));
+        out.items.emplace_back(std::make_unique<fbs::ExecutionRunT>(to_fb(item)));
     }
     return out;
 }
 
-std::vector<pyramid::data_model::GoalDispatch> from_fb(const fbs::GoalDispatchArrayHolderT& msg) {
-    std::vector<pyramid::data_model::GoalDispatch> out{};
+std::vector<pyramid::data_model::ExecutionRun> from_fb(const fbs::ExecutionRunArrayHolderT& msg) {
+    std::vector<pyramid::data_model::ExecutionRun> out{};
     out.reserve(msg.items.size());
     for (const auto& item : msg.items) {
         if (item) {
-            out.push_back(from_fb(*item, static_cast<pyramid::data_model::GoalDispatch*>(nullptr)));
+            out.push_back(from_fb(*item, static_cast<pyramid::data_model::ExecutionRun*>(nullptr)));
         }
     }
     return out;
 }
 
-fbs::DecisionRecordArrayHolderT to_fb(const std::vector<pyramid::data_model::DecisionRecord>& msg) {
-    fbs::DecisionRecordArrayHolderT out{};
+fbs::RequirementPlacementArrayHolderT to_fb(const std::vector<pyramid::data_model::RequirementPlacement>& msg) {
+    fbs::RequirementPlacementArrayHolderT out{};
     out.items.reserve(msg.size());
     for (const auto& item : msg) {
-        out.items.emplace_back(std::make_unique<fbs::DecisionRecordT>(to_fb(item)));
+        out.items.emplace_back(std::make_unique<fbs::RequirementPlacementT>(to_fb(item)));
     }
     return out;
 }
 
-std::vector<pyramid::data_model::DecisionRecord> from_fb(const fbs::DecisionRecordArrayHolderT& msg) {
-    std::vector<pyramid::data_model::DecisionRecord> out{};
+std::vector<pyramid::data_model::RequirementPlacement> from_fb(const fbs::RequirementPlacementArrayHolderT& msg) {
+    std::vector<pyramid::data_model::RequirementPlacement> out{};
     out.reserve(msg.items.size());
     for (const auto& item : msg.items) {
         if (item) {
-            out.push_back(from_fb(*item, static_cast<pyramid::data_model::DecisionRecord*>(nullptr)));
+            out.push_back(from_fb(*item, static_cast<pyramid::data_model::RequirementPlacement*>(nullptr)));
         }
     }
     return out;
@@ -635,43 +655,17 @@ std::vector<pyramid::data_model::DecisionRecord> from_fb(const fbs::DecisionReco
 
 } // namespace
 
-std::string toBinary(const pyramid::data_model::FactUpdate& msg) {
+std::string toBinary(const pyramid::data_model::RequirementReference& msg) {
     flatbuffers::FlatBufferBuilder builder(256);
     auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::FactUpdate::Pack(builder, &object));
+    return finish_buffer(builder, fbs::RequirementReference::Pack(builder, &object));
 }
 
-pyramid::data_model::FactUpdate fromBinaryFactUpdate(const void* data, size_t size) {
-    auto* root = verified_root<fbs::FactUpdate>(data, size, "FactUpdate");
-    fbs::FactUpdateT object{};
+pyramid::data_model::RequirementReference fromBinaryRequirementReference(const void* data, size_t size) {
+    auto* root = verified_root<fbs::RequirementReference>(data, size, "RequirementReference");
+    fbs::RequirementReferenceT object{};
     root->UnPackTo(&object);
-    return from_fb(object, static_cast<pyramid::data_model::FactUpdate*>(nullptr));
-}
-
-std::string toBinary(const pyramid::data_model::StateUpdate& msg) {
-    flatbuffers::FlatBufferBuilder builder(256);
-    auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::StateUpdate::Pack(builder, &object));
-}
-
-pyramid::data_model::StateUpdate fromBinaryStateUpdate(const void* data, size_t size) {
-    auto* root = verified_root<fbs::StateUpdate>(data, size, "StateUpdate");
-    fbs::StateUpdateT object{};
-    root->UnPackTo(&object);
-    return from_fb(object, static_cast<pyramid::data_model::StateUpdate*>(nullptr));
-}
-
-std::string toBinary(const pyramid::data_model::MissionIntent& msg) {
-    flatbuffers::FlatBufferBuilder builder(256);
-    auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::MissionIntent::Pack(builder, &object));
-}
-
-pyramid::data_model::MissionIntent fromBinaryMissionIntent(const void* data, size_t size) {
-    auto* root = verified_root<fbs::MissionIntent>(data, size, "MissionIntent");
-    fbs::MissionIntentT object{};
-    root->UnPackTo(&object);
-    return from_fb(object, static_cast<pyramid::data_model::MissionIntent*>(nullptr));
+    return from_fb(object, static_cast<pyramid::data_model::RequirementReference*>(nullptr));
 }
 
 std::string toBinary(const pyramid::data_model::AgentState& msg) {
@@ -687,30 +681,56 @@ pyramid::data_model::AgentState fromBinaryAgentState(const void* data, size_t si
     return from_fb(object, static_cast<pyramid::data_model::AgentState*>(nullptr));
 }
 
-std::string toBinary(const pyramid::data_model::PolicyEnvelope& msg) {
+std::string toBinary(const pyramid::data_model::PlanningPolicy& msg) {
     flatbuffers::FlatBufferBuilder builder(256);
     auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::PolicyEnvelope::Pack(builder, &object));
+    return finish_buffer(builder, fbs::PlanningPolicy::Pack(builder, &object));
 }
 
-pyramid::data_model::PolicyEnvelope fromBinaryPolicyEnvelope(const void* data, size_t size) {
-    auto* root = verified_root<fbs::PolicyEnvelope>(data, size, "PolicyEnvelope");
-    fbs::PolicyEnvelopeT object{};
+pyramid::data_model::PlanningPolicy fromBinaryPlanningPolicy(const void* data, size_t size) {
+    auto* root = verified_root<fbs::PlanningPolicy>(data, size, "PlanningPolicy");
+    fbs::PlanningPolicyT object{};
     root->UnPackTo(&object);
-    return from_fb(object, static_cast<pyramid::data_model::PolicyEnvelope*>(nullptr));
+    return from_fb(object, static_cast<pyramid::data_model::PlanningPolicy*>(nullptr));
 }
 
-std::string toBinary(const pyramid::data_model::Session& msg) {
+std::string toBinary(const pyramid::data_model::PlanningGoal& msg) {
     flatbuffers::FlatBufferBuilder builder(256);
     auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::Session::Pack(builder, &object));
+    return finish_buffer(builder, fbs::PlanningGoal::Pack(builder, &object));
 }
 
-pyramid::data_model::Session fromBinarySession(const void* data, size_t size) {
-    auto* root = verified_root<fbs::Session>(data, size, "Session");
-    fbs::SessionT object{};
+pyramid::data_model::PlanningGoal fromBinaryPlanningGoal(const void* data, size_t size) {
+    auto* root = verified_root<fbs::PlanningGoal>(data, size, "PlanningGoal");
+    fbs::PlanningGoalT object{};
     root->UnPackTo(&object);
-    return from_fb(object, static_cast<pyramid::data_model::Session*>(nullptr));
+    return from_fb(object, static_cast<pyramid::data_model::PlanningGoal*>(nullptr));
+}
+
+std::string toBinary(const pyramid::data_model::WorldFactUpdate& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::WorldFactUpdate::Pack(builder, &object));
+}
+
+pyramid::data_model::WorldFactUpdate fromBinaryWorldFactUpdate(const void* data, size_t size) {
+    auto* root = verified_root<fbs::WorldFactUpdate>(data, size, "WorldFactUpdate");
+    fbs::WorldFactUpdateT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::WorldFactUpdate*>(nullptr));
+}
+
+std::string toBinary(const pyramid::data_model::StateUpdate& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::StateUpdate::Pack(builder, &object));
+}
+
+pyramid::data_model::StateUpdate fromBinaryStateUpdate(const void* data, size_t size) {
+    auto* root = verified_root<fbs::StateUpdate>(data, size, "StateUpdate");
+    fbs::StateUpdateT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::StateUpdate*>(nullptr));
 }
 
 std::string toBinary(const pyramid::data_model::Capabilities& msg) {
@@ -726,121 +746,82 @@ pyramid::data_model::Capabilities fromBinaryCapabilities(const void* data, size_
     return from_fb(object, static_cast<pyramid::data_model::Capabilities*>(nullptr));
 }
 
-std::string toBinary(const pyramid::data_model::StringKeyValue& msg) {
+std::string toBinary(const pyramid::data_model::PlannedComponentInteraction& msg) {
     flatbuffers::FlatBufferBuilder builder(256);
     auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::StringKeyValue::Pack(builder, &object));
+    return finish_buffer(builder, fbs::PlannedComponentInteraction::Pack(builder, &object));
 }
 
-pyramid::data_model::StringKeyValue fromBinaryStringKeyValue(const void* data, size_t size) {
-    auto* root = verified_root<fbs::StringKeyValue>(data, size, "StringKeyValue");
-    fbs::StringKeyValueT object{};
+pyramid::data_model::PlannedComponentInteraction fromBinaryPlannedComponentInteraction(const void* data, size_t size) {
+    auto* root = verified_root<fbs::PlannedComponentInteraction>(data, size, "PlannedComponentInteraction");
+    fbs::PlannedComponentInteractionT object{};
     root->UnPackTo(&object);
-    return from_fb(object, static_cast<pyramid::data_model::StringKeyValue*>(nullptr));
+    return from_fb(object, static_cast<pyramid::data_model::PlannedComponentInteraction*>(nullptr));
 }
 
-std::string toBinary(const pyramid::data_model::Command& msg) {
+std::string toBinary(const pyramid::data_model::PlanStep& msg) {
     flatbuffers::FlatBufferBuilder builder(256);
     auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::Command::Pack(builder, &object));
+    return finish_buffer(builder, fbs::PlanStep::Pack(builder, &object));
 }
 
-pyramid::data_model::Command fromBinaryCommand(const void* data, size_t size) {
-    auto* root = verified_root<fbs::Command>(data, size, "Command");
-    fbs::CommandT object{};
+pyramid::data_model::PlanStep fromBinaryPlanStep(const void* data, size_t size) {
+    auto* root = verified_root<fbs::PlanStep>(data, size, "PlanStep");
+    fbs::PlanStepT object{};
     root->UnPackTo(&object);
-    return from_fb(object, static_cast<pyramid::data_model::Command*>(nullptr));
+    return from_fb(object, static_cast<pyramid::data_model::PlanStep*>(nullptr));
 }
 
-std::string toBinary(const pyramid::data_model::GoalDispatch& msg) {
+std::string toBinary(const pyramid::data_model::Plan& msg) {
     flatbuffers::FlatBufferBuilder builder(256);
     auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::GoalDispatch::Pack(builder, &object));
+    return finish_buffer(builder, fbs::Plan::Pack(builder, &object));
 }
 
-pyramid::data_model::GoalDispatch fromBinaryGoalDispatch(const void* data, size_t size) {
-    auto* root = verified_root<fbs::GoalDispatch>(data, size, "GoalDispatch");
-    fbs::GoalDispatchT object{};
+pyramid::data_model::Plan fromBinaryPlan(const void* data, size_t size) {
+    auto* root = verified_root<fbs::Plan>(data, size, "Plan");
+    fbs::PlanT object{};
     root->UnPackTo(&object);
-    return from_fb(object, static_cast<pyramid::data_model::GoalDispatch*>(nullptr));
+    return from_fb(object, static_cast<pyramid::data_model::Plan*>(nullptr));
 }
 
-std::string toBinary(const pyramid::data_model::DecisionRecord& msg) {
+std::string toBinary(const pyramid::data_model::RequirementPlacement& msg) {
     flatbuffers::FlatBufferBuilder builder(256);
     auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::DecisionRecord::Pack(builder, &object));
+    return finish_buffer(builder, fbs::RequirementPlacement::Pack(builder, &object));
 }
 
-pyramid::data_model::DecisionRecord fromBinaryDecisionRecord(const void* data, size_t size) {
-    auto* root = verified_root<fbs::DecisionRecord>(data, size, "DecisionRecord");
-    fbs::DecisionRecordT object{};
+pyramid::data_model::RequirementPlacement fromBinaryRequirementPlacement(const void* data, size_t size) {
+    auto* root = verified_root<fbs::RequirementPlacement>(data, size, "RequirementPlacement");
+    fbs::RequirementPlacementT object{};
     root->UnPackTo(&object);
-    return from_fb(object, static_cast<pyramid::data_model::DecisionRecord*>(nullptr));
+    return from_fb(object, static_cast<pyramid::data_model::RequirementPlacement*>(nullptr));
 }
 
-std::string toBinary(const pyramid::data_model::CommandResult& msg) {
+std::string toBinary(const pyramid::data_model::Achievement& msg) {
     flatbuffers::FlatBufferBuilder builder(256);
     auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::CommandResult::Pack(builder, &object));
+    return finish_buffer(builder, fbs::Achievement::Pack(builder, &object));
 }
 
-pyramid::data_model::CommandResult fromBinaryCommandResult(const void* data, size_t size) {
-    auto* root = verified_root<fbs::CommandResult>(data, size, "CommandResult");
-    fbs::CommandResultT object{};
+pyramid::data_model::Achievement fromBinaryAchievement(const void* data, size_t size) {
+    auto* root = verified_root<fbs::Achievement>(data, size, "Achievement");
+    fbs::AchievementT object{};
     root->UnPackTo(&object);
-    return from_fb(object, static_cast<pyramid::data_model::CommandResult*>(nullptr));
+    return from_fb(object, static_cast<pyramid::data_model::Achievement*>(nullptr));
 }
 
-std::string toBinary(const pyramid::data_model::DispatchResult& msg) {
+std::string toBinary(const pyramid::data_model::Entity& msg) {
     flatbuffers::FlatBufferBuilder builder(256);
     auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::DispatchResult::Pack(builder, &object));
+    return finish_buffer(builder, fbs::Entity::Pack(builder, &object));
 }
 
-pyramid::data_model::DispatchResult fromBinaryDispatchResult(const void* data, size_t size) {
-    auto* root = verified_root<fbs::DispatchResult>(data, size, "DispatchResult");
-    fbs::DispatchResultT object{};
+pyramid::data_model::Entity fromBinaryEntity(const void* data, size_t size) {
+    auto* root = verified_root<fbs::Entity>(data, size, "Entity");
+    fbs::EntityT object{};
     root->UnPackTo(&object);
-    return from_fb(object, static_cast<pyramid::data_model::DispatchResult*>(nullptr));
-}
-
-std::string toBinary(const pyramid::data_model::SessionSnapshot& msg) {
-    flatbuffers::FlatBufferBuilder builder(256);
-    auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::SessionSnapshot::Pack(builder, &object));
-}
-
-pyramid::data_model::SessionSnapshot fromBinarySessionSnapshot(const void* data, size_t size) {
-    auto* root = verified_root<fbs::SessionSnapshot>(data, size, "SessionSnapshot");
-    fbs::SessionSnapshotT object{};
-    root->UnPackTo(&object);
-    return from_fb(object, static_cast<pyramid::data_model::SessionSnapshot*>(nullptr));
-}
-
-std::string toBinary(const pyramid::data_model::SessionStepRequest& msg) {
-    flatbuffers::FlatBufferBuilder builder(256);
-    auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::SessionStepRequest::Pack(builder, &object));
-}
-
-pyramid::data_model::SessionStepRequest fromBinarySessionStepRequest(const void* data, size_t size) {
-    auto* root = verified_root<fbs::SessionStepRequest>(data, size, "SessionStepRequest");
-    fbs::SessionStepRequestT object{};
-    root->UnPackTo(&object);
-    return from_fb(object, static_cast<pyramid::data_model::SessionStepRequest*>(nullptr));
-}
-
-std::string toBinary(const pyramid::data_model::SessionStopRequest& msg) {
-    flatbuffers::FlatBufferBuilder builder(256);
-    auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::SessionStopRequest::Pack(builder, &object));
-}
-
-pyramid::data_model::SessionStopRequest fromBinarySessionStopRequest(const void* data, size_t size) {
-    auto* root = verified_root<fbs::SessionStopRequest>(data, size, "SessionStopRequest");
-    fbs::SessionStopRequestT object{};
-    root->UnPackTo(&object);
-    return from_fb(object, static_cast<pyramid::data_model::SessionStopRequest*>(nullptr));
+    return from_fb(object, static_cast<pyramid::data_model::Entity*>(nullptr));
 }
 
 std::string toBinary(const pyramid::data_model::Ack& msg) {
@@ -869,6 +850,32 @@ pyramid::data_model::Query fromBinaryQuery(const void* data, size_t size) {
     return from_fb(object, static_cast<pyramid::data_model::Query*>(nullptr));
 }
 
+std::string toBinary(const pyramid::data_model::PlanningExecutionRequirement& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::PlanningExecutionRequirement::Pack(builder, &object));
+}
+
+pyramid::data_model::PlanningExecutionRequirement fromBinaryPlanningExecutionRequirement(const void* data, size_t size) {
+    auto* root = verified_root<fbs::PlanningExecutionRequirement>(data, size, "PlanningExecutionRequirement");
+    fbs::PlanningExecutionRequirementT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::PlanningExecutionRequirement*>(nullptr));
+}
+
+std::string toBinary(const pyramid::data_model::ExecutionRun& msg) {
+    flatbuffers::FlatBufferBuilder builder(256);
+    auto object = to_fb(msg);
+    return finish_buffer(builder, fbs::ExecutionRun::Pack(builder, &object));
+}
+
+pyramid::data_model::ExecutionRun fromBinaryExecutionRun(const void* data, size_t size) {
+    auto* root = verified_root<fbs::ExecutionRun>(data, size, "ExecutionRun");
+    fbs::ExecutionRunT object{};
+    root->UnPackTo(&object);
+    return from_fb(object, static_cast<pyramid::data_model::ExecutionRun*>(nullptr));
+}
+
 std::string toBinary(const pyramid::data_model::Identifier& msg) {
     flatbuffers::FlatBufferBuilder builder(256);
     auto object = to_fb(msg);
@@ -895,54 +902,54 @@ std::vector<pyramid::data_model::Capabilities> fromBinaryCapabilitiesArray(const
     return from_fb(object);
 }
 
-std::string toBinary(const std::vector<pyramid::data_model::SessionSnapshot>& msg) {
+std::string toBinary(const std::vector<pyramid::data_model::PlanningExecutionRequirement>& msg) {
     flatbuffers::FlatBufferBuilder builder(256);
     auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::SessionSnapshotArrayHolder::Pack(builder, &object));
+    return finish_buffer(builder, fbs::PlanningExecutionRequirementArrayHolder::Pack(builder, &object));
 }
 
-std::vector<pyramid::data_model::SessionSnapshot> fromBinarySessionSnapshotArray(const void* data, size_t size) {
-    auto* root = verified_root<fbs::SessionSnapshotArrayHolder>(data, size, "SessionSnapshotArray");
-    fbs::SessionSnapshotArrayHolderT object{};
+std::vector<pyramid::data_model::PlanningExecutionRequirement> fromBinaryPlanningExecutionRequirementArray(const void* data, size_t size) {
+    auto* root = verified_root<fbs::PlanningExecutionRequirementArrayHolder>(data, size, "PlanningExecutionRequirementArray");
+    fbs::PlanningExecutionRequirementArrayHolderT object{};
     root->UnPackTo(&object);
     return from_fb(object);
 }
 
-std::string toBinary(const std::vector<pyramid::data_model::Command>& msg) {
+std::string toBinary(const std::vector<pyramid::data_model::Plan>& msg) {
     flatbuffers::FlatBufferBuilder builder(256);
     auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::CommandArrayHolder::Pack(builder, &object));
+    return finish_buffer(builder, fbs::PlanArrayHolder::Pack(builder, &object));
 }
 
-std::vector<pyramid::data_model::Command> fromBinaryCommandArray(const void* data, size_t size) {
-    auto* root = verified_root<fbs::CommandArrayHolder>(data, size, "CommandArray");
-    fbs::CommandArrayHolderT object{};
+std::vector<pyramid::data_model::Plan> fromBinaryPlanArray(const void* data, size_t size) {
+    auto* root = verified_root<fbs::PlanArrayHolder>(data, size, "PlanArray");
+    fbs::PlanArrayHolderT object{};
     root->UnPackTo(&object);
     return from_fb(object);
 }
 
-std::string toBinary(const std::vector<pyramid::data_model::GoalDispatch>& msg) {
+std::string toBinary(const std::vector<pyramid::data_model::ExecutionRun>& msg) {
     flatbuffers::FlatBufferBuilder builder(256);
     auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::GoalDispatchArrayHolder::Pack(builder, &object));
+    return finish_buffer(builder, fbs::ExecutionRunArrayHolder::Pack(builder, &object));
 }
 
-std::vector<pyramid::data_model::GoalDispatch> fromBinaryGoalDispatchArray(const void* data, size_t size) {
-    auto* root = verified_root<fbs::GoalDispatchArrayHolder>(data, size, "GoalDispatchArray");
-    fbs::GoalDispatchArrayHolderT object{};
+std::vector<pyramid::data_model::ExecutionRun> fromBinaryExecutionRunArray(const void* data, size_t size) {
+    auto* root = verified_root<fbs::ExecutionRunArrayHolder>(data, size, "ExecutionRunArray");
+    fbs::ExecutionRunArrayHolderT object{};
     root->UnPackTo(&object);
     return from_fb(object);
 }
 
-std::string toBinary(const std::vector<pyramid::data_model::DecisionRecord>& msg) {
+std::string toBinary(const std::vector<pyramid::data_model::RequirementPlacement>& msg) {
     flatbuffers::FlatBufferBuilder builder(256);
     auto object = to_fb(msg);
-    return finish_buffer(builder, fbs::DecisionRecordArrayHolder::Pack(builder, &object));
+    return finish_buffer(builder, fbs::RequirementPlacementArrayHolder::Pack(builder, &object));
 }
 
-std::vector<pyramid::data_model::DecisionRecord> fromBinaryDecisionRecordArray(const void* data, size_t size) {
-    auto* root = verified_root<fbs::DecisionRecordArrayHolder>(data, size, "DecisionRecordArray");
-    fbs::DecisionRecordArrayHolderT object{};
+std::vector<pyramid::data_model::RequirementPlacement> fromBinaryRequirementPlacementArray(const void* data, size_t size) {
+    auto* root = verified_root<fbs::RequirementPlacementArrayHolder>(data, size, "RequirementPlacementArray");
+    fbs::RequirementPlacementArrayHolderT object{};
     root->UnPackTo(&object);
     return from_fb(object);
 }
@@ -955,10 +962,10 @@ void pyramid_services_autonomy_backend_free_buffer(void* data) {
     std::free(data);
 }
 
-void* pyramid_services_autonomy_backend_FactUpdate_to_flatbuffer_json(const char* json, size_t* size_out) {
+void* pyramid_services_autonomy_backend_RequirementReference_to_flatbuffer_json(const char* json, size_t* size_out) {
     if (size_out) *size_out = 0;
     try {
-        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::FactUpdate*>(nullptr));
+        auto value = pyramid::data_model::autonomy::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::RequirementReference*>(nullptr));
         auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
         if (size_out) *size_out = payload.size();
         if (payload.empty()) return nullptr;
@@ -971,68 +978,10 @@ void* pyramid_services_autonomy_backend_FactUpdate_to_flatbuffer_json(const char
     }
 }
 
-char* pyramid_services_autonomy_backend_FactUpdate_from_flatbuffer_json(const void* data, size_t size) {
+char* pyramid_services_autonomy_backend_RequirementReference_from_flatbuffer_json(const void* data, size_t size) {
     try {
-        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryFactUpdate(data, size);
-        auto json = pyramid::data_model::common::toJson(value);
-        char* out = static_cast<char*>(std::malloc(json.size() + 1));
-        if (!out) return nullptr;
-        std::memcpy(out, json.c_str(), json.size() + 1);
-        return out;
-    } catch (...) {
-        return nullptr;
-    }
-}
-
-void* pyramid_services_autonomy_backend_StateUpdate_to_flatbuffer_json(const char* json, size_t* size_out) {
-    if (size_out) *size_out = 0;
-    try {
-        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::StateUpdate*>(nullptr));
-        auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
-        if (size_out) *size_out = payload.size();
-        if (payload.empty()) return nullptr;
-        void* out = std::malloc(payload.size());
-        if (!out) return nullptr;
-        std::memcpy(out, payload.data(), payload.size());
-        return out;
-    } catch (...) {
-        return nullptr;
-    }
-}
-
-char* pyramid_services_autonomy_backend_StateUpdate_from_flatbuffer_json(const void* data, size_t size) {
-    try {
-        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryStateUpdate(data, size);
-        auto json = pyramid::data_model::common::toJson(value);
-        char* out = static_cast<char*>(std::malloc(json.size() + 1));
-        if (!out) return nullptr;
-        std::memcpy(out, json.c_str(), json.size() + 1);
-        return out;
-    } catch (...) {
-        return nullptr;
-    }
-}
-
-void* pyramid_services_autonomy_backend_MissionIntent_to_flatbuffer_json(const char* json, size_t* size_out) {
-    if (size_out) *size_out = 0;
-    try {
-        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::MissionIntent*>(nullptr));
-        auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
-        if (size_out) *size_out = payload.size();
-        if (payload.empty()) return nullptr;
-        void* out = std::malloc(payload.size());
-        if (!out) return nullptr;
-        std::memcpy(out, payload.data(), payload.size());
-        return out;
-    } catch (...) {
-        return nullptr;
-    }
-}
-
-char* pyramid_services_autonomy_backend_MissionIntent_from_flatbuffer_json(const void* data, size_t size) {
-    try {
-        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryMissionIntent(data, size);
-        auto json = pyramid::data_model::common::toJson(value);
+        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryRequirementReference(data, size);
+        auto json = pyramid::data_model::autonomy::toJson(value);
         char* out = static_cast<char*>(std::malloc(json.size() + 1));
         if (!out) return nullptr;
         std::memcpy(out, json.c_str(), json.size() + 1);
@@ -1045,7 +994,7 @@ char* pyramid_services_autonomy_backend_MissionIntent_from_flatbuffer_json(const
 void* pyramid_services_autonomy_backend_AgentState_to_flatbuffer_json(const char* json, size_t* size_out) {
     if (size_out) *size_out = 0;
     try {
-        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::AgentState*>(nullptr));
+        auto value = pyramid::data_model::autonomy::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::AgentState*>(nullptr));
         auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
         if (size_out) *size_out = payload.size();
         if (payload.empty()) return nullptr;
@@ -1061,7 +1010,7 @@ void* pyramid_services_autonomy_backend_AgentState_to_flatbuffer_json(const char
 char* pyramid_services_autonomy_backend_AgentState_from_flatbuffer_json(const void* data, size_t size) {
     try {
         auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryAgentState(data, size);
-        auto json = pyramid::data_model::common::toJson(value);
+        auto json = pyramid::data_model::autonomy::toJson(value);
         char* out = static_cast<char*>(std::malloc(json.size() + 1));
         if (!out) return nullptr;
         std::memcpy(out, json.c_str(), json.size() + 1);
@@ -1071,10 +1020,10 @@ char* pyramid_services_autonomy_backend_AgentState_from_flatbuffer_json(const vo
     }
 }
 
-void* pyramid_services_autonomy_backend_PolicyEnvelope_to_flatbuffer_json(const char* json, size_t* size_out) {
+void* pyramid_services_autonomy_backend_PlanningPolicy_to_flatbuffer_json(const char* json, size_t* size_out) {
     if (size_out) *size_out = 0;
     try {
-        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::PolicyEnvelope*>(nullptr));
+        auto value = pyramid::data_model::autonomy::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::PlanningPolicy*>(nullptr));
         auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
         if (size_out) *size_out = payload.size();
         if (payload.empty()) return nullptr;
@@ -1087,10 +1036,10 @@ void* pyramid_services_autonomy_backend_PolicyEnvelope_to_flatbuffer_json(const 
     }
 }
 
-char* pyramid_services_autonomy_backend_PolicyEnvelope_from_flatbuffer_json(const void* data, size_t size) {
+char* pyramid_services_autonomy_backend_PlanningPolicy_from_flatbuffer_json(const void* data, size_t size) {
     try {
-        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryPolicyEnvelope(data, size);
-        auto json = pyramid::data_model::common::toJson(value);
+        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryPlanningPolicy(data, size);
+        auto json = pyramid::data_model::autonomy::toJson(value);
         char* out = static_cast<char*>(std::malloc(json.size() + 1));
         if (!out) return nullptr;
         std::memcpy(out, json.c_str(), json.size() + 1);
@@ -1100,10 +1049,10 @@ char* pyramid_services_autonomy_backend_PolicyEnvelope_from_flatbuffer_json(cons
     }
 }
 
-void* pyramid_services_autonomy_backend_Session_to_flatbuffer_json(const char* json, size_t* size_out) {
+void* pyramid_services_autonomy_backend_PlanningGoal_to_flatbuffer_json(const char* json, size_t* size_out) {
     if (size_out) *size_out = 0;
     try {
-        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::Session*>(nullptr));
+        auto value = pyramid::data_model::autonomy::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::PlanningGoal*>(nullptr));
         auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
         if (size_out) *size_out = payload.size();
         if (payload.empty()) return nullptr;
@@ -1116,10 +1065,68 @@ void* pyramid_services_autonomy_backend_Session_to_flatbuffer_json(const char* j
     }
 }
 
-char* pyramid_services_autonomy_backend_Session_from_flatbuffer_json(const void* data, size_t size) {
+char* pyramid_services_autonomy_backend_PlanningGoal_from_flatbuffer_json(const void* data, size_t size) {
     try {
-        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinarySession(data, size);
-        auto json = pyramid::data_model::common::toJson(value);
+        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryPlanningGoal(data, size);
+        auto json = pyramid::data_model::autonomy::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_autonomy_backend_WorldFactUpdate_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::autonomy::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::WorldFactUpdate*>(nullptr));
+        auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_autonomy_backend_WorldFactUpdate_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryWorldFactUpdate(data, size);
+        auto json = pyramid::data_model::autonomy::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_autonomy_backend_StateUpdate_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::autonomy::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::StateUpdate*>(nullptr));
+        auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_autonomy_backend_StateUpdate_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryStateUpdate(data, size);
+        auto json = pyramid::data_model::autonomy::toJson(value);
         char* out = static_cast<char*>(std::malloc(json.size() + 1));
         if (!out) return nullptr;
         std::memcpy(out, json.c_str(), json.size() + 1);
@@ -1132,7 +1139,7 @@ char* pyramid_services_autonomy_backend_Session_from_flatbuffer_json(const void*
 void* pyramid_services_autonomy_backend_Capabilities_to_flatbuffer_json(const char* json, size_t* size_out) {
     if (size_out) *size_out = 0;
     try {
-        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::Capabilities*>(nullptr));
+        auto value = pyramid::data_model::autonomy::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::Capabilities*>(nullptr));
         auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
         if (size_out) *size_out = payload.size();
         if (payload.empty()) return nullptr;
@@ -1148,7 +1155,7 @@ void* pyramid_services_autonomy_backend_Capabilities_to_flatbuffer_json(const ch
 char* pyramid_services_autonomy_backend_Capabilities_from_flatbuffer_json(const void* data, size_t size) {
     try {
         auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryCapabilities(data, size);
-        auto json = pyramid::data_model::common::toJson(value);
+        auto json = pyramid::data_model::autonomy::toJson(value);
         char* out = static_cast<char*>(std::malloc(json.size() + 1));
         if (!out) return nullptr;
         std::memcpy(out, json.c_str(), json.size() + 1);
@@ -1158,10 +1165,10 @@ char* pyramid_services_autonomy_backend_Capabilities_from_flatbuffer_json(const 
     }
 }
 
-void* pyramid_services_autonomy_backend_StringKeyValue_to_flatbuffer_json(const char* json, size_t* size_out) {
+void* pyramid_services_autonomy_backend_PlannedComponentInteraction_to_flatbuffer_json(const char* json, size_t* size_out) {
     if (size_out) *size_out = 0;
     try {
-        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::StringKeyValue*>(nullptr));
+        auto value = pyramid::data_model::autonomy::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::PlannedComponentInteraction*>(nullptr));
         auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
         if (size_out) *size_out = payload.size();
         if (payload.empty()) return nullptr;
@@ -1174,10 +1181,10 @@ void* pyramid_services_autonomy_backend_StringKeyValue_to_flatbuffer_json(const 
     }
 }
 
-char* pyramid_services_autonomy_backend_StringKeyValue_from_flatbuffer_json(const void* data, size_t size) {
+char* pyramid_services_autonomy_backend_PlannedComponentInteraction_from_flatbuffer_json(const void* data, size_t size) {
     try {
-        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryStringKeyValue(data, size);
-        auto json = pyramid::data_model::common::toJson(value);
+        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryPlannedComponentInteraction(data, size);
+        auto json = pyramid::data_model::autonomy::toJson(value);
         char* out = static_cast<char*>(std::malloc(json.size() + 1));
         if (!out) return nullptr;
         std::memcpy(out, json.c_str(), json.size() + 1);
@@ -1187,10 +1194,10 @@ char* pyramid_services_autonomy_backend_StringKeyValue_from_flatbuffer_json(cons
     }
 }
 
-void* pyramid_services_autonomy_backend_Command_to_flatbuffer_json(const char* json, size_t* size_out) {
+void* pyramid_services_autonomy_backend_PlanStep_to_flatbuffer_json(const char* json, size_t* size_out) {
     if (size_out) *size_out = 0;
     try {
-        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::Command*>(nullptr));
+        auto value = pyramid::data_model::autonomy::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::PlanStep*>(nullptr));
         auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
         if (size_out) *size_out = payload.size();
         if (payload.empty()) return nullptr;
@@ -1203,10 +1210,10 @@ void* pyramid_services_autonomy_backend_Command_to_flatbuffer_json(const char* j
     }
 }
 
-char* pyramid_services_autonomy_backend_Command_from_flatbuffer_json(const void* data, size_t size) {
+char* pyramid_services_autonomy_backend_PlanStep_from_flatbuffer_json(const void* data, size_t size) {
     try {
-        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryCommand(data, size);
-        auto json = pyramid::data_model::common::toJson(value);
+        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryPlanStep(data, size);
+        auto json = pyramid::data_model::autonomy::toJson(value);
         char* out = static_cast<char*>(std::malloc(json.size() + 1));
         if (!out) return nullptr;
         std::memcpy(out, json.c_str(), json.size() + 1);
@@ -1216,10 +1223,10 @@ char* pyramid_services_autonomy_backend_Command_from_flatbuffer_json(const void*
     }
 }
 
-void* pyramid_services_autonomy_backend_GoalDispatch_to_flatbuffer_json(const char* json, size_t* size_out) {
+void* pyramid_services_autonomy_backend_Plan_to_flatbuffer_json(const char* json, size_t* size_out) {
     if (size_out) *size_out = 0;
     try {
-        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::GoalDispatch*>(nullptr));
+        auto value = pyramid::data_model::autonomy::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::Plan*>(nullptr));
         auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
         if (size_out) *size_out = payload.size();
         if (payload.empty()) return nullptr;
@@ -1232,10 +1239,10 @@ void* pyramid_services_autonomy_backend_GoalDispatch_to_flatbuffer_json(const ch
     }
 }
 
-char* pyramid_services_autonomy_backend_GoalDispatch_from_flatbuffer_json(const void* data, size_t size) {
+char* pyramid_services_autonomy_backend_Plan_from_flatbuffer_json(const void* data, size_t size) {
     try {
-        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryGoalDispatch(data, size);
-        auto json = pyramid::data_model::common::toJson(value);
+        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryPlan(data, size);
+        auto json = pyramid::data_model::autonomy::toJson(value);
         char* out = static_cast<char*>(std::malloc(json.size() + 1));
         if (!out) return nullptr;
         std::memcpy(out, json.c_str(), json.size() + 1);
@@ -1245,10 +1252,10 @@ char* pyramid_services_autonomy_backend_GoalDispatch_from_flatbuffer_json(const 
     }
 }
 
-void* pyramid_services_autonomy_backend_DecisionRecord_to_flatbuffer_json(const char* json, size_t* size_out) {
+void* pyramid_services_autonomy_backend_RequirementPlacement_to_flatbuffer_json(const char* json, size_t* size_out) {
     if (size_out) *size_out = 0;
     try {
-        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::DecisionRecord*>(nullptr));
+        auto value = pyramid::data_model::autonomy::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::RequirementPlacement*>(nullptr));
         auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
         if (size_out) *size_out = payload.size();
         if (payload.empty()) return nullptr;
@@ -1261,10 +1268,10 @@ void* pyramid_services_autonomy_backend_DecisionRecord_to_flatbuffer_json(const 
     }
 }
 
-char* pyramid_services_autonomy_backend_DecisionRecord_from_flatbuffer_json(const void* data, size_t size) {
+char* pyramid_services_autonomy_backend_RequirementPlacement_from_flatbuffer_json(const void* data, size_t size) {
     try {
-        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryDecisionRecord(data, size);
-        auto json = pyramid::data_model::common::toJson(value);
+        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryRequirementPlacement(data, size);
+        auto json = pyramid::data_model::autonomy::toJson(value);
         char* out = static_cast<char*>(std::malloc(json.size() + 1));
         if (!out) return nullptr;
         std::memcpy(out, json.c_str(), json.size() + 1);
@@ -1274,10 +1281,10 @@ char* pyramid_services_autonomy_backend_DecisionRecord_from_flatbuffer_json(cons
     }
 }
 
-void* pyramid_services_autonomy_backend_CommandResult_to_flatbuffer_json(const char* json, size_t* size_out) {
+void* pyramid_services_autonomy_backend_Achievement_to_flatbuffer_json(const char* json, size_t* size_out) {
     if (size_out) *size_out = 0;
     try {
-        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::CommandResult*>(nullptr));
+        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::Achievement*>(nullptr));
         auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
         if (size_out) *size_out = payload.size();
         if (payload.empty()) return nullptr;
@@ -1290,9 +1297,9 @@ void* pyramid_services_autonomy_backend_CommandResult_to_flatbuffer_json(const c
     }
 }
 
-char* pyramid_services_autonomy_backend_CommandResult_from_flatbuffer_json(const void* data, size_t size) {
+char* pyramid_services_autonomy_backend_Achievement_from_flatbuffer_json(const void* data, size_t size) {
     try {
-        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryCommandResult(data, size);
+        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryAchievement(data, size);
         auto json = pyramid::data_model::common::toJson(value);
         char* out = static_cast<char*>(std::malloc(json.size() + 1));
         if (!out) return nullptr;
@@ -1303,10 +1310,10 @@ char* pyramid_services_autonomy_backend_CommandResult_from_flatbuffer_json(const
     }
 }
 
-void* pyramid_services_autonomy_backend_DispatchResult_to_flatbuffer_json(const char* json, size_t* size_out) {
+void* pyramid_services_autonomy_backend_Entity_to_flatbuffer_json(const char* json, size_t* size_out) {
     if (size_out) *size_out = 0;
     try {
-        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::DispatchResult*>(nullptr));
+        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::Entity*>(nullptr));
         auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
         if (size_out) *size_out = payload.size();
         if (payload.empty()) return nullptr;
@@ -1319,96 +1326,9 @@ void* pyramid_services_autonomy_backend_DispatchResult_to_flatbuffer_json(const 
     }
 }
 
-char* pyramid_services_autonomy_backend_DispatchResult_from_flatbuffer_json(const void* data, size_t size) {
+char* pyramid_services_autonomy_backend_Entity_from_flatbuffer_json(const void* data, size_t size) {
     try {
-        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryDispatchResult(data, size);
-        auto json = pyramid::data_model::common::toJson(value);
-        char* out = static_cast<char*>(std::malloc(json.size() + 1));
-        if (!out) return nullptr;
-        std::memcpy(out, json.c_str(), json.size() + 1);
-        return out;
-    } catch (...) {
-        return nullptr;
-    }
-}
-
-void* pyramid_services_autonomy_backend_SessionSnapshot_to_flatbuffer_json(const char* json, size_t* size_out) {
-    if (size_out) *size_out = 0;
-    try {
-        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::SessionSnapshot*>(nullptr));
-        auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
-        if (size_out) *size_out = payload.size();
-        if (payload.empty()) return nullptr;
-        void* out = std::malloc(payload.size());
-        if (!out) return nullptr;
-        std::memcpy(out, payload.data(), payload.size());
-        return out;
-    } catch (...) {
-        return nullptr;
-    }
-}
-
-char* pyramid_services_autonomy_backend_SessionSnapshot_from_flatbuffer_json(const void* data, size_t size) {
-    try {
-        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinarySessionSnapshot(data, size);
-        auto json = pyramid::data_model::common::toJson(value);
-        char* out = static_cast<char*>(std::malloc(json.size() + 1));
-        if (!out) return nullptr;
-        std::memcpy(out, json.c_str(), json.size() + 1);
-        return out;
-    } catch (...) {
-        return nullptr;
-    }
-}
-
-void* pyramid_services_autonomy_backend_SessionStepRequest_to_flatbuffer_json(const char* json, size_t* size_out) {
-    if (size_out) *size_out = 0;
-    try {
-        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::SessionStepRequest*>(nullptr));
-        auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
-        if (size_out) *size_out = payload.size();
-        if (payload.empty()) return nullptr;
-        void* out = std::malloc(payload.size());
-        if (!out) return nullptr;
-        std::memcpy(out, payload.data(), payload.size());
-        return out;
-    } catch (...) {
-        return nullptr;
-    }
-}
-
-char* pyramid_services_autonomy_backend_SessionStepRequest_from_flatbuffer_json(const void* data, size_t size) {
-    try {
-        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinarySessionStepRequest(data, size);
-        auto json = pyramid::data_model::common::toJson(value);
-        char* out = static_cast<char*>(std::malloc(json.size() + 1));
-        if (!out) return nullptr;
-        std::memcpy(out, json.c_str(), json.size() + 1);
-        return out;
-    } catch (...) {
-        return nullptr;
-    }
-}
-
-void* pyramid_services_autonomy_backend_SessionStopRequest_to_flatbuffer_json(const char* json, size_t* size_out) {
-    if (size_out) *size_out = 0;
-    try {
-        auto value = pyramid::data_model::common::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::SessionStopRequest*>(nullptr));
-        auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
-        if (size_out) *size_out = payload.size();
-        if (payload.empty()) return nullptr;
-        void* out = std::malloc(payload.size());
-        if (!out) return nullptr;
-        std::memcpy(out, payload.data(), payload.size());
-        return out;
-    } catch (...) {
-        return nullptr;
-    }
-}
-
-char* pyramid_services_autonomy_backend_SessionStopRequest_from_flatbuffer_json(const void* data, size_t size) {
-    try {
-        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinarySessionStopRequest(data, size);
+        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryEntity(data, size);
         auto json = pyramid::data_model::common::toJson(value);
         char* out = static_cast<char*>(std::malloc(json.size() + 1));
         if (!out) return nullptr;
@@ -1477,6 +1397,64 @@ char* pyramid_services_autonomy_backend_Query_from_flatbuffer_json(const void* d
     }
 }
 
+void* pyramid_services_autonomy_backend_PlanningExecutionRequirement_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::autonomy::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::PlanningExecutionRequirement*>(nullptr));
+        auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_autonomy_backend_PlanningExecutionRequirement_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryPlanningExecutionRequirement(data, size);
+        auto json = pyramid::data_model::autonomy::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+void* pyramid_services_autonomy_backend_ExecutionRun_to_flatbuffer_json(const char* json, size_t* size_out) {
+    if (size_out) *size_out = 0;
+    try {
+        auto value = pyramid::data_model::autonomy::fromJson(std::string(json ? json : ""), static_cast<pyramid::data_model::ExecutionRun*>(nullptr));
+        auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(value);
+        if (size_out) *size_out = payload.size();
+        if (payload.empty()) return nullptr;
+        void* out = std::malloc(payload.size());
+        if (!out) return nullptr;
+        std::memcpy(out, payload.data(), payload.size());
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+char* pyramid_services_autonomy_backend_ExecutionRun_from_flatbuffer_json(const void* data, size_t size) {
+    try {
+        auto value = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryExecutionRun(data, size);
+        auto json = pyramid::data_model::autonomy::toJson(value);
+        char* out = static_cast<char*>(std::malloc(json.size() + 1));
+        if (!out) return nullptr;
+        std::memcpy(out, json.c_str(), json.size() + 1);
+        return out;
+    } catch (...) {
+        return nullptr;
+    }
+}
+
 void* pyramid_services_autonomy_backend_Identifier_to_flatbuffer_json(const char* json, size_t* size_out) {
     if (size_out) *size_out = 0;
     try {
@@ -1514,7 +1492,7 @@ void* pyramid_services_autonomy_backend_CapabilitiesArray_to_flatbuffer_json(con
         if (arr.is_array()) {
             values.reserve(arr.size());
             for (const auto& item : arr) {
-                values.push_back(pyramid::data_model::common::fromJson(item.dump(), static_cast<pyramid::data_model::Capabilities*>(nullptr)));
+                values.push_back(pyramid::data_model::autonomy::fromJson(item.dump(), static_cast<pyramid::data_model::Capabilities*>(nullptr)));
             }
         }
         auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(values);
@@ -1534,7 +1512,7 @@ char* pyramid_services_autonomy_backend_CapabilitiesArray_from_flatbuffer_json(c
         auto values = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryCapabilitiesArray(data, size);
         nlohmann::json arr = nlohmann::json::array();
         for (const auto& item : values) {
-            arr.push_back(nlohmann::json::parse(pyramid::data_model::common::toJson(item)));
+            arr.push_back(nlohmann::json::parse(pyramid::data_model::autonomy::toJson(item)));
         }
         auto json = arr.dump();
         char* out = static_cast<char*>(std::malloc(json.size() + 1));
@@ -1546,15 +1524,15 @@ char* pyramid_services_autonomy_backend_CapabilitiesArray_from_flatbuffer_json(c
     }
 }
 
-void* pyramid_services_autonomy_backend_SessionSnapshotArray_to_flatbuffer_json(const char* json, size_t* size_out) {
+void* pyramid_services_autonomy_backend_PlanningExecutionRequirementArray_to_flatbuffer_json(const char* json, size_t* size_out) {
     if (size_out) *size_out = 0;
     try {
         auto arr = nlohmann::json::parse(std::string(json ? json : "[]"));
-        std::vector<pyramid::data_model::SessionSnapshot> values;
+        std::vector<pyramid::data_model::PlanningExecutionRequirement> values;
         if (arr.is_array()) {
             values.reserve(arr.size());
             for (const auto& item : arr) {
-                values.push_back(pyramid::data_model::common::fromJson(item.dump(), static_cast<pyramid::data_model::SessionSnapshot*>(nullptr)));
+                values.push_back(pyramid::data_model::autonomy::fromJson(item.dump(), static_cast<pyramid::data_model::PlanningExecutionRequirement*>(nullptr)));
             }
         }
         auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(values);
@@ -1569,12 +1547,12 @@ void* pyramid_services_autonomy_backend_SessionSnapshotArray_to_flatbuffer_json(
     }
 }
 
-char* pyramid_services_autonomy_backend_SessionSnapshotArray_from_flatbuffer_json(const void* data, size_t size) {
+char* pyramid_services_autonomy_backend_PlanningExecutionRequirementArray_from_flatbuffer_json(const void* data, size_t size) {
     try {
-        auto values = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinarySessionSnapshotArray(data, size);
+        auto values = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryPlanningExecutionRequirementArray(data, size);
         nlohmann::json arr = nlohmann::json::array();
         for (const auto& item : values) {
-            arr.push_back(nlohmann::json::parse(pyramid::data_model::common::toJson(item)));
+            arr.push_back(nlohmann::json::parse(pyramid::data_model::autonomy::toJson(item)));
         }
         auto json = arr.dump();
         char* out = static_cast<char*>(std::malloc(json.size() + 1));
@@ -1586,15 +1564,15 @@ char* pyramid_services_autonomy_backend_SessionSnapshotArray_from_flatbuffer_jso
     }
 }
 
-void* pyramid_services_autonomy_backend_CommandArray_to_flatbuffer_json(const char* json, size_t* size_out) {
+void* pyramid_services_autonomy_backend_PlanArray_to_flatbuffer_json(const char* json, size_t* size_out) {
     if (size_out) *size_out = 0;
     try {
         auto arr = nlohmann::json::parse(std::string(json ? json : "[]"));
-        std::vector<pyramid::data_model::Command> values;
+        std::vector<pyramid::data_model::Plan> values;
         if (arr.is_array()) {
             values.reserve(arr.size());
             for (const auto& item : arr) {
-                values.push_back(pyramid::data_model::common::fromJson(item.dump(), static_cast<pyramid::data_model::Command*>(nullptr)));
+                values.push_back(pyramid::data_model::autonomy::fromJson(item.dump(), static_cast<pyramid::data_model::Plan*>(nullptr)));
             }
         }
         auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(values);
@@ -1609,12 +1587,12 @@ void* pyramid_services_autonomy_backend_CommandArray_to_flatbuffer_json(const ch
     }
 }
 
-char* pyramid_services_autonomy_backend_CommandArray_from_flatbuffer_json(const void* data, size_t size) {
+char* pyramid_services_autonomy_backend_PlanArray_from_flatbuffer_json(const void* data, size_t size) {
     try {
-        auto values = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryCommandArray(data, size);
+        auto values = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryPlanArray(data, size);
         nlohmann::json arr = nlohmann::json::array();
         for (const auto& item : values) {
-            arr.push_back(nlohmann::json::parse(pyramid::data_model::common::toJson(item)));
+            arr.push_back(nlohmann::json::parse(pyramid::data_model::autonomy::toJson(item)));
         }
         auto json = arr.dump();
         char* out = static_cast<char*>(std::malloc(json.size() + 1));
@@ -1626,15 +1604,15 @@ char* pyramid_services_autonomy_backend_CommandArray_from_flatbuffer_json(const 
     }
 }
 
-void* pyramid_services_autonomy_backend_GoalDispatchArray_to_flatbuffer_json(const char* json, size_t* size_out) {
+void* pyramid_services_autonomy_backend_ExecutionRunArray_to_flatbuffer_json(const char* json, size_t* size_out) {
     if (size_out) *size_out = 0;
     try {
         auto arr = nlohmann::json::parse(std::string(json ? json : "[]"));
-        std::vector<pyramid::data_model::GoalDispatch> values;
+        std::vector<pyramid::data_model::ExecutionRun> values;
         if (arr.is_array()) {
             values.reserve(arr.size());
             for (const auto& item : arr) {
-                values.push_back(pyramid::data_model::common::fromJson(item.dump(), static_cast<pyramid::data_model::GoalDispatch*>(nullptr)));
+                values.push_back(pyramid::data_model::autonomy::fromJson(item.dump(), static_cast<pyramid::data_model::ExecutionRun*>(nullptr)));
             }
         }
         auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(values);
@@ -1649,12 +1627,12 @@ void* pyramid_services_autonomy_backend_GoalDispatchArray_to_flatbuffer_json(con
     }
 }
 
-char* pyramid_services_autonomy_backend_GoalDispatchArray_from_flatbuffer_json(const void* data, size_t size) {
+char* pyramid_services_autonomy_backend_ExecutionRunArray_from_flatbuffer_json(const void* data, size_t size) {
     try {
-        auto values = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryGoalDispatchArray(data, size);
+        auto values = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryExecutionRunArray(data, size);
         nlohmann::json arr = nlohmann::json::array();
         for (const auto& item : values) {
-            arr.push_back(nlohmann::json::parse(pyramid::data_model::common::toJson(item)));
+            arr.push_back(nlohmann::json::parse(pyramid::data_model::autonomy::toJson(item)));
         }
         auto json = arr.dump();
         char* out = static_cast<char*>(std::malloc(json.size() + 1));
@@ -1666,15 +1644,15 @@ char* pyramid_services_autonomy_backend_GoalDispatchArray_from_flatbuffer_json(c
     }
 }
 
-void* pyramid_services_autonomy_backend_DecisionRecordArray_to_flatbuffer_json(const char* json, size_t* size_out) {
+void* pyramid_services_autonomy_backend_RequirementPlacementArray_to_flatbuffer_json(const char* json, size_t* size_out) {
     if (size_out) *size_out = 0;
     try {
         auto arr = nlohmann::json::parse(std::string(json ? json : "[]"));
-        std::vector<pyramid::data_model::DecisionRecord> values;
+        std::vector<pyramid::data_model::RequirementPlacement> values;
         if (arr.is_array()) {
             values.reserve(arr.size());
             for (const auto& item : arr) {
-                values.push_back(pyramid::data_model::common::fromJson(item.dump(), static_cast<pyramid::data_model::DecisionRecord*>(nullptr)));
+                values.push_back(pyramid::data_model::autonomy::fromJson(item.dump(), static_cast<pyramid::data_model::RequirementPlacement*>(nullptr)));
             }
         }
         auto payload = pyramid::services::autonomy_backend::flatbuffers_codec::toBinary(values);
@@ -1689,12 +1667,12 @@ void* pyramid_services_autonomy_backend_DecisionRecordArray_to_flatbuffer_json(c
     }
 }
 
-char* pyramid_services_autonomy_backend_DecisionRecordArray_from_flatbuffer_json(const void* data, size_t size) {
+char* pyramid_services_autonomy_backend_RequirementPlacementArray_from_flatbuffer_json(const void* data, size_t size) {
     try {
-        auto values = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryDecisionRecordArray(data, size);
+        auto values = pyramid::services::autonomy_backend::flatbuffers_codec::fromBinaryRequirementPlacementArray(data, size);
         nlohmann::json arr = nlohmann::json::array();
         for (const auto& item : values) {
-            arr.push_back(nlohmann::json::parse(pyramid::data_model::common::toJson(item)));
+            arr.push_back(nlohmann::json::parse(pyramid::data_model::autonomy::toJson(item)));
         }
         auto json = arr.dump();
         char* out = static_cast<char*>(std::malloc(json.size() + 1));

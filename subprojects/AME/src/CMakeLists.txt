@@ -26,11 +26,13 @@ add_library(ame_core STATIC
     lib/wm_audit_log.cpp
     lib/plan_audit_log.cpp
     lib/perception_bridge.cpp
+    lib/pyramid_autonomy_bridge.cpp
     lib/world_model_snapshot.cpp
 )
 
 target_include_directories(ame_core PUBLIC
     ${AME_ROOT_DIR}/include
+    ${PYRAMID_ROOT_DIR}/examples/cpp/generated
 )
 
 if(NOT MUJIN_BUILD_PYRAMID)
@@ -47,6 +49,7 @@ target_link_libraries(ame_core
         lapkt_core
         pcl_core
         pyramid_core
+        pyramid_generated_codecs
 )
 
 # ---------------------------------------------------------------------------

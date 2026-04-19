@@ -10,70 +10,6 @@
 
 namespace pyramid::data_model::autonomy {
 
-std::string toString(AutonomyBackendState v) {
-    switch (v) {
-        case AutonomyBackendState::Unspecified: return "AUTONOMY_BACKEND_STATE_UNSPECIFIED";
-        case AutonomyBackendState::Idle: return "AUTONOMY_BACKEND_STATE_IDLE";
-        case AutonomyBackendState::Ready: return "AUTONOMY_BACKEND_STATE_READY";
-        case AutonomyBackendState::WaitingForResults: return "AUTONOMY_BACKEND_STATE_WAITING_FOR_RESULTS";
-        case AutonomyBackendState::Complete: return "AUTONOMY_BACKEND_STATE_COMPLETE";
-        case AutonomyBackendState::Failed: return "AUTONOMY_BACKEND_STATE_FAILED";
-        case AutonomyBackendState::Stopped: return "AUTONOMY_BACKEND_STATE_STOPPED";
-    }
-    return "AUTONOMY_BACKEND_STATE_UNSPECIFIED";
-}
-
-AutonomyBackendState autonomyBackendStateFromString(const std::string& s) {
-    if (s == "AUTONOMY_BACKEND_STATE_UNSPECIFIED") return AutonomyBackendState::Unspecified;
-    if (s == "AUTONOMY_BACKEND_STATE_IDLE") return AutonomyBackendState::Idle;
-    if (s == "AUTONOMY_BACKEND_STATE_READY") return AutonomyBackendState::Ready;
-    if (s == "AUTONOMY_BACKEND_STATE_WAITING_FOR_RESULTS") return AutonomyBackendState::WaitingForResults;
-    if (s == "AUTONOMY_BACKEND_STATE_COMPLETE") return AutonomyBackendState::Complete;
-    if (s == "AUTONOMY_BACKEND_STATE_FAILED") return AutonomyBackendState::Failed;
-    if (s == "AUTONOMY_BACKEND_STATE_STOPPED") return AutonomyBackendState::Stopped;
-    return AutonomyBackendState::Unspecified;
-}
-
-std::string toString(CommandStatus v) {
-    switch (v) {
-        case CommandStatus::Unspecified: return "COMMAND_STATUS_UNSPECIFIED";
-        case CommandStatus::Pending: return "COMMAND_STATUS_PENDING";
-        case CommandStatus::Running: return "COMMAND_STATUS_RUNNING";
-        case CommandStatus::Succeeded: return "COMMAND_STATUS_SUCCEEDED";
-        case CommandStatus::FailedTransient: return "COMMAND_STATUS_FAILED_TRANSIENT";
-        case CommandStatus::FailedPermanent: return "COMMAND_STATUS_FAILED_PERMANENT";
-        case CommandStatus::Cancelled: return "COMMAND_STATUS_CANCELLED";
-    }
-    return "COMMAND_STATUS_UNSPECIFIED";
-}
-
-CommandStatus commandStatusFromString(const std::string& s) {
-    if (s == "COMMAND_STATUS_UNSPECIFIED") return CommandStatus::Unspecified;
-    if (s == "COMMAND_STATUS_PENDING") return CommandStatus::Pending;
-    if (s == "COMMAND_STATUS_RUNNING") return CommandStatus::Running;
-    if (s == "COMMAND_STATUS_SUCCEEDED") return CommandStatus::Succeeded;
-    if (s == "COMMAND_STATUS_FAILED_TRANSIENT") return CommandStatus::FailedTransient;
-    if (s == "COMMAND_STATUS_FAILED_PERMANENT") return CommandStatus::FailedPermanent;
-    if (s == "COMMAND_STATUS_CANCELLED") return CommandStatus::Cancelled;
-    return CommandStatus::Unspecified;
-}
-
-std::string toString(StopMode v) {
-    switch (v) {
-        case StopMode::Unspecified: return "STOP_MODE_UNSPECIFIED";
-        case StopMode::Drain: return "STOP_MODE_DRAIN";
-        case StopMode::Immediate: return "STOP_MODE_IMMEDIATE";
-    }
-    return "STOP_MODE_UNSPECIFIED";
-}
-
-StopMode stopModeFromString(const std::string& s) {
-    if (s == "STOP_MODE_UNSPECIFIED") return StopMode::Unspecified;
-    if (s == "STOP_MODE_DRAIN") return StopMode::Drain;
-    if (s == "STOP_MODE_IMMEDIATE") return StopMode::Immediate;
-    return StopMode::Unspecified;
-}
-
 std::string toString(FactAuthorityLevel v) {
     switch (v) {
         case FactAuthorityLevel::Unspecified: return "FACT_AUTHORITY_LEVEL_UNSPECIFIED";
@@ -90,88 +26,90 @@ FactAuthorityLevel factAuthorityLevelFromString(const std::string& s) {
     return FactAuthorityLevel::Unspecified;
 }
 
-std::string toJson(const FactUpdate& msg) {
+std::string toString(PlanningExecutionMode v) {
+    switch (v) {
+        case PlanningExecutionMode::Unspecified: return "PLANNING_EXECUTION_MODE_UNSPECIFIED";
+        case PlanningExecutionMode::PlanAndExecute: return "PLANNING_EXECUTION_MODE_PLAN_AND_EXECUTE";
+        case PlanningExecutionMode::PlanOnly: return "PLANNING_EXECUTION_MODE_PLAN_ONLY";
+        case PlanningExecutionMode::ExecuteApprovedPlan: return "PLANNING_EXECUTION_MODE_EXECUTE_APPROVED_PLAN";
+    }
+    return "PLANNING_EXECUTION_MODE_UNSPECIFIED";
+}
+
+PlanningExecutionMode planningExecutionModeFromString(const std::string& s) {
+    if (s == "PLANNING_EXECUTION_MODE_UNSPECIFIED") return PlanningExecutionMode::Unspecified;
+    if (s == "PLANNING_EXECUTION_MODE_PLAN_AND_EXECUTE") return PlanningExecutionMode::PlanAndExecute;
+    if (s == "PLANNING_EXECUTION_MODE_PLAN_ONLY") return PlanningExecutionMode::PlanOnly;
+    if (s == "PLANNING_EXECUTION_MODE_EXECUTE_APPROVED_PLAN") return PlanningExecutionMode::ExecuteApprovedPlan;
+    return PlanningExecutionMode::Unspecified;
+}
+
+std::string toString(PlanningExecutionState v) {
+    switch (v) {
+        case PlanningExecutionState::Unspecified: return "PLANNING_EXECUTION_STATE_UNSPECIFIED";
+        case PlanningExecutionState::Accepted: return "PLANNING_EXECUTION_STATE_ACCEPTED";
+        case PlanningExecutionState::Planning: return "PLANNING_EXECUTION_STATE_PLANNING";
+        case PlanningExecutionState::Executing: return "PLANNING_EXECUTION_STATE_EXECUTING";
+        case PlanningExecutionState::WaitingForComponents: return "PLANNING_EXECUTION_STATE_WAITING_FOR_COMPONENTS";
+        case PlanningExecutionState::Achieved: return "PLANNING_EXECUTION_STATE_ACHIEVED";
+        case PlanningExecutionState::Failed: return "PLANNING_EXECUTION_STATE_FAILED";
+        case PlanningExecutionState::Cancelled: return "PLANNING_EXECUTION_STATE_CANCELLED";
+    }
+    return "PLANNING_EXECUTION_STATE_UNSPECIFIED";
+}
+
+PlanningExecutionState planningExecutionStateFromString(const std::string& s) {
+    if (s == "PLANNING_EXECUTION_STATE_UNSPECIFIED") return PlanningExecutionState::Unspecified;
+    if (s == "PLANNING_EXECUTION_STATE_ACCEPTED") return PlanningExecutionState::Accepted;
+    if (s == "PLANNING_EXECUTION_STATE_PLANNING") return PlanningExecutionState::Planning;
+    if (s == "PLANNING_EXECUTION_STATE_EXECUTING") return PlanningExecutionState::Executing;
+    if (s == "PLANNING_EXECUTION_STATE_WAITING_FOR_COMPONENTS") return PlanningExecutionState::WaitingForComponents;
+    if (s == "PLANNING_EXECUTION_STATE_ACHIEVED") return PlanningExecutionState::Achieved;
+    if (s == "PLANNING_EXECUTION_STATE_FAILED") return PlanningExecutionState::Failed;
+    if (s == "PLANNING_EXECUTION_STATE_CANCELLED") return PlanningExecutionState::Cancelled;
+    return PlanningExecutionState::Unspecified;
+}
+
+std::string toString(RequirementPlacementOperation v) {
+    switch (v) {
+        case RequirementPlacementOperation::Unspecified: return "REQUIREMENT_PLACEMENT_OPERATION_UNSPECIFIED";
+        case RequirementPlacementOperation::CreateRequirement: return "REQUIREMENT_PLACEMENT_OPERATION_CREATE_REQUIREMENT";
+        case RequirementPlacementOperation::ReadRequirement: return "REQUIREMENT_PLACEMENT_OPERATION_READ_REQUIREMENT";
+        case RequirementPlacementOperation::UpdateRequirement: return "REQUIREMENT_PLACEMENT_OPERATION_UPDATE_REQUIREMENT";
+        case RequirementPlacementOperation::DeleteRequirement: return "REQUIREMENT_PLACEMENT_OPERATION_DELETE_REQUIREMENT";
+        case RequirementPlacementOperation::ReadProduct: return "REQUIREMENT_PLACEMENT_OPERATION_READ_PRODUCT";
+        case RequirementPlacementOperation::ReadCapability: return "REQUIREMENT_PLACEMENT_OPERATION_READ_CAPABILITY";
+    }
+    return "REQUIREMENT_PLACEMENT_OPERATION_UNSPECIFIED";
+}
+
+RequirementPlacementOperation requirementPlacementOperationFromString(const std::string& s) {
+    if (s == "REQUIREMENT_PLACEMENT_OPERATION_UNSPECIFIED") return RequirementPlacementOperation::Unspecified;
+    if (s == "REQUIREMENT_PLACEMENT_OPERATION_CREATE_REQUIREMENT") return RequirementPlacementOperation::CreateRequirement;
+    if (s == "REQUIREMENT_PLACEMENT_OPERATION_READ_REQUIREMENT") return RequirementPlacementOperation::ReadRequirement;
+    if (s == "REQUIREMENT_PLACEMENT_OPERATION_UPDATE_REQUIREMENT") return RequirementPlacementOperation::UpdateRequirement;
+    if (s == "REQUIREMENT_PLACEMENT_OPERATION_DELETE_REQUIREMENT") return RequirementPlacementOperation::DeleteRequirement;
+    if (s == "REQUIREMENT_PLACEMENT_OPERATION_READ_PRODUCT") return RequirementPlacementOperation::ReadProduct;
+    if (s == "REQUIREMENT_PLACEMENT_OPERATION_READ_CAPABILITY") return RequirementPlacementOperation::ReadCapability;
+    return RequirementPlacementOperation::Unspecified;
+}
+
+std::string toJson(const RequirementReference& msg) {
     nlohmann::json obj;
-    obj["key"] = msg.key;
-    obj["value"] = msg.value;
-    obj["source"] = msg.source;
-    obj["authority"] = toString(msg.authority);
+    obj["requirement_id"] = msg.requirement_id;
+    obj["component_name"] = msg.component_name;
+    obj["service_name"] = msg.service_name;
+    obj["type_name"] = msg.type_name;
     return obj.dump();
 }
 
-FactUpdate fromJson(const std::string& s, FactUpdate* /*tag*/) {
+RequirementReference fromJson(const std::string& s, RequirementReference* /*tag*/) {
     auto j = nlohmann::json::parse(s);
-    FactUpdate msg;
-    if (j.contains("key")) msg.key = j["key"].get<std::string>();
-    if (j.contains("value")) msg.value = j["value"].get<bool>();
-    if (j.contains("source")) msg.source = j["source"].get<std::string>();
-    if (j.contains("authority")) msg.authority = factAuthorityLevelFromString(j["authority"].get<std::string>());
-    return msg;
-}
-
-std::string toJson(const StateUpdate& msg) {
-    nlohmann::json obj;
-    if (msg.update_time.has_value()) {
-        obj["update_time"] = msg.update_time.value();
-    }
-    obj["id"] = msg.id;
-    obj["source"] = msg.source;
-    {
-        nlohmann::json arr = nlohmann::json::array();
-        for (const auto& v : msg.fact_updates) {
-            arr.push_back(nlohmann::json::parse(toJson(v)));
-        }
-        obj["fact_updates"] = arr;
-    }
-    return obj.dump();
-}
-
-StateUpdate fromJson(const std::string& s, StateUpdate* /*tag*/) {
-    auto j = nlohmann::json::parse(s);
-    StateUpdate msg;
-    if (j.contains("update_time")) {
-        msg.update_time = j["update_time"].get<double>();
-    }
-    if (j.contains("id")) msg.id = j["id"].get<std::string>();
-    if (j.contains("source")) msg.source = j["source"].get<std::string>();
-    if (j.contains("fact_updates")) {
-        for (const auto& v : j["fact_updates"]) {
-            msg.fact_updates.push_back(fromJson(v.dump(), static_cast<FactUpdate*>(nullptr)));
-        }
-    }
-    return msg;
-}
-
-std::string toJson(const MissionIntent& msg) {
-    nlohmann::json obj;
-    if (msg.update_time.has_value()) {
-        obj["update_time"] = msg.update_time.value();
-    }
-    obj["id"] = msg.id;
-    obj["source"] = msg.source;
-    {
-        nlohmann::json arr = nlohmann::json::array();
-        for (const auto& v : msg.goal_fluents) {
-            arr.push_back(v);
-        }
-        obj["goal_fluents"] = arr;
-    }
-    return obj.dump();
-}
-
-MissionIntent fromJson(const std::string& s, MissionIntent* /*tag*/) {
-    auto j = nlohmann::json::parse(s);
-    MissionIntent msg;
-    if (j.contains("update_time")) {
-        msg.update_time = j["update_time"].get<double>();
-    }
-    if (j.contains("id")) msg.id = j["id"].get<std::string>();
-    if (j.contains("source")) msg.source = j["source"].get<std::string>();
-    if (j.contains("goal_fluents")) {
-        for (const auto& v : j["goal_fluents"]) {
-            msg.goal_fluents.push_back(v.get<std::string>());
-        }
-    }
+    RequirementReference msg;
+    if (j.contains("requirement_id")) msg.requirement_id = j["requirement_id"].get<std::string>();
+    if (j.contains("component_name")) msg.component_name = j["component_name"].get<std::string>();
+    if (j.contains("service_name")) msg.service_name = j["service_name"].get<std::string>();
+    if (j.contains("type_name")) msg.type_name = j["type_name"].get<std::string>();
     return msg;
 }
 
@@ -192,29 +130,76 @@ AgentState fromJson(const std::string& s, AgentState* /*tag*/) {
     return msg;
 }
 
-std::string toJson(const PolicyEnvelope& msg) {
+std::string toJson(const PlanningPolicy& msg) {
     nlohmann::json obj;
     obj["max_replans"] = msg.max_replans;
-    obj["enable_goal_dispatch"] = msg.enable_goal_dispatch;
+    obj["enable_replanning"] = msg.enable_replanning;
+    obj["max_concurrent_placements"] = msg.max_concurrent_placements;
     return obj.dump();
 }
 
-PolicyEnvelope fromJson(const std::string& s, PolicyEnvelope* /*tag*/) {
+PlanningPolicy fromJson(const std::string& s, PlanningPolicy* /*tag*/) {
     auto j = nlohmann::json::parse(s);
-    PolicyEnvelope msg;
+    PlanningPolicy msg;
     if (j.contains("max_replans")) msg.max_replans = j["max_replans"].get<uint32_t>();
-    if (j.contains("enable_goal_dispatch")) msg.enable_goal_dispatch = j["enable_goal_dispatch"].get<bool>();
+    if (j.contains("enable_replanning")) msg.enable_replanning = j["enable_replanning"].get<bool>();
+    if (j.contains("max_concurrent_placements")) msg.max_concurrent_placements = j["max_concurrent_placements"].get<uint32_t>();
     return msg;
 }
 
-std::string toJson(const Session& msg) {
+std::string toJson(const PlanningGoal& msg) {
     nlohmann::json obj;
     if (msg.update_time.has_value()) {
         obj["update_time"] = msg.update_time.value();
     }
     obj["id"] = msg.id;
     obj["source"] = msg.source;
-    obj["intent"] = nlohmann::json::parse(toJson(msg.intent));
+    obj["name"] = msg.name;
+    if (msg.requirement.has_value()) {
+        obj["requirement"] = nlohmann::json::parse(toJson(msg.requirement.value()));
+    }
+    if (msg.expression.has_value()) {
+        obj["expression"] = msg.expression.value();
+    }
+    return obj.dump();
+}
+
+PlanningGoal fromJson(const std::string& s, PlanningGoal* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    PlanningGoal msg;
+    if (j.contains("update_time")) {
+        msg.update_time = j["update_time"].get<double>();
+    }
+    if (j.contains("id")) msg.id = j["id"].get<std::string>();
+    if (j.contains("source")) msg.source = j["source"].get<std::string>();
+    if (j.contains("name")) msg.name = j["name"].get<std::string>();
+    if (j.contains("requirement")) {
+        msg.requirement = fromJson(j["requirement"].dump(), static_cast<RequirementReference*>(nullptr));
+    }
+    if (j.contains("expression")) {
+        msg.expression = j["expression"].get<std::string>();
+    }
+    return msg;
+}
+
+std::string toJson(const PlanningExecutionRequirement& msg) {
+    nlohmann::json obj;
+    obj["base"] = nlohmann::json::parse(toJson(msg.base));
+    obj["status"] = nlohmann::json::parse(toJson(msg.status));
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.upstream_requirement) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["upstream_requirement"] = arr;
+    }
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.goal) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["goal"] = arr;
+    }
     obj["policy"] = nlohmann::json::parse(toJson(msg.policy));
     {
         nlohmann::json arr = nlohmann::json::array();
@@ -223,22 +208,94 @@ std::string toJson(const Session& msg) {
         }
         obj["available_agents"] = arr;
     }
+    obj["mode"] = toString(msg.mode);
+    obj["approved_plan_id"] = msg.approved_plan_id;
     return obj.dump();
 }
 
-Session fromJson(const std::string& s, Session* /*tag*/) {
+PlanningExecutionRequirement fromJson(const std::string& s, PlanningExecutionRequirement* /*tag*/) {
     auto j = nlohmann::json::parse(s);
-    Session msg;
+    PlanningExecutionRequirement msg;
+    if (j.contains("base")) msg.base = fromJson(j["base"].dump(), static_cast<pyramid::data_model::common::Entity*>(nullptr));
+    if (j.contains("status")) msg.status = fromJson(j["status"].dump(), static_cast<pyramid::data_model::common::Achievement*>(nullptr));
+    if (j.contains("upstream_requirement")) {
+        for (const auto& v : j["upstream_requirement"]) {
+            msg.upstream_requirement.push_back(fromJson(v.dump(), static_cast<RequirementReference*>(nullptr)));
+        }
+    }
+    if (j.contains("goal")) {
+        for (const auto& v : j["goal"]) {
+            msg.goal.push_back(fromJson(v.dump(), static_cast<PlanningGoal*>(nullptr)));
+        }
+    }
+    if (j.contains("policy")) msg.policy = fromJson(j["policy"].dump(), static_cast<PlanningPolicy*>(nullptr));
+    if (j.contains("available_agents")) {
+        for (const auto& v : j["available_agents"]) {
+            msg.available_agents.push_back(fromJson(v.dump(), static_cast<AgentState*>(nullptr)));
+        }
+    }
+    if (j.contains("mode")) msg.mode = planningExecutionModeFromString(j["mode"].get<std::string>());
+    if (j.contains("approved_plan_id")) msg.approved_plan_id = j["approved_plan_id"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const WorldFactUpdate& msg) {
+    nlohmann::json obj;
+    if (msg.update_time.has_value()) {
+        obj["update_time"] = msg.update_time.value();
+    }
+    obj["id"] = msg.id;
+    obj["entity_source"] = msg.entity_source;
+    obj["key"] = msg.key;
+    obj["value"] = msg.value;
+    obj["source"] = msg.source;
+    obj["authority"] = toString(msg.authority);
+    return obj.dump();
+}
+
+WorldFactUpdate fromJson(const std::string& s, WorldFactUpdate* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    WorldFactUpdate msg;
+    if (j.contains("update_time")) {
+        msg.update_time = j["update_time"].get<double>();
+    }
+    if (j.contains("id")) msg.id = j["id"].get<std::string>();
+    if (j.contains("entity_source")) msg.entity_source = j["entity_source"].get<std::string>();
+    if (j.contains("key")) msg.key = j["key"].get<std::string>();
+    if (j.contains("value")) msg.value = j["value"].get<bool>();
+    if (j.contains("source")) msg.source = j["source"].get<std::string>();
+    if (j.contains("authority")) msg.authority = factAuthorityLevelFromString(j["authority"].get<std::string>());
+    return msg;
+}
+
+std::string toJson(const StateUpdate& msg) {
+    nlohmann::json obj;
+    if (msg.update_time.has_value()) {
+        obj["update_time"] = msg.update_time.value();
+    }
+    obj["id"] = msg.id;
+    obj["source"] = msg.source;
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.fact_update) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["fact_update"] = arr;
+    }
+    return obj.dump();
+}
+
+StateUpdate fromJson(const std::string& s, StateUpdate* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    StateUpdate msg;
     if (j.contains("update_time")) {
         msg.update_time = j["update_time"].get<double>();
     }
     if (j.contains("id")) msg.id = j["id"].get<std::string>();
     if (j.contains("source")) msg.source = j["source"].get<std::string>();
-    if (j.contains("intent")) msg.intent = fromJson(j["intent"].dump(), static_cast<MissionIntent*>(nullptr));
-    if (j.contains("policy")) msg.policy = fromJson(j["policy"].dump(), static_cast<PolicyEnvelope*>(nullptr));
-    if (j.contains("available_agents")) {
-        for (const auto& v : j["available_agents"]) {
-            msg.available_agents.push_back(fromJson(v.dump(), static_cast<AgentState*>(nullptr)));
+    if (j.contains("fact_update")) {
+        for (const auto& v : j["fact_update"]) {
+            msg.fact_update.push_back(fromJson(v.dump(), static_cast<WorldFactUpdate*>(nullptr)));
         }
     }
     return msg;
@@ -252,9 +309,12 @@ std::string toJson(const Capabilities& msg) {
     obj["id"] = msg.id;
     obj["source"] = msg.source;
     obj["backend_id"] = msg.backend_id;
-    obj["supports_batch_planning"] = msg.supports_batch_planning;
-    obj["supports_external_command_dispatch"] = msg.supports_external_command_dispatch;
+    obj["supports_plan_only"] = msg.supports_plan_only;
+    obj["supports_plan_and_execute"] = msg.supports_plan_and_execute;
+    obj["supports_execute_approved_plan"] = msg.supports_execute_approved_plan;
     obj["supports_replanning"] = msg.supports_replanning;
+    obj["supports_typed_component_requirement_placement"] = msg.supports_typed_component_requirement_placement;
+    obj["supports_state_update_ingress"] = msg.supports_state_update_ingress;
     return obj.dump();
 }
 
@@ -267,115 +327,81 @@ Capabilities fromJson(const std::string& s, Capabilities* /*tag*/) {
     if (j.contains("id")) msg.id = j["id"].get<std::string>();
     if (j.contains("source")) msg.source = j["source"].get<std::string>();
     if (j.contains("backend_id")) msg.backend_id = j["backend_id"].get<std::string>();
-    if (j.contains("supports_batch_planning")) msg.supports_batch_planning = j["supports_batch_planning"].get<bool>();
-    if (j.contains("supports_external_command_dispatch")) msg.supports_external_command_dispatch = j["supports_external_command_dispatch"].get<bool>();
+    if (j.contains("supports_plan_only")) msg.supports_plan_only = j["supports_plan_only"].get<bool>();
+    if (j.contains("supports_plan_and_execute")) msg.supports_plan_and_execute = j["supports_plan_and_execute"].get<bool>();
+    if (j.contains("supports_execute_approved_plan")) msg.supports_execute_approved_plan = j["supports_execute_approved_plan"].get<bool>();
     if (j.contains("supports_replanning")) msg.supports_replanning = j["supports_replanning"].get<bool>();
+    if (j.contains("supports_typed_component_requirement_placement")) msg.supports_typed_component_requirement_placement = j["supports_typed_component_requirement_placement"].get<bool>();
+    if (j.contains("supports_state_update_ingress")) msg.supports_state_update_ingress = j["supports_state_update_ingress"].get<bool>();
     return msg;
 }
 
-std::string toJson(const StringKeyValue& msg) {
+std::string toJson(const PlannedComponentInteraction& msg) {
     nlohmann::json obj;
-    obj["key"] = msg.key;
-    obj["value"] = msg.value;
+    obj["target_component"] = msg.target_component;
+    obj["target_service"] = msg.target_service;
+    obj["target_type"] = msg.target_type;
+    obj["operation"] = toString(msg.operation);
     return obj.dump();
 }
 
-StringKeyValue fromJson(const std::string& s, StringKeyValue* /*tag*/) {
+PlannedComponentInteraction fromJson(const std::string& s, PlannedComponentInteraction* /*tag*/) {
     auto j = nlohmann::json::parse(s);
-    StringKeyValue msg;
-    if (j.contains("key")) msg.key = j["key"].get<std::string>();
-    if (j.contains("value")) msg.value = j["value"].get<std::string>();
+    PlannedComponentInteraction msg;
+    if (j.contains("target_component")) msg.target_component = j["target_component"].get<std::string>();
+    if (j.contains("target_service")) msg.target_service = j["target_service"].get<std::string>();
+    if (j.contains("target_type")) msg.target_type = j["target_type"].get<std::string>();
+    if (j.contains("operation")) msg.operation = requirementPlacementOperationFromString(j["operation"].get<std::string>());
     return msg;
 }
 
-std::string toJson(const Command& msg) {
+std::string toJson(const PlanStep& msg) {
     nlohmann::json obj;
     if (msg.update_time.has_value()) {
         obj["update_time"] = msg.update_time.value();
     }
     obj["id"] = msg.id;
     obj["source"] = msg.source;
-    obj["command_id"] = msg.command_id;
+    obj["sequence_number"] = msg.sequence_number;
     obj["action_name"] = msg.action_name;
     obj["signature"] = msg.signature;
-    obj["service_name"] = msg.service_name;
-    obj["operation"] = msg.operation;
     {
         nlohmann::json arr = nlohmann::json::array();
-        for (const auto& v : msg.request_fields) {
+        for (const auto& v : msg.interaction) {
             arr.push_back(nlohmann::json::parse(toJson(v)));
         }
-        obj["request_fields"] = arr;
+        obj["interaction"] = arr;
     }
     return obj.dump();
 }
 
-Command fromJson(const std::string& s, Command* /*tag*/) {
+PlanStep fromJson(const std::string& s, PlanStep* /*tag*/) {
     auto j = nlohmann::json::parse(s);
-    Command msg;
+    PlanStep msg;
     if (j.contains("update_time")) {
         msg.update_time = j["update_time"].get<double>();
     }
     if (j.contains("id")) msg.id = j["id"].get<std::string>();
     if (j.contains("source")) msg.source = j["source"].get<std::string>();
-    if (j.contains("command_id")) msg.command_id = j["command_id"].get<std::string>();
+    if (j.contains("sequence_number")) msg.sequence_number = j["sequence_number"].get<uint32_t>();
     if (j.contains("action_name")) msg.action_name = j["action_name"].get<std::string>();
     if (j.contains("signature")) msg.signature = j["signature"].get<std::string>();
-    if (j.contains("service_name")) msg.service_name = j["service_name"].get<std::string>();
-    if (j.contains("operation")) msg.operation = j["operation"].get<std::string>();
-    if (j.contains("request_fields")) {
-        for (const auto& v : j["request_fields"]) {
-            msg.request_fields.push_back(fromJson(v.dump(), static_cast<StringKeyValue*>(nullptr)));
+    if (j.contains("interaction")) {
+        for (const auto& v : j["interaction"]) {
+            msg.interaction.push_back(fromJson(v.dump(), static_cast<PlannedComponentInteraction*>(nullptr)));
         }
     }
     return msg;
 }
 
-std::string toJson(const GoalDispatch& msg) {
+std::string toJson(const Plan& msg) {
     nlohmann::json obj;
     if (msg.update_time.has_value()) {
         obj["update_time"] = msg.update_time.value();
     }
     obj["id"] = msg.id;
     obj["source"] = msg.source;
-    obj["dispatch_id"] = msg.dispatch_id;
-    obj["agent_id"] = msg.agent_id;
-    {
-        nlohmann::json arr = nlohmann::json::array();
-        for (const auto& v : msg.goals) {
-            arr.push_back(v);
-        }
-        obj["goals"] = arr;
-    }
-    return obj.dump();
-}
-
-GoalDispatch fromJson(const std::string& s, GoalDispatch* /*tag*/) {
-    auto j = nlohmann::json::parse(s);
-    GoalDispatch msg;
-    if (j.contains("update_time")) {
-        msg.update_time = j["update_time"].get<double>();
-    }
-    if (j.contains("id")) msg.id = j["id"].get<std::string>();
-    if (j.contains("source")) msg.source = j["source"].get<std::string>();
-    if (j.contains("dispatch_id")) msg.dispatch_id = j["dispatch_id"].get<std::string>();
-    if (j.contains("agent_id")) msg.agent_id = j["agent_id"].get<std::string>();
-    if (j.contains("goals")) {
-        for (const auto& v : j["goals"]) {
-            msg.goals.push_back(v.get<std::string>());
-        }
-    }
-    return msg;
-}
-
-std::string toJson(const DecisionRecord& msg) {
-    nlohmann::json obj;
-    if (msg.update_time.has_value()) {
-        obj["update_time"] = msg.update_time.value();
-    }
-    obj["id"] = msg.id;
-    obj["source"] = msg.source;
-    obj["session_id"] = msg.session_id;
+    obj["planning_execution_requirement_id"] = msg.planning_execution_requirement_id;
     obj["backend_id"] = msg.backend_id;
     obj["world_version"] = msg.world_version;
     obj["replan_count"] = msg.replan_count;
@@ -383,218 +409,135 @@ std::string toJson(const DecisionRecord& msg) {
     obj["solve_time_ms"] = msg.solve_time_ms;
     {
         nlohmann::json arr = nlohmann::json::array();
-        for (const auto& v : msg.planned_action_signatures) {
-            arr.push_back(v);
+        for (const auto& v : msg.step) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
         }
-        obj["planned_action_signatures"] = arr;
+        obj["step"] = arr;
     }
     obj["compiled_bt_xml"] = msg.compiled_bt_xml;
+    if (msg.predicted_quality.has_value()) {
+        obj["predicted_quality"] = msg.predicted_quality.value();
+    }
     return obj.dump();
 }
 
-DecisionRecord fromJson(const std::string& s, DecisionRecord* /*tag*/) {
+Plan fromJson(const std::string& s, Plan* /*tag*/) {
     auto j = nlohmann::json::parse(s);
-    DecisionRecord msg;
+    Plan msg;
     if (j.contains("update_time")) {
         msg.update_time = j["update_time"].get<double>();
     }
     if (j.contains("id")) msg.id = j["id"].get<std::string>();
     if (j.contains("source")) msg.source = j["source"].get<std::string>();
-    if (j.contains("session_id")) msg.session_id = j["session_id"].get<std::string>();
+    if (j.contains("planning_execution_requirement_id")) msg.planning_execution_requirement_id = j["planning_execution_requirement_id"].get<std::string>();
     if (j.contains("backend_id")) msg.backend_id = j["backend_id"].get<std::string>();
     if (j.contains("world_version")) msg.world_version = j["world_version"].get<uint64_t>();
     if (j.contains("replan_count")) msg.replan_count = j["replan_count"].get<uint32_t>();
     if (j.contains("plan_success")) msg.plan_success = j["plan_success"].get<bool>();
     if (j.contains("solve_time_ms")) msg.solve_time_ms = j["solve_time_ms"].get<double>();
-    if (j.contains("planned_action_signatures")) {
-        for (const auto& v : j["planned_action_signatures"]) {
-            msg.planned_action_signatures.push_back(v.get<std::string>());
+    if (j.contains("step")) {
+        for (const auto& v : j["step"]) {
+            msg.step.push_back(fromJson(v.dump(), static_cast<PlanStep*>(nullptr)));
         }
     }
     if (j.contains("compiled_bt_xml")) msg.compiled_bt_xml = j["compiled_bt_xml"].get<std::string>();
+    if (j.contains("predicted_quality")) {
+        msg.predicted_quality = j["predicted_quality"].get<double>();
+    }
     return msg;
 }
 
-std::string toJson(const CommandResult& msg) {
+std::string toJson(const RequirementPlacement& msg) {
     nlohmann::json obj;
     if (msg.update_time.has_value()) {
         obj["update_time"] = msg.update_time.value();
     }
     obj["id"] = msg.id;
-    obj["entity_source"] = msg.entity_source;
-    obj["command_id"] = msg.command_id;
-    obj["status"] = toString(msg.status);
+    obj["source"] = msg.source;
+    obj["planning_execution_requirement_id"] = msg.planning_execution_requirement_id;
+    obj["plan_id"] = msg.plan_id;
+    obj["plan_step_id"] = msg.plan_step_id;
+    obj["target_component"] = msg.target_component;
+    obj["target_service"] = msg.target_service;
+    obj["target_type"] = msg.target_type;
+    obj["operation"] = toString(msg.operation);
+    obj["target_requirement_id"] = msg.target_requirement_id;
     {
         nlohmann::json arr = nlohmann::json::array();
-        for (const auto& v : msg.observed_updates) {
-            arr.push_back(nlohmann::json::parse(toJson(v)));
+        for (const auto& v : msg.related_entity_id) {
+            arr.push_back(v);
         }
-        obj["observed_updates"] = arr;
+        obj["related_entity_id"] = arr;
     }
-    obj["source"] = msg.source;
+    obj["progress"] = toString(msg.progress);
     return obj.dump();
 }
 
-CommandResult fromJson(const std::string& s, CommandResult* /*tag*/) {
+RequirementPlacement fromJson(const std::string& s, RequirementPlacement* /*tag*/) {
     auto j = nlohmann::json::parse(s);
-    CommandResult msg;
+    RequirementPlacement msg;
     if (j.contains("update_time")) {
         msg.update_time = j["update_time"].get<double>();
     }
     if (j.contains("id")) msg.id = j["id"].get<std::string>();
-    if (j.contains("entity_source")) msg.entity_source = j["entity_source"].get<std::string>();
-    if (j.contains("command_id")) msg.command_id = j["command_id"].get<std::string>();
-    if (j.contains("status")) msg.status = commandStatusFromString(j["status"].get<std::string>());
-    if (j.contains("observed_updates")) {
-        for (const auto& v : j["observed_updates"]) {
-            msg.observed_updates.push_back(fromJson(v.dump(), static_cast<FactUpdate*>(nullptr)));
+    if (j.contains("source")) msg.source = j["source"].get<std::string>();
+    if (j.contains("planning_execution_requirement_id")) msg.planning_execution_requirement_id = j["planning_execution_requirement_id"].get<std::string>();
+    if (j.contains("plan_id")) msg.plan_id = j["plan_id"].get<std::string>();
+    if (j.contains("plan_step_id")) msg.plan_step_id = j["plan_step_id"].get<std::string>();
+    if (j.contains("target_component")) msg.target_component = j["target_component"].get<std::string>();
+    if (j.contains("target_service")) msg.target_service = j["target_service"].get<std::string>();
+    if (j.contains("target_type")) msg.target_type = j["target_type"].get<std::string>();
+    if (j.contains("operation")) msg.operation = requirementPlacementOperationFromString(j["operation"].get<std::string>());
+    if (j.contains("target_requirement_id")) msg.target_requirement_id = j["target_requirement_id"].get<std::string>();
+    if (j.contains("related_entity_id")) {
+        for (const auto& v : j["related_entity_id"]) {
+            msg.related_entity_id.push_back(v.get<std::string>());
         }
     }
-    if (j.contains("source")) msg.source = j["source"].get<std::string>();
+    if (j.contains("progress")) msg.progress = pyramid::data_model::common::progressFromString(j["progress"].get<std::string>());
     return msg;
 }
 
-std::string toJson(const DispatchResult& msg) {
-    nlohmann::json obj;
-    if (msg.update_time.has_value()) {
-        obj["update_time"] = msg.update_time.value();
-    }
-    obj["id"] = msg.id;
-    obj["entity_source"] = msg.entity_source;
-    obj["dispatch_id"] = msg.dispatch_id;
-    obj["status"] = toString(msg.status);
-    {
-        nlohmann::json arr = nlohmann::json::array();
-        for (const auto& v : msg.observed_updates) {
-            arr.push_back(nlohmann::json::parse(toJson(v)));
-        }
-        obj["observed_updates"] = arr;
-    }
-    obj["source"] = msg.source;
-    return obj.dump();
-}
-
-DispatchResult fromJson(const std::string& s, DispatchResult* /*tag*/) {
-    auto j = nlohmann::json::parse(s);
-    DispatchResult msg;
-    if (j.contains("update_time")) {
-        msg.update_time = j["update_time"].get<double>();
-    }
-    if (j.contains("id")) msg.id = j["id"].get<std::string>();
-    if (j.contains("entity_source")) msg.entity_source = j["entity_source"].get<std::string>();
-    if (j.contains("dispatch_id")) msg.dispatch_id = j["dispatch_id"].get<std::string>();
-    if (j.contains("status")) msg.status = commandStatusFromString(j["status"].get<std::string>());
-    if (j.contains("observed_updates")) {
-        for (const auto& v : j["observed_updates"]) {
-            msg.observed_updates.push_back(fromJson(v.dump(), static_cast<FactUpdate*>(nullptr)));
-        }
-    }
-    if (j.contains("source")) msg.source = j["source"].get<std::string>();
-    return msg;
-}
-
-std::string toJson(const SessionSnapshot& msg) {
+std::string toJson(const ExecutionRun& msg) {
     nlohmann::json obj;
     if (msg.update_time.has_value()) {
         obj["update_time"] = msg.update_time.value();
     }
     obj["id"] = msg.id;
     obj["source"] = msg.source;
-    obj["session_id"] = msg.session_id;
+    obj["planning_execution_requirement_id"] = msg.planning_execution_requirement_id;
+    obj["plan_id"] = msg.plan_id;
     obj["state"] = toString(msg.state);
-    obj["world_version"] = msg.world_version;
+    obj["achievement"] = nlohmann::json::parse(toJson(msg.achievement));
     obj["replan_count"] = msg.replan_count;
     {
         nlohmann::json arr = nlohmann::json::array();
-        for (const auto& v : msg.agent_states) {
+        for (const auto& v : msg.outstanding_placement) {
             arr.push_back(nlohmann::json::parse(toJson(v)));
         }
-        obj["agent_states"] = arr;
-    }
-    {
-        nlohmann::json arr = nlohmann::json::array();
-        for (const auto& v : msg.outstanding_commands) {
-            arr.push_back(nlohmann::json::parse(toJson(v)));
-        }
-        obj["outstanding_commands"] = arr;
-    }
-    {
-        nlohmann::json arr = nlohmann::json::array();
-        for (const auto& v : msg.outstanding_goal_dispatches) {
-            arr.push_back(nlohmann::json::parse(toJson(v)));
-        }
-        obj["outstanding_goal_dispatches"] = arr;
-    }
-    {
-        nlohmann::json arr = nlohmann::json::array();
-        for (const auto& v : msg.decision_history) {
-            arr.push_back(nlohmann::json::parse(toJson(v)));
-        }
-        obj["decision_history"] = arr;
+        obj["outstanding_placement"] = arr;
     }
     return obj.dump();
 }
 
-SessionSnapshot fromJson(const std::string& s, SessionSnapshot* /*tag*/) {
+ExecutionRun fromJson(const std::string& s, ExecutionRun* /*tag*/) {
     auto j = nlohmann::json::parse(s);
-    SessionSnapshot msg;
+    ExecutionRun msg;
     if (j.contains("update_time")) {
         msg.update_time = j["update_time"].get<double>();
     }
     if (j.contains("id")) msg.id = j["id"].get<std::string>();
     if (j.contains("source")) msg.source = j["source"].get<std::string>();
-    if (j.contains("session_id")) msg.session_id = j["session_id"].get<std::string>();
-    if (j.contains("state")) msg.state = autonomyBackendStateFromString(j["state"].get<std::string>());
-    if (j.contains("world_version")) msg.world_version = j["world_version"].get<uint64_t>();
+    if (j.contains("planning_execution_requirement_id")) msg.planning_execution_requirement_id = j["planning_execution_requirement_id"].get<std::string>();
+    if (j.contains("plan_id")) msg.plan_id = j["plan_id"].get<std::string>();
+    if (j.contains("state")) msg.state = planningExecutionStateFromString(j["state"].get<std::string>());
+    if (j.contains("achievement")) msg.achievement = fromJson(j["achievement"].dump(), static_cast<pyramid::data_model::common::Achievement*>(nullptr));
     if (j.contains("replan_count")) msg.replan_count = j["replan_count"].get<uint32_t>();
-    if (j.contains("agent_states")) {
-        for (const auto& v : j["agent_states"]) {
-            msg.agent_states.push_back(fromJson(v.dump(), static_cast<AgentState*>(nullptr)));
+    if (j.contains("outstanding_placement")) {
+        for (const auto& v : j["outstanding_placement"]) {
+            msg.outstanding_placement.push_back(fromJson(v.dump(), static_cast<RequirementPlacement*>(nullptr)));
         }
     }
-    if (j.contains("outstanding_commands")) {
-        for (const auto& v : j["outstanding_commands"]) {
-            msg.outstanding_commands.push_back(fromJson(v.dump(), static_cast<Command*>(nullptr)));
-        }
-    }
-    if (j.contains("outstanding_goal_dispatches")) {
-        for (const auto& v : j["outstanding_goal_dispatches"]) {
-            msg.outstanding_goal_dispatches.push_back(fromJson(v.dump(), static_cast<GoalDispatch*>(nullptr)));
-        }
-    }
-    if (j.contains("decision_history")) {
-        for (const auto& v : j["decision_history"]) {
-            msg.decision_history.push_back(fromJson(v.dump(), static_cast<DecisionRecord*>(nullptr)));
-        }
-    }
-    return msg;
-}
-
-std::string toJson(const SessionStepRequest& msg) {
-    nlohmann::json obj;
-    obj["session_id"] = msg.session_id;
-    return obj.dump();
-}
-
-SessionStepRequest fromJson(const std::string& s, SessionStepRequest* /*tag*/) {
-    auto j = nlohmann::json::parse(s);
-    SessionStepRequest msg;
-    if (j.contains("session_id")) msg.session_id = j["session_id"].get<std::string>();
-    return msg;
-}
-
-std::string toJson(const SessionStopRequest& msg) {
-    nlohmann::json obj;
-    obj["session_id"] = msg.session_id;
-    obj["mode"] = toString(msg.mode);
-    return obj.dump();
-}
-
-SessionStopRequest fromJson(const std::string& s, SessionStopRequest* /*tag*/) {
-    auto j = nlohmann::json::parse(s);
-    SessionStopRequest msg;
-    if (j.contains("session_id")) msg.session_id = j["session_id"].get<std::string>();
-    if (j.contains("mode")) msg.mode = stopModeFromString(j["mode"].get<std::string>());
     return msg;
 }
 
