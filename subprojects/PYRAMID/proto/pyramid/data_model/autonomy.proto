@@ -6,208 +6,211 @@ import "pyramid/data_model/base.proto";
 import "pyramid/data_model/common.proto";
 
 // =============================================================================
-// Autonomy Backend Data Model
+// AME Autonomy Data Model
 // =============================================================================
-// This proto file defines messages and enums for the unified autonomy backend
-// surface, structured to follow PYRAMID EntityActions CRUD conventions.
+// This proto defines the target PYRAMID-facing AME surface.
 //
-// Source of truth: subprojects/AME/include/ame/autonomy_backend.h
-//
-// NOTE: This proto uses full EntityActions semantics. The current AME backend
-// implementation uses a session-based push/pull model. See ALIGNMENT.md for
-// required backend changes to support this CRUD interface.
+// Objectives and Tasks own their domain semantics. They delegate planning and
+// optional execution to AME by placing PlanningExecutionRequirement entities.
+// AME then exposes plans, execution runs, and typed component requirement
+// placements as read-only products.
 // =============================================================================
 
 // -----------------------------------------------------------------------------
 // Enums
 // -----------------------------------------------------------------------------
 
-// Lifecycle state of a whole-system autonomy backend session.
-enum AutonomyBackendState {
-  AUTONOMY_BACKEND_STATE_UNSPECIFIED = 0;
-  AUTONOMY_BACKEND_STATE_IDLE = 1;
-  AUTONOMY_BACKEND_STATE_READY = 2;
-  AUTONOMY_BACKEND_STATE_WAITING_FOR_RESULTS = 3;
-  AUTONOMY_BACKEND_STATE_COMPLETE = 4;
-  AUTONOMY_BACKEND_STATE_FAILED = 5;
-  AUTONOMY_BACKEND_STATE_STOPPED = 6;
-}
-
-// Reported outcome status for an externally dispatched command.
-enum CommandStatus {
-  COMMAND_STATUS_UNSPECIFIED = 0;
-  COMMAND_STATUS_PENDING = 1;
-  COMMAND_STATUS_RUNNING = 2;
-  COMMAND_STATUS_SUCCEEDED = 3;
-  COMMAND_STATUS_FAILED_TRANSIENT = 4;
-  COMMAND_STATUS_FAILED_PERMANENT = 5;
-  COMMAND_STATUS_CANCELLED = 6;
-}
-
-// Requested stop mode for an autonomy backend session.
-enum StopMode {
-  STOP_MODE_UNSPECIFIED = 0;
-  STOP_MODE_DRAIN = 1;
-  STOP_MODE_IMMEDIATE = 2;
-}
-
-// Backend-neutral authority tag for a fact update crossing the shell boundary.
+// Backend-neutral authority tag for a world fact update crossing the AME
+// boundary.
 enum FactAuthorityLevel {
   FACT_AUTHORITY_LEVEL_UNSPECIFIED = 0;
   FACT_AUTHORITY_LEVEL_BELIEVED = 1;
   FACT_AUTHORITY_LEVEL_CONFIRMED = 2;
 }
 
-// -----------------------------------------------------------------------------
-// Core Entity Messages
-// -----------------------------------------------------------------------------
-// Following PYRAMID EntityActions conventions, entity messages include an
-// Entity base for CRUD addressability (id, source, update_time).
-// -----------------------------------------------------------------------------
-
-// Single fact update applied through the backend ingress surface.
-message FactUpdate {
-  string key = 1;
-  bool value = 2;
-  string source = 3;
-  FactAuthorityLevel authority = 4;
+// Requested operating mode for an AME planning/execution requirement.
+enum PlanningExecutionMode {
+  PLANNING_EXECUTION_MODE_UNSPECIFIED = 0;
+  PLANNING_EXECUTION_MODE_PLAN_AND_EXECUTE = 1;
+  PLANNING_EXECUTION_MODE_PLAN_ONLY = 2;
+  PLANNING_EXECUTION_MODE_EXECUTE_APPROVED_PLAN = 3;
 }
 
-// State ingress payload for authoritative world updates.
-// EntityActions: in (Create/Update/Delete)
-message StateUpdate {
-  pyramid.data_model.common.Entity base = 1;  // For CRUD addressability
-  repeated FactUpdate fact_updates = 2;
+// Lifecycle state of a delegated AME planning/execution requirement.
+enum PlanningExecutionState {
+  PLANNING_EXECUTION_STATE_UNSPECIFIED = 0;
+  PLANNING_EXECUTION_STATE_ACCEPTED = 1;
+  PLANNING_EXECUTION_STATE_PLANNING = 2;
+  PLANNING_EXECUTION_STATE_EXECUTING = 3;
+  PLANNING_EXECUTION_STATE_WAITING_FOR_COMPONENTS = 4;
+  PLANNING_EXECUTION_STATE_ACHIEVED = 5;
+  PLANNING_EXECUTION_STATE_FAILED = 6;
+  PLANNING_EXECUTION_STATE_CANCELLED = 7;
 }
 
-// Mission intent passed to the backend shell.
-// EntityActions: in (Create/Update/Delete)
-message MissionIntent {
-  pyramid.data_model.common.Entity base = 1;  // For CRUD addressability
-  repeated string goal_fluents = 2;
+// EntityActions-style operation AME performs against another component.
+enum RequirementPlacementOperation {
+  REQUIREMENT_PLACEMENT_OPERATION_UNSPECIFIED = 0;
+  REQUIREMENT_PLACEMENT_OPERATION_CREATE_REQUIREMENT = 1;
+  REQUIREMENT_PLACEMENT_OPERATION_READ_REQUIREMENT = 2;
+  REQUIREMENT_PLACEMENT_OPERATION_UPDATE_REQUIREMENT = 3;
+  REQUIREMENT_PLACEMENT_OPERATION_DELETE_REQUIREMENT = 4;
+  REQUIREMENT_PLACEMENT_OPERATION_READ_PRODUCT = 5;
+  REQUIREMENT_PLACEMENT_OPERATION_READ_CAPABILITY = 6;
 }
 
-// Backend-neutral view of an agent/resource that can accept delegated work.
+// -----------------------------------------------------------------------------
+// Requirement Delegation Inputs
+// -----------------------------------------------------------------------------
+
+// Reference to a requirement/entity owned by another PYRAMID component.
+// This preserves traceability without making AME own Objective or Task schemas.
+message RequirementReference {
+  pyramid.data_model.base.Identifier requirement_id = 1;
+  string component_name = 2;
+  string service_name = 3;
+  string type_name = 4;
+}
+
+// Backend-neutral view of an agent/resource AME may use during planning and
+// execution.
 message AgentState {
   string agent_id = 1;
   string agent_type = 2;
   bool available = 3;
 }
 
-// Policy knobs exposed at the whole-system wrapper boundary.
-message PolicyEnvelope {
+// Policy knobs for a delegated AME planning/execution requirement.
+message PlanningPolicy {
   uint32 max_replans = 1;
-  bool enable_goal_dispatch = 2;
+  bool enable_replanning = 2;
+  uint32 max_concurrent_placements = 3;
 }
 
-// Session bootstrap parameters for a backend run.
-// EntityActions: inout (full CRUD)
-message Session {
+// Single goal accepted by AME.
+message PlanningGoal {
   pyramid.data_model.common.Entity base = 1;  // For CRUD addressability
-  MissionIntent intent = 2;
-  PolicyEnvelope policy = 3;
-  repeated AgentState available_agents = 4;
+  string name = 2;
+  oneof goal {
+    // Preferred form when the goal is delegated from Objective/Task/component
+    // requirements.
+    RequirementReference requirement = 3;
+
+    // AME-domain expression for planner-specific adapters, such as PDDL
+    // fluents. This is still contained inside the AME contract rather than
+    // exposed as a generic command surface.
+    string expression = 4;
+  }
 }
 
-// Declared top-level capabilities of an autonomy backend.
+// Requirement placed on AME by Objectives, Tasks, or another coordinator when
+// they need AME to plan and optionally execute a response.
+// EntityActions: inout (full CRUD)
+message PlanningExecutionRequirement {
+  pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
+  repeated RequirementReference upstream_requirement = 2;
+  repeated PlanningGoal goal = 3;
+  PlanningPolicy policy = 4;
+  repeated AgentState available_agents = 5;
+  PlanningExecutionMode mode = 6;
+  optional pyramid.data_model.base.Identifier approved_plan_id = 7;
+}
+
+// -----------------------------------------------------------------------------
+// State Inputs
+// -----------------------------------------------------------------------------
+
+// Single world fact update applied through AME state ingress.
+message WorldFactUpdate {
+  pyramid.data_model.common.Entity base = 1;  // For CRUD addressability
+  string key = 2;
+  bool value = 3;
+  string source = 4;
+  FactAuthorityLevel authority = 5;
+}
+
+// State ingress payload for authoritative or believed world updates.
+// EntityActions: in (Create/Update/Delete)
+message StateUpdate {
+  pyramid.data_model.common.Entity base = 1;  // For CRUD addressability
+  repeated WorldFactUpdate fact_update = 2;
+}
+
+// -----------------------------------------------------------------------------
+// AME Products
+// -----------------------------------------------------------------------------
+
+// Declared top-level capabilities of an AME backend.
 // EntityActions: out (Read only)
 message Capabilities {
   pyramid.data_model.common.Entity base = 1;  // For CRUD addressability
   string backend_id = 2;
-  bool supports_batch_planning = 3;
-  bool supports_external_command_dispatch = 4;
-  bool supports_replanning = 5;
+  bool supports_plan_only = 3;
+  bool supports_plan_and_execute = 4;
+  bool supports_execute_approved_plan = 5;
+  bool supports_replanning = 6;
+  bool supports_typed_component_requirement_placement = 7;
+  bool supports_state_update_ingress = 8;
 }
 
-// Key-value pair for request field maps.
-// Used instead of proto map<K,V> for broader PYRAMID backend compatibility.
-message StringKeyValue {
-  string key = 1;
-  string value = 2;
+// Planned EntityActions interaction with another component.
+message PlannedComponentInteraction {
+  string target_component = 1;
+  string target_service = 2;
+  string target_type = 3;
+  RequirementPlacementOperation operation = 4;
 }
 
-// Command emitted by the backend egress surface for external dispatch.
-// EntityActions: out (Read only)
-message Command {
+// Ordered step in a plan produced by AME.
+message PlanStep {
   pyramid.data_model.common.Entity base = 1;  // For CRUD addressability
-  string command_id = 2;
+  uint32 sequence_number = 2;
   string action_name = 3;
   string signature = 4;
-  string service_name = 5;
-  string operation = 6;
-  // Request fields as key-value pairs (semantically a map<string,string>).
-  repeated StringKeyValue request_fields = 7;
+  repeated PlannedComponentInteraction interaction = 5;
 }
 
-// Goal/task dispatch emitted to an assigned agent or subordinate backend.
+// Plan product emitted by AME after solving a planning/execution requirement.
 // EntityActions: out (Read only)
-message GoalDispatch {
+message Plan {
   pyramid.data_model.common.Entity base = 1;  // For CRUD addressability
-  string dispatch_id = 2;
-  string agent_id = 3;
-  repeated string goals = 4;
-}
-
-// Decision/audit record emitted when the backend forms a new plan.
-// EntityActions: out (Read only)
-message DecisionRecord {
-  pyramid.data_model.common.Entity base = 1;  // For CRUD addressability
-  string session_id = 2;
+  pyramid.data_model.base.Identifier planning_execution_requirement_id = 2;
   string backend_id = 3;
   uint64 world_version = 4;
   uint32 replan_count = 5;
   bool plan_success = 6;
   double solve_time_ms = 7;
-  repeated string planned_action_signatures = 8;
+  repeated PlanStep step = 8;
   string compiled_bt_xml = 9;
+  optional pyramid.data_model.base.Percentage predicted_quality = 10;
 }
 
-// Result returned by the external dispatcher for a command.
-// EntityActions: in (Create/Update/Delete)
-message CommandResult {
+// Record of a typed EntityActions interaction AME performed or intends to
+// perform on another component. This is a traceability product, not a generic
+// command envelope.
+// EntityActions: out (Read only)
+message RequirementPlacement {
   pyramid.data_model.common.Entity base = 1;  // For CRUD addressability
-  string command_id = 2;
-  CommandStatus status = 3;
-  repeated FactUpdate observed_updates = 4;
-  string source = 5;
+  pyramid.data_model.base.Identifier planning_execution_requirement_id = 2;
+  pyramid.data_model.base.Identifier plan_id = 3;
+  pyramid.data_model.base.Identifier plan_step_id = 4;
+  string target_component = 5;
+  string target_service = 6;
+  string target_type = 7;
+  RequirementPlacementOperation operation = 8;
+  pyramid.data_model.base.Identifier target_requirement_id = 9;
+  repeated pyramid.data_model.base.Identifier related_entity_id = 10;
+  pyramid.data_model.common.Progress progress = 11;
 }
 
-// Result returned for a previously emitted goal dispatch.
-// EntityActions: in (Create/Update/Delete)
-message DispatchResult {
+// Execution run product for a requirement currently being enacted by AME.
+// EntityActions: out (Read only)
+message ExecutionRun {
   pyramid.data_model.common.Entity base = 1;  // For CRUD addressability
-  string dispatch_id = 2;
-  CommandStatus status = 3;
-  repeated FactUpdate observed_updates = 4;
-  string source = 5;
-}
-
-// Snapshot of the wrapper-visible backend state.
-// EntityActions: out (Read only) - returned by ReadSession
-message SessionSnapshot {
-  pyramid.data_model.common.Entity base = 1;  // For CRUD addressability
-  string session_id = 2;
-  AutonomyBackendState state = 3;
-  uint64 world_version = 4;
-  uint32 replan_count = 5;
-  repeated AgentState agent_states = 6;
-  repeated Command outstanding_commands = 7;
-  repeated GoalDispatch outstanding_goal_dispatches = 8;
-  repeated DecisionRecord decision_history = 9;
-}
-
-// -----------------------------------------------------------------------------
-// Session Control Messages
-// -----------------------------------------------------------------------------
-
-// Request to advance backend deliberation (used with UpdateSession).
-// Triggers one deliberation cycle and populates egress queues.
-message SessionStepRequest {
-  pyramid.data_model.base.Identifier session_id = 1;
-}
-
-// Request to stop a session (used with DeleteSession).
-message SessionStopRequest {
-  pyramid.data_model.base.Identifier session_id = 1;
-  StopMode mode = 2;
+  pyramid.data_model.base.Identifier planning_execution_requirement_id = 2;
+  pyramid.data_model.base.Identifier plan_id = 3;
+  PlanningExecutionState state = 4;
+  pyramid.data_model.common.Achievement achievement = 5;
+  uint32 replan_count = 6;
+  repeated RequirementPlacement outstanding_placement = 7;
 }

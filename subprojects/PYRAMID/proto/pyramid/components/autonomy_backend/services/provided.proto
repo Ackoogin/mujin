@@ -7,27 +7,17 @@ import "pyramid/data_model/common.proto";
 import "pyramid/data_model/autonomy.proto";
 
 // =============================================================================
-// Autonomy Backend Service Interface - EntityActions CRUD Style
+// AME Autonomy Service Interface - EntityActions CRUD Style
 // =============================================================================
-// gRPC service definitions following PYRAMID EntityActions conventions.
-//
-// Each entity property is exposed through standard CRUD operations based on
-// its flow direction:
-//   - inout: Create, Read, Update, Delete
-//   - out:   Read only
-//   - in:    Create, Update, Delete (no Read)
-//
-// NOTE: The current AME backend implementation uses a session-based push/pull
-// model that differs semantically from this CRUD interface. See ALIGNMENT.md
-// for required backend changes.
-//
-// Source of truth: subprojects/AME/include/ame/autonomy_backend.h
+// Objectives, Tasks, or another coordinator delegate planning/execution to AME
+// by placing PlanningExecutionRequirement entities. AME exposes plans,
+// execution runs, and typed requirement-placement traceability products.
 // =============================================================================
 
 // -----------------------------------------------------------------------------
 // Capabilities Service (out - Read only)
 // -----------------------------------------------------------------------------
-// EntityActions Service for Capabilities
+// EntityActions Service for AME Capabilities.
 // Service Type: PROVIDED
 service Capabilities_Service {
   // Read capabilities (output only)
@@ -36,169 +26,76 @@ service Capabilities_Service {
 }
 
 // -----------------------------------------------------------------------------
-// Session Service (inout - full CRUD)
+// PlanningExecutionRequirement Service (inout - full CRUD)
 // -----------------------------------------------------------------------------
-// EntityActions Service for Session
+// EntityActions Service for AME delegated planning/execution requirements.
 // Service Type: PROVIDED
-//
-// Session lifecycle:
-//   CreateSession  -> start a new session (replaces IAutonomyBackend::start)
-//   ReadSession    -> query session state (replaces IAutonomyBackend::readSnapshot)
-//   UpdateSession  -> advance deliberation (replaces IAutonomyBackend::step)
-//   DeleteSession  -> stop session (replaces IAutonomyBackend::requestStop)
-service Session_Service {
-  // Create session (start a new backend session)
-  rpc CreateSession(pyramid.data_model.autonomy.Session)
+service Planning_Execution_Service {
+  // Create requirement (delegate planning/execution to AME)
+  rpc CreateRequirement(pyramid.data_model.autonomy.PlanningExecutionRequirement)
       returns (pyramid.data_model.base.Identifier);
 
-  // Read session (query session snapshots)
-  rpc ReadSession(pyramid.data_model.common.Query)
-      returns (stream pyramid.data_model.autonomy.SessionSnapshot);
+  // Read requirement (inspect delegated planning/execution requirements)
+  rpc ReadRequirement(pyramid.data_model.common.Query)
+      returns (stream pyramid.data_model.autonomy.PlanningExecutionRequirement);
 
-  // Update session (advance deliberation - triggers step)
-  rpc UpdateSession(pyramid.data_model.autonomy.SessionStepRequest)
+  // Update requirement (refine, progress, or attach an approved plan)
+  rpc UpdateRequirement(pyramid.data_model.autonomy.PlanningExecutionRequirement)
       returns (pyramid.data_model.common.Ack);
 
-  // Delete session (stop session)
-  rpc DeleteSession(pyramid.data_model.autonomy.SessionStopRequest)
+  // Delete requirement (cancel delegated planning/execution)
+  rpc DeleteRequirement(pyramid.data_model.base.Identifier)
       returns (pyramid.data_model.common.Ack);
 }
 
 // -----------------------------------------------------------------------------
 // State Service (in - Create/Update/Delete, no Read)
 // -----------------------------------------------------------------------------
-// EntityActions Service for State
+// EntityActions Service for AME state ingress.
 // Service Type: PROVIDED
-//
-// State ingress for authoritative world updates.
-// Replaces IAutonomyBackend::pushState.
 service State_Service {
-  // Create state (push new state facts)
+  // Create state (push new world facts)
   rpc CreateState(pyramid.data_model.autonomy.StateUpdate)
       returns (pyramid.data_model.base.Identifier);
 
-  // Update state (push state fact changes)
+  // Update state (push world fact changes)
   rpc UpdateState(pyramid.data_model.autonomy.StateUpdate)
       returns (pyramid.data_model.common.Ack);
 
-  // Delete state (remove state facts by ID)
+  // Delete state (remove state by ID)
   rpc DeleteState(pyramid.data_model.base.Identifier)
       returns (pyramid.data_model.common.Ack);
 }
 
 // -----------------------------------------------------------------------------
-// Intent Service (in - Create/Update/Delete, no Read)
+// Plan Service (out - Read only)
 // -----------------------------------------------------------------------------
-// EntityActions Service for Intent
+// EntityActions Service for AME plan products.
 // Service Type: PROVIDED
-//
-// Mission intent management.
-// Replaces IAutonomyBackend::pushIntent.
-service Intent_Service {
-  // Create intent (set initial mission intent)
-  rpc CreateIntent(pyramid.data_model.autonomy.MissionIntent)
-      returns (pyramid.data_model.base.Identifier);
-
-  // Update intent (replace mission intent)
-  rpc UpdateIntent(pyramid.data_model.autonomy.MissionIntent)
-      returns (pyramid.data_model.common.Ack);
-
-  // Delete intent (clear mission intent)
-  rpc DeleteIntent(pyramid.data_model.base.Identifier)
-      returns (pyramid.data_model.common.Ack);
+service Plan_Service {
+  // Read plan products generated for planning/execution requirements
+  rpc ReadPlan(pyramid.data_model.common.Query)
+      returns (stream pyramid.data_model.autonomy.Plan);
 }
 
 // -----------------------------------------------------------------------------
-// Command Service (out - Read only)
+// ExecutionRun Service (out - Read only)
 // -----------------------------------------------------------------------------
-// EntityActions Service for Command
+// EntityActions Service for AME execution run products.
 // Service Type: PROVIDED
-//
-// Command egress for external dispatch.
-// Replaces IAutonomyBackend::pullCommands.
-//
-// BACKEND CHANGE REQUIRED: Current implementation drains a queue (consumptive).
-// EntityActions Read is idempotent. Backend must maintain queryable command store.
-service Command_Service {
-  // Read commands (query pending commands for external dispatch)
-  rpc ReadCommand(pyramid.data_model.common.Query)
-      returns (stream pyramid.data_model.autonomy.Command);
+service Execution_Run_Service {
+  // Read execution run products for delegated requirements
+  rpc ReadRun(pyramid.data_model.common.Query)
+      returns (stream pyramid.data_model.autonomy.ExecutionRun);
 }
 
 // -----------------------------------------------------------------------------
-// GoalDispatch Service (out - Read only)
+// RequirementPlacement Service (out - Read only)
 // -----------------------------------------------------------------------------
-// EntityActions Service for GoalDispatch
+// EntityActions Service for typed component requirement placements and reads.
 // Service Type: PROVIDED
-//
-// Goal dispatch egress for external delegation.
-// Replaces IAutonomyBackend::pullGoalDispatches.
-//
-// BACKEND CHANGE REQUIRED: Current implementation drains a queue (consumptive).
-// EntityActions Read is idempotent. Backend must maintain queryable dispatch store.
-service GoalDispatch_Service {
-  // Read goal dispatches (query pending dispatches)
-  rpc ReadGoalDispatch(pyramid.data_model.common.Query)
-      returns (stream pyramid.data_model.autonomy.GoalDispatch);
-}
-
-// -----------------------------------------------------------------------------
-// DecisionRecord Service (out - Read only)
-// -----------------------------------------------------------------------------
-// EntityActions Service for DecisionRecord
-// Service Type: PROVIDED
-//
-// Decision record egress for audit/observability.
-// Replaces IAutonomyBackend::pullDecisionRecords.
-//
-// BACKEND CHANGE REQUIRED: Current implementation drains a queue (consumptive).
-// EntityActions Read is idempotent. Backend must maintain queryable record store.
-service DecisionRecord_Service {
-  // Read decision records (query planning decisions)
-  rpc ReadDecisionRecord(pyramid.data_model.common.Query)
-      returns (stream pyramid.data_model.autonomy.DecisionRecord);
-}
-
-// -----------------------------------------------------------------------------
-// CommandResult Service (in - Create/Update/Delete, no Read)
-// -----------------------------------------------------------------------------
-// EntityActions Service for CommandResult
-// Service Type: PROVIDED
-//
-// Command result ingress from external execution.
-// Replaces IAutonomyBackend::pushCommandResult.
-service CommandResult_Service {
-  // Create command result (report command outcome)
-  rpc CreateCommandResult(pyramid.data_model.autonomy.CommandResult)
-      returns (pyramid.data_model.base.Identifier);
-
-  // Update command result (update command status)
-  rpc UpdateCommandResult(pyramid.data_model.autonomy.CommandResult)
-      returns (pyramid.data_model.common.Ack);
-
-  // Delete command result (remove result by ID)
-  rpc DeleteCommandResult(pyramid.data_model.base.Identifier)
-      returns (pyramid.data_model.common.Ack);
-}
-
-// -----------------------------------------------------------------------------
-// DispatchResult Service (in - Create/Update/Delete, no Read)
-// -----------------------------------------------------------------------------
-// EntityActions Service for DispatchResult
-// Service Type: PROVIDED
-//
-// Dispatch result ingress from external delegation.
-// Replaces IAutonomyBackend::pushDispatchResult.
-service DispatchResult_Service {
-  // Create dispatch result (report dispatch outcome)
-  rpc CreateDispatchResult(pyramid.data_model.autonomy.DispatchResult)
-      returns (pyramid.data_model.base.Identifier);
-
-  // Update dispatch result (update dispatch status)
-  rpc UpdateDispatchResult(pyramid.data_model.autonomy.DispatchResult)
-      returns (pyramid.data_model.common.Ack);
-
-  // Delete dispatch result (remove result by ID)
-  rpc DeleteDispatchResult(pyramid.data_model.base.Identifier)
-      returns (pyramid.data_model.common.Ack);
+service Requirement_Placement_Service {
+  // Read typed requirement placements and related component read operations
+  rpc ReadPlacement(pyramid.data_model.common.Query)
+      returns (stream pyramid.data_model.autonomy.RequirementPlacement);
 }
