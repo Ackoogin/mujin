@@ -72,6 +72,11 @@ This JSON output can be transformed into:
 - OpenAPI specifications
 - Code generation templates
 
+For the current PYRAMID generated-binding system built from `.proto` contracts,
+see [`../docs/generated_bindings.md`](../docs/generated_bindings.md). Current
+Tactical Objects binding/conformance status is tracked in
+[`../docs/generated_bindings_status.md`](../docs/generated_bindings_status.md).
+
 ## Notes
 
 - Type references are resolved to human-readable names where possible

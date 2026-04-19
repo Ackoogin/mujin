@@ -350,9 +350,12 @@ class CppServiceGenerator:
             t
             for _, rpc in all_rpcs
             for t in (rpc.raw_req_type, rpc.raw_rsp_type)
+        } | {
+            topic_spec(key).short_type
+            for key in topic_set
         })
 
-        with open(path, 'w') as f:
+        with open(path, 'w', newline='\n') as f:
             # File-level comment block
             f.write('// Auto-generated service binding header\n')
             f.write(f'// Generated from: {self._proto_input.name}'
@@ -366,11 +369,11 @@ class CppServiceGenerator:
             f.write('//   2. EntityActions handler base class'
                     ' (ServiceHandler \u2014 override Handle*)\n')
             if is_provided:
-                f.write('//   3. PCL binding functions (subscribe*, invoke*)\n')
-                f.write('//   4. msgToString utility for PCL message payloads\n')
+                f.write('//   3. PCL binding functions (subscribe*, publish*, invoke*)\n')
+                f.write('//   4. Content-type support metadata and msgToString utility\n')
             else:
                 f.write('//   3. PCL binding functions (subscribe*, publish*)\n')
-                f.write('//   4. msgToString utility for PCL message payloads\n')
+                f.write('//   4. Content-type support metadata and msgToString utility\n')
             f.write('#pragma once\n\n')
 
             # Includes
@@ -384,6 +387,16 @@ class CppServiceGenerator:
 
             # Namespace open
             f.write(f'namespace {full_ns} {{\n\n')
+
+            # ---- Content-type constants --------------------------------------
+            f.write(_SEP + '\n')
+            f.write('// Content-type constants and support metadata\n')
+            f.write(_SEP + '\n\n')
+            f.write('constexpr const char* kJsonContentType = "application/json";\n')
+            f.write('constexpr const char* kFlatBuffersContentType = "application/flatbuffers";\n')
+            f.write('constexpr const char* kProtobufContentType = "application/protobuf";\n\n')
+            f.write('bool supportsContentType(const char* content_type);\n')
+            f.write('std::vector<const char*> supportedContentTypes();\n\n')
 
             # ---- Service wire-name constants ----------------------------------
             f.write(_SEP + '\n')
@@ -478,7 +491,7 @@ class CppServiceGenerator:
             f.write(_SEP + '\n')
             if is_provided:
                 f.write('// PCL binding functions \u2014'
-                        ' Subscribe / Invoke (typed)\n')
+                        ' Subscribe / Publish / Invoke (typed)\n')
             else:
                 f.write('// PCL binding functions \u2014'
                         ' Subscribe / Publish (typed)\n')
@@ -507,6 +520,51 @@ class CppServiceGenerator:
                 f.write(f'{sp}const char*       content_type'
                         f' = "{_DEFAULT_CONTENT_TYPE}");\n\n')
 
+            # Typed publish helpers.  These are generated for every topic in
+            # both provider and consumer namespaces so components on either side
+            # can use the generated binding as their only codec facade.
+            for key, _wire in topic_set.items():
+                pascal = _snake_to_pascal(key)
+                fname = f'publish{pascal}'
+                cname = f'kTopic{pascal}'
+                col = 13 + len(fname) + 1
+                sp = ' ' * col
+                spec = topic_spec(key)
+                wire_decl_t = spec.cpp_payload_type
+                f.write(f'/// \\brief Publish a typed message on'
+                        f' {cname}.\n')
+                f.write('///\n')
+                f.write(f'/// \\p publisher must be the pcl_port_t*'
+                        f' returned by addPublisher for\n')
+                f.write(f'/// {cname}, obtained during on_configure.\n')
+                f.write(f'pcl_status_t {fname}'
+                        f'(pcl_port_t*        publisher,\n')
+                f.write(f'{sp}const {wire_decl_t}& payload,\n')
+                f.write(f'{sp}const char*        content_type'
+                        f' = "{_DEFAULT_CONTENT_TYPE}");\n')
+                f.write('\n')
+                f.write(f'pcl_status_t {fname}'
+                        f'(pcl_port_t*        publisher,\n')
+                f.write(f'{sp}const std::string& payload,\n')
+                f.write(f'{sp}const char*'
+                        f'        content_type'
+                        f' = "{_DEFAULT_CONTENT_TYPE}");\n\n')
+
+                encode_name = f'encode{pascal}'
+                col = len(f'bool {encode_name}(')
+                sp = ' ' * col
+                f.write(f'/// \\brief Encode a typed message for {cname}.\n')
+                f.write(f'bool {encode_name}(const {wire_decl_t}& payload,\n')
+                f.write(f'{sp}const char*        content_type,\n')
+                f.write(f'{sp}std::string*       out);\n\n')
+
+                decode_name = f'decode{pascal}'
+                col = len(f'bool {decode_name}(')
+                sp = ' ' * col
+                f.write(f'/// \\brief Decode a PCL message from {cname}.\n')
+                f.write(f'bool {decode_name}(const pcl_msg_t* msg,\n')
+                f.write(f'{sp}{wire_decl_t}* out);\n\n')
+
             if is_provided:
                 # Typed invoke helpers
                 for svc in parsed.services:
@@ -534,34 +592,6 @@ class CppServiceGenerator:
                                 f' = nullptr,\n')
                         f.write(f'{sp}const char*       content_type'
                                 f' = "{_DEFAULT_CONTENT_TYPE}");\n\n')
-            else:
-                # Typed publish helpers
-                for key, _wire in topic_set.items():
-                    pascal = _snake_to_pascal(key)
-                    fname = f'publish{pascal}'
-                    cname = f'kTopic{pascal}'
-                    col = 13 + len(fname) + 1
-                    sp = ' ' * col
-                    spec = topic_spec(key)
-                    wire_decl_t = spec.cpp_payload_type
-                    f.write(f'/// \\brief Publish a typed message on'
-                            f' {cname}.\n')
-                    f.write('///\n')
-                    f.write(f'/// \\p publisher must be the pcl_port_t*'
-                            f' returned by addPublisher for\n')
-                    f.write(f'/// {cname}, obtained during on_configure.\n')
-                    f.write(f'pcl_status_t {fname}'
-                            f'(pcl_port_t*        publisher,\n')
-                    f.write(f'{sp}const {wire_decl_t}& payload,\n')
-                    f.write(f'{sp}const char*        content_type'
-                            f' = "{_DEFAULT_CONTENT_TYPE}");\n')
-                    f.write('\n')
-                    f.write(f'pcl_status_t {fname}'
-                            f'(pcl_port_t*        publisher,\n')
-                    f.write(f'{sp}const std::string& payload,\n')
-                    f.write(f'{sp}const char*'
-                            f'        content_type'
-                            f' = "{_DEFAULT_CONTENT_TYPE}");\n\n')
 
             # ---- dispatch() --------------------------------------------------
             f.write(_SEP + '\n')
@@ -618,7 +648,7 @@ class CppServiceGenerator:
             'pyramid_data_model_tactical_codec.hpp',
         ]
 
-        with open(path, 'w') as f:
+        with open(path, 'w', newline='\n') as f:
             # File-level comment block
             f.write('// Auto-generated service binding implementation\n')
             f.write(f'// Generated from: {self._proto_input.name}'
@@ -704,9 +734,6 @@ class CppServiceGenerator:
             f.write(_SEP + '\n\n')
             f.write('namespace {\n\n')
 
-            f.write('constexpr const char* kJsonContentType = "application/json";\n')
-            f.write('constexpr const char* kFlatBuffersContentType = "application/flatbuffers";\n')
-            f.write('constexpr const char* kProtobufContentType = "application/protobuf";\n\n')
             f.write('bool is_json_content_type(const char* content_type)\n')
             f.write('{\n')
             f.write('    return !content_type || std::strcmp(content_type, kJsonContentType) == 0;\n')
@@ -785,6 +812,43 @@ class CppServiceGenerator:
 
             f.write('} // namespace\n\n')
 
+            # ---- Content-type metadata ---------------------------------------
+            f.write(_SEP + '\n')
+            f.write('// Content-type support metadata\n')
+            f.write(_SEP + '\n\n')
+            f.write('std::vector<const char*> supportedContentTypes()\n')
+            f.write('{\n')
+            f.write('    std::vector<const char*> result{kJsonContentType};\n')
+            f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
+            f.write('    result.push_back(kFlatBuffersContentType);\n')
+            f.write('#endif\n')
+            f.write('#if PYRAMID_HAVE_SERVICE_PROTOBUF\n')
+            f.write('    result.push_back(kProtobufContentType);\n')
+            f.write('#endif\n')
+            f.write('    return result;\n')
+            f.write('}\n\n')
+            f.write('bool supportsContentType(const char* content_type)\n')
+            f.write('{\n')
+            f.write('    if (is_json_content_type(content_type)) {\n')
+            f.write('        return true;\n')
+            f.write('    }\n')
+            f.write('    if (is_flatbuffers_content_type(content_type)) {\n')
+            f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
+            f.write('        return true;\n')
+            f.write('#else\n')
+            f.write('        return false;\n')
+            f.write('#endif\n')
+            f.write('    }\n')
+            f.write('    if (is_protobuf_content_type(content_type)) {\n')
+            f.write('#if PYRAMID_HAVE_SERVICE_PROTOBUF\n')
+            f.write('        return true;\n')
+            f.write('#else\n')
+            f.write('        return false;\n')
+            f.write('#endif\n')
+            f.write('    }\n')
+            f.write('    return false;\n')
+            f.write('}\n\n')
+
             # Subscribe wrappers (unchanged)
             n_topics = len(topic_set)
             if n_topics:
@@ -858,71 +922,144 @@ class CppServiceGenerator:
                                 f' {rpc.cpp_svc_const},'
                                 f' payload, callback, user_data, route, content_type);\n')
                         f.write('}\n\n')
-            else:
-                # Publish wrappers
-                n_pubs = len(topic_set)
-                if n_pubs:
-                    f.write(_SEP + '\n')
-                    label = 'PCL publish wrapper' + ('s' if n_pubs > 1 else '')
-                    f.write(f'// {label}\n')
-                    f.write(_SEP + '\n\n')
-                    for key, _wire in topic_set.items():
-                        pascal = _snake_to_pascal(key)
-                        fname = f'publish{pascal}'
-                        col = 13 + len(fname) + 1
-                        sp = ' ' * col
-                        spec = topic_spec(key)
-                        f.write(f'pcl_status_t {fname}'
-                                f'(pcl_port_t*        publisher,\n')
-                        f.write(f'{sp}const {spec.cpp_payload_type}& payload,\n')
-                        f.write(f'{sp}const char*        content_type)\n')
-                        f.write('{\n')
-                        f.write('    std::string wire_payload;\n')
-                        f.write('    if (is_flatbuffers_content_type(content_type)) {\n')
-                        f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
-                        f.write('        wire_payload = flatbuffers_codec::toBinary(payload);\n')
-                        f.write('#else\n')
-                        f.write('        return PCL_ERR_INVALID;\n')
-                        f.write('#endif\n')
-                        f.write('    } else if (is_protobuf_content_type(content_type)) {\n')
-                        f.write('#if PYRAMID_HAVE_SERVICE_PROTOBUF\n')
-                        f.write('        wire_payload = protobuf_codec::toBinary(payload);\n')
-                        f.write('#else\n')
-                        f.write('        return PCL_ERR_INVALID;\n')
-                        f.write('#endif\n')
-                        f.write('    } else if (!is_json_content_type(content_type)) {\n')
-                        f.write('        return PCL_ERR_INVALID;\n')
-                        f.write('    } else {\n')
-                        if spec.is_array:
-                            f.write('        wire_payload = "[";\n')
-                            f.write('        bool first = true;\n')
-                            f.write('        for (const auto& item : payload) {\n')
-                            f.write('            if (!first) wire_payload += ",";\n')
-                            f.write('            first = false;\n')
-                            f.write('            wire_payload += toJson(item);\n')
-                            f.write('        }\n')
-                            f.write('        wire_payload += "]";\n')
+            # Publish and topic decode wrappers
+            n_pubs = len(topic_set)
+            if n_pubs:
+                f.write(_SEP + '\n')
+                label = 'PCL topic wrapper' + ('s' if n_pubs > 1 else '')
+                f.write(f'// {label}\n')
+                f.write(_SEP + '\n\n')
+                for key, _wire in topic_set.items():
+                    pascal = _snake_to_pascal(key)
+                    fname = f'publish{pascal}'
+                    decode_name = f'decode{pascal}'
+                    encode_name = f'encode{pascal}'
+                    spec = topic_spec(key)
+                    col = len(f'bool {encode_name}(')
+                    sp = ' ' * col
+                    f.write(f'bool {encode_name}(const {spec.cpp_payload_type}& payload,\n')
+                    f.write(f'{sp}const char*        content_type,\n')
+                    f.write(f'{sp}std::string*       out)\n')
+                    f.write('{\n')
+                    f.write('    if (!out) {\n')
+                    f.write('        return false;\n')
+                    f.write('    }\n')
+                    f.write('    std::string wire_payload;\n')
+                    f.write('    if (is_flatbuffers_content_type(content_type)) {\n')
+                    f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
+                    f.write('        wire_payload = flatbuffers_codec::toBinary(payload);\n')
+                    f.write('#else\n')
+                    f.write('        return false;\n')
+                    f.write('#endif\n')
+                    f.write('    } else if (is_protobuf_content_type(content_type)) {\n')
+                    f.write('#if PYRAMID_HAVE_SERVICE_PROTOBUF\n')
+                    f.write('        wire_payload = protobuf_codec::toBinary(payload);\n')
+                    f.write('#else\n')
+                    f.write('        return false;\n')
+                    f.write('#endif\n')
+                    f.write('    } else if (!is_json_content_type(content_type)) {\n')
+                    f.write('        return false;\n')
+                    f.write('    } else {\n')
+                    if spec.is_array:
+                        f.write('        wire_payload = "[";\n')
+                        f.write('        bool first = true;\n')
+                        f.write('        for (const auto& item : payload) {\n')
+                        f.write('            if (!first) wire_payload += ",";\n')
+                        f.write('            first = false;\n')
+                        f.write('            wire_payload += toJson(item);\n')
+                        f.write('        }\n')
+                        f.write('        wire_payload += "]";\n')
+                    else:
+                        if spec.short_type == 'Identifier':
+                            f.write('        wire_payload = encode_identifier_payload(payload);\n')
                         else:
-                            if spec.short_type == 'Identifier':
-                                f.write('        wire_payload = encode_identifier_payload(payload);\n')
-                            else:
-                                f.write('        wire_payload = toJson(payload);\n')
-                        f.write('    }\n')
-                        f.write(f'    return {fname}(publisher, wire_payload, content_type);\n')
-                        f.write('}\n\n')
-                        f.write(f'pcl_status_t {fname}'
-                                f'(pcl_port_t*        publisher,\n')
-                        f.write(f'{sp}const std::string& payload,\n')
-                        f.write(f'{sp}const char*        content_type)\n')
-                        f.write('{\n')
-                        f.write('    pcl_msg_t msg{};\n')
-                        f.write('    msg.data      = payload.data();\n')
-                        f.write('    msg.size      = static_cast<uint32_t>'
-                                '(payload.size());\n')
-                        f.write('    msg.type_name = content_type;\n')
-                        f.write('    return pcl_port_publish(publisher,'
-                                ' &msg);\n')
-                        f.write('}\n\n')
+                            f.write('        wire_payload = toJson(payload);\n')
+                    f.write('    }\n')
+                    f.write('    *out = wire_payload;\n')
+                    f.write('    return true;\n')
+                    f.write('}\n\n')
+
+                    col = 13 + len(fname) + 1
+                    sp = ' ' * col
+                    f.write(f'pcl_status_t {fname}'
+                            f'(pcl_port_t*        publisher,\n')
+                    f.write(f'{sp}const {spec.cpp_payload_type}& payload,\n')
+                    f.write(f'{sp}const char*        content_type)\n')
+                    f.write('{\n')
+                    f.write('    std::string wire_payload;\n')
+                    f.write(f'    if (!{encode_name}(payload, content_type, &wire_payload)) {{\n')
+                    f.write('        return PCL_ERR_INVALID;\n')
+                    f.write('    }\n')
+                    f.write(f'    return {fname}(publisher, wire_payload, content_type);\n')
+                    f.write('}\n\n')
+                    f.write(f'pcl_status_t {fname}'
+                            f'(pcl_port_t*        publisher,\n')
+                    f.write(f'{sp}const std::string& payload,\n')
+                    f.write(f'{sp}const char*        content_type)\n')
+                    f.write('{\n')
+                    f.write('    pcl_msg_t msg{};\n')
+                    f.write('    msg.data      = payload.data();\n')
+                    f.write('    msg.size      = static_cast<uint32_t>'
+                            '(payload.size());\n')
+                    f.write('    msg.type_name = content_type;\n')
+                    f.write('    return pcl_port_publish(publisher,'
+                            ' &msg);\n')
+                    f.write('}\n\n')
+
+                    col = len(f'bool {decode_name}(')
+                    sp = ' ' * col
+                    f.write(f'bool {decode_name}(const pcl_msg_t* msg,\n')
+                    f.write(f'{sp}{spec.cpp_payload_type}* out)\n')
+                    f.write('{\n')
+                    f.write('    if (!msg || !msg->data || msg->size == 0 || !out) {\n')
+                    f.write('        return false;\n')
+                    f.write('    }\n')
+                    f.write('    try {\n')
+                    f.write('        if (is_flatbuffers_content_type(msg->type_name)) {\n')
+                    f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
+                    if spec.is_array:
+                        f.write(f'            *out = flatbuffers_codec::fromBinary{spec.short_type}Array(msg->data, msg->size);\n')
+                    else:
+                        f.write(f'            *out = flatbuffers_codec::fromBinary{spec.short_type}(msg->data, msg->size);\n')
+                    f.write('            return true;\n')
+                    f.write('#else\n')
+                    f.write('            return false;\n')
+                    f.write('#endif\n')
+                    f.write('        }\n')
+                    f.write('        if (is_protobuf_content_type(msg->type_name)) {\n')
+                    f.write('#if PYRAMID_HAVE_SERVICE_PROTOBUF\n')
+                    if spec.is_array:
+                        f.write(f'            *out = protobuf_codec::fromBinary{spec.short_type}Array(msg->data, msg->size);\n')
+                    else:
+                        f.write(f'            *out = protobuf_codec::fromBinary{spec.short_type}(msg->data, msg->size);\n')
+                    f.write('            return true;\n')
+                    f.write('#else\n')
+                    f.write('            return false;\n')
+                    f.write('#endif\n')
+                    f.write('        }\n')
+                    f.write('        if (!is_json_content_type(msg->type_name)) {\n')
+                    f.write('            return false;\n')
+                    f.write('        }\n')
+                    f.write('        const std::string payload = msgToString(msg->data, msg->size);\n')
+                    if spec.is_array:
+                        f.write('        const auto arr = nlohmann::json::parse(payload);\n')
+                        f.write('        out->clear();\n')
+                        f.write('        for (const auto& item : arr) {\n')
+                        if spec.short_type == 'Identifier':
+                            f.write('            out->push_back(decode_identifier_payload(item.dump()));\n')
+                        else:
+                            f.write(f'            out->push_back(fromJson(item.dump(), static_cast<{spec.short_type}*>(nullptr)));\n')
+                        f.write('        }\n')
+                    else:
+                        if spec.short_type == 'Identifier':
+                            f.write('        *out = decode_identifier_payload(payload);\n')
+                        else:
+                            f.write(f'        *out = fromJson(payload, static_cast<{spec.short_type}*>(nullptr));\n')
+                    f.write('        return true;\n')
+                    f.write('    } catch (...) {\n')
+                    f.write('        return false;\n')
+                    f.write('    }\n')
+                    f.write('}\n\n')
 
             # ---- dispatch() --------------------------------------------------
             f.write(_SEP + '\n')
@@ -1381,7 +1518,7 @@ class CppTypesGenerator:
         alias_names = set(self._aliases.keys())
         non_alias = [m for m in pf.messages if m.name not in alias_names]
 
-        with open(path, 'w') as f:
+        with open(path, 'w', newline='\n') as f:
             f.write('// Auto-generated types header\n')
             f.write(f'// Generated from: {pf.path.name}'
                     f' by generate_bindings.py (types)\n')
@@ -1419,7 +1556,7 @@ class CppTypesGenerator:
             pf.package.replace('.', '_') + '_types.hpp'
             for pf in self._index.files
         )
-        with open(path, 'w') as f:
+        with open(path, 'w', newline='\n') as f:
             f.write('// Auto-generated umbrella types header\n')
             f.write('// Includes all data model type headers and re-exports\n')
             f.write('// their contents into namespace pyramid::data_model.\n')
@@ -1487,7 +1624,7 @@ class CppDataModelCodecGenerator:
     # ------------------------------------------------------------------ header
 
     def _write_header(self, path: Path) -> None:
-        with open(path, 'w') as f:
+        with open(path, 'w', newline='\n') as f:
             f.write('// Auto-generated data model JSON codec header\n')
             f.write(f'// Generated from: {self._pf.path.name}'
                     f' by generate_bindings.py (codec)\n')
@@ -1528,7 +1665,7 @@ class CppDataModelCodecGenerator:
         structs = [m for m in self._pf.messages if m.name not in alias_names]
         current_pkg = self._pf.package
 
-        with open(path, 'w') as f:
+        with open(path, 'w', newline='\n') as f:
             f.write('// Auto-generated data model JSON codec implementation\n')
             f.write(f'// Namespace: {self._ns}\n\n')
             f.write(f'#include "{self._hpp_name}"\n\n')

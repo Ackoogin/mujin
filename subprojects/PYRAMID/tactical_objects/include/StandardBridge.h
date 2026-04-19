@@ -67,7 +67,6 @@ private:
   pcl_status_t dispatchProvidedService(int channel, const pcl_msg_t* request,
                                        pcl_msg_t* response);
   void publishEntityMatches(const std::vector<std::string>& entity_ids);
-  void publishEvidenceRequirement(const std::string& payload);
   bool supportsContentType(const char* content_type) const;
 
   friend class BridgeServiceHandler;

@@ -1,5 +1,25 @@
 # PYRAMID Generated Bindings — Pluggability & Consistency Review
 
+## Current Doc Status
+
+This is a historical review and implementation-plan record from the binding
+pluggability cleanup.
+
+For current usage and v1 architecture, use:
+
+- [generated_bindings.md](generated_bindings.md)
+
+For current Tactical Objects proof status and test coverage, use:
+
+- [generated_bindings_status.md](generated_bindings_status.md)
+
+Some findings below were intentionally fixed after this review, including the
+`StandardBridge` topic encode/decode duplication and removal of the stale
+standalone `examples/dispatch` artefacts. Keep this document as audit context
+rather than as the primary user guide.
+
+---
+
 Reviewer scope: how PYRAMID-generated bindings let a consuming component
 swap codecs and transports with **only configuration / startup wiring**, no
 bespoke per-codec or per-transport branching in business logic.
@@ -15,20 +35,25 @@ The pluggability **architecture** in PYRAMID is sound:
 
 - A registry-based code generator with a clean `CodecBackend` ABC.
 - A transport-agnostic `ServiceHandler` interface generated from `.proto`.
-- A generated `codec_dispatch` layer that selects codec by `content_type`.
+- A generated service-binding `dispatch(...)` path that selects codec by
+  `content_type` for request/response services.
 - A consistent PCL-executor handoff rule ("transport threads do wire work
   only; business logic runs on the executor").
 
 The **realisation** is partial: the design intent is "components use the
 generated bindings + a content-type config; transport selection is just
-startup wiring", but in practice the only live consumer
-(`StandardBridge`) re-implements the dispatch layer by hand, the
-transports have three different activation shapes, and several
-asymmetries make truly drop-in codec swap incomplete.
+startup wiring", but in practice the live Tactical Objects app only does
+that cleanly for service ingress. `StandardBridge` uses the generated
+service `dispatch(...)` path for provided services, but still hand-rolls
+topic payload encode/decode, content-type predicates, and per-codec includes.
+The transports also have three different activation shapes, and several
+generated-output asymmetries make truly drop-in codec swap incomplete.
 
-In short: the **intent is right and visible**, but the proving-ground
-component currently bypasses the very layer that would make pluggability
-zero-code, so the promise isn't yet exercised end-to-end.
+Additional review conclusion: for v1, treat the generated service binding
+as the stable surface and make it complete. Do **not** build v1 around the
+separate `examples/dispatch/*_codec_dispatch.*` artefacts unless the team
+commits to adopting them fully; today they are stale, asymmetric, and not
+the path the app or generator scripts actually exercise.
 
 ---
 
@@ -46,9 +71,10 @@ Driven from `.proto` by `pim/generate_bindings.py` via a registry
 | Service binding | `examples/cpp/generated/pyramid_services_tactical_objects_provided.hpp` (typed `ServiceHandler`, `dispatch(...)`, wire-name constants) | `pyramid-services-tactical_objects-provided.ads` |
 | gRPC transport | `examples/grpc/cpp/pyramid_components_*_grpc_transport.{hpp,cpp}` (`ServerHost::start(address)`) | C-ABI shim specs |
 | ROS2 transport | `examples/ros2/cpp/pyramid_components_*_ros2_transport.{hpp,cpp}` (`ServiceBinder::bind()`) | endpoint-constant specs |
-| Codec dispatch | `examples/dispatch/cpp/pyramid_data_model_*_codec_dispatch.hpp` | `*-codec_dispatch.ads` |
+| Standalone data-model codec dispatch | removed v1 cleanup candidate; historical path was `examples/dispatch/cpp/*_codec_dispatch.*` | removed v1 cleanup candidate |
 
-The contract is well-stated in `docs/service_binding_codegen.md:177-188`:
+The current contract is captured in
+[generated_bindings.md](generated_bindings.md):
 
 > Codec selection: by `content_type`; the generated dispatch layer decodes
 > bytes to proto-native types; handlers operate only on typed values.
@@ -84,19 +110,32 @@ is "subclass + register"; the orchestrator does not need to be edited.
 Caveat: this is generator-time pluggability only. Runtime cannot acquire
 new codecs; they must be regenerated and recompiled.
 
-### 3.3 Codec dispatch layer — INTENT GOOD, USAGE INCONSISTENT
+### 3.3 Standalone data-model codec dispatch — STALE, NOT V1 AS-IS
 
-The generator emits a clean per-package dispatcher
-(`examples/dispatch/cpp/pyramid_data_model_common_codec_dispatch.hpp`).
-For each typed message it produces:
+There are currently two concepts named "dispatch":
+
+1. **Service binding dispatch**: `provided::dispatch(...)` /
+   `consumed::dispatch(...)` in `examples/cpp/generated/*_provided.cpp`
+   and `*_consumed.cpp`. This is live, built by `generate_bindings.py`,
+   and exercised by `test_codec_dispatch_e2e`.
+2. **Standalone data-model codec dispatch**:
+   `examples/dispatch/cpp/pyramid_data_model_*_codec_dispatch.hpp` and
+   the Ada equivalents. These files are not registered in
+   `pim/backends/__init__.py`, are not emitted by
+   `scripts/generate_bindings.bat`, and are not what the current CMake
+   `test_codec_dispatch_e2e` target includes.
+
+The standalone layer emits a clean-looking per-package dispatcher. For each
+typed message it produces:
 
 ```cpp
 inline std::string serialize(const …::GeodeticPosition& msg,
                              const char* content_type);
 ```
 
-…that does the routing. This is exactly the seam business logic should
-sit on top of. Two important properties of the current emission:
+…that does the routing. The intent is reasonable, but this artefact is not
+currently a workable v1 seam. Two important properties of the current
+emission:
 
 - Codecs are gated by `#if defined(CODEC_FLATBUFFERS)` /
   `#if defined(CODEC_PROTOBUF)` (lines 21-27, 52-59, …) — runtime
@@ -107,9 +146,17 @@ sit on top of. Two important properties of the current emission:
   deserialize to their own types; conversion to the common type requires
   a mapping layer" (lines 70-74, 99-103, …).
 
-So the dispatch is **symmetric for serialise, asymmetric for
-deserialise**. A consumer that "just changes `content_type`" gets full
-encode but partial decode.
+So the standalone dispatch is **symmetric for serialise, asymmetric for
+deserialise**. It also does not cover the service-level payload shapes that
+matter in Tactical Objects, such as `std::vector<ObjectMatch>` topic
+payloads. A consumer that "just changes `content_type`" gets full encode
+for simple messages but partial decode and no complete topic/service
+surface.
+
+V1 direction: either delete/quarantine this standalone dispatch concept, or
+fold it into the generated service binding layer and make the service
+binding call it internally. Keeping both concepts active invites drift.
+Given current usage, removal/quarantine is the lower-risk v1 path.
 
 ### 3.4 PCL port-level codec selection — STRONG (when used)
 
@@ -135,7 +182,7 @@ different activation API:
 | PCL socket | `pcl_socket_transport_create_server(port, exec)` then `pcl_executor_set_transport(...)` (`tactical_objects_main.cpp:186-195`) |
 | gRPC | `provided::grpc_transport::buildServer(address, exec)` returning a `ServerHost` (`…_grpc_transport.hpp:29-30`) |
 | ROS2 | construct a `pyramid::transport::ros2::Adapter` (e.g. `RclcppRuntimeAdapter(node)`), then `ServiceBinder(adapter, exec).bind()` (`…_ros2_transport.hpp:11-20`) |
-| PCL shared-memory | central named-bus (foundation only at PCL layer; tactical projection still TBD per `docs/service_schema_tactical_objects.md:86`) |
+| PCL shared-memory | central named-bus (foundation only at PCL layer; Tactical Objects projection status is tracked in [generated_bindings_status.md](generated_bindings_status.md)) |
 
 These shapes are not unifiable today: ServerHost vs adapter+binder vs
 socket factory. So transport swap is "additional setup" (per the user's
@@ -147,10 +194,15 @@ factory shared across them.
 
 ## 4. Inconsistencies and gaps
 
-### 4.1 The proving-ground component bypasses the dispatch layer
+### 4.1 The proving-ground component only partly uses generated bindings
 
 `StandardBridge.cpp` is the live tactical-objects consumer of the
-generated bindings. It:
+generated bindings. The service path is healthier than the first-pass
+review implied: `StandardBridge::dispatchProvidedService(...)` calls
+`prov::dispatch(handler, ..., frontend_content_type_.c_str(), ...)`, so
+provided service requests do flow through generated service dispatch.
+
+The remaining problem is the topic and consumed-interface edge. The bridge:
 
 1. Includes the generated `*_provided.hpp`, `*_consumed.hpp`, and the
    per-codec headers directly (`StandardBridge.cpp:3-7`).
@@ -159,35 +211,38 @@ generated bindings. It:
    etc. (lines 36-50).
 3. Hand-rolls per-codec branches in `encode_match_array` (lines 289-306),
    `encode_evidence_requirement` (lines 308-317), `decode_object_evidence`
-   (lines 319-337) — the exact pattern the generated `codec_dispatch`
-   exists to remove.
-4. Never #includes any `*_codec_dispatch.hpp`.
+   (lines 319-337).
 
-Effect: the dispatch layer's whole reason for being — letting components
-sit on `serialize(msg, content_type)` and forget the codec list — is
-unrealised in the only running consumer. Any new codec requires editing
-StandardBridge in addition to regenerating bindings.
+Effect: service ingress is close to the desired model, but topic
+publication/subscription is not. Any new codec still requires editing
+`StandardBridge` because the generated provided binding exposes subscribe
+helpers for provided topics, but not provider-side typed publish helpers
+for those same topics. The consumed binding has typed `publishObjectEvidence`,
+but the role-symmetric helper set is incomplete.
 
 A second symptom: JSON's "encode a vector of `ObjectMatch`" path
 (line 297-305) builds the JSON array inline (`"[" + toJson(match) + …
 "]"`) because the JSON codec exposes per-message `toJson`, while
 FlatBuffers/Protobuf expose `toBinary(vector<…>)` directly. The
 collection-encoding surface is **asymmetric across codecs**, which is
-why the dispatch layer can't easily cover it today.
+why generated topic helpers need to own service/topic payload encoding for
+arrays as well as scalar messages.
 
 ### 4.2 Two parallel JSON output locations
 
-- Old: `examples/cpp/generated/pyramid_data_model_common_codec.hpp` (no
-  `_json_` suffix). Used by `StandardBridge.cpp` via `tactical_codec::toJson`.
-- New: `examples/json/cpp/pyramid_data_model_common_json_codec.hpp`
+- Active: `examples/cpp/generated/pyramid_data_model_common_codec.hpp`
+  (no `_json_` suffix). Used by the live generated service bindings and
+  by `StandardBridge.cpp` via `tactical_codec::toJson`.
+- Parallel/stale: `examples/json/cpp/pyramid_data_model_common_json_codec.hpp`
   (standardised under `examples/<backend>/cpp/`). Referenced by the
-  generated dispatch layer.
+  standalone data-model `codec_dispatch` artefact, not by the active
+  service binding path.
 
-The dispatch layer therefore won't compile against the headers the
-StandardBridge currently consumes without alignment — partly explaining
-why the consumer hasn't migrated. The `near-term standardisation` list
-in `docs/service_binding_codegen.md:228-241` flags this (item 3:
-"reducing remaining Ada filename/package compatibility glue").
+The standalone dispatch layer therefore points at a different JSON layout
+than the active app consumes. The v1 cleanup should choose one canonical
+layout and remove or quarantine the other. The `near-term standardisation`
+cleanup guidance in [generated_bindings.md](generated_bindings.md) now points
+at this class of filename/package compatibility debt.
 
 ### 4.3 FlatBuffers / Protobuf output layouts also differ
 
@@ -201,21 +256,26 @@ There is no single rule like "every backend lives at
 backend-specific. This is purely a layout issue, but it is a real
 friction point when a new backend needs to be added.
 
-### 4.4 Compile-time #ifdef vs runtime content-type
+### 4.4 Compile-time availability vs runtime content-type
 
-`pyramid_data_model_common_codec_dispatch.hpp:21-27,52-59` brackets
+The standalone `pyramid_data_model_common_codec_dispatch.hpp` brackets
 non-JSON codecs in `#if defined(CODEC_FLATBUFFERS)` /
-`#if defined(CODEC_PROTOBUF)`. At runtime the same file does
-`std::strcmp(content_type, kFlatBuffers)`. Consequences:
+`#if defined(CODEC_PROTOBUF)`. The active generated service bindings use
+`__has_include(...)` to decide whether FlatBuffers/Protobuf service codecs
+are available. Both approaches leave the same v1 gap: runtime configuration
+can request a content type without a generated public way to ask "does this
+binary support it?"
 
-- A binary built without `CODEC_FLATBUFFERS` will compile happily but
-  throw `std::runtime_error("unsupported codec: …")` if a peer sets the
-  port type to `application/flatbuffers`.
-- There is no introspection ("which codecs does this binary support?"),
-  no graceful degradation, no negotiation. The mismatch is silent until
-  first message.
+Consequences:
 
-### 4.5 Asymmetric serialise / deserialise in the dispatch layer
+- A component can be configured with `application/flatbuffers` or
+  `application/protobuf` and only discover missing codec support when a
+  message is encoded/decoded.
+- There is no generated introspection table, no startup validation helper,
+  and no consistent error model across service dispatch, publish helpers,
+  and application code.
+
+### 4.5 Asymmetric serialise / deserialise in standalone dispatch
 
 For every type the generator emits:
 
@@ -227,8 +287,8 @@ T deserializeXxx(const void*, size_t,             // JSON only; throws otherwise
 
 (see `pyramid_data_model_common_codec_dispatch.hpp:65-74, 94-103, …`).
 A bidirectional consumer therefore can't be built on top of the
-dispatch layer alone — exactly the situation that pushed StandardBridge
-back into hand-rolled branches.
+standalone dispatch layer alone. This is a decisive reason not to adopt
+that artefact directly as the v1 surface.
 
 ### 4.6 gRPC transport hard-binds protobuf
 
@@ -243,7 +303,7 @@ Worth documenting explicitly so consumers don't expect
 
 ### 4.7 Ada story has a stated short-cut
 
-`docs/service_binding_codegen.md:189-203` is candid:
+[generated_bindings.md](generated_bindings.md) is candid about the Ada policy:
 
 > JSON is expected to remain native at the Ada layer. FlatBuffers and
 > Protobuf may use generated C/C++ shims internally. … This is a
@@ -274,8 +334,8 @@ RAII type.
 
 ## 5. Cross-language conformance signal
 
-`docs/service_schema_tactical_objects.md:149-166` reports the
-`tobj_master_conformance_e2e` matrix as currently passing for:
+[generated_bindings_status.md](generated_bindings_status.md) tracks the
+current cross-language and transport conformance matrix, including:
 
 - socket + JSON
 - socket + FlatBuffers
@@ -289,71 +349,275 @@ transport, not across transports.
 
 ---
 
-## 6. Concrete recommendations
+## 6. V1 direction and concrete action plan
 
-In rough priority order, with the user's stated bar in mind ("additional
-setup like starting a gRPC server is fine; bespoke code is not"):
+Recommended v1 decision: **adopt the generated service bindings as the only
+component-facing binding surface**. They already expose the stable
+`ServiceHandler` interface, typed invoke/publish/subscribe entry points, and
+service-level `dispatch(...)`. Codec choice should be **statically configured
+at component startup** by `content_type` and validated once against the codecs
+compiled into that binary. Runtime per-port selection can continue where PCL
+already supports it, but v1 should not require dynamic plugin loading or
+business-logic branches on codec.
 
-1. **Migrate `StandardBridge` onto the generated `codec_dispatch`
-   layer.** Replace `is_json_content_type` / `is_flatbuffers_content_type`
-   / `is_protobuf_content_type` and the hand-rolled `encode_*` /
-   `decode_*` helpers with `codec_dispatch::serialize(msg, content_type)`
-   and `codec_dispatch::deserializeXxx(...)`. This will immediately
-   surface gaps 4.1, 4.2, 4.5 as compile errors and force them shut.
+The separate data-model `examples/dispatch/*_codec_dispatch.*` concept should
+not be part of v1 unless it is deliberately folded into the service generator.
+The lower-risk v1 path is to remove or quarantine it.
 
-2. **Make the dispatch layer fully bidirectional.** Either generate a
-   shared deserialise that returns the JSON-codec type and lets the
-   FB/Protobuf paths convert at the boundary, or generate codec-specific
-   typed deserialisers and have the dispatcher own the conversion.
+### 6.0 V1 shape at a glance
 
-3. **Decide on a single codec output convention.** Recommend
-   `examples/<backend>/<lang>/pyramid_<package>_<backend>_codec.{hpp,cpp}`
-   for all four codec backends; align the legacy
-   `examples/cpp/generated/pyramid_data_model_*_codec.hpp` JSON path with
-   the new `examples/json/cpp/...` path so includes are deterministic.
+Target component-facing shape:
 
-4. **Replace `#if defined(CODEC_*)` in the dispatcher with a small
-   registry table.** Even a generated `kAvailableCodecs[]` plus a
-   `bool supports(content_type)` helper would let consumers query
-   available codecs at startup instead of failing on first message.
+```mermaid
+flowchart LR
+  Config["Startup config<br/>content_type"]
+  Component["Component code<br/>typed handlers and domain mapping"]
+  Binding["Generated service binding facade<br/>typed publish, subscribe, invoke, dispatch"]
+  Support["Generated codec support metadata<br/>supportsContentType, supportedContentTypes"]
+  Json["JSON codec"]
+  Flat["FlatBuffers codec"]
+  Proto["Protobuf codec"]
+  Pcl["PCL ports and executor"]
+  Socket["Socket transport"]
+  Grpc["gRPC transport<br/>protobuf pinned"]
+  Ros2["ROS2 transport projection"]
+  Shm["Shared-memory PCL transport"]
 
-5. **Introduce a transport factory abstraction.** A minimal
-   `pyramid::transport::ProvidedHost` interface with
-   `start(executor)` / `shutdown()`, with concrete
-   `SocketProvidedHost`, `GrpcProvidedHost`, `Ros2ProvidedHost`
-   implementations, would let `tactical_objects_main.cpp` look like:
+  Config --> Support
+  Support --> Binding
+  Component --> Binding
+  Binding --> Json
+  Binding --> Flat
+  Binding --> Proto
+  Binding --> Pcl
+  Socket --> Pcl
+  Grpc --> Binding
+  Ros2 --> Pcl
+  Shm --> Pcl
+```
 
-   ```cpp
-   auto host = pyramid::transport::makeProvidedHost(spec);  // "socket://...", "grpc://..."
-   host->start(remote_exec);
-   ```
+The intended component boundary is therefore simple: component code sees the
+generated binding facade and proto-native generated types. Codec-specific
+headers, content-type branching, and wire payload parsing stay inside generated
+binding/codec code.
 
-   The transport-specific *setup* (open ports, attach to an `rclcpp`
-   node, etc.) is still configuration; the *call shape* in main becomes
-   identical across transports.
+Historical ambiguity removed during v1 cleanup:
 
-6. **Document that gRPC pins the codec to protobuf.** This is fine, but
-   today the matrix table can be misread to suggest `grpc + json` is
-   intended.
+```mermaid
+flowchart TD
+  Std["StandardBridge before cleanup"]
+  ServiceDispatch["Generated service dispatch<br/>live and tested"]
+  ManualCodec["Manual topic codec branches<br/>removed"]
+  CodecHeaders["Direct codec includes<br/>removed from bridge"]
+  StaleDispatch["Standalone data-model codec_dispatch<br/>removed"]
+  ActiveGen["generate_bindings.py active output"]
+  DispatchScript["test_generated_codec_dispatch script<br/>removed"]
 
-7. **Address Ada non-JSON paths separately.** The current shim policy is
-   honest, but it should be a tracked debt with an owner, not just a
-   policy paragraph.
+  Std --> ServiceDispatch
+  Std --> ManualCodec
+  ManualCodec --> CodecHeaders
+  StaleDispatch -. not emitted by script .-> ActiveGen
+  DispatchScript --> ActiveGen
+  DispatchScript -. does not exercise .-> StaleDispatch
+```
+
+V1 cleanup sequence:
+
+```mermaid
+flowchart LR
+  Freeze["Freeze v1 contract"]
+  Quarantine["Remove or quarantine stale codec_dispatch"]
+  Facade["Generate codec facade in service bindings"]
+  Topics["Generate role-symmetric topic helpers"]
+  Migrate["Migrate StandardBridge"]
+  Layout["Consolidate generated output layout"]
+  Tests["Lock with hygiene and runtime tests"]
+
+  Freeze --> Quarantine --> Facade --> Topics --> Migrate --> Layout --> Tests
+```
+
+Provider/consumer topic shape after helper generation:
+
+```mermaid
+flowchart TB
+  Provider["Provider component"]
+  ProviderPublish["generated provided::publishEntityMatches"]
+  ProviderService["generated provided::dispatch"]
+  ConsumerSub["generated provided::subscribeEntityMatchesTyped"]
+  Consumer["Consumer component"]
+  ConsumedPub["generated consumed::publishObjectEvidence"]
+  ProviderSub["generated consumed::subscribeObjectEvidenceTyped"]
+  PclBus["PCL topic/service ports<br/>content_type configured at startup"]
+
+  Provider --> ProviderPublish --> PclBus --> ConsumerSub --> Consumer
+  Consumer --> ConsumedPub --> PclBus --> ProviderSub --> Provider
+  PclBus --> ProviderService --> Provider
+```
+
+### 6.1 Freeze the v1 contract
+
+Define the v1 rule in [generated_bindings.md](generated_bindings.md):
+
+- Component code may include generated service binding headers and generated
+  domain type headers.
+- Component code must not include codec-specific headers such as
+  `*_flatbuffers_codec.hpp` / `*_protobuf_codec.hpp` directly.
+- Component code must not do `strcmp(content_type, ...)` or codec-specific
+  `toJson` / `toBinary` / `fromBinary` branching.
+- Generated binding code owns all codec selection, encode/decode, and
+  unsupported-codec reporting.
+- Transport startup may be transport-specific for v1, but transport choice
+  must not change handler signatures or component business logic.
+
+Acceptance check: `StandardBridge.cpp` should compile without direct
+FlatBuffers/Protobuf includes and without local content-type predicates.
+
+### 6.2 Remove or quarantine stale dispatch artefacts
+
+Cleanup status: completed. The standalone `examples/dispatch` files,
+`pim/backends/codec_dispatch_generator.py`, `test_generated_codec_dispatch.*`
+scripts, and `generated_bindings_flatbuffers_dispatch` CTest wrapper have been
+removed. Active codec dispatch now means generated service-binding dispatch.
+
+Completed cleanup pass:
+
+- Deleted `examples/dispatch/cpp/*_codec_dispatch.*` and
+  `examples/dispatch/ada/*-codec_dispatch.*`.
+- Deleted `pim/backends/codec_dispatch_generator.py`.
+- Deleted `scripts/test_generated_codec_dispatch.*` and the
+  `generated_bindings_flatbuffers_dispatch` CTest entry.
+- Updated current docs so "dispatch" means service binding dispatch unless a
+  section explicitly says "standalone data-model codec dispatch".
+
+This prevents future work from trying to migrate components onto an artefact
+that is currently stale, not generator-registered, and not bidirectional.
+
+### 6.3 Make service bindings own the codec facade
+
+Move the missing abstractions into `pim/cpp_codegen.py` /
+`pim/ada_codegen.py`, where the live service dispatch already exists:
+
+- Generate shared content-type constants and `supportsContentType(...)`.
+- Generate `supportedContentTypes()` or equivalent static metadata so startup
+  can fail early when config asks for a codec not compiled into the binary.
+- Generate internal encode/decode helpers for every request, response, and
+  topic payload shape, including arrays such as `std::vector<ObjectMatch>`.
+- Keep `__has_include` / compile-time gating inside generated binding code,
+  but make unsupported codec behavior explicit and testable.
+- Keep JSON, FlatBuffers, and Protobuf conversion to the same proto-native
+  C++/Ada public types. Codec-native types must not escape into component
+  code.
+
+This gives a single place to add the next codec backend: the backend exposes
+`toBinary` / `fromBinary` for the generated proto-native type surface, and
+the service binding generator wires it into the facade.
+
+### 6.4 Generate role-symmetric topic helpers
+
+Close the current `StandardBridge` gap by generating endpoint-role helpers
+for both sides of every topic:
+
+- For a provider-side topic, generate provider publish helpers as well as
+  consumer subscribe helpers.
+- For a consumed-side topic, generate consumer publish helpers and provider
+  subscribe/decode helpers.
+- Provide typed callback wrappers where practical, so component code can
+  receive `ObjectDetail` or `ObjectEvidenceRequirement` directly rather than
+  raw `pcl_msg_t` plus local decode logic.
+- Keep raw `std::string` publish overloads only as an escape hatch; mark the
+  typed overload as the normal v1 API.
+
+After this, `StandardBridge::publishEntityMatches`,
+`publishEvidenceRequirement`, and `onStandardObjectEvidence` should be thin
+calls into generated helpers plus internal model mapping.
+
+### 6.5 Migrate the Tactical Objects app
+
+Use `StandardBridge` as the v1 proving-ground:
+
+1. Replace local content-type constants/predicates with generated metadata.
+2. Replace `encode_match_array`, `encode_evidence_requirement`, and
+   `decode_object_evidence` with generated typed helpers.
+3. Remove direct includes of FlatBuffers/Protobuf service codec headers from
+   `StandardBridge.cpp`.
+4. Validate `frontend_content_type_` in `on_configure()` and fail before
+   opening ports if unsupported.
+5. Keep `--content-type` / `--frontend-content-type` as the static app-level
+   configuration knob for socket/PCL v1.
+
+The bridge should still own Tactical Objects domain mapping. It should not own
+wire-format selection.
+
+### 6.6 Consolidate generated output layout
+
+Pick one canonical generated-output layout before adding more backends. For
+v1, the least disruptive choice is:
+
+- Keep active C++ service/data-model bindings under `examples/cpp/generated/`.
+- Keep active Ada service/data-model bindings under `examples/ada/generated/`.
+- Put backend-specific generated support under subdirectories of those roots,
+  for example `examples/cpp/generated/flatbuffers/cpp/` and
+  `examples/cpp/generated/protobuf/cpp/`.
+- Remove or clearly mark stale parallel roots such as `examples/json/cpp/`
+  when they are not emitted by `scripts/generate_bindings.bat`.
+
+The rule is less important than enforcing one rule. The previous mix of
+`examples/cpp/generated`, `examples/json/cpp`, `examples/protobuf/cpp`, and
+`examples/dispatch/cpp` let stale artefacts look authoritative.
+
+### 6.7 Keep transport v1 static, document codec coupling
+
+Transport does not need to be fully runtime-selectable for binding v1. A clean
+v1 can be statically wired as long as each component sees the same generated
+handler and typed topic/service APIs.
+
+Concrete v1 transport rules:
+
+- Socket/PCL remains the production proving path for `json`, `flatbuffers`,
+  and `protobuf`.
+- gRPC is documented as protobuf-pinned, not codec-orthogonal.
+- ROS2 is documented as a transport projection over the generated typed
+  surface and ROS2 envelope mapping, not as a separate payload model.
+- Shared memory remains a PCL transport foundation until the Tactical
+  Objects-specific projection is generated.
+
+Only after the binding surface is clean should a common `ProvidedHost` /
+`ConsumedHost` factory be introduced. That factory is useful, but not a v1
+blocker if startup wiring remains explicit and stable.
+
+### 6.8 V1 acceptance tests
+
+Add or tighten tests around the cleanup:
+
+- Generator test: running full C++/Ada generation for
+  `json,flatbuffers,protobuf,grpc,ros2` produces no stale dispatch files
+  and no undocumented parallel JSON/protobuf roots.
+- Static hygiene test: `StandardBridge.cpp` has no direct
+  FlatBuffers/Protobuf codec includes and no local content-type branch table.
+- Runtime tests: real app passes JSON, FlatBuffers, and Protobuf C++ client
+  tests through the generated helpers.
+- Negative config test: unsupported `--content-type` fails during configure,
+  not on first message.
+- Conformance test: keep `socket + JSON`, `socket + FlatBuffers`, and
+  `gRPC + Protobuf`; add `socket + Protobuf` when the standalone Tactical
+  Objects socket/protobuf path is promoted into the master matrix.
+- Documentation test/review checklist: no page describes
+  `examples/dispatch/*_codec_dispatch.*` as active v1 API.
 
 ---
 
 ## 7. Bottom line
 
-The generator's *abstractions* — backend registry, transport-agnostic
-`ServiceHandler`, `content_type`-driven dispatch — are the right ones
-for the user's stated goal. Where the codebase falls short of "just
-binding use and configuration" today is mostly **realisation**:
+The clean v1 is not "make every dispatch artefact real". It is:
 
-- the dispatch layer exists but isn't used by the live consumer;
-- transports lack a common activation interface;
-- codec selection is symmetric on encode but not on decode;
-- compile-time and runtime selection are not reconciled.
+- one generated service binding surface;
+- one static `content_type` configuration point per component/port;
+- generated bindings own all codec encode/decode and support checks;
+- components implement typed handlers and perform domain mapping only;
+- stale generated artefacts are removed or clearly quarantined.
 
-None of these are architectural dead-ends. Item 1 (StandardBridge
-migrating onto the generated dispatch) is the single change that would
-make the rest of the gaps either trivial or unavoidable to fix.
+That path preserves the good architecture already present in
+`ServiceHandler` and service `dispatch(...)`, while removing the ambiguity
+created by the unused standalone `codec_dispatch` files. Once that is stable,
+transport factories and broader runtime selection can be added without
+dragging codec-specific branches back into component code.

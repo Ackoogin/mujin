@@ -162,10 +162,6 @@ ServiceHandler::handleDeleteDispatchResult(const Identifier& /*request*/) {
 
 namespace {
 
-constexpr const char* kJsonContentType = "application/json";
-constexpr const char* kFlatBuffersContentType = "application/flatbuffers";
-constexpr const char* kProtobufContentType = "application/protobuf";
-
 bool is_json_content_type(const char* content_type)
 {
     return !content_type || std::strcmp(content_type, kJsonContentType) == 0;
@@ -233,6 +229,44 @@ pcl_status_t invoke_async(pcl_executor_t* executor,
 }
 
 } // namespace
+
+// ---------------------------------------------------------------------------
+// Content-type support metadata
+// ---------------------------------------------------------------------------
+
+std::vector<const char*> supportedContentTypes()
+{
+    std::vector<const char*> result{kJsonContentType};
+#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
+    result.push_back(kFlatBuffersContentType);
+#endif
+#if PYRAMID_HAVE_SERVICE_PROTOBUF
+    result.push_back(kProtobufContentType);
+#endif
+    return result;
+}
+
+bool supportsContentType(const char* content_type)
+{
+    if (is_json_content_type(content_type)) {
+        return true;
+    }
+    if (is_flatbuffers_content_type(content_type)) {
+#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
+        return true;
+#else
+        return false;
+#endif
+    }
+    if (is_protobuf_content_type(content_type)) {
+#if PYRAMID_HAVE_SERVICE_PROTOBUF
+        return true;
+#else
+        return false;
+#endif
+    }
+    return false;
+}
 
 // ---------------------------------------------------------------------------
 // Typed invoke wrappers — serialise and dispatch via executor transport

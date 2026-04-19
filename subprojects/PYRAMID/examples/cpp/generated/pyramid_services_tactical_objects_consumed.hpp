@@ -8,7 +8,7 @@
 //   1. Wire-name constants and topic constants
 //   2. EntityActions handler base class (ServiceHandler — override Handle*)
 //   3. PCL binding functions (subscribe*, publish*)
-//   4. msgToString utility for PCL message payloads
+//   4. Content-type support metadata and msgToString utility
 #pragma once
 
 #include "pyramid_data_model_types.hpp"
@@ -22,6 +22,17 @@
 #include <vector>
 
 namespace pyramid::services::tactical_objects::consumed {
+
+// ---------------------------------------------------------------------------
+// Content-type constants and support metadata
+// ---------------------------------------------------------------------------
+
+constexpr const char* kJsonContentType = "application/json";
+constexpr const char* kFlatBuffersContentType = "application/flatbuffers";
+constexpr const char* kProtobufContentType = "application/protobuf";
+
+bool supportsContentType(const char* content_type);
+std::vector<const char*> supportedContentTypes();
 
 // ---------------------------------------------------------------------------
 // Service wire-name constants (generated from proto)
@@ -121,6 +132,15 @@ pcl_status_t publishObjectEvidence(pcl_port_t*        publisher,
 pcl_status_t publishObjectEvidence(pcl_port_t*        publisher,
                                    const std::string& payload,
                                    const char*        content_type = "application/json");
+
+/// \brief Encode a typed message for kTopicObjectEvidence.
+bool encodeObjectEvidence(const ObjectDetail& payload,
+                          const char*        content_type,
+                          std::string*       out);
+
+/// \brief Decode a PCL message from kTopicObjectEvidence.
+bool decodeObjectEvidence(const pcl_msg_t* msg,
+                          ObjectDetail* out);
 
 // ---------------------------------------------------------------------------
 // Dispatch — deserialises request, calls handler, serialises response.

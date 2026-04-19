@@ -7,8 +7,8 @@
 // This header provides:
 //   1. Wire-name constants and topic constants
 //   2. EntityActions handler base class (ServiceHandler — override Handle*)
-//   3. PCL binding functions (subscribe*, invoke*)
-//   4. msgToString utility for PCL message payloads
+//   3. PCL binding functions (subscribe*, publish*, invoke*)
+//   4. Content-type support metadata and msgToString utility
 #pragma once
 
 #include "pyramid_data_model_types.hpp"
@@ -22,6 +22,17 @@
 #include <vector>
 
 namespace pyramid::services::autonomy_backend::provided {
+
+// ---------------------------------------------------------------------------
+// Content-type constants and support metadata
+// ---------------------------------------------------------------------------
+
+constexpr const char* kJsonContentType = "application/json";
+constexpr const char* kFlatBuffersContentType = "application/flatbuffers";
+constexpr const char* kProtobufContentType = "application/protobuf";
+
+bool supportsContentType(const char* content_type);
+std::vector<const char*> supportedContentTypes();
 
 // ---------------------------------------------------------------------------
 // Service wire-name constants (generated from proto)
@@ -180,7 +191,7 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// PCL binding functions — Subscribe / Invoke (typed)
+// PCL binding functions — Subscribe / Publish / Invoke (typed)
 // ---------------------------------------------------------------------------
 
 /// \brief Invoke capabilities.read_capabilities (typed, serialisation handled internally).

@@ -6,10 +6,10 @@ This document is retained only as a redirect for older references.
 
 The planning and status material that used to live here has converged into:
 
-- [service_schema_tactical_objects.md](/D:/Dev/repo/mujin/subprojects/PYRAMID/docs/service_schema_tactical_objects.md)
+- [generated_bindings.md](generated_bindings.md)
+  for the current generated-binding architecture and usage guide
+- [generated_bindings_status.md](generated_bindings_status.md)
   for current Tactical Objects proving-ground status
-- [service_binding_codegen.md](/D:/Dev/repo/mujin/subprojects/PYRAMID/docs/service_binding_codegen.md)
-  for generator architecture and emitted artifacts
 
 ## Preserved Decisions
 

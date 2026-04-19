@@ -135,6 +135,24 @@ TEST(ProtoBindingsConsumed, TopicNames) {
     EXPECT_STREQ(cons::kTopicObjectEvidence, "standard.object_evidence");
 }
 
+TEST(ProtoBindingsProvided, ContentTypeMetadata) {
+    EXPECT_TRUE(prov::supportsContentType(nullptr));
+    EXPECT_TRUE(prov::supportsContentType(prov::kJsonContentType));
+    EXPECT_TRUE(prov::supportsContentType(prov::kFlatBuffersContentType));
+    EXPECT_TRUE(prov::supportsContentType(prov::kProtobufContentType));
+    EXPECT_FALSE(prov::supportsContentType("text/plain"));
+    EXPECT_GE(prov::supportedContentTypes().size(), 1u);
+}
+
+TEST(ProtoBindingsConsumed, ContentTypeMetadata) {
+    EXPECT_TRUE(cons::supportsContentType(nullptr));
+    EXPECT_TRUE(cons::supportsContentType(cons::kJsonContentType));
+    EXPECT_TRUE(cons::supportsContentType(cons::kFlatBuffersContentType));
+    EXPECT_TRUE(cons::supportsContentType(cons::kProtobufContentType));
+    EXPECT_FALSE(cons::supportsContentType("text/plain"));
+    EXPECT_GE(cons::supportedContentTypes().size(), 1u);
+}
+
 // ===========================================================================
 // msgToString utility
 // ===========================================================================
@@ -154,6 +172,79 @@ TEST(ProtoBindingsConsumed, MsgToString) {
 TEST(ProtoBindingsProvided, MsgToStringEmpty) {
     std::string result = prov::msgToString(nullptr, 0);
     EXPECT_TRUE(result.empty());
+}
+
+TEST(ProtoBindingsProvided, TopicEncodeDecodeEntityMatches) {
+    types::ObjectMatch match;
+    match.id = "obj-1";
+    match.matching_object_id = "match-1";
+    match.source = "radar";
+    match.update_time = 42.0;
+    const std::vector<types::ObjectMatch> input{match};
+
+    const char* content_types[] = {
+        prov::kJsonContentType,
+        prov::kFlatBuffersContentType,
+        prov::kProtobufContentType,
+    };
+    for (const char* content_type : content_types) {
+        std::string payload;
+        ASSERT_TRUE(prov::encodeEntityMatches(input, content_type, &payload)) << content_type;
+
+        pcl_msg_t msg{};
+        msg.data = payload.data();
+        msg.size = static_cast<uint32_t>(payload.size());
+        msg.type_name = content_type;
+
+        std::vector<types::ObjectMatch> output;
+        ASSERT_TRUE(prov::decodeEntityMatches(&msg, &output)) << content_type;
+        ASSERT_EQ(output.size(), 1u);
+        EXPECT_EQ(output[0].id, "obj-1");
+        EXPECT_EQ(output[0].matching_object_id, "match-1");
+        EXPECT_EQ(output[0].source, "radar");
+        ASSERT_TRUE(output[0].update_time.has_value());
+        EXPECT_DOUBLE_EQ(*output[0].update_time, 42.0);
+    }
+}
+
+TEST(ProtoBindingsConsumed, TopicEncodeDecodeObjectEvidence) {
+    types::ObjectDetail input;
+    input.id = "obj-7";
+    input.identity = types::StandardIdentity::Friendly;
+    input.dimension = types::BattleDimension::Air;
+    input.position.latitude = 0.25;
+    input.position.longitude = -0.75;
+    input.entity_source = "sensor-a";
+
+    const char* content_types[] = {
+        cons::kJsonContentType,
+        cons::kFlatBuffersContentType,
+        cons::kProtobufContentType,
+    };
+    for (const char* content_type : content_types) {
+        std::string payload;
+        ASSERT_TRUE(cons::encodeObjectEvidence(input, content_type, &payload)) << content_type;
+
+        pcl_msg_t msg{};
+        msg.data = payload.data();
+        msg.size = static_cast<uint32_t>(payload.size());
+        msg.type_name = content_type;
+
+        types::ObjectDetail output;
+        ASSERT_TRUE(cons::decodeObjectEvidence(&msg, &output)) << content_type;
+        EXPECT_EQ(output.id, "obj-7");
+        EXPECT_EQ(output.identity, types::StandardIdentity::Friendly);
+        EXPECT_EQ(output.dimension, types::BattleDimension::Air);
+        EXPECT_DOUBLE_EQ(output.position.latitude, 0.25);
+        EXPECT_DOUBLE_EQ(output.position.longitude, -0.75);
+        EXPECT_EQ(output.entity_source, "sensor-a");
+    }
+}
+
+TEST(ProtoBindingsProvided, TopicEncodeRejectsUnsupportedContentType) {
+    std::vector<types::ObjectMatch> matches;
+    std::string payload;
+    EXPECT_FALSE(prov::encodeEntityMatches(matches, "text/plain", &payload));
 }
 
 // ===========================================================================

@@ -4,13 +4,13 @@
 
 This document is now a short redirect rather than a second status page.
 
+For the current generated-binding architecture and usage guide, use:
+
+- [generated_bindings.md](generated_bindings.md)
+
 For the current Tactical Objects backend and transport state, use:
 
-- [service_schema_tactical_objects.md](/D:/Dev/repo/mujin/subprojects/PYRAMID/docs/service_schema_tactical_objects.md)
-
-For generator implementation details, use:
-
-- [service_binding_codegen.md](/D:/Dev/repo/mujin/subprojects/PYRAMID/docs/service_binding_codegen.md)
+- [generated_bindings_status.md](generated_bindings_status.md)
 
 ## Preserved Invariants
 

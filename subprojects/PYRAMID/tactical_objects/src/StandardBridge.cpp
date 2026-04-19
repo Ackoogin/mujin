@@ -1,10 +1,7 @@
 #include <StandardBridge.h>
 
-#include "pyramid_data_model_tactical_codec.hpp"
 #include "pyramid_services_tactical_objects_consumed.hpp"
 #include "pyramid_services_tactical_objects_provided.hpp"
-#include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
-#include "pyramid_services_tactical_objects_protobuf_codec.hpp"
 
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
@@ -14,7 +11,6 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
-#include <cstring>
 #include <cstdlib>
 #include <limits>
 #include <string>
@@ -25,29 +21,10 @@ namespace tactical_objects {
 
 namespace prov = pyramid::services::tactical_objects::provided;
 namespace cons = pyramid::services::tactical_objects::consumed;
-namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
-namespace protobuf_codec = pyramid::services::tactical_objects::protobuf_codec;
-namespace tactical_codec = pyramid::data_model::tactical;
 namespace data_model = pyramid::data_model;
 using pyramid::core::uuid::UUIDHelper;
 
 namespace {
-
-constexpr const char* kJsonContentType = "application/json";
-constexpr const char* kFlatBuffersContentType = "application/flatbuffers";
-constexpr const char* kProtobufContentType = "application/protobuf";
-
-bool is_flatbuffers_content_type(const char* content_type) {
-  return content_type && std::strcmp(content_type, kFlatBuffersContentType) == 0;
-}
-
-bool is_protobuf_content_type(const char* content_type) {
-  return content_type && std::strcmp(content_type, kProtobufContentType) == 0;
-}
-
-bool is_json_content_type(const char* content_type) {
-  return !content_type || std::strcmp(content_type, kJsonContentType) == 0;
-}
 
 data_model::PolyArea make_poly_area(const BoundingBox& bbox) {
   data_model::PolyArea area;
@@ -286,56 +263,6 @@ data_model::ObjectMatch standard_match_from_object(const TacticalObjectsRuntime&
   return match;
 }
 
-std::string encode_match_array(const std::vector<data_model::ObjectMatch>& matches,
-                               const char* content_type) {
-  if (is_flatbuffers_content_type(content_type)) {
-    return flatbuffers_codec::toBinary(matches);
-  }
-  if (is_protobuf_content_type(content_type)) {
-    return protobuf_codec::toBinary(matches);
-  }
-  std::string payload = "[";
-  bool first = true;
-  for (const auto& match : matches) {
-    if (!first) payload += ",";
-    first = false;
-    payload += tactical_codec::toJson(match);
-  }
-  payload += "]";
-  return payload;
-}
-
-std::string encode_evidence_requirement(const data_model::ObjectEvidenceRequirement& req,
-                                        const char* content_type) {
-  if (is_flatbuffers_content_type(content_type)) {
-    return flatbuffers_codec::toBinary(req);
-  }
-  if (is_protobuf_content_type(content_type)) {
-    return protobuf_codec::toBinary(req);
-  }
-  return tactical_codec::toJson(req);
-}
-
-bool decode_object_evidence(const pcl_msg_t* msg, data_model::ObjectDetail& detail) {
-  if (!msg || !msg->data || msg->size == 0) {
-    return false;
-  }
-  try {
-    if (is_flatbuffers_content_type(msg->type_name)) {
-      detail = flatbuffers_codec::fromBinaryObjectDetail(msg->data, msg->size);
-    } else if (is_protobuf_content_type(msg->type_name)) {
-      detail = protobuf_codec::fromBinaryObjectDetail(msg->data, msg->size);
-    } else {
-      detail = tactical_codec::fromJson(
-          std::string(static_cast<const char*>(msg->data), msg->size),
-          static_cast<data_model::ObjectDetail*>(nullptr));
-    }
-    return true;
-  } catch (...) {
-    return false;
-  }
-}
-
 } // namespace
 
 class BridgeServiceHandler : public prov::ServiceHandler {
@@ -374,6 +301,10 @@ StandardBridge::StandardBridge(TacticalObjectsRuntime& runtime, pcl_executor_t* 
       expose_consumed_interface_(expose_consumed_interface) {}
 
 pcl_status_t StandardBridge::on_configure() {
+  if (!supportsContentType(frontend_content_type_.c_str())) {
+    return PCL_ERR_INVALID;
+  }
+
   if (!addService(prov::kSvcCreateRequirement, frontend_content_type_.c_str(),
                   handleCreateRequirement, this)) {
     return PCL_ERR_CALLBACK;
@@ -417,16 +348,12 @@ pcl_status_t StandardBridge::on_activate() {
 }
 
 bool StandardBridge::supportsContentType(const char* content_type) const {
-  if (is_json_content_type(content_type)) {
-    return frontend_content_type_ == kJsonContentType;
+  const char* requested = content_type ? content_type : prov::kJsonContentType;
+  if (frontend_content_type_ != requested) {
+    return false;
   }
-  if (is_flatbuffers_content_type(content_type)) {
-    return frontend_content_type_ == kFlatBuffersContentType;
-  }
-  if (is_protobuf_content_type(content_type)) {
-    return frontend_content_type_ == kProtobufContentType;
-  }
-  return false;
+  return prov::supportsContentType(requested) &&
+         (!expose_consumed_interface_ || cons::supportsContentType(requested));
 }
 
 pcl_status_t StandardBridge::dispatchProvidedService(int channel, const pcl_msg_t* request,
@@ -535,24 +462,10 @@ void StandardBridge::publishEntityMatches(const std::vector<std::string>& entity
     return;
   }
 
-  publish_buffer_ = encode_match_array(matches, frontend_content_type_.c_str());
-  pcl_msg_t out{};
-  out.data = publish_buffer_.data();
-  out.size = static_cast<uint32_t>(publish_buffer_.size());
-  out.type_name = frontend_content_type_.c_str();
-  pcl_port_publish(pub_entity_matches_, &out);
-}
-
-void StandardBridge::publishEvidenceRequirement(const std::string& payload) {
-  if (!pub_evidence_reqs_ || payload.empty()) {
+  if (!prov::encodeEntityMatches(matches, frontend_content_type_.c_str(), &publish_buffer_)) {
     return;
   }
-  publish_buffer_ = payload;
-  pcl_msg_t out{};
-  out.data = publish_buffer_.data();
-  out.size = static_cast<uint32_t>(publish_buffer_.size());
-  out.type_name = frontend_content_type_.c_str();
-  pcl_port_publish(pub_evidence_reqs_, &out);
+  prov::publishEntityMatches(pub_entity_matches_, publish_buffer_, frontend_content_type_.c_str());
 }
 
 pcl_status_t StandardBridge::on_tick(double dt) {
@@ -580,7 +493,7 @@ void StandardBridge::onStandardObjectEvidence(pcl_container_t*, const pcl_msg_t*
                                               void* user_data) {
   auto* self = static_cast<StandardBridge*>(user_data);
   data_model::ObjectDetail detail;
-  if (!decode_object_evidence(msg, detail)) {
+  if (!cons::decodeObjectEvidence(msg, &detail)) {
     return;
   }
 
@@ -637,9 +550,17 @@ data_model::Identifier BridgeServiceHandler::handleCreateRequirement(
     const auto solution = bridge_.runtime_.determineSolution(interest_id);
     for (const auto& requirement : solution.evidence_requirements) {
       const auto standard_req = standard_evidence_requirement(requirement);
-      const auto payload =
-          encode_evidence_requirement(standard_req, bridge_.frontend_content_type_.c_str());
-      bridge_.publishEvidenceRequirement(payload);
+      std::string payload;
+      if (!prov::encodeEvidenceRequirements(
+              standard_req, bridge_.frontend_content_type_.c_str(), &payload)) {
+        continue;
+      }
+      if (bridge_.pub_evidence_reqs_) {
+        bridge_.publish_buffer_ = payload;
+        prov::publishEvidenceRequirements(
+            bridge_.pub_evidence_reqs_, bridge_.publish_buffer_,
+            bridge_.frontend_content_type_.c_str());
+      }
 
       pcl_msg_t req{};
       req.data = const_cast<char*>(payload.data());
@@ -715,8 +636,16 @@ data_model::Ack BridgeServiceHandler::handleUpdateRequirement(
     const auto solution = bridge_.runtime_.determineSolution(UUIDKey(parsed.first));
     for (const auto& requirement : solution.evidence_requirements) {
       const auto standard_req = standard_evidence_requirement(requirement);
-      bridge_.publishEvidenceRequirement(
-          encode_evidence_requirement(standard_req, bridge_.frontend_content_type_.c_str()));
+      if (bridge_.pub_evidence_reqs_) {
+        if (!prov::encodeEvidenceRequirements(
+                standard_req, bridge_.frontend_content_type_.c_str(),
+                &bridge_.publish_buffer_)) {
+          continue;
+        }
+        prov::publishEvidenceRequirements(
+            bridge_.pub_evidence_reqs_, bridge_.publish_buffer_,
+            bridge_.frontend_content_type_.c_str());
+      }
     }
   }
 

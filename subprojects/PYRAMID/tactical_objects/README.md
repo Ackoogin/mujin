@@ -82,6 +82,12 @@ All JSON schemas are defined in `TacticalObjectsCodec` and exercised by `Test_Ta
 
 `tactical_objects_app` exposes the generated Tactical Objects provided interface on its remote socket-facing executor. The app can be started with `--content-type application/json`, `--content-type application/flatbuffers`, or `--content-type application/protobuf`.
 
+Generated binding architecture, content-type selection rules, and topic helper
+usage are documented in
+[`../docs/generated_bindings.md`](../docs/generated_bindings.md). Current
+Tactical Objects generated-binding status and conformance coverage are tracked
+in [`../docs/generated_bindings_status.md`](../docs/generated_bindings_status.md).
+
 | Service/topic | Direction | Payload |
 |---------------|-----------|---------|
 | `object_of_interest.create_requirement` | service | `ObjectInterestRequirement -> Identifier` |

@@ -7,8 +7,8 @@
 // This header provides:
 //   1. Wire-name constants and topic constants
 //   2. EntityActions handler base class (ServiceHandler — override Handle*)
-//   3. PCL binding functions (subscribe*, invoke*)
-//   4. msgToString utility for PCL message payloads
+//   3. PCL binding functions (subscribe*, publish*, invoke*)
+//   4. Content-type support metadata and msgToString utility
 #pragma once
 
 #include "pyramid_data_model_types.hpp"
@@ -22,6 +22,17 @@
 #include <vector>
 
 namespace pyramid::services::tactical_objects::provided {
+
+// ---------------------------------------------------------------------------
+// Content-type constants and support metadata
+// ---------------------------------------------------------------------------
+
+constexpr const char* kJsonContentType = "application/json";
+constexpr const char* kFlatBuffersContentType = "application/flatbuffers";
+constexpr const char* kProtobufContentType = "application/protobuf";
+
+bool supportsContentType(const char* content_type);
+std::vector<const char*> supportedContentTypes();
 
 // ---------------------------------------------------------------------------
 // Service wire-name constants (generated from proto)
@@ -71,6 +82,7 @@ std::string msgToString(const void* data, unsigned size);
 using pyramid::data_model::Ack;
 using pyramid::data_model::Identifier;
 using pyramid::data_model::ObjectDetail;
+using pyramid::data_model::ObjectEvidenceRequirement;
 using pyramid::data_model::ObjectInterestRequirement;
 using pyramid::data_model::ObjectMatch;
 using pyramid::data_model::Query;
@@ -102,7 +114,7 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// PCL binding functions — Subscribe / Invoke (typed)
+// PCL binding functions — Subscribe / Publish / Invoke (typed)
 // ---------------------------------------------------------------------------
 
 /// \brief Subscribe to entity-match publications on kTopicEntityMatches.
@@ -117,6 +129,48 @@ pcl_port_t* subscribeEvidenceRequirements(pcl_container_t*  container,
                                           pcl_sub_callback_t callback,
                                           void*             user_data = nullptr,
                                           const char*       content_type = "application/json");
+
+/// \brief Publish a typed message on kTopicEntityMatches.
+///
+/// \p publisher must be the pcl_port_t* returned by addPublisher for
+/// kTopicEntityMatches, obtained during on_configure.
+pcl_status_t publishEntityMatches(pcl_port_t*        publisher,
+                                  const std::vector<ObjectMatch>& payload,
+                                  const char*        content_type = "application/json");
+
+pcl_status_t publishEntityMatches(pcl_port_t*        publisher,
+                                  const std::string& payload,
+                                  const char*        content_type = "application/json");
+
+/// \brief Encode a typed message for kTopicEntityMatches.
+bool encodeEntityMatches(const std::vector<ObjectMatch>& payload,
+                         const char*        content_type,
+                         std::string*       out);
+
+/// \brief Decode a PCL message from kTopicEntityMatches.
+bool decodeEntityMatches(const pcl_msg_t* msg,
+                         std::vector<ObjectMatch>* out);
+
+/// \brief Publish a typed message on kTopicEvidenceRequirements.
+///
+/// \p publisher must be the pcl_port_t* returned by addPublisher for
+/// kTopicEvidenceRequirements, obtained during on_configure.
+pcl_status_t publishEvidenceRequirements(pcl_port_t*        publisher,
+                                         const ObjectEvidenceRequirement& payload,
+                                         const char*        content_type = "application/json");
+
+pcl_status_t publishEvidenceRequirements(pcl_port_t*        publisher,
+                                         const std::string& payload,
+                                         const char*        content_type = "application/json");
+
+/// \brief Encode a typed message for kTopicEvidenceRequirements.
+bool encodeEvidenceRequirements(const ObjectEvidenceRequirement& payload,
+                                const char*        content_type,
+                                std::string*       out);
+
+/// \brief Decode a PCL message from kTopicEvidenceRequirements.
+bool decodeEvidenceRequirements(const pcl_msg_t* msg,
+                                ObjectEvidenceRequirement* out);
 
 /// \brief Invoke matching_objects.read_match (typed, serialisation handled internally).
 ///

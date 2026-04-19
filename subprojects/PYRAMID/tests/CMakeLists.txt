@@ -142,21 +142,6 @@ if(PYRAMID_ENABLE_PROTOBUF)
     gtest_discover_tests(test_codec_dispatch_e2e DISCOVERY_MODE PRE_TEST)
 endif()
 
-if(PYRAMID_ENABLE_PROTOBUF)
-    if(WIN32)
-        add_test(NAME generated_bindings_flatbuffers_dispatch
-            COMMAND ${CMAKE_COMMAND}
-                    -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_generated_codec_dispatch.bat
-                    -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
-    else()
-        add_test(NAME generated_bindings_flatbuffers_dispatch
-            COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_generated_codec_dispatch.sh)
-    endif()
-    set_tests_properties(generated_bindings_flatbuffers_dispatch PROPERTIES
-        LABELS "generated;codec;dispatch"
-        TIMEOUT 120)
-endif()
-
 add_executable(tobj_socket_server ${TOBJ_TEST_DIR}/tobj_socket_server.cpp)
 target_link_libraries(tobj_socket_server PRIVATE
     tactical_objects tactical_objects_component

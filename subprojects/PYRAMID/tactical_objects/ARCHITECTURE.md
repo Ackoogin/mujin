@@ -92,6 +92,11 @@ It is hosted by `tactical_objects_app` on the socket-facing executor and uses
 the generated provided/consumed service bindings for dispatch and payload
 encoding.
 
+For the canonical generated-binding usage guide, see
+[`../docs/generated_bindings.md`](../docs/generated_bindings.md). For the
+current Tactical Objects binding proof matrix, see
+[`../docs/generated_bindings_status.md`](../docs/generated_bindings_status.md).
+
 The internal runtime still owns correlation, spatial indexing, interest
 matching, and high-rate stream subscriber state. The bridge owns only the schema
 boundary:

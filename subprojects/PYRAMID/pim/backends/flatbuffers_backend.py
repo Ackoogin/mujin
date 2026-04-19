@@ -527,7 +527,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
     # -- Proto-native .fbs schema generation ---------------------------------
 
     def _write_fbs_schema(self, path: Path, pf: ProtoFile, index: ProtoTypeIndex):
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'// Auto-generated FlatBuffers schema from {pf.path.name}\n')
             f.write('// Do not edit — regenerate from proto source\n\n')
 
@@ -572,7 +572,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
         ns = '::'.join(pkg_parts) + '::flatbuffers_codec'
         fbs_base = '_'.join(pkg_parts)
 
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated FlatBuffers PCL codec — do not edit\n')
             f.write(f'// Backend: flatbuffers | Namespace: {ns}\n')
             f.write('#pragma once\n\n')
@@ -612,7 +612,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
     # -- Tactical service-wire generation ------------------------------------
 
     def _write_service_fbs_schema(self, path: Path, group: ServiceCodecGroup):
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated service FlatBuffers schema\n')
             f.write(f'// Generated from proto service closure for {group.base_package}\n')
             f.write('\n')
@@ -641,7 +641,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                 f.write('}\n\n')
 
     def _write_service_cpp_header(self, path: Path, group: ServiceCodecGroup):
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated service FlatBuffers codec\n')
             f.write(f'// Backend: flatbuffers | Namespace: {group.cpp_codec_ns}\n')
             f.write(f'// Generated from proto service closure for {group.base_package}\n')
@@ -675,7 +675,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write(f'}} // namespace {group.cpp_codec_ns}\n')
 
     def _write_service_cpp_impl(self, path: Path, group: ServiceCodecGroup):
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated service FlatBuffers codec\n')
             f.write(f'#include "{group.file_base}_flatbuffers_codec.hpp"\n\n')
             f.write('#include "pyramid_data_model_common_codec.hpp"\n')
@@ -992,7 +992,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
         pkg_parts = [p.capitalize() for p in pf.package.split('.') if p]
         pkg_name = '.'.join(pkg_parts) + '.Flatbuffers_Codec'
 
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('--  Auto-generated FlatBuffers codec spec — do not edit\n')
             f.write(f'--  Backend: flatbuffers | Package: {pkg_name}\n')
             f.write('--\n')
@@ -1018,7 +1018,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write(f'end {pkg_name};\n')
 
     def _write_service_ada_spec(self, path: Path, group: ServiceCodecGroup):
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('--  Auto-generated service FlatBuffers codec\n')
             f.write('--  Backend: flatbuffers\n')
             f.write(f'--  Generated from proto service closure for {group.base_package}\n\n')
@@ -1054,7 +1054,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
         for array_spec in group.array_specs:
             specs.append((camel_to_snake(array_spec.name), array_spec.name))
 
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('--  Auto-generated service FlatBuffers codec\n\n')
             f.write('with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')
             f.write('with Ada.Unchecked_Conversion;\n')

@@ -188,9 +188,9 @@ int main(int argc, char* argv[]) {
     std::fprintf(stderr,
                  "[tactical_objects_test_client] Failed to invoke %s\n",
                  Provided::kSvcCreateRequirement);
-    pcl_container_destroy(container);
     pcl_socket_transport_destroy(transport);
     pcl_executor_destroy(exec);
+    pcl_container_destroy(container);
     return 1;
   }
 
@@ -210,8 +210,8 @@ int main(int argc, char* argv[]) {
                state.match_count.load());
 
   const bool ok = state.interest_id_received.load();
-  pcl_container_destroy(container);
   pcl_socket_transport_destroy(transport);
   pcl_executor_destroy(exec);
+  pcl_container_destroy(container);
   return ok ? 0 : 1;
 }
