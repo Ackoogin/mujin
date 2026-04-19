@@ -4,6 +4,14 @@
 
 No. The dev environment (`subprojects/AME/tools/devenv`) connects directly to the existing `ame_ros2` nodes. No extra bridge app is required.
 
+This guide covers the existing ROS2/Foxglove devenv path. The new PYRAMID
+autonomy backend contract is being tracked separately as a planned devenv mode
+so developers can create `PlanningExecutionRequirement` entities, push
+`StateUpdate` feedback, and inspect `Plan`, `ExecutionRun`, and
+`RequirementPlacement` products locally. See
+`subprojects/PYRAMID/proto/pyramid/components/autonomy_backend/ALIGNMENT.md`
+for the current contract progress and devenv support plan.
+
 It uses two parallel connections:
 
 | Connection | Purpose | When active |

@@ -15,6 +15,7 @@ add_library(ame_core STATIC
     lib/executor_component.cpp
     lib/goal_allocator.cpp
     lib/agent_dispatcher.cpp
+    lib/execution_sink.cpp
     nodes/check_world_predicate.cpp
     nodes/set_world_predicate.cpp
     nodes/invoke_service.cpp

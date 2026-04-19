@@ -2,6 +2,7 @@
 
 #include "ame/action_registry.h"
 #include "ame/autonomy_backend.h"
+#include "ame/execution_sink.h"
 #include "ame/executor_component.h"
 #include "ame/goal_allocator.h"
 #include "ame/planner.h"
@@ -27,7 +28,9 @@ public:
   CurrentAmeBackendAdapter(WorldModel& world_model,
                            const ActionRegistry& action_registry,
                            const Planner& planner = Planner(),
-                           const PlanCompiler& plan_compiler = PlanCompiler());
+                           const PlanCompiler& plan_compiler = PlanCompiler(),
+                           std::shared_ptr<IExecutionSink> execution_sink =
+                               nullptr);
   ~CurrentAmeBackendAdapter();
 
   AutonomyBackendCapabilities describeCapabilities() const override;
@@ -74,6 +77,7 @@ private:
   GoalAllocator goal_allocator_;
   ExecutorComponent executor_;
   std::unique_ptr<BackendPyramidServiceProxy> pyramid_proxy_;
+  std::shared_ptr<IExecutionSink> execution_sink_;
   std::string session_id_;
   PolicyEnvelope policy_;
   AutonomyBackendState state_ = AutonomyBackendState::IDLE;

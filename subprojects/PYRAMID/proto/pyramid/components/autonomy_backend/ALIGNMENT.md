@@ -21,7 +21,8 @@ compatibility surface.
 | Upstream traceability uses `RequirementReference` | AME can refer back to Objective/Task/component requirements by id, service, component, and type |
 | AME outputs are read-only products | Plans, execution runs, and requirement placements are products of AME planning/execution |
 | Component actioning is typed EntityActions | AME should place/update/delete typed component requirements and read products/capabilities |
-| No generic command bus in the target proto | `service_name + operation + request_fields` is replaced by `RequirementPlacement` traceability |
+| No generic command bus in the target PYRAMID proto | `service_name + operation + request_fields` is replaced by typed requirement placement traceability at the PYRAMID boundary |
+| AME internals may still use command-shaped execution | AME remains usable as a planning/execution library outside PYRAMID; wrapper code maps command-shaped plan leaves to typed PYRAMID placements where bindings exist |
 
 ## Reference Contracts
 
@@ -84,6 +85,45 @@ World model producer
   -> State_Service.DeleteState(Identifier)
 ```
 
+## Progress To Date
+
+The first implementation slice has established the new contract and an
+in-process bridge that exercises it through generated PYRAMID service bindings.
+
+| Area | Current state |
+|------|---------------|
+| Proto contract | `autonomy.proto` defines `PlanningExecutionRequirement`, `StateUpdate`, `Capabilities`, `Plan`, `ExecutionRun`, and `RequirementPlacement` |
+| Provided services | `provided.proto` exposes AME capabilities, planning/execution requirement CRUD, state ingress, and read-only plan/run/placement services |
+| PYRAMID generation | C++ service bindings, FlatBuffers schemas, JSON codecs, and protobuf generation include the autonomy backend contract |
+| AME bridge | `PyramidAutonomyBridge` implements the generated autonomy backend service handler in-process |
+| Retained products | The bridge keeps requirement, state, plan, run, and placement stores behind read operations instead of drain-only queues |
+| Planning path | `PLAN_ONLY` requirements are planned and exposed as read-only `Plan` products |
+| Execution path | `PLAN_AND_EXECUTE` requirements produce `ExecutionRun` products and placement traceability |
+| State feedback | `State_Service.CreateState` / `UpdateState` update the AME world model and can complete waiting execution steps |
+| Execution abstraction | AME plan leaves now submit through `IExecutionSink`, allowing command-only or typed-placement-backed execution |
+| Test coverage | Contract, bridge, execution-sink, and backend execution behaviors are covered by focused C++ tests |
+
+Implementation files of interest:
+
+| File | Role |
+|------|------|
+| `subprojects/AME/include/ame/pyramid_autonomy_bridge.h` | Public bridge options and generated service handler implementation surface |
+| `subprojects/AME/src/lib/pyramid_autonomy_bridge.cpp` | In-process AME/PYRAMID contract bridge |
+| `subprojects/AME/include/ame/execution_sink.h` | AME execution abstraction for command-only and typed-placement modes |
+| `subprojects/AME/src/lib/execution_sink.cpp` | Execution sink implementations and binding logic |
+| `subprojects/AME/src/lib/autonomy_backend.cpp` | Existing AME backend adapter wired through `IExecutionSink` |
+| `subprojects/AME/tests/test_ame_autonomy_contract.cpp` | Generated-service contract and bridge behavior tests |
+| `subprojects/AME/tests/test_execution_sink.cpp` | Command-only, typed-placement, fallback, and strict-policy tests |
+
+Current verification command:
+
+```bat
+ctest --test-dir build -C Release -R "ExecutionSink|AutonomyBackend|AmeAutonomyContract|ProtoBindings|CodecDispatch" --output-on-failure
+```
+
+At the time this document was updated, the selected suite passed with `67/67`
+tests.
+
 ## Responsibility Mapping
 
 Objectives responsibilities imply upstream mission-level concerns:
@@ -112,6 +152,56 @@ Tasks responsibilities are the closest conceptual fit for AME:
 AME does not define `ObjectiveRequirement`, `TaskRequirement`, or
 `DerivedNeed`. It accepts `RequirementReference` values that point to upstream
 requirements owned by those components.
+
+## Execution Binding Model
+
+AME needs to support two deployment shapes:
+
+1. PYRAMID deployments, where execution should be visible as typed
+   requirement placements against target component services.
+2. Library or non-PYRAMID deployments, where AME can execute command-shaped BT
+   leaves without requiring PYRAMID component contracts.
+
+The implementation therefore separates AME-internal execution from the
+PYRAMID-facing contract:
+
+| Layer | Shape | Purpose |
+|-------|-------|---------|
+| AME plan leaf | `ActionCommand` / BT `InvokeService` style command | Internal execution intent produced by AME planning/BT execution |
+| Execution sink | `IExecutionSink` | Host-selected boundary that accepts AME execution intent |
+| PYRAMID wrapper | `RequirementBindingExecutionSink` | Maps known commands to typed `RequirementPlacement` records |
+| Non-PYRAMID host | `CommandQueueExecutionSink` or custom sink | Exposes command-shaped execution directly to the host |
+| Public PYRAMID read model | `RequirementPlacement` | Read-only trace of typed requirement placement/progress |
+
+The current execution policies are:
+
+| Policy | Behavior |
+|--------|----------|
+| `CommandOnly` | Every AME execution leaf remains command egress; no typed placement is required |
+| `PreferTypedPlacement` | Bound actions become typed placements; unbound actions fall back to command egress |
+| `RequireTypedPlacement` | Bound actions become typed placements; unbound actions are rejected and the run fails |
+
+Execution bindings are deliberately host/configuration data rather than baked
+into AME's proto. A binding maps an AME action shape to a PYRAMID target:
+
+| Binding concept | Example |
+|-----------------|---------|
+| `action_name` | `search` |
+| command `service_name` / `operation` | `imaging` / `search` |
+| target component | `tactical_objects` |
+| target service | `Object_Of_Interest_Service` |
+| target requirement type | `pyramid.data_model.tactical.ObjectInterestRequirement` |
+| placement operation | `CREATE_REQUIREMENT` |
+
+The default PYRAMID wrapper currently includes example bindings for `move` and
+`search`, and hosts can register or replace bindings through
+`PyramidAutonomyBridge::registerExecutionBinding`. These bindings currently
+project AME execution into retained `RequirementPlacement` products. The next
+implementation step is to connect those placements to real generated component
+service clients where concrete component contracts exist.
+
+This model keeps the public PYRAMID API free of a generic command bus while
+still allowing AME to remain a reusable library for command-oriented users.
 
 ## Tactical Objects Example
 
@@ -178,6 +268,166 @@ AME-specific convention.
    `Requirement.base.status` / `Achievement`.
 7. Ingest external world-state changes through `State_Service`.
 
+## Remaining Plan
+
+The remaining work should proceed in slices that keep the contract testable
+after each step.
+
+### Slice 1: Contract Stabilisation
+
+Status: mostly complete.
+
+- Keep `PlanningExecutionRequirement` as the AME delegation surface.
+- Keep `Plan`, `ExecutionRun`, and `RequirementPlacement` as read-only products.
+- Preserve `State_Service` as AME world-state ingress.
+- Keep Objectives/Tasks references as traceability only until those component
+  protos exist.
+- Maintain generated JSON/FlatBuffers/protobuf coverage for autonomy messages.
+
+Open work:
+
+- Review field naming and enum values with PYRAMID consumers before treating
+  the proto as stable.
+- Decide whether placement records need explicit fields for command fallback
+  traceability, or whether fallback remains an AME-library concern only.
+
+### Slice 2: Backend Bridge Hardening
+
+Status: initial bridge complete; hardening remains.
+
+- Expand retained-store semantics for repeated reads and `one_shot` behavior.
+- Add cancellation behavior from `DeleteRequirement` into running AME execution.
+- Improve `UpdateRequirement` handling for approved-plan execution and
+  requirement refinement.
+- Persist enough plan/run/placement metadata for replay and audit.
+- Add failure causes to requirement achievement and execution-run products.
+
+### Slice 3: Typed Component Invocation
+
+Status: binding/projection layer complete; real service invocation remains.
+
+- Introduce a component service client abstraction behind
+  `RequirementBindingExecutionSink`.
+- For each bound action, construct the target component requirement using a
+  typed mapper instead of only recording placement metadata.
+- Call generated target component service bindings where contracts exist.
+- Read target requirement/product/capability state and feed the result back into
+  AME `RequirementPlacement`, `ExecutionRun`, and world-state updates.
+- Keep `CommandOnly` available for non-PYRAMID users and for actions without
+  PYRAMID component contracts.
+
+Tactical Objects can remain the first concrete CRUD example, but it is not
+expected to cover all execution needs. Future execution-oriented components
+such as mobility, guidance, sensor control, communications, or effectors should
+provide their own requirement CRUD contracts and then be registered as bindings.
+
+### Slice 4: Test Client And Scenario Coverage
+
+Status: generated-service tests exist; standalone client remains.
+
+- Add a small generated-contract test client that can:
+  - create a `PlanningExecutionRequirement`
+  - read the resulting `Plan`
+  - read the `ExecutionRun`
+  - read `RequirementPlacement` records
+  - push `StateUpdate` feedback
+  - re-read the run and requirement achievement
+- Provide at least one plan-only fixture and one plan-and-execute fixture.
+- Add a strict binding-policy fixture that demonstrates failure for unbound
+  commands.
+- Add a preferred binding-policy fixture that demonstrates command fallback.
+- Keep the client useful both as a smoke test and as a reference for future
+  Objectives/Tasks integrations.
+
+### Slice 5: Objectives/Tasks Integration
+
+Status: dependency.
+
+- Wait for Objective and Task requirement protos owned by their components.
+- Map Objective/Task requirements into AME `RequirementReference` and
+  `PlanningGoal` values.
+- Ensure Objectives/Tasks retain responsibility for objective/task quality,
+  while AME reports plan quality, execution progress, and placement outcomes.
+- Add cross-component tests once those protos and service bindings exist.
+
+## Devenv Support Considerations
+
+The current AME devenv is centred on ROS2/PCL workflows:
+
+| Path | Current purpose |
+|------|-----------------|
+| `subprojects/AME/docs/guides/devenv_ros2_quickstart.md` | ROS2 and Foxglove devenv guide |
+| `subprojects/AME/tools/devenv/start_devenv.bat` | Launches the ROS2-backed devenv |
+| `subprojects/AME/tools/devenv/start_devenv_pcl.bat` | Launches the local PCL/Python-binding backend |
+
+The new autonomy contract should be added as a third devenv capability rather
+than replacing the current ROS2 or PCL modes.
+
+### Devenv Goals
+
+- Let developers exercise the new `Planning_Execution_Service` contract without
+  writing custom C++.
+- Make the retained products visible: requirements, plans, execution runs,
+  placements, and state updates.
+- Allow switching execution policy between `CommandOnly`,
+  `PreferTypedPlacement`, and `RequireTypedPlacement`.
+- Allow a small binding configuration to map AME actions to target component
+  requirement services.
+- Keep the dev loop local and deterministic before adding distributed transport.
+
+### Proposed Devenv Shape
+
+| Devenv addition | Description |
+|-----------------|-------------|
+| `--backend pyramid` | New backend mode that talks to an in-process `PyramidAutonomyBridge` |
+| Contract client wrapper | Thin Python or subprocess wrapper around generated C++ JSON service dispatch |
+| Requirement panel | Create/update/delete `PlanningExecutionRequirement` from editable JSON |
+| State panel | Send `StateUpdate` messages and inspect world-state-driven progress |
+| Plan panel | Read `Plan_Service.ReadPlan` and show ordered `PlanStep` rows |
+| Run panel | Read `Execution_Run_Service.ReadRun` and show state/achievement/progress |
+| Placement panel | Read `Requirement_Placement_Service.ReadPlacement` and show bound target interactions |
+| Binding editor | Load/save action-to-component binding examples for local scenarios |
+
+Recommended launch shape:
+
+```bat
+subprojects\AME\tools\devenv\start_devenv_pyramid.bat ^
+  --domain subprojects\AME\domains\uav_search\domain.pddl ^
+  --problem subprojects\AME\domains\uav_search\problem.pddl ^
+  --execution-policy PreferTypedPlacement ^
+  --bindings subprojects\AME\tools\devenv\config\pyramid_bindings.example.json
+```
+
+This can initially run entirely in-process. A later transport-backed mode can
+reuse the same UI panels once PYRAMID service transport is selected.
+
+### Devenv Implementation Plan
+
+1. Add a standalone C++ contract client or bridge runner that exposes the
+   generated autonomy backend service handler through JSON request/response.
+2. Add a Python adapter in `subprojects/AME/tools/devenv` that can call the
+   runner and present the same operations as normal devenv backend methods.
+3. Add a `start_devenv_pyramid.bat` launcher that verifies generated bindings
+   and starts the UI with `--backend pyramid`.
+4. Add example JSON fixtures for:
+   - plan-only search
+   - plan-and-execute search with state feedback
+   - strict binding failure
+   - command fallback
+5. Add UI views for requirement, plan, run, and placement products.
+6. Add smoke tests that run the pyramid backend without ROS2 and verify the UI
+   adapter can complete a create/read/state-feedback/read cycle.
+
+### Devenv Open Decisions
+
+| Decision | Options |
+|----------|---------|
+| Local bridge process | Python extension binding, C++ subprocess with JSON stdin/stdout, or lightweight HTTP service |
+| Binding config format | JSON fixture, command-line flags, or generated PYRAMID component registry |
+| Transport alignment | Keep in-process for now, then map to the eventual PYRAMID runtime transport |
+| Target component simulation | Mock generated service clients first, then swap in real component service clients |
+| Scenario ownership | Keep examples under AME devenv until Objectives/Tasks scenario fixtures exist |
+
 ## Review Checklist
 
 - AME is invoked by `CreateRequirement(PlanningExecutionRequirement)`, not by
@@ -190,6 +440,13 @@ AME-specific convention.
 - Repeated non-`one_shot` reads are idempotent.
 - PDDL/BT/LAPKT details remain AME implementation details unless exposed as AME
   products such as `Plan.compiled_bt_xml`.
+- AME can still be embedded as a command-oriented library through
+  `CommandQueueExecutionSink`.
+- PYRAMID deployments use `RequirementBindingExecutionSink` to project or invoke
+  typed component requirement placements.
+- Devenv support includes a local way to create requirements, push state
+  feedback, and inspect plans/runs/placements before distributed transport is
+  required.
 
 ## File Locations
 

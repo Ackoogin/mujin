@@ -14,6 +14,10 @@ add_executable(test_autonomy_backend test_autonomy_backend.cpp)
 target_link_libraries(test_autonomy_backend PRIVATE ame_core GTest::gtest_main)
 gtest_discover_tests(test_autonomy_backend DISCOVERY_MODE PRE_TEST)
 
+add_executable(test_execution_sink test_execution_sink.cpp)
+target_link_libraries(test_execution_sink PRIVATE ame_core GTest::gtest_main)
+gtest_discover_tests(test_execution_sink DISCOVERY_MODE PRE_TEST)
+
 add_executable(test_ame_autonomy_contract
     test_ame_autonomy_contract.cpp
     ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_services_autonomy_backend_provided.cpp

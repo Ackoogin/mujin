@@ -1,6 +1,7 @@
 #include "ame/current_ame_backend_adapter.h"
 
 #include "ame/bt_nodes/invoke_service.h"
+#include "ame/execution_sink.h"
 #include "ame/pyramid_service.h"
 
 #include <stdexcept>
@@ -10,34 +11,43 @@ namespace ame {
 
 class CurrentAmeBackendAdapter::BackendPyramidServiceProxy : public IPyramidService {
 public:
-  struct PendingCall {
+  struct SubmissionRecord {
     ActionCommand command;
-    bool emitted = false;
-    bool has_result = false;
-    AsyncCallStatus result_status = AsyncCallStatus::PENDING;
-    ServiceMessage response;
+    ExecutionSubmission submission;
   };
 
-  explicit BackendPyramidServiceProxy(std::string session_id)
-      : session_id_(std::move(session_id)) {}
+  struct PendingCall {
+    ActionCommand command;
+    bool accepted = true;
+    std::string rejection_reason;
+  };
+
+  BackendPyramidServiceProxy(std::string session_id,
+                             std::shared_ptr<IExecutionSink> execution_sink)
+      : session_id_(std::move(session_id)),
+        execution_sink_(std::move(execution_sink)) {
+    if (!execution_sink_) {
+      execution_sink_ = std::make_shared<CommandQueueExecutionSink>();
+    }
+    execution_sink_->reset(session_id_);
+  }
 
   void reset(std::string session_id) {
     session_id_ = std::move(session_id);
     next_request_id_ = 0;
     pending_calls_.clear();
-    emitted_commands_.clear();
+    submitted_records_.clear();
+    execution_sink_->reset(session_id_);
+  }
+
+  std::vector<SubmissionRecord> drainSubmissionRecords() {
+    auto records = submitted_records_;
+    submitted_records_.clear();
+    return records;
   }
 
   std::vector<ActionCommand> drainEmittedCommands() {
-    auto commands = emitted_commands_;
-    emitted_commands_.clear();
-    for (auto& command : commands) {
-      auto it = pending_calls_.find(command.command_id);
-      if (it != pending_calls_.end()) {
-        it->second.emitted = true;
-      }
-    }
-    return commands;
+    return execution_sink_->pullCommands();
   }
 
   void submitResult(const CommandResult& result) {
@@ -45,34 +55,12 @@ public:
     if (it == pending_calls_.end()) {
       throw std::invalid_argument("Unknown command_id in proxy result");
     }
-
-    it->second.has_result = true;
-    it->second.response.fields.clear();
-    for (const auto& update : result.observed_updates) {
-      it->second.response.set(update.key, update.value ? "true" : "false");
-    }
-
-    switch (result.status) {
-      case CommandStatus::PENDING:
-      case CommandStatus::RUNNING:
-        it->second.result_status = AsyncCallStatus::PENDING;
-        break;
-      case CommandStatus::SUCCEEDED:
-        it->second.result_status = AsyncCallStatus::SUCCESS;
-        break;
-      case CommandStatus::FAILED_TRANSIENT:
-      case CommandStatus::FAILED_PERMANENT:
-        it->second.result_status = AsyncCallStatus::FAILURE;
-        break;
-      case CommandStatus::CANCELLED:
-        it->second.result_status = AsyncCallStatus::CANCELLED;
-        break;
-    }
+    execution_sink_->pushResult(result);
   }
 
   bool hasPendingCalls() const {
     for (const auto& [command_id, call] : pending_calls_) {
-      if (!call.has_result) {
+      if (execution_sink_->isPending(command_id)) {
         return true;
       }
     }
@@ -81,8 +69,7 @@ public:
 
   void forgetCompletedCalls() {
     for (auto it = pending_calls_.begin(); it != pending_calls_.end();) {
-      if (it->second.has_result &&
-          it->second.result_status != AsyncCallStatus::PENDING) {
+      if (!execution_sink_->isPending(it->first)) {
         it = pending_calls_.erase(it);
       } else {
         ++it;
@@ -109,8 +96,11 @@ public:
 
     PendingCall pending;
     pending.command = command;
+    auto submission = execution_sink_->submit(command);
+    pending.accepted = submission.accepted;
+    pending.rejection_reason = submission.rejection_reason;
     pending_calls_[command.command_id] = pending;
-    emitted_commands_.push_back(command);
+    submitted_records_.push_back({command, submission});
     request_id_to_command_[request_id] = command.command_id;
     return request_id;
   }
@@ -126,12 +116,34 @@ public:
       return AsyncCallStatus::FAILURE;
     }
 
-    if (!pending_it->second.has_result) {
+    if (!pending_it->second.accepted) {
+      response.set("error", pending_it->second.rejection_reason);
+      return AsyncCallStatus::FAILURE;
+    }
+
+    auto result = execution_sink_->resultFor(cmd_it->second);
+    if (!result.has_value()) {
       return AsyncCallStatus::PENDING;
     }
 
-    response = pending_it->second.response;
-    return pending_it->second.result_status;
+    response.fields.clear();
+    for (const auto& update : result->observed_updates) {
+      response.set(update.key, update.value ? "true" : "false");
+    }
+
+    switch (result->status) {
+      case CommandStatus::PENDING:
+      case CommandStatus::RUNNING:
+        return AsyncCallStatus::PENDING;
+      case CommandStatus::SUCCEEDED:
+        return AsyncCallStatus::SUCCESS;
+      case CommandStatus::FAILED_TRANSIENT:
+      case CommandStatus::FAILED_PERMANENT:
+        return AsyncCallStatus::FAILURE;
+      case CommandStatus::CANCELLED:
+        return AsyncCallStatus::CANCELLED;
+    }
+    return AsyncCallStatus::FAILURE;
   }
 
   void cancelCall(uint64_t request_id) override {
@@ -143,28 +155,34 @@ public:
     if (pending_it == pending_calls_.end()) {
       return;
     }
-    pending_it->second.has_result = true;
-    pending_it->second.result_status = AsyncCallStatus::CANCELLED;
+    execution_sink_->cancel(pending_it->second.command.command_id);
   }
 
 private:
   std::string session_id_;
+  std::shared_ptr<IExecutionSink> execution_sink_;
   uint64_t next_request_id_ = 0;
   std::unordered_map<uint64_t, std::string> request_id_to_command_;
   std::unordered_map<std::string, PendingCall> pending_calls_;
-  std::vector<ActionCommand> emitted_commands_;
+  std::vector<SubmissionRecord> submitted_records_;
 };
 
 CurrentAmeBackendAdapter::CurrentAmeBackendAdapter(
     WorldModel& world_model,
     const ActionRegistry& action_registry,
     const Planner& planner,
-    const PlanCompiler& plan_compiler)
+    const PlanCompiler& plan_compiler,
+    std::shared_ptr<IExecutionSink> execution_sink)
     : world_model_(world_model),
       action_registry_(action_registry),
       planner_(planner),
       plan_compiler_(plan_compiler),
-      pyramid_proxy_(std::make_unique<BackendPyramidServiceProxy>("")) {
+      execution_sink_(std::move(execution_sink)) {
+  if (!execution_sink_) {
+    execution_sink_ = std::make_shared<CommandQueueExecutionSink>();
+  }
+  pyramid_proxy_ =
+      std::make_unique<BackendPyramidServiceProxy>("", execution_sink_);
   executor_.setInProcessWorldModel(&world_model_);
   executor_.setBlackboardInitializer([this](const BT::Blackboard::Ptr& blackboard) {
     blackboard->set("pyramid_service",
@@ -294,10 +312,21 @@ void CurrentAmeBackendAdapter::step() {
 
   executor_.tickOnce();
 
+  auto submitted_records = pyramid_proxy_->drainSubmissionRecords();
+  for (const auto& record : submitted_records) {
+    if (record.submission.accepted) {
+      command_tracking_[record.command.command_id] =
+          {record.command, CommandStatus::PENDING};
+    }
+  }
+
   auto emitted_commands = pyramid_proxy_->drainEmittedCommands();
   if (!emitted_commands.empty()) {
     for (const auto& command : emitted_commands) {
-      command_tracking_[command.command_id] = {command, CommandStatus::PENDING};
+      if (command_tracking_.find(command.command_id) == command_tracking_.end()) {
+        command_tracking_[command.command_id] =
+            {command, CommandStatus::PENDING};
+      }
       pending_command_queue_.push_back(command);
     }
     state_ = AutonomyBackendState::WAITING_FOR_RESULTS;
