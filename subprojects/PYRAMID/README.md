@@ -35,7 +35,8 @@ subprojects\PYRAMID\scripts\generate_bindings.bat
 | `core/` | PYRAMID shared runtime layer |
 | `proto/` | Data-model and component service contracts |
 | `pim/` | Binding/code generation tooling |
-| `examples/` | Ada, C++, gRPC, Protobuf, and ROS2 examples |
+| `bindings/` | Checked-in generated C++/Ada bindings plus Protobuf, gRPC, and ROS2 projections |
+| `examples/` | Hand-written Ada and C++ example apps/support code |
 | `tactical_objects/` | Tactical Objects runtime, component, app, and local README |
 | `tests/` | Generated binding, transport, and Tactical Objects tests |
 | `ros2/` | ROS2 transport adapter package |

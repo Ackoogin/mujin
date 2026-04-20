@@ -47,7 +47,7 @@ function(pyramid_fetch_grpc_dependency)
     endif()
 endfunction()
 
-set(PYRAMID_FLATBUFFERS_SCHEMA_DIR "${PYRAMID_ROOT_DIR}/examples/cpp/generated/flatbuffers/cpp")
+set(PYRAMID_FLATBUFFERS_SCHEMA_DIR "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/flatbuffers/cpp")
 set(PYRAMID_FLATBUFFERS_GEN_DIR "${CMAKE_BINARY_DIR}/generated/flatbuffers/cpp")
 set(PYRAMID_FLATBUFFERS_SCHEMAS
     "${PYRAMID_FLATBUFFERS_SCHEMA_DIR}/pyramid_services_autonomy_backend.fbs"
@@ -79,12 +79,12 @@ target_include_directories(pyramid_flatbuffers_support
 )
 
 add_library(pyramid_generated_codecs STATIC
-    "${PYRAMID_ROOT_DIR}/examples/cpp/generated/flatbuffers/cpp/pyramid_services_autonomy_backend_flatbuffers_codec.cpp"
-    "${PYRAMID_ROOT_DIR}/examples/cpp/generated/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.cpp"
-    "${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_autonomy_codec.cpp"
-    "${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_base_codec.cpp"
-    "${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_common_codec.cpp"
-    "${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_data_model_tactical_codec.cpp"
+    "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/flatbuffers/cpp/pyramid_services_autonomy_backend_flatbuffers_codec.cpp"
+    "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.cpp"
+    "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_data_model_autonomy_codec.cpp"
+    "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_data_model_base_codec.cpp"
+    "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_data_model_common_codec.cpp"
+    "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_data_model_tactical_codec.cpp"
 )
 add_dependencies(pyramid_generated_codecs pyramid_flatbuffers_codegen)
 target_link_libraries(pyramid_generated_codecs
@@ -94,7 +94,7 @@ target_link_libraries(pyramid_generated_codecs
 )
 target_include_directories(pyramid_generated_codecs
     PUBLIC
-        "${PYRAMID_ROOT_DIR}/examples/cpp/generated"
+        "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
 )
 
 if(PYRAMID_ENABLE_PROTOBUF)
@@ -180,8 +180,8 @@ if(PYRAMID_ENABLE_PROTOBUF)
     add_custom_target(pyramid_protobuf_codegen DEPENDS ${PYRAMID_PROTOBUF_OUTPUTS})
 
     add_library(pyramid_protobuf_support STATIC
-        "${PYRAMID_ROOT_DIR}/examples/protobuf/cpp/pyramid_services_tactical_objects_protobuf_codec.cpp"
-        "${PYRAMID_ROOT_DIR}/examples/protobuf/cpp/pyramid_services_tactical_objects_protobuf_shim.cpp"
+        "${PYRAMID_ROOT_DIR}/bindings/protobuf/cpp/pyramid_services_tactical_objects_protobuf_codec.cpp"
+        "${PYRAMID_ROOT_DIR}/bindings/protobuf/cpp/pyramid_services_tactical_objects_protobuf_shim.cpp"
         "${PYRAMID_PROTOBUF_GEN_DIR}/pyramid/data_model/base.pb.cc"
         "${PYRAMID_PROTOBUF_GEN_DIR}/pyramid/data_model/common.pb.cc"
         "${PYRAMID_PROTOBUF_GEN_DIR}/pyramid/data_model/tactical.pb.cc"
@@ -195,8 +195,8 @@ if(PYRAMID_ENABLE_PROTOBUF)
     )
     target_include_directories(pyramid_protobuf_support
         PUBLIC
-            "${PYRAMID_ROOT_DIR}/examples/cpp/generated"
-            "${PYRAMID_ROOT_DIR}/examples/protobuf/cpp"
+            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
+            "${PYRAMID_ROOT_DIR}/bindings/protobuf/cpp"
             "${PYRAMID_PROTOBUF_GEN_DIR}"
     )
 
@@ -287,8 +287,8 @@ if(PYRAMID_ENABLE_GRPC)
         add_custom_target(pyramid_grpc_codegen DEPENDS ${PYRAMID_GRPC_OUTPUTS})
 
         add_library(pyramid_grpc_transport STATIC
-            "${PYRAMID_ROOT_DIR}/examples/grpc/cpp/pyramid_components_tactical_objects_services_provided_grpc_transport.cpp"
-            "${PYRAMID_ROOT_DIR}/examples/grpc/cpp/pyramid_components_tactical_objects_services_consumed_grpc_transport.cpp"
+            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp/pyramid_components_tactical_objects_services_provided_grpc_transport.cpp"
+            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp/pyramid_components_tactical_objects_services_consumed_grpc_transport.cpp"
             "${PYRAMID_PROTOBUF_GEN_DIR}/pyramid/components/tactical_objects/services/provided.pb.cc"
             "${PYRAMID_PROTOBUF_GEN_DIR}/pyramid/components/tactical_objects/services/provided.grpc.pb.cc"
             "${PYRAMID_PROTOBUF_GEN_DIR}/pyramid/components/tactical_objects/services/consumed.pb.cc"
@@ -305,15 +305,15 @@ if(PYRAMID_ENABLE_GRPC)
         target_include_directories(pyramid_grpc_transport
             PUBLIC
                 "${PCL_ROOT_DIR}/include"
-                "${PYRAMID_ROOT_DIR}/examples/cpp/generated"
-                "${PYRAMID_ROOT_DIR}/examples/grpc/cpp"
+                "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
+                "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp"
                 "${PYRAMID_PROTOBUF_GEN_DIR}"
         )
 
         add_library(pyramid_grpc_c_shim SHARED
-            "${PYRAMID_ROOT_DIR}/examples/grpc/cpp/pyramid_services_tactical_objects_grpc_c_api_support.cpp"
-            "${PYRAMID_ROOT_DIR}/examples/grpc/cpp/pyramid_components_tactical_objects_services_provided_grpc_c_api.cpp"
-            "${PYRAMID_ROOT_DIR}/examples/grpc/cpp/pyramid_components_tactical_objects_services_consumed_grpc_c_api.cpp"
+            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp/pyramid_services_tactical_objects_grpc_c_api_support.cpp"
+            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp/pyramid_components_tactical_objects_services_provided_grpc_c_api.cpp"
+            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp/pyramid_components_tactical_objects_services_consumed_grpc_c_api.cpp"
         )
         add_dependencies(pyramid_grpc_c_shim pyramid_grpc_codegen pyramid_protobuf_codegen)
         target_link_libraries(pyramid_grpc_c_shim
@@ -325,7 +325,7 @@ if(PYRAMID_ENABLE_GRPC)
         )
         target_include_directories(pyramid_grpc_c_shim
             PUBLIC
-                "${PYRAMID_ROOT_DIR}/examples/grpc/cpp"
+                "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp"
                 "${PYRAMID_PROTOBUF_GEN_DIR}"
         )
     endif()
@@ -333,10 +333,10 @@ endif()
 
 if(PYRAMID_ENABLE_ROS2)
     add_library(pyramid_ros2_transport STATIC
-        "${PYRAMID_ROOT_DIR}/examples/ros2/cpp/pyramid_ros2_transport_support.cpp"
-        "${PYRAMID_ROOT_DIR}/examples/ros2/cpp/pyramid_components_tactical_objects_ros2_transport.cpp"
-        "${PYRAMID_ROOT_DIR}/examples/ros2/cpp/pyramid_components_tactical_objects_services_consumed_ros2_transport.cpp"
-        "${PYRAMID_ROOT_DIR}/examples/ros2/cpp/pyramid_components_tactical_objects_services_provided_ros2_transport.cpp"
+        "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/ros2/cpp/pyramid_ros2_transport_support.cpp"
+        "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/ros2/cpp/pyramid_components_tactical_objects_ros2_transport.cpp"
+        "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/ros2/cpp/pyramid_components_tactical_objects_services_consumed_ros2_transport.cpp"
+        "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/ros2/cpp/pyramid_components_tactical_objects_services_provided_ros2_transport.cpp"
     )
     target_link_libraries(pyramid_ros2_transport
         PUBLIC
@@ -345,7 +345,7 @@ if(PYRAMID_ENABLE_ROS2)
     target_include_directories(pyramid_ros2_transport
         PUBLIC
             "${PCL_ROOT_DIR}/include"
-            "${PYRAMID_ROOT_DIR}/examples/ros2/cpp"
+            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/ros2/cpp"
     )
 endif()
 

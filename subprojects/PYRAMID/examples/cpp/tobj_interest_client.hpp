@@ -7,7 +7,7 @@
 // Architecture: main > TobjInterestClient (this) > service binding > PCL
 #pragma once
 
-#include "generated/pyramid_services_tactical_objects_provided.hpp"
+#include "pyramid_services_tactical_objects_provided.hpp"
 
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>

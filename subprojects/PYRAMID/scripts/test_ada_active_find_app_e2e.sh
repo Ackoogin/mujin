@@ -7,7 +7,7 @@ PYRAMID_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 WORKSPACE_ROOT="$(cd "$PYRAMID_ROOT/../.." && pwd)"
 
 APP_BIN="${WORKSPACE_ROOT}/build/subprojects/PYRAMID/tactical_objects/tactical_objects_app"
-CLIENT_BIN="${PYRAMID_ROOT}/examples/ada/bin/ada_active_find_e2e"
+CLIENT_BIN="${PYRAMID_ROOT}/tests/ada/bin/ada_active_find_e2e"
 PORT=19305
 CONTENT_TYPE="application/json"
 TIMEOUT=25
@@ -56,7 +56,7 @@ if command -v gprbuild &>/dev/null; then
       echo "[driver] SKIP: unable to build GNAT-compatible generated FlatBuffers archive"
       exit 0
     }
-  (cd "$PYRAMID_ROOT/examples/ada" && \
+  (cd "$PYRAMID_ROOT/tests/ada" && \
     MUJIN_ROOT="$WORKSPACE_ROOT" gprbuild -P ada_active_find_e2e.gpr -q \
       -XMUJIN_ROOT="$WORKSPACE_ROOT" \
       -XPCL_INCLUDE_DIR="$WORKSPACE_ROOT/subprojects/PCL/include" \

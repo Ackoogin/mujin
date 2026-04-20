@@ -41,15 +41,15 @@ add_library(pyramid::tactical_objects_component ALIAS tactical_objects_component
 target_sources(tactical_objects_component PRIVATE
     src/TacticalObjectsComponent.cpp
     src/StandardBridge.cpp
-    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_services_tactical_objects_provided.cpp
+    ${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_services_tactical_objects_provided.cpp
 )
 target_include_directories(tactical_objects_component PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
 target_include_directories(tactical_objects_component PRIVATE
-  ${PYRAMID_ROOT_DIR}/examples/cpp/generated
-  ${PYRAMID_ROOT_DIR}/examples/protobuf/cpp
+  ${PYRAMID_ROOT_DIR}/bindings/cpp/generated
+  ${PYRAMID_ROOT_DIR}/bindings/protobuf/cpp
 )
 target_link_libraries(tactical_objects_component PUBLIC
   tactical_objects
@@ -65,12 +65,12 @@ target_compile_features(tactical_objects_component PUBLIC cxx_std_14)
 # ---------------------------------------------------------------------------
 add_executable(tactical_objects_app
     src/apps/tactical_objects_main.cpp
-    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_services_tactical_objects_consumed.cpp
+    ${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_services_tactical_objects_consumed.cpp
 )
 
 add_executable(tactical_objects_test_client
     src/apps/tactical_objects_test_client.cpp
-    ${PYRAMID_ROOT_DIR}/examples/cpp/generated/pyramid_services_tactical_objects_provided.cpp
+    ${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_services_tactical_objects_provided.cpp
 )
 
 target_link_libraries(tactical_objects_app
@@ -85,8 +85,8 @@ target_link_libraries(tactical_objects_app
 
 target_include_directories(tactical_objects_app
     PRIVATE
-        ${PYRAMID_ROOT_DIR}/examples/cpp/generated
-        ${PYRAMID_ROOT_DIR}/examples/protobuf/cpp
+        ${PYRAMID_ROOT_DIR}/bindings/cpp/generated
+        ${PYRAMID_ROOT_DIR}/bindings/protobuf/cpp
 )
 
 target_compile_features(tactical_objects_app PRIVATE cxx_std_14)
@@ -103,8 +103,8 @@ target_link_libraries(tactical_objects_test_client
 
 target_include_directories(tactical_objects_test_client
     PRIVATE
-        ${PYRAMID_ROOT_DIR}/examples/cpp/generated
-        ${PYRAMID_ROOT_DIR}/examples/protobuf/cpp
+        ${PYRAMID_ROOT_DIR}/bindings/cpp/generated
+        ${PYRAMID_ROOT_DIR}/bindings/protobuf/cpp
 )
 
 target_compile_features(tactical_objects_test_client PRIVATE cxx_std_14)

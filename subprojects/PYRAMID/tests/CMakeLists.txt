@@ -1,7 +1,7 @@
 include(GoogleTest)
 
 set(TOBJ_TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tactical_objects)
-set(PROTO_BINDINGS_DIR ${PYRAMID_ROOT_DIR}/examples/cpp/generated)
+set(PROTO_BINDINGS_DIR ${PYRAMID_ROOT_DIR}/bindings/cpp/generated)
 
 add_executable(test_tobj_types ${TOBJ_TEST_DIR}/Test_Types.cpp)
 target_link_libraries(test_tobj_types PRIVATE tactical_objects GTest::gtest_main)
@@ -179,7 +179,7 @@ if(NOT WIN32)
 endif()
 
 add_executable(cpp_active_find_e2e EXCLUDE_FROM_ALL
-    ${PYRAMID_ROOT_DIR}/examples/cpp/cpp_active_find_e2e.cpp
+    ${PYRAMID_ROOT_DIR}/tests/tactical_objects/cpp_active_find_e2e.cpp
     ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_interest_client.cpp
     ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_evidence_provider.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
@@ -285,7 +285,7 @@ if(WIN32 AND TARGET pyramid_grpc_transport)
         pyramid_protobuf_support
     )
     target_include_directories(tobj_grpc_server PRIVATE
-        ${PYRAMID_ROOT_DIR}/examples/grpc/cpp
+        ${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp
         ${PYRAMID_PROTOBUF_GEN_DIR}
     )
 endif()
@@ -293,13 +293,13 @@ endif()
 find_program(GPRBUILD gprbuild)
 set(PYRAMID_PROTO_ROOT ${PYRAMID_ROOT_DIR}/proto)
 if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
-    set(ADA_SRC_DIR ${PYRAMID_ROOT_DIR}/examples/ada)
+    set(ADA_TEST_SRC_DIR ${PYRAMID_ROOT_DIR}/tests/ada)
     find_program(ADA_PYTHON NAMES python3 python)
     if(NOT ADA_PYTHON)
         message(FATAL_ERROR "Python is required to generate Ada bindings for tests")
     endif()
     set(BINDINGS_GEN_SCRIPT ${PYRAMID_ROOT_DIR}/pim/generate_bindings.py)
-    set(ADA_GEN_OUT ${ADA_SRC_DIR}/generated)
+    set(ADA_GEN_OUT ${PYRAMID_ROOT_DIR}/bindings/ada/generated)
     set(ADA_PCL_INCLUDE_DIR "${PCL_ROOT_DIR}/include" CACHE PATH
         "Include directory for Ada gprbuild PCL headers")
     set(ADA_PCL_LIB_NAME "pcl_core" CACHE STRING
@@ -347,10 +347,11 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${ADA_GEN_OUT}/grpc/ada/pyramid_components_tactical_objects_services_provided-grpc_transport.ads
                 ${ADA_GEN_OUT}/grpc/ada/pyramid-components-tactical_objects-services-provided-grpc_transport.ads
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_TEST_SRC_DIR}/bin
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR}
         COMMAND ${CMAKE_COMMAND} -E env MUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
-                ${GPRBUILD} -p -P ${ADA_SRC_DIR}/test_generated_bindings.gpr
+                ${GPRBUILD} -p -P ${ADA_TEST_SRC_DIR}/test_generated_bindings.gpr
                 -XMUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
                 -XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR}
                 -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
@@ -358,7 +359,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                 -XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME}
                 -XPYRAMID_GEN_LIB_DIR=${ADA_PYRAMID_GEN_LIB_DIR}
                 -XPYRAMID_GEN_LIB_NAME=${ADA_PYRAMID_GEN_LIB_NAME}
-        WORKING_DIRECTORY ${ADA_SRC_DIR}
+        WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
         COMMENT "Building Ada generated-bindings test"
     )
     if(WIN32)
@@ -375,7 +376,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     endif()
 
     add_test(NAME ada_generated_bindings_roundtrip
-        COMMAND ${ADA_SRC_DIR}/bin/test_generated_bindings)
+        COMMAND ${ADA_TEST_SRC_DIR}/bin/test_generated_bindings)
     set_tests_properties(ada_generated_bindings_roundtrip PROPERTIES
         LABELS "ada;generated;codec"
         TIMEOUT 20
@@ -404,14 +405,14 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_e2e.bat
                     -DSERVER_BIN=$<TARGET_FILE:tobj_socket_server>
                     -DBRIDGE_BIN=$<TARGET_FILE:standalone_bridge>
-                    -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_active_find_e2e
+                    -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e
                     -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
         add_test(NAME tobj_ada_active_find_e2e
             COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_e2e.sh
                     --server-bin $<TARGET_FILE:tobj_socket_server>
                     --bridge-bin $<TARGET_FILE:standalone_bridge>
-                    --client-bin ${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_active_find_e2e)
+                    --client-bin ${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e)
     endif()
     set_tests_properties(tobj_ada_active_find_e2e PROPERTIES
         LABELS "cross_language;integration"
@@ -423,7 +424,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_e2e.bat
                     -DSERVER_BIN=$<TARGET_FILE:tobj_socket_server>
                     -DBRIDGE_BIN=$<TARGET_FILE:standalone_bridge>
-                    -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_active_find_e2e
+                    -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e
                     -DSCRIPT_ARGS=--content-type|application/flatbuffers
                     -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
@@ -431,7 +432,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
             COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_e2e.sh
                     --server-bin $<TARGET_FILE:tobj_socket_server>
                     --bridge-bin $<TARGET_FILE:standalone_bridge>
-                    --client-bin ${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_active_find_e2e
+                    --client-bin ${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e
                     --content-type application/flatbuffers)
     endif()
     set_tests_properties(tobj_ada_active_find_flatbuffers_e2e PROPERTIES
@@ -443,13 +444,13 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
             COMMAND ${CMAKE_COMMAND}
                     -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_app_e2e.bat
                     -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
-                    -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_active_find_e2e
+                    -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e
                     -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
         add_test(NAME tobj_ada_active_find_app_e2e
             COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_app_e2e.sh
                     --app-bin $<TARGET_FILE:tactical_objects_app>
-                    --client-bin ${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_active_find_e2e)
+                    --client-bin ${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e)
     endif()
     set_tests_properties(tobj_ada_active_find_app_e2e PROPERTIES
         LABELS "cross_language;integration;real_app"
@@ -460,14 +461,14 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
             COMMAND ${CMAKE_COMMAND}
                     -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_app_e2e.bat
                     -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
-                    -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_active_find_e2e
+                    -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e
                     -DSCRIPT_ARGS=--content-type|application/flatbuffers
                     -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
         add_test(NAME tobj_ada_active_find_app_flatbuffers_e2e
             COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_app_e2e.sh
                     --app-bin $<TARGET_FILE:tactical_objects_app>
-                    --client-bin ${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_active_find_e2e
+                    --client-bin ${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e
                     --content-type application/flatbuffers)
     endif()
     set_tests_properties(tobj_ada_active_find_app_flatbuffers_e2e PROPERTIES
@@ -477,8 +478,8 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     if(WIN32 AND TARGET pyramid_grpc_transport)
         add_custom_target(ada_grpc_cpp_interop_build ALL
             COMMAND ${CMAKE_COMMAND} -E env MUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
-                    ${GPRBUILD} -p -P ${ADA_SRC_DIR}/ada_grpc_cpp_interop_e2e.gpr
-            WORKING_DIRECTORY ${ADA_SRC_DIR}
+                    ${GPRBUILD} -p -P ${ADA_TEST_SRC_DIR}/ada_grpc_cpp_interop_e2e.gpr
+            WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
             COMMENT "Building Ada gRPC C++ interop test"
         )
         add_dependencies(ada_grpc_cpp_interop_build pyramid_grpc_c_shim)
@@ -487,7 +488,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
             COMMAND ${CMAKE_COMMAND}
                     -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_ada_grpc_cpp_interop_e2e.bat
                     -DSERVER_BIN=$<TARGET_FILE:tobj_grpc_server>
-                    -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_grpc_cpp_interop_e2e
+                    -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_grpc_cpp_interop_e2e
                     -DSCRIPT_ARGS=--dll-bin|$<TARGET_FILE:pyramid_grpc_c_shim>|--address|127.0.0.1:50111
                     -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
         set_tests_properties(tobj_ada_grpc_cpp_interop_e2e PROPERTIES
@@ -497,7 +498,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         add_test(NAME tobj_master_conformance_e2e
                     COMMAND ${CMAKE_COMMAND}
                     -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_tobj_master_conformance.bat
-                    -DSCRIPT_ARGS=--socket-server-bin|$<TARGET_FILE:tobj_socket_server>|--bridge-bin|$<TARGET_FILE:standalone_bridge>|--socket-client-bin|${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_active_find_e2e|--grpc-server-bin|$<TARGET_FILE:tobj_grpc_server>|--grpc-client-bin|${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_grpc_cpp_interop_e2e|--grpc-dll-bin|$<TARGET_FILE:pyramid_grpc_c_shim>
+                    -DSCRIPT_ARGS=--socket-server-bin|$<TARGET_FILE:tobj_socket_server>|--bridge-bin|$<TARGET_FILE:standalone_bridge>|--socket-client-bin|${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e|--grpc-server-bin|$<TARGET_FILE:tobj_grpc_server>|--grpc-client-bin|${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_grpc_cpp_interop_e2e|--grpc-dll-bin|$<TARGET_FILE:pyramid_grpc_c_shim>
                     -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
         set_tests_properties(tobj_master_conformance_e2e PROPERTIES
             LABELS "cross_language;integration;conformance;codec;grpc"
@@ -515,7 +516,7 @@ if(TARGET pyramid_grpc_transport)
         GTest::gtest_main
     )
     target_include_directories(test_grpc_transport_smoke PRIVATE
-        ${PYRAMID_ROOT_DIR}/examples/grpc/cpp
+        ${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp
         ${PYRAMID_PROTOBUF_GEN_DIR}
     )
     gtest_discover_tests(test_grpc_transport_smoke DISCOVERY_MODE PRE_TEST)
@@ -530,7 +531,7 @@ if(TARGET pyramid_ros2_transport)
         GTest::gtest_main
     )
     target_include_directories(test_ros2_transport_semantics PRIVATE
-        ${PYRAMID_ROOT_DIR}/examples/ros2/cpp
+        ${PYRAMID_ROOT_DIR}/bindings/cpp/generated/ros2/cpp
     )
     gtest_discover_tests(test_ros2_transport_semantics DISCOVERY_MODE PRE_TEST)
 endif()

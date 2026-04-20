@@ -43,12 +43,16 @@ the generated service binding layer.
 |------|-----|
 | Contract source | `subprojects/PYRAMID/proto/**/*.proto` |
 | Generator entry point | `subprojects/PYRAMID/pim/generate_bindings.py` |
-| C++ service facade | `examples/cpp/generated/pyramid_services_*_{provided,consumed}.{hpp,cpp}` |
-| C++ data-model types | `examples/cpp/generated/pyramid_data_model_*_types.hpp` |
-| C++ JSON codecs | `examples/cpp/generated/pyramid_data_model_*_codec.{hpp,cpp}` |
-| C++ FlatBuffers codecs | `examples/cpp/generated/flatbuffers/cpp/*_flatbuffers_codec.*` |
-| C++ Protobuf codecs | data-model stubs in `examples/cpp/generated/protobuf/cpp/*_protobuf_codec.*`; tactical service shim in `examples/protobuf/cpp/pyramid_services_tactical_objects_protobuf_*` |
-| Ada service facade | `examples/ada/generated/pyramid-services-*.ads/.adb` |
+| Generated artifact home | `subprojects/PYRAMID/bindings/` |
+| C++ service facade | `bindings/cpp/generated/pyramid_services_*_{provided,consumed}.{hpp,cpp}` |
+| C++ data-model types | `bindings/cpp/generated/pyramid_data_model_*_types.hpp` |
+| C++ JSON codecs | `bindings/cpp/generated/pyramid_data_model_*_codec.{hpp,cpp}` |
+| C++ FlatBuffers codecs | `bindings/cpp/generated/flatbuffers/cpp/*_flatbuffers_codec.*` |
+| C++ Protobuf codecs | data-model stubs in `bindings/cpp/generated/protobuf/cpp/*_protobuf_codec.*`; tactical service shim in `bindings/protobuf/cpp/pyramid_services_tactical_objects_protobuf_*` |
+| C++ gRPC transport | `bindings/cpp/generated/grpc/cpp/*_grpc_*` |
+| C++ ROS2 transport | `bindings/cpp/generated/ros2/cpp/*_ros2_*` |
+| Ada service facade | `bindings/ada/generated/pyramid-services-*.ads/.adb` |
+| Ada transport projections | `bindings/ada/generated/{grpc,ros2}/ada/*.ads` |
 | ROS2 mapping rules | [ros2_transport_semantics.md](ros2_transport_semantics.md) |
 | Tactical Objects status | [generated_bindings_status.md](../../../../doc/reports/PYRAMID/generated_bindings_status.md) |
 | Historical review | [review_pyramid_bindings_pluggability.md](../../../../doc/reviews/PYRAMID/review_pyramid_bindings_pluggability.md) |
@@ -120,7 +124,7 @@ From the repository root:
 ```bat
 python subprojects\PYRAMID\pim\generate_bindings.py ^
   subprojects\PYRAMID\proto ^
-  subprojects\PYRAMID\examples\cpp\generated ^
+  subprojects\PYRAMID\bindings\cpp\generated ^
   --languages cpp ^
   --backends json,flatbuffers
 ```
@@ -130,7 +134,7 @@ The generator can also emit Ada and other backend projections:
 ```bat
 python subprojects\PYRAMID\pim\generate_bindings.py ^
   subprojects\PYRAMID\proto ^
-  subprojects\PYRAMID\examples\ada\generated ^
+  subprojects\PYRAMID\bindings\ada\generated ^
   --languages ada ^
   --backends json,flatbuffers,protobuf,grpc
 ```
@@ -344,6 +348,8 @@ The following are not v1 user guides:
   plan
 - Historical references to `examples/dispatch/*_codec_dispatch.*`: removed
   standalone dispatch candidate
+- Historical generated artifacts under `examples/`: moved to `bindings/`.
+  New generated output should not be added beneath `examples/`.
 
 Update new work to point at this guide and
 [generated_bindings_status.md](../../../../doc/reports/PYRAMID/generated_bindings_status.md).

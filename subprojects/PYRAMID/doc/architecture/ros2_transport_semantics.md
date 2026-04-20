@@ -5,7 +5,7 @@ semantics.
 
 It is the design reference for the generated `ros2` backend and the shared
 support layer under
-[examples/ros2/cpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/examples/ros2/cpp).
+[bindings/cpp/generated/ros2/cpp](/D:/Dev/repo/mujin/subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp).
 
 ## Purpose
 

@@ -33,9 +33,9 @@ goto parse_args
 
 if "%SOCKET_SERVER_BIN%"=="" set "SOCKET_SERVER_BIN=%PYRAMID_ROOT%\..\..\build\subprojects\PYRAMID\tests\Release\tobj_socket_server.exe"
 if "%BRIDGE_BIN%"=="" set "BRIDGE_BIN=%PYRAMID_ROOT%\..\..\build\subprojects\PYRAMID\tests\Release\standalone_bridge.exe"
-if "%SOCKET_CLIENT_BIN%"=="" set "SOCKET_CLIENT_BIN=%PYRAMID_ROOT%\examples\ada\bin\ada_active_find_e2e.exe"
+if "%SOCKET_CLIENT_BIN%"=="" set "SOCKET_CLIENT_BIN=%PYRAMID_ROOT%\tests\ada\bin\ada_active_find_e2e.exe"
 if "%GRPC_SERVER_BIN%"=="" set "GRPC_SERVER_BIN=%PYRAMID_ROOT%\..\..\build\subprojects\PYRAMID\tests\Release\tobj_grpc_server.exe"
-if "%GRPC_CLIENT_BIN%"=="" set "GRPC_CLIENT_BIN=%PYRAMID_ROOT%\examples\ada\bin\ada_grpc_cpp_interop_e2e.exe"
+if "%GRPC_CLIENT_BIN%"=="" set "GRPC_CLIENT_BIN=%PYRAMID_ROOT%\tests\ada\bin\ada_grpc_cpp_interop_e2e.exe"
 if "%GRPC_DLL_BIN%"=="" set "GRPC_DLL_BIN=%PYRAMID_ROOT%\..\..\build\subprojects\PYRAMID\tests\Release\pyramid_grpc_ada_interop_shim.dll"
 
 echo === Tactical Objects Master Conformance ===

@@ -41,8 +41,8 @@ goto parse_args
 
 if "%SERVER_BIN%"=="" set "SERVER_BIN=%WORKSPACE_ROOT%\build\subprojects\PYRAMID\tests\Release\tobj_grpc_server.exe"
 if "%CLIENT_BIN%"=="" (
-    set "CLIENT_BIN=%PYRAMID_ROOT%\examples\ada\bin\ada_grpc_cpp_interop_e2e.exe"
-    if not exist "!CLIENT_BIN!" set "CLIENT_BIN=%PYRAMID_ROOT%\examples\ada\bin\ada_grpc_cpp_interop_e2e"
+    set "CLIENT_BIN=%PYRAMID_ROOT%\tests\ada\bin\ada_grpc_cpp_interop_e2e.exe"
+    if not exist "!CLIENT_BIN!" set "CLIENT_BIN=%PYRAMID_ROOT%\tests\ada\bin\ada_grpc_cpp_interop_e2e"
 )
 if "%DLL_BIN%"=="" set "DLL_BIN=%WORKSPACE_ROOT%\build\subprojects\PYRAMID\tests\Release\pyramid_grpc_ada_interop_shim.dll"
 
@@ -53,7 +53,7 @@ echo === Ada gRPC C++ Interop E2E Test ===
 where gprbuild >nul 2>&1
 if %errorlevel% equ 0 (
     echo [driver] Building Ada gRPC client...
-    set "ADA_DIR=%PYRAMID_ROOT%\examples\ada"
+    set "ADA_DIR=%PYRAMID_ROOT%\tests\ada"
     pushd "!ADA_DIR!"
     gprbuild -P ada_grpc_cpp_interop_e2e.gpr -q >nul 2>&1
     if !errorlevel! neq 0 (

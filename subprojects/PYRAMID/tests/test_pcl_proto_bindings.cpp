@@ -2,7 +2,7 @@
 /// \brief Tests for C++ PCL/proto service bindings (provided and consumed).
 ///
 /// Validates the auto-generated C++ service bindings that mirror the Ada
-/// generated files in subprojects/PYRAMID/examples/ada/generated/:
+/// generated files in subprojects/PYRAMID/bindings/ada/generated/:
 ///   - Wire-name constants match the proto service definitions
 ///   - Topic constants are correct
 ///   - msgToString utility works correctly

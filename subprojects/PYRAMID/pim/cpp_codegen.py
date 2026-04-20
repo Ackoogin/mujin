@@ -2023,7 +2023,7 @@ def main():
         if len(sys.argv) < 4:
             print('Usage: python cpp_service_generator.py --types'
                   ' <data_model_dir> <output_dir>')
-            print('  e.g. --types proto/pyramid/data_model examples/cpp/generated')
+            print('  e.g. --types proto/pyramid/data_model bindings/cpp/generated')
             sys.exit(1)
         gen = CppTypesGenerator(Path(sys.argv[2]))
         gen.generate(sys.argv[3])

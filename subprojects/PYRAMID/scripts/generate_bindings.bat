@@ -41,8 +41,8 @@ if "%DO_CPP%"=="0" if "%DO_ADA%"=="0" (
 )
 
 if "%PROTO_DIR%"=="" set "PROTO_DIR=%PYRAMID_ROOT%\proto"
-if "%CPP_OUT%"=="" set "CPP_OUT=%PYRAMID_ROOT%\examples\cpp\generated"
-if "%ADA_OUT%"=="" set "ADA_OUT=%PYRAMID_ROOT%\examples\ada\generated"
+if "%CPP_OUT%"=="" set "CPP_OUT=%PYRAMID_ROOT%\bindings\cpp\generated"
+if "%ADA_OUT%"=="" set "ADA_OUT=%PYRAMID_ROOT%\bindings\ada\generated"
 
 set "PY_CMD="
 where py >nul 2>&1

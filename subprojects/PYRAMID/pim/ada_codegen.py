@@ -2297,7 +2297,7 @@ def main():
         if len(sys.argv) < 4:
             print('Usage: python ada_service_generator.py --types'
                   ' <data_model_dir> <output_dir>')
-            print('  e.g. --types proto/pyramid/data_model examples/ada/generated')
+            print('  e.g. --types proto/pyramid/data_model bindings/ada/generated')
             sys.exit(1)
         gen = AdaTypesGenerator(Path(sys.argv[2]))
         gen.generate(sys.argv[3])

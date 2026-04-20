@@ -33,7 +33,7 @@ add_library(ame_core STATIC
 
 target_include_directories(ame_core PUBLIC
     ${AME_ROOT_DIR}/include
-    ${PYRAMID_ROOT_DIR}/examples/cpp/generated
+    ${PYRAMID_ROOT_DIR}/bindings/cpp/generated
 )
 
 if(NOT MUJIN_BUILD_PYRAMID)

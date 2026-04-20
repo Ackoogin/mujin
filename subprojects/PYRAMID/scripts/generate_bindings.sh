@@ -18,8 +18,8 @@ DO_CPP=0
 DO_ADA=0
 BACKENDS="json,flatbuffers"
 PROTO_DIR="$PYRAMID_ROOT/proto"
-CPP_OUT="$PYRAMID_ROOT/examples/cpp/generated"
-ADA_OUT="$PYRAMID_ROOT/examples/ada/generated"
+CPP_OUT="$PYRAMID_ROOT/bindings/cpp/generated"
+ADA_OUT="$PYRAMID_ROOT/bindings/ada/generated"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

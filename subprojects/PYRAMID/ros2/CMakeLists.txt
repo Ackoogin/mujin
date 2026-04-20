@@ -46,16 +46,16 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 
 add_library(${PROJECT_NAME}_lib SHARED
     src/rclcpp_runtime_adapter.cpp
-    ${MUJIN_ROOT}/subprojects/PYRAMID/examples/ros2/cpp/pyramid_ros2_transport_support.cpp
-    ${MUJIN_ROOT}/subprojects/PYRAMID/examples/ros2/cpp/pyramid_components_tactical_objects_ros2_transport.cpp
-    ${MUJIN_ROOT}/subprojects/PYRAMID/examples/ros2/cpp/pyramid_components_tactical_objects_services_consumed_ros2_transport.cpp
-    ${MUJIN_ROOT}/subprojects/PYRAMID/examples/ros2/cpp/pyramid_components_tactical_objects_services_provided_ros2_transport.cpp
+    ${MUJIN_ROOT}/subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp/pyramid_ros2_transport_support.cpp
+    ${MUJIN_ROOT}/subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp/pyramid_components_tactical_objects_ros2_transport.cpp
+    ${MUJIN_ROOT}/subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp/pyramid_components_tactical_objects_services_consumed_ros2_transport.cpp
+    ${MUJIN_ROOT}/subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp/pyramid_components_tactical_objects_services_provided_ros2_transport.cpp
 )
 set_target_properties(${PROJECT_NAME}_lib PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 target_include_directories(${PROJECT_NAME}_lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<BUILD_INTERFACE:${MUJIN_ROOT}/subprojects/PYRAMID/examples/ros2/cpp>
+    $<BUILD_INTERFACE:${MUJIN_ROOT}/subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp>
     $<INSTALL_INTERFACE:include>
 )
 

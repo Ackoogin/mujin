@@ -1,6 +1,10 @@
 project Test_Pyramid_UUIDs is
+  Root_Dir := external("MUJIN_ROOT", ".." & "/.." & "/..");
+
   for Languages use ("Ada");
-  for Source_Dirs use (".", "generated");
+  for Source_Dirs use
+    (".",
+     Root_Dir & "/subprojects/PYRAMID/examples/ada");
   for Main use ("test_pyramid_uuids.adb");
 
   for Object_Dir use "obj_test_pyramid_uuids";

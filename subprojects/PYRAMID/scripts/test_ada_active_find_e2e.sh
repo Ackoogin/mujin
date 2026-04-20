@@ -17,7 +17,7 @@ WORKSPACE_ROOT="$(cd "$PYRAMID_ROOT/../.." && pwd)"
 # Defaults
 SERVER_BIN="${WORKSPACE_ROOT}/build/subprojects/PYRAMID/tests/tobj_socket_server"
 BRIDGE_BIN="${WORKSPACE_ROOT}/build/subprojects/PYRAMID/tests/standalone_bridge"
-CLIENT_BIN="${PYRAMID_ROOT}/examples/ada/bin/ada_active_find_e2e"
+CLIENT_BIN="${PYRAMID_ROOT}/tests/ada/bin/ada_active_find_e2e"
 BACKEND_PORT=19235
 FRONTEND_PORT=19236
 CONTENT_TYPE="application/json"
@@ -77,7 +77,7 @@ if command -v gprbuild &>/dev/null; then
     exit 0
   }
 
-  (cd "$PYRAMID_ROOT/examples/ada" && \
+  (cd "$PYRAMID_ROOT/tests/ada" && \
     MUJIN_ROOT="$WORKSPACE_ROOT" gprbuild -P ada_active_find_e2e.gpr -q \
       -XMUJIN_ROOT="$WORKSPACE_ROOT" \
       -XPCL_INCLUDE_DIR="$WORKSPACE_ROOT/subprojects/PCL/include" \

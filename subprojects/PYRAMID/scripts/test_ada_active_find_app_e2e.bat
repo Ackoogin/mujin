@@ -29,8 +29,8 @@ goto parse_args
 :done_args
 if "%APP_BIN%"=="" set "APP_BIN=%WORKSPACE_ROOT%\build\subprojects\PYRAMID\tactical_objects\Release\tactical_objects_app.exe"
 if "%CLIENT_BIN%"=="" (
-    set "CLIENT_BIN=%PYRAMID_ROOT%\examples\ada\bin\ada_active_find_e2e.exe"
-    if not exist "!CLIENT_BIN!" set "CLIENT_BIN=%PYRAMID_ROOT%\examples\ada\bin\ada_active_find_e2e"
+    set "CLIENT_BIN=%PYRAMID_ROOT%\tests\ada\bin\ada_active_find_e2e.exe"
+    if not exist "!CLIENT_BIN!" set "CLIENT_BIN=%PYRAMID_ROOT%\tests\ada\bin\ada_active_find_e2e"
 )
 
 echo === Ada ActiveFind Real-App E2E (%CONTENT_TYPE%) ===
@@ -50,7 +50,7 @@ if %errorlevel% equ 0 (
 where gprbuild >nul 2>&1
 if %errorlevel% equ 0 (
     echo [driver] Building Ada active-find client...
-    set "ADA_DIR=%PYRAMID_ROOT%\examples\ada"
+    set "ADA_DIR=%PYRAMID_ROOT%\tests\ada"
     set "ADA_PCL_LIB_DIR=%WORKSPACE_ROOT%\build\ada_gnat_pcl"
     set "ADA_PYRAMID_LIB_DIR=%WORKSPACE_ROOT%\build\ada_gnat_pyramid"
     set "ADA_PCL_BUILD_SCRIPT=%WORKSPACE_ROOT%\subprojects\PCL\scripts\build_gnat_pcl_static_libs.bat"

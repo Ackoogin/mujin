@@ -8,7 +8,7 @@
 with "gnatcoll";
 
 project Test_Generated_Bindings is
-  Root_Dir := external("MUJIN_ROOT", ".." & "/..");
+  Root_Dir := external("MUJIN_ROOT", ".." & "/.." & "/..");
   Pcl_Include_Dir := external("PCL_INCLUDE_DIR", Root_Dir & "/include");
   Pcl_Lib_Dir := external("PCL_LIB_DIR", Root_Dir & "/build/install/lib");
   Pcl_Lib_Name := external("PCL_LIB_NAME", "pcl_core");
@@ -20,10 +20,11 @@ project Test_Generated_Bindings is
 
   for Source_Dirs use
     (".",
-     "generated",
-     "generated/flatbuffers/ada",
-     "generated/protobuf/ada",
-     "generated/grpc/ada");
+     Root_Dir & "/subprojects/PYRAMID/examples/ada",
+     Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated",
+     Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/flatbuffers/ada",
+     Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/protobuf/ada",
+     Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/grpc/ada");
   for Main use ("test_generated_bindings.adb");
 
   for Object_Dir use "obj_test_bindings";

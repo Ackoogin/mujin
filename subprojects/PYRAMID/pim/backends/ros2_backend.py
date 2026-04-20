@@ -15,7 +15,7 @@ streaming RPCs are mapped to:
   - a correlated "cancel" ROS2 topic
 
 The generated C++ transport files depend on the shared support layer under
-examples/ros2/cpp. Ada output is a package of canonical ROS2 endpoint
+bindings/cpp/generated/ros2/cpp. Ada output is a package of canonical ROS2 endpoint
 constants, which is enough for external orchestration and future runtime work.
 """
 

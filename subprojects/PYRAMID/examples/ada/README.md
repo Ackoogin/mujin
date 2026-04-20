@@ -7,7 +7,9 @@ Files:
 - `pcl_bindings.ads`: thin Ada import layer for the C API
 - `pcl_component.ads` / `.adb`: OO wrapper with tagged `Component` and `Executor` types
 - `pcl_sensor_demo.adb`: demo built on top of `Pcl_Component`
-- `pcl_component_tests.adb`: Ada test runner for the OO wrapper
+
+Ada test runners live under `subprojects/PYRAMID/tests/ada`. Generated Ada
+bindings live under `subprojects/PYRAMID/bindings/ada/generated`.
 
 The example mirrors the C `external_io_bridge_example.c` flow:
 
@@ -66,9 +68,10 @@ or on Windows:
 subprojects\PCL\scripts\build_gnat_pcl_static_libs.bat
 ```
 
-Build OO tests:
+Build the OO wrapper test from the test tree:
 
 ```sh
+cd ../../tests/ada
 gprbuild -P pcl_component_tests.gpr
 ```
 
@@ -84,7 +87,7 @@ Run:
 .\bin\pcl_sensor_demo.exe
 ```
 
-Run OO tests:
+Run the OO wrapper test:
 
 ```sh
 .\bin\pcl_component_tests.exe

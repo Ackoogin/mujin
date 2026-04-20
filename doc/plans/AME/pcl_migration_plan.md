@@ -49,7 +49,7 @@ After the PCL migration, the ROS2 nodes became pure lifecycle forwarders with no
 The correct long-term solution is a **ROS2 PCL transport adapter** (Phase 6 below) that maps PCL ports to ROS2 topics and services automatically, so `devenv` and any other ROS2 caller can reach the system without any direct-call bridges in the node wrappers. Until that adapter exists, there is no clean way to expose the system externally without some form of bypass.
 
 Shared groundwork for that mapping now exists in PYRAMID under
-`subprojects/PYRAMID/examples/ros2/cpp`,
+`subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp`,
 `subprojects/PYRAMID/ros2`, and
 `subprojects/PYRAMID/doc/architecture/ros2_transport_semantics.md`: canonical topic,
 service, and streaming-channel naming, a generic ROS2 envelope package, and a

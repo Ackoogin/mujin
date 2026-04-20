@@ -35,7 +35,7 @@ if [[ "$FORCE_REBUILD" == "--force" ]]; then
   rm -f "$LIB_FILE" "$OUT_DIR"/lib${LIB_NAME}_*.a "$OBJ_DIR"/*.o
 fi
 
-GEN_DIR="$PYRAMID_ROOT/examples/cpp/generated"
+GEN_DIR="$PYRAMID_ROOT/bindings/cpp/generated"
 GEN_FB_DIR="$GEN_DIR/flatbuffers/cpp"
 BUILD_FB_DIR="$WORKSPACE_ROOT/build/generated/flatbuffers/cpp"
 FLATBUFFERS_INCLUDE="$WORKSPACE_ROOT/build/_deps/flatbuffers-src/include"

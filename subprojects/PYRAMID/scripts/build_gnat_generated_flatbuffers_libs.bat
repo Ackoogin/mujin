@@ -43,7 +43,7 @@ if "%FORCE_REBUILD%"=="1" (
   del /f /q "%OBJ_DIR%\*.o" >nul 2>&1
 )
 
-set "GEN_DIR=%PYRAMID_ROOT%\examples\cpp\generated"
+set "GEN_DIR=%PYRAMID_ROOT%\bindings\cpp\generated"
 set "GEN_FB_DIR=%GEN_DIR%\flatbuffers\cpp"
 set "BUILD_FB_DIR=%WORKSPACE_ROOT%\build\generated\flatbuffers\cpp"
 set "FLATBUFFERS_INCLUDE=%WORKSPACE_ROOT%\build\_deps\flatbuffers-src\include"
