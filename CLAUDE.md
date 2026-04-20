@@ -9,22 +9,22 @@ See `doc/CODING_STYLE.md` for coding standards.
 
 AME is a **PDDL planning + BehaviorTree execution pipeline** for autonomous mission planning and execution. It takes formal mission descriptions (PDDL), automatically plans using LAPKT classical AI search, compiles plans into executable behaviour trees, and runs them with replan-on-failure. A 5-layer observability stack provides full auditability.
 
-See `README.md` for a comprehensive project overview, and `subprojects/AME/docs/stakeholder_summary.md` for a non-technical summary aimed at programme managers and other stakeholders.
+See `README.md` for a comprehensive project overview, and `doc/reports/AME/stakeholder_summary.md` for a non-technical summary aimed at programme managers and other stakeholders.
 
 ## Documentation
 
 | Document | Purpose |
 |----------|---------|
 | `README.md` | Project overview, quick start, architecture summary |
-| `subprojects/AME/docs/stakeholder_summary.md` | High-level approach and status for non-technical stakeholders |
-| `subprojects/AME/docs/architecture/` | **Consolidated architecture reference** (see below) |
-| `subprojects/AME/docs/guides/quickstart.md` | Getting started, build, run, Foxglove Studio setup |
-| `subprojects/AME/docs/TODO.md` | Consolidated remaining work: temporal planning, hardening, future |
-| `subprojects/AME/docs/research/temporal_extension_research.md` | **Temporal planner evaluation**: OPTIC, POPF, TFD, Aries, STN, BT.CPP integration |
-| `subprojects/AME/docs/autonomy_assurance_plan.md` | SACE/AMLAS/DSTL safety assurance framework |
-| `subprojects/AME/docs/research/neuro_symbolic_reasoning.md` | Neural/LLM integration options and architecture |
+| `doc/reports/AME/stakeholder_summary.md` | High-level approach and status for non-technical stakeholders |
+| `subprojects/AME/doc/architecture/` | **Consolidated architecture reference** (see below) |
+| `subprojects/AME/doc/guides/quickstart.md` | Getting started, build, run, Foxglove Studio setup |
+| `doc/todo/AME/TODO.md` | Consolidated remaining work: temporal planning, hardening, future |
+| `doc/research/AME/temporal_extension_research.md` | **Temporal planner evaluation**: OPTIC, POPF, TFD, Aries, STN, BT.CPP integration |
+| `doc/plans/AME/autonomy_assurance_plan.md` | SACE/AMLAS/DSTL safety assurance framework |
+| `doc/research/AME/neuro_symbolic_reasoning.md` | Neural/LLM integration options and architecture |
 
-### Architecture Reference (`subprojects/AME/docs/architecture/`)
+### Architecture Reference (`subprojects/AME/doc/architecture/`)
 
 | File | Contents |
 |------|----------|
@@ -94,9 +94,9 @@ Produces three JSONL output files in the working directory: `ame_bt_events.jsonl
 
 ## Architecture
 
-The full architecture is documented in `subprojects/AME/docs/architecture/` (8 numbered files). Key points for development:
+The full architecture is documented in `subprojects/AME/doc/architecture/` (7 numbered files). Key points for development:
 
-- **WorldModel** (`subprojects/AME/include/ame/world_model.h`) is the central shared state with eager grounding and audit callbacks. See `subprojects/AME/docs/architecture/02-world-model.md`.
+- **WorldModel** (`subprojects/AME/include/ame/world_model.h`) is the central shared state with eager grounding and audit callbacks. See `subprojects/AME/doc/architecture/02-world-model.md`.
 - **LAPKT integration**: `Planner::solve()` calls `WorldModel::projectToSTRIPS()`. LAPKT is built from source as `lapkt_core` static library; MSVC compat shims in `cmake/compat/`.
 - **`ame_foxglove`** is a separate static library. Guard Foxglove code with `#if defined(AME_FOXGLOVE)`.
 - **Library boundaries**, **adding new PDDL actions**, and **ROS2 build/run** are all in the architecture docs.

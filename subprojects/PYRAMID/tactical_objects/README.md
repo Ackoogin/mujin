@@ -4,6 +4,8 @@ A PYRAMID component that maintains authoritative knowledge of battlespace object
 
 Conforms to **PYRAMID Technical Standard 5.4.2.60**.
 
+Current status: the runtime, generated PYRAMID service bridge, binary streaming codec, interest-filtered updates, resync service, JSON/FlatBuffers/Protobuf generated binding paths, and Ada/C++ socket smoke flows are implemented and covered by tests. See [`generated_bindings_status.md`](../../../doc/reports/PYRAMID/generated_bindings_status.md) for the current conformance snapshot.
+
 ---
 
 ## Quick start
@@ -84,9 +86,9 @@ All JSON schemas are defined in `TacticalObjectsCodec` and exercised by `Test_Ta
 
 Generated binding architecture, content-type selection rules, and topic helper
 usage are documented in
-[`../docs/generated_bindings.md`](../docs/generated_bindings.md). Current
+[`../doc/architecture/generated_bindings.md`](../doc/architecture/generated_bindings.md). Current
 Tactical Objects generated-binding status and conformance coverage are tracked
-in [`../docs/generated_bindings_status.md`](../docs/generated_bindings_status.md).
+in [`generated_bindings_status.md`](../../../doc/reports/PYRAMID/generated_bindings_status.md).
 
 | Service/topic | Direction | Payload |
 |---------------|-----------|---------|
@@ -218,7 +220,7 @@ cmake --build build-coverage -j$(nproc) --target tactical_objects tactical_objec
   test_tobj_component_hlr test_tobj_streaming_codec test_tobj_runtime_streaming \
   test_tobj_interest_matching test_tobj_e2e test_tobj_socket_e2e
 # run all binaries, then:
-gcovr --root . --filter "pyramid/tactical_objects/src/.*" \
+gcovr --root . --filter "subprojects/PYRAMID/tactical_objects/src/.*" \
   --object-directory build-coverage \
   --gcov-ignore-errors source_not_found \
   --gcov-ignore-errors no_working_dir_found --txt
@@ -235,8 +237,8 @@ gcovr --root . --filter "pyramid/tactical_objects/src/.*" \
 
 | Document | Purpose |
 |----------|---------|
-| `ARCHITECTURE.md` | Layer diagram, data-flow, worked examples |
-| `DESIGN.md` | Concrete class design and implementation structure |
-| `HLR.md` | High-level requirements (`TOBJ.001`–`TOBJ.053`, `PYR-RESP-0729`–`PYR-RESP-0745`) |
-| `LLR.md` | Low-level requirements per engine |
-| `HLR_COVERAGE.md` | Requirement → test traceability matrix |
+| [`ARCHITECTURE.md`](../doc/architecture/tactical_objects/ARCHITECTURE.md) | Layer diagram, data-flow, worked examples |
+| [`DESIGN.md`](../doc/architecture/tactical_objects/DESIGN.md) | Concrete class design and implementation structure |
+| [`HLR.md`](../doc/requirements/tactical_objects/HLR.md) | High-level requirements (`TOBJ.001`–`TOBJ.053`, `PYR-RESP-0729`–`PYR-RESP-0745`) |
+| [`LLR.md`](../doc/requirements/tactical_objects/LLR.md) | Low-level requirements per engine |
+| [`HLR_COVERAGE.md`](../../../doc/reports/PYRAMID/tactical_objects/HLR_COVERAGE.md) | Requirement → test traceability matrix |

@@ -2,7 +2,7 @@
 ///
 /// Uses the standard UAV search-and-classify domain with all PDDL actions
 /// mapped to InvokeService subtree templates (the PYRAMID integration pattern
-/// from subprojects/AME/docs/guides/pyramid_service_integration_guide.md).  A tracking
+/// from subprojects/AME/doc/guides/planning_execution_user_guide.md).  A tracking
 /// IPyramidService stub records every async call so the test can verify that
 /// the correct PYRAMID services were invoked with the right parameters.
 ///
@@ -144,7 +144,7 @@ protected:
     ex_node_->setActionRegistry(&pl_node_->actionRegistry());
 
     // --- Map all PDDL actions to PYRAMID InvokeService templates ---
-    // Following the pattern from pyramid_service_integration_guide.md
+    // Following the pattern from planning_execution_user_guide.md
 
     // (move ?robot ?from ?to) → mobility/move
     pl_node_->actionRegistry().registerActionSubTree("move",

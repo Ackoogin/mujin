@@ -2,7 +2,8 @@
 """
 Generate HLR → LLR → test traceability report for tactical_objects.
 
-Reads HLR_COVERAGE.md, LLR.md, and scans test files for ///< REQ_/TOBJ/PYR-RESP tags.
+Reads the Tactical Objects HLR coverage report and LLR, then scans test files
+for ///< REQ_/TOBJ/PYR-RESP tags.
 Produces a completeness report showing requirement-to-test mapping.
 """
 
@@ -98,13 +99,15 @@ def main():
   workspace_root = pyramid_root.parent.parent
   tobj_dir = pyramid_root / "tactical_objects"
   test_dir = pyramid_root / "tests" / "tactical_objects"
+  hlr_coverage_path = workspace_root / "doc" / "reports" / "PYRAMID" / "tactical_objects" / "HLR_COVERAGE.md"
+  llr_path = pyramid_root / "doc" / "requirements" / "tactical_objects" / "LLR.md"
 
   if not tobj_dir.exists():
     print("tactical_objects dir not found", file=sys.stderr)
     sys.exit(1)
 
-  hlr_coverage = (tobj_dir / "HLR_COVERAGE.md").read_text(encoding="utf-8", errors="replace")
-  llr_content = (tobj_dir / "LLR.md").read_text(encoding="utf-8", errors="replace")
+  hlr_coverage = hlr_coverage_path.read_text(encoding="utf-8", errors="replace")
+  llr_content = llr_path.read_text(encoding="utf-8", errors="replace")
 
   hlr = parse_hlr_coverage(hlr_coverage)
   llr = parse_llr(llr_content)
@@ -113,7 +116,7 @@ def main():
   lines = []
   lines.append("# HLR → LLR → Test Traceability Report")
   lines.append("")
-  lines.append("Generated from HLR_COVERAGE.md, LLR.md, and test file tags.")
+  lines.append("Generated from doc/reports/PYRAMID/tactical_objects/HLR_COVERAGE.md, subprojects/PYRAMID/doc/requirements/tactical_objects/LLR.md, and test file tags.")
   lines.append("")
   lines.append("## Summary")
   lines.append("")
@@ -128,7 +131,7 @@ def main():
   lines.append(f"| LLR with verification test specified | {llr_with_tests} |")
   lines.append(f"| LLR with ///< tag in tests | {llr_tagged} |")
   lines.append("")
-  lines.append("## HLR → Tests (from HLR_COVERAGE.md)")
+  lines.append("## HLR → Tests (from doc/reports/PYRAMID/tactical_objects/HLR_COVERAGE.md)")
   lines.append("")
   lines.append("| HLR | Description | Test(s) |")
   lines.append("|-----|-------------|---------|")
@@ -137,7 +140,7 @@ def main():
     desc = d["description"][:60] + "…" if len(d["description"]) > 60 else d["description"]
     lines.append(f"| {tobj} | {desc} | {d['tests']} |")
   lines.append("")
-  lines.append("## LLR → HLR → Test (from LLR.md)")
+  lines.append("## LLR → HLR → Test (from subprojects/PYRAMID/doc/requirements/tactical_objects/LLR.md)")
   lines.append("")
   lines.append("| LLR | Traces (HLR) | Verification | Tagged |")
   lines.append("|-----|--------------|--------------|--------|")

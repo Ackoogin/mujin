@@ -1,6 +1,28 @@
-# SysML XMI Parser
+# PYRAMID PIM And Binding Tools
 
-Extracts logical data models from Cameo Systems Modeler XMI exports into structured JSON format.
+This directory contains the PYRAMID platform-independent model tools: proto parsing, generated C++/Ada bindings, JSON/FlatBuffers/Protobuf/gRPC/ROS2 backends, and a SysML XMI parser for importing logical data models.
+
+The primary entry point for the current generated-binding pipeline is:
+
+```bash
+python generate_bindings.py
+```
+
+From the workspace root, prefer the wrapper scripts:
+
+```bat
+subprojects\PYRAMID\scripts\generate_bindings.bat
+```
+
+```bash
+subprojects/PYRAMID/scripts/generate_bindings.sh
+```
+
+For generated-binding architecture and usage, see [`../doc/architecture/generated_bindings.md`](../doc/architecture/generated_bindings.md).
+
+## SysML XMI Parser
+
+`sysml_parser.py` extracts logical data models from Cameo Systems Modeler XMI exports into structured JSON format.
 
 ## Usage
 
@@ -64,7 +86,7 @@ python sysml_parser.py <input.xmi> [output.json]
 - Supports XMI 2.1 with UML 2.5 (2013 spec)
 - Handles nested package structures
 
-## Next Steps
+## Downstream Uses
 
 This JSON output can be transformed into:
 - Protobuf `.proto` files
@@ -72,10 +94,10 @@ This JSON output can be transformed into:
 - OpenAPI specifications
 - Code generation templates
 
-For the current PYRAMID generated-binding system built from `.proto` contracts,
-see [`../docs/generated_bindings.md`](../docs/generated_bindings.md). Current
+The current PYRAMID generated-binding system is built from `.proto` contracts.
+Current
 Tactical Objects binding/conformance status is tracked in
-[`../docs/generated_bindings_status.md`](../docs/generated_bindings_status.md).
+[`generated_bindings_status.md`](../../../doc/reports/PYRAMID/generated_bindings_status.md).
 
 ## Notes
 

@@ -22,11 +22,14 @@ The Ada projects that compile C units use `-std=c11` for broader toolchain compa
 
 This matches the core CMake PCL targets (`pcl_core`, `pcl_transport_socket`), which are also configured with `C_STANDARD 11`.
 
-By default the `.gpr` files expect:
+By default the `.gpr` files use historical relative defaults. In this workspace,
+the most reliable approach is to pass explicit paths from `subprojects/PYRAMID/examples/ada`.
 
-- `MUJIN_ROOT=../..`
-- `PCL_INCLUDE_DIR=<MUJIN_ROOT>/include`
-- `PCL_LIB_DIR=<MUJIN_ROOT>/build/install/lib`
+Recommended values:
+
+- `MUJIN_ROOT=../../../..`
+- `PCL_INCLUDE_DIR=../../../../subprojects/PCL/include`
+- `PCL_LIB_DIR=../../../../subprojects/PCL/build/ada_gnat_pcl` or another directory containing GCC-compatible PCL static libraries
 - `PCL_LIB_NAME=pcl_core`
 - `PCL_SOCKET_LIB_NAME=pcl_transport_socket` (for generated-service examples)
 
@@ -44,11 +47,23 @@ Example with explicit overrides:
 
 ```sh
 gprbuild -P pcl_sensor_demo.gpr \
-  -XMUJIN_ROOT=../.. \
-  -XPCL_INCLUDE_DIR=../../include \
-  -XPCL_LIB_DIR=../../build/install/lib \
+  -XMUJIN_ROOT=../../../.. \
+  -XPCL_INCLUDE_DIR=../../../../subprojects/PCL/include \
+  -XPCL_LIB_DIR=../../../../subprojects/PCL/build/ada_gnat_pcl \
   -XPCL_LIB_NAME=pcl_core \
   -XPCL_SOCKET_LIB_NAME=pcl_transport_socket
+```
+
+Build those GCC-compatible PCL libraries from the workspace root with:
+
+```sh
+subprojects/PCL/scripts/build_gnat_pcl_static_libs.sh
+```
+
+or on Windows:
+
+```bat
+subprojects\PCL\scripts\build_gnat_pcl_static_libs.bat
 ```
 
 Build OO tests:

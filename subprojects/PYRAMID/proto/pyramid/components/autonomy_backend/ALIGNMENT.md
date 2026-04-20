@@ -34,7 +34,7 @@ compatibility surface.
 | `pyramid/data_model/tactical.proto` | Concrete component requirement/product example |
 | `pyramid/components/tactical_objects/services/provided.proto` | Example provided requirement CRUD and products |
 | `pyramid/components/tactical_objects/services/consumed.proto` | Example consumed evidence and capability services |
-| `PYRAMID_COMPONENT_RESPONSIBILITIES.md` | Responsibility guidance for Objectives, Tasks, Tactical Objects, progress, quality, and capability |
+| `subprojects/PYRAMID/doc/architecture/PYRAMID_COMPONENT_RESPONSIBILITIES.md` | Responsibility guidance for Objectives, Tasks, Tactical Objects, progress, quality, and capability |
 
 ## Target Contract
 
@@ -356,7 +356,7 @@ The current AME devenv is centred on ROS2/PCL workflows:
 
 | Path | Current purpose |
 |------|-----------------|
-| `subprojects/AME/docs/guides/devenv_ros2_quickstart.md` | ROS2 and Foxglove devenv guide |
+| `subprojects/AME/doc/guides/devenv_ros2_quickstart.md` | ROS2 and Foxglove devenv guide |
 | `subprojects/AME/tools/devenv/start_devenv.bat` | Launches the ROS2-backed devenv |
 | `subprojects/AME/tools/devenv/start_devenv_pcl.bat` | Launches the local PCL/Python-binding backend |
 
@@ -458,4 +458,4 @@ reuse the same UI panels once PYRAMID service transport is selected.
 | Tactical Objects data model proto | `subprojects/PYRAMID/proto/pyramid/data_model/tactical.proto` |
 | Tactical Objects provided proto | `subprojects/PYRAMID/proto/pyramid/components/tactical_objects/services/provided.proto` |
 | Tactical Objects consumed proto | `subprojects/PYRAMID/proto/pyramid/components/tactical_objects/services/consumed.proto` |
-| PYRAMID responsibilities | `subprojects/PYRAMID/PYRAMID_COMPONENT_RESPONSIBILITIES.md` |
+| PYRAMID responsibilities | `subprojects/PYRAMID/doc/architecture/PYRAMID_COMPONENT_RESPONSIBILITIES.md` |
