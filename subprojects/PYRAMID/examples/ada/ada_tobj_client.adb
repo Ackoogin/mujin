@@ -4,8 +4,10 @@
 --  server via TCP socket transport.
 --
 --  Uses the interest client component (standard bridge interface):
---    - Calls  "object_of_interest.create_requirement"  (standard JSON)
---    - Subscribes to "standard.entity_matches"          (standard JSON array)
+--    - Calls  "object_of_interest.create_requirement"
+--    - Subscribes to "standard.entity_matches"
+--  The generated service binding owns payload encoding and decoding; pass
+--  --content-type to select the supported binding content type.
 --
 --  Architecture: main (this) > component logic > service binding > PCL
 --

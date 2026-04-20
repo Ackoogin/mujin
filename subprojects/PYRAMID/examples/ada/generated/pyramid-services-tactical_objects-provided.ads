@@ -68,6 +68,11 @@ package Pyramid.Services.Tactical_Objects.Provided is
      (Data : System.Address;
       Size : Interfaces.C.unsigned) return String;
 
+   Json_Content_Type : constant String := "application/json";
+   Flatbuffers_Content_Type : constant String := "application/flatbuffers";
+
+   function Supports_Content_Type (Content_Type : String) return Boolean;
+
    --  -- EntityActions handler callbacks ----------------------------
    --  Supply these callbacks from your component at registration time.
 
@@ -115,10 +120,22 @@ package Pyramid.Services.Tactical_Objects.Provided is
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
+   function Decode_Entity_Matches
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Object_Match_Array;
+
+   function Decode_Evidence_Requirements
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Object_Evidence_Requirement;
+
    procedure Register_Services
      (Container : Pcl_Bindings.Pcl_Container_Access;
       Handlers  : access constant Service_Handlers := null;
       Content_Type : String := "application/json");
+
+   function Decode_Read_Match_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Object_Match_Array;
 
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Read_Match
@@ -128,6 +145,10 @@ package Pyramid.Services.Tactical_Objects.Provided is
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
+   function Decode_Create_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Identifier;
+
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Create_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
@@ -135,6 +156,10 @@ package Pyramid.Services.Tactical_Objects.Provided is
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
+
+   function Decode_Read_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Object_Interest_Requirement_Array;
 
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Read_Requirement
@@ -144,6 +169,10 @@ package Pyramid.Services.Tactical_Objects.Provided is
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
+   function Decode_Update_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Ack;
+
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Update_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
@@ -152,6 +181,10 @@ package Pyramid.Services.Tactical_Objects.Provided is
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
+   function Decode_Delete_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Ack;
+
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Delete_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
@@ -159,6 +192,10 @@ package Pyramid.Services.Tactical_Objects.Provided is
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
+
+   function Decode_Read_Detail_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Object_Detail_Array;
 
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Read_Detail

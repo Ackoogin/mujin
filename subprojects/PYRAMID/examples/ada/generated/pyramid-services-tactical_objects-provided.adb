@@ -3,6 +3,7 @@
 
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 with Ada.Unchecked_Conversion;
+with GNATCOLL.JSON;  use GNATCOLL.JSON;
 with Interfaces.C.Strings;
 with System;
 with System.Storage_Elements;
@@ -47,6 +48,283 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    end Msg_To_String;
 
    package Flatbuffers_Codec renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
+
+   function Supports_Content_Type (Content_Type : String) return Boolean is
+   begin
+      return Content_Type = ""
+        or else Content_Type = Json_Content_Type
+        or else Content_Type = Flatbuffers_Content_Type;
+   end Supports_Content_Type;
+
+   function Message_Content_Type
+     (Msg : access constant Pcl_Bindings.Pcl_Msg) return String is
+   begin
+      if Msg = null or else Msg.Type_Name = Interfaces.C.Strings.Null_Ptr then
+         return Json_Content_Type;
+      end if;
+      return Interfaces.C.Strings.Value (Msg.Type_Name);
+   end Message_Content_Type;
+
+   function Decode_Identifier_Payload (Payload : String) return Identifier is
+   begin
+      declare
+         J : constant JSON_Value := Read (Payload);
+      begin
+         if J.Kind = JSON_String_Type then
+            return To_Unbounded_String (String'(UTF8_String'(Get (J))));
+         elsif J.Kind = JSON_Object_Type and then Has_Field (J, "uuid") then
+            return To_Unbounded_String (String'(UTF8_String'(Get (J, "uuid"))));
+         end if;
+      exception
+         when others =>
+            null;
+      end;
+      return To_Unbounded_String (Payload);
+   end Decode_Identifier_Payload;
+
+   function Decode_Entity_Matches
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Object_Match_Array
+   is
+      Empty : Object_Match_Array (1 .. 0);
+      Payload : constant String :=
+        (if Msg = null or else Msg.Data = System.Null_Address
+         then ""
+         else Msg_To_String (Msg.Data, Msg.Size));
+      Content_Type : constant String := Message_Content_Type (Msg);
+   begin
+      if Payload = "" then
+         return Empty;
+      end if;
+
+      declare
+         Json_Payload : constant String :=
+           (if Content_Type = "" or else Content_Type = Json_Content_Type
+            then Payload
+            elsif Content_Type = Flatbuffers_Content_Type
+            then Flatbuffers_Codec.From_Binary_object_match_array (Payload)
+            else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+         R : constant Read_Result := Read (Json_Payload);
+      begin
+         if not R.Success or else R.Value.Kind /= JSON_Array_Type then
+            return Empty;
+         end if;
+         declare
+            Arr    : constant JSON_Array := Get (R.Value);
+            Result : Object_Match_Array (1 .. GNATCOLL.JSON.Length (Arr));
+         begin
+            for I in 1 .. GNATCOLL.JSON.Length (Arr) loop
+               Result (I) := From_Json (Write (Get (Arr, I)), null);
+            end loop;
+            return Result;
+         end;
+      end;
+   end Decode_Entity_Matches;
+
+   function Decode_Evidence_Requirements
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Object_Evidence_Requirement
+   is
+      Payload : constant String :=
+        (if Msg = null or else Msg.Data = System.Null_Address
+         then ""
+         else Msg_To_String (Msg.Data, Msg.Size));
+      Content_Type : constant String := Message_Content_Type (Msg);
+   begin
+      if Payload = "" then
+         return From_Json ("{}", null);
+      end if;
+
+      if Content_Type = "" or else Content_Type = Json_Content_Type then
+         return From_Json (Payload, null);
+      elsif Content_Type = Flatbuffers_Content_Type then
+         return Flatbuffers_Codec.From_Binary_object_evidence_requirement (Payload, null);
+      end if;
+      raise Constraint_Error with "Unsupported content type: " & Content_Type;
+   end Decode_Evidence_Requirements;
+
+   function Decode_Read_Match_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Object_Match_Array
+   is
+      Empty : Object_Match_Array (1 .. 0);
+      Payload : constant String :=
+        (if Msg = null or else Msg.Data = System.Null_Address
+         then ""
+         else Msg_To_String (Msg.Data, Msg.Size));
+      Content_Type : constant String := Message_Content_Type (Msg);
+   begin
+      if Payload = "" then
+         return Empty;
+      end if;
+
+      declare
+         Json_Payload : constant String :=
+           (if Content_Type = "" or else Content_Type = Json_Content_Type
+            then Payload
+            elsif Content_Type = Flatbuffers_Content_Type
+            then Flatbuffers_Codec.From_Binary_Object_Match_Array (Payload)
+            else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+         R : constant Read_Result := Read (Json_Payload);
+      begin
+         if not R.Success or else R.Value.Kind /= JSON_Array_Type then
+            return Empty;
+         end if;
+         declare
+            Arr    : constant JSON_Array := Get (R.Value);
+            Result : Object_Match_Array (1 .. GNATCOLL.JSON.Length (Arr));
+         begin
+            for I in 1 .. GNATCOLL.JSON.Length (Arr) loop
+               Result (I) := From_Json (Write (Get (Arr, I)), null);
+            end loop;
+            return Result;
+         end;
+      end;
+   end Decode_Read_Match_Response;
+
+   function Decode_Create_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Identifier
+   is
+      Payload : constant String :=
+        (if Msg = null or else Msg.Data = System.Null_Address
+         then ""
+         else Msg_To_String (Msg.Data, Msg.Size));
+      Content_Type : constant String := Message_Content_Type (Msg);
+   begin
+      if Payload = "" then
+         return Null_Unbounded_String;
+      end if;
+
+      if Content_Type = "" or else Content_Type = Json_Content_Type then
+         return Decode_Identifier_Payload (Payload);
+      elsif Content_Type = Flatbuffers_Content_Type then
+         return Flatbuffers_Codec.From_Binary_Identifier (Payload, null);
+      end if;
+      raise Constraint_Error with "Unsupported content type: " & Content_Type;
+   end Decode_Create_Requirement_Response;
+
+   function Decode_Read_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Object_Interest_Requirement_Array
+   is
+      Empty : Object_Interest_Requirement_Array (1 .. 0);
+      Payload : constant String :=
+        (if Msg = null or else Msg.Data = System.Null_Address
+         then ""
+         else Msg_To_String (Msg.Data, Msg.Size));
+      Content_Type : constant String := Message_Content_Type (Msg);
+   begin
+      if Payload = "" then
+         return Empty;
+      end if;
+
+      declare
+         Json_Payload : constant String :=
+           (if Content_Type = "" or else Content_Type = Json_Content_Type
+            then Payload
+            elsif Content_Type = Flatbuffers_Content_Type
+            then Flatbuffers_Codec.From_Binary_Object_Interest_Requirement_Array (Payload)
+            else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+         R : constant Read_Result := Read (Json_Payload);
+      begin
+         if not R.Success or else R.Value.Kind /= JSON_Array_Type then
+            return Empty;
+         end if;
+         declare
+            Arr    : constant JSON_Array := Get (R.Value);
+            Result : Object_Interest_Requirement_Array (1 .. GNATCOLL.JSON.Length (Arr));
+         begin
+            for I in 1 .. GNATCOLL.JSON.Length (Arr) loop
+               Result (I) := From_Json (Write (Get (Arr, I)), null);
+            end loop;
+            return Result;
+         end;
+      end;
+   end Decode_Read_Requirement_Response;
+
+   function Decode_Update_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Ack
+   is
+      Payload : constant String :=
+        (if Msg = null or else Msg.Data = System.Null_Address
+         then ""
+         else Msg_To_String (Msg.Data, Msg.Size));
+      Content_Type : constant String := Message_Content_Type (Msg);
+   begin
+      if Payload = "" then
+         return From_Json ("{}", null);
+      end if;
+
+      if Content_Type = "" or else Content_Type = Json_Content_Type then
+         return From_Json (Payload, null);
+      elsif Content_Type = Flatbuffers_Content_Type then
+         return Flatbuffers_Codec.From_Binary_Ack (Payload, null);
+      end if;
+      raise Constraint_Error with "Unsupported content type: " & Content_Type;
+   end Decode_Update_Requirement_Response;
+
+   function Decode_Delete_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Ack
+   is
+      Payload : constant String :=
+        (if Msg = null or else Msg.Data = System.Null_Address
+         then ""
+         else Msg_To_String (Msg.Data, Msg.Size));
+      Content_Type : constant String := Message_Content_Type (Msg);
+   begin
+      if Payload = "" then
+         return From_Json ("{}", null);
+      end if;
+
+      if Content_Type = "" or else Content_Type = Json_Content_Type then
+         return From_Json (Payload, null);
+      elsif Content_Type = Flatbuffers_Content_Type then
+         return Flatbuffers_Codec.From_Binary_Ack (Payload, null);
+      end if;
+      raise Constraint_Error with "Unsupported content type: " & Content_Type;
+   end Decode_Delete_Requirement_Response;
+
+   function Decode_Read_Detail_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Object_Detail_Array
+   is
+      Empty : Object_Detail_Array (1 .. 0);
+      Payload : constant String :=
+        (if Msg = null or else Msg.Data = System.Null_Address
+         then ""
+         else Msg_To_String (Msg.Data, Msg.Size));
+      Content_Type : constant String := Message_Content_Type (Msg);
+   begin
+      if Payload = "" then
+         return Empty;
+      end if;
+
+      declare
+         Json_Payload : constant String :=
+           (if Content_Type = "" or else Content_Type = Json_Content_Type
+            then Payload
+            elsif Content_Type = Flatbuffers_Content_Type
+            then Flatbuffers_Codec.From_Binary_Object_Detail_Array (Payload)
+            else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+         R : constant Read_Result := Read (Json_Payload);
+      begin
+         if not R.Success or else R.Value.Kind /= JSON_Array_Type then
+            return Empty;
+         end if;
+         declare
+            Arr    : constant JSON_Array := Get (R.Value);
+            Result : Object_Detail_Array (1 .. GNATCOLL.JSON.Length (Arr));
+         begin
+            for I in 1 .. GNATCOLL.JSON.Length (Arr) loop
+               Result (I) := From_Json (Write (Get (Arr, I)), null);
+            end loop;
+            return Result;
+         end;
+      end;
+   end Decode_Read_Detail_Response;
 
    --  -- Matching_Objects_Service ------------------------------------
    function Default_Handle_Read_Match

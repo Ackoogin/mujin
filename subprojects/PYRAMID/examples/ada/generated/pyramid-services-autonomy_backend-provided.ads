@@ -30,74 +30,47 @@ package Pyramid.Services.Autonomy_Backend.Provided is
 
    type Service_Channel is
      (Ch_Read_Capabilities,
-      Ch_Create_Session,
-      Ch_Read_Session,
-      Ch_Update_Session,
-      Ch_Delete_Session,
+      Ch_Create_Requirement,
+      Ch_Read_Requirement,
+      Ch_Update_Requirement,
+      Ch_Delete_Requirement,
       Ch_Create_State,
       Ch_Update_State,
       Ch_Delete_State,
-      Ch_Create_Intent,
-      Ch_Update_Intent,
-      Ch_Delete_Intent,
-      Ch_Read_Command,
-      Ch_Read_Goal_Dispatch,
-      Ch_Read_Decision_Record,
-      Ch_Create_Command_Result,
-      Ch_Update_Command_Result,
-      Ch_Delete_Command_Result,
-      Ch_Create_Dispatch_Result,
-      Ch_Update_Dispatch_Result,
-      Ch_Delete_Dispatch_Result);
+      Ch_Read_Plan,
+      Ch_Read_Run,
+      Ch_Read_Placement);
 
    type Capabilities_Array is array (Positive range <>) of Capabilities;
-   type Command_Array is array (Positive range <>) of Command;
-   type Decision_Record_Array is array (Positive range <>) of Decision_Record;
-   type Goal_Dispatch_Array is array (Positive range <>) of Goal_Dispatch;
-   type Session_Snapshot_Array is array (Positive range <>) of Session_Snapshot;
+   type Execution_Run_Array is array (Positive range <>) of Execution_Run;
+   type Plan_Array is array (Positive range <>) of Plan;
+   type Planning_Execution_Requirement_Array is array (Positive range <>) of Planning_Execution_Requirement;
+   type Requirement_Placement_Array is array (Positive range <>) of Requirement_Placement;
 
    --  -- Service wire-name constants (generated from proto) --------
 
    Svc_Read_Capabilities : constant String :=
      "capabilities.read_capabilities";
-   Svc_Create_Session : constant String :=
-     "session.create_session";
-   Svc_Read_Session : constant String :=
-     "session.read_session";
-   Svc_Update_Session : constant String :=
-     "session.update_session";
-   Svc_Delete_Session : constant String :=
-     "session.delete_session";
+   Svc_Create_Requirement : constant String :=
+     "planning_execution.create_requirement";
+   Svc_Read_Requirement : constant String :=
+     "planning_execution.read_requirement";
+   Svc_Update_Requirement : constant String :=
+     "planning_execution.update_requirement";
+   Svc_Delete_Requirement : constant String :=
+     "planning_execution.delete_requirement";
    Svc_Create_State : constant String :=
      "state.create_state";
    Svc_Update_State : constant String :=
      "state.update_state";
    Svc_Delete_State : constant String :=
      "state.delete_state";
-   Svc_Create_Intent : constant String :=
-     "intent.create_intent";
-   Svc_Update_Intent : constant String :=
-     "intent.update_intent";
-   Svc_Delete_Intent : constant String :=
-     "intent.delete_intent";
-   Svc_Read_Command : constant String :=
-     "command.read_command";
-   Svc_Read_Goal_Dispatch : constant String :=
-     "goal_dispatch.read_goal_dispatch";
-   Svc_Read_Decision_Record : constant String :=
-     "decision_record.read_decision_record";
-   Svc_Create_Command_Result : constant String :=
-     "command_result.create_command_result";
-   Svc_Update_Command_Result : constant String :=
-     "command_result.update_command_result";
-   Svc_Delete_Command_Result : constant String :=
-     "command_result.delete_command_result";
-   Svc_Create_Dispatch_Result : constant String :=
-     "dispatch_result.create_dispatch_result";
-   Svc_Update_Dispatch_Result : constant String :=
-     "dispatch_result.update_dispatch_result";
-   Svc_Delete_Dispatch_Result : constant String :=
-     "dispatch_result.delete_dispatch_result";
+   Svc_Read_Plan : constant String :=
+     "plan.read_plan";
+   Svc_Read_Run : constant String :=
+     "execution_run.read_run";
+   Svc_Read_Placement : constant String :=
+     "requirement_placement.read_placement";
 
    --  -- PCL message utility ------------------------------------
 
@@ -105,23 +78,28 @@ package Pyramid.Services.Autonomy_Backend.Provided is
      (Data : System.Address;
       Size : Interfaces.C.unsigned) return String;
 
+   Json_Content_Type : constant String := "application/json";
+   Flatbuffers_Content_Type : constant String := "application/flatbuffers";
+
+   function Supports_Content_Type (Content_Type : String) return Boolean;
+
    --  -- EntityActions handler callbacks ----------------------------
    --  Supply these callbacks from your component at registration time.
 
    --  Capabilities_Service
    type Handle_Read_Capabilities_Access is access function
      (Request : Query) return Capabilities_Array;
-   --  Session_Service
-   type Handle_Create_Session_Access is access procedure
-     (Request  : in  Session;
+   --  Planning_Execution_Service
+   type Handle_Create_Requirement_Access is access procedure
+     (Request  : in  Planning_Execution_Requirement;
       Response : out Identifier);
-   type Handle_Read_Session_Access is access function
-     (Request : Query) return Session_Snapshot_Array;
-   type Handle_Update_Session_Access is access procedure
-     (Request  : in  Session_Step_Request;
+   type Handle_Read_Requirement_Access is access function
+     (Request : Query) return Planning_Execution_Requirement_Array;
+   type Handle_Update_Requirement_Access is access procedure
+     (Request  : in  Planning_Execution_Requirement;
       Response : out Ack);
-   type Handle_Delete_Session_Access is access procedure
-     (Request  : in  Session_Stop_Request;
+   type Handle_Delete_Requirement_Access is access procedure
+     (Request  : in  Identifier;
       Response : out Ack);
    --  State_Service
    type Handle_Create_State_Access is access procedure
@@ -133,67 +111,28 @@ package Pyramid.Services.Autonomy_Backend.Provided is
    type Handle_Delete_State_Access is access procedure
      (Request  : in  Identifier;
       Response : out Ack);
-   --  Intent_Service
-   type Handle_Create_Intent_Access is access procedure
-     (Request  : in  Mission_Intent;
-      Response : out Identifier);
-   type Handle_Update_Intent_Access is access procedure
-     (Request  : in  Mission_Intent;
-      Response : out Ack);
-   type Handle_Delete_Intent_Access is access procedure
-     (Request  : in  Identifier;
-      Response : out Ack);
-   --  Command_Service
-   type Handle_Read_Command_Access is access function
-     (Request : Query) return Command_Array;
-   --  GoalDispatch_Service
-   type Handle_Read_Goal_Dispatch_Access is access function
-     (Request : Query) return Goal_Dispatch_Array;
-   --  DecisionRecord_Service
-   type Handle_Read_Decision_Record_Access is access function
-     (Request : Query) return Decision_Record_Array;
-   --  CommandResult_Service
-   type Handle_Create_Command_Result_Access is access procedure
-     (Request  : in  Command_Result;
-      Response : out Identifier);
-   type Handle_Update_Command_Result_Access is access procedure
-     (Request  : in  Command_Result;
-      Response : out Ack);
-   type Handle_Delete_Command_Result_Access is access procedure
-     (Request  : in  Identifier;
-      Response : out Ack);
-   --  DispatchResult_Service
-   type Handle_Create_Dispatch_Result_Access is access procedure
-     (Request  : in  Dispatch_Result;
-      Response : out Identifier);
-   type Handle_Update_Dispatch_Result_Access is access procedure
-     (Request  : in  Dispatch_Result;
-      Response : out Ack);
-   type Handle_Delete_Dispatch_Result_Access is access procedure
-     (Request  : in  Identifier;
-      Response : out Ack);
+   --  Plan_Service
+   type Handle_Read_Plan_Access is access function
+     (Request : Query) return Plan_Array;
+   --  Execution_Run_Service
+   type Handle_Read_Run_Access is access function
+     (Request : Query) return Execution_Run_Array;
+   --  Requirement_Placement_Service
+   type Handle_Read_Placement_Access is access function
+     (Request : Query) return Requirement_Placement_Array;
 
    type Service_Handlers is record
       On_Read_Capabilities : Handle_Read_Capabilities_Access := null;
-      On_Create_Session : Handle_Create_Session_Access := null;
-      On_Read_Session : Handle_Read_Session_Access := null;
-      On_Update_Session : Handle_Update_Session_Access := null;
-      On_Delete_Session : Handle_Delete_Session_Access := null;
+      On_Create_Requirement : Handle_Create_Requirement_Access := null;
+      On_Read_Requirement : Handle_Read_Requirement_Access := null;
+      On_Update_Requirement : Handle_Update_Requirement_Access := null;
+      On_Delete_Requirement : Handle_Delete_Requirement_Access := null;
       On_Create_State : Handle_Create_State_Access := null;
       On_Update_State : Handle_Update_State_Access := null;
       On_Delete_State : Handle_Delete_State_Access := null;
-      On_Create_Intent : Handle_Create_Intent_Access := null;
-      On_Update_Intent : Handle_Update_Intent_Access := null;
-      On_Delete_Intent : Handle_Delete_Intent_Access := null;
-      On_Read_Command : Handle_Read_Command_Access := null;
-      On_Read_Goal_Dispatch : Handle_Read_Goal_Dispatch_Access := null;
-      On_Read_Decision_Record : Handle_Read_Decision_Record_Access := null;
-      On_Create_Command_Result : Handle_Create_Command_Result_Access := null;
-      On_Update_Command_Result : Handle_Update_Command_Result_Access := null;
-      On_Delete_Command_Result : Handle_Delete_Command_Result_Access := null;
-      On_Create_Dispatch_Result : Handle_Create_Dispatch_Result_Access := null;
-      On_Update_Dispatch_Result : Handle_Update_Dispatch_Result_Access := null;
-      On_Delete_Dispatch_Result : Handle_Delete_Dispatch_Result_Access := null;
+      On_Read_Plan : Handle_Read_Plan_Access := null;
+      On_Read_Run : Handle_Read_Run_Access := null;
+      On_Read_Placement : Handle_Read_Placement_Access := null;
    end record;
 
    --  -- PCL binding procedures ------------------------------------
@@ -205,6 +144,10 @@ package Pyramid.Services.Autonomy_Backend.Provided is
       Handlers  : access constant Service_Handlers := null;
       Content_Type : String := "application/json");
 
+   function Decode_Read_Capabilities_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Capabilities_Array;
+
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Read_Capabilities
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
@@ -213,37 +156,57 @@ package Pyramid.Services.Autonomy_Backend.Provided is
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
+   function Decode_Create_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Identifier;
+
    --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Create_Session
+   procedure Invoke_Create_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Session;
+      Request   : Planning_Execution_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
+   function Decode_Read_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Planning_Execution_Requirement_Array;
+
    --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Read_Session
+   procedure Invoke_Read_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
+   function Decode_Update_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Ack;
+
    --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Update_Session
+   procedure Invoke_Update_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Session_Step_Request;
+      Request   : Planning_Execution_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
+   function Decode_Delete_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Ack;
+
    --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Delete_Session
+   procedure Invoke_Delete_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Session_Stop_Request;
+      Request   : Identifier;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
+
+   function Decode_Create_State_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Identifier;
 
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Create_State
@@ -253,6 +216,10 @@ package Pyramid.Services.Autonomy_Backend.Provided is
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
+   function Decode_Update_State_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Ack;
+
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Update_State
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
@@ -260,6 +227,10 @@ package Pyramid.Services.Autonomy_Backend.Provided is
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
+
+   function Decode_Delete_State_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Ack;
 
    --  Invoke via executor transport (transport-agnostic).
    procedure Invoke_Delete_State
@@ -269,98 +240,38 @@ package Pyramid.Services.Autonomy_Backend.Provided is
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
-   --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Create_Intent
-     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Mission_Intent;
-      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address;
-      Content_Type : String := "application/json");
+   function Decode_Read_Plan_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Plan_Array;
 
    --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Update_Intent
-     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Mission_Intent;
-      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address;
-      Content_Type : String := "application/json");
-
-   --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Delete_Intent
-     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Identifier;
-      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address;
-      Content_Type : String := "application/json");
-
-   --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Read_Command
+   procedure Invoke_Read_Plan
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
+   function Decode_Read_Run_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Execution_Run_Array;
+
    --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Read_Goal_Dispatch
+   procedure Invoke_Read_Run
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
+   function Decode_Read_Placement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Requirement_Placement_Array;
+
    --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Read_Decision_Record
+   procedure Invoke_Read_Placement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
-      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address;
-      Content_Type : String := "application/json");
-
-   --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Create_Command_Result
-     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Command_Result;
-      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address;
-      Content_Type : String := "application/json");
-
-   --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Update_Command_Result
-     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Command_Result;
-      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address;
-      Content_Type : String := "application/json");
-
-   --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Delete_Command_Result
-     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Identifier;
-      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address;
-      Content_Type : String := "application/json");
-
-   --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Create_Dispatch_Result
-     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Dispatch_Result;
-      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address;
-      Content_Type : String := "application/json");
-
-   --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Update_Dispatch_Result
-     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Dispatch_Result;
-      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
-      User_Data : System.Address := System.Null_Address;
-      Content_Type : String := "application/json");
-
-   --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Delete_Dispatch_Result
-     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Identifier;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");

@@ -9,17 +9,16 @@
 
 #include "generated/pyramid_services_tactical_objects_provided.hpp"
 #include "generated/pyramid_services_tactical_objects_consumed.hpp"
-#include "generated/pyramid_data_model_tactical_codec.hpp"
 
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
 #include <atomic>
+#include <string>
 
 namespace tobj_example {
 
 namespace Provided  = pyramid::services::tactical_objects::provided;
 namespace Consumed  = pyramid::services::tactical_objects::consumed;
-namespace TacticalCodec = pyramid::data_model::tactical;
 using namespace pyramid::services::tactical_objects;
 using namespace pyramid::data_model;
 
@@ -27,6 +26,7 @@ using namespace pyramid::data_model;
 struct EvidenceProviderState {
     pcl_executor_t*      executor          = nullptr;
     pcl_port_t*          publisher         = nullptr;
+    std::string          content_type      = Provided::kJsonContentType;
     std::atomic<bool>    evidence_req_received{false};
     std::atomic<bool>    observation_sent{false};
 

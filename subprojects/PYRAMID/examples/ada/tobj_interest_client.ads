@@ -13,12 +13,14 @@ with Pcl_Bindings;
 with Ada.Strings.Unbounded;
 with Pyramid.Data_Model.Base.Types;
 with Pyramid.Data_Model.Common.Types;
+with Pyramid.Services.Tactical_Objects.Provided;
 with System;
 
 package Tobj_Interest_Client is
 
    Content_Type : Ada.Strings.Unbounded.Unbounded_String :=
-     Ada.Strings.Unbounded.To_Unbounded_String ("application/json");
+     Ada.Strings.Unbounded.To_Unbounded_String
+       (Pyramid.Services.Tactical_Objects.Provided.Json_Content_Type);
 
    --  Component state (written by callbacks on the executor thread)
    Matches_Received     : Natural := 0;

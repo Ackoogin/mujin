@@ -6,26 +6,20 @@
 with Ada.Text_IO;
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 with Interfaces.C;
-with Interfaces.C.Strings;
 with Pyramid.Services.Tactical_Objects.Provided;
 with Pyramid.Services.Tactical_Objects.Consumed;
-with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
 with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;
 with Pyramid.Data_Model.Common.Types_Codec;
 with Pyramid.Data_Model.Tactical.Types;  use Pyramid.Data_Model.Tactical.Types;
-with Pyramid.Data_Model.Tactical.Types_Codec;
 with System;
 
 package body Tobj_Evidence_Provider is
 
    package Provided renames Pyramid.Services.Tactical_Objects.Provided;
    package Consumed renames Pyramid.Services.Tactical_Objects.Consumed;
-   package Flat     renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
    package Common   renames Pyramid.Data_Model.Common.Types_Codec;
-   package Tactical renames Pyramid.Data_Model.Tactical.Types_Codec;
 
    use type Interfaces.C.unsigned;
-   use type Interfaces.C.Strings.chars_ptr;
    use type Pcl_Bindings.Pcl_Executor_Access;
    use type System.Address;
 
@@ -39,20 +33,6 @@ package body Tobj_Evidence_Provider is
                             "[evidence_provider] " & Msg);
       Ada.Text_IO.Flush (Ada.Text_IO.Standard_Error);
    end Log;
-
-   function Decode_Evidence_Requirement
-     (Msg : access constant Pcl_Bindings.Pcl_Msg)
-      return Object_Evidence_Requirement
-   is
-      Payload : constant String := Provided.Msg_To_String (Msg.Data, Msg.Size);
-   begin
-      if Msg.Type_Name /= Interfaces.C.Strings.Null_Ptr
-        and then Interfaces.C.Strings.Value (Msg.Type_Name) = Flat.Content_Type
-      then
-         return Flat.From_Binary_Object_Evidence_Requirement (Payload, null);
-      end if;
-      return Tactical.From_Json (Payload, null);
-   end Decode_Evidence_Requirement;
 
    -- -- On_Configure ----------------------------------------------------------
 
@@ -85,7 +65,8 @@ package body Tobj_Evidence_Provider is
       Evidence_Req_Received := True;
 
       declare
-         Req : constant Object_Evidence_Requirement := Decode_Evidence_Requirement (Msg);
+         Req : constant Object_Evidence_Requirement :=
+           Provided.Decode_Evidence_Requirements (Msg);
          Dimension_Str : constant String :=
            (if Req.Dimension = null or else Req.Dimension'Length = 0
             then "DIMENSION_UNSPECIFIED"

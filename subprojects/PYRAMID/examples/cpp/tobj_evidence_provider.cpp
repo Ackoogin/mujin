@@ -21,8 +21,12 @@ static void log(const char* msg) {
 // -- on_configure -------------------------------------------------------------
 
 pcl_status_t evidenceProviderOnConfigure(pcl_container_t* c, void* user_data) {
-    Provided::subscribeEvidenceRequirements(c, onEvidenceRequirement, user_data);
-    return PCL_OK;
+    auto* state = static_cast<EvidenceProviderState*>(user_data);
+    Provided::subscribeEvidenceRequirements(
+        c, onEvidenceRequirement, user_data, state->content_type.c_str());
+    state->publisher = pcl_container_add_publisher(
+        c, Consumed::kTopicObjectEvidence, state->content_type.c_str());
+    return state->publisher ? PCL_OK : PCL_ERR_CALLBACK;
 }
 
 // -- onEvidenceRequirement ----------------------------------------------------
@@ -34,14 +38,13 @@ void onEvidenceRequirement(pcl_container_t* /*c*/, const pcl_msg_t* msg,
 
     state->evidence_req_received.store(true);
 
-    std::string body = Provided::msgToString(msg->data, msg->size);
-    log(("evidence requirement: " + body).c_str());
-
-    auto req = TacticalCodec::fromJson(
-        body, static_cast<ObjectEvidenceRequirement*>(nullptr));
+    ObjectEvidenceRequirement req;
+    if (!Provided::decodeEvidenceRequirements(msg, &req)) {
+        return;
+    }
     (void)req;  // parsed for completeness; not needed to build the response
 
-    if (!state->observation_sent.load() && state->executor) {
+    if (!state->observation_sent.load() && state->publisher) {
         // Business logic: publish a typed observation.
         // Position: 51.0°N 0.0°E; HOSTILE; SEA_SURFACE dimension.
         ObjectDetail obs;
@@ -53,18 +56,11 @@ void onEvidenceRequirement(pcl_container_t* /*c*/, const pcl_msg_t* msg,
         obs.quality       = 0.9;
         obs.creation_time = 0.5;
 
-        std::string obs_json = TacticalCodec::toJson(obs);
         log(("Publishing standard observation on "
              + std::string(Consumed::kTopicObjectEvidence)).c_str());
 
-        // Publish via the standard.object_evidence topic using the executor
-        // as an in-process publisher (dispatch_incoming re-uses the topic).
-        pcl_msg_t out{};
-        out.data      = obs_json.data();
-        out.size      = static_cast<uint32_t>(obs_json.size());
-        out.type_name = "application/json";
-        pcl_executor_dispatch_incoming(state->executor,
-                                       Consumed::kTopicObjectEvidence, &out);
+        Consumed::publishObjectEvidence(
+            state->publisher, obs, state->content_type.c_str());
         state->observation_sent.store(true);
         log("Standard observation published");
     }

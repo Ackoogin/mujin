@@ -155,6 +155,11 @@ class ProtoRpc:
         return f'Invoke_{_camel_to_snake(self.name)}'
 
     @property
+    def ada_decode_response_name(self) -> str:
+        """Decode_Create_Requirement_Response."""
+        return f'Decode_{_camel_to_snake(self.name)}_Response'
+
+    @property
     def ada_svc_const(self) -> str:
         """Svc_Create_Requirement."""
         return f'Svc_{_camel_to_snake(self.name)}'
@@ -440,7 +445,7 @@ def _ensure_parent_packages(output_dir: Path, pkg_names: List[str]) -> None:
         ads = output_dir / (file_base + '.ads')
         if ads.exists():
             continue
-        with open(ads, 'w', encoding='utf-8') as f:
+        with open(ads, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'--  Auto-generated parent package spec (empty)\n')
             f.write(f'package {ancestor} is\n')
             f.write(f'end {ancestor};\n')
@@ -506,7 +511,7 @@ class AdaServiceGenerator:
         is_provided = _is_provided(parsed)
         sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
 
-        with open(path, 'w') as f:
+        with open(path, 'w', newline='\n') as f:
             f.write(f'--  Auto-generated service binding specification\n')
             f.write(f'--  Generated from: {self._proto_input.name}'
                     f' by generate_bindings.py\n')
@@ -588,6 +593,11 @@ class AdaServiceGenerator:
             f.write(f'     (Data : System.Address;\n')
             f.write(f'      Size : Interfaces.C.unsigned) return String;\n')
             f.write(f'\n')
+            f.write(f'   Json_Content_Type : constant String := "application/json";\n')
+            f.write(f'   Flatbuffers_Content_Type : constant String := "application/flatbuffers";\n')
+            f.write(f'\n')
+            f.write(f'   function Supports_Content_Type (Content_Type : String) return Boolean;\n')
+            f.write(f'\n')
 
             # Handler callback declarations
             f.write(f'   --  -- EntityActions handler callbacks ----------------------------\n')
@@ -637,6 +647,17 @@ class AdaServiceGenerator:
                 f.write(f'      Content_Type : String := "application/json");\n')
                 f.write(f'\n')
 
+            # Topic decode helpers so component callbacks do not branch on
+            # wire content type.
+            for key in all_topics:
+                decode_name = 'Decode_' + '_'.join(
+                    w.capitalize() for w in key.split('_'))
+                spec = topic_spec(key)
+                f.write(f'   function {decode_name}\n')
+                f.write(f'     (Msg : access constant Pcl_Bindings.Pcl_Msg)\n')
+                f.write(f'      return {spec.ada_payload_type};\n')
+                f.write(f'\n')
+
             f.write(f'   procedure Register_Services\n')
             f.write(f'     (Container : Pcl_Bindings.Pcl_Container_Access;\n')
             f.write(f'      Handlers  : access constant Service_Handlers := null;\n')
@@ -648,6 +669,10 @@ class AdaServiceGenerator:
             if is_provided:
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
+                        f.write(f'   function {rpc.ada_decode_response_name}\n')
+                        f.write(f'     (Msg : access constant Pcl_Bindings.Pcl_Msg)\n')
+                        f.write(f'      return {rpc.ada_rsp_type};\n')
+                        f.write(f'\n')
                         f.write(f'   --  Invoke via executor transport (transport-agnostic).\n')
                         f.write(f'   procedure {rpc.ada_invoke_name}\n')
                         f.write(f'     (Executor  : Pcl_Bindings.Pcl_Executor_Access;\n')
@@ -695,12 +720,13 @@ class AdaServiceGenerator:
         is_provided = _is_provided(parsed)
         sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
 
-        with open(path, 'w') as f:
+        with open(path, 'w', newline='\n') as f:
             f.write(f'--  Auto-generated service binding body\n')
             f.write(f'--  Package body: {pkg_name}\n')
             f.write(f'\n')
             f.write(f'with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')
             f.write(f'with Ada.Unchecked_Conversion;\n')
+            f.write(f'with GNATCOLL.JSON;  use GNATCOLL.JSON;\n')
             f.write(f'with Interfaces.C.Strings;\n')
             f.write(f'with System;\n')
             f.write(f'with System.Storage_Elements;\n')
@@ -752,6 +778,130 @@ class AdaServiceGenerator:
 
             f.write(f'   package Flatbuffers_Codec renames {_flatbuffers_codec_pkg_from_proto(parsed)};\n')
             f.write(f'\n')
+
+            f.write(f'   function Supports_Content_Type (Content_Type : String) return Boolean is\n')
+            f.write(f'   begin\n')
+            f.write(f'      return Content_Type = ""\n')
+            f.write(f'        or else Content_Type = Json_Content_Type\n')
+            f.write(f'        or else Content_Type = Flatbuffers_Content_Type;\n')
+            f.write(f'   end Supports_Content_Type;\n')
+            f.write(f'\n')
+            f.write(f'   function Message_Content_Type\n')
+            f.write(f'     (Msg : access constant Pcl_Bindings.Pcl_Msg) return String is\n')
+            f.write(f'   begin\n')
+            f.write(f'      if Msg = null or else Msg.Type_Name = Interfaces.C.Strings.Null_Ptr then\n')
+            f.write(f'         return Json_Content_Type;\n')
+            f.write(f'      end if;\n')
+            f.write(f'      return Interfaces.C.Strings.Value (Msg.Type_Name);\n')
+            f.write(f'   end Message_Content_Type;\n')
+            f.write(f'\n')
+            f.write(f'   function Decode_Identifier_Payload (Payload : String) return Identifier is\n')
+            f.write(f'   begin\n')
+            f.write(f'      declare\n')
+            f.write(f'         J : constant JSON_Value := Read (Payload);\n')
+            f.write(f'      begin\n')
+            f.write(f'         if J.Kind = JSON_String_Type then\n')
+            f.write("            return To_Unbounded_String (String'(UTF8_String'(Get (J))));\n")
+            f.write(f'         elsif J.Kind = JSON_Object_Type and then Has_Field (J, "uuid") then\n')
+            f.write("            return To_Unbounded_String (String'(UTF8_String'(Get (J, \"uuid\"))));\n")
+            f.write(f'         end if;\n')
+            f.write(f'      exception\n')
+            f.write(f'         when others =>\n')
+            f.write(f'            null;\n')
+            f.write(f'      end;\n')
+            f.write(f'      return To_Unbounded_String (Payload);\n')
+            f.write(f'   end Decode_Identifier_Payload;\n')
+            f.write(f'\n')
+
+            def write_payload_decode_function(func_name: str, payload_type: str,
+                                              short_type: str, is_array: bool,
+                                              fb_suffix: str) -> None:
+                f.write(f'   function {func_name}\n')
+                f.write(f'     (Msg : access constant Pcl_Bindings.Pcl_Msg)\n')
+                f.write(f'      return {payload_type}\n')
+                f.write(f'   is\n')
+                f.write(f'      Empty : {payload_type} (1 .. 0);\n') if is_array else None
+                f.write(f'      Payload : constant String :=\n')
+                f.write(f'        (if Msg = null or else Msg.Data = System.Null_Address\n')
+                f.write(f'         then ""\n')
+                f.write(f'         else Msg_To_String (Msg.Data, Msg.Size));\n')
+                f.write(f'      Content_Type : constant String := Message_Content_Type (Msg);\n')
+                f.write(f'   begin\n')
+                f.write(f'      if Payload = "" then\n')
+                if is_array:
+                    f.write(f'         return Empty;\n')
+                elif short_type == 'Identifier':
+                    f.write(f'         return Null_Unbounded_String;\n')
+                else:
+                    f.write(f'         return From_Json ("{{}}", null);\n')
+                f.write(f'      end if;\n')
+                f.write(f'\n')
+                if is_array:
+                    f.write(f'      declare\n')
+                    f.write(f'         Json_Payload : constant String :=\n')
+                    f.write(f'           (if Content_Type = "" or else Content_Type = Json_Content_Type\n')
+                    f.write(f'            then Payload\n')
+                    f.write(f'            elsif Content_Type = Flatbuffers_Content_Type\n')
+                    f.write(f'            then Flatbuffers_Codec.From_Binary_{fb_suffix} (Payload)\n')
+                    f.write(f'            else raise Constraint_Error with "Unsupported content type: " & Content_Type);\n')
+                    f.write(f'         R : constant Read_Result := Read (Json_Payload);\n')
+                    f.write(f'      begin\n')
+                    f.write(f'         if not R.Success or else R.Value.Kind /= JSON_Array_Type then\n')
+                    f.write(f'            return Empty;\n')
+                    f.write(f'         end if;\n')
+                    f.write(f'         declare\n')
+                    f.write(f'            Arr    : constant JSON_Array := Get (R.Value);\n')
+                    f.write(f'            Result : {payload_type} (1 .. GNATCOLL.JSON.Length (Arr));\n')
+                    f.write(f'         begin\n')
+                    f.write(f'            for I in 1 .. GNATCOLL.JSON.Length (Arr) loop\n')
+                    if short_type == 'Identifier':
+                        f.write(f'               Result (I) := Decode_Identifier_Payload (Write (Get (Arr, I)));\n')
+                    else:
+                        f.write(f'               Result (I) := From_Json (Write (Get (Arr, I)), null);\n')
+                    f.write(f'            end loop;\n')
+                    f.write(f'            return Result;\n')
+                    f.write(f'         end;\n')
+                    f.write(f'      end;\n')
+                else:
+                    f.write(f'      if Content_Type = "" or else Content_Type = Json_Content_Type then\n')
+                    if short_type == 'Identifier':
+                        f.write(f'         return Decode_Identifier_Payload (Payload);\n')
+                    else:
+                        f.write(f'         return From_Json (Payload, null);\n')
+                    f.write(f'      elsif Content_Type = Flatbuffers_Content_Type then\n')
+                    f.write(f'         return Flatbuffers_Codec.From_Binary_{fb_suffix} (Payload, null);\n')
+                    f.write(f'      end if;\n')
+                    f.write(f'      raise Constraint_Error with "Unsupported content type: " & Content_Type;\n')
+                f.write(f'   end {func_name};\n')
+                f.write(f'\n')
+
+            all_topics = dict(sub_topics)
+            all_topics.update(pub_topics)
+            for key in all_topics:
+                spec = topic_spec(key)
+                func_name = 'Decode_' + '_'.join(
+                    w.capitalize() for w in key.split('_'))
+                write_payload_decode_function(
+                    func_name,
+                    spec.ada_payload_type,
+                    spec.short_type,
+                    spec.is_array,
+                    spec.flatbuffers_suffix)
+
+            if is_provided:
+                for _, rpc in all_rpcs:
+                    rsp_short = _short_type(rpc.rsp)
+                    rsp_fb_suffix = (
+                        _flatbuffers_func_suffix_for_stream(rpc.rsp)
+                        if rpc.streaming else
+                        _flatbuffers_func_suffix_for_type(rpc.rsp)
+                    )
+                    write_payload_decode_function(
+                        rpc.ada_decode_response_name,
+                        rpc.ada_rsp_type,
+                        rsp_short,
+                        rpc.streaming,
+                        rsp_fb_suffix)
 
             # Default handler implementations
             current_svc = None
@@ -1454,7 +1604,7 @@ class AdaTypesGenerator:
         sorted_msgs = self._toposort(non_alias)
         with_clauses = self._with_clauses_for_file(pf)
 
-        with open(path, 'w') as f:
+        with open(path, 'w', newline='\n') as f:
             f.write('--  Auto-generated types specification\n')
             f.write(f'--  Generated from: {pf.path.name}'
                     f' by generate_bindings.py (types)\n')
@@ -1607,7 +1757,7 @@ class AdaDataModelCodecGenerator:
         alias_names = set(self._aliases.keys())
         structs = [m for m in self._pf.messages if m.name not in alias_names]
 
-        with open(path, 'w') as f:
+        with open(path, 'w', newline='\n') as f:
             f.write('--  Auto-generated data model JSON codec specification\n')
             f.write(f'--  Generated from: {self._pf.path.name}'
                     f' by generate_bindings.py (codec)\n')
@@ -2087,7 +2237,7 @@ class AdaDataModelCodecGenerator:
         alias_names = set(self._aliases.keys())
         structs = [m for m in self._pf.messages if m.name not in alias_names]
 
-        with open(path, 'w') as f:
+        with open(path, 'w', newline='\n') as f:
             f.write('--  Auto-generated data model JSON codec body\n')
             f.write(f'--  Package: {self._ada_pkg}\n\n')
             f.write('with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')

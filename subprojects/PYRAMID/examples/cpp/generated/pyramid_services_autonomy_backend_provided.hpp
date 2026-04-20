@@ -140,6 +140,10 @@ public:
 // PCL binding functions — Subscribe / Publish / Invoke (typed)
 // ---------------------------------------------------------------------------
 
+/// \brief Decode a response from capabilities.read_capabilities.
+bool decodeReadCapabilitiesResponse(const pcl_msg_t* msg,
+                                    std::vector<Capabilities>* out);
+
 /// \brief Invoke capabilities.read_capabilities (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -150,6 +154,10 @@ pcl_status_t invokeReadCapabilities(pcl_executor_t* executor,
                                     void*                   user_data = nullptr,
                                     const pcl_endpoint_route_t* route = nullptr,
                                     const char*       content_type = "application/json");
+
+/// \brief Decode a response from planning_execution.create_requirement.
+bool decodeCreateRequirementResponse(const pcl_msg_t* msg,
+                                     Identifier* out);
 
 /// \brief Invoke planning_execution.create_requirement (typed, serialisation handled internally).
 ///
@@ -162,6 +170,10 @@ pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
                                      const pcl_endpoint_route_t* route = nullptr,
                                      const char*       content_type = "application/json");
 
+/// \brief Decode a response from planning_execution.read_requirement.
+bool decodeReadRequirementResponse(const pcl_msg_t* msg,
+                                   std::vector<PlanningExecutionRequirement>* out);
+
 /// \brief Invoke planning_execution.read_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -172,6 +184,10 @@ pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
                                    void*                   user_data = nullptr,
                                    const pcl_endpoint_route_t* route = nullptr,
                                    const char*       content_type = "application/json");
+
+/// \brief Decode a response from planning_execution.update_requirement.
+bool decodeUpdateRequirementResponse(const pcl_msg_t* msg,
+                                     Ack* out);
 
 /// \brief Invoke planning_execution.update_requirement (typed, serialisation handled internally).
 ///
@@ -184,6 +200,10 @@ pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
                                      const pcl_endpoint_route_t* route = nullptr,
                                      const char*       content_type = "application/json");
 
+/// \brief Decode a response from planning_execution.delete_requirement.
+bool decodeDeleteRequirementResponse(const pcl_msg_t* msg,
+                                     Ack* out);
+
 /// \brief Invoke planning_execution.delete_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -194,6 +214,10 @@ pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
                                      void*                   user_data = nullptr,
                                      const pcl_endpoint_route_t* route = nullptr,
                                      const char*       content_type = "application/json");
+
+/// \brief Decode a response from state.create_state.
+bool decodeCreateStateResponse(const pcl_msg_t* msg,
+                               Identifier* out);
 
 /// \brief Invoke state.create_state (typed, serialisation handled internally).
 ///
@@ -206,6 +230,10 @@ pcl_status_t invokeCreateState(pcl_executor_t* executor,
                                const pcl_endpoint_route_t* route = nullptr,
                                const char*       content_type = "application/json");
 
+/// \brief Decode a response from state.update_state.
+bool decodeUpdateStateResponse(const pcl_msg_t* msg,
+                               Ack* out);
+
 /// \brief Invoke state.update_state (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -216,6 +244,10 @@ pcl_status_t invokeUpdateState(pcl_executor_t* executor,
                                void*                   user_data = nullptr,
                                const pcl_endpoint_route_t* route = nullptr,
                                const char*       content_type = "application/json");
+
+/// \brief Decode a response from state.delete_state.
+bool decodeDeleteStateResponse(const pcl_msg_t* msg,
+                               Ack* out);
 
 /// \brief Invoke state.delete_state (typed, serialisation handled internally).
 ///
@@ -228,6 +260,10 @@ pcl_status_t invokeDeleteState(pcl_executor_t* executor,
                                const pcl_endpoint_route_t* route = nullptr,
                                const char*       content_type = "application/json");
 
+/// \brief Decode a response from plan.read_plan.
+bool decodeReadPlanResponse(const pcl_msg_t* msg,
+                            std::vector<Plan>* out);
+
 /// \brief Invoke plan.read_plan (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -239,6 +275,10 @@ pcl_status_t invokeReadPlan(pcl_executor_t* executor,
                             const pcl_endpoint_route_t* route = nullptr,
                             const char*       content_type = "application/json");
 
+/// \brief Decode a response from execution_run.read_run.
+bool decodeReadRunResponse(const pcl_msg_t* msg,
+                           std::vector<ExecutionRun>* out);
+
 /// \brief Invoke execution_run.read_run (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -249,6 +289,10 @@ pcl_status_t invokeReadRun(pcl_executor_t* executor,
                            void*                   user_data = nullptr,
                            const pcl_endpoint_route_t* route = nullptr,
                            const char*       content_type = "application/json");
+
+/// \brief Decode a response from requirement_placement.read_placement.
+bool decodeReadPlacementResponse(const pcl_msg_t* msg,
+                                 std::vector<RequirementPlacement>* out);
 
 /// \brief Invoke requirement_placement.read_placement (typed, serialisation handled internally).
 ///

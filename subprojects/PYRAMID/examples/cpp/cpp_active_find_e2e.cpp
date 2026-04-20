@@ -12,6 +12,7 @@
 // Serialisation is handled by the generated proto-native codecs.
 //
 // Usage: cpp_active_find_e2e [--host 127.0.0.1] [--port 19123]
+//                            [--content-type application/json]
 
 #include "tobj_interest_client.hpp"
 #include "tobj_evidence_provider.hpp"
@@ -47,15 +48,18 @@ int main(int argc, char** argv) {
 
     const char* host = "127.0.0.1";
     uint16_t    port = 19000;
+    const char* content_type = provided::kJsonContentType;
 
     for (int i = 1; i < argc - 1; ++i) {
         if (std::strcmp(argv[i], "--host") == 0) host = argv[++i];
         if (std::strcmp(argv[i], "--port") == 0) port = static_cast<uint16_t>(std::atoi(argv[++i]));
+        if (std::strcmp(argv[i], "--content-type") == 0) content_type = argv[++i];
     }
 
     char connect_msg[256];
     std::snprintf(connect_msg, sizeof(connect_msg),
-                  "Connecting to %s:%u", host, port);
+                  "Connecting to %s:%u content-type=%s",
+                  host, port, content_type);
     log(connect_msg);
 
     // -- Create executor ------------------------------------------------------
@@ -78,6 +82,7 @@ int main(int argc, char** argv) {
     // -- Create interest client container -------------------------------------
 
     InterestClientState client_state;
+    client_state.content_type = content_type;
     pcl_callbacks_t client_cbs{};
     client_cbs.on_configure = interestClientOnConfigure;
     pcl_container_t* client_c =
@@ -96,6 +101,7 @@ int main(int argc, char** argv) {
 
     EvidenceProviderState provider_state;
     provider_state.executor = exec;
+    provider_state.content_type = content_type;
     pcl_callbacks_t prov_cbs{};
     prov_cbs.on_configure = evidenceProviderOnConfigure;
     pcl_container_t* provider_c =
@@ -118,8 +124,9 @@ int main(int argc, char** argv) {
     // Typed enum values avoid stringly-typed JSON construction here.
 
     sendCreateRequirement(
-        transport,
+        exec,
         &client_state,
+        content_type,
         DataPolicy::Obtain,
         StandardIdentity::Hostile,
         BattleDimension::SeaSurface,

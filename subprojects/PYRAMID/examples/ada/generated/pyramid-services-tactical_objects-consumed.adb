@@ -3,6 +3,7 @@
 
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 with Ada.Unchecked_Conversion;
+with GNATCOLL.JSON;  use GNATCOLL.JSON;
 with Interfaces.C.Strings;
 with System;
 with System.Storage_Elements;
@@ -47,6 +48,61 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
    end Msg_To_String;
 
    package Flatbuffers_Codec renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
+
+   function Supports_Content_Type (Content_Type : String) return Boolean is
+   begin
+      return Content_Type = ""
+        or else Content_Type = Json_Content_Type
+        or else Content_Type = Flatbuffers_Content_Type;
+   end Supports_Content_Type;
+
+   function Message_Content_Type
+     (Msg : access constant Pcl_Bindings.Pcl_Msg) return String is
+   begin
+      if Msg = null or else Msg.Type_Name = Interfaces.C.Strings.Null_Ptr then
+         return Json_Content_Type;
+      end if;
+      return Interfaces.C.Strings.Value (Msg.Type_Name);
+   end Message_Content_Type;
+
+   function Decode_Identifier_Payload (Payload : String) return Identifier is
+   begin
+      declare
+         J : constant JSON_Value := Read (Payload);
+      begin
+         if J.Kind = JSON_String_Type then
+            return To_Unbounded_String (String'(UTF8_String'(Get (J))));
+         elsif J.Kind = JSON_Object_Type and then Has_Field (J, "uuid") then
+            return To_Unbounded_String (String'(UTF8_String'(Get (J, "uuid"))));
+         end if;
+      exception
+         when others =>
+            null;
+      end;
+      return To_Unbounded_String (Payload);
+   end Decode_Identifier_Payload;
+
+   function Decode_Object_Evidence
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Object_Detail
+   is
+      Payload : constant String :=
+        (if Msg = null or else Msg.Data = System.Null_Address
+         then ""
+         else Msg_To_String (Msg.Data, Msg.Size));
+      Content_Type : constant String := Message_Content_Type (Msg);
+   begin
+      if Payload = "" then
+         return From_Json ("{}", null);
+      end if;
+
+      if Content_Type = "" or else Content_Type = Json_Content_Type then
+         return From_Json (Payload, null);
+      elsif Content_Type = Flatbuffers_Content_Type then
+         return Flatbuffers_Codec.From_Binary_object_detail (Payload, null);
+      end if;
+      raise Constraint_Error with "Unsupported content type: " & Content_Type;
+   end Decode_Object_Evidence;
 
    --  -- Object_Evidence_Service ------------------------------------
    function Default_Handle_Read_Detail

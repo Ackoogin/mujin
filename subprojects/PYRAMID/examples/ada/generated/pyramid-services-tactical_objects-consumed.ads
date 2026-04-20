@@ -66,6 +66,11 @@ package Pyramid.Services.Tactical_Objects.Consumed is
      (Data : System.Address;
       Size : Interfaces.C.unsigned) return String;
 
+   Json_Content_Type : constant String := "application/json";
+   Flatbuffers_Content_Type : constant String := "application/flatbuffers";
+
+   function Supports_Content_Type (Content_Type : String) return Boolean;
+
    --  -- EntityActions handler callbacks ----------------------------
    --  Supply these callbacks from your component at registration time.
 
@@ -100,6 +105,10 @@ package Pyramid.Services.Tactical_Objects.Consumed is
    --  -- PCL binding procedures ------------------------------------
    --  Subscribe/Invoke/Publish wrappers for PCL transport layer.
    --  Serialisation is handled internally (codec baked at generation time).
+
+   function Decode_Object_Evidence
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Object_Detail;
 
    procedure Register_Services
      (Container : Pcl_Bindings.Pcl_Container_Access;

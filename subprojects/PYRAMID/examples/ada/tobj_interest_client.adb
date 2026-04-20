@@ -4,27 +4,19 @@
 --  Uses proto-native tactical codecs for both RPC and standard topic payloads.
 
 with Ada.Text_IO;
-with Ada.Unchecked_Conversion;
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
-with GNATCOLL.JSON;  use GNATCOLL.JSON;
 with Interfaces.C;
-with Interfaces.C.Strings;
 with Pyramid.Data_Model.Base.Types;  use Pyramid.Data_Model.Base.Types;
 with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;
 with Pyramid.Data_Model.Tactical.Types;  use Pyramid.Data_Model.Tactical.Types;
-with Pyramid.Data_Model.Tactical.Types_Codec;
 with Pyramid.Services.Tactical_Objects.Provided;
-with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
 with System;
 
 package body Tobj_Interest_Client is
 
    package Provided renames Pyramid.Services.Tactical_Objects.Provided;
-   package Flat     renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
-   package Tactical renames Pyramid.Data_Model.Tactical.Types_Codec;
 
    use type Interfaces.C.unsigned;
-   use type Interfaces.C.Strings.chars_ptr;
    use type System.Address;
 
    procedure Log (Msg : String) is
@@ -33,63 +25,6 @@ package body Tobj_Interest_Client is
                             "[interest_client] " & Msg);
       Ada.Text_IO.Flush (Ada.Text_IO.Standard_Error);
    end Log;
-
-   function To_Address is new
-     Ada.Unchecked_Conversion (Interfaces.C.Strings.chars_ptr, System.Address);
-
-   function Decode_Entity_Matches_Payload
-     (Msg : access constant Pcl_Bindings.Pcl_Msg) return String
-   is
-      Payload : constant String := Provided.Msg_To_String (Msg.Data, Msg.Size);
-   begin
-      if Msg.Type_Name /= Interfaces.C.Strings.Null_Ptr
-        and then Interfaces.C.Strings.Value (Msg.Type_Name) = Flat.Content_Type
-      then
-         return Flat.From_Binary_Object_Match_Array (Payload);
-      end if;
-      return Payload;
-   end Decode_Entity_Matches_Payload;
-
-   function Decode_Entity_Matches
-     (Msg : access constant Pcl_Bindings.Pcl_Msg)
-      return Provided.Object_Match_Array
-   is
-      Body_Str : constant String := Decode_Entity_Matches_Payload (Msg);
-      R        : constant Read_Result := Read (Body_Str);
-   begin
-      if not R.Success or else R.Value.Kind /= JSON_Array_Type then
-         return (1 .. 0 => <>);
-      end if;
-
-      declare
-         Arr    : constant JSON_Array := Get (R.Value);
-         Result : Provided.Object_Match_Array (1 .. GNATCOLL.JSON.Length (Arr));
-      begin
-         for I in 1 .. GNATCOLL.JSON.Length (Arr) loop
-            Result (I) :=
-              Tactical.From_Json (Write (Get (Arr, I)), null);
-         end loop;
-         return Result;
-      end;
-   end Decode_Entity_Matches;
-
-   function Decode_Identifier_Payload (Payload : String) return Identifier is
-      J : constant JSON_Value := Read (Payload);
-   begin
-      return To_Unbounded_String (String'(UTF8_String'(Get (J))));
-   exception
-      when others =>
-         begin
-            if Has_Field (J, "uuid") then
-               return To_Unbounded_String
-                 (String'(UTF8_String'(Get (J, "uuid"))));
-            end if;
-         exception
-            when others =>
-               null;
-         end;
-         return Null_Unbounded_String;
-   end Decode_Identifier_Payload;
 
    -- -- On_Configure ----------------------------------------------------------
 
@@ -120,11 +55,10 @@ package body Tobj_Interest_Client is
       end if;
 
       declare
-         Body_Str : constant String := Decode_Entity_Matches_Payload (Msg);
          Matches  : constant Provided.Object_Match_Array :=
-           Decode_Entity_Matches (Msg);
+           Provided.Decode_Entity_Matches (Msg);
       begin
-         Log ("standard.entity_matches: " & Body_Str);
+         Log ("standard.entity_matches received");
          for I in Matches'Range loop
             Log ("  entity[" & Natural'Image (I) & "]"
                  & " id=" & To_String (Matches (I).Id)
@@ -149,12 +83,8 @@ package body Tobj_Interest_Client is
          Resp.Size > 0
       then
          declare
-            Raw_Payload : constant String := Provided.Msg_To_String (Resp.Data, Resp.Size);
             Interest_Id : constant Identifier :=
-              (if Resp.Type_Name /= Interfaces.C.Strings.Null_Ptr
-                  and then Interfaces.C.Strings.Value (Resp.Type_Name) = Flat.Content_Type
-               then Flat.From_Binary_Identifier (Raw_Payload, null)
-               else Decode_Identifier_Payload (Raw_Payload));
+              Provided.Decode_Create_Requirement_Response (Resp);
          begin
             Log ("create_requirement response id: " & To_String (Interest_Id));
             if Interest_Id /= Null_Unbounded_String then
@@ -178,7 +108,7 @@ package body Tobj_Interest_Client is
       Min_Lon_Rad : Long_Float := 0.0;
       Max_Lon_Rad : Long_Float := 0.0)
    is
-      pragma Unreferenced (Identity, Max_Lat_Rad, Max_Lon_Rad);
+      pragma Unreferenced (Identity);
       Req : Object_Interest_Requirement;
       use type Pcl_Bindings.Pcl_Status;
    begin
@@ -200,48 +130,18 @@ package body Tobj_Interest_Client is
 
       Log ("create_requirement request (proto-native typed)");
       declare
-         Payload      : constant String :=
-           (if To_String (Content_Type) = Flat.Content_Type
-            then Flat.To_Binary_Object_Interest_Requirement (Req)
-            else Tactical.To_Json (Req));
-         Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
-         Payload_Bytes : aliased constant String := Payload;
-         Svc_C  : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String (Provided.Svc_Create_Requirement);
-         Msg    : aliased Pcl_Bindings.Pcl_Msg;
          Status : Pcl_Bindings.Pcl_Status;
       begin
-         if To_String (Content_Type) = Flat.Content_Type then
-            Log ("create_requirement payload: [flatbuffers " &
-                 Integer'Image (Payload_Bytes'Length) & " bytes]");
-         else
-            Log ("create_requirement payload: " & Payload);
-         end if;
-         if To_String (Content_Type) = Flat.Content_Type then
-            Msg.Data :=
-              (if Payload_Bytes'Length = 0
-               then System.Null_Address
-               else Payload_Bytes (Payload_Bytes'First)'Address);
-         else
-            Req_C := Interfaces.C.Strings.New_String (Payload);
-            Msg.Data := To_Address (Req_C);
-        end if;
-        Msg.Size      := Interfaces.C.unsigned (Payload_Bytes'Length);
-        Msg.Type_Name := Interfaces.C.Strings.New_String
-          (To_String (Content_Type));
-         Status := Pcl_Bindings.Invoke_Async
-           (Exec, Svc_C, Msg'Access,
-            On_Create_Requirement_Response'Unrestricted_Access,
-            System.Null_Address);
+         Provided.Invoke_Create_Requirement
+           (Executor     => Exec,
+            Request      => Req,
+            Callback     => On_Create_Requirement_Response'Unrestricted_Access,
+            Content_Type => To_String (Content_Type));
+         Status := Pcl_Bindings.PCL_OK;
          if Status /= Pcl_Bindings.PCL_OK then
             Log ("create_requirement invoke failed");
             Svc_Response_Ready := True;
          end if;
-         if Req_C /= Interfaces.C.Strings.Null_Ptr then
-            Interfaces.C.Strings.Free (Req_C);
-         end if;
-         Interfaces.C.Strings.Free (Svc_C);
-         Interfaces.C.Strings.Free (Msg.Type_Name);
       end;
    end Send_Create_Requirement;
 

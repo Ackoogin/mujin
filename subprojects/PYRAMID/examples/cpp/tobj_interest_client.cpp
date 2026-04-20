@@ -5,10 +5,7 @@
 
 #include "tobj_interest_client.hpp"
 
-#include <nlohmann/json.hpp>
-
 #include <cstdio>
-#include <cstring>
 #include <string>
 
 namespace tobj_example {
@@ -21,7 +18,10 @@ static void log(const char* msg) {
 // -- on_configure -------------------------------------------------------------
 
 pcl_status_t interestClientOnConfigure(pcl_container_t* c, void* user_data) {
-    Provided::subscribeEntityMatches(c, onEntityMatches, user_data);
+    auto* state = static_cast<InterestClientState*>(user_data);
+    Provided::subscribeEntityMatches(
+        c, onEntityMatches, user_data,
+        state ? state->content_type.c_str() : Provided::kJsonContentType);
     return PCL_OK;
 }
 
@@ -32,22 +32,11 @@ void onEntityMatches(pcl_container_t* /*c*/, const pcl_msg_t* msg,
     auto* state = static_cast<InterestClientState*>(user_data);
     if (!msg || !msg->data || msg->size == 0) return;
 
-    std::string body = Provided::msgToString(msg->data, msg->size);
-    log(("standard.entity_matches: " + body).c_str());
-
     std::vector<ObjectMatch> matches;
-    try {
-        auto arr = nlohmann::json::parse(body);
-        if (!arr.is_array()) {
-            return;
-        }
-        for (const auto& item : arr) {
-            matches.push_back(TacticalCodec::fromJson(
-                item.dump(), static_cast<ObjectMatch*>(nullptr)));
-        }
-    } catch (...) {
+    if (!Provided::decodeEntityMatches(msg, &matches)) {
         return;
     }
+    log("standard.entity_matches received");
     for (const auto& m : matches) {
         char buf[256];
         std::snprintf(buf, sizeof(buf),
@@ -67,16 +56,10 @@ void onEntityMatches(pcl_container_t* /*c*/, const pcl_msg_t* msg,
 void onCreateRequirementResponse(const pcl_msg_t* resp, void* user_data) {
     auto* state = static_cast<InterestClientState*>(user_data);
     if (resp && resp->data && resp->size > 0) {
-        std::string body = Provided::msgToString(resp->data, resp->size);
-        log(("create_requirement response: " + body).c_str());
-        try {
-            auto parsed = nlohmann::json::parse(body);
-            if (parsed.is_string() && !parsed.get<std::string>().empty()) {
-                state->interest_id_received.store(true);
-            }
-        } catch (...) {
-        }
-        if (state->interest_id_received.load()) {
+        Identifier interest_id;
+        if (Provided::decodeCreateRequirementResponse(resp, &interest_id) &&
+            !interest_id.empty()) {
+            log(("create_requirement response id: " + interest_id).c_str());
             state->interest_id_received.store(true);
         }
     }
@@ -86,8 +69,9 @@ void onCreateRequirementResponse(const pcl_msg_t* resp, void* user_data) {
 // -- sendCreateRequirement ----------------------------------------------------
 
 pcl_status_t sendCreateRequirement(
-    pcl_socket_transport_t* transport,
+    pcl_executor_t*         executor,
     InterestClientState*    state,
+    const char*             content_type,
     DataPolicy              policy,
     StandardIdentity        identity,
     BattleDimension         dimension,
@@ -115,17 +99,10 @@ pcl_status_t sendCreateRequirement(
         req.poly_area = poly;
     }
 
-    std::string req_str = TacticalCodec::toJson(req);
-    log(("create_requirement request: " + req_str).c_str());
-
-    pcl_msg_t request_msg{};
-    request_msg.data = req_str.data();
-    request_msg.size = static_cast<uint32_t>(req_str.size());
-    request_msg.type_name = "application/json";
-
-    return pcl_socket_transport_invoke_remote_async(
-        transport, Provided::kSvcCreateRequirement, &request_msg,
-        onCreateRequirementResponse, state);
+    log("create_requirement request (proto-native typed)");
+    return Provided::invokeCreateRequirement(
+        executor, req, onCreateRequirementResponse, state, nullptr,
+        content_type);
 }
 
 } // namespace tobj_example

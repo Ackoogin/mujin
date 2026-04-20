@@ -142,12 +142,21 @@ if(PYRAMID_ENABLE_PROTOBUF)
     gtest_discover_tests(test_codec_dispatch_e2e DISCOVERY_MODE PRE_TEST)
 endif()
 
-add_executable(tobj_socket_server ${TOBJ_TEST_DIR}/tobj_socket_server.cpp)
+add_executable(tobj_socket_server
+    ${TOBJ_TEST_DIR}/tobj_socket_server.cpp
+    ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
+    ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
+)
 target_link_libraries(tobj_socket_server PRIVATE
     tactical_objects tactical_objects_component
     pcl_core pcl_transport_socket
+    pyramid_generated_codecs
+    pyramid_flatbuffers_support
 )
-target_include_directories(tobj_socket_server PRIVATE ${PCL_ROOT_DIR}/src)
+target_include_directories(tobj_socket_server PRIVATE
+    ${PCL_ROOT_DIR}/src
+    ${PROTO_BINDINGS_DIR}
+)
 if(NOT WIN32)
     target_link_libraries(tobj_socket_server PRIVATE pthread)
 endif()
@@ -167,6 +176,27 @@ target_include_directories(standalone_bridge PRIVATE
 )
 if(NOT WIN32)
     target_link_libraries(standalone_bridge PRIVATE pthread)
+endif()
+
+add_executable(cpp_active_find_e2e EXCLUDE_FROM_ALL
+    ${PYRAMID_ROOT_DIR}/examples/cpp/cpp_active_find_e2e.cpp
+    ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_interest_client.cpp
+    ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_evidence_provider.cpp
+    ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
+    ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
+)
+target_link_libraries(cpp_active_find_e2e PRIVATE
+    pcl_core pcl_transport_socket
+    pyramid_generated_codecs
+    pyramid_flatbuffers_support
+)
+target_include_directories(cpp_active_find_e2e PRIVATE
+    ${PCL_ROOT_DIR}/include
+    ${PROTO_BINDINGS_DIR}
+    ${PYRAMID_ROOT_DIR}/examples/cpp
+)
+if(NOT WIN32)
+    target_link_libraries(cpp_active_find_e2e PRIVATE pthread)
 endif()
 
 if(WIN32)

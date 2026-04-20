@@ -176,6 +176,11 @@ class ProtoRpc:
         return f'invoke{self.name}'
 
     @property
+    def cpp_decode_response_func(self) -> str:
+        """decodeCreateRequirementResponse."""
+        return f'decode{self.name}Response'
+
+    @property
     def cpp_req_type(self) -> str:
         """C++ request type after BASE_TYPE_MAP mapping."""
         return _mapped_type(self.req)
@@ -570,6 +575,13 @@ class CppServiceGenerator:
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
                         wire_full = f'{svc.wire_prefix}.{rpc.wire_name}'
+                        rsp_decl_t = rpc.cpp_rsp_type
+                        decode_col = len(f'bool {rpc.cpp_decode_response_func}(')
+                        decode_sp = ' ' * decode_col
+                        f.write(f'/// \\brief Decode a response from {wire_full}.\n')
+                        f.write(f'bool {rpc.cpp_decode_response_func}'
+                                f'(const pcl_msg_t* msg,\n')
+                        f.write(f'{decode_sp}{rsp_decl_t}* out);\n\n')
                         req_decl_t = rpc.cpp_req_type
                         col = 13 + len(rpc.cpp_invoke_func) + 1
                         sp = ' ' * col
@@ -896,6 +908,71 @@ class CppServiceGenerator:
                     f.write('}\n\n')
 
             if is_provided:
+                # Typed response decoders — hide content-type details from
+                # component response callbacks.
+                f.write(_SEP + '\n')
+                f.write('// Typed response decode wrappers\n')
+                f.write(_SEP + '\n\n')
+                for svc in parsed.services:
+                    for rpc in svc.rpcs:
+                        rsp_decl_t = rpc.cpp_rsp_type
+                        rsp_raw_t = rpc.raw_rsp_type
+                        col = len(f'bool {rpc.cpp_decode_response_func}(')
+                        sp = ' ' * col
+                        f.write(f'bool {rpc.cpp_decode_response_func}'
+                                f'(const pcl_msg_t* msg,\n')
+                        f.write(f'{sp}{rsp_decl_t}* out)\n')
+                        f.write('{\n')
+                        f.write('    if (!msg || !msg->data || msg->size == 0 || !out) {\n')
+                        f.write('        return false;\n')
+                        f.write('    }\n')
+                        f.write('    try {\n')
+                        f.write('        if (is_flatbuffers_content_type(msg->type_name)) {\n')
+                        f.write('#if PYRAMID_HAVE_SERVICE_FLATBUFFERS\n')
+                        if rpc.streaming:
+                            f.write(f'            *out = flatbuffers_codec::fromBinary{rsp_raw_t}Array(msg->data, msg->size);\n')
+                        else:
+                            f.write(f'            *out = flatbuffers_codec::fromBinary{rsp_raw_t}(msg->data, msg->size);\n')
+                        f.write('            return true;\n')
+                        f.write('#else\n')
+                        f.write('            return false;\n')
+                        f.write('#endif\n')
+                        f.write('        }\n')
+                        f.write('        if (is_protobuf_content_type(msg->type_name)) {\n')
+                        f.write('#if PYRAMID_HAVE_SERVICE_PROTOBUF\n')
+                        if rpc.streaming:
+                            f.write(f'            *out = protobuf_codec::fromBinary{rsp_raw_t}Array(msg->data, msg->size);\n')
+                        else:
+                            f.write(f'            *out = protobuf_codec::fromBinary{rsp_raw_t}(msg->data, msg->size);\n')
+                        f.write('            return true;\n')
+                        f.write('#else\n')
+                        f.write('            return false;\n')
+                        f.write('#endif\n')
+                        f.write('        }\n')
+                        f.write('        if (!is_json_content_type(msg->type_name)) {\n')
+                        f.write('            return false;\n')
+                        f.write('        }\n')
+                        f.write('        const std::string payload = msgToString(msg->data, msg->size);\n')
+                        if rpc.streaming:
+                            f.write('        const auto arr = nlohmann::json::parse(payload);\n')
+                            f.write('        out->clear();\n')
+                            f.write('        for (const auto& item : arr) {\n')
+                            if rsp_decl_t == 'std::vector<Identifier>':
+                                f.write('            out->push_back(decode_identifier_payload(item.dump()));\n')
+                            else:
+                                f.write(f'            out->push_back(fromJson(item.dump(), static_cast<{rsp_raw_t}*>(nullptr)));\n')
+                            f.write('        }\n')
+                        else:
+                            if rsp_decl_t == 'Identifier':
+                                f.write('        *out = decode_identifier_payload(payload);\n')
+                            else:
+                                f.write(f'        *out = fromJson(payload, static_cast<{rsp_raw_t}*>(nullptr));\n')
+                        f.write('        return true;\n')
+                        f.write('    } catch (...) {\n')
+                        f.write('        return false;\n')
+                        f.write('    }\n')
+                        f.write('}\n\n')
+
                 # Typed invoke wrappers — serialize request, then PCL
                 f.write(_SEP + '\n')
                 f.write('// Typed invoke wrappers \u2014 serialise and dispatch via executor transport\n')

@@ -47,7 +47,7 @@ the generated service binding layer.
 | C++ data-model types | `examples/cpp/generated/pyramid_data_model_*_types.hpp` |
 | C++ JSON codecs | `examples/cpp/generated/pyramid_data_model_*_codec.{hpp,cpp}` |
 | C++ FlatBuffers codecs | `examples/cpp/generated/flatbuffers/cpp/*_flatbuffers_codec.*` |
-| C++ Protobuf codecs | `examples/protobuf/cpp/*_protobuf_codec.*` |
+| C++ Protobuf codecs | data-model stubs in `examples/cpp/generated/protobuf/cpp/*_protobuf_codec.*`; tactical service shim in `examples/protobuf/cpp/pyramid_services_tactical_objects_protobuf_*` |
 | Ada service facade | `examples/ada/generated/pyramid-services-*.ads/.adb` |
 | ROS2 mapping rules | [ros2_transport_semantics.md](ros2_transport_semantics.md) |
 | Tactical Objects status | [generated_bindings_status.md](generated_bindings_status.md) |

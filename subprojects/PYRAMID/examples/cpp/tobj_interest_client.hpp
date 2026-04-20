@@ -8,22 +8,21 @@
 #pragma once
 
 #include "generated/pyramid_services_tactical_objects_provided.hpp"
-#include "generated/pyramid_data_model_tactical_codec.hpp"
 
 #include <pcl/pcl_container.h>
-#include <pcl/pcl_transport_socket.h>
+#include <pcl/pcl_executor.h>
 #include <atomic>
 #include <string>
 
 namespace tobj_example {
 
 namespace Provided  = pyramid::services::tactical_objects::provided;
-namespace TacticalCodec = pyramid::data_model::tactical;
 using namespace pyramid::services::tactical_objects;
 using namespace pyramid::data_model;
 
 /// \brief Shared state visible to the e2e driver.
 struct InterestClientState {
+    std::string       content_type{Provided::kJsonContentType};
     std::atomic<int>  matches_received{0};
     std::atomic<bool> found_hostile_entity{false};
     std::atomic<bool> svc_response_ready{false};
@@ -49,10 +48,11 @@ void onCreateRequirementResponse(const pcl_msg_t* resp, void* user_data);
 /// \brief Build and send a create_requirement via the standard bridge.
 ///
 /// Business logic (which enums to use, bounding box) lives in the caller;
-/// all JSON serialisation is handled by the proto-native tactical codec.
+/// all wire serialisation is handled by the generated service binding.
 pcl_status_t sendCreateRequirement(
-    pcl_socket_transport_t* transport,
+    pcl_executor_t*         executor,
     InterestClientState*    state,
+    const char*             content_type,
     DataPolicy              policy,
     StandardIdentity        identity,
     BattleDimension         dimension  = BattleDimension::Unspecified,

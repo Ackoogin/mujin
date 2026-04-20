@@ -3,76 +3,10 @@
 
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 with GNATCOLL.JSON;  use GNATCOLL.JSON;
+with Pyramid.Data_Model.Common.Types_Codec;
 pragma Warnings (Off);
 
 package body Pyramid.Data_Model.Autonomy.Types_Codec is
-
-   function To_String (V : Autonomy_Backend_State) return String is
-   begin
-      case V is
-         when State_Unspecified => return "AUTONOMY_BACKEND_STATE_UNSPECIFIED";
-         when State_Idle => return "AUTONOMY_BACKEND_STATE_IDLE";
-         when State_Ready => return "AUTONOMY_BACKEND_STATE_READY";
-         when State_WaitingForResults => return "AUTONOMY_BACKEND_STATE_WAITING_FOR_RESULTS";
-         when State_Complete => return "AUTONOMY_BACKEND_STATE_COMPLETE";
-         when State_Failed => return "AUTONOMY_BACKEND_STATE_FAILED";
-         when State_Stopped => return "AUTONOMY_BACKEND_STATE_STOPPED";
-      end case;
-   end To_String;
-
-   function Autonomy_Backend_State_From_String (S : String) return Autonomy_Backend_State is
-   begin
-      if S = "AUTONOMY_BACKEND_STATE_UNSPECIFIED" then return State_Unspecified; end if;
-      if S = "AUTONOMY_BACKEND_STATE_IDLE" then return State_Idle; end if;
-      if S = "AUTONOMY_BACKEND_STATE_READY" then return State_Ready; end if;
-      if S = "AUTONOMY_BACKEND_STATE_WAITING_FOR_RESULTS" then return State_WaitingForResults; end if;
-      if S = "AUTONOMY_BACKEND_STATE_COMPLETE" then return State_Complete; end if;
-      if S = "AUTONOMY_BACKEND_STATE_FAILED" then return State_Failed; end if;
-      if S = "AUTONOMY_BACKEND_STATE_STOPPED" then return State_Stopped; end if;
-      return State_Unspecified;
-   end Autonomy_Backend_State_From_String;
-
-   function To_String (V : Command_Status) return String is
-   begin
-      case V is
-         when Status_Unspecified => return "COMMAND_STATUS_UNSPECIFIED";
-         when Status_Pending => return "COMMAND_STATUS_PENDING";
-         when Status_Running => return "COMMAND_STATUS_RUNNING";
-         when Status_Succeeded => return "COMMAND_STATUS_SUCCEEDED";
-         when Status_FailedTransient => return "COMMAND_STATUS_FAILED_TRANSIENT";
-         when Status_FailedPermanent => return "COMMAND_STATUS_FAILED_PERMANENT";
-         when Status_Cancelled => return "COMMAND_STATUS_CANCELLED";
-      end case;
-   end To_String;
-
-   function Command_Status_From_String (S : String) return Command_Status is
-   begin
-      if S = "COMMAND_STATUS_UNSPECIFIED" then return Status_Unspecified; end if;
-      if S = "COMMAND_STATUS_PENDING" then return Status_Pending; end if;
-      if S = "COMMAND_STATUS_RUNNING" then return Status_Running; end if;
-      if S = "COMMAND_STATUS_SUCCEEDED" then return Status_Succeeded; end if;
-      if S = "COMMAND_STATUS_FAILED_TRANSIENT" then return Status_FailedTransient; end if;
-      if S = "COMMAND_STATUS_FAILED_PERMANENT" then return Status_FailedPermanent; end if;
-      if S = "COMMAND_STATUS_CANCELLED" then return Status_Cancelled; end if;
-      return Status_Unspecified;
-   end Command_Status_From_String;
-
-   function To_String (V : Stop_Mode) return String is
-   begin
-      case V is
-         when Mode_Unspecified => return "STOP_MODE_UNSPECIFIED";
-         when Mode_Drain => return "STOP_MODE_DRAIN";
-         when Mode_Immediate => return "STOP_MODE_IMMEDIATE";
-      end case;
-   end To_String;
-
-   function Stop_Mode_From_String (S : String) return Stop_Mode is
-   begin
-      if S = "STOP_MODE_UNSPECIFIED" then return Mode_Unspecified; end if;
-      if S = "STOP_MODE_DRAIN" then return Mode_Drain; end if;
-      if S = "STOP_MODE_IMMEDIATE" then return Mode_Immediate; end if;
-      return Mode_Unspecified;
-   end Stop_Mode_From_String;
 
    function To_String (V : Fact_Authority_Level) return String is
    begin
@@ -91,61 +25,78 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       return Level_Unspecified;
    end Fact_Authority_Level_From_String;
 
-   function To_Json (Msg : Fact_Update) return String is
+   function To_String (V : Planning_Execution_Mode) return String is
    begin
-      return "{" &
-        """key"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Key) & """" &
-        "," &
-        """value"":" & (if Msg.Value then "true" else "false") &
-        "," &
-        """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """" &
-        "," &
-        """authority"":" & """" & To_String (Msg.Authority) & """" &
-        "}";
-   end To_Json;
+      case V is
+         when Mode_Unspecified => return "PLANNING_EXECUTION_MODE_UNSPECIFIED";
+         when Mode_PlanAndExecute => return "PLANNING_EXECUTION_MODE_PLAN_AND_EXECUTE";
+         when Mode_PlanOnly => return "PLANNING_EXECUTION_MODE_PLAN_ONLY";
+         when Mode_ExecuteApprovedPlan => return "PLANNING_EXECUTION_MODE_EXECUTE_APPROVED_PLAN";
+      end case;
+   end To_String;
 
-   function From_Json (S : String; Tag : access Fact_Update) return Fact_Update is
-      pragma Unreferenced (Tag);
-      J      : constant JSON_Value := Read (S);
-      Result : Fact_Update;
+   function Planning_Execution_Mode_From_String (S : String) return Planning_Execution_Mode is
    begin
-      if Has_Field (J, "key") then
-         declare
-            Val : constant JSON_Value := Get (J, "key");
-            Str : constant String := Get (Val);
-         begin
-            Result.Key := To_Unbounded_String (Str);
-         end;
-      end if;
-      if Has_Field (J, "value") then
-         declare
-            Val : constant JSON_Value := Get (J, "value");
-         begin
-            Result.Value := Get (Val);
-         end;
-      end if;
-      if Has_Field (J, "source") then
-         declare
-            Val : constant JSON_Value := Get (J, "source");
-            Str : constant String := Get (Val);
-         begin
-            Result.Source := To_Unbounded_String (Str);
-         end;
-      end if;
-      if Has_Field (J, "authority") then
-         declare
-            Val : constant JSON_Value := Get (J, "authority");
-            Str : constant String := Get (Val);
-         begin
-            Result.Authority := Fact_Authority_Level_From_String (Str);
-         end;
-      end if;
-      return Result;
-   exception
-      when others => return Result;
-   end From_Json;
+      if S = "PLANNING_EXECUTION_MODE_UNSPECIFIED" then return Mode_Unspecified; end if;
+      if S = "PLANNING_EXECUTION_MODE_PLAN_AND_EXECUTE" then return Mode_PlanAndExecute; end if;
+      if S = "PLANNING_EXECUTION_MODE_PLAN_ONLY" then return Mode_PlanOnly; end if;
+      if S = "PLANNING_EXECUTION_MODE_EXECUTE_APPROVED_PLAN" then return Mode_ExecuteApprovedPlan; end if;
+      return Mode_Unspecified;
+   end Planning_Execution_Mode_From_String;
 
-   function To_Json (Msg : State_Update) return String is
+   function To_String (V : Planning_Execution_State) return String is
+   begin
+      case V is
+         when State_Unspecified => return "PLANNING_EXECUTION_STATE_UNSPECIFIED";
+         when State_Accepted => return "PLANNING_EXECUTION_STATE_ACCEPTED";
+         when State_Planning => return "PLANNING_EXECUTION_STATE_PLANNING";
+         when State_Executing => return "PLANNING_EXECUTION_STATE_EXECUTING";
+         when State_WaitingForComponents => return "PLANNING_EXECUTION_STATE_WAITING_FOR_COMPONENTS";
+         when State_Achieved => return "PLANNING_EXECUTION_STATE_ACHIEVED";
+         when State_Failed => return "PLANNING_EXECUTION_STATE_FAILED";
+         when State_Cancelled => return "PLANNING_EXECUTION_STATE_CANCELLED";
+      end case;
+   end To_String;
+
+   function Planning_Execution_State_From_String (S : String) return Planning_Execution_State is
+   begin
+      if S = "PLANNING_EXECUTION_STATE_UNSPECIFIED" then return State_Unspecified; end if;
+      if S = "PLANNING_EXECUTION_STATE_ACCEPTED" then return State_Accepted; end if;
+      if S = "PLANNING_EXECUTION_STATE_PLANNING" then return State_Planning; end if;
+      if S = "PLANNING_EXECUTION_STATE_EXECUTING" then return State_Executing; end if;
+      if S = "PLANNING_EXECUTION_STATE_WAITING_FOR_COMPONENTS" then return State_WaitingForComponents; end if;
+      if S = "PLANNING_EXECUTION_STATE_ACHIEVED" then return State_Achieved; end if;
+      if S = "PLANNING_EXECUTION_STATE_FAILED" then return State_Failed; end if;
+      if S = "PLANNING_EXECUTION_STATE_CANCELLED" then return State_Cancelled; end if;
+      return State_Unspecified;
+   end Planning_Execution_State_From_String;
+
+   function To_String (V : Requirement_Placement_Operation) return String is
+   begin
+      case V is
+         when Operation_Unspecified => return "REQUIREMENT_PLACEMENT_OPERATION_UNSPECIFIED";
+         when Operation_CreateRequirement => return "REQUIREMENT_PLACEMENT_OPERATION_CREATE_REQUIREMENT";
+         when Operation_ReadRequirement => return "REQUIREMENT_PLACEMENT_OPERATION_READ_REQUIREMENT";
+         when Operation_UpdateRequirement => return "REQUIREMENT_PLACEMENT_OPERATION_UPDATE_REQUIREMENT";
+         when Operation_DeleteRequirement => return "REQUIREMENT_PLACEMENT_OPERATION_DELETE_REQUIREMENT";
+         when Operation_ReadProduct => return "REQUIREMENT_PLACEMENT_OPERATION_READ_PRODUCT";
+         when Operation_ReadCapability => return "REQUIREMENT_PLACEMENT_OPERATION_READ_CAPABILITY";
+      end case;
+   end To_String;
+
+   function Requirement_Placement_Operation_From_String (S : String) return Requirement_Placement_Operation is
+   begin
+      if S = "REQUIREMENT_PLACEMENT_OPERATION_UNSPECIFIED" then return Operation_Unspecified; end if;
+      if S = "REQUIREMENT_PLACEMENT_OPERATION_CREATE_REQUIREMENT" then return Operation_CreateRequirement; end if;
+      if S = "REQUIREMENT_PLACEMENT_OPERATION_READ_REQUIREMENT" then return Operation_ReadRequirement; end if;
+      if S = "REQUIREMENT_PLACEMENT_OPERATION_UPDATE_REQUIREMENT" then return Operation_UpdateRequirement; end if;
+      if S = "REQUIREMENT_PLACEMENT_OPERATION_DELETE_REQUIREMENT" then return Operation_DeleteRequirement; end if;
+      if S = "REQUIREMENT_PLACEMENT_OPERATION_READ_PRODUCT" then return Operation_ReadProduct; end if;
+      if S = "REQUIREMENT_PLACEMENT_OPERATION_READ_CAPABILITY" then return Operation_ReadCapability; end if;
+      return Operation_Unspecified;
+   end Requirement_Placement_Operation_From_String;
+
+   function To_Json (Msg : Requirement_Reference) return String is
       Result : Unbounded_String := To_Unbounded_String ("{");
       First  : Boolean := True;
       procedure Comma is
@@ -155,145 +106,52 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       end Comma;
    begin
       Comma;
-      Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
+      Append (Result, """requirement_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Requirement_Id) & """");
       Comma;
-      Append (Result, """id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Id) & """");
+      Append (Result, """component_name"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Component_Name) & """");
       Comma;
-      Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
-      if Msg.Fact_Updates /= null then
-         Comma;
-         Append (Result, """fact_updates"":[");
-         for I in Msg.Fact_Updates'Range loop
-            if I > Msg.Fact_Updates'First then
-               Append (Result, ",");
-            end if;
-            Append (Result, To_Json (Msg.Fact_Updates (I)));
-         end loop;
-         Append (Result, "]");
-      end if;
+      Append (Result, """service_name"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Service_Name) & """");
+      Comma;
+      Append (Result, """type_name"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Type_Name) & """");
       Append (Result, "}");
       return To_String (Result);
    end To_Json;
 
-   function From_Json (S : String; Tag : access State_Update) return State_Update is
+   function From_Json (S : String; Tag : access Requirement_Reference) return Requirement_Reference is
       pragma Unreferenced (Tag);
       J      : constant JSON_Value := Read (S);
-      Result : State_Update;
+      Result : Requirement_Reference;
    begin
-      if Has_Field (J, "update_time") then
-         Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
-      end if;
-      if Has_Field (J, "id") then
+      if Has_Field (J, "requirement_id") then
          declare
-            Val : constant JSON_Value := Get (J, "id");
+            Val : constant JSON_Value := Get (J, "requirement_id");
             Str : constant String := Get (Val);
          begin
-            Result.Id := To_Unbounded_String (Str);
+            Result.Requirement_Id := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "source") then
+      if Has_Field (J, "component_name") then
          declare
-            Val : constant JSON_Value := Get (J, "source");
+            Val : constant JSON_Value := Get (J, "component_name");
             Str : constant String := Get (Val);
          begin
-            Result.Source := To_Unbounded_String (Str);
+            Result.Component_Name := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "fact_updates") then
+      if Has_Field (J, "service_name") then
          declare
-            Arr_Val : constant JSON_Value := Get (J, "fact_updates");
-            Arr : constant JSON_Array := Get (Arr_Val);
-            Len : constant Natural := Length (Arr);
-         begin
-            if Len > 0 then
-               Result.Fact_Updates := new Fact_Updates_Array (1 .. Len);
-               for I in 1 .. Len loop
-                  declare
-                     Elem : constant JSON_Value := Get (Arr, I);
-                     Sub : constant String := Write (Elem);
-                  begin
-                     Result.Fact_Updates (I) := From_Json (Sub, null);
-                  end;
-               end loop;
-            end if;
-         end;
-      end if;
-      return Result;
-   exception
-      when others => return Result;
-   end From_Json;
-
-   function To_Json (Msg : Mission_Intent) return String is
-      Result : Unbounded_String := To_Unbounded_String ("{");
-      First  : Boolean := True;
-      procedure Comma is
-      begin
-         if First then First := False;
-         else Append (Result, ","); end if;
-      end Comma;
-   begin
-      Comma;
-      Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
-      Comma;
-      Append (Result, """id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Id) & """");
-      Comma;
-      Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
-      if Msg.Goal_Fluents /= null then
-         Comma;
-         Append (Result, """goal_fluents"":[");
-         for I in Msg.Goal_Fluents'Range loop
-            if I > Msg.Goal_Fluents'First then
-               Append (Result, ",");
-            end if;
-            Append (Result, """" & Ada.Strings.Unbounded.To_String (Msg.Goal_Fluents (I)) & """");
-         end loop;
-         Append (Result, "]");
-      end if;
-      Append (Result, "}");
-      return To_String (Result);
-   end To_Json;
-
-   function From_Json (S : String; Tag : access Mission_Intent) return Mission_Intent is
-      pragma Unreferenced (Tag);
-      J      : constant JSON_Value := Read (S);
-      Result : Mission_Intent;
-   begin
-      if Has_Field (J, "update_time") then
-         Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
-      end if;
-      if Has_Field (J, "id") then
-         declare
-            Val : constant JSON_Value := Get (J, "id");
+            Val : constant JSON_Value := Get (J, "service_name");
             Str : constant String := Get (Val);
          begin
-            Result.Id := To_Unbounded_String (Str);
+            Result.Service_Name := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "source") then
+      if Has_Field (J, "type_name") then
          declare
-            Val : constant JSON_Value := Get (J, "source");
+            Val : constant JSON_Value := Get (J, "type_name");
             Str : constant String := Get (Val);
          begin
-            Result.Source := To_Unbounded_String (Str);
-         end;
-      end if;
-      if Has_Field (J, "goal_fluents") then
-         declare
-            Arr_Val : constant JSON_Value := Get (J, "goal_fluents");
-            Arr : constant JSON_Array := Get (Arr_Val);
-            Len : constant Natural := Length (Arr);
-         begin
-            if Len > 0 then
-               Result.Goal_Fluents := new Goal_Fluents_Array (1 .. Len);
-               for I in 1 .. Len loop
-                  declare
-                     Elem : constant JSON_Value := Get (Arr, I);
-                     Str : constant String := Get (Elem);
-                  begin
-                     Result.Goal_Fluents (I) := To_Unbounded_String (Str);
-                  end;
-               end loop;
-            end if;
+            Result.Type_Name := To_Unbounded_String (Str);
          end;
       end if;
       return Result;
@@ -345,36 +203,41 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       when others => return Result;
    end From_Json;
 
-   function To_Json (Msg : Policy_Envelope) return String is
+   function To_Json (Msg : Planning_Policy) return String is
    begin
       return "{" &
         """max_replans"":" & Integer'Image (Msg.Max_Replans) &
         "," &
-        """enable_goal_dispatch"":" & (if Msg.Enable_Goal_Dispatch then "true" else "false") &
+        """enable_replanning"":" & (if Msg.Enable_Replanning then "true" else "false") &
+        "," &
+        """max_concurrent_placements"":" & Integer'Image (Msg.Max_Concurrent_Placements) &
         "}";
    end To_Json;
 
-   function From_Json (S : String; Tag : access Policy_Envelope) return Policy_Envelope is
+   function From_Json (S : String; Tag : access Planning_Policy) return Planning_Policy is
       pragma Unreferenced (Tag);
       J      : constant JSON_Value := Read (S);
-      Result : Policy_Envelope;
+      Result : Planning_Policy;
    begin
       if Has_Field (J, "max_replans") then
          Result.Max_Replans := Integer (Get_Long_Float (Get (J, "max_replans")));
       end if;
-      if Has_Field (J, "enable_goal_dispatch") then
+      if Has_Field (J, "enable_replanning") then
          declare
-            Val : constant JSON_Value := Get (J, "enable_goal_dispatch");
+            Val : constant JSON_Value := Get (J, "enable_replanning");
          begin
-            Result.Enable_Goal_Dispatch := Get (Val);
+            Result.Enable_Replanning := Get (Val);
          end;
+      end if;
+      if Has_Field (J, "max_concurrent_placements") then
+         Result.Max_Concurrent_Placements := Integer (Get_Long_Float (Get (J, "max_concurrent_placements")));
       end if;
       return Result;
    exception
       when others => return Result;
    end From_Json;
 
-   function To_Json (Msg : Session) return String is
+   function To_Json (Msg : Planning_Goal) return String is
       Result : Unbounded_String := To_Unbounded_String ("{");
       First  : Boolean := True;
       procedure Comma is
@@ -390,28 +253,23 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       Comma;
       Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
       Comma;
-      Append (Result, """intent"":" & To_Json (Msg.Intent));
-      Comma;
-      Append (Result, """policy"":" & To_Json (Msg.Policy));
-      if Msg.Available_Agents /= null then
+      Append (Result, """name"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Name) & """");
+      if Msg.Has_Requirement then
          Comma;
-         Append (Result, """available_agents"":[");
-         for I in Msg.Available_Agents'Range loop
-            if I > Msg.Available_Agents'First then
-               Append (Result, ",");
-            end if;
-            Append (Result, To_Json (Msg.Available_Agents (I)));
-         end loop;
-         Append (Result, "]");
+         Append (Result, """requirement"":" & To_Json (Msg.Requirement));
+      end if;
+      if Msg.Has_Expression then
+         Comma;
+         Append (Result, """expression"":" & To_Json (Msg.Expression));
       end if;
       Append (Result, "}");
       return To_String (Result);
    end To_Json;
 
-   function From_Json (S : String; Tag : access Session) return Session is
+   function From_Json (S : String; Tag : access Planning_Goal) return Planning_Goal is
       pragma Unreferenced (Tag);
       J      : constant JSON_Value := Read (S);
-      Result : Session;
+      Result : Planning_Goal;
    begin
       if Has_Field (J, "update_time") then
          Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
@@ -432,11 +290,149 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             Result.Source := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "intent") then
+      if Has_Field (J, "name") then
          declare
-            Sub : constant String := Write (Get (J, "intent"));
+            Val : constant JSON_Value := Get (J, "name");
+            Str : constant String := Get (Val);
          begin
-            Result.Intent := From_Json (Sub, null);
+            Result.Name := To_Unbounded_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "requirement") then
+         Result.Has_Requirement := True;
+         declare
+            Sub : constant String := Write (Get (J, "requirement"));
+         begin
+            Result.Requirement := From_Json (Sub, null);
+         end;
+      end if;
+      if Has_Field (J, "expression") then
+         Result.Has_Expression := True;
+         if Has_Field (J, "expression") then
+            declare
+               Val : constant JSON_Value := Get (J, "expression");
+               Str : constant String := Get (Val);
+            begin
+               Result.Expression := To_Unbounded_String (Str);
+            end;
+         end if;
+      end if;
+      return Result;
+   exception
+      when others => return Result;
+   end From_Json;
+
+   function To_Json (Msg : Planning_Execution_Requirement) return String is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      First  : Boolean := True;
+      procedure Comma is
+      begin
+         if First then First := False;
+         else Append (Result, ","); end if;
+      end Comma;
+   begin
+      Comma;
+      Append (Result, """base"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Base));
+      Comma;
+      Append (Result, """status"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Status));
+      if Msg.Upstream_Requirement /= null then
+         Comma;
+         Append (Result, """upstream_requirement"":[");
+         for I in Msg.Upstream_Requirement'Range loop
+            if I > Msg.Upstream_Requirement'First then
+               Append (Result, ",");
+            end if;
+            Append (Result, To_Json (Msg.Upstream_Requirement (I)));
+         end loop;
+         Append (Result, "]");
+      end if;
+      if Msg.Goal /= null then
+         Comma;
+         Append (Result, """goal"":[");
+         for I in Msg.Goal'Range loop
+            if I > Msg.Goal'First then
+               Append (Result, ",");
+            end if;
+            Append (Result, To_Json (Msg.Goal (I)));
+         end loop;
+         Append (Result, "]");
+      end if;
+      Comma;
+      Append (Result, """policy"":" & To_Json (Msg.Policy));
+      if Msg.Available_Agents /= null then
+         Comma;
+         Append (Result, """available_agents"":[");
+         for I in Msg.Available_Agents'Range loop
+            if I > Msg.Available_Agents'First then
+               Append (Result, ",");
+            end if;
+            Append (Result, To_Json (Msg.Available_Agents (I)));
+         end loop;
+         Append (Result, "]");
+      end if;
+      Comma;
+      Append (Result, """mode"":" & """" & To_String (Msg.Mode) & """");
+      Comma;
+      Append (Result, """approved_plan_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Approved_Plan_Id) & """");
+      Append (Result, "}");
+      return To_String (Result);
+   end To_Json;
+
+   function From_Json (S : String; Tag : access Planning_Execution_Requirement) return Planning_Execution_Requirement is
+      pragma Unreferenced (Tag);
+      J      : constant JSON_Value := Read (S);
+      Result : Planning_Execution_Requirement;
+   begin
+      if Has_Field (J, "base") then
+         declare
+            Sub : constant String := Write (Get (J, "base"));
+         begin
+            Result.Base := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
+         end;
+      end if;
+      if Has_Field (J, "status") then
+         declare
+            Sub : constant String := Write (Get (J, "status"));
+         begin
+            Result.Status := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
+         end;
+      end if;
+      if Has_Field (J, "upstream_requirement") then
+         declare
+            Arr_Val : constant JSON_Value := Get (J, "upstream_requirement");
+            Arr : constant JSON_Array := Get (Arr_Val);
+            Len : constant Natural := Length (Arr);
+         begin
+            if Len > 0 then
+               Result.Upstream_Requirement := new Upstream_Requirement_Array (1 .. Len);
+               for I in 1 .. Len loop
+                  declare
+                     Elem : constant JSON_Value := Get (Arr, I);
+                     Sub : constant String := Write (Elem);
+                  begin
+                     Result.Upstream_Requirement (I) := From_Json (Sub, null);
+                  end;
+               end loop;
+            end if;
+         end;
+      end if;
+      if Has_Field (J, "goal") then
+         declare
+            Arr_Val : constant JSON_Value := Get (J, "goal");
+            Arr : constant JSON_Array := Get (Arr_Val);
+            Len : constant Natural := Length (Arr);
+         begin
+            if Len > 0 then
+               Result.Goal := new Goal_Array (1 .. Len);
+               for I in 1 .. Len loop
+                  declare
+                     Elem : constant JSON_Value := Get (Arr, I);
+                     Sub : constant String := Write (Elem);
+                  begin
+                     Result.Goal (I) := From_Json (Sub, null);
+                  end;
+               end loop;
+            end if;
          end;
       end if;
       if Has_Field (J, "policy") then
@@ -465,6 +461,187 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             end if;
          end;
       end if;
+      if Has_Field (J, "mode") then
+         declare
+            Val : constant JSON_Value := Get (J, "mode");
+            Str : constant String := Get (Val);
+         begin
+            Result.Mode := Planning_Execution_Mode_From_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "approved_plan_id") then
+         declare
+            Val : constant JSON_Value := Get (J, "approved_plan_id");
+            Str : constant String := Get (Val);
+         begin
+            Result.Approved_Plan_Id := To_Unbounded_String (Str);
+         end;
+      end if;
+      return Result;
+   exception
+      when others => return Result;
+   end From_Json;
+
+   function To_Json (Msg : World_Fact_Update) return String is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      First  : Boolean := True;
+      procedure Comma is
+      begin
+         if First then First := False;
+         else Append (Result, ","); end if;
+      end Comma;
+   begin
+      Comma;
+      Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
+      Comma;
+      Append (Result, """id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Id) & """");
+      Comma;
+      Append (Result, """entity_source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Entity_Source) & """");
+      Comma;
+      Append (Result, """key"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Key) & """");
+      Comma;
+      Append (Result, """value"":" & (if Msg.Value then "true" else "false"));
+      Comma;
+      Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
+      Comma;
+      Append (Result, """authority"":" & """" & To_String (Msg.Authority) & """");
+      Append (Result, "}");
+      return To_String (Result);
+   end To_Json;
+
+   function From_Json (S : String; Tag : access World_Fact_Update) return World_Fact_Update is
+      pragma Unreferenced (Tag);
+      J      : constant JSON_Value := Read (S);
+      Result : World_Fact_Update;
+   begin
+      if Has_Field (J, "update_time") then
+         Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
+      end if;
+      if Has_Field (J, "id") then
+         declare
+            Val : constant JSON_Value := Get (J, "id");
+            Str : constant String := Get (Val);
+         begin
+            Result.Id := To_Unbounded_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "entity_source") then
+         declare
+            Val : constant JSON_Value := Get (J, "entity_source");
+            Str : constant String := Get (Val);
+         begin
+            Result.Entity_Source := To_Unbounded_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "key") then
+         declare
+            Val : constant JSON_Value := Get (J, "key");
+            Str : constant String := Get (Val);
+         begin
+            Result.Key := To_Unbounded_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "value") then
+         declare
+            Val : constant JSON_Value := Get (J, "value");
+         begin
+            Result.Value := Get (Val);
+         end;
+      end if;
+      if Has_Field (J, "source") then
+         declare
+            Val : constant JSON_Value := Get (J, "source");
+            Str : constant String := Get (Val);
+         begin
+            Result.Source := To_Unbounded_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "authority") then
+         declare
+            Val : constant JSON_Value := Get (J, "authority");
+            Str : constant String := Get (Val);
+         begin
+            Result.Authority := Fact_Authority_Level_From_String (Str);
+         end;
+      end if;
+      return Result;
+   exception
+      when others => return Result;
+   end From_Json;
+
+   function To_Json (Msg : State_Update) return String is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      First  : Boolean := True;
+      procedure Comma is
+      begin
+         if First then First := False;
+         else Append (Result, ","); end if;
+      end Comma;
+   begin
+      Comma;
+      Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
+      Comma;
+      Append (Result, """id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Id) & """");
+      Comma;
+      Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
+      if Msg.Fact_Update /= null then
+         Comma;
+         Append (Result, """fact_update"":[");
+         for I in Msg.Fact_Update'Range loop
+            if I > Msg.Fact_Update'First then
+               Append (Result, ",");
+            end if;
+            Append (Result, To_Json (Msg.Fact_Update (I)));
+         end loop;
+         Append (Result, "]");
+      end if;
+      Append (Result, "}");
+      return To_String (Result);
+   end To_Json;
+
+   function From_Json (S : String; Tag : access State_Update) return State_Update is
+      pragma Unreferenced (Tag);
+      J      : constant JSON_Value := Read (S);
+      Result : State_Update;
+   begin
+      if Has_Field (J, "update_time") then
+         Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
+      end if;
+      if Has_Field (J, "id") then
+         declare
+            Val : constant JSON_Value := Get (J, "id");
+            Str : constant String := Get (Val);
+         begin
+            Result.Id := To_Unbounded_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "source") then
+         declare
+            Val : constant JSON_Value := Get (J, "source");
+            Str : constant String := Get (Val);
+         begin
+            Result.Source := To_Unbounded_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "fact_update") then
+         declare
+            Arr_Val : constant JSON_Value := Get (J, "fact_update");
+            Arr : constant JSON_Array := Get (Arr_Val);
+            Len : constant Natural := Length (Arr);
+         begin
+            if Len > 0 then
+               Result.Fact_Update := new Fact_Update_Array (1 .. Len);
+               for I in 1 .. Len loop
+                  declare
+                     Elem : constant JSON_Value := Get (Arr, I);
+                     Sub : constant String := Write (Elem);
+                  begin
+                     Result.Fact_Update (I) := From_Json (Sub, null);
+                  end;
+               end loop;
+            end if;
+         end;
+      end if;
       return Result;
    exception
       when others => return Result;
@@ -488,11 +665,17 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       Comma;
       Append (Result, """backend_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Backend_Id) & """");
       Comma;
-      Append (Result, """supports_batch_planning"":" & (if Msg.Supports_Batch_Planning then "true" else "false"));
+      Append (Result, """supports_plan_only"":" & (if Msg.Supports_Plan_Only then "true" else "false"));
       Comma;
-      Append (Result, """supports_external_command_dispatch"":" & (if Msg.Supports_External_Command_Dispatch then "true" else "false"));
+      Append (Result, """supports_plan_and_execute"":" & (if Msg.Supports_Plan_And_Execute then "true" else "false"));
+      Comma;
+      Append (Result, """supports_execute_approved_plan"":" & (if Msg.Supports_Execute_Approved_Plan then "true" else "false"));
       Comma;
       Append (Result, """supports_replanning"":" & (if Msg.Supports_Replanning then "true" else "false"));
+      Comma;
+      Append (Result, """supports_typed_component_requirement_placement"":" & (if Msg.Supports_Typed_Component_Requirement_Placement then "true" else "false"));
+      Comma;
+      Append (Result, """supports_state_update_ingress"":" & (if Msg.Supports_State_Update_Ingress then "true" else "false"));
       Append (Result, "}");
       return To_String (Result);
    end To_Json;
@@ -529,18 +712,25 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             Result.Backend_Id := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "supports_batch_planning") then
+      if Has_Field (J, "supports_plan_only") then
          declare
-            Val : constant JSON_Value := Get (J, "supports_batch_planning");
+            Val : constant JSON_Value := Get (J, "supports_plan_only");
          begin
-            Result.Supports_Batch_Planning := Get (Val);
+            Result.Supports_Plan_Only := Get (Val);
          end;
       end if;
-      if Has_Field (J, "supports_external_command_dispatch") then
+      if Has_Field (J, "supports_plan_and_execute") then
          declare
-            Val : constant JSON_Value := Get (J, "supports_external_command_dispatch");
+            Val : constant JSON_Value := Get (J, "supports_plan_and_execute");
          begin
-            Result.Supports_External_Command_Dispatch := Get (Val);
+            Result.Supports_Plan_And_Execute := Get (Val);
+         end;
+      end if;
+      if Has_Field (J, "supports_execute_approved_plan") then
+         declare
+            Val : constant JSON_Value := Get (J, "supports_execute_approved_plan");
+         begin
+            Result.Supports_Execute_Approved_Plan := Get (Val);
          end;
       end if;
       if Has_Field (J, "supports_replanning") then
@@ -550,39 +740,73 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             Result.Supports_Replanning := Get (Val);
          end;
       end if;
+      if Has_Field (J, "supports_typed_component_requirement_placement") then
+         declare
+            Val : constant JSON_Value := Get (J, "supports_typed_component_requirement_placement");
+         begin
+            Result.Supports_Typed_Component_Requirement_Placement := Get (Val);
+         end;
+      end if;
+      if Has_Field (J, "supports_state_update_ingress") then
+         declare
+            Val : constant JSON_Value := Get (J, "supports_state_update_ingress");
+         begin
+            Result.Supports_State_Update_Ingress := Get (Val);
+         end;
+      end if;
       return Result;
    exception
       when others => return Result;
    end From_Json;
 
-   function To_Json (Msg : String_Key_Value) return String is
+   function To_Json (Msg : Planned_Component_Interaction) return String is
    begin
       return "{" &
-        """key"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Key) & """" &
+        """target_component"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Target_Component) & """" &
         "," &
-        """value"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Value) & """" &
+        """target_service"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Target_Service) & """" &
+        "," &
+        """target_type"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Target_Type) & """" &
+        "," &
+        """operation"":" & """" & To_String (Msg.Operation) & """" &
         "}";
    end To_Json;
 
-   function From_Json (S : String; Tag : access String_Key_Value) return String_Key_Value is
+   function From_Json (S : String; Tag : access Planned_Component_Interaction) return Planned_Component_Interaction is
       pragma Unreferenced (Tag);
       J      : constant JSON_Value := Read (S);
-      Result : String_Key_Value;
+      Result : Planned_Component_Interaction;
    begin
-      if Has_Field (J, "key") then
+      if Has_Field (J, "target_component") then
          declare
-            Val : constant JSON_Value := Get (J, "key");
+            Val : constant JSON_Value := Get (J, "target_component");
             Str : constant String := Get (Val);
          begin
-            Result.Key := To_Unbounded_String (Str);
+            Result.Target_Component := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "value") then
+      if Has_Field (J, "target_service") then
          declare
-            Val : constant JSON_Value := Get (J, "value");
+            Val : constant JSON_Value := Get (J, "target_service");
             Str : constant String := Get (Val);
          begin
-            Result.Value := To_Unbounded_String (Str);
+            Result.Target_Service := To_Unbounded_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "target_type") then
+         declare
+            Val : constant JSON_Value := Get (J, "target_type");
+            Str : constant String := Get (Val);
+         begin
+            Result.Target_Type := To_Unbounded_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "operation") then
+         declare
+            Val : constant JSON_Value := Get (J, "operation");
+            Str : constant String := Get (Val);
+         begin
+            Result.Operation := Requirement_Placement_Operation_From_String (Str);
          end;
       end if;
       return Result;
@@ -590,7 +814,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       when others => return Result;
    end From_Json;
 
-   function To_Json (Msg : Command) return String is
+   function To_Json (Msg : Plan_Step) return String is
       Result : Unbounded_String := To_Unbounded_String ("{");
       First  : Boolean := True;
       procedure Comma is
@@ -606,23 +830,19 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       Comma;
       Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
       Comma;
-      Append (Result, """command_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Command_Id) & """");
+      Append (Result, """sequence_number"":" & Integer'Image (Msg.Sequence_Number));
       Comma;
       Append (Result, """action_name"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Action_Name) & """");
       Comma;
       Append (Result, """signature"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Signature) & """");
-      Comma;
-      Append (Result, """service_name"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Service_Name) & """");
-      Comma;
-      Append (Result, """operation"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Operation) & """");
-      if Msg.Request_Fields /= null then
+      if Msg.Interaction /= null then
          Comma;
-         Append (Result, """request_fields"":[");
-         for I in Msg.Request_Fields'Range loop
-            if I > Msg.Request_Fields'First then
+         Append (Result, """interaction"":[");
+         for I in Msg.Interaction'Range loop
+            if I > Msg.Interaction'First then
                Append (Result, ",");
             end if;
-            Append (Result, To_Json (Msg.Request_Fields (I)));
+            Append (Result, To_Json (Msg.Interaction (I)));
          end loop;
          Append (Result, "]");
       end if;
@@ -630,10 +850,10 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       return To_String (Result);
    end To_Json;
 
-   function From_Json (S : String; Tag : access Command) return Command is
+   function From_Json (S : String; Tag : access Plan_Step) return Plan_Step is
       pragma Unreferenced (Tag);
       J      : constant JSON_Value := Read (S);
-      Result : Command;
+      Result : Plan_Step;
    begin
       if Has_Field (J, "update_time") then
          Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
@@ -654,13 +874,8 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             Result.Source := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "command_id") then
-         declare
-            Val : constant JSON_Value := Get (J, "command_id");
-            Str : constant String := Get (Val);
-         begin
-            Result.Command_Id := To_Unbounded_String (Str);
-         end;
+      if Has_Field (J, "sequence_number") then
+         Result.Sequence_Number := Integer (Get_Long_Float (Get (J, "sequence_number")));
       end if;
       if Has_Field (J, "action_name") then
          declare
@@ -678,36 +893,20 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             Result.Signature := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "service_name") then
+      if Has_Field (J, "interaction") then
          declare
-            Val : constant JSON_Value := Get (J, "service_name");
-            Str : constant String := Get (Val);
-         begin
-            Result.Service_Name := To_Unbounded_String (Str);
-         end;
-      end if;
-      if Has_Field (J, "operation") then
-         declare
-            Val : constant JSON_Value := Get (J, "operation");
-            Str : constant String := Get (Val);
-         begin
-            Result.Operation := To_Unbounded_String (Str);
-         end;
-      end if;
-      if Has_Field (J, "request_fields") then
-         declare
-            Arr_Val : constant JSON_Value := Get (J, "request_fields");
+            Arr_Val : constant JSON_Value := Get (J, "interaction");
             Arr : constant JSON_Array := Get (Arr_Val);
             Len : constant Natural := Length (Arr);
          begin
             if Len > 0 then
-               Result.Request_Fields := new Request_Fields_Array (1 .. Len);
+               Result.Interaction := new Interaction_Array (1 .. Len);
                for I in 1 .. Len loop
                   declare
                      Elem : constant JSON_Value := Get (Arr, I);
                      Sub : constant String := Write (Elem);
                   begin
-                     Result.Request_Fields (I) := From_Json (Sub, null);
+                     Result.Interaction (I) := From_Json (Sub, null);
                   end;
                end loop;
             end if;
@@ -718,7 +917,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       when others => return Result;
    end From_Json;
 
-   function To_Json (Msg : Goal_Dispatch) return String is
+   function To_Json (Msg : Plan) return String is
       Result : Unbounded_String := To_Unbounded_String ("{");
       First  : Boolean := True;
       procedure Comma is
@@ -734,105 +933,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       Comma;
       Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
       Comma;
-      Append (Result, """dispatch_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Dispatch_Id) & """");
-      Comma;
-      Append (Result, """agent_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Agent_Id) & """");
-      if Msg.Goals /= null then
-         Comma;
-         Append (Result, """goals"":[");
-         for I in Msg.Goals'Range loop
-            if I > Msg.Goals'First then
-               Append (Result, ",");
-            end if;
-            Append (Result, """" & Ada.Strings.Unbounded.To_String (Msg.Goals (I)) & """");
-         end loop;
-         Append (Result, "]");
-      end if;
-      Append (Result, "}");
-      return To_String (Result);
-   end To_Json;
-
-   function From_Json (S : String; Tag : access Goal_Dispatch) return Goal_Dispatch is
-      pragma Unreferenced (Tag);
-      J      : constant JSON_Value := Read (S);
-      Result : Goal_Dispatch;
-   begin
-      if Has_Field (J, "update_time") then
-         Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
-      end if;
-      if Has_Field (J, "id") then
-         declare
-            Val : constant JSON_Value := Get (J, "id");
-            Str : constant String := Get (Val);
-         begin
-            Result.Id := To_Unbounded_String (Str);
-         end;
-      end if;
-      if Has_Field (J, "source") then
-         declare
-            Val : constant JSON_Value := Get (J, "source");
-            Str : constant String := Get (Val);
-         begin
-            Result.Source := To_Unbounded_String (Str);
-         end;
-      end if;
-      if Has_Field (J, "dispatch_id") then
-         declare
-            Val : constant JSON_Value := Get (J, "dispatch_id");
-            Str : constant String := Get (Val);
-         begin
-            Result.Dispatch_Id := To_Unbounded_String (Str);
-         end;
-      end if;
-      if Has_Field (J, "agent_id") then
-         declare
-            Val : constant JSON_Value := Get (J, "agent_id");
-            Str : constant String := Get (Val);
-         begin
-            Result.Agent_Id := To_Unbounded_String (Str);
-         end;
-      end if;
-      if Has_Field (J, "goals") then
-         declare
-            Arr_Val : constant JSON_Value := Get (J, "goals");
-            Arr : constant JSON_Array := Get (Arr_Val);
-            Len : constant Natural := Length (Arr);
-         begin
-            if Len > 0 then
-               Result.Goals := new Goals_Array (1 .. Len);
-               for I in 1 .. Len loop
-                  declare
-                     Elem : constant JSON_Value := Get (Arr, I);
-                     Str : constant String := Get (Elem);
-                  begin
-                     Result.Goals (I) := To_Unbounded_String (Str);
-                  end;
-               end loop;
-            end if;
-         end;
-      end if;
-      return Result;
-   exception
-      when others => return Result;
-   end From_Json;
-
-   function To_Json (Msg : Decision_Record) return String is
-      Result : Unbounded_String := To_Unbounded_String ("{");
-      First  : Boolean := True;
-      procedure Comma is
-      begin
-         if First then First := False;
-         else Append (Result, ","); end if;
-      end Comma;
-   begin
-      Comma;
-      Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
-      Comma;
-      Append (Result, """id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Id) & """");
-      Comma;
-      Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
-      Comma;
-      Append (Result, """session_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Session_Id) & """");
+      Append (Result, """planning_execution_requirement_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Planning_Execution_Requirement_Id) & """");
       Comma;
       Append (Result, """backend_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Backend_Id) & """");
       Comma;
@@ -843,27 +944,29 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       Append (Result, """plan_success"":" & (if Msg.Plan_Success then "true" else "false"));
       Comma;
       Append (Result, """solve_time_ms"":" & Long_Float'Image (Msg.Solve_Time_Ms));
-      if Msg.Planned_Action_Signatures /= null then
+      if Msg.Step /= null then
          Comma;
-         Append (Result, """planned_action_signatures"":[");
-         for I in Msg.Planned_Action_Signatures'Range loop
-            if I > Msg.Planned_Action_Signatures'First then
+         Append (Result, """step"":[");
+         for I in Msg.Step'Range loop
+            if I > Msg.Step'First then
                Append (Result, ",");
             end if;
-            Append (Result, """" & Ada.Strings.Unbounded.To_String (Msg.Planned_Action_Signatures (I)) & """");
+            Append (Result, To_Json (Msg.Step (I)));
          end loop;
          Append (Result, "]");
       end if;
       Comma;
       Append (Result, """compiled_bt_xml"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Compiled_Bt_Xml) & """");
+      Comma;
+      Append (Result, """predicted_quality"":" & Long_Float'Image (Msg.Predicted_Quality));
       Append (Result, "}");
       return To_String (Result);
    end To_Json;
 
-   function From_Json (S : String; Tag : access Decision_Record) return Decision_Record is
+   function From_Json (S : String; Tag : access Plan) return Plan is
       pragma Unreferenced (Tag);
       J      : constant JSON_Value := Read (S);
-      Result : Decision_Record;
+      Result : Plan;
    begin
       if Has_Field (J, "update_time") then
          Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
@@ -884,12 +987,12 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             Result.Source := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "session_id") then
+      if Has_Field (J, "planning_execution_requirement_id") then
          declare
-            Val : constant JSON_Value := Get (J, "session_id");
+            Val : constant JSON_Value := Get (J, "planning_execution_requirement_id");
             Str : constant String := Get (Val);
          begin
-            Result.Session_Id := To_Unbounded_String (Str);
+            Result.Planning_Execution_Requirement_Id := To_Unbounded_String (Str);
          end;
       end if;
       if Has_Field (J, "backend_id") then
@@ -916,20 +1019,20 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       if Has_Field (J, "solve_time_ms") then
          Result.Solve_Time_Ms := Get_Long_Float (Get (J, "solve_time_ms"));
       end if;
-      if Has_Field (J, "planned_action_signatures") then
+      if Has_Field (J, "step") then
          declare
-            Arr_Val : constant JSON_Value := Get (J, "planned_action_signatures");
+            Arr_Val : constant JSON_Value := Get (J, "step");
             Arr : constant JSON_Array := Get (Arr_Val);
             Len : constant Natural := Length (Arr);
          begin
             if Len > 0 then
-               Result.Planned_Action_Signatures := new Planned_Action_Signatures_Array (1 .. Len);
+               Result.Step := new Step_Array (1 .. Len);
                for I in 1 .. Len loop
                   declare
                      Elem : constant JSON_Value := Get (Arr, I);
-                     Str : constant String := Get (Elem);
+                     Sub : constant String := Write (Elem);
                   begin
-                     Result.Planned_Action_Signatures (I) := To_Unbounded_String (Str);
+                     Result.Step (I) := From_Json (Sub, null);
                   end;
                end loop;
             end if;
@@ -943,12 +1046,15 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             Result.Compiled_Bt_Xml := To_Unbounded_String (Str);
          end;
       end if;
+      if Has_Field (J, "predicted_quality") then
+         Result.Predicted_Quality := Get_Long_Float (Get (J, "predicted_quality"));
+      end if;
       return Result;
    exception
       when others => return Result;
    end From_Json;
 
-   function To_Json (Msg : Command_Result) return String is
+   function To_Json (Msg : Requirement_Placement) return String is
       Result : Unbounded_String := To_Unbounded_String ("{");
       First  : Boolean := True;
       procedure Comma is
@@ -962,32 +1068,44 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       Comma;
       Append (Result, """id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Id) & """");
       Comma;
-      Append (Result, """entity_source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Entity_Source) & """");
+      Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
       Comma;
-      Append (Result, """command_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Command_Id) & """");
+      Append (Result, """planning_execution_requirement_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Planning_Execution_Requirement_Id) & """");
       Comma;
-      Append (Result, """status"":" & """" & To_String (Msg.Status) & """");
-      if Msg.Observed_Updates /= null then
+      Append (Result, """plan_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Plan_Id) & """");
+      Comma;
+      Append (Result, """plan_step_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Plan_Step_Id) & """");
+      Comma;
+      Append (Result, """target_component"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Target_Component) & """");
+      Comma;
+      Append (Result, """target_service"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Target_Service) & """");
+      Comma;
+      Append (Result, """target_type"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Target_Type) & """");
+      Comma;
+      Append (Result, """operation"":" & """" & To_String (Msg.Operation) & """");
+      Comma;
+      Append (Result, """target_requirement_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Target_Requirement_Id) & """");
+      if Msg.Related_Entity_Id /= null then
          Comma;
-         Append (Result, """observed_updates"":[");
-         for I in Msg.Observed_Updates'Range loop
-            if I > Msg.Observed_Updates'First then
+         Append (Result, """related_entity_id"":[");
+         for I in Msg.Related_Entity_Id'Range loop
+            if I > Msg.Related_Entity_Id'First then
                Append (Result, ",");
             end if;
-            Append (Result, To_Json (Msg.Observed_Updates (I)));
+            Append (Result, """" & Ada.Strings.Unbounded.To_String (Msg.Related_Entity_Id (I)) & """");
          end loop;
          Append (Result, "]");
       end if;
       Comma;
-      Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
+      Append (Result, """progress"":" & """" & Pyramid.Data_Model.Common.Types_Codec.To_String (Msg.Progress) & """");
       Append (Result, "}");
       return To_String (Result);
    end To_Json;
 
-   function From_Json (S : String; Tag : access Command_Result) return Command_Result is
+   function From_Json (S : String; Tag : access Requirement_Placement) return Requirement_Placement is
       pragma Unreferenced (Tag);
       J      : constant JSON_Value := Read (S);
-      Result : Command_Result;
+      Result : Requirement_Placement;
    begin
       if Has_Field (J, "update_time") then
          Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
@@ -1000,49 +1118,6 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             Result.Id := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "entity_source") then
-         declare
-            Val : constant JSON_Value := Get (J, "entity_source");
-            Str : constant String := Get (Val);
-         begin
-            Result.Entity_Source := To_Unbounded_String (Str);
-         end;
-      end if;
-      if Has_Field (J, "command_id") then
-         declare
-            Val : constant JSON_Value := Get (J, "command_id");
-            Str : constant String := Get (Val);
-         begin
-            Result.Command_Id := To_Unbounded_String (Str);
-         end;
-      end if;
-      if Has_Field (J, "status") then
-         declare
-            Val : constant JSON_Value := Get (J, "status");
-            Str : constant String := Get (Val);
-         begin
-            Result.Status := Command_Status_From_String (Str);
-         end;
-      end if;
-      if Has_Field (J, "observed_updates") then
-         declare
-            Arr_Val : constant JSON_Value := Get (J, "observed_updates");
-            Arr : constant JSON_Array := Get (Arr_Val);
-            Len : constant Natural := Length (Arr);
-         begin
-            if Len > 0 then
-               Result.Observed_Updates := new Observed_Updates_Array (1 .. Len);
-               for I in 1 .. Len loop
-                  declare
-                     Elem : constant JSON_Value := Get (Arr, I);
-                     Sub : constant String := Write (Elem);
-                  begin
-                     Result.Observed_Updates (I) := From_Json (Sub, null);
-                  end;
-               end loop;
-            end if;
-         end;
-      end if;
       if Has_Field (J, "source") then
          declare
             Val : constant JSON_Value := Get (J, "source");
@@ -1051,112 +1126,95 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             Result.Source := To_Unbounded_String (Str);
          end;
       end if;
-      return Result;
-   exception
-      when others => return Result;
-   end From_Json;
-
-   function To_Json (Msg : Dispatch_Result) return String is
-      Result : Unbounded_String := To_Unbounded_String ("{");
-      First  : Boolean := True;
-      procedure Comma is
-      begin
-         if First then First := False;
-         else Append (Result, ","); end if;
-      end Comma;
-   begin
-      Comma;
-      Append (Result, """update_time"":" & Long_Float'Image (Msg.Update_Time));
-      Comma;
-      Append (Result, """id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Id) & """");
-      Comma;
-      Append (Result, """entity_source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Entity_Source) & """");
-      Comma;
-      Append (Result, """dispatch_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Dispatch_Id) & """");
-      Comma;
-      Append (Result, """status"":" & """" & To_String (Msg.Status) & """");
-      if Msg.Observed_Updates /= null then
-         Comma;
-         Append (Result, """observed_updates"":[");
-         for I in Msg.Observed_Updates'Range loop
-            if I > Msg.Observed_Updates'First then
-               Append (Result, ",");
-            end if;
-            Append (Result, To_Json (Msg.Observed_Updates (I)));
-         end loop;
-         Append (Result, "]");
-      end if;
-      Comma;
-      Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
-      Append (Result, "}");
-      return To_String (Result);
-   end To_Json;
-
-   function From_Json (S : String; Tag : access Dispatch_Result) return Dispatch_Result is
-      pragma Unreferenced (Tag);
-      J      : constant JSON_Value := Read (S);
-      Result : Dispatch_Result;
-   begin
-      if Has_Field (J, "update_time") then
-         Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
-      end if;
-      if Has_Field (J, "id") then
+      if Has_Field (J, "planning_execution_requirement_id") then
          declare
-            Val : constant JSON_Value := Get (J, "id");
+            Val : constant JSON_Value := Get (J, "planning_execution_requirement_id");
             Str : constant String := Get (Val);
          begin
-            Result.Id := To_Unbounded_String (Str);
+            Result.Planning_Execution_Requirement_Id := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "entity_source") then
+      if Has_Field (J, "plan_id") then
          declare
-            Val : constant JSON_Value := Get (J, "entity_source");
+            Val : constant JSON_Value := Get (J, "plan_id");
             Str : constant String := Get (Val);
          begin
-            Result.Entity_Source := To_Unbounded_String (Str);
+            Result.Plan_Id := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "dispatch_id") then
+      if Has_Field (J, "plan_step_id") then
          declare
-            Val : constant JSON_Value := Get (J, "dispatch_id");
+            Val : constant JSON_Value := Get (J, "plan_step_id");
             Str : constant String := Get (Val);
          begin
-            Result.Dispatch_Id := To_Unbounded_String (Str);
+            Result.Plan_Step_Id := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "status") then
+      if Has_Field (J, "target_component") then
          declare
-            Val : constant JSON_Value := Get (J, "status");
+            Val : constant JSON_Value := Get (J, "target_component");
             Str : constant String := Get (Val);
          begin
-            Result.Status := Command_Status_From_String (Str);
+            Result.Target_Component := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "observed_updates") then
+      if Has_Field (J, "target_service") then
          declare
-            Arr_Val : constant JSON_Value := Get (J, "observed_updates");
+            Val : constant JSON_Value := Get (J, "target_service");
+            Str : constant String := Get (Val);
+         begin
+            Result.Target_Service := To_Unbounded_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "target_type") then
+         declare
+            Val : constant JSON_Value := Get (J, "target_type");
+            Str : constant String := Get (Val);
+         begin
+            Result.Target_Type := To_Unbounded_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "operation") then
+         declare
+            Val : constant JSON_Value := Get (J, "operation");
+            Str : constant String := Get (Val);
+         begin
+            Result.Operation := Requirement_Placement_Operation_From_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "target_requirement_id") then
+         declare
+            Val : constant JSON_Value := Get (J, "target_requirement_id");
+            Str : constant String := Get (Val);
+         begin
+            Result.Target_Requirement_Id := To_Unbounded_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "related_entity_id") then
+         declare
+            Arr_Val : constant JSON_Value := Get (J, "related_entity_id");
             Arr : constant JSON_Array := Get (Arr_Val);
             Len : constant Natural := Length (Arr);
          begin
             if Len > 0 then
-               Result.Observed_Updates := new Observed_Updates_Array (1 .. Len);
+               Result.Related_Entity_Id := new Related_Entity_Id_Array (1 .. Len);
                for I in 1 .. Len loop
                   declare
                      Elem : constant JSON_Value := Get (Arr, I);
-                     Sub : constant String := Write (Elem);
+                     Str : constant String := Get (Elem);
                   begin
-                     Result.Observed_Updates (I) := From_Json (Sub, null);
+                     Result.Related_Entity_Id (I) := To_Unbounded_String (Str);
                   end;
                end loop;
             end if;
          end;
       end if;
-      if Has_Field (J, "source") then
+      if Has_Field (J, "progress") then
          declare
-            Val : constant JSON_Value := Get (J, "source");
+            Val : constant JSON_Value := Get (J, "progress");
             Str : constant String := Get (Val);
          begin
-            Result.Source := To_Unbounded_String (Str);
+            Result.Progress := Pyramid.Data_Model.Common.Types_Codec.Progress_From_String (Str);
          end;
       end if;
       return Result;
@@ -1164,7 +1222,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       when others => return Result;
    end From_Json;
 
-   function To_Json (Msg : Session_Snapshot) return String is
+   function To_Json (Msg : Execution_Run) return String is
       Result : Unbounded_String := To_Unbounded_String ("{");
       First  : Boolean := True;
       procedure Comma is
@@ -1180,54 +1238,23 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       Comma;
       Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
       Comma;
-      Append (Result, """session_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Session_Id) & """");
+      Append (Result, """planning_execution_requirement_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Planning_Execution_Requirement_Id) & """");
+      Comma;
+      Append (Result, """plan_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Plan_Id) & """");
       Comma;
       Append (Result, """state"":" & """" & To_String (Msg.State) & """");
       Comma;
-      Append (Result, """world_version"":" & Integer'Image (Msg.World_Version));
+      Append (Result, """achievement"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Achievement));
       Comma;
       Append (Result, """replan_count"":" & Integer'Image (Msg.Replan_Count));
-      if Msg.Agent_States /= null then
+      if Msg.Outstanding_Placement /= null then
          Comma;
-         Append (Result, """agent_states"":[");
-         for I in Msg.Agent_States'Range loop
-            if I > Msg.Agent_States'First then
+         Append (Result, """outstanding_placement"":[");
+         for I in Msg.Outstanding_Placement'Range loop
+            if I > Msg.Outstanding_Placement'First then
                Append (Result, ",");
             end if;
-            Append (Result, To_Json (Msg.Agent_States (I)));
-         end loop;
-         Append (Result, "]");
-      end if;
-      if Msg.Outstanding_Commands /= null then
-         Comma;
-         Append (Result, """outstanding_commands"":[");
-         for I in Msg.Outstanding_Commands'Range loop
-            if I > Msg.Outstanding_Commands'First then
-               Append (Result, ",");
-            end if;
-            Append (Result, To_Json (Msg.Outstanding_Commands (I)));
-         end loop;
-         Append (Result, "]");
-      end if;
-      if Msg.Outstanding_Goal_Dispatches /= null then
-         Comma;
-         Append (Result, """outstanding_goal_dispatches"":[");
-         for I in Msg.Outstanding_Goal_Dispatches'Range loop
-            if I > Msg.Outstanding_Goal_Dispatches'First then
-               Append (Result, ",");
-            end if;
-            Append (Result, To_Json (Msg.Outstanding_Goal_Dispatches (I)));
-         end loop;
-         Append (Result, "]");
-      end if;
-      if Msg.Decision_History /= null then
-         Comma;
-         Append (Result, """decision_history"":[");
-         for I in Msg.Decision_History'Range loop
-            if I > Msg.Decision_History'First then
-               Append (Result, ",");
-            end if;
-            Append (Result, To_Json (Msg.Decision_History (I)));
+            Append (Result, To_Json (Msg.Outstanding_Placement (I)));
          end loop;
          Append (Result, "]");
       end if;
@@ -1235,10 +1262,10 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       return To_String (Result);
    end To_Json;
 
-   function From_Json (S : String; Tag : access Session_Snapshot) return Session_Snapshot is
+   function From_Json (S : String; Tag : access Execution_Run) return Execution_Run is
       pragma Unreferenced (Tag);
       J      : constant JSON_Value := Read (S);
-      Result : Session_Snapshot;
+      Result : Execution_Run;
    begin
       if Has_Field (J, "update_time") then
          Result.Update_Time := Get_Long_Float (Get (J, "update_time"));
@@ -1259,12 +1286,20 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             Result.Source := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "session_id") then
+      if Has_Field (J, "planning_execution_requirement_id") then
          declare
-            Val : constant JSON_Value := Get (J, "session_id");
+            Val : constant JSON_Value := Get (J, "planning_execution_requirement_id");
             Str : constant String := Get (Val);
          begin
-            Result.Session_Id := To_Unbounded_String (Str);
+            Result.Planning_Execution_Requirement_Id := To_Unbounded_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "plan_id") then
+         declare
+            Val : constant JSON_Value := Get (J, "plan_id");
+            Str : constant String := Get (Val);
+         begin
+            Result.Plan_Id := To_Unbounded_String (Str);
          end;
       end if;
       if Has_Field (J, "state") then
@@ -1272,165 +1307,36 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             Val : constant JSON_Value := Get (J, "state");
             Str : constant String := Get (Val);
          begin
-            Result.State := Autonomy_Backend_State_From_String (Str);
+            Result.State := Planning_Execution_State_From_String (Str);
          end;
       end if;
-      if Has_Field (J, "world_version") then
-         Result.World_Version := Integer (Get_Long_Float (Get (J, "world_version")));
+      if Has_Field (J, "achievement") then
+         declare
+            Sub : constant String := Write (Get (J, "achievement"));
+         begin
+            Result.Achievement := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
+         end;
       end if;
       if Has_Field (J, "replan_count") then
          Result.Replan_Count := Integer (Get_Long_Float (Get (J, "replan_count")));
       end if;
-      if Has_Field (J, "agent_states") then
+      if Has_Field (J, "outstanding_placement") then
          declare
-            Arr_Val : constant JSON_Value := Get (J, "agent_states");
+            Arr_Val : constant JSON_Value := Get (J, "outstanding_placement");
             Arr : constant JSON_Array := Get (Arr_Val);
             Len : constant Natural := Length (Arr);
          begin
             if Len > 0 then
-               Result.Agent_States := new Agent_States_Array (1 .. Len);
+               Result.Outstanding_Placement := new Outstanding_Placement_Array (1 .. Len);
                for I in 1 .. Len loop
                   declare
                      Elem : constant JSON_Value := Get (Arr, I);
                      Sub : constant String := Write (Elem);
                   begin
-                     Result.Agent_States (I) := From_Json (Sub, null);
+                     Result.Outstanding_Placement (I) := From_Json (Sub, null);
                   end;
                end loop;
             end if;
-         end;
-      end if;
-      if Has_Field (J, "outstanding_commands") then
-         declare
-            Arr_Val : constant JSON_Value := Get (J, "outstanding_commands");
-            Arr : constant JSON_Array := Get (Arr_Val);
-            Len : constant Natural := Length (Arr);
-         begin
-            if Len > 0 then
-               Result.Outstanding_Commands := new Outstanding_Commands_Array (1 .. Len);
-               for I in 1 .. Len loop
-                  declare
-                     Elem : constant JSON_Value := Get (Arr, I);
-                     Sub : constant String := Write (Elem);
-                  begin
-                     Result.Outstanding_Commands (I) := From_Json (Sub, null);
-                  end;
-               end loop;
-            end if;
-         end;
-      end if;
-      if Has_Field (J, "outstanding_goal_dispatches") then
-         declare
-            Arr_Val : constant JSON_Value := Get (J, "outstanding_goal_dispatches");
-            Arr : constant JSON_Array := Get (Arr_Val);
-            Len : constant Natural := Length (Arr);
-         begin
-            if Len > 0 then
-               Result.Outstanding_Goal_Dispatches := new Outstanding_Goal_Dispatches_Array (1 .. Len);
-               for I in 1 .. Len loop
-                  declare
-                     Elem : constant JSON_Value := Get (Arr, I);
-                     Sub : constant String := Write (Elem);
-                  begin
-                     Result.Outstanding_Goal_Dispatches (I) := From_Json (Sub, null);
-                  end;
-               end loop;
-            end if;
-         end;
-      end if;
-      if Has_Field (J, "decision_history") then
-         declare
-            Arr_Val : constant JSON_Value := Get (J, "decision_history");
-            Arr : constant JSON_Array := Get (Arr_Val);
-            Len : constant Natural := Length (Arr);
-         begin
-            if Len > 0 then
-               Result.Decision_History := new Decision_History_Array (1 .. Len);
-               for I in 1 .. Len loop
-                  declare
-                     Elem : constant JSON_Value := Get (Arr, I);
-                     Sub : constant String := Write (Elem);
-                  begin
-                     Result.Decision_History (I) := From_Json (Sub, null);
-                  end;
-               end loop;
-            end if;
-         end;
-      end if;
-      return Result;
-   exception
-      when others => return Result;
-   end From_Json;
-
-   function To_Json (Msg : Session_Step_Request) return String is
-      Result : Unbounded_String := To_Unbounded_String ("{");
-      First  : Boolean := True;
-      procedure Comma is
-      begin
-         if First then First := False;
-         else Append (Result, ","); end if;
-      end Comma;
-   begin
-      Comma;
-      Append (Result, """session_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Session_Id) & """");
-      Append (Result, "}");
-      return To_String (Result);
-   end To_Json;
-
-   function From_Json (S : String; Tag : access Session_Step_Request) return Session_Step_Request is
-      pragma Unreferenced (Tag);
-      J      : constant JSON_Value := Read (S);
-      Result : Session_Step_Request;
-   begin
-      if Has_Field (J, "session_id") then
-         declare
-            Val : constant JSON_Value := Get (J, "session_id");
-            Str : constant String := Get (Val);
-         begin
-            Result.Session_Id := To_Unbounded_String (Str);
-         end;
-      end if;
-      return Result;
-   exception
-      when others => return Result;
-   end From_Json;
-
-   function To_Json (Msg : Session_Stop_Request) return String is
-      Result : Unbounded_String := To_Unbounded_String ("{");
-      First  : Boolean := True;
-      procedure Comma is
-      begin
-         if First then First := False;
-         else Append (Result, ","); end if;
-      end Comma;
-   begin
-      Comma;
-      Append (Result, """session_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Session_Id) & """");
-      Comma;
-      Append (Result, """mode"":" & """" & To_String (Msg.Mode) & """");
-      Append (Result, "}");
-      return To_String (Result);
-   end To_Json;
-
-   function From_Json (S : String; Tag : access Session_Stop_Request) return Session_Stop_Request is
-      pragma Unreferenced (Tag);
-      J      : constant JSON_Value := Read (S);
-      Result : Session_Stop_Request;
-   begin
-      if Has_Field (J, "session_id") then
-         declare
-            Val : constant JSON_Value := Get (J, "session_id");
-            Str : constant String := Get (Val);
-         begin
-            Result.Session_Id := To_Unbounded_String (Str);
-         end;
-      end if;
-      if Has_Field (J, "mode") then
-         declare
-            Val : constant JSON_Value := Get (J, "mode");
-            Str : constant String := Get (Val);
-         begin
-            Result.Mode := Stop_Mode_From_String (Str);
          end;
       end if;
       return Result;

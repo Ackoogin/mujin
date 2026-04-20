@@ -172,6 +172,10 @@ bool encodeEvidenceRequirements(const ObjectEvidenceRequirement& payload,
 bool decodeEvidenceRequirements(const pcl_msg_t* msg,
                                 ObjectEvidenceRequirement* out);
 
+/// \brief Decode a response from matching_objects.read_match.
+bool decodeReadMatchResponse(const pcl_msg_t* msg,
+                             std::vector<ObjectMatch>* out);
+
 /// \brief Invoke matching_objects.read_match (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -182,6 +186,10 @@ pcl_status_t invokeReadMatch(pcl_executor_t* executor,
                              void*                   user_data = nullptr,
                              const pcl_endpoint_route_t* route = nullptr,
                              const char*       content_type = "application/json");
+
+/// \brief Decode a response from object_of_interest.create_requirement.
+bool decodeCreateRequirementResponse(const pcl_msg_t* msg,
+                                     Identifier* out);
 
 /// \brief Invoke object_of_interest.create_requirement (typed, serialisation handled internally).
 ///
@@ -194,6 +202,10 @@ pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
                                      const pcl_endpoint_route_t* route = nullptr,
                                      const char*       content_type = "application/json");
 
+/// \brief Decode a response from object_of_interest.read_requirement.
+bool decodeReadRequirementResponse(const pcl_msg_t* msg,
+                                   std::vector<ObjectInterestRequirement>* out);
+
 /// \brief Invoke object_of_interest.read_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -204,6 +216,10 @@ pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
                                    void*                   user_data = nullptr,
                                    const pcl_endpoint_route_t* route = nullptr,
                                    const char*       content_type = "application/json");
+
+/// \brief Decode a response from object_of_interest.update_requirement.
+bool decodeUpdateRequirementResponse(const pcl_msg_t* msg,
+                                     Ack* out);
 
 /// \brief Invoke object_of_interest.update_requirement (typed, serialisation handled internally).
 ///
@@ -216,6 +232,10 @@ pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
                                      const pcl_endpoint_route_t* route = nullptr,
                                      const char*       content_type = "application/json");
 
+/// \brief Decode a response from object_of_interest.delete_requirement.
+bool decodeDeleteRequirementResponse(const pcl_msg_t* msg,
+                                     Ack* out);
+
 /// \brief Invoke object_of_interest.delete_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -226,6 +246,10 @@ pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
                                      void*                   user_data = nullptr,
                                      const pcl_endpoint_route_t* route = nullptr,
                                      const char*       content_type = "application/json");
+
+/// \brief Decode a response from specific_object_detail.read_detail.
+bool decodeReadDetailResponse(const pcl_msg_t* msg,
+                              std::vector<ObjectDetail>* out);
 
 /// \brief Invoke specific_object_detail.read_detail (typed, serialisation handled internally).
 ///

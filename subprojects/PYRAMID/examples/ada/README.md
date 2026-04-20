@@ -177,160 +177,58 @@ callback record instead of requiring edits to generated package bodies.
 
 ### Triggering a Generated Service in a Local Test
 
-There are two correct patterns depending on what you need to test.
-
-#### Option A — `Invoke_Service` (synchronous, single-threaded tests)
-
-`Pcl_Bindings.Invoke_Service` calls the service handler directly and returns
-the response.  It is the right choice when your test drives `Spin_Once`
-yourself and there is no concurrent executor thread — the threading model
-only applies when another thread is spinning.
-
-```ada
-declare
-   Req_Json : aliased constant String := Tactical_Codec.To_Json (Request_Value);
-   Type_C   : Interfaces.C.Strings.chars_ptr :=
-     Interfaces.C.Strings.New_String ("application/json");
-   Svc_C    : Interfaces.C.Strings.chars_ptr :=
-     Interfaces.C.Strings.New_String (Prov.Svc_Create_Requirement);
-   Req_Msg  : aliased Pcl_Bindings.Pcl_Msg :=
-     (Data      => Req_Json'Address,
-      Size      => Interfaces.C.unsigned (Req_Json'Length),
-      Type_Name => Type_C);
-   Resp_Buf : aliased String (1 .. 4096) := (others => ' ');
-   Resp_Msg : aliased Pcl_Bindings.Pcl_Msg :=
-     (Data      => Resp_Buf'Address,
-      Size      => Resp_Buf'Length,
-      Type_Name => Interfaces.C.Strings.Null_Ptr);
-   Rc : Pcl_Bindings.Pcl_Status;
-begin
-   Rc := Pcl_Bindings.Invoke_Service
-     (Exec         => Exec,
-      Service_Name => Svc_C,
-      Request      => Req_Msg'Access,
-      Response     => Resp_Msg'Access);
-   pragma Assert (Rc = Pcl_Bindings.PCL_OK);
-   --  Resp_Buf now holds the encoded response.
-   Interfaces.C.Strings.Free (Svc_C);
-   Interfaces.C.Strings.Free (Type_C);
-end;
-```
-
-#### Option B — `Post_Service_Request` (cross-thread safe, callback-style)
-
-Use `Pcl_Bindings.Post_Service_Request` when a thread other than the executor
-thread needs to trigger a service call.  The request is deep-copied and
-enqueued; the service handler and your response callback both run on the
-executor thread during the next `Spin_Once` cycle.
-
-This is useful when the test needs to prove:
-
-- the service was registered under the expected wire name
-- the generated trampoline decoded the request correctly
-- the typed Ada handler was invoked on the executor thread
-- the threading model (D2/D5) is respected end-to-end
-
-> **Note:** `Post_Incoming` does **not** work for service calls.  It only
-> dispatches to subscriber (`PCL_PORT_SUBSCRIBER`) ports.  Service ports
-> (`PCL_PORT_SERVICE`) are reached only through `Invoke_Service` or
-> `Post_Service_Request`.
+Application examples should call the generated service binding instead of
+constructing `Pcl_Msg` payloads or choosing JSON/FlatBuffers paths directly.
+The binding owns the stable service name, content type, request encoding, and
+response decoding.
 
 ```ada
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
-with Interfaces.C;
-with Interfaces.C.Strings;
-with Pcl_Bindings;
-with Pyramid.Data_Model.Tactical.Types_Codec;
 with Pyramid.Services.Tactical_Objects.Provided;
 
-procedure Example_Service_Post_Request_Test is
-   package Tactical_Codec renames Pyramid.Data_Model.Tactical.Types_Codec;
+procedure Example_Invoke_Create_Requirement is
    package Prov renames Pyramid.Services.Tactical_Objects.Provided;
-
-   Exec      : constant Pcl_Bindings.Pcl_Executor_Access :=
-     Pcl_Bindings.Create_Executor;
-   Container : Pcl_Bindings.Pcl_Container_Access := My_Container_Handle;
-
-   Handler_Called   : Boolean := False;
-   Callback_Called  : Boolean := False;
-
-   procedure Create_Requirement
-     (Request  : in  Object_Interest_Requirement;
-      Response : out Identifier)
-   is
-   begin
-      Handler_Called := True;
-      Response := To_Unbounded_String ("created-by-test");
-   end Create_Requirement;
-
-   Handlers : aliased constant Prov.Service_Handlers :=
-     (On_Read_Match          => null,
-      On_Create_Requirement  => Create_Requirement'Access,
-      On_Read_Requirement    => null,
-      On_Update_Requirement  => null,
-      On_Delete_Requirement  => null,
-      On_Read_Detail         => null);
 
    procedure Response_Cb
      (Resp      : access constant Pcl_Bindings.Pcl_Msg;
       User_Data : System.Address)
    is
-      pragma Unreferenced (Resp, User_Data);
+      pragma Unreferenced (User_Data);
+      Interest_Id : constant Identifier :=
+        Prov.Decode_Create_Requirement_Response (Resp);
    begin
-      Callback_Called := True;
+      pragma Assert (Interest_Id = To_Unbounded_String ("created-by-test"));
    end Response_Cb;
 
-   Request_Value : constant Object_Interest_Requirement :=
-     (Base          => <>,
-      Status        => <>,
-      Source        => Source_Local,
-      Policy        => Policy_Obtain,
-      Dimension     => new Dimension_Array'(1 => Dimension_Sea_Surface),
-      Has_Val_Poly_Area   => False,
-      Val_Poly_Area       => <>,
-      Has_Val_Circle_Area => False,
-      Val_Circle_Area     => <>,
-      Has_Val_Point       => True,
-      Val_Point           => (Position => (Latitude => 0.1, Longitude => 0.3)));
-
-   Request_Json : aliased constant String :=
-     Tactical_Codec.To_Json (Request_Value);
-   Type_Name    : Interfaces.C.Strings.chars_ptr :=
-     Interfaces.C.Strings.New_String ("application/json");
-   Service_Name : Interfaces.C.Strings.chars_ptr :=
-     Interfaces.C.Strings.New_String (Prov.Svc_Create_Requirement);
-
-   Msg : aliased constant Pcl_Bindings.Pcl_Msg :=
-     (Data      => Request_Json'Address,
-      Size      => Interfaces.C.unsigned (Request_Json'Length),
-      Type_Name => Type_Name);
+   Request_Value : Object_Interest_Requirement;
 begin
-   Prov.Register_Services
-     (Container => Container,
-      Handlers  => Handlers'Access);
+   Request_Value.Source := Source_Local;
+   Request_Value.Policy := Policy_Obtain;
+   Request_Value.Dimension :=
+     new Dimension_Array'(1 => Dimension_Sea_Surface);
+   Request_Value.Has_Val_Point := True;
+   Request_Value.Val_Point.Position.Latitude := 0.1;
+   Request_Value.Val_Point.Position.Longitude := 0.3;
 
-   Pcl_Bindings.Add_Container (Exec, Container);
-   Pcl_Bindings.Configure (Container);
-   Pcl_Bindings.Activate (Container);
-
-   --  Enqueue a service call from this thread (safe from any thread).
-   Pcl_Bindings.Post_Service_Request
-     (Exec         => Exec,
-      Service_Name => Service_Name,
-      Request      => Msg'Access,
+   Prov.Invoke_Create_Requirement
+     (Executor     => Exec,
+      Request      => Request_Value,
       Callback     => Response_Cb'Access,
-      User_Data    => System.Null_Address);
+      Content_Type => Prov.Json_Content_Type);
 
-   --  Drain one executor cycle: handler and callback both fire here.
    Pcl_Bindings.Spin_Once (Exec, 0);
+end Example_Invoke_Create_Requirement;
+```
 
-   pragma Assert (Handler_Called);
-   pragma Assert (Callback_Called);
+Use lower-level `Pcl_Bindings.Invoke_Service` or
+`Pcl_Bindings.Post_Service_Request` only in binding tests that explicitly need
+to prove the generated trampoline, content-type negotiation, or executor queue
+semantics.  In those tests, keep the raw message construction in the test body
+and do not copy it into reusable component examples.
 
-   Interfaces.C.Strings.Free (Service_Name);
-   Interfaces.C.Strings.Free (Type_Name);
-   Pcl_Bindings.Destroy_Executor (Exec);
-end Example_Service_Post_Request_Test;
+`Post_Incoming` does not work for service calls.  It only dispatches to
+subscriber (`PCL_PORT_SUBSCRIBER`) ports.  Service ports
+(`PCL_PORT_SERVICE`) are reached through service invocation APIs.
 
 ## Routing and Peer Configuration
 
@@ -446,6 +344,7 @@ For a hand-written port example:
 
 ```ada
 declare
+   Content_Type : constant String := Prov.Json_Content_Type;
    Peer      : Interfaces.C.Strings.chars_ptr :=
      Interfaces.C.Strings.New_String ("bridge_a");
    Peer_List : aliased constant System.Address := Peer'Address;
@@ -453,7 +352,7 @@ declare
      Pcl_Bindings.Add_Service
        (Container    => My_Container_Handle,
         Service_Name => Interfaces.C.Strings.New_String ("track.update"),
-        Type_Name    => Interfaces.C.Strings.New_String ("application/json"),
+         Type_Name    => Interfaces.C.Strings.New_String (Content_Type),
         Handler      => My_Service_Trampoline'Access,
         User_Data    => System.Null_Address);
 begin
@@ -481,6 +380,7 @@ A subscriber may be configured to accept traffic only from specific peers.
 
 ```ada
 declare
+   Content_Type : constant String := Prov.Json_Content_Type;
    Peer      : Interfaces.C.Strings.chars_ptr :=
      Interfaces.C.Strings.New_String ("bridge_b");
    Peer_List : aliased constant System.Address := Peer'Address;
@@ -488,7 +388,7 @@ declare
      Pcl_Bindings.Add_Subscriber
        (Container => My_Container_Handle,
         Topic     => Interfaces.C.Strings.New_String ("intel/topic"),
-        Type_Name => Interfaces.C.Strings.New_String ("application/json"),
+         Type_Name => Interfaces.C.Strings.New_String (Content_Type),
         Callback  => My_Subscriber'Access,
         User_Data => System.Null_Address);
 begin

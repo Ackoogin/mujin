@@ -14,35 +14,13 @@ package Pyramid.Data_model.Autonomy.Flatbuffers_Codec is
    function To_Binary (Msg : System.Address)
      return Interfaces.C.Strings.chars_ptr
      with Import, Convention => C,
-          External_Name => "FactUpdate_to_flatbuffer";
+          External_Name => "RequirementReference_to_flatbuffer";
 
-   function From_Binary_Fact_Update
+   function From_Binary_Requirement_Reference
      (Data : System.Address; Size : Interfaces.C.size_t)
      return System.Address
      with Import, Convention => C,
-          External_Name => "FactUpdate_from_flatbuffer";
-
-   function To_Binary (Msg : System.Address)
-     return Interfaces.C.Strings.chars_ptr
-     with Import, Convention => C,
-          External_Name => "StateUpdate_to_flatbuffer";
-
-   function From_Binary_State_Update
-     (Data : System.Address; Size : Interfaces.C.size_t)
-     return System.Address
-     with Import, Convention => C,
-          External_Name => "StateUpdate_from_flatbuffer";
-
-   function To_Binary (Msg : System.Address)
-     return Interfaces.C.Strings.chars_ptr
-     with Import, Convention => C,
-          External_Name => "MissionIntent_to_flatbuffer";
-
-   function From_Binary_Mission_Intent
-     (Data : System.Address; Size : Interfaces.C.size_t)
-     return System.Address
-     with Import, Convention => C,
-          External_Name => "MissionIntent_from_flatbuffer";
+          External_Name => "RequirementReference_from_flatbuffer";
 
    function To_Binary (Msg : System.Address)
      return Interfaces.C.Strings.chars_ptr
@@ -58,24 +36,57 @@ package Pyramid.Data_model.Autonomy.Flatbuffers_Codec is
    function To_Binary (Msg : System.Address)
      return Interfaces.C.Strings.chars_ptr
      with Import, Convention => C,
-          External_Name => "PolicyEnvelope_to_flatbuffer";
+          External_Name => "PlanningPolicy_to_flatbuffer";
 
-   function From_Binary_Policy_Envelope
+   function From_Binary_Planning_Policy
      (Data : System.Address; Size : Interfaces.C.size_t)
      return System.Address
      with Import, Convention => C,
-          External_Name => "PolicyEnvelope_from_flatbuffer";
+          External_Name => "PlanningPolicy_from_flatbuffer";
 
    function To_Binary (Msg : System.Address)
      return Interfaces.C.Strings.chars_ptr
      with Import, Convention => C,
-          External_Name => "Session_to_flatbuffer";
+          External_Name => "PlanningGoal_to_flatbuffer";
 
-   function From_Binary_Session
+   function From_Binary_Planning_Goal
      (Data : System.Address; Size : Interfaces.C.size_t)
      return System.Address
      with Import, Convention => C,
-          External_Name => "Session_from_flatbuffer";
+          External_Name => "PlanningGoal_from_flatbuffer";
+
+   function To_Binary (Msg : System.Address)
+     return Interfaces.C.Strings.chars_ptr
+     with Import, Convention => C,
+          External_Name => "PlanningExecutionRequirement_to_flatbuffer";
+
+   function From_Binary_Planning_Execution_Requirement
+     (Data : System.Address; Size : Interfaces.C.size_t)
+     return System.Address
+     with Import, Convention => C,
+          External_Name => "PlanningExecutionRequirement_from_flatbuffer";
+
+   function To_Binary (Msg : System.Address)
+     return Interfaces.C.Strings.chars_ptr
+     with Import, Convention => C,
+          External_Name => "WorldFactUpdate_to_flatbuffer";
+
+   function From_Binary_World_Fact_Update
+     (Data : System.Address; Size : Interfaces.C.size_t)
+     return System.Address
+     with Import, Convention => C,
+          External_Name => "WorldFactUpdate_from_flatbuffer";
+
+   function To_Binary (Msg : System.Address)
+     return Interfaces.C.Strings.chars_ptr
+     with Import, Convention => C,
+          External_Name => "StateUpdate_to_flatbuffer";
+
+   function From_Binary_State_Update
+     (Data : System.Address; Size : Interfaces.C.size_t)
+     return System.Address
+     with Import, Convention => C,
+          External_Name => "StateUpdate_from_flatbuffer";
 
    function To_Binary (Msg : System.Address)
      return Interfaces.C.Strings.chars_ptr
@@ -91,100 +102,56 @@ package Pyramid.Data_model.Autonomy.Flatbuffers_Codec is
    function To_Binary (Msg : System.Address)
      return Interfaces.C.Strings.chars_ptr
      with Import, Convention => C,
-          External_Name => "StringKeyValue_to_flatbuffer";
+          External_Name => "PlannedComponentInteraction_to_flatbuffer";
 
-   function From_Binary_String_Key_Value
+   function From_Binary_Planned_Component_Interaction
      (Data : System.Address; Size : Interfaces.C.size_t)
      return System.Address
      with Import, Convention => C,
-          External_Name => "StringKeyValue_from_flatbuffer";
+          External_Name => "PlannedComponentInteraction_from_flatbuffer";
 
    function To_Binary (Msg : System.Address)
      return Interfaces.C.Strings.chars_ptr
      with Import, Convention => C,
-          External_Name => "Command_to_flatbuffer";
+          External_Name => "PlanStep_to_flatbuffer";
 
-   function From_Binary_Command
+   function From_Binary_Plan_Step
      (Data : System.Address; Size : Interfaces.C.size_t)
      return System.Address
      with Import, Convention => C,
-          External_Name => "Command_from_flatbuffer";
+          External_Name => "PlanStep_from_flatbuffer";
 
    function To_Binary (Msg : System.Address)
      return Interfaces.C.Strings.chars_ptr
      with Import, Convention => C,
-          External_Name => "GoalDispatch_to_flatbuffer";
+          External_Name => "Plan_to_flatbuffer";
 
-   function From_Binary_Goal_Dispatch
+   function From_Binary_Plan
      (Data : System.Address; Size : Interfaces.C.size_t)
      return System.Address
      with Import, Convention => C,
-          External_Name => "GoalDispatch_from_flatbuffer";
+          External_Name => "Plan_from_flatbuffer";
 
    function To_Binary (Msg : System.Address)
      return Interfaces.C.Strings.chars_ptr
      with Import, Convention => C,
-          External_Name => "DecisionRecord_to_flatbuffer";
+          External_Name => "RequirementPlacement_to_flatbuffer";
 
-   function From_Binary_Decision_Record
+   function From_Binary_Requirement_Placement
      (Data : System.Address; Size : Interfaces.C.size_t)
      return System.Address
      with Import, Convention => C,
-          External_Name => "DecisionRecord_from_flatbuffer";
+          External_Name => "RequirementPlacement_from_flatbuffer";
 
    function To_Binary (Msg : System.Address)
      return Interfaces.C.Strings.chars_ptr
      with Import, Convention => C,
-          External_Name => "CommandResult_to_flatbuffer";
+          External_Name => "ExecutionRun_to_flatbuffer";
 
-   function From_Binary_Command_Result
+   function From_Binary_Execution_Run
      (Data : System.Address; Size : Interfaces.C.size_t)
      return System.Address
      with Import, Convention => C,
-          External_Name => "CommandResult_from_flatbuffer";
-
-   function To_Binary (Msg : System.Address)
-     return Interfaces.C.Strings.chars_ptr
-     with Import, Convention => C,
-          External_Name => "DispatchResult_to_flatbuffer";
-
-   function From_Binary_Dispatch_Result
-     (Data : System.Address; Size : Interfaces.C.size_t)
-     return System.Address
-     with Import, Convention => C,
-          External_Name => "DispatchResult_from_flatbuffer";
-
-   function To_Binary (Msg : System.Address)
-     return Interfaces.C.Strings.chars_ptr
-     with Import, Convention => C,
-          External_Name => "SessionSnapshot_to_flatbuffer";
-
-   function From_Binary_Session_Snapshot
-     (Data : System.Address; Size : Interfaces.C.size_t)
-     return System.Address
-     with Import, Convention => C,
-          External_Name => "SessionSnapshot_from_flatbuffer";
-
-   function To_Binary (Msg : System.Address)
-     return Interfaces.C.Strings.chars_ptr
-     with Import, Convention => C,
-          External_Name => "SessionStepRequest_to_flatbuffer";
-
-   function From_Binary_Session_Step_Request
-     (Data : System.Address; Size : Interfaces.C.size_t)
-     return System.Address
-     with Import, Convention => C,
-          External_Name => "SessionStepRequest_from_flatbuffer";
-
-   function To_Binary (Msg : System.Address)
-     return Interfaces.C.Strings.chars_ptr
-     with Import, Convention => C,
-          External_Name => "SessionStopRequest_to_flatbuffer";
-
-   function From_Binary_Session_Stop_Request
-     (Data : System.Address; Size : Interfaces.C.size_t)
-     return System.Address
-     with Import, Convention => C,
-          External_Name => "SessionStopRequest_from_flatbuffer";
+          External_Name => "ExecutionRun_from_flatbuffer";
 
 end Pyramid.Data_model.Autonomy.Flatbuffers_Codec;

@@ -65,9 +65,9 @@ Driven from `.proto` by `pim/generate_bindings.py` via a registry
 | Layer | C++ output | Ada output |
 |-------|------------|------------|
 | Types | `examples/cpp/generated/pyramid_data_model_*_types.hpp` | `pyramid-data_model-*-types.ads` |
-| JSON codec | `examples/json/cpp/pyramid_data_model_*_json_codec.hpp` (and a legacy non-suffixed `examples/cpp/generated/pyramid_data_model_*_codec.hpp`) | `pyramid-data_model-*-types_codec.ads` |
+| JSON codec | `examples/cpp/generated/pyramid_data_model_*_codec.hpp` | `pyramid-data_model-*-types_codec.ads` |
 | FlatBuffers codec | `examples/cpp/generated/flatbuffers/cpp/pyramid_data_model_*_flatbuffers_codec.hpp` | shim |
-| Protobuf codec | `examples/protobuf/cpp/pyramid_data_model_*_protobuf_codec.hpp` | shim |
+| Protobuf codec | `examples/cpp/generated/protobuf/cpp/pyramid_data_model_*_protobuf_codec.hpp`; tactical service shim remains under `examples/protobuf/cpp/` | shim |
 | Service binding | `examples/cpp/generated/pyramid_services_tactical_objects_provided.hpp` (typed `ServiceHandler`, `dispatch(...)`, wire-name constants) | `pyramid-services-tactical_objects-provided.ads` |
 | gRPC transport | `examples/grpc/cpp/pyramid_components_*_grpc_transport.{hpp,cpp}` (`ServerHost::start(address)`) | C-ABI shim specs |
 | ROS2 transport | `examples/ros2/cpp/pyramid_components_*_ros2_transport.{hpp,cpp}` (`ServiceBinder::bind()`) | endpoint-constant specs |
@@ -233,10 +233,9 @@ arrays as well as scalar messages.
 - Active: `examples/cpp/generated/pyramid_data_model_common_codec.hpp`
   (no `_json_` suffix). Used by the live generated service bindings and
   by `StandardBridge.cpp` via `tactical_codec::toJson`.
-- Parallel/stale: `examples/json/cpp/pyramid_data_model_common_json_codec.hpp`
-  (standardised under `examples/<backend>/cpp/`). Referenced by the
-  standalone data-model `codec_dispatch` artefact, not by the active
-  service binding path.
+- Removed stale path: `examples/json/cpp/pyramid_data_model_common_json_codec.hpp`
+  and the matching Ada JSON mirror. These were not used by the active service
+  binding path.
 
 The standalone dispatch layer therefore points at a different JSON layout
 than the active app consumes. The v1 cleanup should choose one canonical
@@ -247,7 +246,9 @@ at this class of filename/package compatibility debt.
 ### 4.3 FlatBuffers / Protobuf output layouts also differ
 
 - FlatBuffers C++: `examples/cpp/generated/flatbuffers/cpp/`.
-- Protobuf C++:    `examples/protobuf/cpp/`.
+- Protobuf C++:    `examples/cpp/generated/protobuf/cpp/` for generated
+  data-model stubs; `examples/protobuf/cpp/` is retained only for the tactical
+  service protobuf shim still linked by `pyramid_protobuf_support`.
 - gRPC C++:        `examples/grpc/cpp/`.
 - ROS2 C++:        `examples/ros2/cpp/`.
 
@@ -558,12 +559,14 @@ v1, the least disruptive choice is:
 - Put backend-specific generated support under subdirectories of those roots,
   for example `examples/cpp/generated/flatbuffers/cpp/` and
   `examples/cpp/generated/protobuf/cpp/`.
-- Remove or clearly mark stale parallel roots such as `examples/json/cpp/`
-  when they are not emitted by `scripts/generate_bindings.bat`.
+- Stale parallel roots such as `examples/json/`, `examples/flatbuffers/`, and
+  root-level data-model protobuf codec mirrors have been removed; do not
+  reintroduce them unless they are emitted by `scripts/generate_bindings.bat`
+  as part of the active generated root.
 
 The rule is less important than enforcing one rule. The previous mix of
-`examples/cpp/generated`, `examples/json/cpp`, `examples/protobuf/cpp`, and
-`examples/dispatch/cpp` let stale artefacts look authoritative.
+`examples/cpp/generated`, `examples/json/cpp`, root-level data-model protobuf
+mirrors, and `examples/dispatch/cpp` let stale artefacts look authoritative.
 
 ### 6.7 Keep transport v1 static, document codec coupling
 
