@@ -38,6 +38,7 @@
 with Ada.Command_Line;
 with Ada.Strings.Unbounded;      use Ada.Strings.Unbounded;
 with Ada.Text_IO;
+with Ada.Unchecked_Deallocation;
 with Interfaces.C;
 with Interfaces.C.Strings;
 with Pcl_Bindings;
@@ -117,29 +118,6 @@ procedure Pyramid_Bridge_Main is
    Ame_Exec      : Pcl_Bindings.Pcl_Executor_Access;
    Ame_Transport : Pcl_Shmem_Bindings.Pcl_Shared_Memory_Transport_Access;
 
-   --  Interest requirement placed on Tactical Objects
-   Interest_Id         : Identifier := Null_Unbounded_String;
-   Interest_Id_Ready   : Boolean := False;
-
-   --  Interest requirement response callback
-   procedure On_Create_Req_Response
-     (Resp      : access constant Pcl_Bindings.Pcl_Msg;
-      User_Data : System.Address)
-   is
-      pragma Unreferenced (User_Data);
-   begin
-      if Resp /= null and then Resp.Data /= System.Null_Address
-        and then Resp.Size > 0
-      then
-         Interest_Id :=
-           Provided_Tobj.Decode_Create_Requirement_Response (Resp);
-         Log ("create_requirement response: interest_id=" &
-              To_String (Interest_Id));
-      end if;
-      Interest_Id_Ready := True;
-   end On_Create_Req_Response;
-   pragma Convention (C, On_Create_Req_Response);
-
    -- -- Place a global interest requirement ------------------------------------
    --  Policy_Obtain, no dimension/area filter => all entities, continuously.
 
@@ -154,11 +132,14 @@ procedure Pyramid_Bridge_Main is
       Provided_Tobj.Invoke_Create_Requirement
         (Executor     => Tobj_Exec,
          Request      => Req,
-         Callback     => On_Create_Req_Response'Unrestricted_Access,
+         Callback     => Bridge_Entity_Tracker.On_Create_Req_Response'Access,
          Content_Type => Provided_Tobj.Json_Content_Type);
    end Place_Global_Interest;
 
    -- -- Build and push world facts to AME for a batch of entity IDs -----------
+
+   procedure Free_Fact_Array is new Ada.Unchecked_Deallocation
+     (Fact_Update_Array, Fact_Update_Array_Acc);
 
    procedure Push_World_Facts
      (Ids   : Bridge_Entity_Tracker.Id_Array;
@@ -185,6 +166,8 @@ procedure Pyramid_Bridge_Main is
          Callback     =>
            Bridge_Entity_Tracker.On_Update_State_Response'Unrestricted_Access,
          Content_Type => Provided_Ame.Json_Content_Type);
+
+      Free_Fact_Array (Update.Fact_Update);
 
       Bridge_Entity_Tracker.Facts_Sent :=
         Bridge_Entity_Tracker.Facts_Sent + Count;

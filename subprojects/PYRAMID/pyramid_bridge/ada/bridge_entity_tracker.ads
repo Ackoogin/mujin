@@ -30,6 +30,10 @@ package Bridge_Entity_Tracker is
    --  Running count of World_Fact_Update messages delivered to AME.
    Facts_Sent : Natural := 0;
 
+   --  Interest-requirement ID returned by create_requirement response.
+   Interest_Id       : Unbounded_String := Null_Unbounded_String;
+   Interest_Id_Ready : Boolean := False;
+
    --  Maximum pending entity IDs buffered between spin cycles.
    Max_Pending : constant := 256;
 
@@ -66,5 +70,11 @@ package Bridge_Entity_Tracker is
      (Resp      : access constant Pcl_Bindings.Pcl_Msg;
       User_Data : System.Address);
    pragma Convention (C, On_Update_State_Response);
+
+   --  Response callback for create_requirement (captures interest ID).
+   procedure On_Create_Req_Response
+     (Resp      : access constant Pcl_Bindings.Pcl_Msg;
+      User_Data : System.Address);
+   pragma Convention (C, On_Create_Req_Response);
 
 end Bridge_Entity_Tracker;

@@ -106,4 +106,23 @@ package body Bridge_Entity_Tracker is
       Log ("state.update_state response received");
    end On_Update_State_Response;
 
+   -- -- On_Create_Req_Response ------------------------------------------------
+
+   procedure On_Create_Req_Response
+     (Resp      : access constant Pcl_Bindings.Pcl_Msg;
+      User_Data : System.Address)
+   is
+      pragma Unreferenced (User_Data);
+   begin
+      if Resp /= null and then Resp.Data /= System.Null_Address
+        and then Resp.Size > 0
+      then
+         Interest_Id :=
+           Provided_Tobj.Decode_Create_Requirement_Response (Resp);
+         Log ("create_requirement response: interest_id=" &
+              To_String (Interest_Id));
+      end if;
+      Interest_Id_Ready := True;
+   end On_Create_Req_Response;
+
 end Bridge_Entity_Tracker;

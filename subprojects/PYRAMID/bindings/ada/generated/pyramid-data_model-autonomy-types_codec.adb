@@ -260,7 +260,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       end if;
       if Msg.Has_Expression then
          Comma;
-         Append (Result, """expression"":" & To_Json (Msg.Expression));
+         Append (Result, """expression"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Expression) & """");
       end if;
       Append (Result, "}");
       return To_String (Result);
@@ -937,7 +937,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       Comma;
       Append (Result, """backend_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Backend_Id) & """");
       Comma;
-      Append (Result, """world_version"":" & Integer'Image (Msg.World_Version));
+      Append (Result, """world_version"":" & Long_Integer'Image (Msg.World_Version));
       Comma;
       Append (Result, """replan_count"":" & Integer'Image (Msg.Replan_Count));
       Comma;
@@ -1004,7 +1004,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
          end;
       end if;
       if Has_Field (J, "world_version") then
-         Result.World_Version := Integer (Get_Long_Float (Get (J, "world_version")));
+         Result.World_Version := Long_Integer (Get_Long_Float (Get (J, "world_version")));
       end if;
       if Has_Field (J, "replan_count") then
          Result.Replan_Count := Integer (Get_Long_Float (Get (J, "replan_count")));
