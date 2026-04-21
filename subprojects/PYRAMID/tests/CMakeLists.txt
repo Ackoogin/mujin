@@ -475,6 +475,61 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         LABELS "cross_language;integration;codec;real_app"
         TIMEOUT 40)
 
+    # -- Pyramid Bridge Ada build + E2E test -----------------------------------
+    set(ADA_BRIDGE_SRC_DIR ${PYRAMID_ROOT_DIR}/pyramid_bridge/ada)
+    set(ADA_PCL_SHMEM_LIB_NAME "pcl_transport_shared_memory" CACHE STRING
+        "Base library name for Ada gprbuild PCL shared-memory transport static library")
+
+    add_custom_target(pyramid_bridge_ada_build ALL
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_BRIDGE_SRC_DIR}/bin
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR}
+        COMMAND ${CMAKE_COMMAND} -E env MUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
+                ${GPRBUILD} -p -P ${ADA_BRIDGE_SRC_DIR}/pyramid_bridge.gpr -q
+                -XMUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
+                -XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR}
+                -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
+                -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
+                -XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME}
+                -XPCL_SHMEM_LIB_NAME=${ADA_PCL_SHMEM_LIB_NAME}
+                -XPYRAMID_GEN_LIB_DIR=${ADA_PYRAMID_GEN_LIB_DIR}
+                -XPYRAMID_GEN_LIB_NAME=${ADA_PYRAMID_GEN_LIB_NAME}
+        WORKING_DIRECTORY ${ADA_BRIDGE_SRC_DIR}
+        COMMENT "Building Ada Pyramid Bridge"
+        DEPENDS ada_test_generated_bindings_build
+    )
+    if(WIN32)
+        add_custom_command(TARGET pyramid_bridge_ada_build PRE_BUILD
+            COMMAND cmd /c "${ADA_PCL_BUILD_SCRIPT}" "${ADA_PCL_LIB_DIR}"
+            COMMENT "Preparing GNAT-compatible PCL static archives for Pyramid Bridge build")
+        add_custom_command(TARGET pyramid_bridge_ada_build PRE_BUILD
+            COMMAND cmd /c "${ADA_PYRAMID_GEN_BUILD_SCRIPT}" "${ADA_PYRAMID_GEN_LIB_DIR}"
+            COMMENT "Preparing GNAT-compatible generated FlatBuffers archive for Pyramid Bridge build")
+    else()
+        add_custom_command(TARGET pyramid_bridge_ada_build PRE_BUILD
+            COMMAND bash "${ADA_PYRAMID_GEN_BUILD_SCRIPT}" "${ADA_PYRAMID_GEN_LIB_DIR}"
+            COMMENT "Preparing GNAT-compatible generated FlatBuffers archive for Pyramid Bridge build")
+    endif()
+
+    if(WIN32)
+        add_test(NAME pyramid_bridge_e2e
+            COMMAND ${CMAKE_COMMAND}
+                    -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_pyramid_bridge_e2e.bat
+                    -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
+                    -DSTUB_BIN=$<TARGET_FILE:ame_backend_stub>
+                    -DBRIDGE_BIN=${PYRAMID_ROOT_DIR}/pyramid_bridge/ada/bin/pyramid_bridge_main
+                    -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+    else()
+        add_test(NAME pyramid_bridge_e2e
+            COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_pyramid_bridge_e2e.sh
+                    --app-bin $<TARGET_FILE:tactical_objects_app>
+                    --stub-bin $<TARGET_FILE:ame_backend_stub>
+                    --bridge-bin ${PYRAMID_ROOT_DIR}/pyramid_bridge/ada/bin/pyramid_bridge_main)
+    endif()
+    set_tests_properties(pyramid_bridge_e2e PROPERTIES
+        LABELS "cross_language;integration;shared_memory;real_app"
+        TIMEOUT 60)
+
     if(WIN32 AND TARGET pyramid_grpc_transport)
         add_custom_target(ada_grpc_cpp_interop_build ALL
             COMMAND ${CMAKE_COMMAND} -E env MUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}

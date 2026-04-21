@@ -39,9 +39,13 @@ GEN_DIR="$PYRAMID_ROOT/bindings/cpp/generated"
 GEN_FB_DIR="$GEN_DIR/flatbuffers/cpp"
 BUILD_FB_DIR="$WORKSPACE_ROOT/build/generated/flatbuffers/cpp"
 FLATBUFFERS_INCLUDE="$WORKSPACE_ROOT/build/_deps/flatbuffers-src/include"
-NLOHMANN_INCLUDE="$WORKSPACE_ROOT/build/_deps/nlohmann_json-src/include"
+NLOHMANN_INCLUDE="${NLOHMANN_JSON_INCLUDE:-$WORKSPACE_ROOT/build/_deps/nlohmann_json-src/include}"
+if [[ ! -d "$NLOHMANN_INCLUDE" ]]; then
+  NLOHMANN_INCLUDE="$PYRAMID_ROOT/core/external"
+fi
 
-if [[ ! -f "$BUILD_FB_DIR/pyramid_services_tactical_objects_generated.h" ]]; then
+if [[ ! -f "$BUILD_FB_DIR/pyramid_services_tactical_objects_generated.h" ]] || \
+   [[ ! -f "$BUILD_FB_DIR/pyramid_services_autonomy_backend_generated.h" ]]; then
   if ! command -v cmake >/dev/null 2>&1; then
     echo "[ada-pyramid] ERROR: missing flatc-generated header and cmake not available" >&2
     exit 1
@@ -64,7 +68,9 @@ CXXFLAGS=(
 g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_base_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_base_codec.o"
 g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_common_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_common_codec.o"
 g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_tactical_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_tactical_codec.o"
+g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_autonomy_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_autonomy_codec.o"
 g++ "${CXXFLAGS[@]}" -c "$GEN_FB_DIR/pyramid_services_tactical_objects_flatbuffers_codec.cpp" -o "$OBJ_DIR/pyramid_services_tactical_objects_flatbuffers_codec.o"
+g++ "${CXXFLAGS[@]}" -c "$GEN_FB_DIR/pyramid_services_autonomy_backend_flatbuffers_codec.cpp" -o "$OBJ_DIR/pyramid_services_autonomy_backend_flatbuffers_codec.o"
 
 rm -f "$TMP_LIB_FILE"
 
@@ -72,7 +78,9 @@ ar rcs "$TMP_LIB_FILE" \
   "$OBJ_DIR/pyramid_data_model_base_codec.o" \
   "$OBJ_DIR/pyramid_data_model_common_codec.o" \
   "$OBJ_DIR/pyramid_data_model_tactical_codec.o" \
-  "$OBJ_DIR/pyramid_services_tactical_objects_flatbuffers_codec.o"
+  "$OBJ_DIR/pyramid_data_model_autonomy_codec.o" \
+  "$OBJ_DIR/pyramid_services_tactical_objects_flatbuffers_codec.o" \
+  "$OBJ_DIR/pyramid_services_autonomy_backend_flatbuffers_codec.o"
 
 rm -f "$LIB_FILE"
 mv "$TMP_LIB_FILE" "$LIB_FILE"

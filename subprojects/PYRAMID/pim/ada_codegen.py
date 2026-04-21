@@ -1435,6 +1435,37 @@ class AdaTypesGenerator:
 
     # -- internal --------------------------------------------------------------
 
+    def _ada_pkg_for_type(self, short_name: str) -> Optional[str]:
+        """Return the Ada package name that declares a proto message or enum
+        by its short (unqualified) name."""
+        for pf in self._index.files:
+            for msg in pf.messages:
+                if msg.name == short_name:
+                    return self._ada_pkg_for_file(pf)
+            for enum in pf.enums:
+                if enum.name == short_name:
+                    return self._ada_pkg_for_file(pf)
+        return None
+
+    def _shadow_subtypes_for_file(self, pf) -> Dict[str, str]:
+        """Return {ada_type_name -> qualified_ada_type} for regular record
+        fields where the Ada field name equals the Ada type name, which causes
+        Ada's 'component cannot be used before end of record declaration' error."""
+        result: Dict[str, str] = {}
+        alias_names = set(self._aliases.keys())
+        for msg in pf.messages:
+            if msg.name in alias_names:
+                continue
+            for field, fname in self._inline_base_fields(msg):
+                ada_fname = _ada_name(fname)
+                ada_type, arr = self._ada_field_type(field.type, field.is_repeated, fname)
+                if arr is None and ada_fname == ada_type:
+                    short = field.type.split('.')[-1]
+                    pkg = self._ada_pkg_for_type(short)
+                    if pkg:
+                        result[ada_type] = f'{pkg}.{ada_type}'
+        return result
+
     def _find_scalar_wrappers(self) -> Dict[str, str]:
         aliases: Dict[str, str] = {'Timestamp': 'Long_Float'}
         for msg in self._index.all_messages():
@@ -1565,8 +1596,10 @@ class AdaTypesGenerator:
                         result.append((arr, self._ada_base_type(fld.type)))
         return result
 
-    def _write_record(self, f, msg: ProtoMessage) -> None:
+    def _write_record(self, f, msg: ProtoMessage,
+                      shadow_subtypes: Optional[Dict[str, str]] = None) -> None:
         ada_name = _ada_name(msg.name)
+        shadow = shadow_subtypes or {}
         f.write(f'   type {ada_name} is record\n')
         for field, fname in self._inline_base_fields(msg):
             ada_fname = _ada_name(fname)
@@ -1574,6 +1607,11 @@ class AdaTypesGenerator:
             if arr:
                 # Access-to-array fields default to null (no allocation)
                 f.write(f'      {ada_fname} : {ada_type} := null;\n')
+            elif ada_fname == ada_type and ada_type in shadow:
+                # Use Base_ prefix to avoid component name shadowing the type name
+                dflt = self._ada_default(ada_type, field.type)
+                init = f' := {dflt}' if dflt else ''
+                f.write(f'      {ada_fname} : Base_{ada_type}{init};\n')
             elif field.is_optional and _ADA_SCALAR_MAP.get(field.type, '') not in (
                     'Unbounded_String', ''):
                 f.write(f'      Has_{ada_fname} : Boolean := False;\n')
@@ -1643,10 +1681,17 @@ class AdaTypesGenerator:
             if emitted_arrays:
                 f.write('\n')
 
+            # Subtypes for fields whose Ada name equals their Ada type name
+            shadow_subtypes = self._shadow_subtypes_for_file(pf)
+            for ada_type, qualified in sorted(shadow_subtypes.items()):
+                f.write(f'   subtype Base_{ada_type} is {qualified};\n')
+            if shadow_subtypes:
+                f.write('\n')
+
             # Records interleaved with their array type dependencies
             for msg in sorted_msgs:
                 ada_msg_name = _ada_name(msg.name)
-                self._write_record(f, msg)
+                self._write_record(f, msg, shadow_subtypes)
                 for later_msg in sorted_msgs:
                     for arr_name, elem_type in self._arrays_for_msg(later_msg):
                         if arr_name not in emitted_arrays and elem_type == ada_msg_name:
@@ -1843,7 +1888,8 @@ class AdaDataModelCodecGenerator:
         if fld.type in ('int32', 'int64', 'sint32', 'sint64',
                          'uint32', 'uint64', 'fixed32', 'fixed64',
                          'sfixed32', 'sfixed64'):
-            return f"Integer'Image (Msg.{ada_fname})"
+            ada_int_type = _ADA_SCALAR_MAP[fld.type]
+            return f"{ada_int_type}'Image (Msg.{ada_fname})"
         if fld.type in ('float', 'double'):
             return f"Long_Float'Image (Msg.{ada_fname})"
         if fld.type == 'string':
@@ -1857,7 +1903,7 @@ class AdaDataModelCodecGenerator:
             if ada_target == 'Unbounded_String':
                 return self._string_to_json_expr(f'Msg.{ada_fname}')
             elif ada_target in ('Integer', 'Long_Integer', 'Natural'):
-                return f"Integer'Image (Msg.{ada_fname})"
+                return f"{ada_target}'Image (Msg.{ada_fname})"
             elif ada_target == 'Boolean':
                 return f'(if Msg.{ada_fname} then "true" else "false")'
             else:
@@ -1903,8 +1949,9 @@ class AdaDataModelCodecGenerator:
                            'uint32', 'uint64', 'fixed32', 'fixed64',
                            'sfixed32', 'sfixed64') or ada_target in (
                            'Integer', 'Long_Integer', 'Natural'):
+            int_type = _ADA_SCALAR_MAP.get(fld.type, ada_target or 'Integer')
             f.write(f'{indent}if Has_Field (J, "{wire}") then\n')
-            f.write(f'{indent}   Result.{ada_fname} := Integer (Get_Long_Float (Get (J, "{wire}")));\n')
+            f.write(f'{indent}   Result.{ada_fname} := {int_type} (Get_Long_Float (Get (J, "{wire}")));\n')
             f.write(f'{indent}end if;\n')
         elif (self._index.is_enum_type(fld.type) or
               self._index.is_enum_type(short)):
@@ -2042,7 +2089,10 @@ class AdaDataModelCodecGenerator:
                 # Only emit the variant that is set
                 f.write(f'      if Msg.{has_flag} then\n')
                 f.write(f'         Comma;\n')
-                qcall = self._qualified_to_json(fld, f'Msg.{ada_fname}')
+                if self._is_field_message(fld) and oo_short not in self._aliases:
+                    qcall = self._qualified_to_json(fld, f'Msg.{ada_fname}')
+                else:
+                    qcall = self._to_json_expr(fld, ada_fname)
                 f.write(f'         Append (Result, """{wire}"":" & {qcall});\n')
                 f.write(f'      end if;\n')
 
@@ -2123,7 +2173,7 @@ class AdaDataModelCodecGenerator:
                 elif fld.type == 'bool' or ada_target == 'Boolean':
                     f.write(f'            Append (Result, (if Msg.{ada_fname} (I) then "true" else "false"));\n')
                 elif ada_target in ('Integer', 'Long_Integer', 'Natural'):
-                    f.write(f'            Append (Result, Integer\'Image (Msg.{ada_fname} (I)));\n')
+                    f.write(f'            Append (Result, {ada_target}\'Image (Msg.{ada_fname} (I)));\n')
                 elif fld.type in ('float', 'double') or short in self._aliases:
                     f.write(f'            Append (Result, Long_Float\'Image (Msg.{ada_fname} (I)));\n')
                 else:
@@ -2204,7 +2254,7 @@ class AdaDataModelCodecGenerator:
                 f.write(f'                  declare\n')
                 f.write(f'                     Elem : constant JSON_Value := Get (Arr, I);\n')
                 f.write(f'                  begin\n')
-                f.write(f'                     Result.{ada_fname} (I) := Integer (Get_Long_Float (Elem));\n')
+                f.write(f'                     Result.{ada_fname} (I) := {ada_target} (Get_Long_Float (Elem));\n')
                 f.write(f'                  end;\n')
             else:
                 # Default to float

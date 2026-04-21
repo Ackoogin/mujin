@@ -206,11 +206,11 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
    function To_Json (Msg : Planning_Policy) return String is
    begin
       return "{" &
-        """max_replans"":" & Integer'Image (Msg.Max_Replans) &
+        """max_replans"":" & Natural'Image (Msg.Max_Replans) &
         "," &
         """enable_replanning"":" & (if Msg.Enable_Replanning then "true" else "false") &
         "," &
-        """max_concurrent_placements"":" & Integer'Image (Msg.Max_Concurrent_Placements) &
+        """max_concurrent_placements"":" & Natural'Image (Msg.Max_Concurrent_Placements) &
         "}";
    end To_Json;
 
@@ -220,7 +220,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       Result : Planning_Policy;
    begin
       if Has_Field (J, "max_replans") then
-         Result.Max_Replans := Integer (Get_Long_Float (Get (J, "max_replans")));
+         Result.Max_Replans := Natural (Get_Long_Float (Get (J, "max_replans")));
       end if;
       if Has_Field (J, "enable_replanning") then
          declare
@@ -230,7 +230,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
          end;
       end if;
       if Has_Field (J, "max_concurrent_placements") then
-         Result.Max_Concurrent_Placements := Integer (Get_Long_Float (Get (J, "max_concurrent_placements")));
+         Result.Max_Concurrent_Placements := Natural (Get_Long_Float (Get (J, "max_concurrent_placements")));
       end if;
       return Result;
    exception
@@ -260,7 +260,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       end if;
       if Msg.Has_Expression then
          Comma;
-         Append (Result, """expression"":" & To_Json (Msg.Expression));
+         Append (Result, """expression"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Expression) & """");
       end if;
       Append (Result, "}");
       return To_String (Result);
@@ -830,7 +830,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       Comma;
       Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
       Comma;
-      Append (Result, """sequence_number"":" & Integer'Image (Msg.Sequence_Number));
+      Append (Result, """sequence_number"":" & Natural'Image (Msg.Sequence_Number));
       Comma;
       Append (Result, """action_name"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Action_Name) & """");
       Comma;
@@ -875,7 +875,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
          end;
       end if;
       if Has_Field (J, "sequence_number") then
-         Result.Sequence_Number := Integer (Get_Long_Float (Get (J, "sequence_number")));
+         Result.Sequence_Number := Natural (Get_Long_Float (Get (J, "sequence_number")));
       end if;
       if Has_Field (J, "action_name") then
          declare
@@ -937,9 +937,9 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       Comma;
       Append (Result, """backend_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Backend_Id) & """");
       Comma;
-      Append (Result, """world_version"":" & Integer'Image (Msg.World_Version));
+      Append (Result, """world_version"":" & Long_Integer'Image (Msg.World_Version));
       Comma;
-      Append (Result, """replan_count"":" & Integer'Image (Msg.Replan_Count));
+      Append (Result, """replan_count"":" & Natural'Image (Msg.Replan_Count));
       Comma;
       Append (Result, """plan_success"":" & (if Msg.Plan_Success then "true" else "false"));
       Comma;
@@ -1004,10 +1004,10 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
          end;
       end if;
       if Has_Field (J, "world_version") then
-         Result.World_Version := Integer (Get_Long_Float (Get (J, "world_version")));
+         Result.World_Version := Long_Integer (Get_Long_Float (Get (J, "world_version")));
       end if;
       if Has_Field (J, "replan_count") then
-         Result.Replan_Count := Integer (Get_Long_Float (Get (J, "replan_count")));
+         Result.Replan_Count := Natural (Get_Long_Float (Get (J, "replan_count")));
       end if;
       if Has_Field (J, "plan_success") then
          declare
@@ -1246,7 +1246,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       Comma;
       Append (Result, """achievement"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Achievement));
       Comma;
-      Append (Result, """replan_count"":" & Integer'Image (Msg.Replan_Count));
+      Append (Result, """replan_count"":" & Natural'Image (Msg.Replan_Count));
       if Msg.Outstanding_Placement /= null then
          Comma;
          Append (Result, """outstanding_placement"":[");
@@ -1318,7 +1318,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
          end;
       end if;
       if Has_Field (J, "replan_count") then
-         Result.Replan_Count := Integer (Get_Long_Float (Get (J, "replan_count")));
+         Result.Replan_Count := Natural (Get_Long_Float (Get (J, "replan_count")));
       end if;
       if Has_Field (J, "outstanding_placement") then
          declare

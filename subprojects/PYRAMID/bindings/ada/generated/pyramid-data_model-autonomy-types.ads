@@ -42,6 +42,9 @@ package Pyramid.Data_Model.Autonomy.Types is
    type Related_Entity_Id_Array is array (Positive range <>) of Unbounded_String;
    type Related_Entity_Id_Array_Acc is access all Related_Entity_Id_Array;
 
+   subtype Base_Achievement is Pyramid.Data_Model.Common.Types.Achievement;
+   subtype Base_Progress is Pyramid.Data_Model.Common.Types.Progress;
+
    type Requirement_Reference is record
       Requirement_Id : Unbounded_String := Null_Unbounded_String;
       Component_Name : Unbounded_String := Null_Unbounded_String;
@@ -177,7 +180,7 @@ package Pyramid.Data_Model.Autonomy.Types is
       Operation : Requirement_Placement_Operation := Operation_Unspecified;
       Target_Requirement_Id : Unbounded_String := Null_Unbounded_String;
       Related_Entity_Id : Related_Entity_Id_Array_Acc := null;
-      Progress : Progress := Progress_Unspecified;
+      Progress : Base_Progress := Progress_Unspecified;
    end record;
 
    type Outstanding_Placement_Array is array (Positive range <>) of Requirement_Placement;
@@ -190,7 +193,7 @@ package Pyramid.Data_Model.Autonomy.Types is
       Planning_Execution_Requirement_Id : Unbounded_String := Null_Unbounded_String;
       Plan_Id : Unbounded_String := Null_Unbounded_String;
       State : Planning_Execution_State := State_Unspecified;
-      Achievement : Achievement;
+      Achievement : Base_Achievement;
       Replan_Count : Natural := 0;
       Outstanding_Placement : Outstanding_Placement_Array_Acc := null;
    end record;

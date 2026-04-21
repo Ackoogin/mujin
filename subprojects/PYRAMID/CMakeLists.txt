@@ -351,4 +351,5 @@ endif()
 
 add_subdirectory(core)
 add_subdirectory(tactical_objects)
+add_subdirectory(pyramid_bridge)
 add_subdirectory(tests)
