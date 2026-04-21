@@ -22,42 +22,48 @@ if "%FORCE_REBUILD%"=="0" if exist "%LIB_FILE%" (
   exit /b 0
 )
 
-:: Prefer GNAT's own gcc/ar so objects and archive index are in the i686-pc-mingw32
-:: PE/COFF format that GNAT's linker expects.  A system g++ (typically x86_64) produces
-:: objects whose archive index format GNAT's ld cannot read.
+:: Locate GNAT toolchain (next to gprbuild).  We use GNAT's ar so the archive
+:: index is written in the format GNAT's linker expects.  GNAT gcc is Ada-only
+:: (no cc1plus), so we still use system g++ for C++ compilation, but we ask
+:: GNAT gcc for its target triple and derive the -m32/-m64 arch flag so the
+:: objects match the architecture GNAT is linking for.
 set "GNAT_BIN="
 for /f "tokens=*" %%G in ('where gprbuild 2^>nul') do (
   if not defined GNAT_BIN set "GNAT_BIN=%%~dpG"
 )
 
-set "CXX_CMD="
 set "AR_CMD="
+set "ARCH_FLAG="
 if defined GNAT_BIN (
-  if exist "!GNAT_BIN!gcc.exe"    set "CXX_CMD=!GNAT_BIN!gcc.exe"
-  if exist "!GNAT_BIN!gcc-ar.exe" set "AR_CMD=!GNAT_BIN!gcc-ar.exe"
-  if not defined AR_CMD if exist "!GNAT_BIN!ar.exe" set "AR_CMD=!GNAT_BIN!ar.exe"
-)
+  if exist "!GNAT_BIN!gcc-ar.exe" ( set "AR_CMD=!GNAT_BIN!gcc-ar.exe"
+  ) else if exist "!GNAT_BIN!ar.exe" ( set "AR_CMD=!GNAT_BIN!ar.exe" )
 
-if not defined CXX_CMD (
-  where g++ >nul 2>&1
-  if errorlevel 1 (
-    echo [ada-pyramid] ERROR: GNAT gcc not found and g++ not found in PATH
-    exit /b 1
+  if exist "!GNAT_BIN!gcc.exe" (
+    for /f "tokens=*" %%T in ('"!GNAT_BIN!gcc.exe" -dumpmachine 2^>nul') do set "GNAT_TARGET=%%T"
+    echo [ada-pyramid] GNAT target : !GNAT_TARGET!
+    echo !GNAT_TARGET! | findstr /i "i686 i386 i486 i586" >nul 2>&1
+    if not errorlevel 1 set "ARCH_FLAG=-m32"
+    echo !GNAT_TARGET! | findstr /i "x86_64 amd64" >nul 2>&1
+    if not errorlevel 1 set "ARCH_FLAG=-m64"
   )
-  set "CXX_CMD=g++"
-  echo [ada-pyramid] WARNING: GNAT gcc not found; using system g++ - link may fail if it targets x86_64
 )
 
 if not defined AR_CMD (
   where ar >nul 2>&1
   if errorlevel 1 (
-    echo [ada-pyramid] ERROR: GNAT ar not found and ar not found in PATH
+    echo [ada-pyramid] ERROR: no ar found (checked GNAT bin and PATH^)
     exit /b 1
   )
   set "AR_CMD=ar"
 )
 
-echo [ada-pyramid] Compiler : !CXX_CMD!
+where g++ >nul 2>&1
+if errorlevel 1 (
+  echo [ada-pyramid] ERROR: g++ not found in PATH
+  exit /b 1
+)
+
+echo [ada-pyramid] Compiler : g++ !ARCH_FLAG!
 echo [ada-pyramid] Archiver : !AR_CMD!
 
 if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
@@ -87,12 +93,12 @@ if not exist "%BUILD_FB_DIR%\pyramid_services_tactical_objects_generated.h" (
 
 echo [ada-pyramid] Building GNAT-compatible generated FlatBuffers archive in "%OUT_DIR%"
 
-set "CXXFLAGS=-x c++ -std=c++17 -O2 -I%GEN_DIR% -I%GEN_FB_DIR% -I%BUILD_FB_DIR% -I%FLATBUFFERS_INCLUDE% -I%NLOHMANN_INCLUDE%"
+set "CXXFLAGS=!ARCH_FLAG! -std=c++17 -O2 -I%GEN_DIR% -I%GEN_FB_DIR% -I%BUILD_FB_DIR% -I%FLATBUFFERS_INCLUDE% -I%NLOHMANN_INCLUDE%"
 
-"!CXX_CMD!" %CXXFLAGS% -c "%GEN_DIR%\pyramid_data_model_base_codec.cpp"    -o "%OBJ_DIR%\pyramid_data_model_base_codec.o"    || exit /b 1
-"!CXX_CMD!" %CXXFLAGS% -c "%GEN_DIR%\pyramid_data_model_common_codec.cpp"  -o "%OBJ_DIR%\pyramid_data_model_common_codec.o"  || exit /b 1
-"!CXX_CMD!" %CXXFLAGS% -c "%GEN_DIR%\pyramid_data_model_tactical_codec.cpp" -o "%OBJ_DIR%\pyramid_data_model_tactical_codec.o" || exit /b 1
-"!CXX_CMD!" %CXXFLAGS% -c "%GEN_FB_DIR%\pyramid_services_tactical_objects_flatbuffers_codec.cpp" -o "%OBJ_DIR%\pyramid_services_tactical_objects_flatbuffers_codec.o" || exit /b 1
+g++ %CXXFLAGS% -c "%GEN_DIR%\pyramid_data_model_base_codec.cpp"    -o "%OBJ_DIR%\pyramid_data_model_base_codec.o"    || exit /b 1
+g++ %CXXFLAGS% -c "%GEN_DIR%\pyramid_data_model_common_codec.cpp"  -o "%OBJ_DIR%\pyramid_data_model_common_codec.o"  || exit /b 1
+g++ %CXXFLAGS% -c "%GEN_DIR%\pyramid_data_model_tactical_codec.cpp" -o "%OBJ_DIR%\pyramid_data_model_tactical_codec.o" || exit /b 1
+g++ %CXXFLAGS% -c "%GEN_FB_DIR%\pyramid_services_tactical_objects_flatbuffers_codec.cpp" -o "%OBJ_DIR%\pyramid_services_tactical_objects_flatbuffers_codec.o" || exit /b 1
 
 if exist "%TMP_LIB_FILE%" del /f /q "%TMP_LIB_FILE%" >nul 2>&1
 

@@ -19,36 +19,41 @@ if [[ "$FORCE_REBUILD" != "--force" && -f "$LIB_FILE" ]]; then
   exit 0
 fi
 
-# Prefer GNAT's own gcc/ar so objects and archive index are in the format that
-# GNAT's linker expects.  A system g++ (typically x86_64) produces objects whose
-# archive index format GNAT's cross ld cannot read.
-CXX_CMD=""
+# Locate GNAT toolchain (next to gprbuild).  GNAT gcc is Ada-only (no cc1plus),
+# so we use system g++ for C++ compilation, but we ask GNAT gcc for its target
+# triple and derive the -m32/-m64 arch flag so objects match the architecture
+# GNAT is linking for.  GNAT's ar is used to ensure a compatible archive index.
 AR_CMD=""
+ARCH_FLAG=""
 if command -v gprbuild >/dev/null 2>&1; then
   GNAT_BIN="$(dirname "$(command -v gprbuild)")"
-  if [[ -x "$GNAT_BIN/gcc" ]];    then CXX_CMD="$GNAT_BIN/gcc"; fi
   if [[ -x "$GNAT_BIN/gcc-ar" ]]; then AR_CMD="$GNAT_BIN/gcc-ar"
-  elif [[ -x "$GNAT_BIN/ar" ]];   then AR_CMD="$GNAT_BIN/ar"; fi
-fi
+  elif [[ -x "$GNAT_BIN/ar" ]];    then AR_CMD="$GNAT_BIN/ar"; fi
 
-if [[ -z "$CXX_CMD" ]]; then
-  if ! command -v g++ >/dev/null 2>&1; then
-    echo "[ada-pyramid] ERROR: GNAT gcc not found and g++ not found in PATH" >&2
-    exit 1
+  if [[ -x "$GNAT_BIN/gcc" ]]; then
+    GNAT_TARGET="$("$GNAT_BIN/gcc" -dumpmachine 2>/dev/null || true)"
+    echo "[ada-pyramid] GNAT target : $GNAT_TARGET"
+    case "$GNAT_TARGET" in
+      i686*|i386*|i486*|i586*) ARCH_FLAG="-m32" ;;
+      x86_64*|amd64*)           ARCH_FLAG="-m64" ;;
+    esac
   fi
-  CXX_CMD="g++"
-  echo "[ada-pyramid] WARNING: GNAT gcc not found; using system g++ - link may fail if it targets a different architecture"
 fi
 
 if [[ -z "$AR_CMD" ]]; then
   if ! command -v ar >/dev/null 2>&1; then
-    echo "[ada-pyramid] ERROR: GNAT ar not found and ar not found in PATH" >&2
+    echo "[ada-pyramid] ERROR: no ar found (checked GNAT bin and PATH)" >&2
     exit 1
   fi
   AR_CMD="ar"
 fi
 
-echo "[ada-pyramid] Compiler : $CXX_CMD"
+if ! command -v g++ >/dev/null 2>&1; then
+  echo "[ada-pyramid] ERROR: g++ not found in PATH" >&2
+  exit 1
+fi
+
+echo "[ada-pyramid] Compiler : g++ $ARCH_FLAG"
 echo "[ada-pyramid] Archiver : $AR_CMD"
 
 mkdir -p "$OBJ_DIR"
@@ -79,7 +84,7 @@ fi
 echo "[ada-pyramid] Building GNAT-compatible generated FlatBuffers archive in $OUT_DIR"
 
 CXXFLAGS=(
-  -x c++ -std=c++17 -O2
+  $ARCH_FLAG -std=c++17 -O2
   -I"$GEN_DIR"
   -I"$GEN_FB_DIR"
   -I"$BUILD_FB_DIR"
@@ -87,12 +92,12 @@ CXXFLAGS=(
   -I"$NLOHMANN_INCLUDE"
 )
 
-"$CXX_CMD" "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_base_codec.cpp"     -o "$OBJ_DIR/pyramid_data_model_base_codec.o"
-"$CXX_CMD" "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_common_codec.cpp"   -o "$OBJ_DIR/pyramid_data_model_common_codec.o"
-"$CXX_CMD" "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_tactical_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_tactical_codec.o"
-"$CXX_CMD" "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_autonomy_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_autonomy_codec.o"
-"$CXX_CMD" "${CXXFLAGS[@]}" -c "$GEN_FB_DIR/pyramid_services_tactical_objects_flatbuffers_codec.cpp"  -o "$OBJ_DIR/pyramid_services_tactical_objects_flatbuffers_codec.o"
-"$CXX_CMD" "${CXXFLAGS[@]}" -c "$GEN_FB_DIR/pyramid_services_autonomy_backend_flatbuffers_codec.cpp" -o "$OBJ_DIR/pyramid_services_autonomy_backend_flatbuffers_codec.o"
+g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_base_codec.cpp"     -o "$OBJ_DIR/pyramid_data_model_base_codec.o"
+g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_common_codec.cpp"   -o "$OBJ_DIR/pyramid_data_model_common_codec.o"
+g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_tactical_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_tactical_codec.o"
+g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_autonomy_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_autonomy_codec.o"
+g++ "${CXXFLAGS[@]}" -c "$GEN_FB_DIR/pyramid_services_tactical_objects_flatbuffers_codec.cpp"  -o "$OBJ_DIR/pyramid_services_tactical_objects_flatbuffers_codec.o"
+g++ "${CXXFLAGS[@]}" -c "$GEN_FB_DIR/pyramid_services_autonomy_backend_flatbuffers_codec.cpp" -o "$OBJ_DIR/pyramid_services_autonomy_backend_flatbuffers_codec.o"
 
 rm -f "$TMP_LIB_FILE"
 
