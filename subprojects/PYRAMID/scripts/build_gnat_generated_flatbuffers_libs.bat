@@ -79,6 +79,18 @@ ar rcs "%TMP_LIB_FILE%" ^
 if exist "%LIB_FILE%" del /f /q "%LIB_FILE%" >nul 2>&1
 move /y "%TMP_LIB_FILE%" "%LIB_FILE%" >nul || exit /b 1
 
+:: Re-index with GNAT-compatible ranlib so ld.exe can read the symbol table
+set "GNAT_BIN="
+for /f "tokens=*" %%G in ('where gprbuild 2^>nul') do (
+  if not defined GNAT_BIN set "GNAT_BIN=%%~dpG"
+)
+if defined GNAT_BIN if exist "!GNAT_BIN!ranlib.exe" (
+  echo [ada-pyramid] Re-indexing archive with GNAT ranlib...
+  "!GNAT_BIN!ranlib.exe" "%LIB_FILE%" || exit /b 1
+) else (
+  echo [ada-pyramid] WARNING: GNAT ranlib not found; if ld fails with "archive has no index", add GNAT bin to PATH
+)
+
 echo [ada-pyramid] Built:
 echo [ada-pyramid]   %LIB_FILE%
 exit /b 0
