@@ -32,8 +32,7 @@ fi
 GXX_DIR="$(dirname "$GXX_PATH")"
 
 CC="$GXX_DIR/gcc"
-if [[ -x "$GXX_DIR/gcc-ar" ]]; then AR="$GXX_DIR/gcc-ar"
-else AR="$GXX_DIR/ar"; fi
+AR="$GXX_DIR/ar"
 
 echo "[ada-pcl] Compiler : $CC"
 echo "[ada-pcl] Archiver : $AR"

@@ -30,8 +30,7 @@ fi
 GXX_DIR="$(dirname "$GXX_PATH")"
 
 CXX="$GXX_DIR/g++"
-if [[ -x "$GXX_DIR/gcc-ar" ]]; then AR="$GXX_DIR/gcc-ar"
-else AR="$GXX_DIR/ar"; fi
+AR="$GXX_DIR/ar"
 
 echo "[ada-pyramid] Compiler : $CXX"
 echo "[ada-pyramid] Archiver : $AR"

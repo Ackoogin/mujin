@@ -35,8 +35,7 @@ if not defined GXX_DIR (
 )
 
 set "CXX=!GXX_DIR!g++.exe"
-if exist "!GXX_DIR!gcc-ar.exe" ( set "AR=!GXX_DIR!gcc-ar.exe"
-) else ( set "AR=!GXX_DIR!ar.exe" )
+set "AR=!GXX_DIR!ar.exe"
 
 echo [ada-pyramid] Compiler : !CXX!
 echo [ada-pyramid] Archiver : !AR!

@@ -37,8 +37,7 @@ if not defined GXX_DIR (
 )
 
 set "CC=!GXX_DIR!gcc.exe"
-if exist "!GXX_DIR!gcc-ar.exe" ( set "AR=!GXX_DIR!gcc-ar.exe"
-) else ( set "AR=!GXX_DIR!ar.exe" )
+set "AR=!GXX_DIR!ar.exe"
 
 echo [ada-pcl] Compiler : !CC!
 echo [ada-pcl] Archiver : !AR!
