@@ -85,14 +85,20 @@ ar rcs "$TMP_LIB_FILE" \
 rm -f "$LIB_FILE"
 mv "$TMP_LIB_FILE" "$LIB_FILE"
 
-# Re-index with GNAT-compatible ranlib so ld can read the symbol table
+# Re-index with the GNAT cross-target ranlib so ld can read the symbol table.
+# The cross-target ranlib (e.g. i686-pc-mingw32-ranlib) must be used; the native
+# host ranlib writes an incompatible BFD index format that GNAT's cross ld rejects.
 if command -v gprbuild >/dev/null 2>&1; then
   GNAT_BIN="$(dirname "$(command -v gprbuild)")"
-  if [[ -x "$GNAT_BIN/ranlib" ]]; then
-    echo "[ada-pyramid] Re-indexing archive with GNAT ranlib..."
-    "$GNAT_BIN/ranlib" "$LIB_FILE"
+  USE_RANLIB="$(find "$GNAT_BIN" -maxdepth 1 -name '*-mingw32-ranlib*' ! -name 'ranlib' 2>/dev/null | head -1)"
+  if [[ -z "$USE_RANLIB" && -x "$GNAT_BIN/ranlib" ]]; then
+    USE_RANLIB="$GNAT_BIN/ranlib"
+  fi
+  if [[ -n "$USE_RANLIB" ]]; then
+    echo "[ada-pyramid] Re-indexing archive with $USE_RANLIB..."
+    "$USE_RANLIB" "$LIB_FILE"
   else
-    echo "[ada-pyramid] WARNING: GNAT ranlib not found; if ld fails with 'archive has no index', add GNAT bin to PATH"
+    echo "[ada-pyramid] WARNING: no GNAT ranlib found; link may fail with 'archive has no index'"
   fi
 fi
 

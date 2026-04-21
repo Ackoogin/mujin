@@ -79,16 +79,25 @@ ar rcs "%TMP_LIB_FILE%" ^
 if exist "%LIB_FILE%" del /f /q "%LIB_FILE%" >nul 2>&1
 move /y "%TMP_LIB_FILE%" "%LIB_FILE%" >nul || exit /b 1
 
-:: Re-index with GNAT-compatible ranlib so ld.exe can read the symbol table
+:: Re-index with the GNAT cross-target ranlib so ld.exe can read the symbol table.
+:: The cross-target ranlib (e.g. i686-pc-mingw32-ranlib) must be used; the native
+:: host ranlib writes an incompatible BFD index format that GNAT's cross ld rejects.
 set "GNAT_BIN="
 for /f "tokens=*" %%G in ('where gprbuild 2^>nul') do (
   if not defined GNAT_BIN set "GNAT_BIN=%%~dpG"
 )
-if defined GNAT_BIN if exist "!GNAT_BIN!ranlib.exe" (
-  echo [ada-pyramid] Re-indexing archive with GNAT ranlib...
-  "!GNAT_BIN!ranlib.exe" "%LIB_FILE%" || exit /b 1
-) else (
-  echo [ada-pyramid] WARNING: GNAT ranlib not found; if ld fails with "archive has no index", add GNAT bin to PATH
+if defined GNAT_BIN (
+  set "USE_RANLIB="
+  for /f "tokens=*" %%R in ('dir /b "!GNAT_BIN!*-mingw32-ranlib.exe" 2^>nul') do (
+    if not defined USE_RANLIB set "USE_RANLIB=!GNAT_BIN!%%R"
+  )
+  if not defined USE_RANLIB if exist "!GNAT_BIN!ranlib.exe" set "USE_RANLIB=!GNAT_BIN!ranlib.exe"
+  if defined USE_RANLIB (
+    echo [ada-pyramid] Re-indexing archive with !USE_RANLIB!...
+    "!USE_RANLIB!" "%LIB_FILE%" || exit /b 1
+  ) else (
+    echo [ada-pyramid] WARNING: no GNAT ranlib found; link may fail with "archive has no index"
+  )
 )
 
 echo [ada-pyramid] Built:
