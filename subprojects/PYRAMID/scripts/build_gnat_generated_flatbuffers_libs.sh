@@ -19,10 +19,12 @@ if [[ "$FORCE_REBUILD" != "--force" && -f "$LIB_FILE" ]]; then
   exit 0
 fi
 
-# Locate GNAT toolchain (next to gprbuild).  GNAT gcc is Ada-only (no cc1plus),
-# so we use system g++ for C++ compilation, but we ask GNAT gcc for its target
-# triple and derive the -m32/-m64 arch flag so objects match the architecture
-# GNAT is linking for.  GNAT's ar is used to ensure a compatible archive index.
+# Locate GNAT toolchain (next to gprbuild).  GNAT gcc is Ada/C only (no cc1plus),
+# so system g++ is used for C++ compilation.  We query GNAT gcc for its target
+# triple to derive the right -m32/-m64 flag, ensuring the objects match the
+# architecture GNAT links for.  GNAT's ar is used for a compatible archive index.
+# libstdc++.a from the g++ installation is copied into OUT_DIR so GNAT's linker
+# can satisfy -lstdc++ without needing to know the MinGW lib paths.
 AR_CMD=""
 ARCH_FLAG=""
 if command -v gprbuild >/dev/null 2>&1; then
@@ -111,6 +113,18 @@ rm -f "$TMP_LIB_FILE"
 
 rm -f "$LIB_FILE"
 mv "$TMP_LIB_FILE" "$LIB_FILE"
+
+# Copy libstdc++ from g++'s own installation into OUT_DIR so GNAT's linker
+# can satisfy -lstdc++ without needing to know the MinGW lib paths.
+GXX_LIBSTDCXX="$(g++ ${ARCH_FLAG} -print-file-name=libstdc++.a 2>/dev/null || true)"
+if [[ -n "$GXX_LIBSTDCXX" && "$GXX_LIBSTDCXX" != "libstdc++.a" && -f "$GXX_LIBSTDCXX" ]]; then
+  GXX_LIB_DIR="$(dirname "$GXX_LIBSTDCXX")"
+  echo "[ada-pyramid] Copying libstdc++ from $GXX_LIB_DIR to $OUT_DIR"
+  cp -f "$GXX_LIB_DIR/libstdc++.a"     "$OUT_DIR/" 2>/dev/null || true
+  cp -f "$GXX_LIB_DIR/libstdc++.dll.a" "$OUT_DIR/" 2>/dev/null || true
+else
+  echo "[ada-pyramid] WARNING: libstdc++.a not found via 'g++ ${ARCH_FLAG} -print-file-name'; link may fail with cannot find -lstdc++"
+fi
 
 echo "[ada-pyramid] Built:"
 echo "[ada-pyramid]   $LIB_FILE"

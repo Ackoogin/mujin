@@ -22,11 +22,12 @@ if "%FORCE_REBUILD%"=="0" if exist "%LIB_FILE%" (
   exit /b 0
 )
 
-:: Locate GNAT toolchain (next to gprbuild).  We use GNAT's ar so the archive
-:: index is written in the format GNAT's linker expects.  GNAT gcc is Ada-only
-:: (no cc1plus), so we still use system g++ for C++ compilation, but we ask
-:: GNAT gcc for its target triple and derive the -m32/-m64 arch flag so the
-:: objects match the architecture GNAT is linking for.
+:: Locate GNAT toolchain (next to gprbuild).  GNAT gcc is Ada/C only (no cc1plus),
+:: so system g++ is used for C++ compilation.  We query GNAT gcc for its target
+:: triple to derive the right -m32/-m64 flag, ensuring the objects match the
+:: architecture GNAT links for.  GNAT's ar is used for a compatible archive index.
+:: libstdc++.a from the g++ installation is copied into OUT_DIR so that GNAT's
+:: linker (which only searches GNAT's own lib paths) can satisfy -lstdc++.
 set "GNAT_BIN="
 for /f "tokens=*" %%G in ('where gprbuild 2^>nul') do (
   if not defined GNAT_BIN set "GNAT_BIN=%%~dpG"
@@ -110,6 +111,19 @@ if exist "%TMP_LIB_FILE%" del /f /q "%TMP_LIB_FILE%" >nul 2>&1
 
 if exist "%LIB_FILE%" del /f /q "%LIB_FILE%" >nul 2>&1
 move /y "%TMP_LIB_FILE%" "%LIB_FILE%" >nul || exit /b 1
+
+:: Copy libstdc++ from g++'s own installation into OUT_DIR so GNAT's linker
+:: (which only searches GNAT's own lib paths) can satisfy -lstdc++ at link time.
+set "GXX_LIBSTDCXX="
+for /f "tokens=*" %%L in ('g++ !ARCH_FLAG! -print-file-name=libstdc++.a 2^>nul') do set "GXX_LIBSTDCXX=%%L"
+if defined GXX_LIBSTDCXX if not "!GXX_LIBSTDCXX!"=="libstdc++.a" (
+  for %%D in ("!GXX_LIBSTDCXX!") do set "GXX_LIB_DIR=%%~dpD"
+  echo [ada-pyramid] Copying libstdc++ from !GXX_LIB_DIR! to "%OUT_DIR%"
+  if exist "!GXX_LIB_DIR!libstdc++.a"     copy /y "!GXX_LIB_DIR!libstdc++.a"     "%OUT_DIR%\" >nul
+  if exist "!GXX_LIB_DIR!libstdc++.dll.a" copy /y "!GXX_LIB_DIR!libstdc++.dll.a" "%OUT_DIR%\" >nul
+) else (
+  echo [ada-pyramid] WARNING: 32-bit libstdc++ not found via 'g++ !ARCH_FLAG! -print-file-name'; link may fail with cannot find -lstdc++
+)
 
 echo [ada-pyramid] Built:
 echo [ada-pyramid]   %LIB_FILE%
