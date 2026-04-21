@@ -4,9 +4,10 @@
 
 This document describes the current Tactical Objects alignment with the
 PYRAMID proto interface. It is the stable design reference for the shipped
-component.
+component. It is not an implementation backlog; completed migration work has
+been folded into the current-state sections below.
 
-## Current State
+## Current State (2026-04-21)
 
 Tactical Objects exposes the PYRAMID tactical-objects proto contract through
 generated service bindings. The shipped executable path is:
@@ -196,7 +197,7 @@ ctest --test-dir build -C Release -R "tobj_cpp_app_client_(e2e|flatbuffers_e2e|p
 Broader generated-binding, gRPC, ROS2, and transport status is tracked in
 [generated_bindings_status.md](../../reports/PYRAMID/generated_bindings_status.md).
 
-## Open Design Point
+## Remaining Design Point
 
 The current standard high-rate stream is `standard.entity_matches`. That keeps
 the mass-send path compact and wire efficient. If consumers need full detail in

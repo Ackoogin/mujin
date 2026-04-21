@@ -87,8 +87,8 @@ World model producer
 
 ## Progress To Date
 
-The first implementation slice has established the new contract and an
-in-process bridge that exercises it through generated PYRAMID service bindings.
+The current implementation has established the new contract and an in-process
+bridge that exercises it through generated PYRAMID service bindings.
 
 | Area | Current state |
 |------|---------------|
@@ -97,10 +97,13 @@ in-process bridge that exercises it through generated PYRAMID service bindings.
 | PYRAMID generation | C++ service bindings, FlatBuffers schemas, JSON codecs, and protobuf generation include the autonomy backend contract |
 | AME bridge | `PyramidAutonomyBridge` implements the generated autonomy backend service handler in-process |
 | Retained products | The bridge keeps requirement, state, plan, run, and placement stores behind read operations instead of drain-only queues |
+| Query semantics | `Plan`, `ExecutionRun`, and `RequirementPlacement` product reads support retained repeated reads and `Query.one_shot` removal |
 | Planning path | `PLAN_ONLY` requirements are planned and exposed as read-only `Plan` products |
 | Execution path | `PLAN_AND_EXECUTE` requirements produce `ExecutionRun` products and placement traceability |
 | State feedback | `State_Service.CreateState` / `UpdateState` update the AME world model and can complete waiting execution steps |
+| Requirement lifecycle | `UpdateRequirement` refreshes stored requirement/progress; `DeleteRequirement` removes the requirement and marks matching runs cancelled |
 | Execution abstraction | AME plan leaves now submit through `IExecutionSink`, allowing command-only or typed-placement-backed execution |
+| Binding policies | `CommandOnly`, `PreferTypedPlacement`, and `RequireTypedPlacement` behavior is implemented; strict policy rejects unbound commands and fails the run |
 | Test coverage | Contract, bridge, execution-sink, and backend execution behaviors are covered by focused C++ tests |
 
 Implementation files of interest:
@@ -115,14 +118,13 @@ Implementation files of interest:
 | `subprojects/AME/tests/test_ame_autonomy_contract.cpp` | Generated-service contract and bridge behavior tests |
 | `subprojects/AME/tests/test_execution_sink.cpp` | Command-only, typed-placement, fallback, and strict-policy tests |
 
-Current verification command:
+Focused verification command:
 
 ```bat
 ctest --test-dir build -C Release -R "ExecutionSink|AutonomyBackend|AmeAutonomyContract|ProtoBindings|CodecDispatch" --output-on-failure
 ```
 
-At the time this document was updated, the selected suite passed with `67/67`
-tests.
+Use that selected suite for AME/PYRAMID contract and execution-binding changes.
 
 ## Responsibility Mapping
 
@@ -245,28 +247,34 @@ message Query {
 }
 ```
 
-AME read services should therefore support:
+AME product read services should therefore support:
 
 - lookup by `id[]`
 - repeated idempotent reads when `one_shot` is unset or false
 - one-shot delivery only when `Query.one_shot` is set
 
+Current implementation note: `Plan_Service.ReadPlan`,
+`Execution_Run_Service.ReadRun`, and
+`Requirement_Placement_Service.ReadPlacement` implement `one_shot` removal.
+`Planning_Execution_Service.ReadRequirement` is currently retained/idempotent
+only; whether requirements should also be removed by `one_shot` remains an open
+bridge-hardening decision.
+
 If status, session, target-service, or world-version filtering is needed
 publicly, that should be a future common-query extension rather than a hidden
 AME-specific convention.
 
-## Backend Implementation Direction
+## Backend Implementation Status
 
-1. Replace the old session/command backend boundary with
-   `PlanningExecutionRequirement` CRUD.
-2. Map created requirements into AME planning problems and execution runs.
-3. Expose generated plans through `Plan_Service.ReadPlan`.
-4. Execute plans through generated target component service bindings, starting
-   with Tactical Objects.
-5. Record typed component interactions as `RequirementPlacement` products.
-6. Expose execution state through `Execution_Run_Service.ReadRun` and
-   `Requirement.base.status` / `Achievement`.
-7. Ingest external world-state changes through `State_Service`.
+| Direction | Status |
+|-----------|--------|
+| Replace the old session/command backend boundary with `PlanningExecutionRequirement` CRUD | Implemented in `PyramidAutonomyBridge` |
+| Map created requirements into AME planning problems and execution runs | Implemented for expression goals and available-agent state |
+| Expose generated plans through `Plan_Service.ReadPlan` | Implemented |
+| Record typed component interactions as `RequirementPlacement` products | Implemented through `RequirementBindingExecutionSink` |
+| Expose execution state through `Execution_Run_Service.ReadRun` and requirement status / achievement | Implemented for plan-only, waiting, achieved, failed, and cancelled states |
+| Ingest external world-state changes through `State_Service` | Implemented for create/update state feedback |
+| Execute plans through generated target component service bindings | Remaining work; placements are recorded locally but not yet invoked against real generated clients |
 
 ## Remaining Plan
 
@@ -275,16 +283,18 @@ after each step.
 
 ### Slice 1: Contract Stabilisation
 
-Status: mostly complete.
+Status: implementation complete; external consumer review remains.
 
-- Keep `PlanningExecutionRequirement` as the AME delegation surface.
-- Keep `Plan`, `ExecutionRun`, and `RequirementPlacement` as read-only products.
-- Preserve `State_Service` as AME world-state ingress.
-- Keep Objectives/Tasks references as traceability only until those component
-  protos exist.
-- Maintain generated JSON/FlatBuffers/protobuf coverage for autonomy messages.
+Completed:
 
-Open work:
+- `PlanningExecutionRequirement` is the AME delegation surface.
+- `Plan`, `ExecutionRun`, and `RequirementPlacement` are read-only products.
+- `State_Service` is AME world-state ingress.
+- Objectives/Tasks references are traceability only until those component protos
+  exist.
+- Generated JSON/FlatBuffers/protobuf coverage includes autonomy messages.
+
+Open:
 
 - Review field naming and enum values with PYRAMID consumers before treating
   the proto as stable.
@@ -293,12 +303,24 @@ Open work:
 
 ### Slice 2: Backend Bridge Hardening
 
-Status: initial bridge complete; hardening remains.
+Status: bridge behavior is substantially implemented; audit/replay hardening
+remains.
 
-- Expand retained-store semantics for repeated reads and `one_shot` behavior.
-- Add cancellation behavior from `DeleteRequirement` into running AME execution.
+Completed:
+
+- Retained repeated reads are implemented for product stores.
+- `Query.one_shot` removal is implemented for plan, run, and placement product
+  reads.
+- `DeleteRequirement` cancels matching execution runs.
+- State feedback can move waiting execution runs and placements to completed.
+- Strict binding-policy failures mark the run and requirement failed.
+
+Open:
+
 - Improve `UpdateRequirement` handling for approved-plan execution and
   requirement refinement.
+- Decide whether `PlanningExecutionRequirement` reads should support
+  `one_shot`; current requirement reads are retained/idempotent.
 - Persist enough plan/run/placement metadata for replay and audit.
 - Add failure causes to requirement achievement and execution-run products.
 
@@ -323,7 +345,18 @@ provide their own requirement CRUD contracts and then be registered as bindings.
 
 ### Slice 4: Test Client And Scenario Coverage
 
-Status: generated-service tests exist; standalone client remains.
+Status: generated-service and focused scenario tests exist; standalone client
+and UI-facing smoke coverage remain.
+
+Completed:
+
+- Generated-service bridge tests create requirements, read plans/runs/placements,
+  push state feedback, and re-read completion state.
+- Plan-only and plan-and-execute fixtures exist.
+- Strict binding-policy failure is covered.
+- Preferred binding-policy fallback is covered at the execution-sink layer.
+
+Open:
 
 - Add a small generated-contract test client that can:
   - create a `PlanningExecutionRequirement`
@@ -332,10 +365,6 @@ Status: generated-service tests exist; standalone client remains.
   - read `RequirementPlacement` records
   - push `StateUpdate` feedback
   - re-read the run and requirement achievement
-- Provide at least one plan-only fixture and one plan-and-execute fixture.
-- Add a strict binding-policy fixture that demonstrates failure for unbound
-  commands.
-- Add a preferred binding-policy fixture that demonstrates command fallback.
 - Keep the client useful both as a smoke test and as a reference for future
   Objectives/Tasks integrations.
 
