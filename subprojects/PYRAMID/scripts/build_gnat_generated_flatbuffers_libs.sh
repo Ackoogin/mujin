@@ -19,15 +19,21 @@ if [[ "$FORCE_REBUILD" != "--force" && -f "$LIB_FILE" ]]; then
   exit 0
 fi
 
-if ! command -v g++ >/dev/null 2>&1; then
+# Use g++ and all companion tools (ar) from the same bin directory so that the
+# compiler and archiver are always from the same toolchain and produce
+# mutually-compatible object/archive formats.
+GXX_PATH="$(command -v g++ 2>/dev/null || true)"
+if [[ -z "$GXX_PATH" ]]; then
   echo "[ada-pyramid] ERROR: g++ not found in PATH" >&2
   exit 1
 fi
+GXX_DIR="$(dirname "$GXX_PATH")"
 
-if ! command -v ar >/dev/null 2>&1; then
-  echo "[ada-pyramid] ERROR: ar not found in PATH" >&2
-  exit 1
-fi
+CXX="$GXX_DIR/g++"
+AR="$GXX_DIR/ar"
+
+echo "[ada-pyramid] Compiler : $CXX"
+echo "[ada-pyramid] Archiver : $AR"
 
 mkdir -p "$OBJ_DIR"
 
@@ -65,16 +71,16 @@ CXXFLAGS=(
   -I"$NLOHMANN_INCLUDE"
 )
 
-g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_base_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_base_codec.o"
-g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_common_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_common_codec.o"
-g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_tactical_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_tactical_codec.o"
-g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_autonomy_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_autonomy_codec.o"
-g++ "${CXXFLAGS[@]}" -c "$GEN_FB_DIR/pyramid_services_tactical_objects_flatbuffers_codec.cpp" -o "$OBJ_DIR/pyramid_services_tactical_objects_flatbuffers_codec.o"
-g++ "${CXXFLAGS[@]}" -c "$GEN_FB_DIR/pyramid_services_autonomy_backend_flatbuffers_codec.cpp" -o "$OBJ_DIR/pyramid_services_autonomy_backend_flatbuffers_codec.o"
+"$CXX" "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_base_codec.cpp"     -o "$OBJ_DIR/pyramid_data_model_base_codec.o"
+"$CXX" "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_common_codec.cpp"   -o "$OBJ_DIR/pyramid_data_model_common_codec.o"
+"$CXX" "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_tactical_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_tactical_codec.o"
+"$CXX" "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_autonomy_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_autonomy_codec.o"
+"$CXX" "${CXXFLAGS[@]}" -c "$GEN_FB_DIR/pyramid_services_tactical_objects_flatbuffers_codec.cpp"  -o "$OBJ_DIR/pyramid_services_tactical_objects_flatbuffers_codec.o"
+"$CXX" "${CXXFLAGS[@]}" -c "$GEN_FB_DIR/pyramid_services_autonomy_backend_flatbuffers_codec.cpp" -o "$OBJ_DIR/pyramid_services_autonomy_backend_flatbuffers_codec.o"
 
 rm -f "$TMP_LIB_FILE"
 
-ar rcs "$TMP_LIB_FILE" \
+"$AR" rcs "$TMP_LIB_FILE" \
   "$OBJ_DIR/pyramid_data_model_base_codec.o" \
   "$OBJ_DIR/pyramid_data_model_common_codec.o" \
   "$OBJ_DIR/pyramid_data_model_tactical_codec.o" \
@@ -84,6 +90,19 @@ ar rcs "$TMP_LIB_FILE" \
 
 rm -f "$LIB_FILE"
 mv "$TMP_LIB_FILE" "$LIB_FILE"
+
+# OUT_DIR is on GNAT's linker -L path but GNAT's ld doesn't know about the
+# g++ installation's lib directory.  Copy libstdc++.a from g++'s own lib into
+# OUT_DIR so -lstdc++ resolves there.
+LIBSTDCXX="$("$CXX" -print-file-name=libstdc++.a 2>/dev/null || true)"
+if [[ -n "$LIBSTDCXX" && "$LIBSTDCXX" != "libstdc++.a" && -f "$LIBSTDCXX" ]]; then
+  echo "[ada-pyramid] Copying libstdc++ from $LIBSTDCXX to $OUT_DIR"
+  cp -f "$LIBSTDCXX" "$OUT_DIR/"
+  LIBSTDCXX_DIR="$(dirname "$LIBSTDCXX")"
+  [[ -f "$LIBSTDCXX_DIR/libstdc++.dll.a" ]] && cp -f "$LIBSTDCXX_DIR/libstdc++.dll.a" "$OUT_DIR/" || true
+else
+  echo "[ada-pyramid] WARNING: libstdc++.a not found via '$CXX -print-file-name'; link may fail with cannot find -lstdc++"
+fi
 
 echo "[ada-pyramid] Built:"
 echo "[ada-pyramid]   $LIB_FILE"

@@ -290,7 +290,17 @@ if(WIN32 AND TARGET pyramid_grpc_transport)
     )
 endif()
 
-find_program(GPRBUILD gprbuild)
+# Prefer the gprbuild that lives alongside g++ so the Ada compiler, C/C++
+# compiler, linker, and runtime libraries all come from the same toolchain.
+find_program(GXX_FOR_ADA g++)
+if(GXX_FOR_ADA)
+    get_filename_component(_gxx_dir "${GXX_FOR_ADA}" DIRECTORY)
+    find_program(GPRBUILD gprbuild HINTS "${_gxx_dir}" NO_DEFAULT_PATH)
+endif()
+if(NOT GPRBUILD)
+    find_program(GPRBUILD gprbuild)
+endif()
+unset(_gxx_dir)
 set(PYRAMID_PROTO_ROOT ${PYRAMID_ROOT_DIR}/proto)
 if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     set(ADA_TEST_SRC_DIR ${PYRAMID_ROOT_DIR}/tests/ada)

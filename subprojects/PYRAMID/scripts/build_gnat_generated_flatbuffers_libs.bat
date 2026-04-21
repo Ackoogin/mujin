@@ -22,17 +22,23 @@ if "%FORCE_REBUILD%"=="0" if exist "%LIB_FILE%" (
   exit /b 0
 )
 
-where g++ >nul 2>&1
-if errorlevel 1 (
+:: Use g++ and all companion tools (ar, ranlib) from the same bin directory so
+:: that the compiler, archiver, and symbol-table indexer are always from the
+:: same toolchain and produce mutually-compatible object/archive formats.
+set "GXX_DIR="
+for /f "tokens=*" %%G in ('where g++ 2^>nul') do (
+  if not defined GXX_DIR set "GXX_DIR=%%~dpG"
+)
+if not defined GXX_DIR (
   echo [ada-pyramid] ERROR: g++ not found in PATH
   exit /b 1
 )
 
-where ar >nul 2>&1
-if errorlevel 1 (
-  echo [ada-pyramid] ERROR: ar not found in PATH
-  exit /b 1
-)
+set "CXX=!GXX_DIR!g++.exe"
+set "AR=!GXX_DIR!ar.exe"
+
+echo [ada-pyramid] Compiler : !CXX!
+echo [ada-pyramid] Archiver : !AR!
 
 if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
 if not exist "%OBJ_DIR%" mkdir "%OBJ_DIR%"
@@ -63,14 +69,14 @@ echo [ada-pyramid] Building GNAT-compatible generated FlatBuffers archive in "%O
 
 set "CXXFLAGS=-std=c++17 -O2 -I%GEN_DIR% -I%GEN_FB_DIR% -I%BUILD_FB_DIR% -I%FLATBUFFERS_INCLUDE% -I%NLOHMANN_INCLUDE%"
 
-g++ %CXXFLAGS% -c "%GEN_DIR%\pyramid_data_model_base_codec.cpp" -o "%OBJ_DIR%\pyramid_data_model_base_codec.o" || exit /b 1
-g++ %CXXFLAGS% -c "%GEN_DIR%\pyramid_data_model_common_codec.cpp" -o "%OBJ_DIR%\pyramid_data_model_common_codec.o" || exit /b 1
-g++ %CXXFLAGS% -c "%GEN_DIR%\pyramid_data_model_tactical_codec.cpp" -o "%OBJ_DIR%\pyramid_data_model_tactical_codec.o" || exit /b 1
-g++ %CXXFLAGS% -c "%GEN_FB_DIR%\pyramid_services_tactical_objects_flatbuffers_codec.cpp" -o "%OBJ_DIR%\pyramid_services_tactical_objects_flatbuffers_codec.o" || exit /b 1
+"!CXX!" %CXXFLAGS% -c "%GEN_DIR%\pyramid_data_model_base_codec.cpp"    -o "%OBJ_DIR%\pyramid_data_model_base_codec.o"    || exit /b 1
+"!CXX!" %CXXFLAGS% -c "%GEN_DIR%\pyramid_data_model_common_codec.cpp"  -o "%OBJ_DIR%\pyramid_data_model_common_codec.o"  || exit /b 1
+"!CXX!" %CXXFLAGS% -c "%GEN_DIR%\pyramid_data_model_tactical_codec.cpp" -o "%OBJ_DIR%\pyramid_data_model_tactical_codec.o" || exit /b 1
+"!CXX!" %CXXFLAGS% -c "%GEN_FB_DIR%\pyramid_services_tactical_objects_flatbuffers_codec.cpp" -o "%OBJ_DIR%\pyramid_services_tactical_objects_flatbuffers_codec.o" || exit /b 1
 
 if exist "%TMP_LIB_FILE%" del /f /q "%TMP_LIB_FILE%" >nul 2>&1
 
-ar rcs "%TMP_LIB_FILE%" ^
+"!AR!" rcs "%TMP_LIB_FILE%" ^
   "%OBJ_DIR%\pyramid_data_model_base_codec.o" ^
   "%OBJ_DIR%\pyramid_data_model_common_codec.o" ^
   "%OBJ_DIR%\pyramid_data_model_tactical_codec.o" ^
@@ -78,6 +84,21 @@ ar rcs "%TMP_LIB_FILE%" ^
 
 if exist "%LIB_FILE%" del /f /q "%LIB_FILE%" >nul 2>&1
 move /y "%TMP_LIB_FILE%" "%LIB_FILE%" >nul || exit /b 1
+
+:: OUT_DIR is on GNAT's linker -L path but GNAT's ld doesn't know about
+:: the g++ installation's lib directory.  Copy libstdc++.a (and the DLL
+:: import stub) from g++'s own lib into OUT_DIR so -lstdc++ resolves there.
+set "LIBSTDCXX="
+for /f "tokens=*" %%L in ('"!CXX!" -print-file-name=libstdc++.a 2^>nul') do set "LIBSTDCXX=%%L"
+if defined LIBSTDCXX if not "!LIBSTDCXX!"=="libstdc++.a" (
+  echo [ada-pyramid] Copying libstdc++ from !LIBSTDCXX! to "%OUT_DIR%"
+  copy /y "!LIBSTDCXX!" "%OUT_DIR%\" >nul
+  for %%D in ("!LIBSTDCXX!") do (
+    if exist "%%~dpDlibstdc++.dll.a" copy /y "%%~dpDlibstdc++.dll.a" "%OUT_DIR%\" >nul
+  )
+) else (
+  echo [ada-pyramid] WARNING: libstdc++.a not found via '!CXX! -print-file-name'; link may fail with cannot find -lstdc++
+)
 
 echo [ada-pyramid] Built:
 echo [ada-pyramid]   %LIB_FILE%

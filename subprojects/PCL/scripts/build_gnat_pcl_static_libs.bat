@@ -24,17 +24,23 @@ if "%FORCE_REBUILD%"=="0" if exist "%CORE_LIB%" if exist "%SOCKET_LIB%" if exist
   exit /b 0
 )
 
-where gcc >nul 2>&1
-if errorlevel 1 (
-  echo [ada-pcl] ERROR: gcc not found in PATH
+:: Use gcc and all companion tools (ar) from the same bin directory as g++ so
+:: that the compiler and archiver are always from the same toolchain and produce
+:: mutually-compatible object/archive formats.
+set "GXX_DIR="
+for /f "tokens=*" %%G in ('where g++ 2^>nul') do (
+  if not defined GXX_DIR set "GXX_DIR=%%~dpG"
+)
+if not defined GXX_DIR (
+  echo [ada-pcl] ERROR: g++ not found in PATH
   exit /b 1
 )
 
-where ar >nul 2>&1
-if errorlevel 1 (
-  echo [ada-pcl] ERROR: ar not found in PATH
-  exit /b 1
-)
+set "CC=!GXX_DIR!gcc.exe"
+set "AR=!GXX_DIR!ar.exe"
+
+echo [ada-pcl] Compiler : !CC!
+echo [ada-pcl] Archiver : !AR!
 
 if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
 if not exist "%OBJ_DIR%" mkdir "%OBJ_DIR%"
@@ -53,27 +59,27 @@ echo [ada-pcl] Building GNAT-compatible PCL archives in "%OUT_DIR%"
 
 set "CFLAGS=-std=c11 -O2 -I%ROOT_DIR%\include -I%ROOT_DIR%\src"
 
-gcc %CFLAGS% -c "%ROOT_DIR%\src\pcl_container.c" -o "%OBJ_DIR%\pcl_container.o" || exit /b 1
-gcc %CFLAGS% -c "%ROOT_DIR%\src\pcl_executor.c" -o "%OBJ_DIR%\pcl_executor.o" || exit /b 1
-gcc %CFLAGS% -c "%ROOT_DIR%\src\pcl_log.c" -o "%OBJ_DIR%\pcl_log.o" || exit /b 1
-gcc %CFLAGS% -c "%ROOT_DIR%\src\pcl_bridge.c" -o "%OBJ_DIR%\pcl_bridge.o" || exit /b 1
-gcc %CFLAGS% -c "%ROOT_DIR%\src\pcl_transport_socket.c" -o "%OBJ_DIR%\pcl_transport_socket.o" || exit /b 1
-gcc %CFLAGS% -c "%ROOT_DIR%\src\pcl_transport_shared_memory.c" -o "%OBJ_DIR%\pcl_transport_shared_memory.o" || exit /b 1
+"!CC!" %CFLAGS% -c "%ROOT_DIR%\src\pcl_container.c"               -o "%OBJ_DIR%\pcl_container.o"               || exit /b 1
+"!CC!" %CFLAGS% -c "%ROOT_DIR%\src\pcl_executor.c"                -o "%OBJ_DIR%\pcl_executor.o"                || exit /b 1
+"!CC!" %CFLAGS% -c "%ROOT_DIR%\src\pcl_log.c"                     -o "%OBJ_DIR%\pcl_log.o"                     || exit /b 1
+"!CC!" %CFLAGS% -c "%ROOT_DIR%\src\pcl_bridge.c"                  -o "%OBJ_DIR%\pcl_bridge.o"                  || exit /b 1
+"!CC!" %CFLAGS% -c "%ROOT_DIR%\src\pcl_transport_socket.c"        -o "%OBJ_DIR%\pcl_transport_socket.o"        || exit /b 1
+"!CC!" %CFLAGS% -c "%ROOT_DIR%\src\pcl_transport_shared_memory.c" -o "%OBJ_DIR%\pcl_transport_shared_memory.o" || exit /b 1
 
-if exist "%CORE_TMP%" del /f /q "%CORE_TMP%" >nul 2>&1
+if exist "%CORE_TMP%"   del /f /q "%CORE_TMP%"   >nul 2>&1
 if exist "%SOCKET_TMP%" del /f /q "%SOCKET_TMP%" >nul 2>&1
-if exist "%SHMEM_TMP%" del /f /q "%SHMEM_TMP%" >nul 2>&1
+if exist "%SHMEM_TMP%"  del /f /q "%SHMEM_TMP%"  >nul 2>&1
 
-ar rcs "%CORE_TMP%" "%OBJ_DIR%\pcl_container.o" "%OBJ_DIR%\pcl_executor.o" "%OBJ_DIR%\pcl_log.o" "%OBJ_DIR%\pcl_bridge.o" || exit /b 1
-ar rcs "%SOCKET_TMP%" "%OBJ_DIR%\pcl_transport_socket.o" || exit /b 1
-ar rcs "%SHMEM_TMP%" "%OBJ_DIR%\pcl_transport_shared_memory.o" || exit /b 1
+"!AR!" rcs "%CORE_TMP%"   "%OBJ_DIR%\pcl_container.o" "%OBJ_DIR%\pcl_executor.o" "%OBJ_DIR%\pcl_log.o" "%OBJ_DIR%\pcl_bridge.o" || exit /b 1
+"!AR!" rcs "%SOCKET_TMP%" "%OBJ_DIR%\pcl_transport_socket.o"        || exit /b 1
+"!AR!" rcs "%SHMEM_TMP%"  "%OBJ_DIR%\pcl_transport_shared_memory.o" || exit /b 1
 
-if exist "%CORE_LIB%" del /f /q "%CORE_LIB%" >nul 2>&1
+if exist "%CORE_LIB%"   del /f /q "%CORE_LIB%"   >nul 2>&1
 if exist "%SOCKET_LIB%" del /f /q "%SOCKET_LIB%" >nul 2>&1
-if exist "%SHMEM_LIB%" del /f /q "%SHMEM_LIB%" >nul 2>&1
-move /y "%CORE_TMP%" "%CORE_LIB%" >nul || exit /b 1
+if exist "%SHMEM_LIB%"  del /f /q "%SHMEM_LIB%"  >nul 2>&1
+move /y "%CORE_TMP%"   "%CORE_LIB%"   >nul || exit /b 1
 move /y "%SOCKET_TMP%" "%SOCKET_LIB%" >nul || exit /b 1
-move /y "%SHMEM_TMP%" "%SHMEM_LIB%" >nul || exit /b 1
+move /y "%SHMEM_TMP%"  "%SHMEM_LIB%"  >nul || exit /b 1
 
 echo [ada-pcl] Built:
 echo [ada-pcl]   %CORE_LIB%
