@@ -19,15 +19,37 @@ if [[ "$FORCE_REBUILD" != "--force" && -f "$LIB_FILE" ]]; then
   exit 0
 fi
 
-if ! command -v g++ >/dev/null 2>&1; then
-  echo "[ada-pyramid] ERROR: g++ not found in PATH" >&2
-  exit 1
+# Prefer GNAT's own gcc/ar so objects and archive index are in the format that
+# GNAT's linker expects.  A system g++ (typically x86_64) produces objects whose
+# archive index format GNAT's cross ld cannot read.
+CXX_CMD=""
+AR_CMD=""
+if command -v gprbuild >/dev/null 2>&1; then
+  GNAT_BIN="$(dirname "$(command -v gprbuild)")"
+  if [[ -x "$GNAT_BIN/gcc" ]];    then CXX_CMD="$GNAT_BIN/gcc"; fi
+  if [[ -x "$GNAT_BIN/gcc-ar" ]]; then AR_CMD="$GNAT_BIN/gcc-ar"
+  elif [[ -x "$GNAT_BIN/ar" ]];   then AR_CMD="$GNAT_BIN/ar"; fi
 fi
 
-if ! command -v ar >/dev/null 2>&1; then
-  echo "[ada-pyramid] ERROR: ar not found in PATH" >&2
-  exit 1
+if [[ -z "$CXX_CMD" ]]; then
+  if ! command -v g++ >/dev/null 2>&1; then
+    echo "[ada-pyramid] ERROR: GNAT gcc not found and g++ not found in PATH" >&2
+    exit 1
+  fi
+  CXX_CMD="g++"
+  echo "[ada-pyramid] WARNING: GNAT gcc not found; using system g++ - link may fail if it targets a different architecture"
 fi
+
+if [[ -z "$AR_CMD" ]]; then
+  if ! command -v ar >/dev/null 2>&1; then
+    echo "[ada-pyramid] ERROR: GNAT ar not found and ar not found in PATH" >&2
+    exit 1
+  fi
+  AR_CMD="ar"
+fi
+
+echo "[ada-pyramid] Compiler : $CXX_CMD"
+echo "[ada-pyramid] Archiver : $AR_CMD"
 
 mkdir -p "$OBJ_DIR"
 
@@ -57,7 +79,7 @@ fi
 echo "[ada-pyramid] Building GNAT-compatible generated FlatBuffers archive in $OUT_DIR"
 
 CXXFLAGS=(
-  -std=c++17 -O2
+  -x c++ -std=c++17 -O2
   -I"$GEN_DIR"
   -I"$GEN_FB_DIR"
   -I"$BUILD_FB_DIR"
@@ -65,16 +87,16 @@ CXXFLAGS=(
   -I"$NLOHMANN_INCLUDE"
 )
 
-g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_base_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_base_codec.o"
-g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_common_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_common_codec.o"
-g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_tactical_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_tactical_codec.o"
-g++ "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_autonomy_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_autonomy_codec.o"
-g++ "${CXXFLAGS[@]}" -c "$GEN_FB_DIR/pyramid_services_tactical_objects_flatbuffers_codec.cpp" -o "$OBJ_DIR/pyramid_services_tactical_objects_flatbuffers_codec.o"
-g++ "${CXXFLAGS[@]}" -c "$GEN_FB_DIR/pyramid_services_autonomy_backend_flatbuffers_codec.cpp" -o "$OBJ_DIR/pyramid_services_autonomy_backend_flatbuffers_codec.o"
+"$CXX_CMD" "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_base_codec.cpp"     -o "$OBJ_DIR/pyramid_data_model_base_codec.o"
+"$CXX_CMD" "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_common_codec.cpp"   -o "$OBJ_DIR/pyramid_data_model_common_codec.o"
+"$CXX_CMD" "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_tactical_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_tactical_codec.o"
+"$CXX_CMD" "${CXXFLAGS[@]}" -c "$GEN_DIR/pyramid_data_model_autonomy_codec.cpp" -o "$OBJ_DIR/pyramid_data_model_autonomy_codec.o"
+"$CXX_CMD" "${CXXFLAGS[@]}" -c "$GEN_FB_DIR/pyramid_services_tactical_objects_flatbuffers_codec.cpp"  -o "$OBJ_DIR/pyramid_services_tactical_objects_flatbuffers_codec.o"
+"$CXX_CMD" "${CXXFLAGS[@]}" -c "$GEN_FB_DIR/pyramid_services_autonomy_backend_flatbuffers_codec.cpp" -o "$OBJ_DIR/pyramid_services_autonomy_backend_flatbuffers_codec.o"
 
 rm -f "$TMP_LIB_FILE"
 
-ar rcs "$TMP_LIB_FILE" \
+"$AR_CMD" rcs "$TMP_LIB_FILE" \
   "$OBJ_DIR/pyramid_data_model_base_codec.o" \
   "$OBJ_DIR/pyramid_data_model_common_codec.o" \
   "$OBJ_DIR/pyramid_data_model_tactical_codec.o" \
@@ -84,23 +106,6 @@ ar rcs "$TMP_LIB_FILE" \
 
 rm -f "$LIB_FILE"
 mv "$TMP_LIB_FILE" "$LIB_FILE"
-
-# Re-index with the GNAT cross-target ranlib so ld can read the symbol table.
-# The cross-target ranlib (e.g. i686-pc-mingw32-ranlib) must be used; the native
-# host ranlib writes an incompatible BFD index format that GNAT's cross ld rejects.
-if command -v gprbuild >/dev/null 2>&1; then
-  GNAT_BIN="$(dirname "$(command -v gprbuild)")"
-  USE_RANLIB="$(find "$GNAT_BIN" -maxdepth 1 -name '*-mingw32-ranlib*' ! -name 'ranlib' 2>/dev/null | head -1)"
-  if [[ -z "$USE_RANLIB" && -x "$GNAT_BIN/ranlib" ]]; then
-    USE_RANLIB="$GNAT_BIN/ranlib"
-  fi
-  if [[ -n "$USE_RANLIB" ]]; then
-    echo "[ada-pyramid] Re-indexing archive with $USE_RANLIB..."
-    "$USE_RANLIB" "$LIB_FILE"
-  else
-    echo "[ada-pyramid] WARNING: no GNAT ranlib found; link may fail with 'archive has no index'"
-  fi
-fi
 
 echo "[ada-pyramid] Built:"
 echo "[ada-pyramid]   $LIB_FILE"
