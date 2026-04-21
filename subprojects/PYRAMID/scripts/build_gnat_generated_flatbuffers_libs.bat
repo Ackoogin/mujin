@@ -85,6 +85,21 @@ if exist "%TMP_LIB_FILE%" del /f /q "%TMP_LIB_FILE%" >nul 2>&1
 if exist "%LIB_FILE%" del /f /q "%LIB_FILE%" >nul 2>&1
 move /y "%TMP_LIB_FILE%" "%LIB_FILE%" >nul || exit /b 1
 
+:: OUT_DIR is on GNAT's linker -L path but GNAT's ld doesn't know about
+:: the g++ installation's lib directory.  Copy libstdc++.a (and the DLL
+:: import stub) from g++'s own lib into OUT_DIR so -lstdc++ resolves there.
+set "LIBSTDCXX="
+for /f "tokens=*" %%L in ('"!CXX!" -print-file-name=libstdc++.a 2^>nul') do set "LIBSTDCXX=%%L"
+if defined LIBSTDCXX if not "!LIBSTDCXX!"=="libstdc++.a" (
+  echo [ada-pyramid] Copying libstdc++ from !LIBSTDCXX! to "%OUT_DIR%"
+  copy /y "!LIBSTDCXX!" "%OUT_DIR%\" >nul
+  for %%D in ("!LIBSTDCXX!") do (
+    if exist "%%~dpDlibstdc++.dll.a" copy /y "%%~dpDlibstdc++.dll.a" "%OUT_DIR%\" >nul
+  )
+) else (
+  echo [ada-pyramid] WARNING: libstdc++.a not found via '!CXX! -print-file-name'; link may fail with cannot find -lstdc++
+)
+
 echo [ada-pyramid] Built:
 echo [ada-pyramid]   %LIB_FILE%
 exit /b 0

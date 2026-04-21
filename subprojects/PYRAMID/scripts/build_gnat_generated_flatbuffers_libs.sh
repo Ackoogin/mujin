@@ -91,5 +91,18 @@ rm -f "$TMP_LIB_FILE"
 rm -f "$LIB_FILE"
 mv "$TMP_LIB_FILE" "$LIB_FILE"
 
+# OUT_DIR is on GNAT's linker -L path but GNAT's ld doesn't know about the
+# g++ installation's lib directory.  Copy libstdc++.a from g++'s own lib into
+# OUT_DIR so -lstdc++ resolves there.
+LIBSTDCXX="$("$CXX" -print-file-name=libstdc++.a 2>/dev/null || true)"
+if [[ -n "$LIBSTDCXX" && "$LIBSTDCXX" != "libstdc++.a" && -f "$LIBSTDCXX" ]]; then
+  echo "[ada-pyramid] Copying libstdc++ from $LIBSTDCXX to $OUT_DIR"
+  cp -f "$LIBSTDCXX" "$OUT_DIR/"
+  LIBSTDCXX_DIR="$(dirname "$LIBSTDCXX")"
+  [[ -f "$LIBSTDCXX_DIR/libstdc++.dll.a" ]] && cp -f "$LIBSTDCXX_DIR/libstdc++.dll.a" "$OUT_DIR/" || true
+else
+  echo "[ada-pyramid] WARNING: libstdc++.a not found via '$CXX -print-file-name'; link may fail with cannot find -lstdc++"
+fi
+
 echo "[ada-pyramid] Built:"
 echo "[ada-pyramid]   $LIB_FILE"
