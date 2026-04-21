@@ -1045,11 +1045,9 @@ pcl_socket_transport_t* pcl_socket_transport_create_client_ex(
      If both max_retries and timeout_ms are zero, behave like legacy
      create_client: exactly one attempt, fail-fast on refused.
 
-     Each try_connect_addrinfo call is bounded by the remaining budget (or
-     2 s if no total timeout was set) so a blackholed SYN cannot exceed the
-     caller's documented connect_timeout_ms by more than one slice.  The
-     budget uses actual wall-clock elapsed so fast failures (RST/refused)
-     do not prematurely consume the deadline. */
+     Each try_connect_addrinfo call is bounded by the remaining budget.  Legacy
+     single-shot mode gets a short per-attempt cap so a refused/filtered
+     endpoint cannot stall the caller for the retry-mode backoff slice. */
   {
     uint32_t attempt     = 0u;
     uint32_t delay_ms    = 100u;
@@ -1064,7 +1062,7 @@ pcl_socket_transport_t* pcl_socket_transport_create_client_ex(
       if (timeout_ms > 0u && elapsed >= (uint64_t)timeout_ms) break;
 
       if (single_shot) {
-        per_attempt_ms = 2000u;
+        per_attempt_ms = 250u;
       } else if (timeout_ms > 0u) {
         per_attempt_ms = (uint32_t)((uint64_t)timeout_ms - elapsed);
       } else {

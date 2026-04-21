@@ -300,6 +300,11 @@ StandardBridge::StandardBridge(TacticalObjectsRuntime& runtime, pcl_executor_t* 
       frontend_content_type_(std::move(frontend_content_type)),
       expose_consumed_interface_(expose_consumed_interface) {}
 
+StandardBridge::StandardBridge(TacticalObjectsRuntime& runtime, pcl_executor_t* exec,
+                               bool expose_consumed_interface)
+    : StandardBridge(runtime, exec, std::string("application/json"),
+                     expose_consumed_interface) {}
+
 pcl_status_t StandardBridge::on_configure() {
   if (!supportsContentType(frontend_content_type_.c_str())) {
     return PCL_ERR_INVALID;
@@ -362,12 +367,25 @@ pcl_status_t StandardBridge::dispatchProvidedService(int channel, const pcl_msg_
     return PCL_ERR_INVALID;
   }
 
+  const auto service_channel = static_cast<prov::ServiceChannel>(channel);
+  const bool query_service =
+      service_channel == prov::ServiceChannel::ReadMatch ||
+      service_channel == prov::ServiceChannel::ReadRequirement ||
+      service_channel == prov::ServiceChannel::ReadDetail;
+  const bool empty_json_query =
+      query_service &&
+      frontend_content_type_ == prov::kJsonContentType &&
+      (!request || request->size == 0u);
+  const std::string empty_query_payload = "{}";
+  const void* request_data =
+      empty_json_query ? empty_query_payload.data() : (request ? request->data : nullptr);
+  const size_t request_size =
+      empty_json_query ? empty_query_payload.size() : (request ? request->size : 0u);
+
   BridgeServiceHandler handler(*this);
   void* response_buf = nullptr;
   size_t response_size = 0;
-  prov::dispatch(handler, static_cast<prov::ServiceChannel>(channel),
-                 request ? request->data : nullptr,
-                 request ? request->size : 0u,
+  prov::dispatch(handler, service_channel, request_data, request_size,
                  frontend_content_type_.c_str(),
                  &response_buf, &response_size);
 

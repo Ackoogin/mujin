@@ -45,15 +45,15 @@ if "%CPP_OUT%"=="" set "CPP_OUT=%PYRAMID_ROOT%\bindings\cpp\generated"
 if "%ADA_OUT%"=="" set "ADA_OUT=%PYRAMID_ROOT%\bindings\ada\generated"
 
 set "PY_CMD="
-where py >nul 2>&1
-if %errorlevel% equ 0 set "PY_CMD=py -3"
-if not defined PY_CMD (
-    where python >nul 2>&1
-    if %errorlevel% equ 0 set "PY_CMD=python"
-)
+where python >nul 2>&1
+if %errorlevel% equ 0 set "PY_CMD=python"
 if not defined PY_CMD (
     where python3 >nul 2>&1
     if %errorlevel% equ 0 set "PY_CMD=python3"
+)
+if not defined PY_CMD (
+    where py >nul 2>&1
+    if %errorlevel% equ 0 set "PY_CMD=py -3"
 )
 if not defined PY_CMD (
     echo [generate] FAIL: python launcher not found
@@ -79,4 +79,4 @@ if "%DO_ADA%"=="1" (
 )
 
 echo [generate] PASS
-exit /b 0
+goto :eof

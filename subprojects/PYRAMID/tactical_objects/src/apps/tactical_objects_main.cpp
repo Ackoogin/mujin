@@ -6,8 +6,8 @@
 #include <pcl/component.hpp>
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
+#include <pcl/pcl_transport_shared_memory.h>
 #include <pcl/pcl_transport_socket.h>
-#include <uuid/UUIDHelper.h>
 
 #include <atomic>
 #include <chrono>
@@ -23,6 +23,7 @@ namespace {
 
 namespace consumed = pyramid::services::tactical_objects::consumed;
 constexpr const char* kJsonContentType = "application/json";
+constexpr double kDegToRad = 3.14159265358979323846 / 180.0;
 
 std::atomic<bool> g_shutdown{false};
 
@@ -100,29 +101,61 @@ private:
   std::string response_buffer_;
 };
 
-void publishDemoEvidence(tactical_objects::TacticalObjectsRuntime& runtime) {
-  tactical_objects::Observation obs;
-  obs.observation_id = pyramid::core::uuid::UUIDHelper::generateV4();
-  obs.observed_at = 1.0;
-  obs.object_hint_type = tactical_objects::ObjectType::Platform;
-  obs.affiliation_hint = tactical_objects::Affiliation::Hostile;
-  obs.position.lat = 0.8989737191417272;
-  obs.position.lon = -0.002230530784048753;
-  obs.position.alt = 0.0;
-  obs.confidence = 0.95;
-  obs.source_ref.source_system = "demo-radar";
-  obs.source_sidc = "SHSP------*****";
+class DemoEvidencePublisher : public pcl::Component {
+public:
+  explicit DemoEvidencePublisher(std::string content_type)
+      : pcl::Component("tactical_objects_demo_evidence_publisher"),
+        content_type_(std::move(content_type)) {}
 
-  tactical_objects::ObservationBatch batch;
-  batch.observations.push_back(obs);
-  runtime.processObservationBatch(batch);
-}
+protected:
+  pcl_status_t on_configure() override {
+    publisher_ = addPublisher(consumed::kTopicObjectEvidence, content_type_.c_str());
+    return publisher_ ? PCL_OK : PCL_ERR_CALLBACK;
+  }
+
+  pcl_status_t on_tick(double dt) override {
+    elapsed_since_publish_ += dt;
+    if (published_count_ > 0 && elapsed_since_publish_ < 1.0) {
+      return PCL_OK;
+    }
+
+    pyramid::data_model::ObjectDetail evidence;
+    evidence.id = "bridge-e2e-evidence";
+    evidence.entity_source = "demo-radar";
+    evidence.identity = pyramid::data_model::StandardIdentity::Hostile;
+    evidence.dimension = pyramid::data_model::BattleDimension::SeaSurface;
+    evidence.position.latitude = 51.0 * kDegToRad;
+    evidence.position.longitude = 0.0;
+    evidence.quality = 0.95;
+    evidence.creation_time = 1.0;
+
+    const pcl_status_t rc =
+        consumed::publishObjectEvidence(publisher_, evidence, content_type_.c_str());
+    if (rc == PCL_OK) {
+      ++published_count_;
+      elapsed_since_publish_ = 0.0;
+      logInfo("[DemoEvidence] published standard.object_evidence id=%s source=%s",
+              evidence.id.c_str(), evidence.entity_source.c_str());
+    } else {
+      logWarn("[DemoEvidence] failed to publish standard.object_evidence rc=%d",
+              static_cast<int>(rc));
+    }
+    return PCL_OK;
+  }
+
+private:
+  std::string content_type_;
+  pcl_port_t* publisher_ = nullptr;
+  double elapsed_since_publish_ = 1.0;
+  int published_count_ = 0;
+};
 
 } // namespace
 
 int main(int argc, char* argv[]) {
   uint16_t port = 19123;
   std::string port_file;
+  std::string shmem_bus;
   int timeout_secs = 0;
   bool emit_demo_evidence = false;
   std::string frontend_content_type = kJsonContentType;
@@ -132,6 +165,8 @@ int main(int argc, char* argv[]) {
       port = static_cast<uint16_t>(std::atoi(argv[++i]));
     } else if (std::strcmp(argv[i], "--port-file") == 0 && i + 1 < argc) {
       port_file = argv[++i];
+    } else if (std::strcmp(argv[i], "--shmem-bus") == 0 && i + 1 < argc) {
+      shmem_bus = argv[++i];
     } else if (std::strcmp(argv[i], "--timeout") == 0 && i + 1 < argc) {
       timeout_secs = std::atoi(argv[++i]);
     } else if (std::strcmp(argv[i], "--demo-evidence") == 0) {
@@ -174,56 +209,83 @@ int main(int argc, char* argv[]) {
   standard_bridge.setTickRateHz(100.0);
   pcl_executor_add(remote_exec, standard_bridge.handle());
 
-  if (!port_file.empty()) {
-    std::ofstream stream(port_file);
-    stream << port << '\n';
+  DemoEvidencePublisher demo_evidence_publisher(frontend_content_type);
+  if (emit_demo_evidence) {
+    demo_evidence_publisher.configure();
+    demo_evidence_publisher.activate();
+    demo_evidence_publisher.setTickRateHz(10.0);
+    pcl_executor_add(remote_exec, demo_evidence_publisher.handle());
   }
 
-  std::fprintf(stderr,
-               "[tactical_objects_app] Waiting for remote PYRAMID client on port %u...\n",
-               port);
+  pcl_socket_transport_t* socket_transport = nullptr;
+  pcl_shared_memory_transport_t* shmem_transport = nullptr;
+  pcl_container_t* gateway = nullptr;
 
-  pcl_socket_transport_t* transport =
-      pcl_socket_transport_create_server(port, remote_exec);
-  if (!transport) {
-    std::fprintf(stderr, "[tactical_objects_app] Failed to create socket server\n");
-    pcl_executor_destroy(remote_exec);
-    pcl_executor_destroy(local_exec);
-    return 1;
+  if (!shmem_bus.empty()) {
+    std::fprintf(stderr,
+                 "[tactical_objects_app] Joining shared-memory bus '%s'...\n",
+                 shmem_bus.c_str());
+    shmem_transport = pcl_shared_memory_transport_create(
+        shmem_bus.c_str(), "tactical_objects_app", remote_exec);
+    if (!shmem_transport) {
+      std::fprintf(stderr,
+                   "[tactical_objects_app] Failed to join shared-memory bus '%s'\n",
+                   shmem_bus.c_str());
+      pcl_executor_destroy(remote_exec);
+      pcl_executor_destroy(local_exec);
+      return 1;
+    }
+    pcl_executor_set_transport(
+        remote_exec, pcl_shared_memory_transport_get_transport(shmem_transport));
+    gateway = pcl_shared_memory_transport_gateway_container(shmem_transport);
+  } else {
+    if (!port_file.empty()) {
+      std::ofstream stream(port_file);
+      stream << port << '\n';
+    }
+
+    std::fprintf(stderr,
+                 "[tactical_objects_app] Waiting for remote PYRAMID client on port %u...\n",
+                 port);
+    socket_transport = pcl_socket_transport_create_server(port, remote_exec);
+    if (!socket_transport) {
+      std::fprintf(stderr, "[tactical_objects_app] Failed to create socket server\n");
+      pcl_executor_destroy(remote_exec);
+      pcl_executor_destroy(local_exec);
+      return 1;
+    }
+    pcl_executor_set_transport(
+        remote_exec, pcl_socket_transport_get_transport(socket_transport));
+    gateway = pcl_socket_transport_gateway_container(socket_transport);
   }
 
-  pcl_executor_set_transport(remote_exec, pcl_socket_transport_get_transport(transport));
-
-  pcl_container_t* gateway = pcl_socket_transport_gateway_container(transport);
   pcl_container_configure(gateway);
   pcl_container_activate(gateway);
   pcl_executor_add(remote_exec, gateway);
 
-  std::fprintf(stderr,
-               "[tactical_objects_app] Remote provided interface is live on port %u (%s).\n",
-               port, frontend_content_type.c_str());
+  if (!port_file.empty() && !shmem_bus.empty()) {
+    std::ofstream stream(port_file);
+    stream << shmem_bus << '\n';
+  }
+
+  if (!shmem_bus.empty()) {
+    std::fprintf(stderr,
+                 "[tactical_objects_app] Remote provided interface is live on"
+                 " shared-memory bus '%s' (%s).\n",
+                 shmem_bus.c_str(), frontend_content_type.c_str());
+  } else {
+    std::fprintf(stderr,
+                 "[tactical_objects_app] Remote provided interface is live on port %u (%s).\n",
+                 port, frontend_content_type.c_str());
+  }
   std::fprintf(stderr,
                "[tactical_objects_app] Local consumed interface is exposed on the local executor.\n");
 
-  if (emit_demo_evidence) {
-    publishDemoEvidence(tactical_objects_component.runtime());
-  }
-
   const auto start = std::chrono::steady_clock::now();
-  auto last_demo_publish = start;
   while (!g_shutdown.load()) {
     pcl_executor_spin_once(local_exec, 0);
     pcl_executor_spin_once(remote_exec, 0);
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
-
-    if (emit_demo_evidence) {
-      const auto now = std::chrono::steady_clock::now();
-      if (std::chrono::duration_cast<std::chrono::milliseconds>(
-              now - last_demo_publish).count() >= 1000) {
-        publishDemoEvidence(tactical_objects_component.runtime());
-        last_demo_publish = now;
-      }
-    }
 
     if (timeout_secs > 0) {
       const auto elapsed =
@@ -236,7 +298,12 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  pcl_socket_transport_destroy(transport);
+  if (socket_transport) {
+    pcl_socket_transport_destroy(socket_transport);
+  }
+  if (shmem_transport) {
+    pcl_shared_memory_transport_destroy(shmem_transport);
+  }
   pcl_executor_destroy(remote_exec);
   pcl_executor_destroy(local_exec);
   return 0;

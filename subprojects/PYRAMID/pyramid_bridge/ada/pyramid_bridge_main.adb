@@ -32,6 +32,7 @@
 --    pyramid_bridge_main
 --      [--tobj-host HOST]   (default 127.0.0.1)
 --      [--tobj-port PORT]   (default 19123)
+--      [--tobj-bus  NAME]   (use shared-memory bus instead of TCP socket)
 --      [--ame-bus  NAME]    (default "pyramid_bridge")
 --      [--timeout  SECS]    (default 0 = run until signalled)
 
@@ -71,6 +72,7 @@ procedure Pyramid_Bridge_Main is
    Tobj_Host_Str : Interfaces.C.Strings.chars_ptr :=
      Interfaces.C.Strings.New_String ("127.0.0.1");
    Tobj_Port     : Interfaces.C.unsigned_short := 19123;
+   Tobj_Bus_Name : Unbounded_String := Null_Unbounded_String;
    Ame_Bus_Name  : Unbounded_String :=
      To_Unbounded_String ("pyramid_bridge");
    Timeout_Secs  : Natural := 0;
@@ -88,6 +90,9 @@ procedure Pyramid_Bridge_Main is
          elsif Argument (I) = "--tobj-port" and then I + 1 <= Argument_Count then
             Tobj_Port :=
               Interfaces.C.unsigned_short'Value (Argument (I + 1));
+            I := I + 2;
+         elsif Argument (I) = "--tobj-bus" and then I + 1 <= Argument_Count then
+            Tobj_Bus_Name := To_Unbounded_String (Argument (I + 1));
             I := I + 2;
          elsif Argument (I) = "--ame-bus" and then I + 1 <= Argument_Count then
             Ame_Bus_Name := To_Unbounded_String (Argument (I + 1));
@@ -113,6 +118,7 @@ procedure Pyramid_Bridge_Main is
    --  Tactical Objects side (TCP socket client)
    Tobj_Exec      : Pcl_Bindings.Pcl_Executor_Access;
    Tobj_Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+   Tobj_Shmem_Transport : Pcl_Shmem_Bindings.Pcl_Shared_Memory_Transport_Access;
 
    --  AME side (shared-memory bus participant)
    Ame_Exec      : Pcl_Bindings.Pcl_Executor_Access;
@@ -179,6 +185,7 @@ procedure Pyramid_Bridge_Main is
    Tobj_Cbs : aliased Pcl_Bindings.Pcl_Callbacks;
    Tobj_C   : Pcl_Bindings.Pcl_Container_Access;
    Gw_C     : Pcl_Bindings.Pcl_Container_Access;
+   Tobj_Gw_C : Pcl_Bindings.Pcl_Container_Access;
    Status   : Pcl_Bindings.Pcl_Status;
    pragma Unreferenced (Status);
 
@@ -188,10 +195,18 @@ procedure Pyramid_Bridge_Main is
 begin
    Parse_Args;
 
-   Log ("Tactical Objects: " &
-        Interfaces.C.Strings.Value (Tobj_Host_Str) & ":" &
-        Interfaces.C.unsigned_short'Image (Tobj_Port));
+   if Ada.Strings.Unbounded.Length (Tobj_Bus_Name) > 0 then
+      Log ("Tactical Objects shared-memory bus: " &
+           To_String (Tobj_Bus_Name));
+   else
+      Log ("Tactical Objects: " &
+           Interfaces.C.Strings.Value (Tobj_Host_Str) & ":" &
+           Interfaces.C.unsigned_short'Image (Tobj_Port));
+   end if;
    Log ("AME shared-memory bus: " & To_String (Ame_Bus_Name));
+   if Ada.Strings.Unbounded.Length (Tobj_Bus_Name) > 0 then
+      Interfaces.C.Strings.Free (Tobj_Host_Str);
+   end if;
 
    -- -------------------------------------------------------------------------
    --  1. Create the AME executor and join the shared-memory bus first so the
@@ -248,24 +263,58 @@ begin
       return;
    end if;
 
-   Tobj_Transport :=
-     Pcl_Bindings.Create_Socket_Client (Tobj_Host_Str, Tobj_Port, Tobj_Exec);
-   Interfaces.C.Strings.Free (Tobj_Host_Str);
+   if Ada.Strings.Unbounded.Length (Tobj_Bus_Name) > 0 then
+      declare
+         Bus_Cstr  : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (To_String (Tobj_Bus_Name));
+         Part_Cstr : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String ("bridge_tobj");
+      begin
+         Tobj_Shmem_Transport :=
+           Pcl_Shmem_Bindings.Create (Bus_Cstr, Part_Cstr, Tobj_Exec);
+         Interfaces.C.Strings.Free (Bus_Cstr);
+         Interfaces.C.Strings.Free (Part_Cstr);
+      end;
 
-   if Tobj_Transport = null then
-      Log ("FAIL: could not connect to tactical_objects_app on port" &
-           Interfaces.C.unsigned_short'Image (Tobj_Port));
-      Pcl_Bindings.Destroy_Executor (Tobj_Exec);
-      Pcl_Shmem_Bindings.Destroy (Ame_Transport);
-      Pcl_Bindings.Destroy_Executor (Ame_Exec);
-      Ada.Command_Line.Set_Exit_Status (1);
-      return;
+      if Tobj_Shmem_Transport = null then
+         Log ("FAIL: could not join Tactical Objects shared-memory bus " &
+              To_String (Tobj_Bus_Name));
+         Pcl_Bindings.Destroy_Executor (Tobj_Exec);
+         Pcl_Shmem_Bindings.Destroy (Ame_Transport);
+         Pcl_Bindings.Destroy_Executor (Ame_Exec);
+         Ada.Command_Line.Set_Exit_Status (1);
+         return;
+      end if;
+
+      Status := Pcl_Bindings.Set_Transport
+        (Tobj_Exec, Pcl_Shmem_Bindings.Get_Transport (Tobj_Shmem_Transport));
+
+      Tobj_Gw_C := Pcl_Shmem_Bindings.Gateway_Container (Tobj_Shmem_Transport);
+      Status := Pcl_Bindings.Configure (Tobj_Gw_C);
+      Status := Pcl_Bindings.Activate (Tobj_Gw_C);
+      Status := Pcl_Bindings.Add_Container (Tobj_Exec, Tobj_Gw_C);
+
+      Log ("joined tactical_objects_app shared-memory bus");
+   else
+      Tobj_Transport :=
+        Pcl_Bindings.Create_Socket_Client (Tobj_Host_Str, Tobj_Port, Tobj_Exec);
+      Interfaces.C.Strings.Free (Tobj_Host_Str);
+
+      if Tobj_Transport = null then
+         Log ("FAIL: could not connect to tactical_objects_app on port" &
+              Interfaces.C.unsigned_short'Image (Tobj_Port));
+         Pcl_Bindings.Destroy_Executor (Tobj_Exec);
+         Pcl_Shmem_Bindings.Destroy (Ame_Transport);
+         Pcl_Bindings.Destroy_Executor (Ame_Exec);
+         Ada.Command_Line.Set_Exit_Status (1);
+         return;
+      end if;
+
+      Status := Pcl_Bindings.Set_Transport
+        (Tobj_Exec, Pcl_Bindings.Get_Socket_Transport (Tobj_Transport));
+
+      Log ("connected to tactical_objects_app");
    end if;
-
-   Status := Pcl_Bindings.Set_Transport
-     (Tobj_Exec, Pcl_Bindings.Get_Socket_Transport (Tobj_Transport));
-
-   Log ("connected to tactical_objects_app");
 
    -- -------------------------------------------------------------------------
    --  3. Create the entity-tracker container on the Tobj executor.
@@ -289,7 +338,12 @@ begin
 
    if Tobj_C = null then
       Log ("FAIL: could not create bridge_tobj_consumer container");
-      Pcl_Bindings.Destroy_Socket_Transport (Tobj_Transport);
+      if Tobj_Transport /= null then
+         Pcl_Bindings.Destroy_Socket_Transport (Tobj_Transport);
+      end if;
+      if Tobj_Shmem_Transport /= null then
+         Pcl_Shmem_Bindings.Destroy (Tobj_Shmem_Transport);
+      end if;
       Pcl_Bindings.Destroy_Executor (Tobj_Exec);
       Pcl_Shmem_Bindings.Destroy (Ame_Transport);
       Pcl_Bindings.Destroy_Executor (Ame_Exec);
@@ -345,7 +399,12 @@ begin
    --  6. Cleanup.
    -- -------------------------------------------------------------------------
 
-   Pcl_Bindings.Destroy_Socket_Transport (Tobj_Transport);
+   if Tobj_Transport /= null then
+      Pcl_Bindings.Destroy_Socket_Transport (Tobj_Transport);
+   end if;
+   if Tobj_Shmem_Transport /= null then
+      Pcl_Shmem_Bindings.Destroy (Tobj_Shmem_Transport);
+   end if;
    Pcl_Bindings.Destroy_Container (Tobj_C);
    Pcl_Bindings.Destroy_Executor (Tobj_Exec);
 

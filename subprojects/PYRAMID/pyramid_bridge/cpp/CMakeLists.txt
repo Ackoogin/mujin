@@ -22,3 +22,25 @@ target_include_directories(ame_backend_stub PRIVATE
 if(NOT WIN32)
     target_link_libraries(ame_backend_stub PRIVATE pthread rt)
 endif()
+
+add_executable(pyramid_bridge_evidence_client
+    pyramid_bridge_evidence_client.cpp
+    ${AME_STUB_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
+)
+
+target_link_libraries(pyramid_bridge_evidence_client PRIVATE
+    pcl_core
+    pcl_transport_shared_memory
+    pyramid_generated_codecs
+    pyramid_flatbuffers_support
+    nlohmann_json::nlohmann_json
+)
+
+target_include_directories(pyramid_bridge_evidence_client PRIVATE
+    ${AME_STUB_BINDINGS_DIR}
+    ${PCL_ROOT_DIR}/include
+)
+
+if(NOT WIN32)
+    target_link_libraries(pyramid_bridge_evidence_client PRIVATE pthread)
+endif()

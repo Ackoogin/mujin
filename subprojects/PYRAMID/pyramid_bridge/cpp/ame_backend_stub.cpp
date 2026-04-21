@@ -12,8 +12,8 @@
 ///   - Registers state.create_state and state.update_state service handlers.
 ///   - Decodes each incoming State_Update (JSON codec) and prints every
 ///     World_Fact_Update to stderr.
-///   - Tracks total facts received; exits with 0 when at least one fact
-///     was received within the run window.
+///   - Tracks entity existence world facts; exits with 0 only when at least
+///     one confirmed entity_<id>_exists fact from pyramid_bridge is received.
 ///
 /// Usage:
 ///   ame_backend_stub [--bus NAME] [--timeout SECS]
@@ -49,7 +49,33 @@ static void signal_handler(int) { g_shutdown.store(true); }
 // ---------------------------------------------------------------------------
 
 static std::atomic<int> g_facts_received{0};
+static std::atomic<int> g_valid_entity_facts_received{0};
+static std::atomic<int> g_invalid_facts_received{0};
+static std::atomic<int> g_decode_errors{0};
 static std::atomic<int> g_state_updates_received{0};
+
+static bool starts_with(const std::string& value, const char* prefix) {
+  const std::string prefix_str(prefix);
+  return value.rfind(prefix_str, 0) == 0;
+}
+
+static bool ends_with(const std::string& value, const char* suffix) {
+  const std::string suffix_str(suffix);
+  return value.size() >= suffix_str.size() &&
+         value.compare(value.size() - suffix_str.size(),
+                       suffix_str.size(), suffix_str) == 0;
+}
+
+static bool is_entity_evidence_world_fact(
+    const pyramid::data_model::autonomy::WorldFactUpdate& fact) {
+  return starts_with(fact.key, "entity_") &&
+         ends_with(fact.key, "_exists") &&
+         fact.key.size() > std::strlen("entity__exists") &&
+         fact.value &&
+         fact.source == "pyramid_bridge" &&
+         fact.authority ==
+             pyramid::data_model::autonomy::FactAuthorityLevel::Confirmed;
+}
 
 // ---------------------------------------------------------------------------
 // State_Update handler — decodes JSON and logs each world fact
@@ -63,11 +89,21 @@ static void handle_state_update(const pyramid::data_model::autonomy::StateUpdate
                update.fact_update.size());
 
   for (const auto& fact : update.fact_update) {
-    std::fprintf(stderr, "[ame_stub]   fact key=%s value=%s authority=%s\n",
+    const bool valid = is_entity_evidence_world_fact(fact);
+    std::fprintf(stderr, "[ame_stub]   fact key=%s value=%s source=%s authority=%s\n",
                  fact.key.c_str(),
                  fact.value ? "true" : "false",
+                 fact.source.c_str(),
                  autonomy_codec::toString(fact.authority).c_str());
     g_facts_received.fetch_add(1);
+    if (valid) {
+      g_valid_entity_facts_received.fetch_add(1);
+    } else {
+      std::fprintf(stderr,
+                   "[ame_stub]   INVALID: expected confirmed entity_<id>_exists"
+                   " fact sourced from pyramid_bridge\n");
+      g_invalid_facts_received.fetch_add(1);
+    }
   }
   std::fflush(stderr);
 }
@@ -96,6 +132,7 @@ static pcl_status_t state_service_handler(pcl_container_t*,
     handle_state_update(update);
   } catch (const std::exception& ex) {
     std::fprintf(stderr, "[ame_stub] JSON decode error: %s\n", ex.what());
+    g_decode_errors.fetch_add(1);
   }
 
   // Respond with a simple ACK identifier.
@@ -186,7 +223,7 @@ int main(int argc, char* argv[]) {
   pcl_container_activate(svc_container);
   pcl_executor_add(exec, svc_container);
 
-  std::fprintf(stderr, "[ame_stub] ready — waiting for world facts (timeout=%ds)\n",
+  std::fprintf(stderr, "[ame_stub] ready — waiting for entity world facts (timeout=%ds)\n",
                timeout_secs);
 
   const auto start    = std::chrono::steady_clock::now();
@@ -194,18 +231,38 @@ int main(int argc, char* argv[]) {
 
   while (!g_shutdown.load() && std::chrono::steady_clock::now() < deadline) {
     pcl_executor_spin_once(exec, 0);
+    if (g_valid_entity_facts_received.load() > 0 ||
+        g_invalid_facts_received.load() > 0 ||
+        g_decode_errors.load() > 0) {
+      break;
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(5));
   }
 
   const int facts = g_facts_received.load();
+  const int valid_entity_facts = g_valid_entity_facts_received.load();
+  const int invalid_facts = g_invalid_facts_received.load();
+  const int decode_errors = g_decode_errors.load();
   const int updates = g_state_updates_received.load();
   std::fprintf(stderr,
-               "[ame_stub] shutdown — state_updates=%d world_facts=%d\n",
-               updates, facts);
+               "[ame_stub] shutdown — state_updates=%d world_facts=%d"
+               " valid_entity_facts=%d invalid_facts=%d decode_errors=%d\n",
+               updates, facts, valid_entity_facts, invalid_facts,
+               decode_errors);
+  std::fflush(stderr);
+
+  const bool success =
+      valid_entity_facts > 0 && invalid_facts == 0 && decode_errors == 0;
+  if (success) {
+    // This E2E process is intentionally short-lived.  Let process teardown
+    // reclaim the shared-memory transport after the semantic assertion passes;
+    // the batch driver terminates the remaining participants immediately after.
+    std::exit(0);
+  }
 
   pcl_container_destroy(svc_container);
   pcl_shared_memory_transport_destroy(transport);
   pcl_executor_destroy(exec);
 
-  return (facts > 0) ? 0 : 1;
+  return 1;
 }

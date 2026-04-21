@@ -16,9 +16,11 @@
 #   test_pyramid_bridge_e2e.sh
 #     [--app-bin    PATH]   tactical_objects_app binary
 #     [--stub-bin   PATH]   ame_backend_stub binary
+#     [--evidence-bin PATH] pyramid_bridge_evidence_client binary
 #     [--bridge-bin PATH]   pyramid_bridge_main Ada binary
 #     [--port       NUM]    tactical_objects_app TCP port (default 19400)
 #     [--bus        NAME]   shared-memory bus name (default pyramid_bridge)
+#     [--tobj-bus   NAME]   optional Tactical Objects bus override
 #     [--timeout    SECS]   per-process wall-clock timeout (default 25)
 
 set -euo pipefail
@@ -29,30 +31,39 @@ WORKSPACE_ROOT="$(cd "$PYRAMID_ROOT/../.." && pwd)"
 
 APP_BIN="${WORKSPACE_ROOT}/build/subprojects/PYRAMID/tactical_objects/tactical_objects_app"
 STUB_BIN="${WORKSPACE_ROOT}/build/subprojects/PYRAMID/pyramid_bridge/cpp/ame_backend_stub"
+EVIDENCE_BIN="${WORKSPACE_ROOT}/build/subprojects/PYRAMID/pyramid_bridge/cpp/pyramid_bridge_evidence_client"
 BRIDGE_BIN="${PYRAMID_ROOT}/pyramid_bridge/ada/bin/pyramid_bridge_main"
 PORT=19400
 BUS_NAME="pyramid_bridge"
+TOBJ_BUS_NAME=""
 TIMEOUT=25
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --app-bin)    APP_BIN="$2";    shift 2 ;;
     --stub-bin)   STUB_BIN="$2";   shift 2 ;;
+    --evidence-bin) EVIDENCE_BIN="$2"; shift 2 ;;
     --bridge-bin) BRIDGE_BIN="$2"; shift 2 ;;
     --port)       PORT="$2";       shift 2 ;;
     --bus)        BUS_NAME="$2";   shift 2 ;;
+    --tobj-bus)   TOBJ_BUS_NAME="$2"; shift 2 ;;
     --timeout)    TIMEOUT="$2";    shift 2 ;;
     *) shift ;;
   esac
 done
 
+if [[ -z "$TOBJ_BUS_NAME" ]]; then
+  TOBJ_BUS_NAME="$BUS_NAME"
+fi
+
 APP_PID=""
 STUB_PID=""
 BRIDGE_PID=""
+EVIDENCE_PID=""
 PORT_FILE=$(mktemp /tmp/tobj_bridge_e2e.XXXXXX)
 
 cleanup() {
-  for pid_var in BRIDGE_PID STUB_PID APP_PID; do
+  for pid_var in EVIDENCE_PID BRIDGE_PID STUB_PID APP_PID; do
     eval "pid=\${$pid_var:-}"
     if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
       kill "$pid" 2>/dev/null || true
@@ -64,7 +75,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "=== Pyramid Bridge E2E ==="
-echo "[driver] bus=$BUS_NAME port=$PORT timeout=${TIMEOUT}s"
+echo "[driver] ame_bus=$BUS_NAME tobj_bus=$TOBJ_BUS_NAME timeout=${TIMEOUT}s"
 
 # -------------------------------------------------------------------------
 # Optional: build Ada bridge if gprbuild is available
@@ -77,13 +88,13 @@ if command -v gprbuild &>/dev/null; then
 
   "$WORKSPACE_ROOT/subprojects/PCL/scripts/build_gnat_pcl_static_libs.sh" \
     "$ADA_PCL_LIB_DIR" --force || {
-      echo "[driver] SKIP: unable to build GNAT-compatible PCL archives"
-      exit 0
+      echo "[driver] FAIL: unable to build GNAT-compatible PCL archives"
+      exit 1
     }
   "$PYRAMID_ROOT/scripts/build_gnat_generated_flatbuffers_libs.sh" \
-    "$ADA_PYRAMID_LIB_DIR" --force || {
-      echo "[driver] SKIP: unable to build GNAT-compatible generated FlatBuffers archive"
-      exit 0
+    "$ADA_PYRAMID_LIB_DIR" || {
+      echo "[driver] FAIL: unable to build GNAT-compatible generated FlatBuffers archive"
+      exit 1
     }
   (cd "$PYRAMID_ROOT/pyramid_bridge/ada" && \
     MUJIN_ROOT="$WORKSPACE_ROOT" gprbuild -P pyramid_bridge.gpr -q \
@@ -95,8 +106,8 @@ if command -v gprbuild &>/dev/null; then
       -XPCL_SHMEM_LIB_NAME=pcl_transport_shared_memory \
       -XPYRAMID_GEN_LIB_DIR="$ADA_PYRAMID_LIB_DIR" \
       -XPYRAMID_GEN_LIB_NAME=pyramid_generated_flatbuffers_codec 2>&1) || {
-    echo "[driver] SKIP: gprbuild failed (GNAT toolchain issue)"
-    exit 0
+    echo "[driver] FAIL: gprbuild failed"
+    exit 1
   }
 else
   echo "[driver] gprbuild not found — checking for pre-built bridge binary..."
@@ -114,9 +125,13 @@ if [[ ! -x "$STUB_BIN" ]]; then
   echo "[driver] FAIL: ame_backend_stub not found at $STUB_BIN"
   exit 1
 fi
+if [[ ! -x "$EVIDENCE_BIN" ]]; then
+  echo "[driver] FAIL: pyramid_bridge_evidence_client not found at $EVIDENCE_BIN"
+  exit 1
+fi
 if [[ ! -x "$BRIDGE_BIN" ]]; then
-  echo "[driver] SKIP: pyramid_bridge_main not found at $BRIDGE_BIN"
-  exit 0
+  echo "[driver] FAIL: pyramid_bridge_main not found at $BRIDGE_BIN"
+  exit 1
 fi
 
 # -------------------------------------------------------------------------
@@ -134,12 +149,12 @@ if ! kill -0 "$STUB_PID" 2>/dev/null; then
 fi
 
 # -------------------------------------------------------------------------
-# 2. Start tactical_objects_app with demo evidence injection
+# 2. Start tactical_objects_app on the Tactical Objects shared-memory bus
 # -------------------------------------------------------------------------
 
-echo "[driver] Starting tactical_objects_app on port $PORT..."
-"$APP_BIN" --port "$PORT" --port-file "$PORT_FILE" \
-           --timeout "$TIMEOUT" --demo-evidence &
+echo "[driver] Starting tactical_objects_app on shared-memory bus $TOBJ_BUS_NAME..."
+"$APP_BIN" --shmem-bus "$TOBJ_BUS_NAME" --port-file "$PORT_FILE" \
+           --timeout "$TIMEOUT" &
 APP_PID=$!
 
 for _ in $(seq 1 50); do
@@ -151,8 +166,8 @@ if [[ ! -s "$PORT_FILE" ]]; then
   echo "[driver] FAIL: tactical_objects_app did not write port file" >&2
   exit 1
 fi
-ACTUAL_PORT=$(cat "$PORT_FILE")
-echo "[driver] tactical_objects_app ready on port $ACTUAL_PORT"
+READY_BUS=$(cat "$PORT_FILE")
+echo "[driver] tactical_objects_app ready on shared-memory bus $READY_BUS"
 
 # -------------------------------------------------------------------------
 # 3. Start Ada Pyramid Bridge
@@ -160,11 +175,16 @@ echo "[driver] tactical_objects_app ready on port $ACTUAL_PORT"
 
 echo "[driver] Starting pyramid_bridge_main..."
 "$BRIDGE_BIN" \
-  --tobj-host 127.0.0.1 \
-  --tobj-port "$ACTUAL_PORT" \
+  --tobj-bus "$TOBJ_BUS_NAME" \
   --ame-bus   "$BUS_NAME" \
   --timeout   "$TIMEOUT" &
 BRIDGE_PID=$!
+
+echo "[driver] Starting pyramid_bridge_evidence_client..."
+"$EVIDENCE_BIN" \
+  --bus "$TOBJ_BUS_NAME" \
+  --timeout "$TIMEOUT" &
+EVIDENCE_PID=$!
 
 # -------------------------------------------------------------------------
 # 4. Wait for ame_backend_stub to finish (it exits when it receives facts)

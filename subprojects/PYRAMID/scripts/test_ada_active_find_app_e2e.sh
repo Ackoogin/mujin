@@ -51,8 +51,8 @@ if command -v gprbuild &>/dev/null; then
       echo "[driver] SKIP: unable to build GNAT-compatible PCL static archives"
       exit 0
     }
-  "$PYRAMID_ROOT/scripts/build_gnat_generated_flatbuffers_libs.sh" \
-    "$ADA_PYRAMID_LIB_DIR" --force || {
+    "$PYRAMID_ROOT/scripts/build_gnat_generated_flatbuffers_libs.sh" \
+    "$ADA_PYRAMID_LIB_DIR" || {
       echo "[driver] SKIP: unable to build GNAT-compatible generated FlatBuffers archive"
       exit 0
     }

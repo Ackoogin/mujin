@@ -59,7 +59,7 @@ if %errorlevel% equ 0 (
     call "!ADA_PCL_BUILD_SCRIPT!" "!ADA_PCL_LIB_DIR!" --force
     if !errorlevel! neq 0 set "CAN_BUILD_ADA=0"
     if "!CAN_BUILD_ADA!"=="1" (
-        call "!ADA_PYRAMID_BUILD_SCRIPT!" "!ADA_PYRAMID_LIB_DIR!" --force
+        call "!ADA_PYRAMID_BUILD_SCRIPT!" "!ADA_PYRAMID_LIB_DIR!"
         if !errorlevel! neq 0 set "CAN_BUILD_ADA=0"
     )
     if "!CAN_BUILD_ADA!"=="1" (

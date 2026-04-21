@@ -42,6 +42,7 @@ target_sources(tactical_objects_component PRIVATE
     src/TacticalObjectsComponent.cpp
     src/StandardBridge.cpp
     ${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_services_tactical_objects_provided.cpp
+    ${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_services_tactical_objects_consumed.cpp
 )
 target_include_directories(tactical_objects_component PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -65,7 +66,6 @@ target_compile_features(tactical_objects_component PUBLIC cxx_std_14)
 # ---------------------------------------------------------------------------
 add_executable(tactical_objects_app
     src/apps/tactical_objects_main.cpp
-    ${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_services_tactical_objects_consumed.cpp
 )
 
 add_executable(tactical_objects_test_client
@@ -77,6 +77,7 @@ target_link_libraries(tactical_objects_app
     PRIVATE
         tactical_objects
         tactical_objects_component
+        pcl_transport_shared_memory
         pcl_transport_socket
         pyramid_generated_codecs
         pyramid_protobuf_support

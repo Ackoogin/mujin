@@ -64,7 +64,7 @@ if command -v gprbuild &>/dev/null; then
     exit 0
   }
   echo "[driver] Refreshing GNAT-compatible generated FlatBuffers archive..."
-  "$PYRAMID_ROOT/scripts/build_gnat_generated_flatbuffers_libs.sh" "$ADA_PYRAMID_LIB_DIR" --force || {
+  "$PYRAMID_ROOT/scripts/build_gnat_generated_flatbuffers_libs.sh" "$ADA_PYRAMID_LIB_DIR" || {
     echo "[driver] SKIP: unable to build GNAT-compatible generated FlatBuffers archive"
     exit 0
   }

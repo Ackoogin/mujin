@@ -23,6 +23,8 @@ public:
   StandardBridge(TacticalObjectsRuntime& runtime, pcl_executor_t* exec,
                  std::string frontend_content_type = "application/json",
                  bool expose_consumed_interface = true);
+  StandardBridge(TacticalObjectsRuntime& runtime, pcl_executor_t* exec,
+                 bool expose_consumed_interface);
 
 protected:
   pcl_status_t on_configure() override;

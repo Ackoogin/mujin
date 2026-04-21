@@ -84,7 +84,7 @@ if %errorlevel% equ 0 (
     )
     if "!CAN_BUILD_ADA!"=="1" (
         echo [driver] Refreshing GNAT-compatible generated FlatBuffers archive...
-        call "!ADA_PYRAMID_BUILD_SCRIPT!" "!ADA_PYRAMID_LIB_DIR!" --force
+        call "!ADA_PYRAMID_BUILD_SCRIPT!" "!ADA_PYRAMID_LIB_DIR!"
         if !errorlevel! neq 0 (
             echo [driver] WARNING: failed to build GNAT FlatBuffers archive -- falling back to pre-built binary
             set "CAN_BUILD_ADA=0"

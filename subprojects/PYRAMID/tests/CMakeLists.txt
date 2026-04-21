@@ -231,7 +231,10 @@ endif()
 set_tests_properties(
     tobj_cpp_bridge_client_e2e
     tobj_cpp_bridge_client_flatbuffers_e2e
-    PROPERTIES LABELS "cross_language;integration;codec" TIMEOUT 30)
+    PROPERTIES
+        LABELS "cross_language;integration;codec"
+        TIMEOUT 30
+        RESOURCE_LOCK pyramid_process_e2e)
 
 if(WIN32)
     add_test(NAME tobj_cpp_app_client_e2e
@@ -274,7 +277,10 @@ set_tests_properties(
     tobj_cpp_app_client_e2e
     tobj_cpp_app_client_flatbuffers_e2e
     tobj_cpp_app_client_protobuf_e2e
-    PROPERTIES LABELS "cross_language;integration;codec" TIMEOUT 30)
+    PROPERTIES
+        LABELS "cross_language;integration;codec"
+        TIMEOUT 30
+        RESOURCE_LOCK pyramid_process_e2e)
 
 if(WIN32 AND TARGET pyramid_grpc_transport)
     add_executable(tobj_grpc_server
@@ -407,7 +413,8 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     endif()
     set_tests_properties(tobj_ada_socket_e2e PROPERTIES
         LABELS "cross_language;integration"
-        TIMEOUT 60)
+        TIMEOUT 60
+        RESOURCE_LOCK pyramid_process_e2e)
 
     if(WIN32)
         add_test(NAME tobj_ada_active_find_e2e
@@ -426,7 +433,8 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     endif()
     set_tests_properties(tobj_ada_active_find_e2e PROPERTIES
         LABELS "cross_language;integration"
-        TIMEOUT 40)
+        TIMEOUT 40
+        RESOURCE_LOCK pyramid_process_e2e)
 
     if(WIN32)
         add_test(NAME tobj_ada_active_find_flatbuffers_e2e
@@ -447,7 +455,8 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     endif()
     set_tests_properties(tobj_ada_active_find_flatbuffers_e2e PROPERTIES
         LABELS "cross_language;integration;codec"
-        TIMEOUT 40)
+        TIMEOUT 40
+        RESOURCE_LOCK pyramid_process_e2e)
 
     if(WIN32)
         add_test(NAME tobj_ada_active_find_app_e2e
@@ -464,7 +473,8 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     endif()
     set_tests_properties(tobj_ada_active_find_app_e2e PROPERTIES
         LABELS "cross_language;integration;real_app"
-        TIMEOUT 40)
+        TIMEOUT 40
+        RESOURCE_LOCK pyramid_process_e2e)
 
     if(WIN32)
         add_test(NAME tobj_ada_active_find_app_flatbuffers_e2e
@@ -483,7 +493,8 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     endif()
     set_tests_properties(tobj_ada_active_find_app_flatbuffers_e2e PROPERTIES
         LABELS "cross_language;integration;codec;real_app"
-        TIMEOUT 40)
+        TIMEOUT 40
+        RESOURCE_LOCK pyramid_process_e2e)
 
     # -- Pyramid Bridge Ada build + E2E test -----------------------------------
     set(ADA_BRIDGE_SRC_DIR ${PYRAMID_ROOT_DIR}/pyramid_bridge/ada)
@@ -527,6 +538,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_pyramid_bridge_e2e.bat
                     -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
                     -DSTUB_BIN=$<TARGET_FILE:ame_backend_stub>
+                    -DEVIDENCE_BIN=$<TARGET_FILE:pyramid_bridge_evidence_client>
                     -DBRIDGE_BIN=${PYRAMID_ROOT_DIR}/pyramid_bridge/ada/bin/pyramid_bridge_main
                     -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
@@ -534,11 +546,13 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
             COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_pyramid_bridge_e2e.sh
                     --app-bin $<TARGET_FILE:tactical_objects_app>
                     --stub-bin $<TARGET_FILE:ame_backend_stub>
+                    --evidence-bin $<TARGET_FILE:pyramid_bridge_evidence_client>
                     --bridge-bin ${PYRAMID_ROOT_DIR}/pyramid_bridge/ada/bin/pyramid_bridge_main)
     endif()
     set_tests_properties(pyramid_bridge_e2e PROPERTIES
         LABELS "cross_language;integration;shared_memory;real_app"
-        TIMEOUT 60)
+        TIMEOUT 60
+        RESOURCE_LOCK pyramid_process_e2e)
 
     if(WIN32 AND TARGET pyramid_grpc_transport)
         add_custom_target(ada_grpc_cpp_interop_build ALL
@@ -558,7 +572,8 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
         set_tests_properties(tobj_ada_grpc_cpp_interop_e2e PROPERTIES
             LABELS "cross_language;integration;grpc"
-            TIMEOUT 30)
+            TIMEOUT 30
+            RESOURCE_LOCK pyramid_process_e2e)
 
         add_test(NAME tobj_master_conformance_e2e
                     COMMAND ${CMAKE_COMMAND}
@@ -567,7 +582,8 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
         set_tests_properties(tobj_master_conformance_e2e PROPERTIES
             LABELS "cross_language;integration;conformance;codec;grpc"
-            TIMEOUT 120)
+            TIMEOUT 120
+            RESOURCE_LOCK pyramid_process_e2e)
     endif()
 endif()
 
