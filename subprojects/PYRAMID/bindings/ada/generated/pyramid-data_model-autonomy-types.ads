@@ -8,8 +8,6 @@ with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;
 
 package Pyramid.Data_Model.Autonomy.Types is
 
-   subtype Base_Progress    is Pyramid.Data_Model.Common.Types.Progress;
-   subtype Base_Achievement is Pyramid.Data_Model.Common.Types.Achievement;
 
    type Fact_Authority_Level is
      (Level_Unspecified,
@@ -43,6 +41,9 @@ package Pyramid.Data_Model.Autonomy.Types is
 
    type Related_Entity_Id_Array is array (Positive range <>) of Unbounded_String;
    type Related_Entity_Id_Array_Acc is access all Related_Entity_Id_Array;
+
+   subtype Base_Achievement is Pyramid.Data_Model.Common.Types.Achievement;
+   subtype Base_Progress is Pyramid.Data_Model.Common.Types.Progress;
 
    type Requirement_Reference is record
       Requirement_Id : Unbounded_String := Null_Unbounded_String;
@@ -179,8 +180,7 @@ package Pyramid.Data_Model.Autonomy.Types is
       Operation : Requirement_Placement_Operation := Operation_Unspecified;
       Target_Requirement_Id : Unbounded_String := Null_Unbounded_String;
       Related_Entity_Id : Related_Entity_Id_Array_Acc := null;
-      Progress : Base_Progress :=
-        Pyramid.Data_Model.Common.Types.Progress_Unspecified;
+      Progress : Base_Progress := Progress_Unspecified;
    end record;
 
    type Outstanding_Placement_Array is array (Positive range <>) of Requirement_Placement;
