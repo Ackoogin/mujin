@@ -38,12 +38,26 @@ See `README.md` for a comprehensive project overview, and `doc/reports/AME/stake
 
 ## Build
 
-This project uses MSVC on Windows via CMake. All dependencies (BehaviorTree.CPP, LAPKT, websocketpp, asio, googletest) are fetched automatically by CMake on first configure — no Conan or manual installs needed.
+This project uses CMake, with MSVC/Visual Studio 2022 the primary Windows toolchain. Core dependencies (BehaviorTree.CPP, LAPKT, websocketpp, asio, googletest, and optional PYRAMID transport dependencies) are fetched automatically by CMake on first configure -- no Conan or manual installs needed.
+
+`CMakePresets.json` lives at the repository root and defines:
+
+| Preset type | Names | Purpose |
+|-------------|-------|---------|
+| Configure | `default` | Standard workspace build in `build/` using project default options |
+| Configure | `all-on` | Optional dependencies enabled in `build-all-enabled/`: Foxglove, FlatBuffers, gRPC, Protobuf, ROS2 |
+| Configure | `all-off` | Optional dependencies disabled in `build-all-off/`: Foxglove, FlatBuffers, gRPC, Protobuf, ROS2 |
+| Build | `release`, `debug` | Release/Debug builds using the `default` configure preset |
+| Build | `all-on-release` | Release build using `all-on` |
+| Build | `all-off-release`, `all-off-debug` | Release/Debug builds using `all-off` |
+| Test | `all-on-release`, `all-off-release`, `all-off-debug` | CTest runs with `outputOnFailure` enabled |
+
+The presets currently do not force a generator or architecture. On Windows, use a Visual Studio 2022 x64 developer environment or select the Visual Studio 2022 x64 kit/generator in your CMake frontend.
 
 **Configure and build (Windows, VS 2022):**
 ```bat
 cmake --preset default
-cmake --build build --config Release -j%NUMBER_OF_PROCESSORS%
+cmake --build --preset release --parallel %NUMBER_OF_PROCESSORS%
 ```
 
 **Or using the helper script:**
@@ -54,16 +68,21 @@ subprojects\AME\scripts\build.bat
 **Debug build:**
 ```bat
 cmake --preset default
-cmake --build build --config Debug -j%NUMBER_OF_PROCESSORS%
+cmake --build --preset debug --parallel %NUMBER_OF_PROCESSORS%
 ```
 
-**Without Foxglove bridge (removes websocketpp/asio):**
+**All optional dependencies disabled:**
 ```bat
-cmake --preset default -DAME_FOXGLOVE=OFF
-cmake --build build --config Release
+cmake --preset all-off
+cmake --build --preset all-off-release
 ```
 
-The preset (`CMakePresets.json`) sets generator to "Visual Studio 17 2022", arch x64, binaryDir = `build/`.
+**VS Code / CMake Tools:**
+
+1. Open `D:\Dev\repo\mujin` as the workspace folder.
+2. Run `CMake: Enable CMake Presets integration` from the command palette.
+3. Use `CMake: Select Configure Preset`, `CMake: Select Build Preset`, and `CMake: Select Test Preset`.
+4. If the picker only shows `Release`, `Debug`, or `[Default]`, presets integration is not active yet.
 
 ## Tests
 
@@ -87,7 +106,7 @@ All 73 tests should pass across: WorldModel, TypeSystem, ActionRegistry, PlanCom
 ## Run the demo
 
 ```bat
-build\src\Release\ame_test_app.exe
+build\subprojects\AME\src\Release\ame_test_app.exe
 ```
 
 Produces three JSONL output files in the working directory: `ame_bt_events.jsonl`, `ame_wm_audit.jsonl`, `ame_plan_audit.jsonl`.

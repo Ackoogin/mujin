@@ -57,25 +57,43 @@ For full architecture details, see `subprojects/AME/doc/architecture/` and the c
 - C++17 compiler (MSVC 2019+, GCC 9+, Clang 10+)
 - Git (for automatic dependency fetching)
 
-All dependencies (BehaviorTree.CPP, LAPKT, websocketpp, asio, GoogleTest) are fetched automatically by CMake.
+Core dependencies (BehaviorTree.CPP, LAPKT, websocketpp, asio, GoogleTest, and optional PYRAMID transport dependencies) are fetched automatically by CMake.
 
 ### Build
 
 ```bash
-# Configure and build with the default VS 2022/x64 preset.
+# Configure and build with the default preset.
 cmake --preset default
-cmake --build build --config Release -j$(nproc)
+cmake --build --preset release --parallel $(nproc)
 
 # Or on Windows, use the AME helper script.
 subprojects\AME\scripts\build.bat
 ```
 
-To disable the Foxglove bridge (removes websocketpp/asio dependencies):
+Available configure presets:
+
+| Preset | Build directory | Options |
+|--------|-----------------|---------|
+| `default` | `build/` | Project defaults |
+| `all-on` | `build-all-enabled/` | Enables Foxglove, FlatBuffers, gRPC, Protobuf, and ROS2 |
+| `all-off` | `build-all-off/` | Disables Foxglove, FlatBuffers, gRPC, Protobuf, and ROS2 |
+
+Available build presets are `release`, `debug`, `all-on-release`, `all-off-release`, and `all-off-debug`. Test presets are available for `all-on-release`, `all-off-release`, and `all-off-debug`.
+
+The presets currently do not force a generator or architecture. On Windows, use a Visual Studio 2022 x64 developer environment or select the Visual Studio 2022 x64 kit/generator in your CMake frontend.
+
+To build with all optional dependencies disabled:
 
 ```bash
-cmake --preset default -DAME_FOXGLOVE=OFF
-cmake --build build --config Release
+cmake --preset all-off
+cmake --build --preset all-off-release
 ```
+
+### VS Code / CMake Tools
+
+Open `D:\Dev\repo\mujin` as the workspace folder. In the command palette, run `CMake: Enable CMake Presets integration`, then use `CMake: Select Configure Preset`, `CMake: Select Build Preset`, and `CMake: Select Test Preset`.
+
+If the CMake Tools picker only shows `Release`, `Debug`, or `[Default]`, presets integration is not active yet.
 
 ### Run Tests
 
