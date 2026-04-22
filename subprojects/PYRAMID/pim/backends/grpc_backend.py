@@ -117,6 +117,34 @@ def _facade_header(package: str) -> str:
     return package.replace('.', '_') + '.hpp'
 
 
+def _ensure_parent_packages(output_dir: Path, pkg_names: List[str]) -> None:
+    """Generate empty parent package specs required by Ada child packages.
+
+    For a package like Pyramid.Components.Foo.Services.Provided.GRPC_Transport,
+    Ada requires that every ancestor (Pyramid.Components, Pyramid.Components.Foo,
+    etc.) has a corresponding .ads file.  This function collects all such
+    ancestors from *pkg_names* and writes trivial specs for any that don't
+    already exist in *output_dir*.
+    """
+    needed: dict[str, None] = {}          # ordered set via dict
+    for pkg in pkg_names:
+        parts = pkg.split('.')
+        for i in range(1, len(parts)):    # skip full name, keep ancestors
+            ancestor = '.'.join(parts[:i])
+            needed[ancestor] = None
+
+    for ancestor in needed:
+        file_base = ancestor.lower().replace('.', '-')
+        ads = output_dir / (file_base + '.ads')
+        if ads.exists():
+            continue
+        with open(ads, 'w', encoding='utf-8', newline='\n') as f:
+            f.write(f'--  Auto-generated parent package spec (empty)\n')
+            f.write(f'package {ancestor} is\n')
+            f.write(f'end {ancestor};\n')
+        print(f'  Generated parent spec {ancestor}')
+
+
 class GrpcBackend(codec_backends.CodecBackend):
 
     @property
@@ -156,19 +184,26 @@ class GrpcBackend(codec_backends.CodecBackend):
     def generate_ada(self, index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
         output_dir.mkdir(parents=True, exist_ok=True)
         generated = []
+        generated_pkgs = []
 
         for pf in index.files:
             if not pf.services:
                 continue
 
             pkg_parts = [p.capitalize() for p in pf.package.split('.') if p]
-            file_base = '_'.join(p.lower() for p in pkg_parts)
+            pkg_name = '.'.join(pkg_parts) + '.GRPC_Transport'
+            # Use dashes for Ada file naming convention (Pyramid.Foo.Bar -> pyramid-foo-bar)
+            file_base = '-'.join(p.lower() for p in pkg_parts)
 
             spec_path = output_dir / (file_base + '-grpc_transport.ads')
             body_path = output_dir / (file_base + '-grpc_transport.adb')
             self._write_ada_spec(spec_path, pf, index)
             self._write_ada_body(body_path, pf, index)
             generated.extend([spec_path, body_path])
+            generated_pkgs.append(pkg_name)
+
+        # Generate empty parent package stubs required by Ada child packages
+        _ensure_parent_packages(output_dir, generated_pkgs)
 
         return generated
 

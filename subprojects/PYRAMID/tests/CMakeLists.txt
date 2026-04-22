@@ -364,24 +364,8 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${ADA_GEN_OUT}/protobuf/ada/pyramid_data_model_tactical-protobuf_codec.ads
                 ${ADA_GEN_OUT}/protobuf/ada/pyramid-data_model-tactical-protobuf_codec.ads
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${ADA_GEN_OUT}/grpc/ada/pyramid_components_tactical_objects_services_consumed-grpc_transport.ads
-                ${ADA_GEN_OUT}/grpc/ada/pyramid-components-tactical_objects-services-consumed-grpc_transport.ads
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${ADA_GEN_OUT}/grpc/ada/pyramid_components_tactical_objects_services_consumed-grpc_transport.adb
-                ${ADA_GEN_OUT}/grpc/ada/pyramid-components-tactical_objects-services-consumed-grpc_transport.adb
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${ADA_GEN_OUT}/grpc/ada/pyramid_components_tactical_objects_services_provided-grpc_transport.ads
-                ${ADA_GEN_OUT}/grpc/ada/pyramid-components-tactical_objects-services-provided-grpc_transport.ads
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${ADA_GEN_OUT}/grpc/ada/pyramid_components_tactical_objects_services_provided-grpc_transport.adb
-                ${ADA_GEN_OUT}/grpc/ada/pyramid-components-tactical_objects-services-provided-grpc_transport.adb
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${ADA_GEN_OUT}/grpc/ada/pyramid_components_autonomy_backend_services_provided-grpc_transport.ads
-                ${ADA_GEN_OUT}/grpc/ada/pyramid-components-autonomy_backend-services-provided-grpc_transport.ads
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${ADA_GEN_OUT}/grpc/ada/pyramid_components_autonomy_backend_services_provided-grpc_transport.adb
-                ${ADA_GEN_OUT}/grpc/ada/pyramid-components-autonomy_backend-services-provided-grpc_transport.adb
+        # Note: grpc backend now generates files with correct dash-separated names directly,
+        # along with required parent package stubs - no copy/rename needed
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_TEST_SRC_DIR}/bin
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
         ${_ada_fb_mkdir}

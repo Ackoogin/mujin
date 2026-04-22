@@ -46,7 +46,8 @@ project Pyramid_Bridge is
      (".",
       Root_Dir & "/subprojects/PYRAMID/examples/ada",
       Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated",
-      Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/flatbuffers/ada");
+      Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/flatbuffers/ada",
+      Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/grpc/ada");
 
    for Main use ("pyramid_bridge_main.adb");
 
