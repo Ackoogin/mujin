@@ -151,6 +151,21 @@ endif()
 enable_testing()
 
 # ---------------------------------------------------------------------------
+# Ada toolchain detection (shared by all subprojects that use gprbuild)
+# ---------------------------------------------------------------------------
+# Prefer the gprbuild that lives alongside g++ so the Ada compiler, C/C++
+# compiler, linker, and runtime libraries all come from one installation.
+find_program(GXX_FOR_ADA g++)
+if(GXX_FOR_ADA)
+    get_filename_component(_gxx_dir "${GXX_FOR_ADA}" DIRECTORY)
+    find_program(GPRBUILD gprbuild HINTS "${_gxx_dir}" NO_DEFAULT_PATH)
+    unset(_gxx_dir)
+endif()
+if(NOT GPRBUILD)
+    find_program(GPRBUILD gprbuild)
+endif()
+
+# ---------------------------------------------------------------------------
 # Component subprojects
 # ---------------------------------------------------------------------------
 add_subdirectory(subprojects/PCL)
