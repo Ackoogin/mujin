@@ -52,7 +52,7 @@ set "GEN_DIR=%PYRAMID_ROOT%\bindings\cpp\generated"
 set "GEN_FB_DIR=%GEN_DIR%\flatbuffers\cpp"
 set "BUILD_FB_DIR=%WORKSPACE_ROOT%\build\generated\flatbuffers\cpp"
 set "FLATBUFFERS_INCLUDE=%WORKSPACE_ROOT%\build\_deps\flatbuffers-src\include"
-set "NLOHMANN_INCLUDE=%WORKSPACE_ROOT%\build\_deps\nlohmann_json-src\include"
+set "NLOHMANN_INCLUDE=%PYRAMID_ROOT%\core\external"
 
 if not exist "%BUILD_FB_DIR%" (
   where cmake >nul 2>&1
