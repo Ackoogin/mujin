@@ -48,6 +48,8 @@ function(pyramid_fetch_grpc_dependency)
     endif()
 endfunction()
 
+add_library(pyramid_flatbuffers_support INTERFACE)
+
 if(PYRAMID_ENABLE_FLATBUFFERS)
     set(PYRAMID_FLATBUFFERS_SCHEMA_DIR "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/flatbuffers/cpp")
     set(PYRAMID_FLATBUFFERS_GEN_DIR "${CMAKE_BINARY_DIR}/generated/flatbuffers/cpp")
@@ -71,7 +73,6 @@ if(PYRAMID_ENABLE_FLATBUFFERS)
 
     add_custom_target(pyramid_flatbuffers_codegen DEPENDS ${PYRAMID_FLATBUFFERS_OUTPUTS})
 
-    add_library(pyramid_flatbuffers_support INTERFACE)
     add_dependencies(pyramid_flatbuffers_support pyramid_flatbuffers_codegen)
     target_include_directories(pyramid_flatbuffers_support
         INTERFACE
