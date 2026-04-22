@@ -55,7 +55,7 @@ if %errorlevel% equ 0 (
     echo [driver] Building Ada gRPC client...
     set "ADA_DIR=%PYRAMID_ROOT%\tests\ada"
     pushd "!ADA_DIR!"
-    gprbuild -P ada_grpc_cpp_interop_e2e.gpr -q -XMUJIN_ROOT="%WORKSPACE_ROOT%" -XPCL_LIB_DIR="%WORKSPACE_ROOT%\build\ada_gnat_pcl" -XPYRAMID_GEN_LIB_DIR="%WORKSPACE_ROOT%\build\ada_gnat_pyramid" >nul 2>&1
+    gprbuild -P ada_grpc_cpp_interop_e2e.gpr -q -XUNMANNED_ROOT="%WORKSPACE_ROOT%" -XPCL_LIB_DIR="%WORKSPACE_ROOT%\build\ada_gnat_pcl" -XPYRAMID_GEN_LIB_DIR="%WORKSPACE_ROOT%\build\ada_gnat_pyramid" >nul 2>&1
     if !errorlevel! neq 0 (
         echo [driver] gprbuild failed -- falling back to pre-built binary
     )

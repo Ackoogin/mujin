@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(mujin_workspace LANGUAGES C CXX)
+project(unmanned_workspace LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -7,10 +7,10 @@ set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-set(MUJIN_WORKSPACE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
-set(PCL_ROOT_DIR "${MUJIN_WORKSPACE_ROOT}/subprojects/PCL")
-set(PYRAMID_ROOT_DIR "${MUJIN_WORKSPACE_ROOT}/subprojects/PYRAMID")
-set(AME_ROOT_DIR "${MUJIN_WORKSPACE_ROOT}/subprojects/AME")
+set(UNMANNED_WORKSPACE_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
+set(PCL_ROOT_DIR "${UNMANNED_WORKSPACE_ROOT}/subprojects/PCL")
+set(PYRAMID_ROOT_DIR "${UNMANNED_WORKSPACE_ROOT}/subprojects/PYRAMID")
+set(AME_ROOT_DIR "${UNMANNED_WORKSPACE_ROOT}/subprojects/AME")
 
 # ---------------------------------------------------------------------------
 # Shared third-party dependencies
@@ -78,7 +78,7 @@ target_include_directories(lapkt_core PUBLIC
 
 if(MSVC)
     target_include_directories(lapkt_core BEFORE PUBLIC
-        ${MUJIN_WORKSPACE_ROOT}/cmake/compat
+        ${UNMANNED_WORKSPACE_ROOT}/cmake/compat
     )
     target_compile_definitions(lapkt_core PRIVATE WIN32)
     target_compile_options(lapkt_core PRIVATE /W0)
@@ -169,8 +169,8 @@ endif()
 # Component subprojects
 # ---------------------------------------------------------------------------
 add_subdirectory(subprojects/PCL)
-option(MUJIN_BUILD_PYRAMID "Build the PYRAMID subproject" ON)
-if(MUJIN_BUILD_PYRAMID)
+option(UNMANNED_BUILD_PYRAMID "Build the PYRAMID subproject" ON)
+if(UNMANNED_BUILD_PYRAMID)
     add_subdirectory(subprojects/PYRAMID)
 endif()
 add_subdirectory(subprojects/AME)

@@ -1,7 +1,7 @@
 with "gnatcoll";
 
 project Ada_Grpc_Cpp_Interop_E2E is
-  Root_Dir := external("MUJIN_ROOT", ".." & "/.." & "/.." & "/..");
+  Root_Dir := external("UNMANNED_ROOT", ".." & "/.." & "/.." & "/..");
   Pcl_Include_Dir := external("PCL_INCLUDE_DIR", Root_Dir & "/include");
   Pcl_Lib_Dir := external("PCL_LIB_DIR", Root_Dir & "/build/install/lib");
   Pcl_Lib_Name := external("PCL_LIB_NAME", "pcl_core");

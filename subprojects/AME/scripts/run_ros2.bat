@@ -2,7 +2,7 @@
 REM Run ame_ros2 nodes (in-process mode)
 REM Usage:
 REM   run_ros2.bat [domain.pddl] [problem.pddl]
-REM Or via pixi: pixi run --manifest-path D:\Dev\ros2-windows\pixi.toml cmd /c D:\Dev\repo\mujin\subprojects\AME\scripts\run_ros2.bat
+REM Or via pixi: pixi run --manifest-path D:\Dev\ros2-windows\pixi.toml cmd /c D:\Dev\repo\unmanned\subprojects\AME\scripts\run_ros2.bat
 
 set SCRIPT_DIR=%~dp0
 for %%I in ("%SCRIPT_DIR%\..\..\..") do set REPO_ROOT=%%~fI

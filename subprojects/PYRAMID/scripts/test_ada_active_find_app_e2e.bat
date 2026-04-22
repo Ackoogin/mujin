@@ -63,10 +63,10 @@ if %errorlevel% equ 0 (
         if !errorlevel! neq 0 set "CAN_BUILD_ADA=0"
     )
     if "!CAN_BUILD_ADA!"=="1" (
-        set "MUJIN_ROOT=%WORKSPACE_ROOT%"
+        set "UNMANNED_ROOT=%WORKSPACE_ROOT%"
         pushd "!ADA_DIR!"
         gprbuild -P ada_active_find_e2e.gpr -q ^
-          -XMUJIN_ROOT=!WORKSPACE_ROOT! ^
+          -XUNMANNED_ROOT=!WORKSPACE_ROOT! ^
           -XPCL_INCLUDE_DIR=!WORKSPACE_ROOT!\subprojects\PCL\include ^
           -XPCL_LIB_DIR=!ADA_PCL_LIB_DIR! ^
           -XPCL_LIB_NAME=pcl_core ^

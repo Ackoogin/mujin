@@ -9,7 +9,7 @@ for %%I in ("%SCRIPT_DIR%\..\..\..") do set REPO_ROOT=%%~fI
 cd /d "%REPO_ROOT%"
 
 echo === Configuring with CMake ===
-cmake --preset default -DMUJIN_BUILD_PYRAMID=OFF
+cmake --preset default -DUNMANNED_BUILD_PYRAMID=OFF
 if %ERRORLEVEL% neq 0 (
     echo CMake configure FAILED
     exit /b 1

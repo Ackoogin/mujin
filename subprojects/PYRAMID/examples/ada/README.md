@@ -29,7 +29,7 @@ the most reliable approach is to pass explicit paths from `subprojects/PYRAMID/e
 
 Recommended values:
 
-- `MUJIN_ROOT=../../../..`
+- `UNMANNED_ROOT=../../../..`
 - `PCL_INCLUDE_DIR=../../../../subprojects/PCL/include`
 - `PCL_LIB_DIR=../../../../subprojects/PCL/build/ada_gnat_pcl` or another directory containing GCC-compatible PCL static libraries
 - `PCL_LIB_NAME=pcl_core`
@@ -49,7 +49,7 @@ Example with explicit overrides:
 
 ```sh
 gprbuild -P pcl_sensor_demo.gpr \
-  -XMUJIN_ROOT=../../../.. \
+  -XUNMANNED_ROOT=../../../.. \
   -XPCL_INCLUDE_DIR=../../../../subprojects/PCL/include \
   -XPCL_LIB_DIR=../../../../subprojects/PCL/build/ada_gnat_pcl \
   -XPCL_LIB_NAME=pcl_core \

@@ -22,16 +22,16 @@ foreach ($line in $envOutput) {
 }
 
 # Add ame_ros2 DLL locations and ame_core DLLs
-$env:PATH = "D:\Dev\repo\mujin\build\ame_ros2\Release;" +
-            "D:\Dev\repo\mujin\build\ame_ros2\test\Release;" +
-            "D:\Dev\repo\mujin\install\ame_ros2\lib\ame_ros2;" +
-            "D:\Dev\repo\mujin\build\install\bin;" +
+$env:PATH = "D:\Dev\repo\unmanned\build\ame_ros2\Release;" +
+            "D:\Dev\repo\unmanned\build\ame_ros2\test\Release;" +
+            "D:\Dev\repo\unmanned\install\ame_ros2\lib\ame_ros2;" +
+            "D:\Dev\repo\unmanned\build\install\bin;" +
             $env:PATH
 
 Write-Host "VisualStudioVersion=$env:VisualStudioVersion"
 Write-Host "ros2 bin in PATH: $($env:PATH -like '*ros2-windows\bin*')"
 
-$base = "D:\Dev\repo\mujin\build\ame_ros2\test\Release"
+$base = "D:\Dev\repo\unmanned\build\ame_ros2\test\Release"
 $tests = @(
     "test_world_model_node",
     "test_executor_node",

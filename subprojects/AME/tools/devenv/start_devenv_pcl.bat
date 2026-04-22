@@ -7,7 +7,7 @@ setlocal EnableDelayedExpansion
 
 REM Get the directory where this script is located
 set "SCRIPT_DIR=%~dp0"
-REM tools\devenv\ up 4 levels to repo root (devenv -> tools -> AME -> subprojects -> mujin)
+REM tools\devenv\ up 4 levels to repo root (devenv -> tools -> AME -> subprojects -> unmanned)
 for %%I in ("%SCRIPT_DIR%\..\..\..\..") do set "REPO_ROOT=%%~fI"
 set "PYTHON=%SCRIPT_DIR%.venv\Scripts\python.exe"
 

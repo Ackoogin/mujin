@@ -3,10 +3,10 @@ Quick rclpy service call test - bypasses the ros2 CLI.
 Run from a shell that has ROS2 + ame_ros2 sourced:
 
   call D:\Dev\ros2-windows\setup.bat
-  call D:\Dev\repo\mujin\install\setup.bat
+  call D:\Dev\repo\unmanned\install\setup.bat
   set PYTHONPATH=%PYTHONPATH%;D:\Dev\ros2-windows\.pixi\envs\default\Lib\site-packages
-  set CYCLONEDDS_URI=file://D:/Dev/repo/mujin/cyclonedds_localhost.xml
-  D:\Dev\repo\mujin\subprojects\AME\tools\devenv\.venv\Scripts\python.exe subprojects\AME\tools\devenv\test_rclpy_svc.py
+  set CYCLONEDDS_URI=file://D:/Dev/repo/unmanned/cyclonedds_localhost.xml
+  D:\Dev\repo\unmanned\subprojects\AME\tools\devenv\.venv\Scripts\python.exe subprojects\AME\tools\devenv\test_rclpy_svc.py
 """
 
 import sys

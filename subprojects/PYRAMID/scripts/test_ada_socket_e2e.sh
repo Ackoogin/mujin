@@ -70,8 +70,8 @@ if command -v gprbuild &>/dev/null; then
   }
 
   (cd "$PYRAMID_ROOT/examples/ada" && \
-    MUJIN_ROOT="$WORKSPACE_ROOT" gprbuild -P ada_tobj_client.gpr -q \
-      -XMUJIN_ROOT="$WORKSPACE_ROOT" \
+    UNMANNED_ROOT="$WORKSPACE_ROOT" gprbuild -P ada_tobj_client.gpr -q \
+      -XUNMANNED_ROOT="$WORKSPACE_ROOT" \
       -XPCL_INCLUDE_DIR="$WORKSPACE_ROOT/subprojects/PCL/include" \
       -XPCL_LIB_DIR="$ADA_PCL_LIB_DIR" \
       -XPCL_LIB_NAME=pcl_core \

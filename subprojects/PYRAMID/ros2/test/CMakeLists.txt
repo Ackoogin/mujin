@@ -27,7 +27,7 @@ endif()
 ament_add_gtest(test_rclcpp_runtime_adapter test_rclcpp_runtime_adapter.cpp)
 target_include_directories(test_rclcpp_runtime_adapter PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../include
-    ${MUJIN_ROOT}/subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp
+    ${UNMANNED_ROOT}/subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp
 )
 ament_target_dependencies(test_rclcpp_runtime_adapter rclcpp)
 target_link_libraries(test_rclcpp_runtime_adapter

@@ -217,7 +217,7 @@ if(WIN32)
                 -DSERVER_BIN=$<TARGET_FILE:tobj_socket_server>
                 -DBRIDGE_BIN=$<TARGET_FILE:standalone_bridge>
                 -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
-                -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+                -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     add_test(NAME tobj_cpp_bridge_client_flatbuffers_e2e
         COMMAND ${CMAKE_COMMAND}
                 -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_cpp_bridge_client.bat
@@ -225,7 +225,7 @@ if(WIN32)
                 -DBRIDGE_BIN=$<TARGET_FILE:standalone_bridge>
                 -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
                 -DSCRIPT_ARGS=--content-type|application/flatbuffers
-                -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+                -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
 else()
     add_test(NAME tobj_cpp_bridge_client_e2e
         COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_bridge_client.sh
@@ -253,21 +253,21 @@ if(WIN32)
                 -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.bat
                 -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
                 -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
-                -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+                -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     add_test(NAME tobj_cpp_app_client_flatbuffers_e2e
         COMMAND ${CMAKE_COMMAND}
                 -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.bat
                 -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
                 -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
                 -DSCRIPT_ARGS=--content-type|application/flatbuffers
-                -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+                -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     add_test(NAME tobj_cpp_app_client_protobuf_e2e
         COMMAND ${CMAKE_COMMAND}
                 -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.bat
                 -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
                 -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
                 -DSCRIPT_ARGS=--content-type|application/protobuf
-                -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+                -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
 else()
     add_test(NAME tobj_cpp_app_client_e2e
         COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
@@ -385,9 +385,9 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_TEST_SRC_DIR}/bin
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
         ${_ada_fb_mkdir}
-        COMMAND ${CMAKE_COMMAND} -E env MUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
+        COMMAND ${CMAKE_COMMAND} -E env UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
                 ${GPRBUILD} -p -P ${ADA_TEST_SRC_DIR}/test_generated_bindings.gpr
-                -XMUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
+                -XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
                 -XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR}
                 -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
                 -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
@@ -424,7 +424,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_ada_socket_e2e.bat
                     -DSERVER_BIN=$<TARGET_FILE:tobj_socket_server>
                     -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_tobj_client
-                    -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+                    -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
         add_test(NAME tobj_ada_socket_e2e
             COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_ada_socket_e2e.sh
@@ -443,7 +443,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -DSERVER_BIN=$<TARGET_FILE:tobj_socket_server>
                     -DBRIDGE_BIN=$<TARGET_FILE:standalone_bridge>
                     -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e
-                    -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+                    -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
         add_test(NAME tobj_ada_active_find_e2e
             COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_e2e.sh
@@ -464,7 +464,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -DBRIDGE_BIN=$<TARGET_FILE:standalone_bridge>
                     -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e
                     -DSCRIPT_ARGS=--content-type|application/flatbuffers
-                    -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+                    -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
         add_test(NAME tobj_ada_active_find_flatbuffers_e2e
             COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_e2e.sh
@@ -484,7 +484,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_app_e2e.bat
                     -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
                     -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e
-                    -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+                    -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
         add_test(NAME tobj_ada_active_find_app_e2e
             COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_app_e2e.sh
@@ -503,7 +503,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
                     -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e
                     -DSCRIPT_ARGS=--content-type|application/flatbuffers
-                    -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+                    -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
         add_test(NAME tobj_ada_active_find_app_flatbuffers_e2e
             COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_app_e2e.sh
@@ -525,9 +525,9 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_BRIDGE_SRC_DIR}/bin
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
         ${_ada_fb_mkdir}
-        COMMAND ${CMAKE_COMMAND} -E env MUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
+        COMMAND ${CMAKE_COMMAND} -E env UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
                 ${GPRBUILD} -p -P ${ADA_BRIDGE_SRC_DIR}/pyramid_bridge.gpr -q
-                -XMUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
+                -XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
                 -XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR}
                 -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
                 -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
@@ -561,7 +561,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -DSTUB_BIN=$<TARGET_FILE:ame_backend_stub>
                     -DEVIDENCE_BIN=$<TARGET_FILE:pyramid_bridge_evidence_client>
                     -DBRIDGE_BIN=${PYRAMID_ROOT_DIR}/pyramid_bridge/ada/bin/pyramid_bridge_main
-                    -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+                    -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
         add_test(NAME pyramid_bridge_e2e
             COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_pyramid_bridge_e2e.sh
@@ -579,9 +579,9 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
 
     if(WIN32 AND TARGET pyramid_grpc_transport)
         add_custom_target(ada_grpc_cpp_interop_build ALL
-            COMMAND ${CMAKE_COMMAND} -E env MUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
+            COMMAND ${CMAKE_COMMAND} -E env UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
                     ${GPRBUILD} -p -P ${ADA_TEST_SRC_DIR}/ada_grpc_cpp_interop_e2e.gpr
-                    -XMUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
+                    -XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
                     -XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR}
                     -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
                     -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
@@ -601,7 +601,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -DSERVER_BIN=$<TARGET_FILE:tobj_grpc_server>
                     -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_grpc_cpp_interop_e2e
                     -DSCRIPT_ARGS=--dll-bin|$<TARGET_FILE:pyramid_grpc_c_shim>|--address|127.0.0.1:50111
-                    -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+                    -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
         set_tests_properties(tobj_ada_grpc_cpp_interop_e2e PROPERTIES
             LABELS "cross_language;integration;grpc"
             TIMEOUT 30
@@ -611,7 +611,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     COMMAND ${CMAKE_COMMAND}
                     -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_tobj_master_conformance.bat
                     -DSCRIPT_ARGS=--socket-server-bin|$<TARGET_FILE:tobj_socket_server>|--bridge-bin|$<TARGET_FILE:standalone_bridge>|--socket-client-bin|${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e|--grpc-server-bin|$<TARGET_FILE:tobj_grpc_server>|--grpc-client-bin|${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_grpc_cpp_interop_e2e|--grpc-dll-bin|$<TARGET_FILE:pyramid_grpc_c_shim>
-                    -P ${MUJIN_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+                    -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
         set_tests_properties(tobj_master_conformance_e2e PROPERTIES
             LABELS "cross_language;integration;conformance;codec;grpc"
             TIMEOUT 120

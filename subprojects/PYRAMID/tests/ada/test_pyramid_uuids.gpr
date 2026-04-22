@@ -1,5 +1,5 @@
 project Test_Pyramid_UUIDs is
-  Root_Dir := external("MUJIN_ROOT", ".." & "/.." & "/..");
+  Root_Dir := external("UNMANNED_ROOT", ".." & "/.." & "/..");
 
   for Languages use ("Ada");
   for Source_Dirs use

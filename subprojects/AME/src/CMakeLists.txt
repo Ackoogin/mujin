@@ -36,7 +36,7 @@ target_include_directories(ame_core PUBLIC
     ${PYRAMID_ROOT_DIR}/bindings/cpp/generated
 )
 
-if(NOT MUJIN_BUILD_PYRAMID)
+if(NOT UNMANNED_BUILD_PYRAMID)
     # Provide a no-op stub so ame_core and its dependants link cleanly
     # when the PYRAMID subproject is excluded from the build.
     if(NOT TARGET pyramid_core)
@@ -167,7 +167,7 @@ install(DIRECTORY ${AME_ROOT_DIR}/include/
 
 # Hand-written config file: creates ame::ame_core IMPORTED target
 configure_package_config_file(
-    ${MUJIN_WORKSPACE_ROOT}/cmake/ame_coreConfig.cmake.in
+    ${UNMANNED_WORKSPACE_ROOT}/cmake/ame_coreConfig.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/ame_coreConfig.cmake
     INSTALL_DESTINATION lib/cmake/ame_core
 )

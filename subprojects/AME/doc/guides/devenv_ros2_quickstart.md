@@ -24,8 +24,8 @@ It uses two parallel connections:
 ## Prerequisites
 
 - ROS2 Jazzy installed via pixi at `D:\Dev\ros2-windows`
-- `ame_ros2` built (run `subprojects\AME\scripts\build_ros2.bat` from `D:\Dev\repo\mujin` — see `subprojects/AME/doc/architecture/06-ros2.md`)
-- `install\setup.bat` sourced (produced by the colcon build at `D:\Dev\repo\mujin\install\setup.bat`)
+- `ame_ros2` built (run `subprojects\AME\scripts\build_ros2.bat` from `D:\Dev\repo\unmanned` — see `subprojects/AME/doc/architecture/06-ros2.md`)
+- `install\setup.bat` sourced (produced by the colcon build at `D:\Dev\repo\unmanned\install\setup.bat`)
 - Dev environment venv set up (`subprojects\AME\tools\devenv\setup_venv.bat`)
 
 ---
@@ -36,7 +36,7 @@ The devenv venv needs rclpy on `PYTHONPATH`. Set it in the shell before launchin
 
 ```bat
 call D:\Dev\ros2-windows\setup.bat
-call D:\Dev\repo\mujin\install\setup.bat
+call D:\Dev\repo\unmanned\install\setup.bat
 set PYTHONPATH=%PYTHONPATH%;D:\Dev\ros2-windows\.pixi\envs\default\Lib\site-packages
 ```
 
@@ -49,32 +49,32 @@ Then launch the devenv in the same shell (Step 4).
 The quickest path is the helper script, which handles all PATH and environment setup:
 
 ```bat
-D:\Dev\repo\mujin\subprojects\AME\scripts\run_ros2.bat
+D:\Dev\repo\unmanned\subprojects\AME\scripts\run_ros2.bat
 ```
 
 Or with custom PDDL files:
 
 ```bat
-subprojects\AME\scripts\run_ros2.bat D:\Dev\repo\mujin\subprojects\AME\domains\uav_search\domain.pddl ^
-                                      D:\Dev\repo\mujin\subprojects\AME\domains\uav_search\problem.pddl
+subprojects\AME\scripts\run_ros2.bat D:\Dev\repo\unmanned\subprojects\AME\domains\uav_search\domain.pddl ^
+                                      D:\Dev\repo\unmanned\subprojects\AME\domains\uav_search\problem.pddl
 ```
 
 **Alternatively, launch directly:**
 
 ```bat
 call D:\Dev\ros2-windows\setup.bat
-call D:\Dev\repo\mujin\install\setup.bat
+call D:\Dev\repo\unmanned\install\setup.bat
 
 REM In-process (single node, recommended for development):
 ros2 run ame_ros2 ame_combined ^
   --ros-args ^
-  -p domain.pddl_file:=D:/Dev/repo/mujin/subprojects/AME/domains/uav_search/domain.pddl ^
-  -p domain.problem_file:=D:/Dev/repo/mujin/subprojects/AME/domains/uav_search/problem.pddl
+  -p domain.pddl_file:=D:/Dev/repo/unmanned/subprojects/AME/domains/uav_search/domain.pddl ^
+  -p domain.problem_file:=D:/Dev/repo/unmanned/subprojects/AME/domains/uav_search/problem.pddl
 
 REM Or via launch file (equivalent):
 ros2 launch ame_ros2 ame_inprocess.launch.py ^
-  pddl_file:=D:/Dev/repo/mujin/subprojects/AME/domains/uav_search/domain.pddl ^
-  problem_file:=D:/Dev/repo/mujin/subprojects/AME/domains/uav_search/problem.pddl
+  pddl_file:=D:/Dev/repo/unmanned/subprojects/AME/domains/uav_search/domain.pddl ^
+  problem_file:=D:/Dev/repo/unmanned/subprojects/AME/domains/uav_search/problem.pddl
 ```
 
 The `AmeLifecycleManager` inside the combined node automatically configures and activates
@@ -84,8 +84,8 @@ For the distributed mode (separate processes):
 
 ```bat
 ros2 launch ame_ros2 ame_distributed.launch.py ^
-  pddl_file:=D:/Dev/repo/mujin/subprojects/AME/domains/uav_search/domain.pddl ^
-  problem_file:=D:/Dev/repo/mujin/subprojects/AME/domains/uav_search/problem.pddl
+  pddl_file:=D:/Dev/repo/unmanned/subprojects/AME/domains/uav_search/domain.pddl ^
+  problem_file:=D:/Dev/repo/unmanned/subprojects/AME/domains/uav_search/problem.pddl
 ```
 
 ---
@@ -110,7 +110,7 @@ the devenv expects at `ws://localhost:8765`.
 In the same shell where you set `PYTHONPATH` in Step 1:
 
 ```bat
-cd D:\Dev\repo\mujin
+cd D:\Dev\repo\unmanned
 subprojects\AME\tools\devenv\start_devenv.bat
 ```
 

@@ -1,7 +1,7 @@
 # PowerShell helper: set up VS + ROS2 env, then run colcon
 param([string]$Mode = "all")
 
-$ameRoot = "D:\Dev\repo\mujin"
+$ameRoot = "D:\Dev\repo\unmanned"
 
 # Capture VS + ROS2 environment via temp batch
 $envBat = @"
@@ -49,7 +49,7 @@ if ($Mode -eq "all" -or $Mode -eq "ros2") {
         --packages-select ame_ros2 `
         --base-paths "$ameRoot\subprojects\AME\ros2" `
         --cmake-force-configure `
-        --cmake-args "-DCMAKE_PREFIX_PATH=D:/Dev/ros2-windows;D:/Dev/repo/mujin/build/install"
+        --cmake-args "-DCMAKE_PREFIX_PATH=D:/Dev/ros2-windows;D:/Dev/repo/unmanned/build/install"
     if ($LASTEXITCODE -ne 0) { Write-Error "colcon build failed"; exit 1 }
 }
 

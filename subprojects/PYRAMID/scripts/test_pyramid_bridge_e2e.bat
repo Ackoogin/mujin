@@ -84,7 +84,7 @@ if %errorlevel% equ 0 (
     )
     pushd "%PYRAMID_ROOT%\pyramid_bridge\ada"
     gprbuild -P pyramid_bridge.gpr -q ^
-      -XMUJIN_ROOT=!WORKSPACE_ROOT! ^
+      -XUNMANNED_ROOT=!WORKSPACE_ROOT! ^
       -XPCL_INCLUDE_DIR=!WORKSPACE_ROOT!\subprojects\PCL\include ^
       -XPCL_LIB_DIR=!ADA_PCL_LIB_DIR! ^
       -XPCL_LIB_NAME=pcl_core ^

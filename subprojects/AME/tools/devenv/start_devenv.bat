@@ -6,7 +6,7 @@ rem Run setup_venv.bat once first if the .venv directory does not exist.
 setlocal
 
 set SCRIPT_DIR=%~dp0
-REM tools\devenv\ up 4 levels to repo root (devenv -> tools -> AME -> subprojects -> mujin)
+REM tools\devenv\ up 4 levels to repo root (devenv -> tools -> AME -> subprojects -> unmanned)
 for %%I in ("%SCRIPT_DIR%\..\..\..\..") do set REPO_ROOT=%%~fI
 set PYTHON=%SCRIPT_DIR%.venv\Scripts\python.exe
 set ROS2_ROOT=D:\Dev\ros2-windows
@@ -19,7 +19,7 @@ if not exist "%PYTHON%" (
 )
 
 REM Pin CycloneDDS to one interface (avoids multi-NIC reply confusion with VMware adapters)
-set CYCLONEDDS_URI=file://D:/Dev/repo/mujin/cyclonedds_localhost.xml
+set CYCLONEDDS_URI=file://D:/Dev/repo/unmanned/cyclonedds_localhost.xml
 
 REM Ensure the venv can import ROS2 Python packages and load their native DLLs.
 set PATH=%ROS2_PIXI%;%ROS2_PIXI%\Scripts;%ROS2_PIXI%\Library\bin;%ROS2_ROOT%\Scripts;%ROS2_ROOT%\bin;%REPO_ROOT%\install\ame_ros2\bin;%PATH%

@@ -26,7 +26,7 @@ cmake --preset default ^
   -DCMAKE_INSTALL_PREFIX=%AME_ROOT%\build\install ^
   -DPython3_EXECUTABLE=D:\Dev\ros2-windows\.pixi\envs\default\python.exe ^
   -DCMAKE_DISABLE_FIND_PACKAGE_ament_cmake=ON ^
-  -DMUJIN_BUILD_PYRAMID=OFF
+  -DUNMANNED_BUILD_PYRAMID=OFF
 if errorlevel 1 ( popd & goto error )
 cmake --build %AME_ROOT%\build --config Release -j%NUMBER_OF_PROCESSORS%
 if errorlevel 1 ( popd & goto error )
@@ -46,7 +46,7 @@ pixi run --manifest-path D:\Dev\ros2-windows\pixi.toml colcon build ^
   --base-paths %AME_ROOT%\subprojects\AME\ros2 ^
   --cmake-force-configure ^
   --cmake-args ^
-    "-DCMAKE_PREFIX_PATH=D:/Dev/ros2-windows;D:/Dev/repo/mujin/build/install" ^
+    "-DCMAKE_PREFIX_PATH=D:/Dev/ros2-windows;D:/Dev/repo/unmanned/build/install" ^
     "-DPython3_EXECUTABLE=D:/Dev/ros2-windows/.pixi/envs/default/python.exe"
 if errorlevel 1 goto error
 

@@ -8,21 +8,21 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
-if(NOT DEFINED MUJIN_ROOT)
-    get_filename_component(MUJIN_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
+if(NOT DEFINED UNMANNED_ROOT)
+    get_filename_component(UNMANNED_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
 endif()
-file(TO_CMAKE_PATH "${MUJIN_ROOT}" MUJIN_ROOT)
+file(TO_CMAKE_PATH "${UNMANNED_ROOT}" UNMANNED_ROOT)
 
 if(NOT DEFINED PCL_CORE_INCLUDE_DIR)
-    set(PCL_CORE_INCLUDE_DIR "${MUJIN_ROOT}/subprojects/PCL/include")
+    set(PCL_CORE_INCLUDE_DIR "${UNMANNED_ROOT}/subprojects/PCL/include")
 endif()
 file(TO_CMAKE_PATH "${PCL_CORE_INCLUDE_DIR}" PCL_CORE_INCLUDE_DIR)
 
 if(NOT DEFINED PCL_CORE_LIB)
     if(WIN32)
-        set(PCL_CORE_LIB "${MUJIN_ROOT}/build/subprojects/PCL/src/Release/pcl_core.lib")
+        set(PCL_CORE_LIB "${UNMANNED_ROOT}/build/subprojects/PCL/src/Release/pcl_core.lib")
     else()
-        set(PCL_CORE_LIB "${MUJIN_ROOT}/build/subprojects/PCL/src/libpcl_core.a")
+        set(PCL_CORE_LIB "${UNMANNED_ROOT}/build/subprojects/PCL/src/libpcl_core.a")
     endif()
 endif()
 file(TO_CMAKE_PATH "${PCL_CORE_LIB}" PCL_CORE_LIB)
@@ -46,13 +46,13 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 
 add_library(${PROJECT_NAME}_lib SHARED
     src/rclcpp_runtime_adapter.cpp
-    ${MUJIN_ROOT}/subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp/pyramid_ros2_transport_support.cpp
+    ${UNMANNED_ROOT}/subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp/pyramid_ros2_transport_support.cpp
 )
 set_target_properties(${PROJECT_NAME}_lib PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 target_include_directories(${PROJECT_NAME}_lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<BUILD_INTERFACE:${MUJIN_ROOT}/subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp>
+    $<BUILD_INTERFACE:${UNMANNED_ROOT}/subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp>
     $<INSTALL_INTERFACE:include>
 )
 
