@@ -296,17 +296,7 @@ if(WIN32 AND TARGET pyramid_grpc_transport)
     )
 endif()
 
-# Prefer the gprbuild that lives alongside g++ so the Ada compiler, C/C++
-# compiler, linker, and runtime libraries all come from the same toolchain.
-find_program(GXX_FOR_ADA g++)
-if(GXX_FOR_ADA)
-    get_filename_component(_gxx_dir "${GXX_FOR_ADA}" DIRECTORY)
-    find_program(GPRBUILD gprbuild HINTS "${_gxx_dir}" NO_DEFAULT_PATH)
-endif()
-if(NOT GPRBUILD)
-    find_program(GPRBUILD gprbuild)
-endif()
-unset(_gxx_dir)
+find_program(GPRBUILD gprbuild)
 set(PYRAMID_PROTO_ROOT ${PYRAMID_ROOT_DIR}/proto)
 if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     set(ADA_TEST_SRC_DIR ${PYRAMID_ROOT_DIR}/tests/ada)
@@ -322,23 +312,32 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         "Base library name for Ada gprbuild core PCL static library")
     set(ADA_PCL_SOCKET_LIB_NAME "pcl_transport_socket" CACHE STRING
         "Base library name for Ada gprbuild PCL socket transport static library")
-    set(ADA_PYRAMID_GEN_LIB_NAME "pyramid_generated_flatbuffers_codec" CACHE STRING
-        "Base library name for Ada gprbuild generated FlatBuffers codec archive")
-
     if(WIN32)
         set(ADA_PCL_LIB_DIR "${CMAKE_BINARY_DIR}/ada_gnat_pcl" CACHE PATH
             "Directory containing GNAT-compatible libpcl_core.a and libpcl_transport_socket.a")
         set(ADA_PCL_BUILD_SCRIPT "${PCL_ROOT_DIR}/scripts/build_gnat_pcl_static_libs.bat")
-        set(ADA_PYRAMID_GEN_LIB_DIR "${CMAKE_BINARY_DIR}/ada_gnat_pyramid" CACHE PATH
-            "Directory containing GNAT-compatible generated FlatBuffers codec archive")
-        set(ADA_PYRAMID_GEN_BUILD_SCRIPT "${PYRAMID_ROOT_DIR}/scripts/build_gnat_generated_flatbuffers_libs.bat")
     else()
         set(ADA_PCL_LIB_DIR "${CMAKE_BINARY_DIR}/subprojects/PCL/src" CACHE PATH
             "Directory containing libpcl_core/libpcl_transport_socket for Ada gprbuild")
-        set(ADA_PYRAMID_GEN_LIB_DIR "${CMAKE_BINARY_DIR}/ada_gnat_pyramid" CACHE PATH
-            "Directory containing GNAT-compatible generated FlatBuffers codec archive")
-        set(ADA_PYRAMID_GEN_BUILD_SCRIPT "${PYRAMID_ROOT_DIR}/scripts/build_gnat_generated_flatbuffers_libs.sh")
     endif()
+
+    if(PYRAMID_ENABLE_FLATBUFFERS)
+        set(ADA_PYRAMID_GEN_LIB_NAME "pyramid_generated_flatbuffers_codec" CACHE STRING
+            "Base library name for Ada gprbuild generated FlatBuffers codec archive")
+        if(WIN32)
+            set(ADA_PYRAMID_GEN_LIB_DIR "${CMAKE_BINARY_DIR}/ada_gnat_pyramid" CACHE PATH
+                "Directory containing GNAT-compatible generated FlatBuffers codec archive")
+            set(ADA_PYRAMID_GEN_BUILD_SCRIPT "${PYRAMID_ROOT_DIR}/scripts/build_gnat_generated_flatbuffers_libs.bat")
+        else()
+            set(ADA_PYRAMID_GEN_LIB_DIR "${CMAKE_BINARY_DIR}/ada_gnat_pyramid" CACHE PATH
+                "Directory containing GNAT-compatible generated FlatBuffers codec archive")
+            set(ADA_PYRAMID_GEN_BUILD_SCRIPT "${PYRAMID_ROOT_DIR}/scripts/build_gnat_generated_flatbuffers_libs.sh")
+        endif()
+        set(_ada_fb_args
+            -XPYRAMID_GEN_LIB_DIR=${ADA_PYRAMID_GEN_LIB_DIR}
+            -XPYRAMID_GEN_LIB_NAME=${ADA_PYRAMID_GEN_LIB_NAME}
+        )
+        set(_ada_fb_mkdir COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR})
 
     add_custom_target(ada_test_generated_bindings_build ALL
         COMMAND ${ADA_PYTHON} ${BINDINGS_GEN_SCRIPT} ${PYRAMID_PROTO_ROOT} ${ADA_GEN_OUT} --languages ada --backends json,flatbuffers,protobuf,grpc
@@ -365,7 +364,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                 ${ADA_GEN_OUT}/grpc/ada/pyramid-components-tactical_objects-services-provided-grpc_transport.ads
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_TEST_SRC_DIR}/bin
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR}
+        ${_ada_fb_mkdir}
         COMMAND ${CMAKE_COMMAND} -E env MUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
                 ${GPRBUILD} -p -P ${ADA_TEST_SRC_DIR}/test_generated_bindings.gpr
                 -XMUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
@@ -373,8 +372,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                 -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
                 -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
                 -XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME}
-                -XPYRAMID_GEN_LIB_DIR=${ADA_PYRAMID_GEN_LIB_DIR}
-                -XPYRAMID_GEN_LIB_NAME=${ADA_PYRAMID_GEN_LIB_NAME}
+                ${_ada_fb_args}
         WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
         COMMENT "Building Ada generated-bindings test"
     )
@@ -382,6 +380,8 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         add_custom_command(TARGET ada_test_generated_bindings_build PRE_BUILD
             COMMAND cmd /c "${ADA_PCL_BUILD_SCRIPT}" "${ADA_PCL_LIB_DIR}"
             COMMENT "Preparing GNAT-compatible PCL static archives for Ada builds")
+    endif()
+    if(WIN32)
         add_custom_command(TARGET ada_test_generated_bindings_build PRE_BUILD
             COMMAND cmd /c "${ADA_PYRAMID_GEN_BUILD_SCRIPT}" "${ADA_PYRAMID_GEN_LIB_DIR}"
             COMMENT "Preparing GNAT-compatible generated FlatBuffers archive for Ada builds")
@@ -504,7 +504,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     add_custom_target(pyramid_bridge_ada_build ALL
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_BRIDGE_SRC_DIR}/bin
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR}
+        ${_ada_fb_mkdir}
         COMMAND ${CMAKE_COMMAND} -E env MUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
                 ${GPRBUILD} -p -P ${ADA_BRIDGE_SRC_DIR}/pyramid_bridge.gpr -q
                 -XMUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
@@ -513,8 +513,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                 -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
                 -XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME}
                 -XPCL_SHMEM_LIB_NAME=${ADA_PCL_SHMEM_LIB_NAME}
-                -XPYRAMID_GEN_LIB_DIR=${ADA_PYRAMID_GEN_LIB_DIR}
-                -XPYRAMID_GEN_LIB_NAME=${ADA_PYRAMID_GEN_LIB_NAME}
+                ${_ada_fb_args}
         WORKING_DIRECTORY ${ADA_BRIDGE_SRC_DIR}
         COMMENT "Building Ada Pyramid Bridge"
         DEPENDS ada_test_generated_bindings_build
@@ -523,6 +522,8 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         add_custom_command(TARGET pyramid_bridge_ada_build PRE_BUILD
             COMMAND cmd /c "${ADA_PCL_BUILD_SCRIPT}" "${ADA_PCL_LIB_DIR}"
             COMMENT "Preparing GNAT-compatible PCL static archives for Pyramid Bridge build")
+    endif()
+    if(WIN32)
         add_custom_command(TARGET pyramid_bridge_ada_build PRE_BUILD
             COMMAND cmd /c "${ADA_PYRAMID_GEN_BUILD_SCRIPT}" "${ADA_PYRAMID_GEN_LIB_DIR}"
             COMMENT "Preparing GNAT-compatible generated FlatBuffers archive for Pyramid Bridge build")
@@ -553,6 +554,8 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         LABELS "cross_language;integration;shared_memory;real_app"
         TIMEOUT 60
         RESOURCE_LOCK pyramid_process_e2e)
+
+    endif() # PYRAMID_ENABLE_FLATBUFFERS
 
     if(WIN32 AND TARGET pyramid_grpc_transport)
         add_custom_target(ada_grpc_cpp_interop_build ALL
