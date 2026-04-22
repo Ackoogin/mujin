@@ -20,6 +20,24 @@ subprojects/PYRAMID/scripts/generate_bindings.sh
 
 For generated-binding architecture and usage, see [`../doc/architecture/generated_bindings.md`](../doc/architecture/generated_bindings.md).
 
+For a shorter engineer-facing architecture overview of how generated PYRAMID
+bindings plug into PCL, see
+[`../doc/architecture/pcl_pyramid_binding_generation_overview.md`](../doc/architecture/pcl_pyramid_binding_generation_overview.md).
+
+## Build-Local Generation
+
+The CMake build invokes `generate_bindings.py` during configure when
+`PYRAMID_GENERATE_CPP_BINDINGS=ON`. The default output is
+`${binaryDir}/generated/pyramid_cpp_bindings`, controlled by
+`PYRAMID_CPP_BINDINGS_DIR`. Build targets then depend on
+`pyramid_cpp_bindings_codegen`, which reruns the generator through a stamp file
+when proto contracts or generator Python files change.
+
+For externally delivered contracts, configure with
+`PYRAMID_GENERATE_CPP_BINDINGS=OFF` and set `PYRAMID_CPP_BINDINGS_DIR` to the
+delivered generated C++ binding tree. CMake will glob that tree instead of
+running the generator.
+
 ## SysML XMI Parser
 
 `sysml_parser.py` extracts logical data models from Cameo Systems Modeler XMI exports into structured JSON format.

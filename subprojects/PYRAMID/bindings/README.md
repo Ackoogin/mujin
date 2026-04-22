@@ -1,9 +1,18 @@
 # PYRAMID Bindings
 
 This directory contains the checked-in generated binding artifacts that form
-the current v1 component-facing contract. They are no longer example files:
-production code, Tactical Objects, examples, and tests all build against this
-tree.
+the current v1 component-facing contract snapshot. They are no longer example
+files: production code, Tactical Objects, examples, and tests use these
+interfaces, and downstream component repositories may receive an equivalent
+generated binding tree as a delivered contract artifact.
+
+The monorepo CMake build also creates build-local C++ artifacts under
+`${binaryDir}/generated/pyramid_cpp_bindings`. Those files are produced during
+configure from `subprojects/PYRAMID/proto/` when
+`PYRAMID_GENERATE_CPP_BINDINGS=ON`, then refreshed by the
+`pyramid_cpp_bindings_codegen` target during builds. CMake globs the build-local
+tree, plus supporting generated trees under `bindings/`, instead of maintaining
+handwritten lists of generated filenames.
 
 ## Directory Map
 
@@ -20,6 +29,10 @@ tree.
 `subprojects/PYRAMID/proto/` is the schema source of truth. Regenerate this
 tree with `subprojects/PYRAMID/scripts/generate_bindings.bat` or `.sh` after
 changing proto contracts or generator code.
+
+For a broad architecture view of how these generated artifacts plug into the
+PCL runtime, see
+[`../doc/architecture/pcl_pyramid_binding_generation_overview.md`](../doc/architecture/pcl_pyramid_binding_generation_overview.md).
 
 ## V1 Shape
 

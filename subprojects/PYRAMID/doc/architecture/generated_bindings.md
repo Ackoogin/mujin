@@ -5,13 +5,16 @@
 This is the canonical v1 guide for PYRAMID proto schemas, generated bindings,
 codec backends, and transport projections.
 
+For a shorter engineer-facing overview of how the generated binding layer plugs
+into PCL containers, executors, ports, and transport adapters, start with
+[pcl_pyramid_binding_generation_overview.md](pcl_pyramid_binding_generation_overview.md).
+
 Use this page when you need to:
 
 - understand the binding architecture
 - generate or regenerate bindings
 - write a component against generated services/topics
 - select JSON, FlatBuffers, or Protobuf at startup
-- review which generated artifacts are current versus deprecated
 
 For current Tactical Objects proof status and test coverage, use
 [generated_bindings_status.md](../../../../doc/reports/PYRAMID/generated_bindings_status.md).
@@ -44,6 +47,7 @@ the generated service binding layer.
 | Contract source | `subprojects/PYRAMID/proto/**/*.proto` |
 | Generator entry point | `subprojects/PYRAMID/pim/generate_bindings.py` |
 | Generated artifact home | `subprojects/PYRAMID/bindings/` |
+| Build-local C++ artifact home | `${binaryDir}/generated/pyramid_cpp_bindings` |
 | C++ service facade | `bindings/cpp/generated/pyramid_services_*_{provided,consumed}.{hpp,cpp}` |
 | C++ data-model types | `bindings/cpp/generated/pyramid_data_model_*_types.hpp` |
 | C++ JSON codecs | `bindings/cpp/generated/pyramid_data_model_*_codec.{hpp,cpp}` |
@@ -117,6 +121,61 @@ For all tooling below MBSE extraction, `.proto` is the canonical contract
 artifact. No component should introduce a lower-level schema that competes with
 the proto-derived types.
 
+## Build-Local CMake Artifacts
+
+The CMake build produces a build-local C++ binding tree so generated file names
+do not have to be hardcoded in `CMakeLists.txt`.
+
+By default, when `subprojects/PYRAMID/proto/` exists,
+`PYRAMID_GENERATE_CPP_BINDINGS=ON`. Configure runs:
+
+```bat
+python subprojects\PYRAMID\pim\generate_bindings.py ^
+  subprojects\PYRAMID\proto ^
+  build\generated\pyramid_cpp_bindings ^
+  --languages cpp ^
+  --backends <enabled-backends>
+```
+
+The exact output directory is `PYRAMID_CPP_BINDINGS_DIR`, which defaults to
+`${CMAKE_BINARY_DIR}/generated/pyramid_cpp_bindings`. Each preset therefore has
+its own generated tree:
+
+| Preset | Build-local binding directory |
+|--------|-------------------------------|
+| `default` | `build/generated/pyramid_cpp_bindings` |
+| `all-on` | `build-all-enabled/generated/pyramid_cpp_bindings` |
+| `all-off` | `build-all-off/generated/pyramid_cpp_bindings` |
+
+After configure has seeded the directory, CMake uses glob patterns to discover
+build-local generated files:
+
+- generated service facade sources and headers
+- data-model codec sources
+- FlatBuffers schemas and codec sources
+- generated gRPC transport sources
+
+CMake also derives Protobuf/gRPC compiler outputs from globbed proto files, and
+still globs supporting delivered binding sources under `subprojects/PYRAMID/bindings/`
+for the Tactical Objects Protobuf shim, gRPC C shim, and ROS2 support layer.
+
+The build graph then refreshes the local tree through the
+`pyramid_cpp_bindings_codegen` stamp target whenever proto files or generator
+Python files change. If a generator change adds or removes generated filenames,
+rerun CMake configure so the globbed source lists are refreshed.
+
+For a future component repository where the contract is delivered separately,
+turn off local generation and point CMake at the delivered tree:
+
+```bat
+cmake -S . -B build ^
+  -DPYRAMID_GENERATE_CPP_BINDINGS=OFF ^
+  -DPYRAMID_CPP_BINDINGS_DIR=C:\path\to\delivered\pyramid_cpp_bindings
+```
+
+In that mode, CMake does not run `generate_bindings.py`; it globs the supplied
+binding directory and fails early if required generated sources are missing.
+
 ## Regenerating Bindings
 
 From the repository root:
@@ -144,9 +203,11 @@ The backend registry is in:
 - `pim/codec_backends.py`
 - `pim/backends/`
 
-Generated files are checked in for the current proving path. When changing a
-generator, regenerate the affected outputs and run the binding tests listed
-below.
+Generated files are checked in for the current proving path and may also be
+materialized into build-local directories by CMake. When changing a generator,
+regenerate the affected checked-in outputs if the contract snapshot should
+change, then reconfigure/rebuild so the build-local artifacts are refreshed and
+run the binding tests listed below.
 
 ## Content-Type Contract
 
@@ -264,6 +325,10 @@ topic is relevant, so components can use one facade consistently.
 
 ## Codec Backends
 
+Codec backends serialize typed generated values into the payload carried by
+PCL or by a generated transport envelope. They do not choose the endpoint or
+threading model.
+
 | Backend | Content type | V1 status |
 |---------|--------------|-----------|
 | JSON | `application/json` | baseline active path |
@@ -282,17 +347,38 @@ Adding a codec means:
 
 Transport choice must not change handler signatures.
 
-Current transport projections are:
+There are two transport categories:
 
-- PCL baseline
-- generated gRPC projection
-- generated ROS2 projection and runtime support
-- PCL shared-memory bus foundation
+- PCL runtime transports carry `pcl_msg_t` buffers whose payload codec is chosen
+  by `content_type`.
+- Generated transport bundles project the same proto service contract onto a
+  middleware surface, such as gRPC or ROS2, while still handing business logic
+  back through the generated facade and PCL executor.
+
+| Transport option | Codec relationship | Current state |
+|------------------|--------------------|---------------|
+| PCL in-process | Uses generated JSON, FlatBuffers, or Protobuf payload helpers | Baseline active path |
+| PCL socket | Uses generated JSON, FlatBuffers, or Protobuf payload helpers | Available PCL transport path |
+| PCL UDP | Uses generated payload helpers for pub/sub traffic | Available pub/sub-oriented path |
+| PCL shared memory | Uses generated payload helpers over shared-memory transport | Foundation present |
+| gRPC bundle | Generated gRPC/protobuf service framing; selected with `--backends grpc`, not by runtime `content_type` alone | Generated C++ transport support and smoke/interop coverage |
+| ROS2 bundle | ROS2 envelope carries `content_type` plus payload bytes, preserving codec selection inside the envelope | Generated Tactical Objects projection, C++ facade hooks, shared support layer, fake-adapter and `rclcpp` proofs |
 
 Transport code owns endpoint binding, routing, framing, and I/O thread handoff.
 It must not own payload semantics or codec-specific handler interfaces.
 
-For ROS2 details, use [ros2_transport_semantics.md](ros2_transport_semantics.md).
+ROS2 current-state summary:
+
+- Implemented: generated Tactical Objects ROS2 transport projection, generated
+  `bindRos2(...)` C++ hooks, generated Ada endpoint constants/specs, generic
+  envelope support, direct `rclcpp` runtime adapter, pub/sub, unary service,
+  streaming service, outbound publish, and executor-thread handoff tests.
+- Not yet implemented: ROS2 action mapping, Ada ROS2 runtime beyond generated
+  constants/specs, and top-level plain-CMake integration for the ament package
+  build.
+
+For the canonical ROS2 naming, envelope, streaming, and threading rules, use
+[ros2_transport_semantics.md](ros2_transport_semantics.md).
 
 ## Ada Policy
 
@@ -339,17 +425,3 @@ Run the broader binding/codec/Tactical Objects E2E set:
 ```bat
 ctest --test-dir build -C Release -R "(ProtoBindings|CodecDispatch|TacticalObjectsE2E|tobj_cpp_bridge|tobj_cpp_app)" --output-on-failure
 ```
-
-## Deprecated Or Historical Material
-
-The following are not v1 user guides:
-
-- `doc/reviews/PYRAMID/review_pyramid_bindings_pluggability.md`: historical review and action
-  plan
-- Historical references to `examples/dispatch/*_codec_dispatch.*`: removed
-  standalone dispatch candidate
-- Historical generated artifacts under `examples/`: moved to `bindings/`.
-  New generated output should not be added beneath `examples/`.
-
-Update new work to point at this guide and
-[generated_bindings_status.md](../../../../doc/reports/PYRAMID/generated_bindings_status.md).

@@ -48,6 +48,7 @@ subprojects\PCL\scripts\build_gnat_pcl_static_libs.bat
 - [Low-level requirements](doc/requirements/LLR.md)
 - [Component container design](doc/architecture/component_container_design.md)
 - [Component system overview](doc/architecture/08-pcl-component-system.md)
+- [PCL/PYRAMID binding generation overview](../PYRAMID/doc/architecture/pcl_pyramid_binding_generation_overview.md)
 - [Peer and transport configuration guide](doc/guides/peer_transport_configuration.md)
 - [Coverage report](../../doc/reports/PCL/COVERAGE_REPORT.md)
 - [HLR coverage matrix](../../doc/reports/PCL/HLR_COVERAGE.md)

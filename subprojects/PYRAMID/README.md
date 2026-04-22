@@ -22,6 +22,16 @@ cmake --build build --config Release --target pyramid_core tactical_objects tact
 ctest --test-dir build --output-on-failure -C Release -R "Tactical|ProtoBindings|CodecDispatch|tobj_|Ros2TransportSemantics"
 ```
 
+During CMake configure, PYRAMID generates a build-local C++ binding tree under
+`${binaryDir}/generated/pyramid_cpp_bindings` by default. CMake globs that tree
+for generated service facades, codecs, schemas, and transport projections, then
+build targets refresh it through `pyramid_cpp_bindings_codegen` when proto or
+generator inputs change.
+
+For component repositories that receive the contract separately, set
+`PYRAMID_GENERATE_CPP_BINDINGS=OFF` and point `PYRAMID_CPP_BINDINGS_DIR` at the
+delivered generated C++ binding tree.
+
 Regenerate bindings after changing proto contracts:
 
 ```bat
@@ -48,6 +58,7 @@ subprojects\PYRAMID\scripts\generate_bindings.bat
 
 | Document | Purpose |
 |----------|---------|
+| [doc/architecture/pcl_pyramid_binding_generation_overview.md](doc/architecture/pcl_pyramid_binding_generation_overview.md) | Broad engineer-facing overview of how PYRAMID generated bindings plug into the PCL runtime |
 | [doc/architecture/generated_bindings.md](doc/architecture/generated_bindings.md) | Canonical v1 guide for proto schemas, generated bindings, codecs, transports, and how components should use them |
 | [generated bindings status](../../doc/reports/PYRAMID/generated_bindings_status.md) | Current Tactical Objects binding/conformance status, proof matrix, and remaining gaps |
 | [doc/architecture/ros2_transport_semantics.md](doc/architecture/ros2_transport_semantics.md) | ROS2 topic/service/stream mapping rules |
