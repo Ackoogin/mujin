@@ -117,6 +117,50 @@ def check_cpp(generator: Path, proto_dir: Path) -> None:
         raise AssertionError("cpp json,ros2: parallel ROS2 transport files were generated")
     shutil.rmtree(out_dir)
 
+    out_dir = _case(generator, proto_dir, "cpp", "json,grpc")
+    service_text = _read(_cpp_service_files(out_dir))
+    _assert_present(
+        "cpp json,grpc service facade",
+        service_text,
+        [
+            r"class\s+GrpcServer",
+            r"buildGrpcServer",
+            r"kProtobufContentType",
+        ],
+    )
+    _assert_absent(
+        "cpp json,grpc service facade",
+        service_text,
+        [
+            r"bindRos2",
+            r"pyramid::transport::ros2::Adapter",
+            r"kFlatBuffersContentType",
+        ],
+    )
+    grpc_files = sorted((out_dir / "grpc" / "cpp").glob("*_grpc_transport.*"))
+    grpc_text = _read(grpc_files)
+    _assert_absent(
+        "cpp grpc transport implementation",
+        grpc_text,
+        [
+            r"class\s+ServiceHandler",
+            r"ServiceHandler::",
+            r"buildServer\s*\(",
+            r"handler_",
+        ],
+    )
+    _assert_present(
+        "cpp grpc transport implementation",
+        grpc_text,
+        [
+            r"pcl_executor_post_service_request",
+            r"buildGrpcServer",
+        ],
+    )
+    if (out_dir / "ros2").exists():
+        raise AssertionError("cpp json,grpc: unselected ROS2 transport directory was generated")
+    shutil.rmtree(out_dir)
+
     out_dir = _case(generator, proto_dir, "cpp", "json,flatbuffers")
     text = _read(_cpp_service_files(out_dir))
     _assert_present("cpp json,flatbuffers", text, [r"flatbuffers", r"kFlatBuffersContentType"])

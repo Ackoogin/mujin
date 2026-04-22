@@ -41,24 +41,27 @@ add_library(pyramid::tactical_objects_component ALIAS tactical_objects_component
 target_sources(tactical_objects_component PRIVATE
     src/TacticalObjectsComponent.cpp
     src/StandardBridge.cpp
-    ${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_services_tactical_objects_provided.cpp
-    ${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_services_tactical_objects_consumed.cpp
+    ${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
+    ${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
 )
+add_dependencies(tactical_objects_component pyramid_cpp_bindings_codegen)
 target_include_directories(tactical_objects_component PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
 target_include_directories(tactical_objects_component PRIVATE
-  ${PYRAMID_ROOT_DIR}/bindings/cpp/generated
+  ${PYRAMID_CPP_BINDINGS_DIR}
   ${PYRAMID_ROOT_DIR}/bindings/protobuf/cpp
 )
 target_link_libraries(tactical_objects_component PUBLIC
   tactical_objects
   pcl_core
   pyramid_generated_codecs
-  pyramid_protobuf_support
   pyramid_flatbuffers_support
 )
+if(TARGET pyramid_protobuf_support)
+  target_link_libraries(tactical_objects_component PUBLIC pyramid_protobuf_support)
+endif()
 target_compile_features(tactical_objects_component PUBLIC cxx_std_14)
 
 # ---------------------------------------------------------------------------
@@ -70,8 +73,9 @@ add_executable(tactical_objects_app
 
 add_executable(tactical_objects_test_client
     src/apps/tactical_objects_test_client.cpp
-    ${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_services_tactical_objects_provided.cpp
+    ${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
 )
+add_dependencies(tactical_objects_test_client pyramid_cpp_bindings_codegen)
 
 target_link_libraries(tactical_objects_app
     PRIVATE
@@ -80,13 +84,15 @@ target_link_libraries(tactical_objects_app
         pcl_transport_shared_memory
         pcl_transport_socket
         pyramid_generated_codecs
-        pyramid_protobuf_support
         pyramid_flatbuffers_support
 )
+if(TARGET pyramid_protobuf_support)
+  target_link_libraries(tactical_objects_app PRIVATE pyramid_protobuf_support)
+endif()
 
 target_include_directories(tactical_objects_app
     PRIVATE
-        ${PYRAMID_ROOT_DIR}/bindings/cpp/generated
+        ${PYRAMID_CPP_BINDINGS_DIR}
         ${PYRAMID_ROOT_DIR}/bindings/protobuf/cpp
 )
 
@@ -98,13 +104,15 @@ target_link_libraries(tactical_objects_test_client
         pcl_transport_socket
         nlohmann_json::nlohmann_json
         pyramid_generated_codecs
-        pyramid_protobuf_support
         pyramid_flatbuffers_support
 )
+if(TARGET pyramid_protobuf_support)
+  target_link_libraries(tactical_objects_test_client PRIVATE pyramid_protobuf_support)
+endif()
 
 target_include_directories(tactical_objects_test_client
     PRIVATE
-        ${PYRAMID_ROOT_DIR}/bindings/cpp/generated
+        ${PYRAMID_CPP_BINDINGS_DIR}
         ${PYRAMID_ROOT_DIR}/bindings/protobuf/cpp
 )
 

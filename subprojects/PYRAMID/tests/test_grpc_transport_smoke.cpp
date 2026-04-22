@@ -1,7 +1,5 @@
 #include <gtest/gtest.h>
 
-#include "pyramid_components_tactical_objects_services_provided_grpc_transport.hpp"
-
 #include "pyramid/components/tactical_objects/services/provided.grpc.pb.h"
 
 #include <pcl/pcl_container.h>
@@ -14,6 +12,34 @@
 #include <memory>
 #include <string>
 #include <thread>
+
+namespace pyramid::services::tactical_objects::provided {
+
+class GrpcServer {
+public:
+  GrpcServer();
+  GrpcServer(GrpcServer&&) noexcept;
+  GrpcServer& operator=(GrpcServer&&) noexcept;
+  GrpcServer(const GrpcServer&) = delete;
+  GrpcServer& operator=(const GrpcServer&) = delete;
+  ~GrpcServer();
+
+  bool started() const;
+  explicit operator bool() const { return started(); }
+  void shutdown();
+
+private:
+  struct Impl;
+  explicit GrpcServer(std::unique_ptr<Impl> impl);
+  std::unique_ptr<Impl> impl_;
+  friend GrpcServer buildGrpcServer(const std::string& listen_address,
+                                    pcl_executor_t* executor);
+};
+
+GrpcServer buildGrpcServer(const std::string& listen_address,
+                           pcl_executor_t* executor);
+
+}  // namespace pyramid::services::tactical_objects::provided
 
 namespace proto_services = pyramid::components::tactical_objects::services::provided;
 namespace proto_base = pyramid::data_model::base;
@@ -111,9 +137,8 @@ TEST(GrpcTransportSmoke, UnaryCreateRequirementRoundTrip) {
     }
   });
 
-  auto host = provided::grpc_transport::buildServer(kAddress, executor);
-  ASSERT_NE(host, nullptr);
-  ASSERT_NE(host->get(), nullptr);
+  auto host = provided::buildGrpcServer(kAddress, executor);
+  ASSERT_TRUE(host.started());
 
   auto channel =
       grpc::CreateChannel(kAddress, grpc::InsecureChannelCredentials());
@@ -137,7 +162,7 @@ TEST(GrpcTransportSmoke, UnaryCreateRequirementRoundTrip) {
   EXPECT_EQ(g_handler_thread_id, g_executor_thread_id);
   EXPECT_EQ(response.value(), kExpectedIdentifier);
 
-  host->shutdown();
+  host.shutdown();
   spin_stop.store(true);
   executor_thread.join();
   pcl_container_destroy(container);

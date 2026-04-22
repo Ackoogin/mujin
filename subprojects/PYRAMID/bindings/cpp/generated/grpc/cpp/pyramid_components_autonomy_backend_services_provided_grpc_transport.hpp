@@ -1,8 +1,8 @@
 // Auto-generated gRPC transport — do not edit
-// Backend: grpc | Namespace: pyramid::components::autonomy_backend::services::provided::grpc_transport
+// Backend: grpc | Namespace: pyramid::services::autonomy_backend::provided::grpc_transport
 //
 // Exposes proto services as gRPC services, delegating to
-// the same ServiceHandler interface used by PCL bindings.
+// the standard generated service facade and PCL executor.
 //
 // Requires: protoc + grpc_cpp_plugin generated code
 // Link with: grpc++ protobuf
@@ -11,44 +11,11 @@
 #include "pyramid/components/autonomy_backend/services/provided.grpc.pb.h"
 
 #include <grpcpp/grpcpp.h>
+#include <pcl/pcl_executor.h>
 #include <memory>
 #include <string>
 
-namespace pyramid::components::autonomy_backend::services::provided::grpc_transport {
-
-// ---------------------------------------------------------------------------
-// ServiceHandler — transport-agnostic business logic interface
-//
-// Implement this interface once; it works with both PCL and gRPC transport.
-// ---------------------------------------------------------------------------
-
-class ServiceHandler {
-public:
-    virtual ~ServiceHandler() = default;
-
-    // Capabilities_Service
-    virtual std::vector<Capabilities> handleReadCapabilities(const Query& request);
-
-    // Planning_Execution_Service
-    virtual Identifier handleCreateRequirement(const PlanningExecutionRequirement& request);
-    virtual std::vector<PlanningExecutionRequirement> handleReadRequirement(const Query& request);
-    virtual Ack handleUpdateRequirement(const PlanningExecutionRequirement& request);
-    virtual Ack handleDeleteRequirement(const Identifier& request);
-
-    // State_Service
-    virtual Identifier handleCreateState(const StateUpdate& request);
-    virtual Ack handleUpdateState(const StateUpdate& request);
-    virtual Ack handleDeleteState(const Identifier& request);
-
-    // Plan_Service
-    virtual std::vector<Plan> handleReadPlan(const Query& request);
-
-    // Execution_Run_Service
-    virtual std::vector<ExecutionRun> handleReadRun(const Query& request);
-
-    // Requirement_Placement_Service
-    virtual std::vector<RequirementPlacement> handleReadPlacement(const Query& request);
-};
+namespace pyramid::services::autonomy_backend::provided::grpc_transport {
 
 // ---------------------------------------------------------------------------
 // Capabilities_Service — gRPC service implementation
@@ -56,8 +23,8 @@ public:
 
 class Capabilities_ServiceImpl final : public pyramid::components::autonomy_backend::services::provided::Capabilities_Service::Service {
 public:
-    explicit Capabilities_ServiceImpl(ServiceHandler& handler)
-        : handler_(handler) {}
+    explicit Capabilities_ServiceImpl(pcl_executor_t* executor)
+        : executor_(executor) {}
 
     grpc::Status ReadCapabilities(
         grpc::ServerContext* context,
@@ -65,7 +32,7 @@ public:
         grpc::ServerWriter<::pyramid::data_model::autonomy::Capabilities>* writer) override;
 
 private:
-    ServiceHandler& handler_;
+    pcl_executor_t* executor_;
 };
 
 // ---------------------------------------------------------------------------
@@ -74,8 +41,8 @@ private:
 
 class Planning_Execution_ServiceImpl final : public pyramid::components::autonomy_backend::services::provided::Planning_Execution_Service::Service {
 public:
-    explicit Planning_Execution_ServiceImpl(ServiceHandler& handler)
-        : handler_(handler) {}
+    explicit Planning_Execution_ServiceImpl(pcl_executor_t* executor)
+        : executor_(executor) {}
 
     grpc::Status CreateRequirement(
         grpc::ServerContext* context,
@@ -98,7 +65,7 @@ public:
         ::pyramid::data_model::common::Ack* response) override;
 
 private:
-    ServiceHandler& handler_;
+    pcl_executor_t* executor_;
 };
 
 // ---------------------------------------------------------------------------
@@ -107,8 +74,8 @@ private:
 
 class State_ServiceImpl final : public pyramid::components::autonomy_backend::services::provided::State_Service::Service {
 public:
-    explicit State_ServiceImpl(ServiceHandler& handler)
-        : handler_(handler) {}
+    explicit State_ServiceImpl(pcl_executor_t* executor)
+        : executor_(executor) {}
 
     grpc::Status CreateState(
         grpc::ServerContext* context,
@@ -126,7 +93,7 @@ public:
         ::pyramid::data_model::common::Ack* response) override;
 
 private:
-    ServiceHandler& handler_;
+    pcl_executor_t* executor_;
 };
 
 // ---------------------------------------------------------------------------
@@ -135,8 +102,8 @@ private:
 
 class Plan_ServiceImpl final : public pyramid::components::autonomy_backend::services::provided::Plan_Service::Service {
 public:
-    explicit Plan_ServiceImpl(ServiceHandler& handler)
-        : handler_(handler) {}
+    explicit Plan_ServiceImpl(pcl_executor_t* executor)
+        : executor_(executor) {}
 
     grpc::Status ReadPlan(
         grpc::ServerContext* context,
@@ -144,7 +111,7 @@ public:
         grpc::ServerWriter<::pyramid::data_model::autonomy::Plan>* writer) override;
 
 private:
-    ServiceHandler& handler_;
+    pcl_executor_t* executor_;
 };
 
 // ---------------------------------------------------------------------------
@@ -153,8 +120,8 @@ private:
 
 class Execution_Run_ServiceImpl final : public pyramid::components::autonomy_backend::services::provided::Execution_Run_Service::Service {
 public:
-    explicit Execution_Run_ServiceImpl(ServiceHandler& handler)
-        : handler_(handler) {}
+    explicit Execution_Run_ServiceImpl(pcl_executor_t* executor)
+        : executor_(executor) {}
 
     grpc::Status ReadRun(
         grpc::ServerContext* context,
@@ -162,7 +129,7 @@ public:
         grpc::ServerWriter<::pyramid::data_model::autonomy::ExecutionRun>* writer) override;
 
 private:
-    ServiceHandler& handler_;
+    pcl_executor_t* executor_;
 };
 
 // ---------------------------------------------------------------------------
@@ -171,8 +138,8 @@ private:
 
 class Requirement_Placement_ServiceImpl final : public pyramid::components::autonomy_backend::services::provided::Requirement_Placement_Service::Service {
 public:
-    explicit Requirement_Placement_ServiceImpl(ServiceHandler& handler)
-        : handler_(handler) {}
+    explicit Requirement_Placement_ServiceImpl(pcl_executor_t* executor)
+        : executor_(executor) {}
 
     grpc::Status ReadPlacement(
         grpc::ServerContext* context,
@@ -180,15 +147,7 @@ public:
         grpc::ServerWriter<::pyramid::data_model::autonomy::RequirementPlacement>* writer) override;
 
 private:
-    ServiceHandler& handler_;
+    pcl_executor_t* executor_;
 };
 
-// ---------------------------------------------------------------------------
-// Server builder — registers all services on one gRPC server
-// ---------------------------------------------------------------------------
-
-std::unique_ptr<grpc::Server> buildServer(
-    const std::string& listen_address,
-    ServiceHandler& handler);
-
-} // namespace pyramid::components::autonomy_backend::services::provided::grpc_transport
+} // namespace pyramid::services::autonomy_backend::provided::grpc_transport

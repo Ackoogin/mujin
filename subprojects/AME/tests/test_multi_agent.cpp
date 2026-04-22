@@ -558,8 +558,14 @@ TEST_F(MultiAgentPlanningTest, ScalabilityWithMoreSectors) {
     std::cout << "  Solve time: " << result.solve_time_ms << " ms" << std::endl;
     std::cout << "  Nodes expanded: " << result.expanded << std::endl;
     
-    // Should complete in reasonable time
-    EXPECT_LT(result.solve_time_ms, 5000.0) << "Planning took too long";
+    // Debug builds are substantially slower, but this should still catch
+    // accidental blow-ups in the planner search space.
+#if defined(NDEBUG)
+    constexpr double kMaxSolveTimeMs = 5000.0;
+#else
+    constexpr double kMaxSolveTimeMs = 10000.0;
+#endif
+    EXPECT_LT(result.solve_time_ms, kMaxSolveTimeMs) << "Planning took too long";
 }
 
 // =============================================================================

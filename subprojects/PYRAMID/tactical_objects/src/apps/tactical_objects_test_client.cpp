@@ -1,7 +1,11 @@
 #include "pyramid_services_tactical_objects_provided.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
+#if defined(PYRAMID_ENABLE_FLATBUFFERS)
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
+#endif
+#if defined(PYRAMID_ENABLE_PROTOBUF)
 #include "pyramid_services_tactical_objects_protobuf_codec.hpp"
+#endif
 
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
@@ -19,8 +23,12 @@
 
 namespace {
 
+#if defined(PYRAMID_ENABLE_FLATBUFFERS)
 namespace FlatCodec = pyramid::services::tactical_objects::flatbuffers_codec;
+#endif
+#if defined(PYRAMID_ENABLE_PROTOBUF)
 namespace ProtobufCodec = pyramid::services::tactical_objects::protobuf_codec;
+#endif
 namespace Provided = pyramid::services::tactical_objects::provided;
 namespace TacticalCodec = pyramid::data_model::tactical;
 namespace Common = pyramid::data_model::common;
@@ -42,14 +50,19 @@ void onEntityMatches(pcl_container_t*, const pcl_msg_t* msg, void* user_data) {
   std::vector<ObjectMatch> matches;
   std::string payload;
   try {
-    if (msg->type_name &&
-        std::strcmp(msg->type_name, FlatCodec::kContentType) == 0) {
+    if (false) {
+#if defined(PYRAMID_ENABLE_FLATBUFFERS)
+    } else if (msg->type_name &&
+               std::strcmp(msg->type_name, FlatCodec::kContentType) == 0) {
       matches = FlatCodec::fromBinaryObjectMatchArray(msg->data, msg->size);
       payload = "<flatbuffers>";
+#endif
+#if defined(PYRAMID_ENABLE_PROTOBUF)
     } else if (msg->type_name &&
                std::strcmp(msg->type_name, "application/protobuf") == 0) {
       matches = ProtobufCodec::fromBinaryObjectMatchArray(msg->data, msg->size);
       payload = "<protobuf>";
+#endif
     } else {
       payload.assign(static_cast<const char*>(msg->data), msg->size);
       auto arr = nlohmann::json::parse(payload);
@@ -84,12 +97,17 @@ void onCreateRequirementResponse(const pcl_msg_t* resp, void* user_data) {
 
   try {
     std::string identifier;
-    if (resp->type_name &&
-        std::strcmp(resp->type_name, FlatCodec::kContentType) == 0) {
+    if (false) {
+#if defined(PYRAMID_ENABLE_FLATBUFFERS)
+    } else if (resp->type_name &&
+               std::strcmp(resp->type_name, FlatCodec::kContentType) == 0) {
       identifier = FlatCodec::fromBinaryIdentifier(resp->data, resp->size);
+#endif
+#if defined(PYRAMID_ENABLE_PROTOBUF)
     } else if (resp->type_name &&
                std::strcmp(resp->type_name, "application/protobuf") == 0) {
       identifier = ProtobufCodec::fromBinaryIdentifier(resp->data, resp->size);
+#endif
     } else {
       const std::string payload(static_cast<const char*>(resp->data), resp->size);
       const auto response = nlohmann::json::parse(payload);

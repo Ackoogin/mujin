@@ -113,3 +113,5 @@ subprojects/AME/scripts/install/*
 subprojects/AME/scripts/log/*
 
 
+build-all-enabled/*
+build-all-off/*

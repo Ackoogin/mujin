@@ -5,6 +5,30 @@
             "name": "default",
             "displayName": "Default",
             "binaryDir": "${sourceDir}/build"
+        },
+        {
+            "name": "all-on",
+            "displayName": "All Optional Dependencies Enabled",
+            "binaryDir": "${sourceDir}/build-all-enabled",
+            "cacheVariables": {
+                "AME_FOXGLOVE": "ON",
+                "PYRAMID_ENABLE_FLATBUFFERS": "ON",
+                "PYRAMID_ENABLE_GRPC": "ON",
+                "PYRAMID_ENABLE_PROTOBUF": "ON",
+                "PYRAMID_ENABLE_ROS2": "ON"
+            }
+        },
+        {
+            "name": "all-off",
+            "displayName": "All Optional Dependencies Disabled",
+            "binaryDir": "${sourceDir}/build-all-off",
+            "cacheVariables": {
+                "AME_FOXGLOVE": "OFF",
+                "PYRAMID_ENABLE_FLATBUFFERS": "OFF",
+                "PYRAMID_ENABLE_GRPC": "OFF",
+                "PYRAMID_ENABLE_PROTOBUF": "OFF",
+                "PYRAMID_ENABLE_ROS2": "OFF"
+            }
         }
     ],
     "buildPresets": [
@@ -17,6 +41,47 @@
             "name": "debug",
             "configurePreset": "default",
             "configuration": "Debug"
+        },
+        {
+            "name": "all-on-release",
+            "configurePreset": "all-on",
+            "configuration": "Release"
+        },
+        {
+            "name": "all-off-release",
+            "configurePreset": "all-off",
+            "configuration": "Release"
+        },
+        {
+            "name": "all-off-debug",
+            "configurePreset": "all-off",
+            "configuration": "Debug"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "all-on-release",
+            "configurePreset": "all-on",
+            "configuration": "Release",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "all-off-release",
+            "configurePreset": "all-off",
+            "configuration": "Release",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "all-off-debug",
+            "configurePreset": "all-off",
+            "configuration": "Debug",
+            "output": {
+                "outputOnFailure": true
+            }
         }
     ]
 }

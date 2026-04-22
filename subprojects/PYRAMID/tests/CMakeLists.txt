@@ -1,7 +1,7 @@
 include(GoogleTest)
 
 set(TOBJ_TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tactical_objects)
-set(PROTO_BINDINGS_DIR ${PYRAMID_ROOT_DIR}/bindings/cpp/generated)
+set(PROTO_BINDINGS_DIR ${PYRAMID_CPP_BINDINGS_DIR})
 
 find_program(PYRAMID_PYTHON NAMES python3 python)
 if(NOT PYRAMID_PYTHON)
@@ -158,6 +158,7 @@ add_executable(tobj_socket_server
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
 )
+add_dependencies(tobj_socket_server pyramid_cpp_bindings_codegen)
 target_link_libraries(tobj_socket_server PRIVATE
     tactical_objects tactical_objects_component
     pcl_core pcl_transport_socket
@@ -175,6 +176,7 @@ endif()
 add_executable(standalone_bridge
     ${TOBJ_TEST_DIR}/standalone_bridge.cpp
 )
+add_dependencies(standalone_bridge pyramid_cpp_bindings_codegen)
 target_link_libraries(standalone_bridge PRIVATE
     tactical_objects tactical_objects_component
     pcl_core pcl_transport_socket
@@ -196,6 +198,7 @@ add_executable(cpp_active_find_e2e EXCLUDE_FROM_ALL
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
 )
+add_dependencies(cpp_active_find_e2e pyramid_cpp_bindings_codegen)
 target_link_libraries(cpp_active_find_e2e PRIVATE
     pcl_core pcl_transport_socket
     pyramid_generated_codecs
@@ -210,6 +213,7 @@ if(NOT WIN32)
     target_link_libraries(cpp_active_find_e2e PRIVATE pthread)
 endif()
 
+set(_tobj_cpp_bridge_tests tobj_cpp_bridge_client_e2e)
 if(WIN32)
     add_test(NAME tobj_cpp_bridge_client_e2e
         COMMAND ${CMAKE_COMMAND}
@@ -218,35 +222,42 @@ if(WIN32)
                 -DBRIDGE_BIN=$<TARGET_FILE:standalone_bridge>
                 -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
                 -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
-    add_test(NAME tobj_cpp_bridge_client_flatbuffers_e2e
-        COMMAND ${CMAKE_COMMAND}
-                -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_cpp_bridge_client.bat
-                -DSERVER_BIN=$<TARGET_FILE:tobj_socket_server>
-                -DBRIDGE_BIN=$<TARGET_FILE:standalone_bridge>
-                -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
-                -DSCRIPT_ARGS=--content-type|application/flatbuffers
-                -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+    if(PYRAMID_ENABLE_FLATBUFFERS)
+        add_test(NAME tobj_cpp_bridge_client_flatbuffers_e2e
+            COMMAND ${CMAKE_COMMAND}
+                    -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_cpp_bridge_client.bat
+                    -DSERVER_BIN=$<TARGET_FILE:tobj_socket_server>
+                    -DBRIDGE_BIN=$<TARGET_FILE:standalone_bridge>
+                    -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
+                    -DSCRIPT_ARGS=--content-type|application/flatbuffers
+                    -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+        list(APPEND _tobj_cpp_bridge_tests tobj_cpp_bridge_client_flatbuffers_e2e)
+    endif()
 else()
     add_test(NAME tobj_cpp_bridge_client_e2e
         COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_bridge_client.sh
                 --server-bin $<TARGET_FILE:tobj_socket_server>
                 --bridge-bin $<TARGET_FILE:standalone_bridge>
                 --client-bin $<TARGET_FILE:tactical_objects_test_client>)
-    add_test(NAME tobj_cpp_bridge_client_flatbuffers_e2e
-        COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_bridge_client.sh
-                --server-bin $<TARGET_FILE:tobj_socket_server>
-                --bridge-bin $<TARGET_FILE:standalone_bridge>
-                --client-bin $<TARGET_FILE:tactical_objects_test_client>
-                --content-type application/flatbuffers)
+    if(PYRAMID_ENABLE_FLATBUFFERS)
+        add_test(NAME tobj_cpp_bridge_client_flatbuffers_e2e
+            COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_bridge_client.sh
+                    --server-bin $<TARGET_FILE:tobj_socket_server>
+                    --bridge-bin $<TARGET_FILE:standalone_bridge>
+                    --client-bin $<TARGET_FILE:tactical_objects_test_client>
+                    --content-type application/flatbuffers)
+        list(APPEND _tobj_cpp_bridge_tests tobj_cpp_bridge_client_flatbuffers_e2e)
+    endif()
 endif()
 set_tests_properties(
-    tobj_cpp_bridge_client_e2e
-    tobj_cpp_bridge_client_flatbuffers_e2e
+    ${_tobj_cpp_bridge_tests}
     PROPERTIES
         LABELS "cross_language;integration;codec"
         TIMEOUT 30
         RESOURCE_LOCK pyramid_process_e2e)
+unset(_tobj_cpp_bridge_tests)
 
+set(_tobj_cpp_app_tests tobj_cpp_app_client_e2e)
 if(WIN32)
     add_test(NAME tobj_cpp_app_client_e2e
         COMMAND ${CMAKE_COMMAND}
@@ -254,44 +265,55 @@ if(WIN32)
                 -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
                 -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
                 -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
-    add_test(NAME tobj_cpp_app_client_flatbuffers_e2e
-        COMMAND ${CMAKE_COMMAND}
-                -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.bat
-                -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
-                -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
-                -DSCRIPT_ARGS=--content-type|application/flatbuffers
-                -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
-    add_test(NAME tobj_cpp_app_client_protobuf_e2e
-        COMMAND ${CMAKE_COMMAND}
-                -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.bat
-                -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
-                -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
-                -DSCRIPT_ARGS=--content-type|application/protobuf
-                -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+    if(PYRAMID_ENABLE_FLATBUFFERS)
+        add_test(NAME tobj_cpp_app_client_flatbuffers_e2e
+            COMMAND ${CMAKE_COMMAND}
+                    -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.bat
+                    -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
+                    -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
+                    -DSCRIPT_ARGS=--content-type|application/flatbuffers
+                    -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+        list(APPEND _tobj_cpp_app_tests tobj_cpp_app_client_flatbuffers_e2e)
+    endif()
+    if(PYRAMID_ENABLE_PROTOBUF)
+        add_test(NAME tobj_cpp_app_client_protobuf_e2e
+            COMMAND ${CMAKE_COMMAND}
+                    -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.bat
+                    -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
+                    -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
+                    -DSCRIPT_ARGS=--content-type|application/protobuf
+                    -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+        list(APPEND _tobj_cpp_app_tests tobj_cpp_app_client_protobuf_e2e)
+    endif()
 else()
     add_test(NAME tobj_cpp_app_client_e2e
         COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
                 --app-bin $<TARGET_FILE:tactical_objects_app>
                 --client-bin $<TARGET_FILE:tactical_objects_test_client>)
-    add_test(NAME tobj_cpp_app_client_flatbuffers_e2e
-        COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
-                --app-bin $<TARGET_FILE:tactical_objects_app>
-                --client-bin $<TARGET_FILE:tactical_objects_test_client>
-                --content-type application/flatbuffers)
-    add_test(NAME tobj_cpp_app_client_protobuf_e2e
-        COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
-                --app-bin $<TARGET_FILE:tactical_objects_app>
-                --client-bin $<TARGET_FILE:tactical_objects_test_client>
-                --content-type application/protobuf)
+    if(PYRAMID_ENABLE_FLATBUFFERS)
+        add_test(NAME tobj_cpp_app_client_flatbuffers_e2e
+            COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
+                    --app-bin $<TARGET_FILE:tactical_objects_app>
+                    --client-bin $<TARGET_FILE:tactical_objects_test_client>
+                    --content-type application/flatbuffers)
+        list(APPEND _tobj_cpp_app_tests tobj_cpp_app_client_flatbuffers_e2e)
+    endif()
+    if(PYRAMID_ENABLE_PROTOBUF)
+        add_test(NAME tobj_cpp_app_client_protobuf_e2e
+            COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
+                    --app-bin $<TARGET_FILE:tactical_objects_app>
+                    --client-bin $<TARGET_FILE:tactical_objects_test_client>
+                    --content-type application/protobuf)
+        list(APPEND _tobj_cpp_app_tests tobj_cpp_app_client_protobuf_e2e)
+    endif()
 endif()
 set_tests_properties(
-    tobj_cpp_app_client_e2e
-    tobj_cpp_app_client_flatbuffers_e2e
-    tobj_cpp_app_client_protobuf_e2e
+    ${_tobj_cpp_app_tests}
     PROPERTIES
         LABELS "cross_language;integration;codec"
         TIMEOUT 30
         RESOURCE_LOCK pyramid_process_e2e)
+unset(_tobj_cpp_app_tests)
 
 if(WIN32 AND TARGET pyramid_grpc_transport)
     add_executable(tobj_grpc_server
@@ -302,7 +324,8 @@ if(WIN32 AND TARGET pyramid_grpc_transport)
         pyramid_protobuf_support
     )
     target_include_directories(tobj_grpc_server PRIVATE
-        ${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp
+        ${PROTO_BINDINGS_DIR}
+        ${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp
         ${PYRAMID_PROTOBUF_GEN_DIR}
     )
 endif()
@@ -351,7 +374,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         set(_ada_fb_mkdir COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR})
 
     add_custom_target(ada_test_generated_bindings_build ALL
-        COMMAND ${ADA_PYTHON} ${BINDINGS_GEN_SCRIPT} ${PYRAMID_PROTO_ROOT} ${ADA_GEN_OUT} --languages ada --backends json,flatbuffers,protobuf,grpc
+        COMMAND ${ADA_PYTHON} ${BINDINGS_GEN_SCRIPT} ${PYRAMID_PROTO_ROOT} ${ADA_GEN_OUT} --languages ada --backends json,flatbuffers,protobuf,grpc,ros2
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${ADA_GEN_OUT}/protobuf/ada/pyramid_components_tactical_objects-protobuf_codec.ads
                 ${ADA_GEN_OUT}/protobuf/ada/pyramid-components-tactical_objects-protobuf_codec.ads
@@ -613,7 +636,8 @@ if(TARGET pyramid_grpc_transport)
         GTest::gtest_main
     )
     target_include_directories(test_grpc_transport_smoke PRIVATE
-        ${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp
+        ${PROTO_BINDINGS_DIR}
+        ${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp
         ${PYRAMID_PROTOBUF_GEN_DIR}
     )
     gtest_discover_tests(test_grpc_transport_smoke DISCOVERY_MODE PRE_TEST)
@@ -629,7 +653,7 @@ if(TARGET pyramid_ros2_transport)
     )
     target_include_directories(test_ros2_transport_semantics PRIVATE
         ${PROTO_BINDINGS_DIR}
-        ${PYRAMID_ROOT_DIR}/bindings/cpp/generated/ros2/cpp
+        ${PYRAMID_CPP_BINDINGS_DIR}/ros2/cpp
     )
     gtest_discover_tests(test_ros2_transport_semantics DISCOVERY_MODE PRE_TEST)
     add_test(NAME tobj_ros2_facade_e2e

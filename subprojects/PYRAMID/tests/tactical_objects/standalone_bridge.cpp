@@ -23,8 +23,11 @@
 ///                          [--timeout SECS]
 #include <TacticalObjectsCodec.h>
 #include <StreamingCodec.h>
+#include "pyramid_data_model_types.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
+#if defined(PYRAMID_ENABLE_FLATBUFFERS)
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
+#endif
 #include <pcl/pcl_executor.h>
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_transport_socket.h>
@@ -46,7 +49,9 @@
 
 using namespace tactical_objects;
 using json = nlohmann::json;
+#if defined(PYRAMID_ENABLE_FLATBUFFERS)
 namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
+#endif
 namespace data_model = pyramid::data_model;
 namespace tactical_codec = pyramid::data_model::tactical;
 
@@ -57,7 +62,9 @@ namespace tactical_codec = pyramid::data_model::tactical;
 static std::atomic<bool> g_shutdown{false};
 static void signal_handler(int) { g_shutdown.store(true); }
 static constexpr const char* kJsonContentType = "application/json";
+#if defined(PYRAMID_ENABLE_FLATBUFFERS)
 static constexpr const char* kFlatBuffersContentType = "application/flatbuffers";
+#endif
 
 // ---------------------------------------------------------------------------
 // Shared state between callbacks and main loop
@@ -95,14 +102,24 @@ struct BridgeState {
 static BridgeState g_bridge;
 
 static bool is_flatbuffers_content_type(const char* content_type) {
+#if defined(PYRAMID_ENABLE_FLATBUFFERS)
   return content_type &&
          std::strcmp(content_type, kFlatBuffersContentType) == 0;
+#else
+  (void)content_type;
+  return false;
+#endif
 }
 
 static const char* normalize_content_type(const char* content_type) {
+#if defined(PYRAMID_ENABLE_FLATBUFFERS)
   return is_flatbuffers_content_type(content_type)
              ? kFlatBuffersContentType
              : kJsonContentType;
+#else
+  (void)content_type;
+  return kJsonContentType;
+#endif
 }
 
 static data_model::StandardIdentity standardIdentityFromAffiliation(Affiliation a) {
@@ -218,9 +235,13 @@ static std::string dataPolicyToString(data_model::DataPolicy policy) {
 
 static std::string encode_entity_matches_payload(const std::vector<data_model::ObjectMatch>& matches,
                                                  const char* content_type) {
+#if defined(PYRAMID_ENABLE_FLATBUFFERS)
   if (is_flatbuffers_content_type(content_type)) {
     return flatbuffers_codec::toBinary(matches);
   }
+#else
+  (void)content_type;
+#endif
   std::string payload = "[";
   bool first = true;
   for (const auto& match : matches) {
@@ -234,17 +255,25 @@ static std::string encode_entity_matches_payload(const std::vector<data_model::O
 
 static std::string encode_evidence_requirement_payload(const data_model::ObjectEvidenceRequirement& req,
                                                        const char* content_type) {
+#if defined(PYRAMID_ENABLE_FLATBUFFERS)
   if (is_flatbuffers_content_type(content_type)) {
     return flatbuffers_codec::toBinary(req);
   }
+#else
+  (void)content_type;
+#endif
   return tactical_codec::toJson(req);
 }
 
 static std::string encode_identifier_payload(const data_model::Identifier& id,
                                              const char* content_type) {
+#if defined(PYRAMID_ENABLE_FLATBUFFERS)
   if (is_flatbuffers_content_type(content_type)) {
     return flatbuffers_codec::toBinary(id);
   }
+#else
+  (void)content_type;
+#endif
   return json(id).dump();
 }
 
@@ -253,13 +282,17 @@ static bool decode_object_evidence(const pcl_msg_t* msg, data_model::ObjectDetai
     return false;
   }
   try {
+#if defined(PYRAMID_ENABLE_FLATBUFFERS)
     if (is_flatbuffers_content_type(msg->type_name)) {
       evidence = flatbuffers_codec::fromBinaryObjectDetail(msg->data, msg->size);
     } else {
+#endif
       evidence = tactical_codec::fromJson(
           std::string(static_cast<const char*>(msg->data), msg->size),
           static_cast<data_model::ObjectDetail*>(nullptr));
+#if defined(PYRAMID_ENABLE_FLATBUFFERS)
     }
+#endif
     return true;
   } catch (...) {
     return false;
@@ -310,13 +343,17 @@ static bool decode_create_requirement(const pcl_msg_t* msg,
     return false;
   }
   try {
+#if defined(PYRAMID_ENABLE_FLATBUFFERS)
     if (is_flatbuffers_content_type(msg->type_name)) {
       req = flatbuffers_codec::fromBinaryObjectInterestRequirement(msg->data, msg->size);
     } else {
+#endif
       req = tactical_codec::fromJson(
           std::string(static_cast<const char*>(msg->data), msg->size),
           static_cast<data_model::ObjectInterestRequirement*>(nullptr));
+#if defined(PYRAMID_ENABLE_FLATBUFFERS)
     }
+#endif
     return true;
   } catch (...) {
     return false;

@@ -33,7 +33,7 @@ add_library(ame_core STATIC
 
 target_include_directories(ame_core PUBLIC
     ${AME_ROOT_DIR}/include
-    ${PYRAMID_ROOT_DIR}/bindings/cpp/generated
+    ${PYRAMID_CPP_BINDINGS_DIR}
 )
 
 if(NOT UNMANNED_BUILD_PYRAMID)
@@ -52,6 +52,7 @@ target_link_libraries(ame_core
         pyramid_core
         pyramid_generated_codecs
 )
+add_dependencies(ame_core pyramid_cpp_bindings_codegen)
 
 # ---------------------------------------------------------------------------
 # Foxglove WebSocket bridge (optional)

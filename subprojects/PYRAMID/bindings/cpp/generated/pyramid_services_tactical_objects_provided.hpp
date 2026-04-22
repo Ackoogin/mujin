@@ -20,6 +20,7 @@
 
 #include "ros2/cpp/pyramid_ros2_transport_support.hpp"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -299,6 +300,36 @@ pcl_status_t invokeReadDetail(pcl_executor_t* executor,
                               const Query&                 request,
                               const char*       content_type = "application/json",
                               const pcl_endpoint_route_t* route = nullptr);
+
+// ---------------------------------------------------------------------------
+// gRPC binding startup hook
+// ---------------------------------------------------------------------------
+
+class GrpcServer {
+public:
+    GrpcServer();
+    GrpcServer(GrpcServer&&) noexcept;
+    GrpcServer& operator=(GrpcServer&&) noexcept;
+    GrpcServer(const GrpcServer&) = delete;
+    GrpcServer& operator=(const GrpcServer&) = delete;
+    ~GrpcServer();
+
+    bool started() const;
+    explicit operator bool() const { return started(); }
+    void wait();
+    void shutdown();
+
+private:
+    struct Impl;
+    explicit GrpcServer(std::unique_ptr<Impl> impl);
+    std::unique_ptr<Impl> impl_;
+    friend GrpcServer buildGrpcServer(const std::string& listen_address,
+                                      pcl_executor_t* executor);
+};
+
+/// \brief Start generated gRPC ingress endpoints on a PCL executor.
+GrpcServer buildGrpcServer(const std::string& listen_address,
+                           pcl_executor_t* executor);
 
 // ---------------------------------------------------------------------------
 // ROS2 binding startup hook

@@ -1,5 +1,3 @@
-#include "pyramid_components_tactical_objects_services_provided_grpc_transport.hpp"
-
 #include "pyramid/data_model/base.pb.h"
 #include "pyramid/data_model/common.pb.h"
 #include "pyramid/data_model/tactical.pb.h"
@@ -19,11 +17,38 @@
 #include <string>
 #include <thread>
 
+namespace pyramid::services::tactical_objects::provided {
+
+class GrpcServer {
+public:
+  GrpcServer();
+  GrpcServer(GrpcServer&&) noexcept;
+  GrpcServer& operator=(GrpcServer&&) noexcept;
+  GrpcServer(const GrpcServer&) = delete;
+  GrpcServer& operator=(const GrpcServer&) = delete;
+  ~GrpcServer();
+
+  bool started() const;
+  explicit operator bool() const { return started(); }
+  void shutdown();
+
+private:
+  struct Impl;
+  explicit GrpcServer(std::unique_ptr<Impl> impl);
+  std::unique_ptr<Impl> impl_;
+  friend GrpcServer buildGrpcServer(const std::string& listen_address,
+                                    pcl_executor_t* executor);
+};
+
+GrpcServer buildGrpcServer(const std::string& listen_address,
+                           pcl_executor_t* executor);
+
+}  // namespace pyramid::services::tactical_objects::provided
+
 namespace proto_base = pyramid::data_model::base;
 namespace proto_common = pyramid::data_model::common;
 namespace proto_tactical = pyramid::data_model::tactical;
-namespace provided_grpc =
-    pyramid::services::tactical_objects::provided::grpc_transport;
+namespace provided = pyramid::services::tactical_objects::provided;
 namespace {
 
 constexpr const char* kSvcCreateRequirement =
@@ -176,8 +201,8 @@ int main(int argc, char* argv[]) {
   });
 
   std::fprintf(stderr, "[grpc_server] Starting on %s\n", listen_address.c_str());
-  auto host = provided_grpc::buildServer(listen_address, executor);
-  if (!host || !host->get()) {
+  auto host = provided::buildGrpcServer(listen_address, executor);
+  if (!host.started()) {
     std::fprintf(stderr, "[grpc_server] FAIL: could not start server\n");
     spin_stop.store(true);
     executor_thread.join();
@@ -201,7 +226,7 @@ int main(int argc, char* argv[]) {
   }
 
   std::fprintf(stderr, "[grpc_server] Shutting down\n");
-  host->shutdown();
+  host.shutdown();
   spin_stop.store(true);
   executor_thread.join();
   pcl_container_destroy(container);

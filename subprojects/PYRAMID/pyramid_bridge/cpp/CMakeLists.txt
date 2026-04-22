@@ -1,10 +1,11 @@
-set(AME_STUB_BINDINGS_DIR ${PYRAMID_ROOT_DIR}/bindings/cpp/generated)
+set(AME_STUB_BINDINGS_DIR ${PYRAMID_CPP_BINDINGS_DIR})
 
 add_executable(ame_backend_stub
     ame_backend_stub.cpp
     ${AME_STUB_BINDINGS_DIR}/pyramid_data_model_autonomy_codec.cpp
     ${AME_STUB_BINDINGS_DIR}/pyramid_services_autonomy_backend_provided.cpp
 )
+add_dependencies(ame_backend_stub pyramid_cpp_bindings_codegen)
 
 target_link_libraries(ame_backend_stub PRIVATE
     pcl_core
@@ -27,6 +28,7 @@ add_executable(pyramid_bridge_evidence_client
     pyramid_bridge_evidence_client.cpp
     ${AME_STUB_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
 )
+add_dependencies(pyramid_bridge_evidence_client pyramid_cpp_bindings_codegen)
 
 target_link_libraries(pyramid_bridge_evidence_client PRIVATE
     pcl_core

@@ -309,6 +309,23 @@ class CppServiceGenerator:
     def _has_backend(self, name: str) -> bool:
         return name in self._enabled_backends
 
+    def _service_protobuf_codec_available(self, svc_base_ns: str) -> bool:
+        """Return whether a local-struct service protobuf codec exists.
+
+        The current protobuf backend emits data-model protobuf wrappers.  The
+        generated service facade, however, needs local-struct <-> protobuf
+        conversion helpers.  Those exist today as checked-in service codecs for
+        tactical_objects; do not emit service protobuf dispatch code for service
+        packages that do not have that bridge.
+        """
+        header = '_'.join(svc_base_ns.split('::')) + '_protobuf_codec.hpp'
+        candidates = []
+        for parent in [self._proto_input, *self._proto_input.parents]:
+            if parent.is_file():
+                parent = parent.parent
+            candidates.append(parent / 'bindings' / 'protobuf' / 'cpp' / header)
+        return any(path.exists() for path in candidates)
+
     def generate(self, output_dir: str):
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -408,7 +425,7 @@ class CppServiceGenerator:
             f.write('constexpr const char* kJsonContentType = "application/json";\n')
             if self._has_backend('flatbuffers'):
                 f.write('constexpr const char* kFlatBuffersContentType = "application/flatbuffers";\n')
-            if self._has_backend('protobuf'):
+            if self._has_backend('protobuf') or has_grpc:
                 f.write('constexpr const char* kProtobufContentType = "application/protobuf";\n')
             f.write('\n')
             f.write('bool supportsContentType(const char* content_type);\n')
@@ -706,7 +723,10 @@ class CppServiceGenerator:
         is_provided = _is_provided(parsed)
         svc_base_ns = _namespace_from_proto(parsed)[2]
         has_flatbuffers = self._has_backend('flatbuffers')
-        has_protobuf = self._has_backend('protobuf')
+        has_protobuf = (
+            (self._has_backend('protobuf') or self._has_backend('grpc'))
+            and self._service_protobuf_codec_available(svc_base_ns)
+        )
         flatbuffers_codec_ns = svc_base_ns + '::flatbuffers_codec'
         flatbuffers_codec_header = 'flatbuffers/cpp/' + '_'.join(svc_base_ns.split('::')) + '_flatbuffers_codec.hpp'
         protobuf_codec_ns = svc_base_ns + '::protobuf_codec'

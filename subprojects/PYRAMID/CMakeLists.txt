@@ -12,6 +12,8 @@ option(PYRAMID_ENABLE_GRPC "Enable gRPC transport projection for PYRAMID" OFF)
 option(PYRAMID_ENABLE_ROS2 "Enable ROS2 semantic transport projection for PYRAMID" ON)
 set(PYRAMID_GRPC_TAG "v1.72.0" CACHE STRING "gRPC git tag to fetch when PYRAMID_ENABLE_GRPC is ON")
 
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
 add_library(nlohmann_json INTERFACE)
 add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
 target_include_directories(nlohmann_json
@@ -34,6 +36,11 @@ function(pyramid_fetch_grpc_dependency)
     set(gRPC_BUILD_CODEGEN ON CACHE BOOL "" FORCE)
     set(gRPC_INSTALL OFF CACHE BOOL "" FORCE)
     set(gRPC_MSVC_STATIC_RUNTIME OFF CACHE BOOL "" FORCE)
+    set(protobuf_INSTALL OFF CACHE BOOL "" FORCE)
+    set(protobuf_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(protobuf_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(protobuf_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(protobuf_MSVC_STATIC_RUNTIME OFF CACHE BOOL "" FORCE)
     set(gRPC_DOWNLOAD_ARCHIVES ON CACHE BOOL "" FORCE)
     set(gRPC_ABSL_PROVIDER module CACHE STRING "" FORCE)
     set(gRPC_CARES_PROVIDER module CACHE STRING "" FORCE)
@@ -48,10 +55,90 @@ function(pyramid_fetch_grpc_dependency)
     endif()
 endfunction()
 
+set(PYRAMID_CPP_BINDINGS_DIR
+    "${CMAKE_BINARY_DIR}/generated/pyramid_cpp_bindings"
+    CACHE INTERNAL "Build-local generated PYRAMID C++ binding directory")
+set(PYRAMID_CPP_GENERATOR_BACKENDS json)
+if(PYRAMID_ENABLE_FLATBUFFERS)
+    list(APPEND PYRAMID_CPP_GENERATOR_BACKENDS flatbuffers)
+endif()
+if(PYRAMID_ENABLE_PROTOBUF)
+    list(APPEND PYRAMID_CPP_GENERATOR_BACKENDS protobuf)
+endif()
+if(PYRAMID_ENABLE_GRPC)
+    list(APPEND PYRAMID_CPP_GENERATOR_BACKENDS grpc)
+endif()
+if(PYRAMID_ENABLE_ROS2)
+    list(APPEND PYRAMID_CPP_GENERATOR_BACKENDS ros2)
+endif()
+list(JOIN PYRAMID_CPP_GENERATOR_BACKENDS "," PYRAMID_CPP_GENERATOR_BACKENDS_ARG)
+
+set(PYRAMID_CPP_BINDING_OUTPUTS
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_autonomy_types.hpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_base_types.hpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_common_types.hpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_tactical_types.hpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_types.hpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_autonomy_codec.hpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_autonomy_codec.cpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_base_codec.hpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_base_codec.cpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_common_codec.hpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_common_codec.cpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_tactical_codec.hpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_tactical_codec.cpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_autonomy_backend_provided.hpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_autonomy_backend_provided.cpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.hpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.hpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp"
+)
+if(PYRAMID_ENABLE_FLATBUFFERS)
+    list(APPEND PYRAMID_CPP_BINDING_OUTPUTS
+        "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_autonomy_backend.fbs"
+        "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_autonomy_backend_flatbuffers_codec.hpp"
+        "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_autonomy_backend_flatbuffers_codec.cpp"
+        "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_tactical_objects.fbs"
+        "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
+        "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.cpp"
+    )
+endif()
+if(PYRAMID_ENABLE_GRPC)
+    list(APPEND PYRAMID_CPP_BINDING_OUTPUTS
+        "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp/pyramid_components_tactical_objects_services_provided_grpc_transport.hpp"
+        "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp/pyramid_components_tactical_objects_services_provided_grpc_transport.cpp"
+        "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp/pyramid_components_tactical_objects_services_consumed_grpc_transport.hpp"
+        "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp/pyramid_components_tactical_objects_services_consumed_grpc_transport.cpp"
+    )
+endif()
+
+file(GLOB_RECURSE PYRAMID_PROTO_INPUTS CONFIGURE_DEPENDS
+    "${PYRAMID_PROTO_DIR}/*.proto")
+add_custom_command(
+    OUTPUT ${PYRAMID_CPP_BINDING_OUTPUTS}
+    COMMAND "${CMAKE_COMMAND}" -E rm -rf "${PYRAMID_CPP_BINDINGS_DIR}"
+    COMMAND "${Python3_EXECUTABLE}"
+            "${PYRAMID_ROOT_DIR}/pim/generate_bindings.py"
+            "${PYRAMID_PROTO_DIR}"
+            "${PYRAMID_CPP_BINDINGS_DIR}"
+            --languages cpp
+            --backends "${PYRAMID_CPP_GENERATOR_BACKENDS_ARG}"
+    DEPENDS
+        "${PYRAMID_ROOT_DIR}/pim/generate_bindings.py"
+        "${PYRAMID_ROOT_DIR}/pim/cpp_codegen.py"
+        "${PYRAMID_ROOT_DIR}/pim/codec_backends.py"
+        ${PYRAMID_PROTO_INPUTS}
+    COMMENT "Generating PYRAMID C++ bindings (${PYRAMID_CPP_GENERATOR_BACKENDS_ARG})"
+    VERBATIM
+)
+add_custom_target(pyramid_cpp_bindings_codegen
+    DEPENDS ${PYRAMID_CPP_BINDING_OUTPUTS})
+
 add_library(pyramid_flatbuffers_support INTERFACE)
 
 if(PYRAMID_ENABLE_FLATBUFFERS)
-    set(PYRAMID_FLATBUFFERS_SCHEMA_DIR "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/flatbuffers/cpp")
+    set(PYRAMID_FLATBUFFERS_SCHEMA_DIR "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp")
     set(PYRAMID_FLATBUFFERS_GEN_DIR "${CMAKE_BINARY_DIR}/generated/flatbuffers/cpp")
     set(PYRAMID_FLATBUFFERS_SCHEMAS
         "${PYRAMID_FLATBUFFERS_SCHEMA_DIR}/pyramid_services_autonomy_backend.fbs"
@@ -64,7 +151,7 @@ if(PYRAMID_ENABLE_FLATBUFFERS)
             OUTPUT "${PYRAMID_FLATBUFFERS_OUTPUT}"
             COMMAND "${CMAKE_COMMAND}" -E make_directory "${PYRAMID_FLATBUFFERS_GEN_DIR}"
             COMMAND $<TARGET_FILE:flatc> --cpp --gen-object-api -o "${PYRAMID_FLATBUFFERS_GEN_DIR}" "${PYRAMID_FLATBUFFERS_SCHEMA}"
-            DEPENDS flatc "${PYRAMID_FLATBUFFERS_SCHEMA}"
+            DEPENDS flatc pyramid_cpp_bindings_codegen "${PYRAMID_FLATBUFFERS_SCHEMA}"
             COMMENT "Generating FlatBuffers header for ${PYRAMID_FLATBUFFERS_STEM}.fbs"
             VERBATIM
         )
@@ -72,6 +159,7 @@ if(PYRAMID_ENABLE_FLATBUFFERS)
     endforeach()
 
     add_custom_target(pyramid_flatbuffers_codegen DEPENDS ${PYRAMID_FLATBUFFERS_OUTPUTS})
+    add_dependencies(pyramid_flatbuffers_codegen pyramid_cpp_bindings_codegen)
 
     add_dependencies(pyramid_flatbuffers_support pyramid_flatbuffers_codegen)
     target_include_directories(pyramid_flatbuffers_support
@@ -80,23 +168,26 @@ if(PYRAMID_ENABLE_FLATBUFFERS)
             "${flatbuffers_SOURCE_DIR}/include"
             "${PYRAMID_FLATBUFFERS_SCHEMA_DIR}"
     )
+    target_compile_definitions(pyramid_flatbuffers_support
+        INTERFACE PYRAMID_ENABLE_FLATBUFFERS=1)
 endif()
 
 set(_pyramid_generated_codecs_srcs
-    "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_data_model_autonomy_codec.cpp"
-    "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_data_model_base_codec.cpp"
-    "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_data_model_common_codec.cpp"
-    "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_data_model_tactical_codec.cpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_autonomy_codec.cpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_base_codec.cpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_common_codec.cpp"
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_tactical_codec.cpp"
 )
 if(PYRAMID_ENABLE_FLATBUFFERS)
     list(APPEND _pyramid_generated_codecs_srcs
-        "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/flatbuffers/cpp/pyramid_services_autonomy_backend_flatbuffers_codec.cpp"
-        "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.cpp"
+        "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_autonomy_backend_flatbuffers_codec.cpp"
+        "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.cpp"
     )
 endif()
 
 add_library(pyramid_generated_codecs STATIC ${_pyramid_generated_codecs_srcs})
 unset(_pyramid_generated_codecs_srcs)
+add_dependencies(pyramid_generated_codecs pyramid_cpp_bindings_codegen)
 
 if(PYRAMID_ENABLE_FLATBUFFERS)
     add_dependencies(pyramid_generated_codecs pyramid_flatbuffers_codegen)
@@ -105,6 +196,7 @@ endif()
 target_link_libraries(pyramid_generated_codecs PUBLIC nlohmann_json::nlohmann_json)
 target_include_directories(pyramid_generated_codecs
     PUBLIC
+        "${PYRAMID_CPP_BINDINGS_DIR}"
         "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
 )
 
@@ -206,10 +298,12 @@ if(PYRAMID_ENABLE_PROTOBUF)
     )
     target_include_directories(pyramid_protobuf_support
         PUBLIC
-            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
+            "${PYRAMID_CPP_BINDINGS_DIR}"
             "${PYRAMID_ROOT_DIR}/bindings/protobuf/cpp"
             "${PYRAMID_PROTOBUF_GEN_DIR}"
     )
+    target_compile_definitions(pyramid_protobuf_support
+        PUBLIC PYRAMID_ENABLE_PROTOBUF=1)
 
     target_link_libraries(pyramid_generated_codecs
         PUBLIC
@@ -298,14 +392,17 @@ if(PYRAMID_ENABLE_GRPC)
         add_custom_target(pyramid_grpc_codegen DEPENDS ${PYRAMID_GRPC_OUTPUTS})
 
         add_library(pyramid_grpc_transport STATIC
-            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp/pyramid_components_tactical_objects_services_provided_grpc_transport.cpp"
-            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp/pyramid_components_tactical_objects_services_consumed_grpc_transport.cpp"
+            "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp/pyramid_components_tactical_objects_services_provided_grpc_transport.cpp"
+            "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp/pyramid_components_tactical_objects_services_consumed_grpc_transport.cpp"
             "${PYRAMID_PROTOBUF_GEN_DIR}/pyramid/components/tactical_objects/services/provided.pb.cc"
             "${PYRAMID_PROTOBUF_GEN_DIR}/pyramid/components/tactical_objects/services/provided.grpc.pb.cc"
             "${PYRAMID_PROTOBUF_GEN_DIR}/pyramid/components/tactical_objects/services/consumed.pb.cc"
             "${PYRAMID_PROTOBUF_GEN_DIR}/pyramid/components/tactical_objects/services/consumed.grpc.pb.cc"
         )
-        add_dependencies(pyramid_grpc_transport pyramid_grpc_codegen pyramid_protobuf_codegen)
+        add_dependencies(pyramid_grpc_transport
+            pyramid_cpp_bindings_codegen
+            pyramid_grpc_codegen
+            pyramid_protobuf_codegen)
         target_link_libraries(pyramid_grpc_transport
             PUBLIC
                 gRPC::grpc++
@@ -316,17 +413,22 @@ if(PYRAMID_ENABLE_GRPC)
         target_include_directories(pyramid_grpc_transport
             PUBLIC
                 "${PCL_ROOT_DIR}/include"
-                "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
-                "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp"
+                "${PYRAMID_CPP_BINDINGS_DIR}"
+                "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp"
                 "${PYRAMID_PROTOBUF_GEN_DIR}"
         )
 
+        set(PYRAMID_GRPC_C_SHIM_DIR
+            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp")
         add_library(pyramid_grpc_c_shim SHARED
-            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp/pyramid_services_tactical_objects_grpc_c_api_support.cpp"
-            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp/pyramid_components_tactical_objects_services_provided_grpc_c_api.cpp"
-            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp/pyramid_components_tactical_objects_services_consumed_grpc_c_api.cpp"
+            "${PYRAMID_GRPC_C_SHIM_DIR}/pyramid_services_tactical_objects_grpc_c_api_support.cpp"
+            "${PYRAMID_GRPC_C_SHIM_DIR}/pyramid_components_tactical_objects_services_provided_grpc_c_api.cpp"
+            "${PYRAMID_GRPC_C_SHIM_DIR}/pyramid_components_tactical_objects_services_consumed_grpc_c_api.cpp"
         )
-        add_dependencies(pyramid_grpc_c_shim pyramid_grpc_codegen pyramid_protobuf_codegen)
+        add_dependencies(pyramid_grpc_c_shim
+            pyramid_cpp_bindings_codegen
+            pyramid_grpc_codegen
+            pyramid_protobuf_codegen)
         target_link_libraries(pyramid_grpc_c_shim
             PUBLIC
                 gRPC::grpc++
@@ -336,16 +438,20 @@ if(PYRAMID_ENABLE_GRPC)
         )
         target_include_directories(pyramid_grpc_c_shim
             PUBLIC
-                "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp"
+                "${PYRAMID_GRPC_C_SHIM_DIR}"
+                "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp"
                 "${PYRAMID_PROTOBUF_GEN_DIR}"
         )
     endif()
 endif()
 
 if(PYRAMID_ENABLE_ROS2)
+    set(PYRAMID_ROS2_SUPPORT_DIR
+        "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/ros2/cpp")
     add_library(pyramid_ros2_transport STATIC
-        "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/ros2/cpp/pyramid_ros2_transport_support.cpp"
+        "${PYRAMID_ROS2_SUPPORT_DIR}/pyramid_ros2_transport_support.cpp"
     )
+    add_dependencies(pyramid_ros2_transport pyramid_cpp_bindings_codegen)
     target_link_libraries(pyramid_ros2_transport
         PUBLIC
             pcl_core
@@ -353,7 +459,8 @@ if(PYRAMID_ENABLE_ROS2)
     target_include_directories(pyramid_ros2_transport
         PUBLIC
             "${PCL_ROOT_DIR}/include"
-            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/ros2/cpp"
+            "${PYRAMID_ROS2_SUPPORT_DIR}"
+            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
     )
 endif()
 

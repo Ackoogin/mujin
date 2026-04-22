@@ -113,8 +113,15 @@ def _facade_header(package: str) -> str:
         comp_i = parts.index('components')
         svc_i = parts.index('services')
         if comp_i + 1 < svc_i and svc_i + 1 < len(parts):
-            return f'pyramid_services_{parts[comp_i + 1]}_{parts[svc_i + 1]}.hpp'
+                return f'pyramid_services_{parts[comp_i + 1]}_{parts[svc_i + 1]}.hpp'
     return package.replace('.', '_') + '.hpp'
+
+
+def _service_wire_prefix(service_name: str) -> str:
+    name = service_name
+    if name.endswith('_Service'):
+        name = name[:-len('_Service')]
+    return camel_to_lower_snake(name)
 
 
 def _ensure_parent_packages(output_dir: Path, pkg_names: List[str]) -> None:
@@ -225,7 +232,6 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write(f'// Requires: protoc + grpc_cpp_plugin generated code\n')
             f.write(f'// Link with: grpc++ protobuf\n')
             f.write(f'#pragma once\n\n')
-            f.write(f'#include "{facade_header}"\n')
             f.write(f'#include "{grpc_header}"\n\n')
             f.write(f'#include <grpcpp/grpcpp.h>\n')
             f.write(f'#include <pcl/pcl_executor.h>\n')
@@ -277,15 +283,18 @@ class GrpcBackend(codec_backends.CodecBackend):
         with open(path, 'w', newline='\n') as f:
             f.write(f'// Auto-generated gRPC transport — do not edit\n\n')
             f.write(f'#include "{file_base}_grpc_transport.hpp"\n\n')
+            f.write(f'#include <google/protobuf/message_lite.h>\n')
             f.write(f'#include <pcl/pcl_types.h>\n\n')
             f.write(f'#include <cstdint>\n')
             f.write(f'#include <future>\n')
             f.write(f'#include <memory>\n')
             f.write(f'#include <stdexcept>\n')
             f.write(f'#include <string>\n')
+            f.write(f'#include <utility>\n')
             f.write(f'#include <vector>\n\n')
 
             f.write('namespace {\n\n')
+            f.write('constexpr const char* kProtobufContentType = "application/protobuf";\n\n')
             f.write('struct ExecutorResponse {\n')
             f.write('    pcl_status_t status = PCL_OK;\n')
             f.write('    std::string content_type;\n')
@@ -321,9 +330,9 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('    }\n')
             f.write('    UnaryState state;\n')
             f.write('    pcl_msg_t request{};\n')
-            f.write('    request.data = request_payload.empty() ? nullptr : const_cast<char*>(request_payload.data());\n')
+            f.write('    request.data = request_payload.empty() ? nullptr : request_payload.data();\n')
             f.write('    request.size = static_cast<uint32_t>(request_payload.size());\n')
-            f.write(f'    request.type_name = {facade_ns}::kProtobufContentType;\n')
+            f.write('    request.type_name = kProtobufContentType;\n')
             f.write('    const auto rc = pcl_executor_post_service_request(\n')
             f.write('        executor, service_name, &request, executor_response_callback, &state);\n')
             f.write('    if (rc != PCL_OK) {\n')
@@ -375,6 +384,9 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('    if (response.status != PCL_OK) {\n')
             f.write('        return grpc::Status(grpc::StatusCode::INTERNAL, "executor stream dispatch failed");\n')
             f.write('    }\n')
+            f.write('    if (!writer) {\n')
+            f.write('        return grpc::Status(grpc::StatusCode::INTERNAL, "missing gRPC stream writer");\n')
+            f.write('    }\n')
             f.write('    const char* cursor = response.payload.data();\n')
             f.write('    const char* end = cursor + response.payload.size();\n')
             f.write('    while (cursor < end) {\n')
@@ -401,6 +413,7 @@ class GrpcBackend(codec_backends.CodecBackend):
                 for rpc in svc.rpcs:
                     req_cpp = '::'.join(rpc.request_type.split('.'))
                     rsp_cpp = '::'.join(rpc.response_type.split('.'))
+                    service_name = f'{_service_wire_prefix(svc.name)}.{camel_to_lower_snake(rpc.name)}'
 
                     if rpc.server_streaming:
                         f.write(f'grpc::Status {svc.name}Impl::{rpc.name}(\n')
@@ -408,12 +421,18 @@ class GrpcBackend(codec_backends.CodecBackend):
                         f.write(f'    const ::{req_cpp}* request,\n')
                         f.write(f'    grpc::ServerWriter<::{rsp_cpp}>* writer)\n')
                         f.write(f'{{\n')
-                        f.write(f'    // Delegate to handler, write each result to stream\n')
-                        f.write(f'    auto results = handler_.handle{rpc.name}(*request);\n')
-                        f.write(f'    for (const auto& item : results) {{\n')
-                        f.write(f'        writer->Write(item);\n')
+                        f.write(f'    try {{\n')
+                        f.write(f'        if (!request) {{\n')
+                        f.write(f'            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "missing gRPC request");\n')
+                        f.write(f'        }}\n')
+                        f.write(f'        const auto payload = serialize_grpc_request(*request);\n')
+                        f.write(f'        const auto executor_response = invoke_executor(\n')
+                        f.write(f'            executor_, "{service_name}", payload);\n')
+                        f.write(f'        return write_stream_response<::{rsp_cpp}>(\n')
+                        f.write(f'            executor_response, writer, "{rpc.name}");\n')
+                        f.write(f'    }} catch (const std::exception& ex) {{\n')
+                        f.write(f'        return grpc::Status(grpc::StatusCode::INTERNAL, ex.what());\n')
                         f.write(f'    }}\n')
-                        f.write(f'    return grpc::Status::OK;\n')
                         f.write(f'}}\n\n')
                     else:
                         f.write(f'grpc::Status {svc.name}Impl::{rpc.name}(\n')
@@ -421,28 +440,90 @@ class GrpcBackend(codec_backends.CodecBackend):
                         f.write(f'    const ::{req_cpp}* request,\n')
                         f.write(f'    ::{rsp_cpp}* response)\n')
                         f.write(f'{{\n')
-                        f.write(f'    *response = handler_.handle{rpc.name}(*request);\n')
-                        f.write(f'    return grpc::Status::OK;\n')
+                        f.write(f'    try {{\n')
+                        f.write(f'        if (!request) {{\n')
+                        f.write(f'            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "missing gRPC request");\n')
+                        f.write(f'        }}\n')
+                        f.write(f'        const auto payload = serialize_grpc_request(*request);\n')
+                        f.write(f'        const auto executor_response = invoke_executor(\n')
+                        f.write(f'            executor_, "{service_name}", payload);\n')
+                        f.write(f'        return parse_unary_response(\n')
+                        f.write(f'            executor_response, response, "{rpc.name}");\n')
+                        f.write(f'    }} catch (const std::exception& ex) {{\n')
+                        f.write(f'        return grpc::Status(grpc::StatusCode::INTERNAL, ex.what());\n')
+                        f.write(f'    }}\n')
                         f.write(f'}}\n\n')
 
-            # buildServer
-            f.write(f'std::unique_ptr<grpc::Server> buildServer(\n')
-            f.write(f'    const std::string& listen_address,\n')
-            f.write(f'    ServiceHandler& handler)\n')
-            f.write(f'{{\n')
-            f.write(f'    grpc::ServerBuilder builder;\n')
-            f.write(f'    builder.AddListeningPort(listen_address,'
-                    f' grpc::InsecureServerCredentials());\n\n')
-
-            for svc in pf.services:
-                f.write(f'    auto {camel_to_lower_snake(svc.name)} ='
-                        f' std::make_unique<{svc.name}Impl>(handler);\n')
-                f.write(f'    builder.RegisterService({camel_to_lower_snake(svc.name)}.get());\n\n')
-
-            f.write(f'    return builder.BuildAndStart();\n')
-            f.write(f'}}\n\n')
-
             f.write(f'}} // namespace {ns}\n')
+            f.write(f'\nnamespace {facade_ns} {{\n\n')
+            f.write('class GrpcServer {\n')
+            f.write('public:\n')
+            f.write('    GrpcServer();\n')
+            f.write('    GrpcServer(GrpcServer&&) noexcept;\n')
+            f.write('    GrpcServer& operator=(GrpcServer&&) noexcept;\n')
+            f.write('    GrpcServer(const GrpcServer&) = delete;\n')
+            f.write('    GrpcServer& operator=(const GrpcServer&) = delete;\n')
+            f.write('    ~GrpcServer();\n\n')
+            f.write('    bool started() const;\n')
+            f.write('    explicit operator bool() const { return started(); }\n')
+            f.write('    void wait();\n')
+            f.write('    void shutdown();\n\n')
+            f.write('private:\n')
+            f.write('    struct Impl;\n')
+            f.write('    explicit GrpcServer(std::unique_ptr<Impl> impl);\n')
+            f.write('    std::unique_ptr<Impl> impl_;\n')
+            f.write('    friend GrpcServer buildGrpcServer(const std::string& listen_address,\n')
+            f.write('                                      pcl_executor_t* executor);\n')
+            f.write('};\n\n')
+            f.write('struct GrpcServer::Impl {\n')
+            for svc in pf.services:
+                member = camel_to_lower_snake(svc.name)
+                f.write(f'    std::unique_ptr<grpc_transport::{svc.name}Impl> {member};\n')
+            f.write('    std::unique_ptr<grpc::Server> server;\n')
+            f.write('};\n\n')
+            f.write('GrpcServer::GrpcServer() = default;\n\n')
+            f.write('GrpcServer::GrpcServer(std::unique_ptr<Impl> impl)\n')
+            f.write('    : impl_(std::move(impl))\n')
+            f.write('{}\n\n')
+            f.write('GrpcServer::GrpcServer(GrpcServer&&) noexcept = default;\n\n')
+            f.write('GrpcServer& GrpcServer::operator=(GrpcServer&&) noexcept = default;\n\n')
+            f.write('GrpcServer::~GrpcServer() = default;\n\n')
+            f.write('bool GrpcServer::started() const\n')
+            f.write('{\n')
+            f.write('    return impl_ && impl_->server != nullptr;\n')
+            f.write('}\n\n')
+            f.write('void GrpcServer::wait()\n')
+            f.write('{\n')
+            f.write('    if (started()) {\n')
+            f.write('        impl_->server->Wait();\n')
+            f.write('    }\n')
+            f.write('}\n\n')
+            f.write('void GrpcServer::shutdown()\n')
+            f.write('{\n')
+            f.write('    if (started()) {\n')
+            f.write('        impl_->server->Shutdown();\n')
+            f.write('    }\n')
+            f.write('}\n\n')
+            f.write('GrpcServer buildGrpcServer(const std::string& listen_address,\n')
+            f.write('                           pcl_executor_t* executor)\n')
+            f.write('{\n')
+            f.write('    if (!executor) {\n')
+            f.write('        return {};\n')
+            f.write('    }\n\n')
+            f.write('    auto impl = std::make_unique<GrpcServer::Impl>();\n')
+            f.write('    grpc::ServerBuilder builder;\n')
+            f.write('    builder.AddListeningPort(listen_address, grpc::InsecureServerCredentials());\n\n')
+            for svc in pf.services:
+                member = camel_to_lower_snake(svc.name)
+                f.write(f'    impl->{member} = std::make_unique<grpc_transport::{svc.name}Impl>(executor);\n')
+                f.write(f'    builder.RegisterService(impl->{member}.get());\n\n')
+            f.write('    impl->server = builder.BuildAndStart();\n')
+            f.write('    if (!impl->server) {\n')
+            f.write('        return {};\n')
+            f.write('    }\n')
+            f.write('    return GrpcServer(std::move(impl));\n')
+            f.write('}\n\n')
+            f.write(f'}} // namespace {facade_ns}\n')
 
     # -- Ada spec --------------------------------------------------------------
 
