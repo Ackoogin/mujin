@@ -210,3 +210,146 @@ TEST(PclOom, PostResponseCbDataMallocFails) {
   pcl_executor_destroy(e);
   restore_logs();
 }
+
+TEST(PclOom, PostResponseMsgTypeNameStrdupFails) {
+  silence_logs();
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  auto cb = [](const pcl_msg_t*, void*) {};
+  int payload = 42;
+  pcl_msg_t msg = {};
+  msg.data = &payload;
+  msg.size = sizeof(payload);
+  msg.type_name = "ResponseType";
+
+  // Alloc #0 = response node, #1 = response data, #2 = type_name copy.
+  g_oom_countdown = 2;
+  pcl_status_t rc = pcl_executor_post_response_msg(e, cb, nullptr, &msg);
+  g_oom_countdown = -1;
+  EXPECT_EQ(rc, PCL_ERR_NOMEM);
+
+  pcl_executor_destroy(e);
+  restore_logs();
+}
+
+TEST(PclOom, PostServiceRequestServiceNameStrdupFails) {
+  silence_logs();
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  pcl_msg_t req = {};
+  req.type_name = "RequestType";
+  auto cb = [](const pcl_msg_t*, void*) {};
+
+  // Alloc #0 = request node, #1 = service_name copy.
+  g_oom_countdown = 1;
+  pcl_status_t rc = pcl_executor_post_service_request(e, "svc", &req, cb, nullptr);
+  g_oom_countdown = -1;
+  EXPECT_EQ(rc, PCL_ERR_NOMEM);
+
+  pcl_executor_destroy(e);
+  restore_logs();
+}
+
+TEST(PclOom, PostServiceRequestTypeNameStrdupFails) {
+  silence_logs();
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  pcl_msg_t req = {};
+  req.type_name = "RequestType";
+  auto cb = [](const pcl_msg_t*, void*) {};
+
+  // Alloc #0 = request node, #1 = service_name copy, #2 = type_name copy.
+  g_oom_countdown = 2;
+  pcl_status_t rc = pcl_executor_post_service_request(e, "svc", &req, cb, nullptr);
+  g_oom_countdown = -1;
+  EXPECT_EQ(rc, PCL_ERR_NOMEM);
+
+  pcl_executor_destroy(e);
+  restore_logs();
+}
+
+TEST(PclOom, PostServiceRequestDataMallocFails) {
+  silence_logs();
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  int payload = 42;
+  pcl_msg_t req = {};
+  req.data = &payload;
+  req.size = sizeof(payload);
+  req.type_name = "RequestType";
+  auto cb = [](const pcl_msg_t*, void*) {};
+
+  // Alloc #0 = request node, #1 = service_name copy, #2 = type_name copy,
+  // #3 = request data copy.
+  g_oom_countdown = 3;
+  pcl_status_t rc = pcl_executor_post_service_request(e, "svc", &req, cb, nullptr);
+  g_oom_countdown = -1;
+  EXPECT_EQ(rc, PCL_ERR_NOMEM);
+
+  pcl_executor_destroy(e);
+  restore_logs();
+}
+
+TEST(PclOom, DrainingServiceRequestContextAllocFailsFiresEmptyResponse) {
+  silence_logs();
+
+  struct SvcState {
+    bool callback_fired = false;
+    uint32_t response_size = 123u;
+  } state;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void*) -> pcl_status_t {
+    return pcl_container_add_service(
+               c,
+               "svc",
+               "RequestType",
+               [](pcl_container_t*, const pcl_msg_t*, pcl_msg_t*,
+                  pcl_svc_context_t*, void*) -> pcl_status_t {
+                 return PCL_OK;
+               },
+               nullptr)
+               ? PCL_OK
+               : PCL_ERR_NOMEM;
+  };
+
+  auto* e = pcl_executor_create();
+  auto* c = pcl_container_create("svc_node", &cbs, nullptr);
+  ASSERT_NE(e, nullptr);
+  ASSERT_NE(c, nullptr);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+
+  pcl_msg_t req = {};
+  req.type_name = "RequestType";
+  ASSERT_EQ(
+      pcl_executor_post_service_request(
+          e,
+          "svc",
+          &req,
+          [](const pcl_msg_t* resp, void* ud) {
+            auto* s = static_cast<SvcState*>(ud);
+            s->callback_fired = true;
+            s->response_size = resp ? resp->size : 999u;
+          },
+          &state),
+      PCL_OK);
+
+  // The next allocation in drain_svc_req_queue is the service context.
+  g_oom_countdown = 0;
+  pcl_status_t rc = pcl_executor_spin_once(e, 0);
+  g_oom_countdown = -1;
+
+  EXPECT_EQ(rc, PCL_OK);
+  EXPECT_TRUE(state.callback_fired);
+  EXPECT_EQ(state.response_size, 0u);
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+  restore_logs();
+}

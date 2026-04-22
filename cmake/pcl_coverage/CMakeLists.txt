@@ -85,6 +85,15 @@ add_executable(test_pcl_socket_transport ${PCL_ROOT}/tests/test_pcl_socket_trans
 target_link_libraries(test_pcl_socket_transport PRIVATE pcl_core pcl_transport_socket GTest::gtest_main)
 gtest_discover_tests(test_pcl_socket_transport DISCOVERY_MODE PRE_TEST)
 
+if(NOT MSVC)
+  add_executable(test_pcl_socket_faults ${PCL_ROOT}/tests/test_pcl_socket_faults.cpp)
+  target_link_libraries(test_pcl_socket_faults PRIVATE pcl_core pcl_transport_socket GTest::gtest_main)
+  target_include_directories(test_pcl_socket_faults PRIVATE ${PCL_ROOT}/src)
+  target_link_options(test_pcl_socket_faults PRIVATE
+    -Wl,--wrap=malloc,--wrap=calloc)
+  gtest_discover_tests(test_pcl_socket_faults DISCOVERY_MODE PRE_TEST)
+endif()
+
 # C++ wrapper tests
 add_executable(test_pcl_cpp_wrappers ${PCL_ROOT}/tests/test_pcl_cpp_wrappers.cpp)
 target_link_libraries(test_pcl_cpp_wrappers PRIVATE pcl_core GTest::gtest_main)

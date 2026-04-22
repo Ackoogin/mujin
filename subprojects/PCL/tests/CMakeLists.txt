@@ -44,6 +44,18 @@ if(NOT WIN32)
 endif()
 gtest_discover_tests(test_pcl_socket_transport DISCOVERY_MODE PRE_TEST)
 
+if(NOT MSVC)
+    add_executable(test_pcl_socket_faults test_pcl_socket_faults.cpp)
+    target_link_libraries(test_pcl_socket_faults PRIVATE pcl_core pcl_transport_socket GTest::gtest_main)
+    target_include_directories(test_pcl_socket_faults PRIVATE ${PCL_ROOT_DIR}/src)
+    target_link_options(test_pcl_socket_faults PRIVATE
+        -Wl,--wrap=malloc,--wrap=calloc)
+    if(NOT WIN32)
+        target_link_libraries(test_pcl_socket_faults PRIVATE pthread)
+    endif()
+    gtest_discover_tests(test_pcl_socket_faults DISCOVERY_MODE PRE_TEST)
+endif()
+
 add_executable(test_pcl_udp_transport test_pcl_udp_transport.cpp)
 target_link_libraries(test_pcl_udp_transport PRIVATE pcl_core pcl_transport_udp GTest::gtest_main)
 if(NOT WIN32)
