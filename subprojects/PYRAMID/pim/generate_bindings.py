@@ -39,7 +39,8 @@ import ada_codegen
 import backends  # noqa: F401
 
 
-def _generate_json_cpp(proto_dir: Path, output_dir: Path) -> int:
+def _generate_json_cpp(proto_dir: Path, output_dir: Path,
+                       enabled_backends=None) -> int:
     total = 0
     data_model_dir = proto_dir / 'pyramid' / 'data_model'
     if data_model_dir.exists():
@@ -56,12 +57,16 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path) -> int:
         parsed = cpp_codegen.parse_proto(proto_path)
         if not parsed.services or '.services.' not in f'.{parsed.package}.':
             continue
-        cpp_codegen.CppServiceGenerator(str(proto_path)).generate(str(output_dir))
+        cpp_codegen.CppServiceGenerator(
+            str(proto_path),
+            enabled_backends=enabled_backends,
+        ).generate(str(output_dir))
         total += 1
     return total
 
 
-def _generate_json_ada(proto_dir: Path, output_dir: Path) -> int:
+def _generate_json_ada(proto_dir: Path, output_dir: Path,
+                       enabled_backends=None) -> int:
     total = 0
     data_model_dir = proto_dir / 'pyramid' / 'data_model'
     if data_model_dir.exists():
@@ -78,7 +83,10 @@ def _generate_json_ada(proto_dir: Path, output_dir: Path) -> int:
         parsed = ada_codegen.parse_proto(proto_path)
         if not parsed.services or '.services.' not in f'.{parsed.package}.':
             continue
-        ada_codegen.AdaServiceGenerator(str(proto_path)).generate(str(output_dir))
+        ada_codegen.AdaServiceGenerator(
+            str(proto_path),
+            enabled_backends=enabled_backends,
+        ).generate(str(output_dir))
         total += 1
     return total
 
@@ -156,9 +164,17 @@ def main():
     if 'json' in remaining_backends:
         print('  json: generating unified data-model and service bindings')
         if 'cpp' in langs:
-            total += _generate_json_cpp(proto_dir, output_dir)
+            total += _generate_json_cpp(
+                proto_dir,
+                output_dir,
+                enabled_backends=backend_names,
+            )
         if 'ada' in langs:
-            total += _generate_json_ada(proto_dir, output_dir)
+            total += _generate_json_ada(
+                proto_dir,
+                output_dir,
+                enabled_backends=backend_names,
+            )
         remaining_backends.remove('json')
 
     if remaining_backends:

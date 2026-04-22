@@ -5,7 +5,7 @@ REM Orchestrates:
 REM   1. Build Ada gRPC client if gprbuild is available
 REM   2. Start standalone C++ gRPC server
 REM   3. Wait for ready file
-REM   4. Run Ada client, which calls into the client shim DLL
+REM   4. Run Ada client through the standard generated service facade
 REM   5. Terminate the C++ server and report pass/fail
 setlocal enabledelayedexpansion
 
@@ -55,7 +55,7 @@ if %errorlevel% equ 0 (
     echo [driver] Building Ada gRPC client...
     set "ADA_DIR=%PYRAMID_ROOT%\tests\ada"
     pushd "!ADA_DIR!"
-    gprbuild -P ada_grpc_cpp_interop_e2e.gpr -q >nul 2>&1
+    gprbuild -P ada_grpc_cpp_interop_e2e.gpr -q -XMUJIN_ROOT="%WORKSPACE_ROOT%" -XPCL_LIB_DIR="%WORKSPACE_ROOT%\build\ada_gnat_pcl" -XPYRAMID_GEN_LIB_DIR="%WORKSPACE_ROOT%\build\ada_gnat_pyramid" >nul 2>&1
     if !errorlevel! neq 0 (
         echo [driver] gprbuild failed -- falling back to pre-built binary
     )
@@ -103,14 +103,14 @@ goto cleanup_fail
 echo [driver] gRPC server ready on %ADDRESS%
 timeout /t 1 /nobreak >nul 2>&1
 
-echo [driver] Starting Ada gRPC client...
+echo [driver] Starting Ada gRPC client via generated service facade...
 "%CLIENT_BIN%" --dll "%DLL_BIN%" --address "%ADDRESS%"
 set "CLIENT_EXIT=%errorlevel%"
 
 call :cleanup
 
 if %CLIENT_EXIT% equ 0 (
-    echo [driver] PASS: Ada and C++ exchanged a mid-complexity gRPC/protobuf message
+    echo [driver] PASS: Ada standard facade exchanged a mid-complexity gRPC/protobuf message
     exit /b 0
 ) else (
     echo [driver] FAIL: Ada gRPC client exited with code %CLIENT_EXIT%

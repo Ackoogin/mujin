@@ -25,8 +25,6 @@ with Pyramid.Services.Tactical_Objects.Consumed;
 with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
 with Pyramid.Data_Model.Common.Protobuf_Codec;
 with Pyramid.Data_Model.Tactical.Protobuf_Codec;
-with Pyramid.Components.Tactical_Objects.Services.Provided.GRPC_Transport;
-with Pyramid.Components.Tactical_Objects.Services.Consumed.GRPC_Transport;
 
 procedure Test_Generated_Bindings is
    package Prov renames Pyramid.Services.Tactical_Objects.Provided;
@@ -34,10 +32,6 @@ procedure Test_Generated_Bindings is
    package Flat renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
    package Common_Proto renames Pyramid.Data_Model.Common.Protobuf_Codec;
    package Tactical_Proto renames Pyramid.Data_Model.Tactical.Protobuf_Codec;
-   package Provided_Grpc renames
-     Pyramid.Components.Tactical_Objects.Services.Provided.GRPC_Transport;
-   package Consumed_Grpc renames
-     Pyramid.Components.Tactical_Objects.Services.Consumed.GRPC_Transport;
 
    Pass_Count : Natural := 0;
    Fail_Count : Natural := 0;
@@ -180,14 +174,6 @@ begin
           Common_Proto.Content_Type = "application/protobuf");
    Check ("Tactical protobuf content type",
           Tactical_Proto.Content_Type = "application/protobuf");
-
-   --  12. gRPC transport specs are generated and visible to Ada
-   Check ("Provided gRPC transport spec visible",
-          Provided_Grpc.Invoke_Create_Requirement_Json'Address /=
-            System.Null_Address);
-   Check ("Consumed gRPC transport spec visible",
-          Consumed_Grpc.Invoke_Create_Requirement_Json'Address /=
-            System.Null_Address);
 
    --  Summary
    New_Line;

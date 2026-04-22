@@ -72,6 +72,63 @@ package Pyramid.Services.Autonomy_Backend.Provided is
    Svc_Read_Placement : constant String :=
      "requirement_placement.read_placement";
 
+   --  -- ROS2 endpoint constants --------------------------------
+
+   Ros2_Transport_Content_Type : constant String := "application/ros2";
+
+   Capabilities_Read_Capabilities_Open_Service : constant String :=
+     "/pyramid/stream/capabilities/read_capabilities/open";
+   Capabilities_Read_Capabilities_Frame_Topic : constant String :=
+     "/pyramid/stream/capabilities/read_capabilities/frames";
+   Capabilities_Read_Capabilities_Cancel_Topic : constant String :=
+     "/pyramid/stream/capabilities/read_capabilities/cancel";
+
+   Planning_Execution_Create_Requirement_Service : constant String :=
+     "/pyramid/service/planning_execution/create_requirement";
+
+   Planning_Execution_Read_Requirement_Open_Service : constant String :=
+     "/pyramid/stream/planning_execution/read_requirement/open";
+   Planning_Execution_Read_Requirement_Frame_Topic : constant String :=
+     "/pyramid/stream/planning_execution/read_requirement/frames";
+   Planning_Execution_Read_Requirement_Cancel_Topic : constant String :=
+     "/pyramid/stream/planning_execution/read_requirement/cancel";
+
+   Planning_Execution_Update_Requirement_Service : constant String :=
+     "/pyramid/service/planning_execution/update_requirement";
+
+   Planning_Execution_Delete_Requirement_Service : constant String :=
+     "/pyramid/service/planning_execution/delete_requirement";
+
+   State_Create_State_Service : constant String :=
+     "/pyramid/service/state/create_state";
+
+   State_Update_State_Service : constant String :=
+     "/pyramid/service/state/update_state";
+
+   State_Delete_State_Service : constant String :=
+     "/pyramid/service/state/delete_state";
+
+   Plan_Read_Plan_Open_Service : constant String :=
+     "/pyramid/stream/plan/read_plan/open";
+   Plan_Read_Plan_Frame_Topic : constant String :=
+     "/pyramid/stream/plan/read_plan/frames";
+   Plan_Read_Plan_Cancel_Topic : constant String :=
+     "/pyramid/stream/plan/read_plan/cancel";
+
+   Execution_Run_Read_Run_Open_Service : constant String :=
+     "/pyramid/stream/execution_run/read_run/open";
+   Execution_Run_Read_Run_Frame_Topic : constant String :=
+     "/pyramid/stream/execution_run/read_run/frames";
+   Execution_Run_Read_Run_Cancel_Topic : constant String :=
+     "/pyramid/stream/execution_run/read_run/cancel";
+
+   Requirement_Placement_Read_Placement_Open_Service : constant String :=
+     "/pyramid/stream/requirement_placement/read_placement/open";
+   Requirement_Placement_Read_Placement_Frame_Topic : constant String :=
+     "/pyramid/stream/requirement_placement/read_placement/frames";
+   Requirement_Placement_Read_Placement_Cancel_Topic : constant String :=
+     "/pyramid/stream/requirement_placement/read_placement/cancel";
+
    --  -- PCL message utility ------------------------------------
 
    function Msg_To_String
@@ -80,8 +137,12 @@ package Pyramid.Services.Autonomy_Backend.Provided is
 
    Json_Content_Type : constant String := "application/json";
    Flatbuffers_Content_Type : constant String := "application/flatbuffers";
+   Grpc_Content_Type : constant String := "application/grpc";
 
    function Supports_Content_Type (Content_Type : String) return Boolean;
+
+   procedure Configure_Grpc_Library (Path : String);
+   procedure Configure_Grpc_Channel (Channel : String);
 
    --  -- EntityActions handler callbacks ----------------------------
    --  Supply these callbacks from your component at registration time.

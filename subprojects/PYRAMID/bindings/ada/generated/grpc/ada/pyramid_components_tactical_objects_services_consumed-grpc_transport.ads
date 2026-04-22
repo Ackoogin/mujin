@@ -1,68 +1,56 @@
 --  Auto-generated gRPC transport spec — do not edit
 --  Backend: grpc | Package: Pyramid.Components.Tactical_objects.Services.Consumed.GRPC_Transport
 --
---  gRPC transport for Ada uses the generated canonical C ABI shim.
---  Requests and responses are JSON strings; the shim performs
---  protobuf encoding/decoding and gRPC client calls in C++.
+--  Component-facing calls are typed; the JSON/C ABI shim is private.
 
-with Interfaces.C; use Interfaces.C;
-with Interfaces.C.Strings;
-with System;
+with Pyramid.Data_Model.Base.Types;
+with Pyramid.Data_Model.Common.Types;
+with Pyramid.Data_Model.Tactical.Types;
 
 package Pyramid.Components.Tactical_objects.Services.Consumed.GRPC_Transport is
 
    Content_Type : constant String := "application/grpc";
 
+   procedure Configure_Library (Path : String);
+
+   type Object_Detail_Array is array (Positive range <>) of Pyramid.Data_Model.Tactical.Types.Object_Detail;
+   type Object_Evidence_Requirement_Array is array (Positive range <>) of Pyramid.Data_Model.Tactical.Types.Object_Evidence_Requirement;
+   type Capability_Array is array (Positive range <>) of Pyramid.Data_Model.Common.Types.Capability;
+
    --  Object_Evidence_Service
 
-   function Invoke_Read_Detail_Json
-     (Channel      : Interfaces.C.Strings.chars_ptr;
-      Request_Json : Interfaces.C.Strings.chars_ptr)
-      return Interfaces.C.Strings.chars_ptr
-     with Import, Convention => C,
-          External_Name => "grpc_consumed_object_evidence_service_read_detail_json";
+   function Invoke_Read_Detail
+     (Channel : String;
+      Request : Pyramid.Data_Model.Common.Types.Query)
+      return Object_Detail_Array;
 
    --  Object_Solution_Evidence_Service
 
-   function Invoke_Create_Requirement_Json
-     (Channel      : Interfaces.C.Strings.chars_ptr;
-      Request_Json : Interfaces.C.Strings.chars_ptr)
-      return Interfaces.C.Strings.chars_ptr
-     with Import, Convention => C,
-          External_Name => "grpc_consumed_object_solution_evidence_service_create_requirement_json";
+   function Invoke_Create_Requirement
+     (Channel : String;
+      Request : Pyramid.Data_Model.Tactical.Types.Object_Evidence_Requirement)
+      return Pyramid.Data_Model.Base.Types.Identifier;
 
-   function Invoke_Read_Requirement_Json
-     (Channel      : Interfaces.C.Strings.chars_ptr;
-      Request_Json : Interfaces.C.Strings.chars_ptr)
-      return Interfaces.C.Strings.chars_ptr
-     with Import, Convention => C,
-          External_Name => "grpc_consumed_object_solution_evidence_service_read_requirement_json";
+   function Invoke_Read_Requirement
+     (Channel : String;
+      Request : Pyramid.Data_Model.Common.Types.Query)
+      return Object_Evidence_Requirement_Array;
 
-   function Invoke_Update_Requirement_Json
-     (Channel      : Interfaces.C.Strings.chars_ptr;
-      Request_Json : Interfaces.C.Strings.chars_ptr)
-      return Interfaces.C.Strings.chars_ptr
-     with Import, Convention => C,
-          External_Name => "grpc_consumed_object_solution_evidence_service_update_requirement_json";
+   function Invoke_Update_Requirement
+     (Channel : String;
+      Request : Pyramid.Data_Model.Tactical.Types.Object_Evidence_Requirement)
+      return Pyramid.Data_Model.Common.Types.Ack;
 
-   function Invoke_Delete_Requirement_Json
-     (Channel      : Interfaces.C.Strings.chars_ptr;
-      Request_Json : Interfaces.C.Strings.chars_ptr)
-      return Interfaces.C.Strings.chars_ptr
-     with Import, Convention => C,
-          External_Name => "grpc_consumed_object_solution_evidence_service_delete_requirement_json";
+   function Invoke_Delete_Requirement
+     (Channel : String;
+      Request : Pyramid.Data_Model.Base.Types.Identifier)
+      return Pyramid.Data_Model.Common.Types.Ack;
 
    --  Object_Source_Capability_Service
 
-   function Invoke_Read_Capability_Json
-     (Channel      : Interfaces.C.Strings.chars_ptr;
-      Request_Json : Interfaces.C.Strings.chars_ptr)
-      return Interfaces.C.Strings.chars_ptr
-     with Import, Convention => C,
-          External_Name => "grpc_consumed_object_source_capability_service_read_capability_json";
-
-   procedure Free_String (Value : Interfaces.C.Strings.chars_ptr)
-     with Import, Convention => C,
-          External_Name => "pyramid_services_tactical_objects_grpc_free_string";
+   function Invoke_Read_Capability
+     (Channel : String;
+      Request : Pyramid.Data_Model.Common.Types.Query)
+      return Capability_Array;
 
 end Pyramid.Components.Tactical_objects.Services.Consumed.GRPC_Transport;

@@ -3,6 +3,17 @@ include(GoogleTest)
 set(TOBJ_TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tactical_objects)
 set(PROTO_BINDINGS_DIR ${PYRAMID_ROOT_DIR}/bindings/cpp/generated)
 
+find_program(PYRAMID_PYTHON NAMES python3 python)
+if(NOT PYRAMID_PYTHON)
+    message(FATAL_ERROR "Python is required for PYRAMID binding generator tests")
+endif()
+
+add_test(NAME pyramid_binding_generation_dependencies
+    COMMAND ${PYRAMID_PYTHON}
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_binding_generation_dependencies.py
+            --generator ${PYRAMID_ROOT_DIR}/pim/generate_bindings.py
+            --proto-dir ${PYRAMID_ROOT_DIR}/proto)
+
 add_executable(test_tobj_types ${TOBJ_TEST_DIR}/Test_Types.cpp)
 target_link_libraries(test_tobj_types PRIVATE tactical_objects GTest::gtest_main)
 gtest_discover_tests(test_tobj_types DISCOVERY_MODE PRE_TEST)
@@ -355,14 +366,23 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                 ${ADA_GEN_OUT}/protobuf/ada/pyramid_data_model_tactical-protobuf_codec.ads
                 ${ADA_GEN_OUT}/protobuf/ada/pyramid-data_model-tactical-protobuf_codec.ads
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${ADA_GEN_OUT}/grpc/ada/pyramid_components_tactical_objects-grpc_transport.ads
-                ${ADA_GEN_OUT}/grpc/ada/pyramid-components-tactical_objects-grpc_transport.ads
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${ADA_GEN_OUT}/grpc/ada/pyramid_components_tactical_objects_services_consumed-grpc_transport.ads
                 ${ADA_GEN_OUT}/grpc/ada/pyramid-components-tactical_objects-services-consumed-grpc_transport.ads
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${ADA_GEN_OUT}/grpc/ada/pyramid_components_tactical_objects_services_consumed-grpc_transport.adb
+                ${ADA_GEN_OUT}/grpc/ada/pyramid-components-tactical_objects-services-consumed-grpc_transport.adb
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${ADA_GEN_OUT}/grpc/ada/pyramid_components_tactical_objects_services_provided-grpc_transport.ads
                 ${ADA_GEN_OUT}/grpc/ada/pyramid-components-tactical_objects-services-provided-grpc_transport.ads
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${ADA_GEN_OUT}/grpc/ada/pyramid_components_tactical_objects_services_provided-grpc_transport.adb
+                ${ADA_GEN_OUT}/grpc/ada/pyramid-components-tactical_objects-services-provided-grpc_transport.adb
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${ADA_GEN_OUT}/grpc/ada/pyramid_components_autonomy_backend_services_provided-grpc_transport.ads
+                ${ADA_GEN_OUT}/grpc/ada/pyramid-components-autonomy_backend-services-provided-grpc_transport.ads
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${ADA_GEN_OUT}/grpc/ada/pyramid_components_autonomy_backend_services_provided-grpc_transport.adb
+                ${ADA_GEN_OUT}/grpc/ada/pyramid-components-autonomy_backend-services-provided-grpc_transport.adb
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_TEST_SRC_DIR}/bin
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR}
@@ -558,10 +578,19 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         add_custom_target(ada_grpc_cpp_interop_build ALL
             COMMAND ${CMAKE_COMMAND} -E env MUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
                     ${GPRBUILD} -p -P ${ADA_TEST_SRC_DIR}/ada_grpc_cpp_interop_e2e.gpr
+                    -XMUJIN_ROOT=${MUJIN_WORKSPACE_ROOT}
+                    -XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR}
+                    -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
+                    -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
+                    -XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME}
+                    -XPYRAMID_GEN_LIB_DIR=${ADA_PYRAMID_GEN_LIB_DIR}
+                    -XPYRAMID_GEN_LIB_NAME=${ADA_PYRAMID_GEN_LIB_NAME}
             WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
             COMMENT "Building Ada gRPC C++ interop test"
         )
-        add_dependencies(ada_grpc_cpp_interop_build pyramid_grpc_c_shim)
+        add_dependencies(ada_grpc_cpp_interop_build
+            pyramid_grpc_c_shim
+            ada_test_generated_bindings_build)
 
         add_test(NAME tobj_ada_grpc_cpp_interop_e2e
             COMMAND ${CMAKE_COMMAND}
@@ -612,7 +641,14 @@ if(TARGET pyramid_ros2_transport)
         GTest::gtest_main
     )
     target_include_directories(test_ros2_transport_semantics PRIVATE
+        ${PROTO_BINDINGS_DIR}
         ${PYRAMID_ROOT_DIR}/bindings/cpp/generated/ros2/cpp
     )
     gtest_discover_tests(test_ros2_transport_semantics DISCOVERY_MODE PRE_TEST)
+    add_test(NAME tobj_ros2_facade_e2e
+        COMMAND $<TARGET_FILE:test_ros2_transport_semantics>
+                --gtest_filter=Ros2TransportSemantics.*)
+    set_tests_properties(tobj_ros2_facade_e2e PROPERTIES
+        LABELS "integration;ros2;e2e;facade"
+        TIMEOUT 20)
 endif()

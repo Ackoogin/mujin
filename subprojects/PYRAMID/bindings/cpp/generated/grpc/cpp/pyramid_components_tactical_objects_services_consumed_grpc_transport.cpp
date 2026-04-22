@@ -1,297 +1,122 @@
+// Auto-generated gRPC transport — do not edit
+
 #include "pyramid_components_tactical_objects_services_consumed_grpc_transport.hpp"
 
-#include "pyramid_services_tactical_objects_grpc_dispatch.hpp"
+namespace pyramid::components::tactical_objects::services::consumed::grpc_transport {
 
-#include "pyramid/components/tactical_objects/services/consumed.grpc.pb.h"
-
-#include <pcl/pcl_executor.h>
-
-#include <grpcpp/grpcpp.h>
-
-#include <cstdlib>
-#include <cstring>
-#include <future>
-#include <memory>
-#include <stdexcept>
-#include <string>
-#include <utility>
-
-namespace pyramid::services::tactical_objects::consumed::grpc_transport {
-
-namespace grpc_detail = pyramid::services::tactical_objects::grpc_transport::detail;
-
-namespace {
-
-constexpr const char* kSvcReadDetail = "object_evidence.read_detail";
-constexpr const char* kSvcCreateRequirement =
-    "object_solution_evidence.create_requirement";
-constexpr const char* kSvcReadRequirement =
-    "object_solution_evidence.read_requirement";
-constexpr const char* kSvcUpdateRequirement =
-    "object_solution_evidence.update_requirement";
-constexpr const char* kSvcDeleteRequirement =
-    "object_solution_evidence.delete_requirement";
-constexpr const char* kSvcReadCapability =
-    "object_source_capability.read_capability";
-
-struct UnaryState {
-  std::promise<std::string> promise;
-};
-
-void unaryResponseCallback(const pcl_msg_t* response, void* user_data) {
-  auto* state = static_cast<UnaryState*>(user_data);
-  if (!state) {
-    return;
-  }
-  if (!response || !response->data || response->size == 0) {
-    state->promise.set_value(std::string{});
-    return;
-  }
-  state->promise.set_value(
-      std::string(static_cast<const char*>(response->data), response->size));
+std::vector<ObjectDetail>
+ServiceHandler::handleReadDetail(const Query& /*request*/) {
+    return {};
 }
 
-std::pair<grpc_detail::UniqueResponseBuffer, size_t> invokeUnaryService(
-    pcl_executor_t* executor, const char* service_name,
-    const std::string& request_bytes) {
-  UnaryState state;
-  pcl_msg_t request{};
-  request.data = request_bytes.data();
-  request.size = static_cast<uint32_t>(request_bytes.size());
-  request.type_name = grpc_detail::kProtobufContentType;
+Identifier
+ServiceHandler::handleCreateRequirement(const ObjectEvidenceRequirement& /*request*/) {
+    return {};
+}
 
-  const auto post_rc = pcl_executor_post_service_request(
-      executor, service_name, &request, unaryResponseCallback, &state);
-  if (post_rc != PCL_OK) {
-    throw std::runtime_error("failed to post service request to executor");
-  }
+std::vector<ObjectEvidenceRequirement>
+ServiceHandler::handleReadRequirement(const Query& /*request*/) {
+    return {};
+}
 
-  const auto response = state.promise.get_future().get();
-  void* storage = nullptr;
-  if (!response.empty()) {
-    storage = std::malloc(response.size());
-    if (!storage) {
-      throw std::runtime_error("failed to allocate response buffer");
+Ack
+ServiceHandler::handleUpdateRequirement(const ObjectEvidenceRequirement& /*request*/) {
+    return {};
+}
+
+Ack
+ServiceHandler::handleDeleteRequirement(const Identifier& /*request*/) {
+    return {};
+}
+
+std::vector<Capability>
+ServiceHandler::handleReadCapability(const Query& /*request*/) {
+    return {};
+}
+
+grpc::Status Object_Evidence_ServiceImpl::ReadDetail(
+    grpc::ServerContext* /*context*/,
+    const ::pyramid::data_model::common::Query* request,
+    grpc::ServerWriter<::pyramid::data_model::tactical::ObjectDetail>* writer)
+{
+    // Delegate to handler, write each result to stream
+    auto results = handler_.handleReadDetail(*request);
+    for (const auto& item : results) {
+        writer->Write(item);
     }
-    std::memcpy(storage, response.data(), response.size());
-  }
-  return {grpc_detail::UniqueResponseBuffer(storage), response.size()};
+    return grpc::Status::OK;
 }
 
-}  // namespace
+grpc::Status Object_Solution_Evidence_ServiceImpl::CreateRequirement(
+    grpc::ServerContext* /*context*/,
+    const ::pyramid::data_model::tactical::ObjectEvidenceRequirement* request,
+    ::pyramid::data_model::base::Identifier* response)
+{
+    *response = handler_.handleCreateRequirement(*request);
+    return grpc::Status::OK;
+}
 
-class ObjectEvidenceServiceImpl final
-    : public ::pyramid::components::tactical_objects::services::consumed::
-          Object_Evidence_Service::Service {
- public:
-  explicit ObjectEvidenceServiceImpl(pcl_executor_t* executor)
-      : executor_(executor) {}
+grpc::Status Object_Solution_Evidence_ServiceImpl::ReadRequirement(
+    grpc::ServerContext* /*context*/,
+    const ::pyramid::data_model::common::Query* request,
+    grpc::ServerWriter<::pyramid::data_model::tactical::ObjectEvidenceRequirement>* writer)
+{
+    // Delegate to handler, write each result to stream
+    auto results = handler_.handleReadRequirement(*request);
+    for (const auto& item : results) {
+        writer->Write(item);
+    }
+    return grpc::Status::OK;
+}
 
-  grpc::Status ReadDetail(
-      grpc::ServerContext* /*context*/,
-      const ::pyramid::data_model::common::Query* request,
-      grpc::ServerWriter<::pyramid::data_model::tactical::ObjectDetail>* writer)
-      override {
-    return grpc_detail::dispatchServerStream<
-        ::pyramid::data_model::common::Query,
-        ::pyramid::data_model::tactical::ObjectDetail>(
-        request, writer,
-        [&](const void* request_buf, size_t request_size, void** response_buf,
-            size_t* response_size) {
-          auto result = invokeUnaryService(
-              executor_, kSvcReadDetail,
-              std::string(static_cast<const char*>(request_buf), request_size));
-          *response_buf = result.first.release();
-          *response_size = result.second;
-        },
-        "object_evidence.read_detail");
-  }
+grpc::Status Object_Solution_Evidence_ServiceImpl::UpdateRequirement(
+    grpc::ServerContext* /*context*/,
+    const ::pyramid::data_model::tactical::ObjectEvidenceRequirement* request,
+    ::pyramid::data_model::common::Ack* response)
+{
+    *response = handler_.handleUpdateRequirement(*request);
+    return grpc::Status::OK;
+}
 
- private:
-  pcl_executor_t* executor_;
-};
+grpc::Status Object_Solution_Evidence_ServiceImpl::DeleteRequirement(
+    grpc::ServerContext* /*context*/,
+    const ::pyramid::data_model::base::Identifier* request,
+    ::pyramid::data_model::common::Ack* response)
+{
+    *response = handler_.handleDeleteRequirement(*request);
+    return grpc::Status::OK;
+}
 
-class ObjectSolutionEvidenceServiceImpl final
-    : public ::pyramid::components::tactical_objects::services::consumed::
-          Object_Solution_Evidence_Service::Service {
- public:
-  explicit ObjectSolutionEvidenceServiceImpl(pcl_executor_t* executor)
-      : executor_(executor) {}
+grpc::Status Object_Source_Capability_ServiceImpl::ReadCapability(
+    grpc::ServerContext* /*context*/,
+    const ::pyramid::data_model::common::Query* request,
+    grpc::ServerWriter<::pyramid::data_model::common::Capability>* writer)
+{
+    // Delegate to handler, write each result to stream
+    auto results = handler_.handleReadCapability(*request);
+    for (const auto& item : results) {
+        writer->Write(item);
+    }
+    return grpc::Status::OK;
+}
 
-  grpc::Status CreateRequirement(
-      grpc::ServerContext* /*context*/,
-      const ::pyramid::data_model::tactical::ObjectEvidenceRequirement* request,
-      ::pyramid::data_model::base::Identifier* response) override {
-    return grpc_detail::dispatchUnary<
-        ::pyramid::data_model::tactical::ObjectEvidenceRequirement,
-        ::pyramid::data_model::base::Identifier>(
-        request, response,
-        [&](const void* request_buf, size_t request_size, void** response_buf,
-            size_t* response_size) {
-          auto result = invokeUnaryService(
-              executor_, kSvcCreateRequirement,
-              std::string(static_cast<const char*>(request_buf), request_size));
-          *response_buf = result.first.release();
-          *response_size = result.second;
-        },
-        "object_solution_evidence.create_requirement");
-  }
-
-  grpc::Status ReadRequirement(
-      grpc::ServerContext* /*context*/,
-      const ::pyramid::data_model::common::Query* request,
-      grpc::ServerWriter<::pyramid::data_model::tactical::ObjectEvidenceRequirement>*
-          writer) override {
-    return grpc_detail::dispatchServerStream<
-        ::pyramid::data_model::common::Query,
-        ::pyramid::data_model::tactical::ObjectEvidenceRequirement>(
-        request, writer,
-        [&](const void* request_buf, size_t request_size, void** response_buf,
-            size_t* response_size) {
-          auto result = invokeUnaryService(
-              executor_, kSvcReadRequirement,
-              std::string(static_cast<const char*>(request_buf), request_size));
-          *response_buf = result.first.release();
-          *response_size = result.second;
-        },
-        "object_solution_evidence.read_requirement");
-  }
-
-  grpc::Status UpdateRequirement(
-      grpc::ServerContext* /*context*/,
-      const ::pyramid::data_model::tactical::ObjectEvidenceRequirement* request,
-      ::pyramid::data_model::common::Ack* response) override {
-    return grpc_detail::dispatchUnary<
-        ::pyramid::data_model::tactical::ObjectEvidenceRequirement,
-        ::pyramid::data_model::common::Ack>(
-        request, response,
-        [&](const void* request_buf, size_t request_size, void** response_buf,
-            size_t* response_size) {
-          auto result = invokeUnaryService(
-              executor_, kSvcUpdateRequirement,
-              std::string(static_cast<const char*>(request_buf), request_size));
-          *response_buf = result.first.release();
-          *response_size = result.second;
-        },
-        "object_solution_evidence.update_requirement");
-  }
-
-  grpc::Status DeleteRequirement(
-      grpc::ServerContext* /*context*/,
-      const ::pyramid::data_model::base::Identifier* request,
-      ::pyramid::data_model::common::Ack* response) override {
-    return grpc_detail::dispatchUnary<::pyramid::data_model::base::Identifier,
-                                      ::pyramid::data_model::common::Ack>(
-        request, response,
-        [&](const void* request_buf, size_t request_size, void** response_buf,
-            size_t* response_size) {
-          auto result = invokeUnaryService(
-              executor_, kSvcDeleteRequirement,
-              std::string(static_cast<const char*>(request_buf), request_size));
-          *response_buf = result.first.release();
-          *response_size = result.second;
-        },
-        "object_solution_evidence.delete_requirement");
-  }
-
- private:
-  pcl_executor_t* executor_;
-};
-
-class ObjectSourceCapabilityServiceImpl final
-    : public ::pyramid::components::tactical_objects::services::consumed::
-          Object_Source_Capability_Service::Service {
- public:
-  explicit ObjectSourceCapabilityServiceImpl(pcl_executor_t* executor)
-      : executor_(executor) {}
-
-  grpc::Status ReadCapability(
-      grpc::ServerContext* /*context*/,
-      const ::pyramid::data_model::common::Query* request,
-      grpc::ServerWriter<::pyramid::data_model::common::Capability>* writer)
-      override {
-    return grpc_detail::dispatchServerStream<
-        ::pyramid::data_model::common::Query,
-        ::pyramid::data_model::common::Capability>(
-        request, writer,
-        [&](const void* request_buf, size_t request_size, void** response_buf,
-            size_t* response_size) {
-          auto result = invokeUnaryService(
-              executor_, kSvcReadCapability,
-              std::string(static_cast<const char*>(request_buf), request_size));
-          *response_buf = result.first.release();
-          *response_size = result.second;
-        },
-        "object_source_capability.read_capability");
-  }
-
- private:
-  pcl_executor_t* executor_;
-};
-
-class ServerHost::Impl {
- public:
-  explicit Impl(pcl_executor_t* executor)
-      : object_evidence_service(executor),
-        object_solution_evidence_service(executor),
-        object_source_capability_service(executor) {}
-
-  grpc::Server* start(const std::string& listen_address) {
+std::unique_ptr<grpc::Server> buildServer(
+    const std::string& listen_address,
+    ServiceHandler& handler)
+{
     grpc::ServerBuilder builder;
     builder.AddListeningPort(listen_address, grpc::InsecureServerCredentials());
-    builder.RegisterService(&object_evidence_service);
-    builder.RegisterService(&object_solution_evidence_service);
-    builder.RegisterService(&object_source_capability_service);
-    server = builder.BuildAndStart();
-    return server.get();
-  }
 
-  void shutdown() {
-    if (server) {
-      server->Shutdown();
-    }
-  }
+    auto object_evidence_service = std::make_unique<Object_Evidence_ServiceImpl>(handler);
+    builder.RegisterService(object_evidence_service.get());
 
-  void wait() {
-    if (server) {
-      server->Wait();
-    }
-  }
+    auto object_solution_evidence_service = std::make_unique<Object_Solution_Evidence_ServiceImpl>(handler);
+    builder.RegisterService(object_solution_evidence_service.get());
 
-  grpc::Server* get() const { return server.get(); }
+    auto object_source_capability_service = std::make_unique<Object_Source_Capability_ServiceImpl>(handler);
+    builder.RegisterService(object_source_capability_service.get());
 
-  ObjectEvidenceServiceImpl object_evidence_service;
-  ObjectSolutionEvidenceServiceImpl object_solution_evidence_service;
-  ObjectSourceCapabilityServiceImpl object_source_capability_service;
-  std::unique_ptr<grpc::Server> server;
-};
-
-ServerHost::ServerHost(pcl_executor_t* executor)
-    : impl_(std::make_unique<Impl>(executor)) {}
-
-ServerHost::~ServerHost() = default;
-
-grpc::Server* ServerHost::start(const std::string& listen_address) {
-  return impl_->start(listen_address);
+    return builder.BuildAndStart();
 }
 
-void ServerHost::shutdown() {
-  impl_->shutdown();
-}
-
-void ServerHost::wait() {
-  impl_->wait();
-}
-
-grpc::Server* ServerHost::get() const {
-  return impl_->get();
-}
-
-std::unique_ptr<ServerHost> buildServer(const std::string& listen_address,
-                                        pcl_executor_t* executor) {
-  auto host = std::make_unique<ServerHost>(executor);
-  host->start(listen_address);
-  return host;
-}
-
-}  // namespace pyramid::services::tactical_objects::consumed::grpc_transport
+} // namespace pyramid::components::tactical_objects::services::consumed::grpc_transport

@@ -412,6 +412,12 @@ def _flatbuffers_codec_pkg_from_proto(proto_file: ProtoFile) -> str:
     return '.'.join(ada_parts)
 
 
+def _grpc_transport_pkg_from_proto(proto_file: ProtoFile) -> str:
+    """Derive the generated Ada gRPC transport package for this service proto."""
+    pkg_parts = [p.capitalize() for p in proto_file.package.split('.') if p]
+    return '.'.join(pkg_parts) + '.GRPC_Transport'
+
+
 def _flatbuffers_func_suffix_for_type(full_type: str) -> str:
     """Return the Ada suffix used by the generated FlatBuffers bridge package."""
     return _camel_to_snake(_short_type(full_type))
@@ -456,8 +462,9 @@ def _ensure_parent_packages(output_dir: Path, pkg_names: List[str]) -> None:
 
 class AdaServiceGenerator:
 
-    def __init__(self, proto_input: str):
+    def __init__(self, proto_input: str, enabled_backends=None):
         self._proto_input = Path(proto_input)
+        self._enabled_backends = set(enabled_backends or ['json'])
 
     def generate(self, output_dir: str):
         output_path = Path(output_dir)
@@ -509,6 +516,8 @@ class AdaServiceGenerator:
         })
 
         is_provided = _is_provided(parsed)
+        has_grpc = 'grpc' in self._enabled_backends
+        has_ros2 = 'ros2' in self._enabled_backends
         sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
 
         with open(path, 'w', newline='\n') as f:
@@ -586,6 +595,33 @@ class AdaServiceGenerator:
                     f.write(f'     "{wire}";\n')
                 f.write('\n')
 
+            if has_ros2:
+                f.write(f'   --  -- ROS2 endpoint constants --------------------------------\n')
+                f.write(f'\n')
+                f.write(f'   Ros2_Transport_Content_Type : constant String := "application/ros2";\n')
+                f.write(f'\n')
+                for svc in parsed.services:
+                    svc_name = svc.name
+                    if svc_name.endswith('_Service'):
+                        svc_name = svc_name[:-len('_Service')]
+                    svc_const_prefix = _camel_to_snake(svc_name)
+                    for rpc in svc.rpcs:
+                        rpc_name = _camel_to_snake(rpc.name)
+                        base_name = f'{svc_const_prefix}_{rpc_name}'
+                        if rpc.streaming:
+                            base = f'/pyramid/stream/{svc.wire_prefix}/{rpc.wire_name}'
+                            f.write(f'   {base_name}_Open_Service : constant String :=\n')
+                            f.write(f'     "{base}/open";\n')
+                            f.write(f'   {base_name}_Frame_Topic : constant String :=\n')
+                            f.write(f'     "{base}/frames";\n')
+                            f.write(f'   {base_name}_Cancel_Topic : constant String :=\n')
+                            f.write(f'     "{base}/cancel";\n')
+                        else:
+                            endpoint = f'/pyramid/service/{svc.wire_prefix}/{rpc.wire_name}'
+                            f.write(f'   {base_name}_Service : constant String :=\n')
+                            f.write(f'     "{endpoint}";\n')
+                        f.write(f'\n')
+
             # -- Msg_To_String utility -----------------------------------------
             f.write(f'   --  -- PCL message utility ------------------------------------\n')
             f.write(f'\n')
@@ -595,9 +631,15 @@ class AdaServiceGenerator:
             f.write(f'\n')
             f.write(f'   Json_Content_Type : constant String := "application/json";\n')
             f.write(f'   Flatbuffers_Content_Type : constant String := "application/flatbuffers";\n')
+            if has_grpc:
+                f.write(f'   Grpc_Content_Type : constant String := "application/grpc";\n')
             f.write(f'\n')
             f.write(f'   function Supports_Content_Type (Content_Type : String) return Boolean;\n')
             f.write(f'\n')
+            if has_grpc:
+                f.write(f'   procedure Configure_Grpc_Library (Path : String);\n')
+                f.write(f'   procedure Configure_Grpc_Channel (Channel : String);\n')
+                f.write(f'\n')
 
             # Handler callback declarations
             f.write(f'   --  -- EntityActions handler callbacks ----------------------------\n')
@@ -664,8 +706,6 @@ class AdaServiceGenerator:
             f.write(f'      Content_Type : String := "application/json");\n')
             f.write(f'\n')
 
-            # Invoke helpers for services (provided = client can call them)
-            # These use the proto-native data model type directly.
             if is_provided:
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
@@ -718,6 +758,7 @@ class AdaServiceGenerator:
                     all_rpcs: List[Tuple[str, ProtoRpc]],
                     codec_pkgs: List[str]):
         is_provided = _is_provided(parsed)
+        has_grpc = 'grpc' in self._enabled_backends
         sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
 
         with open(path, 'w', newline='\n') as f:
@@ -734,10 +775,13 @@ class AdaServiceGenerator:
             for cp in codec_pkgs:
                 f.write(f'with {cp};  use {cp};\n')
             f.write(f'with {_flatbuffers_codec_pkg_from_proto(parsed)};\n')
+            if has_grpc:
+                f.write(f'with {_grpc_transport_pkg_from_proto(parsed)};\n')
             f.write(f'\n')
             f.write(f'package body {pkg_name} is\n')
             f.write(f'   use type System.Address;\n')
             f.write(f'   use type Interfaces.C.Strings.chars_ptr;\n')
+            f.write(f'   use type Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
             f.write(f'\n')
 
             # -- Internal helpers ----------------------------------------------
@@ -777,15 +821,34 @@ class AdaServiceGenerator:
             f.write(f'\n')
 
             f.write(f'   package Flatbuffers_Codec renames {_flatbuffers_codec_pkg_from_proto(parsed)};\n')
+            if has_grpc:
+                f.write(f'   package Grpc_Transport renames {_grpc_transport_pkg_from_proto(parsed)};\n')
+                f.write(f'   Grpc_Channel : Unbounded_String := Null_Unbounded_String;\n')
             f.write(f'\n')
 
             f.write(f'   function Supports_Content_Type (Content_Type : String) return Boolean is\n')
             f.write(f'   begin\n')
             f.write(f'      return Content_Type = ""\n')
             f.write(f'        or else Content_Type = Json_Content_Type\n')
-            f.write(f'        or else Content_Type = Flatbuffers_Content_Type;\n')
+            f.write(f'        or else Content_Type = Flatbuffers_Content_Type')
+            if has_grpc:
+                f.write(f'\n')
+                f.write(f'        or else Content_Type = Grpc_Content_Type;\n')
+            else:
+                f.write(f';\n')
             f.write(f'   end Supports_Content_Type;\n')
             f.write(f'\n')
+            if has_grpc:
+                f.write(f'   procedure Configure_Grpc_Library (Path : String) is\n')
+                f.write(f'   begin\n')
+                f.write(f'      Grpc_Transport.Configure_Library (Path);\n')
+                f.write(f'   end Configure_Grpc_Library;\n')
+                f.write(f'\n')
+                f.write(f'   procedure Configure_Grpc_Channel (Channel : String) is\n')
+                f.write(f'   begin\n')
+                f.write(f'      Grpc_Channel := To_Unbounded_String (Channel);\n')
+                f.write(f'   end Configure_Grpc_Channel;\n')
+                f.write(f'\n')
             f.write(f'   function Message_Content_Type\n')
             f.write(f'     (Msg : access constant Pcl_Bindings.Pcl_Msg) return String is\n')
             f.write(f'   begin\n')
@@ -812,6 +875,28 @@ class AdaServiceGenerator:
             f.write(f'      return To_Unbounded_String (Payload);\n')
             f.write(f'   end Decode_Identifier_Payload;\n')
             f.write(f'\n')
+            if has_grpc:
+                f.write(f'   procedure Emit_Invoke_Response\n')
+                f.write(f'     (Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
+                f.write(f'      User_Data : System.Address;\n')
+                f.write(f'      Payload   : String) is\n')
+                f.write(f'      Payload_Bytes : aliased constant String := Payload;\n')
+                f.write(f'      Type_Name : Interfaces.C.Strings.chars_ptr :=\n')
+                f.write(f'        Interfaces.C.Strings.New_String (Json_Content_Type);\n')
+                f.write(f'      Msg : aliased Pcl_Bindings.Pcl_Msg;\n')
+                f.write(f'   begin\n')
+                f.write(f"      Msg.Data :=\n")
+                f.write(f"        (if Payload_Bytes'Length = 0\n")
+                f.write(f"         then System.Null_Address\n")
+                f.write(f"         else Payload_Bytes (Payload_Bytes'First)'Address);\n")
+                f.write(f"      Msg.Size := Interfaces.C.unsigned (Payload_Bytes'Length);\n")
+                f.write(f'      Msg.Type_Name := Type_Name;\n')
+                f.write(f'      if Callback /= null then\n')
+                f.write(f"         Callback (Msg'Access, User_Data);\n")
+                f.write(f'      end if;\n')
+                f.write(f'      Interfaces.C.Strings.Free (Type_Name);\n')
+                f.write(f'   end Emit_Invoke_Response;\n')
+                f.write(f'\n')
 
             def write_payload_decode_function(func_name: str, payload_type: str,
                                               short_type: str, is_array: bool,
@@ -1081,6 +1166,9 @@ class AdaServiceGenerator:
                         f.write(f'         then Json_Payload\n')
                         f.write(f'         elsif Content_Type = "application/flatbuffers"\n')
                         f.write(f'         then Flatbuffers_Codec.To_Binary_{req_fb_suffix} (Request)\n')
+                        if has_grpc:
+                            f.write(f'         elsif Content_Type = Grpc_Content_Type\n')
+                            f.write(f'         then ""\n')
                         f.write(f'         else raise Constraint_Error with "Unsupported content type: " & Content_Type);\n')
                         f.write(f'      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;\n')
                         f.write(f'      Payload_Bytes : aliased constant String := Payload;\n')
@@ -1090,6 +1178,47 @@ class AdaServiceGenerator:
                         f.write(f'      Status : Pcl_Bindings.Pcl_Status;\n')
                         f.write(f'      pragma Unreferenced (Status);\n')
                         f.write(f'   begin\n')
+                        if has_grpc:
+                            f.write(f'      if Content_Type = Grpc_Content_Type then\n')
+                            f.write(f'         if Ada.Strings.Unbounded.Length (Grpc_Channel) = 0 then\n')
+                            f.write(f'            raise Program_Error with "gRPC channel not configured";\n')
+                            f.write(f'         end if;\n')
+                            f.write(f'         declare\n')
+                            if rpc.streaming:
+                                elem_type = _proto_type_to_ada(rpc.rsp)
+                                elem_ser = ('"""" & To_String (Rsp (I)) & """"'
+                                            if elem_type == 'Identifier'
+                                            else 'To_Json (Rsp (I))')
+                                f.write(f'            Rsp : constant Grpc_Transport.{rpc.ada_rsp_type} :=\n')
+                                f.write(f'              Grpc_Transport.{rpc.ada_invoke_name}\n')
+                                f.write(f'                (To_String (Grpc_Channel), Request);\n')
+                                f.write(f'            Acc : Unbounded_String := To_Unbounded_String ("[");\n')
+                                f.write(f'         begin\n')
+                                f.write(f"            for I in Rsp'Range loop\n")
+                                f.write(f"               if I > Rsp'First then\n")
+                                f.write(f'                  Append (Acc, ",");\n')
+                                f.write(f'               end if;\n')
+                                f.write(f'               Append (Acc, {elem_ser});\n')
+                                f.write(f'            end loop;\n')
+                                f.write(f'            Append (Acc, "]");\n')
+                                f.write(f'            Emit_Invoke_Response\n')
+                                f.write(f'              (Callback, User_Data, To_String (Acc));\n')
+                            else:
+                                f.write(f'            Rsp : constant {rpc.ada_rsp_type} :=\n')
+                                f.write(f'              Grpc_Transport.{rpc.ada_invoke_name}\n')
+                                f.write(f'                (To_String (Grpc_Channel), Request);\n')
+                                if rpc.ada_rsp_type == 'Identifier':
+                                    f.write(f'            Response_Payload : constant String :=\n')
+                                    f.write(f'              """" & To_String (Rsp) & """";\n')
+                                else:
+                                    f.write(f'            Response_Payload : constant String := To_Json (Rsp);\n')
+                                f.write(f'         begin\n')
+                                f.write(f'            Emit_Invoke_Response\n')
+                                f.write(f'              (Callback, User_Data, Response_Payload);\n')
+                            f.write(f'         end;\n')
+                            f.write(f'         return;\n')
+                            f.write(f'      end if;\n')
+                            f.write(f'\n')
                         f.write(f'      if Content_Type = "" or else Content_Type = "application/json" then\n')
                         f.write(f'         Req_C := Interfaces.C.Strings.New_String (Payload);\n')
                         f.write(f"         Msg.Data := To_Address (Req_C);\n")

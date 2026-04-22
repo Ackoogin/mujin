@@ -18,6 +18,8 @@
 #include <pcl/pcl_transport.h>
 #include <pcl/pcl_types.h>
 
+#include "ros2/cpp/pyramid_ros2_transport_support.hpp"
+
 #include <string>
 #include <vector>
 
@@ -187,6 +189,12 @@ pcl_status_t invokeReadMatch(pcl_executor_t* executor,
                              const pcl_endpoint_route_t* route = nullptr,
                              const char*       content_type = "application/json");
 
+/// \brief Invoke matching_objects.read_match and ignore the async response.
+pcl_status_t invokeReadMatch(pcl_executor_t* executor,
+                             const Query&                 request,
+                             const char*       content_type = "application/json",
+                             const pcl_endpoint_route_t* route = nullptr);
+
 /// \brief Decode a response from object_of_interest.create_requirement.
 bool decodeCreateRequirementResponse(const pcl_msg_t* msg,
                                      Identifier* out);
@@ -201,6 +209,12 @@ pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
                                      void*                   user_data = nullptr,
                                      const pcl_endpoint_route_t* route = nullptr,
                                      const char*       content_type = "application/json");
+
+/// \brief Invoke object_of_interest.create_requirement and ignore the async response.
+pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
+                                     const ObjectInterestRequirement& request,
+                                     const char*       content_type = "application/json",
+                                     const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Decode a response from object_of_interest.read_requirement.
 bool decodeReadRequirementResponse(const pcl_msg_t* msg,
@@ -217,6 +231,12 @@ pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
                                    const pcl_endpoint_route_t* route = nullptr,
                                    const char*       content_type = "application/json");
 
+/// \brief Invoke object_of_interest.read_requirement and ignore the async response.
+pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
+                                   const Query&                 request,
+                                   const char*       content_type = "application/json",
+                                   const pcl_endpoint_route_t* route = nullptr);
+
 /// \brief Decode a response from object_of_interest.update_requirement.
 bool decodeUpdateRequirementResponse(const pcl_msg_t* msg,
                                      Ack* out);
@@ -231,6 +251,12 @@ pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
                                      void*                   user_data = nullptr,
                                      const pcl_endpoint_route_t* route = nullptr,
                                      const char*       content_type = "application/json");
+
+/// \brief Invoke object_of_interest.update_requirement and ignore the async response.
+pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
+                                     const ObjectInterestRequirement& request,
+                                     const char*       content_type = "application/json",
+                                     const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Decode a response from object_of_interest.delete_requirement.
 bool decodeDeleteRequirementResponse(const pcl_msg_t* msg,
@@ -247,6 +273,12 @@ pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
                                      const pcl_endpoint_route_t* route = nullptr,
                                      const char*       content_type = "application/json");
 
+/// \brief Invoke object_of_interest.delete_requirement and ignore the async response.
+pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
+                                     const Identifier&            request,
+                                     const char*       content_type = "application/json",
+                                     const pcl_endpoint_route_t* route = nullptr);
+
 /// \brief Decode a response from specific_object_detail.read_detail.
 bool decodeReadDetailResponse(const pcl_msg_t* msg,
                               std::vector<ObjectDetail>* out);
@@ -261,6 +293,30 @@ pcl_status_t invokeReadDetail(pcl_executor_t* executor,
                               void*                   user_data = nullptr,
                               const pcl_endpoint_route_t* route = nullptr,
                               const char*       content_type = "application/json");
+
+/// \brief Invoke specific_object_detail.read_detail and ignore the async response.
+pcl_status_t invokeReadDetail(pcl_executor_t* executor,
+                              const Query&                 request,
+                              const char*       content_type = "application/json",
+                              const pcl_endpoint_route_t* route = nullptr);
+
+// ---------------------------------------------------------------------------
+// ROS2 binding startup hook
+// ---------------------------------------------------------------------------
+
+/// \brief Bind generated ROS2 ingress endpoints to the executor.
+inline void bindRos2(pyramid::transport::ros2::Adapter& adapter,
+                     pcl_executor_t* executor)
+{
+    pyramid::transport::ros2::bindTopicIngress(adapter, executor, kTopicEntityMatches);
+    pyramid::transport::ros2::bindTopicIngress(adapter, executor, kTopicEvidenceRequirements);
+    pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadMatch);
+    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcCreateRequirement);
+    pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadRequirement);
+    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcUpdateRequirement);
+    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcDeleteRequirement);
+    pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadDetail);
+}
 
 // ---------------------------------------------------------------------------
 // Dispatch — deserialises request, calls handler, serialises response.

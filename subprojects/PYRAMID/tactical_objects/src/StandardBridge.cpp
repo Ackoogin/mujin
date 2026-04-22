@@ -568,29 +568,14 @@ data_model::Identifier BridgeServiceHandler::handleCreateRequirement(
     const auto solution = bridge_.runtime_.determineSolution(interest_id);
     for (const auto& requirement : solution.evidence_requirements) {
       const auto standard_req = standard_evidence_requirement(requirement);
-      std::string payload;
-      if (!prov::encodeEvidenceRequirements(
-              standard_req, bridge_.frontend_content_type_.c_str(), &payload)) {
-        continue;
-      }
       if (bridge_.pub_evidence_reqs_) {
-        bridge_.publish_buffer_ = payload;
         prov::publishEvidenceRequirements(
-            bridge_.pub_evidence_reqs_, bridge_.publish_buffer_,
+            bridge_.pub_evidence_reqs_, standard_req,
             bridge_.frontend_content_type_.c_str());
       }
 
-      pcl_msg_t req{};
-      req.data = const_cast<char*>(payload.data());
-      req.size = static_cast<uint32_t>(payload.size());
-      req.type_name = bridge_.frontend_content_type_.c_str();
-
-      pcl_msg_t resp{};
-      char resp_buf[1024] = {};
-      resp.data = resp_buf;
-      resp.size = sizeof(resp_buf);
-      resp.type_name = bridge_.frontend_content_type_.c_str();
-      pcl_executor_invoke_service(bridge_.exec_, cons::kSvcCreateRequirement, &req, &resp);
+      cons::invokeCreateRequirement(
+          bridge_.exec_, standard_req, bridge_.frontend_content_type_.c_str());
     }
   }
 

@@ -70,7 +70,7 @@ Driven from `.proto` by `pim/generate_bindings.py` via a registry
 | Protobuf codec | `bindings/cpp/generated/protobuf/cpp/pyramid_data_model_*_protobuf_codec.hpp`; tactical service shim remains under `bindings/protobuf/cpp/` | `bindings/ada/generated/protobuf/ada/*_protobuf_codec.ads` |
 | Service binding | `bindings/cpp/generated/pyramid_services_tactical_objects_provided.hpp` (typed `ServiceHandler`, `dispatch(...)`, wire-name constants) | `bindings/ada/generated/pyramid-services-tactical_objects-provided.ads` |
 | gRPC transport | `bindings/cpp/generated/grpc/cpp/pyramid_components_*_grpc_transport.{hpp,cpp}` (`ServerHost::start(address)`) | `bindings/ada/generated/grpc/ada/*_grpc_transport.ads` |
-| ROS2 transport | `bindings/cpp/generated/ros2/cpp/pyramid_components_*_ros2_transport.{hpp,cpp}` (`ServiceBinder::bind()`) | endpoint-constant specs |
+| ROS2 transport | top-level service facade `bindRos2(...)` plus generic `pyramid_ros2_transport_support.{hpp,cpp}` adapter support | top-level service facade endpoint constants |
 | Standalone data-model codec dispatch | removed v1 cleanup candidate; historical path was `examples/dispatch/cpp/*_codec_dispatch.*` | removed v1 cleanup candidate |
 
 The current contract is captured in
@@ -94,7 +94,7 @@ typed `ServiceHandler` ABC (`handleCreateRequirement`, `handleReadMatch`,
 - PCL: `dispatch(handler, channel, …, content_type, …)` at line 193-199.
 - gRPC: `MatchingObjectsServiceImpl` etc. (`pyramid_components_tactical_objects_services_provided_grpc_transport.cpp:92-239`)
   forward to the same handler via the executor.
-- ROS2: `ServiceBinder::bind()` (`…_ros2_transport.cpp:23-30`) wires
+- ROS2: generated service-facade `bindRos2(...)` wires
   ingress to `pcl_executor_post_service_request`, which lands on the same
   handler.
 
@@ -181,7 +181,7 @@ different activation API:
 |-----------|--------------------------|
 | PCL socket | `pcl_socket_transport_create_server(port, exec)` then `pcl_executor_set_transport(...)` (`tactical_objects_main.cpp:186-195`) |
 | gRPC | `provided::grpc_transport::buildServer(address, exec)` returning a `ServerHost` (`…_grpc_transport.hpp:29-30`) |
-| ROS2 | construct a `pyramid::transport::ros2::Adapter` (e.g. `RclcppRuntimeAdapter(node)`), then `ServiceBinder(adapter, exec).bind()` (`…_ros2_transport.hpp:11-20`) |
+| ROS2 | construct a `pyramid::transport::ros2::Adapter` (e.g. `RclcppRuntimeAdapter(node)`), then call generated `provided::bindRos2(adapter, exec)` |
 | PCL shared-memory | central named-bus (foundation only at PCL layer; Tactical Objects projection status is tracked in [generated_bindings_status.md](../../reports/PYRAMID/generated_bindings_status.md)) |
 
 These shapes are not unifiable today: ServerHost vs adapter+binder vs
@@ -257,24 +257,25 @@ There is no single rule like "every backend lives at
 backend-specific. This is purely a layout issue, but it is a real
 friction point when a new backend needs to be added.
 
-### 4.4 Compile-time availability vs runtime content-type
+### 4.4 Generation-time availability vs runtime content-type
 
 The standalone `pyramid_data_model_common_codec_dispatch.hpp` brackets
 non-JSON codecs in `#if defined(CODEC_FLATBUFFERS)` /
-`#if defined(CODEC_PROTOBUF)`. The active generated service bindings use
-`__has_include(...)` to decide whether FlatBuffers/Protobuf service codecs
-are available. Both approaches leave the same v1 gap: runtime configuration
-can request a content type without a generated public way to ask "does this
-binary support it?"
+`#if defined(CODEC_PROTOBUF)`. That stale standalone path has been removed.
+The active generated C++ and Ada service bindings now use the backend list
+passed to `generate_bindings.py --backends ...` as the source of truth for
+what the facade exposes. C++ no longer uses `__has_include(...)` to decide
+whether FlatBuffers/Protobuf service codecs are available.
 
-Consequences:
+Consequences after cleanup:
 
-- A component can be configured with `application/flatbuffers` or
-  `application/protobuf` and only discover missing codec support when a
-  message is encoded/decoded.
-- There is no generated introspection table, no startup validation helper,
-  and no consistent error model across service dispatch, publish helpers,
-  and application code.
+- JSON-only generation emits no FlatBuffers/Protobuf service constants,
+  branches, aliases, or transport directories such as gRPC or ROS2.
+- Mixed generation emits only the selected dependency branches, for example
+  `json,flatbuffers` has no Protobuf service facade surface and `json,ros2`
+  emits ROS2 startup hooks/metadata on the top-level service facade.
+- `supportsContentType(...)` / `supportedContentTypes()` represent the
+  generated facade contract and can be used for startup validation.
 
 ### 4.5 Asymmetric serialise / deserialise in standalone dispatch
 
@@ -326,9 +327,9 @@ transport->bind(server_handler);
 
 Switching the app from socket to gRPC or ROS2 today requires editing
 `main.cpp` to call a different builder (`buildServer` vs
-`pcl_socket_transport_create_server` vs `Adapter` + `ServiceBinder`).
-Each transport has its own lifetime object (`ServerHost`,
-`pcl_socket_transport_t*`, `Adapter` + `ServiceBinder`), with no common
+`pcl_socket_transport_create_server` vs `Adapter` + generated `bindRos2`).
+Each transport has its own lifetime/startup shape (`ServerHost`,
+`pcl_socket_transport_t*`, `Adapter` + generated `bindRos2`), with no common
 RAII type.
 
 ---
@@ -503,8 +504,8 @@ Move the missing abstractions into `pim/cpp_codegen.py` /
   can fail early when config asks for a codec not compiled into the binary.
 - Generate internal encode/decode helpers for every request, response, and
   topic payload shape, including arrays such as `std::vector<ObjectMatch>`.
-- Keep `__has_include` / compile-time gating inside generated binding code,
-  but make unsupported codec behavior explicit and testable.
+- Keep compile-time dependency selection inside the generator inputs. Generated
+  service binding code should not discover extra codecs from include paths.
 - Keep JSON, FlatBuffers, and Protobuf conversion to the same proto-native
   C++/Ada public types. Codec-native types must not escape into component
   code.
@@ -595,6 +596,8 @@ Add or tighten tests around the cleanup:
 - Generator test: running full C++/Ada generation for
   `json,flatbuffers,protobuf,grpc,ros2` produces no stale dispatch files
   and no undocumented parallel JSON/protobuf roots.
+- ROS2 facade E2E test: `tobj_ros2_facade_e2e` runs the generated
+  `bindRos2(...)` facade through the ROS2 adapter abstraction and PCL executor.
 - Static hygiene test: `StandardBridge.cpp` has no direct
   FlatBuffers/Protobuf codec includes and no local content-type branch table.
 - Runtime tests: real app passes JSON, FlatBuffers, and Protobuf C++ client
@@ -606,6 +609,107 @@ Add or tighten tests around the cleanup:
   Objects socket/protobuf path is promoted into the master matrix.
 - Documentation test/review checklist: no page describes
   `examples/dispatch/*_codec_dispatch.*` as active v1 API.
+
+### 6.9 Facade closure plan
+
+Follow-up review found that the original codec/topic cleanup has largely landed
+for the C++ `StandardBridge`, but a smaller facade issue remains: some component
+and test paths can still see raw PCL, gRPC C ABI, or JSON shim details.
+
+Facade closure means:
+
+- Component business logic may include generated service facades and generated
+  proto-native domain types.
+- Component business logic may not call `_Json` transport exports, `grpc_*`
+  C ABI symbols, ROS2 adapter internals, or raw `pcl_executor_*` service
+  APIs, except in generated transport adapters or narrowly scoped compatibility
+  tests.
+- Bespoke transport setup remains allowed at startup for v1, but once the
+  transport is initialised, service/topic use must go through typed generated
+  `dispatch`, `invoke`, `publish`, `encode`, and `decode` helpers.
+
+Closure sequence:
+
+1. **Generate role-symmetric consumed invoke helpers.** **Done.**
+   Extend `pim/cpp_codegen.py` so consumed service facades expose the same
+   typed `invoke*` and `decode*Response` helpers as provided facades. For
+   Tactical Objects this should include
+   `cons::invokeCreateRequirement(...)` for
+   `object_solution_evidence.create_requirement`.
+
+2. **Migrate `StandardBridge` consumed calls.** **Done.**
+   Replace manual construction of `pcl_msg_t` and direct
+   `pcl_executor_invoke_service(...)` calls in `StandardBridge` with generated
+   consumed-facade helpers. `StandardBridge` should retain only domain mapping,
+   content-type configuration, and startup port wiring.
+
+3. **Make selected dependencies explicit in C++ and Ada facades.** **Done.**
+   `generate_bindings.py --backends ...` is now the source of truth for both
+   language facades. C++ service bindings no longer use `__has_include` to
+   opportunistically expose FlatBuffers or Protobuf; generated JSON-only
+   service facades contain no FlatBuffers/Protobuf constants, branches, or
+   aliases. Ada service facades likewise omit gRPC configuration and
+   `Grpc_Content_Type` unless the gRPC backend is requested.
+
+4. **Add ROS2 to the selected service binding surface.** **Done.**
+   ROS2 output is generated only when the `ros2` backend is requested. The
+   generated C++ service facade exposes `bindRos2(...)` startup wiring over
+   `pyramid::transport::ros2::Adapter` and the executor, while generated Ada
+   service facades expose endpoint constants. Stale component-level ROS2
+   transport files were removed, and no top-level C++/Ada service facade
+   exposes a ROS2-specific business-call API.
+
+5. **Route Ada gRPC through the single typed service facade.** **Done.**
+   Keep the current `_Json` C ABI shim as a generated implementation detail,
+   but do not expose a parallel public `Channel`-based invoke API from the
+   top-level service package. The existing generated `Invoke_*` procedure
+   remains the only component-facing call shape. `Content_Type` selects JSON,
+   FlatBuffers, Protobuf, or gRPC when those backends were requested at binding
+   generation time, and the generated gRPC transport owns JSON/protobuf
+   conversion, C string allocation, shim invocation, response decoding, and
+   error handling.
+
+6. **Update Ada gRPC interop proof.** **Done.**
+   The main Ada/C++ gRPC E2E now calls the top-level generated service
+   procedure (`Pyramid.Services.Tactical_Objects.Provided.Invoke_Create_Requirement`)
+   with `Content_Type => Grpc_Content_Type`, a typed request, and the normal
+   response callback after standard library/channel setup. The facade delegates
+   to the generated gRPC transport, and raw `_Json`/`grpc_*` symbol handling
+   stays inside generated transport implementation code.
+
+7. **Add static facade hygiene checks.** **Done.**
+   Add regression checks that production component code does not include
+   codec-specific headers, call raw `_Json` gRPC exports, or call raw
+   `pcl_executor_*` service APIs for generated Tactical Objects services.
+   Keep allowlists for generated transport code and low-level compatibility
+   harnesses. Add `pyramid_binding_generation_dependencies` to verify C++ and
+   Ada generators only emit selected dependency surfaces.
+
+8. **Document the remaining allowed leaks.**
+   If any shim-level API must stay public for ABI reasons, mark it as
+   compatibility-only in generated docs and tests. The normal examples should
+   use typed generated facades.
+
+Acceptance criteria:
+
+- `StandardBridge.cpp` contains no direct generated-service calls via
+  `pcl_executor_invoke_service` or hand-built service `pcl_msg_t` payloads.
+- C++ provided and consumed facades expose symmetric typed invoke/response
+  helpers.
+- C++ generated service facades expose FlatBuffers/Protobuf support only when
+  those backends were requested at binding generation time.
+- Ada generated service packages expose a single typed service call surface;
+  optional gRPC support is selected by `Content_Type` and generated only when
+  the gRPC backend is requested.
+- Ada examples/tests exercise that top-level service procedure rather than a
+  parallel transport-specific invoke API.
+- ROS2 generated code exposes selected startup hooks/endpoint constants from
+  the top-level C++/Ada service facades while remaining free of ROS2-specific
+  business-call APIs.
+- `_Json` and `grpc_*` symbols are referenced only from generated shims or
+  explicit compatibility tests.
+- Current docs distinguish startup transport wiring from component business
+  logic and make the typed facade the copied example.
 
 ---
 

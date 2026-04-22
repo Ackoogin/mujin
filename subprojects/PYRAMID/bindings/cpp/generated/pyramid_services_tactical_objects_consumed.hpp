@@ -7,7 +7,7 @@
 // This header provides:
 //   1. Wire-name constants and topic constants
 //   2. EntityActions handler base class (ServiceHandler — override Handle*)
-//   3. PCL binding functions (subscribe*, publish*)
+//   3. PCL binding functions (subscribe*, publish*, invoke*)
 //   4. Content-type support metadata and msgToString utility
 #pragma once
 
@@ -17,6 +17,8 @@
 #include <pcl/pcl_executor.h>
 #include <pcl/pcl_transport.h>
 #include <pcl/pcl_types.h>
+
+#include "ros2/cpp/pyramid_ros2_transport_support.hpp"
 
 #include <string>
 #include <vector>
@@ -112,7 +114,7 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// PCL binding functions — Subscribe / Publish (typed)
+// PCL binding functions — Subscribe / Publish / Invoke (typed)
 // ---------------------------------------------------------------------------
 
 /// \brief Subscribe to object-evidence publications on kTopicObjectEvidence.
@@ -141,6 +143,148 @@ bool encodeObjectEvidence(const ObjectDetail& payload,
 /// \brief Decode a PCL message from kTopicObjectEvidence.
 bool decodeObjectEvidence(const pcl_msg_t* msg,
                           ObjectDetail* out);
+
+/// \brief Decode a response from object_evidence.read_detail.
+bool decodeReadDetailResponse(const pcl_msg_t* msg,
+                              std::vector<ObjectDetail>* out);
+
+/// \brief Invoke object_evidence.read_detail (typed, serialisation handled internally).
+///
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
+pcl_status_t invokeReadDetail(pcl_executor_t* executor,
+                              const Query&                 request,
+                              pcl_resp_cb_fn_t        callback,
+                              void*                   user_data = nullptr,
+                              const pcl_endpoint_route_t* route = nullptr,
+                              const char*       content_type = "application/json");
+
+/// \brief Invoke object_evidence.read_detail and ignore the async response.
+pcl_status_t invokeReadDetail(pcl_executor_t* executor,
+                              const Query&                 request,
+                              const char*       content_type = "application/json",
+                              const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Decode a response from object_solution_evidence.create_requirement.
+bool decodeCreateRequirementResponse(const pcl_msg_t* msg,
+                                     Identifier* out);
+
+/// \brief Invoke object_solution_evidence.create_requirement (typed, serialisation handled internally).
+///
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
+pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
+                                     const ObjectEvidenceRequirement& request,
+                                     pcl_resp_cb_fn_t        callback,
+                                     void*                   user_data = nullptr,
+                                     const pcl_endpoint_route_t* route = nullptr,
+                                     const char*       content_type = "application/json");
+
+/// \brief Invoke object_solution_evidence.create_requirement and ignore the async response.
+pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
+                                     const ObjectEvidenceRequirement& request,
+                                     const char*       content_type = "application/json",
+                                     const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Decode a response from object_solution_evidence.read_requirement.
+bool decodeReadRequirementResponse(const pcl_msg_t* msg,
+                                   std::vector<ObjectEvidenceRequirement>* out);
+
+/// \brief Invoke object_solution_evidence.read_requirement (typed, serialisation handled internally).
+///
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
+pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
+                                   const Query&                 request,
+                                   pcl_resp_cb_fn_t        callback,
+                                   void*                   user_data = nullptr,
+                                   const pcl_endpoint_route_t* route = nullptr,
+                                   const char*       content_type = "application/json");
+
+/// \brief Invoke object_solution_evidence.read_requirement and ignore the async response.
+pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
+                                   const Query&                 request,
+                                   const char*       content_type = "application/json",
+                                   const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Decode a response from object_solution_evidence.update_requirement.
+bool decodeUpdateRequirementResponse(const pcl_msg_t* msg,
+                                     Ack* out);
+
+/// \brief Invoke object_solution_evidence.update_requirement (typed, serialisation handled internally).
+///
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
+pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
+                                     const ObjectEvidenceRequirement& request,
+                                     pcl_resp_cb_fn_t        callback,
+                                     void*                   user_data = nullptr,
+                                     const pcl_endpoint_route_t* route = nullptr,
+                                     const char*       content_type = "application/json");
+
+/// \brief Invoke object_solution_evidence.update_requirement and ignore the async response.
+pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
+                                     const ObjectEvidenceRequirement& request,
+                                     const char*       content_type = "application/json",
+                                     const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Decode a response from object_solution_evidence.delete_requirement.
+bool decodeDeleteRequirementResponse(const pcl_msg_t* msg,
+                                     Ack* out);
+
+/// \brief Invoke object_solution_evidence.delete_requirement (typed, serialisation handled internally).
+///
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
+pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
+                                     const Identifier&            request,
+                                     pcl_resp_cb_fn_t        callback,
+                                     void*                   user_data = nullptr,
+                                     const pcl_endpoint_route_t* route = nullptr,
+                                     const char*       content_type = "application/json");
+
+/// \brief Invoke object_solution_evidence.delete_requirement and ignore the async response.
+pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
+                                     const Identifier&            request,
+                                     const char*       content_type = "application/json",
+                                     const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Decode a response from object_source_capability.read_capability.
+bool decodeReadCapabilityResponse(const pcl_msg_t* msg,
+                                  std::vector<Capability>* out);
+
+/// \brief Invoke object_source_capability.read_capability (typed, serialisation handled internally).
+///
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
+pcl_status_t invokeReadCapability(pcl_executor_t* executor,
+                                  const Query&                 request,
+                                  pcl_resp_cb_fn_t        callback,
+                                  void*                   user_data = nullptr,
+                                  const pcl_endpoint_route_t* route = nullptr,
+                                  const char*       content_type = "application/json");
+
+/// \brief Invoke object_source_capability.read_capability and ignore the async response.
+pcl_status_t invokeReadCapability(pcl_executor_t* executor,
+                                  const Query&                 request,
+                                  const char*       content_type = "application/json",
+                                  const pcl_endpoint_route_t* route = nullptr);
+
+// ---------------------------------------------------------------------------
+// ROS2 binding startup hook
+// ---------------------------------------------------------------------------
+
+/// \brief Bind generated ROS2 ingress endpoints to the executor.
+inline void bindRos2(pyramid::transport::ros2::Adapter& adapter,
+                     pcl_executor_t* executor)
+{
+    pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadDetail);
+    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcCreateRequirement);
+    pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadRequirement);
+    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcUpdateRequirement);
+    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcDeleteRequirement);
+    pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadCapability);
+}
 
 // ---------------------------------------------------------------------------
 // Dispatch — deserialises request, calls handler, serialises response.

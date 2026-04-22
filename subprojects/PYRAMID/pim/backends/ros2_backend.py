@@ -14,9 +14,11 @@ streaming RPCs are mapped to:
   - a correlated "frames" ROS2 topic
   - a correlated "cancel" ROS2 topic
 
-The generated C++ transport files depend on the shared support layer under
-bindings/cpp/generated/ros2/cpp. Ada output is a package of canonical ROS2 endpoint
-constants, which is enough for external orchestration and future runtime work.
+The selected service bindings own the service-specific ROS2 surface. C++ emits
+top-level bindRos2(...) startup hooks from cpp_codegen.py, and Ada emits
+top-level endpoint constants from ada_codegen.py. This backend remains
+registered so --backends ros2 selects that facade behavior; the generic runtime
+support layer lives under bindings/cpp/generated/ros2/cpp.
 """
 
 from pathlib import Path
@@ -43,6 +45,10 @@ def _wire_service_name(svc_name: str) -> str:
     return camel_to_lower_snake(_strip_service_suffix(svc_name))
 
 
+def _is_service_package(pf: ProtoFile) -> bool:
+    return '.services.' in f'.{pf.package}.'
+
+
 class Ros2Backend(codec_backends.CodecBackend):
 
     @property
@@ -54,42 +60,12 @@ class Ros2Backend(codec_backends.CodecBackend):
         return 'application/ros2'
 
     def generate_cpp(self, index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
-        output_dir.mkdir(parents=True, exist_ok=True)
-        generated: List[Path] = []
-
-        for pf in index.files:
-            if not pf.services:
-                continue
-
-            pkg_parts = [p for p in pf.package.split('.') if p]
-            ns = '::'.join(pkg_parts) + '::ros2_transport'
-            file_base = '_'.join(pkg_parts)
-
-            hpp_path = output_dir / (file_base + '_ros2_transport.hpp')
-            cpp_path = output_dir / (file_base + '_ros2_transport.cpp')
-
-            self._write_cpp_header(hpp_path, ns, pf)
-            self._write_cpp_impl(cpp_path, ns, file_base, pf)
-            generated.extend([hpp_path, cpp_path])
-
-        return generated
+        del index, output_dir
+        return []
 
     def generate_ada(self, index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
-        output_dir.mkdir(parents=True, exist_ok=True)
-        generated: List[Path] = []
-
-        for pf in index.files:
-            if not pf.services:
-                continue
-
-            pkg_parts = [p.capitalize() for p in pf.package.split('.') if p]
-            file_base = '_'.join(p.lower() for p in pkg_parts)
-
-            spec_path = output_dir / (file_base + '-ros2_transport.ads')
-            self._write_ada_spec(spec_path, pf)
-            generated.append(spec_path)
-
-        return generated
+        del index, output_dir
+        return []
 
     def _write_cpp_header(self, path: Path, ns: str, pf: ProtoFile):
         with open(path, 'w', encoding='utf-8') as f:

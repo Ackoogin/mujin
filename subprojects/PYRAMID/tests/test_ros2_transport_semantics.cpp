@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "pyramid_components_tactical_objects_services_provided_ros2_transport.hpp"
-#include "pyramid_ros2_transport_support.hpp"
+#include "pyramid_services_tactical_objects_provided.hpp"
 
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
@@ -17,16 +16,10 @@
 #include <utility>
 #include <vector>
 
-namespace provided_ros2 =
-    pyramid::components::tactical_objects::services::provided::ros2_transport;
+namespace provided = pyramid::services::tactical_objects::provided;
 namespace ros2_support = pyramid::transport::ros2;
 
 namespace {
-
-constexpr const char* kTopicObjectEvidence = "standard.object_evidence";
-constexpr const char* kSvcCreateRequirement =
-    "object_of_interest.create_requirement";
-constexpr const char* kSvcReadMatch = "matching_objects.read_match";
 
 struct TopicState {
   std::atomic<bool> called{false};
@@ -135,8 +128,8 @@ void topicSubscriber(pcl_container_t*, const pcl_msg_t* msg, void* user_data) {
 pcl_status_t configureTopicContainer(pcl_container_t* container, void* user_data) {
   auto* state = static_cast<TopicState*>(user_data);
   auto* port = pcl_container_add_subscriber(
-      container, kTopicObjectEvidence, "application/protobuf", topicSubscriber,
-      state);
+      container, provided::kTopicEntityMatches, "application/protobuf",
+      topicSubscriber, state);
   return port ? PCL_OK : PCL_ERR_NOMEM;
 }
 
@@ -162,7 +155,7 @@ pcl_status_t handleCreateRequirement(pcl_container_t*, const pcl_msg_t* request,
 
 pcl_status_t configureUnaryContainer(pcl_container_t* container, void* user_data) {
   auto* port = pcl_container_add_service(
-      container, kSvcCreateRequirement, "application/protobuf",
+      container, provided::kSvcCreateRequirement, "application/protobuf",
       handleCreateRequirement, user_data);
   return port ? PCL_OK : PCL_ERR_NOMEM;
 }
@@ -199,7 +192,7 @@ pcl_status_t handleReadMatch(pcl_container_t*, const pcl_msg_t* request,
 
 pcl_status_t configureStreamContainer(pcl_container_t* container, void* user_data) {
   auto* port = pcl_container_add_service(
-      container, kSvcReadMatch, "application/protobuf", handleReadMatch,
+      container, provided::kSvcReadMatch, "application/protobuf", handleReadMatch,
       user_data);
   return port ? PCL_OK : PCL_ERR_NOMEM;
 }
@@ -207,14 +200,17 @@ pcl_status_t configureStreamContainer(pcl_container_t* container, void* user_dat
 }  // namespace
 
 TEST(Ros2TransportSemantics, CanonicalNameMappingUsesRos2Channels) {
-  const auto topic = ros2_support::makeTopicBinding(kTopicObjectEvidence);
-  EXPECT_EQ(topic.ros2_topic, "/pyramid/topic/standard/object_evidence");
+  const auto topic =
+      ros2_support::makeTopicBinding(provided::kTopicEntityMatches);
+  EXPECT_EQ(topic.ros2_topic, "/pyramid/topic/standard/entity_matches");
 
-  const auto unary = ros2_support::makeUnaryServiceBinding(kSvcCreateRequirement);
+  const auto unary =
+      ros2_support::makeUnaryServiceBinding(provided::kSvcCreateRequirement);
   EXPECT_EQ(unary.ros2_service,
             "/pyramid/service/object_of_interest/create_requirement");
 
-  const auto stream = ros2_support::makeStreamServiceBinding(kSvcReadMatch);
+  const auto stream =
+      ros2_support::makeStreamServiceBinding(provided::kSvcReadMatch);
   EXPECT_EQ(stream.ros2_open_service,
             "/pyramid/stream/matching_objects/read_match/open");
   EXPECT_EQ(stream.ros2_frame_topic,
@@ -249,8 +245,9 @@ TEST(Ros2TransportSemantics, TopicIngressRunsSubscriberOnExecutorThread) {
     }
   });
 
-  ros2_support::bindTopicIngress(adapter, executor, kTopicObjectEvidence);
-  const auto binding = ros2_support::makeTopicBinding(kTopicObjectEvidence);
+  provided::bindRos2(adapter, executor);
+  const auto binding =
+      ros2_support::makeTopicBinding(provided::kTopicEntityMatches);
 
   std::thread ingress_thread([&] {
     ros2_support::Envelope envelope;
@@ -301,8 +298,7 @@ TEST(Ros2TransportSemantics, UnaryServiceBridgeRunsHandlerOnExecutorThread) {
     }
   });
 
-  provided_ros2::ServiceBinder binder(adapter, executor);
-  binder.bind();
+  provided::bindRos2(adapter, executor);
 
   ros2_support::Envelope request;
   request.content_type = "application/protobuf";
@@ -314,7 +310,7 @@ TEST(Ros2TransportSemantics, UnaryServiceBridgeRunsHandlerOnExecutorThread) {
   std::thread client_thread([&] {
     client_thread_id = std::this_thread::get_id();
     const auto binding = ros2_support::makeUnaryServiceBinding(
-        kSvcCreateRequirement);
+        provided::kSvcCreateRequirement);
     response = adapter.callUnary(binding.ros2_service, request);
   });
   client_thread.join();
@@ -364,8 +360,7 @@ TEST(Ros2TransportSemantics, StreamServiceBridgePreservesFramesAndExecutorThread
     }
   });
 
-  provided_ros2::ServiceBinder binder(adapter, executor);
-  binder.bind();
+  provided::bindRos2(adapter, executor);
 
   ros2_support::Envelope request;
   request.content_type = "application/protobuf";
@@ -376,7 +371,8 @@ TEST(Ros2TransportSemantics, StreamServiceBridgePreservesFramesAndExecutorThread
   std::vector<ros2_support::Envelope> frames;
   std::thread client_thread([&] {
     client_thread_id = std::this_thread::get_id();
-    const auto binding = ros2_support::makeStreamServiceBinding(kSvcReadMatch);
+    const auto binding =
+        ros2_support::makeStreamServiceBinding(provided::kSvcReadMatch);
     frames = adapter.callStream(binding.ros2_open_service, request);
   });
   client_thread.join();

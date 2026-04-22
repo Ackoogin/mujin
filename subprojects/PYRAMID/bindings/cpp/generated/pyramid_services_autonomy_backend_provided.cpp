@@ -4,18 +4,8 @@
 
 #include "pyramid_services_autonomy_backend_provided.hpp"
 
-#if __has_include("flatbuffers/cpp/pyramid_services_autonomy_backend_flatbuffers_codec.hpp")
 #include "flatbuffers/cpp/pyramid_services_autonomy_backend_flatbuffers_codec.hpp"
-#define PYRAMID_HAVE_SERVICE_FLATBUFFERS 1
-#else
-#define PYRAMID_HAVE_SERVICE_FLATBUFFERS 0
-#endif
-#if __has_include("pyramid_services_autonomy_backend_protobuf_codec.hpp")
 #include "pyramid_services_autonomy_backend_protobuf_codec.hpp"
-#define PYRAMID_HAVE_SERVICE_PROTOBUF 1
-#else
-#define PYRAMID_HAVE_SERVICE_PROTOBUF 0
-#endif
 #include "pyramid_data_model_autonomy_codec.hpp"
 #include "pyramid_data_model_common_codec.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
@@ -40,12 +30,8 @@ using pyramid::data_model::common::toJson;
 using pyramid::data_model::common::fromJson;
 using pyramid::data_model::tactical::toJson;
 using pyramid::data_model::tactical::fromJson;
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
 namespace flatbuffers_codec = pyramid::services::autonomy_backend::flatbuffers_codec;
-#endif
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
 namespace protobuf_codec = pyramid::services::autonomy_backend::protobuf_codec;
-#endif
 
 // ---------------------------------------------------------------------------
 // PCL message utility
@@ -164,6 +150,8 @@ Identifier decode_identifier_payload(const std::string& payload)
     return payload;
 }
 
+void ignore_async_response(const pcl_msg_t*, void*) {}
+
 pcl_status_t invoke_async(pcl_executor_t* executor,
                            const char*             service_name,
                            const std::string&      payload,
@@ -195,12 +183,8 @@ pcl_status_t invoke_async(pcl_executor_t* executor,
 std::vector<const char*> supportedContentTypes()
 {
     std::vector<const char*> result{kJsonContentType};
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
     result.push_back(kFlatBuffersContentType);
-#endif
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
     result.push_back(kProtobufContentType);
-#endif
     return result;
 }
 
@@ -210,18 +194,10 @@ bool supportsContentType(const char* content_type)
         return true;
     }
     if (is_flatbuffers_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
         return true;
-#else
-        return false;
-#endif
     }
     if (is_protobuf_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         return true;
-#else
-        return false;
-#endif
     }
     return false;
 }
@@ -237,23 +213,15 @@ bool decodeReadCapabilitiesResponse(const pcl_msg_t* msg,
         return false;
     }
     try {
-        if (is_flatbuffers_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-            *out = flatbuffers_codec::fromBinaryCapabilitiesArray(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
-        if (is_protobuf_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-            *out = protobuf_codec::fromBinaryCapabilitiesArray(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
         if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryCapabilitiesArray(msg->data, msg->size);
+                return true;
+            }
+            if (is_protobuf_content_type(msg->type_name)) {
+                *out = protobuf_codec::fromBinaryCapabilitiesArray(msg->data, msg->size);
+                return true;
+            }
             return false;
         }
         const std::string payload = msgToString(msg->data, msg->size);
@@ -275,23 +243,15 @@ bool decodeCreateRequirementResponse(const pcl_msg_t* msg,
         return false;
     }
     try {
-        if (is_flatbuffers_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-            *out = flatbuffers_codec::fromBinaryIdentifier(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
-        if (is_protobuf_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-            *out = protobuf_codec::fromBinaryIdentifier(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
         if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryIdentifier(msg->data, msg->size);
+                return true;
+            }
+            if (is_protobuf_content_type(msg->type_name)) {
+                *out = protobuf_codec::fromBinaryIdentifier(msg->data, msg->size);
+                return true;
+            }
             return false;
         }
         const std::string payload = msgToString(msg->data, msg->size);
@@ -309,23 +269,15 @@ bool decodeReadRequirementResponse(const pcl_msg_t* msg,
         return false;
     }
     try {
-        if (is_flatbuffers_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-            *out = flatbuffers_codec::fromBinaryPlanningExecutionRequirementArray(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
-        if (is_protobuf_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-            *out = protobuf_codec::fromBinaryPlanningExecutionRequirementArray(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
         if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryPlanningExecutionRequirementArray(msg->data, msg->size);
+                return true;
+            }
+            if (is_protobuf_content_type(msg->type_name)) {
+                *out = protobuf_codec::fromBinaryPlanningExecutionRequirementArray(msg->data, msg->size);
+                return true;
+            }
             return false;
         }
         const std::string payload = msgToString(msg->data, msg->size);
@@ -347,23 +299,15 @@ bool decodeUpdateRequirementResponse(const pcl_msg_t* msg,
         return false;
     }
     try {
-        if (is_flatbuffers_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-            *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
-        if (is_protobuf_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-            *out = protobuf_codec::fromBinaryAck(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
         if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
+                return true;
+            }
+            if (is_protobuf_content_type(msg->type_name)) {
+                *out = protobuf_codec::fromBinaryAck(msg->data, msg->size);
+                return true;
+            }
             return false;
         }
         const std::string payload = msgToString(msg->data, msg->size);
@@ -381,23 +325,15 @@ bool decodeDeleteRequirementResponse(const pcl_msg_t* msg,
         return false;
     }
     try {
-        if (is_flatbuffers_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-            *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
-        if (is_protobuf_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-            *out = protobuf_codec::fromBinaryAck(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
         if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
+                return true;
+            }
+            if (is_protobuf_content_type(msg->type_name)) {
+                *out = protobuf_codec::fromBinaryAck(msg->data, msg->size);
+                return true;
+            }
             return false;
         }
         const std::string payload = msgToString(msg->data, msg->size);
@@ -415,23 +351,15 @@ bool decodeCreateStateResponse(const pcl_msg_t* msg,
         return false;
     }
     try {
-        if (is_flatbuffers_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-            *out = flatbuffers_codec::fromBinaryIdentifier(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
-        if (is_protobuf_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-            *out = protobuf_codec::fromBinaryIdentifier(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
         if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryIdentifier(msg->data, msg->size);
+                return true;
+            }
+            if (is_protobuf_content_type(msg->type_name)) {
+                *out = protobuf_codec::fromBinaryIdentifier(msg->data, msg->size);
+                return true;
+            }
             return false;
         }
         const std::string payload = msgToString(msg->data, msg->size);
@@ -449,23 +377,15 @@ bool decodeUpdateStateResponse(const pcl_msg_t* msg,
         return false;
     }
     try {
-        if (is_flatbuffers_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-            *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
-        if (is_protobuf_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-            *out = protobuf_codec::fromBinaryAck(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
         if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
+                return true;
+            }
+            if (is_protobuf_content_type(msg->type_name)) {
+                *out = protobuf_codec::fromBinaryAck(msg->data, msg->size);
+                return true;
+            }
             return false;
         }
         const std::string payload = msgToString(msg->data, msg->size);
@@ -483,23 +403,15 @@ bool decodeDeleteStateResponse(const pcl_msg_t* msg,
         return false;
     }
     try {
-        if (is_flatbuffers_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-            *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
-        if (is_protobuf_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-            *out = protobuf_codec::fromBinaryAck(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
         if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
+                return true;
+            }
+            if (is_protobuf_content_type(msg->type_name)) {
+                *out = protobuf_codec::fromBinaryAck(msg->data, msg->size);
+                return true;
+            }
             return false;
         }
         const std::string payload = msgToString(msg->data, msg->size);
@@ -517,23 +429,15 @@ bool decodeReadPlanResponse(const pcl_msg_t* msg,
         return false;
     }
     try {
-        if (is_flatbuffers_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-            *out = flatbuffers_codec::fromBinaryPlanArray(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
-        if (is_protobuf_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-            *out = protobuf_codec::fromBinaryPlanArray(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
         if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryPlanArray(msg->data, msg->size);
+                return true;
+            }
+            if (is_protobuf_content_type(msg->type_name)) {
+                *out = protobuf_codec::fromBinaryPlanArray(msg->data, msg->size);
+                return true;
+            }
             return false;
         }
         const std::string payload = msgToString(msg->data, msg->size);
@@ -555,23 +459,15 @@ bool decodeReadRunResponse(const pcl_msg_t* msg,
         return false;
     }
     try {
-        if (is_flatbuffers_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-            *out = flatbuffers_codec::fromBinaryExecutionRunArray(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
-        if (is_protobuf_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-            *out = protobuf_codec::fromBinaryExecutionRunArray(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
         if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryExecutionRunArray(msg->data, msg->size);
+                return true;
+            }
+            if (is_protobuf_content_type(msg->type_name)) {
+                *out = protobuf_codec::fromBinaryExecutionRunArray(msg->data, msg->size);
+                return true;
+            }
             return false;
         }
         const std::string payload = msgToString(msg->data, msg->size);
@@ -593,23 +489,15 @@ bool decodeReadPlacementResponse(const pcl_msg_t* msg,
         return false;
     }
     try {
-        if (is_flatbuffers_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-            *out = flatbuffers_codec::fromBinaryRequirementPlacementArray(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
-        if (is_protobuf_content_type(msg->type_name)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-            *out = protobuf_codec::fromBinaryRequirementPlacementArray(msg->data, msg->size);
-            return true;
-#else
-            return false;
-#endif
-        }
         if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryRequirementPlacementArray(msg->data, msg->size);
+                return true;
+            }
+            if (is_protobuf_content_type(msg->type_name)) {
+                *out = protobuf_codec::fromBinaryRequirementPlacementArray(msg->data, msg->size);
+                return true;
+            }
             return false;
         }
         const std::string payload = msgToString(msg->data, msg->size);
@@ -636,24 +524,25 @@ pcl_status_t invokeReadCapabilities(pcl_executor_t* executor,
                                     const char*       content_type)
 {
     std::string payload;
-    if (is_flatbuffers_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        payload = flatbuffers_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (is_protobuf_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-        payload = protobuf_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (!is_json_content_type(content_type)) {
-        return PCL_ERR_INVALID;
-    } else {
+    if (is_json_content_type(content_type)) {
         payload = toJson(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else if (is_protobuf_content_type(content_type)) {
+        payload = protobuf_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
     }
     return invoke_async(executor, kSvcReadCapabilities, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeReadCapabilities(pcl_executor_t* executor,
+                                    const Query&                 request,
+                                    const char*       content_type,
+                                    const pcl_endpoint_route_t* route)
+{
+    return invokeReadCapabilities(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
 }
 
 pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
@@ -664,24 +553,25 @@ pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
                                      const char*       content_type)
 {
     std::string payload;
-    if (is_flatbuffers_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        payload = flatbuffers_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (is_protobuf_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-        payload = protobuf_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (!is_json_content_type(content_type)) {
-        return PCL_ERR_INVALID;
-    } else {
+    if (is_json_content_type(content_type)) {
         payload = toJson(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else if (is_protobuf_content_type(content_type)) {
+        payload = protobuf_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
     }
     return invoke_async(executor, kSvcCreateRequirement, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
+                                     const PlanningExecutionRequirement& request,
+                                     const char*       content_type,
+                                     const pcl_endpoint_route_t* route)
+{
+    return invokeCreateRequirement(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
 }
 
 pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
@@ -692,24 +582,25 @@ pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
                                    const char*       content_type)
 {
     std::string payload;
-    if (is_flatbuffers_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        payload = flatbuffers_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (is_protobuf_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-        payload = protobuf_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (!is_json_content_type(content_type)) {
-        return PCL_ERR_INVALID;
-    } else {
+    if (is_json_content_type(content_type)) {
         payload = toJson(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else if (is_protobuf_content_type(content_type)) {
+        payload = protobuf_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
     }
     return invoke_async(executor, kSvcReadRequirement, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
+                                   const Query&                 request,
+                                   const char*       content_type,
+                                   const pcl_endpoint_route_t* route)
+{
+    return invokeReadRequirement(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
 }
 
 pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
@@ -720,24 +611,25 @@ pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
                                      const char*       content_type)
 {
     std::string payload;
-    if (is_flatbuffers_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        payload = flatbuffers_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (is_protobuf_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-        payload = protobuf_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (!is_json_content_type(content_type)) {
-        return PCL_ERR_INVALID;
-    } else {
+    if (is_json_content_type(content_type)) {
         payload = toJson(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else if (is_protobuf_content_type(content_type)) {
+        payload = protobuf_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
     }
     return invoke_async(executor, kSvcUpdateRequirement, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
+                                     const PlanningExecutionRequirement& request,
+                                     const char*       content_type,
+                                     const pcl_endpoint_route_t* route)
+{
+    return invokeUpdateRequirement(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
 }
 
 pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
@@ -748,24 +640,25 @@ pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
                                      const char*       content_type)
 {
     std::string payload;
-    if (is_flatbuffers_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        payload = flatbuffers_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (is_protobuf_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-        payload = protobuf_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (!is_json_content_type(content_type)) {
-        return PCL_ERR_INVALID;
-    } else {
+    if (is_json_content_type(content_type)) {
         payload = encode_identifier_payload(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else if (is_protobuf_content_type(content_type)) {
+        payload = protobuf_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
     }
     return invoke_async(executor, kSvcDeleteRequirement, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
+                                     const Identifier&            request,
+                                     const char*       content_type,
+                                     const pcl_endpoint_route_t* route)
+{
+    return invokeDeleteRequirement(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
 }
 
 pcl_status_t invokeCreateState(pcl_executor_t* executor,
@@ -776,24 +669,25 @@ pcl_status_t invokeCreateState(pcl_executor_t* executor,
                                const char*       content_type)
 {
     std::string payload;
-    if (is_flatbuffers_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        payload = flatbuffers_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (is_protobuf_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-        payload = protobuf_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (!is_json_content_type(content_type)) {
-        return PCL_ERR_INVALID;
-    } else {
+    if (is_json_content_type(content_type)) {
         payload = toJson(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else if (is_protobuf_content_type(content_type)) {
+        payload = protobuf_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
     }
     return invoke_async(executor, kSvcCreateState, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeCreateState(pcl_executor_t* executor,
+                               const StateUpdate&           request,
+                               const char*       content_type,
+                               const pcl_endpoint_route_t* route)
+{
+    return invokeCreateState(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
 }
 
 pcl_status_t invokeUpdateState(pcl_executor_t* executor,
@@ -804,24 +698,25 @@ pcl_status_t invokeUpdateState(pcl_executor_t* executor,
                                const char*       content_type)
 {
     std::string payload;
-    if (is_flatbuffers_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        payload = flatbuffers_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (is_protobuf_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-        payload = protobuf_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (!is_json_content_type(content_type)) {
-        return PCL_ERR_INVALID;
-    } else {
+    if (is_json_content_type(content_type)) {
         payload = toJson(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else if (is_protobuf_content_type(content_type)) {
+        payload = protobuf_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
     }
     return invoke_async(executor, kSvcUpdateState, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeUpdateState(pcl_executor_t* executor,
+                               const StateUpdate&           request,
+                               const char*       content_type,
+                               const pcl_endpoint_route_t* route)
+{
+    return invokeUpdateState(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
 }
 
 pcl_status_t invokeDeleteState(pcl_executor_t* executor,
@@ -832,24 +727,25 @@ pcl_status_t invokeDeleteState(pcl_executor_t* executor,
                                const char*       content_type)
 {
     std::string payload;
-    if (is_flatbuffers_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        payload = flatbuffers_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (is_protobuf_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-        payload = protobuf_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (!is_json_content_type(content_type)) {
-        return PCL_ERR_INVALID;
-    } else {
+    if (is_json_content_type(content_type)) {
         payload = encode_identifier_payload(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else if (is_protobuf_content_type(content_type)) {
+        payload = protobuf_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
     }
     return invoke_async(executor, kSvcDeleteState, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeDeleteState(pcl_executor_t* executor,
+                               const Identifier&            request,
+                               const char*       content_type,
+                               const pcl_endpoint_route_t* route)
+{
+    return invokeDeleteState(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
 }
 
 pcl_status_t invokeReadPlan(pcl_executor_t* executor,
@@ -860,24 +756,25 @@ pcl_status_t invokeReadPlan(pcl_executor_t* executor,
                             const char*       content_type)
 {
     std::string payload;
-    if (is_flatbuffers_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        payload = flatbuffers_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (is_protobuf_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-        payload = protobuf_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (!is_json_content_type(content_type)) {
-        return PCL_ERR_INVALID;
-    } else {
+    if (is_json_content_type(content_type)) {
         payload = toJson(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else if (is_protobuf_content_type(content_type)) {
+        payload = protobuf_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
     }
     return invoke_async(executor, kSvcReadPlan, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeReadPlan(pcl_executor_t* executor,
+                            const Query&                 request,
+                            const char*       content_type,
+                            const pcl_endpoint_route_t* route)
+{
+    return invokeReadPlan(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
 }
 
 pcl_status_t invokeReadRun(pcl_executor_t* executor,
@@ -888,24 +785,25 @@ pcl_status_t invokeReadRun(pcl_executor_t* executor,
                            const char*       content_type)
 {
     std::string payload;
-    if (is_flatbuffers_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        payload = flatbuffers_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (is_protobuf_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-        payload = protobuf_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (!is_json_content_type(content_type)) {
-        return PCL_ERR_INVALID;
-    } else {
+    if (is_json_content_type(content_type)) {
         payload = toJson(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else if (is_protobuf_content_type(content_type)) {
+        payload = protobuf_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
     }
     return invoke_async(executor, kSvcReadRun, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeReadRun(pcl_executor_t* executor,
+                           const Query&                 request,
+                           const char*       content_type,
+                           const pcl_endpoint_route_t* route)
+{
+    return invokeReadRun(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
 }
 
 pcl_status_t invokeReadPlacement(pcl_executor_t* executor,
@@ -916,24 +814,25 @@ pcl_status_t invokeReadPlacement(pcl_executor_t* executor,
                                  const char*       content_type)
 {
     std::string payload;
-    if (is_flatbuffers_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        payload = flatbuffers_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (is_protobuf_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-        payload = protobuf_codec::toBinary(request);
-#else
-        return PCL_ERR_INVALID;
-#endif
-    } else if (!is_json_content_type(content_type)) {
-        return PCL_ERR_INVALID;
-    } else {
+    if (is_json_content_type(content_type)) {
         payload = toJson(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else if (is_protobuf_content_type(content_type)) {
+        payload = protobuf_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
     }
     return invoke_async(executor, kSvcReadPlacement, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeReadPlacement(pcl_executor_t* executor,
+                                 const Query&                 request,
+                                 const char*       content_type,
+                                 const pcl_endpoint_route_t* route)
+{
+    return invokeReadPlacement(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
 }
 
 // ---------------------------------------------------------------------------
@@ -961,17 +860,7 @@ void dispatch(ServiceHandler& handler,
             return;
         }
     } else if (is_flatbuffers_content_type(content_type)) {
-#if !PYRAMID_HAVE_SERVICE_FLATBUFFERS
-        *response_buf = nullptr;
-        *response_size = 0;
-        return;
-#endif
     } else if (is_protobuf_content_type(content_type)) {
-#if !PYRAMID_HAVE_SERVICE_PROTOBUF
-        *response_buf = nullptr;
-        *response_size = 0;
-        return;
-#endif
     } else {
         *response_buf = nullptr;
         *response_size = 0;
@@ -982,290 +871,290 @@ void dispatch(ServiceHandler& handler,
     switch (channel) {
     case ServiceChannel::ReadCapabilities: {
         Query req;
-        if (is_flatbuffers_content_type(content_type))
+        if (is_json_content_type(content_type))
+            req = fromJson(req_str, static_cast<Query*>(nullptr));
+        else if (is_flatbuffers_content_type(content_type))
             req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         else if (is_protobuf_content_type(content_type))
             req = protobuf_codec::fromBinaryQuery(request_buf, request_size);
-#endif
         else
-            req = fromJson(req_str, static_cast<Query*>(nullptr));
+            break;
         auto rsp = handler.handleReadCapabilities(req);
-        if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-        } else if (is_protobuf_content_type(content_type)) {
-            rsp_payload = protobuf_codec::toBinary(rsp);
-            rsp_is_binary = true;
-#endif
-        } else {
+        if (is_json_content_type(content_type)) {
             rsp_payload = "[";
             for (size_t i = 0; i < rsp.size(); ++i) {
                 if (i > 0) rsp_payload += ",";
                 rsp_payload += toJson(rsp[i]);
             }
             rsp_payload += "]";
+        } else if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else if (is_protobuf_content_type(content_type)) {
+            rsp_payload = protobuf_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            break;
         }
         break;
     }
     case ServiceChannel::CreateRequirement: {
         PlanningExecutionRequirement req;
-        if (is_flatbuffers_content_type(content_type))
+        if (is_json_content_type(content_type))
+            req = fromJson(req_str, static_cast<PlanningExecutionRequirement*>(nullptr));
+        else if (is_flatbuffers_content_type(content_type))
             req = flatbuffers_codec::fromBinaryPlanningExecutionRequirement(request_buf, request_size);
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         else if (is_protobuf_content_type(content_type))
             req = protobuf_codec::fromBinaryPlanningExecutionRequirement(request_buf, request_size);
-#endif
         else
-            req = fromJson(req_str, static_cast<PlanningExecutionRequirement*>(nullptr));
+            break;
         auto rsp = handler.handleCreateRequirement(req);
-        if (is_flatbuffers_content_type(content_type)) {
+        if (is_json_content_type(content_type)) {
+            rsp_payload = encode_identifier_payload(rsp);
+        } else if (is_flatbuffers_content_type(content_type)) {
             rsp_payload = flatbuffers_codec::toBinary(rsp);
             rsp_is_binary = true;
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         } else if (is_protobuf_content_type(content_type)) {
             rsp_payload = protobuf_codec::toBinary(rsp);
             rsp_is_binary = true;
-#endif
         } else {
-            rsp_payload = encode_identifier_payload(rsp);
+            break;
         }
         break;
     }
     case ServiceChannel::ReadRequirement: {
         Query req;
-        if (is_flatbuffers_content_type(content_type))
+        if (is_json_content_type(content_type))
+            req = fromJson(req_str, static_cast<Query*>(nullptr));
+        else if (is_flatbuffers_content_type(content_type))
             req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         else if (is_protobuf_content_type(content_type))
             req = protobuf_codec::fromBinaryQuery(request_buf, request_size);
-#endif
         else
-            req = fromJson(req_str, static_cast<Query*>(nullptr));
+            break;
         auto rsp = handler.handleReadRequirement(req);
-        if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-        } else if (is_protobuf_content_type(content_type)) {
-            rsp_payload = protobuf_codec::toBinary(rsp);
-            rsp_is_binary = true;
-#endif
-        } else {
+        if (is_json_content_type(content_type)) {
             rsp_payload = "[";
             for (size_t i = 0; i < rsp.size(); ++i) {
                 if (i > 0) rsp_payload += ",";
                 rsp_payload += toJson(rsp[i]);
             }
             rsp_payload += "]";
+        } else if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else if (is_protobuf_content_type(content_type)) {
+            rsp_payload = protobuf_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            break;
         }
         break;
     }
     case ServiceChannel::UpdateRequirement: {
         PlanningExecutionRequirement req;
-        if (is_flatbuffers_content_type(content_type))
+        if (is_json_content_type(content_type))
+            req = fromJson(req_str, static_cast<PlanningExecutionRequirement*>(nullptr));
+        else if (is_flatbuffers_content_type(content_type))
             req = flatbuffers_codec::fromBinaryPlanningExecutionRequirement(request_buf, request_size);
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         else if (is_protobuf_content_type(content_type))
             req = protobuf_codec::fromBinaryPlanningExecutionRequirement(request_buf, request_size);
-#endif
         else
-            req = fromJson(req_str, static_cast<PlanningExecutionRequirement*>(nullptr));
+            break;
         auto rsp = handler.handleUpdateRequirement(req);
-        if (is_flatbuffers_content_type(content_type)) {
+        if (is_json_content_type(content_type)) {
+            rsp_payload = toJson(rsp);
+        } else if (is_flatbuffers_content_type(content_type)) {
             rsp_payload = flatbuffers_codec::toBinary(rsp);
             rsp_is_binary = true;
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         } else if (is_protobuf_content_type(content_type)) {
             rsp_payload = protobuf_codec::toBinary(rsp);
             rsp_is_binary = true;
-#endif
         } else {
-            rsp_payload = toJson(rsp);
+            break;
         }
         break;
     }
     case ServiceChannel::DeleteRequirement: {
         Identifier req;
-        if (is_flatbuffers_content_type(content_type))
+        if (is_json_content_type(content_type))
+            req = decode_identifier_payload(req_str);
+        else if (is_flatbuffers_content_type(content_type))
             req = flatbuffers_codec::fromBinaryIdentifier(request_buf, request_size);
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         else if (is_protobuf_content_type(content_type))
             req = protobuf_codec::fromBinaryIdentifier(request_buf, request_size);
-#endif
         else
-            req = decode_identifier_payload(req_str);
+            break;
         auto rsp = handler.handleDeleteRequirement(req);
-        if (is_flatbuffers_content_type(content_type)) {
+        if (is_json_content_type(content_type)) {
+            rsp_payload = toJson(rsp);
+        } else if (is_flatbuffers_content_type(content_type)) {
             rsp_payload = flatbuffers_codec::toBinary(rsp);
             rsp_is_binary = true;
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         } else if (is_protobuf_content_type(content_type)) {
             rsp_payload = protobuf_codec::toBinary(rsp);
             rsp_is_binary = true;
-#endif
         } else {
-            rsp_payload = toJson(rsp);
+            break;
         }
         break;
     }
     case ServiceChannel::CreateState: {
         StateUpdate req;
-        if (is_flatbuffers_content_type(content_type))
+        if (is_json_content_type(content_type))
+            req = fromJson(req_str, static_cast<StateUpdate*>(nullptr));
+        else if (is_flatbuffers_content_type(content_type))
             req = flatbuffers_codec::fromBinaryStateUpdate(request_buf, request_size);
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         else if (is_protobuf_content_type(content_type))
             req = protobuf_codec::fromBinaryStateUpdate(request_buf, request_size);
-#endif
         else
-            req = fromJson(req_str, static_cast<StateUpdate*>(nullptr));
+            break;
         auto rsp = handler.handleCreateState(req);
-        if (is_flatbuffers_content_type(content_type)) {
+        if (is_json_content_type(content_type)) {
+            rsp_payload = encode_identifier_payload(rsp);
+        } else if (is_flatbuffers_content_type(content_type)) {
             rsp_payload = flatbuffers_codec::toBinary(rsp);
             rsp_is_binary = true;
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         } else if (is_protobuf_content_type(content_type)) {
             rsp_payload = protobuf_codec::toBinary(rsp);
             rsp_is_binary = true;
-#endif
         } else {
-            rsp_payload = encode_identifier_payload(rsp);
+            break;
         }
         break;
     }
     case ServiceChannel::UpdateState: {
         StateUpdate req;
-        if (is_flatbuffers_content_type(content_type))
+        if (is_json_content_type(content_type))
+            req = fromJson(req_str, static_cast<StateUpdate*>(nullptr));
+        else if (is_flatbuffers_content_type(content_type))
             req = flatbuffers_codec::fromBinaryStateUpdate(request_buf, request_size);
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         else if (is_protobuf_content_type(content_type))
             req = protobuf_codec::fromBinaryStateUpdate(request_buf, request_size);
-#endif
         else
-            req = fromJson(req_str, static_cast<StateUpdate*>(nullptr));
+            break;
         auto rsp = handler.handleUpdateState(req);
-        if (is_flatbuffers_content_type(content_type)) {
+        if (is_json_content_type(content_type)) {
+            rsp_payload = toJson(rsp);
+        } else if (is_flatbuffers_content_type(content_type)) {
             rsp_payload = flatbuffers_codec::toBinary(rsp);
             rsp_is_binary = true;
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         } else if (is_protobuf_content_type(content_type)) {
             rsp_payload = protobuf_codec::toBinary(rsp);
             rsp_is_binary = true;
-#endif
         } else {
-            rsp_payload = toJson(rsp);
+            break;
         }
         break;
     }
     case ServiceChannel::DeleteState: {
         Identifier req;
-        if (is_flatbuffers_content_type(content_type))
+        if (is_json_content_type(content_type))
+            req = decode_identifier_payload(req_str);
+        else if (is_flatbuffers_content_type(content_type))
             req = flatbuffers_codec::fromBinaryIdentifier(request_buf, request_size);
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         else if (is_protobuf_content_type(content_type))
             req = protobuf_codec::fromBinaryIdentifier(request_buf, request_size);
-#endif
         else
-            req = decode_identifier_payload(req_str);
+            break;
         auto rsp = handler.handleDeleteState(req);
-        if (is_flatbuffers_content_type(content_type)) {
+        if (is_json_content_type(content_type)) {
+            rsp_payload = toJson(rsp);
+        } else if (is_flatbuffers_content_type(content_type)) {
             rsp_payload = flatbuffers_codec::toBinary(rsp);
             rsp_is_binary = true;
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         } else if (is_protobuf_content_type(content_type)) {
             rsp_payload = protobuf_codec::toBinary(rsp);
             rsp_is_binary = true;
-#endif
         } else {
-            rsp_payload = toJson(rsp);
+            break;
         }
         break;
     }
     case ServiceChannel::ReadPlan: {
         Query req;
-        if (is_flatbuffers_content_type(content_type))
+        if (is_json_content_type(content_type))
+            req = fromJson(req_str, static_cast<Query*>(nullptr));
+        else if (is_flatbuffers_content_type(content_type))
             req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         else if (is_protobuf_content_type(content_type))
             req = protobuf_codec::fromBinaryQuery(request_buf, request_size);
-#endif
         else
-            req = fromJson(req_str, static_cast<Query*>(nullptr));
+            break;
         auto rsp = handler.handleReadPlan(req);
-        if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-        } else if (is_protobuf_content_type(content_type)) {
-            rsp_payload = protobuf_codec::toBinary(rsp);
-            rsp_is_binary = true;
-#endif
-        } else {
+        if (is_json_content_type(content_type)) {
             rsp_payload = "[";
             for (size_t i = 0; i < rsp.size(); ++i) {
                 if (i > 0) rsp_payload += ",";
                 rsp_payload += toJson(rsp[i]);
             }
             rsp_payload += "]";
+        } else if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else if (is_protobuf_content_type(content_type)) {
+            rsp_payload = protobuf_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            break;
         }
         break;
     }
     case ServiceChannel::ReadRun: {
         Query req;
-        if (is_flatbuffers_content_type(content_type))
+        if (is_json_content_type(content_type))
+            req = fromJson(req_str, static_cast<Query*>(nullptr));
+        else if (is_flatbuffers_content_type(content_type))
             req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         else if (is_protobuf_content_type(content_type))
             req = protobuf_codec::fromBinaryQuery(request_buf, request_size);
-#endif
         else
-            req = fromJson(req_str, static_cast<Query*>(nullptr));
+            break;
         auto rsp = handler.handleReadRun(req);
-        if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-        } else if (is_protobuf_content_type(content_type)) {
-            rsp_payload = protobuf_codec::toBinary(rsp);
-            rsp_is_binary = true;
-#endif
-        } else {
+        if (is_json_content_type(content_type)) {
             rsp_payload = "[";
             for (size_t i = 0; i < rsp.size(); ++i) {
                 if (i > 0) rsp_payload += ",";
                 rsp_payload += toJson(rsp[i]);
             }
             rsp_payload += "]";
+        } else if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else if (is_protobuf_content_type(content_type)) {
+            rsp_payload = protobuf_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            break;
         }
         break;
     }
     case ServiceChannel::ReadPlacement: {
         Query req;
-        if (is_flatbuffers_content_type(content_type))
+        if (is_json_content_type(content_type))
+            req = fromJson(req_str, static_cast<Query*>(nullptr));
+        else if (is_flatbuffers_content_type(content_type))
             req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
         else if (is_protobuf_content_type(content_type))
             req = protobuf_codec::fromBinaryQuery(request_buf, request_size);
-#endif
         else
-            req = fromJson(req_str, static_cast<Query*>(nullptr));
+            break;
         auto rsp = handler.handleReadPlacement(req);
-        if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-#if PYRAMID_HAVE_SERVICE_PROTOBUF
-        } else if (is_protobuf_content_type(content_type)) {
-            rsp_payload = protobuf_codec::toBinary(rsp);
-            rsp_is_binary = true;
-#endif
-        } else {
+        if (is_json_content_type(content_type)) {
             rsp_payload = "[";
             for (size_t i = 0; i < rsp.size(); ++i) {
                 if (i > 0) rsp_payload += ",";
                 rsp_payload += toJson(rsp[i]);
             }
             rsp_payload += "]";
+        } else if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else if (is_protobuf_content_type(content_type)) {
+            rsp_payload = protobuf_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            break;
         }
         break;
     }
@@ -1276,16 +1165,7 @@ void dispatch(ServiceHandler& handler,
         return;
     }
 
-    if (is_flatbuffers_content_type(content_type) ||
-        is_protobuf_content_type(content_type)) {
-#if PYRAMID_HAVE_SERVICE_FLATBUFFERS || PYRAMID_HAVE_SERVICE_PROTOBUF
-        (void) rsp_is_binary;
-#else
-        *response_buf = nullptr;
-        *response_size = 0;
-        return;
-#endif
-    }
+    (void) rsp_is_binary;
 
     if (!rsp_payload.empty()) {
         *response_size = rsp_payload.size();

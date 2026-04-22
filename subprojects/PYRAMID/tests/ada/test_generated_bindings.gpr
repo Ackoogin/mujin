@@ -50,7 +50,8 @@ project Test_Generated_Bindings is
            "-l" & Pcl_Socket_Lib_Name,
            "-l" & Pyramid_Gen_Lib_Name,
            "-lstdc++",
-           "-lws2_32");
+           "-lws2_32",
+           "-lkernel32");
       when others =>
         for Default_Switches ("Ada") use
           ("-L" & Pcl_Lib_Dir,

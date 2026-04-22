@@ -30,6 +30,7 @@ extern "C" {
 #include <nlohmann/json.hpp>
 
 #include <atomic>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -512,6 +513,72 @@ static pcl_status_t configure_consumed_subs(pcl_container_t* c, void* ud) {
     return PCL_OK;
 }
 
+struct ConsumedInvokeCtx {
+    std::atomic<int> service_count{0};
+    std::atomic<int> callback_count{0};
+    bool decoded_response = false;
+    types::ObjectEvidenceRequirement captured_req;
+    types::Identifier response_id;
+    std::string response_buffer;
+};
+
+static pcl_status_t handle_consumed_create_requirement(
+    pcl_container_t*, const pcl_msg_t* request, pcl_msg_t* response,
+    pcl_svc_context_t*, void* user_data) {
+    auto* ctx = static_cast<ConsumedInvokeCtx*>(user_data);
+
+    struct CapturingHandler : public cons::ServiceHandler {
+        explicit CapturingHandler(ConsumedInvokeCtx& ctx) : ctx(ctx) {}
+
+        types::Identifier
+        handleCreateRequirement(const types::ObjectEvidenceRequirement& req) override {
+            ctx.service_count++;
+            ctx.captured_req = req;
+            return "evidence-requirement-typed";
+        }
+
+        ConsumedInvokeCtx& ctx;
+    };
+
+    CapturingHandler handler(*ctx);
+    void* resp_buf = nullptr;
+    size_t resp_size = 0;
+    cons::dispatch(handler, cons::ServiceChannel::CreateRequirement,
+                   request ? request->data : nullptr,
+                   request ? request->size : 0u,
+                   request ? request->type_name : cons::kJsonContentType,
+                   &resp_buf, &resp_size);
+
+    ctx->response_buffer.clear();
+    if (resp_buf && resp_size > 0) {
+        ctx->response_buffer.assign(static_cast<const char*>(resp_buf), resp_size);
+        std::free(resp_buf);
+    }
+
+    response->data = ctx->response_buffer.empty()
+                         ? nullptr
+                         : const_cast<char*>(ctx->response_buffer.data());
+    response->size = static_cast<uint32_t>(ctx->response_buffer.size());
+    response->type_name = request ? request->type_name : cons::kJsonContentType;
+    return PCL_OK;
+}
+
+static pcl_status_t configure_consumed_create_requirement(
+    pcl_container_t* c, void* ud) {
+    auto* port = pcl_container_add_service(
+        c, cons::kSvcCreateRequirement, cons::kJsonContentType,
+        handle_consumed_create_requirement, ud);
+    return port ? PCL_OK : PCL_ERR_NOMEM;
+}
+
+static void consumed_create_requirement_response(
+    const pcl_msg_t* response, void* user_data) {
+    auto* ctx = static_cast<ConsumedInvokeCtx*>(user_data);
+    ctx->decoded_response =
+        cons::decodeCreateRequirementResponse(response, &ctx->response_id);
+    ctx->callback_count++;
+}
+
 TEST(ProtoBindingsConsumed, SubscribeRegistrationSucceeds) {
     ConsumedSubCtx ctx;
     pcl_callbacks_t cbs{};
@@ -524,6 +591,51 @@ TEST(ProtoBindingsConsumed, SubscribeRegistrationSucceeds) {
     EXPECT_EQ(rc, PCL_OK);
     EXPECT_NE(ctx.pub_port, nullptr);
 
+    pcl_container_destroy(c);
+}
+
+// ===========================================================================
+// Typed invoke facade — component code should not construct raw PCL messages
+// ===========================================================================
+
+TEST(ProtoBindingsConsumed, InvokeCreateRequirementUsesTypedFacade) {
+    ConsumedInvokeCtx ctx;
+    pcl_callbacks_t cbs{};
+    cbs.on_configure = configure_consumed_create_requirement;
+
+    pcl_executor_t* exec = pcl_executor_create();
+    ASSERT_NE(exec, nullptr);
+
+    pcl_container_t* c =
+        pcl_container_create("cons_invoke_create_requirement", &cbs, &ctx);
+    ASSERT_NE(c, nullptr);
+    ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+    ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+    ASSERT_EQ(pcl_executor_add(exec, c), PCL_OK);
+
+    types::ObjectEvidenceRequirement req;
+    req.base.id = "typed-evidence-interest";
+    req.policy = types::DataPolicy::Obtain;
+
+    const pcl_status_t rc = cons::invokeCreateRequirement(
+        exec, req, consumed_create_requirement_response, &ctx);
+
+    EXPECT_EQ(rc, PCL_OK);
+    EXPECT_EQ(ctx.service_count.load(), 1);
+    EXPECT_EQ(ctx.callback_count.load(), 1);
+    EXPECT_EQ(ctx.captured_req.base.id, "typed-evidence-interest");
+    EXPECT_EQ(ctx.captured_req.policy, types::DataPolicy::Obtain);
+    EXPECT_TRUE(ctx.decoded_response);
+    EXPECT_EQ(ctx.response_id, "evidence-requirement-typed");
+
+    const pcl_status_t fire_and_forget_rc =
+        cons::invokeCreateRequirement(exec, req, cons::kJsonContentType);
+
+    EXPECT_EQ(fire_and_forget_rc, PCL_OK);
+    EXPECT_EQ(ctx.service_count.load(), 2);
+    EXPECT_EQ(ctx.callback_count.load(), 1);
+
+    pcl_executor_destroy(exec);
     pcl_container_destroy(c);
 }
 

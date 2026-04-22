@@ -334,9 +334,6 @@ endif()
 if(PYRAMID_ENABLE_ROS2)
     add_library(pyramid_ros2_transport STATIC
         "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/ros2/cpp/pyramid_ros2_transport_support.cpp"
-        "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/ros2/cpp/pyramid_components_tactical_objects_ros2_transport.cpp"
-        "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/ros2/cpp/pyramid_components_tactical_objects_services_consumed_ros2_transport.cpp"
-        "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/ros2/cpp/pyramid_components_tactical_objects_services_provided_ros2_transport.cpp"
     )
     target_link_libraries(pyramid_ros2_transport
         PUBLIC
