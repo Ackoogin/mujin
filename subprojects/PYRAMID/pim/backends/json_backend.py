@@ -193,7 +193,7 @@ class JsonBackend(codec_backends.CodecBackend):
     def _write_cpp_header(self, path: Path, ns: str, file_base: str,
                           messages: List[ProtoMessage], enums: List[ProtoEnum],
                           index: ProtoTypeIndex):
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write(f'// Auto-generated JSON codec — do not edit\n')
             f.write(f'// Backend: json | Namespace: {ns}\n')
             f.write('#pragma once\n\n')
@@ -231,7 +231,7 @@ class JsonBackend(codec_backends.CodecBackend):
     def _write_cpp_impl(self, path: Path, ns: str, file_base: str,
                         messages: List[ProtoMessage], enums: List[ProtoEnum],
                         index: ProtoTypeIndex):
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write(f'// Auto-generated JSON codec — do not edit\n')
             f.write(f'#include "{file_base}.hpp"\n\n')
             f.write('#include <nlohmann/json.hpp>\n\n')
@@ -369,7 +369,7 @@ class JsonBackend(codec_backends.CodecBackend):
     def _write_ada_spec(self, path: Path, pkg_name: str,
                         messages: List[ProtoMessage], enums: List[ProtoEnum],
                         index: ProtoTypeIndex):
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write(f'--  Auto-generated JSON codec — do not edit\n')
             f.write(f'--  Backend: json | Package: {pkg_name}\n\n')
             f.write(f'with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;\n')
@@ -414,7 +414,7 @@ class JsonBackend(codec_backends.CodecBackend):
     def _write_ada_body(self, path: Path, pkg_name: str,
                         messages: List[ProtoMessage], enums: List[ProtoEnum],
                         index: ProtoTypeIndex):
-        with open(path, 'w') as f:
+        with open(path, 'w', encoding='utf-8') as f:
             f.write(f'--  Auto-generated JSON codec — do not edit\n\n')
             f.write(f'with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;\n')
             f.write(f'with GNATCOLL.JSON; use GNATCOLL.JSON;\n\n')

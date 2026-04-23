@@ -141,7 +141,7 @@ class AdaDataModelGenerator:
         filename = package_name.lower().replace('.', '-') + '.ads'
         filepath = output_path / filename
         
-        with open(filepath, 'w') as f:
+        with open(filepath, 'w', encoding='utf-8') as f:
             # File header
             f.write("--  Auto-generated from SysML model\n")
             f.write(f"--  Package: {package_name}\n")
