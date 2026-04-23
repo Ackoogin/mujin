@@ -520,7 +520,7 @@ class AdaServiceGenerator:
         has_ros2 = 'ros2' in self._enabled_backends
         sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
 
-        with open(path, 'w', newline='\n') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'--  Auto-generated service binding specification\n')
             f.write(f'--  Generated from: {self._proto_input.name}'
                     f' by generate_bindings.py\n')
@@ -761,7 +761,7 @@ class AdaServiceGenerator:
         has_grpc = 'grpc' in self._enabled_backends
         sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
 
-        with open(path, 'w', newline='\n') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'--  Auto-generated service binding body\n')
             f.write(f'--  Package body: {pkg_name}\n')
             f.write(f'\n')
@@ -1771,7 +1771,7 @@ class AdaTypesGenerator:
         sorted_msgs = self._toposort(non_alias)
         with_clauses = self._with_clauses_for_file(pf)
 
-        with open(path, 'w', newline='\n') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('--  Auto-generated types specification\n')
             f.write(f'--  Generated from: {pf.path.name}'
                     f' by generate_bindings.py (types)\n')
@@ -1931,7 +1931,7 @@ class AdaDataModelCodecGenerator:
         alias_names = set(self._aliases.keys())
         structs = [m for m in self._pf.messages if m.name not in alias_names]
 
-        with open(path, 'w', newline='\n') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('--  Auto-generated data model JSON codec specification\n')
             f.write(f'--  Generated from: {self._pf.path.name}'
                     f' by generate_bindings.py (codec)\n')
@@ -2416,7 +2416,7 @@ class AdaDataModelCodecGenerator:
         alias_names = set(self._aliases.keys())
         structs = [m for m in self._pf.messages if m.name not in alias_names]
 
-        with open(path, 'w', newline='\n') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('--  Auto-generated data model JSON codec body\n')
             f.write(f'--  Package: {self._ada_pkg}\n\n')
             f.write('with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')

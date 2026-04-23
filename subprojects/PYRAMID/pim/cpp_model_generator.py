@@ -95,7 +95,7 @@ class CppDataModelGenerator:
             header_name = self._namespace_to_header(namespace)
             file_path = output_path / f"{header_name}.h"
             
-            with open(file_path, 'w') as f:
+            with open(file_path, 'w', encoding='utf-8') as f:
                 self._write_header(f, namespace, types, header_name)
             
             print(f"  Generated {file_path}")
@@ -790,7 +790,7 @@ class CppDataModelGenerator:
             header_name = self._namespace_to_header(namespace)
             headers.append(f"{header_name}.h")
         
-        with open(common_file, 'w') as f:
+        with open(common_file, 'w', encoding='utf-8') as f:
             f.write("#ifndef PYRAMID_TYPES_H\n")
             f.write("#define PYRAMID_TYPES_H\n\n")
             

@@ -27,6 +27,7 @@ BT::NodeStatus CheckWorldPredicate::tick() {
     getInput("required_authority", required_authority);
 
     auto* wm = config().blackboard->get<WorldModel*>("world_model");
+    if (!wm) return BT::NodeStatus::FAILURE;
 
     if (required_authority == "confirmed") {
         auto meta = wm->getFactMetadata(pred.value());

@@ -385,7 +385,7 @@ class CppServiceGenerator:
             for key in topic_set
         })
 
-        with open(path, 'w', newline='\n') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             # File-level comment block
             f.write('// Auto-generated service binding header\n')
             f.write(f'// Generated from: {self._proto_input.name}'
@@ -767,7 +767,7 @@ class CppServiceGenerator:
             dm_codec_headers.append(
                 f'{indexed_pf.package.replace(".", "_")}_codec.hpp')
 
-        with open(path, 'w', newline='\n') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             # File-level comment block
             f.write('// Auto-generated service binding implementation\n')
             f.write(f'// Generated from: {self._proto_input.name}'
@@ -1667,7 +1667,7 @@ class CppTypesGenerator:
         alias_names = set(self._aliases.keys())
         non_alias = [m for m in pf.messages if m.name not in alias_names]
 
-        with open(path, 'w', newline='\n') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated types header\n')
             f.write(f'// Generated from: {pf.path.name}'
                     f' by generate_bindings.py (types)\n')
@@ -1705,7 +1705,7 @@ class CppTypesGenerator:
             pf.package.replace('.', '_') + '_types.hpp'
             for pf in self._index.files
         )
-        with open(path, 'w', newline='\n') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated umbrella types header\n')
             f.write('// Includes all data model type headers and re-exports\n')
             f.write('// their contents into namespace pyramid::data_model.\n')
@@ -1773,7 +1773,7 @@ class CppDataModelCodecGenerator:
     # ------------------------------------------------------------------ header
 
     def _write_header(self, path: Path) -> None:
-        with open(path, 'w', newline='\n') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated data model JSON codec header\n')
             f.write(f'// Generated from: {self._pf.path.name}'
                     f' by generate_bindings.py (codec)\n')
@@ -1814,7 +1814,7 @@ class CppDataModelCodecGenerator:
         structs = [m for m in self._pf.messages if m.name not in alias_names]
         current_pkg = self._pf.package
 
-        with open(path, 'w', newline='\n') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated data model JSON codec implementation\n')
             f.write(f'// Namespace: {self._ns}\n\n')
             f.write(f'#include "{self._hpp_name}"\n\n')

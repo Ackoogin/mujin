@@ -18,9 +18,10 @@ PlanResult Planner::solve(const WorldModel& wm) const {
     auto t0 = std::chrono::steady_clock::now();
 
     // Project world model to LAPKT STRIPS problem
+    // projectToSTRIPS already calls make_action_tables() as its finalization step;
+    // calling it again duplicates LAPKT's internal successor tables and corrupts planning.
     aptk::STRIPS_Problem strips;
     wm.projectToSTRIPS(strips);
-    strips.make_action_tables();
 
     // Build mapping from LAPKT action index -> WorldModel ground action index
     // Both use the same ordering, but verify via signature matching

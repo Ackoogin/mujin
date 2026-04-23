@@ -222,7 +222,7 @@ class GrpcBackend(codec_backends.CodecBackend):
         pkg_parts = [p for p in pf.package.split('.') if p]
         proto_ns = '::'.join(pkg_parts)
 
-        with open(path, 'w', newline='\n') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'// Auto-generated gRPC transport — do not edit\n')
             f.write(f'// Backend: grpc | Namespace: {ns}\n')
             f.write(f'//\n')
@@ -280,7 +280,7 @@ class GrpcBackend(codec_backends.CodecBackend):
         pkg_parts = [p for p in pf.package.split('.') if p]
         proto_ns = '::'.join(pkg_parts)
 
-        with open(path, 'w', newline='\n') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'// Auto-generated gRPC transport — do not edit\n\n')
             f.write(f'#include "{file_base}_grpc_transport.hpp"\n\n')
             f.write(f'#include <google/protobuf/message_lite.h>\n')
@@ -548,7 +548,7 @@ class GrpcBackend(codec_backends.CodecBackend):
                         seen_streaming.add(name)
                         streaming_responses.append((name, _ada_type(rpc.response_type)))
 
-        with open(path, 'w', newline='\n') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'--  Auto-generated gRPC transport spec — do not edit\n')
             f.write(f'--  Backend: grpc | Package: {pkg_name}\n')
             f.write(f'--\n')
@@ -613,7 +613,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             codec_pkg = _ada_codec_pkg(type_name)
             return f'{codec_pkg}.From_Json ({response}, null)'
 
-        with open(path, 'w', newline='\n') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'--  Auto-generated gRPC transport body — do not edit\n\n')
             f.write(f'with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;\n')
             f.write(f'with Ada.Unchecked_Conversion;\n')
