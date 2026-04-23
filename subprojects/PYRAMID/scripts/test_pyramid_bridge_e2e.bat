@@ -28,6 +28,8 @@ set "PORT=19400"
 set "BUS_NAME=pyramid_bridge"
 set "TOBJ_BUS_NAME="
 set "TIMEOUT_SEC=25"
+set "BUILD_DIR=%PYRAMID_BUILD_DIR%"
+set "BUILD_CONFIG=%PYRAMID_BUILD_CONFIG%"
 
 for %%I in ("%~f0") do set "SCRIPT_BASE=%%~dpI"
 if not defined PYRAMID_ROOT (
@@ -47,15 +49,19 @@ if /i "%~1"=="--port"       (set "PORT=%~2"        & shift & shift & goto parse_
 if /i "%~1"=="--bus"        (set "BUS_NAME=%~2"    & shift & shift & goto parse_args)
 if /i "%~1"=="--tobj-bus"   (set "TOBJ_BUS_NAME=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--timeout"    (set "TIMEOUT_SEC=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="--build-dir"  (set "BUILD_DIR=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="--config"     (set "BUILD_CONFIG=%~2" & shift & shift & goto parse_args)
 shift
 goto parse_args
 :done_args
 
+if not defined BUILD_DIR set "BUILD_DIR=%WORKSPACE_ROOT%\build"
+if not defined BUILD_CONFIG set "BUILD_CONFIG=Release"
 if "%TOBJ_BUS_NAME%"=="" set "TOBJ_BUS_NAME=%BUS_NAME%"
 
-if "%APP_BIN%"==""    set "APP_BIN=%WORKSPACE_ROOT%\build\subprojects\PYRAMID\tactical_objects\Release\tactical_objects_app.exe"
-if "%STUB_BIN%"==""   set "STUB_BIN=%WORKSPACE_ROOT%\build\subprojects\PYRAMID\pyramid_bridge\cpp\Release\ame_backend_stub.exe"
-if "%EVIDENCE_BIN%"=="" set "EVIDENCE_BIN=%WORKSPACE_ROOT%\build\subprojects\PYRAMID\pyramid_bridge\cpp\Release\pyramid_bridge_evidence_client.exe"
+if "%APP_BIN%"==""    set "APP_BIN=%BUILD_DIR%\subprojects\PYRAMID\tactical_objects\%BUILD_CONFIG%\tactical_objects_app.exe"
+if "%STUB_BIN%"==""   set "STUB_BIN=%BUILD_DIR%\subprojects\PYRAMID\pyramid_bridge\cpp\%BUILD_CONFIG%\ame_backend_stub.exe"
+if "%EVIDENCE_BIN%"=="" set "EVIDENCE_BIN=%BUILD_DIR%\subprojects\PYRAMID\pyramid_bridge\cpp\%BUILD_CONFIG%\pyramid_bridge_evidence_client.exe"
 if "%BRIDGE_BIN%"=="" (
     set "BRIDGE_BIN=%PYRAMID_ROOT%\pyramid_bridge\ada\bin\pyramid_bridge_main.exe"
     if not exist "!BRIDGE_BIN!" set "BRIDGE_BIN=%PYRAMID_ROOT%\pyramid_bridge\ada\bin\pyramid_bridge_main"
@@ -69,15 +75,15 @@ REM Optional: build Ada bridge if gprbuild is available
 where gprbuild >nul 2>&1
 if %errorlevel% equ 0 (
     echo [driver] Building Ada Pyramid Bridge...
-    set "ADA_PCL_LIB_DIR=%WORKSPACE_ROOT%\build\ada_gnat_pcl"
-    set "ADA_PYRAMID_LIB_DIR=%WORKSPACE_ROOT%\build\ada_gnat_pyramid"
+    set "ADA_PCL_LIB_DIR=%BUILD_DIR%\ada_gnat_pcl"
+    set "ADA_PYRAMID_LIB_DIR=%BUILD_DIR%\ada_gnat_pyramid"
     set "CAN_BUILD_ADA=1"
     call "%WORKSPACE_ROOT%\subprojects\PCL\scripts\build_gnat_pcl_static_libs.bat" "!ADA_PCL_LIB_DIR!" --force
     if !errorlevel! neq 0 (
         echo [driver] FAIL: unable to build GNAT-compatible PCL archives
         exit /b 1
     )
-    call "%PYRAMID_ROOT%\scripts\build_gnat_generated_flatbuffers_libs.bat" "!ADA_PYRAMID_LIB_DIR!"
+    call "%PYRAMID_ROOT%\scripts\build_gnat_generated_flatbuffers_libs.bat" "!ADA_PYRAMID_LIB_DIR!" --build-dir "!BUILD_DIR!" --config "!BUILD_CONFIG!"
     if !errorlevel! neq 0 (
         echo [driver] FAIL: unable to build GNAT-compatible generated FlatBuffers archive
         exit /b 1

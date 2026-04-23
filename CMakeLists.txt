@@ -12,6 +12,9 @@ set(PCL_ROOT_DIR "${UNMANNED_WORKSPACE_ROOT}/subprojects/PCL")
 set(PYRAMID_ROOT_DIR "${UNMANNED_WORKSPACE_ROOT}/subprojects/PYRAMID")
 set(AME_ROOT_DIR "${UNMANNED_WORKSPACE_ROOT}/subprojects/AME")
 
+option(UNMANNED_BUILD_PYRAMID "Build the PYRAMID subproject" ON)
+option(PYRAMID_ENABLE_FLATBUFFERS "Enable FlatBuffers codec/transport for PYRAMID" ON)
+
 # ---------------------------------------------------------------------------
 # Shared third-party dependencies
 # ---------------------------------------------------------------------------
@@ -123,16 +126,18 @@ set(BUILD_GMOCK OFF CACHE BOOL "" FORCE)
 set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-FetchContent_Declare(
-    flatbuffers
-    GIT_REPOSITORY https://github.com/google/flatbuffers.git
-    GIT_TAG        v24.3.25
-    GIT_SHALLOW    TRUE
-)
-set(FLATBUFFERS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(FLATBUFFERS_BUILD_FLATLIB OFF CACHE BOOL "" FORCE)
-set(FLATBUFFERS_INSTALL OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(flatbuffers)
+if(UNMANNED_BUILD_PYRAMID AND PYRAMID_ENABLE_FLATBUFFERS)
+    FetchContent_Declare(
+        flatbuffers
+        GIT_REPOSITORY https://github.com/google/flatbuffers.git
+        GIT_TAG        v24.3.25
+        GIT_SHALLOW    TRUE
+    )
+    set(FLATBUFFERS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(FLATBUFFERS_BUILD_FLATLIB OFF CACHE BOOL "" FORCE)
+    set(FLATBUFFERS_INSTALL OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(flatbuffers)
+endif()
 
 option(AME_BUILD_PYTHON "Build Python bindings for ame_core" OFF)
 if(AME_BUILD_PYTHON)
@@ -169,7 +174,6 @@ endif()
 # Component subprojects
 # ---------------------------------------------------------------------------
 add_subdirectory(subprojects/PCL)
-option(UNMANNED_BUILD_PYRAMID "Build the PYRAMID subproject" ON)
 if(UNMANNED_BUILD_PYRAMID)
     add_subdirectory(subprojects/PYRAMID)
 endif()

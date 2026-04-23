@@ -77,8 +77,9 @@ Available configure presets:
 | `default` | `build/` | Project defaults |
 | `all-on` | `build-all-enabled/` | Enables Foxglove, FlatBuffers, gRPC, Protobuf, and ROS2 |
 | `all-off` | `build-all-off/` | Disables Foxglove, FlatBuffers, gRPC, Protobuf, and ROS2 |
+| `flatbuffers-only` | `build-flatbuffers-only/` | Enables FlatBuffers only; minimal preset for FlatBuffers/Ada E2E tests |
 
-Available build presets are `release`, `debug`, `all-on-release`, `all-off-release`, and `all-off-debug`. Test presets are available for `all-on-release`, `all-off-release`, and `all-off-debug`.
+Available build presets are `release`, `debug`, `all-on-release`, `all-off-release`, `all-off-debug`, `flatbuffers-only-release`, and `flatbuffers-only-debug`. Test presets are available for `all-on-release`, `all-off-release`, `all-off-debug`, `flatbuffers-only-release`, and `flatbuffers-only-debug`.
 
 The presets currently do not force a generator or architecture. On Windows, use a Visual Studio 2022 x64 developer environment or select the Visual Studio 2022 x64 kit/generator in your CMake frontend.
 

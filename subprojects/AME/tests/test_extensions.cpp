@@ -237,6 +237,14 @@ private:
     uint64_t next_id_ = 0;
 };
 
+static BT::Tree createTreeWithService(BT::BehaviorTreeFactory& factory,
+                                      const char* xml,
+                                      ame::IPyramidService* service) {
+    auto blackboard = BT::Blackboard::create();
+    blackboard->set("pyramid_service", service);
+    return factory.createTreeFromText(xml, blackboard);
+}
+
 // --- ServiceMessage tests ---
 
 TEST(PyramidService, MockAlwaysSucceeds) {
@@ -284,10 +292,9 @@ TEST(InvokeServiceNode, SuccessWithMockService) {
         </root>
     )xml";
 
-    auto tree = factory.createTreeFromText(xml);
-
     ame::MockPyramidService svc;
-    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(&svc));
+    auto tree = createTreeWithService(factory, xml,
+                                      static_cast<ame::IPyramidService*>(&svc));
 
     auto status = tree.tickOnce();
     EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
@@ -305,8 +312,8 @@ TEST(InvokeServiceNode, FailureWithNullService) {
         </root>
     )xml";
 
-    auto tree = factory.createTreeFromText(xml);
-    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(nullptr));
+    auto tree = createTreeWithService(factory, xml,
+                                      static_cast<ame::IPyramidService*>(nullptr));
 
     auto status = tree.tickOnce();
     EXPECT_EQ(status, BT::NodeStatus::FAILURE);
@@ -324,9 +331,9 @@ TEST(InvokeServiceNode, FailureWhenServiceReturnsFalse) {
         </root>
     )xml";
 
-    auto tree = factory.createTreeFromText(xml);
     AlwaysFailService svc;
-    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(&svc));
+    auto tree = createTreeWithService(factory, xml,
+                                      static_cast<ame::IPyramidService*>(&svc));
 
     auto status = tree.tickOnce();
     EXPECT_EQ(status, BT::NodeStatus::FAILURE);
@@ -346,9 +353,9 @@ TEST(InvokeServiceNode, AsyncReturnsRunningThenSuccess) {
         </root>
     )xml";
 
-    auto tree = factory.createTreeFromText(xml);
     DelayedService svc(3);  // completes after 3 polls
-    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(&svc));
+    auto tree = createTreeWithService(factory, xml,
+                                      static_cast<ame::IPyramidService*>(&svc));
 
     // First tick: onStart() -> callAsync + first poll -> PENDING -> RUNNING
     auto s1 = tree.tickOnce();
@@ -378,9 +385,9 @@ TEST(InvokeServiceNode, TimeoutCausesFailure) {
         </root>
     )xml";
 
-    auto tree = factory.createTreeFromText(xml);
     DelayedService svc(1000);  // would take 1000 polls
-    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(&svc));
+    auto tree = createTreeWithService(factory, xml,
+                                      static_cast<ame::IPyramidService*>(&svc));
 
     // First tick may or may not timeout (depends on timing)
     auto s1 = tree.tickOnce();
@@ -410,9 +417,9 @@ TEST(InvokeServiceNode, HaltCancelsPendingCall) {
         </root>
     )xml";
 
-    auto tree = factory.createTreeFromText(xml);
     DelayedService svc(100);  // stays pending
-    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(&svc));
+    auto tree = createTreeWithService(factory, xml,
+                                      static_cast<ame::IPyramidService*>(&svc));
 
     auto s1 = tree.tickOnce();
     EXPECT_EQ(s1, BT::NodeStatus::RUNNING);
@@ -437,9 +444,9 @@ TEST(InvokeServiceNode, PddlParamAutoMapping) {
         </root>
     )xml";
 
-    auto tree = factory.createTreeFromText(xml);
     DelayedService svc(1);  // completes on first poll
-    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(&svc));
+    auto tree = createTreeWithService(factory, xml,
+                                      static_cast<ame::IPyramidService*>(&svc));
 
     auto status = tree.tickOnce();
     EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
@@ -469,9 +476,9 @@ TEST(InvokeServiceNode, ParamMappingMergesWithRequestJson) {
         </root>
     )xml";
 
-    auto tree = factory.createTreeFromText(xml);
     DelayedService svc(1);
-    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(&svc));
+    auto tree = createTreeWithService(factory, xml,
+                                      static_cast<ame::IPyramidService*>(&svc));
 
     auto status = tree.tickOnce();
     EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
@@ -496,9 +503,9 @@ TEST(InvokeServiceNode, NoTimeoutMeansNoLimit) {
         </root>
     )xml";
 
-    auto tree = factory.createTreeFromText(xml);
     DelayedService svc(5);  // completes after 5 polls
-    tree.rootBlackboard()->set("pyramid_service", static_cast<ame::IPyramidService*>(&svc));
+    auto tree = createTreeWithService(factory, xml,
+                                      static_cast<ame::IPyramidService*>(&svc));
 
     // Tick multiple times; should stay RUNNING, not timeout
     BT::NodeStatus status = BT::NodeStatus::IDLE;

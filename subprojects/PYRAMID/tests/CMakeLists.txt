@@ -410,7 +410,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     endif()
     if(WIN32)
         add_custom_command(TARGET ada_test_generated_bindings_build PRE_BUILD
-            COMMAND cmd /c "${ADA_PYRAMID_GEN_BUILD_SCRIPT}" "${ADA_PYRAMID_GEN_LIB_DIR}"
+            COMMAND cmd /c "${ADA_PYRAMID_GEN_BUILD_SCRIPT}" "${ADA_PYRAMID_GEN_LIB_DIR}" --build-dir "${CMAKE_BINARY_DIR}" --config "$<CONFIG>"
             COMMENT "Preparing GNAT-compatible generated FlatBuffers archive for Ada builds")
     else()
         add_custom_command(TARGET ada_test_generated_bindings_build PRE_BUILD
@@ -552,7 +552,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     endif()
     if(WIN32)
         add_custom_command(TARGET pyramid_bridge_ada_build PRE_BUILD
-            COMMAND cmd /c "${ADA_PYRAMID_GEN_BUILD_SCRIPT}" "${ADA_PYRAMID_GEN_LIB_DIR}"
+            COMMAND cmd /c "${ADA_PYRAMID_GEN_BUILD_SCRIPT}" "${ADA_PYRAMID_GEN_LIB_DIR}" --build-dir "${CMAKE_BINARY_DIR}" --config "$<CONFIG>"
             COMMENT "Preparing GNAT-compatible generated FlatBuffers archive for Pyramid Bridge build")
     else()
         add_custom_command(TARGET pyramid_bridge_ada_build PRE_BUILD

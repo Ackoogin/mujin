@@ -133,6 +133,16 @@ static BT::BehaviorTreeFactory buildSpatialFactory() {
   return factory;
 }
 
+static BT::Tree createSpatialTree(BT::BehaviorTreeFactory& factory,
+                                  const std::string& xml,
+                                  ame::WorldModel& wm,
+                                  ame::IPyramidService& service) {
+  auto blackboard = BT::Blackboard::create();
+  blackboard->set("world_model", &wm);
+  blackboard->set<ame::IPyramidService*>("pyramid_service", &service);
+  return factory.createTreeFromText(xml, blackboard);
+}
+
 // =============================================================================
 // ISpatialOracle unit tests
 // =============================================================================
@@ -258,13 +268,9 @@ TEST(E2ESpatialRouting, OracleThenPlanThenExecute) {
   EXPECT_NE(xml.find("path_planner"), std::string::npos);
 
   // Phase 4: Execute BT with stub path planner service
-  auto factory = buildSpatialFactory();
-  auto tree = factory.createTreeFromText(xml);
-
   StubPathPlannerService path_planner;
-  tree.rootBlackboard()->set("world_model", &wm);
-  tree.rootBlackboard()->set<ame::IPyramidService*>("pyramid_service",
-                                                     &path_planner);
+  auto factory = buildSpatialFactory();
+  auto tree = createSpatialTree(factory, xml, wm, path_planner);
 
   auto status = tree.tickWhileRunning();
   EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
@@ -298,13 +304,9 @@ TEST(E2ESpatialRouting, MultiSectorSearchWithOracle) {
   ame::PlanCompiler compiler;
   auto xml = compiler.compileSequential(plan_result.steps, wm, reg);
 
-  auto factory = buildSpatialFactory();
-  auto tree = factory.createTreeFromText(xml);
-
   StubPathPlannerService path_planner;
-  tree.rootBlackboard()->set("world_model", &wm);
-  tree.rootBlackboard()->set<ame::IPyramidService*>("pyramid_service",
-                                                     &path_planner);
+  auto factory = buildSpatialFactory();
+  auto tree = createSpatialTree(factory, xml, wm, path_planner);
 
   auto status = tree.tickWhileRunning();
   EXPECT_EQ(status, BT::NodeStatus::SUCCESS);
@@ -350,12 +352,9 @@ TEST(E2ESpatialRouting, ReplanAfterOracleRefresh) {
   ASSERT_TRUE(result1.success);
 
   auto xml1 = compiler.compileSequential(result1.steps, wm, reg);
-  auto factory1 = buildSpatialFactory();
-  auto tree1 = factory1.createTreeFromText(xml1);
-
   StubPathPlannerService pp1;
-  tree1.rootBlackboard()->set("world_model", &wm);
-  tree1.rootBlackboard()->set<ame::IPyramidService*>("pyramid_service", &pp1);
+  auto factory1 = buildSpatialFactory();
+  auto tree1 = createSpatialTree(factory1, xml1, wm, pp1);
   tree1.tickWhileRunning();
 
   EXPECT_TRUE(wm.getFact("(searched sector_a)"));
@@ -374,12 +373,9 @@ TEST(E2ESpatialRouting, ReplanAfterOracleRefresh) {
   EXPECT_LE(result2.steps.size(), result1.steps.size());
 
   auto xml2 = compiler.compileSequential(result2.steps, wm, reg);
-  auto factory2 = buildSpatialFactory();
-  auto tree2 = factory2.createTreeFromText(xml2);
-
   StubPathPlannerService pp2;
-  tree2.rootBlackboard()->set("world_model", &wm);
-  tree2.rootBlackboard()->set<ame::IPyramidService*>("pyramid_service", &pp2);
+  auto factory2 = buildSpatialFactory();
+  auto tree2 = createSpatialTree(factory2, xml2, wm, pp2);
   tree2.tickWhileRunning();
 
   EXPECT_TRUE(wm.getFact("(searched sector_b)"));
@@ -407,13 +403,9 @@ TEST(E2ESpatialRouting, FactAuthorityOnSpatialFacts) {
   ame::PlanCompiler compiler;
   auto xml = compiler.compileSequential(plan_result.steps, wm, reg);
 
-  auto factory = buildSpatialFactory();
-  auto tree = factory.createTreeFromText(xml);
-
   StubPathPlannerService path_planner;
-  tree.rootBlackboard()->set("world_model", &wm);
-  tree.rootBlackboard()->set<ame::IPyramidService*>("pyramid_service",
-                                                     &path_planner);
+  auto factory = buildSpatialFactory();
+  auto tree = createSpatialTree(factory, xml, wm, path_planner);
   tree.tickWhileRunning();
 
   // BT-applied location facts should be BELIEVED (SetWorldPredicate default)
@@ -450,13 +442,9 @@ TEST(E2ESpatialRouting, RouteAuditTrail) {
   ame::PlanCompiler compiler;
   auto xml = compiler.compileSequential(plan_result.steps, wm, reg);
 
-  auto factory = buildSpatialFactory();
-  auto tree = factory.createTreeFromText(xml);
-
   StubPathPlannerService path_planner;
-  tree.rootBlackboard()->set("world_model", &wm);
-  tree.rootBlackboard()->set<ame::IPyramidService*>("pyramid_service",
-                                                     &path_planner);
+  auto factory = buildSpatialFactory();
+  auto tree = createSpatialTree(factory, xml, wm, path_planner);
   tree.tickWhileRunning();
 
   // Audit log should contain oracle-sourced facts and BT-applied effects

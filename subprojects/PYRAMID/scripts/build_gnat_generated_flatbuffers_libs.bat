@@ -5,12 +5,25 @@ set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%..") do set "PYRAMID_ROOT=%%~fI"
 for %%I in ("%PYRAMID_ROOT%\..\..") do set "WORKSPACE_ROOT=%%~fI"
 
-set "OUT_DIR=%~1"
-if "%OUT_DIR%"=="" set "OUT_DIR=%WORKSPACE_ROOT%\build\ada_gnat_pyramid"
-set "OBJ_DIR=%OUT_DIR%\obj"
+set "OUT_DIR="
 set "FORCE_REBUILD=0"
+set "BUILD_DIR=%PYRAMID_BUILD_DIR%"
+set "BUILD_CONFIG=%PYRAMID_BUILD_CONFIG%"
 
-if /i "%~2"=="--force" set "FORCE_REBUILD=1"
+:parse_args
+if "%~1"=="" goto done_args
+if /i "%~1"=="--force" (set "FORCE_REBUILD=1" & shift & goto parse_args)
+if /i "%~1"=="--build-dir" (set "BUILD_DIR=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="--config" (set "BUILD_CONFIG=%~2" & shift & shift & goto parse_args)
+if not defined OUT_DIR set "OUT_DIR=%~1"
+shift
+goto parse_args
+:done_args
+
+if not defined BUILD_DIR set "BUILD_DIR=%WORKSPACE_ROOT%\build"
+if not defined BUILD_CONFIG set "BUILD_CONFIG=Release"
+if "%OUT_DIR%"=="" set "OUT_DIR=%BUILD_DIR%\ada_gnat_pyramid"
+set "OBJ_DIR=%OUT_DIR%\obj"
 
 set "LIB_NAME=pyramid_generated_flatbuffers_codec"
 set "LIB_FILE=%OUT_DIR%\lib%LIB_NAME%.a"
@@ -50,8 +63,8 @@ if "%FORCE_REBUILD%"=="1" (
 
 set "GEN_DIR=%PYRAMID_ROOT%\bindings\cpp\generated"
 set "GEN_FB_DIR=%GEN_DIR%\flatbuffers\cpp"
-set "BUILD_FB_DIR=%WORKSPACE_ROOT%\build\generated\flatbuffers\cpp"
-set "FLATBUFFERS_INCLUDE=%WORKSPACE_ROOT%\build\_deps\flatbuffers-src\include"
+set "BUILD_FB_DIR=%BUILD_DIR%\generated\flatbuffers\cpp"
+set "FLATBUFFERS_INCLUDE=%BUILD_DIR%\_deps\flatbuffers-src\include"
 set "NLOHMANN_INCLUDE=%PYRAMID_ROOT%\core\external"
 
 if not exist "%BUILD_FB_DIR%" (
@@ -61,7 +74,7 @@ if not exist "%BUILD_FB_DIR%" (
     exit /b 1
   )
   echo [ada-pyramid] Refreshing flatc-generated headers...
-  cmake --build "%WORKSPACE_ROOT%\build" --config Release --target pyramid_flatbuffers_codegen -j4 || exit /b 1
+  cmake --build "%BUILD_DIR%" --config %BUILD_CONFIG% --target pyramid_flatbuffers_codegen -j4 || exit /b 1
 )
 
 set "CXXFLAGS=-std=c++17 -O2 -I%GEN_DIR% -I%GEN_FB_DIR% -I%BUILD_FB_DIR% -I%FLATBUFFERS_INCLUDE% -I%NLOHMANN_INCLUDE%"

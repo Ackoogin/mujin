@@ -29,6 +29,18 @@
                 "PYRAMID_ENABLE_PROTOBUF": "OFF",
                 "PYRAMID_ENABLE_ROS2": "OFF"
             }
+        },
+        {
+            "name": "flatbuffers-only",
+            "displayName": "Only FlatBuffers Enabled",
+            "binaryDir": "${sourceDir}/build-flatbuffers-only",
+            "cacheVariables": {
+                "AME_FOXGLOVE": "OFF",
+                "PYRAMID_ENABLE_FLATBUFFERS": "ON",
+                "PYRAMID_ENABLE_GRPC": "OFF",
+                "PYRAMID_ENABLE_PROTOBUF": "OFF",
+                "PYRAMID_ENABLE_ROS2": "OFF"
+            }
         }
     ],
     "buildPresets": [
@@ -56,6 +68,16 @@
             "name": "all-off-debug",
             "configurePreset": "all-off",
             "configuration": "Debug"
+        },
+        {
+            "name": "flatbuffers-only-release",
+            "configurePreset": "flatbuffers-only",
+            "configuration": "Release"
+        },
+        {
+            "name": "flatbuffers-only-debug",
+            "configurePreset": "flatbuffers-only",
+            "configuration": "Debug"
         }
     ],
     "testPresets": [
@@ -78,6 +100,22 @@
         {
             "name": "all-off-debug",
             "configurePreset": "all-off",
+            "configuration": "Debug",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "flatbuffers-only-release",
+            "configurePreset": "flatbuffers-only",
+            "configuration": "Release",
+            "output": {
+                "outputOnFailure": true
+            }
+        },
+        {
+            "name": "flatbuffers-only-debug",
+            "configurePreset": "flatbuffers-only",
             "configuration": "Debug",
             "output": {
                 "outputOnFailure": true

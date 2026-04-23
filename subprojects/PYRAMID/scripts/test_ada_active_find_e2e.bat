@@ -17,6 +17,8 @@ set "BACKEND_PORT=19235"
 set "FRONTEND_PORT=19236"
 set "CONTENT_TYPE=application/json"
 set "TIMEOUT_SEC=25"
+set "BUILD_DIR=%PYRAMID_BUILD_DIR%"
+set "BUILD_CONFIG=%PYRAMID_BUILD_CONFIG%"
 for %%I in ("%~f0") do set "SCRIPT_BASE=%%~dpI"
 
 if not defined PYRAMID_ROOT (
@@ -36,6 +38,8 @@ if /i "%~1"=="--backend-port" (set "BACKEND_PORT=%~2" & shift & shift & goto par
 if /i "%~1"=="--frontend-port" (set "FRONTEND_PORT=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--content-type" (set "CONTENT_TYPE=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--timeout" (set "TIMEOUT_SEC=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="--build-dir" (set "BUILD_DIR=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="--config" (set "BUILD_CONFIG=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="-ServerBin" (set "SERVER_BIN=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="-BridgeBin" (set "BRIDGE_BIN=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="-ClientBin" (set "CLIENT_BIN=%~2" & shift & shift & goto parse_args)
@@ -43,12 +47,16 @@ if /i "%~1"=="-BackendPort" (set "BACKEND_PORT=%~2" & shift & shift & goto parse
 if /i "%~1"=="-FrontendPort" (set "FRONTEND_PORT=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="-ContentType" (set "CONTENT_TYPE=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="-Timeout" (set "TIMEOUT_SEC=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="-BuildDir" (set "BUILD_DIR=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="-Config" (set "BUILD_CONFIG=%~2" & shift & shift & goto parse_args)
 shift
 goto parse_args
 :done_args
 
-if "%SERVER_BIN%"=="" set "SERVER_BIN=%WORKSPACE_ROOT%\build\subprojects\PYRAMID\tests\Release\tobj_socket_server.exe"
-if "%BRIDGE_BIN%"=="" set "BRIDGE_BIN=%WORKSPACE_ROOT%\build\subprojects\PYRAMID\tests\Release\standalone_bridge.exe"
+if not defined BUILD_DIR set "BUILD_DIR=%WORKSPACE_ROOT%\build"
+if not defined BUILD_CONFIG set "BUILD_CONFIG=Release"
+if "%SERVER_BIN%"=="" set "SERVER_BIN=%BUILD_DIR%\subprojects\PYRAMID\tests\%BUILD_CONFIG%\tobj_socket_server.exe"
+if "%BRIDGE_BIN%"=="" set "BRIDGE_BIN=%BUILD_DIR%\subprojects\PYRAMID\tests\%BUILD_CONFIG%\standalone_bridge.exe"
 if "%CLIENT_BIN%"=="" (
     set "CLIENT_BIN=%PYRAMID_ROOT%\tests\ada\bin\ada_active_find_e2e.exe"
     if not exist "!CLIENT_BIN!" set "CLIENT_BIN=%PYRAMID_ROOT%\tests\ada\bin\ada_active_find_e2e"
@@ -77,8 +85,8 @@ where gprbuild >nul 2>&1
 if %errorlevel% equ 0 (
     echo [driver] Building Ada active-find client...
     set "ADA_DIR=%PYRAMID_ROOT%\tests\ada"
-    set "ADA_PCL_LIB_DIR=%WORKSPACE_ROOT%\build\ada_gnat_pcl"
-    set "ADA_PYRAMID_LIB_DIR=%WORKSPACE_ROOT%\build\ada_gnat_pyramid"
+    set "ADA_PCL_LIB_DIR=%BUILD_DIR%\ada_gnat_pcl"
+    set "ADA_PYRAMID_LIB_DIR=%BUILD_DIR%\ada_gnat_pyramid"
     set "ADA_PCL_BUILD_SCRIPT=%WORKSPACE_ROOT%\subprojects\PCL\scripts\build_gnat_pcl_static_libs.bat"
     set "ADA_PYRAMID_BUILD_SCRIPT=%PYRAMID_ROOT%\scripts\build_gnat_generated_flatbuffers_libs.bat"
     set "CAN_BUILD_ADA=1"
@@ -90,7 +98,7 @@ if %errorlevel% equ 0 (
     )
     if "!CAN_BUILD_ADA!"=="1" (
         echo [driver] Refreshing GNAT-compatible generated FlatBuffers archive...
-        call "!ADA_PYRAMID_BUILD_SCRIPT!" "!ADA_PYRAMID_LIB_DIR!"
+        call "!ADA_PYRAMID_BUILD_SCRIPT!" "!ADA_PYRAMID_LIB_DIR!" --build-dir "!BUILD_DIR!" --config "!BUILD_CONFIG!"
         if !errorlevel! neq 0 (
             echo [driver] WARNING: failed to build GNAT FlatBuffers archive -- falling back to pre-built binary
             set "CAN_BUILD_ADA=0"

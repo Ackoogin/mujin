@@ -14,6 +14,8 @@ set "CLIENT_BIN="
 set "DLL_BIN="
 set "ADDRESS=127.0.0.1:50111"
 set "TIMEOUT_SEC=20"
+set "BUILD_DIR=%PYRAMID_BUILD_DIR%"
+set "BUILD_CONFIG=%PYRAMID_BUILD_CONFIG%"
 for %%I in ("%~f0") do set "SCRIPT_BASE=%%~dpI"
 
 if not defined PYRAMID_ROOT (
@@ -30,21 +32,27 @@ if /i "%~1"=="--client-bin" (set "CLIENT_BIN=%~2" & shift & shift & goto parse_a
 if /i "%~1"=="--dll-bin" (set "DLL_BIN=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--address" (set "ADDRESS=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--timeout" (set "TIMEOUT_SEC=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="--build-dir" (set "BUILD_DIR=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="--config" (set "BUILD_CONFIG=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="-ServerBin" (set "SERVER_BIN=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="-ClientBin" (set "CLIENT_BIN=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="-DllBin" (set "DLL_BIN=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="-Address" (set "ADDRESS=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="-Timeout" (set "TIMEOUT_SEC=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="-BuildDir" (set "BUILD_DIR=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="-Config" (set "BUILD_CONFIG=%~2" & shift & shift & goto parse_args)
 shift
 goto parse_args
 :done_args
 
-if "%SERVER_BIN%"=="" set "SERVER_BIN=%WORKSPACE_ROOT%\build\subprojects\PYRAMID\tests\Release\tobj_grpc_server.exe"
+if not defined BUILD_DIR set "BUILD_DIR=%WORKSPACE_ROOT%\build"
+if not defined BUILD_CONFIG set "BUILD_CONFIG=Release"
+if "%SERVER_BIN%"=="" set "SERVER_BIN=%BUILD_DIR%\subprojects\PYRAMID\tests\%BUILD_CONFIG%\tobj_grpc_server.exe"
 if "%CLIENT_BIN%"=="" (
     set "CLIENT_BIN=%PYRAMID_ROOT%\tests\ada\bin\ada_grpc_cpp_interop_e2e.exe"
     if not exist "!CLIENT_BIN!" set "CLIENT_BIN=%PYRAMID_ROOT%\tests\ada\bin\ada_grpc_cpp_interop_e2e"
 )
-if "%DLL_BIN%"=="" set "DLL_BIN=%WORKSPACE_ROOT%\build\subprojects\PYRAMID\tests\Release\pyramid_grpc_ada_interop_shim.dll"
+if "%DLL_BIN%"=="" set "DLL_BIN=%BUILD_DIR%\subprojects\PYRAMID\tests\%BUILD_CONFIG%\pyramid_grpc_ada_interop_shim.dll"
 
 set "READY_FILE=%TEMP%\pyramid_grpc_ready_%RANDOM%.tmp"
 
@@ -55,7 +63,7 @@ if %errorlevel% equ 0 (
     echo [driver] Building Ada gRPC client...
     set "ADA_DIR=%PYRAMID_ROOT%\tests\ada"
     pushd "!ADA_DIR!"
-    gprbuild -P ada_grpc_cpp_interop_e2e.gpr -q -XUNMANNED_ROOT="%WORKSPACE_ROOT%" -XPCL_LIB_DIR="%WORKSPACE_ROOT%\build\ada_gnat_pcl" -XPYRAMID_GEN_LIB_DIR="%WORKSPACE_ROOT%\build\ada_gnat_pyramid" >nul 2>&1
+    gprbuild -P ada_grpc_cpp_interop_e2e.gpr -q -XUNMANNED_ROOT="%WORKSPACE_ROOT%" -XPCL_LIB_DIR="%BUILD_DIR%\ada_gnat_pcl" -XPYRAMID_GEN_LIB_DIR="%BUILD_DIR%\ada_gnat_pyramid" >nul 2>&1
     if !errorlevel! neq 0 (
         echo [driver] gprbuild failed -- falling back to pre-built binary
     )
