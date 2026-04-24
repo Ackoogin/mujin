@@ -10,13 +10,15 @@ FORCE_REBUILD="${2:-0}"
 
 CORE_LIB="$OUT_DIR/libpcl_core.a"
 SOCKET_LIB="$OUT_DIR/libpcl_transport_socket.a"
+UDP_LIB="$OUT_DIR/libpcl_transport_udp.a"
 SHMEM_LIB="$OUT_DIR/libpcl_transport_shared_memory.a"
 RAND_SUFFIX="${RANDOM}${RANDOM}"
 CORE_TMP="$OUT_DIR/libpcl_core_${RAND_SUFFIX}.a"
 SOCKET_TMP="$OUT_DIR/libpcl_transport_socket_${RAND_SUFFIX}.a"
+UDP_TMP="$OUT_DIR/libpcl_transport_udp_${RAND_SUFFIX}.a"
 SHMEM_TMP="$OUT_DIR/libpcl_transport_shared_memory_${RAND_SUFFIX}.a"
 
-if [[ "$FORCE_REBUILD" != "--force" && -f "$CORE_LIB" && -f "$SOCKET_LIB" && -f "$SHMEM_LIB" ]]; then
+if [[ "$FORCE_REBUILD" != "--force" && -f "$CORE_LIB" && -f "$SOCKET_LIB" && -f "$UDP_LIB" && -f "$SHMEM_LIB" ]]; then
   echo "[ada-pcl] GNAT static archives already present in $OUT_DIR"
   exit 0
 fi
@@ -40,9 +42,10 @@ echo "[ada-pcl] Archiver : $AR"
 mkdir -p "$OBJ_DIR"
 
 if [[ "$FORCE_REBUILD" == "--force" ]]; then
-  rm -f "$CORE_LIB" "$SOCKET_LIB" "$SHMEM_LIB" \
+  rm -f "$CORE_LIB" "$SOCKET_LIB" "$UDP_LIB" "$SHMEM_LIB" \
         "$OUT_DIR"/libpcl_core_*.a \
         "$OUT_DIR"/libpcl_transport_socket_*.a \
+        "$OUT_DIR"/libpcl_transport_udp_*.a \
         "$OUT_DIR"/libpcl_transport_shared_memory_*.a \
         "$OBJ_DIR"/*.o
 fi
@@ -56,9 +59,10 @@ CFLAGS=(-std=c11 -O2 -I"$ROOT_DIR/include" -I"$ROOT_DIR/src")
 "$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_log.c"                     -o "$OBJ_DIR/pcl_log.o"
 "$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_bridge.c"                  -o "$OBJ_DIR/pcl_bridge.o"
 "$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_transport_socket.c"        -o "$OBJ_DIR/pcl_transport_socket.o"
+"$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_transport_udp.c"           -o "$OBJ_DIR/pcl_transport_udp.o"
 "$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_transport_shared_memory.c" -o "$OBJ_DIR/pcl_transport_shared_memory.o"
 
-rm -f "$CORE_TMP" "$SOCKET_TMP" "$SHMEM_TMP"
+rm -f "$CORE_TMP" "$SOCKET_TMP" "$UDP_TMP" "$SHMEM_TMP"
 
 "$AR" rcs "$CORE_TMP" \
   "$OBJ_DIR/pcl_container.o" \
@@ -67,14 +71,17 @@ rm -f "$CORE_TMP" "$SOCKET_TMP" "$SHMEM_TMP"
   "$OBJ_DIR/pcl_bridge.o"
 
 "$AR" rcs "$SOCKET_TMP" "$OBJ_DIR/pcl_transport_socket.o"
+"$AR" rcs "$UDP_TMP"    "$OBJ_DIR/pcl_transport_udp.o"
 "$AR" rcs "$SHMEM_TMP"  "$OBJ_DIR/pcl_transport_shared_memory.o"
 
-rm -f "$CORE_LIB" "$SOCKET_LIB" "$SHMEM_LIB"
+rm -f "$CORE_LIB" "$SOCKET_LIB" "$UDP_LIB" "$SHMEM_LIB"
 mv "$CORE_TMP"   "$CORE_LIB"
 mv "$SOCKET_TMP" "$SOCKET_LIB"
+mv "$UDP_TMP"    "$UDP_LIB"
 mv "$SHMEM_TMP"  "$SHMEM_LIB"
 
 echo "[ada-pcl] Built:"
 echo "[ada-pcl]   $CORE_LIB"
 echo "[ada-pcl]   $SOCKET_LIB"
+echo "[ada-pcl]   $UDP_LIB"
 echo "[ada-pcl]   $SHMEM_LIB"

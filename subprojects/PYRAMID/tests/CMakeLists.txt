@@ -527,6 +527,8 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     set(ADA_BRIDGE_SRC_DIR ${PYRAMID_ROOT_DIR}/pyramid_bridge/ada)
     set(ADA_PCL_SHMEM_LIB_NAME "pcl_transport_shared_memory" CACHE STRING
         "Base library name for Ada gprbuild PCL shared-memory transport static library")
+    set(ADA_PCL_UDP_LIB_NAME "pcl_transport_udp" CACHE STRING
+        "Base library name for Ada gprbuild PCL UDP transport static library")
 
     add_custom_target(pyramid_bridge_ada_build ALL
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_BRIDGE_SRC_DIR}/bin
@@ -539,6 +541,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                 -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
                 -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
                 -XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME}
+                -XPCL_UDP_LIB_NAME=${ADA_PCL_UDP_LIB_NAME}
                 -XPCL_SHMEM_LIB_NAME=${ADA_PCL_SHMEM_LIB_NAME}
                 ${_ada_fb_args}
         WORKING_DIRECTORY ${ADA_BRIDGE_SRC_DIR}

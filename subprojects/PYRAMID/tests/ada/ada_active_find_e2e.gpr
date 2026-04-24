@@ -13,7 +13,7 @@ project Ada_Active_Find_E2E is
 
   for Source_Dirs use
     (".",
-     Root_Dir & "/subprojects/PYRAMID/examples/ada",
+     Root_Dir & "/subprojects/PCL/bindings/ada",
      Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated",
      Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/flatbuffers/ada");
   for Main use ("ada_active_find_e2e.adb");

@@ -11,6 +11,7 @@ This directory is intended to be a future repo boundary for the low-level contai
 - Publisher, subscriber, service, consumed-service, and stream-service endpoints
 - Local, socket, UDP, and shared-memory transport support
 - C++ RAII wrappers in `include/pcl/component.hpp` and `include/pcl/executor.hpp`
+- Canonical Ada binding in `bindings/ada/`
 - Bridge helpers for transform/filter forwarding between endpoints
 
 ## Build And Test
@@ -34,6 +35,7 @@ subprojects\PCL\scripts\build_gnat_pcl_static_libs.bat
 | Path | Contents |
 |------|----------|
 | `include/pcl/` | Public C ABI and C++ wrappers |
+| `bindings/ada/` | Canonical Ada thin binding, OO wrappers, transport helpers, and typed-port generic |
 | `src/` | Core runtime, transports, logging, and bridge implementation |
 | `tests/` | PCL lifecycle, executor, transport, robustness, threading, and wrapper tests |
 | `examples/` | Minimal C examples |
@@ -49,6 +51,7 @@ subprojects\PCL\scripts\build_gnat_pcl_static_libs.bat
 - [Component container design](doc/architecture/component_container_design.md)
 - [Component system overview](doc/architecture/08-pcl-component-system.md)
 - [PCL/PYRAMID binding generation overview](../PYRAMID/doc/architecture/pcl_pyramid_binding_generation_overview.md)
+- [PCL user guide](doc/guides/pcl_user_guide.md)
 - [Peer and transport configuration guide](doc/guides/peer_transport_configuration.md)
 - [Coverage report](../../doc/reports/PCL/COVERAGE_REPORT.md)
 - [HLR coverage matrix](../../doc/reports/PCL/HLR_COVERAGE.md)

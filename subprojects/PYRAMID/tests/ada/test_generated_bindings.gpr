@@ -20,7 +20,7 @@ project Test_Generated_Bindings is
 
   for Source_Dirs use
     (".",
-     Root_Dir & "/subprojects/PYRAMID/examples/ada",
+     Root_Dir & "/subprojects/PCL/bindings/ada",
      Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated",
      Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/flatbuffers/ada",
      Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/protobuf/ada",

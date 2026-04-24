@@ -12,12 +12,93 @@
 
 #include <string>
 #include <string_view>
+#include <initializer_list>
 #include <functional>
 #include <cstdarg>
 #include <cstdio>
 #include <utility>
+#include <vector>
 
 namespace pcl {
+
+/// \brief Lightweight convenience wrapper around a concrete pcl_port_t.
+class Port {
+public:
+  Port() = default;
+
+  Port(pcl_port_t* handle, std::string_view default_type_name = {})
+      : handle_(handle), default_type_name_(default_type_name) {}
+
+  bool valid() const { return handle_ != nullptr; }
+  explicit operator bool() const { return valid(); }
+  operator pcl_port_t*() const { return handle_; }
+
+  pcl_port_t* handle() const { return handle_; }
+  std::string_view defaultTypeName() const { return default_type_name_; }
+
+  pcl_status_t setRoute(uint32_t route_mode,
+                        std::initializer_list<std::string_view> peer_ids = {}) const {
+    if (!handle_) return PCL_ERR_INVALID;
+
+    std::vector<std::string> storage;
+    std::vector<const char*> peers;
+    storage.reserve(peer_ids.size());
+    peers.reserve(peer_ids.size());
+
+    for (const auto peer_id : peer_ids) {
+      storage.emplace_back(peer_id);
+      peers.push_back(storage.back().c_str());
+    }
+
+    return pcl_port_set_route(handle_,
+                              route_mode,
+                              peers.empty() ? nullptr : peers.data(),
+                              static_cast<uint32_t>(peers.size()));
+  }
+
+  pcl_status_t routeLocal() const {
+    return setRoute(PCL_ROUTE_LOCAL);
+  }
+
+  pcl_status_t routeRemote(std::string_view peer_id) const {
+    return setRoute(PCL_ROUTE_REMOTE, {peer_id});
+  }
+
+  pcl_status_t routeRemote(
+      std::initializer_list<std::string_view> peer_ids) const {
+    return setRoute(PCL_ROUTE_REMOTE, peer_ids);
+  }
+
+  pcl_status_t routeLocalAndRemote(std::string_view peer_id) const {
+    return setRoute(PCL_ROUTE_LOCAL | PCL_ROUTE_REMOTE, {peer_id});
+  }
+
+  pcl_status_t routeLocalAndRemote(
+      std::initializer_list<std::string_view> peer_ids) const {
+    return setRoute(PCL_ROUTE_LOCAL | PCL_ROUTE_REMOTE, peer_ids);
+  }
+
+  pcl_status_t publish(const pcl_msg_t* msg) const {
+    return handle_ ? pcl_port_publish(handle_, msg) : PCL_ERR_INVALID;
+  }
+
+  pcl_status_t publish(std::string_view payload,
+                       std::string_view type_name = {}) const {
+    if (!handle_) return PCL_ERR_INVALID;
+
+    const std::string effective_type =
+        type_name.empty() ? default_type_name_ : std::string(type_name);
+    pcl_msg_t msg = {};
+    msg.data = payload.empty() ? nullptr : payload.data();
+    msg.size = static_cast<uint32_t>(payload.size());
+    msg.type_name = effective_type.empty() ? nullptr : effective_type.c_str();
+    return pcl_port_publish(handle_, &msg);
+  }
+
+private:
+  pcl_port_t* handle_ = nullptr;
+  std::string default_type_name_;
+};
 
 /// \brief C++ base class wrapping a pcl_container_t.
 ///
@@ -117,20 +198,30 @@ public:
 
   // -- Port creation (call during on_configure) ------------------------
 
-  pcl_port_t* addPublisher(const char* topic, const char* type_name) {
-    return pcl_container_add_publisher(handle_, topic, type_name);
+  Port addPublisher(const char* topic, const char* type_name) {
+    return Port(pcl_container_add_publisher(handle_, topic, type_name),
+                type_name ? type_name : "");
   }
 
-  pcl_port_t* addSubscriber(const char* topic, const char* type_name,
-                            pcl_sub_callback_t cb, void* user_data) {
-    return pcl_container_add_subscriber(handle_, topic, type_name,
-                                        cb, user_data);
+  Port addSubscriber(const char* topic, const char* type_name,
+                     pcl_sub_callback_t cb, void* user_data) {
+    return Port(pcl_container_add_subscriber(handle_, topic, type_name,
+                                             cb, user_data),
+                type_name ? type_name : "");
   }
 
-  pcl_port_t* addService(const char* service_name, const char* type_name,
-                         pcl_service_handler_t handler, void* user_data) {
-    return pcl_container_add_service(handle_, service_name, type_name,
-                                     handler, user_data);
+  Port addService(const char* service_name, const char* type_name,
+                  pcl_service_handler_t handler, void* user_data) {
+    return Port(pcl_container_add_service(handle_, service_name, type_name,
+                                          handler, user_data),
+                type_name ? type_name : "");
+  }
+
+  Port addStreamService(const char* service_name, const char* type_name,
+                        pcl_stream_handler_t handler, void* user_data) {
+    return Port(pcl_container_add_stream_service(handle_, service_name, type_name,
+                                                 handler, user_data),
+                type_name ? type_name : "");
   }
 
   // -- Service invocation (call from on_tick or callbacks) -------------

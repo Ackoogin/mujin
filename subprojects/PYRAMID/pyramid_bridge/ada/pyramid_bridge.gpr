@@ -14,9 +14,11 @@
 --    PCL_INCLUDE_DIR    PCL public headers
 --    PCL_LIB_DIR        directory containing libpcl_core.a,
 --                       libpcl_transport_socket.a,
+--                       libpcl_transport_udp.a,
 --                       libpcl_transport_shared_memory.a
 --    PCL_LIB_NAME       base name of the PCL core archive (default pcl_core)
 --    PCL_SOCKET_LIB_NAME      (default pcl_transport_socket)
+--    PCL_UDP_LIB_NAME         (default pcl_transport_udp)
 --    PCL_SHMEM_LIB_NAME       (default pcl_transport_shared_memory)
 --    PYRAMID_GEN_LIB_DIR      directory containing the generated codec archive
 --    PYRAMID_GEN_LIB_NAME     (default pyramid_generated_flatbuffers_codec)
@@ -33,6 +35,8 @@ project Pyramid_Bridge is
    Pcl_Lib_Name       := external ("PCL_LIB_NAME", "pcl_core");
    Pcl_Socket_Lib_Name  := external ("PCL_SOCKET_LIB_NAME",
                                      "pcl_transport_socket");
+   Pcl_Udp_Lib_Name     := external ("PCL_UDP_LIB_NAME",
+                                     "pcl_transport_udp");
    Pcl_Shmem_Lib_Name   := external ("PCL_SHMEM_LIB_NAME",
                                      "pcl_transport_shared_memory");
    Pyramid_Gen_Lib_Dir  := external ("PYRAMID_GEN_LIB_DIR",
@@ -42,9 +46,9 @@ project Pyramid_Bridge is
 
    for Languages use ("Ada", "C");
 
-   for Source_Dirs use
+  for Source_Dirs use
      (".",
-      Root_Dir & "/subprojects/PYRAMID/examples/ada",
+      Root_Dir & "/subprojects/PCL/bindings/ada",
       Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated",
       Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/flatbuffers/ada",
       Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/grpc/ada");
@@ -72,6 +76,7 @@ project Pyramid_Bridge is
                "-L" & Pyramid_Gen_Lib_Dir,
                "-l" & Pcl_Lib_Name,
                "-l" & Pcl_Socket_Lib_Name,
+               "-l" & Pcl_Udp_Lib_Name,
                "-l" & Pcl_Shmem_Lib_Name,
                "-l" & Pyramid_Gen_Lib_Name,
                "-lstdc++",
@@ -82,6 +87,7 @@ project Pyramid_Bridge is
                "-L" & Pyramid_Gen_Lib_Dir,
                "-l" & Pcl_Lib_Name,
                "-l" & Pcl_Socket_Lib_Name,
+               "-l" & Pcl_Udp_Lib_Name,
                "-l" & Pcl_Shmem_Lib_Name,
                "-l" & Pyramid_Gen_Lib_Name,
                "-lstdc++",

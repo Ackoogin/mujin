@@ -31,12 +31,14 @@ public:
   int tick_count       = 0;
   double last_dt       = 0.0;
 
-  pcl_port_t* pub_port = nullptr;
+  pcl::Port pub_port;
+  pcl_status_t pub_route_status = PCL_ERR_STATE;
 
 protected:
   pcl_status_t on_configure() override {
     ++configure_count;
     pub_port = addPublisher("test/output", "TestMsg");
+    pub_route_status = pub_port.routeLocal();
     return pub_port ? PCL_OK : PCL_ERR_CALLBACK;
   }
 
@@ -128,13 +130,14 @@ TEST(PclCppComponent, LifecycleCallbacksInvoked) {
 TEST(PclCppComponent, AddPublisherDuringConfigure) {
   TestComponent comp;
   EXPECT_EQ(comp.configure(), PCL_OK);
-  EXPECT_NE(comp.pub_port, nullptr);
+  EXPECT_TRUE(comp.pub_port.valid());
+  EXPECT_EQ(comp.pub_route_status, PCL_OK);
 }
 
 ///< REQ_PCL_135: addSubscriber during configure. PCL.048.
 TEST(PclCppComponent, AddSubscriberDuringConfigure) {
   struct SubComp : public pcl::Component {
-    pcl_port_t* sub_port = nullptr;
+    pcl::Port sub_port;
     bool msg_received = false;
 
     SubComp() : Component("sub_comp") {}
@@ -157,7 +160,7 @@ TEST(PclCppComponent, AddSubscriberDuringConfigure) {
 ///< REQ_PCL_136: addService during configure. PCL.048.
 TEST(PclCppComponent, AddServiceDuringConfigure) {
   struct SvcComp : public pcl::Component {
-    pcl_port_t* svc_port = nullptr;
+    pcl::Port svc_port;
 
     SvcComp() : Component("svc_comp") {}
 
@@ -174,7 +177,31 @@ TEST(PclCppComponent, AddServiceDuringConfigure) {
 
   SvcComp comp;
   EXPECT_EQ(comp.configure(), PCL_OK);
-  EXPECT_NE(comp.svc_port, nullptr);
+  EXPECT_TRUE(comp.svc_port.valid());
+}
+
+///< REQ_PCL_136A: addStreamService during configure. PCL.048.
+TEST(PclCppComponent, AddStreamServiceDuringConfigure) {
+  struct StreamComp : public pcl::Component {
+    pcl::Port stream_port;
+
+    StreamComp() : Component("stream_comp") {}
+
+  protected:
+    pcl_status_t on_configure() override {
+      stream_port = addStreamService(
+          "test/stream", "StreamMsg",
+          [](pcl_container_t*, const pcl_msg_t*, pcl_stream_context_t*,
+             void*) -> pcl_status_t {
+            return PCL_STREAMING;
+          }, this);
+      return stream_port ? PCL_OK : PCL_ERR_CALLBACK;
+    }
+  };
+
+  StreamComp comp;
+  EXPECT_EQ(comp.configure(), PCL_OK);
+  EXPECT_TRUE(comp.stream_port.valid());
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -307,6 +334,7 @@ TEST(PclCppExecutor, AddComponent) {
   comp.activate();
 
   EXPECT_EQ(exec.add(comp), PCL_OK);
+  EXPECT_EQ(exec.remove(comp), PCL_OK);
 }
 
 ///< REQ_PCL_148: Executor add raw container. PCL.049.
@@ -385,6 +413,18 @@ TEST(PclCppExecutor, SetTransport) {
   EXPECT_EQ(exec.setTransport(nullptr), PCL_OK); // revert
 }
 
+///< REQ_PCL_152A: Executor registerTransport accepts named peers. PCL.049.
+TEST(PclCppExecutor, RegisterTransport) {
+  pcl::Executor exec;
+  pcl_transport_t dummy = {};
+  dummy.publish = [](void*, const char*, const pcl_msg_t*) -> pcl_status_t {
+    return PCL_OK;
+  };
+
+  EXPECT_EQ(exec.registerTransport("peer_a", &dummy), PCL_OK);
+  EXPECT_EQ(exec.registerTransport("peer_a", nullptr), PCL_OK);
+}
+
 ///< REQ_PCL_153: Executor dispatchIncoming routes to subscribers. PCL.049.
 TEST(PclCppExecutor, DispatchIncoming) {
   pcl::Executor exec;
@@ -444,6 +484,56 @@ TEST(PclCppExecutor, PostIncoming) {
   EXPECT_TRUE(received);
 
   pcl_container_destroy(c);
+}
+
+///< REQ_PCL_154A: Executor postRemoteIncoming honours remote routing. PCL.049.
+TEST(PclCppExecutor, PostRemoteIncoming) {
+  struct RemoteSubComp : public pcl::Component {
+    pcl::Port sub_port;
+    int received = 0;
+
+    RemoteSubComp() : Component("remote_sub") {}
+
+  protected:
+    pcl_status_t on_configure() override {
+      sub_port = addSubscriber(
+          "remote/topic", "Msg",
+          [](pcl_container_t*, const pcl_msg_t*, void* u) {
+            static_cast<RemoteSubComp*>(u)->received++;
+          }, this);
+      if (!sub_port) return PCL_ERR_CALLBACK;
+      return sub_port.routeRemote("peer_a");
+    }
+  };
+
+  pcl::Executor exec;
+  RemoteSubComp comp;
+  EXPECT_EQ(comp.configure(), PCL_OK);
+  EXPECT_EQ(comp.activate(), PCL_OK);
+  EXPECT_EQ(exec.add(comp), PCL_OK);
+
+  pcl_msg_t msg = {};
+  msg.data = "z";
+  msg.size = 1;
+  msg.type_name = "Msg";
+
+  EXPECT_EQ(exec.postRemoteIncoming("peer_b", "remote/topic", &msg), PCL_OK);
+  exec.spinOnce(0);
+  EXPECT_EQ(comp.received, 0);
+
+  EXPECT_EQ(exec.postRemoteIncoming("peer_a", "remote/topic", &msg), PCL_OK);
+  exec.spinOnce(0);
+  EXPECT_EQ(comp.received, 1);
+}
+
+///< REQ_PCL_154B: Executor endpoint route helpers mirror C API. PCL.049.
+TEST(PclCppExecutor, EndpointRouteHelpers) {
+  pcl::Executor exec;
+  EXPECT_EQ(exec.routeRemote("svc.remote", "peer_a"), PCL_OK);
+  EXPECT_EQ(exec.routeLocal("svc.local", PCL_ENDPOINT_PROVIDED), PCL_OK);
+  EXPECT_EQ(exec.routeLocalAndRemote("topic.remote",
+                                     "peer_b",
+                                     PCL_ENDPOINT_PUBLISHER), PCL_OK);
 }
 
 ///< REQ_PCL_155: Executor move constructor transfers ownership. PCL.049.

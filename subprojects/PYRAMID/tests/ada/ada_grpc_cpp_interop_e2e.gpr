@@ -13,7 +13,7 @@ project Ada_Grpc_Cpp_Interop_E2E is
 
   for Source_Dirs use
     (".",
-     Root_Dir & "/subprojects/PYRAMID/examples/ada",
+     Root_Dir & "/subprojects/PCL/bindings/ada",
      Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated",
      Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/flatbuffers/ada",
      Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/grpc/ada");

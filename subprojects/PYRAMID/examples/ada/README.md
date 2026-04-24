@@ -1,15 +1,30 @@
 # Ada PCL Example
 
-This directory shows how Ada can call the PCL C ABI directly.
+This directory contains Ada examples that consume the canonical PCL Ada binding.
 
 Files:
 
-- `pcl_bindings.ads`: thin Ada import layer for the C API
-- `pcl_component.ads` / `.adb`: OO wrapper with tagged `Component` and `Executor` types
 - `pcl_sensor_demo.adb`: demo built on top of `Pcl_Component`
+
+The canonical binding now lives in:
+
+- `subprojects/PCL/bindings/ada`
+
+That package set provides:
+
+- `Pcl_Bindings`
+- `Pcl_Component`
+- `Pcl_Transports`
+- `Pcl_Content_Types`
+- `Pcl_Typed_Ports`
 
 Ada test runners live under `subprojects/PYRAMID/tests/ada`. Generated Ada
 bindings live under `subprojects/PYRAMID/bindings/ada/generated`.
+
+For the full wrapper walkthrough, transport configuration patterns, and C++/Ada
+wrapper examples, see:
+
+- `subprojects/PCL/doc/guides/pcl_user_guide.md`
 
 The example mirrors the C `external_io_bridge_example.c` flow:
 
