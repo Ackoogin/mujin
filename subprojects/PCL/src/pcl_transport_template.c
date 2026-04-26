@@ -9,10 +9,14 @@
 ///   - One **recv_thread** that calls `hooks.recv_blocking` in a loop
 ///     and posts decoded frames into the executor:
 ///       * PUBLISH      → pcl_executor_post_remote_incoming()
-///       * SVC_REQ      → pcl_executor_post_service_request() — the
-///                        executor invokes the local handler and feeds
-///                        the response back into our send queue as a
-///                        SVC_RESP frame.
+///       * SVC_REQ      → pcl_executor_post_service_request_remote(),
+///                        keyed by our peer_id so remote-exposure
+///                        rules apply (services configured local-only
+///                        or restricted to a peer allow-list are not
+///                        silently exposed to wire traffic).  The
+///                        executor invokes the matching handler and
+///                        the response is fed back into our send
+///                        queue as a SVC_RESP frame.
 ///       * SVC_RESP     → pcl_executor_post_response_msg(), keyed off
 ///                        a sequence-id correlation table populated by
 ///                        invoke_async on the executor thread.
@@ -530,10 +534,12 @@ static void* tpl_recv_thread_main(void* arg)
       pcl_executor_post_remote_incoming(ctx->executor, ctx->peer_id,
                                         in.topic, &msg);
     } else if (in.kind == PCL_TEMPLATE_FRAME_SVC_REQ && in.service_name) {
-      // Server-side dispatch: route the request to the local service
-      // handler via the executor's thread-safe ingress helper.  The
-      // dispatch slot remembers the seq_id and response type_name so
-      // tpl_svc_response_cb can rebuild the SVC_RESP frame.
+      // Server-side dispatch: route the request to a service handler
+      // via the *remote-aware* ingress helper, passing our peer_id as
+      // the source.  This preserves remote-exposure rules — services
+      // restricted to a peer allow-list (or local-only) are not
+      // silently exposed to arbitrary inbound wire traffic, which
+      // would have happened with the plain post_service_request.
       pcl_template_svc_dispatch_t* slot =
           (pcl_template_svc_dispatch_t*)calloc(1u, sizeof(*slot));
       if (slot) {
@@ -545,14 +551,15 @@ static void* tpl_recv_thread_main(void* arg)
         memset(&req, 0, sizeof(req));
         req.data      = in.payload;
         req.size      = in.payload_size;
-        /* post_service_request requires non-NULL type_name. */
+        /* post_service_request_remote requires non-NULL type_name. */
         req.type_name = in.type_name ? in.type_name : "";
 
-        if (pcl_executor_post_service_request(ctx->executor,
-                                              in.service_name,
-                                              &req,
-                                              tpl_svc_response_cb,
-                                              slot) != PCL_OK) {
+        if (pcl_executor_post_service_request_remote(ctx->executor,
+                                                     ctx->peer_id,
+                                                     in.service_name,
+                                                     &req,
+                                                     tpl_svc_response_cb,
+                                                     slot) != PCL_OK) {
           free(slot->type_name);
           free(slot);
         }

@@ -53,8 +53,12 @@
 ///     correlated by a 32-bit sequence id and routed back to the
 ///     caller's response callback when the matching SVC_RESP arrives.
 ///   - Service server — inbound SVC_REQ frames are dispatched into the
-///     executor with `pcl_executor_post_service_request`; the handler's
-///     response is enqueued back as a SVC_RESP frame.
+///     executor with `pcl_executor_post_service_request_remote`,
+///     tagged with the transport's configured peer_id so that the
+///     executor enforces remote-exposure rules (services configured
+///     as local-only or restricted to a peer allow-list are not
+///     silently exposed to wire traffic).  The handler's response is
+///     enqueued back as a SVC_RESP frame.
 ///
 /// Streaming services are out of scope.  Extend by following the
 /// correlation pattern already present for SVC_REQ/RESP in
@@ -282,7 +286,7 @@ const pcl_transport_t* pcl_transport_template_get_transport(
 /// destroy() with a NULL handle is a no-op.
 ///
 /// \note RPC callbacks scheduled via `invoke_async` and SVC_REQ
-///       dispatch contexts scheduled via `pcl_executor_post_service_request`
+///       dispatch contexts scheduled via `pcl_executor_post_service_request_remote`
 ///       are owned by the executor's response queue.  The caller MUST
 ///       stop the executor (or ensure no further `spin_once` calls)
 ///       before invoking destroy(), otherwise a callback may fire after

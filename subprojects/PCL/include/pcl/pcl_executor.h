@@ -163,6 +163,36 @@ pcl_status_t pcl_executor_post_service_request(pcl_executor_t*  e,
                                                pcl_resp_cb_fn_t callback,
                                                void*            user_data);
 
+/// \brief Queue a remote-originated service call from an external thread.
+///
+/// \thread-safe  Safe to call from any thread (intended for transport recv threads).
+///
+/// Identical to \ref pcl_executor_post_service_request except the
+/// dispatched handler lookup uses PCL_ROUTE_REMOTE filtering with the
+/// supplied \p source_peer_id, so services configured as local-only
+/// (or restricted to a specific peer allow-list) are not exposed to
+/// arbitrary inbound wire traffic.
+///
+/// Use this from a transport adapter's recv thread when forwarding a
+/// service request that arrived from a named remote peer.  The
+/// callback fires on the executor thread with the response (or an
+/// empty message if the service is not exposed to \p source_peer_id).
+///
+/// \param e               Target executor.
+/// \param source_peer_id  Logical identity of the remote peer that
+///                        sent the request (must match the peer_id
+///                        the transport was registered under).
+/// \param service_name    Wire name of the service to invoke.
+/// \param request         Request message (deep-copied).
+/// \param callback        Response callback fired on executor thread.
+/// \param user_data       Passed through to \p callback.
+pcl_status_t pcl_executor_post_service_request_remote(pcl_executor_t*  e,
+                                                      const char*      source_peer_id,
+                                                      const char*      service_name,
+                                                      const pcl_msg_t* request,
+                                                      pcl_resp_cb_fn_t callback,
+                                                      void*            user_data);
+
 // ============================================================
 // Async response delivery  (safe to call from ANY thread)
 // Used by transport recv threads returning remote call results.

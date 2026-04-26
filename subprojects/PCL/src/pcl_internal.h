@@ -107,6 +107,10 @@ typedef struct pcl_pending_svc_req_t {
   uint32_t                       size;
   pcl_resp_cb_fn_t               callback;     ///< fired on executor thread
   void*                          user_data;
+  /// Source peer identity when the request arrived from a remote
+  /// transport, NULL when the request is intra-process.  Drives whether
+  /// drain_svc_req_queue() applies remote-exposure rules.  Deep copy.
+  char*                          source_peer_id;
   struct pcl_pending_svc_req_t*  next;
 } pcl_pending_svc_req_t;
 

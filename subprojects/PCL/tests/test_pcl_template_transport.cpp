@@ -533,6 +533,87 @@ TEST(PclTransportTemplate, InvokeAsyncFailsWhenSendStopped) {
   restore_logs();
 }
 
+// Regression: inbound SVC_REQ from a remote peer must be dispatched
+// through the remote-aware executor path so that services configured
+// LOCAL-only (or restricted to a different peer allow-list) are not
+// silently exposed.  The previous implementation routed via
+// pcl_executor_post_service_request(), which always treats requests
+// as local — bypassing remote-exposure rules.
+TEST(PclTransportTemplate, RemoteSvcReqHonoursLocalOnlyExposure) {
+  silence_logs();
+  LoopbackPair p;
+
+  /* Server-side container: registers a service marked LOCAL-only.
+   * A request that arrives from node_a (the remote peer) should NOT
+   * reach the handler — the executor must drop it as not-exposed. */
+  std::atomic<int> handler_calls{0};
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    pcl_port_t* port = pcl_container_add_service(
+        c, "secure/svc", "SvcType",
+        [](pcl_container_t*, const pcl_msg_t*, pcl_msg_t* resp,
+           pcl_svc_context_t*, void* svc_ud) -> pcl_status_t {
+          static_cast<std::atomic<int>*>(svc_ud)->fetch_add(1);
+          static const char body[] = "leaked";
+          resp->data      = body;
+          resp->size      = (uint32_t)sizeof(body) - 1u;
+          resp->type_name = "SvcType";
+          return PCL_OK;
+        }, ud);
+    pcl_port_set_route(port, PCL_ROUTE_LOCAL, nullptr, 0);  /* LOCAL only */
+    return PCL_OK;
+  };
+  auto* svc_c = pcl_container_create("local_only_svc", &cbs, &handler_calls);
+  ASSERT_EQ(pcl_container_configure(svc_c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(svc_c),  PCL_OK);
+  ASSERT_EQ(pcl_executor_add(p.exec_b, svc_c), PCL_OK);
+
+  /* Caller fires the request from exec_a via the transport. */
+  struct ClientCtx {
+    std::atomic<bool> got_response{false};
+    std::string       payload;
+  } client;
+
+  pcl_msg_t req = {};
+  const char* payload = "ping";
+  req.data      = payload;
+  req.size      = (uint32_t)strlen(payload);
+  req.type_name = "SvcType";
+
+  const pcl_transport_t* vt_a =
+      pcl_transport_template_get_transport(p.tpl_a);
+  ASSERT_EQ(vt_a->invoke_async(vt_a->adapter_ctx, "secure/svc", &req,
+      [](const pcl_msg_t* resp, void* ud) {
+        auto* c = static_cast<ClientCtx*>(ud);
+        if (resp && resp->data && resp->size) {
+          c->payload.assign(static_cast<const char*>(resp->data), resp->size);
+        }
+        c->got_response = true;
+      },
+      &client), PCL_OK);
+
+  /* The executor responds with an empty message when the service is
+   * not exposed — give the round trip plenty of time to complete. */
+  const auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::seconds(2);
+  while (!client.got_response && std::chrono::steady_clock::now() < deadline) {
+    pcl_executor_spin_once(p.exec_a, 0);
+    pcl_executor_spin_once(p.exec_b, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+
+  EXPECT_EQ(handler_calls.load(), 0)
+      << "LOCAL-only service must not be invoked by remote SVC_REQ";
+  EXPECT_TRUE(client.got_response.load())
+      << "caller must always observe a response (empty when not exposed)";
+  EXPECT_TRUE(client.payload.empty())
+      << "response must be empty when the service is not exposed remotely";
+
+  pcl_executor_remove(p.exec_b, svc_c);
+  pcl_container_destroy(svc_c);
+  restore_logs();
+}
+
 // ---------------------------------------------------------------------------
 // Conformance — the same suite any transport can extend.
 // ---------------------------------------------------------------------------
