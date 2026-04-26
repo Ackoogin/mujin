@@ -93,6 +93,19 @@ typedef struct {
   char*                            type_name; /* preserved for the SVC_RESP frame */
 } pcl_template_svc_dispatch_t;
 
+// -- Peer-alias tracking ------------------------------------------------
+//
+// Every peer_id this transport is known by gets recorded so destroy()
+// can walk the list and clear *every* executor slot pointing at us —
+// even ones registered under names that have since been replaced by
+// set_peer_id().  Otherwise a stale alias would still hold a pointer
+// to the freed adapter_ctx.
+
+typedef struct pcl_template_peer_alias_t {
+  char*                              peer_id;
+  struct pcl_template_peer_alias_t*  next;
+} pcl_template_peer_alias_t;
+
 // -- Main transport struct ----------------------------------------------
 
 struct pcl_transport_template_t {
@@ -101,6 +114,12 @@ struct pcl_transport_template_t {
   pcl_transport_t         transport;
 
   char                    peer_id[64];
+
+  // Every value peer_id has held since creation, so destroy() can
+  // unregister all of them.  Protected by pending_lock (we already
+  // pay for that mutex; aliases mutate only on set_peer_id which is
+  // not on a hot path).
+  pcl_template_peer_alias_t* peer_aliases;
 
   // Send-side: queue + lock + cond.  send_thread waits on send_cond
   // for new work or stop; vtable publish() pushes and signals.
@@ -244,14 +263,18 @@ static pcl_template_outbound_t* tpl_outbound_clone(
 // Used by both publish() (executor thread) and the SVC_REQ dispatch
 // callback (executor thread) and the SVC_RESP dispatch callback
 // (executor thread).  Always under send_lock.
+//
+// Returns PCL_OK on successful enqueue; PCL_ERR_STATE if the send
+// thread has already been told to stop (the frame is freed in that
+// case so the caller does not need to clean it up).
 
-static void tpl_send_enqueue(struct pcl_transport_template_t* ctx,
-                             pcl_template_outbound_t*         frame) {
+static pcl_status_t tpl_send_enqueue(struct pcl_transport_template_t* ctx,
+                                     pcl_template_outbound_t*         frame) {
   tpl_lock(ctx);
   if (ctx->send_stop) {
     tpl_unlock(ctx);
     tpl_outbound_free(frame);
-    return;
+    return PCL_ERR_STATE;
   }
   if (ctx->send_tail) {
     ctx->send_tail->next = frame;
@@ -261,6 +284,7 @@ static void tpl_send_enqueue(struct pcl_transport_template_t* ctx,
   ctx->send_tail = frame;
   tpl_signal(ctx);
   tpl_unlock(ctx);
+  return PCL_OK;
 }
 
 // -- Pending correlation table helpers ----------------------------------
@@ -310,6 +334,31 @@ static void tpl_pending_drain(struct pcl_transport_template_t* ctx) {
     free(head);
     head = next;
   }
+}
+
+// -- Peer-alias helpers -------------------------------------------------
+
+static void tpl_alias_remember(struct pcl_transport_template_t* ctx,
+                               const char*                       peer_id) {
+  pcl_template_peer_alias_t* node;
+  pcl_template_peer_alias_t* it;
+
+  if (!peer_id || !peer_id[0]) return;
+
+  tpl_pending_lock(ctx);
+  for (it = ctx->peer_aliases; it; it = it->next) {
+    if (it->peer_id && strcmp(it->peer_id, peer_id) == 0) {
+      tpl_pending_unlock(ctx);
+      return;  /* already tracked */
+    }
+  }
+  node = (pcl_template_peer_alias_t*)calloc(1u, sizeof(*node));
+  if (!node) { tpl_pending_unlock(ctx); return; }
+  node->peer_id = tpl_strdup_or_null(peer_id);
+  if (!node->peer_id) { free(node); tpl_pending_unlock(ctx); return; }
+  node->next        = ctx->peer_aliases;
+  ctx->peer_aliases = node;
+  tpl_pending_unlock(ctx);
 }
 
 // -- Server-side SVC_REQ → SVC_RESP plumbing ----------------------------
@@ -472,7 +521,11 @@ static void* tpl_recv_thread_main(void* arg)
       memset(&msg, 0, sizeof(msg));
       msg.data      = in.payload;
       msg.size      = in.payload_size;
-      msg.type_name = in.type_name;
+      /* The executor rejects post_remote_incoming with NULL type_name
+       * (PCL_ERR_INVALID).  Normalise to "" so untyped wire frames
+       * still flow — subscribers gate on topic + peer, not on
+       * matching an empty type. */
+      msg.type_name = in.type_name ? in.type_name : "";
 
       pcl_executor_post_remote_incoming(ctx->executor, ctx->peer_id,
                                         in.topic, &msg);
@@ -492,7 +545,8 @@ static void* tpl_recv_thread_main(void* arg)
         memset(&req, 0, sizeof(req));
         req.data      = in.payload;
         req.size      = in.payload_size;
-        req.type_name = in.type_name;
+        /* post_service_request requires non-NULL type_name. */
+        req.type_name = in.type_name ? in.type_name : "";
 
         if (pcl_executor_post_service_request(ctx->executor,
                                               in.service_name,
@@ -512,7 +566,7 @@ static void* tpl_recv_thread_main(void* arg)
         memset(&resp, 0, sizeof(resp));
         resp.data      = in.payload;
         resp.size      = in.payload_size;
-        resp.type_name = in.type_name;
+        resp.type_name = in.type_name ? in.type_name : "";
 
         pcl_executor_post_response_msg(ctx->executor, entry->cb,
                                        entry->user_data, &resp);
@@ -562,8 +616,7 @@ static pcl_status_t tpl_publish(void*            adapter_ctx,
   frame = tpl_outbound_clone(PCL_TEMPLATE_FRAME_PUBLISH, 0u, topic, NULL, msg);
   if (!frame) return PCL_ERR_NOMEM;
 
-  tpl_send_enqueue(ctx, frame);
-  return PCL_OK;
+  return tpl_send_enqueue(ctx, frame);
 }
 
 // -- Transport vtable: invoke_async (client-side service RPC) ----------
@@ -601,9 +654,19 @@ static pcl_status_t tpl_invoke_async(void*            adapter_ctx,
   }
 
   /* Insert pending entry BEFORE enqueuing the frame so an absurdly fast
-   * response can never race the lookup.  */
+   * response can never race the lookup.  If enqueue fails (send thread
+   * already stopped) we must reclaim the pending slot — otherwise the
+   * caller's callback would be orphaned and never fired. */
   tpl_pending_insert(ctx, entry);
-  tpl_send_enqueue(ctx, frame);
+  {
+    pcl_status_t rc = tpl_send_enqueue(ctx, frame);
+    if (rc != PCL_OK) {
+      pcl_template_pending_t* taken = tpl_pending_take(ctx, entry->seq_id);
+      if (taken) free(taken);
+      /* tpl_send_enqueue already freed `frame` on the error path. */
+      return rc;
+    }
+  }
   return PCL_OK;
 }
 
@@ -761,6 +824,12 @@ pcl_transport_template_t* pcl_transport_template_create(
   }
 #endif
 
+  /* Pre-seed the alias list with the implicit default so destroy()
+   * unregisters it even if the caller never explicitly renamed.
+   * Done after thread creation so the error-cleanup paths above don't
+   * need to deal with the alias list. */
+  tpl_alias_remember(ctx, "default");
+
   return ctx;
 }
 
@@ -769,6 +838,9 @@ pcl_status_t pcl_transport_template_set_peer_id(
     const char*               peer_id) {
   if (!ctx || !peer_id || !peer_id[0]) return PCL_ERR_INVALID;
   snprintf(ctx->peer_id, sizeof(ctx->peer_id), "%s", peer_id);
+  /* Remember this alias so destroy() can unregister it from the
+   * executor — even if the caller renames the peer again later. */
+  tpl_alias_remember(ctx, peer_id);
   return PCL_OK;
 }
 
@@ -782,8 +854,28 @@ void pcl_transport_template_destroy(pcl_transport_template_t* ctx) {
   if (!ctx) return;
 
   if (ctx->executor) {
+    pcl_template_peer_alias_t* alias;
     pcl_executor_set_transport(ctx->executor, NULL);
-    pcl_executor_register_transport(ctx->executor, ctx->peer_id, NULL);
+    /* Walk every peer_id this transport has *ever* been known by and
+     * unregister each from the executor.  Without this, a caller who
+     * mutated peer_id via set_peer_id() would leave the original
+     * alias still bound to the soon-to-be-freed adapter_ctx, and any
+     * later routing to that alias would dereference stale memory.
+     * tpl_alias_drain() empties the list under pending_lock; we walk
+     * a private copy here, then free the copy. */
+    tpl_pending_lock(ctx);
+    alias = ctx->peer_aliases;
+    ctx->peer_aliases = NULL;
+    tpl_pending_unlock(ctx);
+    while (alias) {
+      pcl_template_peer_alias_t* next = alias->next;
+      if (alias->peer_id) {
+        pcl_executor_register_transport(ctx->executor, alias->peer_id, NULL);
+      }
+      free(alias->peer_id);
+      free(alias);
+      alias = next;
+    }
   }
 
   // Stop signal + wake — see invariants on tpl_shutdown.

@@ -119,7 +119,10 @@ typedef struct {
   uint32_t                  seq_id;        ///< Correlates SVC_REQ with SVC_RESP (0 for PUBLISH).
   const char*               topic;         ///< NUL-terminated topic name (PUBLISH only).
   const char*               service_name;  ///< NUL-terminated service name (SVC_REQ only).
-  const char*               type_name;     ///< NUL-terminated message type name, or NULL.
+  const char*               type_name;     ///< NUL-terminated message type name, or NULL on
+                                           ///< the recv path (template normalises to "" before
+                                           ///< handing to the executor — `post_remote_incoming`
+                                           ///< and friends require a non-NULL string).
   const void*               payload;       ///< Payload bytes, or NULL when payload_size == 0.
   uint32_t                  payload_size;  ///< Payload size in bytes.
 } pcl_template_frame_t;

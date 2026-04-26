@@ -396,6 +396,143 @@ TEST(PclTransportTemplate, CloseRunsAfterDestroy) {
   restore_logs();
 }
 
+// Regression: a transport that has been renamed via set_peer_id() must
+// still unregister *every* alias from its executor on destroy, otherwise
+// the executor keeps a dangling pointer into the freed adapter_ctx.
+TEST(PclTransportTemplate, DestroyClearsRenamedPeerAlias) {
+  silence_logs();
+
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  LoopbackLink loopA, loopB;
+  LoopbackEnd  end{ &loopA, &loopB };
+  pcl_template_io_hooks_t hooks = {};
+  hooks.user_data     = &end;
+  hooks.send_blocking = &loopback_send;
+  hooks.recv_blocking = &loopback_recv;
+  hooks.wake          = &loopback_wake;
+
+  auto* t = pcl_transport_template_create(&hooks, e);
+  ASSERT_NE(t, nullptr);
+
+  /* Caller registers the transport under its initial alias, then
+   * renames it.  Without the fix the original alias still points into
+   * the soon-to-be-freed adapter_ctx after destroy(). */
+  ASSERT_EQ(pcl_transport_template_set_peer_id(t, "first"), PCL_OK);
+  pcl_executor_register_transport(e, "first",
+      pcl_transport_template_get_transport(t));
+  ASSERT_EQ(pcl_transport_template_set_peer_id(t, "second"), PCL_OK);
+
+  pcl_transport_template_destroy(t);
+  /* If destroy did NOT clear "first", pcl_executor_destroy will invoke
+   * tpl_shutdown on the freed adapter_ctx (caught by ASAN). */
+  pcl_executor_destroy(e);
+  restore_logs();
+}
+
+// Regression: hooks may report inbound PUBLISH frames with type_name=NULL.
+// The template must normalise that to "" so the executor's
+// post_remote_incoming() does not silently reject them.
+TEST(PclTransportTemplate, RecvPublishNormalisesNullTypeName) {
+  silence_logs();
+  LoopbackPair p;
+
+  /* Synthesise a frame directly into A's inbound queue with type_name
+   * left NULL, then drive A's executor and assert the subscriber on
+   * exec_a observes it. */
+  struct SubState {
+    std::atomic<bool> got{false};
+  } state;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    const char* peers[] = { "node_b" };
+    pcl_port_t* port = pcl_container_add_subscriber(
+        c, "untyped/topic", "",
+        [](pcl_container_t*, const pcl_msg_t*, void* sub_ud) {
+          static_cast<SubState*>(sub_ud)->got = true;
+        }, ud);
+    pcl_port_set_route(port, PCL_ROUTE_REMOTE, peers, 1);
+    return PCL_OK;
+  };
+
+  auto* sub_c = pcl_container_create("recv_null", &cbs, &state);
+  ASSERT_EQ(pcl_container_configure(sub_c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(sub_c),  PCL_OK);
+  ASSERT_EQ(pcl_executor_add(p.exec_a, sub_c), PCL_OK);
+
+  /* Inject a PUBLISH frame into A's inbound queue (the BA link) with
+   * type_name explicitly NULL — this is what a real hook returning
+   * a typeless wire datagram would deliver. */
+  {
+    OwnedFrame f;
+    f.kind         = PCL_TEMPLATE_FRAME_PUBLISH;
+    f.topic        = OwnedFrame::dup("untyped/topic");
+    f.type_name    = nullptr;  /* the deliberate edge case */
+    f.payload      = static_cast<uint8_t*>(std::malloc(4));
+    std::memcpy(f.payload, "data", 4);
+    f.payload_size = 4;
+    std::lock_guard<std::mutex> lk(p.ba.mu);
+    p.ba.queue.emplace_back(std::move(f));
+    p.ba.cv.notify_all();
+  }
+
+  for (int i = 0; i < 100 && !state.got; ++i) {
+    pcl_executor_spin_once(p.exec_a, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+  EXPECT_TRUE(state.got) << "subscriber dropped a PUBLISH with NULL type_name";
+
+  pcl_executor_remove(p.exec_a, sub_c);
+  pcl_container_destroy(sub_c);
+  restore_logs();
+}
+
+// Regression: invoke_async must surface PCL_ERR_STATE when the send
+// thread is already stopping, instead of silently leaking a pending
+// callback that will never fire.
+TEST(PclTransportTemplate, InvokeAsyncFailsWhenSendStopped) {
+  silence_logs();
+
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  LoopbackLink loopA, loopB;
+  LoopbackEnd  end{ &loopA, &loopB };
+  pcl_template_io_hooks_t hooks = {};
+  hooks.user_data     = &end;
+  hooks.send_blocking = &loopback_send;
+  hooks.recv_blocking = &loopback_recv;
+  hooks.wake          = &loopback_wake;
+  auto* t = pcl_transport_template_create(&hooks, e);
+  ASSERT_NE(t, nullptr);
+
+  const pcl_transport_t* vt = pcl_transport_template_get_transport(t);
+
+  /* Drive shutdown manually: this is what pcl_executor_destroy ends up
+   * doing.  After it the send thread refuses new frames. */
+  vt->shutdown(vt->adapter_ctx);
+
+  std::atomic<bool> cb_fired{false};
+  pcl_msg_t req = {};
+  const char* p = "x";
+  req.data      = p;
+  req.size      = 1;
+  req.type_name = "T";
+
+  pcl_status_t rc = vt->invoke_async(vt->adapter_ctx, "svc", &req,
+      [](const pcl_msg_t*, void* ud) { *static_cast<std::atomic<bool>*>(ud) = true; },
+      &cb_fired);
+  EXPECT_EQ(rc, PCL_ERR_STATE)
+      << "invoke_async must report failure when the send queue has stopped";
+  EXPECT_FALSE(cb_fired.load());
+
+  pcl_transport_template_destroy(t);
+  pcl_executor_destroy(e);
+  restore_logs();
+}
+
 // ---------------------------------------------------------------------------
 // Conformance — the same suite any transport can extend.
 // ---------------------------------------------------------------------------
