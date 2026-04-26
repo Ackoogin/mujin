@@ -148,6 +148,16 @@ pcl_status_t pcl_executor_register_transport(pcl_executor_t*        e,
                                              const char*            peer_id,
                                              const pcl_transport_t* transport);
 
+/// \brief Get the currently configured default transport adapter.
+///
+/// Returns the vtable pointer last passed to
+/// pcl_executor_set_transport(), or NULL if no default transport is
+/// installed.  Intended for transport adapters that need to check
+/// whether they are the active default before clearing it during
+/// teardown — destroy() must not blindly wipe an unrelated
+/// transport that another adapter installed.
+const pcl_transport_t* pcl_executor_get_transport(const pcl_executor_t* e);
+
 /// \brief Dispatch an incoming message to the appropriate subscriber callback.
 ///
 /// Called by the transport adapter when a message arrives from the wire and

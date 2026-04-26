@@ -846,8 +846,12 @@ pcl_status_t pcl_transport_template_set_peer_id(
   if (!ctx || !peer_id || !peer_id[0]) return PCL_ERR_INVALID;
   snprintf(ctx->peer_id, sizeof(ctx->peer_id), "%s", peer_id);
   /* Remember this alias so destroy() can unregister it from the
-   * executor — even if the caller renames the peer again later. */
-  tpl_alias_remember(ctx, peer_id);
+   * executor — even if the caller renames the peer again later.
+   * Use the *truncated* form (ctx->peer_id) rather than the raw
+   * caller-supplied string: pcl_executor_register_transport stores
+   * peer ids in a fixed 64-byte buffer too, so comparing against the
+   * truncated value is what actually matches the executor's slot. */
+  tpl_alias_remember(ctx, ctx->peer_id);
   return PCL_OK;
 }
 
@@ -862,14 +866,26 @@ void pcl_transport_template_destroy(pcl_transport_template_t* ctx) {
 
   if (ctx->executor) {
     pcl_template_peer_alias_t* alias;
-    pcl_executor_set_transport(ctx->executor, NULL);
+
+    /* Only clear the executor's *default* transport slot if it is
+     * actually pointing at us.  In multi-transport setups this
+     * adapter may only have been registered as a named peer, with
+     * an unrelated transport installed as the default — wiping it
+     * unconditionally would silently break the executor's default
+     * routing for everyone else. */
+    {
+      const pcl_transport_t* current =
+          pcl_executor_get_transport(ctx->executor);
+      if (current && current->adapter_ctx == ctx) {
+        pcl_executor_set_transport(ctx->executor, NULL);
+      }
+    }
+
     /* Walk every peer_id this transport has *ever* been known by and
      * unregister each from the executor.  Without this, a caller who
      * mutated peer_id via set_peer_id() would leave the original
      * alias still bound to the soon-to-be-freed adapter_ctx, and any
-     * later routing to that alias would dereference stale memory.
-     * tpl_alias_drain() empties the list under pending_lock; we walk
-     * a private copy here, then free the copy. */
+     * later routing to that alias would dereference stale memory. */
     tpl_pending_lock(ctx);
     alias = ctx->peer_aliases;
     ctx->peer_aliases = NULL;

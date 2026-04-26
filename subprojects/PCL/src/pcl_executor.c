@@ -684,6 +684,11 @@ pcl_status_t pcl_executor_set_transport(pcl_executor_t*        e,
   return PCL_OK;
 }
 
+const pcl_transport_t* pcl_executor_get_transport(const pcl_executor_t* e) {
+  if (!e || !e->has_transport) return NULL;
+  return &e->transport;
+}
+
 pcl_status_t pcl_executor_register_transport(pcl_executor_t*        e,
                                              const char*            peer_id,
                                              const pcl_transport_t* transport) {

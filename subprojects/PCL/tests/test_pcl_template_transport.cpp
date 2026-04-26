@@ -614,6 +614,95 @@ TEST(PclTransportTemplate, RemoteSvcReqHonoursLocalOnlyExposure) {
   restore_logs();
 }
 
+// Regression: alias keys must be stored in the executor-truncated
+// form.  set_peer_id snprintfs into a 64-byte buffer; if alias_remember
+// kept the *raw* untruncated input, destroy()'s register_transport(NULL)
+// would compare the long alias against the executor's truncated slot
+// key and miss it — leaving a dangling adapter_ctx in the executor.
+TEST(PclTransportTemplate, DestroyClearsLongPeerIdAlias) {
+  silence_logs();
+
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  LoopbackLink loopA, loopB;
+  LoopbackEnd  end{ &loopA, &loopB };
+  pcl_template_io_hooks_t hooks = {};
+  hooks.user_data     = &end;
+  hooks.send_blocking = &loopback_send;
+  hooks.recv_blocking = &loopback_recv;
+  hooks.wake          = &loopback_wake;
+
+  auto* t = pcl_transport_template_create(&hooks, e);
+  ASSERT_NE(t, nullptr);
+
+  /* peer_id deliberately exceeds the executor's 64-byte slot. */
+  std::string long_id(80, 'p');
+  ASSERT_EQ(pcl_transport_template_set_peer_id(t, long_id.c_str()), PCL_OK);
+  pcl_executor_register_transport(e, long_id.c_str(),
+      pcl_transport_template_get_transport(t));
+
+  pcl_transport_template_destroy(t);
+  /* If the alias key was stored untruncated, register_transport(NULL)
+   * inside destroy() would have missed the executor slot and we would
+   * crash here invoking tpl_shutdown on the freed adapter_ctx. */
+  pcl_executor_destroy(e);
+  restore_logs();
+}
+
+// Regression: destroy() must NOT clear the executor's default
+// transport unless this template instance is *currently* installed
+// as that default.  Otherwise destroying a template that was only
+// registered as a named peer would silently wipe an unrelated
+// default transport.
+TEST(PclTransportTemplate, DestroyPreservesUnrelatedDefaultTransport) {
+  silence_logs();
+
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  /* Build a tiny standalone "other" transport whose vtable points at
+   * a stack-local adapter_ctx token.  We just need to observe whether
+   * the executor's default slot still references it after destroying
+   * the template. */
+  int other_ctx = 0;
+  pcl_transport_t other = {};
+  other.adapter_ctx = &other_ctx;
+  other.publish     = [](void*, const char*, const pcl_msg_t*) -> pcl_status_t {
+    return PCL_OK;
+  };
+  other.shutdown    = [](void*) {};
+  ASSERT_EQ(pcl_executor_set_transport(e, &other), PCL_OK);
+
+  LoopbackLink loopA, loopB;
+  LoopbackEnd  end{ &loopA, &loopB };
+  pcl_template_io_hooks_t hooks = {};
+  hooks.user_data     = &end;
+  hooks.send_blocking = &loopback_send;
+  hooks.recv_blocking = &loopback_recv;
+  hooks.wake          = &loopback_wake;
+
+  auto* t = pcl_transport_template_create(&hooks, e);
+  ASSERT_NE(t, nullptr);
+
+  /* Template is only registered as a named peer — never as default. */
+  pcl_transport_template_set_peer_id(t, "tpl_peer");
+  pcl_executor_register_transport(e, "tpl_peer",
+      pcl_transport_template_get_transport(t));
+
+  pcl_transport_template_destroy(t);
+
+  /* The default must still point at `other`, not have been wiped. */
+  const pcl_transport_t* current = pcl_executor_get_transport(e);
+  ASSERT_NE(current, nullptr)
+      << "destroying a named-peer-only template wiped the default transport";
+  EXPECT_EQ(current->adapter_ctx, &other_ctx);
+
+  pcl_executor_set_transport(e, nullptr);
+  pcl_executor_destroy(e);
+  restore_logs();
+}
+
 // ---------------------------------------------------------------------------
 // Conformance — the same suite any transport can extend.
 // ---------------------------------------------------------------------------
