@@ -83,3 +83,16 @@ gtest_discover_tests(test_pcl_shared_memory_transport DISCOVERY_MODE PRE_TEST)
 add_executable(test_pcl_cpp_wrappers test_pcl_cpp_wrappers.cpp)
 target_link_libraries(test_pcl_cpp_wrappers PRIVATE pcl_core GTest::gtest_main)
 gtest_discover_tests(test_pcl_cpp_wrappers DISCOVERY_MODE PRE_TEST)
+
+# Template transport: scaffold-specific tests + the reusable conformance
+# suite (pcl_transport_conformance.hpp), exercised through an in-memory
+# loopback pair.  Other transports can include the same conformance
+# header — see the docstring at the top of pcl_transport_conformance.hpp.
+add_executable(test_pcl_template_transport test_pcl_template_transport.cpp)
+target_link_libraries(test_pcl_template_transport
+    PRIVATE pcl_core pcl_transport_template GTest::gtest_main)
+target_include_directories(test_pcl_template_transport PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+if(NOT WIN32)
+    target_link_libraries(test_pcl_template_transport PRIVATE pthread)
+endif()
+gtest_discover_tests(test_pcl_template_transport DISCOVERY_MODE PRE_TEST)
