@@ -116,12 +116,12 @@ inline void expectPublishRoundTrip(const TransportPair& pair,
   msg.size      = static_cast<uint32_t>(payload.size());
   msg.type_name = type_name.c_str();
 
-  const auto start = std::chrono::steady_clock::now();
   for (int attempt = 0; attempt < retries && !state.received; ++attempt) {
     pair.sender_vtable->publish(pair.sender_vtable->adapter_ctx,
                                 topic.c_str(), &msg);
+    const auto attempt_start = std::chrono::steady_clock::now();
     while (!state.received &&
-           std::chrono::steady_clock::now() - start < deadline / retries) {
+           std::chrono::steady_clock::now() - attempt_start < deadline / retries) {
       pair.pumpBoth();
     }
   }

@@ -76,8 +76,8 @@
 ///      multi-peer setups).
 ///   4. Call `pcl_transport_template_destroy` during teardown.  The
 ///      template signals stop, calls `hooks.wake` (if provided) so any
-///      in-flight blocking recv unblocks promptly, joins both worker
-///      threads, then calls `hooks.close`.
+///      in-flight `send_blocking` or `recv_blocking` call unblocks
+///      promptly, joins both worker threads, then calls `hooks.close`.
 ///
 /// See `subprojects/PCL/src/pcl_transport_template.c` for the reference
 /// scaffold; the inline `// TODO(engineer):` markers point at the four
@@ -213,14 +213,18 @@ typedef struct {
                                 pcl_template_frame_t* out_frame,
                                 uint32_t              timeout_ms);
 
-  /// \brief Unblock an in-flight `recv_blocking` early.  Optional.
+  /// \brief Unblock any in-flight blocking I/O early.  Optional.
   ///
-  /// Called from the destroying thread after the stop flag is set.
+  /// Called from the destroying thread after both stop flags are set.
   /// A typical implementation closes the underlying file descriptor or
-  /// signals an internal eventfd so a blocking `recv` returns
-  /// immediately.  If the hook is NULL, the recv_thread relies on the
-  /// `timeout_ms` polling interval instead, which means destroy() may
-  /// take up to one timeout to return.
+  /// signals an internal event so any in-flight `send_blocking` or
+  /// `recv_blocking` call returns immediately.
+  ///
+  /// If the hook is NULL, the recv_thread relies on the `timeout_ms`
+  /// polling interval (destroy() may take up to one timeout to return),
+  /// and a `send_blocking` call already in progress when destroy() runs
+  /// will block destroy() until it completes naturally.  Provide `wake`
+  /// whenever the underlying I/O can stall arbitrarily.
   void (*wake)(void* user_data);
 } pcl_template_io_hooks_t;
 
@@ -276,7 +280,7 @@ const pcl_transport_t* pcl_transport_template_get_transport(
 ///   2. Set the stop flag and signal the send_thread's condition
 ///      variable so it drains any pending frame queue and exits.
 ///   3. Call `hooks.wake` (if provided) so any in-flight
-///      `recv_blocking` returns promptly.
+///      `recv_blocking` or `send_blocking` returns promptly.
 ///   4. Join both worker threads.
 ///   5. Call `hooks.close` (if provided) — guaranteed to run on a
 ///      single thread with no concurrent hook activity.

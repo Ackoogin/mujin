@@ -437,6 +437,15 @@ static void* tpl_send_thread_main(void* arg)
       continue;
     }
 
+    /* Abort if stop was signalled while we were dequeuing.  This avoids
+     * entering send_blocking after destroy() begins — which matters when
+     * hooks.wake cannot interrupt an in-flight send.  If we are already
+     * inside send_blocking when wake fires, the hook must unblock it. */
+    if (ctx->send_stop) {
+      tpl_outbound_free(frame);
+      break;
+    }
+
     {
       pcl_template_frame_t out;
       pcl_status_t         rc;
