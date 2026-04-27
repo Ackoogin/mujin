@@ -302,6 +302,7 @@ void pcl_executor_destroy(pcl_executor_t* e) {
       free(node->service_name);
       free(node->type_name);
       free(node->data);
+      free(node->source_peer_id);
       free(node);
       node = next;
     }
@@ -482,8 +483,11 @@ static void drain_svc_req_queue(pcl_executor_t* e) {
       req.size      = node->size;
       req.type_name = node->type_name;
 
-      struct pcl_port_t* port = find_service(e, node->service_name,
-                                             PCL_ROUTE_LOCAL, NULL);
+      struct pcl_port_t* port = node->source_peer_id
+          ? find_service(e, node->service_name,
+                         PCL_ROUTE_REMOTE, node->source_peer_id)
+          : find_service(e, node->service_name,
+                         PCL_ROUTE_LOCAL, NULL);
       if (port) {
         pcl_svc_context_t* ctx = (pcl_svc_context_t*)calloc(1, sizeof(*ctx));
         if (ctx) {
@@ -522,6 +526,7 @@ static void drain_svc_req_queue(pcl_executor_t* e) {
     free(node->service_name);
     free(node->type_name);
     free(node->data);
+    free(node->source_peer_id);
     free(node);
   }
 }
@@ -677,6 +682,17 @@ pcl_status_t pcl_executor_set_transport(pcl_executor_t*        e,
     e->has_transport = 0;
   }
   return PCL_OK;
+}
+
+const pcl_transport_t* pcl_executor_get_transport(const pcl_executor_t* e) {
+  if (!e || !e->has_transport) return NULL;
+  return &e->transport;
+}
+
+const pcl_transport_t* pcl_executor_get_transport_for_peer(
+    const pcl_executor_t* e,
+    const char*           peer_id) {
+  return find_named_transport(e, peer_id);
 }
 
 pcl_status_t pcl_executor_register_transport(pcl_executor_t*        e,
@@ -1151,11 +1167,16 @@ pcl_status_t pcl_executor_post_remote_incoming(pcl_executor_t*  e,
   return enqueue_incoming_message(e, topic, msg, PCL_ROUTE_REMOTE, peer_id);
 }
 
-pcl_status_t pcl_executor_post_service_request(pcl_executor_t*  e,
-                                               const char*      service_name,
-                                               const pcl_msg_t* request,
-                                               pcl_resp_cb_fn_t callback,
-                                               void*            user_data) {
+/* Shared enqueue path for post_service_request and
+ * post_service_request_remote.  When source_peer_id is non-NULL, the
+ * drained request is dispatched with PCL_ROUTE_REMOTE filtering so
+ * remote-exposure rules apply. */
+static pcl_status_t enqueue_svc_req(pcl_executor_t*  e,
+                                    const char*      service_name,
+                                    const pcl_msg_t* request,
+                                    pcl_resp_cb_fn_t callback,
+                                    void*            user_data,
+                                    const char*      source_peer_id) {
   pcl_pending_svc_req_t* node;
 
   if (!e || !service_name || !request || !callback) return PCL_ERR_INVALID;
@@ -1192,6 +1213,17 @@ pcl_status_t pcl_executor_post_service_request(pcl_executor_t*  e,
   node->callback  = callback;
   node->user_data = user_data;
 
+  if (source_peer_id) {
+    node->source_peer_id = pcl_strdup_local(source_peer_id);
+    if (!node->source_peer_id) {
+      free(node->service_name);
+      free(node->type_name);
+      free(node->data);
+      free(node);
+      return PCL_ERR_NOMEM;
+    }
+  }
+
   pcl_mutex_lock(&e->svc_req_lock);
   if (e->svc_req_tail) {
     e->svc_req_tail->next = node;
@@ -1202,4 +1234,23 @@ pcl_status_t pcl_executor_post_service_request(pcl_executor_t*  e,
   pcl_mutex_unlock(&e->svc_req_lock);
 
   return PCL_OK;
+}
+
+pcl_status_t pcl_executor_post_service_request(pcl_executor_t*  e,
+                                               const char*      service_name,
+                                               const pcl_msg_t* request,
+                                               pcl_resp_cb_fn_t callback,
+                                               void*            user_data) {
+  return enqueue_svc_req(e, service_name, request, callback, user_data, NULL);
+}
+
+pcl_status_t pcl_executor_post_service_request_remote(pcl_executor_t*  e,
+                                                      const char*      source_peer_id,
+                                                      const char*      service_name,
+                                                      const pcl_msg_t* request,
+                                                      pcl_resp_cb_fn_t callback,
+                                                      void*            user_data) {
+  if (!source_peer_id || !source_peer_id[0]) return PCL_ERR_INVALID;
+  return enqueue_svc_req(e, service_name, request, callback, user_data,
+                         source_peer_id);
 }

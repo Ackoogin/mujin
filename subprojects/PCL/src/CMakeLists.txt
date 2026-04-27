@@ -104,8 +104,32 @@ set_target_properties(pcl_transport_shared_memory PROPERTIES
   C_EXTENSIONS OFF
 )
 
+# ---------------------------------------------------------------------------
+# pcl_transport_template — engineer-extendable transport scaffold
+# ---------------------------------------------------------------------------
+# Provides the standard PCL threading model (dedicated send + recv worker
+# threads) so the engineer only needs to supply blocking I/O hooks.  See
+# include/pcl/pcl_transport_template.h for the integration contract.
+# ---------------------------------------------------------------------------
+add_library(pcl_transport_template STATIC
+  pcl_transport_template.c
+)
+
+target_include_directories(pcl_transport_template PUBLIC
+  ${PCL_ROOT_DIR}/include
+)
+
+target_link_libraries(pcl_transport_template PUBLIC pcl_core Threads::Threads)
+
+set_target_properties(pcl_transport_template PROPERTIES
+  LINKER_LANGUAGE C
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+)
+
 # Install
-install(TARGETS pcl_core pcl_transport_socket pcl_transport_udp pcl_transport_shared_memory
+install(TARGETS pcl_core pcl_transport_socket pcl_transport_udp pcl_transport_shared_memory pcl_transport_template
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
 )
