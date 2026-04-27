@@ -342,27 +342,28 @@ static void tpl_pending_drain(struct pcl_transport_template_t* ctx) {
 
 // -- Peer-alias helpers -------------------------------------------------
 
-static void tpl_alias_remember(struct pcl_transport_template_t* ctx,
-                               const char*                       peer_id) {
+static pcl_status_t tpl_alias_remember(struct pcl_transport_template_t* ctx,
+                                        const char*                       peer_id) {
   pcl_template_peer_alias_t* node;
   pcl_template_peer_alias_t* it;
 
-  if (!peer_id || !peer_id[0]) return;
+  if (!peer_id || !peer_id[0]) return PCL_OK;
 
   tpl_pending_lock(ctx);
   for (it = ctx->peer_aliases; it; it = it->next) {
     if (it->peer_id && strcmp(it->peer_id, peer_id) == 0) {
       tpl_pending_unlock(ctx);
-      return;  /* already tracked */
+      return PCL_OK;  /* already tracked */
     }
   }
   node = (pcl_template_peer_alias_t*)calloc(1u, sizeof(*node));
-  if (!node) { tpl_pending_unlock(ctx); return; }
+  if (!node) { tpl_pending_unlock(ctx); return PCL_ERR_NOMEM; }
   node->peer_id = tpl_strdup_or_null(peer_id);
-  if (!node->peer_id) { free(node); tpl_pending_unlock(ctx); return; }
+  if (!node->peer_id) { free(node); tpl_pending_unlock(ctx); return PCL_ERR_NOMEM; }
   node->next        = ctx->peer_aliases;
   ctx->peer_aliases = node;
   tpl_pending_unlock(ctx);
+  return PCL_OK;
 }
 
 // -- Server-side SVC_REQ → SVC_RESP plumbing ----------------------------
@@ -844,7 +845,7 @@ pcl_transport_template_t* pcl_transport_template_create(
    * unregisters it even if the caller never explicitly renamed.
    * Done after thread creation so the error-cleanup paths above don't
    * need to deal with the alias list. */
-  tpl_alias_remember(ctx, "default");
+  (void)tpl_alias_remember(ctx, "default");
 
   return ctx;
 }
@@ -860,8 +861,7 @@ pcl_status_t pcl_transport_template_set_peer_id(
    * caller-supplied string: pcl_executor_register_transport stores
    * peer ids in a fixed 64-byte buffer too, so comparing against the
    * truncated value is what actually matches the executor's slot. */
-  tpl_alias_remember(ctx, ctx->peer_id);
-  return PCL_OK;
+  return tpl_alias_remember(ctx, ctx->peer_id);
 }
 
 const pcl_transport_t* pcl_transport_template_get_transport(

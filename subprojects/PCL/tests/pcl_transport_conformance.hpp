@@ -87,15 +87,16 @@ inline void expectPublishRoundTrip(const TransportPair& pair,
   struct OuterCtx {
     const TransportPair* pair;
     std::string          topic;
+    std::string          type_name;
     SubState*            state;
-  } outer{ &pair, topic, &state };
+  } outer{ &pair, topic, type_name, &state };
 
   pcl_callbacks_t cbs = {};
   cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
     auto* o = static_cast<OuterCtx*>(ud);
     const char* peers[] = { o->pair->sender_peer_id.c_str() };
     pcl_port_t* port = pcl_container_add_subscriber(
-        c, o->topic.c_str(), "MsgType",
+        c, o->topic.c_str(), o->type_name.c_str(),
         [](pcl_container_t*, const pcl_msg_t* msg, void* sub_ud) {
           auto* s = static_cast<SubState*>(sub_ud);
           s->payload.assign(static_cast<const char*>(msg->data), msg->size);
