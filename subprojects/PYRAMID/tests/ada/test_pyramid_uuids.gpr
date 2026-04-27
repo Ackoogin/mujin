@@ -4,6 +4,7 @@ project Test_Pyramid_UUIDs is
   for Languages use ("Ada");
   for Source_Dirs use
     (".",
+     Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated",
      Root_Dir & "/subprojects/PYRAMID/examples/ada");
   for Main use ("test_pyramid_uuids.adb");
 
