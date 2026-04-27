@@ -1,4 +1,4 @@
-// Auto-generated gRPC transport — do not edit
+// Auto-generated gRPC transport -- do not edit
 
 #include "pyramid_components_tactical_objects_services_consumed_grpc_transport.hpp"
 

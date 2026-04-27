@@ -1,7 +1,7 @@
 /// \file test_pcl_streaming.cpp
 /// \brief Tests for PCL streaming services.
 ///
-/// Covers REQ_PCL_167–REQ_PCL_172 (tracing to HLR PCL.011c).
+/// Covers REQ_PCL_167-REQ_PCL_172 (tracing to HLR PCL.011c).
 #include <gtest/gtest.h>
 
 #include <vector>
@@ -13,9 +13,9 @@ extern "C" {
 #include "../src/pcl_internal.h"
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // Streaming service tests
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 ///< REQ_PCL_167: Streaming service send and end. PCL.011c.
 TEST(PclStreaming, BasicStreamingSendEnd) {
@@ -260,9 +260,9 @@ TEST(PclStreaming, AddStreamServiceDuringConfigure) {
   pcl_container_destroy(c);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // Transport streaming vtable tests
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 ///< REQ_PCL_167: Streaming with transport vtable. PCL.011c.
 TEST(PclStreaming, TransportStreamSendEnd) {

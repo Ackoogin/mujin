@@ -519,7 +519,7 @@ The runtime shall retain traceability links between a source tactical object req
 
 ---
 
-## 15. Active Find Scenario — Solution Dependency and End-to-End Flow
+## 15. Active Find Scenario -- Solution Dependency and End-to-End Flow
 
 ### REQ_TACTICAL_OBJECTS_066 - ActiveFind Mode Dispatch at Service Boundary
 `TacticalObjectsComponent::handleSubscribeInterest()` shall distinguish `query_mode=active_find` from `read_current` (or absent). When the mode is `active_find`, the handler shall invoke `determineSolution()` and include the solution and derived evidence requirements in the service response. When the mode is `read_current` or absent, the handler shall register the interest without triggering solution derivation.

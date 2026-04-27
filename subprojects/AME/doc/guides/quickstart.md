@@ -34,7 +34,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Debug -DAME_FOXGLOVE=OFF
 ctest --test-dir build --output-on-failure
 ```
 
-All 511 tests should pass (510 if the Ada active-find E2E bridge alignment is pending), covering: WorldModel, TypeSystem, ActionRegistry, PlanCompiler, Planner, PDDL Parser, BT integration, end-to-end pipeline, observability (Layers 1-5), PCL lifecycle/executor/transport, tactical objects component/codec/streaming, Ada generated bindings, cross-language E2E (Ada ↔ C++ over socket), and multi-codec dispatch (JSON, FlatBuffers, Protobuf).
+All 511 tests should pass (510 if the Ada active-find E2E bridge alignment is pending), covering: WorldModel, TypeSystem, ActionRegistry, PlanCompiler, Planner, PDDL Parser, BT integration, end-to-end pipeline, observability (Layers 1-5), PCL lifecycle/executor/transport, tactical objects component/codec/streaming, Ada generated bindings, cross-language E2E (Ada <-> C++ over socket), and multi-codec dispatch (JSON, FlatBuffers, Protobuf).
 
 ## Run the demo
 
@@ -90,7 +90,7 @@ The `FoxgloveBridge` implements the [Foxglove WebSocket protocol](https://github
 
 1. **Download Foxglove Studio** from [foxglove.dev/download](https://foxglove.dev/download) (free, cross-platform).
 
-2. **Run the demo app** — it starts a WebSocket server automatically:
+2. **Run the demo app** -- it starts a WebSocket server automatically:
 
    ```bash
    ./build/subprojects/AME/src/ame_test_app
@@ -123,10 +123,10 @@ Once connected, Foxglove discovers two channels:
 
 Add these panels in Foxglove Studio for a useful monitoring layout:
 
-- **Raw Messages** — subscribe to `/bt_events` to see live BT transitions
-- **Raw Messages** (second panel) — subscribe to `/wm_audit` to see WM changes
-- **Log** — subscribe to either channel for a scrolling event log
-- **Plot** — plot `wm_version` from `/bt_events` to visualize WM version progression over time
+- **Raw Messages** -- subscribe to `/bt_events` to see live BT transitions
+- **Raw Messages** (second panel) -- subscribe to `/wm_audit` to see WM changes
+- **Log** -- subscribe to either channel for a scrolling event log
+- **Plot** -- plot `wm_version` from `/bt_events` to visualize WM version progression over time
 
 ### Testing the live connection
 

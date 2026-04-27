@@ -83,7 +83,7 @@ void StubSpatialOracle::updateNearest(WorldModel& wm) {
         unsigned idx = wm.fluentIndex(fact);
         wm.setFact(idx, true, "stub_spatial_oracle", FactAuthority::CONFIRMED);
       } catch (...) {
-        // Fluent not grounded — skip
+        // Fluent not grounded -- skip
       }
     }
   }

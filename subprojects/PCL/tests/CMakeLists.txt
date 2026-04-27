@@ -87,7 +87,7 @@ gtest_discover_tests(test_pcl_cpp_wrappers DISCOVERY_MODE PRE_TEST)
 # Template transport: scaffold-specific tests + the reusable conformance
 # suite (pcl_transport_conformance.hpp), exercised through an in-memory
 # loopback pair.  Other transports can include the same conformance
-# header — see the docstring at the top of pcl_transport_conformance.hpp.
+# header -- see the docstring at the top of pcl_transport_conformance.hpp.
 add_executable(test_pcl_template_transport test_pcl_template_transport.cpp)
 target_link_libraries(test_pcl_template_transport
     PRIVATE pcl_core pcl_transport_template GTest::gtest_main)

@@ -47,7 +47,7 @@ class PlanResult:
 
 
 class AmePclClient:
-    """Direct PCL client — same interface as AmeRos2Client.
+    """Direct PCL client -- same interface as AmeRos2Client.
     
     Uses _ame_py native bindings to call WorldModel, Planner, and
     PlanCompiler directly without ROS2 middleware.
@@ -71,9 +71,9 @@ class AmePclClient:
         self._snapshot_callbacks: list[Callable[[WorldSnapshot], None]] = []
         self._plan_feedback_queue: deque[PlanFeedback] = deque(maxlen=100)
 
-        # BT event queue — drained by the UI frame loop
+        # BT event queue -- drained by the UI frame loop
         self._bt_event_queue: deque[str] = deque(maxlen=2000)
-        # WM audit event queue — drained by the UI frame loop
+        # WM audit event queue -- drained by the UI frame loop
         self._wm_event_queue: deque[str] = deque(maxlen=2000)
 
         # Auto-tick control
@@ -361,7 +361,7 @@ class AmePclClient:
     ) -> None:
         """Tick the loaded BT automatically in a background thread.
 
-        Ticks continuously until stopped — the tree re-evaluates each tick
+        Ticks continuously until stopped -- the tree re-evaluates each tick
         so it reacts to world-model fact changes.
         """
         self._auto_tick_stop.clear()
@@ -489,7 +489,7 @@ class AmePclClient:
             self._wm.set_audit_callback(self._on_wm_audit)
 
         except AttributeError:
-            print("[PCL] set_audit_callback not available — rebuild _ame_py for live WM events")
+            print("[PCL] set_audit_callback not available -- rebuild _ame_py for live WM events")
 
     def _build_snapshot(self) -> WorldSnapshot:
         """Build a WorldSnapshot from current state (must hold lock)."""

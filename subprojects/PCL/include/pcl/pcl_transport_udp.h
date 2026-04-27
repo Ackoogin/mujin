@@ -2,10 +2,10 @@
 /// \brief UDP datagram transport adapter for cross-process PCL pub/sub.
 ///
 /// Pub/sub-only transport layered on UDP/IPv4.  Service RPC
-/// (invoke_async, respond) and streaming services are NOT supported —
+/// (invoke_async, respond) and streaming services are NOT supported --
 /// use \ref pcl_transport_socket.h (TCP) for those.
 ///
-/// Protocol (single datagram, no length prefix — UDP preserves boundaries):
+/// Protocol (single datagram, no length prefix -- UDP preserves boundaries):
 ///   [1:type=PUBLISH=0x00][2:topic_len][topic]
 ///   [2:type_len][type_name][4:data_len][data]
 ///

@@ -116,7 +116,7 @@ TEST_F(QueryEngineTest, CompoundQueryTypeAndRegion) {
 TEST_F(QueryEngineTest, RegionQueryFiltersExactPositionOutsideBbox) {
   // Cell size = 1.0 deg. Entity at (51.0, 0.0) is in cell [51, 0].
   // Query bbox {51.5, 52.0, 0.5, 1.0} overlaps cell [51,0] but the
-  // entity's exact position (51.0, 0.0) is outside the bbox — triggers continue.
+  // entity's exact position (51.0, 0.0) is outside the bbox -- triggers continue.
   auto id_outside = addEntity(ObjectType::Platform, 51.0, 0.0);
   auto id_inside  = addEntity(ObjectType::Platform, 51.8, 0.7);
 

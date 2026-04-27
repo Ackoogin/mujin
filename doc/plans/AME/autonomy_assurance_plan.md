@@ -7,37 +7,37 @@ Structured around:
 |-----------|--------|-------|
 | **SACE** (Safety Assurance of Autonomous Systems in Complex Environments) | University of York / AAIP | System-level safety case for AS in complex environments |
 | **AMLAS** (Assurance of Machine Learning for Autonomous Systems) | University of York / AAIP | ML-component-specific assurance (if/when ML is introduced) |
-| **DSTL Biscuit Book** (Assurance of AI & Autonomous Systems, 2021) | UK MOD / DSTL | Cross-cutting assurance dimensions — requirements, data, algorithms, integration, adversarial |
+| **DSTL Biscuit Book** (Assurance of AI & Autonomous Systems, 2021) | UK MOD / DSTL | Cross-cutting assurance dimensions -- requirements, data, algorithms, integration, adversarial |
 | **Defence Standard 00-56** | UK MOD | Safety Management Requirements for Defence Systems |
-| **ISO 21448 (SOTIF)** | ISO | Safety of the intended functionality — functional insufficiency analysis, four-quadrant scenario classification |
-| **ISO 34502** | ISO | Scenario-based safety evaluation — systematic risk factor derivation across perception, judgement, and control |
+| **ISO 21448 (SOTIF)** | ISO | Safety of the intended functionality -- functional insufficiency analysis, four-quadrant scenario classification |
+| **ISO 34502** | ISO | Scenario-based safety evaluation -- systematic risk factor derivation across perception, judgement, and control |
 
 > [!NOTE]
 > This plan is modular by design. Each numbered section maps to a SACE stage and can be instantiated, reviewed, and evidenced independently. DSTL "biscuit book" cross-cutting concerns are woven through the relevant stages. AMLAS stages are called out where ML components may be introduced.
 
 ### PDDL Formal Modelling & GSN Argument Mapping
 
-Detailed documentation of how PDDL formal models contribute to each SACE stage, with GSN argument pattern mappings, ISO 21448/34502 impacts, and UAV worked examples, is provided in the **[SACE–PDDL Integration Guide](../../assurance/AME/sace-pddl/00-index.md)** (12 indexed files covering all 8 stages, residual risk management, and cross-stage summary).
+Detailed documentation of how PDDL formal models contribute to each SACE stage, with GSN argument pattern mappings, ISO 21448/34502 impacts, and UAV worked examples, is provided in the **[SACE-PDDL Integration Guide](../../assurance/AME/sace-pddl/00-index.md)** (12 indexed files covering all 8 stages, residual risk management, and cross-stage summary).
 
 ---
 
-## 0. System Overview (Non-SACE — reference context)
+## 0. System Overview (Non-SACE -- reference context)
 
 ### 0.1 Architecture Summary
 
 ```
-WorldModel --▶ LAPKT Planner --▶ Plan-to-BT Compiler --▶ BT.CPP Executor
-    ▲                                                          │
-    └------------ effects + perception ◀-----------------------┘
+WorldModel --> LAPKT Planner --> Plan-to-BT Compiler --> BT.CPP Executor
+    ^                                                          |
+    +------------ effects + perception <-----------------------+
 ```
 
 | Component | Role | Key Assurance Concern |
 |-----------|------|----------------------|
 | **WorldModel** | Single authoritative state store (grounded bitset) | State integrity, audit trail |
 | **LAPKT Planner** | Stateless STRIPS solver (BFS/SIW) | Soundness, completeness, termination |
-| **Plan-to-BT Compiler** | Causal-graph → parallel/sequence BT | Correctness of causal ordering |
+| **Plan-to-BT Compiler** | Causal-graph -> parallel/sequence BT | Correctness of causal ordering |
 | **BT.CPP Executor** | Ticks compiled tree; reactive or non-reactive | Timing, failure propagation, replan triggers |
-| **ActionRegistry** | Maps PDDL actions → BT nodes / sub-trees | Mapping fidelity, coverage |
+| **ActionRegistry** | Maps PDDL actions -> BT nodes / sub-trees | Mapping fidelity, coverage |
 | **MissionExecutor** | Top-level tick loop with replan-on-failure | Convergence, livelock prevention |
 
 ### 0.2 Assurance-Relevant Properties
@@ -48,12 +48,12 @@ The core assurance question for this module is:
 
 This decomposes into:
 
-1. **Correctness** — the planner produces valid plans; the BT executes them faithfully.
-2. **Completeness** — if a valid plan exists, the planner finds one.
-3. **Robustness** — the system detects and recovers from action failures.
-4. **Transparency** — every decision is auditable post-hoc.
-5. **Boundedness** — planning and execution are time-bounded.
-6. **Graceful degradation** — the system enters a safe state when it cannot plan or execute.
+1. **Correctness** -- the planner produces valid plans; the BT executes them faithfully.
+2. **Completeness** -- if a valid plan exists, the planner finds one.
+3. **Robustness** -- the system detects and recovers from action failures.
+4. **Transparency** -- every decision is auditable post-hoc.
+5. **Boundedness** -- planning and execution are time-bounded.
+6. **Graceful degradation** -- the system enters a safe state when it cannot plan or execute.
 
 ---
 
@@ -83,25 +83,25 @@ Enumerate the autonomous capabilities the planning module provides:
 | Automated plan generation | Produces totally-ordered action sequences | LAPKT BFS(f)/SIW solver |
 | Concurrent execution | Identifies and exploits plan parallelism | Causal-graph flow extraction |
 | Reactive monitoring | Continuous precondition checking during execution | `ReactiveSequence` BT nodes |
-| Autonomous replanning | Detects action failure → re-plans from current state | `MissionExecutor.replan()` |
+| Autonomous replanning | Detects action failure -> re-plans from current state | `MissionExecutor.replan()` |
 
 ### 1.3 Operating Scenarios
 
 Define representative scenarios for assurance, e.g.:
 
-- **Nominal** — plan executes to completion, all preconditions hold.
-- **Partial failure** — single action fails, replanning succeeds.
-- **Perception divergence** — external perception updates invalidate plan assumptions.
-- **Planning failure** — no valid plan exists for the current world state.
-- **Comms-degraded** — WorldModel cannot receive perception updates.
-- **Resource-exhausted** — planning time budget exceeded.
+- **Nominal** -- plan executes to completion, all preconditions hold.
+- **Partial failure** -- single action fails, replanning succeeds.
+- **Perception divergence** -- external perception updates invalidate plan assumptions.
+- **Planning failure** -- no valid plan exists for the current world state.
+- **Comms-degraded** -- WorldModel cannot receive perception updates.
+- **Resource-exhausted** -- planning time budget exceeded.
 
 ### 1.4 Evidence Required
 
 | Evidence artefact | Purpose |
 |-------------------|---------|
 | ODM document | Validates operating boundaries are fully specified |
-| Capability–Domain matrix | Demonstrates every capability covered within ODM bounds |
+| Capability-Domain matrix | Demonstrates every capability covered within ODM bounds |
 | Scenario catalogue | Provides basis for SACE Stage 2 hazard identification |
 | CONOPS diagram | Shows human-machine roles and authority levels |
 
@@ -124,7 +124,7 @@ Per the DSTL biscuit book *"Assurance of Requirements"* dimension:
 
 | Technique | Application | Output |
 |-----------|-------------|--------|
-| **STPA** (System-Theoretic Process Analysis) | Control-loop analysis of Planner → Executor → WorldModel | Unsafe Control Actions (UCAs) |
+| **STPA** (System-Theoretic Process Analysis) | Control-loop analysis of Planner -> Executor -> WorldModel | Unsafe Control Actions (UCAs) |
 | **HAZOP on PDDL domain** | Systematic guideword analysis of each PDDL action's preconditions/effects | Deviation scenarios |
 | **FTA / ETA** | Fault and event trees for high-consequence failures | Probability estimation |
 | **FMEA on BT nodes** | Each BT node type analysed for failure modes | Node-level mitigations |
@@ -140,7 +140,7 @@ Per the DSTL biscuit book *"Assurance of Requirements"* dimension:
 | H5 | **Effect misattribution** | BT node applies wrong PDDL effects to WorldModel | SetWorldPredicate nodes |
 | H6 | **Replan livelock** | System cycles between failing plans without converging | MissionExecutor |
 | H7 | **Timing violation** | Planning or BT tick exceeds real-time budget | Planner + Executor |
-| H8 | **Action–BT mismatch** | ActionRegistry maps PDDL action to wrong BT implementation | ActionRegistry |
+| H8 | **Action-BT mismatch** | ActionRegistry maps PDDL action to wrong BT implementation | ActionRegistry |
 | H9 | **Unreachable safe state** | No safe-state behaviour defined for planning failure | MissionExecutor |
 
 ### 2.3 Evidence Required
@@ -164,12 +164,12 @@ The SOC specifies the conditions under which the autonomy module is permitted to
 
 | Rule | Rationale | Implementation |
 |------|-----------|----------------|
-| **Human-on-the-loop (HOTL)** | Operator can observe and override mission execution | Observability stack (Layers 1–5) + override interface |
+| **Human-on-the-loop (HOTL)** | Operator can observe and override mission execution | Observability stack (Layers 1-5) + override interface |
 | **Bounded planning time** | Prevents unbounded compute; ensures timely replanning | `max_iterations` parameter in LAPKT solver |
 | **Replan limit** | Prevents livelock | `MissionExecutor` replan counter + safe-state fallback |
 | **Precondition gating** | Actions only execute when preconditions verified | `CheckWorldPredicate` BT nodes |
 | **Perception freshness** | WorldModel state must be recent enough for planning | Perception timestamp + staleness threshold |
-| **Safe-state fallback** | If no valid plan exists, system enters defined safe state | `ReplanOnFailure` → safe-state BT sub-tree |
+| **Safe-state fallback** | If no valid plan exists, system enters defined safe state | `ReplanOnFailure` -> safe-state BT sub-tree |
 | **Audit completeness** | All state changes and decisions are logged | WM audit log, BT event stream, Plan audit trail |
 
 ### 3.2 Authority and Control Framework
@@ -178,8 +178,8 @@ Mapped to UK MOD Joint Doctrine Note (JDN) autonomy levels:
 
 | Autonomy Level | Description | When applicable |
 |----------------|-------------|-----------------|
-| **Level 2 — Human delegated** | System plans and executes; human can intervene at any point | Default operating mode |
-| **Level 3 — Human supervisory** | System plans, executes, and self-corrects; human notified of key decisions | With replan-on-failure active |
+| **Level 2 -- Human delegated** | System plans and executes; human can intervene at any point | Default operating mode |
+| **Level 3 -- Human supervisory** | System plans, executes, and self-corrects; human notified of key decisions | With replan-on-failure active |
 
 ### 3.3 Evidence Required
 
@@ -202,8 +202,8 @@ Mapped to UK MOD Joint Doctrine Note (JDN) autonomy levels:
 | SR-01 | Planner SHALL only produce plans where every action's preconditions are satisfiable from the plan's causal chain | H1, H4 | Formal verification of Plan-to-BT compiler + unit tests |
 | SR-02 | Planner SHALL terminate within N ms or return NO_PLAN | H2, H7 | Unit test with timeout; metric logged via PlanAuditLog |
 | SR-03 | WorldModel SHALL reject `setFact()` calls with timestamps older than T seconds when freshness-checking is enabled | H3 | Unit test + integration test with stale perception |
-| SR-04 | Causal graph extraction SHALL preserve all add-effect → precondition dependencies | H4 | Property-based test: compiled BT re-checked against original plan |
-| SR-05 | `SetWorldPredicate` BT nodes SHALL only modify the facts specified in the PDDL action's effect list | H5 | Static analysis of action–node binding; integration test |
+| SR-04 | Causal graph extraction SHALL preserve all add-effect -> precondition dependencies | H4 | Property-based test: compiled BT re-checked against original plan |
+| SR-05 | `SetWorldPredicate` BT nodes SHALL only modify the facts specified in the PDDL action's effect list | H5 | Static analysis of action-node binding; integration test |
 | SR-06 | `MissionExecutor` SHALL cease replanning after K consecutive failures and enter safe state | H6 | Unit test |
 | SR-07 | BT tick period SHALL not exceed T ms (e.g. 20 ms for 50 Hz) | H7 | Performance test + runtime monitoring |
 | SR-08 | `ActionRegistry.resolve()` SHALL fail loudly if no mapping exists for a PDDL action name | H8 | Unit test; compile-time assertion where possible |
@@ -215,7 +215,7 @@ Per the DSTL biscuit book *"Assurance of Algorithms"* dimension:
 
 - [ ] LAPKT solver algorithm formally described (BFS(f), SIW) with known properties
 - [ ] Soundness property: all produced plans are valid (precondition-satisfied sequences)
-- [ ] Completeness bounds documented (BFS(f) is complete; SIW is not — document trade-off)
+- [ ] Completeness bounds documented (BFS(f) is complete; SIW is not -- document trade-off)
 - [ ] Termination guaranteed by max-iteration bound
 - [ ] Algorithm behaviour under degraded input documented (incomplete/contradictory WorldModel assertions)
 
@@ -224,7 +224,7 @@ Per the DSTL biscuit book *"Assurance of Algorithms"* dimension:
 | Evidence artefact | Purpose |
 |-------------------|---------|
 | Safety Requirements Specification (SRS) | Formal list of all safety requirements |
-| Traceability matrix (Hazard → Requirement → Test) | End-to-end traceability |
+| Traceability matrix (Hazard -> Requirement -> Test) | End-to-end traceability |
 | Algorithm property documentation | Formal or semi-formal description of solver guarantees |
 
 ---
@@ -238,18 +238,18 @@ Per the DSTL biscuit book *"Assurance of Algorithms"* dimension:
 | Design decision | Assurance argument | Supporting evidence |
 |-----------------|-------------------|---------------------|
 | **Single authoritative WorldModel** | All components read from one truth source; eliminates state divergence | Architecture doc (`concept.md`) + unit tests showing single-instance |
-| **Stateless planner** | Planner carries no hidden state between invocations; same input → same output | Pure-function design; deterministic test suite |
+| **Stateless planner** | Planner carries no hidden state between invocations; same input -> same output | Pure-function design; deterministic test suite |
 | **Compiler-generated BT** | No hand-authored trees in the execution path; systematic construction from plan | Compiler correctness tests; no manual BT XML in deployment |
 | **Reactive vs. non-reactive per action** | Explicit per-action configuration prevents inappropriate continuous checking | ActionRegistry config; documented rationale per action |
-| **Observability layers 1–5** | Every state change, every node transition, every planning episode is logged | Test coverage of audit log completeness |
+| **Observability layers 1-5** | Every state change, every node transition, every planning episode is logged | Test coverage of audit log completeness |
 
 ### 5.2 DSTL Cross-cut: Assurance of Integration
 
 Per the DSTL biscuit book *"Assurance of Integration"* dimension:
 
-- [ ] Interface contracts between WorldModel ↔ Planner ↔ Compiler ↔ Executor defined and tested
+- [ ] Interface contracts between WorldModel <-> Planner <-> Compiler <-> Executor defined and tested
 - [ ] Data format consistency (fluent IDs, predicate strings) verified at integration boundaries
-- [ ] Failure propagation across component boundaries tested (e.g. planner failure → executor response)
+- [ ] Failure propagation across component boundaries tested (e.g. planner failure -> executor response)
 - [ ] ROS2 multi-node deployment tested for race conditions and message ordering
 
 ### 5.3 DSTL Cross-cut: Assurance of Data
@@ -299,10 +299,10 @@ Per the DSTL biscuit book *"Assurance of Data"* dimension:
 
 Per SACE guidance, identify potential common-cause failures:
 
-- [ ] Shared dependency on WorldModel — failure affects all downstream components
-- [ ] Single-threaded execution — CPU starvation affects both BT ticking and perception processing
-- [ ] PDDL domain errors — affect both planner soundness and BT correctness
-- [ ] Version mismatch between BT.CPP and system — runtime behaviour assumptions change
+- [ ] Shared dependency on WorldModel -- failure affects all downstream components
+- [ ] Single-threaded execution -- CPU starvation affects both BT ticking and perception processing
+- [ ] PDDL domain errors -- affect both planner soundness and BT correctness
+- [ ] Version mismatch between BT.CPP and system -- runtime behaviour assumptions change
 
 ### 6.4 Evidence Required
 
@@ -335,7 +335,7 @@ The system must detect when it is operating outside the bounds specified in Stag
 |-----------|-------------|
 | **Operator takeover** | Execution paused; operator assumes direct control |
 | **Autonomous safe-state** | System transitions to pre-defined safe behaviour |
-| **Graduated autonomy reduction** | System reduces autonomy level (Level 3 → Level 2 → Level 1) as confidence decreases |
+| **Graduated autonomy reduction** | System reduces autonomy level (Level 3 -> Level 2 -> Level 1) as confidence decreases |
 
 ### 7.3 Evidence Required
 
@@ -370,12 +370,12 @@ Per the DSTL biscuit book, assurance is underpinned by **Test, Evaluation, Verif
 
 | Test file | Covers | Status |
 |-----------|--------|--------|
-| `test_world_model.cpp` | WorldModel state management, eager grounding | ✅ Passing |
-| `test_action_registry.cpp` | Action mapping, resolution | ✅ Passing |
-| `test_plan_compiler.cpp` | Plan-to-BT compilation, causal graph | ✅ Passing |
-| `test_pddl_parser.cpp` | PDDL file parsing | ✅ Passing |
-| `test_integration.cpp` | End-to-end planning → execution | ✅ Passing |
-| `test_observability.cpp` | Audit logging, BT event streaming | ✅ Passing |
+| `test_world_model.cpp` | WorldModel state management, eager grounding | [x] Passing |
+| `test_action_registry.cpp` | Action mapping, resolution | [x] Passing |
+| `test_plan_compiler.cpp` | Plan-to-BT compilation, causal graph | [x] Passing |
+| `test_pddl_parser.cpp` | PDDL file parsing | [x] Passing |
+| `test_integration.cpp` | End-to-end planning -> execution | [x] Passing |
+| `test_observability.cpp` | Audit logging, BT event streaming | [x] Passing |
 
 ### 8.3 Verification Gaps to Close
 
@@ -437,7 +437,7 @@ If ML components are introduced (e.g. learned heuristics for the planner, ML-bas
 | 6. Model deployment | Runtime monitoring, model versioning, graceful fallback to non-ML path |
 
 > [!IMPORTANT]
-> The current architecture is **ML-free** — the LAPKT planner uses classical deterministic search. AMLAS applies only if ML components are added in future (e.g. learned planning heuristics, perception classifiers). This section should be instantiated at that point.
+> The current architecture is **ML-free** -- the LAPKT planner uses classical deterministic search. AMLAS applies only if ML components are added in future (e.g. learned planning heuristics, perception classifiers). This section should be instantiated at that point.
 
 ---
 
@@ -466,13 +466,13 @@ If ML components are introduced (e.g. learned heuristics for the planner, ML-bas
 
 | Activity | Mechanism | Already exists? |
 |----------|-----------|-----------------|
-| State change auditing | WM audit log (Layer 3) | ✅ Yes |
-| Decision auditing | Plan audit trail (Layer 5) | ✅ Yes |
-| Execution monitoring | BT event stream (Layer 2) | ✅ Yes |
-| Performance monitoring | TreeObserver statistics (Layer 1) | ✅ Yes |
-| Live visualization | Foxglove bridge (Layer 4) | ✅ Yes |
-| Anomaly detection | **Gap** — not yet implemented | ❌ No |
-| Runtime assertion checking | **Gap** — watchdog for invariants | ❌ No |
+| State change auditing | WM audit log (Layer 3) | [x] Yes |
+| Decision auditing | Plan audit trail (Layer 5) | [x] Yes |
+| Execution monitoring | BT event stream (Layer 2) | [x] Yes |
+| Performance monitoring | TreeObserver statistics (Layer 1) | [x] Yes |
+| Live visualization | Foxglove bridge (Layer 4) | [x] Yes |
+| Anomaly detection | **Gap** -- not yet implemented | [X] No |
+| Runtime assertion checking | **Gap** -- watchdog for invariants | [X] No |
 
 ---
 
@@ -480,27 +480,27 @@ If ML components are introduced (e.g. learned heuristics for the planner, ML-bas
 
 | Stage | SACE Stage | Status | Key Gap |
 |-------|-----------|--------|---------|
-| 1 | Operating Context | 🟡 Partial (architecture documented, ODM not formalised) | Formal ODM + CONOPS document |
-| 2 | Hazardous Scenarios | 🔴 Not started | STPA / HAZOP analysis needed |
-| 3 | Safe Operating Concept | 🟡 Partial (safe-state design exists) | Formal SOC document |
-| 4 | Safety Requirements | 🟡 Draft (this document) | Formal SRS + traceability matrix |
-| 5 | Design Assurance | 🟢 Strong (modular, auditable architecture) | Formal safety argument (GSN) |
-| 6 | Hazardous Failures | 🟡 Partial (replan-on-failure implemented) | FMEA + CCA completion |
-| 7 | Out-of-Context | 🔴 Not started | OOC detection + handover design |
-| 8 | Verification | 🟢 Strong (73+ tests, 5-layer observability) | Property-based + adversarial + perf tests |
-| — | Adversarial (DSTL) | 🔴 Not started | Threat model + red-team plan |
-| — | AMLAS | ⚪ N/A (no ML components) | Instantiate when ML introduced |
+| 1 | Operating Context | [yellow] Partial (architecture documented, ODM not formalised) | Formal ODM + CONOPS document |
+| 2 | Hazardous Scenarios | [red] Not started | STPA / HAZOP analysis needed |
+| 3 | Safe Operating Concept | [yellow] Partial (safe-state design exists) | Formal SOC document |
+| 4 | Safety Requirements | [yellow] Draft (this document) | Formal SRS + traceability matrix |
+| 5 | Design Assurance | [green] Strong (modular, auditable architecture) | Formal safety argument (GSN) |
+| 6 | Hazardous Failures | [yellow] Partial (replan-on-failure implemented) | FMEA + CCA completion |
+| 7 | Out-of-Context | [red] Not started | OOC detection + handover design |
+| 8 | Verification | [green] Strong (73+ tests, 5-layer observability) | Property-based + adversarial + perf tests |
+| -- | Adversarial (DSTL) | [red] Not started | Threat model + red-team plan |
+| -- | AMLAS | o N/A (no ML components) | Instantiate when ML introduced |
 
 ---
 
 ## References
 
-1. **SACE Guidance** — University of York, Assuring Autonomy International Programme (2023). *Safety Assurance of Autonomous Systems in Complex Environments.* [york.ac.uk/assuring-autonomy](https://www.york.ac.uk/assuring-autonomy/)
-2. **AMLAS Guidance** — University of York, AAIP (2021). *Assurance of Machine Learning for use in Autonomous Systems.*
-3. **DSTL Biscuit Book** — UK MOD / DSTL (2021). *Assurance of Artificial Intelligence and Autonomous Systems.* [gov.uk](https://www.gov.uk/government/publications/assurance-of-artificial-intelligence-and-autonomous-systems)
-4. **Defence Standard 00-56** — UK MOD. *Safety Management Requirements for Defence Systems.*
-5. **STPA Handbook** — MIT. *System-Theoretic Process Analysis.*
-6. **UK MOD JDN 3/22** — Joint Doctrine Note: Autonomy in Defence.
-7. **ISO 21448:2022** — Road vehicles — Safety of the intended functionality (SOTIF).
-8. **ISO 34502:2022** — Road vehicles — Test scenarios for automated driving systems — Scenario based safety evaluation framework.
+1. **SACE Guidance** -- University of York, Assuring Autonomy International Programme (2023). *Safety Assurance of Autonomous Systems in Complex Environments.* [york.ac.uk/assuring-autonomy](https://www.york.ac.uk/assuring-autonomy/)
+2. **AMLAS Guidance** -- University of York, AAIP (2021). *Assurance of Machine Learning for use in Autonomous Systems.*
+3. **DSTL Biscuit Book** -- UK MOD / DSTL (2021). *Assurance of Artificial Intelligence and Autonomous Systems.* [gov.uk](https://www.gov.uk/government/publications/assurance-of-artificial-intelligence-and-autonomous-systems)
+4. **Defence Standard 00-56** -- UK MOD. *Safety Management Requirements for Defence Systems.*
+5. **STPA Handbook** -- MIT. *System-Theoretic Process Analysis.*
+6. **UK MOD JDN 3/22** -- Joint Doctrine Note: Autonomy in Defence.
+7. **ISO 21448:2022** -- Road vehicles -- Safety of the intended functionality (SOTIF).
+8. **ISO 34502:2022** -- Road vehicles -- Test scenarios for automated driving systems -- Scenario based safety evaluation framework.
 

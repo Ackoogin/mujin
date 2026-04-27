@@ -6,11 +6,11 @@
 
 ### Algorithm
 
-1. **Causal graph** — for each pair (i, j) where i < j: if any add-effect of step i is a precondition of step j, add edge i→j. Also track delete-effect conflicts for mutex detection.
+1. **Causal graph** -- for each pair (i, j) where i < j: if any add-effect of step i is a precondition of step j, add edge i->j. Also track delete-effect conflicts for mutex detection.
 
-2. **Flow extraction** — topological sort, group into independent causal chains. Steps with no cross-flow dependencies form separate flows.
+2. **Flow extraction** -- topological sort, group into independent causal chains. Steps with no cross-flow dependencies form separate flows.
 
-3. **Action unit generation** — each plan step becomes:
+3. **Action unit generation** -- each plan step becomes:
    ```xml
    <Sequence|ReactiveSequence name="action_params">
        <CheckWorldPredicate predicate="pre1" expected="true"/>
@@ -23,11 +23,11 @@
    Sequence vs. ReactiveSequence comes from the ActionRegistry's per-action reactive flag.
 
 4. **Tree composition**:
-   - Single flow → top-level `Sequence`
-   - Multiple flows → `Parallel` node with `success_count = flow_count`
-   - Shared actions (join points) → blackboard-flag guard pattern (first execution sets done-flag; duplicates check and skip)
+   - Single flow -> top-level `Sequence`
+   - Multiple flows -> `Parallel` node with `success_count = flow_count`
+   - Shared actions (join points) -> blackboard-flag guard pattern (first execution sets done-flag; duplicates check and skip)
 
-5. **Output** — XML string loadable by `BT::BehaviorTreeFactory::createTreeFromText()`
+5. **Output** -- XML string loadable by `BT::BehaviorTreeFactory::createTreeFromText()`
 
 **Sequential fallback mode** (all steps in one `Sequence`) is available for debugging.
 
@@ -49,7 +49,7 @@ Wraps a sub-tree. On child FAILURE, signals replan via blackboard flag. MissionE
 
 ### ExecutePhaseAction (StatefulAction)
 
-Orchestrates a full **plan → compile → execute** cycle for a sub-goal set, enabling hierarchical decomposition within a parent behaviour tree.
+Orchestrates a full **plan -> compile -> execute** cycle for a sub-goal set, enabling hierarchical decomposition within a parent behaviour tree.
 
 - Ports: `phase_goals`, optional `phase_name`
 - Planning paths:
@@ -64,9 +64,9 @@ Asynchronous PYRAMID service invocation BT node. Keeps the core SDK-agnostic via
 
 - Request construction: explicit request JSON + optional PDDL parameter auto-mapping (`param_names`/`param_values`)
 - Async lifecycle:
-  - `onStart()` → `callAsync()`
-  - `onRunning()` → `pollResult()` until terminal status
-  - `onHalted()` → `cancelCall()`
+  - `onStart()` -> `callAsync()`
+  - `onRunning()` -> `pollResult()` until terminal status
+  - `onHalted()` -> `cancelCall()`
 - Timeout control: `timeout_ms` (default 5000, `0` disables timeout)
 - Blackboard dependency: `pyramid_service` must contain `IPyramidService*`
 

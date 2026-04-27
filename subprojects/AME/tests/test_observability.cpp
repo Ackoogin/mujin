@@ -1,5 +1,5 @@
 /**
- * Tests for Observability Layers 1–3:
+ * Tests for Observability Layers 1-3:
  *   - Layer 1: TreeObserver integration
  *   - Layer 2: AmeBTLogger structured JSON events
  *   - Layer 3: WorldModel audit log with source tagging
@@ -122,11 +122,11 @@ TEST(WmAuditLog, NoEntryWhenValueUnchanged) {
     wm.setFact("(ready uav1)", false, "test");
     EXPECT_EQ(audit.size(), 0u);
 
-    // Set to true → entry
+    // Set to true -> entry
     wm.setFact("(ready uav1)", true, "test");
     EXPECT_EQ(audit.size(), 1u);
 
-    // Set to true again (no change) → no entry
+    // Set to true again (no change) -> no entry
     wm.setFact("(ready uav1)", true, "test");
     EXPECT_EQ(audit.size(), 1u);
 }

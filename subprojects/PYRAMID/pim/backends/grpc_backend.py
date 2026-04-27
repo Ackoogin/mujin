@@ -223,7 +223,7 @@ class GrpcBackend(codec_backends.CodecBackend):
         proto_ns = '::'.join(pkg_parts)
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
-            f.write(f'// Auto-generated gRPC transport — do not edit\n')
+            f.write(f'// Auto-generated gRPC transport -- do not edit\n')
             f.write(f'// Backend: grpc | Namespace: {ns}\n')
             f.write(f'//\n')
             f.write(f'// Exposes proto services as gRPC services, delegating to\n')
@@ -242,7 +242,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             # gRPC service implementations
             for svc in pf.services:
                 f.write(f'// ---------------------------------------------------------------------------\n')
-                f.write(f'// {svc.name} — gRPC service implementation\n')
+                f.write(f'// {svc.name} -- gRPC service implementation\n')
                 f.write(f'// ---------------------------------------------------------------------------\n\n')
                 f.write(f'class {svc.name}Impl final : public {proto_ns}::{svc.name}::Service {{\n')
                 f.write(f'public:\n')
@@ -281,7 +281,7 @@ class GrpcBackend(codec_backends.CodecBackend):
         proto_ns = '::'.join(pkg_parts)
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
-            f.write(f'// Auto-generated gRPC transport — do not edit\n\n')
+            f.write(f'// Auto-generated gRPC transport -- do not edit\n\n')
             f.write(f'#include "{file_base}_grpc_transport.hpp"\n\n')
             f.write(f'#include <google/protobuf/message_lite.h>\n')
             f.write(f'#include <pcl/pcl_types.h>\n\n')
@@ -549,7 +549,7 @@ class GrpcBackend(codec_backends.CodecBackend):
                         streaming_responses.append((name, _ada_type(rpc.response_type)))
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
-            f.write(f'--  Auto-generated gRPC transport spec — do not edit\n')
+            f.write(f'--  Auto-generated gRPC transport spec -- do not edit\n')
             f.write(f'--  Backend: grpc | Package: {pkg_name}\n')
             f.write(f'--\n')
             f.write(f'--  Component-facing calls are typed; the JSON/C ABI shim is private.\n\n')
@@ -614,7 +614,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             return f'{codec_pkg}.From_Json ({response}, null)'
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
-            f.write(f'--  Auto-generated gRPC transport body — do not edit\n\n')
+            f.write(f'--  Auto-generated gRPC transport body -- do not edit\n\n')
             f.write(f'with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;\n')
             f.write(f'with Ada.Unchecked_Conversion;\n')
             f.write(f'with Interfaces.C.Strings;\n')

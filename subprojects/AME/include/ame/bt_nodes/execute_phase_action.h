@@ -21,30 +21,30 @@ class PlannerComponent;
 /// the result into a BT subtree, and ticks the subtree to completion.
 ///
 /// Blackboard keys (required):
-///   "world_model"    — WorldModel*
-///   "bt_factory"     — BT::BehaviorTreeFactory*
+///   "world_model"    -- WorldModel*
+///   "bt_factory"     -- BT::BehaviorTreeFactory*
 ///
-/// Blackboard keys (planning — one of two paths):
+/// Blackboard keys (planning -- one of two paths):
 ///   Path A (direct):
-///     "planner"        — Planner*
-///     "plan_compiler"  — PlanCompiler*
-///     "action_registry"— ActionRegistry*
+///     "planner"        -- Planner*
+///     "plan_compiler"  -- PlanCompiler*
+///     "action_registry"-- ActionRegistry*
 ///   Path B (component):
-///     "planner_component" — PlannerComponent*
+///     "planner_component" -- PlannerComponent*
 ///
 /// Blackboard keys (optional):
-///   "plan_audit_log"     — PlanAuditLog*   (for recording sub-planning episodes)
-///   "parent_episode_id"  — uint64_t        (causal link to parent phase, 0 = top-level)
+///   "plan_audit_log"     -- PlanAuditLog*   (for recording sub-planning episodes)
+///   "parent_episode_id"  -- uint64_t        (causal link to parent phase, 0 = top-level)
 ///
 /// Ports:
-///   phase_goals  (input) — semicolon-separated goal fluent strings,
+///   phase_goals  (input) -- semicolon-separated goal fluent strings,
 ///                          e.g. "(searched sector_a);(classified sector_a)"
-///   phase_name   (input) — human-readable label for audit / logging
+///   phase_name   (input) -- human-readable label for audit / logging
 ///
 /// Lifecycle:
-///   onStart()   — solve sub-plan, compile to BT XML, instantiate subtree
-///   onRunning() — tick the compiled subtree once per BT cycle
-///   onHalted()  — halt and destroy the subtree
+///   onStart()   -- solve sub-plan, compile to BT XML, instantiate subtree
+///   onRunning() -- tick the compiled subtree once per BT cycle
+///   onHalted()  -- halt and destroy the subtree
 ///
 /// Returns SUCCESS when all sub-goals are achieved, FAILURE if planning fails,
 /// RUNNING while the subtree is executing.

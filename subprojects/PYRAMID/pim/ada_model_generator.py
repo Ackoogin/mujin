@@ -452,7 +452,7 @@ def main():
     generator = AdaDataModelGenerator(datamodel_file)
     generator.generate(output_dir)
     
-    print(f"\n✓ Ada data model generated in {output_dir}/")
+    print(f"\n[x] Ada data model generated in {output_dir}/")
 
 
 if __name__ == '__main__':

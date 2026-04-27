@@ -69,7 +69,7 @@ int main(int argc, char* argv[]) {
   tobj.setTickRateHz(100.0);
   pcl_executor_add(exec, tobj.handle());
 
-  // Create and configure StandardBridge (translates standard proto ↔ internal)
+  // Create and configure StandardBridge (translates standard proto <-> internal)
   // When --no-bridge is set, the bridge runs as a separate process.
   std::unique_ptr<StandardBridge> bridge;
   if (use_bridge) {

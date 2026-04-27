@@ -1,4 +1,4 @@
-"""World Model tab — facts table, objects, types, goals, fact injection."""
+"""World Model tab -- facts table, objects, types, goals, fact injection."""
 
 from __future__ import annotations
 

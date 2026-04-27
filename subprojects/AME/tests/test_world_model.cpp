@@ -308,7 +308,7 @@ static ame::WorldModel buildUAVDomain() {
         {"(at ?r ?to)"},                 // add effects
         {"(at ?r ?from)"});              // delete effects
 
-    // search(robot, sector) — requires at(r, sector)
+    // search(robot, sector) -- requires at(r, sector)
     wm.registerAction("search",
         {"?r", "?s"},
         {"robot", "sector"},
@@ -316,7 +316,7 @@ static ame::WorldModel buildUAVDomain() {
         {"(searched ?s)"},               // add effects
         {});                             // no delete effects
 
-    // classify(robot, sector) — requires at(r, sector) AND searched(sector)
+    // classify(robot, sector) -- requires at(r, sector) AND searched(sector)
     wm.registerAction("classify",
         {"?r", "?s"},
         {"robot", "sector"},

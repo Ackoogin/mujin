@@ -1,4 +1,4 @@
-"""Planning tab — goal editor, plan trigger, results viewer, BT XML."""
+"""Planning tab -- goal editor, plan trigger, results viewer, BT XML."""
 
 from __future__ import annotations
 

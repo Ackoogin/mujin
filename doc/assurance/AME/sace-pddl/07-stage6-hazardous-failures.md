@@ -32,7 +32,7 @@ PDDL also serves as the **interface contract** between autonomous functions: per
 | **Mitigation strategy mapping** | For each hazardous failure: the design change, additional requirement, or operational restriction that manages it, with PDDL evidence that the mitigation is effective |
 | **Residual failure analysis** | Identification of failures that cannot be fully mitigated, with associated risk assessment |
 
-## GSN Mapping — Pattern [DD]
+## GSN Mapping -- Pattern [DD]
 
 Pattern [DD] argues that potential hazardous failures introduced through design decisions have been identified and are acceptably managed.
 
@@ -66,5 +66,5 @@ The planner requires predicate `(obstacle-at ?wp)` from the perception pipeline.
 
 ---
 
-[Next: Stage 7 — Out of Context Operation Assurance](08-stage7-out-of-context.md)
+[Next: Stage 7 -- Out of Context Operation Assurance](08-stage7-out-of-context.md)
 

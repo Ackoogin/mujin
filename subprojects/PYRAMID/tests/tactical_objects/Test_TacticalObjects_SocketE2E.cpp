@@ -1,5 +1,5 @@
 /// \file Test_TacticalObjects_SocketE2E.cpp
-/// \brief Socket transport E2E test: C++ client ↔ C++ server over TCP.
+/// \brief Socket transport E2E test: C++ client <-> C++ server over TCP.
 ///
 /// Validates the full socket transport round-trip without requiring Ada:
 /// 1. Server thread: TacticalObjectsComponent with socket server transport
@@ -64,7 +64,7 @@ static pcl_status_t client_on_configure(pcl_container_t* c, void* ud) {
   return PCL_OK;
 }
 
-/// Server thread function — no GTest assertions (not safe off main thread).
+/// Server thread function -- no GTest assertions (not safe off main thread).
 /// Sets srv.failed on error instead.
 void server_thread_fn(ServerState& srv) {
   pcl_executor_t* exec = pcl_executor_create();
@@ -95,7 +95,7 @@ void server_thread_fn(ServerState& srv) {
   tobj.setTickRateHz(100.0);
   pcl_executor_add(exec, tobj.handle());
 
-  // Gateway container (dispatches SERVICE_REQ → service handlers)
+  // Gateway container (dispatches SERVICE_REQ -> service handlers)
   pcl_container_t* gateway =
       pcl_socket_transport_gateway_container(transport);
   pcl_container_configure(gateway);
@@ -183,7 +183,7 @@ TEST(TacticalObjectsSocketE2E, CppClientReceivesEntityUpdates) {
   pcl_container_activate(client_container);
   pcl_executor_add(client_exec, client_container);
 
-  // Remote service call: subscribe_interest (async — non-blocking enqueue)
+  // Remote service call: subscribe_interest (async -- non-blocking enqueue)
   struct SvcRespCtx {
     std::string   body;
     std::atomic<bool> ready{false};

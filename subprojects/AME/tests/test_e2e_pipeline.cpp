@@ -72,7 +72,7 @@ static BT::BehaviorTreeFactory buildFactory() {
     return factory;
 }
 
-// Full pipeline: plan → compile → execute → verify goal
+// Full pipeline: plan -> compile -> execute -> verify goal
 TEST(E2EPipeline, UAVSearchAndClassify) {
     auto wm = buildUAVDomain();
     wm.setFact("(at uav1 base)", true);
@@ -136,7 +136,7 @@ TEST(E2EPipeline, ReplanAfterStateChange) {
     auto result2 = planner.solve(wm);
     ASSERT_TRUE(result2.success);
 
-    // Should be shorter — just classify (already at sector_a, already searched)
+    // Should be shorter -- just classify (already at sector_a, already searched)
     EXPECT_LT(result2.steps.size(), plan1_size);
 
     // Execute second plan
@@ -288,7 +288,7 @@ TEST(E2EPipeline, MutationQueueBatchedPerception) {
     EXPECT_TRUE(wm.getFact(searched_a));
     EXPECT_TRUE(wm.getFact(searched_b));
 
-    // Goal now satisfied — replanning should find empty plan
+    // Goal now satisfied -- replanning should find empty plan
     ame::Planner planner;
     auto result = planner.solve(wm);
     EXPECT_TRUE(result.success);
@@ -305,7 +305,7 @@ TEST(E2EPipeline, AuthorityConflictTriggersReplan) {
     ame::Planner planner;
     ame::PlanCompiler compiler;
 
-    // Plan expects: move(base→sector_a), search(sector_a)
+    // Plan expects: move(base->sector_a), search(sector_a)
     auto result1 = planner.solve(wm);
     ASSERT_TRUE(result1.success);
     EXPECT_GE(result1.steps.size(), 2u);

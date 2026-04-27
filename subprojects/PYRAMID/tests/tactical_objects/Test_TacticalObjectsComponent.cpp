@@ -350,7 +350,7 @@ TEST(TacticalObjectsComponent, TickCallbackExecutes) {
 
   // With tick_rate_hz = 1000, period = 0.001 s.
   // spinOnce uses dt = 0.001 on the first call (prev_time == 0),
-  // so tick_accumulator (0 + 0.001) >= period (0.001) — fires on_tick.
+  // so tick_accumulator (0 + 0.001) >= period (0.001) -- fires on_tick.
   comp.setTickRateHz(1000.0);
 
   pcl::Executor exec;
@@ -985,7 +985,7 @@ TEST(TacticalObjectsComponent, SubscribeInterestReadCurrentMode) {
   std::string resp_str(static_cast<const char*>(resp.data), resp.size);
   auto jr = nlohmann::json::parse(resp_str);
   ASSERT_TRUE(jr.contains("interest_id"));
-  // ReadCurrent → no solution_id
+  // ReadCurrent -> no solution_id
   ASSERT_FALSE(jr.contains("solution_id"));
 }
 
@@ -1028,7 +1028,7 @@ TEST(TacticalObjectsComponent, DeletedEntityAppearsInDeleteFrame) {
   TacticalObjectsComponent comp;
   comp.configure();
   comp.activate();
-  comp.setTickRateHz(1000.0); // 1 ms period — first spinOnce (dt=0.001) fires tick
+  comp.setTickRateHz(1000.0); // 1 ms period -- first spinOnce (dt=0.001) fires tick
 
   pcl::Executor exec;
   exec.add(comp);
@@ -1055,7 +1055,7 @@ TEST(TacticalObjectsComponent, DeletedEntityAppearsInDeleteFrame) {
   def.affiliation = Affiliation::Hostile;
   auto id = comp.runtime().createObject(def);
 
-  // First tick: subscriber is "new" (sub_versions empty) — full snapshot,
+  // First tick: subscriber is "new" (sub_versions empty) -- full snapshot,
   // populates subscriber_versions so the entity is tracked.
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
   exec.spinOnce(0);
@@ -1071,7 +1071,7 @@ TEST(TacticalObjectsComponent, DeletedEntityAppearsInDeleteFrame) {
   resp.size     = sizeof(resp_buf);
   ASSERT_EQ(pcl_executor_invoke_service(exec.handle(), "delete_object", &req, &resp), PCL_OK);
 
-  // Second tick: not a new subscriber, deleted_entities_ = {id} → assembles
+  // Second tick: not a new subscriber, deleted_entities_ = {id} -> assembles
   // delete frame, hitting lines 113-119.
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
   exec.spinOnce(0);
@@ -1081,13 +1081,13 @@ TEST(TacticalObjectsComponent, DeletedEntityAppearsInDeleteFrame) {
 ///< iteration of do-while where chunk_start > 0).
 ///< Strategy: first tick populates subscriber_versions (new-subscriber full scan),
 ///< then all entities are marked dirty again so the second tick processes them
-///< through the dirty-entity path with max=1 → multiple chunks.
+///< through the dirty-entity path with max=1 -> multiple chunks.
 TEST(TacticalObjectsComponent, MultipleChunksSecondIteration) {
   TacticalObjectsComponent comp;
   comp.configure();
   comp.activate();
   comp.setMaxEntitiesPerFrame(1); // forces multiple loop iterations
-  comp.setTickRateHz(1000.0);     // 1 ms period — first spinOnce (dt=0.001) fires tick
+  comp.setTickRateHz(1000.0);     // 1 ms period -- first spinOnce (dt=0.001) fires tick
 
   pcl::Executor exec;
   exec.add(comp);
@@ -1133,8 +1133,8 @@ TEST(TacticalObjectsComponent, MultipleChunksSecondIteration) {
   upd.position = Position{53.5 * DEG, 0.0, 0};
   comp.runtime().updateObject(id3, upd);
 
-  // Second tick: NOT new subscriber, dirty_entities has 3 entries →
-  // sf.updates.size() == 3, max==1 → second and third iterations with
+  // Second tick: NOT new subscriber, dirty_entities has 3 entries ->
+  // sf.updates.size() == 3, max==1 -> second and third iterations with
   // chunk_start > 0, covering line 107.
   std::this_thread::sleep_for(std::chrono::milliseconds(10));
   exec.spinOnce(0);
@@ -1151,7 +1151,7 @@ TEST(TacticalObjectsComponent, SubscribeInterestInvalidTypeFieldsCoverCatchBlock
   pcl::Executor exec;
   exec.add(comp);
 
-  // object_type is an integer — not null, but get<std::string>() throws (line 428).
+  // object_type is an integer -- not null, but get<std::string>() throws (line 428).
   {
     nlohmann::json j;
     j["object_type"] = 42;       // integer, not string
@@ -1163,7 +1163,7 @@ TEST(TacticalObjectsComponent, SubscribeInterestInvalidTypeFieldsCoverCatchBlock
     EXPECT_EQ(pcl_executor_invoke_service(exec.handle(), "subscribe_interest", &req, &resp), PCL_OK);
   }
 
-  // affiliation is an integer — triggers catch at line 433.
+  // affiliation is an integer -- triggers catch at line 433.
   {
     nlohmann::json j;
     j["affiliation"] = 99;
@@ -1175,7 +1175,7 @@ TEST(TacticalObjectsComponent, SubscribeInterestInvalidTypeFieldsCoverCatchBlock
     EXPECT_EQ(pcl_executor_invoke_service(exec.handle(), "subscribe_interest", &req, &resp), PCL_OK);
   }
 
-  // battle_dimension is an integer — triggers catch at line 439.
+  // battle_dimension is an integer -- triggers catch at line 439.
   {
     nlohmann::json j;
     j["battle_dimension"] = 7;
@@ -1291,7 +1291,7 @@ TEST(TacticalObjectsComponent, StandardReadDetailReturnsDetailArray) {
   ASSERT_TRUE(jr.is_array());
   ASSERT_EQ(jr.size(), 1u);
   EXPECT_EQ(jr[0].value("id", ""), object_id);
-  // Position should be in radians — verify roughly correct
+  // Position should be in radians -- verify roughly correct
   EXPECT_NEAR(jr[0]["position"].value("latitude", 0.0), 52.0 * DEG, 1e-10);
   EXPECT_NEAR(jr[0]["position"].value("longitude", 0.0), 1.0 * DEG, 1e-10);
 }

@@ -32,7 +32,7 @@ See `README.md` for a comprehensive project overview, and `doc/reports/AME/stake
 | `02-world-model.md` | WorldModel API, TypeSystem, eager grounding, authoritative state |
 | `03-planning.md` | PDDL parser, Planner (LAPKT), ActionRegistry API, adding new actions |
 | `04-execution.md` | PlanCompiler algorithm, BT node types, MissionExecutor, replanning |
-| `05-observability.md` | 5-layer observability stack (TreeObserver → FoxgloveBridge → PlanAuditLog) |
+| `05-observability.md` | 5-layer observability stack (TreeObserver -> FoxgloveBridge -> PlanAuditLog) |
 | `06-ros2.md` | ROS2 lifecycle nodes, deployment modes, build/run instructions |
 | `07-extensions.md` | Extensions roadmap (future/cross-cutting: temporal + neuro-symbolic) |
 
@@ -107,7 +107,7 @@ build\tests\Release\test_observability.exe
 build\tests\Release\test_world_model.exe --gtest_filter=WorldModel.SetAndGetFact
 ```
 
-All 73 tests should pass across: WorldModel, TypeSystem, ActionRegistry, PlanCompiler, Planner, PddlParser, integration (BT nodes), end-to-end pipeline, and observability (Layers 1–5).
+All 73 tests should pass across: WorldModel, TypeSystem, ActionRegistry, PlanCompiler, Planner, PddlParser, integration (BT nodes), end-to-end pipeline, and observability (Layers 1-5).
 
 ## Run the demo
 

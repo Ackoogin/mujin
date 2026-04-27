@@ -3,7 +3,7 @@
 ///
 /// A container encapsulates a single component's business logic behind a
 /// lifecycle state machine.  All callbacks execute on the owning executor's
-/// single thread — no internal synchronization required. External I/O threads
+/// single thread -- no internal synchronization required. External I/O threads
 /// must enqueue ingress through the executor rather than calling callbacks
 /// directly.
 ///
@@ -20,12 +20,12 @@ extern "C" {
 
 // -- Callback signatures -------------------------------------------------
 
-/// \brief Subscriber callback — invoked on executor thread when a message arrives.
+/// \brief Subscriber callback -- invoked on executor thread when a message arrives.
 typedef void (*pcl_sub_callback_t)(pcl_container_t* c,
                                    const pcl_msg_t*  msg,
                                    void*             user_data);
 
-/// \brief Service handler — invoked on executor thread.
+/// \brief Service handler -- invoked on executor thread.
 ///
 /// The handler can either:
 /// 1. Populate \p response and return PCL_OK (immediate response).
@@ -43,7 +43,7 @@ typedef pcl_status_t (*pcl_service_handler_t)(pcl_container_t*    c,
                                               pcl_svc_context_t*  ctx,
                                               void*               user_data);
 
-/// \brief Streaming service handler — invoked on executor thread.
+/// \brief Streaming service handler -- invoked on executor thread.
 ///
 /// The handler should save the stream context and return PCL_STREAMING to begin
 /// streaming responses.  Use pcl_stream_send() to send messages, pcl_stream_end()
@@ -73,7 +73,7 @@ typedef struct {
   pcl_status_t (*on_cleanup)    (pcl_container_t* self, void* user_data);
   pcl_status_t (*on_shutdown)   (pcl_container_t* self, void* user_data);
 
-  /// \brief Periodic tick — called at the container's configured rate while ACTIVE.
+  /// \brief Periodic tick -- called at the container's configured rate while ACTIVE.
   pcl_status_t (*on_tick)(pcl_container_t* self, double dt_seconds,
                           void* user_data);
 } pcl_callbacks_t;
@@ -94,19 +94,19 @@ void pcl_container_destroy(pcl_container_t* c);
 
 // -- Lifecycle transitions -----------------------------------------------
 
-/// \brief Transition UNCONFIGURED → CONFIGURED.
+/// \brief Transition UNCONFIGURED -> CONFIGURED.
 pcl_status_t pcl_container_configure(pcl_container_t* c);
 
-/// \brief Transition CONFIGURED → ACTIVE.
+/// \brief Transition CONFIGURED -> ACTIVE.
 pcl_status_t pcl_container_activate(pcl_container_t* c);
 
-/// \brief Transition ACTIVE → CONFIGURED.
+/// \brief Transition ACTIVE -> CONFIGURED.
 pcl_status_t pcl_container_deactivate(pcl_container_t* c);
 
-/// \brief Transition CONFIGURED → UNCONFIGURED.
+/// \brief Transition CONFIGURED -> UNCONFIGURED.
 pcl_status_t pcl_container_cleanup(pcl_container_t* c);
 
-/// \brief Transition any state → FINALIZED.
+/// \brief Transition any state -> FINALIZED.
 pcl_status_t pcl_container_shutdown(pcl_container_t* c);
 
 // -- State query ---------------------------------------------------------
@@ -236,7 +236,7 @@ pcl_status_t pcl_container_invoke_async(pcl_container_t* c,
 /// \brief Send a deferred service response.
 ///
 /// Called by a service handler that previously returned PCL_PENDING.
-/// The context is consumed and freed after this call — do not reuse.
+/// The context is consumed and freed after this call -- do not reuse.
 ///
 /// \param ctx       Context saved from the service handler invocation.
 /// \param response  Response message to send to the caller.
@@ -267,7 +267,7 @@ pcl_status_t pcl_stream_send(pcl_stream_context_t* ctx, const pcl_msg_t* msg);
 /// \brief End a stream normally.
 ///
 /// Signals to the client that the stream is complete.  The context is
-/// freed after this call — do not reuse.
+/// freed after this call -- do not reuse.
 ///
 /// \param ctx  Stream context to end.
 /// \return PCL_OK on success.
@@ -276,7 +276,7 @@ pcl_status_t pcl_stream_end(pcl_stream_context_t* ctx);
 /// \brief Abort a stream with an error.
 ///
 /// Signals to the client that the stream terminated with an error.
-/// The context is freed after this call — do not reuse.
+/// The context is freed after this call -- do not reuse.
 ///
 /// \param ctx         Stream context to abort.
 /// \param error_code  Error code to send to the client.

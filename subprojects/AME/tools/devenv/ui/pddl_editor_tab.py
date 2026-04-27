@@ -1,4 +1,4 @@
-"""PDDL Editor tab — file browser, text editor, syntax validation."""
+"""PDDL Editor tab -- file browser, text editor, syntax validation."""
 
 from __future__ import annotations
 
@@ -207,7 +207,7 @@ class PddlEditorTab:
         errors = self._validate_pddl(content)
 
         if not errors:
-            dpg.set_value(self._validation_text, "Syntax OK — no errors found.")
+            dpg.set_value(self._validation_text, "Syntax OK -- no errors found.")
             dpg.set_value(self._status_text, "Valid")
         else:
             dpg.set_value(self._validation_text, "\n".join(errors))
@@ -286,7 +286,7 @@ class PddlEditorTab:
 
         # Check for (define ...)
         if "(define" not in content:
-            errors.append("Missing (define ...) — not a valid PDDL file")
+            errors.append("Missing (define ...) -- not a valid PDDL file")
 
         # Check for domain or problem declaration
         has_domain = "(domain" in content

@@ -4,13 +4,13 @@ This document now focuses on **future extensions and roadmap-level guidance**.
 
 Completed extension material has been consolidated into the main architecture documents:
 
-- Perception integration + thread safety → [02-world-model.md](02-world-model.md)
-- Runtime extension nodes (`InvokeService`, `ExecutePhaseAction`, `DelegateToAgent`) → [04-execution.md](04-execution.md)
-- ROS2 wiring for extension nodes → [06-ros2.md](06-ros2.md)
+- Perception integration + thread safety -> [02-world-model.md](02-world-model.md)
+- Runtime extension nodes (`InvokeService`, `ExecutePhaseAction`, `DelegateToAgent`) -> [04-execution.md](04-execution.md)
+- ROS2 wiring for extension nodes -> [06-ros2.md](06-ros2.md)
 
 ---
 
-## Temporal Planning (Extension 7) — Future
+## Temporal Planning (Extension 7) -- Future
 
 PDDL 2.1 durative actions with STN (Simple Temporal Network) conversion. See [`temporal_extension_research.md`](../../../../doc/research/AME/temporal_extension_research.md) for full planner evaluation.
 
@@ -30,10 +30,10 @@ Integration pattern: `IPlannerBackend` abstraction selects LAPKT for STRIPS doma
 ### Proposed Architecture
 
 ```
-PDDL 2.1 Domain --▶ PddlParser (extended) --▶ IPlannerBackend
-                                                   │
-                                    ┌--------------┼--------------┐
-                                    ▼              ▼              ▼
+PDDL 2.1 Domain --> PddlParser (extended) --> IPlannerBackend
+                                                   |
+                                    +--------------+--------------+
+                                    v              v              v
                                LapktBackend   OpticBackend   (future)
                                (STRIPS)       (subprocess)   AriesBackend
 ```
@@ -46,7 +46,7 @@ PDDL 2.1 Domain --▶ PddlParser (extended) --▶ IPlannerBackend
 | 7b | WorldModel numeric fluent store + audit | Medium |
 | 7c | `IPlannerBackend` abstraction + OPTIC subprocess | Medium |
 | 7d | STN data structure + consistency check | Low |
-| 7e | PlanCompiler temporal mode (STN → BT `Parallel`/`Timeout`) | High |
+| 7e | PlanCompiler temporal mode (STN -> BT `Parallel`/`Timeout`) | High |
 | 7f | VAL integration for temporal plan validation | Low |
 | 7g | Temporal invariant monitoring (`ReactiveSequence`) | Low |
 | 7h | End-to-end temporal tests | Medium |
@@ -54,7 +54,7 @@ PDDL 2.1 Domain --▶ PddlParser (extended) --▶ IPlannerBackend
 
 ---
 
-## Neuro-Symbolic Integration (Extension 8) — Candidate
+## Neuro-Symbolic Integration (Extension 8) -- Candidate
 
 Neural components should remain advisory while the symbolic stack remains authoritative.
 See [`neuro_symbolic_reasoning.md`](../../../../doc/research/AME/neuro_symbolic_reasoning.md) and [`neuro_symbolic_reasoning_review.md`](../../../../doc/reviews/AME/neuro_symbolic_reasoning_review.md).

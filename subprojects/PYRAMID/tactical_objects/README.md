@@ -1,6 +1,6 @@
 # Tactical Objects
 
-A PYRAMID component that maintains authoritative knowledge of battlespace objects — their identity, kinematics, classification, relationships, and zone membership — and exposes that knowledge through PCL services and subscribers.
+A PYRAMID component that maintains authoritative knowledge of battlespace objects -- their identity, kinematics, classification, relationships, and zone membership -- and exposes that knowledge through PCL services and subscribers.
 
 Conforms to **PYRAMID Technical Standard 5.4.2.60**.
 
@@ -45,18 +45,18 @@ auto resp = rt.query(QueryRequest{});
 
 ```
 PCL transport
-    └- tactical_objects_app
-           ├- StandardBridge          generated PYRAMID provided/consumed interface
-           └- TacticalObjectsRuntime  pure domain logic, testable in isolation
-                  ├- ObjectStore          ECS sparse-set, UUID-keyed
-                  ├- SpatialIndex         WGS84 grid, O(1) region queries
-                  ├- CorrelationEngine    evidence -> entity (merge / split / lineage)
-                  ├- ZoneEngine           polygon/circle geometry + transition detection
-                  ├- MilClassEngine       MIL-STD-2525B field storage + symbol key derivation
-                  ├- QueryEngine          compound predicate filter (type / affil / region / age)
-                  ├- RelationshipIndex    hierarchical + tactical relationships, reverse-indexed
-                  ├- InterestManager      interest requirements + derived evidence + progress
-                  └- TacticalHistory      timestamped snapshots, as-of / interval retrieval
+    +- tactical_objects_app
+           +- StandardBridge          generated PYRAMID provided/consumed interface
+           +- TacticalObjectsRuntime  pure domain logic, testable in isolation
+                  +- ObjectStore          ECS sparse-set, UUID-keyed
+                  +- SpatialIndex         WGS84 grid, O(1) region queries
+                  +- CorrelationEngine    evidence -> entity (merge / split / lineage)
+                  +- ZoneEngine           polygon/circle geometry + transition detection
+                  +- MilClassEngine       MIL-STD-2525B field storage + symbol key derivation
+                  +- QueryEngine          compound predicate filter (type / affil / region / age)
+                  +- RelationshipIndex    hierarchical + tactical relationships, reverse-indexed
+                  +- InterestManager      interest requirements + derived evidence + progress
+                  +- TacticalHistory      timestamped snapshots, as-of / interval retrieval
 ```
 
 The component layer is intentionally thin. `TacticalObjectsComponent` owns internal port wiring and internal JSON serialisation via `TacticalObjectsCodec`; `StandardBridge` owns the generated PYRAMID service boundary. All domain reasoning lives in `TacticalObjectsRuntime` so unit tests can exercise it without a running executor.
@@ -110,10 +110,10 @@ Defined in `include/TacticalObjectsTypes.h`:
 
 | Type | Purpose |
 |------|---------|
-| `ObjectType` | Platform, Person, Equipment, Unit, Formation, Installation, … |
-| `Affiliation` | Friendly, Hostile, Neutral, Unknown, Suspect, … |
+| `ObjectType` | Platform, Person, Equipment, Unit, Formation, Installation, ... |
+| `Affiliation` | Friendly, Hostile, Neutral, Unknown, Suspect, ... |
 | `BattleDimension` | Ground, Air, SeaSurface, Subsurface, Space, SOF |
-| `ZoneType` | AOI, PatrolArea, RestrictedArea, NoGoArea, KillBox, … |
+| `ZoneType` | AOI, PatrolArea, RestrictedArea, NoGoArea, KillBox, ... |
 | `RelationshipType` | Hierarchical, Tactical, Organisational |
 | `Position` | WGS84 latitude / longitude in radians, altitude in metres |
 | `Observation` | Single sensor report (source ref, position, confidence, SIDC hint) |
@@ -192,7 +192,7 @@ ctest --test-dir build --output-on-failure -C Release -R "^test_tobj"
 | `test_tobj_codec` | JSON round-trips for every message type |
 | `test_tobj_interest` | Interest lifecycle, derived evidence, progress |
 | `test_tobj_history` | Snapshot record, as-of and interval retrieval |
-| `test_tobj_runtime` | `TacticalObjectsRuntime` façade integration |
+| `test_tobj_runtime` | `TacticalObjectsRuntime` facade integration |
 | `test_tobj_zone_perf` | Performance: thousands of entities and zones |
 | `test_tobj_streaming_codec` | Binary stream frame codec |
 | `test_tobj_runtime_streaming` | Runtime stream subscriber behaviour |
@@ -239,6 +239,6 @@ gcovr --root . --filter "subprojects/PYRAMID/tactical_objects/src/.*" \
 |----------|---------|
 | [`ARCHITECTURE.md`](../doc/architecture/tactical_objects/ARCHITECTURE.md) | Layer diagram, data-flow, worked examples |
 | [`DESIGN.md`](../doc/architecture/tactical_objects/DESIGN.md) | Concrete class design and implementation structure |
-| [`HLR.md`](../doc/requirements/tactical_objects/HLR.md) | High-level requirements (`TOBJ.001`–`TOBJ.053`, `PYR-RESP-0729`–`PYR-RESP-0745`) |
+| [`HLR.md`](../doc/requirements/tactical_objects/HLR.md) | High-level requirements (`TOBJ.001`-`TOBJ.053`, `PYR-RESP-0729`-`PYR-RESP-0745`) |
 | [`LLR.md`](../doc/requirements/tactical_objects/LLR.md) | Low-level requirements per engine |
-| [`HLR_COVERAGE.md`](../../../doc/reports/PYRAMID/tactical_objects/HLR_COVERAGE.md) | Requirement → test traceability matrix |
+| [`HLR_COVERAGE.md`](../../../doc/reports/PYRAMID/tactical_objects/HLR_COVERAGE.md) | Requirement -> test traceability matrix |

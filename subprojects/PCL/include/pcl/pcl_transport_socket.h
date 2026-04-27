@@ -8,10 +8,10 @@
 ///                          [type_len:2][type_name][req_len:4][req_data]
 ///   Type 2: SVC_RESP  - [0x02][seq_id:4][type_len:2][type_name][resp_len:4][resp_data]
 ///
-/// Server: listens, accepts one client, recv_thread posts PUBLISH → post_incoming,
-///   SVC_REQ → gateway container invokes service and enqueues SVC_RESP to send_thread.
-/// Client: connects, recv_thread posts PUBLISH → post_incoming,
-///   SVC_RESP → post_response_cb on executor thread.
+/// Server: listens, accepts one client, recv_thread posts PUBLISH -> post_incoming,
+///   SVC_REQ -> gateway container invokes service and enqueues SVC_RESP to send_thread.
+/// Client: connects, recv_thread posts PUBLISH -> post_incoming,
+///   SVC_RESP -> post_response_cb on executor thread.
 ///   invoke_remote_async enqueues SVC_REQ to send_thread (non-blocking).
 ///
 /// ALL socket writes are performed exclusively by the dedicated send_thread
@@ -75,7 +75,7 @@ pcl_socket_transport_t* pcl_socket_transport_create_server(uint16_t        port,
 ///
 /// When \p port is 0 and the OS assigns an ephemeral port, \p port_ready (if
 /// non-NULL) is written with the assigned port number immediately after
-/// getsockname — before the blocking accept() call.  A concurrent thread can
+/// getsockname -- before the blocking accept() call.  A concurrent thread can
 /// spin on \p port_ready and use the value to call
 /// pcl_socket_transport_create_client once it becomes non-zero.
 ///
@@ -127,7 +127,7 @@ pcl_socket_transport_t* pcl_socket_transport_create_client(const char*      host
 /// receive a response.
 ///
 /// If \p opts->state_cb is non-NULL it fires on every state transition
-/// (CONNECTING → CONNECTED → DISCONNECTED → CONNECTING → ...).
+/// (CONNECTING -> CONNECTED -> DISCONNECTED -> CONNECTING -> ...).
 ///
 /// TCP keepalive is enabled on the socket so silent peer death is
 /// detected within a few seconds.

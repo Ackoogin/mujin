@@ -100,7 +100,7 @@ TEST(BTNodes, CheckWorldPredicate_RequiredAuthorityConfirmed_FailsOnBelieved) {
     )xml";
     auto tree = createTreeWithWorldModel(factory, xml, wm);
 
-    // Fact is true but only BELIEVED — should fail
+    // Fact is true but only BELIEVED -- should fail
     auto status = tree.tickOnce();
     EXPECT_EQ(status, BT::NodeStatus::FAILURE);
 }

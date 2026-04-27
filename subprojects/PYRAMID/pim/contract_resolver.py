@@ -374,12 +374,12 @@ def main():
     
     # Print summary
     stats = result['statistics']
-    print(f"\n✓ Contract Resolution Complete")
+    print(f"\n[x] Contract Resolution Complete")
     print(f"  Total Activities: {stats['total_activities']}")
     print(f"  Resolved: {stats['resolved']}")
     print(f"  Unresolved: {stats['unresolved']}")
     
-    print(f"\n✓ Contracts written to {output_file}")
+    print(f"\n[x] Contracts written to {output_file}")
     
     # Print contract summary
     if result['contracts']:

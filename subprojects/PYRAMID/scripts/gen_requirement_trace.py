@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate HLR → LLR → test traceability report for tactical_objects.
+Generate HLR -> LLR -> test traceability report for tactical_objects.
 
 Reads the Tactical Objects HLR coverage report and LLR, then scans test files
 for ///< REQ_/TOBJ/PYR-RESP tags.
@@ -114,7 +114,7 @@ def main():
   tags = scan_test_tags(test_dir) if test_dir.exists() else {"req": {}, "tobj": {}, "resp": {}}
 
   lines = []
-  lines.append("# HLR → LLR → Test Traceability Report")
+  lines.append("# HLR -> LLR -> Test Traceability Report")
   lines.append("")
   lines.append("Generated from doc/reports/PYRAMID/tactical_objects/HLR_COVERAGE.md, subprojects/PYRAMID/doc/requirements/tactical_objects/LLR.md, and test file tags.")
   lines.append("")
@@ -131,29 +131,29 @@ def main():
   lines.append(f"| LLR with verification test specified | {llr_with_tests} |")
   lines.append(f"| LLR with ///< tag in tests | {llr_tagged} |")
   lines.append("")
-  lines.append("## HLR → Tests (from doc/reports/PYRAMID/tactical_objects/HLR_COVERAGE.md)")
+  lines.append("## HLR -> Tests (from doc/reports/PYRAMID/tactical_objects/HLR_COVERAGE.md)")
   lines.append("")
   lines.append("| HLR | Description | Test(s) |")
   lines.append("|-----|-------------|---------|")
   for tobj in sorted(hlr.keys()):
     d = hlr[tobj]
-    desc = d["description"][:60] + "…" if len(d["description"]) > 60 else d["description"]
+    desc = d["description"][:60] + "..." if len(d["description"]) > 60 else d["description"]
     lines.append(f"| {tobj} | {desc} | {d['tests']} |")
   lines.append("")
-  lines.append("## LLR → HLR → Test (from subprojects/PYRAMID/doc/requirements/tactical_objects/LLR.md)")
+  lines.append("## LLR -> HLR -> Test (from subprojects/PYRAMID/doc/requirements/tactical_objects/LLR.md)")
   lines.append("")
   lines.append("| LLR | Traces (HLR) | Verification | Tagged |")
   lines.append("|-----|--------------|--------------|--------|")
 
   for req in sorted(llr.keys(), key=lambda x: (int(re.search(r"\d+", x).group()) if re.search(r"\d+", x) else 0)):
     d = llr[req]
-    traces = ", ".join(d["traces"]) if d["traces"] else "—"
+    traces = ", ".join(d["traces"]) if d["traces"] else "--"
     verif = d["verification"][:40] + "..." if len(d["verification"]) > 40 else d["verification"]
-    tagged = "✓" if req in tags["req"] else ""
+    tagged = "[x]" if req in tags["req"] else ""
     lines.append(f"| {req} | {traces} | {verif} | {tagged} |")
 
   lines.append("")
-  lines.append("## Test Files → Requirements (from ///< tags)")
+  lines.append("## Test Files -> Requirements (from ///< tags)")
   lines.append("")
   for test_file in sorted(set(
     t for tests in tags["req"].values() for t in tests

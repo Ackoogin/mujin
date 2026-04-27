@@ -2,8 +2,8 @@
 /// \brief Template/skeleton transport adapter for PCL.
 ///
 /// This header defines a ready-to-use scaffold that an engineer can copy
-/// (or instantiate directly) when integrating a new wire protocol —
-/// serial, custom RPC, vendor middleware, mock, etc. — into the PCL
+/// (or instantiate directly) when integrating a new wire protocol --
+/// serial, custom RPC, vendor middleware, mock, etc. -- into the PCL
 /// executor.  The scaffold provides the **threading model** and the
 /// **lifecycle plumbing**; the engineer only fills in four blocking
 /// I/O hooks via \ref pcl_template_io_hooks_t.
@@ -29,13 +29,13 @@
 ///
 /// | Thread          | What it does                                          |
 /// |-----------------|-------------------------------------------------------|
-/// | Executor thread | publish() / subscribe() vtable calls — never blocks   |
-/// | send_thread     | Calls hooks.send_blocking() — blocks freely           |
-/// | recv_thread     | Calls hooks.recv_blocking() — blocks freely           |
+/// | Executor thread | publish() / subscribe() vtable calls -- never blocks   |
+/// | send_thread     | Calls hooks.send_blocking() -- blocks freely           |
+/// | recv_thread     | Calls hooks.recv_blocking() -- blocks freely           |
 ///
 /// The engineer's hook implementations **may block as long as needed**
 /// (synchronous send, recv with read timeout, etc.).  They run on the
-/// dedicated worker threads — never on the PCL executor (D2/D5 single
+/// dedicated worker threads -- never on the PCL executor (D2/D5 single
 /// -threaded execution guarantee is preserved).
 ///
 /// To deliver inbound frames back into the executor, the recv_thread
@@ -47,12 +47,12 @@
 ///
 /// The template implements **pub/sub and async service RPC** end-to-end:
 ///
-///   - Publish / subscribe — every PUBLISH frame is delivered to the
+///   - Publish / subscribe -- every PUBLISH frame is delivered to the
 ///     executor as remote ingress from the configured peer.
-///   - Service client (`invoke_async`) — outbound SVC_REQ frames are
+///   - Service client (`invoke_async`) -- outbound SVC_REQ frames are
 ///     correlated by a 32-bit sequence id and routed back to the
 ///     caller's response callback when the matching SVC_RESP arrives.
-///   - Service server — inbound SVC_REQ frames are dispatched into the
+///   - Service server -- inbound SVC_REQ frames are dispatched into the
 ///     executor with `pcl_executor_post_service_request_remote`,
 ///     tagged with the transport's configured peer_id so that the
 ///     executor enforces remote-exposure rules (services configured
@@ -101,31 +101,31 @@ extern "C" {
 /// the template to RPC without having to rev the public ABI.
 typedef enum {
   PCL_TEMPLATE_FRAME_PUBLISH  = 0,  ///< Pub/sub message.
-  PCL_TEMPLATE_FRAME_SVC_REQ  = 1,  ///< Reserved — service request (extension point).
-  PCL_TEMPLATE_FRAME_SVC_RESP = 2,  ///< Reserved — service response (extension point).
+  PCL_TEMPLATE_FRAME_SVC_REQ  = 1,  ///< Reserved -- service request (extension point).
+  PCL_TEMPLATE_FRAME_SVC_RESP = 2,  ///< Reserved -- service response (extension point).
 } pcl_template_frame_kind_t;
 
 /// \brief One framed message exchanged between the template and the engineer's hooks.
 ///
-/// On the **send path** (executor → wire) the template owns every
+/// On the **send path** (executor -> wire) the template owns every
 /// pointer and guarantees they remain valid for the duration of the
 /// `send_blocking` call.  Hooks must treat the fields as borrowed and
 /// must not retain pointers after returning.
 ///
-/// On the **recv path** (wire → executor) the engineer's
+/// On the **recv path** (wire -> executor) the engineer's
 /// `recv_blocking` hook fills the struct.  Strings (`topic`,
 /// `type_name`) and the payload buffer must be heap-allocated with
 /// `malloc`; the template `free()`s them after delivery to the
 /// executor.  If a field is unused (e.g. `type_name` for an untyped
 /// payload) leave it NULL.
 typedef struct {
-  pcl_template_frame_kind_t kind;          ///< Frame kind — PUBLISH, SVC_REQ, SVC_RESP.
+  pcl_template_frame_kind_t kind;          ///< Frame kind -- PUBLISH, SVC_REQ, SVC_RESP.
   uint32_t                  seq_id;        ///< Correlates SVC_REQ with SVC_RESP (0 for PUBLISH).
   const char*               topic;         ///< NUL-terminated topic name (PUBLISH only).
   const char*               service_name;  ///< NUL-terminated service name (SVC_REQ only).
   const char*               type_name;     ///< NUL-terminated message type name, or NULL on
                                            ///< the recv path (template normalises to "" before
-                                           ///< handing to the executor — `post_remote_incoming`
+                                           ///< handing to the executor -- `post_remote_incoming`
                                            ///< and friends require a non-NULL string).
   const void*               payload;       ///< Payload bytes, or NULL when payload_size == 0.
   uint32_t                  payload_size;  ///< Payload size in bytes.
@@ -138,7 +138,7 @@ typedef struct {
 /// Populate the function pointers, set `user_data` to whatever your
 /// implementation needs (socket handle, serial fd, etc.) and pass the
 /// struct to \ref pcl_transport_template_create.  The template makes
-/// an internal copy — the struct itself does not need to outlive the
+/// an internal copy -- the struct itself does not need to outlive the
 /// create() call, but anything reachable through `user_data` must.
 ///
 /// All hooks are invoked **off the executor thread**; the template's
@@ -151,7 +151,7 @@ typedef struct {
   /// \brief Establish the underlying session.  Optional (may be NULL).
   ///
   /// Called once during \ref pcl_transport_template_create on the
-  /// **creating thread** — before the worker threads start.  If the
+  /// **creating thread** -- before the worker threads start.  If the
   /// hook returns anything other than `PCL_OK`, create() reports
   /// failure and no threads are spawned.
   ///
@@ -189,7 +189,7 @@ typedef struct {
   /// Invoked repeatedly on the dedicated **recv_thread**.  The hook
   /// must block for *at most* `timeout_ms` milliseconds and then
   /// return so the recv loop can poll its stop flag.  A short timeout
-  /// (e.g. 100–500 ms) gives the engineer's stack a chance to honour
+  /// (e.g. 100-500 ms) gives the engineer's stack a chance to honour
   /// shutdown requests promptly.
   ///
   /// On success: set `*out_frame` and return `PCL_OK`.  Strings and
@@ -203,7 +203,7 @@ typedef struct {
   /// The recv loop logs and continues, so transient I/O errors do not
   /// kill the transport.  Permanent failure should be signalled by
   /// `wake()` returning the loop and letting `recv_blocking` fail
-  /// every call thereafter — the loop ends when destroy() runs.
+  /// every call thereafter -- the loop ends when destroy() runs.
   ///
   /// \param user_data   Opaque pointer from the hooks struct.
   /// \param out_frame   Frame to populate on success.
@@ -282,7 +282,7 @@ const pcl_transport_t* pcl_transport_template_get_transport(
 ///   3. Call `hooks.wake` (if provided) so any in-flight
 ///      `recv_blocking` or `send_blocking` returns promptly.
 ///   4. Join both worker threads.
-///   5. Call `hooks.close` (if provided) — guaranteed to run on a
+///   5. Call `hooks.close` (if provided) -- guaranteed to run on a
 ///      single thread with no concurrent hook activity.
 ///   6. Free the handle.
 ///

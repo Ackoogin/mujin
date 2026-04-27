@@ -11,10 +11,10 @@ namespace ame {
 /// in test/simulation it completes immediately on the first tick.
 ///
 /// Ports:
-///   agent    (input)  — agent identifier (e.g. "uav1")
-///   route    (input)  — serialised waypoint data (semicolon-separated
+///   agent    (input)  -- agent identifier (e.g. "uav1")
+///   route    (input)  -- serialised waypoint data (semicolon-separated
 ///                        "lat,lon,alt" triples from InvokeService response)
-///   progress (output) — "current/total" progress string (e.g. "3/12")
+///   progress (output) -- "current/total" progress string (e.g. "3/12")
 class FollowRoute : public BT::StatefulActionNode {
 public:
   FollowRoute(const std::string& name, const BT::NodeConfiguration& config);

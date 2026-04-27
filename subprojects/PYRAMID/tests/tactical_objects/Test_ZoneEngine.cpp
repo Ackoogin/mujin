@@ -136,7 +136,7 @@ TEST_F(ZoneEngineTest, ZoneSemanticTypeRoundTrip) {
 
 ///< REQ_TACTICAL_OBJECTS_019: isInside returns false for zone with no geometry.
 TEST_F(ZoneEngineTest, IsInsideWithNoGeometryReturnsFalse) {
-  // Create a zone with neither vertices nor radius — fallback path returns false
+  // Create a zone with neither vertices nor radius -- fallback path returns false
   ZoneDefinition def;
   def.zone_type = ZoneType::AOI;
   def.geometry.radius_m = 0.0;

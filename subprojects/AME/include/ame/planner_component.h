@@ -31,9 +31,9 @@ struct PlannerExecutionResult {
 /// \brief PCL-backed planner component.
 ///
 /// Ports created during on_configure():
-///   pub  "bt_xml"      (ame/BTXML)      — compiled BT XML after successful planning
-///   svc  "load_domain" (ame/LoadDomain) — load PDDL domain from strings at runtime
-///   svc  "plan"        (ame/Plan)       — synchronous planning request/response
+///   pub  "bt_xml"      (ame/BTXML)      -- compiled BT XML after successful planning
+///   svc  "load_domain" (ame/LoadDomain) -- load PDDL domain from strings at runtime
+///   svc  "plan"        (ame/Plan)       -- synchronous planning request/response
 ///
 /// Planning runs synchronously on the executor thread (no std::thread).
 ///
@@ -43,7 +43,7 @@ struct PlannerExecutionResult {
 ///   plan_audit.enabled   (bool,   true)
 ///   plan_audit.path      (string, "plan_audit.jsonl")
 ///   compiler.parallel    (bool,   false)
-///   action_registry.<n>  (string) — maps PDDL action name to BT node type
+///   action_registry.<n>  (string) -- maps PDDL action name to BT node type
 class PlannerComponent : public pcl::Component {
 public:
   using QueryStateCallback = std::function<WorldStateSnapshot()>;

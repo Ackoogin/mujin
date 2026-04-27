@@ -1,4 +1,4 @@
-/// \brief `ame_combined` — in-process single-executor deployment.
+/// \brief `ame_combined` -- in-process single-executor deployment.
 ///
 /// Architecture (post-PCL migration):
 ///   - A PCL Executor drives all component ticking and message dispatch
@@ -8,7 +8,7 @@
 ///   - The thin ROS2 lifecycle nodes bridge ROS2 lifecycle transitions to
 ///     PCL component configure/activate/deactivate/cleanup/shutdown calls.
 ///   - All WorldModel reads/writes, BT ticking, and planning happen on the
-///     PCL executor thread — no cross-thread WorldModel access.
+///     PCL executor thread -- no cross-thread WorldModel access.
 ///
 /// Usage:
 ///   ros2 run ame_ros2 ame_combined \
@@ -141,12 +141,12 @@ int main(int argc, char** argv) {
     pcl_running.store(false);
   });
 
-  // -- Bring all nodes through configure → activate via lifecycle manager --
+  // -- Bring all nodes through configure -> activate via lifecycle manager --
   std::thread startup_thread([&lm_node]() {
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     if (!lm_node->startup()) {
       RCLCPP_ERROR(rclcpp::get_logger("ame_combined"),
-                   "Lifecycle startup failed — nodes may not be fully active");
+                   "Lifecycle startup failed -- nodes may not be fully active");
     }
   });
 

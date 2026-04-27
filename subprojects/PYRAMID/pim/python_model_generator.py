@@ -319,7 +319,7 @@ def main():
     generator = PythonDataModelGenerator(datamodel_file)
     generator.generate(output_dir)
     
-    print(f"\n✓ Python data model generated in {output_dir}/")
+    print(f"\n[x] Python data model generated in {output_dir}/")
 
 
 if __name__ == '__main__':

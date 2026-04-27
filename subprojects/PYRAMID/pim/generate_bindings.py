@@ -6,7 +6,7 @@ Parses .proto files and generates all codec/transport backends (JSON,
 FlatBuffers, Protobuf, gRPC, ROS2) for all target languages (C++, Ada) in a
 single invocation.
 
-No hardcoded knowledge of specific data models — everything is derived from
+No hardcoded knowledge of specific data models -- everything is derived from
 the proto IDL as the single source of truth.
 
 Usage:
@@ -189,7 +189,7 @@ def main():
                 print(f'    {fp}')
             total += len(files)
 
-    print(f'\nDone — {total} files generated in {output_dir}/')
+    print(f'\nDone -- {total} files generated in {output_dir}/')
 
 
 if __name__ == '__main__':

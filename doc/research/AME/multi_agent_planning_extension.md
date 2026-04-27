@@ -1,6 +1,6 @@
 # Multi-Agent Planning Extension
 
-**Status: Phase 1 IMPLEMENTED** ✓
+**Status: Phase 1 IMPLEMENTED** [x]
 
 This document reviews approaches for extending the AME PDDL planning system to support multi-agent problems, and outlines remaining phases.
 
@@ -64,8 +64,8 @@ Per-agent BT execution with coordination protocol.
 | Dependency | Status | Notes |
 |------------|--------|-------|
 | Temporal planning (Extension 7) | Future | Concurrent actions benefit from STN infrastructure |
-| Thread safety (Extension 5) | ✓ Complete | RCU snapshots support concurrent agent execution |
-| Hierarchical planning (Extension 6) | ✓ Complete | Per-agent phases can use `ExecutePhaseAction` |
+| Thread safety (Extension 5) | [x] Complete | RCU snapshots support concurrent agent execution |
+| Hierarchical planning (Extension 6) | [x] Complete | Per-agent phases can use `ExecutePhaseAction` |
 
 ---
 

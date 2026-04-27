@@ -14,8 +14,8 @@ This separation keeps the planning model and execution model independently repla
 - Populates types, objects, predicates, initial facts, and goal fluents
 - Example domain: `subprojects/AME/domains/uav_search/domain.pddl` + `problem.pddl`
 - Two entry points:
-  - `PddlParser::parse(domain_path, problem_path, wm)` — from file paths (deployment)
-  - `PddlParser::parseFromString(domain_pddl, problem_pddl, wm)` — from string content (service-driven loading)
+  - `PddlParser::parse(domain_path, problem_path, wm)` -- from file paths (deployment)
+  - `PddlParser::parseFromString(domain_pddl, problem_pddl, wm)` -- from string content (service-driven loading)
 
 ## Domain Loading
 
@@ -69,8 +69,8 @@ public:
 
 Three levels of action implementation:
 
-1. **Simple**: `move(robot, from, to)` → single `MoveAction` BT node
-2. **Template**: `transport(robot, pkg, from, to)` → parameterised sub-tree XML with `{param0}`, `{param1}` substitution
+1. **Simple**: `move(robot, from, to)` -> single `MoveAction` BT node
+2. **Template**: `transport(robot, pkg, from, to)` -> parameterised sub-tree XML with `{param0}`, `{param1}` substitution
 3. **Pre-authored**: hand-crafted BT XML file for complex behaviours (e.g., reactive search with fallbacks)
 
 The `reactive` flag controls whether the compiled action unit uses `ReactiveSequence` (preconditions re-checked every tick) or `Sequence` (checked once at start).

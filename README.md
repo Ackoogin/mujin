@@ -2,25 +2,25 @@
 
 This repository is organised as a workspace containing three subprojects that can be split into separate repositories later with much less churn:
 
-- `subprojects/PCL` — the low-level PYRAMID Container Library runtime and C/C++ wrappers
-- `subprojects/PYRAMID` — PYRAMID core and tactical-objects components built on top of PCL
-- `subprojects/AME` — the Autonomous Mission Engine planning/execution stack built on top of PCL and PYRAMID
+- `subprojects/PCL` -- the low-level PYRAMID Container Library runtime and C/C++ wrappers
+- `subprojects/PYRAMID` -- PYRAMID core and tactical-objects components built on top of PCL
+- `subprojects/AME` -- the Autonomous Mission Engine planning/execution stack built on top of PCL and PYRAMID
 
 AME is the headline application in the workspace: a **PDDL planning + Behaviour Tree execution** pipeline for autonomous mission planning and execution, with full observability and audit trail support.
 
-The system takes a formal mission description (PDDL domain and problem files), automatically generates a plan using classical AI planning, compiles that plan into an executable behaviour tree, and runs it — with replanning on failure. Every decision and state change is logged for post-hoc analysis and real-time monitoring.
+The system takes a formal mission description (PDDL domain and problem files), automatically generates a plan using classical AI planning, compiles that plan into an executable behaviour tree, and runs it -- with replanning on failure. Every decision and state change is logged for post-hoc analysis and real-time monitoring.
 
 ## Key Capabilities
 
-- **Automated planning** — LAPKT breadth-first search solver finds action sequences to achieve mission goals
-- **Parallel execution** — causal analysis identifies independent action flows and executes them concurrently
-- **Hierarchical planning** — `ExecutePhaseAction` decomposes missions into sub-phases, each planned and executed as a dynamic BT sub-tree
-- **External service integration** — `InvokeService` node maps PDDL actions to async PYRAMID service calls with timeout and cancellation
-- **Reactive monitoring** — configurable per-action precondition checking during execution
-- **Replan on failure** — detects action failures, snapshots current state, replans, and resumes
-- **Full observability** — 5-layer audit stack covering BT execution, world state changes, and planning episodes with hierarchical causal links
-- **Live monitoring** — Foxglove Studio integration via WebSocket for real-time visualization
-- **ROS2 integration** — optional lifecycle node wrappers for distributed robotic deployments
+- **Automated planning** -- LAPKT breadth-first search solver finds action sequences to achieve mission goals
+- **Parallel execution** -- causal analysis identifies independent action flows and executes them concurrently
+- **Hierarchical planning** -- `ExecutePhaseAction` decomposes missions into sub-phases, each planned and executed as a dynamic BT sub-tree
+- **External service integration** -- `InvokeService` node maps PDDL actions to async PYRAMID service calls with timeout and cancellation
+- **Reactive monitoring** -- configurable per-action precondition checking during execution
+- **Replan on failure** -- detects action failures, snapshots current state, replans, and resumes
+- **Full observability** -- 5-layer audit stack covering BT execution, world state changes, and planning episodes with hierarchical causal links
+- **Live monitoring** -- Foxglove Studio integration via WebSocket for real-time visualization
+- **ROS2 integration** -- optional lifecycle node wrappers for distributed robotic deployments
 
 ## Architecture Overview
 
@@ -38,13 +38,13 @@ PDDL Domain/Problem
 
 | Component | Role |
 |-----------|------|
-| **WorldModel** | Single authoritative state store — typed objects + boolean predicates as a grounded bitset |
-| **Planner** | Stateless STRIPS solver (LAPKT BRFS) — same input always produces the same plan |
+| **WorldModel** | Single authoritative state store -- typed objects + boolean predicates as a grounded bitset |
+| **Planner** | Stateless STRIPS solver (LAPKT BRFS) -- same input always produces the same plan |
 | **PlanCompiler** | Builds a causal dependency graph from the plan, extracts parallel flows, emits BT XML |
 | **BT.CPP Executor** | Ticks the compiled behaviour tree; BT nodes read/write world state directly |
 | **ActionRegistry** | Maps PDDL action names to BT node types, sub-tree templates, or pre-authored sub-trees |
-| **ExecutePhaseAction** | Hierarchical planning node — plans, compiles, and ticks a sub-tree for a phase goal set |
-| **InvokeService** | Async PYRAMID service node — maps PDDL actions to external service calls with timeout/cancel |
+| **ExecutePhaseAction** | Hierarchical planning node -- plans, compiles, and ticks a sub-tree for a phase goal set |
+| **InvokeService** | Async PYRAMID service node -- maps PDDL actions to external service calls with timeout/cancel |
 | **Observability Stack** | 5 layers: TreeObserver stats, structured BT events, WM audit log, Foxglove bridge, plan audit trail |
 
 For full architecture details, see `subprojects/AME/doc/architecture/` and the component-specific docs under `subprojects/PCL/doc/` and `subprojects/PYRAMID/doc/`.
@@ -140,9 +140,9 @@ Connect Foxglove Studio to `ws://localhost:8765` for real-time monitoring. See `
 
 The core library (`ame_core`) is ROS-agnostic. The `subprojects/AME/ros2/` directory contains an `ament_cmake` package with lifecycle node wrappers:
 
-- **WorldModelNode** — owns state, exposes get/set/query/load_domain services, publishes `/world_state`
-- **PlannerNode** — action server at `~/plan`, domain loading via `~/load_domain` service
-- **ExecutorNode** — ticks BT at 50 Hz, publishes `/executor/bt_events`
+- **WorldModelNode** -- owns state, exposes get/set/query/load_domain services, publishes `/world_state`
+- **PlannerNode** -- action server at `~/plan`, domain loading via `~/load_domain` service
+- **ExecutorNode** -- ticks BT at 50 Hz, publishes `/executor/bt_events`
 
 Supports in-process, distributed, multi-agent, and multi-planner deployment modes. Multiple PlannerNode instances can run with different domain models; domains can be loaded from files (deployment) or pushed via service calls (devenv/testing). See `subprojects/AME/doc/architecture/06-ros2.md` for details.
 

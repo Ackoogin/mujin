@@ -79,27 +79,27 @@ TEST(PclLifecycle, FullTransitionCycle) {
   LifecycleLog log;
   auto* c = pcl_container_create("cycle", &cbs, &log);
 
-  // unconfigured → configured
+  // unconfigured -> configured
   EXPECT_EQ(pcl_container_configure(c), PCL_OK);
   EXPECT_EQ(pcl_container_state(c), PCL_STATE_CONFIGURED);
   EXPECT_EQ(log.configure_count, 1);
 
-  // configured → active
+  // configured -> active
   EXPECT_EQ(pcl_container_activate(c), PCL_OK);
   EXPECT_EQ(pcl_container_state(c), PCL_STATE_ACTIVE);
   EXPECT_EQ(log.activate_count, 1);
 
-  // active → configured
+  // active -> configured
   EXPECT_EQ(pcl_container_deactivate(c), PCL_OK);
   EXPECT_EQ(pcl_container_state(c), PCL_STATE_CONFIGURED);
   EXPECT_EQ(log.deactivate_count, 1);
 
-  // configured → unconfigured
+  // configured -> unconfigured
   EXPECT_EQ(pcl_container_cleanup(c), PCL_OK);
   EXPECT_EQ(pcl_container_state(c), PCL_STATE_UNCONFIGURED);
   EXPECT_EQ(log.cleanup_count, 1);
 
-  // unconfigured → finalized
+  // unconfigured -> finalized
   EXPECT_EQ(pcl_container_shutdown(c), PCL_OK);
   EXPECT_EQ(pcl_container_state(c), PCL_STATE_FINALIZED);
   EXPECT_EQ(log.shutdown_count, 1);
@@ -235,7 +235,7 @@ TEST(PclPorts, CreatedDuringConfigure) {
 TEST(PclPorts, RejectedOutsideConfigure) {
   auto* c = pcl_container_create("badport", nullptr, nullptr);
 
-  // not in on_configure — should fail
+  // not in on_configure -- should fail
   auto* p = pcl_container_add_publisher(c, "topic", "Type");
   EXPECT_EQ(p, nullptr);
 
