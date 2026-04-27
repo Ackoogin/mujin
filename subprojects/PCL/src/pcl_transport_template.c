@@ -845,7 +845,13 @@ pcl_transport_template_t* pcl_transport_template_create(
    * unregisters it even if the caller never explicitly renamed.
    * Done after thread creation so the error-cleanup paths above don't
    * need to deal with the alias list. */
-  (void)tpl_alias_remember(ctx, "default");
+  if (tpl_alias_remember(ctx, "default") != PCL_OK) {
+    /* OOM on the alias seed: the transport was never returned to the
+     * caller so it was never registered in the executor.  destroy()
+     * will stop the threads, call close, and free cleanly. */
+    pcl_transport_template_destroy(ctx);
+    return NULL;
+  }
 
   return ctx;
 }
@@ -853,15 +859,26 @@ pcl_transport_template_t* pcl_transport_template_create(
 pcl_status_t pcl_transport_template_set_peer_id(
     pcl_transport_template_t* ctx,
     const char*               peer_id) {
+  char         old_id[sizeof(ctx->peer_id)];
+  pcl_status_t rc;
+
   if (!ctx || !peer_id || !peer_id[0]) return PCL_ERR_INVALID;
+
+  /* Snapshot the current ID so we can restore it if alias tracking
+   * fails — otherwise ctx->peer_id would hold the new name while the
+   * executor slot and alias list still reflect the old one. */
+  memcpy(old_id, ctx->peer_id, sizeof(old_id));
   snprintf(ctx->peer_id, sizeof(ctx->peer_id), "%s", peer_id);
-  /* Remember this alias so destroy() can unregister it from the
-   * executor — even if the caller renames the peer again later.
-   * Use the *truncated* form (ctx->peer_id) rather than the raw
+
+  /* Use the *truncated* form (ctx->peer_id) rather than the raw
    * caller-supplied string: pcl_executor_register_transport stores
    * peer ids in a fixed 64-byte buffer too, so comparing against the
    * truncated value is what actually matches the executor's slot. */
-  return tpl_alias_remember(ctx, ctx->peer_id);
+  rc = tpl_alias_remember(ctx, ctx->peer_id);
+  if (rc != PCL_OK) {
+    memcpy(ctx->peer_id, old_id, sizeof(ctx->peer_id));
+  }
+  return rc;
 }
 
 const pcl_transport_t* pcl_transport_template_get_transport(
