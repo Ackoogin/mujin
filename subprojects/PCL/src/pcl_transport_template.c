@@ -342,28 +342,36 @@ static void tpl_pending_drain(struct pcl_transport_template_t* ctx) {
 
 // -- Peer-alias helpers -------------------------------------------------
 
-static pcl_status_t tpl_alias_remember(struct pcl_transport_template_t* ctx,
-                                        const char*                       peer_id) {
+/* Internal: insert a peer alias — caller must hold pending_lock. */
+static pcl_status_t tpl_alias_remember_locked(struct pcl_transport_template_t* ctx,
+                                               const char*                       peer_id) {
   pcl_template_peer_alias_t* node;
   pcl_template_peer_alias_t* it;
 
   if (!peer_id || !peer_id[0]) return PCL_OK;
 
-  tpl_pending_lock(ctx);
   for (it = ctx->peer_aliases; it; it = it->next) {
     if (it->peer_id && strcmp(it->peer_id, peer_id) == 0) {
-      tpl_pending_unlock(ctx);
       return PCL_OK;  /* already tracked */
     }
   }
   node = (pcl_template_peer_alias_t*)calloc(1u, sizeof(*node));
-  if (!node) { tpl_pending_unlock(ctx); return PCL_ERR_NOMEM; }
+  if (!node) return PCL_ERR_NOMEM;
   node->peer_id = tpl_strdup_or_null(peer_id);
-  if (!node->peer_id) { free(node); tpl_pending_unlock(ctx); return PCL_ERR_NOMEM; }
+  if (!node->peer_id) { free(node); return PCL_ERR_NOMEM; }
   node->next        = ctx->peer_aliases;
   ctx->peer_aliases = node;
-  tpl_pending_unlock(ctx);
   return PCL_OK;
+}
+
+/* Public wrapper — acquires pending_lock, delegates, releases. */
+static pcl_status_t tpl_alias_remember(struct pcl_transport_template_t* ctx,
+                                        const char*                       peer_id) {
+  pcl_status_t rc;
+  tpl_pending_lock(ctx);
+  rc = tpl_alias_remember_locked(ctx, peer_id);
+  tpl_pending_unlock(ctx);
+  return rc;
 }
 
 // -- Server-side SVC_REQ → SVC_RESP plumbing ----------------------------
@@ -530,6 +538,14 @@ static void* tpl_recv_thread_main(void* arg)
       continue;
     }
 
+    /* Snapshot peer_id under pending_lock — set_peer_id may mutate
+     * ctx->peer_id concurrently and we must not race on that buffer. */
+    {
+      char snap_peer_id[sizeof(ctx->peer_id)];
+      tpl_pending_lock(ctx);
+      memcpy(snap_peer_id, ctx->peer_id, sizeof(snap_peer_id));
+      tpl_pending_unlock(ctx);
+
     if (in.kind == PCL_TEMPLATE_FRAME_PUBLISH && in.topic) {
       pcl_msg_t msg;
       memset(&msg, 0, sizeof(msg));
@@ -541,7 +557,7 @@ static void* tpl_recv_thread_main(void* arg)
        * matching an empty type. */
       msg.type_name = in.type_name ? in.type_name : "";
 
-      pcl_executor_post_remote_incoming(ctx->executor, ctx->peer_id,
+      pcl_executor_post_remote_incoming(ctx->executor, snap_peer_id,
                                         in.topic, &msg);
     } else if (in.kind == PCL_TEMPLATE_FRAME_SVC_REQ && in.service_name) {
       // Server-side dispatch: route the request to a service handler
@@ -565,7 +581,7 @@ static void* tpl_recv_thread_main(void* arg)
         req.type_name = in.type_name ? in.type_name : "";
 
         if (pcl_executor_post_service_request_remote(ctx->executor,
-                                                     ctx->peer_id,
+                                                     snap_peer_id,
                                                      in.service_name,
                                                      &req,
                                                      tpl_svc_response_cb,
@@ -598,6 +614,7 @@ static void* tpl_recv_thread_main(void* arg)
               "pcl_transport_template: ignored malformed frame kind %d",
               (int)in.kind);
     }
+    } /* end snap_peer_id scope */
 
     // The hook handed us ownership; free everything before the next
     // recv so peak memory stays one frame.
@@ -864,20 +881,21 @@ pcl_status_t pcl_transport_template_set_peer_id(
 
   if (!ctx || !peer_id || !peer_id[0]) return PCL_ERR_INVALID;
 
-  /* Snapshot the current ID so we can restore it if alias tracking
-   * fails — otherwise ctx->peer_id would hold the new name while the
-   * executor slot and alias list still reflect the old one. */
+  /* Hold pending_lock for the entire snapshot/write/alias/restore
+   * sequence: recv_thread reads ctx->peer_id under the same lock, so
+   * this eliminates the data race without an extra mutex. */
+  tpl_pending_lock(ctx);
   memcpy(old_id, ctx->peer_id, sizeof(old_id));
   snprintf(ctx->peer_id, sizeof(ctx->peer_id), "%s", peer_id);
-
   /* Use the *truncated* form (ctx->peer_id) rather than the raw
    * caller-supplied string: pcl_executor_register_transport stores
    * peer ids in a fixed 64-byte buffer too, so comparing against the
    * truncated value is what actually matches the executor's slot. */
-  rc = tpl_alias_remember(ctx, ctx->peer_id);
+  rc = tpl_alias_remember_locked(ctx, ctx->peer_id);
   if (rc != PCL_OK) {
     memcpy(ctx->peer_id, old_id, sizeof(ctx->peer_id));
   }
+  tpl_pending_unlock(ctx);
   return rc;
 }
 
