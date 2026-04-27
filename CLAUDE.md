@@ -77,6 +77,12 @@ cmake --preset all-off
 cmake --build --preset all-off-release
 ```
 
+**Build Ada E2E test binaries (requires GNAT/gprbuild; not built by default):**
+```bat
+cmake --build --preset release --target pyramid_ada_all
+```
+Ada targets (`ada_tobj_client_build`, `ada_active_find_e2e_build`, `pyramid_bridge_ada_build`, `ada_test_generated_bindings_build`) are excluded from the default `ALL` build so that routine `cmake --build` and VS Code pre-test builds remain fast. Run the target above before running Ada E2E CTest tests. Ada tests SKIP gracefully when the binaries are absent.
+
 **VS Code / CMake Tools:**
 
 1. Open `D:\Dev\repo\mujin` as the workspace folder.

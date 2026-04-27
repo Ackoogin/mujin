@@ -2,13 +2,15 @@
 REM test_ada_socket_e2e.bat -- Cross-process E2E test driver (Windows).
 REM
 REM Orchestrates:
-REM   1. Build Ada client (if gprbuild available)
-REM   2. Start C++ server (tobj_socket_server)
-REM   3. Wait for server to be ready (port file appears)
-REM   4. Start Ada client (ada_tobj_client)
-REM   5. Wait for Ada client to exit
-REM   6. Terminate server
-REM   7. Report pass/fail
+REM   1. Start C++ server (tobj_socket_server)
+REM   2. Wait for server to be ready (port file appears)
+REM   3. Start Ada client (ada_tobj_client)
+REM   4. Wait for Ada client to exit
+REM   5. Terminate server
+REM   6. Report pass/fail
+REM
+REM Ada binaries must be pre-built via:
+REM   cmake --build --target pyramid_ada_all
 REM
 REM Usage: scripts\test_ada_socket_e2e.bat [--server-bin PATH] [--client-bin PATH]
 REM                                        [--port PORT] [--timeout SECONDS]
@@ -61,69 +63,13 @@ set "SERVER_PID="
 
 echo === Ada Socket E2E Test ===
 
-REM Step 0: Generate Ada service stubs from proto (provided + consumed)
-where python >nul 2>&1
-if %errorlevel% equ 0 (
-    echo [driver] Generating Ada bindings from proto...
-    call "%PYRAMID_ROOT%\scripts\generate_bindings.bat" --ada
-    if !errorlevel! neq 0 (
-        echo [driver] FAIL: Ada service generation failed
-        exit /b 1
-    )
-) else (
-    echo [driver] python not found -- skipping Ada stub generation
-)
-
-REM Step 1: Build Ada client if gprbuild is available
-where gprbuild >nul 2>&1
-if %errorlevel% equ 0 (
-    echo [driver] Building Ada client...
-    set "ADA_DIR=%PYRAMID_ROOT%\examples\ada"
-    set "ADA_PCL_LIB_DIR=%BUILD_DIR%\ada_gnat_pcl"
-    set "ADA_PYRAMID_LIB_DIR=%BUILD_DIR%\ada_gnat_pyramid"
-    set "ADA_PCL_BUILD_SCRIPT=%WORKSPACE_ROOT%\subprojects\PCL\scripts\build_gnat_pcl_static_libs.bat"
-    set "ADA_PYRAMID_BUILD_SCRIPT=%PYRAMID_ROOT%\scripts\build_gnat_generated_flatbuffers_libs.bat"
-    set "CAN_BUILD_ADA=1"
-    echo [driver] Refreshing GNAT-compatible PCL static archives...
-    call "!ADA_PCL_BUILD_SCRIPT!" "!ADA_PCL_LIB_DIR!" --force
-    if !errorlevel! neq 0 (
-        echo [driver] WARNING: failed to build GNAT PCL static archives -- falling back to pre-built binary
-        set "CAN_BUILD_ADA=0"
-    )
-    if "!CAN_BUILD_ADA!"=="1" (
-        echo [driver] Refreshing GNAT-compatible generated FlatBuffers archive...
-        call "!ADA_PYRAMID_BUILD_SCRIPT!" "!ADA_PYRAMID_LIB_DIR!" --build-dir "!BUILD_DIR!" --config "!BUILD_CONFIG!"
-        if !errorlevel! neq 0 (
-            echo [driver] WARNING: failed to build GNAT FlatBuffers archive -- falling back to pre-built binary
-            set "CAN_BUILD_ADA=0"
-        )
-    )
-    if "!CAN_BUILD_ADA!"=="1" (
-        set "UNMANNED_ROOT=%WORKSPACE_ROOT%"
-        pushd "!ADA_DIR!"
-        gprbuild -P ada_tobj_client.gpr -q ^
-          -XUNMANNED_ROOT=!WORKSPACE_ROOT! ^
-          -XPCL_INCLUDE_DIR=!WORKSPACE_ROOT!\subprojects\PCL\include ^
-          -XPCL_LIB_DIR=!ADA_PCL_LIB_DIR! ^
-          -XPCL_LIB_NAME=pcl_core ^
-          -XPCL_SOCKET_LIB_NAME=pcl_transport_socket ^
-          -XPYRAMID_GEN_LIB_DIR=!ADA_PYRAMID_LIB_DIR! ^
-          -XPYRAMID_GEN_LIB_NAME=pyramid_generated_flatbuffers_codec >nul 2>&1
-        if !errorlevel! neq 0 (
-            echo [driver] gprbuild failed -- falling back to pre-built binary
-        )
-        popd
-    )
-) else (
-    echo [driver] gprbuild not found -- checking for pre-built client...
-)
-
 REM Resolve client path
 if not exist "%CLIENT_BIN%" (
     if exist "%CLIENT_BIN%.exe" set "CLIENT_BIN=%CLIENT_BIN%.exe"
 )
 if not exist "%CLIENT_BIN%" (
     echo [driver] SKIP: Ada client binary not found at %CLIENT_BIN%
+    echo [driver]   Run: cmake --build --target pyramid_ada_all
     exit /b 0
 )
 if not exist "%SERVER_BIN%" (
@@ -131,11 +77,11 @@ if not exist "%SERVER_BIN%" (
     exit /b 1
 )
 
-REM Step 2: Start server
+REM Step 1: Start server
 echo [driver] Starting server on port %PORT%...
 start /b "" "%SERVER_BIN%" --port %PORT% --port-file "%PORT_FILE%" --timeout %TIMEOUT_SEC% >nul 2>&1
 
-REM Step 3: Wait for port file (up to 5 seconds)
+REM Step 2: Wait for port file (up to 5 seconds)
 echo [driver] Waiting for server to write port file...
 set "ATTEMPTS=0"
 :wait_port
@@ -156,18 +102,18 @@ goto cleanup_fail
 set /p ACTUAL_PORT=<"%PORT_FILE%"
 echo [driver] Server ready on port %ACTUAL_PORT%
 
-REM Step 4: Brief delay so server enters accept()
+REM Step 3: Brief delay so server enters accept()
 timeout /t 1 /nobreak >nul 2>&1
 
-REM Step 5: Start Ada client
+REM Step 4: Start Ada client
 echo [driver] Starting Ada client...
 "%CLIENT_BIN%" --host 127.0.0.1 --port %ACTUAL_PORT%
 set "CLIENT_EXIT=%errorlevel%"
 
-REM Step 6: Cleanup
+REM Step 5: Cleanup
 call :cleanup
 
-REM Step 7: Report
+REM Step 6: Report
 if %CLIENT_EXIT% equ 0 (
     echo [driver] PASS: Ada client received entity updates over socket transport
     exit /b 0

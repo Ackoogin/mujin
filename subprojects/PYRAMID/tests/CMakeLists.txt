@@ -355,6 +355,12 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
             "Directory containing libpcl_core/libpcl_transport_socket for Ada gprbuild")
     endif()
 
+    # Aggregate target: cmake --build --target pyramid_ada_all builds all Ada
+    # binaries needed by Ada E2E CTest tests.  Not in ALL so routine cmake --build
+    # (e.g. VS Code pre-test build) stays fast.
+    add_custom_target(pyramid_ada_all
+        COMMENT "Build all Ada test binaries and bridges")
+
     if(PYRAMID_ENABLE_FLATBUFFERS)
         set(ADA_PYRAMID_GEN_LIB_NAME "pyramid_generated_flatbuffers_codec" CACHE STRING
             "Base library name for Ada gprbuild generated FlatBuffers codec archive")
@@ -373,7 +379,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         )
         set(_ada_fb_mkdir COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR})
 
-    add_custom_target(ada_test_generated_bindings_build ALL
+    add_custom_target(ada_test_generated_bindings_build
         COMMAND ${ADA_PYTHON} ${BINDINGS_GEN_SCRIPT} ${PYRAMID_PROTO_ROOT} ${ADA_GEN_OUT} --languages ada --backends json,flatbuffers,protobuf,grpc,ros2
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${ADA_GEN_OUT}/protobuf/ada/pyramid_components_tactical_objects-protobuf_codec.ads
@@ -530,7 +536,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     set(ADA_PCL_UDP_LIB_NAME "pcl_transport_udp" CACHE STRING
         "Base library name for Ada gprbuild PCL UDP transport static library")
 
-    add_custom_target(pyramid_bridge_ada_build ALL
+    add_custom_target(pyramid_bridge_ada_build
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_BRIDGE_SRC_DIR}/bin
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
         ${_ada_fb_mkdir}
@@ -585,10 +591,49 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         TIMEOUT 60
         RESOURCE_LOCK pyramid_process_e2e)
 
+    # Ada example client — built by cmake --build --target pyramid_ada_all
+    set(ADA_EXAMPLE_DIR ${PYRAMID_ROOT_DIR}/examples/ada)
+    add_custom_target(ada_tobj_client_build
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_EXAMPLE_DIR}/bin
+        COMMAND ${CMAKE_COMMAND} -E env UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
+                ${GPRBUILD} -p -P ${ADA_EXAMPLE_DIR}/ada_tobj_client.gpr -q
+                -XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
+                -XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR}
+                -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
+                -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
+                -XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME}
+                ${_ada_fb_args}
+        WORKING_DIRECTORY ${ADA_EXAMPLE_DIR}
+        COMMENT "Building Ada tactical objects client"
+        DEPENDS ada_test_generated_bindings_build
+    )
+
+    # Ada active-find E2E client — built by cmake --build --target pyramid_ada_all
+    add_custom_target(ada_active_find_e2e_build
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_TEST_SRC_DIR}/bin
+        COMMAND ${CMAKE_COMMAND} -E env UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
+                ${GPRBUILD} -p -P ${ADA_TEST_SRC_DIR}/ada_active_find_e2e.gpr -q
+                -XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
+                -XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR}
+                -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
+                -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
+                -XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME}
+                ${_ada_fb_args}
+        WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
+        COMMENT "Building Ada active-find E2E test client"
+        DEPENDS ada_test_generated_bindings_build
+    )
+
+    add_dependencies(pyramid_ada_all
+        ada_test_generated_bindings_build
+        pyramid_bridge_ada_build
+        ada_tobj_client_build
+        ada_active_find_e2e_build)
+
     endif() # PYRAMID_ENABLE_FLATBUFFERS
 
     if(WIN32 AND TARGET pyramid_grpc_transport)
-        add_custom_target(ada_grpc_cpp_interop_build ALL
+        add_custom_target(ada_grpc_cpp_interop_build
             COMMAND ${CMAKE_COMMAND} -E env UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
                     ${GPRBUILD} -p -P ${ADA_TEST_SRC_DIR}/ada_grpc_cpp_interop_e2e.gpr
                     -XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
@@ -604,6 +649,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         add_dependencies(ada_grpc_cpp_interop_build
             pyramid_grpc_c_shim
             ada_test_generated_bindings_build)
+        add_dependencies(pyramid_ada_all ada_grpc_cpp_interop_build)
 
         add_test(NAME tobj_ada_grpc_cpp_interop_e2e
             COMMAND ${CMAKE_COMMAND}
