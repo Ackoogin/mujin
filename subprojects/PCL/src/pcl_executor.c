@@ -689,6 +689,12 @@ const pcl_transport_t* pcl_executor_get_transport(const pcl_executor_t* e) {
   return &e->transport;
 }
 
+const pcl_transport_t* pcl_executor_get_transport_for_peer(
+    const pcl_executor_t* e,
+    const char*           peer_id) {
+  return find_named_transport(e, peer_id);
+}
+
 pcl_status_t pcl_executor_register_transport(pcl_executor_t*        e,
                                              const char*            peer_id,
                                              const pcl_transport_t* transport) {

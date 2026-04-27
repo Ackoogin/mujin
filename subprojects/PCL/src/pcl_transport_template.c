@@ -937,7 +937,14 @@ void pcl_transport_template_destroy(pcl_transport_template_t* ctx) {
     while (alias) {
       pcl_template_peer_alias_t* next = alias->next;
       if (alias->peer_id) {
-        pcl_executor_register_transport(ctx->executor, alias->peer_id, NULL);
+        /* Only clear the slot if it still points at us — the alias may
+         * have been rebound to a different transport after we registered
+         * it, and wiping it would silently break the other adapter. */
+        const pcl_transport_t* current =
+            pcl_executor_get_transport_for_peer(ctx->executor, alias->peer_id);
+        if (current && current->adapter_ctx == ctx) {
+          pcl_executor_register_transport(ctx->executor, alias->peer_id, NULL);
+        }
       }
       free(alias->peer_id);
       free(alias);
