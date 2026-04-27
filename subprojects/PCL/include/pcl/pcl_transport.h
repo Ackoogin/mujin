@@ -128,7 +128,7 @@ typedef struct {
   void* adapter_ctx;
 } pcl_transport_t;
 
-// -- Executor ↔ transport wiring -----------------------------------------
+// -- Executor <-> transport wiring -----------------------------------------
 
 /// \brief Set the transport adapter for an executor.
 ///
@@ -136,7 +136,7 @@ typedef struct {
 /// intra-process adapter.
 ///
 /// The executor does NOT take ownership of the transport struct or its
-/// adapter_ctx — caller is responsible for lifetime management.
+/// adapter_ctx -- caller is responsible for lifetime management.
 pcl_status_t pcl_executor_set_transport(pcl_executor_t*        e,
                                         const pcl_transport_t* transport);
 
@@ -154,7 +154,7 @@ pcl_status_t pcl_executor_register_transport(pcl_executor_t*        e,
 /// pcl_executor_set_transport(), or NULL if no default transport is
 /// installed.  Intended for transport adapters that need to check
 /// whether they are the active default before clearing it during
-/// teardown — destroy() must not blindly wipe an unrelated
+/// teardown -- destroy() must not blindly wipe an unrelated
 /// transport that another adapter installed.
 const pcl_transport_t* pcl_executor_get_transport(const pcl_executor_t* e);
 
@@ -164,7 +164,7 @@ const pcl_transport_t* pcl_executor_get_transport(const pcl_executor_t* e);
 /// pcl_executor_register_transport(), or NULL if no transport is
 /// registered for that peer.  Intended for transport adapters that need
 /// to verify they still own a peer slot before clearing it during
-/// teardown — an alias may have been rebound to a different adapter
+/// teardown -- an alias may have been rebound to a different adapter
 /// since it was first registered, and destroy() must not wipe a slot
 /// it no longer owns.
 const pcl_transport_t* pcl_executor_get_transport_for_peer(

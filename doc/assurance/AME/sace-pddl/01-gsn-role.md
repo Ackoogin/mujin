@@ -16,7 +16,7 @@ GSN uses a small set of graphical elements to build structured safety arguments.
 | **Context** | Rounded rectangle | Information that scopes or qualifies a goal or strategy. | "Defined operating context [C1]" or "ISO 21448 four-quadrant scenario classification." |
 | **Assumption** | Oval with A | A statement taken to be true without proof. | "PDDL domain is a faithful abstraction of the real system." |
 | **Justification** | Oval with J | A statement providing the rationale for a strategy. | "ISO 34502 risk factor decomposition ensures systematic scenario coverage." |
-| **Assurance Claim Point** | Black square | Used in SACE specifically to mark points where additional confidence arguments are required. These are characteristic of SACE patterns and indicate where the argument must demonstrate not just that something is true, but that there is justified confidence in the claim. | — |
+| **Assurance Claim Point** | Black square | Used in SACE specifically to mark points where additional confidence arguments are required. These are characteristic of SACE patterns and indicate where the argument must demonstrate not just that something is true, but that there is justified confidence in the claim. | -- |
 
 ---
 
@@ -41,7 +41,7 @@ SACE defines a top-level safety argument that decomposes into two principal clai
 
 ## How PDDL Artefacts Map to GSN Elements
 
-PDDL artefacts primarily populate GSN solution nodes — they are the formal evidence that supports safety claims. However, PDDL also contributes to other GSN elements.
+PDDL artefacts primarily populate GSN solution nodes -- they are the formal evidence that supports safety claims. However, PDDL also contributes to other GSN elements.
 
 ### PDDL as Solution Nodes
 
@@ -65,5 +65,5 @@ The ISO standards primarily populate strategy, context, and justification nodes.
 
 ---
 
-[Next: Stage 1 — Operating Context Assurance](02-stage1-operating-context.md)
+[Next: Stage 1 -- Operating Context Assurance](02-stage1-operating-context.md)
 

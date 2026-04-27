@@ -1,5 +1,5 @@
 /// \file test_pcl_executor.cpp
-/// \brief Tests for PCL executor — spin, dispatch, multi-container, shutdown.
+/// \brief Tests for PCL executor -- spin, dispatch, multi-container, shutdown.
 #include <gtest/gtest.h>
 
 #include <thread>
@@ -67,7 +67,7 @@ TEST(PclExecutor, InactiveContainerNotTicked) {
   TickCounter counter;
   pcl_callbacks_t cbs = counting_callbacks();
   auto* c = pcl_container_create("inactive", &cbs, &counter);
-  // leave unconfigured — should not tick
+  // leave unconfigured -- should not tick
 
   auto* e = pcl_executor_create();
   pcl_executor_add(e, c);
@@ -147,7 +147,7 @@ TEST(PclExecutor, GracefulShutdownFinalizesContainers) {
     return PCL_OK;
   };
 
-  // slightly hacky but works for this test — we need separate counters
+  // slightly hacky but works for this test -- we need separate counters
   // so we use two containers
   auto* c = pcl_container_create("grace", &cbs, &deactivate_count);
   pcl_container_configure(c);
@@ -714,7 +714,7 @@ TEST(PclExecutor, SetTransportClearNull) {
   t.adapter_ctx = &shutdown_called;
 
   ASSERT_EQ(pcl_executor_set_transport(e, &t), PCL_OK);
-  // Clear transport — exercises the else branch and return PCL_OK after it.
+  // Clear transport -- exercises the else branch and return PCL_OK after it.
   ASSERT_EQ(pcl_executor_set_transport(e, nullptr), PCL_OK);
   // Shutdown was NOT called through set_transport; the transport is just cleared.
   EXPECT_FALSE(shutdown_called);
@@ -737,7 +737,7 @@ TEST(PclExecutor, UpdateExistingEndpointRoute) {
 
   ASSERT_EQ(pcl_executor_set_endpoint_route(e, &route), PCL_OK);
 
-  // Second call with the same endpoint — exercises the update (non-NULL entry) path.
+  // Second call with the same endpoint -- exercises the update (non-NULL entry) path.
   const char* peers[] = {"peer_x"};
   route.peer_ids   = peers;
   route.peer_count = 1;
@@ -772,7 +772,7 @@ TEST(PclExecutor, InvokeAsyncIntraProcessImmediateResponse) {
   pcl_container_activate(c);
   pcl_executor_add(e, c);
 
-  // No transport, no endpoint route — goes to intra-process calloc path.
+  // No transport, no endpoint route -- goes to intra-process calloc path.
   bool cb_fired = false;
   int  cb_val   = 0;
   pcl_msg_t req = {};
@@ -825,7 +825,7 @@ TEST(PclExecutor, InvokeAsyncIntraProcessPendingResponse) {
   EXPECT_EQ(pcl_executor_invoke_async(e, "defer.svc", &req,
     [](const pcl_msg_t*, void* ud) { *static_cast<bool*>(ud) = true; },
     &cb_fired), PCL_OK);
-  EXPECT_FALSE(cb_fired);  // deferred — not yet fired
+  EXPECT_FALSE(cb_fired);  // deferred -- not yet fired
   ASSERT_NE(saved_ctx, nullptr);
 
   // Deliver the deferred response and clean up.
@@ -857,7 +857,7 @@ TEST(PclExecutor, PublishPortRouteRemoteWithTransport) {
   auto* e = pcl_executor_create();
   pcl_executor_add(e, c);
 
-  // Set a transport with a publish function — now has_transport == 1.
+  // Set a transport with a publish function -- now has_transport == 1.
   int pub_count = 0;
   pcl_transport_t t = {};
   t.publish = [](void* ctx, const char*, const pcl_msg_t*) -> pcl_status_t {
@@ -867,7 +867,7 @@ TEST(PclExecutor, PublishPortRouteRemoteWithTransport) {
   t.adapter_ctx = &pub_count;
   ASSERT_EQ(pcl_executor_set_transport(e, &t), PCL_OK);
 
-  // No endpoint route configured — port_route_mode returns PCL_ROUTE_REMOTE
+  // No endpoint route configured -- port_route_mode returns PCL_ROUTE_REMOTE
   // because has_transport is true and port type is PUBLISHER.
   pcl_msg_t msg = {};
   msg.data = "x";

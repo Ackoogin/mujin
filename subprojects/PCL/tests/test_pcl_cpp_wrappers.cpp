@@ -1,7 +1,7 @@
 /// \file test_pcl_cpp_wrappers.cpp
-/// \brief Tests for PCL C++ wrappers — pcl::Component and pcl::Executor.
+/// \brief Tests for PCL C++ wrappers -- pcl::Component and pcl::Executor.
 ///
-/// Covers LLRs REQ_PCL_131–REQ_PCL_157 (tracing to HLRs PCL.048 and PCL.049).
+/// Covers LLRs REQ_PCL_131-REQ_PCL_157 (tracing to HLRs PCL.048 and PCL.049).
 
 #include <gtest/gtest.h>
 
@@ -12,9 +12,9 @@
 #include <thread>
 #include <vector>
 
-// ═══════════════════════════════════════════════════════════════════════════
-// REQ_PCL_131–144 — pcl::Component base class (PCL.048)
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// REQ_PCL_131-144 -- pcl::Component base class (PCL.048)
+// ===========================================================================
 
 // -- Minimal subclass for testing ------------------------------------------
 
@@ -69,9 +69,9 @@ protected:
   }
 };
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 // Construction and RAII
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 
 ///< REQ_PCL_131: Component construction produces valid handle. PCL.048.
 TEST(PclCppComponent, ConstructionProducesValidHandle) {
@@ -93,9 +93,9 @@ TEST(PclCppComponent, DestructorFreesResources) {
   SUCCEED();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 // Virtual lifecycle callbacks
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 
 ///< REQ_PCL_133: Component lifecycle callbacks invoked. PCL.048.
 TEST(PclCppComponent, LifecycleCallbacksInvoked) {
@@ -122,9 +122,9 @@ TEST(PclCppComponent, LifecycleCallbacksInvoked) {
   EXPECT_EQ(comp.state(), PCL_STATE_FINALIZED);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 // Port creation helpers
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 
 ///< REQ_PCL_134: addPublisher during configure. PCL.048.
 TEST(PclCppComponent, AddPublisherDuringConfigure) {
@@ -204,9 +204,9 @@ TEST(PclCppComponent, AddStreamServiceDuringConfigure) {
   EXPECT_TRUE(comp.stream_port.valid());
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 // Parameter helpers
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 
 ///< REQ_PCL_137: Parameter string round-trip. PCL.048.
 TEST(PclCppComponent, ParamStringRoundTrip) {
@@ -240,9 +240,9 @@ TEST(PclCppComponent, ParamBoolRoundTrip) {
   EXPECT_EQ(comp.paramBool("missing", false), false);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 // Tick rate helpers
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 
 ///< REQ_PCL_141: Tick rate round-trip. PCL.048.
 TEST(PclCppComponent, TickRateRoundTrip) {
@@ -252,9 +252,9 @@ TEST(PclCppComponent, TickRateRoundTrip) {
   EXPECT_DOUBLE_EQ(comp.tickRateHz(), 25.0);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 // Logging helpers
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 
 ///< REQ_PCL_142: Logging does not crash. PCL.048.
 TEST(PclCppComponent, LoggingDoesNotCrash) {
@@ -281,9 +281,9 @@ TEST(PclCppComponent, LoggingDoesNotCrash) {
   pcl_log_set_level(PCL_LOG_INFO);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 // Move semantics
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 
 ///< REQ_PCL_143: Component move constructor transfers ownership. PCL.048.
 TEST(PclCppComponent, MoveConstructor) {
@@ -307,9 +307,9 @@ TEST(PclCppComponent, MoveAssignment) {
   EXPECT_EQ(a.handle(), nullptr);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// REQ_PCL_145–156 — pcl::Executor wrapper (PCL.049)
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// REQ_PCL_145-156 -- pcl::Executor wrapper (PCL.049)
+// ===========================================================================
 
 ///< REQ_PCL_145: Executor construction produces valid handle. PCL.049.
 TEST(PclCppExecutor, ConstructionProducesValidHandle) {
@@ -346,7 +346,7 @@ TEST(PclCppExecutor, AddRawContainer) {
 
   EXPECT_EQ(exec.add(c), PCL_OK);
 
-  // exec destructor does NOT destroy containers — caller owns them.
+  // exec destructor does NOT destroy containers -- caller owns them.
   pcl_container_destroy(c);
 }
 
@@ -558,9 +558,9 @@ TEST(PclCppExecutor, MoveAssignment) {
   EXPECT_EQ(a.handle(), nullptr);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 // Integration: Component + Executor together
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 
 ///< REQ_PCL_157: Component lifecycle via executor integration. PCL.048, PCL.049.
 TEST(PclCppIntegration, ComponentLifecycleViaExecutor) {

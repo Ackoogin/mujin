@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# ame_core — ROS-agnostic planning + execution library
+# ame_core -- ROS-agnostic planning + execution library
 # ---------------------------------------------------------------------------
 add_library(ame_core STATIC
     lib/type_system.cpp
@@ -117,7 +117,7 @@ if(AME_FOXGLOVE)
 endif()
 
 # ---------------------------------------------------------------------------
-# Install rules — allows ros2/ ament_cmake package to find_package(ame_core)
+# Install rules -- allows ros2/ ament_cmake package to find_package(ame_core)
 #
 # We avoid install(EXPORT) because lapkt_core and behaviortree_cpp are
 # FetchContent targets with absolute source/build-tree paths in their
@@ -149,7 +149,7 @@ install(TARGETS ame_core lapkt_core
     RUNTIME DESTINATION bin
 )
 
-# behaviortree_cpp static archive — copy the built file directly
+# behaviortree_cpp static archive -- copy the built file directly
 install(FILES $<TARGET_FILE:behaviortree_cpp>
     DESTINATION lib
 )

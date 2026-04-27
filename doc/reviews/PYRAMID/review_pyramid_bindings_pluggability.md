@@ -1,4 +1,4 @@
-# PYRAMID Generated Bindings — Pluggability & Consistency Review
+# PYRAMID Generated Bindings -- Pluggability & Consistency Review
 
 ## Current Doc Status
 
@@ -85,13 +85,13 @@ The current contract is captured in
 
 ## 3. Pluggability mechanics, in order of strength
 
-### 3.1 Service handler abstraction — STRONG
+### 3.1 Service handler abstraction -- STRONG
 
 `pyramid_services_tactical_objects_provided.hpp:78-102` defines a single
 typed `ServiceHandler` ABC (`handleCreateRequirement`, `handleReadMatch`,
-…). All three transports re-use it:
+...). All three transports re-use it:
 
-- PCL: `dispatch(handler, channel, …, content_type, …)` at line 193-199.
+- PCL: `dispatch(handler, channel, ..., content_type, ...)` at line 193-199.
 - gRPC: `MatchingObjectsServiceImpl` etc. (`pyramid_components_tactical_objects_services_provided_grpc_transport.cpp:92-239`)
   forward to the same handler via the executor.
 - ROS2: generated service-facade `bindRos2(...)` wires
@@ -101,7 +101,7 @@ typed `ServiceHandler` ABC (`handleCreateRequirement`, `handleReadMatch`,
 Net: a component that implements `ServiceHandler` is genuinely reusable
 across transports. This is the cleanest part of the design.
 
-### 3.2 Backend registry — STRONG (generator-side)
+### 3.2 Backend registry -- STRONG (generator-side)
 
 `pim/codec_backends.py` exposes an `ABC` + `register()` pattern; each
 backend module under `pim/backends/` self-registers. Adding a new codec
@@ -110,7 +110,7 @@ is "subclass + register"; the orchestrator does not need to be edited.
 Caveat: this is generator-time pluggability only. Runtime cannot acquire
 new codecs; they must be regenerated and recompiled.
 
-### 3.3 Standalone data-model codec dispatch — STALE, NOT V1 AS-IS
+### 3.3 Standalone data-model codec dispatch -- STALE, NOT V1 AS-IS
 
 There are currently two concepts named "dispatch":
 
@@ -129,22 +129,22 @@ The standalone layer emits a clean-looking per-package dispatcher. For each
 typed message it produces:
 
 ```cpp
-inline std::string serialize(const …::GeodeticPosition& msg,
+inline std::string serialize(const ...::GeodeticPosition& msg,
                              const char* content_type);
 ```
 
-…that does the routing. The intent is reasonable, but this artefact is not
+...that does the routing. The intent is reasonable, but this artefact is not
 currently a workable v1 seam. Two important properties of the current
 emission:
 
 - Codecs are gated by `#if defined(CODEC_FLATBUFFERS)` /
-  `#if defined(CODEC_PROTOBUF)` (lines 21-27, 52-59, …) — runtime
+  `#if defined(CODEC_PROTOBUF)` (lines 21-27, 52-59, ...) -- runtime
   selection by `content_type` is real, but the available set is fixed at
   build time.
 - `deserializeXxx(...)` only implements JSON; non-JSON paths
   unconditionally throw with the comment "FlatBuffers and Protobuf
   deserialize to their own types; conversion to the common type requires
-  a mapping layer" (lines 70-74, 99-103, …).
+  a mapping layer" (lines 70-74, 99-103, ...).
 
 So the standalone dispatch is **symmetric for serialise, asymmetric for
 deserialise**. It also does not cover the service-level payload shapes that
@@ -158,10 +158,10 @@ fold it into the generated service binding layer and make the service
 binding call it internally. Keeping both concepts active invites drift.
 Given current usage, removal/quarantine is the lower-risk v1 path.
 
-### 3.4 PCL port-level codec selection — STRONG (when used)
+### 3.4 PCL port-level codec selection -- STRONG (when used)
 
 A port is created with a `content_type`; PCL routes the message and the
-generated `dispatch(handler, channel, …, content_type, …)` picks the
+generated `dispatch(handler, channel, ..., content_type, ...)` picks the
 codec. Threaded all the way through `StandardBridge::on_configure`
 (`StandardBridge.cpp:376-413`) the codec is set once via a constructor
 parameter and propagated to every `addService` / `addPublisher` /
@@ -172,7 +172,7 @@ This is the closest the codebase gets to "no bespoke code, just
 configuration". Switching the live tactical-objects app between JSON,
 FlatBuffers, and Protobuf is genuinely a CLI argument.
 
-### 3.5 Transport selection — MIXED
+### 3.5 Transport selection -- MIXED
 
 Transports are **not interchangeable at the call site**. Each presents a
 different activation API:
@@ -180,7 +180,7 @@ different activation API:
 | Transport | Startup call (provider) |
 |-----------|--------------------------|
 | PCL socket | `pcl_socket_transport_create_server(port, exec)` then `pcl_executor_set_transport(...)` (`tactical_objects_main.cpp:186-195`) |
-| gRPC | `provided::grpc_transport::buildServer(address, exec)` returning a `ServerHost` (`…_grpc_transport.hpp:29-30`) |
+| gRPC | `provided::grpc_transport::buildServer(address, exec)` returning a `ServerHost` (`..._grpc_transport.hpp:29-30`) |
 | ROS2 | construct a `pyramid::transport::ros2::Adapter` (e.g. `RclcppRuntimeAdapter(node)`), then call generated `provided::bindRos2(adapter, exec)` |
 | PCL shared-memory | central named-bus (foundation only at PCL layer; Tactical Objects projection status is tracked in [generated_bindings_status.md](../../reports/PYRAMID/generated_bindings_status.md)) |
 
@@ -221,9 +221,9 @@ for those same topics. The consumed binding has typed `publishObjectEvidence`,
 but the role-symmetric helper set is incomplete.
 
 A second symptom: JSON's "encode a vector of `ObjectMatch`" path
-(line 297-305) builds the JSON array inline (`"[" + toJson(match) + …
+(line 297-305) builds the JSON array inline (`"[" + toJson(match) + ...
 "]"`) because the JSON codec exposes per-message `toJson`, while
-FlatBuffers/Protobuf expose `toBinary(vector<…>)` directly. The
+FlatBuffers/Protobuf expose `toBinary(vector<...>)` directly. The
 collection-encoding surface is **asymmetric across codecs**, which is
 why generated topic helpers need to own service/topic payload encoding for
 arrays as well as scalar messages.
@@ -287,7 +287,7 @@ T deserializeXxx(const void*, size_t,             // JSON only; throws otherwise
                  const char* content_type);
 ```
 
-(see `pyramid_data_model_common_codec_dispatch.hpp:65-74, 94-103, …`).
+(see `pyramid_data_model_common_codec_dispatch.hpp:65-74, 94-103, ...`).
 A bidirectional consumer therefore can't be built on top of the
 standalone dispatch layer alone. This is a decisive reason not to adopt
 that artefact directly as the v1 surface.
@@ -296,10 +296,10 @@ that artefact directly as the v1 surface.
 
 `pyramid_services_tactical_objects_grpc_dispatch.hpp:14` declares
 `kProtobufContentType` as the only request type, and the gRPC server
-shim at `…_grpc_transport.cpp:70` sets `request.type_name =
+shim at `..._grpc_transport.cpp:70` sets `request.type_name =
 grpc_detail::kProtobufContentType` unconditionally. This is
 semantically reasonable (gRPC is protobuf-native) but it means
-"transport" and "codec" are not orthogonal axes — gRPC pins the codec.
+"transport" and "codec" are not orthogonal axes -- gRPC pins the codec.
 Worth documenting explicitly so consumers don't expect
 `grpc + flatbuffers`.
 
@@ -308,7 +308,7 @@ Worth documenting explicitly so consumers don't expect
 [generated_bindings.md](../../../subprojects/PYRAMID/doc/architecture/generated_bindings.md) is candid about the Ada policy:
 
 > JSON is expected to remain native at the Ada layer. FlatBuffers and
-> Protobuf may use generated C/C++ shims internally. … This is a
+> Protobuf may use generated C/C++ shims internally. ... This is a
 > short-term implementation choice, not a change to the public contract.
 
 So Ada *callers* see a typed surface, but Ada is not really pluggable at
@@ -343,7 +343,7 @@ current cross-language and transport conformance matrix, including:
 - socket + FlatBuffers
 - gRPC + Protobuf
 
-…with `socket + Protobuf`, shared-memory tactical projection, and
+...with `socket + Protobuf`, shared-memory tactical projection, and
 ROS2/Ada combinations not yet in the master matrix. The matrix shape
 matches the issues above: gRPC is only proven in its native pairing
 (protobuf), and codec orthogonality is exercised under the socket

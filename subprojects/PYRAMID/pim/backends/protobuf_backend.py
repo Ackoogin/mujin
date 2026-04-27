@@ -83,7 +83,7 @@ class ProtobufBackend(codec_backends.CodecBackend):
         proto_ns = '::'.join(pkg_parts)
 
         with open(path, 'w', encoding='utf-8') as f:
-            f.write(f'// Auto-generated Protobuf PCL codec — do not edit\n')
+            f.write(f'// Auto-generated Protobuf PCL codec -- do not edit\n')
             f.write(f'// Backend: protobuf | Namespace: {ns}\n')
             f.write(f'//\n')
             f.write(f'// Wraps protoc-generated SerializeToString / ParseFromString\n')
@@ -130,7 +130,7 @@ class ProtobufBackend(codec_backends.CodecBackend):
         pkg_name = '.'.join(pkg_parts) + '.Protobuf_Codec'
 
         with open(path, 'w', encoding='utf-8') as f:
-            f.write(f'--  Auto-generated Protobuf codec spec — do not edit\n')
+            f.write(f'--  Auto-generated Protobuf codec spec -- do not edit\n')
             f.write(f'--  Backend: protobuf | Package: {pkg_name}\n')
             f.write(f'--\n')
             f.write(f'--  Thin Ada binding to protobuf C++ codec via C interop.\n')

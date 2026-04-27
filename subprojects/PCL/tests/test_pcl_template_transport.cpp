@@ -3,10 +3,10 @@
 ///
 /// Two layers of coverage:
 ///
-///   1. **Template-specific tests** — exercise edge cases of the
+///   1. **Template-specific tests** -- exercise edge cases of the
 ///      scaffold itself (NULL hook validation, idempotent destroy,
 ///      open() failure path, peer id round-trip).
-///   2. **Conformance tests** — drive the same pub/sub and service
+///   2. **Conformance tests** -- drive the same pub/sub and service
 ///      round-trip helpers (`pcl_transport_conformance.hpp`) that any
 ///      other transport can reuse.  The conformance suite is wired up
 ///      with an in-memory `LoopbackLink` pair of hooks, so the test
@@ -46,7 +46,7 @@ namespace {
 // ---------------------------------------------------------------------------
 // In-memory loopback hooks
 //
-// Two LoopbackEnd instances share two queues — one in each direction.
+// Two LoopbackEnd instances share two queues -- one in each direction.
 // send_blocking() pushes into the peer's inbound queue; recv_blocking()
 // pops from this end's inbound queue.  The hooks deliberately respect
 // the C ownership rules from pcl_transport_template.h: outbound payload
@@ -153,7 +153,7 @@ extern "C" pcl_status_t loopback_recv(void* ud, pcl_template_frame_t* out,
   end->inbound->queue.pop_front();
   lk.unlock();
 
-  // Hand ownership over to the template — it frees with C free().
+  // Hand ownership over to the template -- it frees with C free().
   out->kind         = frame.kind;
   out->seq_id       = frame.seq_id;
   out->topic        = frame.topic;        frame.topic = nullptr;
@@ -169,7 +169,7 @@ extern "C" void loopback_wake(void* ud) {
   auto* end = static_cast<LoopbackEnd*>(ud);
   if (!end) return;
   end->stopped = true;
-  // Wake recv on both possible queues — the template only reads from
+  // Wake recv on both possible queues -- the template only reads from
   // `inbound` but wake on both is harmless and keeps the symmetry.
   if (end->inbound)  { std::lock_guard<std::mutex> lk(end->inbound->mu);  end->inbound->cv.notify_all(); }
   if (end->outbound) { std::lock_guard<std::mutex> lk(end->outbound->mu); end->outbound->cv.notify_all(); }
@@ -193,7 +193,7 @@ void restore_logs() {
 /// a pair of in-memory queues.  All resources are owned by the
 /// returned bundle and released by its destructor.
 struct LoopbackPair {
-  // Two queues — A→B and B→A.
+  // Two queues -- A->B and B->A.
   LoopbackLink ab;
   LoopbackLink ba;
 
@@ -243,7 +243,7 @@ struct LoopbackPair {
 
   ~LoopbackPair() {
     // Clear executor registrations using the originally registered peer
-    // ids — robust even if a test mutated the transport's peer_id mid-
+    // ids -- robust even if a test mutated the transport's peer_id mid-
     // life (the template can only clear its *current* peer_id).
     if (exec_a) {
       pcl_executor_set_transport(exec_a, nullptr);
@@ -332,7 +332,7 @@ TEST(PclTransportTemplate, DestroyNullIsNoOp) {
 
 TEST(PclTransportTemplate, SetPeerIdValidation) {
   silence_logs();
-  // A standalone transport — no executor registrations to keep in sync,
+  // A standalone transport -- no executor registrations to keep in sync,
   // so we can rename peer_id freely.
   auto* e = pcl_executor_create();
   LoopbackLink dummy_a, dummy_b;
@@ -463,7 +463,7 @@ TEST(PclTransportTemplate, RecvPublishNormalisesNullTypeName) {
   ASSERT_EQ(pcl_executor_add(p.exec_a, sub_c), PCL_OK);
 
   /* Inject a PUBLISH frame into A's inbound queue (the BA link) with
-   * type_name explicitly NULL — this is what a real hook returning
+   * type_name explicitly NULL -- this is what a real hook returning
    * a typeless wire datagram would deliver. */
   {
     OwnedFrame f;
@@ -538,14 +538,14 @@ TEST(PclTransportTemplate, InvokeAsyncFailsWhenSendStopped) {
 // LOCAL-only (or restricted to a different peer allow-list) are not
 // silently exposed.  The previous implementation routed via
 // pcl_executor_post_service_request(), which always treats requests
-// as local — bypassing remote-exposure rules.
+// as local -- bypassing remote-exposure rules.
 TEST(PclTransportTemplate, RemoteSvcReqHonoursLocalOnlyExposure) {
   silence_logs();
   LoopbackPair p;
 
   /* Server-side container: registers a service marked LOCAL-only.
    * A request that arrives from node_a (the remote peer) should NOT
-   * reach the handler — the executor must drop it as not-exposed. */
+   * reach the handler -- the executor must drop it as not-exposed. */
   std::atomic<int> handler_calls{0};
   pcl_callbacks_t cbs = {};
   cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
@@ -593,7 +593,7 @@ TEST(PclTransportTemplate, RemoteSvcReqHonoursLocalOnlyExposure) {
       &client), PCL_OK);
 
   /* The executor responds with an empty message when the service is
-   * not exposed — give the round trip plenty of time to complete. */
+   * not exposed -- give the round trip plenty of time to complete. */
   const auto deadline = std::chrono::steady_clock::now() +
                         std::chrono::seconds(2);
   while (!client.got_response && std::chrono::steady_clock::now() < deadline) {
@@ -618,7 +618,7 @@ TEST(PclTransportTemplate, RemoteSvcReqHonoursLocalOnlyExposure) {
 // form.  set_peer_id snprintfs into a 64-byte buffer; if alias_remember
 // kept the *raw* untruncated input, destroy()'s register_transport(NULL)
 // would compare the long alias against the executor's truncated slot
-// key and miss it — leaving a dangling adapter_ctx in the executor.
+// key and miss it -- leaving a dangling adapter_ctx in the executor.
 TEST(PclTransportTemplate, DestroyClearsLongPeerIdAlias) {
   silence_logs();
 
@@ -685,7 +685,7 @@ TEST(PclTransportTemplate, DestroyPreservesUnrelatedDefaultTransport) {
   auto* t = pcl_transport_template_create(&hooks, e);
   ASSERT_NE(t, nullptr);
 
-  /* Template is only registered as a named peer — never as default. */
+  /* Template is only registered as a named peer -- never as default. */
   pcl_transport_template_set_peer_id(t, "tpl_peer");
   pcl_executor_register_transport(e, "tpl_peer",
       pcl_transport_template_get_transport(t));
@@ -704,7 +704,7 @@ TEST(PclTransportTemplate, DestroyPreservesUnrelatedDefaultTransport) {
 }
 
 // ---------------------------------------------------------------------------
-// Conformance — the same suite any transport can extend.
+// Conformance -- the same suite any transport can extend.
 // ---------------------------------------------------------------------------
 
 TEST(PclTransportTemplate_Conformance, PublishRoundTrip) {

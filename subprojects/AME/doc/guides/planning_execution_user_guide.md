@@ -125,7 +125,7 @@ Create an adapter implementing:
 
 Example mapping idea:
 
-- PDDL action `move` → service `mobility`, operation `move`
+- PDDL action `move` -> service `mobility`, operation `move`
 - Parameter bindings come from grounded action args.
 
 You can combine:
@@ -174,7 +174,7 @@ For richer failure/latency tests, provide a custom test adapter that delays comp
 - **`CheckWorldPredicate`**: condition check against world state.
 - **`SetWorldPredicate`**: write add/delete effects.
 - **`InvokeService`**: async backend/PYRAMID call.
-- **`ExecutePhaseAction`**: hierarchical node that performs sub-plan → compile → execute for phase goals.
+- **`ExecutePhaseAction`**: hierarchical node that performs sub-plan -> compile -> execute for phase goals.
 - **`DelegateToAgent`**: multi-agent delegation node.
 
 ### `Sequence` vs `ReactiveSequence`

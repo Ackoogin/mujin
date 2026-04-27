@@ -54,7 +54,7 @@ AME uses LAPKT BRFS (Breadth-First Search) over eagerly-grounded STRIPS problems
 | **Maintenance** | Stable; superseded by POPF/OPTIC for most use cases |
 | **Strengths** | Tightly coupled temporal-numeric reasoning via LP; handles duration-dependent effects; well-documented theory |
 | **Weaknesses** | Superseded by POPF/OPTIC; less efficient partial-order handling than POPF |
-| **Integration** | **Medium.** Same COLIN/POPF/OPTIC family — similar integration path |
+| **Integration** | **Medium.** Same COLIN/POPF/OPTIC family -- similar integration path |
 
 ### 2.4 Temporal Fast Downward (TFD)
 
@@ -64,8 +64,8 @@ AME uses LAPKT BRFS (Breadth-First Search) over eagerly-grounded STRIPS problems
 | **PDDL Support** | PDDL 2.1 durative actions, numeric features |
 | **Language** | C++ / Python (translate layer) |
 | **Licence** | GPL |
-| **Origin** | Albert-Ludwigs-Universität Freiburg (Eyerich, Mattmüller, Röger) |
-| **Maintenance** | Stable; GitHub mirrors exist. Standard Fast Downward does NOT support temporal — TFD is separate |
+| **Origin** | Albert-Ludwigs-Universitat Freiburg (Eyerich, Mattmuller, Roger) |
+| **Maintenance** | Stable; GitHub mirrors exist. Standard Fast Downward does NOT support temporal -- TFD is separate |
 | **Strengths** | Anytime planner (progressively improves plans); multi-valued variable encoding for efficient search; well-proven in IPC 2008; PlanSys2 integration available |
 | **Weaknesses** | GPL licence; Python translate step adds complexity; separate codebase from standard Fast Downward; not as actively maintained as standard FD |
 | **Integration** | **Medium-High.** Subprocess invocation (like FD). Requires Python for SAS+ translation. Parse numbered plan outputs. PlanSys2 package shows ROS2 integration path |
@@ -81,8 +81,8 @@ AME uses LAPKT BRFS (Breadth-First Search) over eagerly-grounded STRIPS problems
 | **Origin** | LAAS-CNRS (Arthur Bit-Monnot) |
 | **Maintenance** | **Actively developed** (IPC 2023 participant); unified-planning Python plugin |
 | **Strengths** | Modern codebase; built-in Difference Logic engine (essentially an STN solver); combined temporal + hierarchical; native handling of optional variables; clause learning from SAT solvers; constraint satisfaction approach naturally handles resource conflicts |
-| **Weaknesses** | Rust — requires FFI bridge for C++ integration; plan-space search means no optimality proof or unsolvability proof for action-based planning; younger project with smaller community; integer-only numeric support |
-| **Integration** | **Medium-High.** Rust binary invoked as subprocess. Built-in STN solver is architecturally appealing — could potentially share STN representation. Alternatively, use the unified-planning Python interface |
+| **Weaknesses** | Rust -- requires FFI bridge for C++ integration; plan-space search means no optimality proof or unsolvability proof for action-based planning; younger project with smaller community; integer-only numeric support |
+| **Integration** | **Medium-High.** Rust binary invoked as subprocess. Built-in STN solver is architecturally appealing -- could potentially share STN representation. Alternatively, use the unified-planning Python interface |
 
 ### 2.6 SGPlan6
 
@@ -107,7 +107,7 @@ AME uses LAPKT BRFS (Breadth-First Search) over eagerly-grounded STRIPS problems
 | **Licence** | Freely available (academic) |
 | **Maintenance** | Stable but not actively developed |
 | **Strengths** | Fast for satisficing temporal plans; local search handles large domains well |
-| **Weaknesses** | Stochastic — non-deterministic results; older codebase; less predictable than systematic search |
+| **Weaknesses** | Stochastic -- non-deterministic results; older codebase; less predictable than systematic search |
 | **Integration** | **Medium.** Subprocess |
 
 ---
@@ -130,13 +130,13 @@ AME uses LAPKT BRFS (Breadth-First Search) over eagerly-grounded STRIPS problems
 
 ### Primary: OPTIC (near-term) + Aries (medium-term)
 
-**Phase 1 — OPTIC as subprocess (near-term):**
+**Phase 1 -- OPTIC as subprocess (near-term):**
 - Lowest integration friction: C++, well-documented output format, proven on temporal domains
 - Invoke via `std::system()` or `popen()`, parse timed plan output
 - Sufficient for PDDL 2.1 durative actions + trajectory constraints
-- No changes to LAPKT — keep LAPKT for STRIPS fallback/comparison
+- No changes to LAPKT -- keep LAPKT for STRIPS fallback/comparison
 
-**Phase 2 — Aries evaluation (medium-term):**
+**Phase 2 -- Aries evaluation (medium-term):**
 - Actively maintained, modern architecture with built-in STN solver
 - Supports both hierarchical and temporal planning (aligns with existing Extension 6)
 - Evaluate once Extension 7 foundations (parser, WorldModel numeric support) are stable
@@ -168,7 +168,7 @@ The temporal planner produces a partially-ordered plan with time annotations. Th
 
 ```
 Temporal Plan Output          STN Representation           BT Structure
----------------------    →    ------------------    →    --------------
+---------------------    ->    ------------------    ->    --------------
 0.000: (move uav1 a b) [5]   t0 --[0,0]-- t_start     Parallel {
 5.000: (scan uav1 b) [3]     t_start --[5]-- t1          Sequence {
 0.000: (move uav2 c d) [4]   t1 --[3]-- t2                 move(uav1,a,b)  // 5s
@@ -216,11 +216,11 @@ The STN implementation is straightforward (~200-300 LOC). Floyd-Warshall for the
 |-----------|-------------------------------|
 | `ParallelNode` | Execute concurrent actions; `success_threshold` / `failure_threshold` control synchronisation |
 | `StatefulActionNode` | Non-blocking actions returning `RUNNING`; supports `onStart()`, `onRunning()`, `onHalted()` |
-| `TimeoutNode` (decorator) | Enforce maximum duration on child node — maps directly to STN upper bounds |
-| `DelayNode` (decorator) | Wait before starting child — maps to STN lower bounds |
-| `ReactiveSequence` | Re-evaluates conditions each tick — useful for temporal invariant monitoring |
+| `TimeoutNode` (decorator) | Enforce maximum duration on child node -- maps directly to STN upper bounds |
+| `DelayNode` (decorator) | Wait before starting child -- maps to STN lower bounds |
+| `ReactiveSequence` | Re-evaluates conditions each tick -- useful for temporal invariant monitoring |
 
-### Compilation Strategy: STN → BT
+### Compilation Strategy: STN -> BT
 
 The PlanCompiler's temporal extension converts STN layers into BT structure:
 
@@ -281,8 +281,8 @@ If the invariant fails mid-execution, the `ReactiveSequence` halts the action an
 **Integration:** Run VAL as a post-planning validation step. The temporal planner produces a timed plan; VAL validates it against the PDDL 2.1 domain before the PlanCompiler converts it to a BT. This catches temporal constraint violations, mutex conflicts, and invariant breaches before execution.
 
 ```
-Temporal Planner → timed plan → VAL validation → PlanCompiler → BT
-                                     ↓ (if invalid)
+Temporal Planner -> timed plan -> VAL validation -> PlanCompiler -> BT
+                                     v (if invalid)
                                   replan with adjusted constraints
 ```
 
@@ -308,15 +308,15 @@ The existing `PddlParser` must be extended to handle:
 The current `WorldModel` uses a bitset for Boolean facts. Numeric fluents require:
 
 - A typed value store alongside the bitset (e.g., `std::unordered_map<std::string, double>`)
-- Numeric projection for the planner (`projectToSTRIPS()` → `projectToNumericState()`)
+- Numeric projection for the planner (`projectToSTRIPS()` -> `projectToNumericState()`)
 - Audit callbacks for numeric changes (Layer 2 integration)
 
 ### 8.3 PlanCompiler Temporal Mode
 
 The PlanCompiler needs a second compilation path:
 
-- **STRIPS path (existing):** Linear plan → `Sequence` of action nodes
-- **Temporal path (new):** Timed plan → STN → topological layers → `Parallel`/`Sequence` with deadline decorators
+- **STRIPS path (existing):** Linear plan -> `Sequence` of action nodes
+- **Temporal path (new):** Timed plan -> STN -> topological layers -> `Parallel`/`Sequence` with deadline decorators
 
 The temporal path activates when the plan contains duration annotations.
 
@@ -342,11 +342,11 @@ class OpticBackend : public IPlannerBackend { /* subprocess invocation */ };
 
 | Phase | Work Item | Depends On | Effort |
 |-------|-----------|------------|--------|
-| **7a** | PDDL 2.1 parser extensions (durative actions, numeric fluents) | — | Medium |
-| **7b** | WorldModel numeric fluent store + audit integration | — | Medium |
+| **7a** | PDDL 2.1 parser extensions (durative actions, numeric fluents) | -- | Medium |
+| **7b** | WorldModel numeric fluent store + audit integration | -- | Medium |
 | **7c** | `IPlannerBackend` abstraction + OPTIC subprocess backend | 7a | Medium |
-| **7d** | STN data structure + consistency check + scheduling | — | Low |
-| **7e** | PlanCompiler temporal mode (STN → BT with Parallel/Timeout) | 7a, 7c, 7d | High |
+| **7d** | STN data structure + consistency check + scheduling | -- | Low |
+| **7e** | PlanCompiler temporal mode (STN -> BT with Parallel/Timeout) | 7a, 7c, 7d | High |
 | **7f** | VAL integration for post-planning validation | 7c | Low |
 | **7g** | Temporal invariant monitoring (`ReactiveSequence` pattern) | 7e | Low |
 | **7h** | End-to-end temporal planning tests | All above | Medium |
@@ -365,23 +365,23 @@ Phases 7a, 7b, and 7d can proceed in parallel. Phase 7e is the critical-path ite
 | STN scheduling produces invalid BT structure | Runtime failures | Medium | VAL post-validation; STN consistency check before compilation; round-trip tests |
 | BT.CPP single-threaded ticking limits temporal fidelity | Drift from scheduled times | Low | Use wall-clock tracking in `StatefulActionNode`; TimeoutNode enforces hard deadlines |
 | Numeric fluent support increases WorldModel complexity | Regression risk in existing STRIPS path | Medium | Feature-flag numeric support; keep bitset path unchanged for Boolean-only domains |
-| LAPKT ↔ temporal planner result format mismatch | Two parsing paths to maintain | Low | `IPlannerBackend` abstraction normalises output format |
+| LAPKT <-> temporal planner result format mismatch | Two parsing paths to maintain | Low | `IPlannerBackend` abstraction normalises output format |
 
 ---
 
 ## References
 
-- [OPTIC — Planning Wiki](https://planning.wiki/ref/planners/optic)
-- [POPF — Planning Wiki](https://planning.wiki/ref/planners/popf)
-- [COLIN — Planning with Continuous Linear Numeric Change (arXiv)](https://arxiv.org/abs/1401.5857)
+- [OPTIC -- Planning Wiki](https://planning.wiki/ref/planners/optic)
+- [POPF -- Planning Wiki](https://planning.wiki/ref/planners/popf)
+- [COLIN -- Planning with Continuous Linear Numeric Change (arXiv)](https://arxiv.org/abs/1401.5857)
 - [Temporal Fast Downward (GitHub)](https://github.com/neighthan/tfd)
-- [Aries — Automated Planning Toolbox (GitHub)](https://github.com/plaans/aries)
+- [Aries -- Automated Planning Toolbox (GitHub)](https://github.com/plaans/aries)
 - [SGPlan6 (GitHub)](https://github.com/felisd/sgplan6-pddl-planner)
 - [VAL Plan Validator (GitHub)](https://github.com/KCL-Planning/VAL)
 - [BehaviorTree.CPP Asynchronous Nodes](https://www.behaviortree.dev/docs/3.8/tutorial-advanced/asynchronous_nodes/)
 - [BehaviorTree.CPP Parallel Node](https://github.com/BehaviorTree/BehaviorTree.CPP/blob/master/src/controls/parallel_node.cpp)
 - [PDDL 2.1 Specification (JAIR)](https://jair.org/index.php/jair/article/view/10352)
-- [Temporal Planning — Planning Wiki](https://planning.wiki/ref/planners/tags/temporal)
+- [Temporal Planning -- Planning Wiki](https://planning.wiki/ref/planners/tags/temporal)
 - [Temporal Planning Algorithms (AIG-UPF)](https://github.com/aig-upf/temporal-planning)
 - [Concurrent BTs for Parallel Execution (ResearchGate)](https://www.researchgate.net/publication/327644052_Improving_the_Parallel_Execution_of_Behavior_Trees)
 

@@ -6,8 +6,8 @@ The WorldModel is the central shared state of the system. All components access 
 
 `TypeSystem` (`include/ame/type_system.h`) manages a single-inheritance type hierarchy and object registry:
 
-- Type hierarchy: name → parent (e.g., `uav` → `vehicle` → `object`)
-- Object registry: name → type (e.g., `uav1` → `uav`)
+- Type hierarchy: name -> parent (e.g., `uav` -> `vehicle` -> `object`)
+- Object registry: name -> type (e.g., `uav1` -> `uav`)
 - Validated at grounding time
 
 ## WorldModel API
@@ -65,9 +65,9 @@ public:
 
 ## Eager Grounding
 
-When an object is added, all predicates that can bind to its type are immediately grounded. Fluent indices are stable — once assigned, they never change. This makes `projectToSTRIPS()` a direct mapping and allows replanning without rebuilding the problem.
+When an object is added, all predicates that can bind to its type are immediately grounded. Fluent indices are stable -- once assigned, they never change. This makes `projectToSTRIPS()` a direct mapping and allows replanning without rebuilding the problem.
 
-Facts are stored as a dynamic bitset (`vector<uint64_t>`) — compact and efficient. A `BiMap<unsigned, std::string>` maps fluent indices to string keys (e.g., `"at(uav1,sectorA)"`).
+Facts are stored as a dynamic bitset (`vector<uint64_t>`) -- compact and efficient. A `BiMap<unsigned, std::string>` maps fluent indices to string keys (e.g., `"at(uav1,sectorA)"`).
 
 ## Authoritative State
 

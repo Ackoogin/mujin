@@ -296,7 +296,7 @@ def main():
     generator = TestGenerator(contracts_file, datamodel_file)
     generator.generate(output_dir)
     
-    print(f"\n✓ Contract tests generated in {output_dir}/")
+    print(f"\n[x] Contract tests generated in {output_dir}/")
     print(f"\nRun tests with: pytest {output_dir}")
 
 

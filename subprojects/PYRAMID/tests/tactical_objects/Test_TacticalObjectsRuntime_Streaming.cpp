@@ -101,7 +101,7 @@ TEST(TacticalObjectsRuntimeStreaming, UnmatchedEntityNotPublished) {
     ++call_count;
   });
 
-  // Create a Friendly platform — should NOT match
+  // Create a Friendly platform -- should NOT match
   ObjectDefinition def;
   def.type = ObjectType::Platform;
   def.mil_class.affiliation = Affiliation::Friendly;
@@ -156,7 +156,7 @@ TEST(TacticalObjectsRuntimeStreaming, RemoveSubscriberStopsCallbacks) {
 
   rt.removeStreamSubscriber(handle);
 
-  // Create another object — should not trigger callback
+  // Create another object -- should not trigger callback
   rt.createObject(def);
   rt.flushDirtyEntities(0.0);
   EXPECT_EQ(call_count, 1);  // unchanged
@@ -212,7 +212,7 @@ TEST(TacticalObjectsRuntimeStreaming, DirtyMaskAffiliationOnlyOnAffiliationUpdat
 TEST(TacticalObjectsRuntimeStreaming, NewSubscriberReceivesFullSnapshot) {
   TacticalObjectsRuntime rt;
 
-  // Create entity and flush — entity is no longer in dirty_entities_
+  // Create entity and flush -- entity is no longer in dirty_entities_
   ObjectDefinition def;
   def.type = ObjectType::Platform;
   def.position = {1.0, 2.0, 0.0};
@@ -247,11 +247,11 @@ TEST(TacticalObjectsRuntimeStreaming, UnchangedEntityProducesNoFrame) {
   auto interest_id = rt.interestManager().registerInterest(crit);
   SubscriptionHandle sub = rt.registerStreamSubscriber(interest_id, [](const UUIDKey&, const UUIDKey&) {});
 
-  // First assemble — subscriber sees entity (no flush, dirty_entities_ still has obj_id)
+  // First assemble -- subscriber sees entity (no flush, dirty_entities_ still has obj_id)
   auto sf1 = rt.assembleStreamFrame(interest_id, sub, 0.0);
   ASSERT_FALSE(sf1.updates.empty());
 
-  // Second assemble — same entity, same version, hits "version unchanged" continue
+  // Second assemble -- same entity, same version, hits "version unchanged" continue
   auto sf2 = rt.assembleStreamFrame(interest_id, sub, 0.0);
   EXPECT_TRUE(sf2.updates.empty());
 

@@ -10,7 +10,7 @@ using namespace pyramid::core::uuid;
 static constexpr double DEG = 3.14159265358979323846 / 180.0;
 
 // ---------------------------------------------------------------------------
-// matchesInterest — per-dimension tests
+// matchesInterest -- per-dimension tests
 // ---------------------------------------------------------------------------
 
 TEST(InterestManagerMatching, AffiliationMatchesCorrectly) {
@@ -189,7 +189,7 @@ TEST(InterestManagerMatching, NoFilterMatchesEverything) {
 }
 
 // ---------------------------------------------------------------------------
-// matchingInterests — integration test
+// matchingInterests -- integration test
 // ---------------------------------------------------------------------------
 
 TEST(InterestManagerMatching, MatchingInterestsReturnsCorrectIds) {
@@ -209,23 +209,23 @@ TEST(InterestManagerMatching, MatchingInterestsReturnsCorrectIds) {
 
   InterestManager mgr;
 
-  // Interest 1: Hostile — should match
+  // Interest 1: Hostile -- should match
   InterestCriteria crit1;
   crit1.affiliation = Affiliation::Hostile;
   auto i1 = mgr.registerInterest(crit1);
 
-  // Interest 2: Friendly — should not match
+  // Interest 2: Friendly -- should not match
   InterestCriteria crit2;
   crit2.affiliation = Affiliation::Friendly;
   auto i2 = mgr.registerInterest(crit2);
 
-  // Interest 3: Hostile + area match — should match
+  // Interest 3: Hostile + area match -- should match
   InterestCriteria crit3;
   crit3.affiliation = Affiliation::Hostile;
   crit3.area = BoundingBox{50.0 * DEG, 52.0 * DEG, -1.0 * DEG, 1.0 * DEG};
   auto i3 = mgr.registerInterest(crit3);
 
-  // Interest 4: cancelled — should never appear
+  // Interest 4: cancelled -- should never appear
   InterestCriteria crit4;
   auto i4 = mgr.registerInterest(crit4);
   mgr.cancelInterest(i4);

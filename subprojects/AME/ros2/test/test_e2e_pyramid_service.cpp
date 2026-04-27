@@ -1,4 +1,4 @@
-/// \brief E2E test: PDDL plan → BT execution → PYRAMID service calls via InvokeService.
+/// \brief E2E test: PDDL plan -> BT execution -> PYRAMID service calls via InvokeService.
 ///
 /// Uses the standard UAV search-and-classify domain with all PDDL actions
 /// mapped to InvokeService subtree templates (the PYRAMID integration pattern
@@ -7,8 +7,8 @@
 /// the correct PYRAMID services were invoked with the right parameters.
 ///
 /// Pipeline under test:
-///   WorldModel → Planner (LAPKT) → PlanCompiler → ExecutorNode
-///     → InvokeService BT nodes → IPyramidService stub
+///   WorldModel -> Planner (LAPKT) -> PlanCompiler -> ExecutorNode
+///     -> InvokeService BT nodes -> IPyramidService stub
 
 #include <gtest/gtest.h>
 
@@ -31,7 +31,7 @@
 #include <vector>
 
 // ---------------------------------------------------------------------------
-// Tracking PYRAMID service stub — records every async call for verification
+// Tracking PYRAMID service stub -- records every async call for verification
 // ---------------------------------------------------------------------------
 struct PyramidCallRecord {
   std::string service_name;
@@ -93,7 +93,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Failing PYRAMID service stub — all async calls return FAILURE
+// Failing PYRAMID service stub -- all async calls return FAILURE
 // ---------------------------------------------------------------------------
 class FailingPyramidService : public ame::IPyramidService {
 public:
@@ -118,7 +118,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Test fixture — UAV search domain with all actions via PYRAMID InvokeService
+// Test fixture -- UAV search domain with all actions via PYRAMID InvokeService
 // ---------------------------------------------------------------------------
 class E2EPyramidServiceTest : public ::testing::Test {
 protected:
@@ -146,21 +146,21 @@ protected:
     // --- Map all PDDL actions to PYRAMID InvokeService templates ---
     // Following the pattern from planning_execution_user_guide.md
 
-    // (move ?robot ?from ?to) → mobility/move
+    // (move ?robot ?from ?to) -> mobility/move
     pl_node_->actionRegistry().registerActionSubTree("move",
         R"(<InvokeService service_name="mobility" operation="move")"
         R"( timeout_ms="5000")"
         R"( param_names="?robot;?from;?to")"
         R"( param_values="{param0};{param1};{param2}"/>)");
 
-    // (search ?robot ?sector) → sensors/area_search
+    // (search ?robot ?sector) -> sensors/area_search
     pl_node_->actionRegistry().registerActionSubTree("search",
         R"(<InvokeService service_name="sensors" operation="area_search")"
         R"( timeout_ms="10000")"
         R"( param_names="?robot;?sector")"
         R"( param_values="{param0};{param1}"/>)");
 
-    // (classify ?robot ?sector) → imaging/classify with extra request fields
+    // (classify ?robot ?sector) -> imaging/classify with extra request fields
     pl_node_->actionRegistry().registerActionSubTree("classify",
         R"(<InvokeService service_name="imaging" operation="classify")"
         R"( timeout_ms="10000")"
@@ -264,7 +264,7 @@ protected:
 };
 
 // ---------------------------------------------------------------------------
-// Test: Full pipeline — plan, execute, verify all PYRAMID service calls
+// Test: Full pipeline -- plan, execute, verify all PYRAMID service calls
 // ---------------------------------------------------------------------------
 TEST_F(E2EPyramidServiceTest, PlanAndExecuteInvokesPyramidServices) {
   // Plan in-process (PlannerNode's action server was replaced by PCL service;

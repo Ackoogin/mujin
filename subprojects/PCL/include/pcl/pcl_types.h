@@ -96,7 +96,7 @@ typedef enum {
 
 /// \brief Generic message exchanged through ports.
 ///
-/// The container borrows pointers — caller owns the underlying memory
+/// The container borrows pointers -- caller owns the underlying memory
 /// and must keep it alive for the duration of the call.
 ///
 /// When crossing threads, prefer \ref pcl_executor_post_incoming(), which
@@ -108,12 +108,12 @@ typedef struct {
 } pcl_msg_t;
 
 /// \brief Callback fired on the executor thread when an async service response arrives.
-/// \param resp       Response message (borrow — do not retain pointers after return).
+/// \param resp       Response message (borrow -- do not retain pointers after return).
 /// \param user_data  Caller-supplied context passed to invoke_remote_async.
 typedef void (*pcl_resp_cb_fn_t)(const pcl_msg_t* resp, void* user_data);
 
 /// \brief Callback fired for each message in a streaming service response.
-/// \param msg        Stream message (borrow — do not retain pointers after return).
+/// \param msg        Stream message (borrow -- do not retain pointers after return).
 /// \param end        True if this is the final message (stream complete).
 /// \param status     PCL_OK for normal messages, error code on abort/cancel.
 /// \param user_data  Caller-supplied context passed to invoke_stream.

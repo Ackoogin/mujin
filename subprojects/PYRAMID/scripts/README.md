@@ -73,9 +73,9 @@ chmod +x subprojects/PCL/scripts/*.sh subprojects/PYRAMID/scripts/*.sh
 
 The tactical_objects coverage script also runs `gen_requirement_trace.py`, which produces `coverage_tactical_objects/requirement_traceability.md`:
 
-- **HLR → Tests**: From `doc/reports/PYRAMID/tactical_objects/HLR_COVERAGE.md` (TOBJ.001–TOBJ.053, RESP.001–RESP.017)
-- **LLR → HLR → Test**: From `subprojects/PYRAMID/doc/requirements/tactical_objects/LLR.md` (REQ_TACTICAL_OBJECTS_001–…) with trace to HLR and verification test
-- **Test → Requirements**: From `///< REQ_` / `///< TOBJ.` / `///< RESP.` tags in test files
+- **HLR -> Tests**: From `doc/reports/PYRAMID/tactical_objects/HLR_COVERAGE.md` (TOBJ.001-TOBJ.053, RESP.001-RESP.017)
+- **LLR -> HLR -> Test**: From `subprojects/PYRAMID/doc/requirements/tactical_objects/LLR.md` (REQ_TACTICAL_OBJECTS_001-...) with trace to HLR and verification test
+- **Test -> Requirements**: From `///< REQ_` / `///< TOBJ.` / `///< RESP.` tags in test files
 
 Use this report to verify requirement-to-test trace completeness.
 

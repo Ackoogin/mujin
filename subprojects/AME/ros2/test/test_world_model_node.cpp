@@ -57,7 +57,7 @@ TEST_F(WorldModelNodeTest, SetAndGetFactViaWorldModel) {
 }
 
 // ---------------------------------------------------------------------------
-// PCL service tests — call get_fact / set_fact / query_state via PCL executor
+// PCL service tests -- call get_fact / set_fact / query_state via PCL executor
 // ---------------------------------------------------------------------------
 
 TEST_F(WorldModelNodeTest, GetFactServiceCall) {

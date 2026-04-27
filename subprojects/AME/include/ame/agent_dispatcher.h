@@ -31,12 +31,12 @@ struct AgentDispatchResult {
 /// on_configure() and are immutable thereafter.
 ///
 /// Ports created during on_configure():
-///   pub  "{id}/executor/bt_xml"   (ame/BTXML)  — one per agent in roster
-///   sub  "{id}/executor/status"   (ame/Status) — one per agent in roster
+///   pub  "{id}/executor/bt_xml"   (ame/BTXML)  -- one per agent in roster
+///   sub  "{id}/executor/status"   (ame/Status) -- one per agent in roster
 ///   svc  "dispatch_goals"         (ame/DispatchGoals)
 ///
 /// Parameters:
-///   agent_ids  (string, "") — comma-separated agent IDs (e.g. "uav1,uav2")
+///   agent_ids  (string, "") -- comma-separated agent IDs (e.g. "uav1,uav2")
 class AgentDispatcher : public pcl::Component {
 public:
     AgentDispatcher();
@@ -94,7 +94,7 @@ private:
 
     std::vector<std::string> dispatched_agents_;
 
-    // PCL ports — one publisher and one status cache per agent in the roster
+    // PCL ports -- one publisher and one status cache per agent in the roster
     std::map<std::string, pcl_port_t*> agent_bt_pubs_;
     std::map<std::string, std::string> agent_statuses_;
 

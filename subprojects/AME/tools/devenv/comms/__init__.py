@@ -284,7 +284,7 @@ class AmeRos2Client:
         self._call_in_node_thread("_do_stop_execution")
 
     def tick_once(self) -> None:
-        """No-op in ROS2 mode — PCL executor drives ticking automatically."""
+        """No-op in ROS2 mode -- PCL executor drives ticking automatically."""
         pass
 
     def is_executing(self) -> bool:
@@ -412,7 +412,7 @@ class AmeRos2Client:
 
             self._connected = True
         except (ImportError, ModuleNotFoundError):
-            # ame_ros2 messages not available — run without ROS2 services
+            # ame_ros2 messages not available -- run without ROS2 services
             self._connected = False
 
         while self._running:

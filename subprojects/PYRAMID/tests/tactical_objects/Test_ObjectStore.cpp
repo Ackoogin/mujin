@@ -99,7 +99,7 @@ TEST(ObjectStore, DeleteMiddleElementSwapsWithLast) {
   store.kinematics().set(id1, kc);
   store.kinematics().set(id2, kc);
 
-  // Delete the middle element (id1, index 1) — triggers the idx != last swap
+  // Delete the middle element (id1, index 1) -- triggers the idx != last swap
   ASSERT_TRUE(store.deleteObject(id1));
   ASSERT_EQ(store.objectCount(), 2u);
 

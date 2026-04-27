@@ -302,7 +302,7 @@ def main():
     generator = MockGenerator(contracts_file, datamodel_file)
     generator.generate(output_dir)
     
-    print(f"\n✓ Component mocks generated in {output_dir}/")
+    print(f"\n[x] Component mocks generated in {output_dir}/")
 
 
 if __name__ == '__main__':

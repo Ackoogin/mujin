@@ -1,4 +1,4 @@
-# AME Dev Environment — ROS2 Quickstart
+# AME Dev Environment -- ROS2 Quickstart
 
 ## Do I need a new application?
 
@@ -24,13 +24,13 @@ It uses two parallel connections:
 ## Prerequisites
 
 - ROS2 Jazzy installed via pixi at `D:\Dev\ros2-windows`
-- `ame_ros2` built (run `subprojects\AME\scripts\build_ros2.bat` from `D:\Dev\repo\unmanned` — see `subprojects/AME/doc/architecture/06-ros2.md`)
+- `ame_ros2` built (run `subprojects\AME\scripts\build_ros2.bat` from `D:\Dev\repo\unmanned` -- see `subprojects/AME/doc/architecture/06-ros2.md`)
 - `install\setup.bat` sourced (produced by the colcon build at `D:\Dev\repo\unmanned\install\setup.bat`)
 - Dev environment venv set up (`subprojects\AME\tools\devenv\setup_venv.bat`)
 
 ---
 
-## Step 1 — Make rclpy available to the devenv
+## Step 1 -- Make rclpy available to the devenv
 
 The devenv venv needs rclpy on `PYTHONPATH`. Set it in the shell before launching:
 
@@ -44,7 +44,7 @@ Then launch the devenv in the same shell (Step 4).
 
 ---
 
-## Step 2 — Start the ame_ros2 stack
+## Step 2 -- Start the ame_ros2 stack
 
 The quickest path is the helper script, which handles all PATH and environment setup:
 
@@ -78,7 +78,7 @@ ros2 launch ame_ros2 ame_inprocess.launch.py ^
 ```
 
 The `AmeLifecycleManager` inside the combined node automatically configures and activates
-`world_model_node` → `planner_node` → `executor_node` in order.
+`world_model_node` -> `planner_node` -> `executor_node` in order.
 
 For the distributed mode (separate processes):
 
@@ -90,7 +90,7 @@ ros2 launch ame_ros2 ame_distributed.launch.py ^
 
 ---
 
-## Step 3 — (Optional) Start the Foxglove bridge
+## Step 3 -- (Optional) Start the Foxglove bridge
 
 The Observability and Execution tabs in the devenv receive live BT events and WM audit entries
 via Foxglove WebSocket. Install `foxglove_bridge` then run:
@@ -105,7 +105,7 @@ the devenv expects at `ws://localhost:8765`.
 
 ---
 
-## Step 4 — Launch the dev environment
+## Step 4 -- Launch the dev environment
 
 In the same shell where you set `PYTHONPATH` in Step 1:
 
@@ -116,9 +116,9 @@ subprojects\AME\tools\devenv\start_devenv.bat
 
 The status bar at the bottom will show:
 
-- `ROS2: Connected` — rclpy found the `world_model_node` services
-- `Foxglove: Connected` — WebSocket bridge is live (BT/WM streams active)
-- `WM: v<n>` — world model version, updating on every fact change
+- `ROS2: Connected` -- rclpy found the `world_model_node` services
+- `Foxglove: Connected` -- WebSocket bridge is live (BT/WM streams active)
+- `WM: v<n>` -- world model version, updating on every fact change
 
 > Run with `--no-ros2` for offline/replay mode (no ROS2 required).
 
@@ -132,7 +132,7 @@ The status bar at the bottom will show:
 | **Planning** | Sends goal to `/planner_node/plan` action; streams feedback (nodes expanded, elapsed) |
 | **Execution** | Displays BT node status transitions from Foxglove `/bt_events` stream |
 | **Observability** | Time-series plots of BT events + WM audit entries from Foxglove streams |
-| **PDDL Editor** | Offline only — edit and validate domain/problem files locally |
+| **PDDL Editor** | Offline only -- edit and validate domain/problem files locally |
 
 ---
 
@@ -166,7 +166,7 @@ REM Trigger planning
 ros2 action send_goal /planner_node/plan ame_ros2/action/Plan ^
   "{goal_fluents: ['(searched sector_a)'], replan: false}"
 
-REM Load domain at runtime (devenv/testing — bypasses file paths)
+REM Load domain at runtime (devenv/testing -- bypasses file paths)
 ros2 service call /world_model_node/load_domain ame_ros2/srv/LoadDomain ^
   "{domain_id: 'test', domain_pddl: '...', problem_pddl: '...'}"
 ros2 service call /planner_node/load_domain ame_ros2/srv/LoadDomain ^

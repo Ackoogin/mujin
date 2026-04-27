@@ -1,5 +1,5 @@
 /// \file test_pcl_oom.cpp
-/// \brief OOM-injection tests for PCL executor — covers the malloc-failure
+/// \brief OOM-injection tests for PCL executor -- covers the malloc-failure
 ///        guard branches in pcl_executor_post_incoming that cannot be reached
 ///        without deliberately making allocations fail.
 ///
@@ -20,9 +20,9 @@ extern "C" {
 // -- Malloc interposer ----------------------------------------------------
 //
 // g_oom_countdown (thread-local):
-//   -1  → never fail (normal operation)
-//    0  → fail the very next allocation
-//    N  → skip N allocations, fail the (N+1)-th
+//   -1  -> never fail (normal operation)
+//    0  -> fail the very next allocation
+//    N  -> skip N allocations, fail the (N+1)-th
 //
 // After a failure fires, the countdown resets to -1 automatically.
 
@@ -65,10 +65,10 @@ static void restore_logs() {
 // -- pcl_executor_post_incoming allocation sequence ----------------------
 //
 // Inside post_incoming the allocations happen in this order:
-//   #0  calloc(1, sizeof(pcl_pending_msg_t))       → if NULL → return PCL_ERR_NOMEM
-//   #1  malloc(strlen(topic)+1)  [pcl_strdup_local] → if NULL → free+return PCL_ERR_NOMEM  (line 429)
-//   #2  malloc(strlen(type)+1)   [pcl_strdup_local] → if NULL → free+return PCL_ERR_NOMEM  (line 429)
-//   #3  malloc(msg->size)                           → if NULL → free+return PCL_ERR_NOMEM  (line 435-436)
+//   #0  calloc(1, sizeof(pcl_pending_msg_t))       -> if NULL -> return PCL_ERR_NOMEM
+//   #1  malloc(strlen(topic)+1)  [pcl_strdup_local] -> if NULL -> free+return PCL_ERR_NOMEM  (line 429)
+//   #2  malloc(strlen(type)+1)   [pcl_strdup_local] -> if NULL -> free+return PCL_ERR_NOMEM  (line 429)
+//   #3  malloc(msg->size)                           -> if NULL -> free+return PCL_ERR_NOMEM  (line 435-436)
 
 // Helper: call fn with OOM triggered on the Nth allocation from entry.
 // Storing the result BEFORE any EXPECT_* macro ensures no GTest-internal
@@ -80,7 +80,7 @@ static pcl_status_t do_post(void* ud) {
   return pcl_executor_post_incoming(c->e, c->topic, c->msg);
 }
 
-// Allocation order before post_incoming: executor_create uses 1× calloc.
+// Allocation order before post_incoming: executor_create uses 1x calloc.
 // Inside post_incoming: calloc(pending), malloc(topic), malloc(type_name), malloc(data).
 // Countdown N = skip N allocations, fail the (N+1)-th.
 
@@ -101,7 +101,7 @@ TEST(PclOom, PostIncomingPendingAllocFails) {
   restore_logs();
 }
 
-// -- Fail allocation #1: topic strdup → free_pending_msg path ---------
+// -- Fail allocation #1: topic strdup -> free_pending_msg path ---------
 
 TEST(PclOom, PostIncomingTopicStrdupFails) {
   silence_logs();
@@ -118,7 +118,7 @@ TEST(PclOom, PostIncomingTopicStrdupFails) {
   restore_logs();
 }
 
-// -- Fail allocation #2: type_name strdup → free_pending_msg path -----
+// -- Fail allocation #2: type_name strdup -> free_pending_msg path -----
 
 TEST(PclOom, PostIncomingTypeNameStrdupFails) {
   silence_logs();
@@ -126,7 +126,7 @@ TEST(PclOom, PostIncomingTypeNameStrdupFails) {
   pcl_msg_t msg = {}; msg.type_name = "T";
   OomPostCtx ctx{e, "t", &msg};
 
-  g_oom_countdown = 2;                // skip pending+topic, fail malloc(type_name) → free_pending_msg
+  g_oom_countdown = 2;                // skip pending+topic, fail malloc(type_name) -> free_pending_msg
   pcl_status_t rc = do_post(&ctx);
   g_oom_countdown = -1;
   EXPECT_EQ(rc, PCL_ERR_NOMEM);
@@ -135,7 +135,7 @@ TEST(PclOom, PostIncomingTypeNameStrdupFails) {
   restore_logs();
 }
 
-// -- Fail allocation #3: data malloc → lines 467-469 ------------------
+// -- Fail allocation #3: data malloc -> lines 467-469 ------------------
 
 TEST(PclOom, PostIncomingDataMallocFails) {
   silence_logs();
@@ -191,8 +191,8 @@ TEST(PclOom, BridgeCreateContainerAllocFails) {
 // -- post_response_cb: data malloc fails (lines 553-554) ------------------
 //
 // Inside pcl_executor_post_response_cb the allocation sequence is:
-//   #0  calloc(1, sizeof(node))   → node created
-//   #1  malloc(size)              → data buffer; if NULL: free(node) + ERR_NOMEM
+//   #0  calloc(1, sizeof(node))   -> node created
+//   #1  malloc(size)              -> data buffer; if NULL: free(node) + ERR_NOMEM
 
 TEST(PclOom, PostResponseCbDataMallocFails) {
   silence_logs();

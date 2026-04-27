@@ -48,7 +48,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 )
 
 # ---------------------------------------------------------------------------
-# ame_ros2_lib — the three node classes + RosWmBridge + LifecycleManager
+# ame_ros2_lib -- the three node classes + RosWmBridge + LifecycleManager
 # ---------------------------------------------------------------------------
 add_library(ame_ros2_lib SHARED
     src/nodes/world_model_node.cpp

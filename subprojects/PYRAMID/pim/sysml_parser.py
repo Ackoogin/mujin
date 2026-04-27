@@ -168,7 +168,7 @@ class SysMLParser:
                 print(f"Warning: Package '{package_filter}' not found, searching entire model")
                 self.search_root = self.root
             else:
-                print(f"✓ Found package '{package_filter}', restricting search")
+                print(f"[x] Found package '{package_filter}', restricting search")
         
         # Find all elements with xmi:type attribute
         # Search tree for specific SysML types only
@@ -582,10 +582,10 @@ def main():
     with open(output_file, 'w') as f:
         json.dump(model, f, indent=2)
     
-    print(f"✓ Parsed {len(model['dataTypes'])} data types")
-    print(f"✓ Parsed {len(model['enumerations'])} enumerations")
-    print(f"✓ Parsed {len(model['classes'])} classes/services")
-    print(f"✓ Output written to {output_file}")
+    print(f"[x] Parsed {len(model['dataTypes'])} data types")
+    print(f"[x] Parsed {len(model['enumerations'])} enumerations")
+    print(f"[x] Parsed {len(model['classes'])} classes/services")
+    print(f"[x] Output written to {output_file}")
 
 
 if __name__ == '__main__':

@@ -32,7 +32,7 @@ BT::NodeStatus FollowRoute::onStart() {
   std::string route_str;
   getInput("route", route_str);
 
-  // If the string contains '=' it is a k=v encoded service response —
+  // If the string contains '=' it is a k=v encoded service response --
   // extract the "waypoints" field.
   if (!route_str.empty() && route_str.find('=') != std::string::npos) {
     std::istringstream kv_stream(route_str);

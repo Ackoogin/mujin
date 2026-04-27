@@ -1,4 +1,4 @@
-# 08 — PCL Component System Architecture
+# 08 -- PCL Component System Architecture
 
 This document provides Mermaid diagrams illustrating the PYRAMID Container Library (PCL)
 component system: its layered architecture, communication patterns, and deployment
@@ -34,7 +34,7 @@ graph TB
   end
 
   subgraph Wrapper["C++ Wrapper (optional, header-only)"]
-    CPP["pcl::Component — RAII, virtual methods, trampolines"]
+    CPP["pcl::Component -- RAII, virtual methods, trampolines"]
   end
 
   subgraph Core["Pure C API (pcl_container.h)"]
@@ -44,7 +44,7 @@ graph TB
   end
 
   subgraph Executor["Executor (pcl_executor.h)"]
-    EXEC["pcl_executor_t — single-thread tick loop, ingress queue"]
+    EXEC["pcl_executor_t -- single-thread tick loop, ingress queue"]
   end
 
   subgraph Transport["Transport Adapter (injected via pcl_transport_t)"]
@@ -175,7 +175,7 @@ graph LR
     direction TB
     CHECK{{"Transport<br/>adapter set?"}}
     INTRA["Intra-process<br/>direct dispatch<br/>(zero-copy)"]
-    WIRE["Adapter publish()<br/>serialize → wire"]
+    WIRE["Adapter publish()<br/>serialize -> wire"]
     CHECK -->|"No"| INTRA
     CHECK -->|"Yes"| WIRE
   end
@@ -200,7 +200,7 @@ graph LR
 ## 5. Bridge Pattern
 
 A bridge is a managed container that subscribes to one topic, applies a transform,
-and dispatches the result to a different topic — enabling unit conversion, encoding
+and dispatches the result to a different topic -- enabling unit conversion, encoding
 changes, and protocol translation without modifying either endpoint.
 
 ```mermaid
@@ -211,7 +211,7 @@ graph LR
 
   subgraph Bridge["Bridge Container<br/>'speed_conv'"]
     SUB_B["sub: sensors/speed_mps"]
-    FN["transform_fn()<br/>m/s → km/h"]
+    FN["transform_fn()<br/>m/s -> km/h"]
     PUB_B["dispatch: hmi/speed_kmph<br/>type: SpeedKmph"]
     SUB_B --> FN --> PUB_B
   end
@@ -230,7 +230,7 @@ graph LR
 
 ---
 
-## 6. Deployment Example — Single Process, No Middleware
+## 6. Deployment Example -- Single Process, No Middleware
 
 All components share one executor. Communication is intra-process
 zero-copy. No transport adapter is set. This is the simplest deployment, suitable
@@ -250,7 +250,7 @@ graph TB
 
       subgraph CB["Component B (Processor)"]
         CB_REF["inprocess_ref = &state_mgr"]
-        CB_METHOD["process() → direct call"]
+        CB_METHOD["process() -> direct call"]
       end
 
       subgraph CC["Component C (Task Runner)"]
@@ -274,7 +274,7 @@ graph TB
 
 ---
 
-## 7. Deployment Example — ROS 2 Transport Binding
+## 7. Deployment Example -- ROS 2 Transport Binding
 
 Each component runs in its own executor (potentially in separate processes or nodes).
 A ROS 2 transport adapter bridges PCL ports to DDS topics and services. Components
@@ -329,7 +329,7 @@ graph TB
 
 ---
 
-## 8. Deployment Example — Mixed Bindings with Bridges
+## 8. Deployment Example -- Mixed Bindings with Bridges
 
 A realistic deployment where some components are co-located (sharing an executor for
 zero-copy speed) while others are distributed over different transports. Bridges
@@ -341,13 +341,13 @@ graph TB
     subgraph ExecA["pcl_executor_t (autonomy)"]
       CA3["StateComponent"]
       CC3["TaskRunnerComponent"]
-      BRIDGE_OUT["Bridge: state<br/>→ protobuf encoding"]
+      BRIDGE_OUT["Bridge: state<br/>-> protobuf encoding"]
     end
 
     subgraph ExecS["pcl_executor_t (sensors)"]
       LIDAR["LidarComponent"]
       IMU["ImuComponent"]
-      BRIDGE_UNIT["Bridge: m/s → km/h"]
+      BRIDGE_UNIT["Bridge: m/s -> km/h"]
     end
   end
 
@@ -379,7 +379,7 @@ graph TB
 
 ---
 
-## 9. Deployment Example — Ada / C Cross-Language Binding
+## 9. Deployment Example -- Ada / C Cross-Language Binding
 
 The pure-C ABI enables components written in different languages to share an executor.
 An Ada sensor component links against the same `libpcl` as the C++ autonomy components.
@@ -450,23 +450,23 @@ classDiagram
     -map~string,Publisher~ pubs
     -map~string,Subscription~ subs
     +publish() rclcpp publish
-    +subscribe() create subscription → post_incoming()
+    +subscribe() create subscription -> post_incoming()
     +serve() rclcpp service server
   }
 
   class GrpcAdapter {
     -grpc::Channel* channel
     -serializer* codec
-    +publish() serialize → stream
-    +subscribe() async read → post_incoming()
+    +publish() serialize -> stream
+    +subscribe() async read -> post_incoming()
     +serve() unary RPC handler
   }
 
   class SharedMemAdapter {
     -shm_region* region
     -sem_t* notify
-    +publish() memcpy → signal
-    +subscribe() wait → post_incoming()
+    +publish() memcpy -> signal
+    +subscribe() wait -> post_incoming()
     +serve() req/resp through shm
   }
 
@@ -519,6 +519,6 @@ sequenceDiagram
 | C++ wrapper | `include/pcl/component.hpp` |
 | AME components using PCL | `include/ame/world_model_component.h`, `include/ame/planner_component.h` |
 | ROS2 node wrappers | `ros2/src/nodes/world_model_node.cpp`, `ros2/src/nodes/planner_node.cpp` |
-| In-process ROS2 example | `ros2/src/apps/combined_main.cpp` — all nodes share one executor, zero-copy |
+| In-process ROS2 example | `ros2/src/apps/combined_main.cpp` -- all nodes share one executor, zero-copy |
 | ROS2 integration docs | `subprojects/AME/doc/architecture/06-ros2.md` |
 

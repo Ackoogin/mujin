@@ -3,11 +3,11 @@
 ///
 /// A bridge is a managed container that subscribes to one topic, applies a
 /// user-supplied transform function, and immediately dispatches the result to
-/// a different topic — potentially with a different type name and payload
+/// a different topic -- potentially with a different type name and payload
 /// layout.  This is the standard mechanism for:
 ///
-///   - Unit conversion       e.g. float m/s → int32 km/h
-///   - Encoding change       e.g. int32 state enum → const-char* label
+///   - Unit conversion       e.g. float m/s -> int32 km/h
+///   - Encoding change       e.g. int32 state enum -> const-char* label
 ///   - Multiplicity          one input topic fan-out to many output topics
 ///   - Protocol translation  between component layers
 ///
@@ -56,13 +56,13 @@ extern "C" {
 /// forward the result; any other return code suppresses forwarding silently.
 ///
 /// \param in        Incoming message (borrowed; valid for the duration of the
-///                  call only — do not store the pointer).
+///                  call only -- do not store the pointer).
 /// \param out       Output message to populate.  Set out->data, out->size.
 ///                  out->type_name is pre-populated with the out_type passed
 ///                  to pcl_bridge_create(); the function may override it.
 /// \param user_data Opaque pointer supplied at bridge creation time.
-/// \return PCL_OK   → transformed message is dispatched to out_topic.
-///         anything else → message is dropped silently.
+/// \return PCL_OK   -> transformed message is dispatched to out_topic.
+///         anything else -> message is dropped silently.
 typedef pcl_status_t (*pcl_bridge_fn_t)(const pcl_msg_t* in,
                                         pcl_msg_t*       out,
                                         void*            user_data);
@@ -90,7 +90,7 @@ typedef struct pcl_bridge_t pcl_bridge_t;
 /// \param out_topic  Topic to dispatch transformed messages to (copied).
 /// \param out_type   Type name for outbound messages (copied; pre-filled into
 ///                   out->type_name before the transform function is called).
-/// \param fn         Transform function — must not be NULL.
+/// \param fn         Transform function -- must not be NULL.
 /// \param user_data  Opaque pointer forwarded verbatim to every \p fn call.
 /// \return           New bridge handle, or NULL if any argument is NULL or on
 ///                   allocation failure.
@@ -106,7 +106,7 @@ pcl_bridge_t* pcl_bridge_create(pcl_executor_t*  executor,
 /// \brief Get the bridge's internal container.
 ///
 /// Add this to the executor and drive it through configure/activate.
-/// The bridge owns the container — do not call pcl_container_destroy() on it
+/// The bridge owns the container -- do not call pcl_container_destroy() on it
 /// directly; use pcl_bridge_destroy() instead.
 pcl_container_t* pcl_bridge_container(pcl_bridge_t* b);
 

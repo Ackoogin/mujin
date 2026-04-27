@@ -18,7 +18,7 @@ The subject matter of PCL is the lifecycle management, deterministic execution, 
 ## Design Decisions
 
 ### D1 - Zero External Dependencies
-The core library (`pcl_core`) is written in strict C17 with zero external dependencies — not even the C++ STL.
+The core library (`pcl_core`) is written in strict C17 with zero external dependencies -- not even the C++ STL.
 
 **Why**: Guarantees portability to bare-metal embedded targets, Ada, and Rust through a stable C ABI.
 
@@ -43,12 +43,12 @@ External I/O threads must never call component callbacks directly. They enqueue 
 **Why**: Maintains the deterministic single-threaded execution guarantee while accepting data from concurrent producers.
 
 ### D6 - Lifecycle State Machine
-Containers follow a strict state machine (UNCONFIGURED → CONFIGURED → ACTIVE → FINALIZED) enforcing safe initialization, port creation, and shutdown sequences.
+Containers follow a strict state machine (UNCONFIGURED -> CONFIGURED -> ACTIVE -> FINALIZED) enforcing safe initialization, port creation, and shutdown sequences.
 
 **Why**: Deterministic resource allocation and teardown, modelled on the ROS2 managed lifecycle.
 
 ### D7 - Bridge as First-Class Primitive
-Bridges are managed containers that subscribe, transform, and re-dispatch on the same tick — enabling unit conversion, encoding change, and protocol translation without custom glue code.
+Bridges are managed containers that subscribe, transform, and re-dispatch on the same tick -- enabling unit conversion, encoding change, and protocol translation without custom glue code.
 
 **Why**: Standardizes the common pattern of adapting between component interfaces.
 
@@ -64,7 +64,7 @@ The container shall implement a strict state machine with states: UNCONFIGURED (
 **Rationale**: Deterministic initialization and shutdown sequences are essential for safety-critical systems.
 
 ### PCL.002 - Lifecycle Transitions
-The container shall enforce valid transitions: UNCONFIGURED → CONFIGURED (configure), CONFIGURED → ACTIVE (activate), ACTIVE → CONFIGURED (deactivate), CONFIGURED → UNCONFIGURED (cleanup), and any-state → FINALIZED (shutdown).
+The container shall enforce valid transitions: UNCONFIGURED -> CONFIGURED (configure), CONFIGURED -> ACTIVE (activate), ACTIVE -> CONFIGURED (deactivate), CONFIGURED -> UNCONFIGURED (cleanup), and any-state -> FINALIZED (shutdown).
 
 **Rationale**: Invalid transitions must be rejected to prevent undefined behavior.
 
@@ -182,7 +182,7 @@ The executor shall support an async-signal-safe, thread-safe shutdown request th
 **Rationale**: External signal handlers and watchdog threads need to terminate the executor safely.
 
 ### PCL.021 - Graceful Shutdown
-The executor shall provide a graceful shutdown that transitions each ACTIVE container through deactivate → shutdown → FINALIZED, with a configurable timeout.
+The executor shall provide a graceful shutdown that transitions each ACTIVE container through deactivate -> shutdown -> FINALIZED, with a configurable timeout.
 
 **Rationale**: Orderly teardown prevents resource leaks and ensures cleanup callbacks fire.
 
@@ -221,7 +221,7 @@ The executor shall support `pcl_executor_post_response_cb()` for delivering asyn
 ### PCL.057 - Cross-Thread Local Service Request Queuing
 The executor shall provide `pcl_executor_post_service_request()` for external threads to safely enqueue an intra-process service call. The function shall deep-copy the service name, type name, and request payload before returning. The service handler and response callback shall both execute on the executor thread during the next spin cycle.
 
-**Rationale**: D5 forbids external threads from calling component callbacks directly. Without this function there is no thread-safe path for an external producer to trigger a local service handler — callers were forced to use `pcl_executor_invoke_service()` which bypasses the threading model when called off the executor thread.
+**Rationale**: D5 forbids external threads from calling component callbacks directly. Without this function there is no thread-safe path for an external producer to trigger a local service handler -- callers were forced to use `pcl_executor_invoke_service()` which bypasses the threading model when called off the executor thread.
 
 ## Transport Adapter
 

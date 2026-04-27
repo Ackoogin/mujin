@@ -531,7 +531,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
     def _write_fbs_schema(self, path: Path, pf: ProtoFile, index: ProtoTypeIndex):
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'// Auto-generated FlatBuffers schema from {pf.path.name}\n')
-            f.write('// Do not edit — regenerate from proto source\n\n')
+            f.write('// Do not edit -- regenerate from proto source\n\n')
 
             if pf.package:
                 f.write(f'namespace {pf.package};\n\n')
@@ -575,7 +575,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
         fbs_base = '_'.join(pkg_parts)
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
-            f.write('// Auto-generated FlatBuffers PCL codec — do not edit\n')
+            f.write('// Auto-generated FlatBuffers PCL codec -- do not edit\n')
             f.write(f'// Backend: flatbuffers | Namespace: {ns}\n')
             f.write('#pragma once\n\n')
             f.write(f'// Include the flatc-generated header (run flatc on {fbs_base}.fbs)\n')
@@ -1009,7 +1009,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
         pkg_name = '.'.join(pkg_parts) + '.Flatbuffers_Codec'
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
-            f.write('--  Auto-generated FlatBuffers codec spec — do not edit\n')
+            f.write('--  Auto-generated FlatBuffers codec spec -- do not edit\n')
             f.write(f'--  Backend: flatbuffers | Package: {pkg_name}\n')
             f.write('--\n')
             f.write('--  This package provides thin bindings to the C++ FlatBuffers codec.\n')

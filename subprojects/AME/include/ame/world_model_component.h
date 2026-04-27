@@ -45,8 +45,8 @@ struct Detection;
 /// \brief PCL-backed world model component.
 ///
 /// Ports created during on_configure():
-///   pub  "world_state"  (ame/WorldState)   — periodic state snapshot
-///   sub  "detections"   (ame/Detection)    — perception ingress
+///   pub  "world_state"  (ame/WorldState)   -- periodic state snapshot
+///   sub  "detections"   (ame/Detection)    -- perception ingress
 ///   svc  "get_fact"     (ame/GetFact)
 ///   svc  "set_fact"     (ame/SetFact)
 ///   svc  "query_state"  (ame/QueryState)
@@ -71,7 +71,7 @@ public:
   WorldModel& worldModel() { return wm_; }
   const WorldModel& worldModel() const { return wm_; }
 
-  /// \brief Mutex protecting wm_ for cross-thread access (e.g. ROS2 ↔ PCL).
+  /// \brief Mutex protecting wm_ for cross-thread access (e.g. ROS2 <-> PCL).
   std::mutex& worldModelMutex() { return wm_mutex_; }
 
   /// \brief Register a callback invoked on every world-state publish (from the PCL thread).
@@ -118,7 +118,7 @@ private:
   // PCL ports (valid after on_configure)
   pcl_port_t* pub_world_state_ = nullptr;
 
-  mutable std::mutex wm_mutex_;  ///< Guards wm_ for concurrent PCL ↔ ROS2 access.
+  mutable std::mutex wm_mutex_;  ///< Guards wm_ for concurrent PCL <-> ROS2 access.
   WorldModel wm_;
   std::optional<WmAuditLog> audit_log_;
   std::atomic<bool> state_dirty_{false};

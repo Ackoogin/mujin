@@ -33,7 +33,7 @@ target_link_libraries(tactical_objects
 target_compile_features(tactical_objects PUBLIC cxx_std_14)
 
 # ---------------------------------------------------------------------------
-# TacticalObjectsComponent — PCL integration
+# TacticalObjectsComponent -- PCL integration
 # ---------------------------------------------------------------------------
 add_library(tactical_objects_component)
 add_library(pyramid::tactical_objects_component ALIAS tactical_objects_component)

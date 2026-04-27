@@ -8,30 +8,30 @@ PDDL planning + behaviour tree execution with a shared world model, full observa
 PDDL Domain/Problem
         |
         v
-   WorldModel  --► Planner (LAPKT BRFS) --► PlanCompiler --► BT XML
+   WorldModel  --> Planner (LAPKT BRFS) --> PlanCompiler --> BT XML
    (facts +                                                       |
     actions)                                                      v
         |                                                  BT.CPP Executor
-        └--► WmAuditLog (Layer 3)                          (tickWhileRunning)
+        +--> WmAuditLog (Layer 3)                          (tickWhileRunning)
                                                                   |
-                                              ┌-------------------┤
-                                              │                   │
+                                              +-------------------+
+                                              |                   |
                                         TreeObserver        AmeBTLogger
                                          (Layer 1)           (Layer 2)
                                                                   |
                                                          FoxgloveBridge (Layer 4)
                                                          ws://localhost:8765
 
-PlanAuditLog (Layer 5) — records each planning episode independently
+PlanAuditLog (Layer 5) -- records each planning episode independently
 ```
 
 ## Components
 
 | Component | Role | Header |
 |-----------|------|--------|
-| **WorldModel** | Single authoritative state store — typed objects + boolean predicates as a grounded bitset | `world_model.h` |
+| **WorldModel** | Single authoritative state store -- typed objects + boolean predicates as a grounded bitset | `world_model.h` |
 | **TypeSystem** | Object/type hierarchy with single inheritance | `type_system.h` |
-| **Planner** | Stateless STRIPS solver (LAPKT BRFS) — same input always produces the same plan | `planner.h` |
+| **Planner** | Stateless STRIPS solver (LAPKT BRFS) -- same input always produces the same plan | `planner.h` |
 | **PddlParser** | Loads PDDL domain + problem files into WorldModel | `pddl_parser.h` |
 | **ActionRegistry** | Maps PDDL action names to BT node types, sub-tree templates, or pre-authored sub-trees | `action_registry.h` |
 | **PlanCompiler** | Builds a causal dependency graph from the plan, extracts parallel flows, emits BT XML | `plan_compiler.h` |
@@ -41,11 +41,11 @@ PlanAuditLog (Layer 5) — records each planning episode independently
 
 ## Design Principles
 
-- **Single source of truth** — WorldModel owns all state. The BT blackboard is a read-only view. LAPKT gets a snapshot projection.
-- **ROS-agnostic core** — `ame_core` has no ROS2 dependency. ROS2 integration is a separate adapter layer.
-- **Separation of concerns** — planning model (PDDL) and execution model (BT) are independently replaceable via ActionRegistry.
-- **Sink-based observability** — all logging is callback-driven, composable, and non-blocking.
-- **Automatic recovery** — action failures trigger replanning from current state, not mission abort.
+- **Single source of truth** -- WorldModel owns all state. The BT blackboard is a read-only view. LAPKT gets a snapshot projection.
+- **ROS-agnostic core** -- `ame_core` has no ROS2 dependency. ROS2 integration is a separate adapter layer.
+- **Separation of concerns** -- planning model (PDDL) and execution model (BT) are independently replaceable via ActionRegistry.
+- **Sink-based observability** -- all logging is callback-driven, composable, and non-blocking.
+- **Automatic recovery** -- action failures trigger replanning from current state, not mission abort.
 
 ## Library Boundaries
 

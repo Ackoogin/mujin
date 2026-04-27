@@ -3,7 +3,7 @@
 JSON Codec Backend
 
 Generates C++ (nlohmann/json) and Ada (GNATCOLL.JSON) serialisation code
-for all proto messages.  Entirely driven from the parsed proto model —
+for all proto messages.  Entirely driven from the parsed proto model --
 no hardcoded message names or field lists.
 """
 
@@ -124,7 +124,7 @@ def _ada_to_json_expr(fld: ProtoField, ada_fname: str, index: ProtoTypeIndex) ->
         return f'"""" & To_String (Msg.{ada_fname}) & """"'
     if index.is_enum_type(fld.type) or index.is_enum_type(fld.short_type):
         return f'"""" & To_String (Msg.{ada_fname}) & """"'
-    # Nested message — delegate
+    # Nested message -- delegate
     return f'To_Json (Msg.{ada_fname})'
 
 
@@ -194,7 +194,7 @@ class JsonBackend(codec_backends.CodecBackend):
                           messages: List[ProtoMessage], enums: List[ProtoEnum],
                           index: ProtoTypeIndex):
         with open(path, 'w', encoding='utf-8') as f:
-            f.write(f'// Auto-generated JSON codec — do not edit\n')
+            f.write(f'// Auto-generated JSON codec -- do not edit\n')
             f.write(f'// Backend: json | Namespace: {ns}\n')
             f.write('#pragma once\n\n')
             f.write('#include <string>\n#include <vector>\n#include <cstdint>\n\n')
@@ -232,7 +232,7 @@ class JsonBackend(codec_backends.CodecBackend):
                         messages: List[ProtoMessage], enums: List[ProtoEnum],
                         index: ProtoTypeIndex):
         with open(path, 'w', encoding='utf-8') as f:
-            f.write(f'// Auto-generated JSON codec — do not edit\n')
+            f.write(f'// Auto-generated JSON codec -- do not edit\n')
             f.write(f'#include "{file_base}.hpp"\n\n')
             f.write('#include <nlohmann/json.hpp>\n\n')
             f.write(f'namespace {ns} {{\n\n')
@@ -307,7 +307,7 @@ class JsonBackend(codec_backends.CodecBackend):
                         else:
                             f.write(f'    obj["{jkey}"] = msg.{jkey};\n')
                     else:
-                        # Nested message — delegate to its toJson
+                        # Nested message -- delegate to its toJson
                         f.write(f'    obj["{jkey}"] = nlohmann::json::parse(toJson(msg.{jkey}));\n')
                 f.write(f'    return obj.dump();\n')
                 f.write(f'}}\n\n')
@@ -370,7 +370,7 @@ class JsonBackend(codec_backends.CodecBackend):
                         messages: List[ProtoMessage], enums: List[ProtoEnum],
                         index: ProtoTypeIndex):
         with open(path, 'w', encoding='utf-8') as f:
-            f.write(f'--  Auto-generated JSON codec — do not edit\n')
+            f.write(f'--  Auto-generated JSON codec -- do not edit\n')
             f.write(f'--  Backend: json | Package: {pkg_name}\n\n')
             f.write(f'with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;\n')
             f.write(f'with GNATCOLL.JSON;\n\n')
@@ -415,7 +415,7 @@ class JsonBackend(codec_backends.CodecBackend):
                         messages: List[ProtoMessage], enums: List[ProtoEnum],
                         index: ProtoTypeIndex):
         with open(path, 'w', encoding='utf-8') as f:
-            f.write(f'--  Auto-generated JSON codec — do not edit\n\n')
+            f.write(f'--  Auto-generated JSON codec -- do not edit\n\n')
             f.write(f'with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;\n')
             f.write(f'with GNATCOLL.JSON; use GNATCOLL.JSON;\n\n')
             f.write(f'package body {pkg_name} is\n\n')

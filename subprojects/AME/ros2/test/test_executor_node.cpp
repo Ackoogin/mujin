@@ -40,7 +40,7 @@ protected:
         ex_node_->setInProcessWorldModel(wm_.get());
         ex_node_->factory().registerNodeType<StubTestAction>("StubTestAction");
 
-        // PCL executor drives the BT tick — must be added before configure
+        // PCL executor drives the BT tick -- must be added before configure
         pcl_exec_ = std::make_unique<pcl::Executor>();
         pcl_exec_->add(ex_node_->component());
 

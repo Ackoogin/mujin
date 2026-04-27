@@ -6,11 +6,11 @@
 
 ## SACE Purpose
 
-Defines the Safe Operating Concept (SOC) — the system-level safety requirements specifying how the AS must behave to mitigate each hazardous scenario.
+Defines the Safe Operating Concept (SOC) -- the system-level safety requirements specifying how the AS must behave to mitigate each hazardous scenario.
 
 ## PDDL Contribution
 
-Safety requirements are encoded as PDDL trajectory constraints (PDDL 3.0 and later) or goal-state invariants. The planner only produces plans satisfying these constraints, providing constructive evidence that the SOC is achievable within the model. This evidence is a proof of feasibility in the PDDL formalism, not a proof of real-world safety — the gap between model and reality is captured in the assumption nodes below.
+Safety requirements are encoded as PDDL trajectory constraints (PDDL 3.0 and later) or goal-state invariants. The planner only produces plans satisfying these constraints, providing constructive evidence that the SOC is achievable within the model. This evidence is a proof of feasibility in the PDDL formalism, not a proof of real-world safety -- the gap between model and reality is captured in the assumption nodes below.
 
 ## Inputs
 
@@ -30,7 +30,7 @@ Safety requirements are encoded as PDDL trajectory constraints (PDDL 3.0 and lat
 | **Constraint conflict report** | Identifies requirements making planning infeasible |
 | **SOC-to-PDDL traceability** | Maps each safety requirement to its formal constraint |
 
-## GSN Mapping — Pattern [N]
+## GSN Mapping -- Pattern [N]
 
 Pattern [N] argues that the SOC sufficiently mitigates all identified hazardous scenarios.
 
@@ -63,5 +63,5 @@ encodes the requirement that the UAV shall not enter an uncleared waypoint. The 
 
 ---
 
-[Next: Stage 4 — Safety Requirements Assurance](05-stage4-safety-requirements.md)
+[Next: Stage 4 -- Safety Requirements Assurance](05-stage4-safety-requirements.md)
 

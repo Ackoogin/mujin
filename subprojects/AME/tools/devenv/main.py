@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""AME Dev Environment — entry point.
+"""AME Dev Environment -- entry point.
 
 Usage:
     python -m subprojects.AME.tools.devenv.main [--foxglove-url URL] [--no-ros2]
@@ -19,7 +19,7 @@ from .ui.app import App
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="AME Dev Environment — unified UI for ROS2 planning system",
+        description="AME Dev Environment -- unified UI for ROS2 planning system",
     )
     parser.add_argument(
         "--foxglove-url",

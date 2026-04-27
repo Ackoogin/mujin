@@ -112,16 +112,16 @@ The PDDL planner produces an abstract plan with symbolic `move` actions. A secon
 **Pipeline:**
 ```
 PDDL Plan (abstract)
-    ↓
+    v
 Route Resolution Phase
   For each move(agent, from, to):
     Call path planner service
     Store waypoint list
     Estimate cost/duration
-    If infeasible → mark (not reachable ?r ?to), replan
-    ↓
+    If infeasible -> mark (not reachable ?r ?to), replan
+    v
 Annotated Plan (moves have waypoints + costs)
-    ↓
+    v
 PlanCompiler (generates BT with waypoint-following nodes)
 ```
 
@@ -280,16 +280,16 @@ Combines Option A (proximity predicates for plan guidance) with Option C (lazy r
 
 ```
                          PLANNING                    EXECUTION
-                    ┌─────────────────┐        ┌─────────────────────┐
-                    │                 │        │                     │
-  Spatial Oracle ──>│  (reachable)    │        │   InvokeService     │
-  (pre-plan)        │  (nearest)      │──plan──>│   "path_planner"   │
-                    │  (adjacent)     │        │        │            │
-                    │                 │        │   FollowRoute       │
-                    │  PDDL Planner   │        │        │            │
-                    │  (LAPKT STRIPS) │        │   SetWorldPredicate │
-                    │                 │        │   (at ?r ?to) CONF  │
-                    └─────────────────┘        └─────────────────────┘
+                    +-----------------+        +---------------------+
+                    |                 |        |                     |
+  Spatial Oracle -->|  (reachable)    |        |   InvokeService     |
+  (pre-plan)        |  (nearest)      |--plan-->|   "path_planner"   |
+                    |  (adjacent)     |        |        |            |
+                    |                 |        |   FollowRoute       |
+                    |  PDDL Planner   |        |        |            |
+                    |  (LAPKT STRIPS) |        |   SetWorldPredicate |
+                    |                 |        |   (at ?r ?to) CONF  |
+                    +-----------------+        +---------------------+
 ```
 
 **Pros:**

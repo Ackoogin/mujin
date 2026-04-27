@@ -20,7 +20,7 @@ AmeLifecycleManager::AmeLifecycleManager(const rclcpp::NodeOptions& options)
 }
 
 bool AmeLifecycleManager::startup() {
-  // Configure all nodes in order (WorldModel first — others depend on its services)
+  // Configure all nodes in order (WorldModel first -- others depend on its services)
   for (const auto& node : managed_nodes_) {
     RCLCPP_INFO(get_logger(), "Configuring %s ...", node.c_str());
     if (!changeNodeState(node, lifecycle_msgs::msg::Transition::TRANSITION_CONFIGURE)) {

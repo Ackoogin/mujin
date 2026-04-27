@@ -14,11 +14,11 @@ A 5-layer audit and monitoring system that replaces the paid Groot2 tool with op
 
 ## Layer 1: Built-in BT.CPP Loggers
 
-Zero custom code — uses BT.CPP's free logging infrastructure:
+Zero custom code -- uses BT.CPP's free logging infrastructure:
 
-- **SqliteLogger** — persistent, queryable record of every node state transition with timestamps. Enabled via `BTCPP_SQLITE_LOGGING=ON`.
-- **MinitraceLogger** — Chrome Tracing format (`.json`), viewable in `chrome://tracing` or Perfetto UI for flame chart analysis.
-- **TreeObserver** — per-node statistics (tick counts, success/failure rates, duration). Queryable in-memory.
+- **SqliteLogger** -- persistent, queryable record of every node state transition with timestamps. Enabled via `BTCPP_SQLITE_LOGGING=ON`.
+- **MinitraceLogger** -- Chrome Tracing format (`.json`), viewable in `chrome://tracing` or Perfetto UI for flame chart analysis.
+- **TreeObserver** -- per-node statistics (tick counts, success/failure rates, duration). Queryable in-memory.
 
 ## Layer 2: Structured Event Stream (AmeBTLogger)
 
@@ -39,8 +39,8 @@ Custom `StatusChangeLogger` subclass that emits structured JSON events:
 ```
 
 Sinks (configurable, multiple simultaneously):
-- **File** — JSONL (`ame_bt_events.jsonl`)
-- **Callback** — for live consumers (FoxgloveBridge, ROS2 topic publisher)
+- **File** -- JSONL (`ame_bt_events.jsonl`)
+- **Callback** -- for live consumers (FoxgloveBridge, ROS2 topic publisher)
 
 Captures world model version at each transition, linking BT execution to world model state history.
 
@@ -113,9 +113,9 @@ bridge.stop();
 **Files:** `include/ame/plan_audit_log.h`, `src/plan_audit_log.cpp`
 
 For each planning episode, logs a self-contained JSON object:
-- `episode_id` — unique auto-assigned ID for this episode
-- `parent_episode_id` — causal link to parent phase (0 for top-level episodes)
-- `phase_name` — human-readable label (set by `ExecutePhaseAction`)
+- `episode_id` -- unique auto-assigned ID for this episode
+- `parent_episode_id` -- causal link to parent phase (0 for top-level episodes)
+- `phase_name` -- human-readable label (set by `ExecutePhaseAction`)
 - World model snapshot (init state) that triggered planning
 - Goal fluents
 - LAPKT solver used and solve time (`PlanResult::solve_time_ms`)
@@ -136,10 +136,10 @@ Output: `ame_plan_audit.jsonl`. Forms a complete mission audit trail.
 | Groot2 Feature | Replacement | Layer |
 |----------------|------------|-------|
 | Live tree visualization | Foxglove Studio via FoxgloveBridge | 4 |
-| Real-time node status | AmeBTLogger → Foxglove `/bt_events` | 2, 4 |
-| Blackboard / state inspector | WmAuditLog → Foxglove `/wm_audit` | 3, 4 |
+| Real-time node status | AmeBTLogger -> Foxglove `/bt_events` | 2, 4 |
+| Blackboard / state inspector | WmAuditLog -> Foxglove `/wm_audit` | 3, 4 |
 | Log replay | SQLite queries + Perfetto/Chrome tracing + JSONL | 1, 5 |
 | Node statistics | TreeObserver queryable in-memory | 1 |
 | Plan provenance | PlanAuditLog JSONL | 5 |
-| Tree editor | Not needed — trees are compiler-generated | — |
+| Tree editor | Not needed -- trees are compiler-generated | -- |
 

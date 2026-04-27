@@ -227,7 +227,7 @@ SubscriptionHandle TacticalObjectsRuntime::registerStreamSubscriber(
   handle_to_interest_[h] = interest_id;
   // New subscriber: mark all currently-existing matching entities for full snapshot
   // by setting version 0 (they will be sent with full field mask on first tick).
-  // subscriber_versions_[h] starts empty — absence == "never seen" == send full snapshot.
+  // subscriber_versions_[h] starts empty -- absence == "never seen" == send full snapshot.
   return h;
 }
 
@@ -305,7 +305,7 @@ StreamFrame TacticalObjectsRuntime::assembleStreamFrame(
 
   // Deleted entities matching this interest
   for (const auto& del_id : deleted_entities_) {
-    // We can't check interest match on a deleted entity — just send delete to all
+    // We can't check interest match on a deleted entity -- just send delete to all
     // subscribers for any entity they had previously seen.
     auto vit = sub_versions.find(del_id);
     if (vit != sub_versions.end()) {
@@ -331,7 +331,7 @@ StreamFrame TacticalObjectsRuntime::assembleStreamFrame(
     bool first_time = (vit == sub_versions.end());
 
     if (!first_time && vit->second == entity_version) {
-      continue;  // version unchanged — skip
+      continue;  // version unchanged -- skip
     }
 
     uint16_t mask;
@@ -397,7 +397,7 @@ StreamFrame TacticalObjectsRuntime::assembleStreamFrame(
 }
 
 // ---------------------------------------------------------------------------
-// Flush dirty entities — called by on_tick()
+// Flush dirty entities -- called by on_tick()
 // ---------------------------------------------------------------------------
 
 void TacticalObjectsRuntime::flushDirtyEntities(double timestamp) {

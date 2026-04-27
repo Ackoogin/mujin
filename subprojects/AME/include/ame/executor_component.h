@@ -15,14 +15,14 @@ namespace ame {
 /// \brief PCL-backed BT execution component.
 ///
 /// Ports created during on_configure():
-///   sub  "{prefix}/executor/bt_xml"    (ame/BTXML)   — BT XML to load and execute
-///   pub  "{prefix}/executor/bt_events" (ame/BTEvent) — JSON event lines from AmeBTLogger
-///   pub  "{prefix}/executor/status"    (ame/Status)  — "IDLE"/"RUNNING"/"SUCCESS"/"FAILURE"
+///   sub  "{prefix}/executor/bt_xml"    (ame/BTXML)   -- BT XML to load and execute
+///   pub  "{prefix}/executor/bt_events" (ame/BTEvent) -- JSON event lines from AmeBTLogger
+///   pub  "{prefix}/executor/status"    (ame/Status)  -- "IDLE"/"RUNNING"/"SUCCESS"/"FAILURE"
 ///
 /// on_tick() drives BT ticking at tick_rate_hz (default 50 Hz).
 ///
 /// Parameters:
-///   agent_id          (string, "")   — prefix for topic names (empty = no prefix)
+///   agent_id          (string, "")   -- prefix for topic names (empty = no prefix)
 ///   tick_rate_hz      (double, 50.0)
 ///   bt_log.enabled    (bool,   true)
 ///   bt_log.path       (string, "bt_events.jsonl")

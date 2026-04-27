@@ -41,7 +41,7 @@ private:
 
     // Emit ReactiveFallback goal guard around the plan body.
     // If all goals are already satisfied, the tree returns SUCCESS
-    // without re-executing the plan — safe for continuous ticking.
+    // without re-executing the plan -- safe for continuous ticking.
     void emitGoalGuardOpen(std::ostringstream& xml,
                            const WorldModel& wm,
                            const std::string& indent) const;

@@ -350,7 +350,7 @@ or `PCL_SOCKET_STATE_CONNECTING`):
 - **Publish** frames are dequeued by `send_thread` and silently dropped
   (pub/sub best-effort semantics; the wire is simply unavailable).
 - **Async service calls** remain on the pending list but will not receive
-  a response — application code should apply its own timeouts.
+  a response -- application code should apply its own timeouts.
 - **Inbound messages** cannot arrive until the link is re-established.
 
 Applications that need stronger guarantees should gate calls on
@@ -368,12 +368,12 @@ no callbacks.  Existing call sites need no changes.
 For high-rate telemetry and state broadcasts where occasional loss is
 acceptable and the framing overhead of TCP is not, PCL also ships a
 UDP datagram transport in `pcl/pcl_transport_udp.h`.  It implements the
-same `pcl_transport_t` vtable but deliberately exposes only pub/sub —
+same `pcl_transport_t` vtable but deliberately exposes only pub/sub --
 `invoke_async`, `respond`, `serve`, and `invoke_stream` are all NULL,
 so the executor returns `PCL_ERR_NOT_FOUND` for unsupported RPC calls
 rather than silently accepting unreliable service traffic.
 
-Wire format (single datagram — UDP preserves boundaries, so no
+Wire format (single datagram -- UDP preserves boundaries, so no
 length prefix is needed):
 
 ```
@@ -386,7 +386,7 @@ publishes to one configured remote peer.  For multi-peer fan-out,
 instantiate one UDP transport per peer and register each separately
 with `pcl_executor_register_transport(...)`.
 
-Example — telemetry sender and receiver on the same host:
+Example -- telemetry sender and receiver on the same host:
 
 ```c
 /* Receiver */
@@ -405,11 +405,11 @@ pcl_executor_set_transport(tx_exec, pcl_udp_transport_get_transport(tx));
 
 ### Constraints
 
-- Pub/sub only — use the TCP transport for service RPC and streaming.
+- Pub/sub only -- use the TCP transport for service RPC and streaming.
 - Payload cap of 1400 bytes per published message (below the standard
   Ethernet MTU so IP fragmentation is rare); oversized publishes return
   `PCL_ERR_NOMEM`.
-- Best-effort delivery — application code must tolerate drops, or wrap
+- Best-effort delivery -- application code must tolerate drops, or wrap
   the channel with its own sequencing/retransmit layer.
 - IPv4 only in v1; IPv6 support is a straightforward extension.
 
@@ -505,6 +505,6 @@ If a publisher does not fan out remotely, check:
 - the reference socket transport is still one connection per transport object (auto-reconnect refreshes the same peer endpoint; multi-client fan-in still requires one server transport per peer)
 - multi-hop routing is not automatic
 - route configuration is API-driven today, not file-driven in core PCL
-- the UDP transport is pub/sub only — service RPC (`invoke_async`, `respond`) and streaming services are not supported over UDP; use the socket (TCP) transport for those
+- the UDP transport is pub/sub only -- service RPC (`invoke_async`, `respond`) and streaming services are not supported over UDP; use the socket (TCP) transport for those
 
 Those are deliberate v1 constraints to keep routing behavior explicit and testable.

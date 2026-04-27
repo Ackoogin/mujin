@@ -154,7 +154,7 @@ TEST(PclIntegration, WorldModelQueryStateService) {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 1: on_tick publishes world_state (via PCL port — just verifies no crash)
+// Phase 1: on_tick publishes world_state (via PCL port -- just verifies no crash)
 // ---------------------------------------------------------------------------
 
 ///< REQ_PCL_004: WorldModelComponent::on_tick shall execute without error when in executor.
@@ -169,7 +169,7 @@ TEST(PclIntegration, WorldModelOnTickNoError) {
     ASSERT_EQ(wm_comp.configure(), PCL_OK);
     ASSERT_EQ(wm_comp.activate(), PCL_OK);
 
-    // spinOnce should trigger on_tick and publish (to no subscribers — fine)
+    // spinOnce should trigger on_tick and publish (to no subscribers -- fine)
     EXPECT_EQ(executor.spinOnce(0), PCL_OK);
 
     EXPECT_EQ(wm_comp.deactivate(), PCL_OK);
