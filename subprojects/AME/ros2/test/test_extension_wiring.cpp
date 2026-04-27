@@ -258,7 +258,7 @@ TEST_F(PerceptionQueueTest, DetectionEnqueuedAndFlushedByTick) {
   // Detections now arrive via PCL subscriber (not ROS2 pub/sub).
   // Create a PCL executor, add the component before configure, then verify
   // that postIncoming + spinOnce causes the mutation to be applied.
-  // NodeOptions injects params into ROS2 param system — on_configure reads them,
+  // NodeOptions injects params into ROS2 param system -- on_configure reads them,
   // so these values survive the configure step (unlike setParam before configure).
   auto node_opts = rclcpp::NodeOptions().parameter_overrides({
       rclcpp::Parameter("perception.enabled", true),
@@ -299,7 +299,7 @@ TEST_F(PerceptionQueueTest, DetectionEnqueuedAndFlushedByTick) {
   ASSERT_EQ(pcl_exec.postIncoming("detections", &msg), PCL_OK);
 
   // spinOnce: dispatches subscriber callback (enqueueMutation), then calls on_tick
-  // (applyQueuedMutations) — tick fires because 1000 Hz period <= initial dt=0.001s.
+  // (applyQueuedMutations) -- tick fires because 1000 Hz period <= initial dt=0.001s.
   pcl_exec.spinOnce(0);
 
   EXPECT_TRUE(wm.getFact("(at uav1 sector_a)"));
@@ -321,7 +321,7 @@ TEST(DispatcherServiceTest, DispatchGoalsServiceExistsInPcl) {
   ASSERT_EQ(dispatcher->on_activate(rclcpp_lifecycle::State{}),
             ame_ros2::AgentDispatcherNode::CallbackReturn::SUCCESS);
 
-  // Verify the PCL dispatch_goals service is reachable (empty goals → failure response)
+  // Verify the PCL dispatch_goals service is reachable (empty goals -> failure response)
   std::string req_json = ame::ame_pack_dispatch_goals_request({});
   pcl_msg_t req_msg{};
   req_msg.data      = req_json.c_str();

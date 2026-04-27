@@ -83,7 +83,7 @@ TEST(Planner, UnsolvableProblemReturnsFalse) {
     ts.addType("item");
     wm.addObject("a", "item");
     wm.registerPredicate("done", {"item"});
-    // No actions registered — goal is unreachable
+    // No actions registered -- goal is unreachable
     wm.setGoal({"(done a)"});
 
     ame::Planner planner;
@@ -119,7 +119,7 @@ TEST(Planner, ReplanAfterStateChange) {
     wm.setFact("(at uav1 base)", false);
     wm.setFact("(at uav1 sector_a)", true);
 
-    // Replan — should now just need search (no move)
+    // Replan -- should now just need search (no move)
     auto result2 = planner.solve(wm);
     ASSERT_TRUE(result2.success);
     EXPECT_LT(result2.steps.size(), result1.steps.size());

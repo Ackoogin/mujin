@@ -1,4 +1,4 @@
-"""Execution tab — BT tree visualisation, node status, timeline, tick controls."""
+"""Execution tab -- BT tree visualisation, node status, timeline, tick controls."""
 
 from __future__ import annotations
 
@@ -66,7 +66,7 @@ class ExecutionTab:
     def build(self, parent: int) -> None:
         with dpg.group(parent=parent):
 
-            # ── Control bar ──────────────────────────────────────────
+            # -- Control bar ------------------------------------------
             with dpg.child_window(height=58, border=True):
                 with dpg.group(horizontal=True):
                     dpg.add_text("Status:", color=(140, 140, 160))
@@ -137,7 +137,7 @@ class ExecutionTab:
 
             dpg.add_spacer(height=4)
 
-            # ── Tree + Inspector ──────────────────────────────────────
+            # -- Tree + Inspector --------------------------------------
             with dpg.group(horizontal=True):
                 with dpg.child_window(width=500, height=-250):
                     dpg.add_text("Behaviour Tree", color=(180, 180, 200))
@@ -158,7 +158,7 @@ class ExecutionTab:
                         wrap=-1, color=(160, 160, 170),
                     )
 
-            # ── Timeline ─────────────────────────────────────────────
+            # -- Timeline ---------------------------------------------
             with dpg.child_window(height=240):
                 dpg.add_text("Event Timeline", color=(180, 180, 200))
                 dpg.add_separator()

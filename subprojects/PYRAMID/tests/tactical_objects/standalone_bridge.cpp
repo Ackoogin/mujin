@@ -361,7 +361,7 @@ static bool decode_create_requirement(const pcl_msg_t* msg,
 }
 
 // ---------------------------------------------------------------------------
-// Standard ↔ Internal enum converters (same as StandardBridge.cpp)
+// Standard <-> Internal enum converters (same as StandardBridge.cpp)
 // ---------------------------------------------------------------------------
 
 static std::string affiliationToStdIdentity(Affiliation a) {
@@ -395,7 +395,7 @@ static double degToRad(double d) { return d * 0.017453292519943295; }
 static double radToDeg(double r) { return r * 57.29577951308232; }
 
 // ---------------------------------------------------------------------------
-// Backend subscriber: entity_updates (binary) → standard.entity_matches (JSON)
+// Backend subscriber: entity_updates (binary) -> standard.entity_matches (JSON)
 // ---------------------------------------------------------------------------
 
 static void backend_entity_updates_cb(pcl_container_t*, const pcl_msg_t* msg,
@@ -426,7 +426,7 @@ static void backend_entity_updates_cb(pcl_container_t*, const pcl_msg_t* msg,
 }
 
 // ---------------------------------------------------------------------------
-// Backend subscriber: evidence_requirements (JSON) → standard.evidence_requirements
+// Backend subscriber: evidence_requirements (JSON) -> standard.evidence_requirements
 // ---------------------------------------------------------------------------
 
 static void backend_evidence_reqs_cb(pcl_container_t*, const pcl_msg_t* msg,
@@ -463,7 +463,7 @@ static pcl_status_t backend_on_configure(pcl_container_t* c, void*) {
 }
 
 // ---------------------------------------------------------------------------
-// Frontend subscriber: standard.object_evidence → observation_ingress
+// Frontend subscriber: standard.object_evidence -> observation_ingress
 // ---------------------------------------------------------------------------
 
 static void frontend_object_evidence_cb(pcl_container_t*, const pcl_msg_t* msg,
@@ -526,7 +526,7 @@ static pcl_status_t frontend_create_requirement(pcl_container_t*,
   std::fprintf(stderr, "[bridge] create_requirement received type=%s\n",
                frontend_content_type);
 
-  // Translate standard → internal subscribe_interest format
+  // Translate standard -> internal subscribe_interest format
   json internal;
 
   internal["query_mode"] = (req.policy == data_model::DataPolicy::Obtain)
@@ -575,7 +575,7 @@ static pcl_status_t frontend_create_requirement(pcl_container_t*,
   }
 
   std::string internal_str = internal.dump();
-  std::fprintf(stderr, "[bridge] → subscribe_interest: %s\n",
+  std::fprintf(stderr, "[bridge] -> subscribe_interest: %s\n",
                internal_str.c_str());
 
   // Invoke subscribe_interest on backend via async remote call
@@ -625,7 +625,7 @@ static pcl_status_t frontend_create_requirement(pcl_container_t*,
     return PCL_OK;
   }
 
-  std::fprintf(stderr, "[bridge] ← subscribe_interest: %s\n",
+  std::fprintf(stderr, "[bridge] <- subscribe_interest: %s\n",
                ctx.body.c_str());
 
   // Parse internal response, forward evidence_requirements to frontend
@@ -812,10 +812,10 @@ int main(int argc, char* argv[]) {
   while (!g_shutdown.load() &&
          std::chrono::steady_clock::now() < deadline) {
 
-    // Spin backend — receives entity_updates, evidence_requirements from server
+    // Spin backend -- receives entity_updates, evidence_requirements from server
     pcl_executor_spin_once(g_bridge.backend_exec, 0);
 
-    // Forward pending messages from backend → frontend
+    // Forward pending messages from backend -> frontend
     {
       std::lock_guard<std::mutex> lock(g_bridge.mu);
       for (auto& p : g_bridge.to_frontend) {
@@ -838,10 +838,10 @@ int main(int argc, char* argv[]) {
       g_bridge.to_frontend.clear();
     }
 
-    // Spin frontend — serves Ada client, receives standard.object_evidence
+    // Spin frontend -- serves Ada client, receives standard.object_evidence
     pcl_executor_spin_once(g_bridge.frontend_exec, 0);
 
-    // Forward pending messages from frontend → backend
+    // Forward pending messages from frontend -> backend
     {
       std::lock_guard<std::mutex> lock(g_bridge.mu);
       for (auto& p : g_bridge.to_backend) {

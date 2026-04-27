@@ -1,4 +1,4 @@
-// Auto-generated gRPC transport — do not edit
+// Auto-generated gRPC transport -- do not edit
 
 #include "pyramid_components_autonomy_backend_services_provided_grpc_transport.hpp"
 

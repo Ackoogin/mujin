@@ -97,12 +97,12 @@ PlannerNode::on_configure(const rclcpp_lifecycle::State&) {
               RCLCPP_INFO(get_logger(), "plan: found %zu steps in %.1f ms",
                           r.plan_actions.size(), r.solve_time_ms);
             } else {
-              RCLCPP_WARN(get_logger(), "plan: FAILED — %s", r.error_msg.c_str());
+              RCLCPP_WARN(get_logger(), "plan: FAILED -- %s", r.error_msg.c_str());
             }
           } catch (const std::exception& e) {
             result->success   = false;
             result->error_msg = e.what();
-            RCLCPP_ERROR(get_logger(), "plan: exception — %s", e.what());
+            RCLCPP_ERROR(get_logger(), "plan: exception -- %s", e.what());
           }
           if (goal_handle->is_canceling()) {
             goal_handle->canceled(result);
@@ -125,10 +125,10 @@ PlannerNode::on_configure(const rclcpp_lifecycle::State&) {
         resp->num_fluents        = r.num_fluents;
         resp->num_ground_actions = r.num_ground_actions;
         if (r.success) {
-          RCLCPP_INFO(get_logger(), "load_domain: OK — %u fluents, %u ground actions",
+          RCLCPP_INFO(get_logger(), "load_domain: OK -- %u fluents, %u ground actions",
                       r.num_fluents, r.num_ground_actions);
         } else {
-          RCLCPP_ERROR(get_logger(), "load_domain: FAILED — %s", r.error_msg.c_str());
+          RCLCPP_ERROR(get_logger(), "load_domain: FAILED -- %s", r.error_msg.c_str());
         }
       });
 

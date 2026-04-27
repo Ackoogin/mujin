@@ -192,7 +192,7 @@ bool InterestManager::matchesInterest(const InterestCriteria& criteria,
     return false;
   }
 
-  // affiliation filter — check MilClassComponent first, fall back to direct affiliation
+  // affiliation filter -- check MilClassComponent first, fall back to direct affiliation
   if (criteria.affiliation) {
     const auto* mc = store.milclass().get(rec.id);
     if (mc) {
@@ -202,7 +202,7 @@ bool InterestManager::matchesInterest(const InterestCriteria& criteria,
     }
   }
 
-  // area filter — check KinematicsComponent position
+  // area filter -- check KinematicsComponent position
   if (criteria.area) {
     const auto* kc = store.kinematics().get(rec.id);
     if (!kc) return false;
@@ -228,7 +228,7 @@ bool InterestManager::matchesInterest(const InterestCriteria& criteria,
     if (conf < criteria.minimum_confidence) return false;
   }
 
-  // time_window filter — check LifecycleComponent::last_update_timestamp
+  // time_window filter -- check LifecycleComponent::last_update_timestamp
   if (criteria.time_window_end > 0.0) {
     const auto* lc = store.lifecycle().get(rec.id);
     if (!lc) return false;

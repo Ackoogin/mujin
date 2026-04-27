@@ -1,5 +1,5 @@
 /// \file test_pcl_udp_transport.cpp
-/// \brief Tests for PCL UDP datagram transport — pub/sub round-trip,
+/// \brief Tests for PCL UDP datagram transport -- pub/sub round-trip,
 ///        peer identity filtering, ephemeral port binding, null safety.
 
 #include <gtest/gtest.h>
@@ -144,7 +144,7 @@ TEST(PclUdpTransport, DestroyNullIsNoOp) {
 }
 
 // ---------------------------------------------------------------------------
-// Publish round-trip: sender → receiver on loopback
+// Publish round-trip: sender -> receiver on loopback
 // ---------------------------------------------------------------------------
 
 TEST(PclUdpTransport, PublishDeliveredToSubscriber) {
@@ -207,7 +207,7 @@ TEST(PclUdpTransport, PublishDeliveredToSubscriber) {
   msg.type_name = "HeartbeatMsg";
 
   const pcl_transport_t* vt = pcl_udp_transport_get_transport(send_udp);
-  // UDP is best-effort — send a few times to paper over occasional loss.
+  // UDP is best-effort -- send a few times to paper over occasional loss.
   for (int i = 0; i < 5 && !state.received; ++i) {
     vt->publish(vt->adapter_ctx, "telemetry/heartbeat", &msg);
     for (int j = 0; j < 20 && !state.received; ++j) {
@@ -252,7 +252,7 @@ TEST(PclUdpTransport, SubscriberPeerFilterDropsForeignIngress) {
   ASSERT_NE(send_udp, nullptr);
 
   // The sender arrives tagged as "intruder" but the subscriber only allows
-  // traffic from "trusted" — the message must be dropped.
+  // traffic from "trusted" -- the message must be dropped.
   pcl_udp_transport_set_peer_id(recv_udp, "intruder");
 
   pcl_executor_register_transport(recv_exec, "intruder",

@@ -69,7 +69,7 @@ class Ros2Backend(codec_backends.CodecBackend):
 
     def _write_cpp_header(self, path: Path, ns: str, pf: ProtoFile):
         with open(path, 'w', encoding='utf-8') as f:
-            f.write('// Auto-generated ROS2 transport projection — do not edit\n')
+            f.write('// Auto-generated ROS2 transport projection -- do not edit\n')
             f.write('// Backend: ros2\n')
             f.write('#pragma once\n\n')
             f.write('#include "pyramid_ros2_transport_support.hpp"\n\n')
@@ -92,7 +92,7 @@ class Ros2Backend(codec_backends.CodecBackend):
 
     def _write_cpp_impl(self, path: Path, ns: str, file_base: str, pf: ProtoFile):
         with open(path, 'w', encoding='utf-8') as f:
-            f.write('// Auto-generated ROS2 transport projection — do not edit\n\n')
+            f.write('// Auto-generated ROS2 transport projection -- do not edit\n\n')
             f.write(f'#include "{file_base}_ros2_transport.hpp"\n\n')
             f.write('namespace {\n\n')
 
@@ -134,7 +134,7 @@ class Ros2Backend(codec_backends.CodecBackend):
         pkg_name = '.'.join(pkg_parts) + '.ROS2_Transport'
 
         with open(path, 'w', encoding='utf-8') as f:
-            f.write('--  Auto-generated ROS2 transport constants — do not edit\n')
+            f.write('--  Auto-generated ROS2 transport constants -- do not edit\n')
             f.write(f'--  Backend: ros2 | Package: {pkg_name}\n\n')
             f.write(f'package {pkg_name} is\n\n')
             f.write('   Content_Type : constant String := "application/ros2";\n\n')

@@ -36,8 +36,8 @@ Before residual risk can be evaluated, the acceptance threshold must be defined.
 
 The acceptance criteria must be specific, measurable, and agreed with stakeholders. They may be expressed:
 
-- **Quantitatively** — e.g. a maximum probability of encountering an unmitigated hazardous scenario per operating hour
-- **Qualitatively** — e.g. all identified hazardous scenarios have a documented mitigation with verified evidence, and the unknown-unsafe scenario space has been explored to a defined coverage threshold
+- **Quantitatively** -- e.g. a maximum probability of encountering an unmitigated hazardous scenario per operating hour
+- **Qualitatively** -- e.g. all identified hazardous scenarios have a documented mitigation with verified evidence, and the unknown-unsafe scenario space has been explored to a defined coverage threshold
 
 PDDL contributes by providing formal, quantifiable coverage metrics. The proportion of the reachable state space explored by the planner, the number of fault-injected domain variants exercised, and the number of ISO 34502 annex scenarios with corresponding PDDL verification results all feed into the acceptance criteria evaluation.
 
@@ -59,23 +59,23 @@ Each identified functional insufficiency must be evaluated for its potential to 
 
 A triggering condition is a specific condition in the operating environment that activates a functional insufficiency, causing the system to behave in a potentially hazardous way. ISO 21448 requires systematic identification for each functional insufficiency. ISO 34502 provides the structured framework through its three risk factor categories:
 
-**Perception triggering conditions** — environmental factors that degrade sensor or perception performance:
+**Perception triggering conditions** -- environmental factors that degrade sensor or perception performance:
 - Snow, fog, rain, dust, or sand interfering with camera or LIDAR systems
 - Sun glare causing false negatives
 - RF interference degrading radar returns
 - Camouflaged or low-observable objects in the operating environment
 
-**Judgement and planning triggering conditions** — situations that expose limitations in decision-making logic:
+**Judgement and planning triggering conditions** -- situations that expose limitations in decision-making logic:
 - Novel combinations of environmental states not represented in the PDDL domain
 - Conflicting mission objectives forcing the planner into unsafe trade-offs
 - Adversarial behaviour by other agents that the planner's model does not anticipate
 
-**Control triggering conditions** — physical conditions that degrade actuation or vehicle control:
+**Control triggering conditions** -- physical conditions that degrade actuation or vehicle control:
 - Extreme wind gusts exceeding actuator authority
 - Icing affecting aerodynamic surfaces
 - Mechanical wear reducing control precision
 
-**Misuse triggering conditions** — ISO 21448 explicitly classifies reasonably foreseeable misuse as a triggering condition category:
+**Misuse triggering conditions** -- ISO 21448 explicitly classifies reasonably foreseeable misuse as a triggering condition category:
 - Operator commanding the system outside its defined ODD
 - Incorrect mission parameter entry
 - Overriding safety constraints without authorisation
@@ -100,11 +100,11 @@ Where PDDL cannot verify that a defined response achieves a safe state, this con
 
 After all functional insufficiencies have been identified, triggering conditions enumerated, and responses defined, the residual risk is evaluated against the acceptance criteria. Residual risk arises from three sources:
 
-1. **Known-unsafe scenarios with verified mitigations** — Residual risk is the probability that the mitigation fails. PDDL provides evidence of mitigation effectiveness through constrained plan traces, but the residual depends on the fidelity of the PDDL model to reality (captured as model assumption confidence).
+1. **Known-unsafe scenarios with verified mitigations** -- Residual risk is the probability that the mitigation fails. PDDL provides evidence of mitigation effectiveness through constrained plan traces, but the residual depends on the fidelity of the PDDL model to reality (captured as model assumption confidence).
 
-2. **Known-unsafe scenarios with incomplete mitigations** — Where PDDL analysis reveals that a mitigation does not fully eliminate the hazardous state (e.g. a safe-state is reachable but with non-zero probability of transient unsafe behaviour during transition), the residual risk must be explicitly quantified.
+2. **Known-unsafe scenarios with incomplete mitigations** -- Where PDDL analysis reveals that a mitigation does not fully eliminate the hazardous state (e.g. a safe-state is reachable but with non-zero probability of transient unsafe behaviour during transition), the residual risk must be explicitly quantified.
 
-3. **Unknown-unsafe scenarios** — Residual risk from scenarios not yet discovered. PDDL state-space coverage metrics provide evidence about how much of the *modelled* scenario space has been explored. The acceptance argument combines two elements: (a) coverage metrics showing that the unexplored region of the abstract state space is small, and (b) a confidence argument that the model's state space is a meaningful proxy for real-world scenario diversity. The latter depends on model fidelity evidence and the systematic derivation of the model from ISO 34502 risk factor categories. Abstract state coverage alone does not directly quantify real-world exposure-weighted risk.
+3. **Unknown-unsafe scenarios** -- Residual risk from scenarios not yet discovered. PDDL state-space coverage metrics provide evidence about how much of the *modelled* scenario space has been explored. The acceptance argument combines two elements: (a) coverage metrics showing that the unexplored region of the abstract state space is small, and (b) a confidence argument that the model's state space is a meaningful proxy for real-world scenario diversity. The latter depends on model fidelity evidence and the systematic derivation of the model from ISO 34502 risk factor categories. Abstract state coverage alone does not directly quantify real-world exposure-weighted risk.
 
 ---
 
@@ -112,10 +112,10 @@ After all functional insufficiencies have been identified, triggering conditions
 
 PDDL contributes to residual risk management at four levels:
 
-1. Provides the **formal model** against which functional insufficiencies are identified — every model assumption is a potential insufficiency if violated
+1. Provides the **formal model** against which functional insufficiencies are identified -- every model assumption is a potential insufficiency if violated
 2. Enables **systematic triggering condition exploration** through fault-injected domain variants parameterised by ISO 34502 risk factors
 3. **Verifies** that defined responses achieve safe states
-4. Provides **quantitative coverage metrics** over the abstract state space, which support — but do not alone establish — the argument that residual risk from unknown-unsafe scenarios is acceptable. A confidence argument linking model coverage to real-world risk is also required
+4. Provides **quantitative coverage metrics** over the abstract state space, which support -- but do not alone establish -- the argument that residual risk from unknown-unsafe scenarios is acceptable. A confidence argument linking model coverage to real-world risk is also required
 
 Critically, PDDL also reveals its own limits as residual risk contributors. The assumptions that the PDDL domain is a faithful abstraction, that the predicate set is complete, and that action effects are accurate are themselves sources of residual risk. These must be captured as GSN assumption nodes with explicit confidence arguments.
 
@@ -142,11 +142,11 @@ Residual risk management is the heart of ISO 21448. The standard requires that t
 
 - Formal identification of known-unsafe scenarios through state-space exploration
 - Verified mitigations through constrained planning
-- Coverage metrics over the abstract state space that inform (but do not directly bound) the unknown-unsafe residual — the link between model coverage and real-world risk requires a confidence argument grounded in model fidelity evidence
+- Coverage metrics over the abstract state space that inform (but do not directly bound) the unknown-unsafe residual -- the link between model coverage and real-world risk requires a confidence argument grounded in model fidelity evidence
 
 The acceptance criteria must account for both the probability of encountering an unmitigated scenario and the severity of the potential outcome, consistent with ISO 21448's risk-based approach.
 
-ISO 21448 also requires that reasonably foreseeable misuse be treated as a triggering condition rather than excluded from the analysis. PDDL models must include misuse scenarios — operator actions that violate intended use patterns — and demonstrate that safety constraints are either maintained or that the system transitions to a safe state.
+ISO 21448 also requires that reasonably foreseeable misuse be treated as a triggering condition rather than excluded from the analysis. PDDL models must include misuse scenarios -- operator actions that violate intended use patterns -- and demonstrate that safety constraints are either maintained or that the system transitions to a safe state.
 
 ## ISO 34502 Impact
 
@@ -166,7 +166,7 @@ The ISO 34502 annex structure also provides a natural checklist: every Annex B t
 
 **PDDL verification:** a fault-injected domain variant sets `(camera-degraded)` true, restricts obstacle detection to LIDAR predicates only, and tightens the minimum-separation constraint. The planner demonstrates that missions within the reduced ODM are achievable with the tightened constraint.
 
-**Misuse triggering condition:** the operator commands the UAV to operate in airspace classified as denied. The PDDL domain includes an action `(override-airspace-restriction ?zone)` available only when `(operator-override-active)` is true. A trajectory constraint `(always (implication (denied-airspace ?zone) (not (in ?uav ?zone))))` is maintained regardless of operator override status — the planner will not produce plans entering denied airspace even under operator command. The safety constraint is hardcoded and not overridable. Residual risk: the operator may fly the system manually (bypassing the planner entirely). This residual is managed through operational procedures and documented as an accepted residual risk.
+**Misuse triggering condition:** the operator commands the UAV to operate in airspace classified as denied. The PDDL domain includes an action `(override-airspace-restriction ?zone)` available only when `(operator-override-active)` is true. A trajectory constraint `(always (implication (denied-airspace ?zone) (not (in ?uav ?zone))))` is maintained regardless of operator override status -- the planner will not produce plans entering denied airspace even under operator command. The safety constraint is hardcoded and not overridable. Residual risk: the operator may fly the system manually (bypassing the planner entirely). This residual is managed through operational procedures and documented as an accepted residual risk.
 
 **Residual risk evaluation:** after all mitigations, the state-space coverage report shows that 94% of reachable states have been explored with no unmitigated safety violations. The remaining 6% corresponds to extreme multi-factor degradation states (simultaneous camera, LIDAR, and GPS failure) for which the system enters immediate mission abort. The acceptance argument references ISO 21448's requirement for the unknown-unsafe area to be acceptably small, supported by ISO 34502 systematic risk factor coverage as a justification for the exploration methodology.
 

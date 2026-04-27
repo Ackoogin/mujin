@@ -37,12 +37,12 @@ def main():
     print("[INFO] Waiting for /world_model_node/query_state service (10 s)...")
 
     if not client.wait_for_service(timeout_sec=10.0):
-        print("[ERROR] Service not available after 10 s — is ame_combined running?")
+        print("[ERROR] Service not available after 10 s -- is ame_combined running?")
         node.destroy_node()
         rclpy.shutdown()
         sys.exit(1)
 
-    print("[INFO] Service found — sending request...")
+    print("[INFO] Service found -- sending request...")
     req = QueryState.Request()
     req.keys = []  # empty = return all true facts
 

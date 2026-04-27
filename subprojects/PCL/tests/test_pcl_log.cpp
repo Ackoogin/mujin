@@ -1,5 +1,5 @@
 /// \file test_pcl_log.cpp
-/// \brief Tests for PCL logging — default handler, custom handler, level filtering.
+/// \brief Tests for PCL logging -- default handler, custom handler, level filtering.
 #include <gtest/gtest.h>
 
 #include <string>
@@ -92,6 +92,6 @@ TEST_F(PclLogTest, FormatString) {
 TEST_F(PclLogTest, RevertToDefaultHandler) {
   pcl_log_set_handler(nullptr, nullptr);
 
-  // should not crash — writes to stderr
+  // should not crash -- writes to stderr
   pcl_log(nullptr, PCL_LOG_INFO, "default handler test");
 }

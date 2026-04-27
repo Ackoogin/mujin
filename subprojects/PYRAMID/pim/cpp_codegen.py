@@ -53,12 +53,12 @@ BASE_TYPE_MAP = {
     'pyramid.data_model.common.Ack':      'Ack',
 }
 
-# Standard topic names — tactical_objects bridge-facing topics aligned
+# Standard topic names -- tactical_objects bridge-facing topics aligned
 # directly to canonical proto-derived PYRAMID payloads.
 
 _SEP = '// ' + '-' * 75
 
-# Default content type — used when no port-level override is provided.
+# Default content type -- used when no port-level override is provided.
 # Generated code accepts content_type as a parameter so components can
 # configure per-port codecs at pcl_container_add_* time.
 _DEFAULT_CONTENT_TYPE = 'application/json'
@@ -526,7 +526,7 @@ class CppServiceGenerator:
                     ' Subscribe / Publish / Invoke (typed)\n')
             f.write(_SEP + '\n\n')
 
-            # Subscribe helpers (unchanged — PCL registration is content_type
+            # Subscribe helpers (unchanged -- PCL registration is content_type
             # aware but not typed, since the callback receives raw pcl_msg_t)
             for key, _wire in topic_set.items():
                 pascal = _snake_to_pascal(key)
@@ -689,7 +689,7 @@ class CppServiceGenerator:
 
             # ---- dispatch() --------------------------------------------------
             f.write(_SEP + '\n')
-            f.write('// Dispatch — deserialises request, calls handler,'
+            f.write('// Dispatch -- deserialises request, calls handler,'
                     ' serialises response.\n')
             f.write('//\n')
             f.write('// Response buffer is heap-allocated via std::malloc;'
@@ -780,7 +780,7 @@ class CppServiceGenerator:
                 f.write(f'#include "{flatbuffers_codec_header}"\n')
             if has_protobuf:
                 f.write(f'#include "{protobuf_codec_header}"\n')
-            # Data model codec headers — for serialisation inside
+            # Data model codec headers -- for serialisation inside
             # invoke/publish/dispatch
             for ch in dm_codec_headers:
                 f.write(f'#include "{ch}"\n')
@@ -979,7 +979,7 @@ class CppServiceGenerator:
                     f.write('                                 user_data);\n')
                     f.write('}\n\n')
 
-            # Typed response decoders — hide content-type details from
+            # Typed response decoders -- hide content-type details from
             # component response callbacks.
             f.write(_SEP + '\n')
             f.write('// Typed response decode wrappers\n')
@@ -1038,7 +1038,7 @@ class CppServiceGenerator:
                     f.write('    }\n')
                     f.write('}\n\n')
 
-            # Typed invoke wrappers — serialize request, then PCL
+            # Typed invoke wrappers -- serialize request, then PCL
             f.write(_SEP + '\n')
             f.write('// Typed invoke wrappers \u2014 serialise and dispatch via executor transport\n')
             f.write(_SEP + '\n\n')
@@ -1397,11 +1397,11 @@ _CPP_DEFAULTS: Dict[str, str] = {
 # Messages whose single scalar field makes them transparent wrappers.
 # Identifier is special-cased to std::string; Timestamp to double (epoch s).
 _FORCED_ALIASES: Dict[str, str] = {
-    'Timestamp': 'double',  # google.protobuf.Timestamp wrapper → epoch seconds
+    'Timestamp': 'double',  # google.protobuf.Timestamp wrapper -> epoch seconds
 }
 
 # Single-field message is a scalar wrapper only when the field name signals
-# a physical unit or a generic "value" placeholder — NOT domain names like
+# a physical unit or a generic "value" placeholder -- NOT domain names like
 # "success" (Ack) which carry independent meaning as a struct.
 _UNIT_FIELD_NAMES = frozenset({
     'value', 'radians', 'meters', 'meters_per_second', 'seconds',
@@ -1465,7 +1465,7 @@ class CppTypesGenerator:
             hpp = out / (prefix + '_types.hpp')
             self._write_hpp_for_file(hpp, pf)
             print(f'  Generated {pf.package.replace(".", "::")} (types)')
-        # Umbrella header: pyramid_data_model_types.hpp → includes all + re-exports
+        # Umbrella header: pyramid_data_model_types.hpp -> includes all + re-exports
         umbrella = out / (self._prefix + '_types.hpp')
         self._write_umbrella_hpp(umbrella)
         print(f'  Generated {self._ns} (umbrella)')
@@ -1512,7 +1512,7 @@ class CppTypesGenerator:
         if field_type in _CPP_SCALAR_MAP:
             base = _CPP_SCALAR_MAP[field_type]
         elif short in self._aliases:
-            base = self._aliases[short]           # always a scalar — no namespace
+            base = self._aliases[short]           # always a scalar -- no namespace
         elif '.' in field_type and not field_type.startswith('google.'):
             # Fully-qualified proto type
             pkg = '.'.join(field_type.split('.')[:-1])
@@ -1522,7 +1522,7 @@ class CppTypesGenerator:
                 base = short
         elif (self._index.is_enum_type(field_type)
               or self._index.is_message_type(field_type)):
-            # Short name — look up its package for cross-package qualification
+            # Short name -- look up its package for cross-package qualification
             pkg = self._package_of_type(field_type)
             if current_pkg and pkg and pkg != current_pkg:
                 base = pkg.replace('.', '::') + '::' + field_type
@@ -1753,7 +1753,7 @@ class CppDataModelCodecGenerator:
         self._types_header = self._prefix + '_types.hpp'
         self._hpp_name = self._prefix + '_codec.hpp'
         self._cpp_name = self._prefix + '_codec.cpp'
-        # Build alias map (scalar wrappers) — same logic as CppTypesGenerator
+        # Build alias map (scalar wrappers) -- same logic as CppTypesGenerator
         self._aliases: Dict[str, str] = dict(_FORCED_ALIASES)
         for msg in self._index.all_messages():
             fields = msg.all_fields()

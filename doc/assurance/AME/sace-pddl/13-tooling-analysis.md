@@ -6,7 +6,7 @@
 
 ## Current Capability Baseline
 
-The ame system uses LAPKT BRFS (Breadth-First Search) over eagerly-grounded STRIPS problems. This is the **execution planner** — it generates plans that the BT executor runs. It is fast, sound, and complete for STRIPS.
+The ame system uses LAPKT BRFS (Breadth-First Search) over eagerly-grounded STRIPS problems. This is the **execution planner** -- it generates plans that the BT executor runs. It is fast, sound, and complete for STRIPS.
 
 However, the SACE safety case requires analyses that go beyond goal-directed STRIPS planning. This document identifies the tooling gaps and recommends specific tools for each.
 
@@ -20,21 +20,21 @@ However, the SACE safety case requires analyses that go beyond goal-directed STR
 
 **What's needed:** Verify that plans satisfy global constraints over the entire trajectory, not just at individual action steps. Examples:
 
-- `(always (not (collision ?r)))` — safety invariant
-- `(sometime-before (at ?r base) (fuel-check-done ?r))` — ordering constraint
-- `(at-most-once (airspace-enter ?r ?zone))` — visit constraints
+- `(always (not (collision ?r)))` -- safety invariant
+- `(sometime-before (at ?r base) (fuel-check-done ?r))` -- ordering constraint
+- `(at-most-once (airspace-enter ?r ?zone))` -- visit constraints
 
-**Why STRIPS can't do it:** STRIPS plans are sequences of state transitions. There is no mechanism to express or check properties over the entire sequence. Precondition gating (our current workaround) only works for state invariants that can be expressed as action preconditions — it cannot express temporal ordering, counting, or path-level properties.
+**Why STRIPS can't do it:** STRIPS plans are sequences of state transitions. There is no mechanism to express or check properties over the entire sequence. Precondition gating (our current workaround) only works for state invariants that can be expressed as action preconditions -- it cannot express temporal ordering, counting, or path-level properties.
 
 **Recommended tools:**
 
 | Tool | Capability | Licence | Integration Effort |
 |------|-----------|---------|-------------------|
-| **ENHSP** | Supports PDDL 3.0 constraints, numeric fluents, temporal preferences | LGPL | Medium — Java, CLI interface |
-| **LPRPG-P** | Preferences and trajectory constraints | GPL | Medium — C++, CLI |
-| **OPTIC** | Temporal + trajectory constraints | Academic | Medium — C++, CLI |
+| **ENHSP** | Supports PDDL 3.0 constraints, numeric fluents, temporal preferences | LGPL | Medium -- Java, CLI interface |
+| **LPRPG-P** | Preferences and trajectory constraints | GPL | Medium -- C++, CLI |
+| **OPTIC** | Temporal + trajectory constraints | Academic | Medium -- C++, CLI |
 
-**Integration approach:** Offline analysis tool. Write constrained PDDL domain/problem files. Run external planner as a subprocess. Parse output for plan validity / constraint violation. The ame execution planner remains unchanged — the external tool is used only for safety case evidence generation.
+**Integration approach:** Offline analysis tool. Write constrained PDDL domain/problem files. Run external planner as a subprocess. Parse output for plan validity / constraint violation. The ame execution planner remains unchanged -- the external tool is used only for safety case evidence generation.
 
 ---
 
@@ -57,10 +57,10 @@ However, the SACE safety case requires analyses that go beyond goal-directed STR
 | **SPIN** | LTL model checking, exhaustive state-space exploration, counterexample generation | BSD | Industry standard. Requires translation from PDDL to Promela |
 | **NuSMV** | CTL + LTL model checking, BDD-based symbolic exploration | LGPL | Good for finite-state systems. Requires PDDL-to-SMV translation |
 | **TorchLight** | PDDL-native dead-end detection and reachability analysis | Academic | Directly consumes PDDL; limited to reachability, not full temporal logic |
-| **myND** | Non-deterministic PDDL planner, strong/weak plan analysis | Academic | Handles FOND (fully observable non-deterministic) domains — useful for "plan works under ALL possible failure outcomes" |
+| **myND** | Non-deterministic PDDL planner, strong/weak plan analysis | Academic | Handles FOND (fully observable non-deterministic) domains -- useful for "plan works under ALL possible failure outcomes" |
 | **VAL** (Plan Validator) | Validates PDDL plans against domains, checks constraint satisfaction | BSD | Part of the IPC toolkit. Doesn't search, but validates given plans against PDDL 3.0 constraints |
 
-**Integration approach — two tiers:**
+**Integration approach -- two tiers:**
 
 **Tier 1 (near-term):** Use VAL to validate plan traces from the ame planner against PDDL 3.0 constrained domains. This is a lightweight check: the ame planner generates the plan, VAL checks it against the full constraint set. Catches constraint violations without changing the planner.
 
@@ -75,7 +75,7 @@ However, the SACE safety case requires analyses that go beyond goal-directed STR
 **What's needed:**
 
 - "What is the probability of reaching a hazardous state given failure rate distributions?"
-- "Does the system satisfy a safety property with probability ≥ p?"
+- "Does the system satisfy a safety property with probability >= p?"
 
 **Why STRIPS can't do it:** STRIPS is purely Boolean and deterministic. No probability distributions, no stochastic effects.
 
@@ -87,7 +87,7 @@ However, the SACE safety case requires analyses that go beyond goal-directed STR
 | **Storm** | High-performance probabilistic model checker | GPL | Faster than PRISM for large models. Same translation requirement |
 | **PPDDL planners** (e.g. FF-Replan, FOND-SAT) | Plan under outcome uncertainty | Various | Less mature than dedicated probabilistic model checkers |
 
-**Integration approach:** Build a PDDL+failure-rate-annotation → PRISM translator. Each PDDL action with a failure mode becomes a probabilistic choice in the PRISM model. Run PRISM with quantitative properties. This is a significant integration effort but provides the quantitative residual risk evidence that ISO 21448 requires.
+**Integration approach:** Build a PDDL+failure-rate-annotation -> PRISM translator. Each PDDL action with a failure mode becomes a probabilistic choice in the PRISM model. Run PRISM with quantitative properties. This is a significant integration effort but provides the quantitative residual risk evidence that ISO 21448 requires.
 
 ---
 
@@ -142,13 +142,13 @@ Outputs:
   - Coverage report (which combinations tested, results)
 ```
 
-This is a Python or C++ tool that reads the baseline PDDL, generates variants by toggling init predicates, runs the ame planner (or an external planner) on each, and collects results. This is the most immediately actionable tooling gap — it requires no new planner, just automation around the existing one.
+This is a Python or C++ tool that reads the baseline PDDL, generates variants by toggling init predicates, runs the ame planner (or an external planner) on each, and collects results. This is the most immediately actionable tooling gap -- it requires no new planner, just automation around the existing one.
 
 ---
 
 ### Gap 6: Plan Quality / Optimality
 
-**SACE Stage:** 8 (verification — is the plan not just valid but good?)
+**SACE Stage:** 8 (verification -- is the plan not just valid but good?)
 
 **What's needed:**
 
@@ -170,50 +170,50 @@ This is a Python or C++ tool that reads the baseline PDDL, generates variants by
 ## Recommended Tooling Architecture
 
 ```
-                    ┌---------------------------------------------┐
-                    │           SACE Evidence Pipeline             │
-                    │         (offline, safety case only)          │
-                    ├---------------------------------------------┤
-                    │                                             │
-  PDDL Domain -----┤  ┌--------------┐   ┌------------------┐   │
-  + Problem         │  │ Problem      │--▶│ Ame Planner    │   │--▶ Plan traces
-  + Fault Catalogue │  │ Generator    │   │ (LAPKT BRFS)     │   │    (STRIPS scenarios)
-                    │  └--------------┘   └------------------┘   │
-                    │         │                                   │
-                    │         │           ┌------------------┐   │
-                    │         └----------▶│ VAL              │   │--▶ Constraint checks
-                    │                     │ (Plan Validator)  │   │    (PDDL 3.0)
-                    │                     └------------------┘   │
-                    │                                             │
-  PDDL 3.0         │  ┌--------------------------------------┐   │
-  Constrained  -----┤  │ ENHSP / OPTIC                       │   │--▶ Constraint-
-  Domain            │  │ (trajectory constraint planner)      │   │    satisfying plans
-                    │  └--------------------------------------┘   │
-                    │                                             │
-  Promela /         │  ┌--------------------------------------┐   │
-  SMV Model    -----┤  │ SPIN / NuSMV                         │   │--▶ Property proofs
-  (translated)      │  │ (model checker)                      │   │    + counterexamples
-                    │  └--------------------------------------┘   │
-                    │                                             │
-  PDDL +            │  ┌--------------------------------------┐   │
-  Failure Rates ----┤  │ PRISM / Storm                        │   │--▶ Quantitative
-                    │  │ (probabilistic model checker)        │   │    risk metrics
-                    │  └--------------------------------------┘   │
-                    │                                             │
-  PDDL Domain -----┤  ┌--------------------------------------┐   │
-                    │  │ Fast Downward                        │   │--▶ Optimal plan
-                    │  │ (optimal STRIPS planner)             │   │    quality evidence
-                    │  └--------------------------------------┘   │
-                    └---------------------------------------------┘
-                                         │
-                                         ▼
-                    ┌---------------------------------------------┐
-                    │           Runtime Execution                  │
-                    │         (unchanged — ame core)             │
-                    ├---------------------------------------------┤
-                    │  WorldModel --▶ LAPKT BRFS --▶ PlanCompiler │
-                    │       --▶ BT.CPP Executor                   │
-                    └---------------------------------------------┘
+                    +---------------------------------------------+
+                    |           SACE Evidence Pipeline             |
+                    |         (offline, safety case only)          |
+                    +---------------------------------------------+
+                    |                                             |
+  PDDL Domain -----+  +--------------+   +------------------+   |
+  + Problem         |  | Problem      |-->| Ame Planner    |   |--> Plan traces
+  + Fault Catalogue |  | Generator    |   | (LAPKT BRFS)     |   |    (STRIPS scenarios)
+                    |  +--------------+   +------------------+   |
+                    |         |                                   |
+                    |         |           +------------------+   |
+                    |         +---------->| VAL              |   |--> Constraint checks
+                    |                     | (Plan Validator)  |   |    (PDDL 3.0)
+                    |                     +------------------+   |
+                    |                                             |
+  PDDL 3.0         |  +--------------------------------------+   |
+  Constrained  -----+  | ENHSP / OPTIC                       |   |--> Constraint-
+  Domain            |  | (trajectory constraint planner)      |   |    satisfying plans
+                    |  +--------------------------------------+   |
+                    |                                             |
+  Promela /         |  +--------------------------------------+   |
+  SMV Model    -----+  | SPIN / NuSMV                         |   |--> Property proofs
+  (translated)      |  | (model checker)                      |   |    + counterexamples
+                    |  +--------------------------------------+   |
+                    |                                             |
+  PDDL +            |  +--------------------------------------+   |
+  Failure Rates ----+  | PRISM / Storm                        |   |--> Quantitative
+                    |  | (probabilistic model checker)        |   |    risk metrics
+                    |  +--------------------------------------+   |
+                    |                                             |
+  PDDL Domain -----+  +--------------------------------------+   |
+                    |  | Fast Downward                        |   |--> Optimal plan
+                    |  | (optimal STRIPS planner)             |   |    quality evidence
+                    |  +--------------------------------------+   |
+                    +---------------------------------------------+
+                                         |
+                                         v
+                    +---------------------------------------------+
+                    |           Runtime Execution                  |
+                    |         (unchanged -- ame core)             |
+                    +---------------------------------------------+
+                    |  WorldModel --> LAPKT BRFS --> PlanCompiler |
+                    |       --> BT.CPP Executor                   |
+                    +---------------------------------------------+
 ```
 
 **Key architectural principle:** The ame execution planner is never replaced. External tools run offline, consuming the same PDDL domain files, and produce evidence artefacts that populate the GSN safety argument. The execution pipeline remains STRIPS-only and fast.
@@ -224,12 +224,12 @@ This is a Python or C++ tool that reads the baseline PDDL, generates variants by
 
 | Priority | Tool / Capability | SACE Stages | Effort | Value |
 |----------|------------------|-------------|--------|-------|
-| **1 — Immediate** | PDDL Problem Generator (custom) | 2, 8, Residual | Low (Python script) | High — unblocks systematic fault injection |
-| **2 — Near-term** | VAL (plan validator) | 3, 8 | Low (download + CLI) | High — validates plans against PDDL 3.0 constraints without changing planner |
-| **3 — Near-term** | Fast Downward (optimal planner) | 8 | Low (download + CLI) | Medium — plan quality evidence |
-| **4 — Medium-term** | ENHSP or OPTIC (constrained planner) | 3, 4 | Medium (CLI integration) | High — trajectory constraint satisfaction |
-| **5 — Medium-term** | PDDL-to-Promela translator + SPIN | 2, 7, 8 | High (custom translator) | Very high — universal reachability, full LTL |
-| **6 — Longer-term** | PRISM integration | 6, Residual | High (custom translator) | High — quantitative risk, ISO 21448 compliance |
+| **1 -- Immediate** | PDDL Problem Generator (custom) | 2, 8, Residual | Low (Python script) | High -- unblocks systematic fault injection |
+| **2 -- Near-term** | VAL (plan validator) | 3, 8 | Low (download + CLI) | High -- validates plans against PDDL 3.0 constraints without changing planner |
+| **3 -- Near-term** | Fast Downward (optimal planner) | 8 | Low (download + CLI) | Medium -- plan quality evidence |
+| **4 -- Medium-term** | ENHSP or OPTIC (constrained planner) | 3, 4 | Medium (CLI integration) | High -- trajectory constraint satisfaction |
+| **5 -- Medium-term** | PDDL-to-Promela translator + SPIN | 2, 7, 8 | High (custom translator) | Very high -- universal reachability, full LTL |
+| **6 -- Longer-term** | PRISM integration | 6, Residual | High (custom translator) | High -- quantitative risk, ISO 21448 compliance |
 
 ---
 
@@ -237,13 +237,13 @@ This is a Python or C++ tool that reads the baseline PDDL, generates variants by
 
 | Tool | Stage 1 | Stage 2 | Stage 3 | Stage 4 | Stage 5 | Stage 6 | Stage 7 | Stage 8 | Residual |
 |------|---------|---------|---------|---------|---------|---------|---------|---------|----------|
-| **Ame BRFS** | Plan generation | Fault scenarios (one-at-a-time) | Precondition-gated constraints | Sub-domain plans | Degraded-mode plans | Single failure variants | Per-state recovery | Plan traces | — |
-| **Problem Generator** | — | Systematic fault combinations | — | — | Degraded config enumeration | Failure combinations | OOC state enumeration | Scenario coverage | Random scenarios |
-| **VAL** | — | — | Constraint validation | Decomposition validation | — | — | — | Plan validation | — |
-| **Fast Downward** | — | — | — | — | — | — | — | Optimal plans | — |
-| **ENHSP / OPTIC** | — | — | Trajectory constraints | Constraint decomposition | Temporal constraints | — | — | Constrained plans | — |
-| **SPIN / NuSMV** | — | Exhaustive reachability | — | Joint constraint implication | — | — | Universal recovery | Coverage metrics | Property proofs |
-| **PRISM / Storm** | — | — | — | — | — | Failure probability | — | — | Quantitative risk |
+| **Ame BRFS** | Plan generation | Fault scenarios (one-at-a-time) | Precondition-gated constraints | Sub-domain plans | Degraded-mode plans | Single failure variants | Per-state recovery | Plan traces | -- |
+| **Problem Generator** | -- | Systematic fault combinations | -- | -- | Degraded config enumeration | Failure combinations | OOC state enumeration | Scenario coverage | Random scenarios |
+| **VAL** | -- | -- | Constraint validation | Decomposition validation | -- | -- | -- | Plan validation | -- |
+| **Fast Downward** | -- | -- | -- | -- | -- | -- | -- | Optimal plans | -- |
+| **ENHSP / OPTIC** | -- | -- | Trajectory constraints | Constraint decomposition | Temporal constraints | -- | -- | Constrained plans | -- |
+| **SPIN / NuSMV** | -- | Exhaustive reachability | -- | Joint constraint implication | -- | -- | Universal recovery | Coverage metrics | Property proofs |
+| **PRISM / Storm** | -- | -- | -- | -- | -- | Failure probability | -- | -- | Quantitative risk |
 
 ---
 
@@ -268,7 +268,7 @@ This subsumption relationship must be explicitly argued for each analysis tool i
 - Traceability from evidence to execution is maintained through the subsumption argument
 - Changes to the baseline domain automatically trigger re-analysis across all tool tiers
 
-Note: "single source of truth" is used informally — the execution and analysis domains are not identical, but are formally related through subsumption
+Note: "single source of truth" is used informally -- the execution and analysis domains are not identical, but are formally related through subsumption
 
 ### 3. Incremental Adoption
 

@@ -1,8 +1,8 @@
 /// \file test_pcl_socket_transport.cpp
-/// \brief Tests for PCL TCP socket transport — server/client, wire protocol,
+/// \brief Tests for PCL TCP socket transport -- server/client, wire protocol,
 ///        gateway container, non-blocking send, and async remote service invocation.
 ///
-/// Covers LLRs REQ_PCL_115–REQ_PCL_130 (tracing to HLRs PCL.031–PCL.036, PCL.045).
+/// Covers LLRs REQ_PCL_115-REQ_PCL_130 (tracing to HLRs PCL.031-PCL.036, PCL.045).
 ///
 /// Each test stands up a loopback server+client pair on an ephemeral port,
 /// exercises the transport layer, then tears down cleanly.
@@ -37,9 +37,9 @@ extern "C" {
 #include "pcl/pcl_log.h"
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 // Helpers
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 
 /// Silence logs during tests so stderr is clean.
 static void silence_logs() {
@@ -72,7 +72,7 @@ struct LoopbackPair {
     // then close it and pass the port to both sides.
     // Alternatively, create_server(0) picks an ephemeral port, but we
     // can't read it back from the opaque handle.  Instead we'll use a
-    // small known port range — or just use a fixed high port and retry.
+    // small known port range -- or just use a fixed high port and retry.
     //
     // Simplest approach: start server on port 0 in a thread.  But we need
     // the port before the client can connect.  The server blocks on accept,
@@ -165,9 +165,9 @@ struct LoopbackPair {
   }
 };
 
-// ═══════════════════════════════════════════════════════════════════════════
-// REQ_PCL_115–116 — Server Mode (PCL.031)
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// REQ_PCL_115-116 -- Server Mode (PCL.031)
+// ===========================================================================
 
 ///< REQ_PCL_115: Server creation returns valid transport. PCL.031.
 TEST(PclSocketTransport, ServerCreationAndDestroy) {
@@ -214,7 +214,7 @@ TEST(PclSocketTransport, ServerEphemeralPortAssigned) {
   volatile uint16_t port_ready = 0;
   pcl_socket_transport_t* server_transport = nullptr;
 
-  // Launch server with port=0 — it binds, calls getsockname, then blocks on accept.
+  // Launch server with port=0 -- it binds, calls getsockname, then blocks on accept.
   std::thread server_thread([&]() {
     server_transport = pcl_socket_transport_create_server_ex(
         0, server_exec, &port_ready);
@@ -245,9 +245,9 @@ TEST(PclSocketTransport, ServerEphemeralPortAssigned) {
   restore_logs();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// REQ_PCL_117–119 — Client Mode (PCL.032)
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// REQ_PCL_117-119 -- Client Mode (PCL.032)
+// ===========================================================================
 
 ///< REQ_PCL_117: Client creation returns valid transport. PCL.032.
 TEST(PclSocketTransport, ClientCreationAndDestroy) {
@@ -290,9 +290,9 @@ TEST(PclSocketTransport, ClientConnectToNonexistentServerFails) {
   restore_logs();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// REQ_PCL_120–121 — Wire Protocol (PCL.033)
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// REQ_PCL_120-121 -- Wire Protocol (PCL.033)
+// ===========================================================================
 
 ///< REQ_PCL_120: Publish server to client delivered. PCL.033.
 TEST(PclSocketTransport, PublishServerToClientDelivered) {
@@ -357,9 +357,9 @@ TEST(PclSocketTransport, PublishServerToClientDelivered) {
   restore_logs();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// REQ_PCL_122–124 — Gateway Container (PCL.034)
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// REQ_PCL_122-124 -- Gateway Container (PCL.034)
+// ===========================================================================
 
 ///< REQ_PCL_122: Gateway container exists and is configurable. PCL.034.
 TEST(PclSocketTransport, GatewayContainerExists) {
@@ -402,9 +402,9 @@ TEST(PclSocketTransport, ClientHasNoGateway) {
   restore_logs();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// REQ_PCL_125 — Non-Blocking Send (PCL.035)
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// REQ_PCL_125 -- Non-Blocking Send (PCL.035)
+// ===========================================================================
 
 ///< REQ_PCL_125: Publish is non-blocking. PCL.035.
 TEST(PclSocketTransport, PublishIsNonBlocking) {
@@ -442,9 +442,9 @@ TEST(PclSocketTransport, PublishIsNonBlocking) {
   restore_logs();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// REQ_PCL_126–128 — Async Remote Service Invocation (PCL.036)
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// REQ_PCL_126-128 -- Async Remote Service Invocation (PCL.036)
+// ===========================================================================
 
 ///< REQ_PCL_126: Async remote service round trip. PCL.036.
 TEST(PclSocketTransport, AsyncRemoteServiceRoundTrip) {
@@ -603,9 +603,9 @@ TEST(PclSocketTransport, InvokeRemoteAsyncOnServerReturnsInvalid) {
   restore_logs();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// REQ_PCL_129–130 — Accessor null safety (PCL.045)
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// REQ_PCL_129-130 -- Accessor null safety (PCL.045)
+// ===========================================================================
 
 ///< REQ_PCL_129: Get transport null returns NULL. PCL.045.
 TEST(PclSocketTransport, GetTransportNullReturnsNull) {
@@ -617,9 +617,9 @@ TEST(PclSocketTransport, DestroyNullIsNoOp) {
   pcl_socket_transport_destroy(nullptr); // must not crash
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// REQ_PCL_121 — Wire protocol: client→server (PCL.033)
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// REQ_PCL_121 -- Wire protocol: client->server (PCL.033)
+// ===========================================================================
 
 ///< REQ_PCL_121: Publish client to server delivered. PCL.033.
 TEST(PclSocketTransport, PublishClientToServerDelivered) {
@@ -683,9 +683,9 @@ TEST(PclSocketTransport, PublishClientToServerDelivered) {
   restore_logs();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Additional coverage tests — vtable functions, edge cases, cleanup paths
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// Additional coverage tests -- vtable functions, edge cases, cleanup paths
+// ===========================================================================
 
 ///< REQ_PCL_158: Subscribe vtable is callable. PCL.031.
 TEST(PclSocketTransport, SubscribeVtableCallSucceeds) {
@@ -733,7 +733,7 @@ TEST(PclSocketTransport, DestroyWithPendingAsyncCallNoLeak) {
   pcl_executor_set_transport(pair.client_exec,
       pcl_socket_transport_get_transport(pair.client_transport));
 
-  // Invoke a remote service but DO NOT spin either executor — the response
+  // Invoke a remote service but DO NOT spin either executor -- the response
   // will never arrive, leaving a pending record.
   auto noop_cb = [](const pcl_msg_t*, void*) {};
   pcl_msg_t req = {};
@@ -746,7 +746,7 @@ TEST(PclSocketTransport, DestroyWithPendingAsyncCallNoLeak) {
       pair.client_transport, "no_such_service", &req, noop_cb, nullptr);
   EXPECT_EQ(rc, PCL_OK);
 
-  // Destroy while the pending record is still queued — exercises the
+  // Destroy while the pending record is still queued -- exercises the
   // pending-list drain in pcl_socket_transport_destroy.
   pair.destroy();
   restore_logs();
@@ -765,7 +765,7 @@ TEST(PclSocketTransport, DestroyWithUnsentFramesNoLeak) {
       pcl_socket_transport_get_transport(pair.server_transport);
 
   // Burst-publish many messages so the send queue builds up, then immediately
-  // destroy the transport without draining — exercises the frame-drain loop.
+  // destroy the transport without draining -- exercises the frame-drain loop.
   for (int i = 0; i < 200; ++i) {
     char buf[64];
     int len = snprintf(buf, sizeof(buf), "burst-%d", i);
@@ -776,7 +776,7 @@ TEST(PclSocketTransport, DestroyWithUnsentFramesNoLeak) {
     transport->publish(transport->adapter_ctx, "drain/topic", &msg);
   }
 
-  // Immediately destroy — unsent frames must be freed.
+  // Immediately destroy -- unsent frames must be freed.
   pair.destroy();
   restore_logs();
 }
@@ -807,7 +807,7 @@ TEST(PclSocketTransport, InvokeRemoteAsyncOversizedPayloadReturnsNomem) {
   restore_logs();
 }
 
-// Note: bind-failure test removed — SO_REUSEADDR on Windows allows re-binding
+// Note: bind-failure test removed -- SO_REUSEADDR on Windows allows re-binding
 // to an in-use port, making it unreliable as a unit test trigger.
 
 ///< REQ_PCL_163: Gateway service dispatch with no match. PCL.034, PCL.036.
@@ -824,7 +824,7 @@ TEST(PclSocketTransport, GatewayServiceDispatchNoMatch) {
   pcl_executor_register_transport(pair.client_exec, "server",
       pcl_socket_transport_get_transport(pair.client_transport));
 
-  // Set up gateway on server — but do NOT register any service handler.
+  // Set up gateway on server -- but do NOT register any service handler.
   pcl_container_t* gw = pcl_socket_transport_gateway_container(
       pair.server_transport);
   ASSERT_NE(gw, nullptr);
@@ -859,7 +859,7 @@ TEST(PclSocketTransport, GatewayServiceDispatchNoMatch) {
       pair.client_exec, "nonexistent_service", &req,
       resp_cb, &resp_received);
 
-  // Spin both executors — the gateway should process the request and
+  // Spin both executors -- the gateway should process the request and
   // send back an empty response (since invoke_service fails).
   for (int i = 0; i < 50 && !resp_received; ++i) {
     pcl_executor_spin_once(pair.server_exec, 0);
@@ -874,9 +874,9 @@ TEST(PclSocketTransport, GatewayServiceDispatchNoMatch) {
   restore_logs();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 // Connection semantics: retry, state callbacks, auto-reconnect, keepalive
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
 
 /// Helper: thread-safe log of connection-state transitions.
 struct StateLog {
@@ -970,7 +970,7 @@ TEST(PclSocketTransport, ClientExRetryConnectsToDelayedServer) {
   ASSERT_NE(server_exec, nullptr);
   ASSERT_NE(client_exec, nullptr);
 
-  // Launch the client first — it must retry until the server shows up.
+  // Launch the client first -- it must retry until the server shows up.
   StateLog log;
   pcl_socket_client_opts_t opts = {};
   opts.connect_timeout_ms = 10000;  // 10 s deadline
@@ -1055,7 +1055,7 @@ TEST(PclSocketTransport, GetStateReportsConnected) {
   restore_logs();
 }
 
-/// State callback fires for the initial CONNECTING → CONNECTED transition.
+/// State callback fires for the initial CONNECTING -> CONNECTED transition.
 TEST(PclSocketTransport, StateCallbackFiresOnInitialConnect) {
   silence_logs();
   uint16_t port = pick_free_port();
@@ -1160,7 +1160,7 @@ TEST(PclSocketTransport, AutoReconnectAfterServerRestart) {
   EXPECT_TRUE(reconnected) << "Client did not auto-reconnect";
   EXPECT_NE(server, nullptr);
 
-  // Must have seen at least one DISCONNECTED → CONNECTING → CONNECTED cycle.
+  // Must have seen at least one DISCONNECTED -> CONNECTING -> CONNECTED cycle.
   auto states = log.snapshot();
   size_t disconnects = 0, reconnects = 0;
   for (size_t i = 0; i < states.size(); ++i) {
@@ -1214,7 +1214,7 @@ TEST(PclSocketTransport, NonReconnectingClientReportsDisconnectedAfterServerClos
   pcl_socket_transport_destroy(server);
   server = nullptr;
 
-  // Poll get_state() — must flip to DISCONNECTED even though reconnect is off.
+  // Poll get_state() -- must flip to DISCONNECTED even though reconnect is off.
   bool disconnected = false;
   for (int i = 0; i < 200; ++i) {
     if (pcl_socket_transport_get_state(client) ==
@@ -1249,14 +1249,14 @@ TEST(PclSocketTransport, ClientExRespectsTimeoutOnBlackholedHost) {
   opts.max_retries        = 100;   // allow many retries within the budget
 
   auto start = std::chrono::steady_clock::now();
-  // 192.0.2.1 — RFC 5737 TEST-NET-1, guaranteed non-routable in production.
+  // 192.0.2.1 -- RFC 5737 TEST-NET-1, guaranteed non-routable in production.
   auto* t = pcl_socket_transport_create_client_ex("192.0.2.1", 9, e, &opts);
   auto elapsed = std::chrono::steady_clock::now() - start;
 
   EXPECT_EQ(t, nullptr);
   // Must bail close to the deadline. A slack of 2 s covers one in-flight
   // per-attempt slice + scheduling jitter while still being far below the
-  // pre-fix ~20–75 s blocking-connect worst case.
+  // pre-fix ~20-75 s blocking-connect worst case.
   auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count();
   EXPECT_LT(ms, 2500) << "Actual elapsed=" << ms << " ms";
 

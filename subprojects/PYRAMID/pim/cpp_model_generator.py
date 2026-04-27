@@ -823,7 +823,7 @@ def main():
     generator = CppDataModelGenerator(datamodel_file)
     generator.generate(output_dir)
     
-    print(f"\n✓ C++14 data model generated in {output_dir}/")
+    print(f"\n[x] C++14 data model generated in {output_dir}/")
     print(f"\nInclude in your code:")
     print(f'  #include "pyramid_types.h"')
 

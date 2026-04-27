@@ -34,7 +34,7 @@ Each LLR maps to at least one unit or robustness test. Tests use requirement tag
 ## 2. Lifecycle Transitions
 
 ### REQ_PCL_004 - Full Lifecycle Cycle
-The container shall support the full transition cycle: UNCONFIGURED → CONFIGURED → ACTIVE → CONFIGURED → UNCONFIGURED → FINALIZED, invoking the corresponding callback at each step.
+The container shall support the full transition cycle: UNCONFIGURED -> CONFIGURED -> ACTIVE -> CONFIGURED -> UNCONFIGURED -> FINALIZED, invoking the corresponding callback at each step.
 
 **Traces**: PCL.002, PCL.003
 
@@ -624,7 +624,7 @@ The default handler shall include the container name when a container context is
 **Verification**: `test_pcl_dining.cpp::DestroyNullIsNoOp`.
 
 ### REQ_PCL_079 - Bridge Unit Conversion
-A bridge with a transform function shall convert messages (e.g., float m/s → int32 km/h) and dispatch to the output topic.
+A bridge with a transform function shall convert messages (e.g., float m/s -> int32 km/h) and dispatch to the output topic.
 
 **Traces**: PCL.042
 
@@ -1107,7 +1107,7 @@ Every connected TCP socket (client-connect and server-accept) shall have `SO_KEE
 
 **Traces**: PCL.031, PCL.032, PCL.036e
 
-**Verification**: Implicit — covered by `AutoReconnectAfterServerRestart` which depends on timely peer-death detection.
+**Verification**: Implicit -- covered by `AutoReconnectAfterServerRestart` which depends on timely peer-death detection.
 
 ### REQ_PCL_198 - UDP Transport Creation
 `pcl_udp_transport_create(local_port, remote_host, remote_port, executor)` shall bind a UDP socket on `local_port` (0 = ephemeral), resolve `remote_host:remote_port`, spawn a receive thread, and expose a `pcl_transport_t` vtable with `publish`, `subscribe`, and `shutdown` populated. It shall return NULL for NULL `remote_host` or NULL `executor`.

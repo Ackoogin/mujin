@@ -30,7 +30,7 @@ PDDL's search space is the formal enumeration of all decision points. By explori
 | **Fault-injected domain variants** | Modified PDDL domains modelling specific degradation modes |
 | **Counterexample plan traces** | Concrete action sequences leading to hazardous states |
 
-## GSN Mapping — Pattern [I]
+## GSN Mapping -- Pattern [I]
 
 Pattern [I] argues that all hazardous scenarios have been identified and the identification is complete and correct.
 
@@ -41,11 +41,11 @@ Pattern [I] argues that all hazardous scenarios have been identified and the ide
 | **Context** | The PDDL domain defines the decision space. The preliminary hazard list defines which predicates constitute hazardous states. ISO 21448's four-quadrant classification scopes the argument |
 | **Solution** | The reachability analysis report demonstrates which hazardous predicates are reachable. Counterexample plan traces provide concrete evidence of specific hazardous scenarios. The decision-point register demonstrates completeness of decision analysis |
 | **Justification** | ISO 34502 risk factor decomposition (perception, judgement, control) justifies generating fault-injected variants along these three axes, providing systematic coverage. ISO 21448's requirement to address unknown-unsafe scenarios justifies exhaustive state-space exploration beyond manually identified hazards |
-| **Assumption** | The hazard predicate set is complete — all relevant hazardous conditions have been encoded. Must be reviewed against the preliminary hazard analysis |
+| **Assumption** | The hazard predicate set is complete -- all relevant hazardous conditions have been encoded. Must be reviewed against the preliminary hazard analysis |
 
 ## ISO 21448 (SOTIF) Impact
 
-ISO 21448's four-quadrant model structures the argument. PDDL state-space search addresses the **unknown-unsafe** quadrant *within the modelled state space* by exploring states not anticipated during manual hazard analysis. Each counterexample trace transitions a scenario from unknown-unsafe to known-unsafe. Note that PDDL exploration cannot discover hazards arising from real-world phenomena absent from the model (state space insufficiencies — see [Residual Risk](10-residual-risk.md)). The completeness of the model itself remains an assumption requiring independent review.
+ISO 21448's four-quadrant model structures the argument. PDDL state-space search addresses the **unknown-unsafe** quadrant *within the modelled state space* by exploring states not anticipated during manual hazard analysis. Each counterexample trace transitions a scenario from unknown-unsafe to known-unsafe. Note that PDDL exploration cannot discover hazards arising from real-world phenomena absent from the model (state space insufficiencies -- see [Residual Risk](10-residual-risk.md)). The completeness of the model itself remains an assumption requiring independent review.
 
 ## ISO 34502 Impact
 
@@ -57,5 +57,5 @@ A fault-injected domain variant relaxes the `(obstacle-detected ?wp)` preconditi
 
 ---
 
-[Next: Stage 3 — Safe Operating Concept Assurance](04-stage3-safe-operating-concept.md)
+[Next: Stage 3 -- Safe Operating Concept Assurance](04-stage3-safe-operating-concept.md)
 

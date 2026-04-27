@@ -107,7 +107,7 @@ static ame::WorldModel buildSpatialDomain() {
 static ame::ActionRegistry buildSpatialRegistry() {
   ame::ActionRegistry reg;
 
-  // move action uses a subtree: InvokeService → FollowRoute → SetWorldPredicate
+  // move action uses a subtree: InvokeService -> FollowRoute -> SetWorldPredicate
   reg.registerActionSubTree("move", R"xml(
     <Sequence>
       <InvokeService service_name="path_planner" operation="compute_route"
@@ -234,7 +234,7 @@ TEST(FollowRoute, SucceedsWithWaypoints) {
 }
 
 // =============================================================================
-// E2E Hybrid Spatial Routing: oracle → plan → compile → execute → verify
+// E2E Hybrid Spatial Routing: oracle -> plan -> compile -> execute -> verify
 // =============================================================================
 
 TEST(E2ESpatialRouting, OracleThenPlanThenExecute) {
@@ -250,13 +250,13 @@ TEST(E2ESpatialRouting, OracleThenPlanThenExecute) {
   // Verify oracle ran
   ASSERT_TRUE(wm.getFact("(reachable uav1 sector_a)"));
 
-  // Phase 2: Plan — planner should produce move(uav1,base,sector_a) + search
+  // Phase 2: Plan -- planner should produce move(uav1,base,sector_a) + search
   ame::Planner planner;
   auto plan_result = planner.solve(wm);
   ASSERT_TRUE(plan_result.success);
   ASSERT_GE(plan_result.steps.size(), 2u);
 
-  // Phase 3: Compile with spatial registry (move → InvokeService+FollowRoute)
+  // Phase 3: Compile with spatial registry (move -> InvokeService+FollowRoute)
   auto reg = buildSpatialRegistry();
   ame::PlanCompiler compiler;
   auto xml = compiler.compileSequential(plan_result.steps, wm, reg);
@@ -328,7 +328,7 @@ TEST(E2ESpatialRouting, UnreachableLocationBlocksPlan) {
   wm.setFact("(reachable uav1 sector_b)", true, "oracle", ame::FactAuthority::CONFIRMED);
   // sector_c is NOT reachable
 
-  // Plan should fail — cannot reach sector_c
+  // Plan should fail -- cannot reach sector_c
   ame::Planner planner;
   auto plan_result = planner.solve(wm);
   EXPECT_FALSE(plan_result.success);
@@ -344,7 +344,7 @@ TEST(E2ESpatialRouting, ReplanAfterOracleRefresh) {
   ame::PlanCompiler compiler;
   ame::StubSpatialOracle oracle;
 
-  // First plan: oracle → plan → execute
+  // First plan: oracle -> plan -> execute
   oracle.updateReachability(wm);
   oracle.updateNearest(wm);
 

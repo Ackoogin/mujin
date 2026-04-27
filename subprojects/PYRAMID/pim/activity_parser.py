@@ -136,7 +136,7 @@ class ActivityParser:
                 print(f"Warning: Package '{package_filter}' not found")
                 return result
             else:
-                print(f"✓ Found package '{package_filter}', restricting search")
+                print(f"[x] Found package '{package_filter}', restricting search")
         
         # Find all Activity elements within scope
         for elem in self.root.iter():
@@ -456,13 +456,13 @@ def main():
     parser = ActivityParser(xmi_file)
     result = parser.parse(package_filter=package_filter)
     
-    print(f"✓ Parsed {len(result['activities'])} activities")
+    print(f"[x] Parsed {len(result['activities'])} activities")
     
     # Write output
     with open(output_file, 'w') as f:
         json.dump(result, f, indent=2)
     
-    print(f"✓ Output written to {output_file}")
+    print(f"[x] Output written to {output_file}")
     
     # Print summary
     for activity in result['activities']:

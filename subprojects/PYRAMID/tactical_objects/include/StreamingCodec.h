@@ -89,7 +89,7 @@ public:
   static std::vector<EntityUpdateFrame> decodeBatchFrame(const uint8_t* data, size_t len);
 
   // -----------------------------------------------------------------------
-  // Enum ordinal helpers — O(1), no string allocation
+  // Enum ordinal helpers -- O(1), no string allocation
   // -----------------------------------------------------------------------
   static uint8_t affiliationToOrdinal(Affiliation a);
   static Affiliation ordinalToAffiliation(uint8_t v);

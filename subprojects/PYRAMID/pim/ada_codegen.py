@@ -60,7 +60,7 @@ BASE_TYPE_MAP = {
 # RPC CreateRequirement -> "create_requirement"
 # Full wire name: "object_of_interest.create_requirement"
 
-# Standard topic names — tactical_objects bridge-facing topics aligned
+# Standard topic names -- tactical_objects bridge-facing topics aligned
 # directly to canonical proto-derived PYRAMID payloads.
 
 
@@ -234,7 +234,7 @@ def _is_provided(proto_file: ProtoFile) -> bool:
     return 'provided' in proto_file.package.lower()
 
 
-# All data model type packages, ordered base → common → tactical so that
+# All data model type packages, ordered base -> common -> tactical so that
 # `use` clauses in dependent order work correctly.
 _DATA_MODEL_TYPES_PKGS = [
     'Pyramid.Data_Model.Base.Types',
@@ -242,10 +242,10 @@ _DATA_MODEL_TYPES_PKGS = [
     'Pyramid.Data_Model.Tactical.Types',
 ]
 
-# Primary (most specific) package — kept for codec / single-package references.
+# Primary (most specific) package -- kept for codec / single-package references.
 _DATA_MODEL_TYPES_PKG = _DATA_MODEL_TYPES_PKGS[-1]
 
-# Data model codec packages: Ada type pkg → Ada codec pkg.
+# Data model codec packages: Ada type pkg -> Ada codec pkg.
 # No base-types codec; Identifier/Ack/Query use hardcoded Ada stdlib paths.
 _DM_CODEC_PKG_FOR_TYPE_PKG: Dict[str, str] = {
     'Pyramid.Data_Model.Common.Types':   'Pyramid.Data_Model.Common.Types_Codec',
@@ -308,13 +308,13 @@ def _collect_type_pkgs(proto_path: Path,
     needed: set = set()
     rpc_types = {rpc.req for _, rpc in all_rpcs} | {rpc.rsp for _, rpc in all_rpcs}
 
-    # Step 1 — direct packages from fully-qualified type names in the RPC signature.
+    # Step 1 -- direct packages from fully-qualified type names in the RPC signature.
     for t in rpc_types:
         pkg = _proto_pkg_of_type(t)
         if pkg:
             needed.add(_ada_pkg_from_proto_pkg(pkg))
 
-    # Step 2 — load proto + imports; trace each RPC message's field types too.
+    # Step 2 -- load proto + imports; trace each RPC message's field types too.
     try:
         svc_pf = _pp_parse(proto_path)
         loaded = [svc_pf]
@@ -394,7 +394,7 @@ def _topics_for_proto(
 
 
 def _types_pkg_from_proto(proto_file: 'ProtoFile') -> str:
-    """Return the primary Ada types package (tactical — includes all types)."""
+    """Return the primary Ada types package (tactical -- includes all types)."""
     return _DATA_MODEL_TYPES_PKG
 
 
@@ -1144,7 +1144,7 @@ class AdaServiceGenerator:
                 f.write(f'   end {ada_name};\n')
                 f.write(f'\n')
 
-            # Invoke helpers (provided services) — typed, serialize internally
+            # Invoke helpers (provided services) -- typed, serialize internally
             if is_provided:
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
@@ -1240,7 +1240,7 @@ class AdaServiceGenerator:
                         f.write(f'   end {rpc.ada_invoke_name};\n')
                         f.write(f'\n')
 
-            # Publish helpers (consumed topics — Ada client publishes to server)
+            # Publish helpers (consumed topics -- Ada client publishes to server)
             for key, wire in pub_topics.items():
                 ada_name = 'Publish_' + '_'.join(
                     w.capitalize() for w in key.split('_'))
@@ -1338,7 +1338,7 @@ class AdaServiceGenerator:
             f.write(f'   end Copy_To_Buf;\n')
             f.write(f'\n')
 
-            # Dispatch — deserialise request, call handler, serialise response,
+            # Dispatch -- deserialise request, call handler, serialise response,
             # allocate response buffer via New_String (caller frees with C free).
             f.write(f'   procedure Dispatch\n')
             f.write(f'     (Handlers      : access constant Service_Handlers := null;\n')
@@ -1477,7 +1477,7 @@ _ADA_UNIT_FIELD_NAMES = frozenset({
 
 def _ada_name(cpp_or_proto_name: str) -> str:
     """Convert CamelCase or snake_case proto name to Ada Title_Case."""
-    s = camel_to_snake(cpp_or_proto_name)   # CamelCase → Camel_Case
+    s = camel_to_snake(cpp_or_proto_name)   # CamelCase -> Camel_Case
     return '_'.join(w.capitalize() for w in s.split('_'))
 
 
@@ -1649,7 +1649,7 @@ class AdaTypesGenerator:
                 ada_enum = _ada_name(short)
                 prefix = ada_enum.split('_')[-1] + '_'
                 return prefix + val
-        # Record types rely on their own component defaults — no initialiser needed
+        # Record types rely on their own component defaults -- no initialiser needed
         return None
 
     def _toposort(self, messages: List[ProtoMessage]) -> List[ProtoMessage]:
@@ -2026,7 +2026,7 @@ class AdaDataModelCodecGenerator:
         short = fld.type.split('.')[-1]
         if self._index.is_enum_type(fld.type) or self._index.is_enum_type(short):
             return self._enum_to_json_expr(fld, f'Msg.{ada_fname}')
-        # Alias (unit type collapsed to scalar) — dispatch on target type
+        # Alias (unit type collapsed to scalar) -- dispatch on target type
         if short in self._aliases:
             ada_target = self._aliases[short]
             if ada_target == 'Unbounded_String':
@@ -2132,7 +2132,7 @@ class AdaDataModelCodecGenerator:
         if has_complex:
             self._write_complex_codec(f, ada_n, msg, fields)
         else:
-            # All fields are scalar/enum/alias — use simple concat
+            # All fields are scalar/enum/alias -- use simple concat
             simple_fields = [fld for fld, _ in fields]
             self._write_simple_codec(f, ada_n, simple_fields)
 
@@ -2179,7 +2179,7 @@ class AdaDataModelCodecGenerator:
         for oo in msg.oneofs:
             for fld in oo.fields:
                 oneof_groups.setdefault(oo.name, []).append((fld, fld.name))
-        # Regular fields — filter out any that happen to have oneof_group set
+        # Regular fields -- filter out any that happen to have oneof_group set
         regular_fields = []
         for fld, fname in fields:
             if fld.oneof_group:
@@ -2279,7 +2279,7 @@ class AdaDataModelCodecGenerator:
         short = fld.type.split('.')[-1]
 
         if fld.is_repeated:
-            # Repeated field — emit JSON array
+            # Repeated field -- emit JSON array
             elem_is_scalar = (fld.type in _ADA_SCALAR_MAP or
                               short in self._aliases)
             elem_is_enum = (self._index.is_enum_type(fld.type) or
@@ -2308,14 +2308,14 @@ class AdaDataModelCodecGenerator:
                 else:
                     f.write(f'            Append (Result, Integer\'Image (Msg.{ada_fname} (I)));\n')
             else:
-                # Nested message element — qualify to avoid ambiguity
+                # Nested message element -- qualify to avoid ambiguity
                 qcall = self._qualified_to_json(fld, f'Msg.{ada_fname} (I)')
                 f.write(f'            Append (Result, {qcall});\n')
             f.write(f'         end loop;\n')
             f.write(f'         Append (Result, "]");\n')
             f.write(f'      end if;\n')
         elif self._is_field_message(fld) and short not in self._aliases:
-            # Nested message — delegate with qualified call
+            # Nested message -- delegate with qualified call
             qcall = self._qualified_to_json(fld, f'Msg.{ada_fname}')
             f.write(f'      Comma;\n')
             f.write(f'      Append (Result, """{wire}"":" & {qcall});\n')
@@ -2330,7 +2330,7 @@ class AdaDataModelCodecGenerator:
         short = fld.type.split('.')[-1]
 
         if fld.is_repeated:
-            # Repeated field — iterate JSON array, allocate Ada array
+            # Repeated field -- iterate JSON array, allocate Ada array
             arr_type = _ada_name(fld.name) + '_Array'
             elem_is_msg = (self._is_field_message(fld) and
                            short not in self._aliases)
@@ -2397,7 +2397,7 @@ class AdaDataModelCodecGenerator:
             f.write(f'         end;\n')
             f.write(f'      end if;\n')
         elif self._is_field_message(fld) and short not in self._aliases:
-            # Nested message — extract sub-object, serialise to string, call From_Json
+            # Nested message -- extract sub-object, serialise to string, call From_Json
             qpkg = self._msg_to_codec.get(short, self._ada_pkg)
             qual = f'{qpkg}.' if qpkg != self._ada_pkg else ''
             f.write(f'      if Has_Field (J, "{wire}") then\n')
@@ -2454,7 +2454,7 @@ class AdaDataModelCodecGenerator:
                 f.write(f'      return {prefix}{first_lit};\n')
                 f.write(f'   end {ada_n}_From_String;\n\n')
 
-            # Struct codecs — generate working serialisation for all types
+            # Struct codecs -- generate working serialisation for all types
             for msg in structs:
                 ada_n = _ada_name(msg.name)
                 self._write_codec(f, ada_n, msg)

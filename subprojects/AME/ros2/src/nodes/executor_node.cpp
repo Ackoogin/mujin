@@ -102,7 +102,7 @@ ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
         } catch (const std::exception& e) {
           resp->success   = false;
           resp->error_msg = e.what();
-          RCLCPP_ERROR(get_logger(), "load_bt: FAILED — %s", e.what());
+          RCLCPP_ERROR(get_logger(), "load_bt: FAILED -- %s", e.what());
         }
       });
 
@@ -130,7 +130,7 @@ ExecutorNode::on_configure(const rclcpp_lifecycle::State&) {
     pub_execution_status_->publish(msg);
   }
 
-  // Wire ExecutorComponent event sink → ROS2 bt_events topic + status topic
+  // Wire ExecutorComponent event sink -> ROS2 bt_events topic + status topic
   component_->setEventSink([this](const std::string& json_line) {
     if (pub_bt_events_) {
       std_msgs::msg::String msg;

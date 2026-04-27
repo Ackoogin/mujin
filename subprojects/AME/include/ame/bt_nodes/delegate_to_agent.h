@@ -21,19 +21,19 @@ class PlanAuditLog;
 /// pattern where a leader plans at the goal level and delegates sub-goals.
 ///
 /// Blackboard keys (required):
-///   "world_model"     — WorldModel*
-///   "bt_factory"      — BT::BehaviorTreeFactory*
-///   "planner"         — Planner*
-///   "plan_compiler"   — PlanCompiler*
-///   "action_registry" — ActionRegistry*
+///   "world_model"     -- WorldModel*
+///   "bt_factory"      -- BT::BehaviorTreeFactory*
+///   "planner"         -- Planner*
+///   "plan_compiler"   -- PlanCompiler*
+///   "action_registry" -- ActionRegistry*
 ///
 /// Blackboard keys (optional):
-///   "plan_audit_log"     — PlanAuditLog*
-///   "parent_episode_id"  — uint64_t
+///   "plan_audit_log"     -- PlanAuditLog*
+///   "parent_episode_id"  -- uint64_t
 ///
 /// Ports:
-///   agent_id    (input) — ID of the agent to delegate to, e.g. "uav1"
-///   agent_goals (input) — semicolon-separated goal fluent strings
+///   agent_id    (input) -- ID of the agent to delegate to, e.g. "uav1"
+///   agent_goals (input) -- semicolon-separated goal fluent strings
 ///
 /// The node marks the agent as unavailable during execution and restores
 /// availability when the delegation completes (success or failure).

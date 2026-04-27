@@ -1,6 +1,6 @@
 # Remaining Work
 
-All vertical slice steps (1–8) and extensions 1–6 are complete, including multi-agent planning and ROS2 extension wiring. This document consolidates the roadmap for remaining work.
+All vertical slice steps (1-8) and extensions 1-6 are complete, including multi-agent planning and ROS2 extension wiring. This document consolidates the roadmap for remaining work.
 
 ---
 
@@ -23,7 +23,7 @@ PDDL 2.1 durative actions with STN conversion. See [`temporal_extension_research
 | 7b | WorldModel numeric fluent store + audit | Medium |
 | 7c | `IPlannerBackend` abstraction + OPTIC subprocess | Medium |
 | 7d | STN data structure + consistency check | Low |
-| 7e | PlanCompiler temporal mode (STN → BT `Parallel`/`Timeout`) | High |
+| 7e | PlanCompiler temporal mode (STN -> BT `Parallel`/`Timeout`) | High |
 | 7f | VAL integration for temporal plan validation | Low |
 | 7g | Temporal invariant monitoring (`ReactiveSequence`) | Low |
 | 7h | End-to-end temporal tests | Medium |
@@ -40,7 +40,7 @@ Neural components assist, but the symbolic system remains authoritative. See [`n
 - **Neural Acceptance Criteria:** Latency budget (500ms), fallback to LAPKT on timeout/error, audit logging
 
 ### Phase 1 (Low-Risk)
-- **LLM Goal Interpreter:** Natural language → grounded PDDL goals; symbolic validation rejects invalid fluents
+- **LLM Goal Interpreter:** Natural language -> grounded PDDL goals; symbolic validation rejects invalid fluents
 - **LLM Mission Analyst:** Offline analysis of audit logs; evidence-cited explanations
 
 ### Phase 2+ (Deferred)
@@ -60,7 +60,7 @@ From SACE Stage 8 analysis. See [`autonomy_assurance_plan.md`](../../plans/AME/a
 |-----|-----------|---------|
 | Property-Based Planner Testing | Prove solver soundness over random valid domains | PDDL fuzzer + test harness asserting plan simulation |
 | Adversarial Perception Testing | Reject malicious/stale/inconsistent data | Fault-injection middleware for `setFact()` ROS2 service |
-| Safe-State Integration | Verify degradation to safe state | E2E tests: planning timeout, comms loss, unmapped actions → fallback BT |
+| Safe-State Integration | Verify degradation to safe state | E2E tests: planning timeout, comms loss, unmapped actions -> fallback BT |
 
 ### Medium-Priority
 
@@ -69,7 +69,7 @@ From SACE Stage 8 analysis. See [`autonomy_assurance_plan.md`](../../plans/AME/a
 | OOC Detection | Bounds-checking on WorldModel + `CheckContext` BT node for geofencing |
 | Threat Modelling | `threat_model.md` for spoofing, PDDL injection, denial-of-planning |
 | Performance Benchmarks | CI thresholds on LAPKT time; BT tick stress tests at 50Hz |
-| Compiler Correctness | BT → linear action sequence round-trip verification |
+| Compiler Correctness | BT -> linear action sequence round-trip verification |
 
 ---
 
@@ -94,7 +94,7 @@ From SACE Stage 8 analysis. See [`autonomy_assurance_plan.md`](../../plans/AME/a
 - Complex DAG join-point synchronisation
 
 ### MissionExecutor
-- Progressive replan: retry → local replan → full replan → relax goal → abort
+- Progressive replan: retry -> local replan -> full replan -> relax goal -> abort
 - Replan budget (max N replans)
 - Pre-replan world model consistency checks
 

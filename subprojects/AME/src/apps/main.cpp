@@ -79,7 +79,7 @@ public:
 int main() {
     std::cout << "============================================\n";
     std::cout << " AME End-to-End Vertical Slice\n";
-    std::cout << " PDDL → LAPKT → BT.CPP Pipeline\n";
+    std::cout << " PDDL -> LAPKT -> BT.CPP Pipeline\n";
     std::cout << "============================================\n";
 
     // ---- Step 1: Build world model from PDDL ----

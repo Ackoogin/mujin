@@ -1,4 +1,4 @@
-"""Observability tab — live event stream, WM plots, fact history, JSONL replay."""
+"""Observability tab -- live event stream, WM plots, fact history, JSONL replay."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ class ObservabilityTab:
         self._auto_scroll = True
         self._filter_text: str = ""
 
-        # Track event counts at last plot refresh — only refit when new data arrived
+        # Track event counts at last plot refresh -- only refit when new data arrived
         self._wm_count_at_refresh: int = 0
 
         # Replay

@@ -1,31 +1,31 @@
-# AME ↔ PYRAMID Integration Analysis
+# AME <-> PYRAMID Integration Analysis
 
 ## 4. Functional Comparison: AME vs automata_engine
 
-This section compares the two systems on functionality alone (SACE assurance is covered in §1).
+This section compares the two systems on functionality alone (SACE assurance is covered in S.1).
 
 ### 4.1 Capability Matrix
 
 | Capability | AME | automata_engine | Notes |
 |------------|-----|-----------------|-------|
-| **Classical planning** | ✅ PDDL + LAPKT BRFS (complete, step-optimal) | ✅ GOAP A\* (cost-optimal with admissible heuristic) | Complementary — different optimality criteria |
-| **Behaviour tree execution** | ✅ Full BT.CPP integration, compiled from plans | ⚠️ BtStrategy traverses a tree definition but doesn't use BT.CPP | AME's BT execution is more mature |
-| **FSM execution** | ❌ | ✅ FsmStrategy + FsmPlanExecutor | Useful for procedural/scripted behaviours |
-| **Reinforcement learning** | ❌ | ✅ QLearningStrategy (Q-table lookup) | Niche — requires offline training |
-| **Cost-based optimisation** | ⚠️ BRFS step count only | ✅ Composable cost calculators (spatial, temporal, urgency, schedule-conflict) | Major gap in AME |
-| **Temporal planning** | ❌ (researched, not implemented) | ✅ TemporalPlanExecutor, deadline monitoring, time-window constraints, TemporalConstraint | Major gap in AME |
-| **Resource tracking** | ❌ | ✅ ResourceTracker (fuel, battery, ammunition with threshold depletion) | Major gap in AME |
-| **Multi-asset coordination** | ✅ AgentInfo, DelegateToAgent, GoalAllocator | ✅ Asset-capability matching, CapabilityMatcher, asset-specific costs | Both have multi-asset; automata_engine's is richer for heterogeneous fleets |
-| **Spatial awareness** | ❌ | ✅ GeodeticPositionDetail, SpatialCostCalculator, area decomposition | Major gap in AME |
-| **Parameter resolution** | ✅ ActionRegistry param binding, `{param0}` templates | ✅ Multi-scope ParameterContext, ComputedParameterEngine, expression-based | automata_engine's is significantly more flexible |
-| **Hierarchical planning** | ✅ ExecutePhaseAction (sub-planning per phase) | ✅ GoalResolver (failure-driven sub-goal decomposition) | Different strategies — AME is phase-based, AE is failure-driven |
-| **Reactive replanning** | ✅ MissionExecutor replan-on-failure | ✅ triggerReactivePlanning on world state changes | AE is more event-driven; AME is more BT-tick-driven |
-| **Observability** | ✅ 5-layer stack (BT events, WM audit, plan audit, Foxglove, JSONL) | ⚠️ EventBus + IPlanningEventListener (no file/WebSocket sinks) | AME is far ahead |
-| **Causal-graph parallelism** | ✅ PlanCompiler analyses dependencies for parallel BT branches | ❌ Solutions are sequential action lists | Unique to AME |
-| **External service integration** | ✅ InvokeService BT node (async, timeout) | ❌ Actions are in-process `IAction::execute()` | AME designed for distributed systems |
-| **Perception integration** | ✅ PerceptionBridge (buffered, atomic flush, source-tagged) | ❌ WorldState updated directly | AME designed for sensor fusion |
-| **Dependency injection** | ❌ Manual wiring | ✅ ServiceContainer | Useful for testability |
-| **Validation framework** | ❌ | ✅ Diagnostic and validation subsystem | Useful for configuration correctness |
+| **Classical planning** | [x] PDDL + LAPKT BRFS (complete, step-optimal) | [x] GOAP A\* (cost-optimal with admissible heuristic) | Complementary -- different optimality criteria |
+| **Behaviour tree execution** | [x] Full BT.CPP integration, compiled from plans | [!] BtStrategy traverses a tree definition but doesn't use BT.CPP | AME's BT execution is more mature |
+| **FSM execution** | [X] | [x] FsmStrategy + FsmPlanExecutor | Useful for procedural/scripted behaviours |
+| **Reinforcement learning** | [X] | [x] QLearningStrategy (Q-table lookup) | Niche -- requires offline training |
+| **Cost-based optimisation** | [!] BRFS step count only | [x] Composable cost calculators (spatial, temporal, urgency, schedule-conflict) | Major gap in AME |
+| **Temporal planning** | [X] (researched, not implemented) | [x] TemporalPlanExecutor, deadline monitoring, time-window constraints, TemporalConstraint | Major gap in AME |
+| **Resource tracking** | [X] | [x] ResourceTracker (fuel, battery, ammunition with threshold depletion) | Major gap in AME |
+| **Multi-asset coordination** | [x] AgentInfo, DelegateToAgent, GoalAllocator | [x] Asset-capability matching, CapabilityMatcher, asset-specific costs | Both have multi-asset; automata_engine's is richer for heterogeneous fleets |
+| **Spatial awareness** | [X] | [x] GeodeticPositionDetail, SpatialCostCalculator, area decomposition | Major gap in AME |
+| **Parameter resolution** | [x] ActionRegistry param binding, `{param0}` templates | [x] Multi-scope ParameterContext, ComputedParameterEngine, expression-based | automata_engine's is significantly more flexible |
+| **Hierarchical planning** | [x] ExecutePhaseAction (sub-planning per phase) | [x] GoalResolver (failure-driven sub-goal decomposition) | Different strategies -- AME is phase-based, AE is failure-driven |
+| **Reactive replanning** | [x] MissionExecutor replan-on-failure | [x] triggerReactivePlanning on world state changes | AE is more event-driven; AME is more BT-tick-driven |
+| **Observability** | [x] 5-layer stack (BT events, WM audit, plan audit, Foxglove, JSONL) | [!] EventBus + IPlanningEventListener (no file/WebSocket sinks) | AME is far ahead |
+| **Causal-graph parallelism** | [x] PlanCompiler analyses dependencies for parallel BT branches | [X] Solutions are sequential action lists | Unique to AME |
+| **External service integration** | [x] InvokeService BT node (async, timeout) | [X] Actions are in-process `IAction::execute()` | AME designed for distributed systems |
+| **Perception integration** | [x] PerceptionBridge (buffered, atomic flush, source-tagged) | [X] WorldState updated directly | AME designed for sensor fusion |
+| **Dependency injection** | [X] Manual wiring | [x] ServiceContainer | Useful for testability |
+| **Validation framework** | [X] | [x] Diagnostic and validation subsystem | Useful for configuration correctness |
 | **World state typing** | Boolean predicates (STRIPS) | Polymorphic DetailBase (bool, numeric, string, geodetic, timestamp, etc.) | Trade-off: AME is simpler/verifiable; AE is more expressive |
 
 ### 4.2 Summary
@@ -38,7 +38,7 @@ This section compares the two systems on functionality alone (SACE assurance is 
 
 ## 5. Use Cases for GOAP under PDDL Strategic Planning
 
-When PDDL is the top-level strategic planner (mission-level goals), GOAP fills a distinct niche as a **tactical planner** — faster, cost-aware, and closer to execution. Below are concrete use cases.
+When PDDL is the top-level strategic planner (mission-level goals), GOAP fills a distinct niche as a **tactical planner** -- faster, cost-aware, and closer to execution. Below are concrete use cases.
 
 ### 5.1 Tactical Action Selection (Cost-Optimised)
 
@@ -52,7 +52,7 @@ When PDDL is the top-level strategic planner (mission-level goals), GOAP fills a
 
 **Scenario**: A PDDL-planned action fails mid-execution (e.g., waypoint blocked, sensor degraded). The system needs a fast tactical replan without re-running the full PDDL pipeline.
 
-**Why GOAP, not PDDL?** LAPKT BRFS explores the full grounded state space — suitable for strategic planning but too slow for sub-second replanning. GOAP's A\* with a good heuristic prunes aggressively and finds a cost-optimal local fix quickly. The `GoalResolver` can decompose the failed sub-goal into achievable steps.
+**Why GOAP, not PDDL?** LAPKT BRFS explores the full grounded state space -- suitable for strategic planning but too slow for sub-second replanning. GOAP's A\* with a good heuristic prunes aggressively and finds a cost-optimal local fix quickly. The `GoalResolver` can decompose the failed sub-goal into achievable steps.
 
 **automata_engine components used**: `GoapStrategy`, `GoalResolver`, `triggerReactivePlanning`.
 
@@ -92,57 +92,57 @@ When PDDL is the top-level strategic planner (mission-level goals), GOAP fills a
 
 **Scenario**: Repetitive operational decisions (e.g., preferred patrol routes, sensor mode selection) where historical performance data is available.
 
-**Why Q-Learning?** The decision is too context-dependent for hand-authored rules and too low-level for PDDL. A pre-trained Q-table maps (state, action) → expected reward, enabling fast policy lookup without search.
+**Why Q-Learning?** The decision is too context-dependent for hand-authored rules and too low-level for PDDL. A pre-trained Q-table maps (state, action) -> expected reward, enabling fast policy lookup without search.
 
 **automata_engine components used**: `QLearningStrategy`.
 
 ### 5.8 Layered Architecture Summary
 
 ```
-┌─────────────────────────────────────────────┐
-│  PDDL + LAPKT (Strategic / Mission-Level)   │  "What needs to happen"
-│  Complete, formally verifiable, auditable    │  Minutes-scale planning
-├─────────────────────────────────────────────┤
-│  GOAP + A* (Tactical / Task-Level)          │  "Who does it, how, at what cost"
-│  Cost-optimal, resource-aware, fast replan   │  Sub-second planning
-├─────────────────────────────────────────────┤
-│  FSM (Procedural / Phase-Level)             │  "Execute this sequence exactly"
-│  Verified transitions, no search overhead    │  Deterministic
-├─────────────────────────────────────────────┤
-│  Q-Learning (Preference / Micro-Level)      │  "Which option worked best before"
-│  Offline-trained, policy lookup              │  Sub-millisecond
-├─────────────────────────────────────────────┤
-│  BT.CPP Execution Engine                    │  Tick-based execution, reactivity
-│  AME's existing execution layer              │  Continuous
-└─────────────────────────────────────────────┘
++---------------------------------------------+
+|  PDDL + LAPKT (Strategic / Mission-Level)   |  "What needs to happen"
+|  Complete, formally verifiable, auditable    |  Minutes-scale planning
++---------------------------------------------+
+|  GOAP + A* (Tactical / Task-Level)          |  "Who does it, how, at what cost"
+|  Cost-optimal, resource-aware, fast replan   |  Sub-second planning
++---------------------------------------------+
+|  FSM (Procedural / Phase-Level)             |  "Execute this sequence exactly"
+|  Verified transitions, no search overhead    |  Deterministic
++---------------------------------------------+
+|  Q-Learning (Preference / Micro-Level)      |  "Which option worked best before"
+|  Offline-trained, policy lookup              |  Sub-millisecond
++---------------------------------------------+
+|  BT.CPP Execution Engine                    |  Tick-based execution, reactivity
+|  AME's existing execution layer              |  Continuous
++---------------------------------------------+
 ```
 
 ---
 
-## 6. Reuse Opportunities: automata_engine Components → AME
+## 6. Reuse Opportunities: automata_engine Components -> AME
 
 This section identifies specific components from automata_engine that can be adapted or reused to extend AME, ordered by impact and feasibility.
 
-### 6.1 High Impact, Low Effort — Direct Reuse
+### 6.1 High Impact, Low Effort -- Direct Reuse
 
-#### 6.1.1 Cost Calculators → AME Planner Heuristics
+#### 6.1.1 Cost Calculators -> AME Planner Heuristics
 
 **What**: Port `ICostCalculator` interface and implementations (`SpatialCostCalculator`, `TemporalCostCalculator`, `CompositeCostCalculator`) into AME.
 
-**How**: AME's `Planner::solve()` currently uses BRFS (uniform-cost). LAPKT supports weighted A\* — replacing BRFS with A\* and using automata_engine's cost calculators as the heuristic function gives AME cost-optimal planning without changing the PDDL front-end.
+**How**: AME's `Planner::solve()` currently uses BRFS (uniform-cost). LAPKT supports weighted A\* -- replacing BRFS with A\* and using automata_engine's cost calculators as the heuristic function gives AME cost-optimal planning without changing the PDDL front-end.
 
 **Benefit**: AME gains cost-aware planning (spatial distance, temporal urgency) while retaining PDDL semantics and the full observability stack. The cost calculators are self-contained with minimal dependencies (just `DetailBase` types and `nlohmann/json`).
 
 **Changes needed**:
-- Abstract `ICostCalculator` adapted for AME's `WorldModel` (translate fluent keys ↔ DetailBase)
+- Abstract `ICostCalculator` adapted for AME's `WorldModel` (translate fluent keys <-> DetailBase)
 - LAPKT search algorithm changed from BRFS to A\* (LAPKT supports this natively)
 - Cost calculator configuration added to planner config
 
-#### 6.1.2 ResourceTracker → WorldModel Extension
+#### 6.1.2 ResourceTracker -> WorldModel Extension
 
 **What**: Port `ResourceTracker` to track consumable resources (fuel, battery, mission time) within AME's `WorldModel`.
 
-**How**: Add numeric resource tracking alongside boolean predicates. `ResourceTracker` is a standalone class that maintains resource levels, consumption rates, and threshold alerts. Wire it as a `WorldModel` extension — resource consumption becomes an additional effect applied alongside predicate changes.
+**How**: Add numeric resource tracking alongside boolean predicates. `ResourceTracker` is a standalone class that maintains resource levels, consumption rates, and threshold alerts. Wire it as a `WorldModel` extension -- resource consumption becomes an additional effect applied alongside predicate changes.
 
 **Benefit**: Enables resource-constrained planning without fundamentally changing the STRIPS model. Resource violations surface as additional precondition failures triggering replanning.
 
@@ -152,7 +152,7 @@ This section identifies specific components from automata_engine that can be ada
 - PlanCompiler emits resource consumption effects
 - WmAuditLog extended with resource change events
 
-#### 6.1.3 TemporalConstraint Types → Plan Execution
+#### 6.1.3 TemporalConstraint Types -> Plan Execution
 
 **What**: Adopt `DeadlineDetail`, `TimeWindowDetail`, `DurationDetail`, and `TemporalConstraint` data types.
 
@@ -165,7 +165,7 @@ This section identifies specific components from automata_engine that can be ada
 - ExecutorComponent checks deadlines pre-tick
 - PlanAuditLog extended with temporal metrics
 
-### 6.2 High Impact, Medium Effort — Adaptation Required
+### 6.2 High Impact, Medium Effort -- Adaptation Required
 
 #### 6.2.1 GoapStrategy as Tactical Replanner
 
@@ -176,20 +176,20 @@ This section identifies specific components from automata_engine that can be ada
 **Architecture**:
 ```
 BT Action FAILURE
-  → GOAP tactical replan (sub-second)
-    → Success? Splice fix into BT, continue
-    → Failure? Full PDDL replan (seconds)
+  -> GOAP tactical replan (sub-second)
+    -> Success? Splice fix into BT, continue
+    -> Failure? Full PDDL replan (seconds)
 ```
 
 **Benefit**: Dramatically reduces replanning latency for common failure modes. PDDL only runs when the tactical planner can't find a local solution.
 
 **Changes needed**:
-- WorldModel ↔ WorldState adapter (boolean fluents ↔ typed DetailBase)
+- WorldModel <-> WorldState adapter (boolean fluents <-> typed DetailBase)
 - GoapStrategy integrated as AME dependency (or compiled alongside)
 - New BT meta-node `TacticalReplan` wrapping GOAP invocation
 - PlanAuditLog extended with tactical replan episodes
 
-#### 6.2.2 CapabilityMatcher → Multi-Agent Task Allocation
+#### 6.2.2 CapabilityMatcher -> Multi-Agent Task Allocation
 
 **What**: Port `AssetCapabilityRegistry`, `CapabilityMatcher`, and capability-based action filtering.
 
@@ -203,13 +203,13 @@ BT Action FAILURE
 - PlanCompiler generates agent-capability-filtered BTs
 - Action registration extended with capability requirements
 
-#### 6.2.3 GoalResolver → Hierarchical Failure Recovery
+#### 6.2.3 GoalResolver -> Hierarchical Failure Recovery
 
 **What**: Port `GoalResolver`'s failure-driven sub-goal decomposition.
 
 **How**: AME has `ExecutePhaseAction` for pre-defined hierarchical decomposition. `GoalResolver` adds **automatic** decomposition: when planning fails, it analyses which preconditions are unsatisfied, creates sub-goals to establish them, and recursively plans. This is more flexible than pre-authored phases.
 
-**Benefit**: Self-healing planning — the system can discover and execute prerequisite actions that weren't in the original mission specification.
+**Benefit**: Self-healing planning -- the system can discover and execute prerequisite actions that weren't in the original mission specification.
 
 **Changes needed**:
 - GoalResolver adapted to work with AME's WorldModel
@@ -217,17 +217,17 @@ BT Action FAILURE
 - Integration with MissionExecutor's replan loop
 - Max recursion depth as safety parameter
 
-### 6.3 Medium Impact, Higher Effort — Deeper Integration
+### 6.3 Medium Impact, Higher Effort -- Deeper Integration
 
-#### 6.3.1 ParameterContext → Rich Action Parameterisation
+#### 6.3.1 ParameterContext -> Rich Action Parameterisation
 
 **What**: Port the multi-scope `ParameterContext` and `ComputedParameterEngine`.
 
-**How**: Replace AME's `{param0}`-style string substitution with automata_engine's scoped parameter resolution (action → requirement → global → computed). Computed parameters enable expressions like "distance_to_target * speed_factor" evaluated at planning time.
+**How**: Replace AME's `{param0}`-style string substitution with automata_engine's scoped parameter resolution (action -> requirement -> global -> computed). Computed parameters enable expressions like "distance_to_target * speed_factor" evaluated at planning time.
 
 **Benefit**: More flexible action parameterisation, especially for cost expressions and conditional parameters.
 
-#### 6.3.2 FsmStrategy → Procedural Phase Execution
+#### 6.3.2 FsmStrategy -> Procedural Phase Execution
 
 **What**: Integrate `FsmStrategy` + `FsmPlanExecutor` as an alternative execution mode for deterministic mission phases.
 
@@ -235,7 +235,7 @@ BT Action FAILURE
 
 **Benefit**: Simpler verification for deterministic procedures; no planning overhead.
 
-#### 6.3.3 Validation Framework → Configuration Assurance
+#### 6.3.3 Validation Framework -> Configuration Assurance
 
 **What**: Port the validation/diagnostic subsystem for AME's PDDL domain and problem files.
 
@@ -243,34 +243,34 @@ BT Action FAILURE
 
 **Benefit**: Catches configuration errors before planning, reducing runtime failures.
 
-#### 6.3.4 ServiceContainer → AME Dependency Injection
+#### 6.3.4 ServiceContainer -> AME Dependency Injection
 
 **What**: Adopt `ServiceContainer` for AME's component wiring.
 
-**How**: Replace manual component construction (WorldModel → Planner → PlanCompiler → Executor) with DI container registration. Components resolve dependencies at runtime.
+**How**: Replace manual component construction (WorldModel -> Planner -> PlanCompiler -> Executor) with DI container registration. Components resolve dependencies at runtime.
 
 **Benefit**: Easier testing (mock injection), cleaner component lifecycle, simpler configuration.
 
 ### 6.4 Reuse Roadmap
 
 ```
-Phase 1 — Quick Wins (no architectural change)
-  ├── 6.1.2 ResourceTracker integration
-  ├── 6.1.3 Temporal constraint types for deadline monitoring
-  └── 6.3.3 Validation framework
+Phase 1 -- Quick Wins (no architectural change)
+  +-- 6.1.2 ResourceTracker integration
+  +-- 6.1.3 Temporal constraint types for deadline monitoring
+  +-- 6.3.3 Validation framework
 
-Phase 2 — Cost-Aware Planning (planner enhancement)
-  ├── 6.1.1 Cost calculators → LAPKT A* heuristics
-  └── 6.2.2 CapabilityMatcher for heterogeneous fleets
+Phase 2 -- Cost-Aware Planning (planner enhancement)
+  +-- 6.1.1 Cost calculators -> LAPKT A* heuristics
+  +-- 6.2.2 CapabilityMatcher for heterogeneous fleets
 
-Phase 3 — Tactical Replanning (execution enhancement)
-  ├── 6.2.1 GOAP as tactical replanner
-  └── 6.2.3 GoalResolver for failure recovery
+Phase 3 -- Tactical Replanning (execution enhancement)
+  +-- 6.2.1 GOAP as tactical replanner
+  +-- 6.2.3 GoalResolver for failure recovery
 
-Phase 4 — Architecture Enrichment (deeper integration)
-  ├── 6.3.1 ParameterContext
-  ├── 6.3.2 FsmStrategy for procedures
-  └── 6.3.4 ServiceContainer DI
+Phase 4 -- Architecture Enrichment (deeper integration)
+  +-- 6.3.1 ParameterContext
+  +-- 6.3.2 FsmStrategy for procedures
+  +-- 6.3.4 ServiceContainer DI
 ```
 
 ### 6.5 What NOT to Reuse
@@ -284,39 +284,39 @@ Phase 4 — Architecture Enrichment (deeper integration)
 
 ---
 
-# AME ↔ PYRAMID Integration: SACE Assurance for GOAP + AME as Strategy
+# AME <-> PYRAMID Integration: SACE Assurance for GOAP + AME as Strategy
 
 ## 1. SACE Assurance Applicability to GOAP
 
-Ame's existing [SACE assurance plan](../../plans/AME/autonomy_assurance_plan.md) is tightly coupled to the **PDDL + LAPKT + BT.CPP** architecture. Below is a stage-by-stage analysis of how each SACE stage — and its evidence arguments — applies (or must adapt) when the planning algorithm is automata_engine's **GOAP A\*** rather than LAPKT BRFS.
+Ame's existing [SACE assurance plan](../../plans/AME/autonomy_assurance_plan.md) is tightly coupled to the **PDDL + LAPKT + BT.CPP** architecture. Below is a stage-by-stage analysis of how each SACE stage -- and its evidence arguments -- applies (or must adapt) when the planning algorithm is automata_engine's **GOAP A\*** rather than LAPKT BRFS.
 
 ### 1.1 Property Comparison: LAPKT BRFS vs GOAP A\*
 
 | Assurable Property | LAPKT BRFS (current ame) | GOAP A\* (automata_engine) | Assurance Impact |
 |---|---|---|---|
-| **Soundness** | ✅ Guaranteed — STRIPS semantics; preconditions checked per step | ✅ Guaranteed — `IAction.getPreconditions()` checked at each A\* node expansion | Equivalent — both validate preconditions before applying effects |
-| **Completeness** | ✅ BRFS is complete for finite STRIPS | ⚠️ A\* is complete **iff** heuristic is admissible and graph is finite; GOAP uses `max_depth` bound | New evidence needed: demonstrate heuristic admissibility or document loss of completeness |
-| **Optimality** | ⚠️ BRFS finds shortest plan (step count), not cost-optimal | ✅ A\* with admissible heuristic finds cost-optimal plan vs. configured `ICostCalculator` | Trade-off reversal: GOAP is cost-optimal but may miss step-optimal plans |
-| **Termination** | ✅ Finite grounded fluent space → guaranteed termination | ⚠️ Depends on `max_depth` config + state space finiteness | Must document `GoapConfigOptions.max_depth` as a safety parameter |
-| **Determinism** | ✅ Same PDDL → same plan (BRFS is deterministic) | ⚠️ Depends on action ordering in `ActionRegistry` and tie-breaking in priority queue | Tie-breaking policy must be deterministic and documented |
-| **Transparency** | ✅ 5-layer audit stack (JSONL, Foxglove, BT events) | ⚠️ `IPlanningEventListener` exists but no file/WebSocket sinks by default | Must either port observability layers or bridge `EventBus` → existing sinks |
-| **State integrity** | ✅ Boolean bitset with version counter + `AuditCallback` | ⚠️ Typed `WorldState` with `DetailBase` polymorphism; no built-in audit trail | Need to add audit mechanism to `WorldState` mutations |
+| **Soundness** | [x] Guaranteed -- STRIPS semantics; preconditions checked per step | [x] Guaranteed -- `IAction.getPreconditions()` checked at each A\* node expansion | Equivalent -- both validate preconditions before applying effects |
+| **Completeness** | [x] BRFS is complete for finite STRIPS | [!] A\* is complete **iff** heuristic is admissible and graph is finite; GOAP uses `max_depth` bound | New evidence needed: demonstrate heuristic admissibility or document loss of completeness |
+| **Optimality** | [!] BRFS finds shortest plan (step count), not cost-optimal | [x] A\* with admissible heuristic finds cost-optimal plan vs. configured `ICostCalculator` | Trade-off reversal: GOAP is cost-optimal but may miss step-optimal plans |
+| **Termination** | [x] Finite grounded fluent space -> guaranteed termination | [!] Depends on `max_depth` config + state space finiteness | Must document `GoapConfigOptions.max_depth` as a safety parameter |
+| **Determinism** | [x] Same PDDL -> same plan (BRFS is deterministic) | [!] Depends on action ordering in `ActionRegistry` and tie-breaking in priority queue | Tie-breaking policy must be deterministic and documented |
+| **Transparency** | [x] 5-layer audit stack (JSONL, Foxglove, BT events) | [!] `IPlanningEventListener` exists but no file/WebSocket sinks by default | Must either port observability layers or bridge `EventBus` -> existing sinks |
+| **State integrity** | [x] Boolean bitset with version counter + `AuditCallback` | [!] Typed `WorldState` with `DetailBase` polymorphism; no built-in audit trail | Need to add audit mechanism to `WorldState` mutations |
 
 ### 1.2 SACE Stage Mapping
 
-#### Stage 1 — Operating Context
+#### Stage 1 -- Operating Context
 
 | Aspect | PDDL-specific argument | GOAP equivalent | Gap |
 |--------|----------------------|-----------------|-----|
 | Domain model | PDDL domain file is the formal specification | JSON `ActionDefinition` + `GoapDefinition` | JSON schema is less formal than PDDL; needs validation specification |
-| Capability specification | Derived from PDDL predicates | `AssetCapabilityRegistry` + `Capability` structs | ✅ Richer — automata_engine explicitly models capabilities |
-| Scenario catalogue | Based on PDDL problem files | Based on `PlanningRequest` instances | Equivalent — both enumerate scenarios via problem instances |
+| Capability specification | Derived from PDDL predicates | `AssetCapabilityRegistry` + `Capability` structs | [x] Richer -- automata_engine explicitly models capabilities |
+| Scenario catalogue | Based on PDDL problem files | Based on `PlanningRequest` instances | Equivalent -- both enumerate scenarios via problem instances |
 
 > **Important:** PDDL has well-established formal semantics (McDermott 1998). GOAP's `ActionDefinition` with `Condition` + `ActionEffect` is functionally equivalent but lacks a published formal semantics. For SACE Stage 1, a formal specification of `ActionDefinition` semantics (precondition satisfaction, effect application, cost monotonicity) is needed.
 
-#### Stage 2 — Hazardous Scenarios
+#### Stage 2 -- Hazardous Scenarios
 
-The existing hazard table (H1–H9 in `doc/plans/AME/autonomy_assurance_plan.md`) maps as follows:
+The existing hazard table (H1-H9 in `doc/plans/AME/autonomy_assurance_plan.md`) maps as follows:
 
 | Hazard | PDDL Argument | GOAP Adaptation |
 |--------|---------------|-----------------|
@@ -327,12 +327,12 @@ The existing hazard table (H1–H9 in `doc/plans/AME/autonomy_assurance_plan.md`
 | H5 (Effect misattribution) | `SetWorldPredicate` nodes | **Equivalent**: `ActionEffect` application via `IAction.getEffects()` |
 | H6 (Replan livelock) | `MissionExecutor` counter | **Equivalent**: `GoalResolver` has `max_depth` parameter for recursive replanning |
 | H7 (Timing violation) | `max_iterations` in LAPKT | `max_depth` in `GoapConfigOptions` + A\* expansion limit |
-| H8 (Action–BT mismatch) | `ActionRegistry.resolve()` | `ActionRegistry` (pyramid) + `IAction.execute()` — tighter coupling, less mismatch risk |
-| **H10 (NEW)** | n/a | **Heuristic inadmissibility** — if h(n) overestimates, A\* may return suboptimal plan or miss solutions |
-| **H11 (NEW)** | n/a | **Cost calculator error** — `SpatialCostCalculator` uses great-circle distance; errors in position data propagate to cost |
-| **H12 (NEW)** | n/a | **Type mismatch in DetailBase** — wrong `DetailBase` subtype cast during `WorldState` evaluation |
+| H8 (Action-BT mismatch) | `ActionRegistry.resolve()` | `ActionRegistry` (pyramid) + `IAction.execute()` -- tighter coupling, less mismatch risk |
+| **H10 (NEW)** | n/a | **Heuristic inadmissibility** -- if h(n) overestimates, A\* may return suboptimal plan or miss solutions |
+| **H11 (NEW)** | n/a | **Cost calculator error** -- `SpatialCostCalculator` uses great-circle distance; errors in position data propagate to cost |
+| **H12 (NEW)** | n/a | **Type mismatch in DetailBase** -- wrong `DetailBase` subtype cast during `WorldState` evaluation |
 
-#### Stage 3 — Safe Operating Concept
+#### Stage 3 -- Safe Operating Concept
 
 | SOC Rule | PDDL applicability | GOAP adaptation needed |
 |----------|--------------------|-----------------------|
@@ -341,7 +341,7 @@ The existing hazard table (H1–H9 in `doc/plans/AME/autonomy_assurance_plan.md`
 | Replan limit | `MissionExecutor` counter | `GoalResolver.max_depth` + executor replan counter |
 | Safe-state fallback | BT safe-state sub-tree | Must define equivalent in `BasicPlanExecutor` / `TemporalPlanExecutor` |
 
-#### Stage 4 — Safety Requirements
+#### Stage 4 -- Safety Requirements
 
 New/modified safety requirements for GOAP:
 
@@ -352,16 +352,16 @@ New/modified safety requirements for GOAP:
 | SR-12 | `WorldState` mutations SHALL be logged with source identification (equivalent to ame's `AuditCallback`) | H3 |
 | SR-13 | `GoapStrategy` SHALL expose planning statistics (nodes expanded, depth reached, time elapsed) for audit | SR-02 equivalent |
 
-#### Stage 5 — Design Assurance
+#### Stage 5 -- Design Assurance
 
 | Design argument (PDDL) | GOAP equivalent | Status |
 |------------------------|-----------------|--------|
-| Single authoritative WorldModel | Single `WorldState` per `PlanningRequest` | ✅ Equivalent |
-| Stateless planner | `GoapStrategy` holds `goap_definition_` but plans are pure functions of request | ⚠️ `planning_world_state_` is set during `determineSolution` — mutable internal state |
-| Compiler-generated BT | N/A — GOAP outputs `Solution` directly to executor | ✅ Simpler — no BT compilation step to assure |
-| Observability layers 1–5 | `EventBus` + `IPlanningEventListener` | ⚠️ Less mature — needs evidence of audit completeness |
+| Single authoritative WorldModel | Single `WorldState` per `PlanningRequest` | [x] Equivalent |
+| Stateless planner | `GoapStrategy` holds `goap_definition_` but plans are pure functions of request | [!] `planning_world_state_` is set during `determineSolution` -- mutable internal state |
+| Compiler-generated BT | N/A -- GOAP outputs `Solution` directly to executor | [x] Simpler -- no BT compilation step to assure |
+| Observability layers 1-5 | `EventBus` + `IPlanningEventListener` | [!] Less mature -- needs evidence of audit completeness |
 
-#### Stage 6 — Hazardous Failures
+#### Stage 6 -- Hazardous Failures
 
 GOAP adds new failure modes:
 
@@ -371,17 +371,17 @@ GOAP adds new failure modes:
 | Cost calculator exception | Exception in `calculateCost()` | Fallback to static `IAction.getCost()` |
 | `DetailBase` cast failure | `dynamic_cast` returns nullptr | Error logged; action skipped; plan invalidated |
 
-#### Stages 7–8 (Out-of-Context + Verification)
+#### Stages 7-8 (Out-of-Context + Verification)
 
 Verification additions needed for GOAP:
 
 | Gap | Test type | What to verify |
 |-----|-----------|----------------|
-| Heuristic admissibility | Property-based | h(n) ≤ true cost for random world states |
+| Heuristic admissibility | Property-based | h(n) <= true cost for random world states |
 | Cost calculator accuracy | Unit test | `SpatialCostCalculator` vs known geodetic distances |
 | A\* depth limit safety | Integration test | Planner returns gracefully at `max_depth` |
 | Typed state consistency | Unit test | `DetailBase` round-trip through `WorldState` mutations |
-| Determinism | Property-based | Same `PlanningRequest` → same `Solution` across runs |
+| Determinism | Property-based | Same `PlanningRequest` -> same `Solution` across runs |
 
 ### 1.3 DSTL Cross-Cut Analysis for GOAP
 
@@ -390,7 +390,7 @@ Verification additions needed for GOAP:
 | **Requirements** | Traceable via PDDL domain | Traceable via `ActionDefinition` JSON + `Condition` structs |
 | **Algorithms** | BRFS formally characterised | A\* well-characterised but heuristic must be specified and assured |
 | **Data** | Boolean bitset (simple, verifiable) | Typed `DetailBase` (richer, harder to verify exhaustively) |
-| **Integration** | WorldModel → Planner → Compiler → Executor | WorldState → GoapStrategy → Solution → BasicPlanExecutor |
+| **Integration** | WorldModel -> Planner -> Compiler -> Executor | WorldState -> GoapStrategy -> Solution -> BasicPlanExecutor |
 | **Adversarial** | PDDL injection, perception spoofing | Same + JSON config injection, cost manipulation |
 
 ---
@@ -403,11 +403,11 @@ Wrap ame's entire PDDL+LAPKT pipeline as an implementation of `pyramid::automata
 
 ```
 AutomataEngine
-  ├-- GoapStrategy      (A* + cost calculators)
-  ├-- PddlStrategy      (ame WorldModel + LAPKT BRFS)  ← NEW
-  ├-- FsmStrategy
-  ├-- BtStrategy
-  └-- QLearningStrategy
+  +-- GoapStrategy      (A* + cost calculators)
+  +-- PddlStrategy      (ame WorldModel + LAPKT BRFS)  <- NEW
+  +-- FsmStrategy
+  +-- BtStrategy
+  +-- QLearningStrategy
 ```
 
 ### 2.2 Interface Mapping
@@ -425,18 +425,18 @@ The adapter (`PddlStrategy`) would:
 
 | Step | What happens | Implementation |
 |------|-------------|----------------|
-| 1. Extract world state | `PlanningRequest.context` → `ame::WorldModel` | Translate typed `WorldState` → boolean fluents (threshold/equality checks) |
-| 2. Extract goals | `PlanningRequest.requirements` → PDDL goal fluents | Map `ExpectedEffect` → `setGoal()` fluent keys |
+| 1. Extract world state | `PlanningRequest.context` -> `ame::WorldModel` | Translate typed `WorldState` -> boolean fluents (threshold/equality checks) |
+| 2. Extract goals | `PlanningRequest.requirements` -> PDDL goal fluents | Map `ExpectedEffect` -> `setGoal()` fluent keys |
 | 3. Load domain | From PDDL file path or embedded in `strategy_config` JSON | `PddlParser::parseDomain()` + `parseProblem()` |
 | 4. Solve | `ame::Planner::solve(wm)` | Returns `PlanResult` with `PlanStep` indices |
-| 5. Compile to BT XML | `PlanCompiler::compile()` with causal-graph parallelism | (Optional — can skip if executor uses `Solution` directly) |
-| 6. Map to Solution | `PlanResult.steps` → `vector<SolutionElement>` | One `SolutionElement` per `GroundAction` with `ElementType::ACTION` |
+| 5. Compile to BT XML | `PlanCompiler::compile()` with causal-graph parallelism | (Optional -- can skip if executor uses `Solution` directly) |
+| 6. Map to Solution | `PlanResult.steps` -> `vector<SolutionElement>` | One `SolutionElement` per `GroundAction` with `ElementType::ACTION` |
 | 7. Return | `shared_ptr<Solution>` | Includes `total_estimated_cost` (step count) and constraint validation |
 
 ### 2.3 Skeleton Code
 
 ```cpp
-// pddl_strategy.h — ame as an IPlanningStrategy
+// pddl_strategy.h -- ame as an IPlanningStrategy
 #pragma once
 #include <interfaces/IPlanningStrategy.h>
 #include "ame/world_model.h"
@@ -454,14 +454,14 @@ public:
       const PlanningRequest& request) override;
 
 private:
-  // Translate AutomataEngine WorldState → ame WorldModel fluents
+  // Translate AutomataEngine WorldState -> ame WorldModel fluents
   void syncWorldState(const WorldState& ae_state, ame::WorldModel& wm);
 
-  // Translate AutomataEngine Requirements → ame goal fluents
+  // Translate AutomataEngine Requirements -> ame goal fluents
   void syncGoals(const std::vector<std::shared_ptr<Requirement>>& reqs,
                  ame::WorldModel& wm);
 
-  // Convert ame PlanResult → AutomataEngine Solution
+  // Convert ame PlanResult -> AutomataEngine Solution
   std::shared_ptr<Solution> convertResult(
       const ame::PlanResult& result,
       const ame::WorldModel& wm,
@@ -478,28 +478,28 @@ private:
 
 | Decision | Options | Recommendation |
 |----------|---------|----------------|
-| **State sync direction** | (a) AE WorldState → WM fluents on each `determineSolution()`, (b) Maintain persistent WM | **(a)** — stateless per request, matches ame's design philosophy and aids assurance |
-| **BT compilation** | (a) Compile to BT XML and embed in `SolutionElement.details`, (b) Return `SolutionElement` per action, let AE executor handle | **(b)** — more consistent with AE's `BasicPlanExecutor` expectations |
-| **Cost reporting** | (a) Report LAPKT step count as cost, (b) Ignore cost (BRFS doesn't optimize cost) | **(a)** — step count is a valid cost metric; document it as uniform-cost |
-| **When to select PDDL** | (a) Explicit `preferred_strategy_id`, (b) Auto-select when request has no typed state | **(a)** — explicit selection avoids surprising strategy switches |
+| **State sync direction** | (a) AE WorldState -> WM fluents on each `determineSolution()`, (b) Maintain persistent WM | **(a)** -- stateless per request, matches ame's design philosophy and aids assurance |
+| **BT compilation** | (a) Compile to BT XML and embed in `SolutionElement.details`, (b) Return `SolutionElement` per action, let AE executor handle | **(b)** -- more consistent with AE's `BasicPlanExecutor` expectations |
+| **Cost reporting** | (a) Report LAPKT step count as cost, (b) Ignore cost (BRFS doesn't optimize cost) | **(a)** -- step count is a valid cost metric; document it as uniform-cost |
+| **When to select PDDL** | (a) Explicit `preferred_strategy_id`, (b) Auto-select when request has no typed state | **(a)** -- explicit selection avoids surprising strategy switches |
 
 ### 2.5 Assurance Advantage of Offering Both
 
 Registering `PddlStrategy` alongside `GoapStrategy` in `AutomataEngine` creates a **cross-validation** opportunity:
 
 ```
-PlanningRequest --► GoapStrategy --► Solution A (cost-optimal)
-                └-► PddlStrategy --► Solution B (complete, formally assured)
-                                          │
+PlanningRequest --> GoapStrategy --> Solution A (cost-optimal)
+                +-> PddlStrategy --> Solution B (complete, formally assured)
+                                          |
                                Cross-Validate: same goal reached?
-                               same actions available? divergence → flag
+                               same actions available? divergence -> flag
 ```
 
 This directly supports **SACE Stage 8 (Verification)** by enabling:
 
-- **Diverse redundancy** — two different algorithms solving the same problem
-- **Regression detection** — if GOAP stops finding plans that PDDL can find, the heuristic may be inadmissible
-- **Cost-quality trade-off analysis** — compare GOAP's cost-optimal plan vs PDDL's step-optimal plan
+- **Diverse redundancy** -- two different algorithms solving the same problem
+- **Regression detection** -- if GOAP stops finding plans that PDDL can find, the heuristic may be inadmissible
+- **Cost-quality trade-off analysis** -- compare GOAP's cost-optimal plan vs PDDL's step-optimal plan
 
 ---
 
@@ -507,10 +507,10 @@ This directly supports **SACE Stage 8 (Verification)** by enabling:
 
 | # | Action | Effort | Prerequisite |
 |---|--------|--------|-------------|
-| 1 | **Write formal semantics for `ActionDefinition`** — precondition satisfaction rules, effect application order, cost monotonicity | 1 week | None |
-| 2 | **Implement `PddlStrategy`** adapter — wrap ame pipeline behind `IPlanningStrategy` | 2 weeks | Build system integration (ame_core as dependency of automata_engine) |
-| 3 | **Extend SACE hazard table** with H10–H12 (heuristic inadmissibility, cost calculator error, type mismatch) | 1 week | None |
-| 4 | **Add audit trail to `WorldState`** — equivalent to ame's `AuditCallback` for typed state | 1 week | None |
-| 5 | **Cross-validation harness** — run both strategies on UAV search domain, compare plan equivalence | 2 weeks | Steps 1–2 |
-| 6 | **Update SACE–PDDL integration guide** to cover GOAP as a second planning algorithm | 1 week | Steps 1, 3 |
+| 1 | **Write formal semantics for `ActionDefinition`** -- precondition satisfaction rules, effect application order, cost monotonicity | 1 week | None |
+| 2 | **Implement `PddlStrategy`** adapter -- wrap ame pipeline behind `IPlanningStrategy` | 2 weeks | Build system integration (ame_core as dependency of automata_engine) |
+| 3 | **Extend SACE hazard table** with H10-H12 (heuristic inadmissibility, cost calculator error, type mismatch) | 1 week | None |
+| 4 | **Add audit trail to `WorldState`** -- equivalent to ame's `AuditCallback` for typed state | 1 week | None |
+| 5 | **Cross-validation harness** -- run both strategies on UAV search domain, compare plan equivalence | 2 weeks | Steps 1-2 |
+| 6 | **Update SACE-PDDL integration guide** to cover GOAP as a second planning algorithm | 1 week | Steps 1, 3 |
 

@@ -109,10 +109,10 @@ WorldModelNode::on_configure(const rclcpp_lifecycle::State&) {
         resp->num_fluents        = r.num_fluents;
         resp->num_ground_actions = r.num_ground_actions;
         if (r.success) {
-          RCLCPP_INFO(get_logger(), "load_domain: OK — %u fluents, %u ground actions",
+          RCLCPP_INFO(get_logger(), "load_domain: OK -- %u fluents, %u ground actions",
                       r.num_fluents, r.num_ground_actions);
         } else {
-          RCLCPP_ERROR(get_logger(), "load_domain: FAILED — %s", r.error_msg.c_str());
+          RCLCPP_ERROR(get_logger(), "load_domain: FAILED -- %s", r.error_msg.c_str());
         }
       });
 

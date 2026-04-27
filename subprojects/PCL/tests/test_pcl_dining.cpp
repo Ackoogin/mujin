@@ -1,33 +1,33 @@
 /// \file test_pcl_dining.cpp
 /// \brief Dining-philosopher integration test + bridge unit tests.
 ///
-/// Part 1 — Bridge unit tests
+/// Part 1 -- Bridge unit tests
 /// --------------------------
 /// Verifies the pcl_bridge API: null-argument guards, creation/destruction,
-/// the unit-conversion path (float m/s → int32 km/h), the encoding path
-/// (int32 state enum → const-char* label), and the bridge dropping messages
+/// the unit-conversion path (float m/s -> int32 km/h), the encoding path
+/// (int32 state enum -> const-char* label), and the bridge dropping messages
 /// when the transform returns non-OK.
 ///
-/// Part 2 — Dining Philosophers with Bridges
+/// Part 2 -- Dining Philosophers with Bridges
 /// ------------------------------------------
 /// Models the classic dining-philosophers problem as a PCL component graph:
 ///
-///   5 × Philosopher container  —[phil/N/state : int32]→
-///   5 × Bridge (int32→string)  —[phil/N/status : string]→
-///   1 × Monitor container
+///   5 x Philosopher container  --[phil/N/state : int32]->
+///   5 x Bridge (int32->string)  --[phil/N/status : string]->
+///   1 x Monitor container
 ///
 /// The philosopher on_tick implements:
-///   THINKING (k ticks) → HUNGRY (grab forks) → EATING (k ticks) → release
+///   THINKING (k ticks) -> HUNGRY (grab forks) -> EATING (k ticks) -> release
 ///
 /// Fork acquisition uses the resource-hierarchy rule (lower index first) to
 /// guarantee deadlock freedom on the single-threaded executor.  All fork and
-/// eating-flag updates are unsynchronised — the PCL executor is single-threaded
+/// eating-flag updates are unsynchronised -- the PCL executor is single-threaded
 /// so no mutex is needed.
 ///
 /// Assertions:
-///   • Mutual exclusion — no two neighbouring philosophers eat simultaneously.
-///   • Liveness         — every philosopher completes ≥ MEALS_REQUIRED meals.
-///   • Bridge fidelity  — the monitor sees the correct string for every state.
+///   * Mutual exclusion -- no two neighbouring philosophers eat simultaneously.
+///   * Liveness         -- every philosopher completes >= MEALS_REQUIRED meals.
+///   * Bridge fidelity  -- the monitor sees the correct string for every state.
 #include <gtest/gtest.h>
 
 #include <array>
@@ -43,14 +43,14 @@ extern "C" {
 #include "pcl/pcl_executor.h"
 #include "pcl/pcl_transport.h"
 #include "pcl/pcl_log.h"
-// Internal header — only included here to trigger the port-overflow branch
+// Internal header -- only included here to trigger the port-overflow branch
 // in pcl_bridge.c (bridge_on_configure returning PCL_ERR_NOMEM).
 #include "pcl_internal.h"
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Part 1 — Bridge unit tests
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// Part 1 -- Bridge unit tests
+// ===========================================================================
 
 // -- helpers ----------------------------------------------------------------
 
@@ -66,7 +66,7 @@ static pcl_status_t fail_fn(const pcl_msg_t*, pcl_msg_t*, void*) {
   return PCL_ERR_CALLBACK;
 }
 
-/// m/s (float) → km/h (int32) conversion.
+/// m/s (float) -> km/h (int32) conversion.
 /// Uses a static local so the pointer remains valid after the call.
 static pcl_status_t mps_to_kmph_fn(const pcl_msg_t* in,
                                     pcl_msg_t*       out,
@@ -114,7 +114,7 @@ TEST(PclBridge, CreateAndDestroy) {
   ASSERT_NE(nullptr, b);
   EXPECT_NE(nullptr, pcl_bridge_container(b));
 
-  // Configure + activate container (exercises on_configure → add_subscriber)
+  // Configure + activate container (exercises on_configure -> add_subscriber)
   pcl_container_t* c = pcl_bridge_container(b);
   EXPECT_EQ(PCL_OK, pcl_executor_add(e, c));
   EXPECT_EQ(PCL_OK, pcl_container_configure(c));
@@ -124,7 +124,7 @@ TEST(PclBridge, CreateAndDestroy) {
   pcl_bridge_destroy(b);  // owns container
 }
 
-// -- unit conversion: float m/s → int32 km/h ------------------------------
+// -- unit conversion: float m/s -> int32 km/h ------------------------------
 
 TEST(PclBridge, SpeedUnitConversion) {
   // Consumer: subscribes to "speed/kmph" and records the last received value.
@@ -154,7 +154,7 @@ TEST(PclBridge, SpeedUnitConversion) {
   pcl_container_activate(consumer);
   pcl_executor_add(e, consumer);
 
-  // Bridge: "speed/mps" → "speed/kmph"
+  // Bridge: "speed/mps" -> "speed/kmph"
   auto* b = pcl_bridge_create(e, "speed_bridge",
                                "speed/mps",  "SpeedMps",
                                "speed/kmph", "SpeedKmph",
@@ -172,12 +172,12 @@ TEST(PclBridge, SpeedUnitConversion) {
   msg.data = &mps;
   msg.size = sizeof(mps);
 
-  // dispatch_incoming fires bridge subscriber → transform → consumer subscriber
+  // dispatch_incoming fires bridge subscriber -> transform -> consumer subscriber
   pcl_status_t rc = pcl_executor_dispatch_incoming(e, "speed/mps", &msg);
   EXPECT_EQ(PCL_OK, rc);
   EXPECT_EQ(36, received_kmph);
 
-  // Try another value: 27.78 m/s ≈ 100 km/h
+  // Try another value: 27.78 m/s ~ 100 km/h
   mps = 27.78f;
   pcl_executor_dispatch_incoming(e, "speed/mps", &msg);
   EXPECT_EQ(100, received_kmph);
@@ -223,7 +223,7 @@ TEST(PclBridge, FailTransformSuppressesForward) {
   msg.size = sizeof(dummy);
 
   pcl_executor_dispatch_incoming(e, "in_topic", &msg);
-  EXPECT_EQ(0, received);   // suppressed — consumer must not have fired
+  EXPECT_EQ(0, received);   // suppressed -- consumer must not have fired
 
   pcl_executor_destroy(e);
   pcl_bridge_destroy(b);
@@ -250,9 +250,9 @@ TEST(PclBridge, BridgeInactiveDoesNotForward) {
   msg.data = &dummy;
   msg.size = sizeof(dummy);
 
-  // Subscriber exists but container is CONFIGURED (not ACTIVE) — dispatch still
+  // Subscriber exists but container is CONFIGURED (not ACTIVE) -- dispatch still
   // finds the port and calls the callback; the bridge then dispatches to "cooked"
-  // which has no subscriber → NOT_FOUND; bridge logs a warning and returns.
+  // which has no subscriber -> NOT_FOUND; bridge logs a warning and returns.
   // Main assertion: no crash and the executor is still healthy.
   pcl_executor_dispatch_incoming(e, "raw", &msg);  // must not crash
 
@@ -316,7 +316,7 @@ TEST(PclBridge, DispatchNotFoundLogsDebug) {
   msg.data = &dummy;
   msg.size = sizeof(dummy);
 
-  // No subscriber on "sink_with_no_sub" → dispatch returns NOT_FOUND →
+  // No subscriber on "sink_with_no_sub" -> dispatch returns NOT_FOUND ->
   // bridge_sub_cb logs "no subscriber on out_topic" at DEBUG.
   pcl_executor_dispatch_incoming(e, "src", &msg);  // must not crash
 
@@ -325,16 +325,16 @@ TEST(PclBridge, DispatchNotFoundLogsDebug) {
   pcl_log_set_level(PCL_LOG_INFO);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Part 2 — Dining Philosophers
-// ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// Part 2 -- Dining Philosophers
+// ===========================================================================
 
 static constexpr int kN             = 5;  // number of philosophers / forks
 static constexpr int kMealsRequired = 3;  // meals each philosopher must eat
 static constexpr int kThinkTicks    = 3;  // ticks spent thinking
 static constexpr int kEatTicks      = 2;  // ticks spent eating
 
-// -- Bridge transform: int32 philosopher state → string label --------------
+// -- Bridge transform: int32 philosopher state -> string label --------------
 
 static const char* phil_state_label(int32_t s) {
   switch (s) {
@@ -422,17 +422,17 @@ static pcl_status_t philosopher_tick(pcl_container_t* c,
         p->tick_count = 0;
       }
       break;
-    case 1:  // HUNGRY — try to grab forks each tick
+    case 1:  // HUNGRY -- try to grab forks each tick
       acquire_forks(p);
       break;
     case 2:  // EATING
       if (++p->tick_count >= kEatTicks) {
-        release_forks(p);   // → THINKING
+        release_forks(p);   // -> THINKING
       }
       break;
   }
 
-  // Publish state change so the bridge → monitor pipeline fires.
+  // Publish state change so the bridge -> monitor pipeline fires.
   int32_t next = static_cast<int32_t>(p->state);
   if (next != prev) {
     char topic[32];
@@ -527,7 +527,7 @@ TEST(PclDining, FivePhilosophersWithBridges) {
   pcl_container_activate(monitor);
   pcl_executor_add(exec, monitor);
 
-  // -- Bridges (int32 state → string label) --------------------------------
+  // -- Bridges (int32 state -> string label) --------------------------------
   std::array<pcl_bridge_t*,   kN> bridges{};
 
   for (int i = 0; i < kN; ++i) {
@@ -549,8 +549,8 @@ TEST(PclDining, FivePhilosophersWithBridges) {
 
   // -- Spin ----------------------------------------------------------------
   // Each meal cycle = kThinkTicks + up to kN hungry ticks + kEatTicks ticks.
-  // Worst case ≈ (3 + 5 + 2) * kMealsRequired = 30 ticks per philosopher.
-  // At 500 Hz that's ≤ 60 ms.  Use 2 s for plenty of margin.
+  // Worst case ~ (3 + 5 + 2) * kMealsRequired = 30 ticks per philosopher.
+  // At 500 Hz that's <= 60 ms.  Use 2 s for plenty of margin.
   std::thread spin_thread([exec]() { pcl_executor_spin(exec); });
   std::this_thread::sleep_for(std::chrono::milliseconds(2000));
   pcl_executor_request_shutdown(exec);

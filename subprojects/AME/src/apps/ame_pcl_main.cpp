@@ -1,4 +1,4 @@
-/// \brief `ame_pcl_main` — pure PCL executor entry point (no ROS2).
+/// \brief `ame_pcl_main` -- pure PCL executor entry point (no ROS2).
 ///
 /// Runs the full AME pipeline using the PCL executor for all component
 /// ticking and message dispatch.  No ROS2 dependency.

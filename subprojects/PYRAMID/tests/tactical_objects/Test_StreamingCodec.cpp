@@ -217,7 +217,7 @@ TEST(StreamingCodec, TruncatedBufferReturnsError) {
 
   auto encoded = StreamingCodec::encodeEntityUpdateFrame(frame);
 
-  // Try truncations at every byte — none should crash; error frames have message_type==0
+  // Try truncations at every byte -- none should crash; error frames have message_type==0
   for (size_t trunc = 0; trunc < encoded.size(); ++trunc) {
     auto decoded = StreamingCodec::decodeEntityUpdate(encoded.data(), trunc);
     // Either a valid partial decode or an error sentinel
@@ -302,7 +302,7 @@ TEST(StreamingCodec, BatchFrameTruncatedSafe) {
   for (size_t trunc = 0; trunc < encoded.size(); ++trunc) {
     // Must not crash
     auto decoded = StreamingCodec::decodeBatchFrame(encoded.data(), trunc);
-    // Result may be empty or partial — that's fine
+    // Result may be empty or partial -- that's fine
     (void)decoded;
   }
 }

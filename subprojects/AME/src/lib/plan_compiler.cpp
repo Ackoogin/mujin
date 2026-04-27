@@ -305,11 +305,11 @@ std::string PlanCompiler::compile(const std::vector<PlanStep>& plan,
     auto flows = extractFlows(cg);
 
     if (flows.size() <= 1) {
-        // All steps are in one flow — sequential
+        // All steps are in one flow -- sequential
         return compileSequential(plan, wm, registry);
     }
 
-    // Multiple independent flows — emit Parallel
+    // Multiple independent flows -- emit Parallel
     std::ostringstream xml;
 
     xml << "<root BTCPP_format=\"4\">\n";

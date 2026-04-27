@@ -27,7 +27,7 @@ typedef void (*pcl_log_handler_t)(pcl_log_level_t level,
 /// \brief Install a custom log handler.
 ///
 /// Pass NULL to revert to the default stderr handler.
-/// Not thread-safe — call before pcl_executor_spin().
+/// Not thread-safe -- call before pcl_executor_spin().
 void pcl_log_set_handler(pcl_log_handler_t handler, void* user_data);
 
 /// \brief Set the minimum log level.

@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# pcl_core — PYRAMID Container Library (pure C, zero dependencies)
+# pcl_core -- PYRAMID Container Library (pure C, zero dependencies)
 # ---------------------------------------------------------------------------
 # Compiled as C (not C++) to guarantee ABI stability across compilers.
 # C++ header-only wrappers are in include/pcl/*.hpp.
@@ -33,7 +33,7 @@ find_package(Threads REQUIRED)
 target_link_libraries(pcl_core PRIVATE Threads::Threads)
 
 # ---------------------------------------------------------------------------
-# pcl_transport_socket — TCP socket transport (optional, platform sockets)
+# pcl_transport_socket -- TCP socket transport (optional, platform sockets)
 # ---------------------------------------------------------------------------
 add_library(pcl_transport_socket STATIC
   pcl_transport_socket.c
@@ -57,7 +57,7 @@ set_target_properties(pcl_transport_socket PROPERTIES
 )
 
 # ---------------------------------------------------------------------------
-# pcl_transport_udp — UDP datagram transport (pub/sub only, no RPC)
+# pcl_transport_udp -- UDP datagram transport (pub/sub only, no RPC)
 # ---------------------------------------------------------------------------
 add_library(pcl_transport_udp STATIC
   pcl_transport_udp.c
@@ -81,7 +81,7 @@ set_target_properties(pcl_transport_udp PROPERTIES
 )
 
 # ---------------------------------------------------------------------------
-# pcl_transport_shared_memory — central shared-memory bus transport
+# pcl_transport_shared_memory -- central shared-memory bus transport
 # ---------------------------------------------------------------------------
 add_library(pcl_transport_shared_memory STATIC
   pcl_transport_shared_memory.c
@@ -105,7 +105,7 @@ set_target_properties(pcl_transport_shared_memory PROPERTIES
 )
 
 # ---------------------------------------------------------------------------
-# pcl_transport_template — engineer-extendable transport scaffold
+# pcl_transport_template -- engineer-extendable transport scaffold
 # ---------------------------------------------------------------------------
 # Provides the standard PCL threading model (dedicated send + recv worker
 # threads) so the engineer only needs to supply blocking I/O hooks.  See

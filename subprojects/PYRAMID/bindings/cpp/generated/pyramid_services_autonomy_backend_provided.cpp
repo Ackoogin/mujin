@@ -40,7 +40,7 @@ std::string msgToString(const void* data, unsigned size) {
 }
 
 // ---------------------------------------------------------------------------
-// ServiceHandler — default stub implementations
+// ServiceHandler -- default stub implementations
 // ---------------------------------------------------------------------------
 
 std::vector<Capabilities>
@@ -458,7 +458,7 @@ bool decodeReadPlacementResponse(const pcl_msg_t* msg,
 }
 
 // ---------------------------------------------------------------------------
-// Typed invoke wrappers — serialise and dispatch via executor transport
+// Typed invoke wrappers -- serialise and dispatch via executor transport
 // ---------------------------------------------------------------------------
 
 pcl_status_t invokeReadCapabilities(pcl_executor_t* executor,
@@ -759,7 +759,7 @@ pcl_status_t invokeReadPlacement(pcl_executor_t* executor,
 }
 
 // ---------------------------------------------------------------------------
-// Dispatch — deserialise request, call handler, serialise response
+// Dispatch -- deserialise request, call handler, serialise response
 // ---------------------------------------------------------------------------
 
 void dispatch(ServiceHandler& handler,

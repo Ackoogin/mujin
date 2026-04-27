@@ -28,9 +28,9 @@ static pcl_container_t* make_active(const char* name) {
   return c;
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// pcl_container.c — uncovered branches
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
+// pcl_container.c -- uncovered branches
+// =======================================================================
 
 // -- Parameter overflow (PCL_MAX_PARAMS = 128) ------------------------
 
@@ -55,16 +55,16 @@ TEST(PclContainerRobust, ParamOverflowReturnsNomem) {
 
 TEST(PclContainerRobust, ParamTypeMismatchReturnsDefault) {
   auto* c = pcl_container_create("mismatch", nullptr, nullptr);
-  // store as f64 …
+  // store as f64 ...
   pcl_container_set_param_f64(c, "num", 3.14);
-  // … get as str → should return default
+  // ... get as str -> should return default
   EXPECT_STREQ(pcl_container_get_param_str(c, "num", "def"), "def");
-  // … get as i64 → should return default
+  // ... get as i64 -> should return default
   EXPECT_EQ(pcl_container_get_param_i64(c, "num", -99), -99);
-  // … get as bool → should return default
+  // ... get as bool -> should return default
   EXPECT_EQ(pcl_container_get_param_bool(c, "num", true), true);
 
-  // store as str, get as f64/i64/bool → defaults
+  // store as str, get as f64/i64/bool -> defaults
   pcl_container_set_param_str(c, "word", "hello");
   EXPECT_DOUBLE_EQ(pcl_container_get_param_f64(c, "word", 7.0), 7.0);
   EXPECT_EQ(pcl_container_get_param_i64(c, "word", 5), 5);
@@ -121,7 +121,7 @@ static pcl_status_t fill_ports_configure(pcl_container_t* c, void* ud) {
       ctx->added++;
     }
   }
-  // one more publisher → should fail
+  // one more publisher -> should fail
   ctx->pub_overflow = (pcl_container_add_publisher(c, "overflow_pub", "T") == nullptr);
   // subscriber overflow
   ctx->sub_overflow = (pcl_container_add_subscriber(c, "overflow_sub", "T", sub_nop, nullptr) == nullptr);
@@ -207,7 +207,7 @@ TEST(PclContainerRobust, PublishOnInactiveContainerReturnsClosed) {
 
   auto* c = pcl_container_create("pub_inactive", &cbs, &ctx);
   pcl_container_configure(c);
-  // configured but not active → PCL_ERR_PORT_CLOSED
+  // configured but not active -> PCL_ERR_PORT_CLOSED
   ASSERT_NE(ctx.pub, nullptr);
   pcl_msg_t msg = {};
   msg.type_name = "Msg";
@@ -283,7 +283,7 @@ TEST(PclContainerRobust, CleanupResetsPortCount) {
 
   auto* c = pcl_container_create("cleanup_ports", &cbs, &ctx);
   pcl_container_configure(c);
-  // port was created; after cleanup → re-configure should succeed again
+  // port was created; after cleanup -> re-configure should succeed again
   pcl_container_cleanup(c);
   ctx.pub = nullptr;
   EXPECT_EQ(pcl_container_configure(c), PCL_OK);
@@ -302,9 +302,9 @@ TEST(PclContainerRobust, LongNameTruncated) {
   pcl_container_destroy(c);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// pcl_executor.c — uncovered branches
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
+// pcl_executor.c -- uncovered branches
+// =======================================================================
 
 // -- Executor container overflow (PCL_MAX_CONTAINERS = 64) ------------
 
@@ -353,7 +353,7 @@ TEST(PclExecutorRobust, PostIncomingBadInputs) {
   // null msg
   EXPECT_EQ(pcl_executor_post_incoming(e, "t", nullptr), PCL_ERR_INVALID);
 
-  // size > 0 but data == NULL → PCL_ERR_INVALID
+  // size > 0 but data == NULL -> PCL_ERR_INVALID
   pcl_msg_t bad_msg = {};
   bad_msg.type_name = "T";
   bad_msg.size = 4;
@@ -418,16 +418,16 @@ TEST(PclExecutorRobust, DispatchIncomingNullArgs) {
   pcl_executor_destroy(e);
 }
 
-// -- Drain queue: dispatch fails → error propagated -------------------
+// -- Drain queue: dispatch fails -> error propagated -------------------
 
 TEST(PclExecutorRobust, DrainQueuePropagatesNotFound) {
-  // Post to a topic that has no subscriber → drain should get PCL_ERR_NOT_FOUND
+  // Post to a topic that has no subscriber -> drain should get PCL_ERR_NOT_FOUND
   auto* e = pcl_executor_create();
 
   pcl_msg_t msg = {};
   msg.type_name = "T";
   EXPECT_EQ(pcl_executor_post_incoming(e, "ghost_topic", &msg), PCL_OK);
-  // spin_once will drain and hit NOT_FOUND → propagated
+  // spin_once will drain and hit NOT_FOUND -> propagated
   EXPECT_EQ(pcl_executor_spin_once(e, 0), PCL_ERR_NOT_FOUND);
 
   pcl_executor_destroy(e);
@@ -446,7 +446,7 @@ TEST(PclExecutorRobust, DestroyWithPendingMessagesFrees) {
   for (int i = 0; i < 100; ++i) {
     EXPECT_EQ(pcl_executor_post_incoming(e, "nowhere", &msg), PCL_OK);
   }
-  // destroy without draining — must not leak/crash
+  // destroy without draining -- must not leak/crash
   pcl_executor_destroy(e);
 }
 
@@ -470,7 +470,7 @@ TEST(PclExecutorRobust, SetTransportAndClear) {
   pcl_executor_destroy(e);
   EXPECT_FALSE(shutdown_called); // cleared before destroy
 
-  // set transport then destroy — shutdown IS called
+  // set transport then destroy -- shutdown IS called
   auto* e2 = pcl_executor_create();
   bool sd2 = false;
   pcl_transport_t t2 = {};
@@ -556,13 +556,13 @@ TEST(PclExecutorRobust, InvokeAsyncIntraProcessFallback) {
     static_cast<Ctx*>(ud)->callback_called = true;
   };
 
-  // No transport — should use intra-process dispatch
+  // No transport -- should use intra-process dispatch
   EXPECT_EQ(pcl_executor_invoke_async(e, "test.service", &req, resp_cb, &ctx),
             PCL_OK);
   EXPECT_TRUE(ctx.handler_called);
   EXPECT_TRUE(ctx.callback_called);
 
-  // Service not found — should return NOT_FOUND
+  // Service not found -- should return NOT_FOUND
   ctx.handler_called = false;
   ctx.callback_called = false;
   EXPECT_EQ(pcl_executor_invoke_async(e, "nonexistent", &req, resp_cb, &ctx),
@@ -633,11 +633,11 @@ TEST(PclExecutorRobust, DeferredServiceResponse) {
     }
   };
 
-  // Invoke — handler should defer
+  // Invoke -- handler should defer
   EXPECT_EQ(pcl_executor_invoke_async(e, "deferred.service", &req, resp_cb, &ctx),
             PCL_OK);
   EXPECT_TRUE(ctx.handler_called);
-  EXPECT_FALSE(ctx.callback_called);  // Not yet — deferred
+  EXPECT_FALSE(ctx.callback_called);  // Not yet -- deferred
   EXPECT_NE(ctx.saved_ctx, nullptr);
 
   // Now send the deferred response
@@ -665,7 +665,7 @@ TEST(PclExecutorRobust, ServiceContextFree) {
 
 TEST(PclExecutorRobust, GracefulShutdownTimeout) {
   // Use a container that stalls on deactivate long enough to time out
-  // (timeout_ms=1 with no real stall — just checks the timed_out path
+  // (timeout_ms=1 with no real stall -- just checks the timed_out path
   //  when deadline < 2ms away and we have many containers).
   // We trigger the timeout by using timeout_ms=0 with an active container
   // (deadline = now, so any container not yet finalized trips the timeout).
@@ -685,11 +685,11 @@ TEST(PclExecutorRobust, GracefulShutdownTimeout) {
   auto* e = pcl_executor_create();
   pcl_executor_add(e, c);
 
-  // timeout_ms=1 might or might not expire before deactivate — so just
+  // timeout_ms=1 might or might not expire before deactivate -- so just
   // verify it returns without crashing and container ends up finalized.
   pcl_status_t rc = pcl_executor_shutdown_graceful(e, 1);
   EXPECT_EQ(pcl_container_state(c), PCL_STATE_FINALIZED);
-  // rc is either PCL_OK or PCL_ERR_TIMEOUT depending on timing — both ok
+  // rc is either PCL_OK or PCL_ERR_TIMEOUT depending on timing -- both ok
   (void)rc;
 
   pcl_executor_destroy(e);
@@ -748,14 +748,14 @@ TEST(PclExecutorRobust, RequestShutdownNullSafe) {
   pcl_executor_request_shutdown(nullptr); // must not crash
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // Threading / concurrency tests
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 TEST(PclThreading, ConcurrentPostFromManyThreads) {
   // N threads each post M messages into the same executor concurrently.
   // After joining, spin_once must drain exactly N*M messages (or fail
-  // with NOT_FOUND since no subscriber is registered — but must not crash
+  // with NOT_FOUND since no subscriber is registered -- but must not crash
   // or corrupt the queue).
   constexpr int N = 8;
   constexpr int M = 200;
@@ -783,7 +783,7 @@ TEST(PclThreading, ConcurrentPostFromManyThreads) {
 
   EXPECT_EQ(post_ok.load(), N * M);
 
-  // Drain all — each dispatch will fail with NOT_FOUND (no subscriber).
+  // Drain all -- each dispatch will fail with NOT_FOUND (no subscriber).
   // spin_once returns after first NOT_FOUND; loop until queue empty.
   int drained = 0;
   while (true) {
@@ -793,7 +793,7 @@ TEST(PclThreading, ConcurrentPostFromManyThreads) {
     ADD_FAILURE() << "unexpected rc=" << rc;
     break;
   }
-  // We drained at least N*M - 1 (last spin_once sees empty queue → OK)
+  // We drained at least N*M - 1 (last spin_once sees empty queue -> OK)
   EXPECT_GE(drained, N * M - 1);
 
   pcl_executor_destroy(e);
@@ -968,9 +968,9 @@ TEST(PclThreading, PostDuringActiveSpinNoCorruption) {
   pcl_container_destroy(c);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // Throughput tests
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 TEST(PclThroughput, SpinOnceBurstDispatch) {
   // Post 10 000 messages, drain with spin_once, measure they all arrive.
@@ -1077,9 +1077,9 @@ TEST(PclThroughput, MultiContainerDifferentRates) {
   for (int i = 0; i < 3; ++i) pcl_container_destroy(containers[i]);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// pcl_log.c — remaining coverage
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
+// pcl_log.c -- remaining coverage
+// =======================================================================
 
 struct LogCapture {
   std::vector<std::pair<pcl_log_level_t, std::string>> entries;
@@ -1136,7 +1136,7 @@ TEST(PclLogRobust, FilterBlocksAllBelowFatal) {
 }
 
 TEST(PclLogRobust, DefaultHandlerNoContainerName) {
-  // Revert to default handler and log with NULL container — must not crash.
+  // Revert to default handler and log with NULL container -- must not crash.
   pcl_log_set_handler(nullptr, nullptr);
   pcl_log_set_level(PCL_LOG_DEBUG);
   pcl_log(nullptr, PCL_LOG_DEBUG, "default handler debug");
@@ -1147,7 +1147,7 @@ TEST(PclLogRobust, DefaultHandlerNoContainerName) {
 TEST(PclLogRobust, DefaultHandlerWithContainerName) {
   pcl_log_set_handler(nullptr, nullptr);
   auto* c = pcl_container_create("named_log", nullptr, nullptr);
-  // writes to stderr — must not crash
+  // writes to stderr -- must not crash
   pcl_log(c, PCL_LOG_WARN, "warning from named container");
   pcl_container_destroy(c);
   pcl_log_set_level(PCL_LOG_INFO);
@@ -1190,17 +1190,17 @@ TEST(PclLogRobust, HandlerUserDataPassedThrough) {
 // integer that is not in the pcl_log_level_t enum exercises the
 // "default: return ???" branch in level_str().
 TEST(PclLogRobust, UnknownLevelDefaultBranch) {
-  pcl_log_set_handler(nullptr, nullptr); // use default handler → calls level_str
+  pcl_log_set_handler(nullptr, nullptr); // use default handler -> calls level_str
   // Cast 99 to pcl_log_level_t so level_str hits the default branch.
-  // g_min_level is PCL_LOG_INFO (1); 99 >= 1 → passes the level filter.
+  // g_min_level is PCL_LOG_INFO (1); 99 >= 1 -> passes the level filter.
   pcl_log(nullptr, static_cast<pcl_log_level_t>(99), "unknown level");
-  // Writes "[???] unknown level\n" to stderr — must not crash.
+  // Writes "[???] unknown level\n" to stderr -- must not crash.
   pcl_log_set_level(PCL_LOG_INFO);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // Missing coverage: pcl_container_add_service success path (lines 322-330)
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 static pcl_status_t svc_echo(pcl_container_t*, const pcl_msg_t* req,
                               pcl_msg_t* resp, pcl_svc_context_t*, void*) {
@@ -1227,9 +1227,9 @@ TEST(PclContainerRobust, AddServiceSuccessPath) {
   pcl_container_destroy(c);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // Missing coverage: pcl_port_publish success path (line 343)
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 TEST(PclContainerRobust, PublishSuccessOnActiveContainer) {
   PubPortCtx ctx;
@@ -1246,19 +1246,19 @@ TEST(PclContainerRobust, PublishSuccessOnActiveContainer) {
   msg.data = &payload;
   msg.size = sizeof(payload);
 
-  // Active container + publisher port → PCL_OK
+  // Active container + publisher port -> PCL_OK
   EXPECT_EQ(pcl_port_publish(ctx.pub, &msg), PCL_OK);
 
   pcl_container_destroy(c);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // Missing coverage: pcl_executor_spin() exiting on drain error (line 311)
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 TEST(PclExecutorRobust, SpinExitsOnDrainError) {
   // Post a ghost message BEFORE calling spin().  The very first drain
-  // attempt returns PCL_ERR_NOT_FOUND → spin() returns immediately.
+  // attempt returns PCL_ERR_NOT_FOUND -> spin() returns immediately.
   auto* e = pcl_executor_create();
 
   pcl_msg_t msg = {};
@@ -1272,9 +1272,9 @@ TEST(PclExecutorRobust, SpinExitsOnDrainError) {
   pcl_executor_destroy(e);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // Missing coverage: graceful-shutdown timeout log warning (lines 374-375)
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 TEST(PclExecutorRobust, GracefulShutdownTimeoutWarningLogged) {
   // c1's on_deactivate sleeps long enough to expire the deadline before
@@ -1297,7 +1297,7 @@ TEST(PclExecutorRobust, GracefulShutdownTimeoutWarningLogged) {
   pcl_executor_add(e, c2);
 
   // timeout_ms=5: deadline 5 ms from now.
-  // c1 deactivate takes 20 ms → deadline long expired when c2 iteration starts.
+  // c1 deactivate takes 20 ms -> deadline long expired when c2 iteration starts.
   pcl_status_t rc = pcl_executor_shutdown_graceful(e, 5);
   EXPECT_EQ(rc, PCL_ERR_TIMEOUT);
   EXPECT_EQ(pcl_container_state(c1), PCL_STATE_FINALIZED);
@@ -1308,9 +1308,9 @@ TEST(PclExecutorRobust, GracefulShutdownTimeoutWarningLogged) {
   pcl_container_destroy(c2);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// pcl_executor_remove — previously uncovered
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
+// pcl_executor_remove -- previously uncovered
+// =======================================================================
 
 TEST(PclExecutorRobust, RemoveContainerSuccess) {
   auto* e  = pcl_executor_create();
@@ -1322,7 +1322,7 @@ TEST(PclExecutorRobust, RemoveContainerSuccess) {
   ASSERT_EQ(pcl_executor_add(e, c2), PCL_OK);
   ASSERT_EQ(pcl_executor_add(e, c3), PCL_OK);
 
-  // Remove the middle container — should succeed.
+  // Remove the middle container -- should succeed.
   EXPECT_EQ(pcl_executor_remove(e, c2), PCL_OK);
 
   // Removing the same container again returns NOT_FOUND (already removed).
@@ -1338,9 +1338,9 @@ TEST(PclExecutorRobust, RemoveContainerSuccess) {
   pcl_container_destroy(c3);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// pcl_executor_invoke_service — find_service + dispatch
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
+// pcl_executor_invoke_service -- find_service + dispatch
+// =======================================================================
 
 static pcl_status_t echo_svc_handler(pcl_container_t*, const pcl_msg_t* req,
                                      pcl_msg_t* resp, pcl_svc_context_t*, void*) {
@@ -1395,9 +1395,9 @@ TEST(PclExecutorRobust, InvokeServiceFound) {
   pcl_container_destroy(c);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// pcl_executor_publish — with and without transport adapter
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
+// pcl_executor_publish -- with and without transport adapter
+// =======================================================================
 
 TEST(PclExecutorRobust, PublishNoTransportDispatchesToSubscriber) {
   struct Recv { bool got = false; };
@@ -1462,9 +1462,9 @@ TEST(PclExecutorRobust, PublishWithTransportCallsTransportPublish) {
   pcl_executor_destroy(e);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // pcl_executor_post_response_cb + drain_resp_cb_queue
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 TEST(PclExecutorRobust, PostResponseCbWithDataFiresOnSpin) {
   struct RespCtx {
@@ -1539,9 +1539,9 @@ TEST(PclExecutorRobust, PostResponseCbNullSafety) {
   pcl_executor_destroy(e);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // pcl_port_publish with executor routes via pcl_executor_publish (line 343)
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 TEST(PclContainerRobust, PublishWithExecutorRoutes) {
   struct Ctx {
@@ -1574,7 +1574,7 @@ TEST(PclContainerRobust, PublishWithExecutorRoutes) {
 
   // Add BOTH containers to the same executor.  When the publisher calls
   // pcl_port_publish, the port's executor is set, so it routes via
-  // pcl_executor_publish → dispatch_incoming_now → subscriber callback.
+  // pcl_executor_publish -> dispatch_incoming_now -> subscriber callback.
   auto* e = pcl_executor_create();
   pcl_executor_add(e, pub_c);
   pcl_executor_add(e, sub_c);
@@ -1593,9 +1593,9 @@ TEST(PclContainerRobust, PublishWithExecutorRoutes) {
   pcl_container_destroy(sub_c);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // pcl_executor_destroy with queued response_cb nodes that have data (lines 203-206)
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 TEST(PclExecutorRobust, DestroyWithQueuedRespCbWithData) {
   auto* e = pcl_executor_create();
@@ -1606,13 +1606,13 @@ TEST(PclExecutorRobust, DestroyWithQueuedRespCbWithData) {
     int d = i;
     EXPECT_EQ(pcl_executor_post_response_cb(e, cb, nullptr, &d, sizeof(d)), PCL_OK);
   }
-  // Destroy without spinning — must not leak or crash.
+  // Destroy without spinning -- must not leak or crash.
   pcl_executor_destroy(e);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // Parameter set/get success paths (lines 221-223, 232-234, 244, 253, 262, 271)
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 TEST(PclContainerRobust, ParamI64SetGetSuccess) {
   pcl_callbacks_t cbs = {};
@@ -1654,9 +1654,9 @@ TEST(PclContainerRobust, ParamF64SetGetSuccess) {
   pcl_container_destroy(c);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // pcl_container_invoke_async (lines 349-356)
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 TEST(PclContainerRobust, ContainerInvokeAsyncSuccess) {
   struct Ctx {
@@ -1733,9 +1733,9 @@ TEST(PclContainerRobust, ContainerInvokeAsyncNoExecutor) {
   pcl_container_destroy(c);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // pcl_service_respond null safety (lines 360-361)
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 TEST(PclContainerRobust, ServiceRespondNullArgs) {
   pcl_msg_t resp = {};
@@ -1753,9 +1753,9 @@ TEST(PclContainerRobust, PortSetRouteRejectsPeersWithoutRemoteMode) {
   EXPECT_EQ(pcl_port_set_route(&port, PCL_ROUTE_LOCAL, peers, 1), PCL_ERR_INVALID);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // Shutdown callback (line 160)
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 TEST(PclContainerRobust, ShutdownCallbackInvoked) {
   struct Ctx { bool shutdown_called = false; } ctx;
@@ -1776,9 +1776,9 @@ TEST(PclContainerRobust, ShutdownCallbackInvoked) {
   pcl_container_destroy(c);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // Configure failure logging (line 86)
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 TEST(PclContainerRobust, ConfigureFailureLogsError) {
   pcl_callbacks_t cbs = {};
@@ -1793,9 +1793,9 @@ TEST(PclContainerRobust, ConfigureFailureLogsError) {
   pcl_container_destroy(c);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // Invoke async with handler returning error (line 533 - free ctx on error)
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 TEST(PclExecutorRobust, InvokeAsyncHandlerReturnsError) {
   struct Ctx {
@@ -1826,7 +1826,7 @@ TEST(PclExecutorRobust, InvokeAsyncHandlerReturnsError) {
     static_cast<Ctx*>(ud)->callback_called = true;
   };
 
-  // Handler returns error — callback should NOT be fired
+  // Handler returns error -- callback should NOT be fired
   EXPECT_EQ(pcl_executor_invoke_async(e, "error.svc", &req, resp_cb, &ctx),
             PCL_ERR_CALLBACK);
   EXPECT_TRUE(ctx.handler_called);
@@ -1836,9 +1836,9 @@ TEST(PclExecutorRobust, InvokeAsyncHandlerReturnsError) {
   pcl_container_destroy(c);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // pcl_service_respond with transport respond vtable (lines 366-370)
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 TEST(PclContainerRobust, ServiceRespondWithTransport) {
   struct TransportCtx {
@@ -1885,12 +1885,12 @@ TEST(PclContainerRobust, ServiceRespondWithTransport) {
   req.type_name = "Req";
   auto resp_cb = [](const pcl_msg_t*, void*) {};
 
-  // Invoke — handler defers
+  // Invoke -- handler defers
   EXPECT_EQ(pcl_executor_invoke_async(e, "deferred.svc", &req, resp_cb, nullptr), PCL_OK);
   EXPECT_TRUE(ctx.handler_called);
   EXPECT_NE(ctx.saved_ctx, nullptr);
 
-  // Send deferred response — should use transport.respond
+  // Send deferred response -- should use transport.respond
   pcl_msg_t resp = {};
   resp.type_name = "Resp";
   EXPECT_EQ(pcl_service_respond(ctx.saved_ctx, &resp), PCL_OK);
@@ -1930,9 +1930,9 @@ TEST(PclContainerRobust, ServiceRespondWithDirectContextTransport) {
   EXPECT_EQ(tctx.last_transport_ctx, reinterpret_cast<void*>(0x4321));
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 // pcl_executor_post_incoming fallback to dispatch_incoming_now (line 447)
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
 
 TEST(PclExecutorRobust, DispatchIncomingDirectCall) {
   // Tests pcl_executor_dispatch_incoming (line 447)
@@ -1972,9 +1972,9 @@ TEST(PclExecutorRobust, DispatchIncomingDirectCall) {
   pcl_container_destroy(c);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// pcl_executor_post_service_request — REQ_PCL_180 through REQ_PCL_185
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
+// pcl_executor_post_service_request -- REQ_PCL_180 through REQ_PCL_185
+// =======================================================================
 
 // -- Shared helpers for service-request tests ---------------------------
 
@@ -1996,7 +1996,7 @@ static pcl_status_t capture_svc_handler(pcl_container_t*,
   if (req->data && req->size >= sizeof(int)) {
     memcpy(&ctx->received_value, req->data, sizeof(int));
   }
-  resp->data      = req->data;   // points into node's deep copy — valid during callback
+  resp->data      = req->data;   // points into node's deep copy -- valid during callback
   resp->size      = req->size;
   resp->type_name = req->type_name;
   return PCL_OK;
@@ -2021,7 +2021,7 @@ static pcl_container_t* make_svc_container(const char* name,
   return cont;
 }
 
-// REQ_PCL_180 — deep-copies request; handler receives original bytes.
+// REQ_PCL_180 -- deep-copies request; handler receives original bytes.
 TEST(PclExecutorRobust, PostServiceRequestDeepCopiesRequest) {
   ///< REQ_PCL_180: Post Service Request Deep Copies Request
   SvcReqCtx svc_ctx;
@@ -2040,7 +2040,7 @@ TEST(PclExecutorRobust, PostServiceRequestDeepCopiesRequest) {
     [](const pcl_msg_t*, void* ud) { *static_cast<bool*>(ud) = true; },
     &callback_called), PCL_OK);
 
-  // Overwrite source buffer immediately — executor must have copied it.
+  // Overwrite source buffer immediately -- executor must have copied it.
   payload = 99;
 
   ASSERT_EQ(pcl_executor_spin_once(e, 0), PCL_OK);
@@ -2052,7 +2052,7 @@ TEST(PclExecutorRobust, PostServiceRequestDeepCopiesRequest) {
   pcl_container_destroy(c);
 }
 
-// REQ_PCL_181 — handler and callback both run on the executor (spin) thread.
+// REQ_PCL_181 -- handler and callback both run on the executor (spin) thread.
 TEST(PclExecutorRobust, PostServiceRequestFiresHandlerOnExecutorThread) {
   ///< REQ_PCL_181: Post Service Request Fires Handler On Executor Thread
   SvcReqCtx svc_ctx;
@@ -2081,7 +2081,7 @@ TEST(PclExecutorRobust, PostServiceRequestFiresHandlerOnExecutorThread) {
   producer.join();
   ASSERT_EQ(post_rc, PCL_OK);
 
-  // Spin on this (main) thread — both handler and callback must run here.
+  // Spin on this (main) thread -- both handler and callback must run here.
   const std::thread::id spin_tid = std::this_thread::get_id();
   ASSERT_EQ(pcl_executor_spin_once(e, 0), PCL_OK);
 
@@ -2094,11 +2094,11 @@ TEST(PclExecutorRobust, PostServiceRequestFiresHandlerOnExecutorThread) {
   pcl_container_destroy(c);
 }
 
-// REQ_PCL_182 — service not found; callback still fires with empty message.
+// REQ_PCL_182 -- service not found; callback still fires with empty message.
 TEST(PclExecutorRobust, PostServiceRequestNotFoundFiresEmptyCallback) {
   ///< REQ_PCL_182: Post Service Request Service Not Found Fires Empty Callback
   struct CbCtx { bool called = false; uint32_t size = 1; const void* data = nullptr; } cb_ctx;
-  // Deliberately non-null size sentinel — empty response must set it to 0.
+  // Deliberately non-null size sentinel -- empty response must set it to 0.
   cb_ctx.size = 1;
 
   auto* e = pcl_executor_create();
@@ -2125,7 +2125,7 @@ TEST(PclExecutorRobust, PostServiceRequestNotFoundFiresEmptyCallback) {
   pcl_executor_destroy(e);
 }
 
-// REQ_PCL_183 — multiple requests queued before spin fire in FIFO order.
+// REQ_PCL_183 -- multiple requests queued before spin fire in FIFO order.
 TEST(PclExecutorRobust, PostServiceRequestMultipleQueuedFireInOrder) {
   ///< REQ_PCL_183: Post Service Request Multiple Queued Fire In Order
   struct OrderCtx {
@@ -2190,7 +2190,7 @@ TEST(PclExecutorRobust, PostServiceRequestMultipleQueuedFireInOrder) {
   pcl_container_destroy(cont);
 }
 
-// REQ_PCL_184 — null arguments return PCL_ERR_INVALID.
+// REQ_PCL_184 -- null arguments return PCL_ERR_INVALID.
 TEST(PclExecutorRobust, PostServiceRequestNullSafety) {
   ///< REQ_PCL_184: Post Service Request Null Safety
   auto* e  = pcl_executor_create();
@@ -2211,7 +2211,7 @@ TEST(PclExecutorRobust, PostServiceRequestNullSafety) {
   pcl_executor_destroy(e);
 }
 
-// REQ_PCL_185 — destroy with queued (unspun) requests frees all memory.
+// REQ_PCL_185 -- destroy with queued (unspun) requests frees all memory.
 TEST(PclExecutorRobust, DestroyWithPendingServiceRequestsFrees) {
   ///< REQ_PCL_185: Destroy With Pending Service Requests Frees Memory
   auto* e = pcl_executor_create();
@@ -2220,7 +2220,7 @@ TEST(PclExecutorRobust, DestroyWithPendingServiceRequestsFrees) {
     ADD_FAILURE() << "callback must not fire after executor is destroyed";
   };
 
-  // Queue several requests but never spin — destroy must free them cleanly.
+  // Queue several requests but never spin -- destroy must free them cleanly.
   for (int i = 0; i < 5; ++i) {
     int d = i;
     pcl_msg_t req = {};
@@ -2231,18 +2231,18 @@ TEST(PclExecutorRobust, DestroyWithPendingServiceRequestsFrees) {
               PCL_OK);
   }
 
-  // No spin — destructor must drain the queue without invoking callbacks.
+  // No spin -- destructor must drain the queue without invoking callbacks.
   pcl_executor_destroy(e);
   // Reaching here without crash or assertion failure satisfies the requirement.
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// Coverage gap tests — pcl_executor.c lines not yet reached
-// ═══════════════════════════════════════════════════════════════════════
+// =======================================================================
+// Coverage gap tests -- pcl_executor.c lines not yet reached
+// =======================================================================
 
 // -- endpoint_kind_from_port_type: CLIENT, STREAM_SERVICE, default --------
 // Lines 121-123: publish_port on STREAM_SERVICE and CLIENT ports routes
-// through port_route_mode → endpoint_kind_from_port_type.
+// through port_route_mode -> endpoint_kind_from_port_type.
 TEST(PclExecutorRobust, EndpointKindFromPortType_StreamServiceAndClientAndDefault) {
   // 1. STREAM_SERVICE port via the public API.
   struct StreamCtx { pcl_port_t* port = nullptr; } sctx;
@@ -2266,7 +2266,7 @@ TEST(PclExecutorRobust, EndpointKindFromPortType_StreamServiceAndClientAndDefaul
   pcl_status_t rc = pcl_executor_publish_port(e, sctx.port, &msg);
   (void)rc;
 
-  // 2. CLIENT port — no public API, craft directly via pcl_internal.h access.
+  // 2. CLIENT port -- no public API, craft directly via pcl_internal.h access.
   struct pcl_port_t client_port = {};
   client_port.type = PCL_PORT_CLIENT;
   strncpy(client_port.name, "cl_topic", sizeof(client_port.name) - 1);
@@ -2286,9 +2286,9 @@ TEST(PclExecutorRobust, EndpointKindFromPortType_StreamServiceAndClientAndDefaul
 }
 
 // -- port_route_mode: REMOTE returned for PUBLISHER when has_transport ----
-// Line 178: port type PUBLISHER or CLIENT + executor has transport → REMOTE.
+// Line 178: port type PUBLISHER or CLIENT + executor has transport -> REMOTE.
 TEST(PclExecutorRobust, PortRouteModeReturnsRemoteForPublisherWithTransport) {
-  // Publisher port — with transport, port_route_mode returns REMOTE (line 178).
+  // Publisher port -- with transport, port_route_mode returns REMOTE (line 178).
   pcl_port_t* pub_port = nullptr;
   pcl_callbacks_t cbs = {};
   cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
@@ -2315,8 +2315,8 @@ TEST(PclExecutorRobust, PortRouteModeReturnsRemoteForPublisherWithTransport) {
 
   pcl_msg_t msg = {};
   msg.type_name = "Msg";
-  // publish_port: PUBLISHER + has_transport → port_route_mode returns REMOTE (line 178).
-  // REMOTE mode, peer_count=0, has_transport.publish → calls transport.publish.
+  // publish_port: PUBLISHER + has_transport -> port_route_mode returns REMOTE (line 178).
+  // REMOTE mode, peer_count=0, has_transport.publish -> calls transport.publish.
   EXPECT_EQ(pcl_executor_publish_port(e, pub_port, &msg), PCL_OK);
   EXPECT_TRUE(tctx.called);
 
@@ -2325,7 +2325,7 @@ TEST(PclExecutorRobust, PortRouteModeReturnsRemoteForPublisherWithTransport) {
   pcl_container_destroy(c);
 }
 
-// -- dispatch_incoming_now: route_accepts returns false → continue --------
+// -- dispatch_incoming_now: route_accepts returns false -> continue --------
 // Line 365: subscriber exists for topic but source_route_mode is REMOTE while
 // the subscriber accepts only LOCAL (default when no transport).
 TEST(PclExecutorRobust, DispatchIncomingNow_RouteRejectsRemoteMessage) {
@@ -2342,15 +2342,15 @@ TEST(PclExecutorRobust, DispatchIncomingNow_RouteRejectsRemoteMessage) {
   pcl_container_configure(c);
   pcl_container_activate(c);
 
-  // No transport → subscriber default route is LOCAL only.
+  // No transport -> subscriber default route is LOCAL only.
   auto* e = pcl_executor_create();
   pcl_executor_add(e, c);
 
   pcl_msg_t msg = {};
   msg.type_name = "Msg";
-  // Post as REMOTE: route_accepts(LOCAL, REMOTE) = 0 → continue at line 365.
+  // Post as REMOTE: route_accepts(LOCAL, REMOTE) = 0 -> continue at line 365.
   EXPECT_EQ(pcl_executor_post_remote_incoming(e, "peer_x", "local_sub_topic", &msg), PCL_OK);
-  // spin_once drains, subscriber's route rejects REMOTE → NOT_FOUND.
+  // spin_once drains, subscriber's route rejects REMOTE -> NOT_FOUND.
   EXPECT_EQ(pcl_executor_spin_once(e, 0), PCL_ERR_NOT_FOUND);
   EXPECT_FALSE(received);
 
@@ -2394,8 +2394,8 @@ TEST(PclExecutorRobust, PostServiceRequestViaQueue_HandlerPending) {
       static_cast<Ctx*>(ud)->callback_called = true;
     }, &ctx), PCL_OK);
 
-  // spin_once: drain_svc_req_queue calls handler → PCL_PENDING (line 502).
-  // Callback is NOT fired — deferred via pcl_service_respond.
+  // spin_once: drain_svc_req_queue calls handler -> PCL_PENDING (line 502).
+  // Callback is NOT fired -- deferred via pcl_service_respond.
   ASSERT_EQ(pcl_executor_spin_once(e, 0), PCL_OK);
   EXPECT_TRUE(ctx.handler_called);
   EXPECT_FALSE(ctx.callback_called);
@@ -2447,7 +2447,7 @@ TEST(PclExecutorRobust, PostServiceRequestViaQueue_HandlerError) {
       ctx->resp_size = resp->size;
     }, &ctx), PCL_OK);
 
-  // spin_once: handler returns error → callback fired with empty msg (lines 506-508).
+  // spin_once: handler returns error -> callback fired with empty msg (lines 506-508).
   ASSERT_EQ(pcl_executor_spin_once(e, 0), PCL_OK);
   EXPECT_TRUE(ctx.handler_called);
   EXPECT_TRUE(ctx.callback_called);
@@ -2484,8 +2484,8 @@ TEST(PclExecutorRobust, FindService_RouteRejectsRemoteSource) {
   pcl_msg_t req = {}, resp = {};
   req.type_name = "Msg";
   // invoke_service_remote calls find_service(e, name, REMOTE, peer).
-  // Service has LOCAL route → route_accepts(LOCAL, REMOTE) = false → continue (line 781).
-  // No service found → NOT_FOUND.
+  // Service has LOCAL route -> route_accepts(LOCAL, REMOTE) = false -> continue (line 781).
+  // No service found -> NOT_FOUND.
   EXPECT_EQ(pcl_executor_invoke_service_remote(e, "a_peer", "local_only_svc", &req, &resp),
             PCL_ERR_NOT_FOUND);
 
@@ -2495,7 +2495,7 @@ TEST(PclExecutorRobust, FindService_RouteRejectsRemoteSource) {
 
 // -- invoke_service_remote: null args and global transport fallback -------
 // Line 832: null args return INVALID.
-// Line 840: no named transport for peer but global transport exists → fallback.
+// Line 840: no named transport for peer but global transport exists -> fallback.
 TEST(PclExecutorRobust, InvokeServiceRemote_NullArgsAndGlobalTransportFallback) {
   auto* e = pcl_executor_create();
   pcl_msg_t req = {}, resp = {};
@@ -2546,7 +2546,7 @@ TEST(PclExecutorRobust, InvokeServiceRemote_NullArgsAndGlobalTransportFallback) 
   pcl_executor_set_transport(e, &t);
 
   // find_named_transport("unknown_peer") returns NULL, but has_transport=true
-  // → transport = &e->transport (line 840).
+  // -> transport = &e->transport (line 840).
   EXPECT_EQ(pcl_executor_invoke_service_remote(e, "unknown_peer", "remote_svc2",
                                                &req, &resp), PCL_OK);
   EXPECT_TRUE(svc_ctx2.called);
@@ -2586,7 +2586,7 @@ TEST(PclExecutorRobust, FindService_PeerNotAllowed) {
   pcl_msg_t req = {}, resp = {};
   req.type_name = "Msg";
   // route_accepts(REMOTE, REMOTE) = true, but peer_is_allowed("bad_peer") = false
-  // → continue at line 781.  No service found → NOT_FOUND.
+  // -> continue at line 781.  No service found -> NOT_FOUND.
   EXPECT_EQ(pcl_executor_invoke_service_remote(e, "bad_peer", "peer_gated_svc",
                                                &req, &resp), PCL_ERR_NOT_FOUND);
 
@@ -2614,13 +2614,13 @@ TEST(PclExecutorRobust, PublishPort_RemoteModeNoTransportNotDelivered) {
   // Restrict publisher to REMOTE-only (no local dispatch).
   ASSERT_EQ(pcl_port_set_route(pub_port, PCL_ROUTE_REMOTE, nullptr, 0), PCL_OK);
 
-  // No transport set → no REMOTE publish path available.
+  // No transport set -> no REMOTE publish path available.
   auto* e = pcl_executor_create();
   pcl_executor_add(e, c);
 
   pcl_msg_t msg = {};
   msg.type_name = "Msg";
-  // route_mode = REMOTE, peer_count = 0, !has_transport, !delivered → NOT_FOUND (lines 869-870).
+  // route_mode = REMOTE, peer_count = 0, !has_transport, !delivered -> NOT_FOUND (lines 869-870).
   EXPECT_EQ(pcl_executor_publish_port(e, pub_port, &msg), PCL_ERR_NOT_FOUND);
 
   pcl_executor_destroy(e);

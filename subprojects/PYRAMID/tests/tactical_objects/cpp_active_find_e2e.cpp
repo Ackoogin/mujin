@@ -3,8 +3,8 @@
 // E2E example for the standard ActiveFind flow via StandardBridge (C++).
 //
 // Two reusable components connect to the server over TCP socket transport:
-//   1. Interest Client   — calls create_requirement, receives entity_matches
-//   2. Evidence Provider — receives evidence_requirements, publishes evidence
+//   1. Interest Client   -- calls create_requirement, receives entity_matches
+//   2. Evidence Provider -- receives evidence_requirements, publishes evidence
 //
 // Architecture: main (this) > component logic > service binding > PCL
 //
@@ -120,7 +120,7 @@ int main(int argc, char** argv) {
     // -- Send create_requirement (ActiveFind via bridge) ----------------------
     //
     // Business logic: request HOSTILE entities in SEA_SURFACE dimension within
-    // a bounding box covering the English Channel (50–52°N, 1°W–1°E).
+    // a bounding box covering the English Channel (50-52 degN, 1 degW-1 degE).
     // Typed enum values avoid stringly-typed JSON construction here.
 
     sendCreateRequirement(
@@ -180,7 +180,7 @@ int main(int argc, char** argv) {
                && client_state.found_hostile_entity.load();
 
     if (passed) {
-        log("PASS: Standard ActiveFind flow — evidence provider drove entity "
+        log("PASS: Standard ActiveFind flow -- evidence provider drove entity "
             "creation via bridge, client received HOSTILE via standard.entity_matches");
     } else {
         log("FAIL: Standard ActiveFind flow incomplete");

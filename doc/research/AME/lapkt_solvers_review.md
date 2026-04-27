@@ -2,7 +2,7 @@
 
 ## Current State
 
-AME uses a single LAPKT solver: **BRFS (Breadth-First Search)** over a forward-chaining STRIPS search space (`planner.cpp:14`). BRFS is uninformed — it expands states in generation order without heuristic guidance. It is complete (guaranteed to find a plan if one exists) and step-optimal (finds the shortest plan in terms of action count), but explores the state space exhaustively. No heuristics, novelty measures, or search budgets are currently configured.
+AME uses a single LAPKT solver: **BRFS (Breadth-First Search)** over a forward-chaining STRIPS search space (`planner.cpp:14`). BRFS is uninformed -- it expands states in generation order without heuristic guidance. It is complete (guaranteed to find a plan if one exists) and step-optimal (finds the shortest plan in terms of action count), but explores the state space exhaustively. No heuristics, novelty measures, or search budgets are currently configured.
 
 This is adequate for AME's current UAV search-and-classify domain, which is small enough that BRFS terminates quickly. However, as domains grow in object count, predicate arity, or goal complexity, BRFS will encounter scaling limits. The LAPKT toolkit provides several alternative solvers that could address these limits.
 
@@ -10,7 +10,7 @@ This is adequate for AME's current UAV search-and-classify domain, which is smal
 
 ## Available LAPKT Solvers
 
-### 1. IW(k) — Iterated Width
+### 1. IW(k) -- Iterated Width
 
 **What it is:** A blind search algorithm that prunes states based on *novelty*. A state's novelty w(s) is the size of the smallest tuple of atoms that appears for the first time in s. IW(k) only expands states with novelty <= k. Typically k=1 or k=2.
 
@@ -18,18 +18,18 @@ This is adequate for AME's current UAV search-and-classify domain, which is smal
 
 **Benefit to AME:**
 - Dramatically reduces node expansions compared to BRFS for domains with large state spaces but low effective width (which includes most robotics/logistics domains).
-- Remains a blind search — no heuristic function to design or tune.
+- Remains a blind search -- no heuristic function to design or tune.
 - Particularly well-suited to exploration and navigation sub-problems where the branching factor is high but progress is structurally simple.
 
 **Limitations:**
 - Incomplete for goals with high width. Must fall back to a complete solver if IW(k) fails.
 - Only handles single atomic goals natively; conjunctive goals require SIW (see below).
 
-**Integration effort:** Low. The IW engine header is available in the LAPKT include path. Instantiation follows the same pattern as BRFS — template on `Fwd_Search_Problem`.
+**Integration effort:** Low. The IW engine header is available in the LAPKT include path. Instantiation follows the same pattern as BRFS -- template on `Fwd_Search_Problem`.
 
 ---
 
-### 2. SIW — Serialized Iterated Width
+### 2. SIW -- Serialized Iterated Width
 
 **What it is:** Extends IW to handle conjunctive goals by *serializing* them. SIW picks one unsatisfied goal atom at a time, runs IW to achieve it, then repeats until all goal atoms are satisfied.
 
@@ -42,13 +42,13 @@ This is adequate for AME's current UAV search-and-classify domain, which is smal
 
 **Limitations:**
 - Can get stuck if achieving one sub-goal undoes another (delete interactions between serialized goals). In such cases, falls back to BFS(f) or full search.
-- Not optimal — plan quality depends on goal serialization order.
+- Not optimal -- plan quality depends on goal serialization order.
 
 **Integration effort:** Low-medium. SIW is available as a LAPKT engine. Requires specifying the IW width bound (typically 2).
 
 ---
 
-### 3. BFS(f) — Best-First Search with Novelty
+### 3. BFS(f) -- Best-First Search with Novelty
 
 **What it is:** A best-first search that uses a composite evaluation function f combining a heuristic estimate (typically goal count or landmark count) with a novelty measure. States are ranked lexicographically: first by heuristic bucket, then by novelty within each bucket.
 
@@ -57,7 +57,7 @@ This is adequate for AME's current UAV search-and-classify domain, which is smal
 **Benefit to AME:**
 - Best of both worlds: heuristic-guided search with novelty-based tie-breaking prevents plateaux that trap pure best-first search.
 - IPC competition performance: BFS(f) was among the fastest planners in the AGILE track of IPC 2014.
-- Can be configured with AME's existing compiled `landmark_graph.cxx` for the heuristic component — no new source files needed.
+- Can be configured with AME's existing compiled `landmark_graph.cxx` for the heuristic component -- no new source files needed.
 
 **Limitations:**
 - Requires choosing and instantiating a heuristic (goal count, landmark count, or additive h).
@@ -67,7 +67,7 @@ This is adequate for AME's current UAV search-and-classify domain, which is smal
 
 ---
 
-### 4. SIW-then-BFS(f) — Two-Phase Portfolio
+### 4. SIW-then-BFS(f) -- Two-Phase Portfolio
 
 **What it is:** A solver portfolio that runs SIW first (fast, novelty-based) and falls back to BFS(f) (complete, heuristic-guided) if SIW fails.
 
@@ -86,30 +86,30 @@ This is adequate for AME's current UAV search-and-classify domain, which is smal
 
 ---
 
-### 5. BFWS — Best-First Width Search
+### 5. BFWS -- Best-First Width Search
 
 **What it is:** The state-of-the-art novelty-based planner. BFWS uses evaluation functions that combine novelty with goal-relevant information (landmark counts, goal counts, or both). Multiple variants exist: BFWS(f5), DUAL-BFWS, polynomial BFWS.
 
-**How it works:** BFWS(f5) evaluates states using a tuple (#goals-achieved, novelty, hFF-estimate). DUAL-BFWS maintains two open lists — one novelty-based, one heuristic-based — alternating expansion between them. 1-BFWS restricts to novelty-1 states for polynomial complexity guarantees.
+**How it works:** BFWS(f5) evaluates states using a tuple (#goals-achieved, novelty, hFF-estimate). DUAL-BFWS maintains two open lists -- one novelty-based, one heuristic-based -- alternating expansion between them. 1-BFWS restricts to novelty-1 states for polynomial complexity guarantees.
 
 **Benefit to AME:**
 - Highest coverage of any single-algorithm planner on IPC benchmarks. Won 1st and 2nd place in the Sparkle Planning Challenge.
 - DUAL-BFWS provides strong anytime behaviour: finds an initial plan quickly, then improves it.
-- Polynomial variants (1-BFWS) provide predictable runtime bounds — valuable for safety-critical autonomous systems where planning latency must be bounded.
+- Polynomial variants (1-BFWS) provide predictable runtime bounds -- valuable for safety-critical autonomous systems where planning latency must be bounded.
 
 **Limitations:**
-- Most complex to integrate — requires landmark computation, relevance analysis, and multi-queue management.
+- Most complex to integrate -- requires landmark computation, relevance analysis, and multi-queue management.
 - BFWS implementations may exist as standalone planners outside the LAPKT core library; integration may require pulling additional source files.
 
 **Integration effort:** High. Would require compiling additional LAPKT source files and potentially porting code from the BFWS-public repository.
 
 ---
 
-### 6. WA* — Weighted A*
+### 6. WA* -- Weighted A*
 
 **What it is:** A* search with the evaluation function f(s) = g(s) + W * h(s), where W > 1 inflates the heuristic to trade optimality for speed.
 
-**How it works:** With W=1 it is standard A* (optimal but slow). As W increases, search becomes greedier — faster but with bounded sub-optimality (plan cost <= W * optimal cost). Anytime WA* (also called RWA*) decreases W iteratively to improve plan quality over time.
+**How it works:** With W=1 it is standard A* (optimal but slow). As W increases, search becomes greedier -- faster but with bounded sub-optimality (plan cost <= W * optimal cost). Anytime WA* (also called RWA*) decreases W iteratively to improve plan quality over time.
 
 **Benefit to AME:**
 - Provides bounded sub-optimal plans with predictable quality guarantees (W-admissible).
@@ -124,14 +124,14 @@ This is adequate for AME's current UAV search-and-classify domain, which is smal
 
 ---
 
-### 7. DFS+ — Depth-First Search with Novelty Pruning
+### 7. DFS+ -- Depth-First Search with Novelty Pruning
 
 **What it is:** A depth-first search variant that uses novelty pruning to avoid redundant exploration. Part of the IW family of algorithms.
 
 **How it works:** DFS+ performs depth-first search but prunes branches where all generated states have novelty greater than the bound k. This gives it the memory efficiency of DFS with the pruning power of novelty.
 
 **Benefit to AME:**
-- Lower memory footprint than BFS-based approaches — relevant for embedded or resource-constrained deployments.
+- Lower memory footprint than BFS-based approaches -- relevant for embedded or resource-constrained deployments.
 - Was among the fastest planners in IPC AGILE track alongside BFS(f) and SIW+.
 
 **Limitations:**
@@ -154,7 +154,7 @@ LAPKT provides several heuristic evaluators that can be paired with the search e
 | **h_FF (FastForward)** | Extracts a relaxed plan from the planning graph; uses its length as estimate. | No | No |
 | **Goal Count** | Simply counts unsatisfied goal atoms. Trivial but effective as a secondary heuristic. | No | N/A (trivial) |
 
-**Recommendation:** Start with the landmark count heuristic — it is already compiled into `lapkt_core` and provides admissible estimates suitable for WA* and as a component of BFS(f).
+**Recommendation:** Start with the landmark count heuristic -- it is already compiled into `lapkt_core` and provides admissible estimates suitable for WA* and as a component of BFS(f).
 
 ---
 
@@ -163,8 +163,8 @@ LAPKT provides several heuristic evaluators that can be paired with the search e
 ### Short Term: SIW-then-BRFS Portfolio
 
 Replace the single BRFS solver with a two-phase approach:
-1. Run SIW(2) first — fast novelty-based search for the common case.
-2. Fall back to BRFS if SIW fails — preserves current completeness guarantee.
+1. Run SIW(2) first -- fast novelty-based search for the common case.
+2. Fall back to BRFS if SIW fails -- preserves current completeness guarantee.
 
 This requires minimal code changes (instantiate SIW engine, try it before BRFS) and provides immediate performance improvement for larger domains. The `Planner` interface already returns `PlanResult` with timing metrics, so the caller is unaffected.
 
@@ -265,7 +265,7 @@ This section audits every LAPKT feature compiled into `lapkt_core` or available 
 
 LAPKT's core design principle is the *agnostic interface*: a language-independent problem representation that decouples the planning model from any particular parser or input language. The `STRIPS_Problem` class holds fluents, actions (with preconditions, add effects, delete effects), initial state, and goal specification without any dependency on PDDL syntax.
 
-**How AME uses it:** `WorldModel::projectToSTRIPS()` (`world_model.cpp:438`) constructs a `STRIPS_Problem` programmatically by iterating over AME's internal fluent and ground action registries. This is exactly the intended use of the agnostic interface — AME never passes PDDL text to LAPKT; instead it builds the planning model from its own data structures.
+**How AME uses it:** `WorldModel::projectToSTRIPS()` (`world_model.cpp:438`) constructs a `STRIPS_Problem` programmatically by iterating over AME's internal fluent and ground action registries. This is exactly the intended use of the agnostic interface -- AME never passes PDDL text to LAPKT; instead it builds the planning model from its own data structures.
 
 `Fwd_Search_Problem` wraps a `STRIPS_Problem` to provide a forward search model (initial state, goal test, successor generation). All LAPKT search engines are templated on this wrapper.
 
@@ -295,7 +295,7 @@ The successor generator computes the set of applicable actions for a given state
 
 **How AME uses it:** Implicitly, via `Fwd_Search_Problem`. When the BRFS engine expands a state, it calls the successor generator to enumerate applicable actions. AME does not call the successor generator directly.
 
-**What AME gains:** Efficient applicability testing — the successor generator uses the action tables built by `make_action_tables()` to avoid testing every action against every state.
+**What AME gains:** Efficient applicability testing -- the successor generator uses the action tables built by `make_action_tables()` to avoid testing every action against every state.
 
 #### Utility Libraries (`bit_array.cxx`, `bit_set.cxx`, `memory.cxx`, `resources_control.cxx`)
 
@@ -313,7 +313,7 @@ These features are compiled into the `lapkt_core` static library because the CMa
 
 **What it provides:** Support for actions whose effects depend on conditions beyond the preconditions. In PDDL, these appear as `(when (condition) (effect))` clauses within an action.
 
-**How AME uses it:** Not at all. `projectToSTRIPS()` passes an empty `Conditional_Effect_Vec` for every action. All AME actions are simple STRIPS — fixed preconditions, fixed effects.
+**How AME uses it:** Not at all. `projectToSTRIPS()` passes an empty `Conditional_Effect_Vec` for every action. All AME actions are simple STRIPS -- fixed preconditions, fixed effects.
 
 **Potential benefit:** Conditional effects would allow more compact action representations. For example, a `search(robot, sector)` action could have a conditional effect: "if a target is present in the sector, then `target_found` becomes true." Currently, this must be modelled as separate actions or handled at the BT execution level. Enabling conditional effects would require:
 1. Extending `WorldModel::GroundAction` to store conditional effects.
@@ -322,7 +322,7 @@ These features are compiled into the `lapkt_core` static library because the CMa
 
 #### Conjunctive Component Problem (`conj_comp_prob.cxx`)
 
-**What it provides:** Decomposes a planning problem into conjunctive sub-problems — one per goal atom or per connected component of the causal graph. Used internally by some LAPKT solvers for goal serialization.
+**What it provides:** Decomposes a planning problem into conjunctive sub-problems -- one per goal atom or per connected component of the causal graph. Used internally by some LAPKT solvers for goal serialization.
 
 **How AME uses it:** Not at all. Could be useful if AME implements goal decomposition at the planner level (currently handled by the PlanCompiler's causal graph analysis).
 
@@ -338,14 +338,14 @@ These features are compiled into the `lapkt_core` static library because the CMa
 
 #### Mutex Sets (`mutex_set.cxx`)
 
-**What it provides:** Computes and stores sets of mutually exclusive fluents — pairs of atoms that cannot both be true in any reachable state. Derived from the planning graph.
+**What it provides:** Computes and stores sets of mutually exclusive fluents -- pairs of atoms that cannot both be true in any reachable state. Derived from the planning graph.
 
 **How AME uses it:** Not at all. The BRFS engine does not use mutex pruning.
 
 **Potential benefit:** Mutex information can be used to:
-1. **Prune the search space** — discard states containing mutex pairs.
-2. **Improve heuristic estimates** — h_max and landmark heuristics can use mutex information for tighter bounds.
-3. **Validate domain models** — detect inconsistencies in PDDL domain definitions (e.g., actions that claim to add two mutually exclusive fluents simultaneously).
+1. **Prune the search space** -- discard states containing mutex pairs.
+2. **Improve heuristic estimates** -- h_max and landmark heuristics can use mutex information for tighter bounds.
+3. **Validate domain models** -- detect inconsistencies in PDDL domain definitions (e.g., actions that claim to add two mutually exclusive fluents simultaneously).
 
 Integration would require calling the mutex computation API after `make_action_tables()` and passing mutex sets to heuristic constructors.
 
@@ -364,10 +364,10 @@ Integration would require calling the mutex computation API after `make_action_t
 **How AME uses it:** Not at all.
 
 **Potential benefit:**
-1. **Domain validation** — detect unreachable goals before starting search, providing immediate failure feedback instead of exhaustive exploration.
-2. **Problem simplification** — remove unreachable fluents and inapplicable actions from the STRIPS problem, reducing the effective state space.
-3. **Heuristic computation** — reachability analysis is the foundation of relaxation-based heuristics (h_add, h_max, h_FF). Enabling reachability is a prerequisite for these heuristics.
-4. **Safety assurance** — provably demonstrate that certain dangerous states are unreachable, supporting the SACE/AMLAS safety case (`doc/plans/AME/autonomy_assurance_plan.md`).
+1. **Domain validation** -- detect unreachable goals before starting search, providing immediate failure feedback instead of exhaustive exploration.
+2. **Problem simplification** -- remove unreachable fluents and inapplicable actions from the STRIPS problem, reducing the effective state space.
+3. **Heuristic computation** -- reachability analysis is the foundation of relaxation-based heuristics (h_add, h_max, h_FF). Enabling reachability is a prerequisite for these heuristics.
+4. **Safety assurance** -- provably demonstrate that certain dangerous states are unreachable, supporting the SACE/AMLAS safety case (`doc/plans/AME/autonomy_assurance_plan.md`).
 
 #### Watched Literals Successor Generator (`watched_lit_succ_gen.cxx`)
 
@@ -379,14 +379,14 @@ Integration would require calling the mutex computation API after `make_action_t
 
 #### Landmark Graph Heuristic (`landmark_graph.cxx`)
 
-**What it provides:** Computes a *landmark graph* — a directed graph of facts and actions that must appear in every valid plan. The landmark count heuristic h_LM counts unsatisfied landmarks as an estimate of remaining plan cost. It is admissible (never overestimates).
+**What it provides:** Computes a *landmark graph* -- a directed graph of facts and actions that must appear in every valid plan. The landmark count heuristic h_LM counts unsatisfied landmarks as an estimate of remaining plan cost. It is admissible (never overestimates).
 
 **How AME uses it:** Compiled but never instantiated. This is the most immediately useful piece of dead code in the build.
 
 **Potential benefit:**
-1. **Heuristic search** — pair with WA* for bounded sub-optimal plans, or with BFS(f) for novelty-guided heuristic search.
-2. **Plan quality estimation** — landmark count provides a lower bound on remaining actions, useful for progress reporting and timeout decisions.
-3. **Goal ordering** — the landmark graph reveals causal ordering between sub-goals, which could inform SIW's goal serialization or the PlanCompiler's flow decomposition.
+1. **Heuristic search** -- pair with WA* for bounded sub-optimal plans, or with BFS(f) for novelty-guided heuristic search.
+2. **Plan quality estimation** -- landmark count provides a lower bound on remaining actions, useful for progress reporting and timeout decisions.
+3. **Goal ordering** -- the landmark graph reveals causal ordering between sub-goals, which could inform SIW's goal serialization or the PlanCompiler's flow decomposition.
 
 ---
 
@@ -396,9 +396,9 @@ These features exist in the LAPKT source tree (headers are on the include path) 
 
 #### Novelty Evaluators (`node_eval/novelty/`)
 
-**What they provide:** Functions that compute the novelty w(s) of a state — the size of the smallest tuple of atoms appearing for the first time in s. Used by IW, SIW, BFS(f), and BFWS.
+**What they provide:** Functions that compute the novelty w(s) of a state -- the size of the smallest tuple of atoms appearing for the first time in s. Used by IW, SIW, BFS(f), and BFWS.
 
-**Status:** Header directory is on the include path (`${LAPKT_SRC}/node_eval/novelty`) but no source files are compiled. Novelty evaluators may be header-only templates (common in LAPKT) or may require compilation — this needs verification at build time.
+**Status:** Header directory is on the include path (`${LAPKT_SRC}/node_eval/novelty`) but no source files are compiled. Novelty evaluators may be header-only templates (common in LAPKT) or may require compilation -- this needs verification at build time.
 
 **Required for:** IW, SIW, BFS(f), BFWS, DFS+, and any novelty-based search.
 
@@ -412,7 +412,7 @@ These features exist in the LAPKT source tree (headers are on the include path) 
 
 #### Search Engines (`engine/`)
 
-**What they provide:** All LAPKT search engine implementations — BRFS, IW, SIW, BFS(f), AT_BFS_f, BFWS, WA*, RWA*, DFS+, and others. LAPKT search engines are C++ template classes, so they are header-only and require no additional compilation.
+**What they provide:** All LAPKT search engine implementations -- BRFS, IW, SIW, BFS(f), AT_BFS_f, BFWS, WA*, RWA*, DFS+, and others. LAPKT search engines are C++ template classes, so they are header-only and require no additional compilation.
 
 **Status:** The engine include directory is on the path. Only `brfs.hxx` is currently included by AME code. All other engines are available for immediate use by adding the appropriate `#include` directive.
 
@@ -431,21 +431,21 @@ engine.find_solution(cost, plan);
 
 AME's LAPKT integration is concentrated in exactly two source files:
 
-**`world_model.cpp`** — 12 LAPKT API calls in `projectToSTRIPS()` and `currentStateAsSTRIPS()`:
-- `STRIPS_Problem::add_fluent()` — register fluent names
-- `STRIPS_Problem::add_action()` — register ground actions with pre/add/del
-- `STRIPS_Problem::set_init()` — set initial state fluents
-- `STRIPS_Problem::set_goal()` — set goal fluents
-- `STRIPS_Problem::make_action_tables()` — build internal lookup structures
-- `State(prob)` constructor, `State::set()`, `State::update_hash()` — create initial state
+**`world_model.cpp`** -- 12 LAPKT API calls in `projectToSTRIPS()` and `currentStateAsSTRIPS()`:
+- `STRIPS_Problem::add_fluent()` -- register fluent names
+- `STRIPS_Problem::add_action()` -- register ground actions with pre/add/del
+- `STRIPS_Problem::set_init()` -- set initial state fluents
+- `STRIPS_Problem::set_goal()` -- set goal fluents
+- `STRIPS_Problem::make_action_tables()` -- build internal lookup structures
+- `State(prob)` constructor, `State::set()`, `State::update_hash()` -- create initial state
 
-**`planner.cpp`** — 8 LAPKT API calls in `Planner::solve()`:
-- `Fwd_Search_Problem(&strips)` — wrap STRIPS problem for forward search
-- `BRFS engine(fwd_prob)` — instantiate search engine
-- `engine.set_verbose(false)` — suppress LAPKT console output
-- `engine.start(init)` — set initial state for search
-- `engine.find_solution(cost, plan)` — run search
-- `engine.expanded()`, `engine.generated()` — retrieve search statistics
+**`planner.cpp`** -- 8 LAPKT API calls in `Planner::solve()`:
+- `Fwd_Search_Problem(&strips)` -- wrap STRIPS problem for forward search
+- `BRFS engine(fwd_prob)` -- instantiate search engine
+- `engine.set_verbose(false)` -- suppress LAPKT console output
+- `engine.start(init)` -- set initial state for search
+- `engine.find_solution(cost, plan)` -- run search
+- `engine.expanded()`, `engine.generated()` -- retrieve search statistics
 
 **No other AME files reference LAPKT APIs.** The integration boundary is clean and narrow, making it straightforward to add new solvers or features without affecting the rest of the codebase.
 
@@ -470,16 +470,16 @@ These shims are transparent to AME code and only affect the `lapkt_core` build t
 **Current state:** 17 LAPKT source files compiled; 7 are dead code (41% of LAPKT compilation).
 
 **Files safe to remove from `lapkt_core` if only BRFS is needed:**
-- `cond_eff.cxx` — empty conditional effects vector is the only reference
-- `conj_comp_prob.cxx` — never instantiated
-- `fl_conj.cxx` — never instantiated
-- `mutex_set.cxx` — never instantiated
+- `cond_eff.cxx` -- empty conditional effects vector is the only reference
+- `conj_comp_prob.cxx` -- never instantiated
+- `fl_conj.cxx` -- never instantiated
+- `mutex_set.cxx` -- never instantiated
 
 **Files to keep even though not directly called:**
-- `match_tree.cxx` — may be used internally by `make_action_tables()`
-- `reachability.cxx` — may be used internally by action table construction
-- `watched_lit_succ_gen.cxx` — may be used as an alternate successor generator internally
-- `landmark_graph.cxx` — recommended for near-term heuristic integration
+- `match_tree.cxx` -- may be used internally by `make_action_tables()`
+- `reachability.cxx` -- may be used internally by action table construction
+- `watched_lit_succ_gen.cxx` -- may be used as an alternate successor generator internally
+- `landmark_graph.cxx` -- recommended for near-term heuristic integration
 
 **Recommendation:** Keep all files compiled. The build cost is negligible, and they will be needed as AME adopts more LAPKT features. Removing them risks build failures when new solvers are added.
 

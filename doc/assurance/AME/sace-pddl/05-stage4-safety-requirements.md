@@ -10,7 +10,7 @@ Decomposes system-level safety requirements to sub-system requirements and valid
 
 ## PDDL Contribution
 
-PDDL supports hierarchical decomposition via multi-level domain modelling, where each sub-system gets its own domain file with localised constraints. Requirements at each tier are verified by checking that decomposed plans satisfy their local constraints. However, proving that sub-domain constraints *jointly imply* the system-level constraint requires additional tooling — a theorem prover or model checker (see [Tooling Analysis](13-tooling-analysis.md)). PDDL provides per-tier satisfaction evidence and traceability, not compositional correctness proofs.
+PDDL supports hierarchical decomposition via multi-level domain modelling, where each sub-system gets its own domain file with localised constraints. Requirements at each tier are verified by checking that decomposed plans satisfy their local constraints. However, proving that sub-domain constraints *jointly imply* the system-level constraint requires additional tooling -- a theorem prover or model checker (see [Tooling Analysis](13-tooling-analysis.md)). PDDL provides per-tier satisfaction evidence and traceability, not compositional correctness proofs.
 
 ## Inputs
 
@@ -30,7 +30,7 @@ PDDL supports hierarchical decomposition via multi-level domain modelling, where
 | **Completeness analysis** | Traceability evidence that all system constraints have corresponding sub-domain constraints. Formal proof of joint implication requires a theorem prover or model checker |
 | **Traceability matrix** | Links decomposed requirements to sub-domain predicates and constraints |
 
-## GSN Mapping — Pattern [S]
+## GSN Mapping -- Pattern [S]
 
 Pattern [S] argues that safety requirements are correctly decomposed, complete, and traceable.
 
@@ -62,5 +62,5 @@ The GSN **solution** nodes are the requirement satisfaction proofs at each sub-d
 
 ---
 
-[Next: Stage 5 — Design Assurance](06-stage5-design-assurance.md)
+[Next: Stage 5 -- Design Assurance](06-stage5-design-assurance.md)
 

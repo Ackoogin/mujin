@@ -1,6 +1,6 @@
 # HLR Requirements Coverage
 
-Traceability of HLR requirements (`TOBJ.001`–`TOBJ.053`, `PYR-RESP-0729`–`PYR-RESP-0745`) to tests against the TacticalObjectsComponent (PCL integration layer).
+Traceability of HLR requirements (`TOBJ.001`-`TOBJ.053`, `PYR-RESP-0729`-`PYR-RESP-0745`) to tests against the TacticalObjectsComponent (PCL integration layer).
 
 ## PCL Component Test Coverage
 
@@ -89,7 +89,7 @@ The following TOBJs are implemented in engines (InterestManager, TacticalHistory
 | `Test_TacticalObjectsComponent.cpp` | Core PCL component tests |
 | `Test_TacticalObjectsComponent_Robustness.cpp` | Stress and robustness |
 | `Test_TacticalObjectsComponent_HLR.cpp` | Explicit HLR trace tags, coverage gaps, ActiveFind service-level tests |
-| `Test_TacticalObjects_E2E.cpp` | End-to-end: interest → evidence → correlation → streaming |
+| `Test_TacticalObjects_E2E.cpp` | End-to-end: interest -> evidence -> correlation -> streaming |
 | `Test_InterestManager.cpp` | Interest lifecycle, evidence derivation, measurement, progress |
 | `Test_InterestManager_Matching.cpp` | Interest-entity matching including battle dimension filter |
 

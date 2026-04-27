@@ -249,7 +249,7 @@ TEST(ProtoBindingsProvided, TopicEncodeRejectsUnsupportedContentType) {
 }
 
 // ===========================================================================
-// Proto-native JSON codec — ObjectInterestRequirement
+// Proto-native JSON codec -- ObjectInterestRequirement
 // ===========================================================================
 
 TEST(ProtoBindingsProvided, CreateRequirementJsonKeys) {
@@ -278,7 +278,7 @@ TEST(ProtoBindingsProvided, CreateRequirementJsonDefaults) {
 }
 
 // ===========================================================================
-// Proto-native JSON codec — ObjectDetail topic payload
+// Proto-native JSON codec -- ObjectDetail topic payload
 // ===========================================================================
 
 TEST(ProtoBindingsProvided, EvidenceJsonKeys) {
@@ -311,7 +311,7 @@ TEST(ProtoBindingsProvided, EvidenceJsonDefaultObservedAt) {
 }
 
 // ===========================================================================
-// ServiceHandler — default stub implementations
+// ServiceHandler -- default stub implementations
 // ===========================================================================
 
 // Concrete subclass to exercise the virtual-dispatch path.
@@ -468,7 +468,7 @@ TEST(ProtoBindingsConsumed, HandlerStubsReturnEmpty) {
 }
 
 // ===========================================================================
-// PCL subscribe registration — verify ports are created during on_configure
+// PCL subscribe registration -- verify ports are created during on_configure
 // ===========================================================================
 
 struct SubscribeCtx {
@@ -595,7 +595,7 @@ TEST(ProtoBindingsConsumed, SubscribeRegistrationSucceeds) {
 }
 
 // ===========================================================================
-// Typed invoke facade — component code should not construct raw PCL messages
+// Typed invoke facade -- component code should not construct raw PCL messages
 // ===========================================================================
 
 TEST(ProtoBindingsConsumed, InvokeCreateRequirementUsesTypedFacade) {
@@ -640,7 +640,7 @@ TEST(ProtoBindingsConsumed, InvokeCreateRequirementUsesTypedFacade) {
 }
 
 // ===========================================================================
-// publishObjectEvidence — verify publish returns an error when not active
+// publishObjectEvidence -- verify publish returns an error when not active
 // (port is closed when container is not ACTIVE)
 // ===========================================================================
 
@@ -654,7 +654,7 @@ TEST(ProtoBindingsConsumed, PublishReturnsBadStatusWhenInactive) {
     pcl_container_configure(c);
     ASSERT_NE(ctx.pub_port, nullptr);
 
-    // Container is CONFIGURED but not ACTIVE — port should be closed.
+    // Container is CONFIGURED but not ACTIVE -- port should be closed.
     pcl_status_t rc = cons::publishObjectEvidence(ctx.pub_port, R"({"test":1})");
     EXPECT_NE(rc, PCL_OK);  // expect PCL_ERR_PORT_CLOSED or similar
 
@@ -679,7 +679,7 @@ TEST(ProtoBindingsConsumed, PublishSucceedsWhenActive) {
 }
 
 // ===========================================================================
-// Dispatch — verify all ServiceChannel values are handled without crash
+// Dispatch -- verify all ServiceChannel values are handled without crash
 // ===========================================================================
 
 TEST(ProtoBindingsProvided, DispatchAllChannelsNoCrash) {
@@ -817,7 +817,7 @@ TEST(ProtoBindingsConsumed, DispatchAllChannelsProtobufNoCrash) {
 }
 
 // ===========================================================================
-// Typed dispatch — round-trip through handler with real serialization
+// Typed dispatch -- round-trip through handler with real serialization
 // ===========================================================================
 
 TEST(ProtoBindingsProvided, DispatchCreateRequirementRoundTrip) {
@@ -1028,7 +1028,7 @@ TEST(ProtoBindingsConsumed, DispatchUpdateRequirementProtobufRoundTrip) {
 }
 
 // ===========================================================================
-// Domain types — sanity checks on default values
+// Domain types -- sanity checks on default values
 // ===========================================================================
 
 TEST(ProtoBindingsTypes, AckConstants) {

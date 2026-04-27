@@ -6,7 +6,7 @@ Parses .proto files into a complete model: packages, imports, options,
 enums, messages (with nested types and oneof groups), services, and RPCs.
 
 This is the single parser used by all codec backends and service generators.
-No hardcoded knowledge of specific data models — everything is derived
+No hardcoded knowledge of specific data models -- everything is derived
 from the proto source.
 """
 
@@ -216,7 +216,7 @@ def _parse_message_body(body: str) -> ProtoMessage:
     # Remove nested enum blocks from remaining text
     remaining = re.sub(r'\benum\s+\w+\s*\{[^}]*\}', '', remaining)
 
-    # Nested messages (non-recursive for now — handles one level of nesting)
+    # Nested messages (non-recursive for now -- handles one level of nesting)
     nested_msg_pattern = re.compile(r'\bmessage\s+(\w+)\s*\{')
     for m in nested_msg_pattern.finditer(remaining):
         nested_name = m.group(1)

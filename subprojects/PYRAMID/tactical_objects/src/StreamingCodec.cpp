@@ -267,7 +267,7 @@ EntityUpdateFrame decodeFrameInner(const uint8_t* data, size_t len) {
 }  // anonymous namespace
 
 // ---------------------------------------------------------------------------
-// StreamingCodec — public API
+// StreamingCodec -- public API
 // ---------------------------------------------------------------------------
 
 std::vector<uint8_t> StreamingCodec::encodeEntityUpdate(

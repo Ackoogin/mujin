@@ -339,7 +339,7 @@ void WorldModel::groundNewObject(const std::string& obj_name,
                  const std::string& obj_type) {
   (void)obj_name;
   (void)obj_type;
-  // Re-ground all predicates (simple approach — fine for small domains)
+  // Re-ground all predicates (simple approach -- fine for small domains)
   // We skip duplicates inside groundPredicate
   for (auto& pred : predicates_) {
     groundPredicate(pred.name, pred.param_types);

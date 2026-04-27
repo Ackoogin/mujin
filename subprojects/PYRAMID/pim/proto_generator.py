@@ -126,7 +126,7 @@ class ProtobufGenerator:
         for namespace_path, types in types_by_namespace.items():
             self._generate_proto_file(namespace_path, types)
         
-        print(f"✓ Generated {len(types_by_namespace)} .proto files")
+        print(f"[x] Generated {len(types_by_namespace)} .proto files")
     
     def _group_by_namespace(self) -> Dict[tuple, Dict[str, List]]:
         """Group all types by their namespace, combining consumed/provided into components"""
@@ -368,7 +368,7 @@ class ProtobufGenerator:
         """Check which google protobuf imports are needed"""
         needs = {'timestamp': False, 'base_for_identifier': False}
 
-        # No google.protobuf.Empty — EntityActions uses Ack instead
+        # No google.protobuf.Empty -- EntityActions uses Ack instead
 
         for cls in types['classes']:
             for prop in cls.get('properties', []):
@@ -737,7 +737,7 @@ class ProtobufGenerator:
         """Generate EntityActions service definition for entity-derived properties.
 
         Produces Create/Read/Update/Delete RPCs with correct EntityActions signatures.
-        This is a semantic contract consumed by codex generators — not a gRPC endpoint.
+        This is a semantic contract consumed by codex generators -- not a gRPC endpoint.
         """
         f.write(f'// EntityActions Service for {service_name}\n')
         f.write(f'service {service_name}_Service {{\n')
@@ -754,9 +754,9 @@ class ProtobufGenerator:
 
             prop_camel = ''.join(word.capitalize() for word in prop_name.split('_'))
 
-            # inout → full CRUD
-            # out   → Read only
-            # in    → Create + Update + Delete (no Read)
+            # inout -> full CRUD
+            # out   -> Read only
+            # in    -> Create + Update + Delete (no Read)
 
             if flow_direction == 'inout' or flow_direction is None:
                 f.write(f'  rpc Create{prop_camel} ({qualified_type}) returns ({qualified_identifier});\n')
@@ -907,7 +907,7 @@ def main():
     generator = ProtobufGenerator(model, output_dir)
     generator.generate()
     
-    print(f"\n✓ Protobuf generation complete!")
+    print(f"\n[x] Protobuf generation complete!")
     print(f"  Output directory: {output_dir}/")
 
 

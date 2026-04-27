@@ -518,7 +518,7 @@ TEST(InvokeServiceNode, NoTimeoutMeansNoLimit) {
 }
 
 // =========================================================================
-// Extension 5: Thread Safety — WorldModelSnapshot / SnapshotManager
+// Extension 5: Thread Safety -- WorldModelSnapshot / SnapshotManager
 // =========================================================================
 
 TEST(WorldModelSnapshot, GetFactMatchesWorldModel) {
@@ -598,7 +598,7 @@ TEST(SnapshotManager, ConcurrentPublishAndRead) {
 }
 
 // =========================================================================
-// Extension 6: Hierarchical Planning — ExecutePhaseAction
+// Extension 6: Hierarchical Planning -- ExecutePhaseAction
 // =========================================================================
 
 // Stub BT action node (always succeeds) for use in compiled subtrees.
@@ -744,7 +744,7 @@ TEST(ExecutePhaseAction, PlanAndExecuteSubGoal) {
 }
 
 // =========================================================================
-// Extension 6: Hierarchical Planning — Audit Causal Links
+// Extension 6: Hierarchical Planning -- Audit Causal Links
 // =========================================================================
 
 TEST(ExecutePhaseAction, AuditLogRecordsEpisodeWithPhaseName) {

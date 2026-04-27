@@ -78,7 +78,7 @@ static bool is_entity_evidence_world_fact(
 }
 
 // ---------------------------------------------------------------------------
-// State_Update handler — decodes JSON and logs each world fact
+// State_Update handler -- decodes JSON and logs each world fact
 // ---------------------------------------------------------------------------
 
 static void handle_state_update(const pyramid::data_model::autonomy::StateUpdate& update) {
@@ -223,7 +223,7 @@ int main(int argc, char* argv[]) {
   pcl_container_activate(svc_container);
   pcl_executor_add(exec, svc_container);
 
-  std::fprintf(stderr, "[ame_stub] ready — waiting for entity world facts (timeout=%ds)\n",
+  std::fprintf(stderr, "[ame_stub] ready -- waiting for entity world facts (timeout=%ds)\n",
                timeout_secs);
 
   const auto start    = std::chrono::steady_clock::now();
@@ -245,7 +245,7 @@ int main(int argc, char* argv[]) {
   const int decode_errors = g_decode_errors.load();
   const int updates = g_state_updates_received.load();
   std::fprintf(stderr,
-               "[ame_stub] shutdown — state_updates=%d world_facts=%d"
+               "[ame_stub] shutdown -- state_updates=%d world_facts=%d"
                " valid_entity_facts=%d invalid_facts=%d decode_errors=%d\n",
                updates, facts, valid_entity_facts, invalid_facts,
                decode_errors);

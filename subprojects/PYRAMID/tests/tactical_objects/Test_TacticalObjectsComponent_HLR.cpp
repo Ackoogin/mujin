@@ -1,7 +1,7 @@
 /// \file Test_TacticalObjectsComponent_HLR.cpp
 /// \brief PCL component tests with explicit HLR (TOBJ/PYR-RESP) traceability.
 /// All assertions are made exclusively through data ports (services and
-/// subscribers) — no direct access to component internals or runtime.
+/// subscribers) -- no direct access to component internals or runtime.
 #include <gtest/gtest.h>
 #include <TacticalObjectsComponent.h>
 #include <TacticalObjectsCodec.h>
@@ -76,7 +76,7 @@ static nlohmann::json getObjectViaPort(pcl_executor_t* e,
 }
 
 // ---------------------------------------------------------------------------
-// HLR Tests — data-port only
+// HLR Tests -- data-port only
 // ---------------------------------------------------------------------------
 
 ///< TOBJ.004: External ID association. TOBJ.020: Evidence lineage.
@@ -183,7 +183,7 @@ TEST(TacticalObjectsComponentHLR, TemporalQueryViaService) {
   pcl::Executor exec;
   exec.add(comp);
 
-  // Ingest via subscriber — sets freshness_timestamp = observed_at.
+  // Ingest via subscriber -- sets freshness_timestamp = observed_at.
   ObservationBatch batch;
   Observation obs;
   obs.observation_id = UUIDHelper::generateV4();
@@ -195,7 +195,7 @@ TEST(TacticalObjectsComponentHLR, TemporalQueryViaService) {
 
   QueryRequest qreq;
   qreq.max_age_seconds = 200.0;
-  qreq.current_time = 150.0;  // age = 50 < 200 → entity must match
+  qreq.current_time = 150.0;  // age = 50 < 200 -> entity must match
   char qbuf[4096];
   auto jr = queryViaPort(exec.handle(), qreq, qbuf, sizeof(qbuf));
   ASSERT_GE(jr["entries"].size(), 1u);

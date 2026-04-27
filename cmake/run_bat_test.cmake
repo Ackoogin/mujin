@@ -1,4 +1,4 @@
-# run_bat_test.cmake — CTest wrapper for .bat test scripts on Windows.
+# run_bat_test.cmake -- CTest wrapper for .bat test scripts on Windows.
 #
 # CTest's add_test() quotes each argument individually, which breaks
 # cmd.exe /c parsing.  This wrapper uses execute_process() which

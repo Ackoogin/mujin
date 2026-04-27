@@ -193,7 +193,7 @@ TEST_F(CorrelationEngineTest, ContributingObservationsTracked) {
 // SIDC battle-dimension parsing (lines 90-91, 93-96 in CorrelationEngine.cpp)
 // ---------------------------------------------------------------------------
 
-///< Coverage: SIDC position 2 == 'P' → BattleDimension::Space
+///< Coverage: SIDC position 2 == 'P' -> BattleDimension::Space
 TEST_F(CorrelationEngineTest, SIDCBattleDimension_Space) {
   CorrelationEngine engine(store, spatial, milclass);
   auto obs = makeObs(10.0 * DEG, 10.0 * DEG);
@@ -205,7 +205,7 @@ TEST_F(CorrelationEngineTest, SIDCBattleDimension_Space) {
   EXPECT_EQ(mc->profile.battle_dim, BattleDimension::Space);
 }
 
-///< Coverage: SIDC position 2 == 'A' → BattleDimension::Air
+///< Coverage: SIDC position 2 == 'A' -> BattleDimension::Air
 TEST_F(CorrelationEngineTest, SIDCBattleDimension_Air) {
   CorrelationEngine engine(store, spatial, milclass);
   auto obs = makeObs(11.0 * DEG, 10.0 * DEG);
@@ -217,7 +217,7 @@ TEST_F(CorrelationEngineTest, SIDCBattleDimension_Air) {
   EXPECT_EQ(mc->profile.battle_dim, BattleDimension::Air);
 }
 
-///< Coverage: SIDC position 2 == 'S' → BattleDimension::SeaSurface
+///< Coverage: SIDC position 2 == 'S' -> BattleDimension::SeaSurface
 TEST_F(CorrelationEngineTest, SIDCBattleDimension_SeaSurface) {
   CorrelationEngine engine(store, spatial, milclass);
   auto obs = makeObs(12.0 * DEG, 10.0 * DEG);
@@ -229,7 +229,7 @@ TEST_F(CorrelationEngineTest, SIDCBattleDimension_SeaSurface) {
   EXPECT_EQ(mc->profile.battle_dim, BattleDimension::SeaSurface);
 }
 
-///< Coverage: SIDC position 2 == 'U' → BattleDimension::Subsurface
+///< Coverage: SIDC position 2 == 'U' -> BattleDimension::Subsurface
 TEST_F(CorrelationEngineTest, SIDCBattleDimension_Subsurface) {
   CorrelationEngine engine(store, spatial, milclass);
   auto obs = makeObs(13.0 * DEG, 10.0 * DEG);
@@ -241,7 +241,7 @@ TEST_F(CorrelationEngineTest, SIDCBattleDimension_Subsurface) {
   EXPECT_EQ(mc->profile.battle_dim, BattleDimension::Subsurface);
 }
 
-///< Coverage: SIDC position 2 == 'F' → BattleDimension::SOF
+///< Coverage: SIDC position 2 == 'F' -> BattleDimension::SOF
 TEST_F(CorrelationEngineTest, SIDCBattleDimension_SOF) {
   CorrelationEngine engine(store, spatial, milclass);
   auto obs = makeObs(14.0 * DEG, 10.0 * DEG);
@@ -253,11 +253,11 @@ TEST_F(CorrelationEngineTest, SIDCBattleDimension_SOF) {
   EXPECT_EQ(mc->profile.battle_dim, BattleDimension::SOF);
 }
 
-///< Coverage: SIDC position 2 is unrecognized character → default: break (line 96)
+///< Coverage: SIDC position 2 is unrecognized character -> default: break (line 96)
 TEST_F(CorrelationEngineTest, SIDCBattleDimension_UnknownChar) {
   CorrelationEngine engine(store, spatial, milclass);
   auto obs = makeObs(15.0 * DEG, 10.0 * DEG);
-  obs.source_sidc = "SFX";  // position 2 = 'X' → hits default: break
+  obs.source_sidc = "SFX";  // position 2 = 'X' -> hits default: break
   auto result = engine.processObservation(obs);
   ASSERT_FALSE(result.object_id.isNull());
   // No specific battle_dim assertion: default value remains

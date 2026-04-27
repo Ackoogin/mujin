@@ -30,7 +30,7 @@ The PDDL domain structure mirrors the system architecture. Design assurance uses
 | **Redundancy verification evidence** | Plans achievable via alternative action paths |
 | **Design justification records** | PDDL analysis results linked to architecture decisions |
 
-## GSN Mapping — Pattern [X]
+## GSN Mapping -- Pattern [X]
 
 | GSN Element | Content |
 |-------------|---------|
@@ -54,5 +54,5 @@ Under `(gps-denied)` the planner proves safe-state reachability via inertial-onl
 
 ---
 
-[Next: Stage 6 — Hazardous Failures Management](07-stage6-hazardous-failures.md)
+[Next: Stage 6 -- Hazardous Failures Management](07-stage6-hazardous-failures.md)
 

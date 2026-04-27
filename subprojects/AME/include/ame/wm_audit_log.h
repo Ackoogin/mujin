@@ -20,10 +20,10 @@ namespace ame {
 /// }
 ///
 /// Sources follow a convention:
-///   - "SetWorldPredicate:<node_name>"  — BT effect node
-///   - "perception"                     — external update
-///   - "planner_init"                   — initial state sync
-///   - ""                               — untagged (legacy callers)
+///   - "SetWorldPredicate:<node_name>"  -- BT effect node
+///   - "perception"                     -- external update
+///   - "planner_init"                   -- initial state sync
+///   - ""                               -- untagged (legacy callers)
 class WmAuditLog {
 public:
     struct Entry {

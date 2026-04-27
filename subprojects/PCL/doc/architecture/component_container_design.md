@@ -1,10 +1,10 @@
-# PCL Component Container — Developer Guide
+# PCL Component Container -- Developer Guide
 
 ## 1. Overview
 
 The PYRAMID Container Library (PCL) provides a standard component container for autonomous mission systems. It encapsulates business logic behind a consistent lifecycle while entirely decoupling it from external middleware.
 
-PCL uses a **hybrid architecture**: a pure-C ABI core for maximum portability (Ada, C, C++, Rust), with an optional header-only C++ wrapper for ergonomic authoring. Transport adapters (ROS2, DDS, sockets, shared memory) are pluggable — your component code never depends on middleware.
+PCL uses a **hybrid architecture**: a pure-C ABI core for maximum portability (Ada, C, C++, Rust), with an optional header-only C++ wrapper for ergonomic authoring. Transport adapters (ROS2, DDS, sockets, shared memory) are pluggable -- your component code never depends on middleware.
 
 ---
 
@@ -15,7 +15,7 @@ PCL uses a **hybrid architecture**: a pure-C ABI core for maximum portability (A
 | P1 | **Logic owns the thread** | Business logic runs on exactly one thread (the executor). No internal mutexes needed. |
 | P2 | **I/O is injected** | Transport adapters (ROS2, DDS, sockets, shared-mem) are set via function pointers / vtable, not compiled in. |
 | P3 | **C-ABI at the boundary** | All public symbols are `extern "C"` with opaque handles. C++ internals are hidden behind the ABI wall. |
-| P4 | **Lifecycle is explicit** | Components follow a state machine: `UNCONFIGURED → CONFIGURED → ACTIVE → FINALIZED`. Compatible with ROS2 lifecycle but no rclcpp dependency. |
+| P4 | **Lifecycle is explicit** | Components follow a state machine: `UNCONFIGURED -> CONFIGURED -> ACTIVE -> FINALIZED`. Compatible with ROS2 lifecycle but no rclcpp dependency. |
 | P5 | **Zero-copy where possible** | Intra-process communication between containers in the same executor uses pointer handoff, not serialization. |
 
 ---
@@ -23,26 +23,26 @@ PCL uses a **hybrid architecture**: a pure-C ABI core for maximum portability (A
 ## 3. Architecture
 
 ```
-┌---------------------------------------------------------┐
-│                    Executor (single thread)              │
-│                                                         │
-│  ┌--------------┐  ┌--------------┐  ┌--------------┐  │
-│  │  Container A  │  │  Container B  │  │  Container C  │  │
-│  │ ┌----------┐ │  │ ┌----------┐ │  │ ┌----------┐ │  │
-│  │ │  Logic   │ │  │ │  Logic   │ │  │ │  Logic   │ │  │
-│  │ │ (user)   │ │  │ │ (user)   │ │  │ │ (user)   │ │  │
-│  │ └----┬-----┘ │  │ └----┬-----┘ │  │ └----┬-----┘ │  │
-│  │      │       │  │      │       │  │      │       │  │
-│  │ ┌----▼-----┐ │  │ ┌----▼-----┐ │  │ ┌----▼-----┐ │  │
-│  │ │ Port I/O │ │  │ │ Port I/O │ │  │ │ Port I/O │ │  │
-│  │ └----------┘ │  │ └----------┘ │  │ └----------┘ │  │
-│  └--------------┘  └--------------┘  └--------------┘  │
-│                                                         │
-│  ┌-------------------------------------------------┐    │
-│  │         Transport Adapter (pluggable)            │    │
-│  │   ROS2 / DDS / SharedMem / Socket / gRPC        │    │
-│  └-------------------------------------------------┘    │
-└---------------------------------------------------------┘
++---------------------------------------------------------+
+|                    Executor (single thread)              |
+|                                                         |
+|  +--------------+  +--------------+  +--------------+  |
+|  |  Container A  |  |  Container B  |  |  Container C  |  |
+|  | +----------+ |  | +----------+ |  | +----------+ |  |
+|  | |  Logic   | |  | |  Logic   | |  | |  Logic   | |  |
+|  | | (user)   | |  | | (user)   | |  | | (user)   | |  |
+|  | +----+-----+ |  | +----+-----+ |  | +----+-----+ |  |
+|  |      |       |  |      |       |  |      |       |  |
+|  | +----v-----+ |  | +----v-----+ |  | +----v-----+ |  |
+|  | | Port I/O | |  | | Port I/O | |  | | Port I/O | |  |
+|  | +----------+ |  | +----------+ |  | +----------+ |  |
+|  +--------------+  +--------------+  +--------------+  |
+|                                                         |
+|  +-------------------------------------------------+    |
+|  |         Transport Adapter (pluggable)            |    |
+|  |   ROS2 / DDS / SharedMem / Socket / gRPC        |    |
+|  +-------------------------------------------------+    |
++---------------------------------------------------------+
 ```
 
 The library itself (`pcl_core`) is pure C17 with zero dependencies. A header-only C++ wrapper (`pcl/component.hpp`) provides RAII, virtual method overrides, and modern C++ ergonomics without compromising the ABI. Ada and C consumers use the raw C API directly.
@@ -89,7 +89,7 @@ typedef enum {
 ### 4.2 Lifecycle Callbacks (User Implements)
 
 ```c
-/* User-provided callbacks — all called on the executor thread */
+/* User-provided callbacks -- all called on the executor thread */
 typedef struct {
     pcl_status_t (*on_configure)(pcl_container_t* self, void* user_data);
     pcl_status_t (*on_activate)(pcl_container_t* self, void* user_data);
@@ -97,7 +97,7 @@ typedef struct {
     pcl_status_t (*on_cleanup)(pcl_container_t* self, void* user_data);
     pcl_status_t (*on_shutdown)(pcl_container_t* self, void* user_data);
 
-    /* Periodic tick — called at configured rate while ACTIVE */
+    /* Periodic tick -- called at configured rate while ACTIVE */
     pcl_status_t (*on_tick)(pcl_container_t* self, double dt_seconds,
                             void* user_data);
 } pcl_callbacks_t;
@@ -150,19 +150,19 @@ typedef enum {
     PCL_PORT_CLIENT      = 3,   /* request-reply client */
 } pcl_port_type_t;
 
-/* Message buffer — user owns the data, container borrows it */
+/* Message buffer -- user owns the data, container borrows it */
 typedef struct {
     const void*  data;
     uint32_t     size;
     const char*  type_name;      /* e.g. "SensorReading", "StatusResponse" */
 } pcl_msg_t;
 
-/* Subscriber callback — called on executor thread */
+/* Subscriber callback -- called on executor thread */
 typedef void (*pcl_sub_callback_t)(pcl_container_t* c,
                                     const pcl_msg_t* msg,
                                     void* user_data);
 
-/* Service handler — called on executor thread, must fill response */
+/* Service handler -- called on executor thread, must fill response */
 typedef pcl_status_t (*pcl_service_handler_t)(pcl_container_t* c,
                                                const pcl_msg_t* request,
                                                pcl_msg_t* response,
@@ -190,16 +190,16 @@ pcl_status_t pcl_port_publish(pcl_port_t* port, const pcl_msg_t* msg);
 ### 4.5 Executor
 
 ```c
-/* Executor — runs one or more containers on a single thread */
+/* Executor -- runs one or more containers on a single thread */
 pcl_executor_t* pcl_executor_create(void);
 void            pcl_executor_destroy(pcl_executor_t* e);
 
 pcl_status_t pcl_executor_add(pcl_executor_t* e, pcl_container_t* c);
 
-/* Spin — blocks, runs all containers' ticks and I/O callbacks in round-robin */
+/* Spin -- blocks, runs all containers' ticks and I/O callbacks in round-robin */
 pcl_status_t pcl_executor_spin(pcl_executor_t* e);
 
-/* Spin once — process pending work, return immediately */
+/* Spin once -- process pending work, return immediately */
 pcl_status_t pcl_executor_spin_once(pcl_executor_t* e, uint32_t timeout_ms);
 
 /* Thread-safe ingress from external I/O threads (deep-copies payload) */
@@ -210,7 +210,7 @@ pcl_status_t pcl_executor_post_incoming(pcl_executor_t* e,
 /* Request shutdown (thread-safe, can be called from signal handler) */
 void pcl_executor_request_shutdown(pcl_executor_t* e);
 
-/* Logging — integrates with transport adapter (e.g. ROS2 RCLCPP_INFO) */
+/* Logging -- integrates with transport adapter (e.g. ROS2 RCLCPP_INFO) */
 void pcl_log(pcl_container_t* c, int level, const char* fmt, ...);
 
 #ifdef __cplusplus
@@ -225,7 +225,7 @@ void pcl_log(pcl_container_t* c, int level, const char* fmt, ...);
 The header-only C++ wrapper (`pcl/component.hpp`) provides ergonomic authoring on top of the C ABI. The wrapper uses static trampoline functions to bridge virtual method calls to the C callback interface.
 
 ```cpp
-// pcl/component.hpp — header-only C++ convenience wrapper
+// pcl/component.hpp -- header-only C++ convenience wrapper
 namespace pcl {
 
 class Component {
@@ -279,10 +279,10 @@ private:
 The container's ports produce/consume `pcl_msg_t` (opaque byte buffers + type name). A **transport adapter** connects these to the real middleware:
 
 ```
-Container Port --pcl_msg_t--► Transport Adapter --► Wire
-                                   │
-                          ┌--------┼--------┐
-                          ▼        ▼        ▼
+Container Port --pcl_msg_t--> Transport Adapter --> Wire
+                                   |
+                          +--------+--------+
+                          v        v        v
                         ROS2    SharedMem  Socket
 ```
 
@@ -292,7 +292,7 @@ Implement a transport adapter by filling in four function pointers:
 
 ```c
 typedef struct {
-    /* Called when container publishes — adapter sends to wire */
+    /* Called when container publishes -- adapter sends to wire */
     pcl_status_t (*publish)(void* adapter_ctx, const char* topic,
                             const pcl_msg_t* msg);
 
@@ -317,7 +317,7 @@ pcl_status_t pcl_executor_set_transport(pcl_executor_t* e,
 ### 6.2 ROS2 Adapter Example
 
 ```cpp
-// ros2_adapter.cpp — wraps PCL containers as rclcpp_lifecycle::LifecycleNode
+// ros2_adapter.cpp -- wraps PCL containers as rclcpp_lifecycle::LifecycleNode
 class Ros2Adapter {
 public:
     Ros2Adapter(rclcpp::executors::SingleThreadedExecutor& ros_exec,
@@ -353,7 +353,7 @@ stateDiagram-v2
 **Key rules:**
 - **Ports must be created during `on_configure`.** Dynamic port creation after configure is not supported.
 - **`on_tick()` is only called while `ACTIVE`.** Each container has its own tick rate (set via parameter).
-- **Shutdown is graceful** with a configurable timeout: `ACTIVE → on_deactivate → on_shutdown → FINALIZED`.
+- **Shutdown is graceful** with a configurable timeout: `ACTIVE -> on_deactivate -> on_shutdown -> FINALIZED`.
 
 **Executor tick loop** (while `ACTIVE`):
 
@@ -373,13 +373,13 @@ while (!shutdown_requested) {
 }
 ```
 
-All callbacks execute on the **single executor thread** — no mutexes needed in user code. External transport threads never call user callbacks directly; they only enqueue messages via `pcl_executor_post_incoming()`.
+All callbacks execute on the **single executor thread** -- no mutexes needed in user code. External transport threads never call user callbacks directly; they only enqueue messages via `pcl_executor_post_incoming()`.
 
 ---
 
 ## 8. Serialization
 
-Ports exchange `pcl_msg_t` — a pointer, size, and type name string. PCL is **format-agnostic**: the `data` field is an opaque byte buffer. Each transport adapter knows how to route bytes on the wire.
+Ports exchange `pcl_msg_t` -- a pointer, size, and type name string. PCL is **format-agnostic**: the `data` field is an opaque byte buffer. Each transport adapter knows how to route bytes on the wire.
 
 For **intra-process** communication (no transport adapter set), messages are passed by pointer with zero-copy semantics.
 

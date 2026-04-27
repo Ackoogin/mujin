@@ -13,7 +13,7 @@ namespace tactical_objects {
 struct CorrelationConfig {
   double merge_threshold = 0.8;
   double create_threshold = 0.3;
-  double gate_radius_rad = 0.008726646259971648;  // 0.5° in radians
+  double gate_radius_rad = 0.008726646259971648;  // 0.5 deg in radians
   int split_incompatibility_count = 3;
 };
 

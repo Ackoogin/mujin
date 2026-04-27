@@ -46,7 +46,7 @@ void onEvidenceRequirement(pcl_container_t* /*c*/, const pcl_msg_t* msg,
 
     if (!state->observation_sent.load() && state->publisher) {
         // Business logic: publish a typed observation.
-        // Position: 51.0°N 0.0°E; HOSTILE; SEA_SURFACE dimension.
+        // Position: 51.0 degN 0.0 degE; HOSTILE; SEA_SURFACE dimension.
         ObjectDetail obs;
         obs.id            = "obj-1";
         obs.identity      = StandardIdentity::Hostile;

@@ -10,12 +10,12 @@ Options for integrating neural reasoning (LLMs and other models) into the PDDL p
 PDDL Domain/Problem
         |
         v
-   WorldModel --► Planner (LAPKT BRFS) --► PlanCompiler --► BT Executor
+   WorldModel --> Planner (LAPKT BRFS) --> PlanCompiler --> BT Executor
    (bitset)          pure symbolic              causal          tick loop
                      search                     graph
 ```
 
-The planner is deterministic, complete (for finite STRIPS), and auditable. Every plan step maps 1:1 to a ground action with known preconditions and effects. The observability stack (Layers 1–5) records every state transition, fact change, and planning episode.
+The planner is deterministic, complete (for finite STRIPS), and auditable. Every plan step maps 1:1 to a ground action with known preconditions and effects. The observability stack (Layers 1-5) records every state transition, fact change, and planning episode.
 
 Any neural integration must preserve these properties or explicitly document which guarantees it relaxes.
 
@@ -23,7 +23,7 @@ Any neural integration must preserve these properties or explicitly document whi
 
 ## Integration Point 1: Planning Layer
 
-### Option A — LLM as Heuristic Guide (Preferred Starting Point)
+### Option A -- LLM as Heuristic Guide (Preferred Starting Point)
 
 **Concept**: Keep LAPKT as the sound solver but use an LLM to supply a heuristic ordering or seed search, reducing the number of nodes expanded.
 
@@ -33,7 +33,7 @@ Any neural integration must preserve these properties or explicitly document whi
 WorldModel snapshot (init facts + goal fluents)
         |
         v
-   LLM Heuristic --► ranked action preferences / initial plan sketch
+   LLM Heuristic --> ranked action preferences / initial plan sketch
         |
         v
    LAPKT solver (BRFS / best-first) with LLM-informed h(n)
@@ -45,7 +45,7 @@ WorldModel snapshot (init facts + goal fluents)
 1. Before calling `Planner::solve()`, serialize the current world state and goal into a natural-language or structured prompt.
 2. The LLM returns a ranked list of promising actions or a candidate plan sketch.
 3. Feed rankings into LAPKT as action-ordering preferences (tie-breaking in BRFS) or as the initial state for a plan-repair search.
-4. LAPKT still validates every step against PDDL preconditions — the LLM cannot produce an invalid plan.
+4. LAPKT still validates every step against PDDL preconditions -- the LLM cannot produce an invalid plan.
 
 **Integration surface**:
 
@@ -75,15 +75,15 @@ public:
 };
 ```
 
-**Pros**: Sound plans guaranteed. Graceful degradation — if LLM is unavailable or slow, BRFS proceeds with default ordering. Fully auditable (log the LLM scores alongside the plan episode in Layer 5).
+**Pros**: Sound plans guaranteed. Graceful degradation -- if LLM is unavailable or slow, BRFS proceeds with default ordering. Fully auditable (log the LLM scores alongside the plan episode in Layer 5).
 
-**Cons**: LLM latency added to planning time (mitigated by async pre-computation). Benefit depends on domain complexity — small STRIPS problems already solve in <50ms.
+**Cons**: LLM latency added to planning time (mitigated by async pre-computation). Benefit depends on domain complexity -- small STRIPS problems already solve in <50ms.
 
 **When to use**: Domains with large grounded action spaces (>1000 actions) where BRFS expansion is the bottleneck. Multi-objective scenarios where the LLM encodes soft preferences not expressible in PDDL.
 
 ---
 
-### Option B — LLM-Driven Plan Repair
+### Option B -- LLM-Driven Plan Repair
 
 **Concept**: When the BT executor encounters a failure and replanning is triggered, use an LLM to propose a repair patch rather than replanning from scratch.
 
@@ -100,10 +100,10 @@ BT Failure detected
      - Recent WM audit entries (what changed unexpectedly)
         |
         v
-   LLM Plan Repair --► candidate repair (partial plan suffix)
+   LLM Plan Repair --> candidate repair (partial plan suffix)
         |
         v
-   Validate repair against PDDL --► if valid, compile to BT
+   Validate repair against PDDL --> if valid, compile to BT
                                      if invalid, fall back to full BRFS replan
 ```
 
@@ -136,7 +136,7 @@ The returned plan steps are validated by applying them to a WorldModel copy (for
 
 ---
 
-### Option C — Neural PDDL Domain Authoring
+### Option C -- Neural PDDL Domain Authoring
 
 **Concept**: Use an LLM to generate or extend PDDL domain definitions from natural-language mission descriptions, sensor specifications, or operator intent.
 
@@ -148,10 +148,10 @@ Operator intent (natural language)
   + Object/type inventory from WorldModel
         |
         v
-   LLM Domain Author --► candidate PDDL domain + problem
+   LLM Domain Author --> candidate PDDL domain + problem
         |
         v
-   PDDL Validator --► syntax + type check
+   PDDL Validator --> syntax + type check
         |
         v
    WorldModel::registerPredicate() / registerAction()
@@ -160,7 +160,7 @@ Operator intent (natural language)
    Standard planning pipeline
 ```
 
-This is an **offline** or **mission-setup-time** integration — not in the real-time planning loop.
+This is an **offline** or **mission-setup-time** integration -- not in the real-time planning loop.
 
 **Integration surface**:
 
@@ -187,7 +187,7 @@ public:
 
 ---
 
-### Option D — Learned Heuristic (Non-LLM Neural Model)
+### Option D -- Learned Heuristic (Non-LLM Neural Model)
 
 **Concept**: Train a small, fast neural network (GNN, transformer encoder, or MLP) on historical planning data to predict action costs or goal distances, replacing or augmenting LAPKT's default heuristic.
 
@@ -195,7 +195,7 @@ public:
 
 ```
 Training (offline):
-   PlanAuditLog episodes --► (state, goal, optimal_cost) pairs
+   PlanAuditLog episodes --> (state, goal, optimal_cost) pairs
         |
         v
    Train h(s, g) model (small GNN/MLP)
@@ -207,7 +207,7 @@ Inference (online):
    WorldModel state + goal
         |
         v
-   h(s, g) → estimated cost-to-go
+   h(s, g) -> estimated cost-to-go
         |
         v
    LAPKT best-first search with neural h(n)
@@ -233,13 +233,13 @@ private:
 
 **Pros**: Microsecond inference (no LLM latency). Can be trained on domain-specific data from `PlanAuditLog` episodes. Proven effective in learning-for-planning literature (e.g., LAMA-style landmark heuristics, GNN-based planners).
 
-**Cons**: Requires training data (many solved episodes). Domain-specific — must retrain for new domains. Model quality directly affects search efficiency.
+**Cons**: Requires training data (many solved episodes). Domain-specific -- must retrain for new domains. Model quality directly affects search efficiency.
 
 **Dependencies**: ONNX Runtime (available via FetchContent, ~5MB static lib) or libtorch. Keeping it optional (`AME_NEURAL_HEURISTIC` CMake flag, similar to `AME_FOXGLOVE`).
 
 ---
 
-### Option E — LLM as Goal Interpreter
+### Option E -- LLM as Goal Interpreter
 
 **Concept**: Translate high-level operator commands into formal PDDL goal specifications.
 
@@ -258,7 +258,7 @@ Operator: "Search all sectors and classify anything suspicious"
                    (classified sector_a), (classified sector_b)]
         |
         v
-   WorldModel::setGoal() → standard planning pipeline
+   WorldModel::setGoal() -> standard planning pipeline
 ```
 
 This is the simplest integration point and the lowest risk. The LLM output is a set of ground fluent names, trivially validated against the WorldModel's fluent index.
@@ -267,7 +267,7 @@ This is the simplest integration point and the lowest risk. The LLM output is a 
 
 ## Integration Point 2: Evidence Review Tool
 
-### Option F — LLM-Powered Mission Analyst
+### Option F -- LLM-Powered Mission Analyst
 
 **Concept**: Post-execution (or during long missions), use an LLM to analyze the observability data streams (Layers 2, 3, 5) and surface anomalies, explain failures, or answer operator questions.
 
@@ -281,15 +281,15 @@ This is the simplest integration point and the lowest risk. The LLM output is a 
 
 **Capabilities**:
 
-1. **Anomaly detection** — "Why did the plan fail at step 3?" Feed the plan audit episode + WM changes around the failure timestamp to the LLM. It correlates the expected effects with actual state changes and identifies the divergence.
+1. **Anomaly detection** -- "Why did the plan fail at step 3?" Feed the plan audit episode + WM changes around the failure timestamp to the LLM. It correlates the expected effects with actual state changes and identifies the divergence.
 
-2. **Causal explanation** — "Why is uav1 at sector_b instead of sector_a?" Trace the WM audit log backward from the fact `(at uav1 sector_b)` to find the BT node that set it, the plan step that required it, and the goal that motivated it.
+2. **Causal explanation** -- "Why is uav1 at sector_b instead of sector_a?" Trace the WM audit log backward from the fact `(at uav1 sector_b)` to find the BT node that set it, the plan step that required it, and the goal that motivated it.
 
-3. **Mission summary** — "Summarize what happened in the last 5 minutes." Aggregate BT events and WM changes into a natural-language narrative.
+3. **Mission summary** -- "Summarize what happened in the last 5 minutes." Aggregate BT events and WM changes into a natural-language narrative.
 
-4. **Counterfactual reasoning** — "What would have happened if sector_a had already been searched?" Modify the init state in a plan audit episode, replay planning, and compare the resulting plan.
+4. **Counterfactual reasoning** -- "What would have happened if sector_a had already been searched?" Modify the init state in a plan audit episode, replay planning, and compare the resulting plan.
 
-5. **Safety audit** — "Were all preconditions satisfied before each action executed?" Cross-reference plan steps with WM state at each BT node transition to verify that the symbolic model was respected.
+5. **Safety audit** -- "Were all preconditions satisfied before each action executed?" Cross-reference plan steps with WM state at each BT node transition to verify that the symbolic model was respected.
 
 **Integration surface**:
 
@@ -321,11 +321,11 @@ public:
 
 **Pros**: Leverages the full observability stack already in place. No changes to the core pipeline. High value for operator understanding and post-incident review. Works with any LLM backend (Claude API, local models, etc.).
 
-**Cons**: LLM latency makes real-time alerting challenging (batch or periodic is more practical). Large missions produce voluminous logs — needs a retrieval/windowing strategy to stay within context limits.
+**Cons**: LLM latency makes real-time alerting challenging (batch or periodic is more practical). Large missions produce voluminous logs -- needs a retrieval/windowing strategy to stay within context limits.
 
 ---
 
-### Option G — Neural Anomaly Detector (Non-LLM)
+### Option G -- Neural Anomaly Detector (Non-LLM)
 
 **Concept**: Train a small sequence model (LSTM, transformer) on nominal BT event streams to detect execution anomalies in real time.
 
@@ -340,7 +340,7 @@ Inference (online):
    Live BT event stream
         |
         v
-   If P(observed_event) < threshold → flag anomaly
+   If P(observed_event) < threshold -> flag anomaly
         |
         v
    Alert operator + log to anomaly audit trail
@@ -364,40 +364,40 @@ Inference (online):
 | **Phase 3** | **G: Neural Anomaly Detector** | Medium | Training pipeline + model serving | Real-time monitoring |
 | **Phase 4** | **C: Domain Authoring** | Higher | Validation framework needed | New mission types |
 
-Phase 1 can start immediately — it requires no changes to the core planning or execution pipeline. Phase 2 modifies the planner internals but preserves soundness guarantees. Phase 3 adds ML infrastructure dependencies. Phase 4 involves generating safety-critical artifacts and requires additional verification.
+Phase 1 can start immediately -- it requires no changes to the core planning or execution pipeline. Phase 2 modifies the planner internals but preserves soundness guarantees. Phase 3 adds ML infrastructure dependencies. Phase 4 involves generating safety-critical artifacts and requires additional verification.
 
 ---
 
 ## Architecture: Where Neural Components Fit
 
 ```
-                                    ┌-----------------┐
-                                    │  Goal Interpreter│ (Option E)
-                                    │  (LLM)          │
-                                    └--------┬--------┘
-                                             │ goal fluents
+                                    +-----------------+
+                                    |  Goal Interpreter| (Option E)
+                                    |  (LLM)          |
+                                    +--------+--------+
+                                             | goal fluents
                                              v
-Operator --► Mission Description --► WorldModel --► Planner --► PlanCompiler --► BT Executor
-                                         │              │                            │
-                                         │         ┌----┴-----┐                      │
-                                         │         │ Neural   │ (Options A, D)       │
-                                         │         │ Heuristic│                      │
-                                         │         └----------┘                      │
-                                         │                                           │
-                                         │              ┌--------------┐             │
-                                         │              │ Plan Repair  │ (Option B)  │
-                                         │              │ (LLM)        │◄------------┘
-                                         │              └--------------┘   on failure
-                                         │
-                                         ▼
+Operator --> Mission Description --> WorldModel --> Planner --> PlanCompiler --> BT Executor
+                                         |              |                            |
+                                         |         +----+-----+                      |
+                                         |         | Neural   | (Options A, D)       |
+                                         |         | Heuristic|                      |
+                                         |         +----------+                      |
+                                         |                                           |
+                                         |              +--------------+             |
+                                         |              | Plan Repair  | (Option B)  |
+                                         |              | (LLM)        |<------------+
+                                         |              +--------------+   on failure
+                                         |
+                                         v
                               Observability Layers 2,3,5
-                                         │
-                              ┌----------┴----------┐
-                              │                     │
-                      ┌-------▼------┐    ┌---------▼--------┐
-                      │Mission Analyst│    │Anomaly Detector  │ (Options F, G)
-                      │(LLM, batch)  │    │(neural, real-time)│
-                      └--------------┘    └------------------┘
+                                         |
+                              +----------+----------+
+                              |                     |
+                      +-------v------+    +---------v--------+
+                      |Mission Analyst|    |Anomaly Detector  | (Options F, G)
+                      |(LLM, batch)  |    |(neural, real-time)|
+                      +--------------+    +------------------+
 ```
 
 ---
@@ -406,8 +406,8 @@ Operator --► Mission Description --► WorldModel --► Planner --► PlanComp
 
 All neural integrations follow a **propose-verify** pattern:
 
-1. **Neural component proposes** — action rankings, plan repairs, goal interpretations, explanations.
-2. **Symbolic component verifies** — LAPKT validates plans against PDDL semantics. WorldModel validates goal fluents exist. Forward simulation validates repair steps.
+1. **Neural component proposes** -- action rankings, plan repairs, goal interpretations, explanations.
+2. **Symbolic component verifies** -- LAPKT validates plans against PDDL semantics. WorldModel validates goal fluents exist. Forward simulation validates repair steps.
 
 The symbolic pipeline remains the authority. Neural components are advisory. This is consistent with the safety case documented in `doc/plans/AME/autonomy_assurance_plan.md` and the SACE-PDDL evidence in `doc/assurance/AME/sace-pddl/`.
 
@@ -417,7 +417,7 @@ The symbolic pipeline remains the authority. Neural components are advisory. Thi
 - Goal interpretations logged with the original natural-language input
 - Mission analyst outputs stored with cited evidence for traceability
 
-**Fallback behavior**: If any neural component is unavailable (network failure, timeout, model error), the system degrades to pure symbolic operation. No neural component is in the critical path — they all have bypass routes to the existing deterministic pipeline.
+**Fallback behavior**: If any neural component is unavailable (network failure, timeout, model error), the system degrades to pure symbolic operation. No neural component is in the critical path -- they all have bypass routes to the existing deterministic pipeline.
 
 ---
 
@@ -463,10 +463,10 @@ endif()
 ```
 
 Library boundaries remain clean:
-- `ame_core` — no neural dependencies (unchanged)
-- `ame_llm` — optional, LLM integrations (Options A, B, C, E, F)
-- `ame_neural` — optional, ONNX-based models (Options D, G)
-- `ame_foxglove` — unchanged
+- `ame_core` -- no neural dependencies (unchanged)
+- `ame_llm` -- optional, LLM integrations (Options A, B, C, E, F)
+- `ame_neural` -- optional, ONNX-based models (Options D, G)
+- `ame_foxglove` -- unchanged
 
 ---
 
@@ -474,9 +474,9 @@ Library boundaries remain clean:
 
 This document proposes **Extension 8: Neuro-Symbolic Reasoning** in the roadmap (`doc/extensions.md`). It depends on:
 
-- Extensions 1 (Observability) — **done**, provides data for evidence review
-- Extension 2 (ROS2 Wrappers) — **done**, provides deployment surface
-- Extension 3 (Perception Integration) — provides real-world state updates that make neural plan repair valuable
+- Extensions 1 (Observability) -- **done**, provides data for evidence review
+- Extension 2 (ROS2 Wrappers) -- **done**, provides deployment surface
+- Extension 3 (Perception Integration) -- provides real-world state updates that make neural plan repair valuable
 
-It is independent of Extensions 4–7 (PYRAMID, thread safety, hierarchical/temporal planning) but composes well with them — e.g., hierarchical planning (ext 6) benefits from LLM-guided sub-goal decomposition, and temporal planning (ext 7) benefits from learned duration estimates.
+It is independent of Extensions 4-7 (PYRAMID, thread safety, hierarchical/temporal planning) but composes well with them -- e.g., hierarchical planning (ext 6) benefits from LLM-guided sub-goal decomposition, and temporal planning (ext 7) benefits from learned duration estimates.
 

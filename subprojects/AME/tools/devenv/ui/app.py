@@ -26,7 +26,7 @@ from .pddl_editor_tab import PddlEditorTab
 
 
 class App:
-    """Main application controller — owns comms clients, tabs, and frame loop."""
+    """Main application controller -- owns comms clients, tabs, and frame loop."""
 
     def __init__(self, config: Optional[AppConfig] = None):
         self.config = config or AppConfig()
@@ -77,7 +77,7 @@ class App:
         self._plot_refresh_interval = 1.0  # seconds
         self._last_snapshot_signature: tuple[int, int, tuple[str, ...]] | None = None
 
-        # Last compiled BT XML — shared between Planning and Execution tabs
+        # Last compiled BT XML -- shared between Planning and Execution tabs
         self.last_bt_xml: str = ""
 
     def run(self) -> None:
@@ -134,12 +134,12 @@ class App:
     def _build_ui(self) -> None:
         """Create the primary window with tab bar, status bar."""
         # Reserve height for the status bar so tabs don't push it offscreen.
-        # Status bar ≈ spacer(2) + separator(2) + text line(~22) + padding
+        # Status bar ~ spacer(2) + separator(2) + text line(~22) + padding
         _STATUS_BAR_H = 34
 
         with dpg.window(tag="primary_window", no_scrollbar=True):
             dpg.bind_item_theme("primary_window", create_primary_window_theme())
-            # Main tab bar — content area leaves room for the status bar
+            # Main tab bar -- content area leaves room for the status bar
             with dpg.child_window(
                 border=False,
                 height=-_STATUS_BAR_H,
@@ -176,7 +176,7 @@ class App:
                         with dpg.child_window(border=False) as container:
                             self.pddl_editor_tab.build(container)
 
-            # Status bar at bottom — always visible
+            # Status bar at bottom -- always visible
             dpg.add_spacer(height=2)
             dpg.add_separator()
             with dpg.group(horizontal=True):
@@ -203,7 +203,7 @@ class App:
         dpg.set_primary_window("primary_window", True)
 
     def _on_frame(self) -> None:
-        """Called every frame — drain events, update UI."""
+        """Called every frame -- drain events, update UI."""
         now = time.monotonic()
 
         # FPS counter

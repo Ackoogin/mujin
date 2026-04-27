@@ -25,12 +25,12 @@ PDDL provides the formal, executable definition of the operating context. The do
 
 | Output | Description |
 |--------|-------------|
-| **PDDL domain file** | Formal specification of autonomous capabilities — actions, types, and predicates |
+| **PDDL domain file** | Formal specification of autonomous capabilities -- actions, types, and predicates |
 | **PDDL problem file(s)** | Instantiated operating scenarios with initial states and goals representing specific missions |
 | **ODM-to-PDDL traceability matrix** | Links each ODM element to its PDDL representation, ensuring completeness |
 | **Scenario coverage report** | Demonstrates that the set of problem files covers the defined operating scenarios |
 
-## GSN Mapping — Pattern [G]
+## GSN Mapping -- Pattern [G]
 
 Pattern [G] argues that the operating context has been sufficiently defined and is valid.
 
@@ -66,5 +66,5 @@ PDDL types include `uav`, `waypoint`, `airspace-zone`, and `threat-level`. Actio
 
 ---
 
-[Next: Stage 2 — Hazardous Scenarios Identification](03-stage2-hazardous-scenarios.md)
+[Next: Stage 2 -- Hazardous Scenarios Identification](03-stage2-hazardous-scenarios.md)
 
