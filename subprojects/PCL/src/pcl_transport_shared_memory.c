@@ -155,6 +155,14 @@ static void pcl_shm_copy_token(const char* src,
   dst[i] = '\0';
 }
 
+static size_t pcl_shm_strnlen(const char* src, size_t max_len) {
+  size_t i;
+  if (!src) return 0u;
+  for (i = 0u; i < max_len && src[i] != '\0'; ++i) {
+  }
+  return i;
+}
+
 static void pcl_shm_build_object_name(const char* prefix,
                                       const char* bus_name,
                                       char*       out,
@@ -819,6 +827,7 @@ static void pcl_shm_gateway_sub_cb(pcl_container_t* c,
                                    void*            user_data) {
   pcl_shared_memory_transport_t* ctx =
       (pcl_shared_memory_transport_t*)user_data;
+  const uint8_t* end;
   const uint8_t* p;
   uint32_t seq_id;
   uint16_t source_len;
@@ -840,19 +849,27 @@ static void pcl_shm_gateway_sub_cb(pcl_container_t* c,
   if (!ctx || !msg || !msg->data || msg->size < 14u) return;
 
   p = (const uint8_t*)msg->data;
+  end = p + msg->size;
   seq_id = pcl_shm_read_u32_be(p);      p += 4u;
+  if ((size_t)(end - p) < 2u) return;
   source_len = pcl_shm_read_u16_be(p);  p += 2u;
   if (source_len == 0u || source_len >= sizeof(source_id)) return;
+  if ((size_t)(end - p) < source_len + 2u) return;
   memcpy(source_id, p, source_len);
   source_id[source_len] = '\0';         p += source_len;
 
   service_len = pcl_shm_read_u16_be(p); p += 2u;
+  if ((size_t)(end - p) < service_len + 2u) return;
   service_name = (char*)malloc((size_t)service_len + 1u);
   if (!service_name) return;
   memcpy(service_name, p, service_len);
   service_name[service_len] = '\0';     p += service_len;
 
   type_len = pcl_shm_read_u16_be(p);    p += 2u;
+  if ((size_t)(end - p) < type_len + 4u) {
+    free(service_name);
+    return;
+  }
   if (type_len > 0u) {
     request_type = (char*)malloc((size_t)type_len + 1u);
     if (!request_type) {
@@ -865,7 +882,7 @@ static void pcl_shm_gateway_sub_cb(pcl_container_t* c,
   p += type_len;
 
   req_len = pcl_shm_read_u32_be(p);     p += 4u;
-  if ((uint32_t)(p - (const uint8_t*)msg->data) + req_len > msg->size) {
+  if ((size_t)(end - p) < req_len) {
     free(request_type);
     free(service_name);
     return;
@@ -944,9 +961,20 @@ static pcl_status_t pcl_shm_gateway_on_configure(pcl_container_t* c, void* ud) {
 static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
                                          const pcl_shm_frame_t*         frame) {
   if (!ctx || !frame) return PCL_ERR_INVALID;
+  if (frame->data_size > PCL_SHM_MAX_PAYLOAD) return PCL_ERR_INVALID;
 
   if (frame->kind == PCL_SHM_FRAME_PUBLISH) {
+    size_t source_len = pcl_shm_strnlen(frame->source_id,
+                                        sizeof(frame->source_id));
+    size_t name_len = pcl_shm_strnlen(frame->name, sizeof(frame->name));
+    size_t type_len = pcl_shm_strnlen(frame->type_name,
+                                      sizeof(frame->type_name));
     pcl_msg_t msg = {0};
+    if (source_len == sizeof(frame->source_id) ||
+        name_len == sizeof(frame->name) ||
+        type_len == sizeof(frame->type_name)) {
+      return PCL_ERR_INVALID;
+    }
     msg.data = (frame->data_size > 0u) ? frame->data : NULL;
     msg.size = frame->data_size;
     msg.type_name = frame->type_name[0] ? frame->type_name : NULL;
@@ -957,15 +985,32 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
   }
 
   if (frame->kind == PCL_SHM_FRAME_SVC_REQ) {
-    uint16_t source_len = (uint16_t)strlen(frame->source_id);
-    uint16_t service_len = (uint16_t)strlen(frame->name);
-    uint16_t type_len = (uint16_t)strlen(frame->type_name);
-    uint32_t payload_size = 4u + 2u + source_len + 2u + service_len +
-                            2u + type_len + 4u + frame->data_size;
-    uint8_t* payload = (uint8_t*)malloc(payload_size);
+    size_t raw_source_len = pcl_shm_strnlen(frame->source_id,
+                                            sizeof(frame->source_id));
+    size_t raw_service_len = pcl_shm_strnlen(frame->name,
+                                             sizeof(frame->name));
+    size_t raw_type_len = pcl_shm_strnlen(frame->type_name,
+                                          sizeof(frame->type_name));
+    uint16_t source_len;
+    uint16_t service_len;
+    uint16_t type_len;
+    uint32_t payload_size;
+    uint8_t* payload;
     size_t off = 0u;
     pcl_msg_t msg = {0};
     pcl_status_t rc;
+
+    if (raw_source_len == sizeof(frame->source_id) ||
+        raw_service_len == sizeof(frame->name) ||
+        raw_type_len == sizeof(frame->type_name)) {
+      return PCL_ERR_INVALID;
+    }
+    source_len = (uint16_t)raw_source_len;
+    service_len = (uint16_t)raw_service_len;
+    type_len = (uint16_t)raw_type_len;
+    payload_size = 4u + 2u + source_len + 2u + service_len +
+                   2u + type_len + 4u + frame->data_size;
+    payload = (uint8_t*)malloc(payload_size);
 
     if (!payload) return PCL_ERR_NOMEM;
     pcl_shm_write_u32_be(payload + off, frame->seq_id);      off += 4u;
@@ -994,6 +1039,9 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
     pcl_resp_cb_fn_t callback = NULL;
     void* user_data = NULL;
     pcl_msg_t response = {0};
+    size_t type_len = pcl_shm_strnlen(frame->type_name,
+                                      sizeof(frame->type_name));
+    if (type_len == sizeof(frame->type_name)) return PCL_ERR_INVALID;
     if (pcl_shm_pending_remove(ctx, frame->seq_id, &callback, &user_data) != PCL_OK) {
       return PCL_ERR_NOT_FOUND;
     }

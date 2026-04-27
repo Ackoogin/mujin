@@ -13,6 +13,7 @@ set(PYRAMID_ROOT_DIR "${UNMANNED_WORKSPACE_ROOT}/subprojects/PYRAMID")
 set(AME_ROOT_DIR "${UNMANNED_WORKSPACE_ROOT}/subprojects/AME")
 
 option(UNMANNED_BUILD_PYRAMID "Build the PYRAMID subproject" ON)
+option(UNMANNED_BUILD_AME "Build the AME subproject and AME-only dependencies" OFF)
 option(PYRAMID_ENABLE_FLATBUFFERS "Enable FlatBuffers codec/transport for PYRAMID" ON)
 
 # ---------------------------------------------------------------------------
@@ -20,6 +21,7 @@ option(PYRAMID_ENABLE_FLATBUFFERS "Enable FlatBuffers codec/transport for PYRAMI
 # ---------------------------------------------------------------------------
 include(FetchContent)
 
+if(UNMANNED_BUILD_AME)
 FetchContent_Declare(
     behaviortree_cpp
     GIT_REPOSITORY https://github.com/BehaviorTree/BehaviorTree.CPP.git
@@ -115,6 +117,7 @@ if(AME_FOXGLOVE)
         FetchContent_Populate(asio)
     endif()
 endif()
+endif()
 
 FetchContent_Declare(
     googletest
@@ -140,7 +143,7 @@ if(UNMANNED_BUILD_PYRAMID AND PYRAMID_ENABLE_FLATBUFFERS)
 endif()
 
 option(AME_BUILD_PYTHON "Build Python bindings for ame_core" OFF)
-if(AME_BUILD_PYTHON)
+if(UNMANNED_BUILD_AME AND AME_BUILD_PYTHON)
     find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
     set(PYTHON_EXECUTABLE "${Python3_EXECUTABLE}" CACHE FILEPATH "" FORCE)
 
@@ -177,4 +180,6 @@ add_subdirectory(subprojects/PCL)
 if(UNMANNED_BUILD_PYRAMID)
     add_subdirectory(subprojects/PYRAMID)
 endif()
-add_subdirectory(subprojects/AME)
+if(UNMANNED_BUILD_AME)
+    add_subdirectory(subprojects/AME)
+endif()

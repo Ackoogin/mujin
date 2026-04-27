@@ -245,8 +245,9 @@ struct BusNode {
 TEST(PclSharedMemoryTransport, CreateAndDestroy) {
   silence_logs();
 
+  const std::string bus = unique_token("unit_bus");
   BusNode alpha;
-  ASSERT_TRUE(alpha.create("unit-bus", "alpha"));
+  ASSERT_TRUE(alpha.create(bus.c_str(), "alpha"));
 
   const pcl_transport_t* transport =
       pcl_shared_memory_transport_get_transport(alpha.transport);
@@ -263,13 +264,14 @@ TEST(PclSharedMemoryTransport, CreateAndDestroy) {
 TEST(PclSharedMemoryTransport, DuplicateParticipantIdRejectedOnSameBus) {
   silence_logs();
 
+  const std::string bus = unique_token("dup_bus");
   BusNode alpha;
-  ASSERT_TRUE(alpha.create("dup-bus", "alpha"));
+  ASSERT_TRUE(alpha.create(bus.c_str(), "alpha"));
 
   pcl_executor_t* other_exec = pcl_executor_create();
   ASSERT_NE(other_exec, nullptr);
   auto* duplicate =
-      pcl_shared_memory_transport_create("dup-bus", "alpha", other_exec);
+      pcl_shared_memory_transport_create(bus.c_str(), "alpha", other_exec);
   EXPECT_EQ(duplicate, nullptr);
 
   pcl_executor_destroy(other_exec);
@@ -280,12 +282,13 @@ TEST(PclSharedMemoryTransport, DuplicateParticipantIdRejectedOnSameBus) {
 TEST(PclSharedMemoryTransport, PublishFansOutAcrossBusParticipants) {
   silence_logs();
 
+  const std::string bus = unique_token("fanout_bus");
   BusNode alpha;
   BusNode bravo;
   BusNode charlie;
-  ASSERT_TRUE(alpha.create("fanout-bus", "alpha"));
-  ASSERT_TRUE(bravo.create("fanout-bus", "bravo"));
-  ASSERT_TRUE(charlie.create("fanout-bus", "charlie"));
+  ASSERT_TRUE(alpha.create(bus.c_str(), "alpha"));
+  ASSERT_TRUE(bravo.create(bus.c_str(), "bravo"));
+  ASSERT_TRUE(charlie.create(bus.c_str(), "charlie"));
   ASSERT_TRUE(alpha.attach_transport());
   ASSERT_TRUE(bravo.attach_transport());
   ASSERT_TRUE(charlie.attach_transport());
@@ -363,12 +366,13 @@ TEST(PclSharedMemoryTransport, PublishFansOutAcrossBusParticipants) {
 TEST(PclSharedMemoryTransport, PublishHonoursSubscriberPeerFilter) {
   silence_logs();
 
+  const std::string bus = unique_token("filter_bus");
   BusNode alpha;
   BusNode bravo;
   BusNode charlie;
-  ASSERT_TRUE(alpha.create("filter-bus", "alpha"));
-  ASSERT_TRUE(bravo.create("filter-bus", "bravo"));
-  ASSERT_TRUE(charlie.create("filter-bus", "charlie"));
+  ASSERT_TRUE(alpha.create(bus.c_str(), "alpha"));
+  ASSERT_TRUE(bravo.create(bus.c_str(), "bravo"));
+  ASSERT_TRUE(charlie.create(bus.c_str(), "charlie"));
   ASSERT_TRUE(alpha.attach_transport());
   ASSERT_TRUE(bravo.attach_transport());
   ASSERT_TRUE(charlie.attach_transport());
@@ -439,10 +443,11 @@ TEST(PclSharedMemoryTransport, PublishHonoursSubscriberPeerFilter) {
 TEST(PclSharedMemoryTransport, AsyncDeferredServiceRoundTrip) {
   silence_logs();
 
+  const std::string bus = unique_token("svc_bus");
   BusNode client;
   BusNode server;
-  ASSERT_TRUE(client.create("svc-bus", "client"));
-  ASSERT_TRUE(server.create("svc-bus", "server"));
+  ASSERT_TRUE(client.create(bus.c_str(), "client"));
+  ASSERT_TRUE(server.create(bus.c_str(), "server"));
   ASSERT_TRUE(client.attach_transport(true));
   ASSERT_TRUE(server.attach_transport(true));
 
