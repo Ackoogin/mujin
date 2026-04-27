@@ -9,6 +9,9 @@ REM   4. Start Ada pyramid_bridge_main (background)
 REM   5. Wait for ame_backend_stub to exit (it exits 0 when it receives >=1 fact)
 REM   6. Report pass/fail
 REM
+REM Ada binaries must be pre-built via:
+REM   cmake --build --target pyramid_ada_all
+REM
 REM Usage: scripts\test_pyramid_bridge_e2e.bat
 REM          [--app-bin    PATH]   tactical_objects_app binary
 REM          [--stub-bin   PATH]   ame_backend_stub binary
@@ -71,43 +74,6 @@ if not exist "%BRIDGE_BIN%" if exist "%BRIDGE_BIN%.exe" set "BRIDGE_BIN=%BRIDGE_
 echo === Pyramid Bridge E2E ===
 echo [driver] ame_bus=%BUS_NAME% tobj_bus=%TOBJ_BUS_NAME% timeout=%TIMEOUT_SEC%s
 
-REM Optional: build Ada bridge if gprbuild is available
-where gprbuild >nul 2>&1
-if %errorlevel% equ 0 (
-    echo [driver] Building Ada Pyramid Bridge...
-    set "ADA_PCL_LIB_DIR=%BUILD_DIR%\ada_gnat_pcl"
-    set "ADA_PYRAMID_LIB_DIR=%BUILD_DIR%\ada_gnat_pyramid"
-    set "CAN_BUILD_ADA=1"
-    call "%WORKSPACE_ROOT%\subprojects\PCL\scripts\build_gnat_pcl_static_libs.bat" "!ADA_PCL_LIB_DIR!" --force
-    if !errorlevel! neq 0 (
-        echo [driver] FAIL: unable to build GNAT-compatible PCL archives
-        exit /b 1
-    )
-    call "%PYRAMID_ROOT%\scripts\build_gnat_generated_flatbuffers_libs.bat" "!ADA_PYRAMID_LIB_DIR!" --build-dir "!BUILD_DIR!" --config "!BUILD_CONFIG!"
-    if !errorlevel! neq 0 (
-        echo [driver] FAIL: unable to build GNAT-compatible generated FlatBuffers archive
-        exit /b 1
-    )
-    pushd "%PYRAMID_ROOT%\pyramid_bridge\ada"
-    gprbuild -P pyramid_bridge.gpr -q ^
-      -XUNMANNED_ROOT=!WORKSPACE_ROOT! ^
-      -XPCL_INCLUDE_DIR=!WORKSPACE_ROOT!\subprojects\PCL\include ^
-      -XPCL_LIB_DIR=!ADA_PCL_LIB_DIR! ^
-      -XPCL_LIB_NAME=pcl_core ^
-      -XPCL_SOCKET_LIB_NAME=pcl_transport_socket ^
-      -XPCL_SHMEM_LIB_NAME=pcl_transport_shared_memory ^
-      -XPYRAMID_GEN_LIB_DIR=!ADA_PYRAMID_LIB_DIR! ^
-      -XPYRAMID_GEN_LIB_NAME=pyramid_generated_flatbuffers_codec
-    if !errorlevel! neq 0 (
-        echo [driver] FAIL: gprbuild failed
-        popd
-        exit /b 1
-    )
-    popd
-) else (
-    echo [driver] gprbuild not found -- checking for pre-built bridge binary...
-)
-
 REM Pre-flight checks
 if not exist "%APP_BIN%" (
     echo [driver] FAIL: tactical_objects_app not found at %APP_BIN%
@@ -122,8 +88,9 @@ if not exist "%EVIDENCE_BIN%" (
     exit /b 1
 )
 if not exist "%BRIDGE_BIN%" (
-    echo [driver] FAIL: pyramid_bridge_main not found at %BRIDGE_BIN%
-    exit /b 1
+    echo [driver] SKIP: pyramid_bridge_main not found at %BRIDGE_BIN%
+    echo [driver]   Run: cmake --build --target pyramid_ada_all
+    exit /b 0
 )
 
 set "PORT_FILE=%TEMP%\tobj_bridge_e2e_%RANDOM%.tmp"

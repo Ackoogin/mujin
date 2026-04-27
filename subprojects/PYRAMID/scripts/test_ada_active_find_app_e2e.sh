@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # test_ada_active_find_app_e2e.sh -- Ada ActiveFind against tactical_objects_app.
+#
+# Ada binaries must be pre-built via:  cmake --build --target pyramid_ada_all
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -35,45 +37,9 @@ trap cleanup EXIT
 
 echo "=== Ada ActiveFind Real-App E2E ($CONTENT_TYPE) ==="
 
-if command -v python3 &>/dev/null || command -v python &>/dev/null; then
-  echo "[driver] Generating Ada bindings from proto..."
-  bash "$PYRAMID_ROOT/scripts/generate_bindings.sh" --ada
-else
-  echo "[driver] python not found -- skipping Ada stub generation"
-fi
-
-if command -v gprbuild &>/dev/null; then
-  echo "[driver] Building Ada active-find client..."
-  ADA_PCL_LIB_DIR="$WORKSPACE_ROOT/build/ada_gnat_pcl"
-  ADA_PYRAMID_LIB_DIR="$WORKSPACE_ROOT/build/ada_gnat_pyramid"
-  "$WORKSPACE_ROOT/subprojects/PCL/scripts/build_gnat_pcl_static_libs.sh" \
-    "$ADA_PCL_LIB_DIR" --force || {
-      echo "[driver] SKIP: unable to build GNAT-compatible PCL static archives"
-      exit 0
-    }
-    "$PYRAMID_ROOT/scripts/build_gnat_generated_flatbuffers_libs.sh" \
-    "$ADA_PYRAMID_LIB_DIR" || {
-      echo "[driver] SKIP: unable to build GNAT-compatible generated FlatBuffers archive"
-      exit 0
-    }
-  (cd "$PYRAMID_ROOT/tests/ada" && \
-    UNMANNED_ROOT="$WORKSPACE_ROOT" gprbuild -P ada_active_find_e2e.gpr -q \
-      -XUNMANNED_ROOT="$WORKSPACE_ROOT" \
-      -XPCL_INCLUDE_DIR="$WORKSPACE_ROOT/subprojects/PCL/include" \
-      -XPCL_LIB_DIR="$ADA_PCL_LIB_DIR" \
-      -XPCL_LIB_NAME=pcl_core \
-      -XPCL_SOCKET_LIB_NAME=pcl_transport_socket \
-      -XPYRAMID_GEN_LIB_DIR="$ADA_PYRAMID_LIB_DIR" \
-      -XPYRAMID_GEN_LIB_NAME=pyramid_generated_flatbuffers_codec 2>&1) || {
-    echo "[driver] SKIP: gprbuild failed (GNAT toolchain issue)"
-    exit 0
-  }
-else
-  echo "[driver] gprbuild not found -- checking for pre-built client..."
-fi
-
 if [[ ! -x "$CLIENT_BIN" ]]; then
   echo "[driver] SKIP: Ada client binary not found at $CLIENT_BIN"
+  echo "[driver]   Run: cmake --build --target pyramid_ada_all"
   exit 0
 fi
 if [[ ! -x "$APP_BIN" ]]; then
@@ -101,3 +67,12 @@ echo "[driver] App ready on port $ACTUAL_PORT"
 echo "[driver] Starting Ada active-find client..."
 "$CLIENT_BIN" --host 127.0.0.1 --port "$ACTUAL_PORT" \
               --content-type "$CONTENT_TYPE"
+CLIENT_EXIT=$?
+
+if [[ $CLIENT_EXIT -eq 0 ]]; then
+  echo "[driver] PASS: Ada ActiveFind real-app E2E succeeded"
+  exit 0
+else
+  echo "[driver] FAIL: Ada active-find client exited with code $CLIENT_EXIT"
+  exit 1
+fi

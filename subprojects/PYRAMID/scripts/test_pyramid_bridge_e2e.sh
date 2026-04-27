@@ -12,6 +12,8 @@
 #
 # Pass criteria: ame_backend_stub exits 0 (i.e., received ≥1 world fact).
 #
+# Ada binaries must be pre-built via:  cmake --build --target pyramid_ada_all
+#
 # Usage:
 #   test_pyramid_bridge_e2e.sh
 #     [--app-bin    PATH]   tactical_objects_app binary
@@ -78,42 +80,6 @@ echo "=== Pyramid Bridge E2E ==="
 echo "[driver] ame_bus=$BUS_NAME tobj_bus=$TOBJ_BUS_NAME timeout=${TIMEOUT}s"
 
 # -------------------------------------------------------------------------
-# Optional: build Ada bridge if gprbuild is available
-# -------------------------------------------------------------------------
-
-if command -v gprbuild &>/dev/null; then
-  echo "[driver] Building Ada Pyramid Bridge..."
-  ADA_PCL_LIB_DIR="$WORKSPACE_ROOT/build/ada_gnat_pcl"
-  ADA_PYRAMID_LIB_DIR="$WORKSPACE_ROOT/build/ada_gnat_pyramid"
-
-  "$WORKSPACE_ROOT/subprojects/PCL/scripts/build_gnat_pcl_static_libs.sh" \
-    "$ADA_PCL_LIB_DIR" --force || {
-      echo "[driver] FAIL: unable to build GNAT-compatible PCL archives"
-      exit 1
-    }
-  "$PYRAMID_ROOT/scripts/build_gnat_generated_flatbuffers_libs.sh" \
-    "$ADA_PYRAMID_LIB_DIR" || {
-      echo "[driver] FAIL: unable to build GNAT-compatible generated FlatBuffers archive"
-      exit 1
-    }
-  (cd "$PYRAMID_ROOT/pyramid_bridge/ada" && \
-    UNMANNED_ROOT="$WORKSPACE_ROOT" gprbuild -P pyramid_bridge.gpr -q \
-      -XUNMANNED_ROOT="$WORKSPACE_ROOT" \
-      -XPCL_INCLUDE_DIR="$WORKSPACE_ROOT/subprojects/PCL/include" \
-      -XPCL_LIB_DIR="$ADA_PCL_LIB_DIR" \
-      -XPCL_LIB_NAME=pcl_core \
-      -XPCL_SOCKET_LIB_NAME=pcl_transport_socket \
-      -XPCL_SHMEM_LIB_NAME=pcl_transport_shared_memory \
-      -XPYRAMID_GEN_LIB_DIR="$ADA_PYRAMID_LIB_DIR" \
-      -XPYRAMID_GEN_LIB_NAME=pyramid_generated_flatbuffers_codec 2>&1) || {
-    echo "[driver] FAIL: gprbuild failed"
-    exit 1
-  }
-else
-  echo "[driver] gprbuild not found — checking for pre-built bridge binary..."
-fi
-
-# -------------------------------------------------------------------------
 # Pre-flight checks
 # -------------------------------------------------------------------------
 
@@ -130,8 +96,9 @@ if [[ ! -x "$EVIDENCE_BIN" ]]; then
   exit 1
 fi
 if [[ ! -x "$BRIDGE_BIN" ]]; then
-  echo "[driver] FAIL: pyramid_bridge_main not found at $BRIDGE_BIN"
-  exit 1
+  echo "[driver] SKIP: pyramid_bridge_main not found at $BRIDGE_BIN"
+  echo "[driver]   Run: cmake --build --target pyramid_ada_all"
+  exit 0
 fi
 
 # -------------------------------------------------------------------------

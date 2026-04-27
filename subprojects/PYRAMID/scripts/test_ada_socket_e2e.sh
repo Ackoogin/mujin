@@ -2,13 +2,14 @@
 # test_ada_socket_e2e.sh — Cross-process E2E test driver.
 #
 # Orchestrates:
-#   1. Build Ada client (if gprbuild available)
-#   2. Start C++ server (tobj_socket_server)
-#   3. Wait for server to be ready (port file appears)
-#   4. Start Ada client (ada_tobj_client)
-#   5. Wait for Ada client to exit
-#   6. Terminate server
-#   7. Report pass/fail
+#   1. Start C++ server (tobj_socket_server)
+#   2. Wait for server to be ready (port file appears)
+#   3. Start Ada client (ada_tobj_client)
+#   4. Wait for Ada client to exit
+#   5. Terminate server
+#   6. Report pass/fail
+#
+# Ada binaries must be pre-built via:  cmake --build --target pyramid_ada_all
 #
 # Usage: scripts/test_ada_socket_e2e.sh [--server-bin PATH] [--client-bin PATH]
 set -euo pipefail
@@ -45,52 +46,9 @@ trap cleanup EXIT
 
 echo "=== Ada Socket E2E Test ==="
 
-# Step 0: Generate Ada service stubs from proto (provided + consumed)
-if command -v python3 &>/dev/null || command -v python &>/dev/null; then
-  echo "[driver] Generating Ada bindings from proto..."
-  bash "$PYRAMID_ROOT/scripts/generate_bindings.sh" --ada
-else
-  echo "[driver] python not found — skipping Ada stub generation"
-fi
-
-# Step 1: Build Ada client if gprbuild is available
-if command -v gprbuild &>/dev/null; then
-  echo "[driver] Building Ada client..."
-  ADA_PCL_LIB_DIR="$WORKSPACE_ROOT/build/ada_gnat_pcl"
-  ADA_PYRAMID_LIB_DIR="$WORKSPACE_ROOT/build/ada_gnat_pyramid"
-  echo "[driver] Refreshing GNAT-compatible PCL static archives..."
-  "$WORKSPACE_ROOT/subprojects/PCL/scripts/build_gnat_pcl_static_libs.sh" "$ADA_PCL_LIB_DIR" --force || {
-    echo "[driver] SKIP: unable to build GNAT-compatible PCL static archives"
-    exit 0
-  }
-  echo "[driver] Refreshing GNAT-compatible generated FlatBuffers archive..."
-  "$PYRAMID_ROOT/scripts/build_gnat_generated_flatbuffers_libs.sh" "$ADA_PYRAMID_LIB_DIR" || {
-    echo "[driver] SKIP: unable to build GNAT-compatible generated FlatBuffers archive"
-    exit 0
-  }
-
-  (cd "$PYRAMID_ROOT/examples/ada" && \
-    UNMANNED_ROOT="$WORKSPACE_ROOT" gprbuild -P ada_tobj_client.gpr -q \
-      -XUNMANNED_ROOT="$WORKSPACE_ROOT" \
-      -XPCL_INCLUDE_DIR="$WORKSPACE_ROOT/subprojects/PCL/include" \
-      -XPCL_LIB_DIR="$ADA_PCL_LIB_DIR" \
-      -XPCL_LIB_NAME=pcl_core \
-      -XPCL_SOCKET_LIB_NAME=pcl_transport_socket \
-      -XPYRAMID_GEN_LIB_DIR="$ADA_PYRAMID_LIB_DIR" \
-      -XPYRAMID_GEN_LIB_NAME=pyramid_generated_flatbuffers_codec 2>&1) || {
-    echo "[driver] SKIP: gprbuild failed (GNAT toolchain issue)"
-    exit 0
-  }
-else
-  echo "[driver] gprbuild not found — checking for pre-built client..."
-  if [[ ! -x "$CLIENT_BIN" ]]; then
-    echo "[driver] SKIP: no Ada client binary and no gprbuild"
-    exit 0
-  fi
-fi
-
 if [[ ! -x "$CLIENT_BIN" ]]; then
   echo "[driver] SKIP: Ada client binary not found at $CLIENT_BIN"
+  echo "[driver]   Run: cmake --build --target pyramid_ada_all"
   exit 0
 fi
 
@@ -99,12 +57,12 @@ if [[ ! -x "$SERVER_BIN" ]]; then
   exit 1
 fi
 
-# Step 2: Start server
+# Step 1: Start server
 echo "[driver] Starting server on port $PORT..."
 "$SERVER_BIN" --port "$PORT" --port-file "$PORT_FILE" --timeout "$TIMEOUT" &
 SERVER_PID=$!
 
-# Step 3: Wait for port file
+# Step 2: Wait for port file
 echo "[driver] Waiting for server to write port file..."
 for i in $(seq 1 50); do
   if [[ -s "$PORT_FILE" ]]; then
@@ -121,21 +79,21 @@ fi
 ACTUAL_PORT=$(cat "$PORT_FILE")
 echo "[driver] Server ready on port $ACTUAL_PORT"
 
-# Step 4: Brief delay so server enters accept()
+# Step 3: Brief delay so server enters accept()
 sleep 0.2
 
-# Step 5: Start Ada client
+# Step 4: Start Ada client
 echo "[driver] Starting Ada client..."
 "$CLIENT_BIN" --host 127.0.0.1 --port "$ACTUAL_PORT"
 CLIENT_EXIT=$?
 
-# Step 6: Stop server
+# Step 5: Stop server
 if kill -0 "$SERVER_PID" 2>/dev/null; then
   kill "$SERVER_PID" 2>/dev/null || true
   wait "$SERVER_PID" 2>/dev/null || true
 fi
 
-# Step 7: Report
+# Step 6: Report
 if [[ $CLIENT_EXIT -eq 0 ]]; then
   echo "[driver] PASS: Ada client received entity updates over socket transport"
   exit 0

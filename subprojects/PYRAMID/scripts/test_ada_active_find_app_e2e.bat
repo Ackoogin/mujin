@@ -1,5 +1,8 @@
 @echo off
 REM test_ada_active_find_app_e2e.bat -- Ada ActiveFind against tactical_objects_app.
+REM
+REM Ada binaries must be pre-built via:
+REM   cmake --build --target pyramid_ada_all
 setlocal enabledelayedexpansion
 
 set "APP_BIN="
@@ -41,58 +44,12 @@ if "%CLIENT_BIN%"=="" (
 
 echo === Ada ActiveFind Real-App E2E (%CONTENT_TYPE%) ===
 
-where python >nul 2>&1
-if %errorlevel% equ 0 (
-    echo [driver] Generating Ada bindings from proto...
-    call "%PYRAMID_ROOT%\scripts\generate_bindings.bat" --ada
-    if !errorlevel! neq 0 (
-        echo [driver] FAIL: Ada service generation failed
-        exit /b 1
-    )
-) else (
-    echo [driver] python not found -- skipping Ada stub generation
-)
-
-where gprbuild >nul 2>&1
-if %errorlevel% equ 0 (
-    echo [driver] Building Ada active-find client...
-    set "ADA_DIR=%PYRAMID_ROOT%\tests\ada"
-    set "ADA_PCL_LIB_DIR=%BUILD_DIR%\ada_gnat_pcl"
-    set "ADA_PYRAMID_LIB_DIR=%BUILD_DIR%\ada_gnat_pyramid"
-    set "ADA_PCL_BUILD_SCRIPT=%WORKSPACE_ROOT%\subprojects\PCL\scripts\build_gnat_pcl_static_libs.bat"
-    set "ADA_PYRAMID_BUILD_SCRIPT=%PYRAMID_ROOT%\scripts\build_gnat_generated_flatbuffers_libs.bat"
-    set "CAN_BUILD_ADA=1"
-    call "!ADA_PCL_BUILD_SCRIPT!" "!ADA_PCL_LIB_DIR!" --force
-    if !errorlevel! neq 0 set "CAN_BUILD_ADA=0"
-    if "!CAN_BUILD_ADA!"=="1" (
-        call "!ADA_PYRAMID_BUILD_SCRIPT!" "!ADA_PYRAMID_LIB_DIR!" --build-dir "!BUILD_DIR!" --config "!BUILD_CONFIG!"
-        if !errorlevel! neq 0 set "CAN_BUILD_ADA=0"
-    )
-    if "!CAN_BUILD_ADA!"=="1" (
-        set "UNMANNED_ROOT=%WORKSPACE_ROOT%"
-        pushd "!ADA_DIR!"
-        gprbuild -P ada_active_find_e2e.gpr -q ^
-          -XUNMANNED_ROOT=!WORKSPACE_ROOT! ^
-          -XPCL_INCLUDE_DIR=!WORKSPACE_ROOT!\subprojects\PCL\include ^
-          -XPCL_LIB_DIR=!ADA_PCL_LIB_DIR! ^
-          -XPCL_LIB_NAME=pcl_core ^
-          -XPCL_SOCKET_LIB_NAME=pcl_transport_socket ^
-          -XPYRAMID_GEN_LIB_DIR=!ADA_PYRAMID_LIB_DIR! ^
-          -XPYRAMID_GEN_LIB_NAME=pyramid_generated_flatbuffers_codec >nul 2>&1
-        if !errorlevel! neq 0 echo [driver] gprbuild failed -- falling back to pre-built binary
-        popd
-    ) else (
-        echo [driver] WARNING: unable to refresh GNAT support archives -- falling back to pre-built binary
-    )
-) else (
-    echo [driver] gprbuild not found -- checking for pre-built client...
-)
-
 if not exist "%CLIENT_BIN%" (
     if exist "%CLIENT_BIN%.exe" set "CLIENT_BIN=%CLIENT_BIN%.exe"
 )
 if not exist "%CLIENT_BIN%" (
     echo [driver] SKIP: Ada client binary not found at %CLIENT_BIN%
+    echo [driver]   Run: cmake --build --target pyramid_ada_all
     exit /b 0
 )
 if not exist "%APP_BIN%" (
@@ -141,5 +98,5 @@ exit /b 1
 
 :cleanup
 taskkill /f /im tactical_objects_app.exe >nul 2>&1
-if exist "%PORT_FILE%" del /f "%PORT_FILE%" >nul 2>&1
+if exist "%PORT_FILE%" del /f /q "%PORT_FILE%" >nul 2>&1
 goto :eof
