@@ -30,43 +30,65 @@ package Pyramid.Services.Autonomy_Backend.Provided is
 
    type Service_Channel is
      (Ch_Read_Capabilities,
-      Ch_Create_Requirement,
-      Ch_Read_Requirement,
-      Ch_Update_Requirement,
-      Ch_Delete_Requirement,
+      Ch_Create_Planning_Requirement,
+      Ch_Read_Planning_Requirement,
+      Ch_Update_Planning_Requirement,
+      Ch_Delete_Planning_Requirement,
+      Ch_Create_Execution_Requirement,
+      Ch_Read_Execution_Requirement,
+      Ch_Update_Execution_Requirement,
+      Ch_Delete_Execution_Requirement,
       Ch_Create_State,
       Ch_Update_State,
       Ch_Delete_State,
+      Ch_Create_Plan,
       Ch_Read_Plan,
+      Ch_Update_Plan,
+      Ch_Delete_Plan,
       Ch_Read_Run,
       Ch_Read_Placement);
 
    type Capabilities_Array is array (Positive range <>) of Capabilities;
+   type Execution_Requirement_Array is array (Positive range <>) of Execution_Requirement;
    type Execution_Run_Array is array (Positive range <>) of Execution_Run;
    type Plan_Array is array (Positive range <>) of Plan;
-   type Planning_Execution_Requirement_Array is array (Positive range <>) of Planning_Execution_Requirement;
+   type Planning_Requirement_Array is array (Positive range <>) of Planning_Requirement;
    type Requirement_Placement_Array is array (Positive range <>) of Requirement_Placement;
 
    --  -- Service wire-name constants (generated from proto) --------
 
    Svc_Read_Capabilities : constant String :=
      "capabilities.read_capabilities";
-   Svc_Create_Requirement : constant String :=
-     "planning_execution.create_requirement";
-   Svc_Read_Requirement : constant String :=
-     "planning_execution.read_requirement";
-   Svc_Update_Requirement : constant String :=
-     "planning_execution.update_requirement";
-   Svc_Delete_Requirement : constant String :=
-     "planning_execution.delete_requirement";
+   Svc_Create_Planning_Requirement : constant String :=
+     "planning_requirement.create_planning_requirement";
+   Svc_Read_Planning_Requirement : constant String :=
+     "planning_requirement.read_planning_requirement";
+   Svc_Update_Planning_Requirement : constant String :=
+     "planning_requirement.update_planning_requirement";
+   Svc_Delete_Planning_Requirement : constant String :=
+     "planning_requirement.delete_planning_requirement";
+   Svc_Create_Execution_Requirement : constant String :=
+     "execution_requirement.create_execution_requirement";
+   Svc_Read_Execution_Requirement : constant String :=
+     "execution_requirement.read_execution_requirement";
+   Svc_Update_Execution_Requirement : constant String :=
+     "execution_requirement.update_execution_requirement";
+   Svc_Delete_Execution_Requirement : constant String :=
+     "execution_requirement.delete_execution_requirement";
    Svc_Create_State : constant String :=
      "state.create_state";
    Svc_Update_State : constant String :=
      "state.update_state";
    Svc_Delete_State : constant String :=
      "state.delete_state";
+   Svc_Create_Plan : constant String :=
+     "plan.create_plan";
    Svc_Read_Plan : constant String :=
      "plan.read_plan";
+   Svc_Update_Plan : constant String :=
+     "plan.update_plan";
+   Svc_Delete_Plan : constant String :=
+     "plan.delete_plan";
    Svc_Read_Run : constant String :=
      "execution_run.read_run";
    Svc_Read_Placement : constant String :=
@@ -83,21 +105,37 @@ package Pyramid.Services.Autonomy_Backend.Provided is
    Capabilities_Read_Capabilities_Cancel_Topic : constant String :=
      "/pyramid/stream/capabilities/read_capabilities/cancel";
 
-   Planning_Execution_Create_Requirement_Service : constant String :=
-     "/pyramid/service/planning_execution/create_requirement";
+   Planning_Requirement_Create_Planning_Requirement_Service : constant String :=
+     "/pyramid/service/planning_requirement/create_planning_requirement";
 
-   Planning_Execution_Read_Requirement_Open_Service : constant String :=
-     "/pyramid/stream/planning_execution/read_requirement/open";
-   Planning_Execution_Read_Requirement_Frame_Topic : constant String :=
-     "/pyramid/stream/planning_execution/read_requirement/frames";
-   Planning_Execution_Read_Requirement_Cancel_Topic : constant String :=
-     "/pyramid/stream/planning_execution/read_requirement/cancel";
+   Planning_Requirement_Read_Planning_Requirement_Open_Service : constant String :=
+     "/pyramid/stream/planning_requirement/read_planning_requirement/open";
+   Planning_Requirement_Read_Planning_Requirement_Frame_Topic : constant String :=
+     "/pyramid/stream/planning_requirement/read_planning_requirement/frames";
+   Planning_Requirement_Read_Planning_Requirement_Cancel_Topic : constant String :=
+     "/pyramid/stream/planning_requirement/read_planning_requirement/cancel";
 
-   Planning_Execution_Update_Requirement_Service : constant String :=
-     "/pyramid/service/planning_execution/update_requirement";
+   Planning_Requirement_Update_Planning_Requirement_Service : constant String :=
+     "/pyramid/service/planning_requirement/update_planning_requirement";
 
-   Planning_Execution_Delete_Requirement_Service : constant String :=
-     "/pyramid/service/planning_execution/delete_requirement";
+   Planning_Requirement_Delete_Planning_Requirement_Service : constant String :=
+     "/pyramid/service/planning_requirement/delete_planning_requirement";
+
+   Execution_Requirement_Create_Execution_Requirement_Service : constant String :=
+     "/pyramid/service/execution_requirement/create_execution_requirement";
+
+   Execution_Requirement_Read_Execution_Requirement_Open_Service : constant String :=
+     "/pyramid/stream/execution_requirement/read_execution_requirement/open";
+   Execution_Requirement_Read_Execution_Requirement_Frame_Topic : constant String :=
+     "/pyramid/stream/execution_requirement/read_execution_requirement/frames";
+   Execution_Requirement_Read_Execution_Requirement_Cancel_Topic : constant String :=
+     "/pyramid/stream/execution_requirement/read_execution_requirement/cancel";
+
+   Execution_Requirement_Update_Execution_Requirement_Service : constant String :=
+     "/pyramid/service/execution_requirement/update_execution_requirement";
+
+   Execution_Requirement_Delete_Execution_Requirement_Service : constant String :=
+     "/pyramid/service/execution_requirement/delete_execution_requirement";
 
    State_Create_State_Service : constant String :=
      "/pyramid/service/state/create_state";
@@ -108,12 +146,21 @@ package Pyramid.Services.Autonomy_Backend.Provided is
    State_Delete_State_Service : constant String :=
      "/pyramid/service/state/delete_state";
 
+   Plan_Create_Plan_Service : constant String :=
+     "/pyramid/service/plan/create_plan";
+
    Plan_Read_Plan_Open_Service : constant String :=
      "/pyramid/stream/plan/read_plan/open";
    Plan_Read_Plan_Frame_Topic : constant String :=
      "/pyramid/stream/plan/read_plan/frames";
    Plan_Read_Plan_Cancel_Topic : constant String :=
      "/pyramid/stream/plan/read_plan/cancel";
+
+   Plan_Update_Plan_Service : constant String :=
+     "/pyramid/service/plan/update_plan";
+
+   Plan_Delete_Plan_Service : constant String :=
+     "/pyramid/service/plan/delete_plan";
 
    Execution_Run_Read_Run_Open_Service : constant String :=
      "/pyramid/stream/execution_run/read_run/open";
@@ -150,16 +197,28 @@ package Pyramid.Services.Autonomy_Backend.Provided is
    --  Capabilities_Service
    type Handle_Read_Capabilities_Access is access function
      (Request : Query) return Capabilities_Array;
-   --  Planning_Execution_Service
-   type Handle_Create_Requirement_Access is access procedure
-     (Request  : in  Planning_Execution_Requirement;
+   --  Planning_Requirement_Service
+   type Handle_Create_Planning_Requirement_Access is access procedure
+     (Request  : in  Planning_Requirement;
       Response : out Identifier);
-   type Handle_Read_Requirement_Access is access function
-     (Request : Query) return Planning_Execution_Requirement_Array;
-   type Handle_Update_Requirement_Access is access procedure
-     (Request  : in  Planning_Execution_Requirement;
+   type Handle_Read_Planning_Requirement_Access is access function
+     (Request : Query) return Planning_Requirement_Array;
+   type Handle_Update_Planning_Requirement_Access is access procedure
+     (Request  : in  Planning_Requirement;
       Response : out Ack);
-   type Handle_Delete_Requirement_Access is access procedure
+   type Handle_Delete_Planning_Requirement_Access is access procedure
+     (Request  : in  Identifier;
+      Response : out Ack);
+   --  Execution_Requirement_Service
+   type Handle_Create_Execution_Requirement_Access is access procedure
+     (Request  : in  Execution_Requirement;
+      Response : out Identifier);
+   type Handle_Read_Execution_Requirement_Access is access function
+     (Request : Query) return Execution_Requirement_Array;
+   type Handle_Update_Execution_Requirement_Access is access procedure
+     (Request  : in  Execution_Requirement;
+      Response : out Ack);
+   type Handle_Delete_Execution_Requirement_Access is access procedure
      (Request  : in  Identifier;
       Response : out Ack);
    --  State_Service
@@ -173,8 +232,17 @@ package Pyramid.Services.Autonomy_Backend.Provided is
      (Request  : in  Identifier;
       Response : out Ack);
    --  Plan_Service
+   type Handle_Create_Plan_Access is access procedure
+     (Request  : in  Plan;
+      Response : out Identifier);
    type Handle_Read_Plan_Access is access function
      (Request : Query) return Plan_Array;
+   type Handle_Update_Plan_Access is access procedure
+     (Request  : in  Plan;
+      Response : out Ack);
+   type Handle_Delete_Plan_Access is access procedure
+     (Request  : in  Identifier;
+      Response : out Ack);
    --  Execution_Run_Service
    type Handle_Read_Run_Access is access function
      (Request : Query) return Execution_Run_Array;
@@ -184,14 +252,21 @@ package Pyramid.Services.Autonomy_Backend.Provided is
 
    type Service_Handlers is record
       On_Read_Capabilities : Handle_Read_Capabilities_Access := null;
-      On_Create_Requirement : Handle_Create_Requirement_Access := null;
-      On_Read_Requirement : Handle_Read_Requirement_Access := null;
-      On_Update_Requirement : Handle_Update_Requirement_Access := null;
-      On_Delete_Requirement : Handle_Delete_Requirement_Access := null;
+      On_Create_Planning_Requirement : Handle_Create_Planning_Requirement_Access := null;
+      On_Read_Planning_Requirement : Handle_Read_Planning_Requirement_Access := null;
+      On_Update_Planning_Requirement : Handle_Update_Planning_Requirement_Access := null;
+      On_Delete_Planning_Requirement : Handle_Delete_Planning_Requirement_Access := null;
+      On_Create_Execution_Requirement : Handle_Create_Execution_Requirement_Access := null;
+      On_Read_Execution_Requirement : Handle_Read_Execution_Requirement_Access := null;
+      On_Update_Execution_Requirement : Handle_Update_Execution_Requirement_Access := null;
+      On_Delete_Execution_Requirement : Handle_Delete_Execution_Requirement_Access := null;
       On_Create_State : Handle_Create_State_Access := null;
       On_Update_State : Handle_Update_State_Access := null;
       On_Delete_State : Handle_Delete_State_Access := null;
+      On_Create_Plan : Handle_Create_Plan_Access := null;
       On_Read_Plan : Handle_Read_Plan_Access := null;
+      On_Update_Plan : Handle_Update_Plan_Access := null;
+      On_Delete_Plan : Handle_Delete_Plan_Access := null;
       On_Read_Run : Handle_Read_Run_Access := null;
       On_Read_Placement : Handle_Read_Placement_Access := null;
    end record;
@@ -217,48 +292,96 @@ package Pyramid.Services.Autonomy_Backend.Provided is
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
-   function Decode_Create_Requirement_Response
+   function Decode_Create_Planning_Requirement_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Identifier;
 
    --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Create_Requirement
+   procedure Invoke_Create_Planning_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Planning_Execution_Requirement;
+      Request   : Planning_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
-   function Decode_Read_Requirement_Response
+   function Decode_Read_Planning_Requirement_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
-      return Planning_Execution_Requirement_Array;
+      return Planning_Requirement_Array;
 
    --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Read_Requirement
+   procedure Invoke_Read_Planning_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
-   function Decode_Update_Requirement_Response
+   function Decode_Update_Planning_Requirement_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Ack;
 
    --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Update_Requirement
+   procedure Invoke_Update_Planning_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Planning_Execution_Requirement;
+      Request   : Planning_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
-   function Decode_Delete_Requirement_Response
+   function Decode_Delete_Planning_Requirement_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Ack;
 
    --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Delete_Requirement
+   procedure Invoke_Delete_Planning_Requirement
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
+      Request   : Identifier;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json");
+
+   function Decode_Create_Execution_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Identifier;
+
+   --  Invoke via executor transport (transport-agnostic).
+   procedure Invoke_Create_Execution_Requirement
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
+      Request   : Execution_Requirement;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json");
+
+   function Decode_Read_Execution_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Execution_Requirement_Array;
+
+   --  Invoke via executor transport (transport-agnostic).
+   procedure Invoke_Read_Execution_Requirement
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
+      Request   : Query;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json");
+
+   function Decode_Update_Execution_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Ack;
+
+   --  Invoke via executor transport (transport-agnostic).
+   procedure Invoke_Update_Execution_Requirement
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
+      Request   : Execution_Requirement;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json");
+
+   function Decode_Delete_Execution_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Ack;
+
+   --  Invoke via executor transport (transport-agnostic).
+   procedure Invoke_Delete_Execution_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Identifier;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
@@ -301,6 +424,18 @@ package Pyramid.Services.Autonomy_Backend.Provided is
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
+   function Decode_Create_Plan_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Identifier;
+
+   --  Invoke via executor transport (transport-agnostic).
+   procedure Invoke_Create_Plan
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
+      Request   : Plan;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json");
+
    function Decode_Read_Plan_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Plan_Array;
@@ -309,6 +444,30 @@ package Pyramid.Services.Autonomy_Backend.Provided is
    procedure Invoke_Read_Plan
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json");
+
+   function Decode_Update_Plan_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Ack;
+
+   --  Invoke via executor transport (transport-agnostic).
+   procedure Invoke_Update_Plan
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
+      Request   : Plan;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json");
+
+   function Decode_Delete_Plan_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Ack;
+
+   --  Invoke via executor transport (transport-agnostic).
+   procedure Invoke_Delete_Plan
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
+      Request   : Identifier;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");

@@ -1,4 +1,4 @@
---  Auto-generated gRPC transport spec — do not edit
+--  Auto-generated gRPC transport spec -- do not edit
 --  Backend: grpc | Package: Pyramid.Components.Tactical_objects.Services.Provided.GRPC_Transport
 --
 --  Component-facing calls are typed; the JSON/C ABI shim is private.

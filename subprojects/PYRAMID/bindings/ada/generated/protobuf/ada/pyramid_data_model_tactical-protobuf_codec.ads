@@ -1,4 +1,4 @@
---  Auto-generated Protobuf codec spec — do not edit
+--  Auto-generated Protobuf codec spec -- do not edit
 --  Backend: protobuf | Package: Pyramid.Data_model.Tactical.Protobuf_Codec
 --
 --  Thin Ada binding to protobuf C++ codec via C interop.

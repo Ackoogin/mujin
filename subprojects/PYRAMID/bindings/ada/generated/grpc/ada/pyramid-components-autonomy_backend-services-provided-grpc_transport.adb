@@ -1,4 +1,4 @@
---  Auto-generated gRPC transport body — do not edit
+--  Auto-generated gRPC transport body -- do not edit
 
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Ada.Unchecked_Conversion;
@@ -134,17 +134,29 @@ package body Pyramid.Components.Autonomy_backend.Services.Provided.GRPC_Transpor
       return Result;
    end Decode_Capabilities_Array;
 
-   function Decode_Planning_Execution_Requirement_Array (Response_Json : String) return Planning_Execution_Requirement_Array is
+   function Decode_Planning_Requirement_Array (Response_Json : String) return Planning_Requirement_Array is
       J : constant JSON_Value := Read (Response_Json);
       Arr : constant JSON_Array := Get (J);
       Len : constant Natural := Length (Arr);
-      Result : Planning_Execution_Requirement_Array (1 .. Len);
+      Result : Planning_Requirement_Array (1 .. Len);
    begin
       for I in Result'Range loop
          Result (I) := Pyramid.Data_Model.Autonomy.Types_Codec.From_Json (Write (Get (Arr, I)), null);
       end loop;
       return Result;
-   end Decode_Planning_Execution_Requirement_Array;
+   end Decode_Planning_Requirement_Array;
+
+   function Decode_Execution_Requirement_Array (Response_Json : String) return Execution_Requirement_Array is
+      J : constant JSON_Value := Read (Response_Json);
+      Arr : constant JSON_Array := Get (J);
+      Len : constant Natural := Length (Arr);
+      Result : Execution_Requirement_Array (1 .. Len);
+   begin
+      for I in Result'Range loop
+         Result (I) := Pyramid.Data_Model.Autonomy.Types_Codec.From_Json (Write (Get (Arr, I)), null);
+      end loop;
+      return Result;
+   end Decode_Execution_Requirement_Array;
 
    function Decode_Plan_Array (Response_Json : String) return Plan_Array is
       J : constant JSON_Value := Read (Response_Json);
@@ -194,53 +206,101 @@ package body Pyramid.Components.Autonomy_backend.Services.Provided.GRPC_Transpor
       return Decode_Capabilities_Array (Response_Json);
    end Invoke_Read_Capabilities;
 
-   function Invoke_Create_Requirement
+   function Invoke_Create_Planning_Requirement
      (Channel : String;
-      Request : Pyramid.Data_Model.Autonomy.Types.Planning_Execution_Requirement)
+      Request : Pyramid.Data_Model.Autonomy.Types.Planning_Requirement)
       return Pyramid.Data_Model.Base.Types.Identifier
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Autonomy.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_provided_planning_execution_service_create_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_planning_requirement_service_create_planning_requirement_json")));
    begin
       return Ada.Strings.Unbounded.To_Unbounded_String (Normalise_Json_String (Response_Json));
-   end Invoke_Create_Requirement;
+   end Invoke_Create_Planning_Requirement;
 
-   function Invoke_Read_Requirement
+   function Invoke_Read_Planning_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
-      return Planning_Execution_Requirement_Array
+      return Planning_Requirement_Array
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Common.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_provided_planning_execution_service_read_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_planning_requirement_service_read_planning_requirement_json")));
    begin
-      return Decode_Planning_Execution_Requirement_Array (Response_Json);
-   end Invoke_Read_Requirement;
+      return Decode_Planning_Requirement_Array (Response_Json);
+   end Invoke_Read_Planning_Requirement;
 
-   function Invoke_Update_Requirement
+   function Invoke_Update_Planning_Requirement
      (Channel : String;
-      Request : Pyramid.Data_Model.Autonomy.Types.Planning_Execution_Requirement)
+      Request : Pyramid.Data_Model.Autonomy.Types.Planning_Requirement)
       return Pyramid.Data_Model.Common.Types.Ack
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Autonomy.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_provided_planning_execution_service_update_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_planning_requirement_service_update_planning_requirement_json")));
    begin
       return Pyramid.Data_Model.Common.Types_Codec.From_Json (Response_Json, null);
-   end Invoke_Update_Requirement;
+   end Invoke_Update_Planning_Requirement;
 
-   function Invoke_Delete_Requirement
+   function Invoke_Delete_Planning_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Base.Types.Identifier)
       return Pyramid.Data_Model.Common.Types.Ack
    is
       Response_Json : constant String :=
         Call_Json (Channel, Encode_Identifier (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_provided_planning_execution_service_delete_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_planning_requirement_service_delete_planning_requirement_json")));
    begin
       return Pyramid.Data_Model.Common.Types_Codec.From_Json (Response_Json, null);
-   end Invoke_Delete_Requirement;
+   end Invoke_Delete_Planning_Requirement;
+
+   function Invoke_Create_Execution_Requirement
+     (Channel : String;
+      Request : Pyramid.Data_Model.Autonomy.Types.Execution_Requirement)
+      return Pyramid.Data_Model.Base.Types.Identifier
+   is
+      Response_Json : constant String :=
+        Call_Json (Channel, Pyramid.Data_Model.Autonomy.Types_Codec.To_Json (Request),
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_execution_requirement_service_create_execution_requirement_json")));
+   begin
+      return Ada.Strings.Unbounded.To_Unbounded_String (Normalise_Json_String (Response_Json));
+   end Invoke_Create_Execution_Requirement;
+
+   function Invoke_Read_Execution_Requirement
+     (Channel : String;
+      Request : Pyramid.Data_Model.Common.Types.Query)
+      return Execution_Requirement_Array
+   is
+      Response_Json : constant String :=
+        Call_Json (Channel, Pyramid.Data_Model.Common.Types_Codec.To_Json (Request),
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_execution_requirement_service_read_execution_requirement_json")));
+   begin
+      return Decode_Execution_Requirement_Array (Response_Json);
+   end Invoke_Read_Execution_Requirement;
+
+   function Invoke_Update_Execution_Requirement
+     (Channel : String;
+      Request : Pyramid.Data_Model.Autonomy.Types.Execution_Requirement)
+      return Pyramid.Data_Model.Common.Types.Ack
+   is
+      Response_Json : constant String :=
+        Call_Json (Channel, Pyramid.Data_Model.Autonomy.Types_Codec.To_Json (Request),
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_execution_requirement_service_update_execution_requirement_json")));
+   begin
+      return Pyramid.Data_Model.Common.Types_Codec.From_Json (Response_Json, null);
+   end Invoke_Update_Execution_Requirement;
+
+   function Invoke_Delete_Execution_Requirement
+     (Channel : String;
+      Request : Pyramid.Data_Model.Base.Types.Identifier)
+      return Pyramid.Data_Model.Common.Types.Ack
+   is
+      Response_Json : constant String :=
+        Call_Json (Channel, Encode_Identifier (Request),
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_execution_requirement_service_delete_execution_requirement_json")));
+   begin
+      return Pyramid.Data_Model.Common.Types_Codec.From_Json (Response_Json, null);
+   end Invoke_Delete_Execution_Requirement;
 
    function Invoke_Create_State
      (Channel : String;
@@ -278,6 +338,18 @@ package body Pyramid.Components.Autonomy_backend.Services.Provided.GRPC_Transpor
       return Pyramid.Data_Model.Common.Types_Codec.From_Json (Response_Json, null);
    end Invoke_Delete_State;
 
+   function Invoke_Create_Plan
+     (Channel : String;
+      Request : Pyramid.Data_Model.Autonomy.Types.Plan)
+      return Pyramid.Data_Model.Base.Types.Identifier
+   is
+      Response_Json : constant String :=
+        Call_Json (Channel, Pyramid.Data_Model.Autonomy.Types_Codec.To_Json (Request),
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_plan_service_create_plan_json")));
+   begin
+      return Ada.Strings.Unbounded.To_Unbounded_String (Normalise_Json_String (Response_Json));
+   end Invoke_Create_Plan;
+
    function Invoke_Read_Plan
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
@@ -289,6 +361,30 @@ package body Pyramid.Components.Autonomy_backend.Services.Provided.GRPC_Transpor
    begin
       return Decode_Plan_Array (Response_Json);
    end Invoke_Read_Plan;
+
+   function Invoke_Update_Plan
+     (Channel : String;
+      Request : Pyramid.Data_Model.Autonomy.Types.Plan)
+      return Pyramid.Data_Model.Common.Types.Ack
+   is
+      Response_Json : constant String :=
+        Call_Json (Channel, Pyramid.Data_Model.Autonomy.Types_Codec.To_Json (Request),
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_plan_service_update_plan_json")));
+   begin
+      return Pyramid.Data_Model.Common.Types_Codec.From_Json (Response_Json, null);
+   end Invoke_Update_Plan;
+
+   function Invoke_Delete_Plan
+     (Channel : String;
+      Request : Pyramid.Data_Model.Base.Types.Identifier)
+      return Pyramid.Data_Model.Common.Types.Ack
+   is
+      Response_Json : constant String :=
+        Call_Json (Channel, Encode_Identifier (Request),
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_plan_service_delete_plan_json")));
+   begin
+      return Pyramid.Data_Model.Common.Types_Codec.From_Json (Response_Json, null);
+   end Invoke_Delete_Plan;
 
    function Invoke_Read_Run
      (Channel : String;

@@ -9,9 +9,10 @@ import "pyramid/data_model/autonomy.proto";
 // =============================================================================
 // AME Autonomy Service Interface - EntityActions CRUD Style
 // =============================================================================
-// Objectives, Tasks, or another coordinator delegate planning/execution to AME
-// by placing PlanningExecutionRequirement entities. AME exposes plans,
-// execution runs, and typed requirement-placement traceability products.
+// Objectives, Tasks, or another coordinator delegate planning to AME by placing
+// PlanningRequirement entities, then delegate execution by placing
+// ExecutionRequirement entities. AME exposes plans as addressable resources and
+// execution runs / requirement-placement traceability as read-only products.
 // =============================================================================
 
 // -----------------------------------------------------------------------------
@@ -26,25 +27,48 @@ service Capabilities_Service {
 }
 
 // -----------------------------------------------------------------------------
-// PlanningExecutionRequirement Service (inout - full CRUD)
+// PlanningRequirement Service (inout - full CRUD)
 // -----------------------------------------------------------------------------
-// EntityActions Service for AME delegated planning/execution requirements.
+// EntityActions Service for AME delegated planning requirements.
 // Service Type: PROVIDED
-service Planning_Execution_Service {
-  // Create requirement (delegate planning/execution to AME)
-  rpc CreateRequirement(pyramid.data_model.autonomy.PlanningExecutionRequirement)
+service Planning_Requirement_Service {
+  // Create planning requirement (delegate planning to AME)
+  rpc CreatePlanningRequirement(pyramid.data_model.autonomy.PlanningRequirement)
       returns (pyramid.data_model.base.Identifier);
 
-  // Read requirement (inspect delegated planning/execution requirements)
-  rpc ReadRequirement(pyramid.data_model.common.Query)
-      returns (stream pyramid.data_model.autonomy.PlanningExecutionRequirement);
+  // Read planning requirement
+  rpc ReadPlanningRequirement(pyramid.data_model.common.Query)
+      returns (stream pyramid.data_model.autonomy.PlanningRequirement);
 
-  // Update requirement (refine, progress, or attach an approved plan)
-  rpc UpdateRequirement(pyramid.data_model.autonomy.PlanningExecutionRequirement)
+  // Update planning requirement
+  rpc UpdatePlanningRequirement(pyramid.data_model.autonomy.PlanningRequirement)
       returns (pyramid.data_model.common.Ack);
 
-  // Delete requirement (cancel delegated planning/execution)
-  rpc DeleteRequirement(pyramid.data_model.base.Identifier)
+  // Delete planning requirement
+  rpc DeletePlanningRequirement(pyramid.data_model.base.Identifier)
+      returns (pyramid.data_model.common.Ack);
+}
+
+// -----------------------------------------------------------------------------
+// ExecutionRequirement Service (inout - full CRUD)
+// -----------------------------------------------------------------------------
+// EntityActions Service for AME delegated execution requirements.
+// Service Type: PROVIDED
+service Execution_Requirement_Service {
+  // Create execution requirement (execute an approved plan)
+  rpc CreateExecutionRequirement(pyramid.data_model.autonomy.ExecutionRequirement)
+      returns (pyramid.data_model.base.Identifier);
+
+  // Read execution requirement
+  rpc ReadExecutionRequirement(pyramid.data_model.common.Query)
+      returns (stream pyramid.data_model.autonomy.ExecutionRequirement);
+
+  // Update execution requirement
+  rpc UpdateExecutionRequirement(pyramid.data_model.autonomy.ExecutionRequirement)
+      returns (pyramid.data_model.common.Ack);
+
+  // Delete execution requirement
+  rpc DeleteExecutionRequirement(pyramid.data_model.base.Identifier)
       returns (pyramid.data_model.common.Ack);
 }
 
@@ -68,14 +92,27 @@ service State_Service {
 }
 
 // -----------------------------------------------------------------------------
-// Plan Service (out - Read only)
+// Plan Service (inout - full CRUD)
 // -----------------------------------------------------------------------------
-// EntityActions Service for AME plan products.
+// EntityActions Service for AME plan resources.
 // Service Type: PROVIDED
 service Plan_Service {
-  // Read plan products generated for planning/execution requirements
+  // Create plan resource (for externally approved or imported plans)
+  rpc CreatePlan(pyramid.data_model.autonomy.Plan)
+      returns (pyramid.data_model.base.Identifier);
+
+  // Read plan resources generated for planning requirements or explicitly
+  // created by coordinators
   rpc ReadPlan(pyramid.data_model.common.Query)
       returns (stream pyramid.data_model.autonomy.Plan);
+
+  // Update plan resource
+  rpc UpdatePlan(pyramid.data_model.autonomy.Plan)
+      returns (pyramid.data_model.common.Ack);
+
+  // Delete plan resource
+  rpc DeletePlan(pyramid.data_model.base.Identifier)
+      returns (pyramid.data_model.common.Ack);
 }
 
 // -----------------------------------------------------------------------------
@@ -84,7 +121,7 @@ service Plan_Service {
 // EntityActions Service for AME execution run products.
 // Service Type: PROVIDED
 service Execution_Run_Service {
-  // Read execution run products for delegated requirements
+  // Read execution run products for delegated execution requirements
   rpc ReadRun(pyramid.data_model.common.Query)
       returns (stream pyramid.data_model.autonomy.ExecutionRun);
 }

@@ -157,7 +157,7 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
       end;
    end Decode_Read_Capabilities_Response;
 
-   function Decode_Create_Requirement_Response
+   function Decode_Create_Planning_Requirement_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Identifier
    is
@@ -177,13 +177,13 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          return Flatbuffers_Codec.From_Binary_Identifier (Payload, null);
       end if;
       raise Constraint_Error with "Unsupported content type: " & Content_Type;
-   end Decode_Create_Requirement_Response;
+   end Decode_Create_Planning_Requirement_Response;
 
-   function Decode_Read_Requirement_Response
+   function Decode_Read_Planning_Requirement_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
-      return Planning_Execution_Requirement_Array
+      return Planning_Requirement_Array
    is
-      Empty : Planning_Execution_Requirement_Array (1 .. 0);
+      Empty : Planning_Requirement_Array (1 .. 0);
       Payload : constant String :=
         (if Msg = null or else Msg.Data = System.Null_Address
          then ""
@@ -199,7 +199,7 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
            (if Content_Type = "" or else Content_Type = Json_Content_Type
             then Payload
             elsif Content_Type = Flatbuffers_Content_Type
-            then Flatbuffers_Codec.From_Binary_Planning_Execution_Requirement_Array (Payload)
+            then Flatbuffers_Codec.From_Binary_Planning_Requirement_Array (Payload)
             else raise Constraint_Error with "Unsupported content type: " & Content_Type);
          R : constant Read_Result := Read (Json_Payload);
       begin
@@ -208,7 +208,7 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          end if;
          declare
             Arr    : constant JSON_Array := Get (R.Value);
-            Result : Planning_Execution_Requirement_Array (1 .. GNATCOLL.JSON.Length (Arr));
+            Result : Planning_Requirement_Array (1 .. GNATCOLL.JSON.Length (Arr));
          begin
             for I in 1 .. GNATCOLL.JSON.Length (Arr) loop
                Result (I) := From_Json (Write (Get (Arr, I)), null);
@@ -216,9 +216,9 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
             return Result;
          end;
       end;
-   end Decode_Read_Requirement_Response;
+   end Decode_Read_Planning_Requirement_Response;
 
-   function Decode_Update_Requirement_Response
+   function Decode_Update_Planning_Requirement_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Ack
    is
@@ -238,9 +238,9 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          return Flatbuffers_Codec.From_Binary_Ack (Payload, null);
       end if;
       raise Constraint_Error with "Unsupported content type: " & Content_Type;
-   end Decode_Update_Requirement_Response;
+   end Decode_Update_Planning_Requirement_Response;
 
-   function Decode_Delete_Requirement_Response
+   function Decode_Delete_Planning_Requirement_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Ack
    is
@@ -260,7 +260,112 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          return Flatbuffers_Codec.From_Binary_Ack (Payload, null);
       end if;
       raise Constraint_Error with "Unsupported content type: " & Content_Type;
-   end Decode_Delete_Requirement_Response;
+   end Decode_Delete_Planning_Requirement_Response;
+
+   function Decode_Create_Execution_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Identifier
+   is
+      Payload : constant String :=
+        (if Msg = null or else Msg.Data = System.Null_Address
+         then ""
+         else Msg_To_String (Msg.Data, Msg.Size));
+      Content_Type : constant String := Message_Content_Type (Msg);
+   begin
+      if Payload = "" then
+         return Null_Unbounded_String;
+      end if;
+
+      if Content_Type = "" or else Content_Type = Json_Content_Type then
+         return Decode_Identifier_Payload (Payload);
+      elsif Content_Type = Flatbuffers_Content_Type then
+         return Flatbuffers_Codec.From_Binary_Identifier (Payload, null);
+      end if;
+      raise Constraint_Error with "Unsupported content type: " & Content_Type;
+   end Decode_Create_Execution_Requirement_Response;
+
+   function Decode_Read_Execution_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Execution_Requirement_Array
+   is
+      Empty : Execution_Requirement_Array (1 .. 0);
+      Payload : constant String :=
+        (if Msg = null or else Msg.Data = System.Null_Address
+         then ""
+         else Msg_To_String (Msg.Data, Msg.Size));
+      Content_Type : constant String := Message_Content_Type (Msg);
+   begin
+      if Payload = "" then
+         return Empty;
+      end if;
+
+      declare
+         Json_Payload : constant String :=
+           (if Content_Type = "" or else Content_Type = Json_Content_Type
+            then Payload
+            elsif Content_Type = Flatbuffers_Content_Type
+            then Flatbuffers_Codec.From_Binary_Execution_Requirement_Array (Payload)
+            else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+         R : constant Read_Result := Read (Json_Payload);
+      begin
+         if not R.Success or else R.Value.Kind /= JSON_Array_Type then
+            return Empty;
+         end if;
+         declare
+            Arr    : constant JSON_Array := Get (R.Value);
+            Result : Execution_Requirement_Array (1 .. GNATCOLL.JSON.Length (Arr));
+         begin
+            for I in 1 .. GNATCOLL.JSON.Length (Arr) loop
+               Result (I) := From_Json (Write (Get (Arr, I)), null);
+            end loop;
+            return Result;
+         end;
+      end;
+   end Decode_Read_Execution_Requirement_Response;
+
+   function Decode_Update_Execution_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Ack
+   is
+      Payload : constant String :=
+        (if Msg = null or else Msg.Data = System.Null_Address
+         then ""
+         else Msg_To_String (Msg.Data, Msg.Size));
+      Content_Type : constant String := Message_Content_Type (Msg);
+   begin
+      if Payload = "" then
+         return From_Json ("{}", null);
+      end if;
+
+      if Content_Type = "" or else Content_Type = Json_Content_Type then
+         return From_Json (Payload, null);
+      elsif Content_Type = Flatbuffers_Content_Type then
+         return Flatbuffers_Codec.From_Binary_Ack (Payload, null);
+      end if;
+      raise Constraint_Error with "Unsupported content type: " & Content_Type;
+   end Decode_Update_Execution_Requirement_Response;
+
+   function Decode_Delete_Execution_Requirement_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Ack
+   is
+      Payload : constant String :=
+        (if Msg = null or else Msg.Data = System.Null_Address
+         then ""
+         else Msg_To_String (Msg.Data, Msg.Size));
+      Content_Type : constant String := Message_Content_Type (Msg);
+   begin
+      if Payload = "" then
+         return From_Json ("{}", null);
+      end if;
+
+      if Content_Type = "" or else Content_Type = Json_Content_Type then
+         return From_Json (Payload, null);
+      elsif Content_Type = Flatbuffers_Content_Type then
+         return Flatbuffers_Codec.From_Binary_Ack (Payload, null);
+      end if;
+      raise Constraint_Error with "Unsupported content type: " & Content_Type;
+   end Decode_Delete_Execution_Requirement_Response;
 
    function Decode_Create_State_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
@@ -328,6 +433,28 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
       raise Constraint_Error with "Unsupported content type: " & Content_Type;
    end Decode_Delete_State_Response;
 
+   function Decode_Create_Plan_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Identifier
+   is
+      Payload : constant String :=
+        (if Msg = null or else Msg.Data = System.Null_Address
+         then ""
+         else Msg_To_String (Msg.Data, Msg.Size));
+      Content_Type : constant String := Message_Content_Type (Msg);
+   begin
+      if Payload = "" then
+         return Null_Unbounded_String;
+      end if;
+
+      if Content_Type = "" or else Content_Type = Json_Content_Type then
+         return Decode_Identifier_Payload (Payload);
+      elsif Content_Type = Flatbuffers_Content_Type then
+         return Flatbuffers_Codec.From_Binary_Identifier (Payload, null);
+      end if;
+      raise Constraint_Error with "Unsupported content type: " & Content_Type;
+   end Decode_Create_Plan_Response;
+
    function Decode_Read_Plan_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Plan_Array
@@ -366,6 +493,50 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          end;
       end;
    end Decode_Read_Plan_Response;
+
+   function Decode_Update_Plan_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Ack
+   is
+      Payload : constant String :=
+        (if Msg = null or else Msg.Data = System.Null_Address
+         then ""
+         else Msg_To_String (Msg.Data, Msg.Size));
+      Content_Type : constant String := Message_Content_Type (Msg);
+   begin
+      if Payload = "" then
+         return From_Json ("{}", null);
+      end if;
+
+      if Content_Type = "" or else Content_Type = Json_Content_Type then
+         return From_Json (Payload, null);
+      elsif Content_Type = Flatbuffers_Content_Type then
+         return Flatbuffers_Codec.From_Binary_Ack (Payload, null);
+      end if;
+      raise Constraint_Error with "Unsupported content type: " & Content_Type;
+   end Decode_Update_Plan_Response;
+
+   function Decode_Delete_Plan_Response
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Ack
+   is
+      Payload : constant String :=
+        (if Msg = null or else Msg.Data = System.Null_Address
+         then ""
+         else Msg_To_String (Msg.Data, Msg.Size));
+      Content_Type : constant String := Message_Content_Type (Msg);
+   begin
+      if Payload = "" then
+         return From_Json ("{}", null);
+      end if;
+
+      if Content_Type = "" or else Content_Type = Json_Content_Type then
+         return From_Json (Payload, null);
+      elsif Content_Type = Flatbuffers_Content_Type then
+         return Flatbuffers_Codec.From_Binary_Ack (Payload, null);
+      end if;
+      raise Constraint_Error with "Unsupported content type: " & Content_Type;
+   end Decode_Delete_Plan_Response;
 
    function Decode_Read_Run_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
@@ -455,42 +626,79 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
       return Empty;
    end Default_Handle_Read_Capabilities;
 
-   --  -- Planning_Execution_Service ------------------------------------
-   procedure Default_Handle_Create_Requirement
-     (Request  : in  Planning_Execution_Requirement;
+   --  -- Planning_Requirement_Service ------------------------------------
+   procedure Default_Handle_Create_Planning_Requirement
+     (Request  : in  Planning_Requirement;
       Response : out Identifier)
    is
       pragma Unreferenced (Request);
    begin
       Response := Null_Unbounded_String;
-   end Default_Handle_Create_Requirement;
+   end Default_Handle_Create_Planning_Requirement;
 
-   function Default_Handle_Read_Requirement
-     (Request : Query) return Planning_Execution_Requirement_Array
+   function Default_Handle_Read_Planning_Requirement
+     (Request : Query) return Planning_Requirement_Array
    is
       pragma Unreferenced (Request);
-      Empty : Planning_Execution_Requirement_Array (1 .. 0);
+      Empty : Planning_Requirement_Array (1 .. 0);
    begin
       return Empty;
-   end Default_Handle_Read_Requirement;
+   end Default_Handle_Read_Planning_Requirement;
 
-   procedure Default_Handle_Update_Requirement
-     (Request  : in  Planning_Execution_Requirement;
+   procedure Default_Handle_Update_Planning_Requirement
+     (Request  : in  Planning_Requirement;
       Response : out Ack)
    is
       pragma Unreferenced (Request);
    begin
       Response := (Success => True);
-   end Default_Handle_Update_Requirement;
+   end Default_Handle_Update_Planning_Requirement;
 
-   procedure Default_Handle_Delete_Requirement
+   procedure Default_Handle_Delete_Planning_Requirement
      (Request  : in  Identifier;
       Response : out Ack)
    is
       pragma Unreferenced (Request);
    begin
       Response := (Success => True);
-   end Default_Handle_Delete_Requirement;
+   end Default_Handle_Delete_Planning_Requirement;
+
+   --  -- Execution_Requirement_Service ------------------------------------
+   procedure Default_Handle_Create_Execution_Requirement
+     (Request  : in  Execution_Requirement;
+      Response : out Identifier)
+   is
+      pragma Unreferenced (Request);
+   begin
+      Response := Null_Unbounded_String;
+   end Default_Handle_Create_Execution_Requirement;
+
+   function Default_Handle_Read_Execution_Requirement
+     (Request : Query) return Execution_Requirement_Array
+   is
+      pragma Unreferenced (Request);
+      Empty : Execution_Requirement_Array (1 .. 0);
+   begin
+      return Empty;
+   end Default_Handle_Read_Execution_Requirement;
+
+   procedure Default_Handle_Update_Execution_Requirement
+     (Request  : in  Execution_Requirement;
+      Response : out Ack)
+   is
+      pragma Unreferenced (Request);
+   begin
+      Response := (Success => True);
+   end Default_Handle_Update_Execution_Requirement;
+
+   procedure Default_Handle_Delete_Execution_Requirement
+     (Request  : in  Identifier;
+      Response : out Ack)
+   is
+      pragma Unreferenced (Request);
+   begin
+      Response := (Success => True);
+   end Default_Handle_Delete_Execution_Requirement;
 
    --  -- State_Service ------------------------------------
    procedure Default_Handle_Create_State
@@ -521,6 +729,15 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
    end Default_Handle_Delete_State;
 
    --  -- Plan_Service ------------------------------------
+   procedure Default_Handle_Create_Plan
+     (Request  : in  Plan;
+      Response : out Identifier)
+   is
+      pragma Unreferenced (Request);
+   begin
+      Response := Null_Unbounded_String;
+   end Default_Handle_Create_Plan;
+
    function Default_Handle_Read_Plan
      (Request : Query) return Plan_Array
    is
@@ -529,6 +746,24 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
    begin
       return Empty;
    end Default_Handle_Read_Plan;
+
+   procedure Default_Handle_Update_Plan
+     (Request  : in  Plan;
+      Response : out Ack)
+   is
+      pragma Unreferenced (Request);
+   begin
+      Response := (Success => True);
+   end Default_Handle_Update_Plan;
+
+   procedure Default_Handle_Delete_Plan
+     (Request  : in  Identifier;
+      Response : out Ack)
+   is
+      pragma Unreferenced (Request);
+   begin
+      Response := (Success => True);
+   end Default_Handle_Delete_Plan;
 
    --  -- Execution_Run_Service ------------------------------------
    function Default_Handle_Read_Run
@@ -558,37 +793,69 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
       User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
    pragma Convention (C, Service_Read_Capabilities);
 
-   function Service_Create_Requirement
+   function Service_Create_Planning_Requirement
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
       Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
       User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
-   pragma Convention (C, Service_Create_Requirement);
+   pragma Convention (C, Service_Create_Planning_Requirement);
 
-   function Service_Read_Requirement
+   function Service_Read_Planning_Requirement
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
       Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
       User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
-   pragma Convention (C, Service_Read_Requirement);
+   pragma Convention (C, Service_Read_Planning_Requirement);
 
-   function Service_Update_Requirement
+   function Service_Update_Planning_Requirement
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
       Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
       User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
-   pragma Convention (C, Service_Update_Requirement);
+   pragma Convention (C, Service_Update_Planning_Requirement);
 
-   function Service_Delete_Requirement
+   function Service_Delete_Planning_Requirement
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
       Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
       User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
-   pragma Convention (C, Service_Delete_Requirement);
+   pragma Convention (C, Service_Delete_Planning_Requirement);
+
+   function Service_Create_Execution_Requirement
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
+   pragma Convention (C, Service_Create_Execution_Requirement);
+
+   function Service_Read_Execution_Requirement
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
+   pragma Convention (C, Service_Read_Execution_Requirement);
+
+   function Service_Update_Execution_Requirement
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
+   pragma Convention (C, Service_Update_Execution_Requirement);
+
+   function Service_Delete_Execution_Requirement
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
+   pragma Convention (C, Service_Delete_Execution_Requirement);
 
    function Service_Create_State
      (Self      : Pcl_Bindings.Pcl_Container_Access;
@@ -614,6 +881,14 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
       User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
    pragma Convention (C, Service_Delete_State);
 
+   function Service_Create_Plan
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
+   pragma Convention (C, Service_Create_Plan);
+
    function Service_Read_Plan
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
@@ -621,6 +896,22 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
       Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
       User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
    pragma Convention (C, Service_Read_Plan);
+
+   function Service_Update_Plan
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
+   pragma Convention (C, Service_Update_Plan);
+
+   function Service_Delete_Plan
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
+   pragma Convention (C, Service_Delete_Plan);
 
    function Service_Read_Run
      (Self      : Pcl_Bindings.Pcl_Container_Access;
@@ -664,7 +955,7 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
       end;
       declare
          Service_Name : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String (Svc_Create_Requirement);
+           Interfaces.C.Strings.New_String (Svc_Create_Planning_Requirement);
          Type_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Content_Type);
          Port : Pcl_Bindings.Pcl_Port_Access;
@@ -674,14 +965,14 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
            (Container    => Container,
             Service_Name => Service_Name,
             Type_Name    => Type_Name,
-            Handler      => Service_Create_Requirement'Access,
+            Handler      => Service_Create_Planning_Requirement'Access,
             User_Data    => Handler_Ptr);
          Interfaces.C.Strings.Free (Service_Name);
          Interfaces.C.Strings.Free (Type_Name);
       end;
       declare
          Service_Name : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String (Svc_Read_Requirement);
+           Interfaces.C.Strings.New_String (Svc_Read_Planning_Requirement);
          Type_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Content_Type);
          Port : Pcl_Bindings.Pcl_Port_Access;
@@ -691,14 +982,14 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
            (Container    => Container,
             Service_Name => Service_Name,
             Type_Name    => Type_Name,
-            Handler      => Service_Read_Requirement'Access,
+            Handler      => Service_Read_Planning_Requirement'Access,
             User_Data    => Handler_Ptr);
          Interfaces.C.Strings.Free (Service_Name);
          Interfaces.C.Strings.Free (Type_Name);
       end;
       declare
          Service_Name : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String (Svc_Update_Requirement);
+           Interfaces.C.Strings.New_String (Svc_Update_Planning_Requirement);
          Type_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Content_Type);
          Port : Pcl_Bindings.Pcl_Port_Access;
@@ -708,14 +999,14 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
            (Container    => Container,
             Service_Name => Service_Name,
             Type_Name    => Type_Name,
-            Handler      => Service_Update_Requirement'Access,
+            Handler      => Service_Update_Planning_Requirement'Access,
             User_Data    => Handler_Ptr);
          Interfaces.C.Strings.Free (Service_Name);
          Interfaces.C.Strings.Free (Type_Name);
       end;
       declare
          Service_Name : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String (Svc_Delete_Requirement);
+           Interfaces.C.Strings.New_String (Svc_Delete_Planning_Requirement);
          Type_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Content_Type);
          Port : Pcl_Bindings.Pcl_Port_Access;
@@ -725,7 +1016,75 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
            (Container    => Container,
             Service_Name => Service_Name,
             Type_Name    => Type_Name,
-            Handler      => Service_Delete_Requirement'Access,
+            Handler      => Service_Delete_Planning_Requirement'Access,
+            User_Data    => Handler_Ptr);
+         Interfaces.C.Strings.Free (Service_Name);
+         Interfaces.C.Strings.Free (Type_Name);
+      end;
+      declare
+         Service_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Svc_Create_Execution_Requirement);
+         Type_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Content_Type);
+         Port : Pcl_Bindings.Pcl_Port_Access;
+         pragma Unreferenced (Port);
+      begin
+         Port := Pcl_Bindings.Add_Service
+           (Container    => Container,
+            Service_Name => Service_Name,
+            Type_Name    => Type_Name,
+            Handler      => Service_Create_Execution_Requirement'Access,
+            User_Data    => Handler_Ptr);
+         Interfaces.C.Strings.Free (Service_Name);
+         Interfaces.C.Strings.Free (Type_Name);
+      end;
+      declare
+         Service_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Svc_Read_Execution_Requirement);
+         Type_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Content_Type);
+         Port : Pcl_Bindings.Pcl_Port_Access;
+         pragma Unreferenced (Port);
+      begin
+         Port := Pcl_Bindings.Add_Service
+           (Container    => Container,
+            Service_Name => Service_Name,
+            Type_Name    => Type_Name,
+            Handler      => Service_Read_Execution_Requirement'Access,
+            User_Data    => Handler_Ptr);
+         Interfaces.C.Strings.Free (Service_Name);
+         Interfaces.C.Strings.Free (Type_Name);
+      end;
+      declare
+         Service_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Svc_Update_Execution_Requirement);
+         Type_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Content_Type);
+         Port : Pcl_Bindings.Pcl_Port_Access;
+         pragma Unreferenced (Port);
+      begin
+         Port := Pcl_Bindings.Add_Service
+           (Container    => Container,
+            Service_Name => Service_Name,
+            Type_Name    => Type_Name,
+            Handler      => Service_Update_Execution_Requirement'Access,
+            User_Data    => Handler_Ptr);
+         Interfaces.C.Strings.Free (Service_Name);
+         Interfaces.C.Strings.Free (Type_Name);
+      end;
+      declare
+         Service_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Svc_Delete_Execution_Requirement);
+         Type_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Content_Type);
+         Port : Pcl_Bindings.Pcl_Port_Access;
+         pragma Unreferenced (Port);
+      begin
+         Port := Pcl_Bindings.Add_Service
+           (Container    => Container,
+            Service_Name => Service_Name,
+            Type_Name    => Type_Name,
+            Handler      => Service_Delete_Execution_Requirement'Access,
             User_Data    => Handler_Ptr);
          Interfaces.C.Strings.Free (Service_Name);
          Interfaces.C.Strings.Free (Type_Name);
@@ -783,6 +1142,23 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
       end;
       declare
          Service_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Svc_Create_Plan);
+         Type_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Content_Type);
+         Port : Pcl_Bindings.Pcl_Port_Access;
+         pragma Unreferenced (Port);
+      begin
+         Port := Pcl_Bindings.Add_Service
+           (Container    => Container,
+            Service_Name => Service_Name,
+            Type_Name    => Type_Name,
+            Handler      => Service_Create_Plan'Access,
+            User_Data    => Handler_Ptr);
+         Interfaces.C.Strings.Free (Service_Name);
+         Interfaces.C.Strings.Free (Type_Name);
+      end;
+      declare
+         Service_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Svc_Read_Plan);
          Type_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Content_Type);
@@ -794,6 +1170,40 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
             Service_Name => Service_Name,
             Type_Name    => Type_Name,
             Handler      => Service_Read_Plan'Access,
+            User_Data    => Handler_Ptr);
+         Interfaces.C.Strings.Free (Service_Name);
+         Interfaces.C.Strings.Free (Type_Name);
+      end;
+      declare
+         Service_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Svc_Update_Plan);
+         Type_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Content_Type);
+         Port : Pcl_Bindings.Pcl_Port_Access;
+         pragma Unreferenced (Port);
+      begin
+         Port := Pcl_Bindings.Add_Service
+           (Container    => Container,
+            Service_Name => Service_Name,
+            Type_Name    => Type_Name,
+            Handler      => Service_Update_Plan'Access,
+            User_Data    => Handler_Ptr);
+         Interfaces.C.Strings.Free (Service_Name);
+         Interfaces.C.Strings.Free (Type_Name);
+      end;
+      declare
+         Service_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Svc_Delete_Plan);
+         Type_Name : Interfaces.C.Strings.chars_ptr :=
+           Interfaces.C.Strings.New_String (Content_Type);
+         Port : Pcl_Bindings.Pcl_Port_Access;
+         pragma Unreferenced (Port);
+      begin
+         Port := Pcl_Bindings.Add_Service
+           (Container    => Container,
+            Service_Name => Service_Name,
+            Type_Name    => Type_Name,
+            Handler      => Service_Delete_Plan'Access,
             User_Data    => Handler_Ptr);
          Interfaces.C.Strings.Free (Service_Name);
          Interfaces.C.Strings.Free (Type_Name);
@@ -872,7 +1282,7 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          return Pcl_Bindings.PCL_ERR_INVALID;
    end Service_Read_Capabilities;
 
-   function Service_Create_Requirement
+   function Service_Create_Planning_Requirement
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
@@ -891,7 +1301,7 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
    begin
       Dispatch
         (Handlers      => Handlers_Ptr,
-         Channel       => Ch_Create_Requirement,
+         Channel       => Ch_Create_Planning_Requirement,
          Request_Buf   => Request.Data,
          Request_Size  => Natural (Request.Size),
          Content_Type  => Req_Type,
@@ -908,9 +1318,9 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          Response.Size := 0;
          Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
          return Pcl_Bindings.PCL_ERR_INVALID;
-   end Service_Create_Requirement;
+   end Service_Create_Planning_Requirement;
 
-   function Service_Read_Requirement
+   function Service_Read_Planning_Requirement
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
@@ -929,7 +1339,7 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
    begin
       Dispatch
         (Handlers      => Handlers_Ptr,
-         Channel       => Ch_Read_Requirement,
+         Channel       => Ch_Read_Planning_Requirement,
          Request_Buf   => Request.Data,
          Request_Size  => Natural (Request.Size),
          Content_Type  => Req_Type,
@@ -946,9 +1356,9 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          Response.Size := 0;
          Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
          return Pcl_Bindings.PCL_ERR_INVALID;
-   end Service_Read_Requirement;
+   end Service_Read_Planning_Requirement;
 
-   function Service_Update_Requirement
+   function Service_Update_Planning_Requirement
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
@@ -967,7 +1377,7 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
    begin
       Dispatch
         (Handlers      => Handlers_Ptr,
-         Channel       => Ch_Update_Requirement,
+         Channel       => Ch_Update_Planning_Requirement,
          Request_Buf   => Request.Data,
          Request_Size  => Natural (Request.Size),
          Content_Type  => Req_Type,
@@ -984,9 +1394,9 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          Response.Size := 0;
          Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
          return Pcl_Bindings.PCL_ERR_INVALID;
-   end Service_Update_Requirement;
+   end Service_Update_Planning_Requirement;
 
-   function Service_Delete_Requirement
+   function Service_Delete_Planning_Requirement
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
@@ -1005,7 +1415,7 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
    begin
       Dispatch
         (Handlers      => Handlers_Ptr,
-         Channel       => Ch_Delete_Requirement,
+         Channel       => Ch_Delete_Planning_Requirement,
          Request_Buf   => Request.Data,
          Request_Size  => Natural (Request.Size),
          Content_Type  => Req_Type,
@@ -1022,7 +1432,159 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          Response.Size := 0;
          Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
          return Pcl_Bindings.PCL_ERR_INVALID;
-   end Service_Delete_Requirement;
+   end Service_Delete_Planning_Requirement;
+
+   function Service_Create_Execution_Requirement
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status
+   is
+      pragma Unreferenced (Self, Ctx);
+      Handlers_Ptr : constant Service_Handlers_Access :=
+        (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Req_Type  : constant String :=
+        (if Request.Type_Name = Interfaces.C.Strings.Null_Ptr
+         then "application/json"
+         else Interfaces.C.Strings.Value (Request.Type_Name));
+      Resp_Buf  : System.Address := System.Null_Address;
+      Resp_Size : Natural := 0;
+   begin
+      Dispatch
+        (Handlers      => Handlers_Ptr,
+         Channel       => Ch_Create_Execution_Requirement,
+         Request_Buf   => Request.Data,
+         Request_Size  => Natural (Request.Size),
+         Content_Type  => Req_Type,
+         Response_Buf  => Resp_Buf,
+         Response_Size => Resp_Size);
+      Response.Data := Resp_Buf;
+      Response.Size := Interfaces.C.unsigned (Resp_Size);
+      Response.Type_Name :=
+        Interfaces.C.Strings.New_String (Req_Type);
+      return Pcl_Bindings.PCL_OK;
+   exception
+      when others =>
+         Response.Data := System.Null_Address;
+         Response.Size := 0;
+         Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
+         return Pcl_Bindings.PCL_ERR_INVALID;
+   end Service_Create_Execution_Requirement;
+
+   function Service_Read_Execution_Requirement
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status
+   is
+      pragma Unreferenced (Self, Ctx);
+      Handlers_Ptr : constant Service_Handlers_Access :=
+        (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Req_Type  : constant String :=
+        (if Request.Type_Name = Interfaces.C.Strings.Null_Ptr
+         then "application/json"
+         else Interfaces.C.Strings.Value (Request.Type_Name));
+      Resp_Buf  : System.Address := System.Null_Address;
+      Resp_Size : Natural := 0;
+   begin
+      Dispatch
+        (Handlers      => Handlers_Ptr,
+         Channel       => Ch_Read_Execution_Requirement,
+         Request_Buf   => Request.Data,
+         Request_Size  => Natural (Request.Size),
+         Content_Type  => Req_Type,
+         Response_Buf  => Resp_Buf,
+         Response_Size => Resp_Size);
+      Response.Data := Resp_Buf;
+      Response.Size := Interfaces.C.unsigned (Resp_Size);
+      Response.Type_Name :=
+        Interfaces.C.Strings.New_String (Req_Type);
+      return Pcl_Bindings.PCL_OK;
+   exception
+      when others =>
+         Response.Data := System.Null_Address;
+         Response.Size := 0;
+         Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
+         return Pcl_Bindings.PCL_ERR_INVALID;
+   end Service_Read_Execution_Requirement;
+
+   function Service_Update_Execution_Requirement
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status
+   is
+      pragma Unreferenced (Self, Ctx);
+      Handlers_Ptr : constant Service_Handlers_Access :=
+        (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Req_Type  : constant String :=
+        (if Request.Type_Name = Interfaces.C.Strings.Null_Ptr
+         then "application/json"
+         else Interfaces.C.Strings.Value (Request.Type_Name));
+      Resp_Buf  : System.Address := System.Null_Address;
+      Resp_Size : Natural := 0;
+   begin
+      Dispatch
+        (Handlers      => Handlers_Ptr,
+         Channel       => Ch_Update_Execution_Requirement,
+         Request_Buf   => Request.Data,
+         Request_Size  => Natural (Request.Size),
+         Content_Type  => Req_Type,
+         Response_Buf  => Resp_Buf,
+         Response_Size => Resp_Size);
+      Response.Data := Resp_Buf;
+      Response.Size := Interfaces.C.unsigned (Resp_Size);
+      Response.Type_Name :=
+        Interfaces.C.Strings.New_String (Req_Type);
+      return Pcl_Bindings.PCL_OK;
+   exception
+      when others =>
+         Response.Data := System.Null_Address;
+         Response.Size := 0;
+         Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
+         return Pcl_Bindings.PCL_ERR_INVALID;
+   end Service_Update_Execution_Requirement;
+
+   function Service_Delete_Execution_Requirement
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status
+   is
+      pragma Unreferenced (Self, Ctx);
+      Handlers_Ptr : constant Service_Handlers_Access :=
+        (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Req_Type  : constant String :=
+        (if Request.Type_Name = Interfaces.C.Strings.Null_Ptr
+         then "application/json"
+         else Interfaces.C.Strings.Value (Request.Type_Name));
+      Resp_Buf  : System.Address := System.Null_Address;
+      Resp_Size : Natural := 0;
+   begin
+      Dispatch
+        (Handlers      => Handlers_Ptr,
+         Channel       => Ch_Delete_Execution_Requirement,
+         Request_Buf   => Request.Data,
+         Request_Size  => Natural (Request.Size),
+         Content_Type  => Req_Type,
+         Response_Buf  => Resp_Buf,
+         Response_Size => Resp_Size);
+      Response.Data := Resp_Buf;
+      Response.Size := Interfaces.C.unsigned (Resp_Size);
+      Response.Type_Name :=
+        Interfaces.C.Strings.New_String (Req_Type);
+      return Pcl_Bindings.PCL_OK;
+   exception
+      when others =>
+         Response.Data := System.Null_Address;
+         Response.Size := 0;
+         Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
+         return Pcl_Bindings.PCL_ERR_INVALID;
+   end Service_Delete_Execution_Requirement;
 
    function Service_Create_State
      (Self      : Pcl_Bindings.Pcl_Container_Access;
@@ -1138,6 +1700,44 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          return Pcl_Bindings.PCL_ERR_INVALID;
    end Service_Delete_State;
 
+   function Service_Create_Plan
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status
+   is
+      pragma Unreferenced (Self, Ctx);
+      Handlers_Ptr : constant Service_Handlers_Access :=
+        (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Req_Type  : constant String :=
+        (if Request.Type_Name = Interfaces.C.Strings.Null_Ptr
+         then "application/json"
+         else Interfaces.C.Strings.Value (Request.Type_Name));
+      Resp_Buf  : System.Address := System.Null_Address;
+      Resp_Size : Natural := 0;
+   begin
+      Dispatch
+        (Handlers      => Handlers_Ptr,
+         Channel       => Ch_Create_Plan,
+         Request_Buf   => Request.Data,
+         Request_Size  => Natural (Request.Size),
+         Content_Type  => Req_Type,
+         Response_Buf  => Resp_Buf,
+         Response_Size => Resp_Size);
+      Response.Data := Resp_Buf;
+      Response.Size := Interfaces.C.unsigned (Resp_Size);
+      Response.Type_Name :=
+        Interfaces.C.Strings.New_String (Req_Type);
+      return Pcl_Bindings.PCL_OK;
+   exception
+      when others =>
+         Response.Data := System.Null_Address;
+         Response.Size := 0;
+         Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
+         return Pcl_Bindings.PCL_ERR_INVALID;
+   end Service_Create_Plan;
+
    function Service_Read_Plan
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
@@ -1175,6 +1775,82 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
          return Pcl_Bindings.PCL_ERR_INVALID;
    end Service_Read_Plan;
+
+   function Service_Update_Plan
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status
+   is
+      pragma Unreferenced (Self, Ctx);
+      Handlers_Ptr : constant Service_Handlers_Access :=
+        (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Req_Type  : constant String :=
+        (if Request.Type_Name = Interfaces.C.Strings.Null_Ptr
+         then "application/json"
+         else Interfaces.C.Strings.Value (Request.Type_Name));
+      Resp_Buf  : System.Address := System.Null_Address;
+      Resp_Size : Natural := 0;
+   begin
+      Dispatch
+        (Handlers      => Handlers_Ptr,
+         Channel       => Ch_Update_Plan,
+         Request_Buf   => Request.Data,
+         Request_Size  => Natural (Request.Size),
+         Content_Type  => Req_Type,
+         Response_Buf  => Resp_Buf,
+         Response_Size => Resp_Size);
+      Response.Data := Resp_Buf;
+      Response.Size := Interfaces.C.unsigned (Resp_Size);
+      Response.Type_Name :=
+        Interfaces.C.Strings.New_String (Req_Type);
+      return Pcl_Bindings.PCL_OK;
+   exception
+      when others =>
+         Response.Data := System.Null_Address;
+         Response.Size := 0;
+         Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
+         return Pcl_Bindings.PCL_ERR_INVALID;
+   end Service_Update_Plan;
+
+   function Service_Delete_Plan
+     (Self      : Pcl_Bindings.Pcl_Container_Access;
+      Request   : access constant Pcl_Bindings.Pcl_Msg;
+      Response  : access Pcl_Bindings.Pcl_Msg;
+      Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
+      User_Data : System.Address) return Pcl_Bindings.Pcl_Status
+   is
+      pragma Unreferenced (Self, Ctx);
+      Handlers_Ptr : constant Service_Handlers_Access :=
+        (if User_Data = System.Null_Address then null else To_Handlers (User_Data));
+      Req_Type  : constant String :=
+        (if Request.Type_Name = Interfaces.C.Strings.Null_Ptr
+         then "application/json"
+         else Interfaces.C.Strings.Value (Request.Type_Name));
+      Resp_Buf  : System.Address := System.Null_Address;
+      Resp_Size : Natural := 0;
+   begin
+      Dispatch
+        (Handlers      => Handlers_Ptr,
+         Channel       => Ch_Delete_Plan,
+         Request_Buf   => Request.Data,
+         Request_Size  => Natural (Request.Size),
+         Content_Type  => Req_Type,
+         Response_Buf  => Resp_Buf,
+         Response_Size => Resp_Size);
+      Response.Data := Resp_Buf;
+      Response.Size := Interfaces.C.unsigned (Resp_Size);
+      Response.Type_Name :=
+        Interfaces.C.Strings.New_String (Req_Type);
+      return Pcl_Bindings.PCL_OK;
+   exception
+      when others =>
+         Response.Data := System.Null_Address;
+         Response.Size := 0;
+         Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
+         return Pcl_Bindings.PCL_ERR_INVALID;
+   end Service_Delete_Plan;
 
    function Service_Read_Run
      (Self      : Pcl_Bindings.Pcl_Container_Access;
@@ -1322,9 +1998,9 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
       Interfaces.C.Strings.Free (Msg.Type_Name);
    end Invoke_Read_Capabilities;
 
-   procedure Invoke_Create_Requirement
+   procedure Invoke_Create_Planning_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Planning_Execution_Requirement;
+      Request   : Planning_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json")
@@ -1335,14 +2011,14 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
         (if Content_Type = "" or else Content_Type = "application/json"
          then Json_Payload
          elsif Content_Type = "application/flatbuffers"
-         then Flatbuffers_Codec.To_Binary_Planning_Execution_Requirement (Request)
+         then Flatbuffers_Codec.To_Binary_Planning_Requirement (Request)
          elsif Content_Type = Grpc_Content_Type
          then ""
          else raise Constraint_Error with "Unsupported content type: " & Content_Type);
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Svc_Create_Requirement);
+        Interfaces.C.Strings.New_String (Svc_Create_Planning_Requirement);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
@@ -1353,7 +2029,7 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          end if;
          declare
             Rsp : constant Identifier :=
-              Grpc_Transport.Invoke_Create_Requirement
+              Grpc_Transport.Invoke_Create_Planning_Requirement
                 (To_String (Grpc_Channel), Request);
             Response_Payload : constant String :=
               """" & To_String (Rsp) & """";
@@ -1382,9 +2058,9 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
       end if;
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
-   end Invoke_Create_Requirement;
+   end Invoke_Create_Planning_Requirement;
 
-   procedure Invoke_Read_Requirement
+   procedure Invoke_Read_Planning_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
@@ -1404,7 +2080,7 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Svc_Read_Requirement);
+        Interfaces.C.Strings.New_String (Svc_Read_Planning_Requirement);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
@@ -1414,8 +2090,8 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
             raise Program_Error with "gRPC channel not configured";
          end if;
          declare
-            Rsp : constant Grpc_Transport.Planning_Execution_Requirement_Array :=
-              Grpc_Transport.Invoke_Read_Requirement
+            Rsp : constant Grpc_Transport.Planning_Requirement_Array :=
+              Grpc_Transport.Invoke_Read_Planning_Requirement
                 (To_String (Grpc_Channel), Request);
             Acc : Unbounded_String := To_Unbounded_String ("[");
          begin
@@ -1450,11 +2126,11 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
       end if;
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
-   end Invoke_Read_Requirement;
+   end Invoke_Read_Planning_Requirement;
 
-   procedure Invoke_Update_Requirement
+   procedure Invoke_Update_Planning_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
-      Request   : Planning_Execution_Requirement;
+      Request   : Planning_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json")
@@ -1465,14 +2141,14 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
         (if Content_Type = "" or else Content_Type = "application/json"
          then Json_Payload
          elsif Content_Type = "application/flatbuffers"
-         then Flatbuffers_Codec.To_Binary_Planning_Execution_Requirement (Request)
+         then Flatbuffers_Codec.To_Binary_Planning_Requirement (Request)
          elsif Content_Type = Grpc_Content_Type
          then ""
          else raise Constraint_Error with "Unsupported content type: " & Content_Type);
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Svc_Update_Requirement);
+        Interfaces.C.Strings.New_String (Svc_Update_Planning_Requirement);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
@@ -1483,7 +2159,7 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          end if;
          declare
             Rsp : constant Ack :=
-              Grpc_Transport.Invoke_Update_Requirement
+              Grpc_Transport.Invoke_Update_Planning_Requirement
                 (To_String (Grpc_Channel), Request);
             Response_Payload : constant String := To_Json (Rsp);
          begin
@@ -1511,9 +2187,9 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
       end if;
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
-   end Invoke_Update_Requirement;
+   end Invoke_Update_Planning_Requirement;
 
-   procedure Invoke_Delete_Requirement
+   procedure Invoke_Delete_Planning_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Identifier;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
@@ -1533,7 +2209,7 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Svc_Delete_Requirement);
+        Interfaces.C.Strings.New_String (Svc_Delete_Planning_Requirement);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
@@ -1544,7 +2220,7 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          end if;
          declare
             Rsp : constant Ack :=
-              Grpc_Transport.Invoke_Delete_Requirement
+              Grpc_Transport.Invoke_Delete_Planning_Requirement
                 (To_String (Grpc_Channel), Request);
             Response_Payload : constant String := To_Json (Rsp);
          begin
@@ -1572,7 +2248,259 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
       end if;
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
-   end Invoke_Delete_Requirement;
+   end Invoke_Delete_Planning_Requirement;
+
+   procedure Invoke_Create_Execution_Requirement
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
+      Request   : Execution_Requirement;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json")
+   is
+      use type Pcl_Bindings.Pcl_Status;
+      Json_Payload : constant String := To_Json (Request);
+      Payload : constant String :=
+        (if Content_Type = "" or else Content_Type = "application/json"
+         then Json_Payload
+         elsif Content_Type = "application/flatbuffers"
+         then Flatbuffers_Codec.To_Binary_Execution_Requirement (Request)
+         elsif Content_Type = Grpc_Content_Type
+         then ""
+         else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
+      Payload_Bytes : aliased constant String := Payload;
+      Svc_C  : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Svc_Create_Execution_Requirement);
+      Msg    : aliased Pcl_Bindings.Pcl_Msg;
+      Status : Pcl_Bindings.Pcl_Status;
+      pragma Unreferenced (Status);
+   begin
+      if Content_Type = Grpc_Content_Type then
+         if Ada.Strings.Unbounded.Length (Grpc_Channel) = 0 then
+            raise Program_Error with "gRPC channel not configured";
+         end if;
+         declare
+            Rsp : constant Identifier :=
+              Grpc_Transport.Invoke_Create_Execution_Requirement
+                (To_String (Grpc_Channel), Request);
+            Response_Payload : constant String :=
+              """" & To_String (Rsp) & """";
+         begin
+            Emit_Invoke_Response
+              (Callback, User_Data, Response_Payload);
+         end;
+         return;
+      end if;
+
+      if Content_Type = "" or else Content_Type = "application/json" then
+         Req_C := Interfaces.C.Strings.New_String (Payload);
+         Msg.Data := To_Address (Req_C);
+      else
+         Msg.Data :=
+           (if Payload_Bytes'Length = 0
+            then System.Null_Address
+            else Payload_Bytes (Payload_Bytes'First)'Address);
+      end if;
+      Msg.Size      := Interfaces.C.unsigned (Payload_Bytes'Length);
+      Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
+      Status := Pcl_Bindings.Invoke_Async
+        (Executor, Svc_C, Msg'Access, Callback, User_Data);
+      if Req_C /= Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Req_C);
+      end if;
+      Interfaces.C.Strings.Free (Svc_C);
+      Interfaces.C.Strings.Free (Msg.Type_Name);
+   end Invoke_Create_Execution_Requirement;
+
+   procedure Invoke_Read_Execution_Requirement
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
+      Request   : Query;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json")
+   is
+      use type Pcl_Bindings.Pcl_Status;
+      Json_Payload : constant String := To_Json (Request);
+      Payload : constant String :=
+        (if Content_Type = "" or else Content_Type = "application/json"
+         then Json_Payload
+         elsif Content_Type = "application/flatbuffers"
+         then Flatbuffers_Codec.To_Binary_Query (Request)
+         elsif Content_Type = Grpc_Content_Type
+         then ""
+         else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
+      Payload_Bytes : aliased constant String := Payload;
+      Svc_C  : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Svc_Read_Execution_Requirement);
+      Msg    : aliased Pcl_Bindings.Pcl_Msg;
+      Status : Pcl_Bindings.Pcl_Status;
+      pragma Unreferenced (Status);
+   begin
+      if Content_Type = Grpc_Content_Type then
+         if Ada.Strings.Unbounded.Length (Grpc_Channel) = 0 then
+            raise Program_Error with "gRPC channel not configured";
+         end if;
+         declare
+            Rsp : constant Grpc_Transport.Execution_Requirement_Array :=
+              Grpc_Transport.Invoke_Read_Execution_Requirement
+                (To_String (Grpc_Channel), Request);
+            Acc : Unbounded_String := To_Unbounded_String ("[");
+         begin
+            for I in Rsp'Range loop
+               if I > Rsp'First then
+                  Append (Acc, ",");
+               end if;
+               Append (Acc, To_Json (Rsp (I)));
+            end loop;
+            Append (Acc, "]");
+            Emit_Invoke_Response
+              (Callback, User_Data, To_String (Acc));
+         end;
+         return;
+      end if;
+
+      if Content_Type = "" or else Content_Type = "application/json" then
+         Req_C := Interfaces.C.Strings.New_String (Payload);
+         Msg.Data := To_Address (Req_C);
+      else
+         Msg.Data :=
+           (if Payload_Bytes'Length = 0
+            then System.Null_Address
+            else Payload_Bytes (Payload_Bytes'First)'Address);
+      end if;
+      Msg.Size      := Interfaces.C.unsigned (Payload_Bytes'Length);
+      Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
+      Status := Pcl_Bindings.Invoke_Async
+        (Executor, Svc_C, Msg'Access, Callback, User_Data);
+      if Req_C /= Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Req_C);
+      end if;
+      Interfaces.C.Strings.Free (Svc_C);
+      Interfaces.C.Strings.Free (Msg.Type_Name);
+   end Invoke_Read_Execution_Requirement;
+
+   procedure Invoke_Update_Execution_Requirement
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
+      Request   : Execution_Requirement;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json")
+   is
+      use type Pcl_Bindings.Pcl_Status;
+      Json_Payload : constant String := To_Json (Request);
+      Payload : constant String :=
+        (if Content_Type = "" or else Content_Type = "application/json"
+         then Json_Payload
+         elsif Content_Type = "application/flatbuffers"
+         then Flatbuffers_Codec.To_Binary_Execution_Requirement (Request)
+         elsif Content_Type = Grpc_Content_Type
+         then ""
+         else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
+      Payload_Bytes : aliased constant String := Payload;
+      Svc_C  : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Svc_Update_Execution_Requirement);
+      Msg    : aliased Pcl_Bindings.Pcl_Msg;
+      Status : Pcl_Bindings.Pcl_Status;
+      pragma Unreferenced (Status);
+   begin
+      if Content_Type = Grpc_Content_Type then
+         if Ada.Strings.Unbounded.Length (Grpc_Channel) = 0 then
+            raise Program_Error with "gRPC channel not configured";
+         end if;
+         declare
+            Rsp : constant Ack :=
+              Grpc_Transport.Invoke_Update_Execution_Requirement
+                (To_String (Grpc_Channel), Request);
+            Response_Payload : constant String := To_Json (Rsp);
+         begin
+            Emit_Invoke_Response
+              (Callback, User_Data, Response_Payload);
+         end;
+         return;
+      end if;
+
+      if Content_Type = "" or else Content_Type = "application/json" then
+         Req_C := Interfaces.C.Strings.New_String (Payload);
+         Msg.Data := To_Address (Req_C);
+      else
+         Msg.Data :=
+           (if Payload_Bytes'Length = 0
+            then System.Null_Address
+            else Payload_Bytes (Payload_Bytes'First)'Address);
+      end if;
+      Msg.Size      := Interfaces.C.unsigned (Payload_Bytes'Length);
+      Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
+      Status := Pcl_Bindings.Invoke_Async
+        (Executor, Svc_C, Msg'Access, Callback, User_Data);
+      if Req_C /= Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Req_C);
+      end if;
+      Interfaces.C.Strings.Free (Svc_C);
+      Interfaces.C.Strings.Free (Msg.Type_Name);
+   end Invoke_Update_Execution_Requirement;
+
+   procedure Invoke_Delete_Execution_Requirement
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
+      Request   : Identifier;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json")
+   is
+      use type Pcl_Bindings.Pcl_Status;
+      Json_Payload : constant String := To_String (Request);
+      Payload : constant String :=
+        (if Content_Type = "" or else Content_Type = "application/json"
+         then Json_Payload
+         elsif Content_Type = "application/flatbuffers"
+         then Flatbuffers_Codec.To_Binary_Identifier (Request)
+         elsif Content_Type = Grpc_Content_Type
+         then ""
+         else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
+      Payload_Bytes : aliased constant String := Payload;
+      Svc_C  : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Svc_Delete_Execution_Requirement);
+      Msg    : aliased Pcl_Bindings.Pcl_Msg;
+      Status : Pcl_Bindings.Pcl_Status;
+      pragma Unreferenced (Status);
+   begin
+      if Content_Type = Grpc_Content_Type then
+         if Ada.Strings.Unbounded.Length (Grpc_Channel) = 0 then
+            raise Program_Error with "gRPC channel not configured";
+         end if;
+         declare
+            Rsp : constant Ack :=
+              Grpc_Transport.Invoke_Delete_Execution_Requirement
+                (To_String (Grpc_Channel), Request);
+            Response_Payload : constant String := To_Json (Rsp);
+         begin
+            Emit_Invoke_Response
+              (Callback, User_Data, Response_Payload);
+         end;
+         return;
+      end if;
+
+      if Content_Type = "" or else Content_Type = "application/json" then
+         Req_C := Interfaces.C.Strings.New_String (Payload);
+         Msg.Data := To_Address (Req_C);
+      else
+         Msg.Data :=
+           (if Payload_Bytes'Length = 0
+            then System.Null_Address
+            else Payload_Bytes (Payload_Bytes'First)'Address);
+      end if;
+      Msg.Size      := Interfaces.C.unsigned (Payload_Bytes'Length);
+      Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
+      Status := Pcl_Bindings.Invoke_Async
+        (Executor, Svc_C, Msg'Access, Callback, User_Data);
+      if Req_C /= Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Req_C);
+      end if;
+      Interfaces.C.Strings.Free (Svc_C);
+      Interfaces.C.Strings.Free (Msg.Type_Name);
+   end Invoke_Delete_Execution_Requirement;
 
    procedure Invoke_Create_State
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
@@ -1758,6 +2686,68 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
       Interfaces.C.Strings.Free (Msg.Type_Name);
    end Invoke_Delete_State;
 
+   procedure Invoke_Create_Plan
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
+      Request   : Plan;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json")
+   is
+      use type Pcl_Bindings.Pcl_Status;
+      Json_Payload : constant String := To_Json (Request);
+      Payload : constant String :=
+        (if Content_Type = "" or else Content_Type = "application/json"
+         then Json_Payload
+         elsif Content_Type = "application/flatbuffers"
+         then Flatbuffers_Codec.To_Binary_Plan (Request)
+         elsif Content_Type = Grpc_Content_Type
+         then ""
+         else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
+      Payload_Bytes : aliased constant String := Payload;
+      Svc_C  : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Svc_Create_Plan);
+      Msg    : aliased Pcl_Bindings.Pcl_Msg;
+      Status : Pcl_Bindings.Pcl_Status;
+      pragma Unreferenced (Status);
+   begin
+      if Content_Type = Grpc_Content_Type then
+         if Ada.Strings.Unbounded.Length (Grpc_Channel) = 0 then
+            raise Program_Error with "gRPC channel not configured";
+         end if;
+         declare
+            Rsp : constant Identifier :=
+              Grpc_Transport.Invoke_Create_Plan
+                (To_String (Grpc_Channel), Request);
+            Response_Payload : constant String :=
+              """" & To_String (Rsp) & """";
+         begin
+            Emit_Invoke_Response
+              (Callback, User_Data, Response_Payload);
+         end;
+         return;
+      end if;
+
+      if Content_Type = "" or else Content_Type = "application/json" then
+         Req_C := Interfaces.C.Strings.New_String (Payload);
+         Msg.Data := To_Address (Req_C);
+      else
+         Msg.Data :=
+           (if Payload_Bytes'Length = 0
+            then System.Null_Address
+            else Payload_Bytes (Payload_Bytes'First)'Address);
+      end if;
+      Msg.Size      := Interfaces.C.unsigned (Payload_Bytes'Length);
+      Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
+      Status := Pcl_Bindings.Invoke_Async
+        (Executor, Svc_C, Msg'Access, Callback, User_Data);
+      if Req_C /= Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Req_C);
+      end if;
+      Interfaces.C.Strings.Free (Svc_C);
+      Interfaces.C.Strings.Free (Msg.Type_Name);
+   end Invoke_Create_Plan;
+
    procedure Invoke_Read_Plan
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
@@ -1825,6 +2815,128 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
    end Invoke_Read_Plan;
+
+   procedure Invoke_Update_Plan
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
+      Request   : Plan;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json")
+   is
+      use type Pcl_Bindings.Pcl_Status;
+      Json_Payload : constant String := To_Json (Request);
+      Payload : constant String :=
+        (if Content_Type = "" or else Content_Type = "application/json"
+         then Json_Payload
+         elsif Content_Type = "application/flatbuffers"
+         then Flatbuffers_Codec.To_Binary_Plan (Request)
+         elsif Content_Type = Grpc_Content_Type
+         then ""
+         else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
+      Payload_Bytes : aliased constant String := Payload;
+      Svc_C  : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Svc_Update_Plan);
+      Msg    : aliased Pcl_Bindings.Pcl_Msg;
+      Status : Pcl_Bindings.Pcl_Status;
+      pragma Unreferenced (Status);
+   begin
+      if Content_Type = Grpc_Content_Type then
+         if Ada.Strings.Unbounded.Length (Grpc_Channel) = 0 then
+            raise Program_Error with "gRPC channel not configured";
+         end if;
+         declare
+            Rsp : constant Ack :=
+              Grpc_Transport.Invoke_Update_Plan
+                (To_String (Grpc_Channel), Request);
+            Response_Payload : constant String := To_Json (Rsp);
+         begin
+            Emit_Invoke_Response
+              (Callback, User_Data, Response_Payload);
+         end;
+         return;
+      end if;
+
+      if Content_Type = "" or else Content_Type = "application/json" then
+         Req_C := Interfaces.C.Strings.New_String (Payload);
+         Msg.Data := To_Address (Req_C);
+      else
+         Msg.Data :=
+           (if Payload_Bytes'Length = 0
+            then System.Null_Address
+            else Payload_Bytes (Payload_Bytes'First)'Address);
+      end if;
+      Msg.Size      := Interfaces.C.unsigned (Payload_Bytes'Length);
+      Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
+      Status := Pcl_Bindings.Invoke_Async
+        (Executor, Svc_C, Msg'Access, Callback, User_Data);
+      if Req_C /= Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Req_C);
+      end if;
+      Interfaces.C.Strings.Free (Svc_C);
+      Interfaces.C.Strings.Free (Msg.Type_Name);
+   end Invoke_Update_Plan;
+
+   procedure Invoke_Delete_Plan
+     (Executor  : Pcl_Bindings.Pcl_Executor_Access;
+      Request   : Identifier;
+      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address := System.Null_Address;
+      Content_Type : String := "application/json")
+   is
+      use type Pcl_Bindings.Pcl_Status;
+      Json_Payload : constant String := To_String (Request);
+      Payload : constant String :=
+        (if Content_Type = "" or else Content_Type = "application/json"
+         then Json_Payload
+         elsif Content_Type = "application/flatbuffers"
+         then Flatbuffers_Codec.To_Binary_Identifier (Request)
+         elsif Content_Type = Grpc_Content_Type
+         then ""
+         else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
+      Payload_Bytes : aliased constant String := Payload;
+      Svc_C  : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Svc_Delete_Plan);
+      Msg    : aliased Pcl_Bindings.Pcl_Msg;
+      Status : Pcl_Bindings.Pcl_Status;
+      pragma Unreferenced (Status);
+   begin
+      if Content_Type = Grpc_Content_Type then
+         if Ada.Strings.Unbounded.Length (Grpc_Channel) = 0 then
+            raise Program_Error with "gRPC channel not configured";
+         end if;
+         declare
+            Rsp : constant Ack :=
+              Grpc_Transport.Invoke_Delete_Plan
+                (To_String (Grpc_Channel), Request);
+            Response_Payload : constant String := To_Json (Rsp);
+         begin
+            Emit_Invoke_Response
+              (Callback, User_Data, Response_Payload);
+         end;
+         return;
+      end if;
+
+      if Content_Type = "" or else Content_Type = "application/json" then
+         Req_C := Interfaces.C.Strings.New_String (Payload);
+         Msg.Data := To_Address (Req_C);
+      else
+         Msg.Data :=
+           (if Payload_Bytes'Length = 0
+            then System.Null_Address
+            else Payload_Bytes (Payload_Bytes'First)'Address);
+      end if;
+      Msg.Size      := Interfaces.C.unsigned (Payload_Bytes'Length);
+      Msg.Type_Name := Interfaces.C.Strings.New_String (Content_Type);
+      Status := Pcl_Bindings.Invoke_Async
+        (Executor, Svc_C, Msg'Access, Callback, User_Data);
+      if Req_C /= Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Req_C);
+      end if;
+      Interfaces.C.Strings.Free (Svc_C);
+      Interfaces.C.Strings.Free (Msg.Type_Name);
+   end Invoke_Delete_Plan;
 
    procedure Invoke_Read_Run
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
@@ -2025,21 +3137,21 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
                     Response_Buf, Response_Size);
                end;
             end;
-         when Ch_Create_Requirement =>
+         when Ch_Create_Planning_Requirement =>
             declare
-               Req : constant Planning_Execution_Requirement :=
+               Req : constant Planning_Requirement :=
                  (if Content_Type = "" or else Content_Type = "application/json"
                   then From_Json (Request_Payload, null)
                   elsif Content_Type = "application/flatbuffers"
-                  then Flatbuffers_Codec.From_Binary_Planning_Execution_Requirement (Request_Payload, null)
+                  then Flatbuffers_Codec.From_Binary_Planning_Requirement (Request_Payload, null)
                   else raise Constraint_Error with "Unsupported content type: " & Content_Type);
                Rsp : Identifier;
                Json_Response : String := "";
             begin
-               if Handlers /= null and then Handlers.On_Create_Requirement /= null then
-                  Handlers.On_Create_Requirement.all (Req, Rsp);
+               if Handlers /= null and then Handlers.On_Create_Planning_Requirement /= null then
+                  Handlers.On_Create_Planning_Requirement.all (Req, Rsp);
                else
-                  Default_Handle_Create_Requirement (Req, Rsp);
+                  Default_Handle_Create_Planning_Requirement (Req, Rsp);
                end if;
                Json_Response := To_String (Rsp);
                Copy_To_Buf
@@ -2050,7 +3162,7 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
                    else raise Constraint_Error with "Unsupported content type: " & Content_Type),
                   Response_Buf, Response_Size);
             end;
-         when Ch_Read_Requirement =>
+         when Ch_Read_Planning_Requirement =>
             declare
                Req : constant Query :=
                  (if Content_Type = "" or else Content_Type = "application/json"
@@ -2058,10 +3170,10 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
                   elsif Content_Type = "application/flatbuffers"
                   then Flatbuffers_Codec.From_Binary_Query (Request_Payload, null)
                   else raise Constraint_Error with "Unsupported content type: " & Content_Type);
-               Rsp : constant Planning_Execution_Requirement_Array :=
-                 (if Handlers /= null and then Handlers.On_Read_Requirement /= null
-                  then Handlers.On_Read_Requirement.all (Req)
-                  else Default_Handle_Read_Requirement (Req));
+               Rsp : constant Planning_Requirement_Array :=
+                 (if Handlers /= null and then Handlers.On_Read_Planning_Requirement /= null
+                  then Handlers.On_Read_Planning_Requirement.all (Req)
+                  else Default_Handle_Read_Planning_Requirement (Req));
             begin
                declare
                   use Ada.Strings.Unbounded;
@@ -2081,26 +3193,26 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
                     ((if Content_Type = "" or else Content_Type = "application/json"
                       then Json_Response
                       elsif Content_Type = "application/flatbuffers"
-                      then Flatbuffers_Codec.To_Binary_Planning_Execution_Requirement_Array (Json_Response)
+                      then Flatbuffers_Codec.To_Binary_Planning_Requirement_Array (Json_Response)
                       else raise Constraint_Error with "Unsupported content type: " & Content_Type),
                     Response_Buf, Response_Size);
                end;
             end;
-         when Ch_Update_Requirement =>
+         when Ch_Update_Planning_Requirement =>
             declare
-               Req : constant Planning_Execution_Requirement :=
+               Req : constant Planning_Requirement :=
                  (if Content_Type = "" or else Content_Type = "application/json"
                   then From_Json (Request_Payload, null)
                   elsif Content_Type = "application/flatbuffers"
-                  then Flatbuffers_Codec.From_Binary_Planning_Execution_Requirement (Request_Payload, null)
+                  then Flatbuffers_Codec.From_Binary_Planning_Requirement (Request_Payload, null)
                   else raise Constraint_Error with "Unsupported content type: " & Content_Type);
                Rsp : Ack;
                Json_Response : String := "";
             begin
-               if Handlers /= null and then Handlers.On_Update_Requirement /= null then
-                  Handlers.On_Update_Requirement.all (Req, Rsp);
+               if Handlers /= null and then Handlers.On_Update_Planning_Requirement /= null then
+                  Handlers.On_Update_Planning_Requirement.all (Req, Rsp);
                else
-                  Default_Handle_Update_Requirement (Req, Rsp);
+                  Default_Handle_Update_Planning_Requirement (Req, Rsp);
                end if;
                Json_Response := To_Json (Rsp);
                Copy_To_Buf
@@ -2111,7 +3223,7 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
                    else raise Constraint_Error with "Unsupported content type: " & Content_Type),
                   Response_Buf, Response_Size);
             end;
-         when Ch_Delete_Requirement =>
+         when Ch_Delete_Planning_Requirement =>
             declare
                Req : constant Identifier :=
                  (if Content_Type = "" or else Content_Type = "application/json"
@@ -2122,10 +3234,121 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
                Rsp : Ack;
                Json_Response : String := "";
             begin
-               if Handlers /= null and then Handlers.On_Delete_Requirement /= null then
-                  Handlers.On_Delete_Requirement.all (Req, Rsp);
+               if Handlers /= null and then Handlers.On_Delete_Planning_Requirement /= null then
+                  Handlers.On_Delete_Planning_Requirement.all (Req, Rsp);
                else
-                  Default_Handle_Delete_Requirement (Req, Rsp);
+                  Default_Handle_Delete_Planning_Requirement (Req, Rsp);
+               end if;
+               Json_Response := To_Json (Rsp);
+               Copy_To_Buf
+                 ((if Content_Type = "" or else Content_Type = "application/json"
+                   then Json_Response
+                   elsif Content_Type = "application/flatbuffers"
+                   then Flatbuffers_Codec.To_Binary_Ack (Rsp)
+                   else raise Constraint_Error with "Unsupported content type: " & Content_Type),
+                  Response_Buf, Response_Size);
+            end;
+         when Ch_Create_Execution_Requirement =>
+            declare
+               Req : constant Execution_Requirement :=
+                 (if Content_Type = "" or else Content_Type = "application/json"
+                  then From_Json (Request_Payload, null)
+                  elsif Content_Type = "application/flatbuffers"
+                  then Flatbuffers_Codec.From_Binary_Execution_Requirement (Request_Payload, null)
+                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+               Rsp : Identifier;
+               Json_Response : String := "";
+            begin
+               if Handlers /= null and then Handlers.On_Create_Execution_Requirement /= null then
+                  Handlers.On_Create_Execution_Requirement.all (Req, Rsp);
+               else
+                  Default_Handle_Create_Execution_Requirement (Req, Rsp);
+               end if;
+               Json_Response := To_String (Rsp);
+               Copy_To_Buf
+                 ((if Content_Type = "" or else Content_Type = "application/json"
+                   then Json_Response
+                   elsif Content_Type = "application/flatbuffers"
+                   then Flatbuffers_Codec.To_Binary_Identifier (Rsp)
+                   else raise Constraint_Error with "Unsupported content type: " & Content_Type),
+                  Response_Buf, Response_Size);
+            end;
+         when Ch_Read_Execution_Requirement =>
+            declare
+               Req : constant Query :=
+                 (if Content_Type = "" or else Content_Type = "application/json"
+                  then From_Json (Request_Payload, null)
+                  elsif Content_Type = "application/flatbuffers"
+                  then Flatbuffers_Codec.From_Binary_Query (Request_Payload, null)
+                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+               Rsp : constant Execution_Requirement_Array :=
+                 (if Handlers /= null and then Handlers.On_Read_Execution_Requirement /= null
+                  then Handlers.On_Read_Execution_Requirement.all (Req)
+                  else Default_Handle_Read_Execution_Requirement (Req));
+            begin
+               declare
+                  use Ada.Strings.Unbounded;
+                  Acc : Unbounded_String :=
+                    To_Unbounded_String ("[");
+                  Json_Response : String := "";
+               begin
+                  for I in Rsp'Range loop
+                     if I > Rsp'First then
+                        Append (Acc, ",");
+                     end if;
+                     Append (Acc, To_Json (Rsp (I)));
+                  end loop;
+                  Append (Acc, "]");
+                  Json_Response := To_String (Acc);
+                  Copy_To_Buf
+                    ((if Content_Type = "" or else Content_Type = "application/json"
+                      then Json_Response
+                      elsif Content_Type = "application/flatbuffers"
+                      then Flatbuffers_Codec.To_Binary_Execution_Requirement_Array (Json_Response)
+                      else raise Constraint_Error with "Unsupported content type: " & Content_Type),
+                    Response_Buf, Response_Size);
+               end;
+            end;
+         when Ch_Update_Execution_Requirement =>
+            declare
+               Req : constant Execution_Requirement :=
+                 (if Content_Type = "" or else Content_Type = "application/json"
+                  then From_Json (Request_Payload, null)
+                  elsif Content_Type = "application/flatbuffers"
+                  then Flatbuffers_Codec.From_Binary_Execution_Requirement (Request_Payload, null)
+                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+               Rsp : Ack;
+               Json_Response : String := "";
+            begin
+               if Handlers /= null and then Handlers.On_Update_Execution_Requirement /= null then
+                  Handlers.On_Update_Execution_Requirement.all (Req, Rsp);
+               else
+                  Default_Handle_Update_Execution_Requirement (Req, Rsp);
+               end if;
+               Json_Response := To_Json (Rsp);
+               Copy_To_Buf
+                 ((if Content_Type = "" or else Content_Type = "application/json"
+                   then Json_Response
+                   elsif Content_Type = "application/flatbuffers"
+                   then Flatbuffers_Codec.To_Binary_Ack (Rsp)
+                   else raise Constraint_Error with "Unsupported content type: " & Content_Type),
+                  Response_Buf, Response_Size);
+            end;
+         when Ch_Delete_Execution_Requirement =>
+            declare
+               Req : constant Identifier :=
+                 (if Content_Type = "" or else Content_Type = "application/json"
+                  then To_Unbounded_String (Request_Payload)
+                  elsif Content_Type = "application/flatbuffers"
+                  then Flatbuffers_Codec.From_Binary_Identifier (Request_Payload, null)
+                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+               Rsp : Ack;
+               Json_Response : String := "";
+            begin
+               if Handlers /= null and then Handlers.On_Delete_Execution_Requirement /= null then
+                  Handlers.On_Delete_Execution_Requirement.all (Req, Rsp);
+               else
+                  Default_Handle_Delete_Execution_Requirement (Req, Rsp);
                end if;
                Json_Response := To_Json (Rsp);
                Copy_To_Buf
@@ -2211,6 +3434,31 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
                    else raise Constraint_Error with "Unsupported content type: " & Content_Type),
                   Response_Buf, Response_Size);
             end;
+         when Ch_Create_Plan =>
+            declare
+               Req : constant Plan :=
+                 (if Content_Type = "" or else Content_Type = "application/json"
+                  then From_Json (Request_Payload, null)
+                  elsif Content_Type = "application/flatbuffers"
+                  then Flatbuffers_Codec.From_Binary_Plan (Request_Payload, null)
+                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+               Rsp : Identifier;
+               Json_Response : String := "";
+            begin
+               if Handlers /= null and then Handlers.On_Create_Plan /= null then
+                  Handlers.On_Create_Plan.all (Req, Rsp);
+               else
+                  Default_Handle_Create_Plan (Req, Rsp);
+               end if;
+               Json_Response := To_String (Rsp);
+               Copy_To_Buf
+                 ((if Content_Type = "" or else Content_Type = "application/json"
+                   then Json_Response
+                   elsif Content_Type = "application/flatbuffers"
+                   then Flatbuffers_Codec.To_Binary_Identifier (Rsp)
+                   else raise Constraint_Error with "Unsupported content type: " & Content_Type),
+                  Response_Buf, Response_Size);
+            end;
          when Ch_Read_Plan =>
             declare
                Req : constant Query :=
@@ -2246,6 +3494,56 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
                       else raise Constraint_Error with "Unsupported content type: " & Content_Type),
                     Response_Buf, Response_Size);
                end;
+            end;
+         when Ch_Update_Plan =>
+            declare
+               Req : constant Plan :=
+                 (if Content_Type = "" or else Content_Type = "application/json"
+                  then From_Json (Request_Payload, null)
+                  elsif Content_Type = "application/flatbuffers"
+                  then Flatbuffers_Codec.From_Binary_Plan (Request_Payload, null)
+                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+               Rsp : Ack;
+               Json_Response : String := "";
+            begin
+               if Handlers /= null and then Handlers.On_Update_Plan /= null then
+                  Handlers.On_Update_Plan.all (Req, Rsp);
+               else
+                  Default_Handle_Update_Plan (Req, Rsp);
+               end if;
+               Json_Response := To_Json (Rsp);
+               Copy_To_Buf
+                 ((if Content_Type = "" or else Content_Type = "application/json"
+                   then Json_Response
+                   elsif Content_Type = "application/flatbuffers"
+                   then Flatbuffers_Codec.To_Binary_Ack (Rsp)
+                   else raise Constraint_Error with "Unsupported content type: " & Content_Type),
+                  Response_Buf, Response_Size);
+            end;
+         when Ch_Delete_Plan =>
+            declare
+               Req : constant Identifier :=
+                 (if Content_Type = "" or else Content_Type = "application/json"
+                  then To_Unbounded_String (Request_Payload)
+                  elsif Content_Type = "application/flatbuffers"
+                  then Flatbuffers_Codec.From_Binary_Identifier (Request_Payload, null)
+                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+               Rsp : Ack;
+               Json_Response : String := "";
+            begin
+               if Handlers /= null and then Handlers.On_Delete_Plan /= null then
+                  Handlers.On_Delete_Plan.all (Req, Rsp);
+               else
+                  Default_Handle_Delete_Plan (Req, Rsp);
+               end if;
+               Json_Response := To_Json (Rsp);
+               Copy_To_Buf
+                 ((if Content_Type = "" or else Content_Type = "application/json"
+                   then Json_Response
+                   elsif Content_Type = "application/flatbuffers"
+                   then Flatbuffers_Codec.To_Binary_Ack (Rsp)
+                   else raise Constraint_Error with "Unsupported content type: " & Content_Type),
+                  Response_Buf, Response_Size);
             end;
          when Ch_Read_Run =>
             declare

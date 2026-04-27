@@ -1,4 +1,4 @@
-// Auto-generated FlatBuffers PCL codec — do not edit
+// Auto-generated FlatBuffers PCL codec -- do not edit
 // Backend: flatbuffers | Namespace: pyramid::data_model::autonomy::flatbuffers_codec
 #pragma once
 
@@ -98,25 +98,67 @@ inline PlanningGoalT fromBinaryPlanningGoal(const std::string& s) {
     return fromBinaryPlanningGoal(s.data(), s.size());
 }
 
-inline std::string toBinary(const PlanningExecutionRequirementT& obj) {
+inline std::string toBinary(const ExecutionPolicyT& obj) {
     flatbuffers::FlatBufferBuilder builder(1024);
-    auto offset = PlanningExecutionRequirement::Pack(builder, &obj);
+    auto offset = ExecutionPolicy::Pack(builder, &obj);
     builder.Finish(offset);
     return std::string(
         reinterpret_cast<const char*>(builder.GetBufferPointer()),
         builder.GetSize());
 }
 
-inline PlanningExecutionRequirementT fromBinaryPlanningExecutionRequirement(const void* data, size_t size) {
+inline ExecutionPolicyT fromBinaryExecutionPolicy(const void* data, size_t size) {
     (void) size;
-    PlanningExecutionRequirementT result;
-    auto* fb = flatbuffers::GetRoot<PlanningExecutionRequirement>(data);
+    ExecutionPolicyT result;
+    auto* fb = flatbuffers::GetRoot<ExecutionPolicy>(data);
     if (fb) fb->UnPackTo(&result);
     return result;
 }
 
-inline PlanningExecutionRequirementT fromBinaryPlanningExecutionRequirement(const std::string& s) {
-    return fromBinaryPlanningExecutionRequirement(s.data(), s.size());
+inline ExecutionPolicyT fromBinaryExecutionPolicy(const std::string& s) {
+    return fromBinaryExecutionPolicy(s.data(), s.size());
+}
+
+inline std::string toBinary(const PlanningRequirementT& obj) {
+    flatbuffers::FlatBufferBuilder builder(1024);
+    auto offset = PlanningRequirement::Pack(builder, &obj);
+    builder.Finish(offset);
+    return std::string(
+        reinterpret_cast<const char*>(builder.GetBufferPointer()),
+        builder.GetSize());
+}
+
+inline PlanningRequirementT fromBinaryPlanningRequirement(const void* data, size_t size) {
+    (void) size;
+    PlanningRequirementT result;
+    auto* fb = flatbuffers::GetRoot<PlanningRequirement>(data);
+    if (fb) fb->UnPackTo(&result);
+    return result;
+}
+
+inline PlanningRequirementT fromBinaryPlanningRequirement(const std::string& s) {
+    return fromBinaryPlanningRequirement(s.data(), s.size());
+}
+
+inline std::string toBinary(const ExecutionRequirementT& obj) {
+    flatbuffers::FlatBufferBuilder builder(1024);
+    auto offset = ExecutionRequirement::Pack(builder, &obj);
+    builder.Finish(offset);
+    return std::string(
+        reinterpret_cast<const char*>(builder.GetBufferPointer()),
+        builder.GetSize());
+}
+
+inline ExecutionRequirementT fromBinaryExecutionRequirement(const void* data, size_t size) {
+    (void) size;
+    ExecutionRequirementT result;
+    auto* fb = flatbuffers::GetRoot<ExecutionRequirement>(data);
+    if (fb) fb->UnPackTo(&result);
+    return result;
+}
+
+inline ExecutionRequirementT fromBinaryExecutionRequirement(const std::string& s) {
+    return fromBinaryExecutionRequirement(s.data(), s.size());
 }
 
 inline std::string toBinary(const WorldFactUpdateT& obj) {

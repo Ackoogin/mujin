@@ -1,5 +1,5 @@
 // Auto-generated FlatBuffers schema from tactical.proto
-// Do not edit — regenerate from proto source
+// Do not edit -- regenerate from proto source
 
 namespace pyramid.data_model.tactical;
 

@@ -2,10 +2,10 @@
 
 This document records the target PYRAMID-facing AME proto shape.
 
-Objectives and Tasks own objective/task semantics. They delegate planning and
-optional execution to AME by placing an AME-specific
-`PlanningExecutionRequirement`. AME then plans, executes through typed
-component EntityActions, and exposes plans, execution runs, and placement
+Objectives and Tasks own objective/task semantics. They delegate planning to AME
+by placing an AME-specific `PlanningRequirement`, then delegate execution by
+placing an `ExecutionRequirement` that references an approved plan. AME then
+exposes plans as addressable resources and execution runs / placement
 traceability as read-only products.
 
 This is the new target shape. The existing AME backend implementation can be
@@ -16,10 +16,11 @@ compatibility surface.
 
 | Decision | Rationale |
 |----------|-----------|
-| AME has its own `PlanningExecutionRequirement` | Objectives/Tasks need a typed way to delegate planning/execution without AME owning their schemas |
+| AME has separate `PlanningRequirement` and `ExecutionRequirement` types | Objectives/Tasks need typed ways to delegate planning and execution without AME owning their schemas |
 | AME does not define Objective or Task requirement schemas | Objective/Task contracts remain owned by their components |
 | Upstream traceability uses `RequirementReference` | AME can refer back to Objective/Task/component requirements by id, service, component, and type |
-| AME outputs are read-only products | Plans, execution runs, and requirement placements are products of AME planning/execution |
+| Plans are addressable resources | Plans can be produced by AME planning or imported by a coordinator before being executed by id |
+| Execution outputs are read-only products | Execution runs and requirement placements are products of AME execution |
 | Component actioning is typed EntityActions | AME should place/update/delete typed component requirements and read products/capabilities |
 | No generic command bus in the target PYRAMID proto | `service_name + operation + request_fields` is replaced by typed requirement placement traceability at the PYRAMID boundary |
 | AME internals may still use command-shaped execution | AME remains usable as a planning/execution library outside PYRAMID; wrapper code maps command-shaped plan leaves to typed PYRAMID placements where bindings exist |
@@ -42,16 +43,17 @@ New data-model elements in `pyramid/data_model/autonomy.proto`:
 
 | Element | Purpose |
 |---------|---------|
-| `PlanningExecutionRequirement` | Typed `Requirement` placed on AME by Objectives, Tasks, or another coordinator |
+| `PlanningRequirement` | Typed `Requirement` placed on AME when a coordinator needs a plan |
+| `ExecutionRequirement` | Typed `Requirement` placed on AME when a coordinator wants an approved plan executed |
 | `RequirementReference` | Traceability to upstream Objective/Task/component requirements without AME owning those schemas |
 | `PlanningGoal` | Goal accepted by AME, as either a requirement reference or an AME-domain expression |
-| `PlanningPolicy` | Planning and execution policy knobs such as replanning limits |
+| `PlanningPolicy` / `ExecutionPolicy` | Policy knobs such as replanning limits and placement concurrency |
 | `AgentState` | Backend-neutral view of available agents/resources |
 | `StateUpdate` / `WorldFactUpdate` | State ingress for AME's world model |
 | `Capabilities` | Read-only AME capability declaration |
-| `Plan` / `PlanStep` | Read-only plan products produced by AME |
+| `Plan` / `PlanStep` | Addressable plan resources produced by AME or imported by coordinators |
 | `PlannedComponentInteraction` | Planned EntityActions interaction with a target component |
-| `ExecutionRun` | Read-only execution state and achievement for a delegated requirement |
+| `ExecutionRun` | Read-only execution state and achievement for an execution requirement |
 | `RequirementPlacement` | Read-only trace of typed EntityActions interactions AME performs against target components |
 
 Provided services in
@@ -60,9 +62,10 @@ Provided services in
 | Service | Operations | Purpose |
 |---------|------------|---------|
 | `Capabilities_Service` | `ReadCapabilities` | Discover AME backend capabilities |
-| `Planning_Execution_Service` | `CreateRequirement`, `ReadRequirement`, `UpdateRequirement`, `DeleteRequirement` | Primary AME delegation surface |
+| `Planning_Requirement_Service` | `CreatePlanningRequirement`, `ReadPlanningRequirement`, `UpdatePlanningRequirement`, `DeletePlanningRequirement` | AME planning delegation surface |
+| `Execution_Requirement_Service` | `CreateExecutionRequirement`, `ReadExecutionRequirement`, `UpdateExecutionRequirement`, `DeleteExecutionRequirement` | AME execution delegation surface |
 | `State_Service` | `CreateState`, `UpdateState`, `DeleteState` | Push authoritative or believed world state into AME |
-| `Plan_Service` | `ReadPlan` | Read AME plan products |
+| `Plan_Service` | `CreatePlan`, `ReadPlan`, `UpdatePlan`, `DeletePlan` | Manage AME plan resources |
 | `Execution_Run_Service` | `ReadRun` | Read AME execution run products |
 | `Requirement_Placement_Service` | `ReadPlacement` | Read traceability for typed component requirement placements and reads |
 
@@ -70,8 +73,9 @@ The top-level interaction is:
 
 ```text
 Objectives/Tasks
-  -> Planning_Execution_Service.CreateRequirement(PlanningExecutionRequirement)
+  -> Planning_Requirement_Service.CreatePlanningRequirement(PlanningRequirement)
   -> Plan_Service.ReadPlan(Query)
+  -> Execution_Requirement_Service.CreateExecutionRequirement(ExecutionRequirement)
   -> Execution_Run_Service.ReadRun(Query)
   -> Requirement_Placement_Service.ReadPlacement(Query)
 ```
@@ -92,16 +96,16 @@ bridge that exercises it through generated PYRAMID service bindings.
 
 | Area | Current state |
 |------|---------------|
-| Proto contract | `autonomy.proto` defines `PlanningExecutionRequirement`, `StateUpdate`, `Capabilities`, `Plan`, `ExecutionRun`, and `RequirementPlacement` |
-| Provided services | `provided.proto` exposes AME capabilities, planning/execution requirement CRUD, state ingress, and read-only plan/run/placement services |
+| Proto contract | `autonomy.proto` defines `PlanningRequirement`, `ExecutionRequirement`, `StateUpdate`, `Capabilities`, `Plan`, `ExecutionRun`, and `RequirementPlacement` |
+| Provided services | `provided.proto` exposes AME capabilities, separate planning and execution requirement CRUD, plan CRUD, state ingress, and read-only run/placement services |
 | PYRAMID generation | C++ service bindings, FlatBuffers schemas, JSON codecs, and protobuf generation include the autonomy backend contract |
 | AME bridge | `PyramidAutonomyBridge` implements the generated autonomy backend service handler in-process |
-| Retained products | The bridge keeps requirement, state, plan, run, and placement stores behind read operations instead of drain-only queues |
-| Query semantics | `Plan`, `ExecutionRun`, and `RequirementPlacement` product reads support retained repeated reads and `Query.one_shot` removal |
-| Planning path | `PLAN_ONLY` requirements are planned and exposed as read-only `Plan` products |
-| Execution path | `PLAN_AND_EXECUTE` requirements produce `ExecutionRun` products and placement traceability |
+| Retained resources/products | The bridge keeps requirement, state, plan, run, and placement stores behind read operations instead of drain-only queues |
+| Query semantics | `Plan`, `ExecutionRun`, and `RequirementPlacement` reads support retained repeated reads and `Query.one_shot` removal |
+| Planning path | `PlanningRequirement` entities are planned and exposed as CRUD-addressable `Plan` resources |
+| Execution path | `ExecutionRequirement` entities execute approved plans and produce `ExecutionRun` products and placement traceability |
 | State feedback | `State_Service.CreateState` / `UpdateState` update the AME world model and can complete waiting execution steps |
-| Requirement lifecycle | `UpdateRequirement` refreshes stored requirement/progress; `DeleteRequirement` removes the requirement and marks matching runs cancelled |
+| Requirement lifecycle | Planning and execution update calls refresh their stored requirements; execution delete removes the requirement and marks matching runs cancelled |
 | Execution abstraction | AME plan leaves now submit through `IExecutionSink`, allowing command-only or typed-placement-backed execution |
 | Binding policies | `CommandOnly`, `PreferTypedPlacement`, and `RequireTypedPlacement` behavior is implemented; strict policy rejects unbound commands and fails the run |
 | Test coverage | Contract, bridge, execution-sink, and backend execution behaviors are covered by focused C++ tests |
@@ -149,7 +153,7 @@ Tasks responsibilities are the closest conceptual fit for AME:
 | `COMP-062-R07` coordinate solution enactment | AME enacts the plan through typed component EntityActions |
 | `COMP-062-R08` identify progress of solution | AME exposes `ExecutionRun` and requirement achievement state |
 | `COMP-062-R09` evaluate solution quality | AME exposes predicted plan quality; Tasks retain task-level quality assessment |
-| `COMP-062-R10` determine implementation solution cost | Future AME plan products can carry cost once a standard cost model exists |
+| `COMP-062-R10` determine implementation solution cost | Future AME plan resources can carry cost once a standard cost model exists |
 
 AME does not define `ObjectiveRequirement`, `TaskRequirement`, or
 `DerivedNeed`. It accepts `RequirementReference` values that point to upstream
@@ -223,7 +227,8 @@ AME records those interactions as `RequirementPlacement` products:
 
 | `RequirementPlacement` field | Example |
 |------------------------------|---------|
-| `planning_execution_requirement_id` | id of the AME requirement delegated by Tasks/Objectives |
+| `execution_requirement_id` | id of the AME execution requirement delegated by Tasks/Objectives |
+| `planning_requirement_id` | id of the AME planning requirement that produced the plan |
 | `plan_id` / `plan_step_id` | AME plan and step that caused the interaction |
 | `target_component` | `tactical_objects` |
 | `target_service` | `Object_Of_Interest_Service` |
@@ -247,7 +252,7 @@ message Query {
 }
 ```
 
-AME product read services should therefore support:
+AME resource/product read services should therefore support:
 
 - lookup by `id[]`
 - repeated idempotent reads when `one_shot` is unset or false
@@ -256,8 +261,10 @@ AME product read services should therefore support:
 Current implementation note: `Plan_Service.ReadPlan`,
 `Execution_Run_Service.ReadRun`, and
 `Requirement_Placement_Service.ReadPlacement` implement `one_shot` removal.
-`Planning_Execution_Service.ReadRequirement` is currently retained/idempotent
-only; whether requirements should also be removed by `one_shot` remains an open
+`Plan_Service` also supports explicit create, update, and delete for externally
+approved or imported plans.
+Planning and execution requirement reads are currently retained/idempotent only;
+whether requirements should also be removed by `one_shot` remains an open
 bridge-hardening decision.
 
 If status, session, target-service, or world-version filtering is needed
@@ -268,11 +275,11 @@ AME-specific convention.
 
 | Direction | Status |
 |-----------|--------|
-| Replace the old session/command backend boundary with `PlanningExecutionRequirement` CRUD | Implemented in `PyramidAutonomyBridge` |
-| Map created requirements into AME planning problems and execution runs | Implemented for expression goals and available-agent state |
-| Expose generated plans through `Plan_Service.ReadPlan` | Implemented |
+| Replace the old session/command backend boundary with planning and execution requirement CRUD | Implemented in `PyramidAutonomyBridge` |
+| Map planning requirements into AME planning problems and execution requirements into execution runs | Implemented for expression goals, approved plans, and available-agent state |
+| Expose generated and imported plans through `Plan_Service` CRUD | Implemented |
 | Record typed component interactions as `RequirementPlacement` products | Implemented through `RequirementBindingExecutionSink` |
-| Expose execution state through `Execution_Run_Service.ReadRun` and requirement status / achievement | Implemented for plan-only, waiting, achieved, failed, and cancelled states |
+| Expose execution state through `Execution_Run_Service.ReadRun` and requirement status / achievement | Implemented for waiting, achieved, failed, and cancelled states |
 | Ingest external world-state changes through `State_Service` | Implemented for create/update state feedback |
 | Execute plans through generated target component service bindings | Remaining work; placements are recorded locally but not yet invoked against real generated clients |
 
@@ -287,8 +294,9 @@ Status: implementation complete; external consumer review remains.
 
 Completed:
 
-- `PlanningExecutionRequirement` is the AME delegation surface.
-- `Plan`, `ExecutionRun`, and `RequirementPlacement` are read-only products.
+- `PlanningRequirement` and `ExecutionRequirement` are the AME delegation surfaces.
+- `Plan` is a CRUD-addressable resource; `ExecutionRun` and
+  `RequirementPlacement` are read-only products.
 - `State_Service` is AME world-state ingress.
 - Objectives/Tasks references are traceability only until those component protos
   exist.
@@ -309,17 +317,17 @@ remains.
 Completed:
 
 - Retained repeated reads are implemented for product stores.
-- `Query.one_shot` removal is implemented for plan, run, and placement product
+- `Query.one_shot` removal is implemented for plan, run, and placement
   reads.
-- `DeleteRequirement` cancels matching execution runs.
+- `DeleteExecutionRequirement` cancels matching execution runs.
 - State feedback can move waiting execution runs and placements to completed.
 - Strict binding-policy failures mark the run and requirement failed.
 
 Open:
 
-- Improve `UpdateRequirement` handling for approved-plan execution and
+- Improve `UpdatePlanningRequirement` / `UpdateExecutionRequirement` handling for
   requirement refinement.
-- Decide whether `PlanningExecutionRequirement` reads should support
+- Decide whether planning/execution requirement reads should support
   `one_shot`; current requirement reads are retained/idempotent.
 - Persist enough plan/run/placement metadata for replay and audit.
 - Add failure causes to requirement achievement and execution-run products.
@@ -359,8 +367,9 @@ Completed:
 Open:
 
 - Add a small generated-contract test client that can:
-  - create a `PlanningExecutionRequirement`
+  - create a `PlanningRequirement`
   - read the resulting `Plan`
+  - create an `ExecutionRequirement`
   - read the `ExecutionRun`
   - read `RequirementPlacement` records
   - push `StateUpdate` feedback
@@ -394,8 +403,8 @@ than replacing the current ROS2 or PCL modes.
 
 ### Devenv Goals
 
-- Let developers exercise the new `Planning_Execution_Service` contract without
-  writing custom C++.
+- Let developers exercise the new planning and execution requirement service
+  contracts without writing custom C++.
 - Make the retained products visible: requirements, plans, execution runs,
   placements, and state updates.
 - Allow switching execution policy between `CommandOnly`,
@@ -410,9 +419,9 @@ than replacing the current ROS2 or PCL modes.
 |-----------------|-------------|
 | `--backend pyramid` | New backend mode that talks to an in-process `PyramidAutonomyBridge` |
 | Contract client wrapper | Thin Python or subprocess wrapper around generated C++ JSON service dispatch |
-| Requirement panel | Create/update/delete `PlanningExecutionRequirement` from editable JSON |
+| Requirement panel | Create/update/delete `PlanningRequirement` and `ExecutionRequirement` from editable JSON |
 | State panel | Send `StateUpdate` messages and inspect world-state-driven progress |
-| Plan panel | Read `Plan_Service.ReadPlan` and show ordered `PlanStep` rows |
+| Plan panel | Create/update/delete plans through `Plan_Service` and show ordered `PlanStep` rows |
 | Run panel | Read `Execution_Run_Service.ReadRun` and show state/achievement/progress |
 | Placement panel | Read `Requirement_Placement_Service.ReadPlacement` and show bound target interactions |
 | Binding editor | Load/save action-to-component binding examples for local scenarios |
@@ -459,11 +468,12 @@ reuse the same UI panels once PYRAMID service transport is selected.
 
 ## Review Checklist
 
-- AME is invoked by `CreateRequirement(PlanningExecutionRequirement)`, not by
-  session start or generic command.
+- AME is invoked by `CreatePlanningRequirement(PlanningRequirement)` followed by
+  `CreateExecutionRequirement(ExecutionRequirement)` when execution is needed,
+  not by session start or generic command.
 - Objectives and Tasks remain upstream owners of their own requirement schemas.
-- AME outputs are products: `Plan`, `ExecutionRun`, and
-  `RequirementPlacement`.
+- AME exposes `Plan` as a resource and exposes `ExecutionRun` /
+  `RequirementPlacement` as products.
 - Component behaviours are typed EntityActions against target component
   services.
 - Repeated non-`one_shot` reads are idempotent.

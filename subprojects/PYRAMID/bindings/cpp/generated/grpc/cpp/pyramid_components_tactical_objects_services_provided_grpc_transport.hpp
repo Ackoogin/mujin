@@ -1,4 +1,4 @@
-// Auto-generated gRPC transport — do not edit
+// Auto-generated gRPC transport -- do not edit
 // Backend: grpc | Namespace: pyramid::services::tactical_objects::provided::grpc_transport
 //
 // Exposes proto services as gRPC services, delegating to
@@ -18,7 +18,7 @@
 namespace pyramid::services::tactical_objects::provided::grpc_transport {
 
 // ---------------------------------------------------------------------------
-// Matching_Objects_Service — gRPC service implementation
+// Matching_Objects_Service -- gRPC service implementation
 // ---------------------------------------------------------------------------
 
 class Matching_Objects_ServiceImpl final : public pyramid::components::tactical_objects::services::provided::Matching_Objects_Service::Service {
@@ -36,7 +36,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Object_Of_Interest_Service — gRPC service implementation
+// Object_Of_Interest_Service -- gRPC service implementation
 // ---------------------------------------------------------------------------
 
 class Object_Of_Interest_ServiceImpl final : public pyramid::components::tactical_objects::services::provided::Object_Of_Interest_Service::Service {
@@ -69,7 +69,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Specific_Object_Detail_Service — gRPC service implementation
+// Specific_Object_Detail_Service -- gRPC service implementation
 // ---------------------------------------------------------------------------
 
 class Specific_Object_Detail_ServiceImpl final : public pyramid::components::tactical_objects::services::provided::Specific_Object_Detail_Service::Service {

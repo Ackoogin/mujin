@@ -26,48 +26,28 @@ FactAuthorityLevel factAuthorityLevelFromString(const std::string& s) {
     return FactAuthorityLevel::Unspecified;
 }
 
-std::string toString(PlanningExecutionMode v) {
+std::string toString(ExecutionState v) {
     switch (v) {
-        case PlanningExecutionMode::Unspecified: return "PLANNING_EXECUTION_MODE_UNSPECIFIED";
-        case PlanningExecutionMode::PlanAndExecute: return "PLANNING_EXECUTION_MODE_PLAN_AND_EXECUTE";
-        case PlanningExecutionMode::PlanOnly: return "PLANNING_EXECUTION_MODE_PLAN_ONLY";
-        case PlanningExecutionMode::ExecuteApprovedPlan: return "PLANNING_EXECUTION_MODE_EXECUTE_APPROVED_PLAN";
+        case ExecutionState::Unspecified: return "EXECUTION_STATE_UNSPECIFIED";
+        case ExecutionState::Accepted: return "EXECUTION_STATE_ACCEPTED";
+        case ExecutionState::Executing: return "EXECUTION_STATE_EXECUTING";
+        case ExecutionState::WaitingForComponents: return "EXECUTION_STATE_WAITING_FOR_COMPONENTS";
+        case ExecutionState::Achieved: return "EXECUTION_STATE_ACHIEVED";
+        case ExecutionState::Failed: return "EXECUTION_STATE_FAILED";
+        case ExecutionState::Cancelled: return "EXECUTION_STATE_CANCELLED";
     }
-    return "PLANNING_EXECUTION_MODE_UNSPECIFIED";
+    return "EXECUTION_STATE_UNSPECIFIED";
 }
 
-PlanningExecutionMode planningExecutionModeFromString(const std::string& s) {
-    if (s == "PLANNING_EXECUTION_MODE_UNSPECIFIED") return PlanningExecutionMode::Unspecified;
-    if (s == "PLANNING_EXECUTION_MODE_PLAN_AND_EXECUTE") return PlanningExecutionMode::PlanAndExecute;
-    if (s == "PLANNING_EXECUTION_MODE_PLAN_ONLY") return PlanningExecutionMode::PlanOnly;
-    if (s == "PLANNING_EXECUTION_MODE_EXECUTE_APPROVED_PLAN") return PlanningExecutionMode::ExecuteApprovedPlan;
-    return PlanningExecutionMode::Unspecified;
-}
-
-std::string toString(PlanningExecutionState v) {
-    switch (v) {
-        case PlanningExecutionState::Unspecified: return "PLANNING_EXECUTION_STATE_UNSPECIFIED";
-        case PlanningExecutionState::Accepted: return "PLANNING_EXECUTION_STATE_ACCEPTED";
-        case PlanningExecutionState::Planning: return "PLANNING_EXECUTION_STATE_PLANNING";
-        case PlanningExecutionState::Executing: return "PLANNING_EXECUTION_STATE_EXECUTING";
-        case PlanningExecutionState::WaitingForComponents: return "PLANNING_EXECUTION_STATE_WAITING_FOR_COMPONENTS";
-        case PlanningExecutionState::Achieved: return "PLANNING_EXECUTION_STATE_ACHIEVED";
-        case PlanningExecutionState::Failed: return "PLANNING_EXECUTION_STATE_FAILED";
-        case PlanningExecutionState::Cancelled: return "PLANNING_EXECUTION_STATE_CANCELLED";
-    }
-    return "PLANNING_EXECUTION_STATE_UNSPECIFIED";
-}
-
-PlanningExecutionState planningExecutionStateFromString(const std::string& s) {
-    if (s == "PLANNING_EXECUTION_STATE_UNSPECIFIED") return PlanningExecutionState::Unspecified;
-    if (s == "PLANNING_EXECUTION_STATE_ACCEPTED") return PlanningExecutionState::Accepted;
-    if (s == "PLANNING_EXECUTION_STATE_PLANNING") return PlanningExecutionState::Planning;
-    if (s == "PLANNING_EXECUTION_STATE_EXECUTING") return PlanningExecutionState::Executing;
-    if (s == "PLANNING_EXECUTION_STATE_WAITING_FOR_COMPONENTS") return PlanningExecutionState::WaitingForComponents;
-    if (s == "PLANNING_EXECUTION_STATE_ACHIEVED") return PlanningExecutionState::Achieved;
-    if (s == "PLANNING_EXECUTION_STATE_FAILED") return PlanningExecutionState::Failed;
-    if (s == "PLANNING_EXECUTION_STATE_CANCELLED") return PlanningExecutionState::Cancelled;
-    return PlanningExecutionState::Unspecified;
+ExecutionState executionStateFromString(const std::string& s) {
+    if (s == "EXECUTION_STATE_UNSPECIFIED") return ExecutionState::Unspecified;
+    if (s == "EXECUTION_STATE_ACCEPTED") return ExecutionState::Accepted;
+    if (s == "EXECUTION_STATE_EXECUTING") return ExecutionState::Executing;
+    if (s == "EXECUTION_STATE_WAITING_FOR_COMPONENTS") return ExecutionState::WaitingForComponents;
+    if (s == "EXECUTION_STATE_ACHIEVED") return ExecutionState::Achieved;
+    if (s == "EXECUTION_STATE_FAILED") return ExecutionState::Failed;
+    if (s == "EXECUTION_STATE_CANCELLED") return ExecutionState::Cancelled;
+    return ExecutionState::Unspecified;
 }
 
 std::string toString(RequirementPlacementOperation v) {
@@ -134,7 +114,6 @@ std::string toJson(const PlanningPolicy& msg) {
     nlohmann::json obj;
     obj["max_replans"] = msg.max_replans;
     obj["enable_replanning"] = msg.enable_replanning;
-    obj["max_concurrent_placements"] = msg.max_concurrent_placements;
     return obj.dump();
 }
 
@@ -143,7 +122,6 @@ PlanningPolicy fromJson(const std::string& s, PlanningPolicy* /*tag*/) {
     PlanningPolicy msg;
     if (j.contains("max_replans")) msg.max_replans = j["max_replans"].get<uint32_t>();
     if (j.contains("enable_replanning")) msg.enable_replanning = j["enable_replanning"].get<bool>();
-    if (j.contains("max_concurrent_placements")) msg.max_concurrent_placements = j["max_concurrent_placements"].get<uint32_t>();
     return msg;
 }
 
@@ -182,7 +160,24 @@ PlanningGoal fromJson(const std::string& s, PlanningGoal* /*tag*/) {
     return msg;
 }
 
-std::string toJson(const PlanningExecutionRequirement& msg) {
+std::string toJson(const ExecutionPolicy& msg) {
+    nlohmann::json obj;
+    obj["max_replans"] = msg.max_replans;
+    obj["enable_replanning"] = msg.enable_replanning;
+    obj["max_concurrent_placements"] = msg.max_concurrent_placements;
+    return obj.dump();
+}
+
+ExecutionPolicy fromJson(const std::string& s, ExecutionPolicy* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ExecutionPolicy msg;
+    if (j.contains("max_replans")) msg.max_replans = j["max_replans"].get<uint32_t>();
+    if (j.contains("enable_replanning")) msg.enable_replanning = j["enable_replanning"].get<bool>();
+    if (j.contains("max_concurrent_placements")) msg.max_concurrent_placements = j["max_concurrent_placements"].get<uint32_t>();
+    return msg;
+}
+
+std::string toJson(const PlanningRequirement& msg) {
     nlohmann::json obj;
     obj["base"] = nlohmann::json::parse(toJson(msg.base));
     obj["status"] = nlohmann::json::parse(toJson(msg.status));
@@ -208,14 +203,12 @@ std::string toJson(const PlanningExecutionRequirement& msg) {
         }
         obj["available_agents"] = arr;
     }
-    obj["mode"] = toString(msg.mode);
-    obj["approved_plan_id"] = msg.approved_plan_id;
     return obj.dump();
 }
 
-PlanningExecutionRequirement fromJson(const std::string& s, PlanningExecutionRequirement* /*tag*/) {
+PlanningRequirement fromJson(const std::string& s, PlanningRequirement* /*tag*/) {
     auto j = nlohmann::json::parse(s);
-    PlanningExecutionRequirement msg;
+    PlanningRequirement msg;
     if (j.contains("base")) msg.base = fromJson(j["base"].dump(), static_cast<pyramid::data_model::common::Entity*>(nullptr));
     if (j.contains("status")) msg.status = fromJson(j["status"].dump(), static_cast<pyramid::data_model::common::Achievement*>(nullptr));
     if (j.contains("upstream_requirement")) {
@@ -234,8 +227,51 @@ PlanningExecutionRequirement fromJson(const std::string& s, PlanningExecutionReq
             msg.available_agents.push_back(fromJson(v.dump(), static_cast<AgentState*>(nullptr)));
         }
     }
-    if (j.contains("mode")) msg.mode = planningExecutionModeFromString(j["mode"].get<std::string>());
-    if (j.contains("approved_plan_id")) msg.approved_plan_id = j["approved_plan_id"].get<std::string>();
+    return msg;
+}
+
+std::string toJson(const ExecutionRequirement& msg) {
+    nlohmann::json obj;
+    obj["base"] = nlohmann::json::parse(toJson(msg.base));
+    obj["status"] = nlohmann::json::parse(toJson(msg.status));
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.upstream_requirement) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["upstream_requirement"] = arr;
+    }
+    obj["plan_id"] = msg.plan_id;
+    obj["policy"] = nlohmann::json::parse(toJson(msg.policy));
+    {
+        nlohmann::json arr = nlohmann::json::array();
+        for (const auto& v : msg.available_agents) {
+            arr.push_back(nlohmann::json::parse(toJson(v)));
+        }
+        obj["available_agents"] = arr;
+    }
+    obj["planning_requirement_id"] = msg.planning_requirement_id;
+    return obj.dump();
+}
+
+ExecutionRequirement fromJson(const std::string& s, ExecutionRequirement* /*tag*/) {
+    auto j = nlohmann::json::parse(s);
+    ExecutionRequirement msg;
+    if (j.contains("base")) msg.base = fromJson(j["base"].dump(), static_cast<pyramid::data_model::common::Entity*>(nullptr));
+    if (j.contains("status")) msg.status = fromJson(j["status"].dump(), static_cast<pyramid::data_model::common::Achievement*>(nullptr));
+    if (j.contains("upstream_requirement")) {
+        for (const auto& v : j["upstream_requirement"]) {
+            msg.upstream_requirement.push_back(fromJson(v.dump(), static_cast<RequirementReference*>(nullptr)));
+        }
+    }
+    if (j.contains("plan_id")) msg.plan_id = j["plan_id"].get<std::string>();
+    if (j.contains("policy")) msg.policy = fromJson(j["policy"].dump(), static_cast<ExecutionPolicy*>(nullptr));
+    if (j.contains("available_agents")) {
+        for (const auto& v : j["available_agents"]) {
+            msg.available_agents.push_back(fromJson(v.dump(), static_cast<AgentState*>(nullptr)));
+        }
+    }
+    if (j.contains("planning_requirement_id")) msg.planning_requirement_id = j["planning_requirement_id"].get<std::string>();
     return msg;
 }
 
@@ -309,9 +345,9 @@ std::string toJson(const Capabilities& msg) {
     obj["id"] = msg.id;
     obj["source"] = msg.source;
     obj["backend_id"] = msg.backend_id;
-    obj["supports_plan_only"] = msg.supports_plan_only;
-    obj["supports_plan_and_execute"] = msg.supports_plan_and_execute;
-    obj["supports_execute_approved_plan"] = msg.supports_execute_approved_plan;
+    obj["supports_planning_requirements"] = msg.supports_planning_requirements;
+    obj["supports_execution_requirements"] = msg.supports_execution_requirements;
+    obj["supports_approved_plan_execution"] = msg.supports_approved_plan_execution;
     obj["supports_replanning"] = msg.supports_replanning;
     obj["supports_typed_component_requirement_placement"] = msg.supports_typed_component_requirement_placement;
     obj["supports_state_update_ingress"] = msg.supports_state_update_ingress;
@@ -327,9 +363,9 @@ Capabilities fromJson(const std::string& s, Capabilities* /*tag*/) {
     if (j.contains("id")) msg.id = j["id"].get<std::string>();
     if (j.contains("source")) msg.source = j["source"].get<std::string>();
     if (j.contains("backend_id")) msg.backend_id = j["backend_id"].get<std::string>();
-    if (j.contains("supports_plan_only")) msg.supports_plan_only = j["supports_plan_only"].get<bool>();
-    if (j.contains("supports_plan_and_execute")) msg.supports_plan_and_execute = j["supports_plan_and_execute"].get<bool>();
-    if (j.contains("supports_execute_approved_plan")) msg.supports_execute_approved_plan = j["supports_execute_approved_plan"].get<bool>();
+    if (j.contains("supports_planning_requirements")) msg.supports_planning_requirements = j["supports_planning_requirements"].get<bool>();
+    if (j.contains("supports_execution_requirements")) msg.supports_execution_requirements = j["supports_execution_requirements"].get<bool>();
+    if (j.contains("supports_approved_plan_execution")) msg.supports_approved_plan_execution = j["supports_approved_plan_execution"].get<bool>();
     if (j.contains("supports_replanning")) msg.supports_replanning = j["supports_replanning"].get<bool>();
     if (j.contains("supports_typed_component_requirement_placement")) msg.supports_typed_component_requirement_placement = j["supports_typed_component_requirement_placement"].get<bool>();
     if (j.contains("supports_state_update_ingress")) msg.supports_state_update_ingress = j["supports_state_update_ingress"].get<bool>();
@@ -401,7 +437,7 @@ std::string toJson(const Plan& msg) {
     }
     obj["id"] = msg.id;
     obj["source"] = msg.source;
-    obj["planning_execution_requirement_id"] = msg.planning_execution_requirement_id;
+    obj["planning_requirement_id"] = msg.planning_requirement_id;
     obj["backend_id"] = msg.backend_id;
     obj["world_version"] = msg.world_version;
     obj["replan_count"] = msg.replan_count;
@@ -429,7 +465,7 @@ Plan fromJson(const std::string& s, Plan* /*tag*/) {
     }
     if (j.contains("id")) msg.id = j["id"].get<std::string>();
     if (j.contains("source")) msg.source = j["source"].get<std::string>();
-    if (j.contains("planning_execution_requirement_id")) msg.planning_execution_requirement_id = j["planning_execution_requirement_id"].get<std::string>();
+    if (j.contains("planning_requirement_id")) msg.planning_requirement_id = j["planning_requirement_id"].get<std::string>();
     if (j.contains("backend_id")) msg.backend_id = j["backend_id"].get<std::string>();
     if (j.contains("world_version")) msg.world_version = j["world_version"].get<uint64_t>();
     if (j.contains("replan_count")) msg.replan_count = j["replan_count"].get<uint32_t>();
@@ -454,7 +490,8 @@ std::string toJson(const RequirementPlacement& msg) {
     }
     obj["id"] = msg.id;
     obj["source"] = msg.source;
-    obj["planning_execution_requirement_id"] = msg.planning_execution_requirement_id;
+    obj["execution_requirement_id"] = msg.execution_requirement_id;
+    obj["planning_requirement_id"] = msg.planning_requirement_id;
     obj["plan_id"] = msg.plan_id;
     obj["plan_step_id"] = msg.plan_step_id;
     obj["target_component"] = msg.target_component;
@@ -481,7 +518,8 @@ RequirementPlacement fromJson(const std::string& s, RequirementPlacement* /*tag*
     }
     if (j.contains("id")) msg.id = j["id"].get<std::string>();
     if (j.contains("source")) msg.source = j["source"].get<std::string>();
-    if (j.contains("planning_execution_requirement_id")) msg.planning_execution_requirement_id = j["planning_execution_requirement_id"].get<std::string>();
+    if (j.contains("execution_requirement_id")) msg.execution_requirement_id = j["execution_requirement_id"].get<std::string>();
+    if (j.contains("planning_requirement_id")) msg.planning_requirement_id = j["planning_requirement_id"].get<std::string>();
     if (j.contains("plan_id")) msg.plan_id = j["plan_id"].get<std::string>();
     if (j.contains("plan_step_id")) msg.plan_step_id = j["plan_step_id"].get<std::string>();
     if (j.contains("target_component")) msg.target_component = j["target_component"].get<std::string>();
@@ -505,7 +543,8 @@ std::string toJson(const ExecutionRun& msg) {
     }
     obj["id"] = msg.id;
     obj["source"] = msg.source;
-    obj["planning_execution_requirement_id"] = msg.planning_execution_requirement_id;
+    obj["execution_requirement_id"] = msg.execution_requirement_id;
+    obj["planning_requirement_id"] = msg.planning_requirement_id;
     obj["plan_id"] = msg.plan_id;
     obj["state"] = toString(msg.state);
     obj["achievement"] = nlohmann::json::parse(toJson(msg.achievement));
@@ -528,9 +567,10 @@ ExecutionRun fromJson(const std::string& s, ExecutionRun* /*tag*/) {
     }
     if (j.contains("id")) msg.id = j["id"].get<std::string>();
     if (j.contains("source")) msg.source = j["source"].get<std::string>();
-    if (j.contains("planning_execution_requirement_id")) msg.planning_execution_requirement_id = j["planning_execution_requirement_id"].get<std::string>();
+    if (j.contains("execution_requirement_id")) msg.execution_requirement_id = j["execution_requirement_id"].get<std::string>();
+    if (j.contains("planning_requirement_id")) msg.planning_requirement_id = j["planning_requirement_id"].get<std::string>();
     if (j.contains("plan_id")) msg.plan_id = j["plan_id"].get<std::string>();
-    if (j.contains("state")) msg.state = planningExecutionStateFromString(j["state"].get<std::string>());
+    if (j.contains("state")) msg.state = executionStateFromString(j["state"].get<std::string>());
     if (j.contains("achievement")) msg.achievement = fromJson(j["achievement"].dump(), static_cast<pyramid::data_model::common::Achievement*>(nullptr));
     if (j.contains("replan_count")) msg.replan_count = j["replan_count"].get<uint32_t>();
     if (j.contains("outstanding_placement")) {

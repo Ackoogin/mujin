@@ -37,6 +37,13 @@ package Pyramid.Services.Autonomy_Backend.Flatbuffers_Codec is
    function From_Binary_Planning_Goal
      (Payload : String; Tag : access Pyramid.Data_Model.Autonomy.Types.Planning_Goal) return Pyramid.Data_Model.Autonomy.Types.Planning_Goal;
 
+   function To_Binary_Execution_Policy (Json : String) return String;
+   function To_Binary_Execution_Policy (Msg : Pyramid.Data_Model.Autonomy.Types.Execution_Policy) return String;
+   function From_Binary_Execution_Policy (Payload : String) return String;
+
+   function From_Binary_Execution_Policy
+     (Payload : String; Tag : access Pyramid.Data_Model.Autonomy.Types.Execution_Policy) return Pyramid.Data_Model.Autonomy.Types.Execution_Policy;
+
    function To_Binary_World_Fact_Update (Json : String) return String;
    function To_Binary_World_Fact_Update (Msg : Pyramid.Data_Model.Autonomy.Types.World_Fact_Update) return String;
    function From_Binary_World_Fact_Update (Payload : String) return String;
@@ -114,12 +121,19 @@ package Pyramid.Services.Autonomy_Backend.Flatbuffers_Codec is
    function From_Binary_Query
      (Payload : String; Tag : access Pyramid.Data_Model.Common.Types.Query) return Pyramid.Data_Model.Common.Types.Query;
 
-   function To_Binary_Planning_Execution_Requirement (Json : String) return String;
-   function To_Binary_Planning_Execution_Requirement (Msg : Pyramid.Data_Model.Autonomy.Types.Planning_Execution_Requirement) return String;
-   function From_Binary_Planning_Execution_Requirement (Payload : String) return String;
+   function To_Binary_Planning_Requirement (Json : String) return String;
+   function To_Binary_Planning_Requirement (Msg : Pyramid.Data_Model.Autonomy.Types.Planning_Requirement) return String;
+   function From_Binary_Planning_Requirement (Payload : String) return String;
 
-   function From_Binary_Planning_Execution_Requirement
-     (Payload : String; Tag : access Pyramid.Data_Model.Autonomy.Types.Planning_Execution_Requirement) return Pyramid.Data_Model.Autonomy.Types.Planning_Execution_Requirement;
+   function From_Binary_Planning_Requirement
+     (Payload : String; Tag : access Pyramid.Data_Model.Autonomy.Types.Planning_Requirement) return Pyramid.Data_Model.Autonomy.Types.Planning_Requirement;
+
+   function To_Binary_Execution_Requirement (Json : String) return String;
+   function To_Binary_Execution_Requirement (Msg : Pyramid.Data_Model.Autonomy.Types.Execution_Requirement) return String;
+   function From_Binary_Execution_Requirement (Payload : String) return String;
+
+   function From_Binary_Execution_Requirement
+     (Payload : String; Tag : access Pyramid.Data_Model.Autonomy.Types.Execution_Requirement) return Pyramid.Data_Model.Autonomy.Types.Execution_Requirement;
 
    function To_Binary_Execution_Run (Json : String) return String;
    function To_Binary_Execution_Run (Msg : Pyramid.Data_Model.Autonomy.Types.Execution_Run) return String;
@@ -138,8 +152,11 @@ package Pyramid.Services.Autonomy_Backend.Flatbuffers_Codec is
    function To_Binary_Capabilities_Array (Json : String) return String;
    function From_Binary_Capabilities_Array (Payload : String) return String;
 
-   function To_Binary_Planning_Execution_Requirement_Array (Json : String) return String;
-   function From_Binary_Planning_Execution_Requirement_Array (Payload : String) return String;
+   function To_Binary_Planning_Requirement_Array (Json : String) return String;
+   function From_Binary_Planning_Requirement_Array (Payload : String) return String;
+
+   function To_Binary_Execution_Requirement_Array (Json : String) return String;
+   function From_Binary_Execution_Requirement_Array (Payload : String) return String;
 
    function To_Binary_Plan_Array (Json : String) return String;
    function From_Binary_Plan_Array (Payload : String) return String;

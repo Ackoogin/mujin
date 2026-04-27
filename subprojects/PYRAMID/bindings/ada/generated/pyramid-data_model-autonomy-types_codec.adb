@@ -25,51 +25,30 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       return Level_Unspecified;
    end Fact_Authority_Level_From_String;
 
-   function To_String (V : Planning_Execution_Mode) return String is
+   function To_String (V : Execution_State) return String is
    begin
       case V is
-         when Mode_Unspecified => return "PLANNING_EXECUTION_MODE_UNSPECIFIED";
-         when Mode_PlanAndExecute => return "PLANNING_EXECUTION_MODE_PLAN_AND_EXECUTE";
-         when Mode_PlanOnly => return "PLANNING_EXECUTION_MODE_PLAN_ONLY";
-         when Mode_ExecuteApprovedPlan => return "PLANNING_EXECUTION_MODE_EXECUTE_APPROVED_PLAN";
+         when State_Unspecified => return "EXECUTION_STATE_UNSPECIFIED";
+         when State_Accepted => return "EXECUTION_STATE_ACCEPTED";
+         when State_Executing => return "EXECUTION_STATE_EXECUTING";
+         when State_WaitingForComponents => return "EXECUTION_STATE_WAITING_FOR_COMPONENTS";
+         when State_Achieved => return "EXECUTION_STATE_ACHIEVED";
+         when State_Failed => return "EXECUTION_STATE_FAILED";
+         when State_Cancelled => return "EXECUTION_STATE_CANCELLED";
       end case;
    end To_String;
 
-   function Planning_Execution_Mode_From_String (S : String) return Planning_Execution_Mode is
+   function Execution_State_From_String (S : String) return Execution_State is
    begin
-      if S = "PLANNING_EXECUTION_MODE_UNSPECIFIED" then return Mode_Unspecified; end if;
-      if S = "PLANNING_EXECUTION_MODE_PLAN_AND_EXECUTE" then return Mode_PlanAndExecute; end if;
-      if S = "PLANNING_EXECUTION_MODE_PLAN_ONLY" then return Mode_PlanOnly; end if;
-      if S = "PLANNING_EXECUTION_MODE_EXECUTE_APPROVED_PLAN" then return Mode_ExecuteApprovedPlan; end if;
-      return Mode_Unspecified;
-   end Planning_Execution_Mode_From_String;
-
-   function To_String (V : Planning_Execution_State) return String is
-   begin
-      case V is
-         when State_Unspecified => return "PLANNING_EXECUTION_STATE_UNSPECIFIED";
-         when State_Accepted => return "PLANNING_EXECUTION_STATE_ACCEPTED";
-         when State_Planning => return "PLANNING_EXECUTION_STATE_PLANNING";
-         when State_Executing => return "PLANNING_EXECUTION_STATE_EXECUTING";
-         when State_WaitingForComponents => return "PLANNING_EXECUTION_STATE_WAITING_FOR_COMPONENTS";
-         when State_Achieved => return "PLANNING_EXECUTION_STATE_ACHIEVED";
-         when State_Failed => return "PLANNING_EXECUTION_STATE_FAILED";
-         when State_Cancelled => return "PLANNING_EXECUTION_STATE_CANCELLED";
-      end case;
-   end To_String;
-
-   function Planning_Execution_State_From_String (S : String) return Planning_Execution_State is
-   begin
-      if S = "PLANNING_EXECUTION_STATE_UNSPECIFIED" then return State_Unspecified; end if;
-      if S = "PLANNING_EXECUTION_STATE_ACCEPTED" then return State_Accepted; end if;
-      if S = "PLANNING_EXECUTION_STATE_PLANNING" then return State_Planning; end if;
-      if S = "PLANNING_EXECUTION_STATE_EXECUTING" then return State_Executing; end if;
-      if S = "PLANNING_EXECUTION_STATE_WAITING_FOR_COMPONENTS" then return State_WaitingForComponents; end if;
-      if S = "PLANNING_EXECUTION_STATE_ACHIEVED" then return State_Achieved; end if;
-      if S = "PLANNING_EXECUTION_STATE_FAILED" then return State_Failed; end if;
-      if S = "PLANNING_EXECUTION_STATE_CANCELLED" then return State_Cancelled; end if;
+      if S = "EXECUTION_STATE_UNSPECIFIED" then return State_Unspecified; end if;
+      if S = "EXECUTION_STATE_ACCEPTED" then return State_Accepted; end if;
+      if S = "EXECUTION_STATE_EXECUTING" then return State_Executing; end if;
+      if S = "EXECUTION_STATE_WAITING_FOR_COMPONENTS" then return State_WaitingForComponents; end if;
+      if S = "EXECUTION_STATE_ACHIEVED" then return State_Achieved; end if;
+      if S = "EXECUTION_STATE_FAILED" then return State_Failed; end if;
+      if S = "EXECUTION_STATE_CANCELLED" then return State_Cancelled; end if;
       return State_Unspecified;
-   end Planning_Execution_State_From_String;
+   end Execution_State_From_String;
 
    function To_String (V : Requirement_Placement_Operation) return String is
    begin
@@ -209,8 +188,6 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
         """max_replans"":" & Natural'Image (Msg.Max_Replans) &
         "," &
         """enable_replanning"":" & (if Msg.Enable_Replanning then "true" else "false") &
-        "," &
-        """max_concurrent_placements"":" & Natural'Image (Msg.Max_Concurrent_Placements) &
         "}";
    end To_Json;
 
@@ -228,9 +205,6 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
          begin
             Result.Enable_Replanning := Get (Val);
          end;
-      end if;
-      if Has_Field (J, "max_concurrent_placements") then
-         Result.Max_Concurrent_Placements := Natural (Get_Long_Float (Get (J, "max_concurrent_placements")));
       end if;
       return Result;
    exception
@@ -322,7 +296,41 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       when others => return Result;
    end From_Json;
 
-   function To_Json (Msg : Planning_Execution_Requirement) return String is
+   function To_Json (Msg : Execution_Policy) return String is
+   begin
+      return "{" &
+        """max_replans"":" & Natural'Image (Msg.Max_Replans) &
+        "," &
+        """enable_replanning"":" & (if Msg.Enable_Replanning then "true" else "false") &
+        "," &
+        """max_concurrent_placements"":" & Natural'Image (Msg.Max_Concurrent_Placements) &
+        "}";
+   end To_Json;
+
+   function From_Json (S : String; Tag : access Execution_Policy) return Execution_Policy is
+      pragma Unreferenced (Tag);
+      J      : constant JSON_Value := Read (S);
+      Result : Execution_Policy;
+   begin
+      if Has_Field (J, "max_replans") then
+         Result.Max_Replans := Natural (Get_Long_Float (Get (J, "max_replans")));
+      end if;
+      if Has_Field (J, "enable_replanning") then
+         declare
+            Val : constant JSON_Value := Get (J, "enable_replanning");
+         begin
+            Result.Enable_Replanning := Get (Val);
+         end;
+      end if;
+      if Has_Field (J, "max_concurrent_placements") then
+         Result.Max_Concurrent_Placements := Natural (Get_Long_Float (Get (J, "max_concurrent_placements")));
+      end if;
+      return Result;
+   exception
+      when others => return Result;
+   end From_Json;
+
+   function To_Json (Msg : Planning_Requirement) return String is
       Result : Unbounded_String := To_Unbounded_String ("{");
       First  : Boolean := True;
       procedure Comma is
@@ -370,18 +378,14 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
          end loop;
          Append (Result, "]");
       end if;
-      Comma;
-      Append (Result, """mode"":" & """" & To_String (Msg.Mode) & """");
-      Comma;
-      Append (Result, """approved_plan_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Approved_Plan_Id) & """");
       Append (Result, "}");
       return To_String (Result);
    end To_Json;
 
-   function From_Json (S : String; Tag : access Planning_Execution_Requirement) return Planning_Execution_Requirement is
+   function From_Json (S : String; Tag : access Planning_Requirement) return Planning_Requirement is
       pragma Unreferenced (Tag);
       J      : constant JSON_Value := Read (S);
-      Result : Planning_Execution_Requirement;
+      Result : Planning_Requirement;
    begin
       if Has_Field (J, "base") then
          declare
@@ -461,20 +465,134 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             end if;
          end;
       end if;
-      if Has_Field (J, "mode") then
+      return Result;
+   exception
+      when others => return Result;
+   end From_Json;
+
+   function To_Json (Msg : Execution_Requirement) return String is
+      Result : Unbounded_String := To_Unbounded_String ("{");
+      First  : Boolean := True;
+      procedure Comma is
+      begin
+         if First then First := False;
+         else Append (Result, ","); end if;
+      end Comma;
+   begin
+      Comma;
+      Append (Result, """base"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Base));
+      Comma;
+      Append (Result, """status"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Status));
+      if Msg.Upstream_Requirement /= null then
+         Comma;
+         Append (Result, """upstream_requirement"":[");
+         for I in Msg.Upstream_Requirement'Range loop
+            if I > Msg.Upstream_Requirement'First then
+               Append (Result, ",");
+            end if;
+            Append (Result, To_Json (Msg.Upstream_Requirement (I)));
+         end loop;
+         Append (Result, "]");
+      end if;
+      Comma;
+      Append (Result, """plan_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Plan_Id) & """");
+      Comma;
+      Append (Result, """policy"":" & To_Json (Msg.Policy));
+      if Msg.Available_Agents /= null then
+         Comma;
+         Append (Result, """available_agents"":[");
+         for I in Msg.Available_Agents'Range loop
+            if I > Msg.Available_Agents'First then
+               Append (Result, ",");
+            end if;
+            Append (Result, To_Json (Msg.Available_Agents (I)));
+         end loop;
+         Append (Result, "]");
+      end if;
+      Comma;
+      Append (Result, """planning_requirement_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Planning_Requirement_Id) & """");
+      Append (Result, "}");
+      return To_String (Result);
+   end To_Json;
+
+   function From_Json (S : String; Tag : access Execution_Requirement) return Execution_Requirement is
+      pragma Unreferenced (Tag);
+      J      : constant JSON_Value := Read (S);
+      Result : Execution_Requirement;
+   begin
+      if Has_Field (J, "base") then
          declare
-            Val : constant JSON_Value := Get (J, "mode");
-            Str : constant String := Get (Val);
+            Sub : constant String := Write (Get (J, "base"));
          begin
-            Result.Mode := Planning_Execution_Mode_From_String (Str);
+            Result.Base := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
          end;
       end if;
-      if Has_Field (J, "approved_plan_id") then
+      if Has_Field (J, "status") then
          declare
-            Val : constant JSON_Value := Get (J, "approved_plan_id");
+            Sub : constant String := Write (Get (J, "status"));
+         begin
+            Result.Status := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
+         end;
+      end if;
+      if Has_Field (J, "upstream_requirement") then
+         declare
+            Arr_Val : constant JSON_Value := Get (J, "upstream_requirement");
+            Arr : constant JSON_Array := Get (Arr_Val);
+            Len : constant Natural := Length (Arr);
+         begin
+            if Len > 0 then
+               Result.Upstream_Requirement := new Upstream_Requirement_Array (1 .. Len);
+               for I in 1 .. Len loop
+                  declare
+                     Elem : constant JSON_Value := Get (Arr, I);
+                     Sub : constant String := Write (Elem);
+                  begin
+                     Result.Upstream_Requirement (I) := From_Json (Sub, null);
+                  end;
+               end loop;
+            end if;
+         end;
+      end if;
+      if Has_Field (J, "plan_id") then
+         declare
+            Val : constant JSON_Value := Get (J, "plan_id");
             Str : constant String := Get (Val);
          begin
-            Result.Approved_Plan_Id := To_Unbounded_String (Str);
+            Result.Plan_Id := To_Unbounded_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "policy") then
+         declare
+            Sub : constant String := Write (Get (J, "policy"));
+         begin
+            Result.Policy := From_Json (Sub, null);
+         end;
+      end if;
+      if Has_Field (J, "available_agents") then
+         declare
+            Arr_Val : constant JSON_Value := Get (J, "available_agents");
+            Arr : constant JSON_Array := Get (Arr_Val);
+            Len : constant Natural := Length (Arr);
+         begin
+            if Len > 0 then
+               Result.Available_Agents := new Available_Agents_Array (1 .. Len);
+               for I in 1 .. Len loop
+                  declare
+                     Elem : constant JSON_Value := Get (Arr, I);
+                     Sub : constant String := Write (Elem);
+                  begin
+                     Result.Available_Agents (I) := From_Json (Sub, null);
+                  end;
+               end loop;
+            end if;
+         end;
+      end if;
+      if Has_Field (J, "planning_requirement_id") then
+         declare
+            Val : constant JSON_Value := Get (J, "planning_requirement_id");
+            Str : constant String := Get (Val);
+         begin
+            Result.Planning_Requirement_Id := To_Unbounded_String (Str);
          end;
       end if;
       return Result;
@@ -665,11 +783,11 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       Comma;
       Append (Result, """backend_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Backend_Id) & """");
       Comma;
-      Append (Result, """supports_plan_only"":" & (if Msg.Supports_Plan_Only then "true" else "false"));
+      Append (Result, """supports_planning_requirements"":" & (if Msg.Supports_Planning_Requirements then "true" else "false"));
       Comma;
-      Append (Result, """supports_plan_and_execute"":" & (if Msg.Supports_Plan_And_Execute then "true" else "false"));
+      Append (Result, """supports_execution_requirements"":" & (if Msg.Supports_Execution_Requirements then "true" else "false"));
       Comma;
-      Append (Result, """supports_execute_approved_plan"":" & (if Msg.Supports_Execute_Approved_Plan then "true" else "false"));
+      Append (Result, """supports_approved_plan_execution"":" & (if Msg.Supports_Approved_Plan_Execution then "true" else "false"));
       Comma;
       Append (Result, """supports_replanning"":" & (if Msg.Supports_Replanning then "true" else "false"));
       Comma;
@@ -712,25 +830,25 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             Result.Backend_Id := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "supports_plan_only") then
+      if Has_Field (J, "supports_planning_requirements") then
          declare
-            Val : constant JSON_Value := Get (J, "supports_plan_only");
+            Val : constant JSON_Value := Get (J, "supports_planning_requirements");
          begin
-            Result.Supports_Plan_Only := Get (Val);
+            Result.Supports_Planning_Requirements := Get (Val);
          end;
       end if;
-      if Has_Field (J, "supports_plan_and_execute") then
+      if Has_Field (J, "supports_execution_requirements") then
          declare
-            Val : constant JSON_Value := Get (J, "supports_plan_and_execute");
+            Val : constant JSON_Value := Get (J, "supports_execution_requirements");
          begin
-            Result.Supports_Plan_And_Execute := Get (Val);
+            Result.Supports_Execution_Requirements := Get (Val);
          end;
       end if;
-      if Has_Field (J, "supports_execute_approved_plan") then
+      if Has_Field (J, "supports_approved_plan_execution") then
          declare
-            Val : constant JSON_Value := Get (J, "supports_execute_approved_plan");
+            Val : constant JSON_Value := Get (J, "supports_approved_plan_execution");
          begin
-            Result.Supports_Execute_Approved_Plan := Get (Val);
+            Result.Supports_Approved_Plan_Execution := Get (Val);
          end;
       end if;
       if Has_Field (J, "supports_replanning") then
@@ -933,7 +1051,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       Comma;
       Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
       Comma;
-      Append (Result, """planning_execution_requirement_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Planning_Execution_Requirement_Id) & """");
+      Append (Result, """planning_requirement_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Planning_Requirement_Id) & """");
       Comma;
       Append (Result, """backend_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Backend_Id) & """");
       Comma;
@@ -987,12 +1105,12 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             Result.Source := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "planning_execution_requirement_id") then
+      if Has_Field (J, "planning_requirement_id") then
          declare
-            Val : constant JSON_Value := Get (J, "planning_execution_requirement_id");
+            Val : constant JSON_Value := Get (J, "planning_requirement_id");
             Str : constant String := Get (Val);
          begin
-            Result.Planning_Execution_Requirement_Id := To_Unbounded_String (Str);
+            Result.Planning_Requirement_Id := To_Unbounded_String (Str);
          end;
       end if;
       if Has_Field (J, "backend_id") then
@@ -1070,7 +1188,9 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       Comma;
       Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
       Comma;
-      Append (Result, """planning_execution_requirement_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Planning_Execution_Requirement_Id) & """");
+      Append (Result, """execution_requirement_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Execution_Requirement_Id) & """");
+      Comma;
+      Append (Result, """planning_requirement_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Planning_Requirement_Id) & """");
       Comma;
       Append (Result, """plan_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Plan_Id) & """");
       Comma;
@@ -1126,12 +1246,20 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             Result.Source := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "planning_execution_requirement_id") then
+      if Has_Field (J, "execution_requirement_id") then
          declare
-            Val : constant JSON_Value := Get (J, "planning_execution_requirement_id");
+            Val : constant JSON_Value := Get (J, "execution_requirement_id");
             Str : constant String := Get (Val);
          begin
-            Result.Planning_Execution_Requirement_Id := To_Unbounded_String (Str);
+            Result.Execution_Requirement_Id := To_Unbounded_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "planning_requirement_id") then
+         declare
+            Val : constant JSON_Value := Get (J, "planning_requirement_id");
+            Str : constant String := Get (Val);
+         begin
+            Result.Planning_Requirement_Id := To_Unbounded_String (Str);
          end;
       end if;
       if Has_Field (J, "plan_id") then
@@ -1238,7 +1366,9 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       Comma;
       Append (Result, """source"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Source) & """");
       Comma;
-      Append (Result, """planning_execution_requirement_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Planning_Execution_Requirement_Id) & """");
+      Append (Result, """execution_requirement_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Execution_Requirement_Id) & """");
+      Comma;
+      Append (Result, """planning_requirement_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Planning_Requirement_Id) & """");
       Comma;
       Append (Result, """plan_id"":" & """" & Ada.Strings.Unbounded.To_String (Msg.Plan_Id) & """");
       Comma;
@@ -1286,12 +1416,20 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             Result.Source := To_Unbounded_String (Str);
          end;
       end if;
-      if Has_Field (J, "planning_execution_requirement_id") then
+      if Has_Field (J, "execution_requirement_id") then
          declare
-            Val : constant JSON_Value := Get (J, "planning_execution_requirement_id");
+            Val : constant JSON_Value := Get (J, "execution_requirement_id");
             Str : constant String := Get (Val);
          begin
-            Result.Planning_Execution_Requirement_Id := To_Unbounded_String (Str);
+            Result.Execution_Requirement_Id := To_Unbounded_String (Str);
+         end;
+      end if;
+      if Has_Field (J, "planning_requirement_id") then
+         declare
+            Val : constant JSON_Value := Get (J, "planning_requirement_id");
+            Str : constant String := Get (Val);
+         begin
+            Result.Planning_Requirement_Id := To_Unbounded_String (Str);
          end;
       end if;
       if Has_Field (J, "plan_id") then
@@ -1307,7 +1445,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             Val : constant JSON_Value := Get (J, "state");
             Str : constant String := Get (Val);
          begin
-            Result.State := Planning_Execution_State_From_String (Str);
+            Result.State := Execution_State_From_String (Str);
          end;
       end if;
       if Has_Field (J, "achievement") then

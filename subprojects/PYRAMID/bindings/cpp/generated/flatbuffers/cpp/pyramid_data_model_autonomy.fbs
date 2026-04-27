@@ -1,5 +1,5 @@
 // Auto-generated FlatBuffers schema from autonomy.proto
-// Do not edit — regenerate from proto source
+// Do not edit -- regenerate from proto source
 
 namespace pyramid.data_model.autonomy;
 
@@ -9,22 +9,14 @@ enum FactAuthorityLevel : byte {
   CONFIRMED = 2
 }
 
-enum PlanningExecutionMode : byte {
-  UNSPECIFIED = 0,
-  PLAN_AND_EXECUTE = 1,
-  PLAN_ONLY = 2,
-  EXECUTE_APPROVED_PLAN = 3
-}
-
-enum PlanningExecutionState : byte {
+enum ExecutionState : byte {
   UNSPECIFIED = 0,
   ACCEPTED = 1,
-  PLANNING = 2,
-  EXECUTING = 3,
-  WAITING_FOR_COMPONENTS = 4,
-  ACHIEVED = 5,
-  FAILED = 6,
-  CANCELLED = 7
+  EXECUTING = 2,
+  WAITING_FOR_COMPONENTS = 3,
+  ACHIEVED = 4,
+  FAILED = 5,
+  CANCELLED = 6
 }
 
 enum RequirementPlacementOperation : byte {
@@ -58,7 +50,6 @@ table AgentState {
 table PlanningPolicy {
   max_replans:uint;
   enable_replanning:bool;
-  max_concurrent_placements:uint;
 }
 
 table PlanningGoal {
@@ -67,14 +58,27 @@ table PlanningGoal {
   goal:GoalUnion;
 }
 
-table PlanningExecutionRequirement {
+table ExecutionPolicy {
+  max_replans:uint;
+  enable_replanning:bool;
+  max_concurrent_placements:uint;
+}
+
+table PlanningRequirement {
   base:Requirement;
   upstream_requirement:[RequirementReference];
   goal:[PlanningGoal];
   policy:PlanningPolicy;
   available_agents:[AgentState];
-  mode:PlanningExecutionMode;
-  approved_plan_id:Identifier;
+}
+
+table ExecutionRequirement {
+  base:Requirement;
+  upstream_requirement:[RequirementReference];
+  plan_id:Identifier;
+  policy:ExecutionPolicy;
+  available_agents:[AgentState];
+  planning_requirement_id:Identifier;
 }
 
 table WorldFactUpdate {
@@ -93,9 +97,9 @@ table StateUpdate {
 table Capabilities {
   base:Entity;
   backend_id:string;
-  supports_plan_only:bool;
-  supports_plan_and_execute:bool;
-  supports_execute_approved_plan:bool;
+  supports_planning_requirements:bool;
+  supports_execution_requirements:bool;
+  supports_approved_plan_execution:bool;
   supports_replanning:bool;
   supports_typed_component_requirement_placement:bool;
   supports_state_update_ingress:bool;
@@ -118,7 +122,7 @@ table PlanStep {
 
 table Plan {
   base:Entity;
-  planning_execution_requirement_id:Identifier;
+  planning_requirement_id:Identifier;
   backend_id:string;
   world_version:ulong;
   replan_count:uint;
@@ -131,7 +135,8 @@ table Plan {
 
 table RequirementPlacement {
   base:Entity;
-  planning_execution_requirement_id:Identifier;
+  execution_requirement_id:Identifier;
+  planning_requirement_id:Identifier;
   plan_id:Identifier;
   plan_step_id:Identifier;
   target_component:string;
@@ -145,9 +150,10 @@ table RequirementPlacement {
 
 table ExecutionRun {
   base:Entity;
-  planning_execution_requirement_id:Identifier;
+  execution_requirement_id:Identifier;
+  planning_requirement_id:Identifier;
   plan_id:Identifier;
-  state:PlanningExecutionState;
+  state:ExecutionState;
   achievement:Achievement;
   replan_count:uint;
   outstanding_placement:[RequirementPlacement];

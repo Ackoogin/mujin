@@ -120,9 +120,8 @@ model::StateUpdate initialAtBaseState() {
   return state;
 }
 
-model::PlanningExecutionRequirement planAndExecuteRequirement() {
-  model::PlanningExecutionRequirement requirement;
-  requirement.mode = model::PlanningExecutionMode::PlanAndExecute;
+model::PlanningRequirement planningRequirement() {
+  model::PlanningRequirement requirement;
   requirement.policy.max_replans = 3;
   requirement.policy.enable_replanning = true;
 
@@ -135,6 +134,18 @@ model::PlanningExecutionRequirement planAndExecuteRequirement() {
   agent.agent_type = "robot";
   agent.available = true;
   requirement.available_agents.push_back(agent);
+  return requirement;
+}
+
+model::ExecutionRequirement executionRequirement(
+    const std::string& plan_id,
+    const std::string& planning_requirement_id) {
+  model::ExecutionRequirement requirement;
+  requirement.plan_id = plan_id;
+  requirement.planning_requirement_id = planning_requirement_id;
+  requirement.policy.max_replans = 3;
+  requirement.policy.enable_replanning = true;
+  requirement.policy.max_concurrent_placements = 2;
   return requirement;
 }
 
@@ -180,24 +191,11 @@ TEST(AmeAutonomyContract, PlansThroughGeneratedJsonServiceContract) {
   ASSERT_FALSE(state_id.empty());
   EXPECT_TRUE(wm.getFact("(at uav1 base)"));
 
-  model::PlanningExecutionRequirement requirement;
-  requirement.mode = model::PlanningExecutionMode::PlanOnly;
-  requirement.policy.max_replans = 3;
-  requirement.policy.enable_replanning = true;
-
-  model::PlanningGoal goal;
-  goal.expression = "(searched sector_a)";
-  requirement.goal.push_back(goal);
-
-  model::AgentState agent;
-  agent.agent_id = "uav1";
-  agent.agent_type = "robot";
-  agent.available = true;
-  requirement.available_agents.push_back(agent);
+  const auto requirement = planningRequirement();
 
   const auto requirement_id_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::CreateRequirement,
+                   provided::ServiceChannel::CreatePlanningRequirement,
                    autonomy_codec::toJson(requirement));
   const auto requirement_id =
       nlohmann::json::parse(requirement_id_payload).get<std::string>();
@@ -205,18 +203,18 @@ TEST(AmeAutonomyContract, PlansThroughGeneratedJsonServiceContract) {
 
   const auto read_requirement_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadRequirement,
+                   provided::ServiceChannel::ReadPlanningRequirement,
                    common_codec::toJson(queryId(requirement_id)));
   const auto requirements =
-      decodeJsonArray<model::PlanningExecutionRequirement>(
+      decodeJsonArray<model::PlanningRequirement>(
           read_requirement_payload,
           [](const std::string& item) {
             return autonomy_codec::fromJson(
-                item, static_cast<model::PlanningExecutionRequirement*>(nullptr));
+                item, static_cast<model::PlanningRequirement*>(nullptr));
           });
   ASSERT_EQ(requirements.size(), 1u);
   EXPECT_EQ(requirements.front().base.id, requirement_id);
-  EXPECT_EQ(requirements.front().status.status, common::Progress::InProgress);
+  EXPECT_EQ(requirements.front().status.status, common::Progress::Completed);
 
   const auto read_plan_payload =
       dispatchJson(bridge,
@@ -230,7 +228,7 @@ TEST(AmeAutonomyContract, PlansThroughGeneratedJsonServiceContract) {
                 item, static_cast<model::Plan*>(nullptr));
           });
   ASSERT_EQ(plans.size(), 1u);
-  EXPECT_EQ(plans.front().planning_execution_requirement_id, requirement_id);
+  EXPECT_EQ(plans.front().planning_requirement_id, requirement_id);
   EXPECT_TRUE(plans.front().plan_success);
   EXPECT_GE(plans.front().step.size(), 2u);
   EXPECT_FALSE(plans.front().compiled_bt_xml.empty());
@@ -249,6 +247,58 @@ TEST(AmeAutonomyContract, PlansThroughGeneratedJsonServiceContract) {
   ASSERT_EQ(second_plans.size(), 1u);
   EXPECT_EQ(second_plans.front().id, plans.front().id);
 
+  model::Plan imported_plan;
+  imported_plan.id = "external-plan-1";
+  imported_plan.backend_id = "external.coordinator";
+  imported_plan.plan_success = true;
+  imported_plan.compiled_bt_xml = "<root/>";
+  model::PlanStep imported_step;
+  imported_step.id = "external-plan-1/step/1";
+  imported_step.sequence_number = 1;
+  imported_step.action_name = "search";
+  imported_step.signature = "search(uav1,sector_a)";
+  imported_plan.step.push_back(imported_step);
+
+  const auto imported_plan_id =
+      nlohmann::json::parse(
+          dispatchJson(bridge,
+                       provided::ServiceChannel::CreatePlan,
+                       autonomy_codec::toJson(imported_plan)))
+          .get<std::string>();
+  EXPECT_EQ(imported_plan_id, imported_plan.id);
+
+  imported_plan.backend_id = "external.coordinator.updated";
+  const auto update_plan_ack =
+      common_codec::fromJson(
+          dispatchJson(bridge,
+                       provided::ServiceChannel::UpdatePlan,
+                       autonomy_codec::toJson(imported_plan)),
+          static_cast<model::Ack*>(nullptr));
+  EXPECT_TRUE(update_plan_ack.success);
+
+  const auto read_imported_plan_payload =
+      dispatchJson(bridge,
+                   provided::ServiceChannel::ReadPlan,
+                   common_codec::toJson(queryId(imported_plan_id)));
+  const auto imported_plans =
+      decodeJsonArray<model::Plan>(
+          read_imported_plan_payload,
+          [](const std::string& item) {
+            return autonomy_codec::fromJson(
+                item, static_cast<model::Plan*>(nullptr));
+          });
+  ASSERT_EQ(imported_plans.size(), 1u);
+  EXPECT_EQ(imported_plans.front().backend_id,
+            "external.coordinator.updated");
+
+  const auto delete_plan_ack =
+      common_codec::fromJson(
+          dispatchJson(bridge,
+                       provided::ServiceChannel::DeletePlan,
+                       nlohmann::json(imported_plan_id).dump()),
+          static_cast<model::Ack*>(nullptr));
+  EXPECT_TRUE(delete_plan_ack.success);
+
   const auto read_run_payload =
       dispatchJson(bridge,
                    provided::ServiceChannel::ReadRun,
@@ -260,11 +310,7 @@ TEST(AmeAutonomyContract, PlansThroughGeneratedJsonServiceContract) {
             return autonomy_codec::fromJson(
                 item, static_cast<model::ExecutionRun*>(nullptr));
           });
-  ASSERT_EQ(runs.size(), 1u);
-  EXPECT_EQ(runs.front().planning_execution_requirement_id, requirement_id);
-  EXPECT_EQ(runs.front().plan_id, plans.front().id);
-  EXPECT_EQ(runs.front().state, model::PlanningExecutionState::Achieved);
-  EXPECT_EQ(runs.front().achievement.status, common::Progress::Completed);
+  EXPECT_TRUE(runs.empty());
 
   const auto read_placement_payload =
       dispatchJson(bridge,
@@ -277,23 +323,7 @@ TEST(AmeAutonomyContract, PlansThroughGeneratedJsonServiceContract) {
             return autonomy_codec::fromJson(
                 item, static_cast<model::RequirementPlacement*>(nullptr));
           });
-  ASSERT_GE(placements.size(), 2u);
-
-  bool found_tactical_object_requirement = false;
-  for (const auto& placement : placements) {
-    if (placement.target_component == "tactical_objects") {
-      found_tactical_object_requirement = true;
-      EXPECT_EQ(placement.planning_execution_requirement_id, requirement_id);
-      EXPECT_EQ(placement.plan_id, plans.front().id);
-      EXPECT_EQ(placement.target_service, "Object_Of_Interest_Service");
-      EXPECT_EQ(placement.target_type,
-                "pyramid.data_model.tactical.ObjectInterestRequirement");
-      EXPECT_EQ(placement.operation,
-                model::RequirementPlacementOperation::CreateRequirement);
-      EXPECT_EQ(placement.progress, common::Progress::NotStarted);
-    }
-  }
-  EXPECT_TRUE(found_tactical_object_requirement);
+  EXPECT_TRUE(placements.empty());
 }
 
 TEST(AmeAutonomyContract, PlanAndExecuteCompletesFromStateFeedback) {
@@ -313,8 +343,9 @@ TEST(AmeAutonomyContract, PlanAndExecuteCompletesFromStateFeedback) {
                 item, static_cast<model::Capabilities*>(nullptr));
           });
   ASSERT_EQ(capabilities.size(), 1u);
-  EXPECT_TRUE(capabilities.front().supports_plan_and_execute);
-  EXPECT_TRUE(capabilities.front().supports_execute_approved_plan);
+  EXPECT_TRUE(capabilities.front().supports_planning_requirements);
+  EXPECT_TRUE(capabilities.front().supports_execution_requirements);
+  EXPECT_TRUE(capabilities.front().supports_approved_plan_execution);
 
   model::StateUpdate initial_state;
   model::WorldFactUpdate initial_location;
@@ -331,28 +362,36 @@ TEST(AmeAutonomyContract, PlanAndExecuteCompletesFromStateFeedback) {
           .get<std::string>();
   ASSERT_FALSE(initial_state_id.empty());
 
-  model::PlanningExecutionRequirement requirement;
-  requirement.mode = model::PlanningExecutionMode::PlanAndExecute;
-  requirement.policy.max_replans = 3;
-  requirement.policy.enable_replanning = true;
-
-  model::PlanningGoal goal;
-  goal.expression = "(searched sector_a)";
-  requirement.goal.push_back(goal);
-
-  model::AgentState agent;
-  agent.agent_id = "uav1";
-  agent.agent_type = "robot";
-  agent.available = true;
-  requirement.available_agents.push_back(agent);
-
-  const auto requirement_id =
+  const auto planning_requirement_id =
       nlohmann::json::parse(
           dispatchJson(bridge,
-                       provided::ServiceChannel::CreateRequirement,
-                       autonomy_codec::toJson(requirement)))
+                       provided::ServiceChannel::CreatePlanningRequirement,
+                       autonomy_codec::toJson(planningRequirement())))
           .get<std::string>();
-  ASSERT_FALSE(requirement_id.empty());
+  ASSERT_FALSE(planning_requirement_id.empty());
+
+  const auto plan_payload =
+      dispatchJson(bridge,
+                   provided::ServiceChannel::ReadPlan,
+                   common_codec::toJson(queryAll()));
+  const auto plans =
+      decodeJsonArray<model::Plan>(
+          plan_payload,
+          [](const std::string& item) {
+            return autonomy_codec::fromJson(
+                item, static_cast<model::Plan*>(nullptr));
+          });
+  ASSERT_EQ(plans.size(), 1u);
+  ASSERT_TRUE(plans.front().plan_success);
+
+  const auto execution_requirement_id =
+      nlohmann::json::parse(
+          dispatchJson(bridge,
+                       provided::ServiceChannel::CreateExecutionRequirement,
+                       autonomy_codec::toJson(executionRequirement(
+                           plans.front().id, planning_requirement_id))))
+          .get<std::string>();
+  ASSERT_FALSE(execution_requirement_id.empty());
 
   const auto initial_run_payload =
       dispatchJson(bridge,
@@ -366,8 +405,12 @@ TEST(AmeAutonomyContract, PlanAndExecuteCompletesFromStateFeedback) {
                 item, static_cast<model::ExecutionRun*>(nullptr));
           });
   ASSERT_EQ(initial_runs.size(), 1u);
+  EXPECT_EQ(initial_runs.front().execution_requirement_id,
+            execution_requirement_id);
+  EXPECT_EQ(initial_runs.front().planning_requirement_id,
+            planning_requirement_id);
   EXPECT_EQ(initial_runs.front().state,
-            model::PlanningExecutionState::WaitingForComponents);
+            model::ExecutionState::WaitingForComponents);
   EXPECT_EQ(initial_runs.front().achievement.status,
             common::Progress::InProgress);
   ASSERT_GE(initial_runs.front().outstanding_placement.size(), 2u);
@@ -387,7 +430,8 @@ TEST(AmeAutonomyContract, PlanAndExecuteCompletesFromStateFeedback) {
   bool found_open_mobility_placement = false;
   bool found_open_tactical_placement = false;
   for (const auto& placement : initial_placements) {
-    EXPECT_EQ(placement.id.find("ame-pyramid-bridge/placement/"), 0u);
+    EXPECT_EQ(placement.execution_requirement_id, execution_requirement_id);
+    EXPECT_EQ(placement.planning_requirement_id, planning_requirement_id);
     if (placement.target_component == "mobility") {
       found_open_mobility_placement = true;
       EXPECT_EQ(placement.target_service, "Move_Service");
@@ -435,21 +479,21 @@ TEST(AmeAutonomyContract, PlanAndExecuteCompletesFromStateFeedback) {
           });
   ASSERT_EQ(completed_runs.size(), 1u);
   EXPECT_EQ(completed_runs.front().state,
-            model::PlanningExecutionState::Achieved);
+            model::ExecutionState::Achieved);
   EXPECT_EQ(completed_runs.front().achievement.status,
             common::Progress::Completed);
   EXPECT_TRUE(completed_runs.front().outstanding_placement.empty());
 
   const auto completed_requirement_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadRequirement,
-                   common_codec::toJson(queryId(requirement_id)));
+                   provided::ServiceChannel::ReadExecutionRequirement,
+                   common_codec::toJson(queryId(execution_requirement_id)));
   const auto completed_requirements =
-      decodeJsonArray<model::PlanningExecutionRequirement>(
+      decodeJsonArray<model::ExecutionRequirement>(
           completed_requirement_payload,
           [](const std::string& item) {
             return autonomy_codec::fromJson(
-                item, static_cast<model::PlanningExecutionRequirement*>(nullptr));
+                item, static_cast<model::ExecutionRequirement*>(nullptr));
           });
   ASSERT_EQ(completed_requirements.size(), 1u);
   EXPECT_EQ(completed_requirements.front().status.status,
@@ -491,13 +535,35 @@ TEST(AmeAutonomyContract, HostCanRegisterExecutionBindingsForProjection) {
           .get<std::string>();
   ASSERT_FALSE(state_id.empty());
 
-  const auto requirement_id =
+  const auto planning_requirement_id =
       nlohmann::json::parse(
           dispatchJson(bridge,
-                       provided::ServiceChannel::CreateRequirement,
-                       autonomy_codec::toJson(planAndExecuteRequirement())))
+                       provided::ServiceChannel::CreatePlanningRequirement,
+                       autonomy_codec::toJson(planningRequirement())))
           .get<std::string>();
-  ASSERT_FALSE(requirement_id.empty());
+  ASSERT_FALSE(planning_requirement_id.empty());
+
+  const auto plan_payload =
+      dispatchJson(bridge,
+                   provided::ServiceChannel::ReadPlan,
+                   common_codec::toJson(queryAll()));
+  const auto plans =
+      decodeJsonArray<model::Plan>(
+          plan_payload,
+          [](const std::string& item) {
+            return autonomy_codec::fromJson(
+                item, static_cast<model::Plan*>(nullptr));
+          });
+  ASSERT_EQ(plans.size(), 1u);
+
+  const auto execution_requirement_id =
+      nlohmann::json::parse(
+          dispatchJson(bridge,
+                       provided::ServiceChannel::CreateExecutionRequirement,
+                       autonomy_codec::toJson(executionRequirement(
+                           plans.front().id, planning_requirement_id))))
+          .get<std::string>();
+  ASSERT_FALSE(execution_requirement_id.empty());
 
   const auto placement_payload =
       dispatchJson(bridge,
@@ -518,7 +584,7 @@ TEST(AmeAutonomyContract, HostCanRegisterExecutionBindingsForProjection) {
     EXPECT_EQ(placement.progress, common::Progress::InProgress);
     EXPECT_EQ(placement.operation,
               model::RequirementPlacementOperation::CreateRequirement);
-    EXPECT_EQ(placement.id.find("ame-pyramid-bridge/placement/"), 0u);
+    EXPECT_EQ(placement.execution_requirement_id, execution_requirement_id);
     if (placement.target_component == "host_mobility") {
       found_host_mobility = true;
       EXPECT_EQ(placement.target_service, "Host_Move_Service");
@@ -551,13 +617,35 @@ TEST(AmeAutonomyContract, StrictPolicyFailsRunWhenNoBindingExists) {
           .get<std::string>();
   ASSERT_FALSE(state_id.empty());
 
-  const auto requirement_id =
+  const auto planning_requirement_id =
       nlohmann::json::parse(
           dispatchJson(bridge,
-                       provided::ServiceChannel::CreateRequirement,
-                       autonomy_codec::toJson(planAndExecuteRequirement())))
+                       provided::ServiceChannel::CreatePlanningRequirement,
+                       autonomy_codec::toJson(planningRequirement())))
           .get<std::string>();
-  ASSERT_FALSE(requirement_id.empty());
+  ASSERT_FALSE(planning_requirement_id.empty());
+
+  const auto plan_payload =
+      dispatchJson(bridge,
+                   provided::ServiceChannel::ReadPlan,
+                   common_codec::toJson(queryAll()));
+  const auto plans =
+      decodeJsonArray<model::Plan>(
+          plan_payload,
+          [](const std::string& item) {
+            return autonomy_codec::fromJson(
+                item, static_cast<model::Plan*>(nullptr));
+          });
+  ASSERT_EQ(plans.size(), 1u);
+
+  const auto execution_requirement_id =
+      nlohmann::json::parse(
+          dispatchJson(bridge,
+                       provided::ServiceChannel::CreateExecutionRequirement,
+                       autonomy_codec::toJson(executionRequirement(
+                           plans.front().id, planning_requirement_id))))
+          .get<std::string>();
+  ASSERT_FALSE(execution_requirement_id.empty());
 
   const auto run_payload =
       dispatchJson(bridge,
@@ -571,19 +659,19 @@ TEST(AmeAutonomyContract, StrictPolicyFailsRunWhenNoBindingExists) {
                 item, static_cast<model::ExecutionRun*>(nullptr));
           });
   ASSERT_EQ(runs.size(), 1u);
-  EXPECT_EQ(runs.front().state, model::PlanningExecutionState::Failed);
+  EXPECT_EQ(runs.front().state, model::ExecutionState::Failed);
   EXPECT_EQ(runs.front().achievement.status, common::Progress::Failed);
 
   const auto requirement_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadRequirement,
-                   common_codec::toJson(queryId(requirement_id)));
+                   provided::ServiceChannel::ReadExecutionRequirement,
+                   common_codec::toJson(queryId(execution_requirement_id)));
   const auto requirements =
-      decodeJsonArray<model::PlanningExecutionRequirement>(
+      decodeJsonArray<model::ExecutionRequirement>(
           requirement_payload,
           [](const std::string& item) {
             return autonomy_codec::fromJson(
-                item, static_cast<model::PlanningExecutionRequirement*>(nullptr));
+                item, static_cast<model::ExecutionRequirement*>(nullptr));
           });
   ASSERT_EQ(requirements.size(), 1u);
   EXPECT_EQ(requirements.front().status.status, common::Progress::Failed);

@@ -318,7 +318,7 @@ inline void bindRos2(pyramid::transport::ros2::Adapter& adapter,
 }
 
 // ---------------------------------------------------------------------------
-// Dispatch — deserialises request, calls handler, serialises response.
+// Dispatch -- deserialises request, calls handler, serialises response.
 //
 // Response buffer is heap-allocated via std::malloc; caller frees with std::free.
 // ---------------------------------------------------------------------------

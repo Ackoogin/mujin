@@ -1,4 +1,4 @@
-// Auto-generated FlatBuffers PCL codec — do not edit
+// Auto-generated FlatBuffers PCL codec -- do not edit
 // Backend: flatbuffers | Namespace: pyramid::data_model::common::flatbuffers_codec
 #pragma once
 

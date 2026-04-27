@@ -1,4 +1,4 @@
-// Auto-generated gRPC transport — do not edit
+// Auto-generated gRPC transport -- do not edit
 // Backend: grpc | Namespace: pyramid::services::autonomy_backend::provided::grpc_transport
 //
 // Exposes proto services as gRPC services, delegating to
@@ -18,7 +18,7 @@
 namespace pyramid::services::autonomy_backend::provided::grpc_transport {
 
 // ---------------------------------------------------------------------------
-// Capabilities_Service — gRPC service implementation
+// Capabilities_Service -- gRPC service implementation
 // ---------------------------------------------------------------------------
 
 class Capabilities_ServiceImpl final : public pyramid::components::autonomy_backend::services::provided::Capabilities_Service::Service {
@@ -36,30 +36,30 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Planning_Execution_Service — gRPC service implementation
+// Planning_Requirement_Service -- gRPC service implementation
 // ---------------------------------------------------------------------------
 
-class Planning_Execution_ServiceImpl final : public pyramid::components::autonomy_backend::services::provided::Planning_Execution_Service::Service {
+class Planning_Requirement_ServiceImpl final : public pyramid::components::autonomy_backend::services::provided::Planning_Requirement_Service::Service {
 public:
-    explicit Planning_Execution_ServiceImpl(pcl_executor_t* executor)
+    explicit Planning_Requirement_ServiceImpl(pcl_executor_t* executor)
         : executor_(executor) {}
 
-    grpc::Status CreateRequirement(
+    grpc::Status CreatePlanningRequirement(
         grpc::ServerContext* context,
-        const ::pyramid::data_model::autonomy::PlanningExecutionRequirement* request,
+        const ::pyramid::data_model::autonomy::PlanningRequirement* request,
         ::pyramid::data_model::base::Identifier* response) override;
 
-    grpc::Status ReadRequirement(
+    grpc::Status ReadPlanningRequirement(
         grpc::ServerContext* context,
         const ::pyramid::data_model::common::Query* request,
-        grpc::ServerWriter<::pyramid::data_model::autonomy::PlanningExecutionRequirement>* writer) override;
+        grpc::ServerWriter<::pyramid::data_model::autonomy::PlanningRequirement>* writer) override;
 
-    grpc::Status UpdateRequirement(
+    grpc::Status UpdatePlanningRequirement(
         grpc::ServerContext* context,
-        const ::pyramid::data_model::autonomy::PlanningExecutionRequirement* request,
+        const ::pyramid::data_model::autonomy::PlanningRequirement* request,
         ::pyramid::data_model::common::Ack* response) override;
 
-    grpc::Status DeleteRequirement(
+    grpc::Status DeletePlanningRequirement(
         grpc::ServerContext* context,
         const ::pyramid::data_model::base::Identifier* request,
         ::pyramid::data_model::common::Ack* response) override;
@@ -69,7 +69,40 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// State_Service — gRPC service implementation
+// Execution_Requirement_Service -- gRPC service implementation
+// ---------------------------------------------------------------------------
+
+class Execution_Requirement_ServiceImpl final : public pyramid::components::autonomy_backend::services::provided::Execution_Requirement_Service::Service {
+public:
+    explicit Execution_Requirement_ServiceImpl(pcl_executor_t* executor)
+        : executor_(executor) {}
+
+    grpc::Status CreateExecutionRequirement(
+        grpc::ServerContext* context,
+        const ::pyramid::data_model::autonomy::ExecutionRequirement* request,
+        ::pyramid::data_model::base::Identifier* response) override;
+
+    grpc::Status ReadExecutionRequirement(
+        grpc::ServerContext* context,
+        const ::pyramid::data_model::common::Query* request,
+        grpc::ServerWriter<::pyramid::data_model::autonomy::ExecutionRequirement>* writer) override;
+
+    grpc::Status UpdateExecutionRequirement(
+        grpc::ServerContext* context,
+        const ::pyramid::data_model::autonomy::ExecutionRequirement* request,
+        ::pyramid::data_model::common::Ack* response) override;
+
+    grpc::Status DeleteExecutionRequirement(
+        grpc::ServerContext* context,
+        const ::pyramid::data_model::base::Identifier* request,
+        ::pyramid::data_model::common::Ack* response) override;
+
+private:
+    pcl_executor_t* executor_;
+};
+
+// ---------------------------------------------------------------------------
+// State_Service -- gRPC service implementation
 // ---------------------------------------------------------------------------
 
 class State_ServiceImpl final : public pyramid::components::autonomy_backend::services::provided::State_Service::Service {
@@ -97,7 +130,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Plan_Service — gRPC service implementation
+// Plan_Service -- gRPC service implementation
 // ---------------------------------------------------------------------------
 
 class Plan_ServiceImpl final : public pyramid::components::autonomy_backend::services::provided::Plan_Service::Service {
@@ -105,17 +138,32 @@ public:
     explicit Plan_ServiceImpl(pcl_executor_t* executor)
         : executor_(executor) {}
 
+    grpc::Status CreatePlan(
+        grpc::ServerContext* context,
+        const ::pyramid::data_model::autonomy::Plan* request,
+        ::pyramid::data_model::base::Identifier* response) override;
+
     grpc::Status ReadPlan(
         grpc::ServerContext* context,
         const ::pyramid::data_model::common::Query* request,
         grpc::ServerWriter<::pyramid::data_model::autonomy::Plan>* writer) override;
+
+    grpc::Status UpdatePlan(
+        grpc::ServerContext* context,
+        const ::pyramid::data_model::autonomy::Plan* request,
+        ::pyramid::data_model::common::Ack* response) override;
+
+    grpc::Status DeletePlan(
+        grpc::ServerContext* context,
+        const ::pyramid::data_model::base::Identifier* request,
+        ::pyramid::data_model::common::Ack* response) override;
 
 private:
     pcl_executor_t* executor_;
 };
 
 // ---------------------------------------------------------------------------
-// Execution_Run_Service — gRPC service implementation
+// Execution_Run_Service -- gRPC service implementation
 // ---------------------------------------------------------------------------
 
 class Execution_Run_ServiceImpl final : public pyramid::components::autonomy_backend::services::provided::Execution_Run_Service::Service {
@@ -133,7 +181,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Requirement_Placement_Service — gRPC service implementation
+// Requirement_Placement_Service -- gRPC service implementation
 // ---------------------------------------------------------------------------
 
 class Requirement_Placement_ServiceImpl final : public pyramid::components::autonomy_backend::services::provided::Requirement_Placement_Service::Service {

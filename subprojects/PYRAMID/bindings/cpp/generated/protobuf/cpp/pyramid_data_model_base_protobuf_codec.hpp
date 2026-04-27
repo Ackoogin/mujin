@@ -1,4 +1,4 @@
-// Auto-generated Protobuf PCL codec — do not edit
+// Auto-generated Protobuf PCL codec -- do not edit
 // Backend: protobuf | Namespace: pyramid::data_model::base::protobuf_codec
 //
 // Wraps protoc-generated SerializeToString / ParseFromString

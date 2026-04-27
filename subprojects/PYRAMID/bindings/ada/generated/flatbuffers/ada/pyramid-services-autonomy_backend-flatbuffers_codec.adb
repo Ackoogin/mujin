@@ -88,6 +88,18 @@ package body Pyramid.Services.Autonomy_Backend.Flatbuffers_Codec is
      with Import, Convention => C,
           External_Name => "pyramid_services_autonomy_backend_PlanningGoal_from_flatbuffer_json";
 
+   function Imported_To_Binary_Execution_Policy
+     (Json     : Interfaces.C.Strings.chars_ptr;
+      Size_Out : access Interfaces.C.size_t) return System.Address
+     with Import, Convention => C,
+          External_Name => "pyramid_services_autonomy_backend_ExecutionPolicy_to_flatbuffer_json";
+
+   function Imported_From_Binary_Execution_Policy
+     (Data : System.Address; Size : Interfaces.C.size_t)
+      return Interfaces.C.Strings.chars_ptr
+     with Import, Convention => C,
+          External_Name => "pyramid_services_autonomy_backend_ExecutionPolicy_from_flatbuffer_json";
+
    function Imported_To_Binary_World_Fact_Update
      (Json     : Interfaces.C.Strings.chars_ptr;
       Size_Out : access Interfaces.C.size_t) return System.Address
@@ -220,17 +232,29 @@ package body Pyramid.Services.Autonomy_Backend.Flatbuffers_Codec is
      with Import, Convention => C,
           External_Name => "pyramid_services_autonomy_backend_Query_from_flatbuffer_json";
 
-   function Imported_To_Binary_Planning_Execution_Requirement
+   function Imported_To_Binary_Planning_Requirement
      (Json     : Interfaces.C.Strings.chars_ptr;
       Size_Out : access Interfaces.C.size_t) return System.Address
      with Import, Convention => C,
-          External_Name => "pyramid_services_autonomy_backend_PlanningExecutionRequirement_to_flatbuffer_json";
+          External_Name => "pyramid_services_autonomy_backend_PlanningRequirement_to_flatbuffer_json";
 
-   function Imported_From_Binary_Planning_Execution_Requirement
+   function Imported_From_Binary_Planning_Requirement
      (Data : System.Address; Size : Interfaces.C.size_t)
       return Interfaces.C.Strings.chars_ptr
      with Import, Convention => C,
-          External_Name => "pyramid_services_autonomy_backend_PlanningExecutionRequirement_from_flatbuffer_json";
+          External_Name => "pyramid_services_autonomy_backend_PlanningRequirement_from_flatbuffer_json";
+
+   function Imported_To_Binary_Execution_Requirement
+     (Json     : Interfaces.C.Strings.chars_ptr;
+      Size_Out : access Interfaces.C.size_t) return System.Address
+     with Import, Convention => C,
+          External_Name => "pyramid_services_autonomy_backend_ExecutionRequirement_to_flatbuffer_json";
+
+   function Imported_From_Binary_Execution_Requirement
+     (Data : System.Address; Size : Interfaces.C.size_t)
+      return Interfaces.C.Strings.chars_ptr
+     with Import, Convention => C,
+          External_Name => "pyramid_services_autonomy_backend_ExecutionRequirement_from_flatbuffer_json";
 
    function Imported_To_Binary_Execution_Run
      (Json     : Interfaces.C.Strings.chars_ptr;
@@ -268,17 +292,29 @@ package body Pyramid.Services.Autonomy_Backend.Flatbuffers_Codec is
      with Import, Convention => C,
           External_Name => "pyramid_services_autonomy_backend_CapabilitiesArray_from_flatbuffer_json";
 
-   function Imported_To_Binary_Planning_Execution_Requirement_Array
+   function Imported_To_Binary_Planning_Requirement_Array
      (Json     : Interfaces.C.Strings.chars_ptr;
       Size_Out : access Interfaces.C.size_t) return System.Address
      with Import, Convention => C,
-          External_Name => "pyramid_services_autonomy_backend_PlanningExecutionRequirementArray_to_flatbuffer_json";
+          External_Name => "pyramid_services_autonomy_backend_PlanningRequirementArray_to_flatbuffer_json";
 
-   function Imported_From_Binary_Planning_Execution_Requirement_Array
+   function Imported_From_Binary_Planning_Requirement_Array
      (Data : System.Address; Size : Interfaces.C.size_t)
       return Interfaces.C.Strings.chars_ptr
      with Import, Convention => C,
-          External_Name => "pyramid_services_autonomy_backend_PlanningExecutionRequirementArray_from_flatbuffer_json";
+          External_Name => "pyramid_services_autonomy_backend_PlanningRequirementArray_from_flatbuffer_json";
+
+   function Imported_To_Binary_Execution_Requirement_Array
+     (Json     : Interfaces.C.Strings.chars_ptr;
+      Size_Out : access Interfaces.C.size_t) return System.Address
+     with Import, Convention => C,
+          External_Name => "pyramid_services_autonomy_backend_ExecutionRequirementArray_to_flatbuffer_json";
+
+   function Imported_From_Binary_Execution_Requirement_Array
+     (Data : System.Address; Size : Interfaces.C.size_t)
+      return Interfaces.C.Strings.chars_ptr
+     with Import, Convention => C,
+          External_Name => "pyramid_services_autonomy_backend_ExecutionRequirementArray_from_flatbuffer_json";
 
    function Imported_To_Binary_Plan_Array
      (Json     : Interfaces.C.Strings.chars_ptr;
@@ -467,6 +503,44 @@ package body Pyramid.Services.Autonomy_Backend.Flatbuffers_Codec is
          return Result;
       end;
    end From_Binary_Planning_Goal;
+
+   function To_Binary_Execution_Policy (Json : String) return String is
+      Json_C   : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String (Json);
+      Size_Out : aliased Interfaces.C.size_t := 0;
+      Data     : System.Address := Imported_To_Binary_Execution_Policy (Json_C, Size_Out'Access);
+   begin
+      Interfaces.C.Strings.Free (Json_C);
+      if Data = System.Null_Address then
+         raise Constraint_Error with "FlatBuffers encode failed for Execution_Policy";
+      end if;
+
+      declare
+         Result : constant String := Copy_From_Buffer (Data, Size_Out);
+      begin
+         Free_Buffer (Data);
+         return Result;
+      end;
+   end To_Binary_Execution_Policy;
+
+   function From_Binary_Execution_Policy (Payload : String) return String is
+      Payload_Bytes : aliased constant String := Payload;
+      Json_C : Interfaces.C.Strings.chars_ptr := Imported_From_Binary_Execution_Policy
+        ((if Payload_Bytes'Length = 0
+          then System.Null_Address
+          else Payload_Bytes (Payload_Bytes'First)'Address),
+         Interfaces.C.size_t (Payload_Bytes'Length));
+   begin
+      if Json_C = Interfaces.C.Strings.Null_Ptr then
+         raise Constraint_Error with "FlatBuffers decode failed for Execution_Policy";
+      end if;
+
+      declare
+         Result : constant String := Interfaces.C.Strings.Value (Json_C);
+      begin
+         Free_Buffer (To_Address (Json_C));
+         return Result;
+      end;
+   end From_Binary_Execution_Policy;
 
    function To_Binary_World_Fact_Update (Json : String) return String is
       Json_C   : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String (Json);
@@ -886,14 +960,14 @@ package body Pyramid.Services.Autonomy_Backend.Flatbuffers_Codec is
       end;
    end From_Binary_Query;
 
-   function To_Binary_Planning_Execution_Requirement (Json : String) return String is
+   function To_Binary_Planning_Requirement (Json : String) return String is
       Json_C   : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String (Json);
       Size_Out : aliased Interfaces.C.size_t := 0;
-      Data     : System.Address := Imported_To_Binary_Planning_Execution_Requirement (Json_C, Size_Out'Access);
+      Data     : System.Address := Imported_To_Binary_Planning_Requirement (Json_C, Size_Out'Access);
    begin
       Interfaces.C.Strings.Free (Json_C);
       if Data = System.Null_Address then
-         raise Constraint_Error with "FlatBuffers encode failed for Planning_Execution_Requirement";
+         raise Constraint_Error with "FlatBuffers encode failed for Planning_Requirement";
       end if;
 
       declare
@@ -902,18 +976,18 @@ package body Pyramid.Services.Autonomy_Backend.Flatbuffers_Codec is
          Free_Buffer (Data);
          return Result;
       end;
-   end To_Binary_Planning_Execution_Requirement;
+   end To_Binary_Planning_Requirement;
 
-   function From_Binary_Planning_Execution_Requirement (Payload : String) return String is
+   function From_Binary_Planning_Requirement (Payload : String) return String is
       Payload_Bytes : aliased constant String := Payload;
-      Json_C : Interfaces.C.Strings.chars_ptr := Imported_From_Binary_Planning_Execution_Requirement
+      Json_C : Interfaces.C.Strings.chars_ptr := Imported_From_Binary_Planning_Requirement
         ((if Payload_Bytes'Length = 0
           then System.Null_Address
           else Payload_Bytes (Payload_Bytes'First)'Address),
          Interfaces.C.size_t (Payload_Bytes'Length));
    begin
       if Json_C = Interfaces.C.Strings.Null_Ptr then
-         raise Constraint_Error with "FlatBuffers decode failed for Planning_Execution_Requirement";
+         raise Constraint_Error with "FlatBuffers decode failed for Planning_Requirement";
       end if;
 
       declare
@@ -922,7 +996,45 @@ package body Pyramid.Services.Autonomy_Backend.Flatbuffers_Codec is
          Free_Buffer (To_Address (Json_C));
          return Result;
       end;
-   end From_Binary_Planning_Execution_Requirement;
+   end From_Binary_Planning_Requirement;
+
+   function To_Binary_Execution_Requirement (Json : String) return String is
+      Json_C   : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String (Json);
+      Size_Out : aliased Interfaces.C.size_t := 0;
+      Data     : System.Address := Imported_To_Binary_Execution_Requirement (Json_C, Size_Out'Access);
+   begin
+      Interfaces.C.Strings.Free (Json_C);
+      if Data = System.Null_Address then
+         raise Constraint_Error with "FlatBuffers encode failed for Execution_Requirement";
+      end if;
+
+      declare
+         Result : constant String := Copy_From_Buffer (Data, Size_Out);
+      begin
+         Free_Buffer (Data);
+         return Result;
+      end;
+   end To_Binary_Execution_Requirement;
+
+   function From_Binary_Execution_Requirement (Payload : String) return String is
+      Payload_Bytes : aliased constant String := Payload;
+      Json_C : Interfaces.C.Strings.chars_ptr := Imported_From_Binary_Execution_Requirement
+        ((if Payload_Bytes'Length = 0
+          then System.Null_Address
+          else Payload_Bytes (Payload_Bytes'First)'Address),
+         Interfaces.C.size_t (Payload_Bytes'Length));
+   begin
+      if Json_C = Interfaces.C.Strings.Null_Ptr then
+         raise Constraint_Error with "FlatBuffers decode failed for Execution_Requirement";
+      end if;
+
+      declare
+         Result : constant String := Interfaces.C.Strings.Value (Json_C);
+      begin
+         Free_Buffer (To_Address (Json_C));
+         return Result;
+      end;
+   end From_Binary_Execution_Requirement;
 
    function To_Binary_Execution_Run (Json : String) return String is
       Json_C   : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String (Json);
@@ -1038,14 +1150,14 @@ package body Pyramid.Services.Autonomy_Backend.Flatbuffers_Codec is
       end;
    end From_Binary_Capabilities_Array;
 
-   function To_Binary_Planning_Execution_Requirement_Array (Json : String) return String is
+   function To_Binary_Planning_Requirement_Array (Json : String) return String is
       Json_C   : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String (Json);
       Size_Out : aliased Interfaces.C.size_t := 0;
-      Data     : System.Address := Imported_To_Binary_Planning_Execution_Requirement_Array (Json_C, Size_Out'Access);
+      Data     : System.Address := Imported_To_Binary_Planning_Requirement_Array (Json_C, Size_Out'Access);
    begin
       Interfaces.C.Strings.Free (Json_C);
       if Data = System.Null_Address then
-         raise Constraint_Error with "FlatBuffers encode failed for Planning_Execution_Requirement_Array";
+         raise Constraint_Error with "FlatBuffers encode failed for Planning_Requirement_Array";
       end if;
 
       declare
@@ -1054,18 +1166,18 @@ package body Pyramid.Services.Autonomy_Backend.Flatbuffers_Codec is
          Free_Buffer (Data);
          return Result;
       end;
-   end To_Binary_Planning_Execution_Requirement_Array;
+   end To_Binary_Planning_Requirement_Array;
 
-   function From_Binary_Planning_Execution_Requirement_Array (Payload : String) return String is
+   function From_Binary_Planning_Requirement_Array (Payload : String) return String is
       Payload_Bytes : aliased constant String := Payload;
-      Json_C : Interfaces.C.Strings.chars_ptr := Imported_From_Binary_Planning_Execution_Requirement_Array
+      Json_C : Interfaces.C.Strings.chars_ptr := Imported_From_Binary_Planning_Requirement_Array
         ((if Payload_Bytes'Length = 0
           then System.Null_Address
           else Payload_Bytes (Payload_Bytes'First)'Address),
          Interfaces.C.size_t (Payload_Bytes'Length));
    begin
       if Json_C = Interfaces.C.Strings.Null_Ptr then
-         raise Constraint_Error with "FlatBuffers decode failed for Planning_Execution_Requirement_Array";
+         raise Constraint_Error with "FlatBuffers decode failed for Planning_Requirement_Array";
       end if;
 
       declare
@@ -1074,7 +1186,45 @@ package body Pyramid.Services.Autonomy_Backend.Flatbuffers_Codec is
          Free_Buffer (To_Address (Json_C));
          return Result;
       end;
-   end From_Binary_Planning_Execution_Requirement_Array;
+   end From_Binary_Planning_Requirement_Array;
+
+   function To_Binary_Execution_Requirement_Array (Json : String) return String is
+      Json_C   : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String (Json);
+      Size_Out : aliased Interfaces.C.size_t := 0;
+      Data     : System.Address := Imported_To_Binary_Execution_Requirement_Array (Json_C, Size_Out'Access);
+   begin
+      Interfaces.C.Strings.Free (Json_C);
+      if Data = System.Null_Address then
+         raise Constraint_Error with "FlatBuffers encode failed for Execution_Requirement_Array";
+      end if;
+
+      declare
+         Result : constant String := Copy_From_Buffer (Data, Size_Out);
+      begin
+         Free_Buffer (Data);
+         return Result;
+      end;
+   end To_Binary_Execution_Requirement_Array;
+
+   function From_Binary_Execution_Requirement_Array (Payload : String) return String is
+      Payload_Bytes : aliased constant String := Payload;
+      Json_C : Interfaces.C.Strings.chars_ptr := Imported_From_Binary_Execution_Requirement_Array
+        ((if Payload_Bytes'Length = 0
+          then System.Null_Address
+          else Payload_Bytes (Payload_Bytes'First)'Address),
+         Interfaces.C.size_t (Payload_Bytes'Length));
+   begin
+      if Json_C = Interfaces.C.Strings.Null_Ptr then
+         raise Constraint_Error with "FlatBuffers decode failed for Execution_Requirement_Array";
+      end if;
+
+      declare
+         Result : constant String := Interfaces.C.Strings.Value (Json_C);
+      begin
+         Free_Buffer (To_Address (Json_C));
+         return Result;
+      end;
+   end From_Binary_Execution_Requirement_Array;
 
    function To_Binary_Plan_Array (Json : String) return String is
       Json_C   : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String (Json);
@@ -1254,6 +1404,22 @@ package body Pyramid.Services.Autonomy_Backend.Flatbuffers_Codec is
       return Result;
    end From_Binary_Planning_Goal;
 
+   function To_Binary_Execution_Policy (Msg : Pyramid.Data_Model.Autonomy.Types.Execution_Policy) return String is
+   begin
+      return To_Binary_Execution_Policy (Pyramid.Data_Model.Autonomy.Types_Codec.To_Json (Msg));
+   end To_Binary_Execution_Policy;
+
+   function From_Binary_Execution_Policy
+     (Payload : String; Tag : access Pyramid.Data_Model.Autonomy.Types.Execution_Policy) return Pyramid.Data_Model.Autonomy.Types.Execution_Policy
+   is
+      pragma Unreferenced (Tag);
+      Json   : constant String := From_Binary_Execution_Policy (Payload);
+      Result : Pyramid.Data_Model.Autonomy.Types.Execution_Policy;
+   begin
+      Result := Pyramid.Data_Model.Autonomy.Types_Codec.From_Json (Json, null);
+      return Result;
+   end From_Binary_Execution_Policy;
+
    function To_Binary_World_Fact_Update (Msg : Pyramid.Data_Model.Autonomy.Types.World_Fact_Update) return String is
    begin
       return To_Binary_World_Fact_Update (Pyramid.Data_Model.Autonomy.Types_Codec.To_Json (Msg));
@@ -1430,21 +1596,37 @@ package body Pyramid.Services.Autonomy_Backend.Flatbuffers_Codec is
       return Result;
    end From_Binary_Query;
 
-   function To_Binary_Planning_Execution_Requirement (Msg : Pyramid.Data_Model.Autonomy.Types.Planning_Execution_Requirement) return String is
+   function To_Binary_Planning_Requirement (Msg : Pyramid.Data_Model.Autonomy.Types.Planning_Requirement) return String is
    begin
-      return To_Binary_Planning_Execution_Requirement (Pyramid.Data_Model.Autonomy.Types_Codec.To_Json (Msg));
-   end To_Binary_Planning_Execution_Requirement;
+      return To_Binary_Planning_Requirement (Pyramid.Data_Model.Autonomy.Types_Codec.To_Json (Msg));
+   end To_Binary_Planning_Requirement;
 
-   function From_Binary_Planning_Execution_Requirement
-     (Payload : String; Tag : access Pyramid.Data_Model.Autonomy.Types.Planning_Execution_Requirement) return Pyramid.Data_Model.Autonomy.Types.Planning_Execution_Requirement
+   function From_Binary_Planning_Requirement
+     (Payload : String; Tag : access Pyramid.Data_Model.Autonomy.Types.Planning_Requirement) return Pyramid.Data_Model.Autonomy.Types.Planning_Requirement
    is
       pragma Unreferenced (Tag);
-      Json   : constant String := From_Binary_Planning_Execution_Requirement (Payload);
-      Result : Pyramid.Data_Model.Autonomy.Types.Planning_Execution_Requirement;
+      Json   : constant String := From_Binary_Planning_Requirement (Payload);
+      Result : Pyramid.Data_Model.Autonomy.Types.Planning_Requirement;
    begin
       Result := Pyramid.Data_Model.Autonomy.Types_Codec.From_Json (Json, null);
       return Result;
-   end From_Binary_Planning_Execution_Requirement;
+   end From_Binary_Planning_Requirement;
+
+   function To_Binary_Execution_Requirement (Msg : Pyramid.Data_Model.Autonomy.Types.Execution_Requirement) return String is
+   begin
+      return To_Binary_Execution_Requirement (Pyramid.Data_Model.Autonomy.Types_Codec.To_Json (Msg));
+   end To_Binary_Execution_Requirement;
+
+   function From_Binary_Execution_Requirement
+     (Payload : String; Tag : access Pyramid.Data_Model.Autonomy.Types.Execution_Requirement) return Pyramid.Data_Model.Autonomy.Types.Execution_Requirement
+   is
+      pragma Unreferenced (Tag);
+      Json   : constant String := From_Binary_Execution_Requirement (Payload);
+      Result : Pyramid.Data_Model.Autonomy.Types.Execution_Requirement;
+   begin
+      Result := Pyramid.Data_Model.Autonomy.Types_Codec.From_Json (Json, null);
+      return Result;
+   end From_Binary_Execution_Requirement;
 
    function To_Binary_Execution_Run (Msg : Pyramid.Data_Model.Autonomy.Types.Execution_Run) return String is
    begin

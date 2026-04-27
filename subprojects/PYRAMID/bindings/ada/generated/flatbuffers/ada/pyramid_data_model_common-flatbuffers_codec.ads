@@ -1,4 +1,4 @@
---  Auto-generated FlatBuffers codec spec — do not edit
+--  Auto-generated FlatBuffers codec spec -- do not edit
 --  Backend: flatbuffers | Package: Pyramid.Data_model.Common.Flatbuffers_Codec
 --
 --  This package provides thin bindings to the C++ FlatBuffers codec.

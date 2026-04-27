@@ -19,22 +19,14 @@ enum class FactAuthorityLevel : int {
     Confirmed = 2,
 };
 
-enum class PlanningExecutionMode : int {
-    Unspecified = 0,
-    PlanAndExecute = 1,
-    PlanOnly = 2,
-    ExecuteApprovedPlan = 3,
-};
-
-enum class PlanningExecutionState : int {
+enum class ExecutionState : int {
     Unspecified = 0,
     Accepted = 1,
-    Planning = 2,
-    Executing = 3,
-    WaitingForComponents = 4,
-    Achieved = 5,
-    Failed = 6,
-    Cancelled = 7,
+    Executing = 2,
+    WaitingForComponents = 3,
+    Achieved = 4,
+    Failed = 5,
+    Cancelled = 6,
 };
 
 enum class RequirementPlacementOperation : int {
@@ -63,7 +55,6 @@ struct AgentState {
 struct PlanningPolicy {
     uint32_t max_replans = 0;
     bool enable_replanning = false;
-    uint32_t max_concurrent_placements = 0;
 };
 
 struct PlanningGoal {
@@ -76,15 +67,29 @@ struct PlanningGoal {
     std::optional<std::string> expression;
 };
 
-struct PlanningExecutionRequirement {
+struct ExecutionPolicy {
+    uint32_t max_replans = 0;
+    bool enable_replanning = false;
+    uint32_t max_concurrent_placements = 0;
+};
+
+struct PlanningRequirement {
     pyramid::data_model::common::Entity base = {};  // from Requirement
     pyramid::data_model::common::Achievement status = {};  // from Requirement
     std::vector<RequirementReference> upstream_requirement = {};
     std::vector<PlanningGoal> goal = {};
     PlanningPolicy policy = {};
     std::vector<AgentState> available_agents = {};
-    PlanningExecutionMode mode = PlanningExecutionMode::Unspecified;
-    std::string approved_plan_id = {};  // optional
+};
+
+struct ExecutionRequirement {
+    pyramid::data_model::common::Entity base = {};  // from Requirement
+    pyramid::data_model::common::Achievement status = {};  // from Requirement
+    std::vector<RequirementReference> upstream_requirement = {};
+    std::string plan_id = {};
+    ExecutionPolicy policy = {};
+    std::vector<AgentState> available_agents = {};
+    std::string planning_requirement_id = {};  // optional
 };
 
 struct WorldFactUpdate {
@@ -109,9 +114,9 @@ struct Capabilities {
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
     std::string backend_id = {};
-    bool supports_plan_only = false;
-    bool supports_plan_and_execute = false;
-    bool supports_execute_approved_plan = false;
+    bool supports_planning_requirements = false;
+    bool supports_execution_requirements = false;
+    bool supports_approved_plan_execution = false;
     bool supports_replanning = false;
     bool supports_typed_component_requirement_placement = false;
     bool supports_state_update_ingress = false;
@@ -138,7 +143,7 @@ struct Plan {
     std::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
-    std::string planning_execution_requirement_id = {};
+    std::string planning_requirement_id = {};
     std::string backend_id = {};
     uint64_t world_version = 0;
     uint32_t replan_count = 0;
@@ -153,7 +158,8 @@ struct RequirementPlacement {
     std::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
-    std::string planning_execution_requirement_id = {};
+    std::string execution_requirement_id = {};
+    std::string planning_requirement_id = {};
     std::string plan_id = {};
     std::string plan_step_id = {};
     std::string target_component = {};
@@ -169,9 +175,10 @@ struct ExecutionRun {
     std::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
-    std::string planning_execution_requirement_id = {};
+    std::string execution_requirement_id = {};
+    std::string planning_requirement_id = {};
     std::string plan_id = {};
-    PlanningExecutionState state = PlanningExecutionState::Unspecified;
+    ExecutionState state = ExecutionState::Unspecified;
     pyramid::data_model::common::Achievement achievement = {};
     uint32_t replan_count = 0;
     std::vector<RequirementPlacement> outstanding_placement = {};

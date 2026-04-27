@@ -14,16 +14,9 @@ package Pyramid.Data_Model.Autonomy.Types is
       Level_Believed,
       Level_Confirmed);
 
-   type Planning_Execution_Mode is
-     (Mode_Unspecified,
-      Mode_PlanAndExecute,
-      Mode_PlanOnly,
-      Mode_ExecuteApprovedPlan);
-
-   type Planning_Execution_State is
+   type Execution_State is
      (State_Unspecified,
       State_Accepted,
-      State_Planning,
       State_Executing,
       State_WaitingForComponents,
       State_Achieved,
@@ -67,7 +60,6 @@ package Pyramid.Data_Model.Autonomy.Types is
    type Planning_Policy is record
       Max_Replans : Natural := 0;
       Enable_Replanning : Boolean := False;
-      Max_Concurrent_Placements : Natural := 0;
    end record;
 
    type Planning_Goal is record
@@ -85,15 +77,29 @@ package Pyramid.Data_Model.Autonomy.Types is
    type Goal_Array is array (Positive range <>) of Planning_Goal;
    type Goal_Array_Acc is access all Goal_Array;
 
-   type Planning_Execution_Requirement is record
+   type Execution_Policy is record
+      Max_Replans : Natural := 0;
+      Enable_Replanning : Boolean := False;
+      Max_Concurrent_Placements : Natural := 0;
+   end record;
+
+   type Planning_Requirement is record
       Base : Entity;
       Status : Achievement;
       Upstream_Requirement : Upstream_Requirement_Array_Acc := null;
       Goal : Goal_Array_Acc := null;
       Policy : Planning_Policy;
       Available_Agents : Available_Agents_Array_Acc := null;
-      Mode : Planning_Execution_Mode := Mode_Unspecified;
-      Approved_Plan_Id : Unbounded_String := Null_Unbounded_String;
+   end record;
+
+   type Execution_Requirement is record
+      Base : Entity;
+      Status : Achievement;
+      Upstream_Requirement : Upstream_Requirement_Array_Acc := null;
+      Plan_Id : Unbounded_String := Null_Unbounded_String;
+      Policy : Execution_Policy;
+      Available_Agents : Available_Agents_Array_Acc := null;
+      Planning_Requirement_Id : Unbounded_String := Null_Unbounded_String;
    end record;
 
    type World_Fact_Update is record
@@ -121,9 +127,9 @@ package Pyramid.Data_Model.Autonomy.Types is
       Id : Unbounded_String := Null_Unbounded_String;
       Source : Unbounded_String := Null_Unbounded_String;
       Backend_Id : Unbounded_String := Null_Unbounded_String;
-      Supports_Plan_Only : Boolean := False;
-      Supports_Plan_And_Execute : Boolean := False;
-      Supports_Execute_Approved_Plan : Boolean := False;
+      Supports_Planning_Requirements : Boolean := False;
+      Supports_Execution_Requirements : Boolean := False;
+      Supports_Approved_Plan_Execution : Boolean := False;
       Supports_Replanning : Boolean := False;
       Supports_Typed_Component_Requirement_Placement : Boolean := False;
       Supports_State_Update_Ingress : Boolean := False;
@@ -156,7 +162,7 @@ package Pyramid.Data_Model.Autonomy.Types is
       Update_Time : Long_Float := 0.0;
       Id : Unbounded_String := Null_Unbounded_String;
       Source : Unbounded_String := Null_Unbounded_String;
-      Planning_Execution_Requirement_Id : Unbounded_String := Null_Unbounded_String;
+      Planning_Requirement_Id : Unbounded_String := Null_Unbounded_String;
       Backend_Id : Unbounded_String := Null_Unbounded_String;
       World_Version : Long_Integer := 0;
       Replan_Count : Natural := 0;
@@ -171,7 +177,8 @@ package Pyramid.Data_Model.Autonomy.Types is
       Update_Time : Long_Float := 0.0;
       Id : Unbounded_String := Null_Unbounded_String;
       Source : Unbounded_String := Null_Unbounded_String;
-      Planning_Execution_Requirement_Id : Unbounded_String := Null_Unbounded_String;
+      Execution_Requirement_Id : Unbounded_String := Null_Unbounded_String;
+      Planning_Requirement_Id : Unbounded_String := Null_Unbounded_String;
       Plan_Id : Unbounded_String := Null_Unbounded_String;
       Plan_Step_Id : Unbounded_String := Null_Unbounded_String;
       Target_Component : Unbounded_String := Null_Unbounded_String;
@@ -190,9 +197,10 @@ package Pyramid.Data_Model.Autonomy.Types is
       Update_Time : Long_Float := 0.0;
       Id : Unbounded_String := Null_Unbounded_String;
       Source : Unbounded_String := Null_Unbounded_String;
-      Planning_Execution_Requirement_Id : Unbounded_String := Null_Unbounded_String;
+      Execution_Requirement_Id : Unbounded_String := Null_Unbounded_String;
+      Planning_Requirement_Id : Unbounded_String := Null_Unbounded_String;
       Plan_Id : Unbounded_String := Null_Unbounded_String;
-      State : Planning_Execution_State := State_Unspecified;
+      State : Execution_State := State_Unspecified;
       Achievement : Base_Achievement;
       Replan_Count : Natural := 0;
       Outstanding_Placement : Outstanding_Placement_Array_Acc := null;

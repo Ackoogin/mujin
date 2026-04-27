@@ -11,10 +11,8 @@ namespace pyramid::data_model::autonomy {
 // Enum string converters
 std::string toString(FactAuthorityLevel v);
 FactAuthorityLevel factAuthorityLevelFromString(const std::string& s);
-std::string toString(PlanningExecutionMode v);
-PlanningExecutionMode planningExecutionModeFromString(const std::string& s);
-std::string toString(PlanningExecutionState v);
-PlanningExecutionState planningExecutionStateFromString(const std::string& s);
+std::string toString(ExecutionState v);
+ExecutionState executionStateFromString(const std::string& s);
 std::string toString(RequirementPlacementOperation v);
 RequirementPlacementOperation requirementPlacementOperationFromString(const std::string& s);
 
@@ -27,8 +25,12 @@ std::string toJson(const PlanningPolicy& msg);
 PlanningPolicy fromJson(const std::string& s, PlanningPolicy* /*tag*/ = nullptr);
 std::string toJson(const PlanningGoal& msg);
 PlanningGoal fromJson(const std::string& s, PlanningGoal* /*tag*/ = nullptr);
-std::string toJson(const PlanningExecutionRequirement& msg);
-PlanningExecutionRequirement fromJson(const std::string& s, PlanningExecutionRequirement* /*tag*/ = nullptr);
+std::string toJson(const ExecutionPolicy& msg);
+ExecutionPolicy fromJson(const std::string& s, ExecutionPolicy* /*tag*/ = nullptr);
+std::string toJson(const PlanningRequirement& msg);
+PlanningRequirement fromJson(const std::string& s, PlanningRequirement* /*tag*/ = nullptr);
+std::string toJson(const ExecutionRequirement& msg);
+ExecutionRequirement fromJson(const std::string& s, ExecutionRequirement* /*tag*/ = nullptr);
 std::string toJson(const WorldFactUpdate& msg);
 WorldFactUpdate fromJson(const std::string& s, WorldFactUpdate* /*tag*/ = nullptr);
 std::string toJson(const StateUpdate& msg);

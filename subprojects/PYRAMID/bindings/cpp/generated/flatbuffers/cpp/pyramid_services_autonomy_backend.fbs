@@ -9,22 +9,14 @@ enum FactAuthorityLevel : int {
   CONFIRMED = 2
 }
 
-enum PlanningExecutionMode : int {
-  UNSPECIFIED = 0,
-  PLAN_AND_EXECUTE = 1,
-  PLAN_ONLY = 2,
-  EXECUTE_APPROVED_PLAN = 3
-}
-
-enum PlanningExecutionState : int {
+enum ExecutionState : int {
   UNSPECIFIED = 0,
   ACCEPTED = 1,
-  PLANNING = 2,
-  EXECUTING = 3,
-  WAITING_FOR_COMPONENTS = 4,
-  ACHIEVED = 5,
-  FAILED = 6,
-  CANCELLED = 7
+  EXECUTING = 2,
+  WAITING_FOR_COMPONENTS = 3,
+  ACHIEVED = 4,
+  FAILED = 5,
+  CANCELLED = 6
 }
 
 enum RequirementPlacementOperation : int {
@@ -70,7 +62,6 @@ table AgentState {
 table PlanningPolicy {
   max_replans:uint;
   enable_replanning:bool;
-  max_concurrent_placements:uint;
 }
 
 table PlanningGoal {
@@ -81,6 +72,12 @@ table PlanningGoal {
   name:string;
   requirement:RequirementReference;
   expression:string;
+}
+
+table ExecutionPolicy {
+  max_replans:uint;
+  enable_replanning:bool;
+  max_concurrent_placements:uint;
 }
 
 table WorldFactUpdate {
@@ -108,9 +105,9 @@ table Capabilities {
   id:string;
   source:string;
   backend_id:string;
-  supports_plan_only:bool;
-  supports_plan_and_execute:bool;
-  supports_execute_approved_plan:bool;
+  supports_planning_requirements:bool;
+  supports_execution_requirements:bool;
+  supports_approved_plan_execution:bool;
   supports_replanning:bool;
   supports_typed_component_requirement_placement:bool;
   supports_state_update_ingress:bool;
@@ -139,7 +136,7 @@ table Plan {
   update_time:double;
   id:string;
   source:string;
-  planning_execution_requirement_id:string;
+  planning_requirement_id:string;
   backend_id:string;
   world_version:ulong;
   replan_count:uint;
@@ -156,7 +153,8 @@ table RequirementPlacement {
   update_time:double;
   id:string;
   source:string;
-  planning_execution_requirement_id:string;
+  execution_requirement_id:string;
+  planning_requirement_id:string;
   plan_id:string;
   plan_step_id:string;
   target_component:string;
@@ -196,15 +194,23 @@ table Query {
   one_shot:bool;
 }
 
-table PlanningExecutionRequirement {
+table PlanningRequirement {
   base:Entity;
   status:Achievement;
   upstream_requirement:[RequirementReference];
   goal:[PlanningGoal];
   policy:PlanningPolicy;
   available_agents:[AgentState];
-  mode:PlanningExecutionMode;
-  approved_plan_id:string;
+}
+
+table ExecutionRequirement {
+  base:Entity;
+  status:Achievement;
+  upstream_requirement:[RequirementReference];
+  plan_id:string;
+  policy:ExecutionPolicy;
+  available_agents:[AgentState];
+  planning_requirement_id:string;
 }
 
 table ExecutionRun {
@@ -212,9 +218,10 @@ table ExecutionRun {
   update_time:double;
   id:string;
   source:string;
-  planning_execution_requirement_id:string;
+  execution_requirement_id:string;
+  planning_requirement_id:string;
   plan_id:string;
-  state:PlanningExecutionState;
+  state:ExecutionState;
   achievement:Achievement;
   replan_count:uint;
   outstanding_placement:[RequirementPlacement];
@@ -228,8 +235,12 @@ table CapabilitiesArrayHolder {
   items:[Capabilities];
 }
 
-table PlanningExecutionRequirementArrayHolder {
-  items:[PlanningExecutionRequirement];
+table PlanningRequirementArrayHolder {
+  items:[PlanningRequirement];
+}
+
+table ExecutionRequirementArrayHolder {
+  items:[ExecutionRequirement];
 }
 
 table PlanArrayHolder {

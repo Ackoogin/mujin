@@ -1,4 +1,4 @@
---  Auto-generated gRPC transport body — do not edit
+--  Auto-generated gRPC transport body -- do not edit
 
 with Ada.Strings.Unbounded; use Ada.Strings.Unbounded;
 with Ada.Unchecked_Conversion;

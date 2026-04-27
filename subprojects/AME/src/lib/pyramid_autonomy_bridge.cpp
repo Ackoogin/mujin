@@ -128,9 +128,9 @@ PyramidAutonomyBridge::handleReadCapabilities(const Query& request) {
   Capabilities capabilities;
   capabilities.id = "ame.current_stack";
   capabilities.backend_id = "ame.current_stack";
-  capabilities.supports_plan_only = true;
-  capabilities.supports_plan_and_execute = true;
-  capabilities.supports_execute_approved_plan = true;
+  capabilities.supports_planning_requirements = true;
+  capabilities.supports_execution_requirements = true;
+  capabilities.supports_approved_plan_execution = true;
   capabilities.supports_replanning = true;
   capabilities.supports_typed_component_requirement_placement = true;
   capabilities.supports_state_update_ingress = true;
@@ -140,97 +140,126 @@ PyramidAutonomyBridge::handleReadCapabilities(const Query& request) {
   return {capabilities};
 }
 
-PyramidAutonomyBridge::Identifier PyramidAutonomyBridge::handleCreateRequirement(
-    const PlanningExecutionRequirement& request) {
+PyramidAutonomyBridge::Identifier
+PyramidAutonomyBridge::handleCreatePlanningRequirement(
+    const PlanningRequirement& request) {
   auto requirement = request;
   auto requirement_id = requirement.base.id;
   if (requirement_id.empty()) {
-    requirement_id = nextId("ame-req");
+    requirement_id = nextId("ame-plan-req");
     requirement.base.id = requirement_id;
   }
 
   requirement.status.status = common::Progress::InProgress;
-  requirements_[requirement_id] = requirement;
+  planning_requirements_[requirement_id] = requirement;
 
-  for (const auto& agent : requirement.available_agents) {
-    world_model_.registerAgent(agent.agent_id, agent.agent_type);
-    if (auto* wm_agent = world_model_.getAgent(agent.agent_id)) {
-      wm_agent->available = agent.available;
-    }
+  applyPlanningContext(requirement);
+  auto plan = makePlan(requirement, requirement_id);
+  plans_[plan.id] = plan;
+  planning_requirements_[requirement_id].status.status =
+      plan.plan_success ? common::Progress::Completed : common::Progress::Failed;
+  if (plan.plan_success) {
+    planning_requirements_[requirement_id].status.quality = 100.0;
   }
 
-  std::vector<std::string> goals;
-  for (const auto& goal : requirement.goal) {
-    if (goal.expression.has_value()) {
-      goals.push_back(goal.expression.value());
-    }
-  }
-  world_model_.setGoal(goals);
+  return requirement_id;
+}
 
+std::vector<PyramidAutonomyBridge::PlanningRequirement>
+PyramidAutonomyBridge::handleReadPlanningRequirement(const Query& request) {
+  return readStore(planning_requirements_, request);
+}
+
+PyramidAutonomyBridge::Ack
+PyramidAutonomyBridge::handleUpdatePlanningRequirement(
+    const PlanningRequirement& request) {
+  if (request.base.id.empty()) {
+    return model::kAckFail;
+  }
+  auto it = planning_requirements_.find(request.base.id);
+  if (it == planning_requirements_.end()) {
+    return model::kAckFail;
+  }
+  it->second = request;
+  return model::kAckOk;
+}
+
+PyramidAutonomyBridge::Ack
+PyramidAutonomyBridge::handleDeletePlanningRequirement(
+    const Identifier& request) {
+  const auto erased = planning_requirements_.erase(request);
+  return erased > 0 ? model::kAckOk : model::kAckFail;
+}
+
+PyramidAutonomyBridge::Identifier
+PyramidAutonomyBridge::handleCreateExecutionRequirement(
+    const ExecutionRequirement& request) {
+  auto requirement = request;
+  auto requirement_id = requirement.base.id;
+  if (requirement_id.empty()) {
+    requirement_id = nextId("ame-exec-req");
+    requirement.base.id = requirement_id;
+  }
+  requirement.status.status = common::Progress::InProgress;
+  execution_requirements_[requirement_id] = requirement;
+  applyExecutionContext(requirement);
+
+  const auto plan_it = plans_.find(requirement.plan_id);
   Plan plan;
-  const auto execute_approved =
-      requirement.mode == model::PlanningExecutionMode::ExecuteApprovedPlan &&
-      !requirement.approved_plan_id.empty();
-  if (execute_approved) {
-    const auto plan_it = plans_.find(requirement.approved_plan_id);
-    if (plan_it != plans_.end()) {
-      plan = plan_it->second;
-    } else {
-      plan.id = requirement.approved_plan_id;
-      plan.planning_execution_requirement_id = requirement_id;
-      plan.backend_id = "ame.current_stack";
-      plan.world_version = world_model_.version();
-      plan.plan_success = false;
-    }
+  if (plan_it != plans_.end()) {
+    plan = plan_it->second;
   } else {
-    plan = makePlan(requirement, requirement_id);
-    plans_[plan.id] = plan;
+    plan.id = requirement.plan_id;
+    plan.planning_requirement_id = requirement.planning_requirement_id;
+    plan.backend_id = "ame.current_stack";
+    plan.world_version = world_model_.version();
+    plan.plan_success = false;
+  }
+  if (execution_requirements_[requirement_id].planning_requirement_id.empty()) {
+    execution_requirements_[requirement_id].planning_requirement_id =
+        plan.planning_requirement_id;
   }
 
-  auto run = makeRun(requirement, plan);
+  auto run = makeRun(execution_requirements_[requirement_id], plan);
   runs_[run.id] = run;
+  if (!plan.plan_success) {
+    execution_requirements_[requirement_id].status.status =
+        common::Progress::Failed;
+    return requirement_id;
+  }
 
-  const auto execute =
-      plan.plan_success &&
-      (requirement.mode == model::PlanningExecutionMode::PlanAndExecute ||
-       requirement.mode == model::PlanningExecutionMode::ExecuteApprovedPlan);
   bool execution_rejected = false;
   for (const auto& step : plan.step) {
-    if (execute) {
-      const auto command = makeCommand(requirement_id, step);
-      const auto submission = execution_sink_->submit(command);
-      if (submission.placement.has_value()) {
-        placement_contexts_[submission.placement->command_id] =
-            {requirement_id, plan.id, step.id};
-        placements_[submission.placement->placement_id] =
-            makePlacement(submission.placement.value());
-        continue;
-      }
-
-      auto fallback = makePlacement(requirement_id, plan, step);
-      fallback.progress =
-          submission.accepted ? common::Progress::InProgress
-                              : common::Progress::Failed;
-      execution_rejected = execution_rejected || !submission.accepted;
-      fallback.target_component =
-          submission.command_egress_visible ? "ame.command_fallback"
-                                            : fallback.target_component;
-      placements_[fallback.id] = fallback;
+    const auto command = makeCommand(requirement_id, step);
+    const auto submission = execution_sink_->submit(command);
+    if (submission.placement.has_value()) {
+      placement_contexts_[submission.placement->command_id] =
+          {requirement_id, plan.planning_requirement_id, plan.id, step.id};
+      placements_[submission.placement->placement_id] =
+          makePlacement(submission.placement.value());
       continue;
     }
 
-    auto placement = makePlacement(requirement_id, plan, step);
-    placements_[placement.id] = placement;
+    auto fallback = makePlacement(requirement_id, plan, step);
+    fallback.progress =
+        submission.accepted ? common::Progress::InProgress
+                            : common::Progress::Failed;
+    execution_rejected = execution_rejected || !submission.accepted;
+    fallback.target_component =
+        submission.command_egress_visible ? "ame.command_fallback"
+                                          : fallback.target_component;
+    placements_[fallback.id] = fallback;
   }
   syncPlacementRecordsFromSink();
   if (execution_rejected) {
     for (auto& [run_id, stored_run] : runs_) {
-      if (stored_run.planning_execution_requirement_id == requirement_id) {
-        stored_run.state = model::PlanningExecutionState::Failed;
+      if (stored_run.execution_requirement_id == requirement_id) {
+        stored_run.state = model::ExecutionState::Failed;
         stored_run.achievement.status = common::Progress::Failed;
       }
     }
-    requirements_[requirement_id].status.status = common::Progress::Failed;
+    execution_requirements_[requirement_id].status.status =
+        common::Progress::Failed;
     return requirement_id;
   }
   refreshExecutionProgress(requirement_id);
@@ -238,18 +267,19 @@ PyramidAutonomyBridge::Identifier PyramidAutonomyBridge::handleCreateRequirement
   return requirement_id;
 }
 
-std::vector<PyramidAutonomyBridge::PlanningExecutionRequirement>
-PyramidAutonomyBridge::handleReadRequirement(const Query& request) {
-  return readStore(requirements_, request);
+std::vector<PyramidAutonomyBridge::ExecutionRequirement>
+PyramidAutonomyBridge::handleReadExecutionRequirement(const Query& request) {
+  return readStore(execution_requirements_, request);
 }
 
-PyramidAutonomyBridge::Ack PyramidAutonomyBridge::handleUpdateRequirement(
-    const PlanningExecutionRequirement& request) {
+PyramidAutonomyBridge::Ack
+PyramidAutonomyBridge::handleUpdateExecutionRequirement(
+    const ExecutionRequirement& request) {
   if (request.base.id.empty()) {
     return model::kAckFail;
   }
-  auto it = requirements_.find(request.base.id);
-  if (it == requirements_.end()) {
+  auto it = execution_requirements_.find(request.base.id);
+  if (it == execution_requirements_.end()) {
     return model::kAckFail;
   }
   it->second = request;
@@ -257,12 +287,13 @@ PyramidAutonomyBridge::Ack PyramidAutonomyBridge::handleUpdateRequirement(
   return model::kAckOk;
 }
 
-PyramidAutonomyBridge::Ack PyramidAutonomyBridge::handleDeleteRequirement(
+PyramidAutonomyBridge::Ack
+PyramidAutonomyBridge::handleDeleteExecutionRequirement(
     const Identifier& request) {
-  auto erased = requirements_.erase(request);
+  auto erased = execution_requirements_.erase(request);
   for (auto& [id, run] : runs_) {
-    if (run.planning_execution_requirement_id == request) {
-      run.state = model::PlanningExecutionState::Cancelled;
+    if (run.execution_requirement_id == request) {
+      run.state = model::ExecutionState::Cancelled;
       run.achievement.status = common::Progress::Cancelled;
     }
   }
@@ -290,11 +321,50 @@ PyramidAutonomyBridge::Ack PyramidAutonomyBridge::handleDeleteState(
   return request.empty() ? model::kAckFail : model::kAckOk;
 }
 
+PyramidAutonomyBridge::Identifier PyramidAutonomyBridge::handleCreatePlan(
+    const Plan& request) {
+  auto plan = request;
+  auto plan_id = plan.id;
+  if (plan_id.empty()) {
+    plan_id = nextId("ame-plan");
+    plan.id = plan_id;
+  }
+  plans_[plan_id] = plan;
+  return plan_id;
+}
+
 std::vector<PyramidAutonomyBridge::Plan>
 PyramidAutonomyBridge::handleReadPlan(const Query& request) {
   auto result = readStore(plans_, request);
   eraseReadItems(plans_, request);
   return result;
+}
+
+PyramidAutonomyBridge::Ack PyramidAutonomyBridge::handleUpdatePlan(
+    const Plan& request) {
+  if (request.id.empty()) {
+    return model::kAckFail;
+  }
+  auto it = plans_.find(request.id);
+  if (it == plans_.end()) {
+    return model::kAckFail;
+  }
+  it->second = request;
+  return model::kAckOk;
+}
+
+PyramidAutonomyBridge::Ack PyramidAutonomyBridge::handleDeletePlan(
+    const Identifier& request) {
+  const auto erased = plans_.erase(request);
+  for (auto& [id, run] : runs_) {
+    if (run.plan_id == request &&
+        run.state != model::ExecutionState::Achieved &&
+        run.state != model::ExecutionState::Failed) {
+      run.state = model::ExecutionState::Cancelled;
+      run.achievement.status = common::Progress::Cancelled;
+    }
+  }
+  return erased > 0 ? model::kAckOk : model::kAckFail;
 }
 
 std::vector<PyramidAutonomyBridge::ExecutionRun>
@@ -386,14 +456,42 @@ std::string PyramidAutonomyBridge::nextId(const std::string& prefix) {
   return prefix + "-" + std::to_string(++next_id_);
 }
 
+void PyramidAutonomyBridge::applyPlanningContext(
+    const PlanningRequirement& requirement) {
+  for (const auto& agent : requirement.available_agents) {
+    world_model_.registerAgent(agent.agent_id, agent.agent_type);
+    if (auto* wm_agent = world_model_.getAgent(agent.agent_id)) {
+      wm_agent->available = agent.available;
+    }
+  }
+
+  std::vector<std::string> goals;
+  for (const auto& goal : requirement.goal) {
+    if (goal.expression.has_value()) {
+      goals.push_back(goal.expression.value());
+    }
+  }
+  world_model_.setGoal(goals);
+}
+
+void PyramidAutonomyBridge::applyExecutionContext(
+    const ExecutionRequirement& requirement) {
+  for (const auto& agent : requirement.available_agents) {
+    world_model_.registerAgent(agent.agent_id, agent.agent_type);
+    if (auto* wm_agent = world_model_.getAgent(agent.agent_id)) {
+      wm_agent->available = agent.available;
+    }
+  }
+}
+
 PyramidAutonomyBridge::Plan PyramidAutonomyBridge::makePlan(
-    const PlanningExecutionRequirement&,
+    const PlanningRequirement&,
     const std::string& requirement_id) {
   auto result = planner_.solve(world_model_);
 
   Plan plan;
   plan.id = nextId("ame-plan");
-  plan.planning_execution_requirement_id = requirement_id;
+  plan.planning_requirement_id = requirement_id;
   plan.backend_id = "ame.current_stack";
   plan.world_version = world_model_.version();
   plan.replan_count = 0;
@@ -441,40 +539,38 @@ PyramidAutonomyBridge::Plan PyramidAutonomyBridge::makePlan(
 }
 
 PyramidAutonomyBridge::ExecutionRun PyramidAutonomyBridge::makeRun(
-    const PlanningExecutionRequirement& requirement,
+    const ExecutionRequirement& requirement,
     const Plan& plan) const {
   ExecutionRun run;
   run.id = plan.id + "/run/" + requirement.base.id;
-  run.planning_execution_requirement_id = requirement.base.id;
+  run.execution_requirement_id = requirement.base.id;
+  run.planning_requirement_id = requirement.planning_requirement_id.empty()
+                                    ? plan.planning_requirement_id
+                                    : requirement.planning_requirement_id;
   run.plan_id = plan.id;
   run.replan_count = plan.replan_count;
 
   if (!plan.plan_success) {
-    run.state = model::PlanningExecutionState::Failed;
+    run.state = model::ExecutionState::Failed;
     run.achievement.status = common::Progress::Failed;
     return run;
   }
 
-  if (requirement.mode == model::PlanningExecutionMode::PlanAndExecute ||
-      requirement.mode ==
-          model::PlanningExecutionMode::ExecuteApprovedPlan) {
-    run.state = model::PlanningExecutionState::Accepted;
-    run.achievement.status = common::Progress::NotStarted;
-  } else {
-    run.state = model::PlanningExecutionState::Achieved;
-    run.achievement.status = common::Progress::Completed;
-    run.achievement.quality = 100.0;
-  }
+  run.state = model::ExecutionState::Accepted;
+  run.achievement.status = common::Progress::NotStarted;
   return run;
 }
 
 PyramidAutonomyBridge::RequirementPlacement PyramidAutonomyBridge::makePlacement(
-    const std::string& requirement_id,
+    const std::string& execution_requirement_id,
     const Plan& plan,
     const model::PlanStep& step) const {
   RequirementPlacement placement;
-  placement.id = plan.id + "/placement/" + std::to_string(step.sequence_number);
-  placement.planning_execution_requirement_id = requirement_id;
+  placement.id =
+      execution_requirement_id + "/placement/" +
+      std::to_string(step.sequence_number);
+  placement.execution_requirement_id = execution_requirement_id;
+  placement.planning_requirement_id = plan.planning_requirement_id;
   placement.plan_id = plan.id;
   placement.plan_step_id = step.id;
   if (!step.interaction.empty()) {
@@ -490,10 +586,10 @@ PyramidAutonomyBridge::RequirementPlacement PyramidAutonomyBridge::makePlacement
 }
 
 ActionCommand PyramidAutonomyBridge::makeCommand(
-    const std::string& requirement_id,
+    const std::string& execution_requirement_id,
     const model::PlanStep& step) const {
   ActionCommand command;
-  command.command_id = requirement_id + "/command/" +
+  command.command_id = execution_requirement_id + "/command/" +
                        std::to_string(step.sequence_number);
   command.action_name = step.action_name;
   command.signature = step.signature;
@@ -513,8 +609,9 @@ PyramidAutonomyBridge::RequirementPlacement PyramidAutonomyBridge::makePlacement
   placement.id = record.placement_id;
   const auto context_it = placement_contexts_.find(record.command_id);
   if (context_it != placement_contexts_.end()) {
-    placement.planning_execution_requirement_id =
-        context_it->second.requirement_id;
+    placement.execution_requirement_id =
+        context_it->second.execution_requirement_id;
+    placement.planning_requirement_id = context_it->second.requirement_id;
     placement.plan_id = context_it->second.plan_id;
     placement.plan_step_id = context_it->second.plan_step_id;
   }
@@ -544,20 +641,33 @@ void PyramidAutonomyBridge::applyStateUpdate(const StateUpdate& update) {
                          fact_update.source,
                          toWorldModelAuthority(fact_update.authority));
   }
-  std::vector<std::string> requirement_ids;
-  requirement_ids.reserve(requirements_.size());
-  for (const auto& [id, requirement] : requirements_) {
-    requirement_ids.push_back(id);
+  std::vector<std::string> execution_requirement_ids;
+  execution_requirement_ids.reserve(execution_requirements_.size());
+  for (const auto& [id, requirement] : execution_requirements_) {
+    execution_requirement_ids.push_back(id);
   }
-  for (const auto& id : requirement_ids) {
+  for (const auto& id : execution_requirement_ids) {
     refreshExecutionProgress(id);
   }
 }
 
 bool PyramidAutonomyBridge::requirementGoalsSatisfied(
-    const PlanningExecutionRequirement& requirement) const {
+    const ExecutionRequirement& requirement) const {
+  auto planning_requirement_id = requirement.planning_requirement_id;
+  if (planning_requirement_id.empty()) {
+    const auto plan_it = plans_.find(requirement.plan_id);
+    if (plan_it != plans_.end()) {
+      planning_requirement_id = plan_it->second.planning_requirement_id;
+    }
+  }
+  const auto planning_it =
+      planning_requirements_.find(planning_requirement_id);
+  if (planning_it == planning_requirements_.end()) {
+    return false;
+  }
+
   bool has_expression_goal = false;
-  for (const auto& goal : requirement.goal) {
+  for (const auto& goal : planning_it->second.goal) {
     if (!goal.expression.has_value()) {
       continue;
     }
@@ -571,11 +681,11 @@ bool PyramidAutonomyBridge::requirementGoalsSatisfied(
 
 std::vector<PyramidAutonomyBridge::RequirementPlacement>
 PyramidAutonomyBridge::outstandingPlacements(
-    const std::string& requirement_id,
+    const std::string& execution_requirement_id,
     const std::string& plan_id) const {
   std::vector<RequirementPlacement> result;
   for (const auto& [id, placement] : placements_) {
-    if (placement.planning_execution_requirement_id == requirement_id &&
+    if (placement.execution_requirement_id == execution_requirement_id &&
         placement.plan_id == plan_id &&
         placement.progress != common::Progress::Completed &&
         placement.progress != common::Progress::Cancelled &&
@@ -587,28 +697,25 @@ PyramidAutonomyBridge::outstandingPlacements(
 }
 
 void PyramidAutonomyBridge::refreshExecutionProgress(
-    const std::string& requirement_id) {
-  auto requirement_it = requirements_.find(requirement_id);
-  if (requirement_it == requirements_.end()) {
+    const std::string& execution_requirement_id) {
+  auto requirement_it =
+      execution_requirements_.find(execution_requirement_id);
+  if (requirement_it == execution_requirements_.end()) {
     return;
   }
   auto& requirement = requirement_it->second;
-  if (requirement.mode != model::PlanningExecutionMode::PlanAndExecute &&
-      requirement.mode != model::PlanningExecutionMode::ExecuteApprovedPlan) {
-    return;
-  }
 
   const auto goals_satisfied = requirementGoalsSatisfied(requirement);
   for (auto& [id, run] : runs_) {
-    if (run.planning_execution_requirement_id != requirement_id ||
-        run.state == model::PlanningExecutionState::Cancelled ||
-        run.state == model::PlanningExecutionState::Failed) {
+    if (run.execution_requirement_id != execution_requirement_id ||
+        run.state == model::ExecutionState::Cancelled ||
+        run.state == model::ExecutionState::Failed) {
       continue;
     }
 
     if (goals_satisfied) {
       for (const auto& [command_id, context] : placement_contexts_) {
-        if (context.requirement_id == requirement_id &&
+        if (context.execution_requirement_id == execution_requirement_id &&
             context.plan_id == run.plan_id) {
           CommandResult result;
           result.command_id = command_id;
@@ -619,7 +726,7 @@ void PyramidAutonomyBridge::refreshExecutionProgress(
       }
       syncPlacementRecordsFromSink();
 
-      run.state = model::PlanningExecutionState::Achieved;
+      run.state = model::ExecutionState::Achieved;
       run.achievement.status = common::Progress::Completed;
       run.achievement.quality = 100.0;
       run.outstanding_placement.clear();
@@ -627,7 +734,7 @@ void PyramidAutonomyBridge::refreshExecutionProgress(
       requirement.status.quality = 100.0;
 
       for (auto& [placement_id, placement] : placements_) {
-        if (placement.planning_execution_requirement_id == requirement_id &&
+        if (placement.execution_requirement_id == execution_requirement_id &&
             placement.plan_id == run.plan_id) {
           placement.progress = common::Progress::Completed;
         }
@@ -635,11 +742,11 @@ void PyramidAutonomyBridge::refreshExecutionProgress(
       continue;
     }
 
-    run.state = model::PlanningExecutionState::WaitingForComponents;
+    run.state = model::ExecutionState::WaitingForComponents;
     run.achievement.status = common::Progress::InProgress;
     requirement.status.status = common::Progress::InProgress;
     run.outstanding_placement =
-        outstandingPlacements(requirement_id, run.plan_id);
+        outstandingPlacements(execution_requirement_id, run.plan_id);
   }
 }
 

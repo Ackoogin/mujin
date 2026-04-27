@@ -40,7 +40,7 @@ std::string msgToString(const void* data, unsigned size) {
 }
 
 // ---------------------------------------------------------------------------
-// ServiceHandler -- default stub implementations
+// ServiceHandler — default stub implementations
 // ---------------------------------------------------------------------------
 
 std::vector<Capabilities>
@@ -49,22 +49,42 @@ ServiceHandler::handleReadCapabilities(const Query& /*request*/) {
 }
 
 Identifier
-ServiceHandler::handleCreateRequirement(const PlanningExecutionRequirement& /*request*/) {
+ServiceHandler::handleCreatePlanningRequirement(const PlanningRequirement& /*request*/) {
     return {};
 }
 
-std::vector<PlanningExecutionRequirement>
-ServiceHandler::handleReadRequirement(const Query& /*request*/) {
+std::vector<PlanningRequirement>
+ServiceHandler::handleReadPlanningRequirement(const Query& /*request*/) {
     return {};
 }
 
 Ack
-ServiceHandler::handleUpdateRequirement(const PlanningExecutionRequirement& /*request*/) {
+ServiceHandler::handleUpdatePlanningRequirement(const PlanningRequirement& /*request*/) {
     return pyramid::data_model::kAckOk;
 }
 
 Ack
-ServiceHandler::handleDeleteRequirement(const Identifier& /*request*/) {
+ServiceHandler::handleDeletePlanningRequirement(const Identifier& /*request*/) {
+    return pyramid::data_model::kAckOk;
+}
+
+Identifier
+ServiceHandler::handleCreateExecutionRequirement(const ExecutionRequirement& /*request*/) {
+    return {};
+}
+
+std::vector<ExecutionRequirement>
+ServiceHandler::handleReadExecutionRequirement(const Query& /*request*/) {
+    return {};
+}
+
+Ack
+ServiceHandler::handleUpdateExecutionRequirement(const ExecutionRequirement& /*request*/) {
+    return pyramid::data_model::kAckOk;
+}
+
+Ack
+ServiceHandler::handleDeleteExecutionRequirement(const Identifier& /*request*/) {
     return pyramid::data_model::kAckOk;
 }
 
@@ -83,9 +103,24 @@ ServiceHandler::handleDeleteState(const Identifier& /*request*/) {
     return pyramid::data_model::kAckOk;
 }
 
+Identifier
+ServiceHandler::handleCreatePlan(const Plan& /*request*/) {
+    return {};
+}
+
 std::vector<Plan>
 ServiceHandler::handleReadPlan(const Query& /*request*/) {
     return {};
+}
+
+Ack
+ServiceHandler::handleUpdatePlan(const Plan& /*request*/) {
+    return pyramid::data_model::kAckOk;
+}
+
+Ack
+ServiceHandler::handleDeletePlan(const Identifier& /*request*/) {
+    return pyramid::data_model::kAckOk;
 }
 
 std::vector<ExecutionRun>
@@ -221,8 +256,8 @@ bool decodeReadCapabilitiesResponse(const pcl_msg_t* msg,
     }
 }
 
-bool decodeCreateRequirementResponse(const pcl_msg_t* msg,
-                                     Identifier* out)
+bool decodeCreatePlanningRequirementResponse(const pcl_msg_t* msg,
+                                             Identifier* out)
 {
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
@@ -243,8 +278,8 @@ bool decodeCreateRequirementResponse(const pcl_msg_t* msg,
     }
 }
 
-bool decodeReadRequirementResponse(const pcl_msg_t* msg,
-                                   std::vector<PlanningExecutionRequirement>* out)
+bool decodeReadPlanningRequirementResponse(const pcl_msg_t* msg,
+                                           std::vector<PlanningRequirement>* out)
 {
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
@@ -252,7 +287,7 @@ bool decodeReadRequirementResponse(const pcl_msg_t* msg,
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryPlanningExecutionRequirementArray(msg->data, msg->size);
+                *out = flatbuffers_codec::fromBinaryPlanningRequirementArray(msg->data, msg->size);
                 return true;
             }
             return false;
@@ -261,7 +296,7 @@ bool decodeReadRequirementResponse(const pcl_msg_t* msg,
         const auto arr = nlohmann::json::parse(payload);
         out->clear();
         for (const auto& item : arr) {
-            out->push_back(fromJson(item.dump(), static_cast<PlanningExecutionRequirement*>(nullptr)));
+            out->push_back(fromJson(item.dump(), static_cast<PlanningRequirement*>(nullptr)));
         }
         return true;
     } catch (...) {
@@ -269,8 +304,8 @@ bool decodeReadRequirementResponse(const pcl_msg_t* msg,
     }
 }
 
-bool decodeUpdateRequirementResponse(const pcl_msg_t* msg,
-                                     Ack* out)
+bool decodeUpdatePlanningRequirementResponse(const pcl_msg_t* msg,
+                                             Ack* out)
 {
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
@@ -291,8 +326,100 @@ bool decodeUpdateRequirementResponse(const pcl_msg_t* msg,
     }
 }
 
-bool decodeDeleteRequirementResponse(const pcl_msg_t* msg,
-                                     Ack* out)
+bool decodeDeletePlanningRequirementResponse(const pcl_msg_t* msg,
+                                             Ack* out)
+{
+    if (!msg || !msg->data || msg->size == 0 || !out) {
+        return false;
+    }
+    try {
+        if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
+                return true;
+            }
+            return false;
+        }
+        const std::string payload = msgToString(msg->data, msg->size);
+        *out = fromJson(payload, static_cast<Ack*>(nullptr));
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool decodeCreateExecutionRequirementResponse(const pcl_msg_t* msg,
+                                              Identifier* out)
+{
+    if (!msg || !msg->data || msg->size == 0 || !out) {
+        return false;
+    }
+    try {
+        if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryIdentifier(msg->data, msg->size);
+                return true;
+            }
+            return false;
+        }
+        const std::string payload = msgToString(msg->data, msg->size);
+        *out = decode_identifier_payload(payload);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool decodeReadExecutionRequirementResponse(const pcl_msg_t* msg,
+                                            std::vector<ExecutionRequirement>* out)
+{
+    if (!msg || !msg->data || msg->size == 0 || !out) {
+        return false;
+    }
+    try {
+        if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryExecutionRequirementArray(msg->data, msg->size);
+                return true;
+            }
+            return false;
+        }
+        const std::string payload = msgToString(msg->data, msg->size);
+        const auto arr = nlohmann::json::parse(payload);
+        out->clear();
+        for (const auto& item : arr) {
+            out->push_back(fromJson(item.dump(), static_cast<ExecutionRequirement*>(nullptr)));
+        }
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool decodeUpdateExecutionRequirementResponse(const pcl_msg_t* msg,
+                                              Ack* out)
+{
+    if (!msg || !msg->data || msg->size == 0 || !out) {
+        return false;
+    }
+    try {
+        if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
+                return true;
+            }
+            return false;
+        }
+        const std::string payload = msgToString(msg->data, msg->size);
+        *out = fromJson(payload, static_cast<Ack*>(nullptr));
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool decodeDeleteExecutionRequirementResponse(const pcl_msg_t* msg,
+                                              Ack* out)
 {
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
@@ -379,6 +506,28 @@ bool decodeDeleteStateResponse(const pcl_msg_t* msg,
     }
 }
 
+bool decodeCreatePlanResponse(const pcl_msg_t* msg,
+                              Identifier* out)
+{
+    if (!msg || !msg->data || msg->size == 0 || !out) {
+        return false;
+    }
+    try {
+        if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryIdentifier(msg->data, msg->size);
+                return true;
+            }
+            return false;
+        }
+        const std::string payload = msgToString(msg->data, msg->size);
+        *out = decode_identifier_payload(payload);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 bool decodeReadPlanResponse(const pcl_msg_t* msg,
                             std::vector<Plan>* out)
 {
@@ -399,6 +548,50 @@ bool decodeReadPlanResponse(const pcl_msg_t* msg,
         for (const auto& item : arr) {
             out->push_back(fromJson(item.dump(), static_cast<Plan*>(nullptr)));
         }
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool decodeUpdatePlanResponse(const pcl_msg_t* msg,
+                              Ack* out)
+{
+    if (!msg || !msg->data || msg->size == 0 || !out) {
+        return false;
+    }
+    try {
+        if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
+                return true;
+            }
+            return false;
+        }
+        const std::string payload = msgToString(msg->data, msg->size);
+        *out = fromJson(payload, static_cast<Ack*>(nullptr));
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool decodeDeletePlanResponse(const pcl_msg_t* msg,
+                              Ack* out)
+{
+    if (!msg || !msg->data || msg->size == 0 || !out) {
+        return false;
+    }
+    try {
+        if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
+                return true;
+            }
+            return false;
+        }
+        const std::string payload = msgToString(msg->data, msg->size);
+        *out = fromJson(payload, static_cast<Ack*>(nullptr));
         return true;
     } catch (...) {
         return false;
@@ -458,7 +651,7 @@ bool decodeReadPlacementResponse(const pcl_msg_t* msg,
 }
 
 // ---------------------------------------------------------------------------
-// Typed invoke wrappers -- serialise and dispatch via executor transport
+// Typed invoke wrappers — serialise and dispatch via executor transport
 // ---------------------------------------------------------------------------
 
 pcl_status_t invokeReadCapabilities(pcl_executor_t* executor,
@@ -488,12 +681,12 @@ pcl_status_t invokeReadCapabilities(pcl_executor_t* executor,
                          nullptr, route, content_type);
 }
 
-pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
-                                     const PlanningExecutionRequirement& request,
-                                     pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data,
-                                     const pcl_endpoint_route_t* route,
-                                     const char*       content_type)
+pcl_status_t invokeCreatePlanningRequirement(pcl_executor_t* executor,
+                                             const PlanningRequirement&   request,
+                                             pcl_resp_cb_fn_t        callback,
+                                             void*                   user_data,
+                                             const pcl_endpoint_route_t* route,
+                                             const char*       content_type)
 {
     std::string payload;
     if (is_json_content_type(content_type)) {
@@ -503,24 +696,24 @@ pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
     } else {
         return PCL_ERR_INVALID;
     }
-    return invoke_async(executor, kSvcCreateRequirement, payload, callback, user_data, route, content_type);
+    return invoke_async(executor, kSvcCreatePlanningRequirement, payload, callback, user_data, route, content_type);
 }
 
-pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
-                                     const PlanningExecutionRequirement& request,
-                                     const char*       content_type,
-                                     const pcl_endpoint_route_t* route)
+pcl_status_t invokeCreatePlanningRequirement(pcl_executor_t* executor,
+                                             const PlanningRequirement&   request,
+                                             const char*       content_type,
+                                             const pcl_endpoint_route_t* route)
 {
-    return invokeCreateRequirement(executor, request, ignore_async_response,
+    return invokeCreatePlanningRequirement(executor, request, ignore_async_response,
                          nullptr, route, content_type);
 }
 
-pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
-                                   const Query&                 request,
-                                   pcl_resp_cb_fn_t        callback,
-                                   void*                   user_data,
-                                   const pcl_endpoint_route_t* route,
-                                   const char*       content_type)
+pcl_status_t invokeReadPlanningRequirement(pcl_executor_t* executor,
+                                           const Query&                 request,
+                                           pcl_resp_cb_fn_t        callback,
+                                           void*                   user_data,
+                                           const pcl_endpoint_route_t* route,
+                                           const char*       content_type)
 {
     std::string payload;
     if (is_json_content_type(content_type)) {
@@ -530,24 +723,24 @@ pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
     } else {
         return PCL_ERR_INVALID;
     }
-    return invoke_async(executor, kSvcReadRequirement, payload, callback, user_data, route, content_type);
+    return invoke_async(executor, kSvcReadPlanningRequirement, payload, callback, user_data, route, content_type);
 }
 
-pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
-                                   const Query&                 request,
-                                   const char*       content_type,
-                                   const pcl_endpoint_route_t* route)
+pcl_status_t invokeReadPlanningRequirement(pcl_executor_t* executor,
+                                           const Query&                 request,
+                                           const char*       content_type,
+                                           const pcl_endpoint_route_t* route)
 {
-    return invokeReadRequirement(executor, request, ignore_async_response,
+    return invokeReadPlanningRequirement(executor, request, ignore_async_response,
                          nullptr, route, content_type);
 }
 
-pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
-                                     const PlanningExecutionRequirement& request,
-                                     pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data,
-                                     const pcl_endpoint_route_t* route,
-                                     const char*       content_type)
+pcl_status_t invokeUpdatePlanningRequirement(pcl_executor_t* executor,
+                                             const PlanningRequirement&   request,
+                                             pcl_resp_cb_fn_t        callback,
+                                             void*                   user_data,
+                                             const pcl_endpoint_route_t* route,
+                                             const char*       content_type)
 {
     std::string payload;
     if (is_json_content_type(content_type)) {
@@ -557,24 +750,24 @@ pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
     } else {
         return PCL_ERR_INVALID;
     }
-    return invoke_async(executor, kSvcUpdateRequirement, payload, callback, user_data, route, content_type);
+    return invoke_async(executor, kSvcUpdatePlanningRequirement, payload, callback, user_data, route, content_type);
 }
 
-pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
-                                     const PlanningExecutionRequirement& request,
-                                     const char*       content_type,
-                                     const pcl_endpoint_route_t* route)
+pcl_status_t invokeUpdatePlanningRequirement(pcl_executor_t* executor,
+                                             const PlanningRequirement&   request,
+                                             const char*       content_type,
+                                             const pcl_endpoint_route_t* route)
 {
-    return invokeUpdateRequirement(executor, request, ignore_async_response,
+    return invokeUpdatePlanningRequirement(executor, request, ignore_async_response,
                          nullptr, route, content_type);
 }
 
-pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
-                                     const Identifier&            request,
-                                     pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data,
-                                     const pcl_endpoint_route_t* route,
-                                     const char*       content_type)
+pcl_status_t invokeDeletePlanningRequirement(pcl_executor_t* executor,
+                                             const Identifier&            request,
+                                             pcl_resp_cb_fn_t        callback,
+                                             void*                   user_data,
+                                             const pcl_endpoint_route_t* route,
+                                             const char*       content_type)
 {
     std::string payload;
     if (is_json_content_type(content_type)) {
@@ -584,15 +777,123 @@ pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
     } else {
         return PCL_ERR_INVALID;
     }
-    return invoke_async(executor, kSvcDeleteRequirement, payload, callback, user_data, route, content_type);
+    return invoke_async(executor, kSvcDeletePlanningRequirement, payload, callback, user_data, route, content_type);
 }
 
-pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
-                                     const Identifier&            request,
-                                     const char*       content_type,
-                                     const pcl_endpoint_route_t* route)
+pcl_status_t invokeDeletePlanningRequirement(pcl_executor_t* executor,
+                                             const Identifier&            request,
+                                             const char*       content_type,
+                                             const pcl_endpoint_route_t* route)
 {
-    return invokeDeleteRequirement(executor, request, ignore_async_response,
+    return invokeDeletePlanningRequirement(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
+}
+
+pcl_status_t invokeCreateExecutionRequirement(pcl_executor_t* executor,
+                                              const ExecutionRequirement&  request,
+                                              pcl_resp_cb_fn_t        callback,
+                                              void*                   user_data,
+                                              const pcl_endpoint_route_t* route,
+                                              const char*       content_type)
+{
+    std::string payload;
+    if (is_json_content_type(content_type)) {
+        payload = toJson(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
+    }
+    return invoke_async(executor, kSvcCreateExecutionRequirement, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeCreateExecutionRequirement(pcl_executor_t* executor,
+                                              const ExecutionRequirement&  request,
+                                              const char*       content_type,
+                                              const pcl_endpoint_route_t* route)
+{
+    return invokeCreateExecutionRequirement(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
+}
+
+pcl_status_t invokeReadExecutionRequirement(pcl_executor_t* executor,
+                                            const Query&                 request,
+                                            pcl_resp_cb_fn_t        callback,
+                                            void*                   user_data,
+                                            const pcl_endpoint_route_t* route,
+                                            const char*       content_type)
+{
+    std::string payload;
+    if (is_json_content_type(content_type)) {
+        payload = toJson(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
+    }
+    return invoke_async(executor, kSvcReadExecutionRequirement, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeReadExecutionRequirement(pcl_executor_t* executor,
+                                            const Query&                 request,
+                                            const char*       content_type,
+                                            const pcl_endpoint_route_t* route)
+{
+    return invokeReadExecutionRequirement(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
+}
+
+pcl_status_t invokeUpdateExecutionRequirement(pcl_executor_t* executor,
+                                              const ExecutionRequirement&  request,
+                                              pcl_resp_cb_fn_t        callback,
+                                              void*                   user_data,
+                                              const pcl_endpoint_route_t* route,
+                                              const char*       content_type)
+{
+    std::string payload;
+    if (is_json_content_type(content_type)) {
+        payload = toJson(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
+    }
+    return invoke_async(executor, kSvcUpdateExecutionRequirement, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeUpdateExecutionRequirement(pcl_executor_t* executor,
+                                              const ExecutionRequirement&  request,
+                                              const char*       content_type,
+                                              const pcl_endpoint_route_t* route)
+{
+    return invokeUpdateExecutionRequirement(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
+}
+
+pcl_status_t invokeDeleteExecutionRequirement(pcl_executor_t* executor,
+                                              const Identifier&            request,
+                                              pcl_resp_cb_fn_t        callback,
+                                              void*                   user_data,
+                                              const pcl_endpoint_route_t* route,
+                                              const char*       content_type)
+{
+    std::string payload;
+    if (is_json_content_type(content_type)) {
+        payload = encode_identifier_payload(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
+    }
+    return invoke_async(executor, kSvcDeleteExecutionRequirement, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeDeleteExecutionRequirement(pcl_executor_t* executor,
+                                              const Identifier&            request,
+                                              const char*       content_type,
+                                              const pcl_endpoint_route_t* route)
+{
+    return invokeDeleteExecutionRequirement(executor, request, ignore_async_response,
                          nullptr, route, content_type);
 }
 
@@ -677,6 +978,33 @@ pcl_status_t invokeDeleteState(pcl_executor_t* executor,
                          nullptr, route, content_type);
 }
 
+pcl_status_t invokeCreatePlan(pcl_executor_t* executor,
+                              const Plan&                  request,
+                              pcl_resp_cb_fn_t        callback,
+                              void*                   user_data,
+                              const pcl_endpoint_route_t* route,
+                              const char*       content_type)
+{
+    std::string payload;
+    if (is_json_content_type(content_type)) {
+        payload = toJson(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
+    }
+    return invoke_async(executor, kSvcCreatePlan, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeCreatePlan(pcl_executor_t* executor,
+                              const Plan&                  request,
+                              const char*       content_type,
+                              const pcl_endpoint_route_t* route)
+{
+    return invokeCreatePlan(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
+}
+
 pcl_status_t invokeReadPlan(pcl_executor_t* executor,
                             const Query&                 request,
                             pcl_resp_cb_fn_t        callback,
@@ -701,6 +1029,60 @@ pcl_status_t invokeReadPlan(pcl_executor_t* executor,
                             const pcl_endpoint_route_t* route)
 {
     return invokeReadPlan(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
+}
+
+pcl_status_t invokeUpdatePlan(pcl_executor_t* executor,
+                              const Plan&                  request,
+                              pcl_resp_cb_fn_t        callback,
+                              void*                   user_data,
+                              const pcl_endpoint_route_t* route,
+                              const char*       content_type)
+{
+    std::string payload;
+    if (is_json_content_type(content_type)) {
+        payload = toJson(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
+    }
+    return invoke_async(executor, kSvcUpdatePlan, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeUpdatePlan(pcl_executor_t* executor,
+                              const Plan&                  request,
+                              const char*       content_type,
+                              const pcl_endpoint_route_t* route)
+{
+    return invokeUpdatePlan(executor, request, ignore_async_response,
+                         nullptr, route, content_type);
+}
+
+pcl_status_t invokeDeletePlan(pcl_executor_t* executor,
+                              const Identifier&            request,
+                              pcl_resp_cb_fn_t        callback,
+                              void*                   user_data,
+                              const pcl_endpoint_route_t* route,
+                              const char*       content_type)
+{
+    std::string payload;
+    if (is_json_content_type(content_type)) {
+        payload = encode_identifier_payload(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
+    }
+    return invoke_async(executor, kSvcDeletePlan, payload, callback, user_data, route, content_type);
+}
+
+pcl_status_t invokeDeletePlan(pcl_executor_t* executor,
+                              const Identifier&            request,
+                              const char*       content_type,
+                              const pcl_endpoint_route_t* route)
+{
+    return invokeDeletePlan(executor, request, ignore_async_response,
                          nullptr, route, content_type);
 }
 
@@ -759,7 +1141,7 @@ pcl_status_t invokeReadPlacement(pcl_executor_t* executor,
 }
 
 // ---------------------------------------------------------------------------
-// Dispatch -- deserialise request, call handler, serialise response
+// Dispatch — deserialise request, call handler, serialise response
 // ---------------------------------------------------------------------------
 
 void dispatch(ServiceHandler& handler,
@@ -815,15 +1197,15 @@ void dispatch(ServiceHandler& handler,
         }
         break;
     }
-    case ServiceChannel::CreateRequirement: {
-        PlanningExecutionRequirement req;
+    case ServiceChannel::CreatePlanningRequirement: {
+        PlanningRequirement req;
         if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<PlanningExecutionRequirement*>(nullptr));
+            req = fromJson(req_str, static_cast<PlanningRequirement*>(nullptr));
         else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryPlanningExecutionRequirement(request_buf, request_size);
+            req = flatbuffers_codec::fromBinaryPlanningRequirement(request_buf, request_size);
         else
             break;
-        auto rsp = handler.handleCreateRequirement(req);
+        auto rsp = handler.handleCreatePlanningRequirement(req);
         if (is_json_content_type(content_type)) {
             rsp_payload = encode_identifier_payload(rsp);
         } else if (is_flatbuffers_content_type(content_type)) {
@@ -834,7 +1216,7 @@ void dispatch(ServiceHandler& handler,
         }
         break;
     }
-    case ServiceChannel::ReadRequirement: {
+    case ServiceChannel::ReadPlanningRequirement: {
         Query req;
         if (is_json_content_type(content_type))
             req = fromJson(req_str, static_cast<Query*>(nullptr));
@@ -842,7 +1224,7 @@ void dispatch(ServiceHandler& handler,
             req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
         else
             break;
-        auto rsp = handler.handleReadRequirement(req);
+        auto rsp = handler.handleReadPlanningRequirement(req);
         if (is_json_content_type(content_type)) {
             rsp_payload = "[";
             for (size_t i = 0; i < rsp.size(); ++i) {
@@ -858,15 +1240,15 @@ void dispatch(ServiceHandler& handler,
         }
         break;
     }
-    case ServiceChannel::UpdateRequirement: {
-        PlanningExecutionRequirement req;
+    case ServiceChannel::UpdatePlanningRequirement: {
+        PlanningRequirement req;
         if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<PlanningExecutionRequirement*>(nullptr));
+            req = fromJson(req_str, static_cast<PlanningRequirement*>(nullptr));
         else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryPlanningExecutionRequirement(request_buf, request_size);
+            req = flatbuffers_codec::fromBinaryPlanningRequirement(request_buf, request_size);
         else
             break;
-        auto rsp = handler.handleUpdateRequirement(req);
+        auto rsp = handler.handleUpdatePlanningRequirement(req);
         if (is_json_content_type(content_type)) {
             rsp_payload = toJson(rsp);
         } else if (is_flatbuffers_content_type(content_type)) {
@@ -877,7 +1259,7 @@ void dispatch(ServiceHandler& handler,
         }
         break;
     }
-    case ServiceChannel::DeleteRequirement: {
+    case ServiceChannel::DeletePlanningRequirement: {
         Identifier req;
         if (is_json_content_type(content_type))
             req = decode_identifier_payload(req_str);
@@ -885,7 +1267,88 @@ void dispatch(ServiceHandler& handler,
             req = flatbuffers_codec::fromBinaryIdentifier(request_buf, request_size);
         else
             break;
-        auto rsp = handler.handleDeleteRequirement(req);
+        auto rsp = handler.handleDeletePlanningRequirement(req);
+        if (is_json_content_type(content_type)) {
+            rsp_payload = toJson(rsp);
+        } else if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            break;
+        }
+        break;
+    }
+    case ServiceChannel::CreateExecutionRequirement: {
+        ExecutionRequirement req;
+        if (is_json_content_type(content_type))
+            req = fromJson(req_str, static_cast<ExecutionRequirement*>(nullptr));
+        else if (is_flatbuffers_content_type(content_type))
+            req = flatbuffers_codec::fromBinaryExecutionRequirement(request_buf, request_size);
+        else
+            break;
+        auto rsp = handler.handleCreateExecutionRequirement(req);
+        if (is_json_content_type(content_type)) {
+            rsp_payload = encode_identifier_payload(rsp);
+        } else if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            break;
+        }
+        break;
+    }
+    case ServiceChannel::ReadExecutionRequirement: {
+        Query req;
+        if (is_json_content_type(content_type))
+            req = fromJson(req_str, static_cast<Query*>(nullptr));
+        else if (is_flatbuffers_content_type(content_type))
+            req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
+        else
+            break;
+        auto rsp = handler.handleReadExecutionRequirement(req);
+        if (is_json_content_type(content_type)) {
+            rsp_payload = "[";
+            for (size_t i = 0; i < rsp.size(); ++i) {
+                if (i > 0) rsp_payload += ",";
+                rsp_payload += toJson(rsp[i]);
+            }
+            rsp_payload += "]";
+        } else if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            break;
+        }
+        break;
+    }
+    case ServiceChannel::UpdateExecutionRequirement: {
+        ExecutionRequirement req;
+        if (is_json_content_type(content_type))
+            req = fromJson(req_str, static_cast<ExecutionRequirement*>(nullptr));
+        else if (is_flatbuffers_content_type(content_type))
+            req = flatbuffers_codec::fromBinaryExecutionRequirement(request_buf, request_size);
+        else
+            break;
+        auto rsp = handler.handleUpdateExecutionRequirement(req);
+        if (is_json_content_type(content_type)) {
+            rsp_payload = toJson(rsp);
+        } else if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            break;
+        }
+        break;
+    }
+    case ServiceChannel::DeleteExecutionRequirement: {
+        Identifier req;
+        if (is_json_content_type(content_type))
+            req = decode_identifier_payload(req_str);
+        else if (is_flatbuffers_content_type(content_type))
+            req = flatbuffers_codec::fromBinaryIdentifier(request_buf, request_size);
+        else
+            break;
+        auto rsp = handler.handleDeleteExecutionRequirement(req);
         if (is_json_content_type(content_type)) {
             rsp_payload = toJson(rsp);
         } else if (is_flatbuffers_content_type(content_type)) {
@@ -953,6 +1416,25 @@ void dispatch(ServiceHandler& handler,
         }
         break;
     }
+    case ServiceChannel::CreatePlan: {
+        Plan req;
+        if (is_json_content_type(content_type))
+            req = fromJson(req_str, static_cast<Plan*>(nullptr));
+        else if (is_flatbuffers_content_type(content_type))
+            req = flatbuffers_codec::fromBinaryPlan(request_buf, request_size);
+        else
+            break;
+        auto rsp = handler.handleCreatePlan(req);
+        if (is_json_content_type(content_type)) {
+            rsp_payload = encode_identifier_payload(rsp);
+        } else if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            break;
+        }
+        break;
+    }
     case ServiceChannel::ReadPlan: {
         Query req;
         if (is_json_content_type(content_type))
@@ -969,6 +1451,44 @@ void dispatch(ServiceHandler& handler,
                 rsp_payload += toJson(rsp[i]);
             }
             rsp_payload += "]";
+        } else if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            break;
+        }
+        break;
+    }
+    case ServiceChannel::UpdatePlan: {
+        Plan req;
+        if (is_json_content_type(content_type))
+            req = fromJson(req_str, static_cast<Plan*>(nullptr));
+        else if (is_flatbuffers_content_type(content_type))
+            req = flatbuffers_codec::fromBinaryPlan(request_buf, request_size);
+        else
+            break;
+        auto rsp = handler.handleUpdatePlan(req);
+        if (is_json_content_type(content_type)) {
+            rsp_payload = toJson(rsp);
+        } else if (is_flatbuffers_content_type(content_type)) {
+            rsp_payload = flatbuffers_codec::toBinary(rsp);
+            rsp_is_binary = true;
+        } else {
+            break;
+        }
+        break;
+    }
+    case ServiceChannel::DeletePlan: {
+        Identifier req;
+        if (is_json_content_type(content_type))
+            req = decode_identifier_payload(req_str);
+        else if (is_flatbuffers_content_type(content_type))
+            req = flatbuffers_codec::fromBinaryIdentifier(request_buf, request_size);
+        else
+            break;
+        auto rsp = handler.handleDeletePlan(req);
+        if (is_json_content_type(content_type)) {
+            rsp_payload = toJson(rsp);
         } else if (is_flatbuffers_content_type(content_type)) {
             rsp_payload = flatbuffers_codec::toBinary(rsp);
             rsp_is_binary = true;

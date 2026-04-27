@@ -25,17 +25,17 @@ struct PyramidAutonomyBridgeOptions {
   std::vector<ExecutionBinding> execution_bindings;
 };
 
-/// \brief PYRAMID EntityActions bridge for the AME planning/execution contract.
+/// \brief PYRAMID EntityActions bridge for the AME planning and execution contract.
 class PyramidAutonomyBridge
     : public pyramid::services::autonomy_backend::provided::ServiceHandler {
 public:
   using Ack = pyramid::data_model::Ack;
   using Capabilities = pyramid::data_model::Capabilities;
+  using ExecutionRequirement = pyramid::data_model::ExecutionRequirement;
   using ExecutionRun = pyramid::data_model::ExecutionRun;
   using Identifier = pyramid::data_model::Identifier;
   using Plan = pyramid::data_model::Plan;
-  using PlanningExecutionRequirement =
-      pyramid::data_model::PlanningExecutionRequirement;
+  using PlanningRequirement = pyramid::data_model::PlanningRequirement;
   using Query = pyramid::data_model::Query;
   using RequirementPlacement = pyramid::data_model::RequirementPlacement;
   using StateUpdate = pyramid::data_model::StateUpdate;
@@ -66,23 +66,34 @@ public:
 
   std::vector<Capabilities> handleReadCapabilities(
       const Query& request) override;
-  Identifier handleCreateRequirement(
-      const PlanningExecutionRequirement& request) override;
-  std::vector<PlanningExecutionRequirement> handleReadRequirement(
+  Identifier handleCreatePlanningRequirement(
+      const PlanningRequirement& request) override;
+  std::vector<PlanningRequirement> handleReadPlanningRequirement(
       const Query& request) override;
-  Ack handleUpdateRequirement(
-      const PlanningExecutionRequirement& request) override;
-  Ack handleDeleteRequirement(const Identifier& request) override;
+  Ack handleUpdatePlanningRequirement(
+      const PlanningRequirement& request) override;
+  Ack handleDeletePlanningRequirement(const Identifier& request) override;
+  Identifier handleCreateExecutionRequirement(
+      const ExecutionRequirement& request) override;
+  std::vector<ExecutionRequirement> handleReadExecutionRequirement(
+      const Query& request) override;
+  Ack handleUpdateExecutionRequirement(
+      const ExecutionRequirement& request) override;
+  Ack handleDeleteExecutionRequirement(const Identifier& request) override;
   Identifier handleCreateState(const StateUpdate& request) override;
   Ack handleUpdateState(const StateUpdate& request) override;
   Ack handleDeleteState(const Identifier& request) override;
+  Identifier handleCreatePlan(const Plan& request) override;
   std::vector<Plan> handleReadPlan(const Query& request) override;
+  Ack handleUpdatePlan(const Plan& request) override;
+  Ack handleDeletePlan(const Identifier& request) override;
   std::vector<ExecutionRun> handleReadRun(const Query& request) override;
   std::vector<RequirementPlacement> handleReadPlacement(
       const Query& request) override;
 
 private:
   struct PlacementContext {
+    std::string execution_requirement_id;
     std::string requirement_id;
     std::string plan_id;
     std::string plan_step_id;
@@ -98,23 +109,25 @@ private:
       RequirementPlacementState state);
 
   std::string nextId(const std::string& prefix);
-  Plan makePlan(const PlanningExecutionRequirement& requirement,
+  void applyPlanningContext(const PlanningRequirement& requirement);
+  void applyExecutionContext(const ExecutionRequirement& requirement);
+  Plan makePlan(const PlanningRequirement& requirement,
                 const std::string& requirement_id);
-  ExecutionRun makeRun(const PlanningExecutionRequirement& requirement,
+  ExecutionRun makeRun(const ExecutionRequirement& requirement,
                        const Plan& plan) const;
-  RequirementPlacement makePlacement(const std::string& requirement_id,
+  RequirementPlacement makePlacement(const std::string& execution_requirement_id,
                                      const Plan& plan,
                                      const pyramid::data_model::PlanStep& step) const;
-  ActionCommand makeCommand(const std::string& requirement_id,
+  ActionCommand makeCommand(const std::string& execution_requirement_id,
                             const pyramid::data_model::PlanStep& step) const;
   RequirementPlacement makePlacement(
       const RequirementPlacementRecord& record) const;
   void syncPlacementRecordsFromSink();
   bool requirementGoalsSatisfied(
-      const PlanningExecutionRequirement& requirement) const;
-  void refreshExecutionProgress(const std::string& requirement_id);
+      const ExecutionRequirement& requirement) const;
+  void refreshExecutionProgress(const std::string& execution_requirement_id);
   std::vector<RequirementPlacement> outstandingPlacements(
-      const std::string& requirement_id,
+      const std::string& execution_requirement_id,
       const std::string& plan_id) const;
   void applyStateUpdate(const StateUpdate& update);
 
@@ -125,7 +138,8 @@ private:
   std::shared_ptr<IExecutionSink> execution_sink_;
   uint64_t next_id_ = 0;
 
-  std::unordered_map<std::string, PlanningExecutionRequirement> requirements_;
+  std::unordered_map<std::string, PlanningRequirement> planning_requirements_;
+  std::unordered_map<std::string, ExecutionRequirement> execution_requirements_;
   std::unordered_map<std::string, Plan> plans_;
   std::unordered_map<std::string, ExecutionRun> runs_;
   std::unordered_map<std::string, RequirementPlacement> placements_;

@@ -158,9 +158,9 @@ grpc::Status Capabilities_ServiceImpl::ReadCapabilities(
     }
 }
 
-grpc::Status Planning_Execution_ServiceImpl::CreateRequirement(
+grpc::Status Planning_Requirement_ServiceImpl::CreatePlanningRequirement(
     grpc::ServerContext* /*context*/,
-    const ::pyramid::data_model::autonomy::PlanningExecutionRequirement* request,
+    const ::pyramid::data_model::autonomy::PlanningRequirement* request,
     ::pyramid::data_model::base::Identifier* response)
 {
     try {
@@ -169,18 +169,18 @@ grpc::Status Planning_Execution_ServiceImpl::CreateRequirement(
         }
         const auto payload = serialize_grpc_request(*request);
         const auto executor_response = invoke_executor(
-            executor_, "planning_execution.create_requirement", payload);
+            executor_, "planning_requirement.create_planning_requirement", payload);
         return parse_unary_response(
-            executor_response, response, "CreateRequirement");
+            executor_response, response, "CreatePlanningRequirement");
     } catch (const std::exception& ex) {
         return grpc::Status(grpc::StatusCode::INTERNAL, ex.what());
     }
 }
 
-grpc::Status Planning_Execution_ServiceImpl::ReadRequirement(
+grpc::Status Planning_Requirement_ServiceImpl::ReadPlanningRequirement(
     grpc::ServerContext* /*context*/,
     const ::pyramid::data_model::common::Query* request,
-    grpc::ServerWriter<::pyramid::data_model::autonomy::PlanningExecutionRequirement>* writer)
+    grpc::ServerWriter<::pyramid::data_model::autonomy::PlanningRequirement>* writer)
 {
     try {
         if (!request) {
@@ -188,17 +188,17 @@ grpc::Status Planning_Execution_ServiceImpl::ReadRequirement(
         }
         const auto payload = serialize_grpc_request(*request);
         const auto executor_response = invoke_executor(
-            executor_, "planning_execution.read_requirement", payload);
-        return write_stream_response<::pyramid::data_model::autonomy::PlanningExecutionRequirement>(
-            executor_response, writer, "ReadRequirement");
+            executor_, "planning_requirement.read_planning_requirement", payload);
+        return write_stream_response<::pyramid::data_model::autonomy::PlanningRequirement>(
+            executor_response, writer, "ReadPlanningRequirement");
     } catch (const std::exception& ex) {
         return grpc::Status(grpc::StatusCode::INTERNAL, ex.what());
     }
 }
 
-grpc::Status Planning_Execution_ServiceImpl::UpdateRequirement(
+grpc::Status Planning_Requirement_ServiceImpl::UpdatePlanningRequirement(
     grpc::ServerContext* /*context*/,
-    const ::pyramid::data_model::autonomy::PlanningExecutionRequirement* request,
+    const ::pyramid::data_model::autonomy::PlanningRequirement* request,
     ::pyramid::data_model::common::Ack* response)
 {
     try {
@@ -207,15 +207,15 @@ grpc::Status Planning_Execution_ServiceImpl::UpdateRequirement(
         }
         const auto payload = serialize_grpc_request(*request);
         const auto executor_response = invoke_executor(
-            executor_, "planning_execution.update_requirement", payload);
+            executor_, "planning_requirement.update_planning_requirement", payload);
         return parse_unary_response(
-            executor_response, response, "UpdateRequirement");
+            executor_response, response, "UpdatePlanningRequirement");
     } catch (const std::exception& ex) {
         return grpc::Status(grpc::StatusCode::INTERNAL, ex.what());
     }
 }
 
-grpc::Status Planning_Execution_ServiceImpl::DeleteRequirement(
+grpc::Status Planning_Requirement_ServiceImpl::DeletePlanningRequirement(
     grpc::ServerContext* /*context*/,
     const ::pyramid::data_model::base::Identifier* request,
     ::pyramid::data_model::common::Ack* response)
@@ -226,9 +226,85 @@ grpc::Status Planning_Execution_ServiceImpl::DeleteRequirement(
         }
         const auto payload = serialize_grpc_request(*request);
         const auto executor_response = invoke_executor(
-            executor_, "planning_execution.delete_requirement", payload);
+            executor_, "planning_requirement.delete_planning_requirement", payload);
         return parse_unary_response(
-            executor_response, response, "DeleteRequirement");
+            executor_response, response, "DeletePlanningRequirement");
+    } catch (const std::exception& ex) {
+        return grpc::Status(grpc::StatusCode::INTERNAL, ex.what());
+    }
+}
+
+grpc::Status Execution_Requirement_ServiceImpl::CreateExecutionRequirement(
+    grpc::ServerContext* /*context*/,
+    const ::pyramid::data_model::autonomy::ExecutionRequirement* request,
+    ::pyramid::data_model::base::Identifier* response)
+{
+    try {
+        if (!request) {
+            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "missing gRPC request");
+        }
+        const auto payload = serialize_grpc_request(*request);
+        const auto executor_response = invoke_executor(
+            executor_, "execution_requirement.create_execution_requirement", payload);
+        return parse_unary_response(
+            executor_response, response, "CreateExecutionRequirement");
+    } catch (const std::exception& ex) {
+        return grpc::Status(grpc::StatusCode::INTERNAL, ex.what());
+    }
+}
+
+grpc::Status Execution_Requirement_ServiceImpl::ReadExecutionRequirement(
+    grpc::ServerContext* /*context*/,
+    const ::pyramid::data_model::common::Query* request,
+    grpc::ServerWriter<::pyramid::data_model::autonomy::ExecutionRequirement>* writer)
+{
+    try {
+        if (!request) {
+            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "missing gRPC request");
+        }
+        const auto payload = serialize_grpc_request(*request);
+        const auto executor_response = invoke_executor(
+            executor_, "execution_requirement.read_execution_requirement", payload);
+        return write_stream_response<::pyramid::data_model::autonomy::ExecutionRequirement>(
+            executor_response, writer, "ReadExecutionRequirement");
+    } catch (const std::exception& ex) {
+        return grpc::Status(grpc::StatusCode::INTERNAL, ex.what());
+    }
+}
+
+grpc::Status Execution_Requirement_ServiceImpl::UpdateExecutionRequirement(
+    grpc::ServerContext* /*context*/,
+    const ::pyramid::data_model::autonomy::ExecutionRequirement* request,
+    ::pyramid::data_model::common::Ack* response)
+{
+    try {
+        if (!request) {
+            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "missing gRPC request");
+        }
+        const auto payload = serialize_grpc_request(*request);
+        const auto executor_response = invoke_executor(
+            executor_, "execution_requirement.update_execution_requirement", payload);
+        return parse_unary_response(
+            executor_response, response, "UpdateExecutionRequirement");
+    } catch (const std::exception& ex) {
+        return grpc::Status(grpc::StatusCode::INTERNAL, ex.what());
+    }
+}
+
+grpc::Status Execution_Requirement_ServiceImpl::DeleteExecutionRequirement(
+    grpc::ServerContext* /*context*/,
+    const ::pyramid::data_model::base::Identifier* request,
+    ::pyramid::data_model::common::Ack* response)
+{
+    try {
+        if (!request) {
+            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "missing gRPC request");
+        }
+        const auto payload = serialize_grpc_request(*request);
+        const auto executor_response = invoke_executor(
+            executor_, "execution_requirement.delete_execution_requirement", payload);
+        return parse_unary_response(
+            executor_response, response, "DeleteExecutionRequirement");
     } catch (const std::exception& ex) {
         return grpc::Status(grpc::StatusCode::INTERNAL, ex.what());
     }
@@ -291,6 +367,25 @@ grpc::Status State_ServiceImpl::DeleteState(
     }
 }
 
+grpc::Status Plan_ServiceImpl::CreatePlan(
+    grpc::ServerContext* /*context*/,
+    const ::pyramid::data_model::autonomy::Plan* request,
+    ::pyramid::data_model::base::Identifier* response)
+{
+    try {
+        if (!request) {
+            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "missing gRPC request");
+        }
+        const auto payload = serialize_grpc_request(*request);
+        const auto executor_response = invoke_executor(
+            executor_, "plan.create_plan", payload);
+        return parse_unary_response(
+            executor_response, response, "CreatePlan");
+    } catch (const std::exception& ex) {
+        return grpc::Status(grpc::StatusCode::INTERNAL, ex.what());
+    }
+}
+
 grpc::Status Plan_ServiceImpl::ReadPlan(
     grpc::ServerContext* /*context*/,
     const ::pyramid::data_model::common::Query* request,
@@ -305,6 +400,44 @@ grpc::Status Plan_ServiceImpl::ReadPlan(
             executor_, "plan.read_plan", payload);
         return write_stream_response<::pyramid::data_model::autonomy::Plan>(
             executor_response, writer, "ReadPlan");
+    } catch (const std::exception& ex) {
+        return grpc::Status(grpc::StatusCode::INTERNAL, ex.what());
+    }
+}
+
+grpc::Status Plan_ServiceImpl::UpdatePlan(
+    grpc::ServerContext* /*context*/,
+    const ::pyramid::data_model::autonomy::Plan* request,
+    ::pyramid::data_model::common::Ack* response)
+{
+    try {
+        if (!request) {
+            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "missing gRPC request");
+        }
+        const auto payload = serialize_grpc_request(*request);
+        const auto executor_response = invoke_executor(
+            executor_, "plan.update_plan", payload);
+        return parse_unary_response(
+            executor_response, response, "UpdatePlan");
+    } catch (const std::exception& ex) {
+        return grpc::Status(grpc::StatusCode::INTERNAL, ex.what());
+    }
+}
+
+grpc::Status Plan_ServiceImpl::DeletePlan(
+    grpc::ServerContext* /*context*/,
+    const ::pyramid::data_model::base::Identifier* request,
+    ::pyramid::data_model::common::Ack* response)
+{
+    try {
+        if (!request) {
+            return grpc::Status(grpc::StatusCode::INVALID_ARGUMENT, "missing gRPC request");
+        }
+        const auto payload = serialize_grpc_request(*request);
+        const auto executor_response = invoke_executor(
+            executor_, "plan.delete_plan", payload);
+        return parse_unary_response(
+            executor_response, response, "DeletePlan");
     } catch (const std::exception& ex) {
         return grpc::Status(grpc::StatusCode::INTERNAL, ex.what());
     }
@@ -376,7 +509,8 @@ private:
 
 struct GrpcServer::Impl {
     std::unique_ptr<grpc_transport::Capabilities_ServiceImpl> capabilities_service;
-    std::unique_ptr<grpc_transport::Planning_Execution_ServiceImpl> planning_execution_service;
+    std::unique_ptr<grpc_transport::Planning_Requirement_ServiceImpl> planning_requirement_service;
+    std::unique_ptr<grpc_transport::Execution_Requirement_ServiceImpl> execution_requirement_service;
     std::unique_ptr<grpc_transport::State_ServiceImpl> state_service;
     std::unique_ptr<grpc_transport::Plan_ServiceImpl> plan_service;
     std::unique_ptr<grpc_transport::Execution_Run_ServiceImpl> execution_run_service;
@@ -429,8 +563,11 @@ GrpcServer buildGrpcServer(const std::string& listen_address,
     impl->capabilities_service = std::make_unique<grpc_transport::Capabilities_ServiceImpl>(executor);
     builder.RegisterService(impl->capabilities_service.get());
 
-    impl->planning_execution_service = std::make_unique<grpc_transport::Planning_Execution_ServiceImpl>(executor);
-    builder.RegisterService(impl->planning_execution_service.get());
+    impl->planning_requirement_service = std::make_unique<grpc_transport::Planning_Requirement_ServiceImpl>(executor);
+    builder.RegisterService(impl->planning_requirement_service.get());
+
+    impl->execution_requirement_service = std::make_unique<grpc_transport::Execution_Requirement_ServiceImpl>(executor);
+    builder.RegisterService(impl->execution_requirement_service.get());
 
     impl->state_service = std::make_unique<grpc_transport::State_ServiceImpl>(executor);
     builder.RegisterService(impl->state_service.get());

@@ -10,10 +10,11 @@ import "pyramid/data_model/common.proto";
 // =============================================================================
 // This proto defines the target PYRAMID-facing AME surface.
 //
-// Objectives and Tasks own their domain semantics. They delegate planning and
-// optional execution to AME by placing PlanningExecutionRequirement entities.
-// AME then exposes plans, execution runs, and typed component requirement
-// placements as read-only products.
+// Objectives and Tasks own their domain semantics. They delegate planning to
+// AME by placing PlanningRequirement entities, then delegate execution by
+// placing ExecutionRequirement entities that reference approved plans. AME then
+// exposes plans as addressable resources and execution runs / typed component
+// requirement placements as read-only products.
 // =============================================================================
 
 // -----------------------------------------------------------------------------
@@ -28,24 +29,15 @@ enum FactAuthorityLevel {
   FACT_AUTHORITY_LEVEL_CONFIRMED = 2;
 }
 
-// Requested operating mode for an AME planning/execution requirement.
-enum PlanningExecutionMode {
-  PLANNING_EXECUTION_MODE_UNSPECIFIED = 0;
-  PLANNING_EXECUTION_MODE_PLAN_AND_EXECUTE = 1;
-  PLANNING_EXECUTION_MODE_PLAN_ONLY = 2;
-  PLANNING_EXECUTION_MODE_EXECUTE_APPROVED_PLAN = 3;
-}
-
-// Lifecycle state of a delegated AME planning/execution requirement.
-enum PlanningExecutionState {
-  PLANNING_EXECUTION_STATE_UNSPECIFIED = 0;
-  PLANNING_EXECUTION_STATE_ACCEPTED = 1;
-  PLANNING_EXECUTION_STATE_PLANNING = 2;
-  PLANNING_EXECUTION_STATE_EXECUTING = 3;
-  PLANNING_EXECUTION_STATE_WAITING_FOR_COMPONENTS = 4;
-  PLANNING_EXECUTION_STATE_ACHIEVED = 5;
-  PLANNING_EXECUTION_STATE_FAILED = 6;
-  PLANNING_EXECUTION_STATE_CANCELLED = 7;
+// Lifecycle state of a delegated AME execution requirement.
+enum ExecutionState {
+  EXECUTION_STATE_UNSPECIFIED = 0;
+  EXECUTION_STATE_ACCEPTED = 1;
+  EXECUTION_STATE_EXECUTING = 2;
+  EXECUTION_STATE_WAITING_FOR_COMPONENTS = 3;
+  EXECUTION_STATE_ACHIEVED = 4;
+  EXECUTION_STATE_FAILED = 5;
+  EXECUTION_STATE_CANCELLED = 6;
 }
 
 // EntityActions-style operation AME performs against another component.
@@ -80,11 +72,10 @@ message AgentState {
   bool available = 3;
 }
 
-// Policy knobs for a delegated AME planning/execution requirement.
+// Policy knobs for a delegated AME planning requirement.
 message PlanningPolicy {
   uint32 max_replans = 1;
   bool enable_replanning = 2;
-  uint32 max_concurrent_placements = 3;
 }
 
 // Single goal accepted by AME.
@@ -103,17 +94,34 @@ message PlanningGoal {
   }
 }
 
+// Policy knobs for a delegated AME execution requirement.
+message ExecutionPolicy {
+  uint32 max_replans = 1;
+  bool enable_replanning = 2;
+  uint32 max_concurrent_placements = 3;
+}
+
 // Requirement placed on AME by Objectives, Tasks, or another coordinator when
-// they need AME to plan and optionally execute a response.
+// they need AME to plan a response.
 // EntityActions: inout (full CRUD)
-message PlanningExecutionRequirement {
+message PlanningRequirement {
   pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
   repeated RequirementReference upstream_requirement = 2;
   repeated PlanningGoal goal = 3;
   PlanningPolicy policy = 4;
   repeated AgentState available_agents = 5;
-  PlanningExecutionMode mode = 6;
-  optional pyramid.data_model.base.Identifier approved_plan_id = 7;
+}
+
+// Requirement placed on AME when a previously produced or externally approved
+// plan should be executed.
+// EntityActions: inout (full CRUD)
+message ExecutionRequirement {
+  pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
+  repeated RequirementReference upstream_requirement = 2;
+  pyramid.data_model.base.Identifier plan_id = 3;
+  ExecutionPolicy policy = 4;
+  repeated AgentState available_agents = 5;
+  optional pyramid.data_model.base.Identifier planning_requirement_id = 6;
 }
 
 // -----------------------------------------------------------------------------
@@ -145,9 +153,9 @@ message StateUpdate {
 message Capabilities {
   pyramid.data_model.common.Entity base = 1;  // For CRUD addressability
   string backend_id = 2;
-  bool supports_plan_only = 3;
-  bool supports_plan_and_execute = 4;
-  bool supports_execute_approved_plan = 5;
+  bool supports_planning_requirements = 3;
+  bool supports_execution_requirements = 4;
+  bool supports_approved_plan_execution = 5;
   bool supports_replanning = 6;
   bool supports_typed_component_requirement_placement = 7;
   bool supports_state_update_ingress = 8;
@@ -170,11 +178,13 @@ message PlanStep {
   repeated PlannedComponentInteraction interaction = 5;
 }
 
-// Plan product emitted by AME after solving a planning/execution requirement.
-// EntityActions: out (Read only)
+// Plan resource emitted by AME after solving a planning requirement, or created
+// by a coordinator when an externally approved plan should be made addressable
+// for execution.
+// EntityActions: inout (full CRUD)
 message Plan {
   pyramid.data_model.common.Entity base = 1;  // For CRUD addressability
-  pyramid.data_model.base.Identifier planning_execution_requirement_id = 2;
+  pyramid.data_model.base.Identifier planning_requirement_id = 2;
   string backend_id = 3;
   uint64 world_version = 4;
   uint32 replan_count = 5;
@@ -191,26 +201,29 @@ message Plan {
 // EntityActions: out (Read only)
 message RequirementPlacement {
   pyramid.data_model.common.Entity base = 1;  // For CRUD addressability
-  pyramid.data_model.base.Identifier planning_execution_requirement_id = 2;
-  pyramid.data_model.base.Identifier plan_id = 3;
-  pyramid.data_model.base.Identifier plan_step_id = 4;
-  string target_component = 5;
-  string target_service = 6;
-  string target_type = 7;
-  RequirementPlacementOperation operation = 8;
-  pyramid.data_model.base.Identifier target_requirement_id = 9;
-  repeated pyramid.data_model.base.Identifier related_entity_id = 10;
-  pyramid.data_model.common.Progress progress = 11;
+  pyramid.data_model.base.Identifier execution_requirement_id = 2;
+  pyramid.data_model.base.Identifier planning_requirement_id = 3;
+  pyramid.data_model.base.Identifier plan_id = 4;
+  pyramid.data_model.base.Identifier plan_step_id = 5;
+  string target_component = 6;
+  string target_service = 7;
+  string target_type = 8;
+  RequirementPlacementOperation operation = 9;
+  pyramid.data_model.base.Identifier target_requirement_id = 10;
+  repeated pyramid.data_model.base.Identifier related_entity_id = 11;
+  pyramid.data_model.common.Progress progress = 12;
 }
 
-// Execution run product for a requirement currently being enacted by AME.
+// Execution run product for an execution requirement currently being enacted by
+// AME.
 // EntityActions: out (Read only)
 message ExecutionRun {
   pyramid.data_model.common.Entity base = 1;  // For CRUD addressability
-  pyramid.data_model.base.Identifier planning_execution_requirement_id = 2;
-  pyramid.data_model.base.Identifier plan_id = 3;
-  PlanningExecutionState state = 4;
-  pyramid.data_model.common.Achievement achievement = 5;
-  uint32 replan_count = 6;
-  repeated RequirementPlacement outstanding_placement = 7;
+  pyramid.data_model.base.Identifier execution_requirement_id = 2;
+  pyramid.data_model.base.Identifier planning_requirement_id = 3;
+  pyramid.data_model.base.Identifier plan_id = 4;
+  ExecutionState state = 5;
+  pyramid.data_model.common.Achievement achievement = 6;
+  uint32 replan_count = 7;
+  repeated RequirementPlacement outstanding_placement = 8;
 }

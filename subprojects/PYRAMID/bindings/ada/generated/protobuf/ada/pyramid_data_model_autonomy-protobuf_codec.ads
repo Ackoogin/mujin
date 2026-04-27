@@ -1,4 +1,4 @@
---  Auto-generated Protobuf codec spec — do not edit
+--  Auto-generated Protobuf codec spec -- do not edit
 --  Backend: protobuf | Package: Pyramid.Data_model.Autonomy.Protobuf_Codec
 --
 --  Thin Ada binding to protobuf C++ codec via C interop.
@@ -61,17 +61,41 @@ package Pyramid.Data_model.Autonomy.Protobuf_Codec is
      with Import, Convention => C,
           External_Name => "PlanningGoal_from_protobuf";
 
-   --  PlanningExecutionRequirement: protobuf SerializeToString / ParseFromArray
-   function To_Binary_Planning_Execution_Requirement (Msg : System.Address)
+   --  ExecutionPolicy: protobuf SerializeToString / ParseFromArray
+   function To_Binary_Execution_Policy (Msg : System.Address)
      return Interfaces.C.Strings.chars_ptr
      with Import, Convention => C,
-          External_Name => "PlanningExecutionRequirement_to_protobuf";
+          External_Name => "ExecutionPolicy_to_protobuf";
 
-   function From_Binary_Planning_Execution_Requirement
+   function From_Binary_Execution_Policy
      (Data : System.Address; Size : Interfaces.C.size_t)
      return System.Address
      with Import, Convention => C,
-          External_Name => "PlanningExecutionRequirement_from_protobuf";
+          External_Name => "ExecutionPolicy_from_protobuf";
+
+   --  PlanningRequirement: protobuf SerializeToString / ParseFromArray
+   function To_Binary_Planning_Requirement (Msg : System.Address)
+     return Interfaces.C.Strings.chars_ptr
+     with Import, Convention => C,
+          External_Name => "PlanningRequirement_to_protobuf";
+
+   function From_Binary_Planning_Requirement
+     (Data : System.Address; Size : Interfaces.C.size_t)
+     return System.Address
+     with Import, Convention => C,
+          External_Name => "PlanningRequirement_from_protobuf";
+
+   --  ExecutionRequirement: protobuf SerializeToString / ParseFromArray
+   function To_Binary_Execution_Requirement (Msg : System.Address)
+     return Interfaces.C.Strings.chars_ptr
+     with Import, Convention => C,
+          External_Name => "ExecutionRequirement_to_protobuf";
+
+   function From_Binary_Execution_Requirement
+     (Data : System.Address; Size : Interfaces.C.size_t)
+     return System.Address
+     with Import, Convention => C,
+          External_Name => "ExecutionRequirement_from_protobuf";
 
    --  WorldFactUpdate: protobuf SerializeToString / ParseFromArray
    function To_Binary_World_Fact_Update (Msg : System.Address)

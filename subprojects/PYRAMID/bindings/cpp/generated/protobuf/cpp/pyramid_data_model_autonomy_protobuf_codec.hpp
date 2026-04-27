@@ -1,4 +1,4 @@
-// Auto-generated Protobuf PCL codec — do not edit
+// Auto-generated Protobuf PCL codec -- do not edit
 // Backend: protobuf | Namespace: pyramid::data_model::autonomy::protobuf_codec
 //
 // Wraps protoc-generated SerializeToString / ParseFromString
@@ -89,22 +89,58 @@ inline pyramid::data_model::autonomy::PlanningGoal fromBinaryPlanningGoal(const 
     return fromBinaryPlanningGoal(s.data(), s.size());
 }
 
-/// Serialise PlanningExecutionRequirement via protobuf.
-inline std::string toBinary(const pyramid::data_model::autonomy::PlanningExecutionRequirement& msg) {
+/// Serialise ExecutionPolicy via protobuf.
+inline std::string toBinary(const pyramid::data_model::autonomy::ExecutionPolicy& msg) {
     std::string out;
     msg.SerializeToString(&out);
     return out;
 }
 
-/// Deserialise PlanningExecutionRequirement from protobuf wire format.
-inline pyramid::data_model::autonomy::PlanningExecutionRequirement fromBinaryPlanningExecutionRequirement(const void* data, size_t size) {
-    pyramid::data_model::autonomy::PlanningExecutionRequirement result;
+/// Deserialise ExecutionPolicy from protobuf wire format.
+inline pyramid::data_model::autonomy::ExecutionPolicy fromBinaryExecutionPolicy(const void* data, size_t size) {
+    pyramid::data_model::autonomy::ExecutionPolicy result;
     result.ParseFromArray(data, static_cast<int>(size));
     return result;
 }
 
-inline pyramid::data_model::autonomy::PlanningExecutionRequirement fromBinaryPlanningExecutionRequirement(const std::string& s) {
-    return fromBinaryPlanningExecutionRequirement(s.data(), s.size());
+inline pyramid::data_model::autonomy::ExecutionPolicy fromBinaryExecutionPolicy(const std::string& s) {
+    return fromBinaryExecutionPolicy(s.data(), s.size());
+}
+
+/// Serialise PlanningRequirement via protobuf.
+inline std::string toBinary(const pyramid::data_model::autonomy::PlanningRequirement& msg) {
+    std::string out;
+    msg.SerializeToString(&out);
+    return out;
+}
+
+/// Deserialise PlanningRequirement from protobuf wire format.
+inline pyramid::data_model::autonomy::PlanningRequirement fromBinaryPlanningRequirement(const void* data, size_t size) {
+    pyramid::data_model::autonomy::PlanningRequirement result;
+    result.ParseFromArray(data, static_cast<int>(size));
+    return result;
+}
+
+inline pyramid::data_model::autonomy::PlanningRequirement fromBinaryPlanningRequirement(const std::string& s) {
+    return fromBinaryPlanningRequirement(s.data(), s.size());
+}
+
+/// Serialise ExecutionRequirement via protobuf.
+inline std::string toBinary(const pyramid::data_model::autonomy::ExecutionRequirement& msg) {
+    std::string out;
+    msg.SerializeToString(&out);
+    return out;
+}
+
+/// Deserialise ExecutionRequirement from protobuf wire format.
+inline pyramid::data_model::autonomy::ExecutionRequirement fromBinaryExecutionRequirement(const void* data, size_t size) {
+    pyramid::data_model::autonomy::ExecutionRequirement result;
+    result.ParseFromArray(data, static_cast<int>(size));
+    return result;
+}
+
+inline pyramid::data_model::autonomy::ExecutionRequirement fromBinaryExecutionRequirement(const std::string& s) {
+    return fromBinaryExecutionRequirement(s.data(), s.size());
 }
 
 /// Serialise WorldFactUpdate via protobuf.

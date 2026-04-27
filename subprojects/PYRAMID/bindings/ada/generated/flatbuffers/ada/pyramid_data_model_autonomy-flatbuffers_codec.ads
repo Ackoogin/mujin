@@ -1,4 +1,4 @@
---  Auto-generated FlatBuffers codec spec — do not edit
+--  Auto-generated FlatBuffers codec spec -- do not edit
 --  Backend: flatbuffers | Package: Pyramid.Data_model.Autonomy.Flatbuffers_Codec
 --
 --  This package provides thin bindings to the C++ FlatBuffers codec.
@@ -58,13 +58,35 @@ package Pyramid.Data_model.Autonomy.Flatbuffers_Codec is
    function To_Binary (Msg : System.Address)
      return Interfaces.C.Strings.chars_ptr
      with Import, Convention => C,
-          External_Name => "PlanningExecutionRequirement_to_flatbuffer";
+          External_Name => "ExecutionPolicy_to_flatbuffer";
 
-   function From_Binary_Planning_Execution_Requirement
+   function From_Binary_Execution_Policy
      (Data : System.Address; Size : Interfaces.C.size_t)
      return System.Address
      with Import, Convention => C,
-          External_Name => "PlanningExecutionRequirement_from_flatbuffer";
+          External_Name => "ExecutionPolicy_from_flatbuffer";
+
+   function To_Binary (Msg : System.Address)
+     return Interfaces.C.Strings.chars_ptr
+     with Import, Convention => C,
+          External_Name => "PlanningRequirement_to_flatbuffer";
+
+   function From_Binary_Planning_Requirement
+     (Data : System.Address; Size : Interfaces.C.size_t)
+     return System.Address
+     with Import, Convention => C,
+          External_Name => "PlanningRequirement_from_flatbuffer";
+
+   function To_Binary (Msg : System.Address)
+     return Interfaces.C.Strings.chars_ptr
+     with Import, Convention => C,
+          External_Name => "ExecutionRequirement_to_flatbuffer";
+
+   function From_Binary_Execution_Requirement
+     (Data : System.Address; Size : Interfaces.C.size_t)
+     return System.Address
+     with Import, Convention => C,
+          External_Name => "ExecutionRequirement_from_flatbuffer";
 
    function To_Binary (Msg : System.Address)
      return Interfaces.C.Strings.chars_ptr

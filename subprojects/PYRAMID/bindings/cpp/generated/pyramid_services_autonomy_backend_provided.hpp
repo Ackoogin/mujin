@@ -41,17 +41,24 @@ std::vector<const char*> supportedContentTypes();
 // Service wire-name constants (generated from proto)
 // ---------------------------------------------------------------------------
 
-constexpr const char* kSvcReadCapabilities   = "capabilities.read_capabilities";
-constexpr const char* kSvcCreateRequirement  = "planning_execution.create_requirement";
-constexpr const char* kSvcReadRequirement    = "planning_execution.read_requirement";
-constexpr const char* kSvcUpdateRequirement  = "planning_execution.update_requirement";
-constexpr const char* kSvcDeleteRequirement  = "planning_execution.delete_requirement";
-constexpr const char* kSvcCreateState        = "state.create_state";
-constexpr const char* kSvcUpdateState        = "state.update_state";
-constexpr const char* kSvcDeleteState        = "state.delete_state";
-constexpr const char* kSvcReadPlan           = "plan.read_plan";
-constexpr const char* kSvcReadRun            = "execution_run.read_run";
-constexpr const char* kSvcReadPlacement      = "requirement_placement.read_placement";
+constexpr const char* kSvcReadCapabilities            = "capabilities.read_capabilities";
+constexpr const char* kSvcCreatePlanningRequirement   = "planning_requirement.create_planning_requirement";
+constexpr const char* kSvcReadPlanningRequirement     = "planning_requirement.read_planning_requirement";
+constexpr const char* kSvcUpdatePlanningRequirement   = "planning_requirement.update_planning_requirement";
+constexpr const char* kSvcDeletePlanningRequirement   = "planning_requirement.delete_planning_requirement";
+constexpr const char* kSvcCreateExecutionRequirement  = "execution_requirement.create_execution_requirement";
+constexpr const char* kSvcReadExecutionRequirement    = "execution_requirement.read_execution_requirement";
+constexpr const char* kSvcUpdateExecutionRequirement  = "execution_requirement.update_execution_requirement";
+constexpr const char* kSvcDeleteExecutionRequirement  = "execution_requirement.delete_execution_requirement";
+constexpr const char* kSvcCreateState                 = "state.create_state";
+constexpr const char* kSvcUpdateState                 = "state.update_state";
+constexpr const char* kSvcDeleteState                 = "state.delete_state";
+constexpr const char* kSvcCreatePlan                  = "plan.create_plan";
+constexpr const char* kSvcReadPlan                    = "plan.read_plan";
+constexpr const char* kSvcUpdatePlan                  = "plan.update_plan";
+constexpr const char* kSvcDeletePlan                  = "plan.delete_plan";
+constexpr const char* kSvcReadRun                     = "execution_run.read_run";
+constexpr const char* kSvcReadPlacement               = "requirement_placement.read_placement";
 
 // ---------------------------------------------------------------------------
 // Service channel discriminant
@@ -59,14 +66,21 @@ constexpr const char* kSvcReadPlacement      = "requirement_placement.read_place
 
 enum class ServiceChannel {
     ReadCapabilities,
-    CreateRequirement,
-    ReadRequirement,
-    UpdateRequirement,
-    DeleteRequirement,
+    CreatePlanningRequirement,
+    ReadPlanningRequirement,
+    UpdatePlanningRequirement,
+    DeletePlanningRequirement,
+    CreateExecutionRequirement,
+    ReadExecutionRequirement,
+    UpdateExecutionRequirement,
+    DeleteExecutionRequirement,
     CreateState,
     UpdateState,
     DeleteState,
+    CreatePlan,
     ReadPlan,
+    UpdatePlan,
+    DeletePlan,
     ReadRun,
     ReadPlacement,
 };
@@ -87,10 +101,11 @@ std::string msgToString(const void* data, unsigned size);
 
 using pyramid::data_model::Ack;
 using pyramid::data_model::Capabilities;
+using pyramid::data_model::ExecutionRequirement;
 using pyramid::data_model::ExecutionRun;
 using pyramid::data_model::Identifier;
 using pyramid::data_model::Plan;
-using pyramid::data_model::PlanningExecutionRequirement;
+using pyramid::data_model::PlanningRequirement;
 using pyramid::data_model::Query;
 using pyramid::data_model::RequirementPlacement;
 using pyramid::data_model::StateUpdate;
@@ -103,18 +118,31 @@ public:
     virtual std::vector<Capabilities>
     handleReadCapabilities(const Query& request);
 
-    // Planning_Execution_Service
+    // Planning_Requirement_Service
     virtual Identifier
-    handleCreateRequirement(const PlanningExecutionRequirement& request);
+    handleCreatePlanningRequirement(const PlanningRequirement& request);
 
-    virtual std::vector<PlanningExecutionRequirement>
-    handleReadRequirement(const Query& request);
-
-    virtual Ack
-    handleUpdateRequirement(const PlanningExecutionRequirement& request);
+    virtual std::vector<PlanningRequirement>
+    handleReadPlanningRequirement(const Query& request);
 
     virtual Ack
-    handleDeleteRequirement(const Identifier& request);
+    handleUpdatePlanningRequirement(const PlanningRequirement& request);
+
+    virtual Ack
+    handleDeletePlanningRequirement(const Identifier& request);
+
+    // Execution_Requirement_Service
+    virtual Identifier
+    handleCreateExecutionRequirement(const ExecutionRequirement& request);
+
+    virtual std::vector<ExecutionRequirement>
+    handleReadExecutionRequirement(const Query& request);
+
+    virtual Ack
+    handleUpdateExecutionRequirement(const ExecutionRequirement& request);
+
+    virtual Ack
+    handleDeleteExecutionRequirement(const Identifier& request);
 
     // State_Service
     virtual Identifier
@@ -127,8 +155,17 @@ public:
     handleDeleteState(const Identifier& request);
 
     // Plan_Service
+    virtual Identifier
+    handleCreatePlan(const Plan& request);
+
     virtual std::vector<Plan>
     handleReadPlan(const Query& request);
+
+    virtual Ack
+    handleUpdatePlan(const Plan& request);
+
+    virtual Ack
+    handleDeletePlan(const Identifier& request);
 
     // Execution_Run_Service
     virtual std::vector<ExecutionRun>
@@ -164,89 +201,173 @@ pcl_status_t invokeReadCapabilities(pcl_executor_t* executor,
                                     const char*       content_type = "application/json",
                                     const pcl_endpoint_route_t* route = nullptr);
 
-/// \brief Decode a response from planning_execution.create_requirement.
-bool decodeCreateRequirementResponse(const pcl_msg_t* msg,
-                                     Identifier* out);
+/// \brief Decode a response from planning_requirement.create_planning_requirement.
+bool decodeCreatePlanningRequirementResponse(const pcl_msg_t* msg,
+                                             Identifier* out);
 
-/// \brief Invoke planning_execution.create_requirement (typed, serialisation handled internally).
+/// \brief Invoke planning_requirement.create_planning_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
-pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
-                                     const PlanningExecutionRequirement& request,
-                                     pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr,
-                                     const pcl_endpoint_route_t* route = nullptr,
-                                     const char*       content_type = "application/json");
+pcl_status_t invokeCreatePlanningRequirement(pcl_executor_t* executor,
+                                             const PlanningRequirement&   request,
+                                             pcl_resp_cb_fn_t        callback,
+                                             void*                   user_data = nullptr,
+                                             const pcl_endpoint_route_t* route = nullptr,
+                                             const char*       content_type = "application/json");
 
-/// \brief Invoke planning_execution.create_requirement and ignore the async response.
-pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
-                                     const PlanningExecutionRequirement& request,
-                                     const char*       content_type = "application/json",
-                                     const pcl_endpoint_route_t* route = nullptr);
+/// \brief Invoke planning_requirement.create_planning_requirement and ignore the async response.
+pcl_status_t invokeCreatePlanningRequirement(pcl_executor_t* executor,
+                                             const PlanningRequirement&   request,
+                                             const char*       content_type = "application/json",
+                                             const pcl_endpoint_route_t* route = nullptr);
 
-/// \brief Decode a response from planning_execution.read_requirement.
-bool decodeReadRequirementResponse(const pcl_msg_t* msg,
-                                   std::vector<PlanningExecutionRequirement>* out);
+/// \brief Decode a response from planning_requirement.read_planning_requirement.
+bool decodeReadPlanningRequirementResponse(const pcl_msg_t* msg,
+                                           std::vector<PlanningRequirement>* out);
 
-/// \brief Invoke planning_execution.read_requirement (typed, serialisation handled internally).
+/// \brief Invoke planning_requirement.read_planning_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
-pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
-                                   const Query&                 request,
-                                   pcl_resp_cb_fn_t        callback,
-                                   void*                   user_data = nullptr,
-                                   const pcl_endpoint_route_t* route = nullptr,
-                                   const char*       content_type = "application/json");
+pcl_status_t invokeReadPlanningRequirement(pcl_executor_t* executor,
+                                           const Query&                 request,
+                                           pcl_resp_cb_fn_t        callback,
+                                           void*                   user_data = nullptr,
+                                           const pcl_endpoint_route_t* route = nullptr,
+                                           const char*       content_type = "application/json");
 
-/// \brief Invoke planning_execution.read_requirement and ignore the async response.
-pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
-                                   const Query&                 request,
-                                   const char*       content_type = "application/json",
-                                   const pcl_endpoint_route_t* route = nullptr);
+/// \brief Invoke planning_requirement.read_planning_requirement and ignore the async response.
+pcl_status_t invokeReadPlanningRequirement(pcl_executor_t* executor,
+                                           const Query&                 request,
+                                           const char*       content_type = "application/json",
+                                           const pcl_endpoint_route_t* route = nullptr);
 
-/// \brief Decode a response from planning_execution.update_requirement.
-bool decodeUpdateRequirementResponse(const pcl_msg_t* msg,
-                                     Ack* out);
+/// \brief Decode a response from planning_requirement.update_planning_requirement.
+bool decodeUpdatePlanningRequirementResponse(const pcl_msg_t* msg,
+                                             Ack* out);
 
-/// \brief Invoke planning_execution.update_requirement (typed, serialisation handled internally).
+/// \brief Invoke planning_requirement.update_planning_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
-pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
-                                     const PlanningExecutionRequirement& request,
-                                     pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr,
-                                     const pcl_endpoint_route_t* route = nullptr,
-                                     const char*       content_type = "application/json");
+pcl_status_t invokeUpdatePlanningRequirement(pcl_executor_t* executor,
+                                             const PlanningRequirement&   request,
+                                             pcl_resp_cb_fn_t        callback,
+                                             void*                   user_data = nullptr,
+                                             const pcl_endpoint_route_t* route = nullptr,
+                                             const char*       content_type = "application/json");
 
-/// \brief Invoke planning_execution.update_requirement and ignore the async response.
-pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
-                                     const PlanningExecutionRequirement& request,
-                                     const char*       content_type = "application/json",
-                                     const pcl_endpoint_route_t* route = nullptr);
+/// \brief Invoke planning_requirement.update_planning_requirement and ignore the async response.
+pcl_status_t invokeUpdatePlanningRequirement(pcl_executor_t* executor,
+                                             const PlanningRequirement&   request,
+                                             const char*       content_type = "application/json",
+                                             const pcl_endpoint_route_t* route = nullptr);
 
-/// \brief Decode a response from planning_execution.delete_requirement.
-bool decodeDeleteRequirementResponse(const pcl_msg_t* msg,
-                                     Ack* out);
+/// \brief Decode a response from planning_requirement.delete_planning_requirement.
+bool decodeDeletePlanningRequirementResponse(const pcl_msg_t* msg,
+                                             Ack* out);
 
-/// \brief Invoke planning_execution.delete_requirement (typed, serialisation handled internally).
+/// \brief Invoke planning_requirement.delete_planning_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
-pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
-                                     const Identifier&            request,
-                                     pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr,
-                                     const pcl_endpoint_route_t* route = nullptr,
-                                     const char*       content_type = "application/json");
+pcl_status_t invokeDeletePlanningRequirement(pcl_executor_t* executor,
+                                             const Identifier&            request,
+                                             pcl_resp_cb_fn_t        callback,
+                                             void*                   user_data = nullptr,
+                                             const pcl_endpoint_route_t* route = nullptr,
+                                             const char*       content_type = "application/json");
 
-/// \brief Invoke planning_execution.delete_requirement and ignore the async response.
-pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
-                                     const Identifier&            request,
-                                     const char*       content_type = "application/json",
-                                     const pcl_endpoint_route_t* route = nullptr);
+/// \brief Invoke planning_requirement.delete_planning_requirement and ignore the async response.
+pcl_status_t invokeDeletePlanningRequirement(pcl_executor_t* executor,
+                                             const Identifier&            request,
+                                             const char*       content_type = "application/json",
+                                             const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Decode a response from execution_requirement.create_execution_requirement.
+bool decodeCreateExecutionRequirementResponse(const pcl_msg_t* msg,
+                                              Identifier* out);
+
+/// \brief Invoke execution_requirement.create_execution_requirement (typed, serialisation handled internally).
+///
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
+pcl_status_t invokeCreateExecutionRequirement(pcl_executor_t* executor,
+                                              const ExecutionRequirement&  request,
+                                              pcl_resp_cb_fn_t        callback,
+                                              void*                   user_data = nullptr,
+                                              const pcl_endpoint_route_t* route = nullptr,
+                                              const char*       content_type = "application/json");
+
+/// \brief Invoke execution_requirement.create_execution_requirement and ignore the async response.
+pcl_status_t invokeCreateExecutionRequirement(pcl_executor_t* executor,
+                                              const ExecutionRequirement&  request,
+                                              const char*       content_type = "application/json",
+                                              const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Decode a response from execution_requirement.read_execution_requirement.
+bool decodeReadExecutionRequirementResponse(const pcl_msg_t* msg,
+                                            std::vector<ExecutionRequirement>* out);
+
+/// \brief Invoke execution_requirement.read_execution_requirement (typed, serialisation handled internally).
+///
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
+pcl_status_t invokeReadExecutionRequirement(pcl_executor_t* executor,
+                                            const Query&                 request,
+                                            pcl_resp_cb_fn_t        callback,
+                                            void*                   user_data = nullptr,
+                                            const pcl_endpoint_route_t* route = nullptr,
+                                            const char*       content_type = "application/json");
+
+/// \brief Invoke execution_requirement.read_execution_requirement and ignore the async response.
+pcl_status_t invokeReadExecutionRequirement(pcl_executor_t* executor,
+                                            const Query&                 request,
+                                            const char*       content_type = "application/json",
+                                            const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Decode a response from execution_requirement.update_execution_requirement.
+bool decodeUpdateExecutionRequirementResponse(const pcl_msg_t* msg,
+                                              Ack* out);
+
+/// \brief Invoke execution_requirement.update_execution_requirement (typed, serialisation handled internally).
+///
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
+pcl_status_t invokeUpdateExecutionRequirement(pcl_executor_t* executor,
+                                              const ExecutionRequirement&  request,
+                                              pcl_resp_cb_fn_t        callback,
+                                              void*                   user_data = nullptr,
+                                              const pcl_endpoint_route_t* route = nullptr,
+                                              const char*       content_type = "application/json");
+
+/// \brief Invoke execution_requirement.update_execution_requirement and ignore the async response.
+pcl_status_t invokeUpdateExecutionRequirement(pcl_executor_t* executor,
+                                              const ExecutionRequirement&  request,
+                                              const char*       content_type = "application/json",
+                                              const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Decode a response from execution_requirement.delete_execution_requirement.
+bool decodeDeleteExecutionRequirementResponse(const pcl_msg_t* msg,
+                                              Ack* out);
+
+/// \brief Invoke execution_requirement.delete_execution_requirement (typed, serialisation handled internally).
+///
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
+pcl_status_t invokeDeleteExecutionRequirement(pcl_executor_t* executor,
+                                              const Identifier&            request,
+                                              pcl_resp_cb_fn_t        callback,
+                                              void*                   user_data = nullptr,
+                                              const pcl_endpoint_route_t* route = nullptr,
+                                              const char*       content_type = "application/json");
+
+/// \brief Invoke execution_requirement.delete_execution_requirement and ignore the async response.
+pcl_status_t invokeDeleteExecutionRequirement(pcl_executor_t* executor,
+                                              const Identifier&            request,
+                                              const char*       content_type = "application/json",
+                                              const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Decode a response from state.create_state.
 bool decodeCreateStateResponse(const pcl_msg_t* msg,
@@ -311,6 +432,27 @@ pcl_status_t invokeDeleteState(pcl_executor_t* executor,
                                const char*       content_type = "application/json",
                                const pcl_endpoint_route_t* route = nullptr);
 
+/// \brief Decode a response from plan.create_plan.
+bool decodeCreatePlanResponse(const pcl_msg_t* msg,
+                              Identifier* out);
+
+/// \brief Invoke plan.create_plan (typed, serialisation handled internally).
+///
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
+pcl_status_t invokeCreatePlan(pcl_executor_t* executor,
+                              const Plan&                  request,
+                              pcl_resp_cb_fn_t        callback,
+                              void*                   user_data = nullptr,
+                              const pcl_endpoint_route_t* route = nullptr,
+                              const char*       content_type = "application/json");
+
+/// \brief Invoke plan.create_plan and ignore the async response.
+pcl_status_t invokeCreatePlan(pcl_executor_t* executor,
+                              const Plan&                  request,
+                              const char*       content_type = "application/json",
+                              const pcl_endpoint_route_t* route = nullptr);
+
 /// \brief Decode a response from plan.read_plan.
 bool decodeReadPlanResponse(const pcl_msg_t* msg,
                             std::vector<Plan>* out);
@@ -331,6 +473,48 @@ pcl_status_t invokeReadPlan(pcl_executor_t* executor,
                             const Query&                 request,
                             const char*       content_type = "application/json",
                             const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Decode a response from plan.update_plan.
+bool decodeUpdatePlanResponse(const pcl_msg_t* msg,
+                              Ack* out);
+
+/// \brief Invoke plan.update_plan (typed, serialisation handled internally).
+///
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
+pcl_status_t invokeUpdatePlan(pcl_executor_t* executor,
+                              const Plan&                  request,
+                              pcl_resp_cb_fn_t        callback,
+                              void*                   user_data = nullptr,
+                              const pcl_endpoint_route_t* route = nullptr,
+                              const char*       content_type = "application/json");
+
+/// \brief Invoke plan.update_plan and ignore the async response.
+pcl_status_t invokeUpdatePlan(pcl_executor_t* executor,
+                              const Plan&                  request,
+                              const char*       content_type = "application/json",
+                              const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Decode a response from plan.delete_plan.
+bool decodeDeletePlanResponse(const pcl_msg_t* msg,
+                              Ack* out);
+
+/// \brief Invoke plan.delete_plan (typed, serialisation handled internally).
+///
+/// Uses the configured endpoint route, or the legacy
+/// executor transport fallback when no route is supplied.
+pcl_status_t invokeDeletePlan(pcl_executor_t* executor,
+                              const Identifier&            request,
+                              pcl_resp_cb_fn_t        callback,
+                              void*                   user_data = nullptr,
+                              const pcl_endpoint_route_t* route = nullptr,
+                              const char*       content_type = "application/json");
+
+/// \brief Invoke plan.delete_plan and ignore the async response.
+pcl_status_t invokeDeletePlan(pcl_executor_t* executor,
+                              const Identifier&            request,
+                              const char*       content_type = "application/json",
+                              const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Decode a response from execution_run.read_run.
 bool decodeReadRunResponse(const pcl_msg_t* msg,
@@ -413,20 +597,27 @@ inline void bindRos2(pyramid::transport::ros2::Adapter& adapter,
                      pcl_executor_t* executor)
 {
     pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadCapabilities);
-    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcCreateRequirement);
-    pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadRequirement);
-    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcUpdateRequirement);
-    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcDeleteRequirement);
+    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcCreatePlanningRequirement);
+    pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadPlanningRequirement);
+    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcUpdatePlanningRequirement);
+    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcDeletePlanningRequirement);
+    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcCreateExecutionRequirement);
+    pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadExecutionRequirement);
+    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcUpdateExecutionRequirement);
+    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcDeleteExecutionRequirement);
     pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcCreateState);
     pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcUpdateState);
     pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcDeleteState);
+    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcCreatePlan);
     pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadPlan);
+    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcUpdatePlan);
+    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcDeletePlan);
     pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadRun);
     pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadPlacement);
 }
 
 // ---------------------------------------------------------------------------
-// Dispatch — deserialises request, calls handler, serialises response.
+// Dispatch -- deserialises request, calls handler, serialises response.
 //
 // Response buffer is heap-allocated via std::malloc; caller frees with std::free.
 // ---------------------------------------------------------------------------

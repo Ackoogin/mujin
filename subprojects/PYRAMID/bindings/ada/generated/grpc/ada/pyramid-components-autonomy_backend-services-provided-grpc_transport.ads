@@ -1,4 +1,4 @@
---  Auto-generated gRPC transport spec — do not edit
+--  Auto-generated gRPC transport spec -- do not edit
 --  Backend: grpc | Package: Pyramid.Components.Autonomy_backend.Services.Provided.GRPC_Transport
 --
 --  Component-facing calls are typed; the JSON/C ABI shim is private.
@@ -14,7 +14,8 @@ package Pyramid.Components.Autonomy_backend.Services.Provided.GRPC_Transport is
    procedure Configure_Library (Path : String);
 
    type Capabilities_Array is array (Positive range <>) of Pyramid.Data_Model.Autonomy.Types.Capabilities;
-   type Planning_Execution_Requirement_Array is array (Positive range <>) of Pyramid.Data_Model.Autonomy.Types.Planning_Execution_Requirement;
+   type Planning_Requirement_Array is array (Positive range <>) of Pyramid.Data_Model.Autonomy.Types.Planning_Requirement;
+   type Execution_Requirement_Array is array (Positive range <>) of Pyramid.Data_Model.Autonomy.Types.Execution_Requirement;
    type Plan_Array is array (Positive range <>) of Pyramid.Data_Model.Autonomy.Types.Plan;
    type Execution_Run_Array is array (Positive range <>) of Pyramid.Data_Model.Autonomy.Types.Execution_Run;
    type Requirement_Placement_Array is array (Positive range <>) of Pyramid.Data_Model.Autonomy.Types.Requirement_Placement;
@@ -26,24 +27,46 @@ package Pyramid.Components.Autonomy_backend.Services.Provided.GRPC_Transport is
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Capabilities_Array;
 
-   --  Planning_Execution_Service
+   --  Planning_Requirement_Service
 
-   function Invoke_Create_Requirement
+   function Invoke_Create_Planning_Requirement
      (Channel : String;
-      Request : Pyramid.Data_Model.Autonomy.Types.Planning_Execution_Requirement)
+      Request : Pyramid.Data_Model.Autonomy.Types.Planning_Requirement)
       return Pyramid.Data_Model.Base.Types.Identifier;
 
-   function Invoke_Read_Requirement
+   function Invoke_Read_Planning_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
-      return Planning_Execution_Requirement_Array;
+      return Planning_Requirement_Array;
 
-   function Invoke_Update_Requirement
+   function Invoke_Update_Planning_Requirement
      (Channel : String;
-      Request : Pyramid.Data_Model.Autonomy.Types.Planning_Execution_Requirement)
+      Request : Pyramid.Data_Model.Autonomy.Types.Planning_Requirement)
       return Pyramid.Data_Model.Common.Types.Ack;
 
-   function Invoke_Delete_Requirement
+   function Invoke_Delete_Planning_Requirement
+     (Channel : String;
+      Request : Pyramid.Data_Model.Base.Types.Identifier)
+      return Pyramid.Data_Model.Common.Types.Ack;
+
+   --  Execution_Requirement_Service
+
+   function Invoke_Create_Execution_Requirement
+     (Channel : String;
+      Request : Pyramid.Data_Model.Autonomy.Types.Execution_Requirement)
+      return Pyramid.Data_Model.Base.Types.Identifier;
+
+   function Invoke_Read_Execution_Requirement
+     (Channel : String;
+      Request : Pyramid.Data_Model.Common.Types.Query)
+      return Execution_Requirement_Array;
+
+   function Invoke_Update_Execution_Requirement
+     (Channel : String;
+      Request : Pyramid.Data_Model.Autonomy.Types.Execution_Requirement)
+      return Pyramid.Data_Model.Common.Types.Ack;
+
+   function Invoke_Delete_Execution_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Base.Types.Identifier)
       return Pyramid.Data_Model.Common.Types.Ack;
@@ -67,10 +90,25 @@ package Pyramid.Components.Autonomy_backend.Services.Provided.GRPC_Transport is
 
    --  Plan_Service
 
+   function Invoke_Create_Plan
+     (Channel : String;
+      Request : Pyramid.Data_Model.Autonomy.Types.Plan)
+      return Pyramid.Data_Model.Base.Types.Identifier;
+
    function Invoke_Read_Plan
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Plan_Array;
+
+   function Invoke_Update_Plan
+     (Channel : String;
+      Request : Pyramid.Data_Model.Autonomy.Types.Plan)
+      return Pyramid.Data_Model.Common.Types.Ack;
+
+   function Invoke_Delete_Plan
+     (Channel : String;
+      Request : Pyramid.Data_Model.Base.Types.Identifier)
+      return Pyramid.Data_Model.Common.Types.Ack;
 
    --  Execution_Run_Service
 

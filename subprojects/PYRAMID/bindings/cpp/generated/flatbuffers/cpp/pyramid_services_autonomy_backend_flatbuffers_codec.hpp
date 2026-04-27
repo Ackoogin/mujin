@@ -41,6 +41,12 @@ inline pyramid::data_model::PlanningGoal fromBinaryPlanningGoal(const std::strin
     return fromBinaryPlanningGoal(s.data(), s.size());
 }
 
+std::string toBinary(const pyramid::data_model::ExecutionPolicy& msg);
+pyramid::data_model::ExecutionPolicy fromBinaryExecutionPolicy(const void* data, size_t size);
+inline pyramid::data_model::ExecutionPolicy fromBinaryExecutionPolicy(const std::string& s) {
+    return fromBinaryExecutionPolicy(s.data(), s.size());
+}
+
 std::string toBinary(const pyramid::data_model::WorldFactUpdate& msg);
 pyramid::data_model::WorldFactUpdate fromBinaryWorldFactUpdate(const void* data, size_t size);
 inline pyramid::data_model::WorldFactUpdate fromBinaryWorldFactUpdate(const std::string& s) {
@@ -107,10 +113,16 @@ inline pyramid::data_model::Query fromBinaryQuery(const std::string& s) {
     return fromBinaryQuery(s.data(), s.size());
 }
 
-std::string toBinary(const pyramid::data_model::PlanningExecutionRequirement& msg);
-pyramid::data_model::PlanningExecutionRequirement fromBinaryPlanningExecutionRequirement(const void* data, size_t size);
-inline pyramid::data_model::PlanningExecutionRequirement fromBinaryPlanningExecutionRequirement(const std::string& s) {
-    return fromBinaryPlanningExecutionRequirement(s.data(), s.size());
+std::string toBinary(const pyramid::data_model::PlanningRequirement& msg);
+pyramid::data_model::PlanningRequirement fromBinaryPlanningRequirement(const void* data, size_t size);
+inline pyramid::data_model::PlanningRequirement fromBinaryPlanningRequirement(const std::string& s) {
+    return fromBinaryPlanningRequirement(s.data(), s.size());
+}
+
+std::string toBinary(const pyramid::data_model::ExecutionRequirement& msg);
+pyramid::data_model::ExecutionRequirement fromBinaryExecutionRequirement(const void* data, size_t size);
+inline pyramid::data_model::ExecutionRequirement fromBinaryExecutionRequirement(const std::string& s) {
+    return fromBinaryExecutionRequirement(s.data(), s.size());
 }
 
 std::string toBinary(const pyramid::data_model::ExecutionRun& msg);
@@ -131,10 +143,16 @@ inline std::vector<pyramid::data_model::Capabilities> fromBinaryCapabilitiesArra
     return fromBinaryCapabilitiesArray(s.data(), s.size());
 }
 
-std::string toBinary(const std::vector<pyramid::data_model::PlanningExecutionRequirement>& msg);
-std::vector<pyramid::data_model::PlanningExecutionRequirement> fromBinaryPlanningExecutionRequirementArray(const void* data, size_t size);
-inline std::vector<pyramid::data_model::PlanningExecutionRequirement> fromBinaryPlanningExecutionRequirementArray(const std::string& s) {
-    return fromBinaryPlanningExecutionRequirementArray(s.data(), s.size());
+std::string toBinary(const std::vector<pyramid::data_model::PlanningRequirement>& msg);
+std::vector<pyramid::data_model::PlanningRequirement> fromBinaryPlanningRequirementArray(const void* data, size_t size);
+inline std::vector<pyramid::data_model::PlanningRequirement> fromBinaryPlanningRequirementArray(const std::string& s) {
+    return fromBinaryPlanningRequirementArray(s.data(), s.size());
+}
+
+std::string toBinary(const std::vector<pyramid::data_model::ExecutionRequirement>& msg);
+std::vector<pyramid::data_model::ExecutionRequirement> fromBinaryExecutionRequirementArray(const void* data, size_t size);
+inline std::vector<pyramid::data_model::ExecutionRequirement> fromBinaryExecutionRequirementArray(const std::string& s) {
+    return fromBinaryExecutionRequirementArray(s.data(), s.size());
 }
 
 std::string toBinary(const std::vector<pyramid::data_model::Plan>& msg);

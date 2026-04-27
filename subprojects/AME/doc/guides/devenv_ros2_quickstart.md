@@ -6,10 +6,10 @@ No. The dev environment (`subprojects/AME/tools/devenv`) connects directly to th
 
 This guide covers the existing ROS2/Foxglove devenv path. The new PYRAMID
 autonomy backend contract is being tracked separately as a planned devenv mode
-so developers can create `PlanningExecutionRequirement` entities, push
-`StateUpdate` feedback, and inspect `Plan`, `ExecutionRun`, and
-`RequirementPlacement` products locally. See
-`subprojects/PYRAMID/proto/pyramid/components/autonomy_backend/ALIGNMENT.md`
+so developers can create separate `PlanningRequirement` and
+`ExecutionRequirement` entities, push `StateUpdate` feedback, and inspect
+`Plan` resources plus `ExecutionRun` and `RequirementPlacement` products
+locally. See `doc/todo/AME/ALIGNMENT.md`
 for the current contract progress and devenv support plan.
 
 It uses two parallel connections:
@@ -172,5 +172,3 @@ ros2 service call /world_model_node/load_domain ame_ros2/srv/LoadDomain ^
 ros2 service call /planner_node/load_domain ame_ros2/srv/LoadDomain ^
   "{domain_id: 'test', domain_pddl: '...', problem_pddl: '...'}"
 ```
-
-

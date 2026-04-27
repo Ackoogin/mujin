@@ -1,4 +1,4 @@
-// Auto-generated gRPC transport — do not edit
+// Auto-generated gRPC transport -- do not edit
 // Backend: grpc | Namespace: pyramid::services::tactical_objects::consumed::grpc_transport
 //
 // Exposes proto services as gRPC services, delegating to
@@ -18,7 +18,7 @@
 namespace pyramid::services::tactical_objects::consumed::grpc_transport {
 
 // ---------------------------------------------------------------------------
-// Object_Evidence_Service — gRPC service implementation
+// Object_Evidence_Service -- gRPC service implementation
 // ---------------------------------------------------------------------------
 
 class Object_Evidence_ServiceImpl final : public pyramid::components::tactical_objects::services::consumed::Object_Evidence_Service::Service {
@@ -36,7 +36,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Object_Solution_Evidence_Service — gRPC service implementation
+// Object_Solution_Evidence_Service -- gRPC service implementation
 // ---------------------------------------------------------------------------
 
 class Object_Solution_Evidence_ServiceImpl final : public pyramid::components::tactical_objects::services::consumed::Object_Solution_Evidence_Service::Service {
@@ -69,7 +69,7 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// Object_Source_Capability_Service — gRPC service implementation
+// Object_Source_Capability_Service -- gRPC service implementation
 // ---------------------------------------------------------------------------
 
 class Object_Source_Capability_ServiceImpl final : public pyramid::components::tactical_objects::services::consumed::Object_Source_Capability_Service::Service {

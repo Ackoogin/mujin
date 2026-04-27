@@ -9,10 +9,8 @@ package Pyramid.Data_Model.Autonomy.Types_Codec is
 
    function To_String (V : Fact_Authority_Level) return String;
    function Fact_Authority_Level_From_String (S : String) return Fact_Authority_Level;
-   function To_String (V : Planning_Execution_Mode) return String;
-   function Planning_Execution_Mode_From_String (S : String) return Planning_Execution_Mode;
-   function To_String (V : Planning_Execution_State) return String;
-   function Planning_Execution_State_From_String (S : String) return Planning_Execution_State;
+   function To_String (V : Execution_State) return String;
+   function Execution_State_From_String (S : String) return Execution_State;
    function To_String (V : Requirement_Placement_Operation) return String;
    function Requirement_Placement_Operation_From_String (S : String) return Requirement_Placement_Operation;
 
@@ -24,8 +22,12 @@ package Pyramid.Data_Model.Autonomy.Types_Codec is
    function From_Json (S : String; Tag : access Planning_Policy) return Planning_Policy;
    function To_Json (Msg : Planning_Goal) return String;
    function From_Json (S : String; Tag : access Planning_Goal) return Planning_Goal;
-   function To_Json (Msg : Planning_Execution_Requirement) return String;
-   function From_Json (S : String; Tag : access Planning_Execution_Requirement) return Planning_Execution_Requirement;
+   function To_Json (Msg : Execution_Policy) return String;
+   function From_Json (S : String; Tag : access Execution_Policy) return Execution_Policy;
+   function To_Json (Msg : Planning_Requirement) return String;
+   function From_Json (S : String; Tag : access Planning_Requirement) return Planning_Requirement;
+   function To_Json (Msg : Execution_Requirement) return String;
+   function From_Json (S : String; Tag : access Execution_Requirement) return Execution_Requirement;
    function To_Json (Msg : World_Fact_Update) return String;
    function From_Json (S : String; Tag : access World_Fact_Update) return World_Fact_Update;
    function To_Json (Msg : State_Update) return String;
