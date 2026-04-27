@@ -96,3 +96,14 @@ if(NOT WIN32)
     target_link_libraries(test_pcl_template_transport PRIVATE pthread)
 endif()
 gtest_discover_tests(test_pcl_template_transport DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_pcl_apos_transport test_pcl_apos_transport.cpp)
+target_link_libraries(test_pcl_apos_transport
+    PRIVATE pcl_core pcl_transport_apos GTest::gtest_main)
+target_include_directories(test_pcl_apos_transport PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${PCL_ROOT_DIR}/bindings/apos)
+if(NOT WIN32)
+    target_link_libraries(test_pcl_apos_transport PRIVATE pthread)
+endif()
+gtest_discover_tests(test_pcl_apos_transport DISCOVERY_MODE PRE_TEST)

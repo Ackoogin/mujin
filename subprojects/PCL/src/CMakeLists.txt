@@ -128,8 +128,50 @@ set_target_properties(pcl_transport_template PROPERTIES
   C_EXTENSIONS OFF
 )
 
+# ---------------------------------------------------------------------------
+# apos_stub + pcl_transport_apos -- APOS Local Virtual Channel transport
+# ---------------------------------------------------------------------------
+add_library(apos_stub STATIC
+  ${PCL_ROOT_DIR}/bindings/apos/apos.c
+)
+
+target_include_directories(apos_stub PUBLIC
+  ${PCL_ROOT_DIR}/bindings/apos
+)
+
+target_link_libraries(apos_stub PUBLIC Threads::Threads)
+
+set_target_properties(apos_stub PROPERTIES
+  LINKER_LANGUAGE C
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+)
+
+add_library(pcl_transport_apos STATIC
+  pcl_transport_apos.c
+)
+
+target_include_directories(pcl_transport_apos PUBLIC
+  ${PCL_ROOT_DIR}/include
+)
+
+target_include_directories(pcl_transport_apos PRIVATE
+  ${PCL_ROOT_DIR}/bindings/apos
+)
+
+target_link_libraries(pcl_transport_apos
+  PUBLIC pcl_core pcl_transport_template apos_stub)
+
+set_target_properties(pcl_transport_apos PROPERTIES
+  LINKER_LANGUAGE C
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+)
+
 # Install
-install(TARGETS pcl_core pcl_transport_socket pcl_transport_udp pcl_transport_shared_memory pcl_transport_template
+install(TARGETS pcl_core pcl_transport_socket pcl_transport_udp pcl_transport_shared_memory pcl_transport_template pcl_transport_apos apos_stub
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
 )
