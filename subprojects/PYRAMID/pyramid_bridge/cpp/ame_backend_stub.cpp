@@ -39,7 +39,7 @@
 #include <thread>
 
 using json = nlohmann::json;
-namespace autonomy_codec = pyramid::data_model::autonomy;
+namespace autonomy_codec = pyramid::domain_model::autonomy;
 
 static std::atomic<bool> g_shutdown{false};
 static void signal_handler(int) { g_shutdown.store(true); }
@@ -67,21 +67,21 @@ static bool ends_with(const std::string& value, const char* suffix) {
 }
 
 static bool is_entity_evidence_world_fact(
-    const pyramid::data_model::autonomy::WorldFactUpdate& fact) {
+    const pyramid::domain_model::autonomy::WorldFactUpdate& fact) {
   return starts_with(fact.key, "entity_") &&
          ends_with(fact.key, "_exists") &&
          fact.key.size() > std::strlen("entity__exists") &&
          fact.value &&
          fact.source == "pyramid_bridge" &&
          fact.authority ==
-             pyramid::data_model::autonomy::FactAuthorityLevel::Confirmed;
+             pyramid::domain_model::autonomy::FactAuthorityLevel::Confirmed;
 }
 
 // ---------------------------------------------------------------------------
 // State_Update handler -- decodes JSON and logs each world fact
 // ---------------------------------------------------------------------------
 
-static void handle_state_update(const pyramid::data_model::autonomy::StateUpdate& update) {
+static void handle_state_update(const pyramid::domain_model::autonomy::StateUpdate& update) {
   g_state_updates_received.fetch_add(1);
   std::fprintf(stderr, "[ame_stub] state.update_state received"
                " source=%s facts=%zu\n",
@@ -128,7 +128,7 @@ static pcl_status_t state_service_handler(pcl_container_t*,
                               request->size);
     const auto update =
         autonomy_codec::fromJson(payload,
-                                 static_cast<pyramid::data_model::autonomy::StateUpdate*>(nullptr));
+                                 static_cast<pyramid::domain_model::autonomy::StateUpdate*>(nullptr));
     handle_state_update(update);
   } catch (const std::exception& ex) {
     std::fprintf(stderr, "[ame_stub] JSON decode error: %s\n", ex.what());

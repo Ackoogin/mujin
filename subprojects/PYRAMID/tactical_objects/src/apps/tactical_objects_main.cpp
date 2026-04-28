@@ -49,8 +49,8 @@ protected:
 private:
   class Handler : public consumed::ServiceHandler {
   public:
-    pyramid::data_model::Identifier
-    handleCreateRequirement(const pyramid::data_model::ObjectEvidenceRequirement&) override {
+    pyramid::domain_model::Identifier
+    handleCreateRequirement(const pyramid::domain_model::ObjectEvidenceRequirement&) override {
       return "stub-evidence-requirement-001";
     }
   };
@@ -119,11 +119,11 @@ protected:
       return PCL_OK;
     }
 
-    pyramid::data_model::ObjectDetail evidence;
+    pyramid::domain_model::ObjectDetail evidence;
     evidence.id = "bridge-e2e-evidence";
     evidence.entity_source = "demo-radar";
-    evidence.identity = pyramid::data_model::StandardIdentity::Hostile;
-    evidence.dimension = pyramid::data_model::BattleDimension::SeaSurface;
+    evidence.identity = pyramid::domain_model::StandardIdentity::Hostile;
+    evidence.dimension = pyramid::domain_model::BattleDimension::SeaSurface;
     evidence.position.latitude = 51.0 * kDegToRad;
     evidence.position.longitude = 0.0;
     evidence.quality = 0.95;

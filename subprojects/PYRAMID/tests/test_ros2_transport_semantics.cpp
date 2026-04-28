@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-namespace provided = pyramid::services::tactical_objects::provided;
+namespace provided = pyramid::components::tactical_objects::services::provided;
 namespace ros2_support = pyramid::transport::ros2;
 
 namespace {

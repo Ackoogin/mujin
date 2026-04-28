@@ -4,10 +4,14 @@
 
 #include "pyramid_data_model_common_codec.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
+#include "pyramid/data_model/base.pb.h"
+#include "pyramid/data_model/common.pb.h"
+#include "pyramid/data_model/tactical.pb.h"
 
 #include <cstdlib>
 #include <cstring>
 #include <nlohmann/json.hpp>
+#include <cmath>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -78,11 +82,11 @@ std::vector<T> decode_array(const void* data, size_t size, FromJsonFn from_json,
   return out;
 }
 
-std::string encode_identifier_json(const pyramid::data_model::Identifier& value) {
+std::string encode_identifier_json(const pyramid::domain_model::Identifier& value) {
   return nlohmann::json(value).dump();
 }
 
-pyramid::data_model::Identifier decode_identifier_json(const std::string& json) {
+pyramid::domain_model::Identifier decode_identifier_json(const std::string& json) {
   auto parsed = nlohmann::json::parse(json);
   if (!parsed.is_string()) {
     return {};
@@ -90,351 +94,493 @@ pyramid::data_model::Identifier decode_identifier_json(const std::string& json) 
   return parsed.get<std::string>();
 }
 
+template <typename MessageT>
+std::string serialize_proto(const MessageT& message, const char* type_name) {
+  std::string out;
+  if (!message.SerializeToString(&out)) {
+    throw std::runtime_error(std::string("protobuf serialization failed for ") + type_name);
+  }
+  return out;
+}
+
+template <typename MessageT>
+MessageT parse_proto(const void* data, size_t size, const char* type_name) {
+  MessageT message;
+  if ((data == nullptr && size != 0) ||
+      !message.ParseFromArray(data, static_cast<int>(size))) {
+    throw std::runtime_error(std::string("protobuf decode failed for ") + type_name);
+  }
+  return message;
+}
+
+double timestamp_to_seconds(const ::pyramid::data_model::base::Timestamp& ts) {
+  if (!ts.has_value()) {
+    return 0.0;
+  }
+  return static_cast<double>(ts.value().seconds()) +
+         static_cast<double>(ts.value().nanos()) / 1'000'000'000.0;
+}
+
+void set_timestamp(double seconds, ::pyramid::data_model::base::Timestamp* out) {
+  if (out == nullptr) {
+    return;
+  }
+  auto whole_seconds = static_cast<int64_t>(std::floor(seconds));
+  auto nanos = static_cast<int32_t>(
+      std::llround((seconds - static_cast<double>(whole_seconds)) * 1'000'000'000.0));
+  if (nanos >= 1'000'000'000) {
+    whole_seconds += 1;
+    nanos -= 1'000'000'000;
+  } else if (nanos < 0) {
+    whole_seconds -= 1;
+    nanos += 1'000'000'000;
+  }
+  auto* value = out->mutable_value();
+  value->set_seconds(whole_seconds);
+  value->set_nanos(nanos);
+}
+
+::pyramid::data_model::common::GeodeticPosition to_proto(
+    const pyramid::domain_model::GeodeticPosition& msg) {
+  ::pyramid::data_model::common::GeodeticPosition out;
+  out.mutable_latitude()->set_radians(msg.latitude);
+  out.mutable_longitude()->set_radians(msg.longitude);
+  return out;
+}
+
+pyramid::domain_model::GeodeticPosition from_proto(
+    const ::pyramid::data_model::common::GeodeticPosition& msg) {
+  pyramid::domain_model::GeodeticPosition out;
+  if (msg.has_latitude()) {
+    out.latitude = msg.latitude().radians();
+  }
+  if (msg.has_longitude()) {
+    out.longitude = msg.longitude().radians();
+  }
+  return out;
+}
+
+::pyramid::data_model::tactical::ObjectDetail to_proto(
+    const pyramid::domain_model::ObjectDetail& msg) {
+  ::pyramid::data_model::tactical::ObjectDetail out;
+  auto* base = out.mutable_base();
+  if (msg.update_time.has_value()) {
+    set_timestamp(*msg.update_time, base->mutable_update_time());
+  }
+  if (!msg.id.empty()) {
+    base->mutable_id()->set_value(msg.id);
+  }
+  if (!msg.entity_source.empty()) {
+    base->mutable_source()->set_value(msg.entity_source);
+  }
+  for (const auto source : msg.source) {
+    out.add_source(static_cast<::pyramid::data_model::tactical::ObjectSource>(
+        static_cast<int>(source)));
+  }
+  *out.mutable_position() = to_proto(msg.position);
+  set_timestamp(msg.creation_time, out.mutable_creation_time());
+  if (msg.quality.has_value()) {
+    out.mutable_quality()->set_value(*msg.quality);
+  }
+  if (msg.course.has_value()) {
+    out.mutable_course()->set_radians(*msg.course);
+  }
+  if (msg.speed.has_value()) {
+    out.mutable_speed()->set_meters_per_second(*msg.speed);
+  }
+  if (msg.length.has_value()) {
+    out.mutable_length()->set_meters(*msg.length);
+  }
+  out.set_identity(static_cast<::pyramid::data_model::common::StandardIdentity>(
+      static_cast<int>(msg.identity)));
+  out.set_dimension(static_cast<::pyramid::data_model::common::BattleDimension>(
+      static_cast<int>(msg.dimension)));
+  return out;
+}
+
+pyramid::domain_model::ObjectDetail from_proto(
+    const ::pyramid::data_model::tactical::ObjectDetail& msg) {
+  pyramid::domain_model::ObjectDetail out;
+  if (msg.has_base()) {
+    const auto& base = msg.base();
+    if (base.has_update_time()) {
+      out.update_time = timestamp_to_seconds(base.update_time());
+    }
+    if (base.has_id()) {
+      out.id = base.id().value();
+    }
+    if (base.has_source()) {
+      out.entity_source = base.source().value();
+    }
+  }
+  if (msg.has_position()) {
+    out.position = from_proto(msg.position());
+  }
+  if (msg.has_creation_time()) {
+    out.creation_time = timestamp_to_seconds(msg.creation_time());
+  }
+  if (msg.has_quality()) {
+    out.quality = msg.quality().value();
+  }
+  if (msg.has_course()) {
+    out.course = msg.course().radians();
+  }
+  if (msg.has_speed()) {
+    out.speed = msg.speed().meters_per_second();
+  }
+  if (msg.has_length()) {
+    out.length = msg.length().meters();
+  }
+  out.identity = static_cast<pyramid::domain_model::StandardIdentity>(
+      static_cast<int>(msg.identity()));
+  out.dimension = static_cast<pyramid::domain_model::BattleDimension>(
+      static_cast<int>(msg.dimension()));
+  out.source.reserve(static_cast<size_t>(msg.source_size()));
+  for (const auto source : msg.source()) {
+    out.source.push_back(static_cast<pyramid::domain_model::ObjectSource>(
+        static_cast<int>(source)));
+  }
+  return out;
+}
+
 }  // namespace
 
-std::string toBinary(const pyramid::data_model::GeodeticPosition& msg) {
-  return encode_single(msg, [](const pyramid::data_model::GeodeticPosition& value) {
-                         return pyramid::data_model::common::toJson(value);
+std::string toBinary(const pyramid::domain_model::GeodeticPosition& msg) {
+  return encode_single(msg, [](const pyramid::domain_model::GeodeticPosition& value) {
+                         return pyramid::domain_model::common::toJson(value);
                        },
                        pyramid_services_tactical_objects_GeodeticPosition_to_protobuf_json);
 }
 
-pyramid::data_model::GeodeticPosition fromBinaryGeodeticPosition(const void* data,
+pyramid::domain_model::GeodeticPosition fromBinaryGeodeticPosition(const void* data,
                                                                  size_t size) {
-  return decode_single<pyramid::data_model::GeodeticPosition>(
+  return decode_single<pyramid::domain_model::GeodeticPosition>(
       data, size,
-      [](const std::string& json, pyramid::data_model::GeodeticPosition* tag) {
-        return pyramid::data_model::common::fromJson(json, tag);
+      [](const std::string& json, pyramid::domain_model::GeodeticPosition* tag) {
+        return pyramid::domain_model::common::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_GeodeticPosition_from_protobuf_json);
 }
 
-std::string toBinary(const pyramid::data_model::PolyArea& msg) {
-  return encode_single(msg, [](const pyramid::data_model::PolyArea& value) {
-                         return pyramid::data_model::common::toJson(value);
+std::string toBinary(const pyramid::domain_model::PolyArea& msg) {
+  return encode_single(msg, [](const pyramid::domain_model::PolyArea& value) {
+                         return pyramid::domain_model::common::toJson(value);
                        },
                        pyramid_services_tactical_objects_PolyArea_to_protobuf_json);
 }
 
-pyramid::data_model::PolyArea fromBinaryPolyArea(const void* data, size_t size) {
-  return decode_single<pyramid::data_model::PolyArea>(
+pyramid::domain_model::PolyArea fromBinaryPolyArea(const void* data, size_t size) {
+  return decode_single<pyramid::domain_model::PolyArea>(
       data, size,
-      [](const std::string& json, pyramid::data_model::PolyArea* tag) {
-        return pyramid::data_model::common::fromJson(json, tag);
+      [](const std::string& json, pyramid::domain_model::PolyArea* tag) {
+        return pyramid::domain_model::common::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_PolyArea_from_protobuf_json);
 }
 
-std::string toBinary(const pyramid::data_model::Achievement& msg) {
-  return encode_single(msg, [](const pyramid::data_model::Achievement& value) {
-                         return pyramid::data_model::common::toJson(value);
+std::string toBinary(const pyramid::domain_model::Achievement& msg) {
+  return encode_single(msg, [](const pyramid::domain_model::Achievement& value) {
+                         return pyramid::domain_model::common::toJson(value);
                        },
                        pyramid_services_tactical_objects_Achievement_to_protobuf_json);
 }
 
-pyramid::data_model::Achievement fromBinaryAchievement(const void* data,
+pyramid::domain_model::Achievement fromBinaryAchievement(const void* data,
                                                        size_t size) {
-  return decode_single<pyramid::data_model::Achievement>(
+  return decode_single<pyramid::domain_model::Achievement>(
       data, size,
-      [](const std::string& json, pyramid::data_model::Achievement* tag) {
-        return pyramid::data_model::common::fromJson(json, tag);
+      [](const std::string& json, pyramid::domain_model::Achievement* tag) {
+        return pyramid::domain_model::common::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_Achievement_from_protobuf_json);
 }
 
-std::string toBinary(const pyramid::data_model::Entity& msg) {
-  return encode_single(msg, [](const pyramid::data_model::Entity& value) {
-                         return pyramid::data_model::common::toJson(value);
+std::string toBinary(const pyramid::domain_model::Entity& msg) {
+  return encode_single(msg, [](const pyramid::domain_model::Entity& value) {
+                         return pyramid::domain_model::common::toJson(value);
                        },
                        pyramid_services_tactical_objects_Entity_to_protobuf_json);
 }
 
-pyramid::data_model::Entity fromBinaryEntity(const void* data, size_t size) {
-  return decode_single<pyramid::data_model::Entity>(
+pyramid::domain_model::Entity fromBinaryEntity(const void* data, size_t size) {
+  return decode_single<pyramid::domain_model::Entity>(
       data, size,
-      [](const std::string& json, pyramid::data_model::Entity* tag) {
-        return pyramid::data_model::common::fromJson(json, tag);
+      [](const std::string& json, pyramid::domain_model::Entity* tag) {
+        return pyramid::domain_model::common::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_Entity_from_protobuf_json);
 }
 
-std::string toBinary(const pyramid::data_model::CircleArea& msg) {
-  return encode_single(msg, [](const pyramid::data_model::CircleArea& value) {
-                         return pyramid::data_model::common::toJson(value);
+std::string toBinary(const pyramid::domain_model::CircleArea& msg) {
+  return encode_single(msg, [](const pyramid::domain_model::CircleArea& value) {
+                         return pyramid::domain_model::common::toJson(value);
                        },
                        pyramid_services_tactical_objects_CircleArea_to_protobuf_json);
 }
 
-pyramid::data_model::CircleArea fromBinaryCircleArea(const void* data,
+pyramid::domain_model::CircleArea fromBinaryCircleArea(const void* data,
                                                      size_t size) {
-  return decode_single<pyramid::data_model::CircleArea>(
+  return decode_single<pyramid::domain_model::CircleArea>(
       data, size,
-      [](const std::string& json, pyramid::data_model::CircleArea* tag) {
-        return pyramid::data_model::common::fromJson(json, tag);
+      [](const std::string& json, pyramid::domain_model::CircleArea* tag) {
+        return pyramid::domain_model::common::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_CircleArea_from_protobuf_json);
 }
 
-std::string toBinary(const pyramid::data_model::Point& msg) {
-  return encode_single(msg, [](const pyramid::data_model::Point& value) {
-                         return pyramid::data_model::common::toJson(value);
+std::string toBinary(const pyramid::domain_model::Point& msg) {
+  return encode_single(msg, [](const pyramid::domain_model::Point& value) {
+                         return pyramid::domain_model::common::toJson(value);
                        },
                        pyramid_services_tactical_objects_Point_to_protobuf_json);
 }
 
-pyramid::data_model::Point fromBinaryPoint(const void* data, size_t size) {
-  return decode_single<pyramid::data_model::Point>(
+pyramid::domain_model::Point fromBinaryPoint(const void* data, size_t size) {
+  return decode_single<pyramid::domain_model::Point>(
       data, size,
-      [](const std::string& json, pyramid::data_model::Point* tag) {
-        return pyramid::data_model::common::fromJson(json, tag);
+      [](const std::string& json, pyramid::domain_model::Point* tag) {
+        return pyramid::domain_model::common::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_Point_from_protobuf_json);
 }
 
-std::string toBinary(const pyramid::data_model::Contraint& msg) {
-  return encode_single(msg, [](const pyramid::data_model::Contraint& value) {
-                         return pyramid::data_model::common::toJson(value);
+std::string toBinary(const pyramid::domain_model::Contraint& msg) {
+  return encode_single(msg, [](const pyramid::domain_model::Contraint& value) {
+                         return pyramid::domain_model::common::toJson(value);
                        },
                        pyramid_services_tactical_objects_Contraint_to_protobuf_json);
 }
 
-pyramid::data_model::Contraint fromBinaryContraint(const void* data,
+pyramid::domain_model::Contraint fromBinaryContraint(const void* data,
                                                    size_t size) {
-  return decode_single<pyramid::data_model::Contraint>(
+  return decode_single<pyramid::domain_model::Contraint>(
       data, size,
-      [](const std::string& json, pyramid::data_model::Contraint* tag) {
-        return pyramid::data_model::common::fromJson(json, tag);
+      [](const std::string& json, pyramid::domain_model::Contraint* tag) {
+        return pyramid::domain_model::common::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_Contraint_from_protobuf_json);
 }
 
-std::string toBinary(const pyramid::data_model::Ack& msg) {
-  return encode_single(msg, [](const pyramid::data_model::Ack& value) {
-                         return pyramid::data_model::common::toJson(value);
+std::string toBinary(const pyramid::domain_model::Ack& msg) {
+  return encode_single(msg, [](const pyramid::domain_model::Ack& value) {
+                         return pyramid::domain_model::common::toJson(value);
                        },
                        pyramid_services_tactical_objects_Ack_to_protobuf_json);
 }
 
-pyramid::data_model::Ack fromBinaryAck(const void* data, size_t size) {
-  return decode_single<pyramid::data_model::Ack>(
+pyramid::domain_model::Ack fromBinaryAck(const void* data, size_t size) {
+  return decode_single<pyramid::domain_model::Ack>(
       data, size,
-      [](const std::string& json, pyramid::data_model::Ack* tag) {
-        return pyramid::data_model::common::fromJson(json, tag);
+      [](const std::string& json, pyramid::domain_model::Ack* tag) {
+        return pyramid::domain_model::common::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_Ack_from_protobuf_json);
 }
 
-std::string toBinary(const pyramid::data_model::Query& msg) {
-  return encode_single(msg, [](const pyramid::data_model::Query& value) {
-                         return pyramid::data_model::common::toJson(value);
+std::string toBinary(const pyramid::domain_model::Query& msg) {
+  return encode_single(msg, [](const pyramid::domain_model::Query& value) {
+                         return pyramid::domain_model::common::toJson(value);
                        },
                        pyramid_services_tactical_objects_Query_to_protobuf_json);
 }
 
-pyramid::data_model::Query fromBinaryQuery(const void* data, size_t size) {
-  return decode_single<pyramid::data_model::Query>(
+pyramid::domain_model::Query fromBinaryQuery(const void* data, size_t size) {
+  return decode_single<pyramid::domain_model::Query>(
       data, size,
-      [](const std::string& json, pyramid::data_model::Query* tag) {
-        return pyramid::data_model::common::fromJson(json, tag);
+      [](const std::string& json, pyramid::domain_model::Query* tag) {
+        return pyramid::domain_model::common::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_Query_from_protobuf_json);
 }
 
-std::string toBinary(const pyramid::data_model::ObjectDetail& msg) {
-  return encode_single(msg, [](const pyramid::data_model::ObjectDetail& value) {
-                         return pyramid::data_model::tactical::toJson(value);
-                       },
-                       pyramid_services_tactical_objects_ObjectDetail_to_protobuf_json);
+std::string toBinary(const pyramid::domain_model::ObjectDetail& msg) {
+  return serialize_proto(to_proto(msg), "ObjectDetail");
 }
 
-pyramid::data_model::ObjectDetail fromBinaryObjectDetail(const void* data,
-                                                         size_t size) {
-  return decode_single<pyramid::data_model::ObjectDetail>(
-      data, size,
-      [](const std::string& json, pyramid::data_model::ObjectDetail* tag) {
-        return pyramid::data_model::tactical::fromJson(json, tag);
-      },
-      pyramid_services_tactical_objects_ObjectDetail_from_protobuf_json);
+pyramid::domain_model::ObjectDetail fromBinaryObjectDetail(const void* data,
+                                                                 size_t size) {
+  return from_proto(parse_proto<::pyramid::data_model::tactical::ObjectDetail>(
+      data, size, "ObjectDetail"));
 }
 
-std::string toBinary(const pyramid::data_model::ObjectEvidenceRequirement& msg) {
+std::string toBinary(const pyramid::domain_model::ObjectEvidenceRequirement& msg) {
   return encode_single(
       msg,
-      [](const pyramid::data_model::ObjectEvidenceRequirement& value) {
-        return pyramid::data_model::tactical::toJson(value);
+      [](const pyramid::domain_model::ObjectEvidenceRequirement& value) {
+        return pyramid::domain_model::tactical::toJson(value);
       },
       pyramid_services_tactical_objects_ObjectEvidenceRequirement_to_protobuf_json);
 }
 
-pyramid::data_model::ObjectEvidenceRequirement fromBinaryObjectEvidenceRequirement(
+pyramid::domain_model::ObjectEvidenceRequirement fromBinaryObjectEvidenceRequirement(
     const void* data, size_t size) {
-  return decode_single<pyramid::data_model::ObjectEvidenceRequirement>(
+  return decode_single<pyramid::domain_model::ObjectEvidenceRequirement>(
       data, size,
       [](const std::string& json,
-         pyramid::data_model::ObjectEvidenceRequirement* tag) {
-        return pyramid::data_model::tactical::fromJson(json, tag);
+         pyramid::domain_model::ObjectEvidenceRequirement* tag) {
+        return pyramid::domain_model::tactical::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_ObjectEvidenceRequirement_from_protobuf_json);
 }
 
-std::string toBinary(const pyramid::data_model::ObjectInterestRequirement& msg) {
+std::string toBinary(const pyramid::domain_model::ObjectInterestRequirement& msg) {
   return encode_single(
       msg,
-      [](const pyramid::data_model::ObjectInterestRequirement& value) {
-        return pyramid::data_model::tactical::toJson(value);
+      [](const pyramid::domain_model::ObjectInterestRequirement& value) {
+        return pyramid::domain_model::tactical::toJson(value);
       },
       pyramid_services_tactical_objects_ObjectInterestRequirement_to_protobuf_json);
 }
 
-pyramid::data_model::ObjectInterestRequirement fromBinaryObjectInterestRequirement(
+pyramid::domain_model::ObjectInterestRequirement fromBinaryObjectInterestRequirement(
     const void* data, size_t size) {
-  return decode_single<pyramid::data_model::ObjectInterestRequirement>(
+  return decode_single<pyramid::domain_model::ObjectInterestRequirement>(
       data, size,
       [](const std::string& json,
-         pyramid::data_model::ObjectInterestRequirement* tag) {
-        return pyramid::data_model::tactical::fromJson(json, tag);
+         pyramid::domain_model::ObjectInterestRequirement* tag) {
+        return pyramid::domain_model::tactical::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_ObjectInterestRequirement_from_protobuf_json);
 }
 
-std::string toBinary(const pyramid::data_model::ObjectMatch& msg) {
-  return encode_single(msg, [](const pyramid::data_model::ObjectMatch& value) {
-                         return pyramid::data_model::tactical::toJson(value);
+std::string toBinary(const pyramid::domain_model::ObjectMatch& msg) {
+  return encode_single(msg, [](const pyramid::domain_model::ObjectMatch& value) {
+                         return pyramid::domain_model::tactical::toJson(value);
                        },
                        pyramid_services_tactical_objects_ObjectMatch_to_protobuf_json);
 }
 
-pyramid::data_model::ObjectMatch fromBinaryObjectMatch(const void* data,
+pyramid::domain_model::ObjectMatch fromBinaryObjectMatch(const void* data,
                                                        size_t size) {
-  return decode_single<pyramid::data_model::ObjectMatch>(
+  return decode_single<pyramid::domain_model::ObjectMatch>(
       data, size,
-      [](const std::string& json, pyramid::data_model::ObjectMatch* tag) {
-        return pyramid::data_model::tactical::fromJson(json, tag);
+      [](const std::string& json, pyramid::domain_model::ObjectMatch* tag) {
+        return pyramid::domain_model::tactical::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_ObjectMatch_from_protobuf_json);
 }
 
-std::string toBinary(const pyramid::data_model::Capability& msg) {
-  return encode_single(msg, [](const pyramid::data_model::Capability& value) {
-                         return pyramid::data_model::common::toJson(value);
+std::string toBinary(const pyramid::domain_model::Capability& msg) {
+  return encode_single(msg, [](const pyramid::domain_model::Capability& value) {
+                         return pyramid::domain_model::common::toJson(value);
                        },
                        pyramid_services_tactical_objects_Capability_to_protobuf_json);
 }
 
-pyramid::data_model::Capability fromBinaryCapability(const void* data,
+pyramid::domain_model::Capability fromBinaryCapability(const void* data,
                                                      size_t size) {
-  return decode_single<pyramid::data_model::Capability>(
+  return decode_single<pyramid::domain_model::Capability>(
       data, size,
-      [](const std::string& json, pyramid::data_model::Capability* tag) {
-        return pyramid::data_model::common::fromJson(json, tag);
+      [](const std::string& json, pyramid::domain_model::Capability* tag) {
+        return pyramid::domain_model::common::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_Capability_from_protobuf_json);
 }
 
-std::string toBinary(const pyramid::data_model::Identifier& msg) {
-  return encode_via_json(
-      encode_identifier_json(msg),
-      pyramid_services_tactical_objects_Identifier_to_protobuf_json);
+std::string toBinary(const pyramid::domain_model::Identifier& msg) {
+  ::pyramid::data_model::base::Identifier proto;
+  proto.set_value(msg);
+  return serialize_proto(proto, "Identifier");
 }
 
-pyramid::data_model::Identifier fromBinaryIdentifier(const void* data,
-                                                     size_t size) {
-  return decode_identifier_json(decode_json(
-      data, size, pyramid_services_tactical_objects_Identifier_from_protobuf_json));
+pyramid::domain_model::Identifier fromBinaryIdentifier(const void* data,
+                                                             size_t size) {
+  return parse_proto<::pyramid::data_model::base::Identifier>(
+      data, size, "Identifier").value();
 }
 
-std::string toBinary(const std::vector<pyramid::data_model::ObjectDetail>& msg) {
+std::string toBinary(const std::vector<pyramid::domain_model::ObjectDetail>& msg) {
   return encode_array(msg,
-                      [](const pyramid::data_model::ObjectDetail& value) {
-                        return pyramid::data_model::tactical::toJson(value);
+                      [](const pyramid::domain_model::ObjectDetail& value) {
+                        return pyramid::domain_model::tactical::toJson(value);
                       },
                       pyramid_services_tactical_objects_ObjectDetailArray_to_protobuf_json);
 }
 
-std::vector<pyramid::data_model::ObjectDetail> fromBinaryObjectDetailArray(
+std::vector<pyramid::domain_model::ObjectDetail> fromBinaryObjectDetailArray(
     const void* data, size_t size) {
-  return decode_array<pyramid::data_model::ObjectDetail>(
+  return decode_array<pyramid::domain_model::ObjectDetail>(
       data, size,
-      [](const std::string& json, pyramid::data_model::ObjectDetail* tag) {
-        return pyramid::data_model::tactical::fromJson(json, tag);
+      [](const std::string& json, pyramid::domain_model::ObjectDetail* tag) {
+        return pyramid::domain_model::tactical::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_ObjectDetailArray_from_protobuf_json);
 }
 
 std::string toBinary(
-    const std::vector<pyramid::data_model::ObjectEvidenceRequirement>& msg) {
+    const std::vector<pyramid::domain_model::ObjectEvidenceRequirement>& msg) {
   return encode_array(
       msg,
-      [](const pyramid::data_model::ObjectEvidenceRequirement& value) {
-        return pyramid::data_model::tactical::toJson(value);
+      [](const pyramid::domain_model::ObjectEvidenceRequirement& value) {
+        return pyramid::domain_model::tactical::toJson(value);
       },
       pyramid_services_tactical_objects_ObjectEvidenceRequirementArray_to_protobuf_json);
 }
 
-std::vector<pyramid::data_model::ObjectEvidenceRequirement>
+std::vector<pyramid::domain_model::ObjectEvidenceRequirement>
 fromBinaryObjectEvidenceRequirementArray(const void* data, size_t size) {
-  return decode_array<pyramid::data_model::ObjectEvidenceRequirement>(
+  return decode_array<pyramid::domain_model::ObjectEvidenceRequirement>(
       data, size,
       [](const std::string& json,
-         pyramid::data_model::ObjectEvidenceRequirement* tag) {
-        return pyramid::data_model::tactical::fromJson(json, tag);
+         pyramid::domain_model::ObjectEvidenceRequirement* tag) {
+        return pyramid::domain_model::tactical::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_ObjectEvidenceRequirementArray_from_protobuf_json);
 }
 
-std::string toBinary(const std::vector<pyramid::data_model::Capability>& msg) {
+std::string toBinary(const std::vector<pyramid::domain_model::Capability>& msg) {
   return encode_array(msg,
-                      [](const pyramid::data_model::Capability& value) {
-                        return pyramid::data_model::common::toJson(value);
+                      [](const pyramid::domain_model::Capability& value) {
+                        return pyramid::domain_model::common::toJson(value);
                       },
                       pyramid_services_tactical_objects_CapabilityArray_to_protobuf_json);
 }
 
-std::vector<pyramid::data_model::Capability> fromBinaryCapabilityArray(
+std::vector<pyramid::domain_model::Capability> fromBinaryCapabilityArray(
     const void* data, size_t size) {
-  return decode_array<pyramid::data_model::Capability>(
+  return decode_array<pyramid::domain_model::Capability>(
       data, size,
-      [](const std::string& json, pyramid::data_model::Capability* tag) {
-        return pyramid::data_model::common::fromJson(json, tag);
+      [](const std::string& json, pyramid::domain_model::Capability* tag) {
+        return pyramid::domain_model::common::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_CapabilityArray_from_protobuf_json);
 }
 
-std::string toBinary(const std::vector<pyramid::data_model::ObjectMatch>& msg) {
+std::string toBinary(const std::vector<pyramid::domain_model::ObjectMatch>& msg) {
   return encode_array(msg,
-                      [](const pyramid::data_model::ObjectMatch& value) {
-                        return pyramid::data_model::tactical::toJson(value);
+                      [](const pyramid::domain_model::ObjectMatch& value) {
+                        return pyramid::domain_model::tactical::toJson(value);
                       },
                       pyramid_services_tactical_objects_ObjectMatchArray_to_protobuf_json);
 }
 
-std::vector<pyramid::data_model::ObjectMatch> fromBinaryObjectMatchArray(
+std::vector<pyramid::domain_model::ObjectMatch> fromBinaryObjectMatchArray(
     const void* data, size_t size) {
-  return decode_array<pyramid::data_model::ObjectMatch>(
+  return decode_array<pyramid::domain_model::ObjectMatch>(
       data, size,
-      [](const std::string& json, pyramid::data_model::ObjectMatch* tag) {
-        return pyramid::data_model::tactical::fromJson(json, tag);
+      [](const std::string& json, pyramid::domain_model::ObjectMatch* tag) {
+        return pyramid::domain_model::tactical::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_ObjectMatchArray_from_protobuf_json);
 }
 
 std::string toBinary(
-    const std::vector<pyramid::data_model::ObjectInterestRequirement>& msg) {
+    const std::vector<pyramid::domain_model::ObjectInterestRequirement>& msg) {
   return encode_array(
       msg,
-      [](const pyramid::data_model::ObjectInterestRequirement& value) {
-        return pyramid::data_model::tactical::toJson(value);
+      [](const pyramid::domain_model::ObjectInterestRequirement& value) {
+        return pyramid::domain_model::tactical::toJson(value);
       },
       pyramid_services_tactical_objects_ObjectInterestRequirementArray_to_protobuf_json);
 }
 
-std::vector<pyramid::data_model::ObjectInterestRequirement>
+std::vector<pyramid::domain_model::ObjectInterestRequirement>
 fromBinaryObjectInterestRequirementArray(const void* data, size_t size) {
-  return decode_array<pyramid::data_model::ObjectInterestRequirement>(
+  return decode_array<pyramid::domain_model::ObjectInterestRequirement>(
       data, size,
       [](const std::string& json,
-         pyramid::data_model::ObjectInterestRequirement* tag) {
-        return pyramid::data_model::tactical::fromJson(json, tag);
+         pyramid::domain_model::ObjectInterestRequirement* tag) {
+        return pyramid::domain_model::tactical::fromJson(json, tag);
       },
       pyramid_services_tactical_objects_ObjectInterestRequirementArray_from_protobuf_json);
 }

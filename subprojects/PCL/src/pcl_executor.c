@@ -54,6 +54,19 @@ static void pcl_sleep_seconds(double seconds) {
 #endif
 }
 
+static void pcl_idle_wait_ms(uint32_t timeout_ms) {
+  if (timeout_ms == 0u) return;
+#ifdef _WIN32
+  if (timeout_ms <= 1u) {
+    if (!SwitchToThread()) {
+      Sleep(0);
+    }
+    return;
+  }
+#endif
+  pcl_sleep_seconds((double)timeout_ms / 1000.0);
+}
+
 // -- Mutex helpers -------------------------------------------------------
 
 #ifdef _WIN32
@@ -378,7 +391,8 @@ static pcl_status_t dispatch_incoming_now(pcl_executor_t*  e,
   return delivered ? PCL_OK : PCL_ERR_NOT_FOUND;
 }
 
-static void drain_resp_cb_queue(pcl_executor_t* e) {
+static uint32_t drain_resp_cb_queue(pcl_executor_t* e) {
+  uint32_t drained = 0u;
   for (;;) {
     pcl_resp_cb_node_t* node;
     pcl_msg_t           resp;
@@ -403,12 +417,16 @@ static void drain_resp_cb_queue(pcl_executor_t* e) {
     free(node->data);
     free(node->type_name);
     free(node);
+    ++drained;
   }
+  return drained;
 }
 
-static pcl_status_t drain_incoming_queue(pcl_executor_t* e) {
+static pcl_status_t drain_incoming_queue(pcl_executor_t* e,
+                                         uint32_t*        drained_count) {
   pcl_pending_msg_t* pending;
   pcl_status_t       rc = PCL_OK;
+  uint32_t           drained = 0u;
 
   if (!e) return PCL_ERR_INVALID;
 
@@ -439,12 +457,14 @@ static pcl_status_t drain_incoming_queue(pcl_executor_t* e) {
                                                           : PCL_ROUTE_LOCAL,
                                pending->source_peer_id);
     free_pending_msg(pending);
+    ++drained;
 
     if (rc != PCL_OK) {
       return rc;
     }
   }
 
+  if (drained_count) *drained_count = drained;
   return PCL_OK;
 }
 
@@ -462,7 +482,8 @@ static struct pcl_port_t* find_service(pcl_executor_t* e,
 // If the service is not found, the callback is still fired with an empty
 // message so the caller is never silently abandoned.
 
-static void drain_svc_req_queue(pcl_executor_t* e) {
+static uint32_t drain_svc_req_queue(pcl_executor_t* e) {
+  uint32_t drained = 0u;
   for (;;) {
     pcl_pending_svc_req_t* node;
 
@@ -528,7 +549,9 @@ static void drain_svc_req_queue(pcl_executor_t* e) {
     free(node->data);
     free(node->source_peer_id);
     free(node);
+    ++drained;
   }
+  return drained;
 }
 
 // -- Tick one container --------------------------------------------------
@@ -576,19 +599,20 @@ pcl_status_t pcl_executor_spin(pcl_executor_t* e) {
   t_prev = pcl_clock_now();
 
   while (!e->shutdown_requested) {
+    uint32_t incoming_drained = 0u;
     double t_now = pcl_clock_now();
     double dt = t_now - t_prev;
     double elapsed;
     double remaining;
     t_prev = t_now;
 
-    rc = drain_incoming_queue(e);
+    rc = drain_incoming_queue(e, &incoming_drained);
     if (rc != PCL_OK) {
       return rc;
     }
 
-    drain_svc_req_queue(e);
-    drain_resp_cb_queue(e);
+    (void)drain_svc_req_queue(e);
+    (void)drain_resp_cb_queue(e);
 
     for (i = 0; i < e->container_count; ++i) {
       tick_container(e->containers[i], dt);
@@ -610,22 +634,31 @@ pcl_status_t pcl_executor_spin_once(pcl_executor_t* e, uint32_t timeout_ms) {
   double dt;
   pcl_status_t rc;
   uint32_t i;
+  uint32_t incoming_drained = 0u;
+  uint32_t svc_drained = 0u;
+  uint32_t resp_drained = 0u;
 
   if (!e) return PCL_ERR_INVALID;
-  (void)timeout_ms;
 
   t_now = pcl_clock_now();
   dt = (e->prev_time > 0.0) ? (t_now - e->prev_time) : 0.001;
   e->prev_time = t_now;
 
-  rc = drain_incoming_queue(e);
+  rc = drain_incoming_queue(e, &incoming_drained);
   if (rc != PCL_OK) return rc;
 
-  drain_svc_req_queue(e);
-  drain_resp_cb_queue(e);
+  svc_drained = drain_svc_req_queue(e);
+  resp_drained = drain_resp_cb_queue(e);
 
   for (i = 0; i < e->container_count; ++i) {
     tick_container(e->containers[i], dt);
+  }
+
+  if (timeout_ms > 0u &&
+      incoming_drained == 0u &&
+      svc_drained == 0u &&
+      resp_drained == 0u) {
+    pcl_idle_wait_ms(timeout_ms);
   }
 
   return PCL_OK;

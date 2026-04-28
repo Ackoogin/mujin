@@ -22,12 +22,12 @@ extern "C" {
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 #include "pyramid_services_tactical_objects_protobuf_codec.hpp"
 
-namespace prov = pyramid::services::tactical_objects::provided;
-namespace cons = pyramid::services::tactical_objects::consumed;
+namespace prov = pyramid::components::tactical_objects::services::provided;
+namespace cons = pyramid::components::tactical_objects::services::consumed;
 namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
 namespace protobuf_codec = pyramid::services::tactical_objects::protobuf_codec;
-namespace types = pyramid::data_model;
-namespace tactical_codec = pyramid::data_model::tactical;
+namespace types = pyramid::domain_model;
+namespace tactical_codec = pyramid::domain_model::tactical;
 
 namespace {
 

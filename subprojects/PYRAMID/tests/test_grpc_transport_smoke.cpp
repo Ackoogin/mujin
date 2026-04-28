@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
 #include "pyramid/components/tactical_objects/services/provided.grpc.pb.h"
+#include "pyramid_data_model_types.hpp"
+#include "pyramid_services_tactical_objects_protobuf_codec.hpp"
 
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
@@ -13,7 +15,7 @@
 #include <string>
 #include <thread>
 
-namespace pyramid::services::tactical_objects::provided {
+namespace pyramid::components::tactical_objects::services::provided {
 
 class GrpcServer {
 public:
@@ -39,13 +41,15 @@ private:
 GrpcServer buildGrpcServer(const std::string& listen_address,
                            pcl_executor_t* executor);
 
-}  // namespace pyramid::services::tactical_objects::provided
+}  // namespace pyramid::components::tactical_objects::services::provided
 
 namespace proto_services = pyramid::components::tactical_objects::services::provided;
 namespace proto_base = pyramid::data_model::base;
 namespace proto_common = pyramid::data_model::common;
 namespace proto_tactical = pyramid::data_model::tactical;
-namespace provided = pyramid::services::tactical_objects::provided;
+namespace domain = pyramid::domain_model;
+namespace protobuf_codec = pyramid::services::tactical_objects::protobuf_codec;
+namespace provided = pyramid::components::tactical_objects::services::provided;
 
 namespace {
 
@@ -64,6 +68,21 @@ std::string serialize(const google::protobuf::MessageLite& message) {
   std::string bytes;
   EXPECT_TRUE(message.SerializeToString(&bytes));
   return bytes;
+}
+
+proto_tactical::ObjectInterestRequirement makeCreateRequirementRequest() {
+  proto_tactical::ObjectInterestRequirement request;
+  auto* base = request.mutable_base()->mutable_base();
+  base->mutable_id()->set_value("grpc-interest-42");
+  base->mutable_source()->set_value("grpc-smoke-client");
+  request.set_source(proto_tactical::OBJECT_SOURCE_RADAR);
+  request.set_policy(proto_common::DATA_POLICY_OBTAIN);
+  request.add_dimension(proto_common::BATTLE_DIMENSION_GROUND);
+  request.add_dimension(proto_common::BATTLE_DIMENSION_AIR);
+  auto* point = request.mutable_point()->mutable_position();
+  point->mutable_latitude()->set_radians(51.477811);
+  point->mutable_longitude()->set_radians(-0.001475);
+  return request;
 }
 
 pcl_status_t handleCreateRequirement(pcl_container_t*,
@@ -106,6 +125,27 @@ pcl_status_t onConfigure(pcl_container_t* container, void*) {
 
 }  // namespace
 
+TEST(GrpcTransportSmoke, DomainAndWireTypesCoexist) {
+  domain::ObjectDetail domain_value;
+  domain_value.id = "coexist-1";
+  domain_value.identity = domain::StandardIdentity::Friendly;
+  domain_value.dimension = domain::BattleDimension::Air;
+  domain_value.position.latitude = 0.5;
+  domain_value.position.longitude = -1.25;
+
+  const auto bytes = protobuf_codec::toBinary(domain_value);
+  const auto decoded = protobuf_codec::fromBinaryObjectDetail(bytes);
+
+  proto_tactical::ObjectDetail wire_value;
+  ASSERT_TRUE(wire_value.ParseFromString(bytes));
+  ASSERT_TRUE(wire_value.has_base());
+  ASSERT_TRUE(wire_value.base().has_id());
+
+  EXPECT_EQ(decoded.id, "coexist-1");
+  EXPECT_EQ(wire_value.base().id().value(), "coexist-1");
+  EXPECT_EQ(wire_value.identity(), proto_common::STANDARD_IDENTITY_FRIENDLY);
+}
+
 TEST(GrpcTransportSmoke, UnaryCreateRequirementRoundTrip) {
   constexpr auto kAddress = "127.0.0.1:50091";
 
@@ -145,8 +185,7 @@ TEST(GrpcTransportSmoke, UnaryCreateRequirementRoundTrip) {
   auto stub = proto_services::Object_Of_Interest_Service::NewStub(channel);
   ASSERT_NE(stub, nullptr);
 
-  proto_tactical::ObjectInterestRequirement request;
-  request.set_policy(proto_common::DATA_POLICY_OBTAIN);
+  const auto request = makeCreateRequirementRequest();
   proto_base::Identifier response;
   grpc::ClientContext context;
 
