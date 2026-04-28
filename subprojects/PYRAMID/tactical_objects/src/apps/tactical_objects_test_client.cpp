@@ -32,7 +32,7 @@ namespace ProtobufCodec = pyramid::services::tactical_objects::protobuf_codec;
 namespace Provided = pyramid::services::tactical_objects::provided;
 namespace TacticalCodec = pyramid::domain_model::tactical;
 namespace Common = pyramid::domain_model::common;
-using namespace pyramid::data_model;
+using namespace pyramid::domain_model;
 
 struct ClientState {
     std::atomic<bool> response_ready{false};

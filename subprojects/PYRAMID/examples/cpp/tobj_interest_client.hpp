@@ -18,7 +18,7 @@ namespace tobj_example {
 
 namespace Provided  = pyramid::services::tactical_objects::provided;
 using namespace pyramid::services::tactical_objects;
-using namespace pyramid::data_model;
+using namespace pyramid::domain_model;
 
 /// \brief Shared state visible to the e2e driver.
 struct InterestClientState {

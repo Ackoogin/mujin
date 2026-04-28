@@ -1766,9 +1766,6 @@ class CppTypesGenerator:
                 if ns != self._ns:
                     f.write(f'using namespace {ns};\n')
             f.write(f'}} // namespace {self._ns}\n')
-            f.write('\n// Backward-compatibility alias: consumers migrate from pyramid::data_model\n')
-            f.write('// to pyramid::domain_model at their own pace.\n')
-            f.write('namespace pyramid { namespace data_model = domain_model; }\n')
 
 
 # ---------------------------------------------------------------------------
