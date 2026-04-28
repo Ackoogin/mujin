@@ -239,6 +239,12 @@ The Ada transport wrapper is intentionally opinionated:
 - `Register` registers it under a peer ID
 - `Start_Gateway` configures, activates, and adds the transport gateway container when needed
 
+`Start_Gateway` is required only on a participant that *serves* requests
+to other peers. See section 5.4 below for what the gateway is and when
+to skip it. Pure publishers and pure clients (callers) skip
+`Start_Gateway` entirely; calling it on a transport that has no gateway
+(e.g. a socket client) raises `Pcl_Component.Pcl_Error`.
+
 Socket client:
 
 ```ada
@@ -292,7 +298,52 @@ begin
 end;
 ```
 
-### 5.4 Typed Ports With Ada Generics
+### 5.4 Gateway Containers (Inbound Service Dispatch)
+
+PCL's executor is single-threaded so that ticks, subscriber callbacks,
+and service handlers are sequenced deterministically. Cross-process
+transports (TCP socket, shared-memory bus) cannot honour that on their
+own: they have to drain the wire continuously, which means inbound
+traffic lands on a transport-owned I/O thread, *not* the executor
+thread.
+
+Topic publishes solve this trivially -- the transport thread can call
+`pcl_executor_post_remote_incoming` and the message lands in the
+executor's ingress queue. Service requests are different: a handler may
+return `PCL_PENDING`, may take time, and must be looked up via the
+executor's port table with full per-peer routing semantics. None of that
+is safe to do from the transport thread.
+
+The bridge is the **gateway container**:
+
+1. The transport's I/O thread receives a service-request frame, repacks
+   it, and posts it as remote ingress on a private internal topic that
+   only the gateway subscribes to (with `PCL_ROUTE_REMOTE`).
+2. On the next executor spin, the gateway's subscriber callback wakes
+   up, looks up the matching `provided` service through the executor's
+   remote-aware port lookup (so peer allow-lists and route mode are
+   honoured), and invokes the handler.
+3. The handler's response is handed back to the transport, which frames
+   it and writes it back to the wire (or to the requester's mailbox in
+   the shared-memory case).
+
+Practical implications when using `Pcl_Transports`:
+
+| Role | Needs `Start_Gateway`? |
+|------|------------------------|
+| Socket server hosting a service | yes |
+| Socket client calling a remote service | no |
+| Shared-memory participant hosting a service | yes |
+| Shared-memory participant only publishing or only calling | no |
+| Pure pub/sub on either transport | no |
+
+Activating a gateway you do not need is harmless but slightly wastes a
+container slot in the executor. Forgetting it on a server-side
+participant manifests as remote callers never seeing a response: the
+transport delivers the request to the gateway topic, but with no
+subscriber the request is dropped and the caller observes a timeout.
+
+### 5.5 Typed Ports With Ada Generics
 
 `Pcl_Typed_Ports` is for cases where you already have a codec pair and want to
 stop repeating:
