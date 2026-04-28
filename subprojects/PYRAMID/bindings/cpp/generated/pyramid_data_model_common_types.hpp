@@ -1,6 +1,6 @@
 // Auto-generated types header
 // Generated from: common.proto by generate_bindings.py (types)
-// Namespace: pyramid::data_model::common
+// Namespace: pyramid::domain_model::common
 #pragma once
 
 #include <cstdint>
@@ -9,7 +9,7 @@
 #include <vector>
 #include "pyramid_data_model_base_types.hpp"
 
-namespace pyramid::data_model::common {
+namespace pyramid::domain_model::common {
 
 
 enum class Feasibility : int {
@@ -122,4 +122,4 @@ struct Query {
     std::optional<bool> one_shot;  // optional
 };
 
-} // namespace pyramid::data_model::common
+} // namespace pyramid::domain_model::common

@@ -1,5 +1,5 @@
 // Auto-generated data model JSON codec implementation
-// Namespace: pyramid::data_model::common
+// Namespace: pyramid::domain_model::common
 
 #include "pyramid_data_model_common_codec.hpp"
 
@@ -7,7 +7,7 @@
 
 #include "pyramid_data_model_base_codec.hpp"
 
-namespace pyramid::data_model::common {
+namespace pyramid::domain_model::common {
 
 std::string toString(Feasibility v) {
     switch (v) {
@@ -354,4 +354,4 @@ Query fromJson(const std::string& s, Query* /*tag*/) {
     return msg;
 }
 
-} // namespace pyramid::data_model::common
+} // namespace pyramid::domain_model::common

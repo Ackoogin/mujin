@@ -52,7 +52,7 @@ using json = nlohmann::json;
 #if defined(PYRAMID_ENABLE_FLATBUFFERS)
 namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
 #endif
-namespace data_model = pyramid::data_model;
+namespace data_model = pyramid::domain_model;
 namespace tactical_codec = pyramid::domain_model::tactical;
 
 // ---------------------------------------------------------------------------

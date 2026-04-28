@@ -2,7 +2,7 @@
 
 #include <cstddef>
 
-namespace pyramid::services::tactical_objects::provided {
+namespace pyramid::components::tactical_objects::services::provided {
 
 class ServiceHandler;
 
@@ -23,9 +23,9 @@ void dispatch(ServiceHandler& handler,
               void** response_buf,
               size_t* response_size);
 
-}  // namespace pyramid::services::tactical_objects::provided
+}  // namespace pyramid::components::tactical_objects::services::provided
 
-namespace pyramid::services::tactical_objects::consumed {
+namespace pyramid::components::tactical_objects::services::consumed {
 
 class ServiceHandler;
 
@@ -46,4 +46,4 @@ void dispatch(ServiceHandler& handler,
               void** response_buf,
               size_t* response_size);
 
-}  // namespace pyramid::services::tactical_objects::consumed
+}  // namespace pyramid::components::tactical_objects::services::consumed

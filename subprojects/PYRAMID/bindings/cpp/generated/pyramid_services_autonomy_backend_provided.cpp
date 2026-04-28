@@ -1,6 +1,6 @@
 // Auto-generated service binding implementation
 // Generated from: provided.proto by generate_bindings.py
-// Namespace: pyramid::services::autonomy_backend::provided
+// Namespace: pyramid::components::autonomy_backend::services::provided
 
 #include "pyramid_services_autonomy_backend_provided.hpp"
 
@@ -20,15 +20,15 @@
 #include <string>
 #include <vector>
 
-namespace pyramid::services::autonomy_backend::provided {
+namespace pyramid::components::autonomy_backend::services::provided {
 
 // Bring data model codec functions into scope
-using pyramid::data_model::autonomy::toJson;
-using pyramid::data_model::autonomy::fromJson;
-using pyramid::data_model::common::toJson;
-using pyramid::data_model::common::fromJson;
-using pyramid::data_model::tactical::toJson;
-using pyramid::data_model::tactical::fromJson;
+using pyramid::domain_model::autonomy::toJson;
+using pyramid::domain_model::autonomy::fromJson;
+using pyramid::domain_model::common::toJson;
+using pyramid::domain_model::common::fromJson;
+using pyramid::domain_model::tactical::toJson;
+using pyramid::domain_model::tactical::fromJson;
 namespace flatbuffers_codec = pyramid::services::autonomy_backend::flatbuffers_codec;
 
 // ---------------------------------------------------------------------------
@@ -60,12 +60,12 @@ ServiceHandler::handleReadPlanningRequirement(const Query& /*request*/) {
 
 Ack
 ServiceHandler::handleUpdatePlanningRequirement(const PlanningRequirement& /*request*/) {
-    return pyramid::data_model::kAckOk;
+    return pyramid::domain_model::kAckOk;
 }
 
 Ack
 ServiceHandler::handleDeletePlanningRequirement(const Identifier& /*request*/) {
-    return pyramid::data_model::kAckOk;
+    return pyramid::domain_model::kAckOk;
 }
 
 Identifier
@@ -80,12 +80,12 @@ ServiceHandler::handleReadExecutionRequirement(const Query& /*request*/) {
 
 Ack
 ServiceHandler::handleUpdateExecutionRequirement(const ExecutionRequirement& /*request*/) {
-    return pyramid::data_model::kAckOk;
+    return pyramid::domain_model::kAckOk;
 }
 
 Ack
 ServiceHandler::handleDeleteExecutionRequirement(const Identifier& /*request*/) {
-    return pyramid::data_model::kAckOk;
+    return pyramid::domain_model::kAckOk;
 }
 
 Identifier
@@ -95,12 +95,12 @@ ServiceHandler::handleCreateState(const StateUpdate& /*request*/) {
 
 Ack
 ServiceHandler::handleUpdateState(const StateUpdate& /*request*/) {
-    return pyramid::data_model::kAckOk;
+    return pyramid::domain_model::kAckOk;
 }
 
 Ack
 ServiceHandler::handleDeleteState(const Identifier& /*request*/) {
-    return pyramid::data_model::kAckOk;
+    return pyramid::domain_model::kAckOk;
 }
 
 Identifier
@@ -115,12 +115,12 @@ ServiceHandler::handleReadPlan(const Query& /*request*/) {
 
 Ack
 ServiceHandler::handleUpdatePlan(const Plan& /*request*/) {
-    return pyramid::data_model::kAckOk;
+    return pyramid::domain_model::kAckOk;
 }
 
 Ack
 ServiceHandler::handleDeletePlan(const Identifier& /*request*/) {
-    return pyramid::data_model::kAckOk;
+    return pyramid::domain_model::kAckOk;
 }
 
 std::vector<ExecutionRun>
@@ -1564,4 +1564,4 @@ void dispatch(ServiceHandler& handler,
     }
 }
 
-} // namespace pyramid::services::autonomy_backend::provided
+} // namespace pyramid::components::autonomy_backend::services::provided

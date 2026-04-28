@@ -27,18 +27,18 @@ struct PyramidAutonomyBridgeOptions {
 
 /// \brief PYRAMID EntityActions bridge for the AME planning and execution contract.
 class PyramidAutonomyBridge
-    : public pyramid::services::autonomy_backend::provided::ServiceHandler {
+    : public pyramid::components::autonomy_backend::services::provided::ServiceHandler {
 public:
-  using Ack = pyramid::data_model::Ack;
-  using Capabilities = pyramid::data_model::Capabilities;
-  using ExecutionRequirement = pyramid::data_model::ExecutionRequirement;
-  using ExecutionRun = pyramid::data_model::ExecutionRun;
-  using Identifier = pyramid::data_model::Identifier;
-  using Plan = pyramid::data_model::Plan;
-  using PlanningRequirement = pyramid::data_model::PlanningRequirement;
-  using Query = pyramid::data_model::Query;
-  using RequirementPlacement = pyramid::data_model::RequirementPlacement;
-  using StateUpdate = pyramid::data_model::StateUpdate;
+  using Ack = pyramid::domain_model::Ack;
+  using Capabilities = pyramid::domain_model::Capabilities;
+  using ExecutionRequirement = pyramid::domain_model::ExecutionRequirement;
+  using ExecutionRun = pyramid::domain_model::ExecutionRun;
+  using Identifier = pyramid::domain_model::Identifier;
+  using Plan = pyramid::domain_model::Plan;
+  using PlanningRequirement = pyramid::domain_model::PlanningRequirement;
+  using Query = pyramid::domain_model::Query;
+  using RequirementPlacement = pyramid::domain_model::RequirementPlacement;
+  using StateUpdate = pyramid::domain_model::StateUpdate;
 
   /// \brief Construct a bridge over the current AME planning stack.
   PyramidAutonomyBridge(WorldModel& world_model,
@@ -100,12 +100,12 @@ private:
   };
 
   static FactAuthority toWorldModelAuthority(
-      pyramid::data_model::FactAuthorityLevel authority);
+      pyramid::domain_model::FactAuthorityLevel authority);
   static std::string actionName(const std::string& signature);
   static std::vector<std::string> actionParameters(
       const std::string& signature);
   static bool queryIncludes(const Query& query, const std::string& id);
-  static pyramid::data_model::common::Progress progressFromPlacementState(
+  static pyramid::domain_model::common::Progress progressFromPlacementState(
       RequirementPlacementState state);
 
   std::string nextId(const std::string& prefix);
@@ -117,9 +117,9 @@ private:
                        const Plan& plan) const;
   RequirementPlacement makePlacement(const std::string& execution_requirement_id,
                                      const Plan& plan,
-                                     const pyramid::data_model::PlanStep& step) const;
+                                     const pyramid::domain_model::PlanStep& step) const;
   ActionCommand makeCommand(const std::string& execution_requirement_id,
-                            const pyramid::data_model::PlanStep& step) const;
+                            const pyramid::domain_model::PlanStep& step) const;
   RequirementPlacement makePlacement(
       const RequirementPlacementRecord& record) const;
   void syncPlacementRecordsFromSink();

@@ -1,5 +1,5 @@
 // Auto-generated gRPC transport -- do not edit
-// Backend: grpc | Namespace: pyramid::services::tactical_objects::provided::grpc_transport
+// Backend: grpc | Namespace: pyramid::components::tactical_objects::services::provided::grpc_transport
 //
 // Exposes proto services as gRPC services, delegating to
 // the standard generated service facade and PCL executor.
@@ -15,7 +15,7 @@
 #include <memory>
 #include <string>
 
-namespace pyramid::services::tactical_objects::provided::grpc_transport {
+namespace pyramid::components::tactical_objects::services::provided::grpc_transport {
 
 // ---------------------------------------------------------------------------
 // Matching_Objects_Service -- gRPC service implementation
@@ -86,4 +86,4 @@ private:
     pcl_executor_t* executor_;
 };
 
-} // namespace pyramid::services::tactical_objects::provided::grpc_transport
+} // namespace pyramid::components::tactical_objects::services::provided::grpc_transport

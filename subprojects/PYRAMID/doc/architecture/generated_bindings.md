@@ -235,8 +235,8 @@ Rules:
 Implement the generated handler interface:
 
 ```cpp
-namespace prov = pyramid::services::tactical_objects::provided;
-namespace model = pyramid::data_model;
+namespace prov = pyramid::components::tactical_objects::services::provided;
+namespace model = pyramid::domain_model;
 
 class Handler : public prov::ServiceHandler {
 public:

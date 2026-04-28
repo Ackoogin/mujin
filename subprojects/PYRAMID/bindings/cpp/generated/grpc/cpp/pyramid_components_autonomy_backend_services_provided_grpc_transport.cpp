@@ -137,7 +137,7 @@ grpc::Status write_stream_response(const ExecutorResponse& response,
 
 } // namespace
 
-namespace pyramid::services::autonomy_backend::provided::grpc_transport {
+namespace pyramid::components::autonomy_backend::services::provided::grpc_transport {
 
 grpc::Status Capabilities_ServiceImpl::ReadCapabilities(
     grpc::ServerContext* /*context*/,
@@ -481,9 +481,9 @@ grpc::Status Requirement_Placement_ServiceImpl::ReadPlacement(
     }
 }
 
-} // namespace pyramid::services::autonomy_backend::provided::grpc_transport
+} // namespace pyramid::components::autonomy_backend::services::provided::grpc_transport
 
-namespace pyramid::services::autonomy_backend::provided {
+namespace pyramid::components::autonomy_backend::services::provided {
 
 class GrpcServer {
 public:
@@ -588,4 +588,4 @@ GrpcServer buildGrpcServer(const std::string& listen_address,
     return GrpcServer(std::move(impl));
 }
 
-} // namespace pyramid::services::autonomy_backend::provided
+} // namespace pyramid::components::autonomy_backend::services::provided

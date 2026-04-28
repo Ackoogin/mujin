@@ -17,9 +17,8 @@
 
 namespace tobj_example {
 
-namespace Provided  = pyramid::services::tactical_objects::provided;
-namespace Consumed  = pyramid::services::tactical_objects::consumed;
-using namespace pyramid::services::tactical_objects;
+namespace Provided = pyramid::components::tactical_objects::services::provided;
+namespace Consumed = pyramid::components::tactical_objects::services::consumed;
 using namespace pyramid::domain_model;
 
 /// \brief Shared state visible to the e2e driver.

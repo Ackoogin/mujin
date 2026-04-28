@@ -21,7 +21,7 @@
 
 namespace {
 
-namespace consumed = pyramid::services::tactical_objects::consumed;
+namespace consumed = pyramid::components::tactical_objects::services::consumed;
 constexpr const char* kJsonContentType = "application/json";
 constexpr double kDegToRad = 3.14159265358979323846 / 180.0;
 

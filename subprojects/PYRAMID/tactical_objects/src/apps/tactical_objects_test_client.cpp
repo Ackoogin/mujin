@@ -29,7 +29,7 @@ namespace FlatCodec = pyramid::services::tactical_objects::flatbuffers_codec;
 #if defined(PYRAMID_ENABLE_PROTOBUF)
 namespace ProtobufCodec = pyramid::services::tactical_objects::protobuf_codec;
 #endif
-namespace Provided = pyramid::services::tactical_objects::provided;
+namespace Provided = pyramid::components::tactical_objects::services::provided;
 namespace TacticalCodec = pyramid::domain_model::tactical;
 namespace Common = pyramid::domain_model::common;
 using namespace pyramid::domain_model;

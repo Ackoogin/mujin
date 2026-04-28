@@ -1,6 +1,6 @@
 // Auto-generated types header
 // Generated from: autonomy.proto by generate_bindings.py (types)
-// Namespace: pyramid::data_model::autonomy
+// Namespace: pyramid::domain_model::autonomy
 #pragma once
 
 #include <cstdint>
@@ -10,7 +10,7 @@
 #include "pyramid_data_model_base_types.hpp"
 #include "pyramid_data_model_common_types.hpp"
 
-namespace pyramid::data_model::autonomy {
+namespace pyramid::domain_model::autonomy {
 
 
 enum class FactAuthorityLevel : int {
@@ -74,8 +74,8 @@ struct ExecutionPolicy {
 };
 
 struct PlanningRequirement {
-    pyramid::data_model::common::Entity base = {};  // from Requirement
-    pyramid::data_model::common::Achievement status = {};  // from Requirement
+    pyramid::domain_model::common::Entity base = {};  // from Requirement
+    pyramid::domain_model::common::Achievement status = {};  // from Requirement
     std::vector<RequirementReference> upstream_requirement = {};
     std::vector<PlanningGoal> goal = {};
     PlanningPolicy policy = {};
@@ -83,8 +83,8 @@ struct PlanningRequirement {
 };
 
 struct ExecutionRequirement {
-    pyramid::data_model::common::Entity base = {};  // from Requirement
-    pyramid::data_model::common::Achievement status = {};  // from Requirement
+    pyramid::domain_model::common::Entity base = {};  // from Requirement
+    pyramid::domain_model::common::Achievement status = {};  // from Requirement
     std::vector<RequirementReference> upstream_requirement = {};
     std::string plan_id = {};
     ExecutionPolicy policy = {};
@@ -168,7 +168,7 @@ struct RequirementPlacement {
     RequirementPlacementOperation operation = RequirementPlacementOperation::Unspecified;
     std::string target_requirement_id = {};
     std::vector<std::string> related_entity_id = {};
-    pyramid::data_model::common::Progress progress = pyramid::data_model::common::Progress::Unspecified;
+    pyramid::domain_model::common::Progress progress = pyramid::domain_model::common::Progress::Unspecified;
 };
 
 struct ExecutionRun {
@@ -179,9 +179,9 @@ struct ExecutionRun {
     std::string planning_requirement_id = {};
     std::string plan_id = {};
     ExecutionState state = ExecutionState::Unspecified;
-    pyramid::data_model::common::Achievement achievement = {};
+    pyramid::domain_model::common::Achievement achievement = {};
     uint32_t replan_count = 0;
     std::vector<RequirementPlacement> outstanding_placement = {};
 };
 
-} // namespace pyramid::data_model::autonomy
+} // namespace pyramid::domain_model::autonomy

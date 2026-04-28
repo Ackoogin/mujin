@@ -1,6 +1,6 @@
 // Auto-generated service binding header
 // Generated from: provided.proto by generate_bindings.py
-// Namespace: pyramid::services::tactical_objects::provided
+// Namespace: pyramid::components::tactical_objects::services::provided
 //
 // Architecture: component logic > service binding (this) > PCL
 //
@@ -24,7 +24,7 @@
 #include <string>
 #include <vector>
 
-namespace pyramid::services::tactical_objects::provided {
+namespace pyramid::components::tactical_objects::services::provided {
 
 // ---------------------------------------------------------------------------
 // Content-type constants and support metadata
@@ -82,13 +82,13 @@ std::string msgToString(const void* data, unsigned size);
 // Default implementations return empty / null values (stub behaviour).
 // ---------------------------------------------------------------------------
 
-using pyramid::data_model::Ack;
-using pyramid::data_model::Identifier;
-using pyramid::data_model::ObjectDetail;
-using pyramid::data_model::ObjectEvidenceRequirement;
-using pyramid::data_model::ObjectInterestRequirement;
-using pyramid::data_model::ObjectMatch;
-using pyramid::data_model::Query;
+using pyramid::domain_model::Ack;
+using pyramid::domain_model::Identifier;
+using pyramid::domain_model::ObjectDetail;
+using pyramid::domain_model::ObjectEvidenceRequirement;
+using pyramid::domain_model::ObjectInterestRequirement;
+using pyramid::domain_model::ObjectMatch;
+using pyramid::domain_model::Query;
 
 class ServiceHandler {
 public:
@@ -373,4 +373,9 @@ inline void dispatch(ServiceHandler& handler,
     dispatch(handler, channel, request_buf, request_size, "application/json", response_buf, response_size);
 }
 
-} // namespace pyramid::services::tactical_objects::provided
+} // namespace pyramid::components::tactical_objects::services::provided
+
+// Legacy service namespace alias for existing callers.
+namespace pyramid::services::tactical_objects {
+namespace provided = ::pyramid::components::tactical_objects::services::provided;
+} // namespace pyramid::services::tactical_objects

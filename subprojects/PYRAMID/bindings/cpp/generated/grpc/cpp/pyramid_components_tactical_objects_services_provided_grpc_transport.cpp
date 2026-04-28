@@ -137,7 +137,7 @@ grpc::Status write_stream_response(const ExecutorResponse& response,
 
 } // namespace
 
-namespace pyramid::services::tactical_objects::provided::grpc_transport {
+namespace pyramid::components::tactical_objects::services::provided::grpc_transport {
 
 grpc::Status Matching_Objects_ServiceImpl::ReadMatch(
     grpc::ServerContext* /*context*/,
@@ -253,9 +253,9 @@ grpc::Status Specific_Object_Detail_ServiceImpl::ReadDetail(
     }
 }
 
-} // namespace pyramid::services::tactical_objects::provided::grpc_transport
+} // namespace pyramid::components::tactical_objects::services::provided::grpc_transport
 
-namespace pyramid::services::tactical_objects::provided {
+namespace pyramid::components::tactical_objects::services::provided {
 
 class GrpcServer {
 public:
@@ -344,4 +344,4 @@ GrpcServer buildGrpcServer(const std::string& listen_address,
     return GrpcServer(std::move(impl));
 }
 
-} // namespace pyramid::services::tactical_objects::provided
+} // namespace pyramid::components::tactical_objects::services::provided

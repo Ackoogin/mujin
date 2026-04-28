@@ -29,7 +29,6 @@
 #include <thread>
 
 using namespace tobj_example;
-using namespace pyramid::services::tactical_objects;
 
 namespace {
 
@@ -48,7 +47,7 @@ int main(int argc, char** argv) {
 
     const char* host = "127.0.0.1";
     uint16_t    port = 19000;
-    const char* content_type = provided::kJsonContentType;
+    const char* content_type = Provided::kJsonContentType;
 
     for (int i = 1; i < argc - 1; ++i) {
         if (std::strcmp(argv[i], "--host") == 0) host = argv[++i];

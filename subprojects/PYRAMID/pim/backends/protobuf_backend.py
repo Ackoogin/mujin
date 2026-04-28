@@ -82,7 +82,7 @@ class ProtobufBackend(codec_backends.CodecBackend):
         # Proto C++ namespace uses :: between package segments
         proto_ns = '::'.join(pkg_parts)
 
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'// Auto-generated Protobuf PCL codec -- do not edit\n')
             f.write(f'// Backend: protobuf | Namespace: {ns}\n')
             f.write(f'//\n')
@@ -129,7 +129,7 @@ class ProtobufBackend(codec_backends.CodecBackend):
         pkg_parts = [p.capitalize() for p in pf.package.split('.') if p]
         pkg_name = '.'.join(pkg_parts) + '.Protobuf_Codec'
 
-        with open(path, 'w', encoding='utf-8') as f:
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'--  Auto-generated Protobuf codec spec -- do not edit\n')
             f.write(f'--  Backend: protobuf | Package: {pkg_name}\n')
             f.write(f'--\n')

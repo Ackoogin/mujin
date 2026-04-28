@@ -2,6 +2,13 @@
 
 Date: 2026-04-28
 
+> Note: the benchmark harness has since been corrected so the local, shared-memory,
+> socket, and gRPC transport cases all use the same unary
+> `object_of_interest.create_requirement` request/response shape
+> (`ObjectInterestRequirement -> Identifier`). The numeric results below were
+> gathered before that correction and should be rerun before making cross-transport
+> comparisons.
+
 ## Purpose
 
 This report captures the current performance baseline for PYRAMID generated

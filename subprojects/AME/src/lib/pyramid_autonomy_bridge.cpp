@@ -8,8 +8,8 @@
 
 namespace ame {
 
-namespace model = pyramid::data_model;
-namespace common = pyramid::data_model::common;
+namespace model = pyramid::domain_model;
+namespace common = pyramid::domain_model::common;
 
 namespace {
 

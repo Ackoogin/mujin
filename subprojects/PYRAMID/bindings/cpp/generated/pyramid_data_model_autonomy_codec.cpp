@@ -1,5 +1,5 @@
 // Auto-generated data model JSON codec implementation
-// Namespace: pyramid::data_model::autonomy
+// Namespace: pyramid::domain_model::autonomy
 
 #include "pyramid_data_model_autonomy_codec.hpp"
 
@@ -8,7 +8,7 @@
 #include "pyramid_data_model_base_codec.hpp"
 #include "pyramid_data_model_common_codec.hpp"
 
-namespace pyramid::data_model::autonomy {
+namespace pyramid::domain_model::autonomy {
 
 std::string toString(FactAuthorityLevel v) {
     switch (v) {
@@ -209,8 +209,8 @@ std::string toJson(const PlanningRequirement& msg) {
 PlanningRequirement fromJson(const std::string& s, PlanningRequirement* /*tag*/) {
     auto j = nlohmann::json::parse(s);
     PlanningRequirement msg;
-    if (j.contains("base")) msg.base = fromJson(j["base"].dump(), static_cast<pyramid::data_model::common::Entity*>(nullptr));
-    if (j.contains("status")) msg.status = fromJson(j["status"].dump(), static_cast<pyramid::data_model::common::Achievement*>(nullptr));
+    if (j.contains("base")) msg.base = fromJson(j["base"].dump(), static_cast<pyramid::domain_model::common::Entity*>(nullptr));
+    if (j.contains("status")) msg.status = fromJson(j["status"].dump(), static_cast<pyramid::domain_model::common::Achievement*>(nullptr));
     if (j.contains("upstream_requirement")) {
         for (const auto& v : j["upstream_requirement"]) {
             msg.upstream_requirement.push_back(fromJson(v.dump(), static_cast<RequirementReference*>(nullptr)));
@@ -257,8 +257,8 @@ std::string toJson(const ExecutionRequirement& msg) {
 ExecutionRequirement fromJson(const std::string& s, ExecutionRequirement* /*tag*/) {
     auto j = nlohmann::json::parse(s);
     ExecutionRequirement msg;
-    if (j.contains("base")) msg.base = fromJson(j["base"].dump(), static_cast<pyramid::data_model::common::Entity*>(nullptr));
-    if (j.contains("status")) msg.status = fromJson(j["status"].dump(), static_cast<pyramid::data_model::common::Achievement*>(nullptr));
+    if (j.contains("base")) msg.base = fromJson(j["base"].dump(), static_cast<pyramid::domain_model::common::Entity*>(nullptr));
+    if (j.contains("status")) msg.status = fromJson(j["status"].dump(), static_cast<pyramid::domain_model::common::Achievement*>(nullptr));
     if (j.contains("upstream_requirement")) {
         for (const auto& v : j["upstream_requirement"]) {
             msg.upstream_requirement.push_back(fromJson(v.dump(), static_cast<RequirementReference*>(nullptr)));
@@ -532,7 +532,7 @@ RequirementPlacement fromJson(const std::string& s, RequirementPlacement* /*tag*
             msg.related_entity_id.push_back(v.get<std::string>());
         }
     }
-    if (j.contains("progress")) msg.progress = pyramid::data_model::common::progressFromString(j["progress"].get<std::string>());
+    if (j.contains("progress")) msg.progress = pyramid::domain_model::common::progressFromString(j["progress"].get<std::string>());
     return msg;
 }
 
@@ -571,7 +571,7 @@ ExecutionRun fromJson(const std::string& s, ExecutionRun* /*tag*/) {
     if (j.contains("planning_requirement_id")) msg.planning_requirement_id = j["planning_requirement_id"].get<std::string>();
     if (j.contains("plan_id")) msg.plan_id = j["plan_id"].get<std::string>();
     if (j.contains("state")) msg.state = executionStateFromString(j["state"].get<std::string>());
-    if (j.contains("achievement")) msg.achievement = fromJson(j["achievement"].dump(), static_cast<pyramid::data_model::common::Achievement*>(nullptr));
+    if (j.contains("achievement")) msg.achievement = fromJson(j["achievement"].dump(), static_cast<pyramid::domain_model::common::Achievement*>(nullptr));
     if (j.contains("replan_count")) msg.replan_count = j["replan_count"].get<uint32_t>();
     if (j.contains("outstanding_placement")) {
         for (const auto& v : j["outstanding_placement"]) {
@@ -581,4 +581,4 @@ ExecutionRun fromJson(const std::string& s, ExecutionRun* /*tag*/) {
     return msg;
 }
 
-} // namespace pyramid::data_model::autonomy
+} // namespace pyramid::domain_model::autonomy

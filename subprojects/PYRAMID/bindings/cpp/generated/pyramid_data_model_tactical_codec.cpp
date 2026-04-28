@@ -1,5 +1,5 @@
 // Auto-generated data model JSON codec implementation
-// Namespace: pyramid::data_model::tactical
+// Namespace: pyramid::domain_model::tactical
 
 #include "pyramid_data_model_tactical_codec.hpp"
 
@@ -8,7 +8,7 @@
 #include "pyramid_data_model_base_codec.hpp"
 #include "pyramid_data_model_common_codec.hpp"
 
-namespace pyramid::data_model::tactical {
+namespace pyramid::domain_model::tactical {
 
 std::string toString(ObjectSource v) {
     switch (v) {
@@ -72,7 +72,7 @@ ObjectDetail fromJson(const std::string& s, ObjectDetail* /*tag*/) {
             msg.source.push_back(objectSourceFromString(v.get<std::string>()));
         }
     }
-    if (j.contains("position")) msg.position = fromJson(j["position"].dump(), static_cast<pyramid::data_model::common::GeodeticPosition*>(nullptr));
+    if (j.contains("position")) msg.position = fromJson(j["position"].dump(), static_cast<pyramid::domain_model::common::GeodeticPosition*>(nullptr));
     if (j.contains("creation_time")) msg.creation_time = j["creation_time"].get<double>();
     if (j.contains("quality")) {
         msg.quality = j["quality"].get<double>();
@@ -86,8 +86,8 @@ ObjectDetail fromJson(const std::string& s, ObjectDetail* /*tag*/) {
     if (j.contains("length")) {
         msg.length = j["length"].get<double>();
     }
-    if (j.contains("identity")) msg.identity = pyramid::data_model::common::standardIdentityFromString(j["identity"].get<std::string>());
-    if (j.contains("dimension")) msg.dimension = pyramid::data_model::common::battleDimensionFromString(j["dimension"].get<std::string>());
+    if (j.contains("identity")) msg.identity = pyramid::domain_model::common::standardIdentityFromString(j["identity"].get<std::string>());
+    if (j.contains("dimension")) msg.dimension = pyramid::domain_model::common::battleDimensionFromString(j["dimension"].get<std::string>());
     return msg;
 }
 
@@ -99,7 +99,7 @@ std::string toJson(const ObjectEvidenceRequirement& msg) {
     {
         nlohmann::json arr = nlohmann::json::array();
         for (const auto& v : msg.dimension) {
-            arr.push_back(pyramid::data_model::common::toString(v));
+            arr.push_back(pyramid::domain_model::common::toString(v));
         }
         obj["dimension"] = arr;
     }
@@ -118,22 +118,22 @@ std::string toJson(const ObjectEvidenceRequirement& msg) {
 ObjectEvidenceRequirement fromJson(const std::string& s, ObjectEvidenceRequirement* /*tag*/) {
     auto j = nlohmann::json::parse(s);
     ObjectEvidenceRequirement msg;
-    if (j.contains("base")) msg.base = fromJson(j["base"].dump(), static_cast<pyramid::data_model::common::Entity*>(nullptr));
-    if (j.contains("status")) msg.status = fromJson(j["status"].dump(), static_cast<pyramid::data_model::common::Achievement*>(nullptr));
-    if (j.contains("policy")) msg.policy = pyramid::data_model::common::dataPolicyFromString(j["policy"].get<std::string>());
+    if (j.contains("base")) msg.base = fromJson(j["base"].dump(), static_cast<pyramid::domain_model::common::Entity*>(nullptr));
+    if (j.contains("status")) msg.status = fromJson(j["status"].dump(), static_cast<pyramid::domain_model::common::Achievement*>(nullptr));
+    if (j.contains("policy")) msg.policy = pyramid::domain_model::common::dataPolicyFromString(j["policy"].get<std::string>());
     if (j.contains("dimension")) {
         for (const auto& v : j["dimension"]) {
-            msg.dimension.push_back(pyramid::data_model::common::battleDimensionFromString(v.get<std::string>()));
+            msg.dimension.push_back(pyramid::domain_model::common::battleDimensionFromString(v.get<std::string>()));
         }
     }
     if (j.contains("poly_area")) {
-        msg.poly_area = fromJson(j["poly_area"].dump(), static_cast<pyramid::data_model::common::PolyArea*>(nullptr));
+        msg.poly_area = fromJson(j["poly_area"].dump(), static_cast<pyramid::domain_model::common::PolyArea*>(nullptr));
     }
     if (j.contains("circle_area")) {
-        msg.circle_area = fromJson(j["circle_area"].dump(), static_cast<pyramid::data_model::common::CircleArea*>(nullptr));
+        msg.circle_area = fromJson(j["circle_area"].dump(), static_cast<pyramid::domain_model::common::CircleArea*>(nullptr));
     }
     if (j.contains("point")) {
-        msg.point = fromJson(j["point"].dump(), static_cast<pyramid::data_model::common::Point*>(nullptr));
+        msg.point = fromJson(j["point"].dump(), static_cast<pyramid::domain_model::common::Point*>(nullptr));
     }
     return msg;
 }
@@ -149,7 +149,7 @@ std::string toJson(const ObjectInterestRequirement& msg) {
     {
         nlohmann::json arr = nlohmann::json::array();
         for (const auto& v : msg.dimension) {
-            arr.push_back(pyramid::data_model::common::toString(v));
+            arr.push_back(pyramid::domain_model::common::toString(v));
         }
         obj["dimension"] = arr;
     }
@@ -168,25 +168,25 @@ std::string toJson(const ObjectInterestRequirement& msg) {
 ObjectInterestRequirement fromJson(const std::string& s, ObjectInterestRequirement* /*tag*/) {
     auto j = nlohmann::json::parse(s);
     ObjectInterestRequirement msg;
-    if (j.contains("base")) msg.base = fromJson(j["base"].dump(), static_cast<pyramid::data_model::common::Entity*>(nullptr));
-    if (j.contains("status")) msg.status = fromJson(j["status"].dump(), static_cast<pyramid::data_model::common::Achievement*>(nullptr));
+    if (j.contains("base")) msg.base = fromJson(j["base"].dump(), static_cast<pyramid::domain_model::common::Entity*>(nullptr));
+    if (j.contains("status")) msg.status = fromJson(j["status"].dump(), static_cast<pyramid::domain_model::common::Achievement*>(nullptr));
     if (j.contains("source")) {
         msg.source = objectSourceFromString(j["source"].get<std::string>());
     }
-    if (j.contains("policy")) msg.policy = pyramid::data_model::common::dataPolicyFromString(j["policy"].get<std::string>());
+    if (j.contains("policy")) msg.policy = pyramid::domain_model::common::dataPolicyFromString(j["policy"].get<std::string>());
     if (j.contains("dimension")) {
         for (const auto& v : j["dimension"]) {
-            msg.dimension.push_back(pyramid::data_model::common::battleDimensionFromString(v.get<std::string>()));
+            msg.dimension.push_back(pyramid::domain_model::common::battleDimensionFromString(v.get<std::string>()));
         }
     }
     if (j.contains("poly_area")) {
-        msg.poly_area = fromJson(j["poly_area"].dump(), static_cast<pyramid::data_model::common::PolyArea*>(nullptr));
+        msg.poly_area = fromJson(j["poly_area"].dump(), static_cast<pyramid::domain_model::common::PolyArea*>(nullptr));
     }
     if (j.contains("circle_area")) {
-        msg.circle_area = fromJson(j["circle_area"].dump(), static_cast<pyramid::data_model::common::CircleArea*>(nullptr));
+        msg.circle_area = fromJson(j["circle_area"].dump(), static_cast<pyramid::domain_model::common::CircleArea*>(nullptr));
     }
     if (j.contains("point")) {
-        msg.point = fromJson(j["point"].dump(), static_cast<pyramid::data_model::common::Point*>(nullptr));
+        msg.point = fromJson(j["point"].dump(), static_cast<pyramid::domain_model::common::Point*>(nullptr));
     }
     return msg;
 }
@@ -214,4 +214,4 @@ ObjectMatch fromJson(const std::string& s, ObjectMatch* /*tag*/) {
     return msg;
 }
 
-} // namespace pyramid::data_model::tactical
+} // namespace pyramid::domain_model::tactical

@@ -1,12 +1,12 @@
 // Auto-generated data model JSON codec header
 // Generated from: common.proto by generate_bindings.py (codec)
-// Namespace: pyramid::data_model::common
+// Namespace: pyramid::domain_model::common
 #pragma once
 
 #include "pyramid_data_model_common_types.hpp"
 #include <string>
 
-namespace pyramid::data_model::common {
+namespace pyramid::domain_model::common {
 
 // Enum string converters
 std::string toString(Feasibility v);
@@ -44,4 +44,4 @@ Ack fromJson(const std::string& s, Ack* /*tag*/ = nullptr);
 std::string toJson(const Query& msg);
 Query fromJson(const std::string& s, Query* /*tag*/ = nullptr);
 
-} // namespace pyramid::data_model::common
+} // namespace pyramid::domain_model::common

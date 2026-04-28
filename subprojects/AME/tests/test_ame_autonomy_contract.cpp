@@ -15,11 +15,11 @@
 
 namespace {
 
-namespace autonomy_codec = pyramid::data_model::autonomy;
-namespace common = pyramid::data_model::common;
-namespace common_codec = pyramid::data_model::common;
-namespace model = pyramid::data_model;
-namespace provided = pyramid::services::autonomy_backend::provided;
+namespace autonomy_codec = pyramid::domain_model::autonomy;
+namespace common = pyramid::domain_model::common;
+namespace common_codec = pyramid::domain_model::common;
+namespace model = pyramid::domain_model;
+namespace provided = pyramid::components::autonomy_backend::services::provided;
 
 ame::WorldModel buildDomain() {
   ame::WorldModel wm;

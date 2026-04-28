@@ -1,12 +1,12 @@
 // Auto-generated data model JSON codec header
 // Generated from: autonomy.proto by generate_bindings.py (codec)
-// Namespace: pyramid::data_model::autonomy
+// Namespace: pyramid::domain_model::autonomy
 #pragma once
 
 #include "pyramid_data_model_autonomy_types.hpp"
 #include <string>
 
-namespace pyramid::data_model::autonomy {
+namespace pyramid::domain_model::autonomy {
 
 // Enum string converters
 std::string toString(FactAuthorityLevel v);
@@ -48,4 +48,4 @@ RequirementPlacement fromJson(const std::string& s, RequirementPlacement* /*tag*
 std::string toJson(const ExecutionRun& msg);
 ExecutionRun fromJson(const std::string& s, ExecutionRun* /*tag*/ = nullptr);
 
-} // namespace pyramid::data_model::autonomy
+} // namespace pyramid::domain_model::autonomy

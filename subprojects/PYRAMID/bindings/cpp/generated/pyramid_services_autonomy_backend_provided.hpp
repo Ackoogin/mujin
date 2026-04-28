@@ -1,6 +1,6 @@
 // Auto-generated service binding header
 // Generated from: provided.proto by generate_bindings.py
-// Namespace: pyramid::services::autonomy_backend::provided
+// Namespace: pyramid::components::autonomy_backend::services::provided
 //
 // Architecture: component logic > service binding (this) > PCL
 //
@@ -24,7 +24,7 @@
 #include <string>
 #include <vector>
 
-namespace pyramid::services::autonomy_backend::provided {
+namespace pyramid::components::autonomy_backend::services::provided {
 
 // ---------------------------------------------------------------------------
 // Content-type constants and support metadata
@@ -99,16 +99,16 @@ std::string msgToString(const void* data, unsigned size);
 // Default implementations return empty / null values (stub behaviour).
 // ---------------------------------------------------------------------------
 
-using pyramid::data_model::Ack;
-using pyramid::data_model::Capabilities;
-using pyramid::data_model::ExecutionRequirement;
-using pyramid::data_model::ExecutionRun;
-using pyramid::data_model::Identifier;
-using pyramid::data_model::Plan;
-using pyramid::data_model::PlanningRequirement;
-using pyramid::data_model::Query;
-using pyramid::data_model::RequirementPlacement;
-using pyramid::data_model::StateUpdate;
+using pyramid::domain_model::Ack;
+using pyramid::domain_model::Capabilities;
+using pyramid::domain_model::ExecutionRequirement;
+using pyramid::domain_model::ExecutionRun;
+using pyramid::domain_model::Identifier;
+using pyramid::domain_model::Plan;
+using pyramid::domain_model::PlanningRequirement;
+using pyramid::domain_model::Query;
+using pyramid::domain_model::RequirementPlacement;
+using pyramid::domain_model::StateUpdate;
 
 class ServiceHandler {
 public:
@@ -640,4 +640,9 @@ inline void dispatch(ServiceHandler& handler,
     dispatch(handler, channel, request_buf, request_size, "application/json", response_buf, response_size);
 }
 
-} // namespace pyramid::services::autonomy_backend::provided
+} // namespace pyramid::components::autonomy_backend::services::provided
+
+// Legacy service namespace alias for existing callers.
+namespace pyramid::services::autonomy_backend {
+namespace provided = ::pyramid::components::autonomy_backend::services::provided;
+} // namespace pyramid::services::autonomy_backend

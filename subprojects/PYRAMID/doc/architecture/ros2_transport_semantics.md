@@ -95,7 +95,7 @@ When the service facade is generated with ROS2 enabled, it exposes a startup
 hook for each service package:
 
 ```cpp
-namespace provided = pyramid::services::tactical_objects::provided;
+namespace provided = pyramid::components::tactical_objects::services::provided;
 
 provided::bindRos2(adapter, executor);
 ```
@@ -304,7 +304,7 @@ The generated ROS2 support layer and standalone tests enforce this rule.
 Minimal shape:
 
 ```cpp
-namespace provided = pyramid::services::tactical_objects::provided;
+namespace provided = pyramid::components::tactical_objects::services::provided;
 
 auto executor = pcl_executor_create();
 // Create/configure/activate containers and add them to executor.

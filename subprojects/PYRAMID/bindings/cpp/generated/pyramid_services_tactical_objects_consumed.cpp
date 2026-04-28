@@ -1,6 +1,6 @@
 // Auto-generated service binding implementation
 // Generated from: consumed.proto by generate_bindings.py
-// Namespace: pyramid::services::tactical_objects::consumed
+// Namespace: pyramid::components::tactical_objects::services::consumed
 
 #include "pyramid_services_tactical_objects_consumed.hpp"
 
@@ -21,15 +21,15 @@
 #include <string>
 #include <vector>
 
-namespace pyramid::services::tactical_objects::consumed {
+namespace pyramid::components::tactical_objects::services::consumed {
 
 // Bring data model codec functions into scope
-using pyramid::data_model::autonomy::toJson;
-using pyramid::data_model::autonomy::fromJson;
-using pyramid::data_model::common::toJson;
-using pyramid::data_model::common::fromJson;
-using pyramid::data_model::tactical::toJson;
-using pyramid::data_model::tactical::fromJson;
+using pyramid::domain_model::autonomy::toJson;
+using pyramid::domain_model::autonomy::fromJson;
+using pyramid::domain_model::common::toJson;
+using pyramid::domain_model::common::fromJson;
+using pyramid::domain_model::tactical::toJson;
+using pyramid::domain_model::tactical::fromJson;
 namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
 namespace protobuf_codec = pyramid::services::tactical_objects::protobuf_codec;
 
@@ -62,12 +62,12 @@ ServiceHandler::handleReadRequirement(const Query& /*request*/) {
 
 Ack
 ServiceHandler::handleUpdateRequirement(const ObjectEvidenceRequirement& /*request*/) {
-    return pyramid::data_model::kAckOk;
+    return pyramid::domain_model::kAckOk;
 }
 
 Ack
 ServiceHandler::handleDeleteRequirement(const Identifier& /*request*/) {
-    return pyramid::data_model::kAckOk;
+    return pyramid::domain_model::kAckOk;
 }
 
 std::vector<Capability>
@@ -828,4 +828,4 @@ void dispatch(ServiceHandler& handler,
     }
 }
 
-} // namespace pyramid::services::tactical_objects::consumed
+} // namespace pyramid::components::tactical_objects::services::consumed

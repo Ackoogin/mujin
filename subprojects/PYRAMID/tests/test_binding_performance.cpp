@@ -2,10 +2,10 @@
 /// \brief Codec/transport performance benchmark via generated PYRAMID bindings.
 ///
 /// For each transport (local in-process, shared-memory bus, TCP socket) and each
-/// enabled codec (JSON, FlatBuffers, Protobuf), N messages of a non-trivial
-/// ObjectDetail payload are transferred sequentially and the per-message latency
-/// is recorded. When gRPC support is enabled, a unary protobuf round-trip is
-/// benchmarked separately through the generated gRPC transport host.
+/// enabled codec (JSON, FlatBuffers, Protobuf), N unary create-requirement
+/// service calls are transferred sequentially and the per-call latency is
+/// recorded. When gRPC support is enabled, the same unary protobuf round-trip
+/// is benchmarked through the generated gRPC transport host.
 /// A formatted report is printed at the end of the test suite.
 
 #include <gtest/gtest.h>
@@ -19,7 +19,7 @@ extern "C" {
 #include <pcl/pcl_types.h>
 }
 
-#include "pyramid_services_tactical_objects_consumed.hpp"
+#include "pyramid_services_tactical_objects_provided.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 #if defined(PYRAMID_HAS_PROTOBUF)
@@ -51,7 +51,7 @@ extern "C" {
 #include <windows.h>
 #endif
 
-namespace cons = pyramid::components::tactical_objects::services::consumed;
+namespace svc = pyramid::components::tactical_objects::services::provided;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -66,16 +66,21 @@ static constexpr int kMsgTimeoutMs = 2000;
 // Payload factory
 // ---------------------------------------------------------------------------
 
-static cons::ObjectDetail makePayload() {
-  cons::ObjectDetail ev;
-  ev.id            = "binding-perf-entity-000000000001-abcdef";
-  ev.identity      = pyramid::domain_model::StandardIdentity::Hostile;
-  ev.dimension     = pyramid::domain_model::BattleDimension::Ground;
-  ev.position.latitude  = 51.477811;
-  ev.position.longitude = -0.001475;
-  ev.creation_time = 1717000000.0;
-  ev.quality       = 0.987654321;
-  return ev;
+static svc::ObjectInterestRequirement makePayload() {
+  svc::ObjectInterestRequirement request;
+  request.base.id = "binding-perf-interest-000000000001-abcdef";
+  request.base.source = "perf-client";
+  request.source = pyramid::domain_model::ObjectSource::Radar;
+  request.policy = pyramid::domain_model::DataPolicy::Obtain;
+  request.dimension = {
+      pyramid::domain_model::BattleDimension::Ground,
+      pyramid::domain_model::BattleDimension::Air,
+  };
+  request.point = pyramid::domain_model::Point{{
+      51.477811,
+      -0.001475,
+  }};
+  return request;
 }
 
 // ---------------------------------------------------------------------------
@@ -222,7 +227,8 @@ static void printReport(const std::vector<PerfResult>& results) {
   printf("============================================================"
          "==============================\n");
   printf(" PYRAMID Binding Performance Report\n");
-  printf(" Payload: ObjectDetail  |  Iterations per combo: %d\n", kNMsgs);
+  printf(" Payload: ObjectInterestRequirement -> Identifier"
+         "  |  Iterations per combo: %d\n", kNMsgs);
   printf("============================================================"
          "==============================\n");
   printf("%-24s | %7s | %9s | %10s | %10s | %10s | %10s | %10s\n",
@@ -252,7 +258,8 @@ static void printCodecReport(const std::vector<CodecPerfResult>& results) {
   printf("============================================================"
          "==============================\n");
   printf(" PYRAMID Codec Cost Report\n");
-  printf(" Payload: ObjectDetail  |  Iterations per combo: %d\n", kNCodecIters);
+  printf(" Payload: ObjectInterestRequirement"
+         "  |  Iterations per combo: %d\n", kNCodecIters);
   printf("============================================================"
          "==============================\n");
   printf("%-24s | %7s | %9s | %12s | %12s | %12s\n",
@@ -309,63 +316,139 @@ static CodecPerfResult runCodecLoop(const char* label,
 }
 
 // ---------------------------------------------------------------------------
-// Shared receive state (used across transport benchmarks)
+// Shared unary response state (used across transport benchmarks)
 // ---------------------------------------------------------------------------
 
-struct RecvState {
+struct UnaryResponseState {
   std::atomic<int> count{0};
   std::mutex       mutex;
   std::condition_variable cv;
-  const char*      content_type = nullptr;
+  bool             decoded = false;
+  svc::Identifier  response_id;
 };
 
-static void recvCallback(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
-  auto* s = static_cast<RecvState*>(ud);
-  // Count bytes received (avoid constructing ObjectDetail by-value here:
-  // pyramid::domain_model::tactical::ObjectDetail is defined in both the
-  // generated C++ bindings and the protobuf code; constructing a local
-  // of that type in a translation unit that links both causes an ODR
-  // destructor collision.  Encoding cost is already captured by the
-  // timing window that starts in publishObjectEvidence.)
-  if (msg && msg->size > 0) {
-    s->count.fetch_add(1, std::memory_order_release);
-    s->cv.notify_all();
-  }
+static void createRequirementResponse(const pcl_msg_t* msg, void* ud) {
+  auto* s = static_cast<UnaryResponseState*>(ud);
+  s->decoded = svc::decodeCreateRequirementResponse(msg, &s->response_id);
+  s->count.fetch_add(1, std::memory_order_release);
+  s->cv.notify_all();
 }
 
-static bool waitForDelivery(RecvState& recv,
+static bool waitForResponse(UnaryResponseState& state,
                             int prev_count,
                             std::chrono::steady_clock::time_point deadline) {
-  std::unique_lock<std::mutex> lock(recv.mutex);
-  return recv.cv.wait_until(lock, deadline, [&] {
-    return recv.count.load(std::memory_order_acquire) > prev_count;
+  std::unique_lock<std::mutex> lock(state.mutex);
+  return state.cv.wait_until(lock, deadline, [&] {
+    return state.count.load(std::memory_order_acquire) > prev_count;
   });
 }
 
 // ---------------------------------------------------------------------------
-// Publisher on_configure helper
+// Unary service helpers
 // ---------------------------------------------------------------------------
 
-struct PubSetup {
-  pcl_port_t* port        = nullptr;
+struct UnaryServiceSetup {
   const char* content_type = nullptr;
+  std::string response_buffer;
 };
 
-static pcl_status_t onConfigurePub(pcl_container_t* c, void* ud) {
-  auto* s = static_cast<PubSetup*>(ud);
-  s->port = pcl_container_add_publisher(c, cons::kTopicObjectEvidence,
-                                        s->content_type);
-  return s->port ? PCL_OK : PCL_ERR_NOMEM;
+class UnaryServiceHandler : public svc::ServiceHandler {
+public:
+  svc::Identifier handleCreateRequirement(
+      const svc::ObjectInterestRequirement&) override {
+    return "binding-perf-interest-000000000001-abcdef";
+  }
+};
+
+static pcl_status_t handleCreateRequirement(pcl_container_t*,
+                                            const pcl_msg_t* request,
+                                            pcl_msg_t* response,
+                                            pcl_svc_context_t*,
+                                            void* user_data) {
+  if (response == nullptr) {
+    return PCL_ERR_INVALID;
+  }
+
+  auto* setup = static_cast<UnaryServiceSetup*>(user_data);
+  UnaryServiceHandler handler;
+  void* response_buf = nullptr;
+  size_t response_size = 0;
+  svc::dispatch(handler, svc::ServiceChannel::CreateRequirement,
+                request ? request->data : nullptr,
+                request ? request->size : 0u,
+                request ? request->type_name : setup->content_type,
+                &response_buf, &response_size);
+
+  setup->response_buffer.clear();
+  if (response_buf != nullptr && response_size > 0) {
+    setup->response_buffer.assign(static_cast<const char*>(response_buf),
+                                  response_size);
+    std::free(response_buf);
+  }
+
+  response->data = setup->response_buffer.empty()
+                       ? nullptr
+                       : const_cast<char*>(setup->response_buffer.data());
+  response->size = static_cast<uint32_t>(setup->response_buffer.size());
+  response->type_name = request ? request->type_name : setup->content_type;
+  return PCL_OK;
 }
 
-// ---------------------------------------------------------------------------
-// Subscriber on_configure helper
-// ---------------------------------------------------------------------------
+static pcl_status_t onConfigureUnaryService(pcl_container_t* container,
+                                            void* ud) {
+  auto* setup = static_cast<UnaryServiceSetup*>(ud);
+  auto* port = pcl_container_add_service(
+      container, svc::kSvcCreateRequirement, setup->content_type,
+      handleCreateRequirement, ud);
+  if (port == nullptr) {
+    return PCL_ERR_NOMEM;
+  }
+  return pcl_port_set_route(port, PCL_ROUTE_LOCAL | PCL_ROUTE_REMOTE,
+                            nullptr, 0u);
+}
 
-static pcl_status_t onConfigureSub(pcl_container_t* c, void* ud) {
-  auto* s = static_cast<RecvState*>(ud);
-  cons::subscribeObjectEvidence(c, recvCallback, ud, s->content_type);
-  return PCL_OK;
+static bool addRemoteGateway(pcl_executor_t* exec, pcl_container_t* gateway) {
+  if (gateway == nullptr) {
+    return false;
+  }
+  if (pcl_container_configure(gateway) != PCL_OK) {
+    return false;
+  }
+  if (pcl_container_activate(gateway) != PCL_OK) {
+    return false;
+  }
+  return pcl_executor_add(exec, gateway) == PCL_OK;
+}
+
+static bool setRemoteEndpointRoute(pcl_executor_t* exec,
+                                   const char* endpoint_name,
+                                   const char* peer_id) {
+  const char* peers[] = {peer_id};
+  pcl_endpoint_route_t route{};
+  route.endpoint_name = endpoint_name;
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode = PCL_ROUTE_REMOTE;
+  route.peer_ids = peers;
+  route.peer_count = 1u;
+  return pcl_executor_set_endpoint_route(exec, &route) == PCL_OK;
+}
+
+static size_t encodedPayloadSize(const svc::ObjectInterestRequirement& request,
+                                 const char* content_type) {
+  if (std::strcmp(content_type, "application/json") == 0) {
+    return pyramid::domain_model::tactical::toJson(request).size();
+  }
+  if (std::strcmp(content_type, "application/flatbuffers") == 0) {
+    return pyramid::services::tactical_objects::flatbuffers_codec::toBinary(
+        request).size();
+  }
+#if defined(PYRAMID_HAS_PROTOBUF)
+  if (std::strcmp(content_type, "application/protobuf") == 0) {
+    return pyramid::services::tactical_objects::protobuf_codec::toBinary(
+        request).size();
+  }
+#endif
+  return 0u;
 }
 
 // ---------------------------------------------------------------------------
@@ -383,55 +466,46 @@ static std::string uniqueId(const char* prefix) {
 // ---------------------------------------------------------------------------
 
 static PerfResult runLocal(const char* label, const char* ct,
-                           const cons::ObjectDetail& ev) {
+                           const svc::ObjectInterestRequirement& request) {
   pcl_executor_t* exec = pcl_executor_create();
+  UnaryServiceSetup service_setup{ct};
+  pcl_callbacks_t service_cbs{};
+  service_cbs.on_configure = onConfigureUnaryService;
+  auto* service_c =
+      pcl_container_create("lperf_service", &service_cbs, &service_setup);
+  pcl_container_configure(service_c);
+  pcl_container_activate(service_c);
+  pcl_executor_add(exec, service_c);
 
-  PubSetup pub_setup{nullptr, ct};
-  pcl_callbacks_t pub_cbs{};
-  pub_cbs.on_configure = onConfigurePub;
-  auto* pub_c = pcl_container_create("lperf_pub", &pub_cbs, &pub_setup);
-  pcl_container_configure(pub_c);
-  pcl_container_activate(pub_c);
-  pcl_executor_add(exec, pub_c);
-
-  RecvState recv{};
-  recv.content_type = ct;
-  pcl_callbacks_t sub_cbs{};
-  sub_cbs.on_configure = onConfigureSub;
-  auto* sub_c = pcl_container_create("lperf_sub", &sub_cbs, &recv);
-  pcl_container_configure(sub_c);
-  pcl_container_activate(sub_c);
-  pcl_executor_add(exec, sub_c);
-
-  // Measure encoded size
-  std::string sample;
-  cons::encodeObjectEvidence(ev, ct, &sample);
-  size_t payload_bytes = sample.size();
+  const size_t payload_bytes = encodedPayloadSize(request, ct);
 
   std::vector<double> wall_latencies;
   std::vector<double> cpu_times;
   wall_latencies.reserve(kNMsgs);
   cpu_times.reserve(kNMsgs);
   int timed_out = 0;
+  UnaryResponseState response_state{};
 
   for (int i = 0; i < kNMsgs; ++i) {
-    int prev = recv.count.load(std::memory_order_acquire);
+    int prev = response_state.count.load(std::memory_order_acquire);
     auto t0 = Clock::now();
     double cpu_t0 = threadCpuNowNs();
-    cons::publishObjectEvidence(pub_setup.port, ev, ct);
+    response_state.decoded = false;
+    const auto rc = svc::invokeCreateRequirement(
+        exec, request, createRequirementResponse, &response_state, nullptr, ct);
 
     bool delivered = false;
     auto deadline = std::chrono::steady_clock::now() +
                     std::chrono::milliseconds(kMsgTimeoutMs);
-    while (std::chrono::steady_clock::now() < deadline) {
+    while (rc == PCL_OK && std::chrono::steady_clock::now() < deadline) {
       pcl_executor_spin_once(exec, 0);
-      if (recv.count.load(std::memory_order_acquire) > prev) {
+      if (response_state.count.load(std::memory_order_acquire) > prev) {
         delivered = true;
         break;
       }
     }
 
-    if (delivered) {
+    if (delivered && response_state.decoded) {
       wall_latencies.push_back(toUs(t0, Clock::now()));
       cpu_times.push_back(threadCpuElapsedUs(cpu_t0));
     } else {
@@ -440,8 +514,7 @@ static PerfResult runLocal(const char* label, const char* ct,
   }
 
   pcl_executor_destroy(exec);
-  pcl_container_destroy(sub_c);
-  pcl_container_destroy(pub_c);
+  pcl_container_destroy(service_c);
 
   return computeResult(label, kNMsgs, static_cast<int>(wall_latencies.size()),
                        timed_out, payload_bytes, wall_latencies, cpu_times);
@@ -452,84 +525,90 @@ static PerfResult runLocal(const char* label, const char* ct,
 // ---------------------------------------------------------------------------
 
 static PerfResult runShmem(const char* label, const char* ct,
-                           const cons::ObjectDetail& ev) {
+                           const svc::ObjectInterestRequirement& request) {
   std::string bus = uniqueId("perfbus");
-  std::string pub_id = uniqueId("pub");
-  std::string sub_id = uniqueId("sub");
+  std::string client_id = uniqueId("client");
+  std::string server_id = uniqueId("server");
 
-  // --- Subscriber participant (set up first so it's registered on the bus) ---
-  pcl_executor_t* sub_exec = pcl_executor_create();
+  // --- Server participant ---
+  pcl_executor_t* server_exec = pcl_executor_create();
   auto* sub_t = pcl_shared_memory_transport_create(
-      bus.c_str(), sub_id.c_str(), sub_exec);
+      bus.c_str(), server_id.c_str(), server_exec);
   if (!sub_t) {
-    pcl_executor_destroy(sub_exec);
+    pcl_executor_destroy(server_exec);
     PerfResult r; r.label = label; r.skipped = true; return r;
   }
-  pcl_executor_set_transport(sub_exec,
+  pcl_executor_set_transport(server_exec,
       pcl_shared_memory_transport_get_transport(sub_t));
+  if (!addRemoteGateway(
+          server_exec,
+          pcl_shared_memory_transport_gateway_container(sub_t))) {
+    pcl_shared_memory_transport_destroy(sub_t);
+    pcl_executor_destroy(server_exec);
+    PerfResult r; r.label = label; r.skipped = true; return r;
+  }
 
-  RecvState recv{};
-  recv.content_type = ct;
-  pcl_callbacks_t sub_cbs{};
-  sub_cbs.on_configure = onConfigureSub;
-  auto* sub_c = pcl_container_create("shmperf_sub", &sub_cbs, &recv);
-  pcl_container_configure(sub_c);
-  pcl_container_activate(sub_c);
-  pcl_executor_add(sub_exec, sub_c);
+  UnaryServiceSetup service_setup{ct};
+  pcl_callbacks_t service_cbs{};
+  service_cbs.on_configure = onConfigureUnaryService;
+  auto* service_c =
+      pcl_container_create("shmperf_service", &service_cbs, &service_setup);
+  pcl_container_configure(service_c);
+  pcl_container_activate(service_c);
+  pcl_executor_add(server_exec, service_c);
 
-  // Subscriber spin thread
-  std::atomic<bool> sub_stop{false};
-  std::thread sub_thread([&] {
-    while (!sub_stop.load(std::memory_order_relaxed)) {
-      pcl_executor_spin_once(sub_exec, 1);
+  std::atomic<bool> server_stop{false};
+  std::thread server_thread([&] {
+    while (!server_stop.load(std::memory_order_relaxed)) {
+      pcl_executor_spin_once(server_exec, 1);
       std::this_thread::yield();
     }
   });
 
-  // --- Publisher participant ---
-  pcl_executor_t* pub_exec = pcl_executor_create();
+  // --- Client participant ---
+  pcl_executor_t* client_exec = pcl_executor_create();
   auto* pub_t = pcl_shared_memory_transport_create(
-      bus.c_str(), pub_id.c_str(), pub_exec);
+      bus.c_str(), client_id.c_str(), client_exec);
   if (!pub_t) {
-    sub_stop.store(true);
-    sub_thread.join();
+    server_stop.store(true);
+    server_thread.join();
     pcl_shared_memory_transport_destroy(sub_t);
-    pcl_executor_destroy(sub_exec);
-    pcl_container_destroy(sub_c);
-    pcl_executor_destroy(pub_exec);
+    pcl_executor_destroy(server_exec);
+    pcl_container_destroy(service_c);
+    pcl_executor_destroy(client_exec);
     PerfResult r; r.label = label; r.skipped = true; return r;
   }
-  pcl_executor_set_transport(pub_exec,
+  pcl_executor_set_transport(client_exec,
       pcl_shared_memory_transport_get_transport(pub_t));
 
-  PubSetup pub_setup{nullptr, ct};
-  pcl_callbacks_t pub_cbs{};
-  pub_cbs.on_configure = onConfigurePub;
-  auto* pub_c = pcl_container_create("shmperf_pub", &pub_cbs, &pub_setup);
-  pcl_container_configure(pub_c);
-  pcl_container_activate(pub_c);
-  pcl_executor_add(pub_exec, pub_c);
-
-  // Measure encoded size
-  std::string sample;
-  cons::encodeObjectEvidence(ev, ct, &sample);
-  size_t payload_bytes = sample.size();
+  const size_t payload_bytes = encodedPayloadSize(request, ct);
 
   std::vector<double> wall_latencies;
   std::vector<double> cpu_times;
   wall_latencies.reserve(kNMsgs);
   cpu_times.reserve(kNMsgs);
   int timed_out = 0;
+  UnaryResponseState response_state{};
 
   for (int i = 0; i < kNMsgs; ++i) {
-    int prev = recv.count.load(std::memory_order_acquire);
+    int prev = response_state.count.load(std::memory_order_acquire);
     auto t0 = Clock::now();
     double cpu_t0 = threadCpuNowNs();
-    cons::publishObjectEvidence(pub_setup.port, ev, ct);
+    response_state.decoded = false;
+    const auto rc = svc::invokeCreateRequirement(
+        client_exec, request, createRequirementResponse, &response_state,
+        nullptr, ct);
 
     auto deadline = std::chrono::steady_clock::now() +
                     std::chrono::milliseconds(kMsgTimeoutMs);
-    if (waitForDelivery(recv, prev, deadline)) {
+    while (rc == PCL_OK &&
+           response_state.count.load(std::memory_order_acquire) <= prev &&
+           std::chrono::steady_clock::now() < deadline) {
+      pcl_executor_spin_once(client_exec, 0);
+      std::this_thread::yield();
+    }
+    if (response_state.count.load(std::memory_order_acquire) > prev &&
+        response_state.decoded) {
       wall_latencies.push_back(toUs(t0, Clock::now()));
       cpu_times.push_back(threadCpuElapsedUs(cpu_t0));
     } else {
@@ -538,16 +617,15 @@ static PerfResult runShmem(const char* label, const char* ct,
   }
 
   // Teardown
-  sub_stop.store(true);
-  sub_thread.join();
+  server_stop.store(true);
+  server_thread.join();
 
   pcl_shared_memory_transport_destroy(pub_t);
-  pcl_executor_destroy(pub_exec);
-  pcl_container_destroy(pub_c);
+  pcl_executor_destroy(client_exec);
 
   pcl_shared_memory_transport_destroy(sub_t);
-  pcl_executor_destroy(sub_exec);
-  pcl_container_destroy(sub_c);
+  pcl_executor_destroy(server_exec);
+  pcl_container_destroy(service_c);
 
   return computeResult(label, kNMsgs, static_cast<int>(wall_latencies.size()),
                        timed_out, payload_bytes, wall_latencies, cpu_times);
@@ -559,35 +637,100 @@ static PerfResult runShmem(const char* label, const char* ct,
 
 /// Server-side state shared between the server thread and the test body.
 struct SocketServerCtx {
-  uint16_t          port_ready = 0;        // written by PCL before port_published release
-  std::atomic<bool> port_published{false}; // release fence after port_ready is set
+  uint16_t          port_ready = 0;
   std::atomic<bool> ready_for_msgs{false};
   std::atomic<bool> stop{false};
   std::atomic<bool> failed{false};
-  RecvState*        recv = nullptr;
+  UnaryServiceSetup* service = nullptr;
 };
+
+static uint16_t pickSocketPort() {
+#if defined(_WIN32)
+  WSADATA wsa{};
+  if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+    return 0;
+  }
+  SOCKET tmp = socket(AF_INET, SOCK_STREAM, 0);
+  if (tmp == INVALID_SOCKET) {
+    return 0;
+  }
+#else
+  int tmp = socket(AF_INET, SOCK_STREAM, 0);
+  if (tmp < 0) {
+    return 0;
+  }
+#endif
+
+  sockaddr_in addr{};
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  addr.sin_port = 0;
+
+  if (bind(tmp, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+#if defined(_WIN32)
+    closesocket(tmp);
+#else
+    close(tmp);
+#endif
+    return 0;
+  }
+
+#if defined(_WIN32)
+  int len = static_cast<int>(sizeof(addr));
+#else
+  socklen_t len = sizeof(addr);
+#endif
+  if (getsockname(tmp, reinterpret_cast<sockaddr*>(&addr), &len) != 0) {
+#if defined(_WIN32)
+    closesocket(tmp);
+#else
+    close(tmp);
+#endif
+    return 0;
+  }
+
+  const uint16_t port = ntohs(addr.sin_port);
+#if defined(_WIN32)
+  closesocket(tmp);
+#else
+  close(tmp);
+#endif
+  return port;
+}
 
 static void socketServerThread(SocketServerCtx* ctx) {
   pcl_executor_t* exec = pcl_executor_create();
   if (!exec) { ctx->failed.store(true, std::memory_order_relaxed); return; }
 
-  uint16_t assigned_port = 0;
-  auto* t = pcl_socket_transport_create_server_ex(0, exec, &assigned_port);
+  auto* t = pcl_socket_transport_create_server(ctx->port_ready, exec);
   if (!t) {
     ctx->failed.store(true, std::memory_order_relaxed);
     pcl_executor_destroy(exec);
     return;
   }
-  ctx->port_ready = assigned_port;
-  ctx->port_published.store(true, std::memory_order_release);
+  if (pcl_socket_transport_set_peer_id(t, "client") != PCL_OK) {
+    ctx->failed.store(true, std::memory_order_relaxed);
+    pcl_socket_transport_destroy(t);
+    pcl_executor_destroy(exec);
+    return;
+  }
   pcl_executor_set_transport(exec, pcl_socket_transport_get_transport(t));
+  pcl_executor_register_transport(exec, "client",
+      pcl_socket_transport_get_transport(t));
+  if (!addRemoteGateway(exec, pcl_socket_transport_gateway_container(t))) {
+    ctx->failed.store(true, std::memory_order_relaxed);
+    pcl_socket_transport_destroy(t);
+    pcl_executor_destroy(exec);
+    return;
+  }
 
-  pcl_callbacks_t sub_cbs{};
-  sub_cbs.on_configure = onConfigureSub;
-  auto* sub_c = pcl_container_create("skperf_sub", &sub_cbs, ctx->recv);
-  pcl_container_configure(sub_c);
-  pcl_container_activate(sub_c);
-  pcl_executor_add(exec, sub_c);
+  pcl_callbacks_t service_cbs{};
+  service_cbs.on_configure = onConfigureUnaryService;
+  auto* service_c =
+      pcl_container_create("skperf_service", &service_cbs, ctx->service);
+  pcl_container_configure(service_c);
+  pcl_container_activate(service_c);
+  pcl_executor_add(exec, service_c);
   ctx->ready_for_msgs.store(true, std::memory_order_release);
 
   while (!ctx->stop.load(std::memory_order_relaxed)) {
@@ -597,55 +740,60 @@ static void socketServerThread(SocketServerCtx* ctx) {
 
   pcl_socket_transport_destroy(t);
   pcl_executor_destroy(exec);
-  pcl_container_destroy(sub_c);
+  pcl_container_destroy(service_c);
 }
 
 static PerfResult runSocket(const char* label, const char* ct,
-                            const cons::ObjectDetail& ev) {
-  RecvState recv{};
-  recv.content_type = ct;
+                            const svc::ObjectInterestRequirement& request) {
+  UnaryServiceSetup service_setup{ct};
 
   SocketServerCtx ctx{};
-  ctx.recv = &recv;
-
-  std::thread server(socketServerThread, &ctx);
-
-  // Wait for server to publish the chosen port.
-  auto ready_deadline = std::chrono::steady_clock::now() +
-                        std::chrono::milliseconds(kMsgTimeoutMs);
-  while (!ctx.port_published.load(std::memory_order_acquire) &&
-         std::chrono::steady_clock::now() < ready_deadline) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  ctx.service = &service_setup;
+  ctx.port_ready = pickSocketPort();
+  if (ctx.port_ready == 0) {
+    PerfResult r; r.label = label; r.skipped = true; return r;
   }
 
-  if (ctx.failed.load(std::memory_order_relaxed) || ctx.port_ready == 0) {
+  std::thread server(socketServerThread, &ctx);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  if (ctx.failed.load(std::memory_order_relaxed)) {
     ctx.stop.store(true);
     server.join();
     PerfResult r; r.label = label; r.skipped = true; return r;
   }
 
-  uint16_t port = ctx.port_ready;
-
   // Client side
   pcl_executor_t* client_exec = pcl_executor_create();
-  auto* client_t = pcl_socket_transport_create_client(
-      "127.0.0.1", port, client_exec);
+  pcl_socket_client_opts_t client_opts{};
+  client_opts.connect_timeout_ms = kMsgTimeoutMs;
+  client_opts.max_retries = 8u;
+  auto* client_t = pcl_socket_transport_create_client_ex(
+      "127.0.0.1", ctx.port_ready, client_exec, &client_opts);
   if (!client_t) {
     ctx.stop.store(true);
     server.join();
     pcl_executor_destroy(client_exec);
     PerfResult r; r.label = label; r.skipped = true; return r;
   }
+  if (pcl_socket_transport_set_peer_id(client_t, "server") != PCL_OK) {
+    ctx.stop.store(true);
+    pcl_socket_transport_destroy(client_t);
+    pcl_executor_destroy(client_exec);
+    server.join();
+    PerfResult r; r.label = label; r.skipped = true; return r;
+  }
   pcl_executor_set_transport(client_exec,
       pcl_socket_transport_get_transport(client_t));
-
-  PubSetup pub_setup{nullptr, ct};
-  pcl_callbacks_t pub_cbs{};
-  pub_cbs.on_configure = onConfigurePub;
-  auto* pub_c = pcl_container_create("skperf_pub", &pub_cbs, &pub_setup);
-  pcl_container_configure(pub_c);
-  pcl_container_activate(pub_c);
-  pcl_executor_add(client_exec, pub_c);
+  pcl_executor_register_transport(client_exec, "server",
+      pcl_socket_transport_get_transport(client_t));
+  if (!setRemoteEndpointRoute(client_exec, svc::kSvcCreateRequirement,
+                              "server")) {
+    ctx.stop.store(true);
+    pcl_socket_transport_destroy(client_t);
+    pcl_executor_destroy(client_exec);
+    server.join();
+    PerfResult r; r.label = label; r.skipped = true; return r;
+  }
 
   auto msg_ready_deadline = std::chrono::steady_clock::now() +
                             std::chrono::milliseconds(kMsgTimeoutMs);
@@ -657,32 +805,38 @@ static PerfResult runSocket(const char* label, const char* ct,
     ctx.stop.store(true);
     pcl_socket_transport_destroy(client_t);
     pcl_executor_destroy(client_exec);
-    pcl_container_destroy(pub_c);
     server.join();
     PerfResult r; r.label = label; r.skipped = true; return r;
   }
 
-  std::string sample;
-  cons::encodeObjectEvidence(ev, ct, &sample);
-  size_t payload_bytes = sample.size();
+  const size_t payload_bytes = encodedPayloadSize(request, ct);
 
   std::vector<double> wall_latencies;
   std::vector<double> cpu_times;
   wall_latencies.reserve(kNMsgs);
   cpu_times.reserve(kNMsgs);
   int timed_out = 0;
+  UnaryResponseState response_state{};
 
   for (int i = 0; i < kNMsgs; ++i) {
-    int prev = recv.count.load(std::memory_order_acquire);
+    int prev = response_state.count.load(std::memory_order_acquire);
     auto t0 = Clock::now();
     double cpu_t0 = threadCpuNowNs();
-    cons::publishObjectEvidence(pub_setup.port, ev, ct);
-    // spin client executor to flush send queue
-    pcl_executor_spin_once(client_exec, 0);
+    response_state.decoded = false;
+    const auto rc = svc::invokeCreateRequirement(
+        client_exec, request, createRequirementResponse, &response_state,
+        nullptr, ct);
 
     auto deadline = std::chrono::steady_clock::now() +
                     std::chrono::milliseconds(kMsgTimeoutMs);
-    if (waitForDelivery(recv, prev, deadline)) {
+    while (rc == PCL_OK &&
+           response_state.count.load(std::memory_order_acquire) <= prev &&
+           std::chrono::steady_clock::now() < deadline) {
+      pcl_executor_spin_once(client_exec, 0);
+      std::this_thread::yield();
+    }
+    if (response_state.count.load(std::memory_order_acquire) > prev &&
+        response_state.decoded) {
       wall_latencies.push_back(toUs(t0, Clock::now()));
       cpu_times.push_back(threadCpuElapsedUs(cpu_t0));
     } else {
@@ -693,7 +847,6 @@ static PerfResult runSocket(const char* label, const char* ct,
   ctx.stop.store(true);
   pcl_socket_transport_destroy(client_t);
   pcl_executor_destroy(client_exec);
-  pcl_container_destroy(pub_c);
   server.join();
 
   return computeResult(label, kNMsgs, static_cast<int>(wall_latencies.size()),
@@ -706,33 +859,6 @@ namespace proto_services = pyramid::components::tactical_objects::services::prov
 namespace proto_base = pyramid::data_model::base;
 namespace proto_common = pyramid::data_model::common;
 namespace proto_tactical = pyramid::data_model::tactical;
-
-namespace pyramid::components::tactical_objects::services::provided {
-
-class GrpcServer {
-public:
-  GrpcServer();
-  GrpcServer(GrpcServer&&) noexcept;
-  GrpcServer& operator=(GrpcServer&&) noexcept;
-  GrpcServer(const GrpcServer&) = delete;
-  GrpcServer& operator=(const GrpcServer&) = delete;
-  ~GrpcServer();
-
-  bool started() const;
-  void shutdown();
-
-private:
-  struct Impl;
-  explicit GrpcServer(std::unique_ptr<Impl> impl);
-  std::unique_ptr<Impl> impl_;
-  friend GrpcServer buildGrpcServer(const std::string& listen_address,
-                                    pcl_executor_t* executor);
-};
-
-GrpcServer buildGrpcServer(const std::string& listen_address,
-                           pcl_executor_t* executor);
-
-}  // namespace pyramid::components::tactical_objects::services::provided
 
 namespace provided = pyramid::components::tactical_objects::services::provided;
 
@@ -882,27 +1008,14 @@ protected:
   static std::vector<PerfResult> results_;
   static std::vector<CodecPerfResult> codec_results_;
 
-  void SetUp() override {
-#if defined(PYRAMID_HAS_PROTOBUF)
-    // ODR collision: pyramid::data_model::tactical::ObjectDetail is defined as
-    // both a plain C++ struct (pyramid_data_model_tactical_types.hpp) and a
-    // protobuf Message (tactical.pb.h) in this TU, causing the linker to
-    // resolve cons::ObjectDetail ctor/dtor to protobuf versions and crash at
-    // makePayload()'s static initialisation.  Skip all benchmarks until the
-    // ODR collision is resolved by isolating the protobuf codec into a separate TU.
-    GTEST_SKIP() << "ODR collision between plain-struct and protobuf ObjectDetail; "
-                    "fix pending (see PR #84)";
-#endif
-  }
-
   static void TearDownTestSuite() {
     printReport(results_);
     printCodecReport(codec_results_);
   }
 
-  static const cons::ObjectDetail& payload() {
-    static const auto ev = makePayload();
-    return ev;
+  static const svc::ObjectInterestRequirement& payload() {
+    static const auto request = makePayload();
+    return request;
   }
 };
 
@@ -910,18 +1023,18 @@ std::vector<PerfResult> BindingPerformanceTest::results_;
 std::vector<CodecPerfResult> BindingPerformanceTest::codec_results_;
 
 TEST_F(BindingPerformanceTest, Codec_Json) {
-  const auto& ev = payload();
-  const auto sample = tactical_codec::toJson(ev);
+  const auto& request = payload();
+  const auto sample = tactical_codec::toJson(request);
 
   auto encode = runCodecLoop("codec / json encode", sample.size(), kNCodecIters, [&] {
-    auto bytes = tactical_codec::toJson(ev);
+    auto bytes = tactical_codec::toJson(request);
     s_codec_sink.fetch_add(static_cast<uint64_t>(bytes.size()),
                            std::memory_order_relaxed);
   });
   auto decode = runCodecLoop("codec / json decode", sample.size(), kNCodecIters, [&] {
     auto decoded = tactical_codec::fromJson(
-        sample, static_cast<cons::ObjectDetail*>(nullptr));
-    s_codec_sink.fetch_add(static_cast<uint64_t>(decoded.id.size()),
+        sample, static_cast<svc::ObjectInterestRequirement*>(nullptr));
+    s_codec_sink.fetch_add(static_cast<uint64_t>(decoded.base.id.size()),
                            std::memory_order_relaxed);
   });
 
@@ -932,17 +1045,17 @@ TEST_F(BindingPerformanceTest, Codec_Json) {
 }
 
 TEST_F(BindingPerformanceTest, Codec_FlatBuffers) {
-  const auto& ev = payload();
-  const auto sample = flatbuffers_codec::toBinary(ev);
+  const auto& request = payload();
+  const auto sample = flatbuffers_codec::toBinary(request);
 
   auto encode = runCodecLoop("codec / flatbuffers enc", sample.size(), kNCodecIters, [&] {
-    auto bytes = flatbuffers_codec::toBinary(ev);
+    auto bytes = flatbuffers_codec::toBinary(request);
     s_codec_sink.fetch_add(static_cast<uint64_t>(bytes.size()),
                            std::memory_order_relaxed);
   });
   auto decode = runCodecLoop("codec / flatbuffers dec", sample.size(), kNCodecIters, [&] {
-    auto decoded = flatbuffers_codec::fromBinaryObjectDetail(sample);
-    s_codec_sink.fetch_add(static_cast<uint64_t>(decoded.id.size()),
+    auto decoded = flatbuffers_codec::fromBinaryObjectInterestRequirement(sample);
+    s_codec_sink.fetch_add(static_cast<uint64_t>(decoded.base.id.size()),
                            std::memory_order_relaxed);
   });
 
@@ -954,17 +1067,17 @@ TEST_F(BindingPerformanceTest, Codec_FlatBuffers) {
 
 #if defined(PYRAMID_HAS_PROTOBUF)
 TEST_F(BindingPerformanceTest, Codec_Protobuf) {
-  const auto& ev = payload();
-  const auto sample = protobuf_codec::toBinary(ev);
+  const auto& request = payload();
+  const auto sample = protobuf_codec::toBinary(request);
 
   auto encode = runCodecLoop("codec / protobuf enc", sample.size(), kNCodecIters, [&] {
-    auto bytes = protobuf_codec::toBinary(ev);
+    auto bytes = protobuf_codec::toBinary(request);
     s_codec_sink.fetch_add(static_cast<uint64_t>(bytes.size()),
                            std::memory_order_relaxed);
   });
   auto decode = runCodecLoop("codec / protobuf dec", sample.size(), kNCodecIters, [&] {
-    auto decoded = protobuf_codec::fromBinaryObjectDetail(sample);
-    s_codec_sink.fetch_add(static_cast<uint64_t>(decoded.id.size()),
+    auto decoded = protobuf_codec::fromBinaryObjectInterestRequirement(sample);
+    s_codec_sink.fetch_add(static_cast<uint64_t>(decoded.base.id.size()),
                            std::memory_order_relaxed);
   });
 

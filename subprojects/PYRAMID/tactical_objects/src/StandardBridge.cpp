@@ -19,9 +19,9 @@
 
 namespace tactical_objects {
 
-namespace prov = pyramid::services::tactical_objects::provided;
-namespace cons = pyramid::services::tactical_objects::consumed;
-namespace data_model = pyramid::data_model;
+namespace prov = pyramid::components::tactical_objects::services::provided;
+namespace cons = pyramid::components::tactical_objects::services::consumed;
+namespace data_model = pyramid::domain_model;
 using pyramid::core::uuid::UUIDHelper;
 
 namespace {
