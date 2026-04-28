@@ -259,6 +259,50 @@ static pcl_status_t on_configure(pcl_container_t* self, void* ud) {
 }
 ```
 
+## 7a. Gateway Containers For Inbound RPC
+
+Topic publishes can be injected into the executor straight from a
+transport's I/O thread (`pcl_executor_post_remote_incoming`). Inbound
+service requests cannot: handlers must run on the executor thread, where
+the port table, per-peer routes, and `PCL_PENDING` semantics live.
+
+PCL bridges the two by adding a small synthetic container -- the
+**gateway container** -- to the executor. The transport thread reformats
+each inbound service request and posts it as remote ingress on a private
+internal topic that only the gateway subscribes to (with
+`PCL_ROUTE_REMOTE`). The gateway's subscriber callback then dispatches
+the request through the executor's remote-aware service lookup so route
+modes and peer allow-lists are honoured exactly as for any other remote
+ingress.
+
+Where the gateway lives:
+
+- **Socket transport** -- gateway exists only on server-mode handles
+  (`pcl_socket_transport_create_server`). Client transports return NULL
+  from `pcl_socket_transport_gateway_container()`.
+- **Shared-memory transport** -- gateway exists on every participant
+  (the bus is symmetric; any participant may host services).
+  `pcl_shared_memory_transport_gateway_container()` returns a non-NULL
+  container regardless of role.
+- **UDP transport** -- no gateway (UDP is publish/subscribe only;
+  service RPC is deliberately unsupported).
+
+Wiring the gateway:
+
+1. Fetch the container via `*_gateway_container(transport)`.
+2. Drive it through `pcl_container_configure()` and
+   `pcl_container_activate()`.
+3. Add it to the executor with `pcl_executor_add()`.
+
+The Ada wrapper exposes one helper for steps 1-3:
+`Pcl_Transports.Start_Gateway`.
+
+Skip the gateway entirely if the participant is a pure publisher or a
+pure client (caller). Forgetting it on a side that *does* host a
+service is silent: requests reach the transport, are repacked into the
+gateway topic, and are dropped because no subscriber is listening; the
+caller observes a timeout.
+
 ## 8. Socket Transport Peer Setup
 
 The socket transport itself is still one connection per transport object.
