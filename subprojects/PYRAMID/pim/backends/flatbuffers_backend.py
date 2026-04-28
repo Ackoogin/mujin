@@ -260,7 +260,7 @@ def _message_spec_from_proto(
         field_index += 1 + (1 if generated_presence else 0)
     return FlatMessageSpec(
         name=msg.name,
-        cpp_type=f'pyramid::data_model::{msg.name}',
+        cpp_type=f'pyramid::domain_model::{msg.name}',
         ada_type=camel_to_snake(msg.name),
         full_type=full_type,
         fields=fields,
@@ -276,7 +276,7 @@ def _alias_root_spec(short_name: str, full_type: str,
     table_name = f'{short_name}Value'
     return FlatMessageSpec(
         name=table_name,
-        cpp_type=f'pyramid::data_model::{short_name}',
+        cpp_type=f'pyramid::domain_model::{short_name}',
         ada_type=camel_to_snake(short_name),
         full_type=full_type,
         fields=[FlatFieldSpec(
@@ -385,7 +385,7 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
                 holder_name=f'{short}ArrayHolder',
                 element_kind='string' if proto_scalar == 'string' else 'scalar',
                 element_type_name=_FBS_SCALAR_MAP[proto_scalar],
-                element_cpp_type=f'pyramid::data_model::{short}',
+                element_cpp_type=f'pyramid::domain_model::{short}',
                 element_ada_type=camel_to_snake(short),
                 element_full_type=type_name,
                 json_codec_ns=_json_codec_namespace_for_type(type_name),
@@ -397,7 +397,7 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
                 holder_name=f'{short}ArrayHolder',
                 element_kind='message',
                 element_type_name=short,
-                element_cpp_type=f'pyramid::data_model::{short}',
+                element_cpp_type=f'pyramid::domain_model::{short}',
                 element_ada_type=camel_to_snake(short),
                 element_full_type=type_name,
                 json_codec_ns=_json_codec_namespace_for_type(type_name),
@@ -655,7 +655,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write('#include <string>\n')
             f.write('#include <vector>\n\n')
             f.write(f'namespace {group.cpp_codec_ns} {{\n\n')
-            f.write('namespace data_model = pyramid::data_model;\n')
+            f.write('namespace data_model = pyramid::domain_model;\n')
             f.write('\n')
             f.write('static constexpr const char* kContentType = "application/flatbuffers";\n\n')
 
@@ -784,35 +784,35 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                         f.write(f'    out.{field.name}.reserve({member}.size());\n')
                         f.write(f'    for (const auto& item : {member}) {{\n')
                         f.write('        if (item) {\n')
-                        f.write(f'            out.{field.name}.push_back(from_fb(*item, static_cast<pyramid::data_model::{field.type_name}*>(nullptr)));\n')
+                        f.write(f'            out.{field.name}.push_back(from_fb(*item, static_cast<pyramid::domain_model::{field.type_name}*>(nullptr)));\n')
                         f.write('        }\n')
                         f.write('    }\n')
                     elif field.kind == 'enum':
                         f.write(f'    out.{field.name}.reserve({member}.size());\n')
                         f.write(f'    for (const auto& item : {member}) {{\n')
-                        f.write(f'        out.{field.name}.push_back(static_cast<pyramid::data_model::{field.type_name}>(item));\n')
+                        f.write(f'        out.{field.name}.push_back(static_cast<pyramid::domain_model::{field.type_name}>(item));\n')
                         f.write('    }\n')
                     else:
                         f.write(f'    out.{field.name} = {member};\n')
                 elif field.generated_presence:
                     f.write(f'    if (msg.has_{field.name}) {{\n')
                     if field.kind == 'enum':
-                        f.write(f'        out.{field.name} = static_cast<pyramid::data_model::{field.type_name}>({member});\n')
+                        f.write(f'        out.{field.name} = static_cast<pyramid::domain_model::{field.type_name}>({member});\n')
                     else:
                         f.write(f'        out.{field.name} = {member};\n')
                     f.write('    }\n')
                 elif field.generated_optional and field.kind == 'message':
                     f.write(f'    if ({member}) {{\n')
-                    f.write(f'        out.{field.name} = from_fb(*{member}, static_cast<pyramid::data_model::{field.type_name}*>(nullptr));\n')
+                    f.write(f'        out.{field.name} = from_fb(*{member}, static_cast<pyramid::domain_model::{field.type_name}*>(nullptr));\n')
                     f.write('    }\n')
                 elif field.generated_optional:
                     f.write(f'    if (!{member}.empty()) {{\n')
                     f.write(f'        out.{field.name} = {member};\n')
                     f.write('    }\n')
                 elif field.kind == 'message':
-                    f.write(f'    if ({member}) out.{field.name} = from_fb(*{member}, static_cast<pyramid::data_model::{field.type_name}*>(nullptr));\n')
+                    f.write(f'    if ({member}) out.{field.name} = from_fb(*{member}, static_cast<pyramid::domain_model::{field.type_name}*>(nullptr));\n')
                 elif field.kind == 'enum':
-                    f.write(f'    out.{field.name} = static_cast<pyramid::data_model::{field.type_name}>({member});\n')
+                    f.write(f'    out.{field.name} = static_cast<pyramid::domain_model::{field.type_name}>({member});\n')
                 else:
                     f.write(f'    out.{field.name} = {member};\n')
             f.write('    return out;\n')
@@ -839,7 +839,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                 f.write('    out.reserve(msg.items.size());\n')
                 f.write('    for (const auto& item : msg.items) {\n')
                 f.write('        if (item) {\n')
-                f.write(f'            out.push_back(from_fb(*item, static_cast<pyramid::data_model::{short}*>(nullptr)));\n')
+                f.write(f'            out.push_back(from_fb(*item, static_cast<pyramid::domain_model::{short}*>(nullptr)));\n')
                 f.write('        }\n')
                 f.write('    }\n')
             else:
@@ -880,11 +880,11 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
 
     def _cpp_json_encode_expr(self, group: ServiceCodecGroup, json_ns: str, cpp_type: str, expr: str) -> str:
         if json_ns == 'autonomy':
-            return f'pyramid::data_model::autonomy::toJson({expr})'
+            return f'pyramid::domain_model::autonomy::toJson({expr})'
         if json_ns == 'common':
-            return f'pyramid::data_model::common::toJson({expr})'
+            return f'pyramid::domain_model::common::toJson({expr})'
         if json_ns == 'tactical':
-            return f'pyramid::data_model::tactical::toJson({expr})'
+            return f'pyramid::domain_model::tactical::toJson({expr})'
         if json_ns == 'identifier':
             return f'nlohmann::json({expr}).dump()'
         if json_ns == 'wire':
@@ -893,11 +893,11 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
 
     def _cpp_json_decode_expr(self, group: ServiceCodecGroup, json_ns: str, cpp_type: str, expr: str) -> str:
         if json_ns == 'autonomy':
-            return f'pyramid::data_model::autonomy::fromJson({expr}, static_cast<{cpp_type}*>(nullptr))'
+            return f'pyramid::domain_model::autonomy::fromJson({expr}, static_cast<{cpp_type}*>(nullptr))'
         if json_ns == 'common':
-            return f'pyramid::data_model::common::fromJson({expr}, static_cast<{cpp_type}*>(nullptr))'
+            return f'pyramid::domain_model::common::fromJson({expr}, static_cast<{cpp_type}*>(nullptr))'
         if json_ns == 'tactical':
-            return f'pyramid::data_model::tactical::fromJson({expr}, static_cast<{cpp_type}*>(nullptr))'
+            return f'pyramid::domain_model::tactical::fromJson({expr}, static_cast<{cpp_type}*>(nullptr))'
         if json_ns == 'identifier':
             return (
                 '[&]() { auto j = nlohmann::json::parse(' + expr + '); '

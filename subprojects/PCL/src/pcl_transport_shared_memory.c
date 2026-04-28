@@ -45,7 +45,7 @@
 #define PCL_SHM_MAX_OBJECT_NAME 256u
 #define PCL_SHM_MAX_PAYLOAD 16384u
 #define PCL_SHM_DISCOVERY_RETRIES 20u
-#define PCL_SHM_POLL_MS 5u
+#define PCL_SHM_POLL_MS 1u
 
 typedef enum {
   PCL_SHM_FRAME_NONE = 0,
@@ -123,6 +123,13 @@ typedef struct pcl_shared_memory_transport_t {
 
 static void pcl_shm_sleep_ms(uint32_t ms) {
 #ifdef _WIN32
+  if (ms == 0u) return;
+  if (ms <= 1u) {
+    if (!SwitchToThread()) {
+      Sleep(0);
+    }
+    return;
+  }
   Sleep(ms);
 #else
   struct timespec req;

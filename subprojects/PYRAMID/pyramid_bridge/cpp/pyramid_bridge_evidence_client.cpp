@@ -40,12 +40,12 @@ pcl_status_t on_configure(pcl_container_t* container, void* user_data) {
   return state->publisher ? PCL_OK : PCL_ERR_CALLBACK;
 }
 
-pyramid::data_model::ObjectDetail make_evidence() {
-  pyramid::data_model::ObjectDetail evidence;
+pyramid::domain_model::ObjectDetail make_evidence() {
+  pyramid::domain_model::ObjectDetail evidence;
   evidence.id = "bridge-e2e-evidence";
   evidence.entity_source = "demo-radar";
-  evidence.identity = pyramid::data_model::StandardIdentity::Hostile;
-  evidence.dimension = pyramid::data_model::BattleDimension::SeaSurface;
+  evidence.identity = pyramid::domain_model::StandardIdentity::Hostile;
+  evidence.dimension = pyramid::domain_model::BattleDimension::SeaSurface;
   evidence.position.latitude = 51.0 * kDegToRad;
   evidence.position.longitude = 0.0;
   evidence.quality = 0.95;

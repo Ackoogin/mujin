@@ -253,18 +253,30 @@ def parse_proto(proto_path: Path) -> ProtoFile:
 
 # -- C++ namespace / file name derivation -------------------------------------
 
-_DATA_MODEL_TYPES_NS = 'pyramid::data_model'
+_DATA_MODEL_PROTO_ROOT = 'pyramid.data_model'
+_DATA_MODEL_TYPES_NS = 'pyramid::domain_model'
+_DATA_MODEL_TYPES_HEADER = 'pyramid_data_model_types.hpp'
 
-def _namespace_from_proto(proto_file: ProtoFile) -> Tuple[str, str, str, str]:
-    """Return (full_namespace, file_prefix, svc_base_ns, types_namespace).
 
-    pyramid.components.tactical_objects.services.provided
-      -> full_ns    : pyramid::services::tactical_objects::provided
-      -> file_prefix: pyramid_services_tactical_objects_provided
-      -> svc_base_ns: pyramid::services::tactical_objects
-      -> types_ns   : pyramid::data_model
+def _cpp_ns_for_proto_package(package: str) -> str:
+    if package == _DATA_MODEL_PROTO_ROOT:
+        return _DATA_MODEL_TYPES_NS
+    if package.startswith(_DATA_MODEL_PROTO_ROOT + '.'):
+        suffix = package[len(_DATA_MODEL_PROTO_ROOT) + 1:]
+        return _DATA_MODEL_TYPES_NS + '::' + suffix.replace('.', '::')
+    return package.replace('.', '::')
+
+
+def _cpp_ns_for_proto_type_package(package: str) -> str:
+    return _cpp_ns_for_proto_package(package)
+
+def _legacy_service_namespace(package: str) -> Tuple[str, str]:
+    """Return the legacy service namespace base and generated file prefix.
+
+    Keep these stable so existing generated codec file names and checked-in
+    service protobuf codec headers continue to resolve.
     """
-    parts = proto_file.package.split('.')
+    parts = package.split('.')
 
     last = parts[-1].lower()
     suffix = None
@@ -277,10 +289,29 @@ def _namespace_from_proto(proto_file: ProtoFile) -> Tuple[str, str, str, str]:
 
     ns_parts = ['pyramid', 'services'] + [p.lower() for p in meaningful]
     suffix = suffix or 'provided'
+    return '::'.join(ns_parts), '_'.join(ns_parts + [suffix])
 
-    svc_base_ns = '::'.join(ns_parts)
-    full_ns = svc_base_ns + '::' + suffix
-    file_prefix = '_'.join(ns_parts + [suffix])
+
+def _namespace_from_proto(proto_file: ProtoFile) -> Tuple[str, str, str, str]:
+    """Return (full_namespace, file_prefix, svc_base_ns, types_namespace).
+
+    pyramid.components.tactical_objects.services.provided
+      -> full_ns    : pyramid::components::tactical_objects::services::provided
+      -> file_prefix: pyramid_services_tactical_objects_provided
+      -> svc_base_ns: pyramid::services::tactical_objects
+      -> types_ns   : pyramid::domain_model
+    """
+    parts = proto_file.package.split('.')
+
+    last = parts[-1].lower()
+    suffix = None
+    if last in ('provided', 'consumed'):
+        suffix = last
+        parts = parts[:-1]
+
+    suffix = suffix or 'provided'
+    full_ns = '::'.join(parts + [suffix])
+    svc_base_ns, file_prefix = _legacy_service_namespace(proto_file.package)
 
     return full_ns, file_prefix, svc_base_ns, _DATA_MODEL_TYPES_NS
 
@@ -351,7 +382,7 @@ class CppServiceGenerator:
                 continue
 
             full_ns, file_prefix, _svc_base_ns, types_ns = _namespace_from_proto(parsed)
-            types_header = '_'.join(types_ns.split('::')) + '_types.hpp'
+            types_header = _DATA_MODEL_TYPES_HEADER
 
             hpp_path = output_path / (file_prefix + '.hpp')
             cpp_path = output_path / (file_prefix + '.cpp')
@@ -370,6 +401,9 @@ class CppServiceGenerator:
         is_provided = _is_provided(parsed)
         has_grpc = self._has_backend('grpc')
         has_ros2 = self._has_backend('ros2')
+        legacy_svc_base_ns, _legacy_prefix = _legacy_service_namespace(parsed.package)
+        legacy_role = parsed.package.split('.')[-1] if parsed.package else 'provided'
+        legacy_full_ns = legacy_svc_base_ns + '::' + legacy_role
         sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
         all_topics = dict(sub_topics)
         all_topics.update(pub_topics)
@@ -714,6 +748,15 @@ class CppServiceGenerator:
 
             # Namespace close
             f.write(f'}} // namespace {full_ns}\n')
+            if legacy_full_ns != full_ns:
+                legacy_parts = legacy_full_ns.split('::')
+                alias_name = legacy_parts[-1]
+                alias_parent = '::'.join(legacy_parts[:-1])
+                f.write('\n')
+                f.write('// Legacy service namespace alias for existing callers.\n')
+                f.write(f'namespace {alias_parent} {{\n')
+                f.write(f'namespace {alias_name} = ::{full_ns};\n')
+                f.write(f'}} // namespace {alias_parent}\n')
 
     # -- Implementation (.cpp) -------------------------------------------------
 
@@ -763,7 +806,7 @@ class CppServiceGenerator:
                 continue
             if indexed_pf.package == 'pyramid.data_model.base':
                 continue
-            dm_codec_nss.append(indexed_pf.package.replace('.', '::'))
+            dm_codec_nss.append(_cpp_ns_for_proto_package(indexed_pf.package))
             dm_codec_headers.append(
                 f'{indexed_pf.package.replace(".", "_")}_codec.hpp')
 
@@ -1420,11 +1463,15 @@ _STRUCT_CONSTANTS: Dict[str, List[Tuple[str, str]]] = {
 def _common_cpp_ns(index: ProtoTypeIndex) -> str:
     """Derive C++ namespace from common package prefix of data model protos.
 
-    e.g. pyramid.data_model.base, pyramid.data_model.common -> pyramid::data_model
+    e.g. pyramid.data_model.base, pyramid.data_model.common -> pyramid::domain_model
     """
     pkgs = [pf.package for pf in index.files if pf.package]
     if not pkgs:
         return 'data_model'
+    if all(pkg == _DATA_MODEL_PROTO_ROOT or
+           pkg.startswith(_DATA_MODEL_PROTO_ROOT + '.')
+           for pkg in pkgs):
+        return _DATA_MODEL_TYPES_NS
     parts = [p.split('.') for p in pkgs]
     common = parts[0]
     for p in parts[1:]:
@@ -1466,7 +1513,7 @@ class CppTypesGenerator:
             self._write_hpp_for_file(hpp, pf)
             print(f'  Generated {pf.package.replace(".", "::")} (types)')
         # Umbrella header: pyramid_data_model_types.hpp -> includes all + re-exports
-        umbrella = out / (self._prefix + '_types.hpp')
+        umbrella = out / _DATA_MODEL_TYPES_HEADER
         self._write_umbrella_hpp(umbrella)
         print(f'  Generated {self._ns} (umbrella)')
 
@@ -1517,7 +1564,7 @@ class CppTypesGenerator:
             # Fully-qualified proto type
             pkg = '.'.join(field_type.split('.')[:-1])
             if current_pkg and pkg != current_pkg:
-                base = pkg.replace('.', '::') + '::' + short
+                base = _cpp_ns_for_proto_type_package(pkg) + '::' + short
             else:
                 base = short
         elif (self._index.is_enum_type(field_type)
@@ -1525,7 +1572,7 @@ class CppTypesGenerator:
             # Short name -- look up its package for cross-package qualification
             pkg = self._package_of_type(field_type)
             if current_pkg and pkg and pkg != current_pkg:
-                base = pkg.replace('.', '::') + '::' + field_type
+                base = _cpp_ns_for_proto_type_package(pkg) + '::' + field_type
             else:
                 base = field_type
         else:
@@ -1549,11 +1596,11 @@ class CppTypesGenerator:
                 if '.' in field_type and not field_type.startswith('google.'):
                     pkg = '.'.join(field_type.split('.')[:-1])
                     if current_pkg and pkg != current_pkg:
-                        return f'{pkg.replace(".", "::")}::{short}::{lit}'
+                        return f'{_cpp_ns_for_proto_type_package(pkg)}::{short}::{lit}'
                 else:
                     pkg = self._package_of_type(field_type)
                     if current_pkg and pkg and pkg != current_pkg:
-                        return f'{pkg.replace(".", "::")}::{field_type}::{lit}'
+                        return f'{_cpp_ns_for_proto_type_package(pkg)}::{field_type}::{lit}'
                 return f'{short}::{lit}'
         return '{}'
 
@@ -1661,7 +1708,7 @@ class CppTypesGenerator:
         return result
 
     def _write_hpp_for_file(self, path: Path, pf) -> None:
-        ns = pf.package.replace('.', '::')
+        ns = _cpp_ns_for_proto_package(pf.package)
         current_pkg = pf.package
         includes = self._includes_for_file(pf)
         alias_names = set(self._aliases.keys())
@@ -1699,8 +1746,7 @@ class CppTypesGenerator:
 
     def _write_umbrella_hpp(self, path: Path) -> None:
         """Umbrella header that includes all per-file headers and re-exports
-        everything into the common pyramid::data_model namespace for backward
-        compatibility with code that uses that single namespace."""
+        everything into the common domain-model namespace."""
         per_file_headers = sorted(
             pf.package.replace('.', '_') + '_types.hpp'
             for pf in self._index.files
@@ -1708,15 +1754,15 @@ class CppTypesGenerator:
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated umbrella types header\n')
             f.write('// Includes all data model type headers and re-exports\n')
-            f.write('// their contents into namespace pyramid::data_model.\n')
+            f.write(f'// their contents into namespace {_DATA_MODEL_TYPES_NS}.\n')
             f.write('#pragma once\n\n')
             for h in per_file_headers:
                 f.write(f'#include "{h}"\n')
             f.write('\n// Re-export all sub-namespace types into the common namespace\n')
-            f.write('// so existing code using pyramid::data_model::T continues to work.\n')
+            f.write('// so generated bindings can use a single domain-model root.\n')
             f.write(f'namespace {self._ns} {{\n')
             for pf in self._index.files:
-                ns = pf.package.replace('.', '::')
+                ns = _cpp_ns_for_proto_package(pf.package)
                 if ns != self._ns:
                     f.write(f'using namespace {ns};\n')
             f.write(f'}} // namespace {self._ns}\n')
@@ -1748,7 +1794,7 @@ class CppDataModelCodecGenerator:
     def __init__(self, pf, index: 'ProtoTypeIndex'):
         self._pf = pf
         self._index = index
-        self._ns = pf.package.replace('.', '::')
+        self._ns = _cpp_ns_for_proto_package(pf.package)
         self._prefix = pf.package.replace('.', '_')
         self._types_header = self._prefix + '_types.hpp'
         self._hpp_name = self._prefix + '_codec.hpp'
@@ -1884,7 +1930,7 @@ class CppDataModelCodecGenerator:
         else:
             pkg = self._package_of_type(type_name)
         if pkg and pkg != current_pkg:
-            return pkg.replace('.', '::') + '::' + short
+            return _cpp_ns_for_proto_type_package(pkg) + '::' + short
         return short
 
     def _field_info(self, field, fname: str, current_pkg: str):

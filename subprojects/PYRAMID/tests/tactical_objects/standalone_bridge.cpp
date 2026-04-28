@@ -53,7 +53,7 @@ using json = nlohmann::json;
 namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
 #endif
 namespace data_model = pyramid::data_model;
-namespace tactical_codec = pyramid::data_model::tactical;
+namespace tactical_codec = pyramid::domain_model::tactical;
 
 // ---------------------------------------------------------------------------
 // Globals

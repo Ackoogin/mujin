@@ -17,7 +17,7 @@
 #include <string>
 #include <thread>
 
-namespace pyramid::services::tactical_objects::provided {
+namespace pyramid::components::tactical_objects::services::provided {
 
 class GrpcServer {
 public:
@@ -43,12 +43,12 @@ private:
 GrpcServer buildGrpcServer(const std::string& listen_address,
                            pcl_executor_t* executor);
 
-}  // namespace pyramid::services::tactical_objects::provided
+}  // namespace pyramid::components::tactical_objects::services::provided
 
 namespace proto_base = pyramid::data_model::base;
 namespace proto_common = pyramid::data_model::common;
 namespace proto_tactical = pyramid::data_model::tactical;
-namespace provided = pyramid::services::tactical_objects::provided;
+namespace provided = pyramid::components::tactical_objects::services::provided;
 namespace {
 
 constexpr const char* kSvcCreateRequirement =

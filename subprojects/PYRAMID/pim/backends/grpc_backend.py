@@ -8,7 +8,7 @@ executor.
 
 The C++ generated service facade owns the component-facing startup hook:
 
-    pyramid::services::<component>::provided::buildGrpcServer(...)
+    pyramid::components::<component>::services::provided::buildGrpcServer(...)
 
 The transport-specific files remain implementation glue and do not define a
 parallel ServiceHandler interface.
@@ -95,16 +95,7 @@ def _rpc_op(rpc: ProtoRpc):
 
 
 def _facade_namespace(package: str) -> str:
-    parts = [p for p in package.split('.') if p]
-    if 'components' in parts and 'services' in parts:
-        comp_i = parts.index('components')
-        svc_i = parts.index('services')
-        if comp_i + 1 < svc_i and svc_i + 1 < len(parts):
-            root = '::'.join(parts[:comp_i])
-            component = parts[comp_i + 1]
-            role = parts[svc_i + 1]
-            return f'{root}::services::{component}::{role}'
-    return '::'.join(parts)
+    return '::'.join(p for p in package.split('.') if p)
 
 
 def _facade_header(package: str) -> str:

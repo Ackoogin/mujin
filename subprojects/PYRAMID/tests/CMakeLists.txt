@@ -131,9 +131,9 @@ if(PYRAMID_ENABLE_PROTOBUF)
 endif()
 
 # ---------------------------------------------------------------------------
-# Binding performance benchmark (requires Protobuf for all three codecs)
+# Binding performance benchmark
 # ---------------------------------------------------------------------------
-if(PYRAMID_ENABLE_PROTOBUF)
+if(PYRAMID_ENABLE_FLATBUFFERS)
     add_executable(test_binding_performance
         test_binding_performance.cpp
         ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
@@ -151,8 +151,11 @@ if(PYRAMID_ENABLE_PROTOBUF)
         ${PYRAMID_ROOT_DIR}/tactical_objects/include
         ${PYRAMID_ROOT_DIR}/core/include
     )
-    if(NOT WIN32)
-        target_link_libraries(test_binding_performance PRIVATE pthread rt)
+    if(PYRAMID_ENABLE_PROTOBUF)
+        target_compile_definitions(test_binding_performance PRIVATE PYRAMID_HAS_PROTOBUF)
+        target_include_directories(test_binding_performance PRIVATE
+            ${PYRAMID_PROTOBUF_GEN_DIR}
+        )
     endif()
     if(TARGET pyramid_grpc_transport)
         target_link_libraries(test_binding_performance PRIVATE pyramid_grpc_transport)
@@ -161,6 +164,9 @@ if(PYRAMID_ENABLE_PROTOBUF)
             ${PYRAMID_PROTOBUF_GEN_DIR}
         )
         target_compile_definitions(test_binding_performance PRIVATE PYRAMID_HAS_GRPC)
+    endif()
+    if(NOT WIN32)
+        target_link_libraries(test_binding_performance PRIVATE pthread rt)
     endif()
     gtest_discover_tests(test_binding_performance
         DISCOVERY_MODE PRE_TEST
