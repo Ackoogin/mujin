@@ -1,6 +1,15 @@
 # Autonomy Assurance Plan
 
 Modular assurance plan for the PDDL-planning + Behaviour-Tree-execution autonomy module.
+
+## Executive Summary
+
+AME treats autonomy as an **explicit engineering model**, not a hidden collection of scripts. Stakeholders first agree the required autonomous behaviour against a small set of **keystone operational scenarios**. Those agreed scenarios are then formalised in **PDDL**, which provides a precise description of goals, actions, constraints, and expected outcomes for the autonomy function.
+
+Within an **MBSE workflow**, this gives a practical bridge from high-level operational intent to analyzable behaviour. SysML/MBSE artefacts capture the mission context, stakeholders, constraints, interfaces, and scenarios; the PDDL model then acts as the **executable behavioural elaboration** of that agreed intent. This allows the team to test whether scenarios are achievable, expose missing assumptions, identify unsafe or incomplete action logic, and refine requirements before committing to deeper implementation.
+
+For assurance, the benefit is that autonomy claims can be backed by evidence rather than narrative alone. The same formal model that expresses the intended behaviour can be used to support hazard analysis, derive safety requirements, validate plan feasibility, exercise off-nominal cases, and generate auditable execution evidence. In effect, the PDDL model becomes a key MBSE assurance asset: a formal mechanism for turning stakeholder-approved autonomy concepts into verifiable and reviewable system behaviour.
+
 Structured around:
 
 | Framework | Source | Scope |
@@ -503,4 +512,3 @@ If ML components are introduced (e.g. learned heuristics for the planner, ML-bas
 6. **UK MOD JDN 3/22** -- Joint Doctrine Note: Autonomy in Defence.
 7. **ISO 21448:2022** -- Road vehicles -- Safety of the intended functionality (SOTIF).
 8. **ISO 34502:2022** -- Road vehicles -- Test scenarios for automated driving systems -- Scenario based safety evaluation framework.
-
