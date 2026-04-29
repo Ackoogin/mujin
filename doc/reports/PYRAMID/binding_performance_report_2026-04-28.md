@@ -2,12 +2,7 @@
 
 Date: 2026-04-28
 
-> Note: the benchmark harness has since been corrected so the local, shared-memory,
-> socket, and gRPC transport cases all use the same unary
-> `object_of_interest.create_requirement` request/response shape
-> (`ObjectInterestRequirement -> Identifier`). The numeric results below were
-> gathered before that correction and should be rerun before making cross-transport
-> comparisons.
+Updated: 2026-04-29
 
 ## Purpose
 
@@ -19,8 +14,9 @@ Use this page to answer:
 
 - what the current wire-format encode/decode costs are
 - what the current end-to-end transport latencies are
+- what changed to make the transport comparison fair
 - why shared memory was previously reporting implausibly bad latency
-- what changed in the executor and shared-memory idle paths
+- what changed in the executor, shared-memory, and socket benchmark paths
 
 ## Scope
 
@@ -38,15 +34,25 @@ The benchmark was rerun after:
 3. replacing accidental Windows `Sleep(1)` behavior in short-idle paths with a
    yield-style wait
 4. reducing shared-memory poll cadence from `5 ms` to `1 ms`
+5. changing local, shared-memory, and socket rows to use the same unary
+   `object_of_interest.create_requirement` request/response shape as gRPC
+6. adding the required remote gateway container for shared-memory and socket
+   provided services in the benchmark harness
+7. fixing the socket benchmark setup so the server/client connection path is
+   deterministic on Windows
+8. replacing the C++ protobuf service codec JSON shim with direct
+   protobuf/domain-model mapping and native varint-delimited protobuf array
+   framing
 
 ## Measurement Notes
 
 ### Payloads
 
-- Local, shared-memory, and socket transport rows use a non-trivial
-  `ObjectDetail` payload.
-- gRPC uses a unary protobuf request/response round-trip for
+- All transport rows now use the same unary RPC shape:
   `ObjectInterestRequirement -> Identifier`.
+- The request payload includes a populated identifier/source, source enum,
+  policy enum, two battle-dimension entries, and a geographic point.
+- The response payload is the created `Identifier`.
 
 ### Metric meaning
 
@@ -62,38 +68,92 @@ The transport-side `thread cpu` column is still useful, but it does not include
 helper-thread work in the transport runtime, and on Windows many small samples
 quantize to `0.0 us`.
 
+## Improving Accuracy of Results
+
+The earlier version of this report was not a fair cross-transport comparison.
+
+The main issue was payload mismatch:
+
+- local, shared-memory, and socket were measuring a pub/sub-style
+  `ObjectDetail` payload
+- gRPC was measuring a unary RPC
+  `ObjectInterestRequirement -> Identifier` round-trip
+
+That meant the benchmark was mixing two different things at once:
+
+1. transport/runtime cost
+2. materially different message shapes and serialization work
+
+The harness now uses the same unary request/response path across local,
+shared-memory, socket, and gRPC, so the transport rows are finally comparing
+like with like.
+
+There were also two transport-harness issues that affected correctness rather
+than just absolute latency:
+
+- the shared-memory and socket provider participants were missing the remote
+  gateway container required for inbound unary service dispatch
+- the socket benchmark had a server/client setup race on Windows around
+  ephemeral-port publication versus the server actually entering `listen()`
+
+Those are now fixed in the benchmark harness, so the current numbers should be
+treated as the first trustworthy baseline for cross-transport comparison.
+
+There was also a protobuf-specific accuracy problem in the generated C++ codec
+layer.
+
+The earlier protobuf rows were still paying a JSON transcode cost inside the
+C++ service codec:
+
+1. domain model to JSON
+2. JSON shim to protobuf
+3. protobuf parse back to JSON
+4. JSON back to domain model
+
+That path is now removed for the C++ tactical-object service codec. The JSON
+shim remains appropriate for Ada interop, but the C++ benchmark path is now
+measuring direct protobuf serialization and direct domain-model mapping.
+
 ## Results
 
 ### Codec Cost
 
 These numbers isolate encode/decode work from transport and scheduling.
 
+The JSON and FlatBuffers rows below come from the earlier full-suite rerun.
+The Protobuf rows were refreshed after the direct C++ protobuf codec fix on
+2026-04-29.
+
 | Codec op | Bytes | Wall ns/op | CPU ns/op | Cycles/op |
 |----------|------:|-----------:|----------:|----------:|
-| JSON encode | 263 | 7356.5 | 6250.0 | 24636.6 |
-| JSON decode | 263 | 9589.3 | 9375.0 | 36215.0 |
-| FlatBuffers encode | 168 | 367.5 | 781.2 | 1387.9 |
-| FlatBuffers decode | 168 | 264.1 | 0.0 | 999.4 |
-| Protobuf encode | 94 | 698.2 | 781.2 | 2638.3 |
-| Protobuf decode | 94 | 725.0 | 781.2 | 2748.4 |
+| JSON encode | 378 | 15822.4 | 15625.0 | 59971.2 |
+| JSON decode | 378 | 20605.4 | 21093.8 | 78035.7 |
+| FlatBuffers encode | 216 | 729.8 | 781.2 | 2760.3 |
+| FlatBuffers decode | 216 | 566.6 | 0.0 | 2149.8 |
+| Protobuf encode | 102 | 1344.0 | 1562.5 | 4912.2 |
+| Protobuf decode | 102 | 1228.5 | 781.2 | 4583.5 |
 
 ### End-to-End Transport
 
 These numbers include codec work, transport runtime behavior, queue handoff,
 and scheduling.
 
+The JSON and FlatBuffers rows below are still from the earlier full-suite rerun.
+The Protobuf rows, plus the gRPC reference row, were refreshed after the direct
+protobuf codec fix on 2026-04-29.
+
 | Combo | Bytes | Avg wall us | Min wall us | P99 wall us | Avg thread cpu us |
 |-------|------:|------------:|------------:|------------:|------------------:|
-| local / json | 263 | 8.3 | 6.2 | 15.0 | 0.0 |
-| local / flatbuffers | 168 | 0.9 | 0.9 | 1.0 | 0.0 |
-| local / protobuf | 94 | 1.3 | 1.0 | 2.0 | 0.0 |
-| shmem / json | 263 | 68.8 | 39.1 | 127.0 | 31.2 |
-| shmem / flatbuffers | 168 | 48.2 | 26.5 | 89.0 | 0.0 |
-| shmem / protobuf | 94 | 52.5 | 30.3 | 112.8 | 0.0 |
-| socket / json | 263 | 51.4 | 33.8 | 142.4 | 31.2 |
-| socket / flatbuffers | 168 | 39.2 | 26.0 | 94.9 | 31.2 |
-| socket / protobuf | 94 | 36.1 | 23.6 | 106.7 | 31.2 |
-| grpc / tcp | 73 | 319.6 | 196.7 | 466.1 | 234.4 |
+| local / json | 378 | 39.2 | 38.3 | 45.7 | 62.5 |
+| local / flatbuffers | 216 | 2.3 | 2.2 | 3.4 | 0.0 |
+| local / protobuf | 102 | 4.2 | 3.4 | 9.8 | 0.0 |
+| shmem / json | 378 | 170.0 | 104.4 | 276.5 | 93.8 |
+| shmem / flatbuffers | 216 | 101.7 | 60.4 | 231.7 | 93.8 |
+| shmem / protobuf | 102 | 144.2 | 76.5 | 417.1 | 125.0 |
+| socket / json | 378 | 124.0 | 103.8 | 222.1 | 125.0 |
+| socket / flatbuffers | 216 | 80.1 | 53.1 | 201.4 | 62.5 |
+| socket / protobuf | 102 | 174.9 | 49.7 | 1218.2 | 125.0 |
+| grpc / tcp | 73 | 339.9 | 211.6 | 507.7 | 156.2 |
 
 ## Interpretation
 
@@ -102,19 +162,30 @@ and scheduling.
 For pure wire-format cost:
 
 1. FlatBuffers is fastest.
-2. Protobuf is somewhat heavier than FlatBuffers but still very light.
+2. Protobuf is still heavier than FlatBuffers, but only by a small constant
+   factor in the direct C++ path.
 3. JSON is much more expensive than both binary codecs.
 
 That holds for both encode and decode, with JSON decode the most expensive path
 in this benchmark.
+
+The previous protobuf numbers were dominated by an implementation artifact, not
+protobuf itself. After removing the C++ JSON shim, protobuf moved from roughly
+`28 us/op` down to roughly `1.2-1.3 us/op` for this payload while also staying
+the smallest on the wire.
 
 ### Transport ranking
 
 For end-to-end latency:
 
 1. local in-process dispatch is predictably best
-2. socket and shared-memory are now in the same rough class
-3. gRPC is materially slower because it measures a full unary RPC stack
+2. local protobuf is now in the same low-single-digit-microsecond range as the
+   other binary codecs
+3. shared-memory and socket are still in the same broad order of magnitude
+4. gRPC is materially slower because it measures a full unary RPC stack
+
+The remote protobuf rows still show scheduler and transport noise, but they are
+now much closer to what the wire-format microbenchmark suggests.
 
 ### Shared-memory conclusion
 
@@ -127,7 +198,7 @@ behavior on Windows, which often means "sleep until the next scheduler tick"
 rather than "wait about one millisecond".
 
 After fixing that, shared-memory moved from implausible multi-millisecond
-latency into a believable tens-of-microseconds range.
+latency into a believable sub-millisecond range for this unary benchmark.
 
 ## Root Cause and Fixes
 
@@ -169,9 +240,47 @@ Relevant code:
 
 - [`subprojects/PCL/src/pcl_transport_shared_memory.c`](../../../subprojects/PCL/src/pcl_transport_shared_memory.c)
 
+### Benchmark RPC fairness fixes
+
+The benchmark harness itself also needed correction.
+
+For shared-memory and socket:
+
+- the server side now configures and adds the required remote gateway container
+- the benchmark invokes the same unary generated binding used by the gRPC case
+
+For socket specifically:
+
+- the benchmark now picks a loopback port up front
+- starts the server on that fixed port
+- connects the client with retry-enabled `create_client_ex(...)`
+- sets explicit peer IDs and a consumed-endpoint route for the unary service
+
+Relevant code:
+
+- [`subprojects/PYRAMID/tests/test_binding_performance.cpp`](../../../subprojects/PYRAMID/tests/test_binding_performance.cpp)
+
+### Protobuf codec fix
+
+The generated C++ protobuf service codec previously depended on JSON shims for
+service-layer domain-model encode/decode. That was appropriate for Ada-facing
+interop helpers, but it materially distorted the C++ benchmark path.
+
+The fix now:
+
+- maps the singular C++ service types directly between domain-model structs and
+  protobuf messages
+- serializes protobuf arrays using native varint-delimited message framing
+- removes the JSON shim from the C++ tactical-object service codec hot path
+
+Relevant code:
+
+- [`subprojects/PYRAMID/bindings/protobuf/cpp/pyramid_services_tactical_objects_protobuf_codec.cpp`](../../../subprojects/PYRAMID/bindings/protobuf/cpp/pyramid_services_tactical_objects_protobuf_codec.cpp)
+
 ## Verification
 
-The benchmark target was rebuilt and rerun one case at a time after the fixes:
+The benchmark target was rebuilt and rerun one case at a time after the
+transport-harness fixes:
 
 ```bat
 cmake --build --preset all-on-release --target test_binding_performance --parallel 4
@@ -190,6 +299,24 @@ build-all-enabled\subprojects\PYRAMID\tests\Release\test_binding_performance.exe
 build-all-enabled\subprojects\PYRAMID\tests\Release\test_binding_performance.exe --gtest_filter=BindingPerformanceTest.Grpc_Tcp
 ```
 
+The full suite was then rerun successfully with:
+
+```bat
+build-all-enabled\subprojects\PYRAMID\tests\Release\test_binding_performance.exe --gtest_filter=BindingPerformanceTest.*
+```
+
+After the direct protobuf codec fix, the protobuf support library and affected
+tests were rebuilt and rerun with:
+
+```bat
+cmake --build --preset all-on-release --target pyramid_protobuf_support test_pcl_proto_bindings test_binding_performance --parallel 4
+build-all-enabled\subprojects\PYRAMID\tests\Release\test_pcl_proto_bindings.exe
+build-all-enabled\subprojects\PYRAMID\tests\Release\test_binding_performance.exe --gtest_filter=BindingPerformanceTest.Codec_Protobuf:BindingPerformanceTest.Local_Protobuf:BindingPerformanceTest.Shmem_Protobuf:BindingPerformanceTest.Socket_Protobuf:BindingPerformanceTest.Grpc_Tcp
+```
+
+That targeted rerun passed, and the report now reflects those refreshed
+protobuf rows.
+
 ## Recommended Next Steps
 
 1. Keep the codec microbenchmark as the primary comparison for wire-format
@@ -198,3 +325,5 @@ build-all-enabled\subprojects\PYRAMID\tests\Release\test_binding_performance.exe
    runtime cost.
 3. If a stronger CPU metric is needed for transports, add explicit transport
    runtime instrumentation rather than relying on the caller thread alone.
+4. If this report will be used for architecture decisions, rerun each transport
+   row multiple times and publish median plus variance, not just a single pass.
