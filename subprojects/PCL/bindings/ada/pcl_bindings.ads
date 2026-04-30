@@ -12,6 +12,7 @@
 --  cover a feature, or when generated PYRAMID bindings need raw access to the
 --  C handles and callback typedefs.
 
+with Interfaces;
 with Interfaces.C;
 with Interfaces.C.Extensions;
 with Interfaces.C.Strings;
@@ -20,6 +21,12 @@ with System;
 package Pcl_Bindings is
   --  C ``bool`` exposed at the ABI boundary for routing callbacks etc.
   subtype C_Bool is Interfaces.C.Extensions.bool;
+
+  --  The PCL C ABI exposes signed 64-bit parameters as ``int64_t``.  Older
+  --  GNAT toolchains do not always provide ``Interfaces.C.long_long``, so we
+  --  model the ABI contract directly instead of depending on that alias.
+  type C_Int64 is new Interfaces.Integer_64;
+  pragma Convention(C, C_Int64);
 
   --  Numeric status code matching ``pcl_status_t`` in the C ABI.
   --
@@ -565,7 +572,7 @@ package Pcl_Bindings is
   function Set_Param_I64
     (Container : Pcl_Container_Access;
      Key       : Interfaces.C.Strings.chars_ptr;
-     Value     : Interfaces.C.long_long) return Pcl_Status;
+     Value     : C_Int64) return Pcl_Status;
   pragma Import(C, Set_Param_I64, "pcl_container_set_param_i64");
 
   function Set_Param_Bool
@@ -590,7 +597,7 @@ package Pcl_Bindings is
   function Get_Param_I64
     (Container   : Pcl_Container_Access;
      Key         : Interfaces.C.Strings.chars_ptr;
-     Default_Val : Interfaces.C.long_long) return Interfaces.C.long_long;
+     Default_Val : C_Int64) return C_Int64;
   pragma Import(C, Get_Param_I64, "pcl_container_get_param_i64");
 
   function Get_Param_Bool

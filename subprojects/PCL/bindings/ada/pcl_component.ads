@@ -125,7 +125,7 @@ package Pcl_Component is
   procedure Set_Param
     (This  : in out Component'Class;
      Key   : String;
-     Value : Interfaces.C.long_long);
+     Value : Long_Long_Integer);
   procedure Set_Param
     (This  : in out Component'Class;
      Key   : String;
@@ -143,7 +143,7 @@ package Pcl_Component is
   function Param_I64
     (This        : Component'Class;
      Key         : String;
-     Default_Val : Interfaces.C.long_long := 0) return Interfaces.C.long_long;
+     Default_Val : Long_Long_Integer := 0) return Long_Long_Integer;
   function Param_Bool
     (This        : Component'Class;
      Key         : String;
