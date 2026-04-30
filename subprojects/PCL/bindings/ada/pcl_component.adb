@@ -497,20 +497,6 @@ package body Pcl_Component is
   procedure Set_Param
     (This  : in out Component'Class;
      Key   : String;
-     Value : Long_Long_Integer) is
-    Key_C : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String(Key);
-  begin
-    Ensure_Created(This);
-    Check(Pcl_Bindings.Set_Param_I64(This.Handle,
-                                     Key_C,
-                                     Pcl_Bindings.C_Int64(Value)),
-          "set int param");
-    Interfaces.C.Strings.Free(Key_C);
-  end Set_Param;
-
-  procedure Set_Param
-    (This  : in out Component'Class;
-     Key   : String;
      Value : Boolean) is
     Key_C : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String(Key);
   begin
@@ -560,21 +546,6 @@ package body Pcl_Component is
     Interfaces.C.Strings.Free(Key_C);
     return Value;
   end Param_F64;
-
-  function Param_I64
-    (This        : Component'Class;
-     Key         : String;
-     Default_Val : Long_Long_Integer := 0) return Long_Long_Integer is
-    Key_C : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String(Key);
-    Value : Pcl_Bindings.C_Int64;
-  begin
-    Ensure_Created(This);
-    Value := Pcl_Bindings.Get_Param_I64(This.Handle,
-                                        Key_C,
-                                        Pcl_Bindings.C_Int64(Default_Val));
-    Interfaces.C.Strings.Free(Key_C);
-    return Long_Long_Integer(Value);
-  end Param_I64;
 
   function Param_Bool
     (This        : Component'Class;

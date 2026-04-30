@@ -125,10 +125,6 @@ package Pcl_Component is
   procedure Set_Param
     (This  : in out Component'Class;
      Key   : String;
-     Value : Long_Long_Integer);
-  procedure Set_Param
-    (This  : in out Component'Class;
-     Key   : String;
      Value : Boolean);
 
   --  Parameter readers; ``Default_Val`` is returned when the key is unset.
@@ -140,10 +136,6 @@ package Pcl_Component is
     (This        : Component'Class;
      Key         : String;
      Default_Val : Interfaces.C.double := 0.0) return Interfaces.C.double;
-  function Param_I64
-    (This        : Component'Class;
-     Key         : String;
-     Default_Val : Long_Long_Integer := 0) return Long_Long_Integer;
   function Param_Bool
     (This        : Component'Class;
      Key         : String;
