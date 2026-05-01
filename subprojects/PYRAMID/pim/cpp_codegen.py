@@ -1672,7 +1672,7 @@ class CppTypesGenerator:
                 default = '{}'
                 opt = ''
             elif field.is_optional and base_cpp not in ('std::string',):
-                cpp_type = f'std::optional<{base_cpp}>'
+                cpp_type = f'tl::optional<{base_cpp}>'
                 default = ''
                 opt = '  // optional'
             else:
@@ -1685,7 +1685,7 @@ class CppTypesGenerator:
             f.write(f'    // oneof {oo.name}\n')
             for field in oo.fields:
                 cpp_type = self._cpp_field_type(field.type, False, current_pkg)
-                f.write(f'    std::optional<{cpp_type}> {field.name};\n')
+                f.write(f'    tl::optional<{cpp_type}> {field.name};\n')
         f.write('};\n')
         for const_name, init in _STRUCT_CONSTANTS.get(msg.name, []):
             body = init[len(msg.name):] if init.startswith(msg.name) else (
@@ -1721,7 +1721,7 @@ class CppTypesGenerator:
             f.write(f'// Namespace: {ns}\n')
             f.write('#pragma once\n\n')
             f.write('#include <cstdint>\n')
-            f.write('#include <optional>\n')
+            f.write('#include <tl/optional.hpp>\n')
             f.write('#include <string>\n')
             f.write('#include <vector>\n')
             for inc in includes:
