@@ -7,7 +7,31 @@ WORKSPACE_ROOT="$(cd "$PYRAMID_ROOT/../.." && pwd)"
 
 OUT_DIR="${1:-$WORKSPACE_ROOT/build/ada_gnat_pyramid}"
 OBJ_DIR="$OUT_DIR/obj"
-FORCE_REBUILD="${2:-0}"
+FORCE_REBUILD=0
+BUILD_DIR="${PYRAMID_BUILD_DIR:-$WORKSPACE_ROOT/build}"
+
+if [[ $# -gt 0 ]]; then
+  shift
+fi
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --force)
+      FORCE_REBUILD="--force"
+      shift
+      ;;
+    --build-dir)
+      BUILD_DIR="$2"
+      shift 2
+      ;;
+    --config)
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
 
 LIB_NAME="pyramid_generated_flatbuffers_codec"
 LIB_FILE="$OUT_DIR/lib${LIB_NAME}.a"
@@ -27,7 +51,14 @@ fi
 GXX_DIR="$(dirname "$GXX_PATH")"
 
 CXX="$GXX_DIR/g++"
-AR="$GXX_DIR/ar"
+AR="$(command -v gcc-ar 2>/dev/null || true)"
+if [[ -z "$AR" ]]; then
+  AR="$(command -v ar 2>/dev/null || true)"
+fi
+if [[ -z "$AR" ]]; then
+  echo "[ada-pyramid] ERROR: ar not found in PATH" >&2
+  exit 1
+fi
 
 echo "[ada-pyramid] Compiler : $CXX"
 echo "[ada-pyramid] Archiver : $AR"
@@ -43,9 +74,9 @@ fi
 
 GEN_DIR="$PYRAMID_ROOT/bindings/cpp/generated"
 GEN_FB_DIR="$GEN_DIR/flatbuffers/cpp"
-BUILD_FB_DIR="$WORKSPACE_ROOT/build/generated/flatbuffers/cpp"
-FLATBUFFERS_INCLUDE="$WORKSPACE_ROOT/build/_deps/flatbuffers-src/include"
-NLOHMANN_INCLUDE="${NLOHMANN_JSON_INCLUDE:-$WORKSPACE_ROOT/build/_deps/nlohmann_json-src/include}"
+BUILD_FB_DIR="$BUILD_DIR/generated/flatbuffers/cpp"
+FLATBUFFERS_INCLUDE="$BUILD_DIR/_deps/flatbuffers-src/include"
+NLOHMANN_INCLUDE="${NLOHMANN_JSON_INCLUDE:-$BUILD_DIR/_deps/nlohmann_json-src/include}"
 if [[ ! -d "$NLOHMANN_INCLUDE" ]]; then
   NLOHMANN_INCLUDE="$PYRAMID_ROOT/core/external"
 fi
@@ -56,7 +87,7 @@ if [[ ! -d "$BUILD_FB_DIR" ]]; then
     exit 1
   fi
   echo "[ada-pyramid] Refreshing flatc-generated headers..."
-  cmake --build "$WORKSPACE_ROOT/build" --config Release --target pyramid_flatbuffers_codegen -j4
+  cmake --build "$BUILD_DIR" --config Release --target pyramid_flatbuffers_codegen -j4
 fi
 
 CXXFLAGS=(

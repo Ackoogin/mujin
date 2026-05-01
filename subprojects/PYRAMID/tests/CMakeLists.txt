@@ -386,6 +386,17 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     endif()
     set(BINDINGS_GEN_SCRIPT ${PYRAMID_ROOT_DIR}/pim/generate_bindings.py)
     set(ADA_GEN_OUT ${PYRAMID_ROOT_DIR}/bindings/ada/generated)
+    if(WIN32)
+        set(ADA_GPR_PROJECT_PATH "")
+        set(_ada_gpr_project_path_env "")
+    else()
+        set(ADA_GNATCOLL_CORE_DIR ${PYRAMID_ROOT_DIR}/core/external/gnatcoll-core/core)
+        set(ADA_GNATCOLL_MINIMAL_DIR ${PYRAMID_ROOT_DIR}/core/external/gnatcoll-core/minimal)
+        set(ADA_GNATCOLL_PROJECTS_DIR ${PYRAMID_ROOT_DIR}/core/external/gnatcoll-core/projects)
+        set(ADA_GPR_PROJECT_PATH
+            "${ADA_GNATCOLL_CORE_DIR}:${ADA_GNATCOLL_MINIMAL_DIR}:${ADA_GNATCOLL_PROJECTS_DIR}")
+        set(_ada_gpr_project_path_env ";GPR_PROJECT_PATH=${ADA_GPR_PROJECT_PATH}")
+    endif()
     set(ADA_PCL_INCLUDE_DIR "${PCL_ROOT_DIR}/include" CACHE PATH
         "Include directory for Ada gprbuild PCL headers")
     set(ADA_PCL_LIB_NAME "pcl_core" CACHE STRING
@@ -444,7 +455,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND}
                 -DOUTPUT=${ADA_PCL_SENSOR_DEMO_EXE}
                 -DWORKING_DIRECTORY=${ADA_EXAMPLE_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD};-p;-P;${ADA_EXAMPLE_DIR}/pcl_sensor_demo.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}${_ada_gpr_project_path_env};${GPRBUILD};-p;-P;${ADA_EXAMPLE_DIR}/pcl_sensor_demo.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_EXAMPLE_DIR}
         COMMENT "Building Ada PCL sensor demo"
@@ -461,7 +472,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND}
                 -DOUTPUT=${ADA_PCL_COMPONENT_TESTS_EXE}
                 -DWORKING_DIRECTORY=${ADA_TEST_SRC_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD};-p;-P;${ADA_TEST_SRC_DIR}/pcl_component_tests.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}${_ada_gpr_project_path_env};${GPRBUILD};-p;-P;${ADA_TEST_SRC_DIR}/pcl_component_tests.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
         COMMENT "Building Ada PCL component tests"
@@ -478,7 +489,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND}
                 -DOUTPUT=${ADA_PYRAMID_UUID_TEST_EXE}
                 -DWORKING_DIRECTORY=${ADA_TEST_SRC_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD};-p;-P;${ADA_TEST_SRC_DIR}/test_pyramid_uuids.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}${_ada_gpr_project_path_env};${GPRBUILD};-p;-P;${ADA_TEST_SRC_DIR}/test_pyramid_uuids.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
         COMMENT "Building Ada Pyramid UUID test"
@@ -525,64 +536,85 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
             DEPENDS
                 ${ADA_PYRAMID_GEN_BUILD_SCRIPT}
                 ${ADA_PYRAMID_GEN_CODEC_INPUTS}
-                ${PYRAMID_FLATBUFFERS_OUTPUTS}
+                pyramid_flatbuffers_codegen
             COMMENT "Preparing GNAT-compatible generated FlatBuffers archive for Ada builds"
             VERBATIM)
     else()
         add_custom_command(
             OUTPUT ${ADA_PYRAMID_GEN_ARCHIVE}
             COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR}
-            COMMAND bash ${ADA_PYRAMID_GEN_BUILD_SCRIPT} ${ADA_PYRAMID_GEN_LIB_DIR}
+            COMMAND bash ${ADA_PYRAMID_GEN_BUILD_SCRIPT} ${ADA_PYRAMID_GEN_LIB_DIR} --build-dir ${CMAKE_BINARY_DIR}
             DEPENDS
                 ${ADA_PYRAMID_GEN_BUILD_SCRIPT}
                 ${ADA_PYRAMID_GEN_CODEC_INPUTS}
-                ${PYRAMID_FLATBUFFERS_OUTPUTS}
+                pyramid_flatbuffers_codegen
             COMMENT "Preparing GNAT-compatible generated FlatBuffers archive for Ada builds"
             VERBATIM)
     endif()
     add_custom_target(ada_pyramid_generated_flatbuffers_archive
         DEPENDS ${ADA_PYRAMID_GEN_ARCHIVE})
 
+    set(_ada_bindings_backends json)
+    if(PYRAMID_ENABLE_FLATBUFFERS)
+        list(APPEND _ada_bindings_backends flatbuffers)
+    endif()
+    if(PYRAMID_ENABLE_PROTOBUF)
+        list(APPEND _ada_bindings_backends protobuf)
+    endif()
+    if(PYRAMID_ENABLE_GRPC)
+        list(APPEND _ada_bindings_backends grpc)
+    endif()
+    if(PYRAMID_ENABLE_ROS2)
+        list(APPEND _ada_bindings_backends ros2)
+    endif()
+    list(JOIN _ada_bindings_backends "," _ada_bindings_backends_arg)
+
     set(ADA_GENERATED_BINDINGS_EXE
         ${ADA_TEST_SRC_DIR}/bin/test_generated_bindings${CMAKE_EXECUTABLE_SUFFIX})
+    set(_ada_generated_bindings_commands
+        COMMAND ${ADA_PYTHON}
+                ${BINDINGS_GEN_SCRIPT}
+                ${PYRAMID_PROTO_ROOT}
+                ${ADA_GEN_OUT}
+                --languages ada
+                --backends ${_ada_bindings_backends_arg}
+    )
+    if(PYRAMID_ENABLE_PROTOBUF)
+        list(APPEND _ada_generated_bindings_commands
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${ADA_GEN_OUT}/protobuf/ada/pyramid_components_tactical_objects-protobuf_codec.ads
+                    ${ADA_GEN_OUT}/protobuf/ada/pyramid-components-tactical_objects-protobuf_codec.ads
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${ADA_GEN_OUT}/protobuf/ada/pyramid_data_model_base-protobuf_codec.ads
+                    ${ADA_GEN_OUT}/protobuf/ada/pyramid-data_model-base-protobuf_codec.ads
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${ADA_GEN_OUT}/protobuf/ada/pyramid_data_model_common-protobuf_codec.ads
+                    ${ADA_GEN_OUT}/protobuf/ada/pyramid-data_model-common-protobuf_codec.ads
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    ${ADA_GEN_OUT}/protobuf/ada/pyramid_data_model_tactical-protobuf_codec.ads
+                    ${ADA_GEN_OUT}/protobuf/ada/pyramid-data_model-tactical-protobuf_codec.ads
+        )
+    endif()
+    list(APPEND _ada_generated_bindings_commands
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_TEST_SRC_DIR}/bin
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
+        ${_ada_fb_mkdir}
+        COMMAND ${CMAKE_COMMAND} -E env
+                UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
+                GPR_PROJECT_PATH=${ADA_GPR_PROJECT_PATH}
+                ${GPRBUILD}
+                -p
+                -P ${ADA_TEST_SRC_DIR}/test_generated_bindings.gpr
+                -XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
+                -XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR}
+                -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
+                -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
+                -XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME}
+                ${_ada_fb_args}
+    )
     add_custom_command(
         OUTPUT ${ADA_GENERATED_BINDINGS_EXE}
-        COMMAND ${CMAKE_COMMAND}
-                -DOUTPUT=${ADA_GENERATED_BINDINGS_EXE}
-                "-DRUN_COMMAND=${ADA_PYTHON};${BINDINGS_GEN_SCRIPT};${PYRAMID_PROTO_ROOT};${ADA_GEN_OUT};--languages;ada;--backends;json,flatbuffers,protobuf,grpc,ros2"
-                -P ${ADA_RUN_IF_MISSING}
-        COMMAND ${CMAKE_COMMAND}
-                -DOUTPUT=${ADA_GENERATED_BINDINGS_EXE}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;copy_if_different;${ADA_GEN_OUT}/protobuf/ada/pyramid_components_tactical_objects-protobuf_codec.ads;${ADA_GEN_OUT}/protobuf/ada/pyramid-components-tactical_objects-protobuf_codec.ads"
-                -P ${ADA_RUN_IF_MISSING}
-        COMMAND ${CMAKE_COMMAND}
-                -DOUTPUT=${ADA_GENERATED_BINDINGS_EXE}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;copy_if_different;${ADA_GEN_OUT}/protobuf/ada/pyramid_data_model_base-protobuf_codec.ads;${ADA_GEN_OUT}/protobuf/ada/pyramid-data_model-base-protobuf_codec.ads"
-                -P ${ADA_RUN_IF_MISSING}
-        COMMAND ${CMAKE_COMMAND}
-                -DOUTPUT=${ADA_GENERATED_BINDINGS_EXE}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;copy_if_different;${ADA_GEN_OUT}/protobuf/ada/pyramid_data_model_common-protobuf_codec.ads;${ADA_GEN_OUT}/protobuf/ada/pyramid-data_model-common-protobuf_codec.ads"
-                -P ${ADA_RUN_IF_MISSING}
-        COMMAND ${CMAKE_COMMAND}
-                -DOUTPUT=${ADA_GENERATED_BINDINGS_EXE}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;copy_if_different;${ADA_GEN_OUT}/protobuf/ada/pyramid_data_model_tactical-protobuf_codec.ads;${ADA_GEN_OUT}/protobuf/ada/pyramid-data_model-tactical-protobuf_codec.ads"
-                -P ${ADA_RUN_IF_MISSING}
-        # Note: grpc backend now generates files with correct dash-separated names directly,
-        # along with required parent package stubs - no copy/rename needed
-        COMMAND ${CMAKE_COMMAND}
-                -DOUTPUT=${ADA_GENERATED_BINDINGS_EXE}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;make_directory;${ADA_TEST_SRC_DIR}/bin"
-                -P ${ADA_RUN_IF_MISSING}
-        COMMAND ${CMAKE_COMMAND}
-                -DOUTPUT=${ADA_GENERATED_BINDINGS_EXE}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;make_directory;${ADA_PCL_LIB_DIR}"
-                -P ${ADA_RUN_IF_MISSING}
-        ${_ada_fb_mkdir}
-        COMMAND ${CMAKE_COMMAND}
-                -DOUTPUT=${ADA_GENERATED_BINDINGS_EXE}
-                -DWORKING_DIRECTORY=${ADA_TEST_SRC_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD};-p;-P;${ADA_TEST_SRC_DIR}/test_generated_bindings.gpr;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};${_ada_fb_args}"
-                -P ${ADA_RUN_IF_MISSING}
+        ${_ada_generated_bindings_commands}
         WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
         COMMENT "Building Ada generated-bindings test"
         VERBATIM
@@ -718,7 +750,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND}
                 -DOUTPUT=${ADA_PYRAMID_BRIDGE_EXE}
                 -DWORKING_DIRECTORY=${ADA_BRIDGE_SRC_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD};-p;-P;${ADA_BRIDGE_SRC_DIR}/pyramid_bridge.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};-XPCL_UDP_LIB_NAME=${ADA_PCL_UDP_LIB_NAME};-XPCL_SHMEM_LIB_NAME=${ADA_PCL_SHMEM_LIB_NAME};${_ada_fb_args}"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}${_ada_gpr_project_path_env};${GPRBUILD};-p;-P;${ADA_BRIDGE_SRC_DIR}/pyramid_bridge.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};-XPCL_UDP_LIB_NAME=${ADA_PCL_UDP_LIB_NAME};-XPCL_SHMEM_LIB_NAME=${ADA_PCL_SHMEM_LIB_NAME};${_ada_fb_args}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_BRIDGE_SRC_DIR}
         COMMENT "Building Ada Pyramid Bridge"
@@ -764,7 +796,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND}
                 -DOUTPUT=${ADA_TOBJ_CLIENT_EXE}
                 -DWORKING_DIRECTORY=${ADA_EXAMPLE_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD};-p;-P;${ADA_EXAMPLE_DIR}/ada_tobj_client.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};${_ada_fb_args}"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}${_ada_gpr_project_path_env};${GPRBUILD};-p;-P;${ADA_EXAMPLE_DIR}/ada_tobj_client.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};${_ada_fb_args}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_EXAMPLE_DIR}
         COMMENT "Building Ada tactical objects client"
@@ -786,7 +818,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND}
                 -DOUTPUT=${ADA_ACTIVE_FIND_E2E_EXE}
                 -DWORKING_DIRECTORY=${ADA_TEST_SRC_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD};-p;-P;${ADA_TEST_SRC_DIR}/ada_active_find_e2e.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};${_ada_fb_args}"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}${_ada_gpr_project_path_env};${GPRBUILD};-p;-P;${ADA_TEST_SRC_DIR}/ada_active_find_e2e.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};${_ada_fb_args}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
         COMMENT "Building Ada active-find E2E test client"

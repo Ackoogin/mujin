@@ -49,6 +49,11 @@ extern "C" {
 #define NOMINMAX
 #endif
 #include <windows.h>
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
 #endif
 
 namespace svc = pyramid::components::tactical_objects::services::provided;

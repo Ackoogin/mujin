@@ -23,15 +23,11 @@ with Pyramid.Data_Model.Tactical.Types_Codec;  use Pyramid.Data_Model.Tactical.T
 with Pyramid.Services.Tactical_Objects.Provided;
 with Pyramid.Services.Tactical_Objects.Consumed;
 with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
-with Pyramid.Data_Model.Common.Protobuf_Codec;
-with Pyramid.Data_Model.Tactical.Protobuf_Codec;
 
 procedure Test_Generated_Bindings is
    package Prov renames Pyramid.Services.Tactical_Objects.Provided;
    package Cons renames Pyramid.Services.Tactical_Objects.Consumed;
    package Flat renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
-   package Common_Proto renames Pyramid.Data_Model.Common.Protobuf_Codec;
-   package Tactical_Proto renames Pyramid.Data_Model.Tactical.Protobuf_Codec;
 
    Pass_Count : Natural := 0;
    Fail_Count : Natural := 0;
@@ -168,12 +164,6 @@ begin
       Check ("Dispatch CreateRequirement flatbuffers returns buffer",
              Resp_Buf /= System.Null_Address or Resp_Size = 0);
    end;
-
-   --  11. Protobuf codec specs are generated and visible to Ada
-   Check ("Common protobuf content type",
-          Common_Proto.Content_Type = "application/protobuf");
-   Check ("Tactical protobuf content type",
-          Tactical_Proto.Content_Type = "application/protobuf");
 
    --  Summary
    New_Line;

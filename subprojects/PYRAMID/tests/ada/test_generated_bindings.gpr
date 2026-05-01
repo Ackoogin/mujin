@@ -5,7 +5,7 @@
 --  Build:  gprbuild -p -P test_generated_bindings.gpr
 --  Run:    bin/test_generated_bindings
 
-with "gnatcoll";
+with "../../core/external/gnatcoll-core/core/gnatcoll_core.gpr";
 
 project Test_Generated_Bindings is
   Root_Dir := external("UNMANNED_ROOT", ".." & "/.." & "/..");
@@ -15,6 +15,8 @@ project Test_Generated_Bindings is
   Pcl_Socket_Lib_Name := external("PCL_SOCKET_LIB_NAME", "pcl_transport_socket");
   Pyramid_Gen_Lib_Dir := external("PYRAMID_GEN_LIB_DIR", Root_Dir & "/build/ada_gnat_pyramid");
   Pyramid_Gen_Lib_Name := external("PYRAMID_GEN_LIB_NAME", "pyramid_generated_flatbuffers_codec");
+  Pyramid_Protobuf_Ada_Dir := external("PYRAMID_PROTOBUF_ADA_DIR", ".");
+  Pyramid_Grpc_Ada_Dir := external("PYRAMID_GRPC_ADA_DIR", ".");
 
   for Languages use ("Ada");
 
@@ -23,8 +25,8 @@ project Test_Generated_Bindings is
      Root_Dir & "/subprojects/PCL/bindings/ada",
      Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated",
      Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/flatbuffers/ada",
-     Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/protobuf/ada",
-     Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/grpc/ada");
+     Pyramid_Protobuf_Ada_Dir,
+     Pyramid_Grpc_Ada_Dir);
   for Main use ("test_generated_bindings.adb");
 
   for Object_Dir use "obj_test_bindings";
