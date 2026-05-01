@@ -80,6 +80,8 @@ subprojects/PYRAMID/examples/ada/bin/*
 subprojects/PYRAMID/examples/ada/obj_active_find/*
 subprojects/PYRAMID/examples/ada/obj_test_bindings/*
 subprojects/PYRAMID/examples/ada/obj_tobj_client/*
+subprojects/PYRAMID/tests/ada/bin/*
+subprojects/PYRAMID/pyramid_bridge/ada/bin/*
 
 # References
 ref/*
