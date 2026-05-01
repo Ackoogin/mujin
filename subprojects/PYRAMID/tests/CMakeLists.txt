@@ -392,9 +392,8 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     else()
         set(ADA_GNATCOLL_CORE_DIR ${PYRAMID_ROOT_DIR}/core/external/gnatcoll-core/core)
         set(ADA_GNATCOLL_MINIMAL_DIR ${PYRAMID_ROOT_DIR}/core/external/gnatcoll-core/minimal)
-        set(ADA_GNATCOLL_PROJECTS_DIR ${PYRAMID_ROOT_DIR}/core/external/gnatcoll-core/projects)
         set(ADA_GPR_PROJECT_PATH
-            "${ADA_GNATCOLL_CORE_DIR}:${ADA_GNATCOLL_MINIMAL_DIR}:${ADA_GNATCOLL_PROJECTS_DIR}")
+            "${ADA_GNATCOLL_CORE_DIR}:${ADA_GNATCOLL_MINIMAL_DIR}")
         set(_ada_gpr_project_path_env ";GPR_PROJECT_PATH=${ADA_GPR_PROJECT_PATH}")
     endif()
     set(ADA_PCL_INCLUDE_DIR "${PCL_ROOT_DIR}/include" CACHE PATH
