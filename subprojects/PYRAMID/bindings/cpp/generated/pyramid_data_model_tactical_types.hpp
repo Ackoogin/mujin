@@ -4,7 +4,7 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
+#include <tl/optional.hpp>
 #include <string>
 #include <vector>
 #include "pyramid_data_model_base_types.hpp"
@@ -20,16 +20,16 @@ enum class ObjectSource : int {
 };
 
 struct ObjectDetail {
-    std::optional<double> update_time;  // from Entity  // optional
+    tl::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string entity_source = {};  // from Entity  // optional
     std::vector<ObjectSource> source = {};
     pyramid::domain_model::common::GeodeticPosition position = {};
     double creation_time = 0.0;
-    std::optional<double> quality;  // optional
-    std::optional<double> course;  // optional
-    std::optional<double> speed;  // optional
-    std::optional<double> length;  // optional
+    tl::optional<double> quality;  // optional
+    tl::optional<double> course;  // optional
+    tl::optional<double> speed;  // optional
+    tl::optional<double> length;  // optional
     pyramid::domain_model::common::StandardIdentity identity = pyramid::domain_model::common::StandardIdentity::Unspecified;
     pyramid::domain_model::common::BattleDimension dimension = pyramid::domain_model::common::BattleDimension::Unspecified;
 };
@@ -40,25 +40,25 @@ struct ObjectEvidenceRequirement {
     pyramid::domain_model::common::DataPolicy policy = pyramid::domain_model::common::DataPolicy::Unspecified;
     std::vector<pyramid::domain_model::common::BattleDimension> dimension = {};
     // oneof location
-    std::optional<pyramid::domain_model::common::PolyArea> poly_area;
-    std::optional<pyramid::domain_model::common::CircleArea> circle_area;
-    std::optional<pyramid::domain_model::common::Point> point;
+    tl::optional<pyramid::domain_model::common::PolyArea> poly_area;
+    tl::optional<pyramid::domain_model::common::CircleArea> circle_area;
+    tl::optional<pyramid::domain_model::common::Point> point;
 };
 
 struct ObjectInterestRequirement {
     pyramid::domain_model::common::Entity base = {};  // from Requirement
     pyramid::domain_model::common::Achievement status = {};  // from Requirement
-    std::optional<ObjectSource> source;  // optional
+    tl::optional<ObjectSource> source;  // optional
     pyramid::domain_model::common::DataPolicy policy = pyramid::domain_model::common::DataPolicy::Unspecified;
     std::vector<pyramid::domain_model::common::BattleDimension> dimension = {};
     // oneof location
-    std::optional<pyramid::domain_model::common::PolyArea> poly_area;
-    std::optional<pyramid::domain_model::common::CircleArea> circle_area;
-    std::optional<pyramid::domain_model::common::Point> point;
+    tl::optional<pyramid::domain_model::common::PolyArea> poly_area;
+    tl::optional<pyramid::domain_model::common::CircleArea> circle_area;
+    tl::optional<pyramid::domain_model::common::Point> point;
 };
 
 struct ObjectMatch {
-    std::optional<double> update_time;  // from Entity  // optional
+    tl::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
     std::string matching_object_id = {};

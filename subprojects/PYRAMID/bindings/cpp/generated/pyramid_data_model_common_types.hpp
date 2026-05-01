@@ -4,7 +4,7 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
+#include <tl/optional.hpp>
 #include <string>
 #include <vector>
 #include "pyramid_data_model_base_types.hpp"
@@ -67,22 +67,22 @@ struct PolyArea {
 };
 
 struct Entity {
-    std::optional<double> update_time;  // optional
+    tl::optional<double> update_time;  // optional
     std::string id = {};  // optional
     std::string source = {};  // optional
 };
 
 struct Achievement {
-    std::optional<double> update_time;  // from Entity  // optional
+    tl::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
     Progress status = Progress::Unspecified;
-    std::optional<double> quality;  // optional
+    tl::optional<double> quality;  // optional
     Feasibility achieveability = Feasibility::Unspecified;
 };
 
 struct Requirement {
-    std::optional<double> update_time;  // from Entity  // optional
+    tl::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
     Achievement status = {};
@@ -94,7 +94,7 @@ struct Contraint {
 };
 
 struct Capability {
-    std::optional<double> update_time;  // from Entity  // optional
+    tl::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
     bool availability = false;
@@ -119,7 +119,7 @@ constexpr Ack kAckFail{ false };
 
 struct Query {
     std::vector<std::string> id = {};
-    std::optional<bool> one_shot;  // optional
+    tl::optional<bool> one_shot;  // optional
 };
 
 } // namespace pyramid::domain_model::common

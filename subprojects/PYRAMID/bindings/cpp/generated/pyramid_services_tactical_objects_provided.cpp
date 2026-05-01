@@ -5,7 +5,6 @@
 #include "pyramid_services_tactical_objects_provided.hpp"
 
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
-#include "pyramid_services_tactical_objects_protobuf_codec.hpp"
 #include "pyramid_data_model_autonomy_codec.hpp"
 #include "pyramid_data_model_common_codec.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
@@ -31,7 +30,6 @@ using pyramid::domain_model::common::fromJson;
 using pyramid::domain_model::tactical::toJson;
 using pyramid::domain_model::tactical::fromJson;
 namespace flatbuffers_codec = pyramid::services::tactical_objects::flatbuffers_codec;
-namespace protobuf_codec = pyramid::services::tactical_objects::protobuf_codec;
 
 // ---------------------------------------------------------------------------
 // PCL message utility
@@ -89,11 +87,6 @@ bool is_json_content_type(const char* content_type)
 bool is_flatbuffers_content_type(const char* content_type)
 {
     return content_type && std::strcmp(content_type, kFlatBuffersContentType) == 0;
-}
-
-bool is_protobuf_content_type(const char* content_type)
-{
-    return content_type && std::strcmp(content_type, kProtobufContentType) == 0;
 }
 
 std::string json_request_body(const void* data, size_t size)
@@ -159,7 +152,6 @@ std::vector<const char*> supportedContentTypes()
 {
     std::vector<const char*> result{kJsonContentType};
     result.push_back(kFlatBuffersContentType);
-    result.push_back(kProtobufContentType);
     return result;
 }
 
@@ -169,9 +161,6 @@ bool supportsContentType(const char* content_type)
         return true;
     }
     if (is_flatbuffers_content_type(content_type)) {
-        return true;
-    }
-    if (is_protobuf_content_type(content_type)) {
         return true;
     }
     return false;
@@ -221,10 +210,6 @@ bool decodeReadMatchResponse(const pcl_msg_t* msg,
                 *out = flatbuffers_codec::fromBinaryObjectMatchArray(msg->data, msg->size);
                 return true;
             }
-            if (is_protobuf_content_type(msg->type_name)) {
-                *out = protobuf_codec::fromBinaryObjectMatchArray(msg->data, msg->size);
-                return true;
-            }
             return false;
         }
         const std::string payload = msgToString(msg->data, msg->size);
@@ -251,10 +236,6 @@ bool decodeCreateRequirementResponse(const pcl_msg_t* msg,
                 *out = flatbuffers_codec::fromBinaryIdentifier(msg->data, msg->size);
                 return true;
             }
-            if (is_protobuf_content_type(msg->type_name)) {
-                *out = protobuf_codec::fromBinaryIdentifier(msg->data, msg->size);
-                return true;
-            }
             return false;
         }
         const std::string payload = msgToString(msg->data, msg->size);
@@ -275,10 +256,6 @@ bool decodeReadRequirementResponse(const pcl_msg_t* msg,
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
                 *out = flatbuffers_codec::fromBinaryObjectInterestRequirementArray(msg->data, msg->size);
-                return true;
-            }
-            if (is_protobuf_content_type(msg->type_name)) {
-                *out = protobuf_codec::fromBinaryObjectInterestRequirementArray(msg->data, msg->size);
                 return true;
             }
             return false;
@@ -307,10 +284,6 @@ bool decodeUpdateRequirementResponse(const pcl_msg_t* msg,
                 *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
                 return true;
             }
-            if (is_protobuf_content_type(msg->type_name)) {
-                *out = protobuf_codec::fromBinaryAck(msg->data, msg->size);
-                return true;
-            }
             return false;
         }
         const std::string payload = msgToString(msg->data, msg->size);
@@ -333,10 +306,6 @@ bool decodeDeleteRequirementResponse(const pcl_msg_t* msg,
                 *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
                 return true;
             }
-            if (is_protobuf_content_type(msg->type_name)) {
-                *out = protobuf_codec::fromBinaryAck(msg->data, msg->size);
-                return true;
-            }
             return false;
         }
         const std::string payload = msgToString(msg->data, msg->size);
@@ -357,10 +326,6 @@ bool decodeReadDetailResponse(const pcl_msg_t* msg,
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
                 *out = flatbuffers_codec::fromBinaryObjectDetailArray(msg->data, msg->size);
-                return true;
-            }
-            if (is_protobuf_content_type(msg->type_name)) {
-                *out = protobuf_codec::fromBinaryObjectDetailArray(msg->data, msg->size);
                 return true;
             }
             return false;
@@ -393,8 +358,6 @@ pcl_status_t invokeReadMatch(pcl_executor_t* executor,
         payload = toJson(request);
     } else if (is_flatbuffers_content_type(content_type)) {
         payload = flatbuffers_codec::toBinary(request);
-    } else if (is_protobuf_content_type(content_type)) {
-        payload = protobuf_codec::toBinary(request);
     } else {
         return PCL_ERR_INVALID;
     }
@@ -422,8 +385,6 @@ pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
         payload = toJson(request);
     } else if (is_flatbuffers_content_type(content_type)) {
         payload = flatbuffers_codec::toBinary(request);
-    } else if (is_protobuf_content_type(content_type)) {
-        payload = protobuf_codec::toBinary(request);
     } else {
         return PCL_ERR_INVALID;
     }
@@ -451,8 +412,6 @@ pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
         payload = toJson(request);
     } else if (is_flatbuffers_content_type(content_type)) {
         payload = flatbuffers_codec::toBinary(request);
-    } else if (is_protobuf_content_type(content_type)) {
-        payload = protobuf_codec::toBinary(request);
     } else {
         return PCL_ERR_INVALID;
     }
@@ -480,8 +439,6 @@ pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
         payload = toJson(request);
     } else if (is_flatbuffers_content_type(content_type)) {
         payload = flatbuffers_codec::toBinary(request);
-    } else if (is_protobuf_content_type(content_type)) {
-        payload = protobuf_codec::toBinary(request);
     } else {
         return PCL_ERR_INVALID;
     }
@@ -509,8 +466,6 @@ pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
         payload = encode_identifier_payload(request);
     } else if (is_flatbuffers_content_type(content_type)) {
         payload = flatbuffers_codec::toBinary(request);
-    } else if (is_protobuf_content_type(content_type)) {
-        payload = protobuf_codec::toBinary(request);
     } else {
         return PCL_ERR_INVALID;
     }
@@ -538,8 +493,6 @@ pcl_status_t invokeReadDetail(pcl_executor_t* executor,
         payload = toJson(request);
     } else if (is_flatbuffers_content_type(content_type)) {
         payload = flatbuffers_codec::toBinary(request);
-    } else if (is_protobuf_content_type(content_type)) {
-        payload = protobuf_codec::toBinary(request);
     } else {
         return PCL_ERR_INVALID;
     }
@@ -578,8 +531,6 @@ bool encodeEntityMatches(const std::vector<ObjectMatch>& payload,
         wire_payload += "]";
     } else if (is_flatbuffers_content_type(content_type)) {
         wire_payload = flatbuffers_codec::toBinary(payload);
-    } else if (is_protobuf_content_type(content_type)) {
-        wire_payload = protobuf_codec::toBinary(payload);
     } else {
         return false;
     }
@@ -621,10 +572,6 @@ bool decodeEntityMatches(const pcl_msg_t* msg,
                 *out = flatbuffers_codec::fromBinaryObjectMatchArray(msg->data, msg->size);
                 return true;
             }
-            if (is_protobuf_content_type(msg->type_name)) {
-                *out = protobuf_codec::fromBinaryObjectMatchArray(msg->data, msg->size);
-                return true;
-            }
             return false;
         }
         const std::string payload = msgToString(msg->data, msg->size);
@@ -651,8 +598,6 @@ bool encodeEvidenceRequirements(const ObjectEvidenceRequirement& payload,
         wire_payload = toJson(payload);
     } else if (is_flatbuffers_content_type(content_type)) {
         wire_payload = flatbuffers_codec::toBinary(payload);
-    } else if (is_protobuf_content_type(content_type)) {
-        wire_payload = protobuf_codec::toBinary(payload);
     } else {
         return false;
     }
@@ -694,10 +639,6 @@ bool decodeEvidenceRequirements(const pcl_msg_t* msg,
                 *out = flatbuffers_codec::fromBinaryObjectEvidenceRequirement(msg->data, msg->size);
                 return true;
             }
-            if (is_protobuf_content_type(msg->type_name)) {
-                *out = protobuf_codec::fromBinaryObjectEvidenceRequirement(msg->data, msg->size);
-                return true;
-            }
             return false;
         }
         const std::string payload = msgToString(msg->data, msg->size);
@@ -733,7 +674,6 @@ void dispatch(ServiceHandler& handler,
             return;
         }
     } else if (is_flatbuffers_content_type(content_type)) {
-    } else if (is_protobuf_content_type(content_type)) {
     } else {
         *response_buf = nullptr;
         *response_size = 0;
@@ -748,8 +688,6 @@ void dispatch(ServiceHandler& handler,
             req = fromJson(req_str, static_cast<Query*>(nullptr));
         else if (is_flatbuffers_content_type(content_type))
             req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-        else if (is_protobuf_content_type(content_type))
-            req = protobuf_codec::fromBinaryQuery(request_buf, request_size);
         else
             break;
         auto rsp = handler.handleReadMatch(req);
@@ -763,9 +701,6 @@ void dispatch(ServiceHandler& handler,
         } else if (is_flatbuffers_content_type(content_type)) {
             rsp_payload = flatbuffers_codec::toBinary(rsp);
             rsp_is_binary = true;
-        } else if (is_protobuf_content_type(content_type)) {
-            rsp_payload = protobuf_codec::toBinary(rsp);
-            rsp_is_binary = true;
         } else {
             break;
         }
@@ -777,8 +712,6 @@ void dispatch(ServiceHandler& handler,
             req = fromJson(req_str, static_cast<ObjectInterestRequirement*>(nullptr));
         else if (is_flatbuffers_content_type(content_type))
             req = flatbuffers_codec::fromBinaryObjectInterestRequirement(request_buf, request_size);
-        else if (is_protobuf_content_type(content_type))
-            req = protobuf_codec::fromBinaryObjectInterestRequirement(request_buf, request_size);
         else
             break;
         auto rsp = handler.handleCreateRequirement(req);
@@ -786,9 +719,6 @@ void dispatch(ServiceHandler& handler,
             rsp_payload = encode_identifier_payload(rsp);
         } else if (is_flatbuffers_content_type(content_type)) {
             rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else if (is_protobuf_content_type(content_type)) {
-            rsp_payload = protobuf_codec::toBinary(rsp);
             rsp_is_binary = true;
         } else {
             break;
@@ -801,8 +731,6 @@ void dispatch(ServiceHandler& handler,
             req = fromJson(req_str, static_cast<Query*>(nullptr));
         else if (is_flatbuffers_content_type(content_type))
             req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-        else if (is_protobuf_content_type(content_type))
-            req = protobuf_codec::fromBinaryQuery(request_buf, request_size);
         else
             break;
         auto rsp = handler.handleReadRequirement(req);
@@ -816,9 +744,6 @@ void dispatch(ServiceHandler& handler,
         } else if (is_flatbuffers_content_type(content_type)) {
             rsp_payload = flatbuffers_codec::toBinary(rsp);
             rsp_is_binary = true;
-        } else if (is_protobuf_content_type(content_type)) {
-            rsp_payload = protobuf_codec::toBinary(rsp);
-            rsp_is_binary = true;
         } else {
             break;
         }
@@ -830,8 +755,6 @@ void dispatch(ServiceHandler& handler,
             req = fromJson(req_str, static_cast<ObjectInterestRequirement*>(nullptr));
         else if (is_flatbuffers_content_type(content_type))
             req = flatbuffers_codec::fromBinaryObjectInterestRequirement(request_buf, request_size);
-        else if (is_protobuf_content_type(content_type))
-            req = protobuf_codec::fromBinaryObjectInterestRequirement(request_buf, request_size);
         else
             break;
         auto rsp = handler.handleUpdateRequirement(req);
@@ -839,9 +762,6 @@ void dispatch(ServiceHandler& handler,
             rsp_payload = toJson(rsp);
         } else if (is_flatbuffers_content_type(content_type)) {
             rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else if (is_protobuf_content_type(content_type)) {
-            rsp_payload = protobuf_codec::toBinary(rsp);
             rsp_is_binary = true;
         } else {
             break;
@@ -854,8 +774,6 @@ void dispatch(ServiceHandler& handler,
             req = decode_identifier_payload(req_str);
         else if (is_flatbuffers_content_type(content_type))
             req = flatbuffers_codec::fromBinaryIdentifier(request_buf, request_size);
-        else if (is_protobuf_content_type(content_type))
-            req = protobuf_codec::fromBinaryIdentifier(request_buf, request_size);
         else
             break;
         auto rsp = handler.handleDeleteRequirement(req);
@@ -863,9 +781,6 @@ void dispatch(ServiceHandler& handler,
             rsp_payload = toJson(rsp);
         } else if (is_flatbuffers_content_type(content_type)) {
             rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else if (is_protobuf_content_type(content_type)) {
-            rsp_payload = protobuf_codec::toBinary(rsp);
             rsp_is_binary = true;
         } else {
             break;
@@ -878,8 +793,6 @@ void dispatch(ServiceHandler& handler,
             req = fromJson(req_str, static_cast<Query*>(nullptr));
         else if (is_flatbuffers_content_type(content_type))
             req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-        else if (is_protobuf_content_type(content_type))
-            req = protobuf_codec::fromBinaryQuery(request_buf, request_size);
         else
             break;
         auto rsp = handler.handleReadDetail(req);
@@ -892,9 +805,6 @@ void dispatch(ServiceHandler& handler,
             rsp_payload += "]";
         } else if (is_flatbuffers_content_type(content_type)) {
             rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else if (is_protobuf_content_type(content_type)) {
-            rsp_payload = protobuf_codec::toBinary(rsp);
             rsp_is_binary = true;
         } else {
             break;

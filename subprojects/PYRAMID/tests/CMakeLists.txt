@@ -509,6 +509,11 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
             -XPYRAMID_GEN_LIB_NAME=${ADA_PYRAMID_GEN_LIB_NAME}
         )
         set(_ada_fb_mkdir COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR})
+        file(GLOB ADA_PYRAMID_GEN_CODEC_INPUTS CONFIGURE_DEPENDS
+            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_data_model_*_codec.cpp"
+            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_data_model_*_codec.hpp"
+            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/flatbuffers/cpp/*_flatbuffers_codec.cpp"
+            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/flatbuffers/cpp/*_flatbuffers_codec.hpp")
 
     set(ADA_PYRAMID_GEN_ARCHIVE
         ${ADA_PYRAMID_GEN_LIB_DIR}/lib${ADA_PYRAMID_GEN_LIB_NAME}.a)
@@ -516,20 +521,22 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         add_custom_command(
             OUTPUT ${ADA_PYRAMID_GEN_ARCHIVE}
             COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR}
-            COMMAND ${CMAKE_COMMAND}
-                    -DOUTPUT=${ADA_PYRAMID_GEN_ARCHIVE}
-                    "-DRUN_COMMAND=cmd;/c;${ADA_PYRAMID_GEN_BUILD_SCRIPT};${ADA_PYRAMID_GEN_LIB_DIR};--build-dir;${CMAKE_BINARY_DIR};--config;$<CONFIG>"
-                    -P ${ADA_RUN_IF_MISSING}
+            COMMAND cmd /c ${ADA_PYRAMID_GEN_BUILD_SCRIPT} ${ADA_PYRAMID_GEN_LIB_DIR} --build-dir ${CMAKE_BINARY_DIR} --config $<CONFIG>
+            DEPENDS
+                ${ADA_PYRAMID_GEN_BUILD_SCRIPT}
+                ${ADA_PYRAMID_GEN_CODEC_INPUTS}
+                ${PYRAMID_FLATBUFFERS_OUTPUTS}
             COMMENT "Preparing GNAT-compatible generated FlatBuffers archive for Ada builds"
             VERBATIM)
     else()
         add_custom_command(
             OUTPUT ${ADA_PYRAMID_GEN_ARCHIVE}
             COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR}
-            COMMAND ${CMAKE_COMMAND}
-                    -DOUTPUT=${ADA_PYRAMID_GEN_ARCHIVE}
-                    "-DRUN_COMMAND=bash;${ADA_PYRAMID_GEN_BUILD_SCRIPT};${ADA_PYRAMID_GEN_LIB_DIR}"
-                    -P ${ADA_RUN_IF_MISSING}
+            COMMAND bash ${ADA_PYRAMID_GEN_BUILD_SCRIPT} ${ADA_PYRAMID_GEN_LIB_DIR}
+            DEPENDS
+                ${ADA_PYRAMID_GEN_BUILD_SCRIPT}
+                ${ADA_PYRAMID_GEN_CODEC_INPUTS}
+                ${PYRAMID_FLATBUFFERS_OUTPUTS}
             COMMENT "Preparing GNAT-compatible generated FlatBuffers archive for Ada builds"
             VERBATIM)
     endif()

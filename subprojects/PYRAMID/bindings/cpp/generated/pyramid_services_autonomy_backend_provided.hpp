@@ -18,9 +18,6 @@
 #include <pcl/pcl_transport.h>
 #include <pcl/pcl_types.h>
 
-#include "ros2/cpp/pyramid_ros2_transport_support.hpp"
-
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -32,7 +29,6 @@ namespace pyramid::components::autonomy_backend::services::provided {
 
 constexpr const char* kJsonContentType = "application/json";
 constexpr const char* kFlatBuffersContentType = "application/flatbuffers";
-constexpr const char* kProtobufContentType = "application/protobuf";
 
 bool supportsContentType(const char* content_type);
 std::vector<const char*> supportedContentTypes();
@@ -557,64 +553,6 @@ pcl_status_t invokeReadPlacement(pcl_executor_t* executor,
                                  const Query&                 request,
                                  const char*       content_type = "application/json",
                                  const pcl_endpoint_route_t* route = nullptr);
-
-// ---------------------------------------------------------------------------
-// gRPC binding startup hook
-// ---------------------------------------------------------------------------
-
-class GrpcServer {
-public:
-    GrpcServer();
-    GrpcServer(GrpcServer&&) noexcept;
-    GrpcServer& operator=(GrpcServer&&) noexcept;
-    GrpcServer(const GrpcServer&) = delete;
-    GrpcServer& operator=(const GrpcServer&) = delete;
-    ~GrpcServer();
-
-    bool started() const;
-    explicit operator bool() const { return started(); }
-    void wait();
-    void shutdown();
-
-private:
-    struct Impl;
-    explicit GrpcServer(std::unique_ptr<Impl> impl);
-    std::unique_ptr<Impl> impl_;
-    friend GrpcServer buildGrpcServer(const std::string& listen_address,
-                                      pcl_executor_t* executor);
-};
-
-/// \brief Start generated gRPC ingress endpoints on a PCL executor.
-GrpcServer buildGrpcServer(const std::string& listen_address,
-                           pcl_executor_t* executor);
-
-// ---------------------------------------------------------------------------
-// ROS2 binding startup hook
-// ---------------------------------------------------------------------------
-
-/// \brief Bind generated ROS2 ingress endpoints to the executor.
-inline void bindRos2(pyramid::transport::ros2::Adapter& adapter,
-                     pcl_executor_t* executor)
-{
-    pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadCapabilities);
-    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcCreatePlanningRequirement);
-    pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadPlanningRequirement);
-    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcUpdatePlanningRequirement);
-    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcDeletePlanningRequirement);
-    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcCreateExecutionRequirement);
-    pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadExecutionRequirement);
-    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcUpdateExecutionRequirement);
-    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcDeleteExecutionRequirement);
-    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcCreateState);
-    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcUpdateState);
-    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcDeleteState);
-    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcCreatePlan);
-    pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadPlan);
-    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcUpdatePlan);
-    pyramid::transport::ros2::bindUnaryServiceIngress(adapter, executor, kSvcDeletePlan);
-    pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadRun);
-    pyramid::transport::ros2::bindStreamServiceIngress(adapter, executor, kSvcReadPlacement);
-}
 
 // ---------------------------------------------------------------------------
 // Dispatch -- deserialises request, calls handler, serialises response.

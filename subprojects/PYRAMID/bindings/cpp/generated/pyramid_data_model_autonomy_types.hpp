@@ -4,7 +4,7 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
+#include <tl/optional.hpp>
 #include <string>
 #include <vector>
 #include "pyramid_data_model_base_types.hpp"
@@ -58,13 +58,13 @@ struct PlanningPolicy {
 };
 
 struct PlanningGoal {
-    std::optional<double> update_time;  // from Entity  // optional
+    tl::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
     std::string name = {};
     // oneof goal
-    std::optional<RequirementReference> requirement;
-    std::optional<std::string> expression;
+    tl::optional<RequirementReference> requirement;
+    tl::optional<std::string> expression;
 };
 
 struct ExecutionPolicy {
@@ -93,7 +93,7 @@ struct ExecutionRequirement {
 };
 
 struct WorldFactUpdate {
-    std::optional<double> update_time;  // from Entity  // optional
+    tl::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string entity_source = {};  // from Entity  // optional
     std::string key = {};
@@ -103,14 +103,14 @@ struct WorldFactUpdate {
 };
 
 struct StateUpdate {
-    std::optional<double> update_time;  // from Entity  // optional
+    tl::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
     std::vector<WorldFactUpdate> fact_update = {};
 };
 
 struct Capabilities {
-    std::optional<double> update_time;  // from Entity  // optional
+    tl::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
     std::string backend_id = {};
@@ -130,7 +130,7 @@ struct PlannedComponentInteraction {
 };
 
 struct PlanStep {
-    std::optional<double> update_time;  // from Entity  // optional
+    tl::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
     uint32_t sequence_number = 0;
@@ -140,7 +140,7 @@ struct PlanStep {
 };
 
 struct Plan {
-    std::optional<double> update_time;  // from Entity  // optional
+    tl::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
     std::string planning_requirement_id = {};
@@ -151,11 +151,11 @@ struct Plan {
     double solve_time_ms = 0.0;
     std::vector<PlanStep> step = {};
     std::string compiled_bt_xml = {};
-    std::optional<double> predicted_quality;  // optional
+    tl::optional<double> predicted_quality;  // optional
 };
 
 struct RequirementPlacement {
-    std::optional<double> update_time;  // from Entity  // optional
+    tl::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
     std::string execution_requirement_id = {};
@@ -172,7 +172,7 @@ struct RequirementPlacement {
 };
 
 struct ExecutionRun {
-    std::optional<double> update_time;  // from Entity  // optional
+    tl::optional<double> update_time;  // from Entity  // optional
     std::string id = {};  // from Entity  // optional
     std::string source = {};  // from Entity  // optional
     std::string execution_requirement_id = {};
