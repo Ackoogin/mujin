@@ -1,4 +1,4 @@
-with "../../core/external/gnatcoll-core/core/gnatcoll_core.gpr";
+with "gnatcoll_core.gpr";
 
 project Ada_Tobj_Client is
   Root_Dir := external("UNMANNED_ROOT", ".." & "/.." & "/..");

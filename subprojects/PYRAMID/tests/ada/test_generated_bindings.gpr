@@ -5,7 +5,7 @@
 --  Build:  gprbuild -p -P test_generated_bindings.gpr
 --  Run:    bin/test_generated_bindings
 
-with "../../core/external/gnatcoll-core/core/gnatcoll_core.gpr";
+with "gnatcoll_core.gpr";
 
 project Test_Generated_Bindings is
   Root_Dir := external("UNMANNED_ROOT", ".." & "/.." & "/..");
