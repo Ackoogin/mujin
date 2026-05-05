@@ -280,13 +280,13 @@ if(WIN32)
     endif()
 else()
     add_test(NAME tobj_cpp_bridge_client_e2e
-        COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_bridge_client.sh
+        COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_cpp_bridge_client.sh
                 --server-bin $<TARGET_FILE:tobj_socket_server>
                 --bridge-bin $<TARGET_FILE:standalone_bridge>
                 --client-bin $<TARGET_FILE:tactical_objects_test_client>)
     if(PYRAMID_ENABLE_FLATBUFFERS)
         add_test(NAME tobj_cpp_bridge_client_flatbuffers_e2e
-            COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_bridge_client.sh
+            COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_cpp_bridge_client.sh
                     --server-bin $<TARGET_FILE:tobj_socket_server>
                     --bridge-bin $<TARGET_FILE:standalone_bridge>
                     --client-bin $<TARGET_FILE:tactical_objects_test_client>
@@ -332,12 +332,12 @@ if(WIN32)
     endif()
 else()
     add_test(NAME tobj_cpp_app_client_e2e
-        COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
+        COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
                 --app-bin $<TARGET_FILE:tactical_objects_app>
                 --client-bin $<TARGET_FILE:tactical_objects_test_client>)
     if(PYRAMID_ENABLE_FLATBUFFERS)
         add_test(NAME tobj_cpp_app_client_flatbuffers_e2e
-            COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
+            COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
                     --app-bin $<TARGET_FILE:tactical_objects_app>
                     --client-bin $<TARGET_FILE:tactical_objects_test_client>
                     --content-type application/flatbuffers)
@@ -345,7 +345,7 @@ else()
     endif()
     if(PYRAMID_ENABLE_PROTOBUF)
         add_test(NAME tobj_cpp_app_client_protobuf_e2e
-            COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
+            COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
                     --app-bin $<TARGET_FILE:tactical_objects_app>
                     --client-bin $<TARGET_FILE:tactical_objects_test_client>
                     --content-type application/protobuf)
@@ -659,7 +659,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
         add_test(NAME tobj_ada_socket_e2e
-            COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_ada_socket_e2e.sh
+            COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_ada_socket_e2e.sh
                     --server-bin $<TARGET_FILE:tobj_socket_server>
                     --client-bin ${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_tobj_client)
     endif()
@@ -679,7 +679,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
         add_test(NAME tobj_ada_active_find_e2e
-            COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_e2e.sh
+            COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_e2e.sh
                     --server-bin $<TARGET_FILE:tobj_socket_server>
                     --bridge-bin $<TARGET_FILE:standalone_bridge>
                     --client-bin ${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e)
@@ -701,7 +701,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
         add_test(NAME tobj_ada_active_find_flatbuffers_e2e
-            COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_e2e.sh
+            COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_e2e.sh
                     --server-bin $<TARGET_FILE:tobj_socket_server>
                     --bridge-bin $<TARGET_FILE:standalone_bridge>
                     --client-bin ${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e
@@ -722,7 +722,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
         add_test(NAME tobj_ada_active_find_app_e2e
-            COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_app_e2e.sh
+            COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_app_e2e.sh
                     --app-bin $<TARGET_FILE:tactical_objects_app>
                     --client-bin ${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e)
     endif()
@@ -742,7 +742,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
         add_test(NAME tobj_ada_active_find_app_flatbuffers_e2e
-            COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_app_e2e.sh
+            COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_ada_active_find_app_e2e.sh
                     --app-bin $<TARGET_FILE:tactical_objects_app>
                     --client-bin ${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e
                     --content-type application/flatbuffers)
