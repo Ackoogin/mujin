@@ -36,7 +36,8 @@ STUB_BIN="${WORKSPACE_ROOT}/build/subprojects/PYRAMID/pyramid_bridge/cpp/ame_bac
 EVIDENCE_BIN="${WORKSPACE_ROOT}/build/subprojects/PYRAMID/pyramid_bridge/cpp/pyramid_bridge_evidence_client"
 BRIDGE_BIN="${PYRAMID_ROOT}/pyramid_bridge/ada/bin/pyramid_bridge_main"
 PORT=19400
-BUS_NAME="pyramid_bridge"
+BUS_NAME=""
+GENERATED_BUS_NAME=0
 TOBJ_BUS_NAME=""
 TIMEOUT=25
 
@@ -54,6 +55,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -z "$BUS_NAME" ]]; then
+  BUS_NAME="pyramid_bridge_${$}"
+  GENERATED_BUS_NAME=1
+fi
+
 if [[ -z "$TOBJ_BUS_NAME" ]]; then
   TOBJ_BUS_NAME="$BUS_NAME"
 fi
@@ -64,6 +70,19 @@ BRIDGE_PID=""
 EVIDENCE_PID=""
 PORT_FILE=$(mktemp /tmp/tobj_bridge_e2e.XXXXXX)
 
+cleanup_generated_bus() {
+  local bus="$1"
+  local token
+
+  if [[ ! -d /dev/shm ]]; then
+    return
+  fi
+
+  token="$(printf '%s' "$bus" | sed 's/[^A-Za-z0-9]/_/g')"
+  rm -f "/dev/shm/pcl_shm_bus_${token}" \
+        "/dev/shm/sem.pcl_shm_lock_${token}"
+}
+
 cleanup() {
   for pid_var in EVIDENCE_PID BRIDGE_PID STUB_PID APP_PID; do
     eval "pid=\${$pid_var:-}"
@@ -73,6 +92,9 @@ cleanup() {
     fi
   done
   rm -f "$PORT_FILE"
+  if [[ "$GENERATED_BUS_NAME" -eq 1 ]]; then
+    cleanup_generated_bus "$BUS_NAME"
+  fi
 }
 trap cleanup EXIT
 

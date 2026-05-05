@@ -790,7 +790,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
     else()
         add_test(NAME pyramid_bridge_e2e
-            COMMAND ${PYRAMID_ROOT_DIR}/scripts/test_pyramid_bridge_e2e.sh
+            COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_pyramid_bridge_e2e.sh
                     --app-bin $<TARGET_FILE:tactical_objects_app>
                     --stub-bin $<TARGET_FILE:ame_backend_stub>
                     --evidence-bin $<TARGET_FILE:pyramid_bridge_evidence_client>
