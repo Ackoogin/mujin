@@ -23,7 +23,7 @@
 --    PYRAMID_GEN_LIB_DIR      directory containing the generated codec archive
 --    PYRAMID_GEN_LIB_NAME     (default pyramid_generated_flatbuffers_codec)
 
-with "gnatcoll_core.gpr";
+with "gnatcoll_json.gpr";
 
 project Pyramid_Bridge is
 

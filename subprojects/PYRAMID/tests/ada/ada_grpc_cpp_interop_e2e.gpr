@@ -1,4 +1,4 @@
-with "gnatcoll_core.gpr";
+with "gnatcoll_json.gpr";
 
 project Ada_Grpc_Cpp_Interop_E2E is
   Root_Dir := external("UNMANNED_ROOT", ".." & "/.." & "/.." & "/..");

@@ -1,0 +1,216 @@
+------------------------------------------------------------------------------
+--  GNATCOLL JSON-only project for PYRAMID Ada tests/bridges.
+--
+--  PYRAMID only uses GNATCOLL.JSON.  The upstream gnatcoll_core.gpr exposes
+--  the whole core source tree, which makes older GNAT toolchains compile
+--  unrelated units such as GNATCOLL.Random that depend on Interfaces.Unsigned_128.
+--  Keep this project intentionally small so those units are not considered.
+------------------------------------------------------------------------------
+
+with "../minimal/gnatcoll_minimal.gpr";
+
+library project GNATCOLL_JSON is
+
+   Name := "gnatcoll_json";
+
+   type Build_Type is ("DEBUG", "PROD");
+   Build : Build_Type := External ("GNATCOLL_BUILD_MODE",
+                                   External ("BUILD", "PROD"));
+
+   type Library_Type_Type is ("relocatable", "static", "static-pic");
+   Library_Type : Library_Type_Type := External ("LIBRARY_TYPE", "static");
+   for Run_Path_Option use ();
+
+   type OS_Kind is ("windows", "unix", "osx");
+   OS : OS_Kind := External ("GNATCOLL_OS", "unix");
+
+   Sources := ("src", "src/os");
+   case OS is
+      when "unix" | "osx" =>
+         Sources := Sources & ("src/os/unix");
+      when "windows" =>
+         Sources := Sources & ("src/os/win32");
+   end case;
+
+   Common_Sources :=
+     ("gnatcoll-buffer.ads",
+      "gnatcoll-buffer.adb",
+      "gnatcoll-json.ads",
+      "gnatcoll-json.adb",
+      "gnatcoll-json-utility.ads",
+      "gnatcoll-json-utility.adb",
+      "gnatcoll_support.c",
+      "gnatcoll-mmap.ads",
+      "gnatcoll-mmap.adb",
+      "gnatcoll-os.ads",
+      "gnatcoll-os-fs.ads",
+      "gnatcoll-os-fs.adb",
+      "gnatcoll-os-stat.ads",
+      "gnatcoll-os-stat.adb",
+      "gnatcoll-string_builders.ads",
+      "gnatcoll-string_builders.adb",
+      "gnatcoll-strings.ads",
+      "gnatcoll-strings_impl.ads",
+      "gnatcoll-strings_impl.adb");
+
+   Unix_Sources :=
+     ("gnatcoll-mmap-system__unix.ads",
+      "gnatcoll-mmap-system__unix.adb",
+      "gnatcoll-os-fs-is_console__unix.adb",
+      "gnatcoll-os-fs-null_file__unix.adb",
+      "gnatcoll-os-fs-open__unix.adb",
+      "gnatcoll-os-fs-open_pipe__linux.adb",
+      "gnatcoll-os-fs-set_close_on_exec__unix.adb",
+      "gnatcoll-os-libc.ads",
+      "gnatcoll-os-libc_constants__linux.ads",
+      "gnatcoll-os-libc-stat.ads",
+      "libc-wrappers.c",
+      "gnatcoll-os-stat-fstat__unix.adb",
+      "gnatcoll-os-stat-stat__unix.adb");
+
+   OSXSources :=
+     ("gnatcoll-mmap-system__unix.ads",
+      "gnatcoll-mmap-system__unix.adb",
+      "gnatcoll-os-fs-is_console__unix.adb",
+      "gnatcoll-os-fs-null_file__unix.adb",
+      "gnatcoll-os-fs-open__unix.adb",
+      "gnatcoll-os-fs-open_pipe__unix.adb",
+      "gnatcoll-os-fs-set_close_on_exec__unix.adb",
+      "gnatcoll-os-libc.ads",
+      "gnatcoll-os-libc_constants__osx.ads",
+      "gnatcoll-os-libc-stat.ads",
+      "libc-wrappers.c",
+      "gnatcoll-os-stat-fstat__unix.adb",
+      "gnatcoll-os-stat-stat__unix.adb");
+
+   Windows_Sources :=
+     ("gnatcoll-mmap-system__win32.ads",
+      "gnatcoll-mmap-system__win32.adb",
+      "gnatcoll-io-native.ads",
+      "gnatcoll-io-native.adb",
+      "gnatcoll-io-native-codec__win32.adb",
+      "gnatcoll-os-fs-is_console__win32.adb",
+      "gnatcoll-os-fs-null_file__win32.adb",
+      "gnatcoll-os-fs-open__win32.adb",
+      "gnatcoll-os-fs-open_pipe__win32.adb",
+      "gnatcoll-os-fs-set_close_on_exec__win32.adb",
+      "gnatcoll-os-stat-fstat__win32.adb",
+      "gnatcoll-os-stat-stat__win32.adb",
+      "gnatcoll-os-win32.ads",
+      "gnatcoll-os-win32.adb",
+      "gnatcoll-os-win32-files.ads",
+      "gnatcoll-os-win32-files.adb",
+      "gnatcoll-os-win32-strings.ads",
+      "gnatcoll-os-win32-strings.adb",
+      "win32-wrappers.c",
+      "gnatcoll-wstring_builders.ads",
+      "gnatcoll-wstring_builders.adb");
+
+   Source_List := Common_Sources;
+   case OS is
+      when "unix" =>
+         Source_List := Source_List & Unix_Sources;
+      when "osx" =>
+         Source_List := Source_List & OSXSources;
+      when "windows" =>
+         Source_List := Source_List & Windows_Sources;
+   end case;
+
+   for Languages use ("Ada", "C");
+   for Source_Dirs use Sources;
+   for Source_Files use Source_List;
+   for Library_Kind use Library_Type;
+   for Library_Name use Name;
+
+   Object_Root := External ("GNATCOLL_OBJECT_ROOT", "");
+   case OS is
+      when "windows" | "osx" =>
+         for Object_Dir use Object_Root & "obj/gnatcoll_json/all";
+      when "unix" =>
+         case Library_Type is
+            when "relocatable" | "static-pic" =>
+               for Object_Dir use Object_Root & "obj/gnatcoll_json/pic";
+            when "static" =>
+               for Object_Dir use Object_Root & "obj/gnatcoll_json/static";
+         end case;
+   end case;
+
+   for Library_Dir
+      use Object_Root & "lib/gnatcoll_json/" & Project'Library_Kind;
+
+   package Compiler is
+      case Build is
+         when "DEBUG" =>
+            for Switches ("Ada") use ("-g", "-O0");
+         when "PROD" =>
+            for Switches ("Ada") use ("-O2", "-gnatn");
+      end case;
+
+      for Switches ("Ada") use Compiler'Switches ("Ada")
+        & External_As_List ("ADAFLAGS", " ");
+      for Switches ("C") use External_As_List ("CFLAGS", " ")
+        & External_As_List ("CPPFLAGS", " ");
+   end Compiler;
+
+   package Naming is
+      case OS is
+         when "unix" =>
+            for Specification ("GNATCOLL.Mmap.System")
+              use "gnatcoll-mmap-system__unix.ads";
+            for Implementation ("GNATCOLL.Mmap.System")
+              use "gnatcoll-mmap-system__unix.adb";
+            for Implementation ("GNATCOLL.OS.FS.Open_Pipe")
+              use "gnatcoll-os-fs-open_pipe__linux.adb";
+            for Specification ("GNATCOLL.OS.Libc_Constants")
+              use "gnatcoll-os-libc_constants__linux.ads";
+         when "osx" =>
+            for Specification ("GNATCOLL.Mmap.System")
+              use "gnatcoll-mmap-system__unix.ads";
+            for Implementation ("GNATCOLL.Mmap.System")
+              use "gnatcoll-mmap-system__unix.adb";
+            for Implementation ("GNATCOLL.OS.FS.Open_Pipe")
+              use "gnatcoll-os-fs-open_pipe__unix.adb";
+            for Specification ("GNATCOLL.OS.Libc_Constants")
+              use "gnatcoll-os-libc_constants__osx.ads";
+         when "windows" =>
+            for Specification ("GNATCOLL.Mmap.System")
+              use "gnatcoll-mmap-system__win32.ads";
+            for Implementation ("GNATCOLL.Mmap.System")
+              use "gnatcoll-mmap-system__win32.adb";
+            for Implementation ("GNATCOLL.IO.Native.Codec")
+              use "gnatcoll-io-native-codec__win32.adb";
+      end case;
+
+      case OS is
+         when "unix" | "osx" =>
+            for Implementation ("GNATCOLL.OS.FS.Is_Console")
+              use "gnatcoll-os-fs-is_console__unix.adb";
+            for Implementation ("GNATCOLL.OS.FS.Null_File")
+              use "gnatcoll-os-fs-null_file__unix.adb";
+            for Implementation ("GNATCOLL.OS.FS.Open")
+              use "gnatcoll-os-fs-open__unix.adb";
+            for Implementation ("GNATCOLL.OS.FS.Set_Close_On_Exec")
+              use "gnatcoll-os-fs-set_close_on_exec__unix.adb";
+            for Implementation ("GNATCOLL.OS.Stat.Fstat")
+              use "gnatcoll-os-stat-fstat__unix.adb";
+            for Implementation ("GNATCOLL.OS.Stat.Stat")
+              use "gnatcoll-os-stat-stat__unix.adb";
+         when "windows" =>
+            for Implementation ("GNATCOLL.OS.FS.Is_Console")
+              use "gnatcoll-os-fs-is_console__win32.adb";
+            for Implementation ("GNATCOLL.OS.FS.Null_File")
+              use "gnatcoll-os-fs-null_file__win32.adb";
+            for Implementation ("GNATCOLL.OS.FS.Open")
+              use "gnatcoll-os-fs-open__win32.adb";
+            for Implementation ("GNATCOLL.OS.FS.Open_Pipe")
+              use "gnatcoll-os-fs-open_pipe__win32.adb";
+            for Implementation ("GNATCOLL.OS.FS.Set_Close_On_Exec")
+              use "gnatcoll-os-fs-set_close_on_exec__win32.adb";
+            for Implementation ("GNATCOLL.OS.Stat.Fstat")
+              use "gnatcoll-os-stat-fstat__win32.adb";
+            for Implementation ("GNATCOLL.OS.Stat.Stat")
+              use "gnatcoll-os-stat-stat__win32.adb";
+      end case;
+   end Naming;
+
+end GNATCOLL_JSON;
