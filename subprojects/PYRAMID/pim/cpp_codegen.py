@@ -1494,10 +1494,13 @@ class CppTypesGenerator:
         gen.generate(output_dir)
     """
 
-    def __init__(self, data_model_dir: Path):
-        proto_files = parse_proto_tree(data_model_dir)
+    def __init__(self, data_model_source):
+        if isinstance(data_model_source, Path):
+            proto_files = parse_proto_tree(data_model_source)
+        else:
+            proto_files = list(data_model_source)
         self._index = ProtoTypeIndex(proto_files)
-        self._data_model_dir = data_model_dir
+        self._data_model_dir = data_model_source if isinstance(data_model_source, Path) else None
         self._ns = _common_cpp_ns(self._index)
         self._prefix = '_'.join(self._ns.split('::'))
         self._aliases = self._find_scalar_wrappers()

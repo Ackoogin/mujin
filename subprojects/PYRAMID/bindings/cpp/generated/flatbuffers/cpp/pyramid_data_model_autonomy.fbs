@@ -1,6 +1,9 @@
 // Auto-generated FlatBuffers schema from autonomy.proto
 // Do not edit -- regenerate from proto source
 
+include "pyramid_data_model_base.fbs";
+include "pyramid_data_model_common.fbs";
+
 namespace pyramid.data_model.autonomy;
 
 enum FactAuthorityLevel : byte {
@@ -29,13 +32,17 @@ enum RequirementPlacementOperation : byte {
   READ_CAPABILITY = 6
 }
 
+table PlanningGoalGoalUnionExpressionValue {
+  value:string;
+}
+
 union GoalUnion {
   RequirementReference,
-  string
+  PlanningGoalGoalUnionExpressionValue
 }
 
 table RequirementReference {
-  requirement_id:Identifier;
+  requirement_id:pyramid.data_model.base.Identifier;
   component_name:string;
   service_name:string;
   type_name:string;
@@ -53,7 +60,7 @@ table PlanningPolicy {
 }
 
 table PlanningGoal {
-  base:Entity;
+  base:pyramid.data_model.common.Entity;
   name:string;
   goal:GoalUnion;
 }
@@ -65,7 +72,7 @@ table ExecutionPolicy {
 }
 
 table PlanningRequirement {
-  base:Requirement;
+  base:pyramid.data_model.common.Requirement;
   upstream_requirement:[RequirementReference];
   goal:[PlanningGoal];
   policy:PlanningPolicy;
@@ -73,16 +80,16 @@ table PlanningRequirement {
 }
 
 table ExecutionRequirement {
-  base:Requirement;
+  base:pyramid.data_model.common.Requirement;
   upstream_requirement:[RequirementReference];
-  plan_id:Identifier;
+  plan_id:pyramid.data_model.base.Identifier;
   policy:ExecutionPolicy;
   available_agents:[AgentState];
-  planning_requirement_id:Identifier;
+  planning_requirement_id:pyramid.data_model.base.Identifier;
 }
 
 table WorldFactUpdate {
-  base:Entity;
+  base:pyramid.data_model.common.Entity;
   key:string;
   value:bool;
   source:string;
@@ -90,12 +97,12 @@ table WorldFactUpdate {
 }
 
 table StateUpdate {
-  base:Entity;
+  base:pyramid.data_model.common.Entity;
   fact_update:[WorldFactUpdate];
 }
 
 table Capabilities {
-  base:Entity;
+  base:pyramid.data_model.common.Entity;
   backend_id:string;
   supports_planning_requirements:bool;
   supports_execution_requirements:bool;
@@ -113,7 +120,7 @@ table PlannedComponentInteraction {
 }
 
 table PlanStep {
-  base:Entity;
+  base:pyramid.data_model.common.Entity;
   sequence_number:uint;
   action_name:string;
   signature:string;
@@ -121,8 +128,8 @@ table PlanStep {
 }
 
 table Plan {
-  base:Entity;
-  planning_requirement_id:Identifier;
+  base:pyramid.data_model.common.Entity;
+  planning_requirement_id:pyramid.data_model.base.Identifier;
   backend_id:string;
   world_version:ulong;
   replan_count:uint;
@@ -130,31 +137,31 @@ table Plan {
   solve_time_ms:double;
   step:[PlanStep];
   compiled_bt_xml:string;
-  predicted_quality:Percentage;
+  predicted_quality:pyramid.data_model.base.Percentage;
 }
 
 table RequirementPlacement {
-  base:Entity;
-  execution_requirement_id:Identifier;
-  planning_requirement_id:Identifier;
-  plan_id:Identifier;
-  plan_step_id:Identifier;
+  base:pyramid.data_model.common.Entity;
+  execution_requirement_id:pyramid.data_model.base.Identifier;
+  planning_requirement_id:pyramid.data_model.base.Identifier;
+  plan_id:pyramid.data_model.base.Identifier;
+  plan_step_id:pyramid.data_model.base.Identifier;
   target_component:string;
   target_service:string;
   target_type:string;
   operation:RequirementPlacementOperation;
-  target_requirement_id:Identifier;
-  related_entity_id:[Identifier];
-  progress:Progress;
+  target_requirement_id:pyramid.data_model.base.Identifier;
+  related_entity_id:[pyramid.data_model.base.Identifier];
+  progress:pyramid.data_model.common.Progress;
 }
 
 table ExecutionRun {
-  base:Entity;
-  execution_requirement_id:Identifier;
-  planning_requirement_id:Identifier;
-  plan_id:Identifier;
+  base:pyramid.data_model.common.Entity;
+  execution_requirement_id:pyramid.data_model.base.Identifier;
+  planning_requirement_id:pyramid.data_model.base.Identifier;
+  plan_id:pyramid.data_model.base.Identifier;
   state:ExecutionState;
-  achievement:Achievement;
+  achievement:pyramid.data_model.common.Achievement;
   replan_count:uint;
   outstanding_placement:[RequirementPlacement];
 }

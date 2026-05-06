@@ -1,5 +1,5 @@
 --  Auto-generated types specification
---  Generated from: base.proto by generate_bindings.py (types)
+--  Generated from: pyramid.data_model.base.proto by generate_bindings.py (types)
 --  Package: Pyramid.Data_Model.Base.Types
 
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;

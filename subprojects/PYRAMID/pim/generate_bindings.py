@@ -39,15 +39,21 @@ import ada_codegen
 import backends  # noqa: F401
 
 
+def _discover_data_model_files(proto_dir: Path):
+    return [
+        pf for pf in parse_proto_tree(proto_dir)
+        if pf.package.startswith('pyramid.data_model')
+    ]
+
+
 def _generate_json_cpp(proto_dir: Path, output_dir: Path,
                        enabled_backends=None) -> int:
     total = 0
-    data_model_dir = proto_dir / 'pyramid' / 'data_model'
-    if data_model_dir.exists():
-        gen = cpp_codegen.CppTypesGenerator(data_model_dir)
+    dm_files = _discover_data_model_files(proto_dir)
+    if dm_files:
+        gen = cpp_codegen.CppTypesGenerator(dm_files)
         gen.generate(str(output_dir))
         total += 1
-        dm_files = parse_proto_tree(data_model_dir)
         dm_index = ProtoTypeIndex(dm_files)
         for pf in dm_files:
             cpp_codegen.CppDataModelCodecGenerator(pf, dm_index).generate(str(output_dir))
@@ -68,12 +74,11 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
 def _generate_json_ada(proto_dir: Path, output_dir: Path,
                        enabled_backends=None) -> int:
     total = 0
-    data_model_dir = proto_dir / 'pyramid' / 'data_model'
-    if data_model_dir.exists():
-        gen = ada_codegen.AdaTypesGenerator(data_model_dir)
+    dm_files = _discover_data_model_files(proto_dir)
+    if dm_files:
+        gen = ada_codegen.AdaTypesGenerator(dm_files)
         gen.generate(str(output_dir))
         total += 1
-        dm_files = parse_proto_tree(data_model_dir)
         dm_index = ProtoTypeIndex(dm_files)
         for pf in dm_files:
             ada_codegen.AdaDataModelCodecGenerator(pf, dm_index).generate(str(output_dir))

@@ -1,5 +1,5 @@
 --  Auto-generated service binding specification
---  Generated from: consumed.proto by generate_bindings.py
+--  Generated from: pyramid.components.tactical_objects.services.provided.consumed.proto by generate_bindings.py
 --  Package: Pyramid.Services.Tactical_Objects.Consumed
 --
 --  Architecture: component logic > service binding (this) > PCL

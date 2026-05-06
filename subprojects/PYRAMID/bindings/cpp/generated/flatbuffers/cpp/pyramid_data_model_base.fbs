@@ -12,7 +12,7 @@ table Length {
 }
 
 table Timestamp {
-  value:Timestamp;
+  value:double;
 }
 
 table Identifier {

@@ -1,5 +1,5 @@
 --  Auto-generated service binding specification
---  Generated from: provided.proto by generate_bindings.py
+--  Generated from: pyramid.components.autonomy_backend.services.provided.proto by generate_bindings.py
 --  Package: Pyramid.Services.Autonomy_Backend.Provided
 --
 --  Architecture: component logic > service binding (this) > PCL

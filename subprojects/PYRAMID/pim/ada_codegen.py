@@ -1513,10 +1513,13 @@ class AdaTypesGenerator:
         gen.generate(output_dir)
     """
 
-    def __init__(self, data_model_dir: Path):
-        proto_files = parse_proto_tree(data_model_dir)
+    def __init__(self, data_model_source):
+        if isinstance(data_model_source, Path):
+            proto_files = parse_proto_tree(data_model_source)
+        else:
+            proto_files = list(data_model_source)
         self._index = ProtoTypeIndex(proto_files)
-        self._data_model_dir = data_model_dir
+        self._data_model_dir = data_model_source if isinstance(data_model_source, Path) else None
         self._ada_pkg = _common_ada_pkg(self._index)
         self._file_base = self._ada_pkg.lower().replace('.', '-')
         self._aliases = self._find_scalar_wrappers()

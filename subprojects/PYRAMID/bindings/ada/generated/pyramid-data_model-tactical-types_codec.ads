@@ -1,5 +1,5 @@
 --  Auto-generated data model JSON codec specification
---  Generated from: tactical.proto by generate_bindings.py (codec)
+--  Generated from: pyramid.data_model.tactical.proto by generate_bindings.py (codec)
 --  Package: Pyramid.Data_Model.Tactical.Types_Codec
 
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;

@@ -1,6 +1,8 @@
 // Auto-generated FlatBuffers schema from common.proto
 // Do not edit -- regenerate from proto source
 
+include "pyramid_data_model_base.fbs";
+
 namespace pyramid.data_model.common;
 
 enum Feasibility : byte {
@@ -49,8 +51,8 @@ enum DataPolicy : byte {
 }
 
 table GeodeticPosition {
-  latitude:Angle;
-  longitude:Angle;
+  latitude:pyramid.data_model.base.Angle;
+  longitude:pyramid.data_model.base.Angle;
 }
 
 table PolyArea {
@@ -60,7 +62,7 @@ table PolyArea {
 table Achievement {
   base:Entity;
   status:Progress;
-  quality:Percentage;
+  quality:pyramid.data_model.base.Percentage;
   achieveability:Feasibility;
 }
 
@@ -77,14 +79,14 @@ table Capability {
 }
 
 table Entity {
-  update_time:Timestamp;
-  id:Identifier;
-  source:Identifier;
+  update_time:pyramid.data_model.base.Timestamp;
+  id:pyramid.data_model.base.Identifier;
+  source:pyramid.data_model.base.Identifier;
 }
 
 table CircleArea {
   position:GeodeticPosition;
-  radius:Length;
+  radius:pyramid.data_model.base.Length;
 }
 
 table Point {
@@ -101,7 +103,7 @@ table Ack {
 }
 
 table Query {
-  id:[Identifier];
+  id:[pyramid.data_model.base.Identifier];
   one_shot:bool;
 }
 
