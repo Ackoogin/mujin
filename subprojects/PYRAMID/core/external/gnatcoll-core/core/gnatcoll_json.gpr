@@ -35,10 +35,17 @@ library project GNATCOLL_JSON is
    Common_Sources :=
      ("gnatcoll-buffer.ads",
       "gnatcoll-buffer.adb",
+      "gnatcoll-io.ads",
+      "gnatcoll-io.adb",
       "gnatcoll-json.ads",
       "gnatcoll-json.adb",
       "gnatcoll-json-utility.ads",
       "gnatcoll-json-utility.adb",
+      "gnatcoll-utils.ads",
+      "gnatcoll-utils.adb",
+      "gnatcoll-path.ads",
+      "gnatcoll-path.adb",
+      "executable_path.c",
       "gnatcoll_support.c",
       "gnatcoll-mmap.ads",
       "gnatcoll-mmap.adb",
@@ -51,7 +58,8 @@ library project GNATCOLL_JSON is
       "gnatcoll-string_builders.adb",
       "gnatcoll-strings.ads",
       "gnatcoll-strings_impl.ads",
-      "gnatcoll-strings_impl.adb");
+      "gnatcoll-strings_impl.adb",
+      "gnatcoll-vfs_types.ads");
 
    Unix_Sources :=
      ("gnatcoll-mmap-system__unix.ads",

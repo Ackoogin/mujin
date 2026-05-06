@@ -330,6 +330,7 @@ def _topics_for_proto(
 # -- Code generation -----------------------------------------------------------
 
 class CppServiceGenerator:
+    _dm_proto_cache: Dict[Path, List[ProtoFile]] = {}
 
     def __init__(self, proto_input: str, enabled_backends=None):
         self._proto_input = Path(proto_input)
@@ -356,6 +357,49 @@ class CppServiceGenerator:
                 parent = parent.parent
             candidates.append(parent / 'bindings' / 'protobuf' / 'cpp' / header)
         return any(path.exists() for path in candidates)
+
+    def _discover_data_model_proto_files(self) -> List[ProtoFile]:
+        """Find parsed data-model protos for service JSON codec imports.
+
+        Support both historical folder layouts like `proto/pyramid/data_model/*`
+        and flattened namespace-style filenames under a shared `proto` root.
+        """
+        roots: List[Path] = []
+        if self._proto_input.is_dir():
+            roots.append(self._proto_input)
+        else:
+            proto_root = next(
+                (parent for parent in [self._proto_input.parent, *self._proto_input.parents]
+                 if parent.name.lower() == 'proto'),
+                None,
+            )
+            if proto_root is not None:
+                roots.append(proto_root)
+            roots.extend([self._proto_input.parent, *self._proto_input.parents])
+
+        seen: set[Path] = set()
+        for root in roots:
+            try:
+                resolved = root.resolve()
+            except OSError:
+                resolved = root
+            if resolved in seen or not root.exists() or not root.is_dir():
+                continue
+            seen.add(resolved)
+            if resolved not in self._dm_proto_cache:
+                try:
+                    files = parse_proto_tree(root)
+                except OSError:
+                    files = []
+                self._dm_proto_cache[resolved] = [
+                    pf for pf in files
+                    if pf.package == _DATA_MODEL_PROTO_ROOT
+                    or pf.package.startswith(_DATA_MODEL_PROTO_ROOT + '.')
+                ]
+            dm_files = self._dm_proto_cache[resolved]
+            if dm_files:
+                return dm_files
+        return []
 
     def generate(self, output_dir: str):
         output_path = Path(output_dir)
@@ -786,21 +830,7 @@ class CppServiceGenerator:
         # the current Tactical Objects subset.
         dm_codec_nss = []
         dm_codec_headers = []
-        if self._proto_input.is_dir():
-            data_model_files = [
-                parse_proto(p) for p in self._proto_input.rglob('*.proto')
-            ]
-        else:
-            data_model_files = []
-            for parent in self._proto_input.parents:
-                candidate = parent / 'pyramid' / 'data_model'
-                if candidate.exists():
-                    data_model_files = [
-                        parse_proto(p) for p in candidate.rglob('*.proto')
-                    ]
-                    break
-            if not data_model_files:
-                data_model_files = [parsed]
+        data_model_files = self._discover_data_model_proto_files()
         for indexed_pf in data_model_files:
             if not indexed_pf.package.startswith('pyramid.data_model'):
                 continue

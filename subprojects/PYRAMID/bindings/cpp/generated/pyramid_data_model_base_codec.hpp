@@ -1,5 +1,5 @@
 // Auto-generated data model JSON codec header
-// Generated from: base.proto by generate_bindings.py (codec)
+// Generated from: pyramid.data_model.base.proto by generate_bindings.py (codec)
 // Namespace: pyramid::domain_model::base
 #pragma once
 

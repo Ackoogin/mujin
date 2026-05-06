@@ -1,5 +1,5 @@
 // Auto-generated service binding header
-// Generated from: consumed.proto by generate_bindings.py
+// Generated from: pyramid.components.tactical_objects.services.provided.consumed.proto by generate_bindings.py
 // Namespace: pyramid::components::tactical_objects::services::consumed
 //
 // Architecture: component logic > service binding (this) > PCL

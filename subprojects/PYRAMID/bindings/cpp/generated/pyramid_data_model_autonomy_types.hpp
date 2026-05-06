@@ -1,5 +1,5 @@
 // Auto-generated types header
-// Generated from: autonomy.proto by generate_bindings.py (types)
+// Generated from: pyramid.data_model.autonomy.proto by generate_bindings.py (types)
 // Namespace: pyramid::domain_model::autonomy
 #pragma once
 

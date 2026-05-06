@@ -374,7 +374,7 @@ if(PYRAMID_ENABLE_GRPC)
             "was not found. Skipping Tactical Objects gRPC transport targets.")
     else()
         file(GLOB_RECURSE PYRAMID_GRPC_SERVICE_PROTOS CONFIGURE_DEPENDS
-            "${PYRAMID_PROTO_DIR}/pyramid/components/*/services/*.proto")
+            "${PYRAMID_PROTO_DIR}/pyramid/components/*.proto")
         if(NOT PYRAMID_GRPC_SERVICE_PROTOS)
             message(FATAL_ERROR
                 "PYRAMID_ENABLE_GRPC is ON, but no service proto files "

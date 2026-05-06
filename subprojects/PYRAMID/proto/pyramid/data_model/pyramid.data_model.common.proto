@@ -3,7 +3,7 @@ syntax = "proto3";
 package pyramid.data_model.common;
 
 import "google/protobuf/timestamp.proto";
-import "pyramid/data_model/base.proto";
+import "pyramid/data_model/pyramid.data_model.base.proto";
 
 enum Feasibility {
   FEASIBILITY_UNSPECIFIED = 0;

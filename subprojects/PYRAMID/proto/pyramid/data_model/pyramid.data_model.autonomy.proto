@@ -2,8 +2,8 @@ syntax = "proto3";
 
 package pyramid.data_model.autonomy;
 
-import "pyramid/data_model/base.proto";
-import "pyramid/data_model/common.proto";
+import "pyramid/data_model/pyramid.data_model.base.proto";
+import "pyramid/data_model/pyramid.data_model.common.proto";
 
 // =============================================================================
 // AME Autonomy Data Model

@@ -555,7 +555,10 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             for imported in pf.imports:
                 if not imported.endswith('.proto') or imported.startswith('google/protobuf/'):
                     continue
-                include_base = imported[:-6].replace('/', '_')
+                include_stem = Path(imported).stem
+                if not include_stem.startswith('pyramid.'):
+                    include_stem = f'pyramid.{include_stem}'
+                include_base = include_stem.replace('.', '_')
                 f.write(f'include "{include_base}.fbs";\n')
             if pf.imports:
                 filtered_imports = [

@@ -1,4 +1,4 @@
-// Auto-generated FlatBuffers schema from autonomy.proto
+// Auto-generated FlatBuffers schema from pyramid.data_model.autonomy.proto
 // Do not edit -- regenerate from proto source
 
 include "pyramid_data_model_base.fbs";

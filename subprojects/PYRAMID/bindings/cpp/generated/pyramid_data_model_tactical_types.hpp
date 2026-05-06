@@ -1,5 +1,5 @@
 // Auto-generated types header
-// Generated from: tactical.proto by generate_bindings.py (types)
+// Generated from: pyramid.data_model.tactical.proto by generate_bindings.py (types)
 // Namespace: pyramid::domain_model::tactical
 #pragma once
 

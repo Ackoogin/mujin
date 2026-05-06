@@ -3,9 +3,9 @@ syntax = "proto3";
 package pyramid.components.tactical_objects.services.consumed;
 
 import "google/protobuf/empty.proto";
-import "pyramid/data_model/base.proto";
-import "pyramid/data_model/common.proto";
-import "pyramid/data_model/tactical.proto";
+import "pyramid/data_model/pyramid.data_model.base.proto";
+import "pyramid/data_model/pyramid.data_model.common.proto";
+import "pyramid/data_model/pyramid.data_model.tactical.proto";
 
 // gRPC Service for Object_Evidence
 service Object_Evidence_Service {

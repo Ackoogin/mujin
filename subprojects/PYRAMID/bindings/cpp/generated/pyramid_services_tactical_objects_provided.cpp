@@ -1,5 +1,5 @@
 // Auto-generated service binding implementation
-// Generated from: provided.proto by generate_bindings.py
+// Generated from: pyramid.components.tactical_objects.services.provided.proto by generate_bindings.py
 // Namespace: pyramid::components::tactical_objects::services::provided
 
 #include "pyramid_services_tactical_objects_provided.hpp"

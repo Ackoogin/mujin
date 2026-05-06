@@ -1,4 +1,4 @@
-// Auto-generated FlatBuffers schema from tactical.proto
+// Auto-generated FlatBuffers schema from pyramid.data_model.tactical.proto
 // Do not edit -- regenerate from proto source
 
 include "pyramid_data_model_base.fbs";

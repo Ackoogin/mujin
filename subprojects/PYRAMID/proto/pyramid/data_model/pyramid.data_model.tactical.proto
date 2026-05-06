@@ -3,8 +3,8 @@ syntax = "proto3";
 package pyramid.data_model.tactical;
 
 import "google/protobuf/timestamp.proto";
-import "pyramid/data_model/base.proto";
-import "pyramid/data_model/common.proto";
+import "pyramid/data_model/pyramid.data_model.base.proto";
+import "pyramid/data_model/pyramid.data_model.common.proto";
 
 enum ObjectSource {
   OBJECT_SOURCE_UNSPECIFIED = 0;

@@ -1,5 +1,5 @@
 // Auto-generated service binding implementation
-// Generated from: provided.proto by generate_bindings.py
+// Generated from: pyramid.components.autonomy_backend.services.provided.proto by generate_bindings.py
 // Namespace: pyramid::components::autonomy_backend::services::provided
 
 #include "pyramid_services_autonomy_backend_provided.hpp"

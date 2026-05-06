@@ -1,5 +1,5 @@
 // Auto-generated data model JSON codec header
-// Generated from: autonomy.proto by generate_bindings.py (codec)
+// Generated from: pyramid.data_model.autonomy.proto by generate_bindings.py (codec)
 // Namespace: pyramid::domain_model::autonomy
 #pragma once
 

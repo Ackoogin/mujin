@@ -92,7 +92,7 @@ class ProtobufGenerator:
     def __init__(self, model: Dict[str, Any], output_dir: str = 'proto'):
         self.model = model
         self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(exist_ok=True)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # Track all types for imports
         self.generated_types = set()
@@ -220,10 +220,10 @@ class ProtobufGenerator:
         else:
             package_name = 'pyramid.model'
         
-        # Create filename from package name (replacing dots with underscores or keeping dots)
-        # E.g., pyramid.data_model.tactical -> pyramid.data_model.tactical.proto
-        filename = package_name + '.proto'
-        filepath = self.output_dir / filename
+        # Keep package-style filenames, but place them under stable
+        # `pyramid/data_model` or `pyramid/components` folders.
+        filepath = self.output_dir / self._proto_relpath_for_package(package_name)
+        filepath.parent.mkdir(parents=True, exist_ok=True)
         
         # Use StringIO to buffer content before writing
         buffer = StringIO()
@@ -271,12 +271,14 @@ class ProtobufGenerator:
             if google_imports['base_for_identifier']:
                 # Check if Identifier is not in current package
                 if 'Identifier' in self.type_to_package and self.type_to_package['Identifier'] != package_name:
-                    imports.append(f'import "pyramid/{self.type_to_package["Identifier"]}.proto";')
+                    imports.append(
+                        f'import "{self._proto_relpath_for_package(self.type_to_package["Identifier"]).as_posix()}";'
+                    )
             
             # Add imports for types from other packages
             type_imports = self._collect_imports(types, package_name)
             for import_path in type_imports:
-                imports.append(f'import "pyramid/{import_path}";')
+                imports.append(f'import "{import_path}";')
             
             if imports:
                 f.write('\n'.join(imports))
@@ -330,17 +332,14 @@ class ProtobufGenerator:
                 if type_name and type_name in type_to_package:
                     ref_package = type_to_package[type_name]
                     if ref_package != package_name:
-                        # Convert package to import filename (flat structure)
-                        import_path = ref_package + '.proto'
-                        imports.add(import_path)
+                        imports.add(self._proto_relpath_for_package(ref_package).as_posix())
             
             # Check parent types
             for parent in dt.get('generalizes', []):
                 if parent in type_to_package:
                     ref_package = type_to_package[parent]
                     if ref_package != package_name:
-                        import_path = ref_package + '.proto'
-                        imports.add(import_path)
+                        imports.add(self._proto_relpath_for_package(ref_package).as_posix())
         
         # Check classes for external references
         for cls in types['classes']:
@@ -349,8 +348,7 @@ class ProtobufGenerator:
                 if type_name and type_name in type_to_package:
                     ref_package = type_to_package[type_name]
                     if ref_package != package_name:
-                        import_path = ref_package + '.proto'
-                        imports.add(import_path)
+                        imports.add(self._proto_relpath_for_package(ref_package).as_posix())
             
             # Check parent types - only import if they have non-entity properties
             for parent in cls.get('generalizes', []):
@@ -359,10 +357,16 @@ class ProtobufGenerator:
                     if self._type_has_non_entity_properties(parent):
                         ref_package = type_to_package[parent]
                         if ref_package != package_name:
-                            import_path = ref_package + '.proto'
-                            imports.add(import_path)
-        
+                            imports.add(self._proto_relpath_for_package(ref_package).as_posix())
+
         return sorted(imports)
+
+    def _proto_relpath_for_package(self, package_name: str) -> Path:
+        """Map a proto package to the repo's foldered proto layout."""
+        parts = package_name.split('.')
+        if len(parts) >= 2 and parts[0] == 'pyramid' and parts[1] in ('data_model', 'components'):
+            return Path('pyramid') / parts[1] / f'{package_name}.proto'
+        return Path('pyramid') / f'{package_name}.proto'
     
     def _needs_google_imports(self, types: Dict[str, List]) -> Dict[str, bool]:
         """Check which google protobuf imports are needed"""

@@ -1,5 +1,5 @@
 // Auto-generated service binding header
-// Generated from: provided.proto by generate_bindings.py
+// Generated from: pyramid.components.autonomy_backend.services.provided.proto by generate_bindings.py
 // Namespace: pyramid::components::autonomy_backend::services::provided
 //
 // Architecture: component logic > service binding (this) > PCL

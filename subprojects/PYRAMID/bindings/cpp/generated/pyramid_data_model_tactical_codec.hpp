@@ -1,5 +1,5 @@
 // Auto-generated data model JSON codec header
-// Generated from: tactical.proto by generate_bindings.py (codec)
+// Generated from: pyramid.data_model.tactical.proto by generate_bindings.py (codec)
 // Namespace: pyramid::domain_model::tactical
 #pragma once
 

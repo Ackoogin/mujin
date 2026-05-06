@@ -1,4 +1,4 @@
-// Auto-generated FlatBuffers schema from base.proto
+// Auto-generated FlatBuffers schema from pyramid.data_model.base.proto
 // Do not edit -- regenerate from proto source
 
 namespace pyramid.data_model.base;
