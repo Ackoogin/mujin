@@ -10,6 +10,7 @@ with System.Storage_Elements;
 with Pyramid.Data_Model.Common.Types_Codec;  use Pyramid.Data_Model.Common.Types_Codec;
 with Pyramid.Data_Model.Tactical.Types_Codec;  use Pyramid.Data_Model.Tactical.Types_Codec;
 with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
+with Pyramid.Components.Tactical_objects.Services.Provided.GRPC_Transport;
 
 package body Pyramid.Services.Tactical_Objects.Provided is
    use type System.Address;
@@ -49,13 +50,26 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    end Msg_To_String;
 
    package Flatbuffers_Codec renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
+   package Grpc_Transport renames Pyramid.Components.Tactical_objects.Services.Provided.GRPC_Transport;
+   Grpc_Channel : Unbounded_String := Null_Unbounded_String;
 
    function Supports_Content_Type (Content_Type : String) return Boolean is
    begin
       return Content_Type = ""
         or else Content_Type = Json_Content_Type
-        or else Content_Type = Flatbuffers_Content_Type;
+        or else Content_Type = Flatbuffers_Content_Type
+        or else Content_Type = Grpc_Content_Type;
    end Supports_Content_Type;
+
+   procedure Configure_Grpc_Library (Path : String) is
+   begin
+      Grpc_Transport.Configure_Library (Path);
+   end Configure_Grpc_Library;
+
+   procedure Configure_Grpc_Channel (Channel : String) is
+   begin
+      Grpc_Channel := To_Unbounded_String (Channel);
+   end Configure_Grpc_Channel;
 
    function Message_Content_Type
      (Msg : access constant Pcl_Bindings.Pcl_Msg) return String is
@@ -82,6 +96,27 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       end;
       return To_Unbounded_String (Payload);
    end Decode_Identifier_Payload;
+
+   procedure Emit_Invoke_Response
+     (Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address;
+      Payload   : String) is
+      Payload_Bytes : aliased constant String := Payload;
+      Type_Name : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Json_Content_Type);
+      Msg : aliased Pcl_Bindings.Pcl_Msg;
+   begin
+      Msg.Data :=
+        (if Payload_Bytes'Length = 0
+         then System.Null_Address
+         else Payload_Bytes (Payload_Bytes'First)'Address);
+      Msg.Size := Interfaces.C.unsigned (Payload_Bytes'Length);
+      Msg.Type_Name := Type_Name;
+      if Callback /= null then
+         Callback (Msg'Access, User_Data);
+      end if;
+      Interfaces.C.Strings.Free (Type_Name);
+   end Emit_Invoke_Response;
 
    function Decode_Entity_Matches
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
@@ -833,6 +868,8 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          then Json_Payload
          elsif Content_Type = "application/flatbuffers"
          then Flatbuffers_Codec.To_Binary_Query (Request)
+         elsif Content_Type = Grpc_Content_Type
+         then ""
          else raise Constraint_Error with "Unsupported content type: " & Content_Type);
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
@@ -842,6 +879,29 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
    begin
+      if Content_Type = Grpc_Content_Type then
+         if Ada.Strings.Unbounded.Length (Grpc_Channel) = 0 then
+            raise Program_Error with "gRPC channel not configured";
+         end if;
+         declare
+            Rsp : constant Grpc_Transport.Object_Match_Array :=
+              Grpc_Transport.Invoke_Matching_Objects_Read_Match
+                (To_String (Grpc_Channel), Request);
+            Acc : Unbounded_String := To_Unbounded_String ("[");
+         begin
+            for I in Rsp'Range loop
+               if I > Rsp'First then
+                  Append (Acc, ",");
+               end if;
+               Append (Acc, To_Json (Rsp (I)));
+            end loop;
+            Append (Acc, "]");
+            Emit_Invoke_Response
+              (Callback, User_Data, To_String (Acc));
+         end;
+         return;
+      end if;
+
       if Content_Type = "" or else Content_Type = "application/json" then
          Req_C := Interfaces.C.Strings.New_String (Payload);
          Msg.Data := To_Address (Req_C);
@@ -876,6 +936,8 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          then Json_Payload
          elsif Content_Type = "application/flatbuffers"
          then Flatbuffers_Codec.To_Binary_Object_Interest_Requirement (Request)
+         elsif Content_Type = Grpc_Content_Type
+         then ""
          else raise Constraint_Error with "Unsupported content type: " & Content_Type);
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
@@ -885,6 +947,23 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
    begin
+      if Content_Type = Grpc_Content_Type then
+         if Ada.Strings.Unbounded.Length (Grpc_Channel) = 0 then
+            raise Program_Error with "gRPC channel not configured";
+         end if;
+         declare
+            Rsp : constant Identifier :=
+              Grpc_Transport.Invoke_Object_Of_Interest_Create_Requirement
+                (To_String (Grpc_Channel), Request);
+            Response_Payload : constant String :=
+              """" & To_String (Rsp) & """";
+         begin
+            Emit_Invoke_Response
+              (Callback, User_Data, Response_Payload);
+         end;
+         return;
+      end if;
+
       if Content_Type = "" or else Content_Type = "application/json" then
          Req_C := Interfaces.C.Strings.New_String (Payload);
          Msg.Data := To_Address (Req_C);
@@ -919,6 +998,8 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          then Json_Payload
          elsif Content_Type = "application/flatbuffers"
          then Flatbuffers_Codec.To_Binary_Query (Request)
+         elsif Content_Type = Grpc_Content_Type
+         then ""
          else raise Constraint_Error with "Unsupported content type: " & Content_Type);
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
@@ -928,6 +1009,29 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
    begin
+      if Content_Type = Grpc_Content_Type then
+         if Ada.Strings.Unbounded.Length (Grpc_Channel) = 0 then
+            raise Program_Error with "gRPC channel not configured";
+         end if;
+         declare
+            Rsp : constant Grpc_Transport.Object_Interest_Requirement_Array :=
+              Grpc_Transport.Invoke_Object_Of_Interest_Read_Requirement
+                (To_String (Grpc_Channel), Request);
+            Acc : Unbounded_String := To_Unbounded_String ("[");
+         begin
+            for I in Rsp'Range loop
+               if I > Rsp'First then
+                  Append (Acc, ",");
+               end if;
+               Append (Acc, To_Json (Rsp (I)));
+            end loop;
+            Append (Acc, "]");
+            Emit_Invoke_Response
+              (Callback, User_Data, To_String (Acc));
+         end;
+         return;
+      end if;
+
       if Content_Type = "" or else Content_Type = "application/json" then
          Req_C := Interfaces.C.Strings.New_String (Payload);
          Msg.Data := To_Address (Req_C);
@@ -962,6 +1066,8 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          then Json_Payload
          elsif Content_Type = "application/flatbuffers"
          then Flatbuffers_Codec.To_Binary_Object_Interest_Requirement (Request)
+         elsif Content_Type = Grpc_Content_Type
+         then ""
          else raise Constraint_Error with "Unsupported content type: " & Content_Type);
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
@@ -971,6 +1077,22 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
    begin
+      if Content_Type = Grpc_Content_Type then
+         if Ada.Strings.Unbounded.Length (Grpc_Channel) = 0 then
+            raise Program_Error with "gRPC channel not configured";
+         end if;
+         declare
+            Rsp : constant Ack :=
+              Grpc_Transport.Invoke_Object_Of_Interest_Update_Requirement
+                (To_String (Grpc_Channel), Request);
+            Response_Payload : constant String := To_Json (Rsp);
+         begin
+            Emit_Invoke_Response
+              (Callback, User_Data, Response_Payload);
+         end;
+         return;
+      end if;
+
       if Content_Type = "" or else Content_Type = "application/json" then
          Req_C := Interfaces.C.Strings.New_String (Payload);
          Msg.Data := To_Address (Req_C);
@@ -1005,6 +1127,8 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          then Json_Payload
          elsif Content_Type = "application/flatbuffers"
          then Flatbuffers_Codec.To_Binary_Identifier (Request)
+         elsif Content_Type = Grpc_Content_Type
+         then ""
          else raise Constraint_Error with "Unsupported content type: " & Content_Type);
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
@@ -1014,6 +1138,22 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
    begin
+      if Content_Type = Grpc_Content_Type then
+         if Ada.Strings.Unbounded.Length (Grpc_Channel) = 0 then
+            raise Program_Error with "gRPC channel not configured";
+         end if;
+         declare
+            Rsp : constant Ack :=
+              Grpc_Transport.Invoke_Object_Of_Interest_Delete_Requirement
+                (To_String (Grpc_Channel), Request);
+            Response_Payload : constant String := To_Json (Rsp);
+         begin
+            Emit_Invoke_Response
+              (Callback, User_Data, Response_Payload);
+         end;
+         return;
+      end if;
+
       if Content_Type = "" or else Content_Type = "application/json" then
          Req_C := Interfaces.C.Strings.New_String (Payload);
          Msg.Data := To_Address (Req_C);
@@ -1048,6 +1188,8 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          then Json_Payload
          elsif Content_Type = "application/flatbuffers"
          then Flatbuffers_Codec.To_Binary_Query (Request)
+         elsif Content_Type = Grpc_Content_Type
+         then ""
          else raise Constraint_Error with "Unsupported content type: " & Content_Type);
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
@@ -1057,6 +1199,29 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
    begin
+      if Content_Type = Grpc_Content_Type then
+         if Ada.Strings.Unbounded.Length (Grpc_Channel) = 0 then
+            raise Program_Error with "gRPC channel not configured";
+         end if;
+         declare
+            Rsp : constant Grpc_Transport.Object_Detail_Array :=
+              Grpc_Transport.Invoke_Specific_Object_Detail_Read_Detail
+                (To_String (Grpc_Channel), Request);
+            Acc : Unbounded_String := To_Unbounded_String ("[");
+         begin
+            for I in Rsp'Range loop
+               if I > Rsp'First then
+                  Append (Acc, ",");
+               end if;
+               Append (Acc, To_Json (Rsp (I)));
+            end loop;
+            Append (Acc, "]");
+            Emit_Invoke_Response
+              (Callback, User_Data, To_String (Acc));
+         end;
+         return;
+      end if;
+
       if Content_Type = "" or else Content_Type = "application/json" then
          Req_C := Interfaces.C.Strings.New_String (Payload);
          Msg.Data := To_Address (Req_C);

@@ -1,6 +1,0 @@
-Running main() from D:\Dev\repo\mujin\build-all-enabled\_deps\googletest-src\googletest\src\gtest_main.cc
-Note: Google Test filter = BindingPerformanceTest.Socket_Json
-[==========] Running 1 test from 1 test suite.
-[----------] Global test environment set-up.
-[----------] 1 test from BindingPerformanceTest
-[ RUN      ] BindingPerformanceTest.Socket_Json

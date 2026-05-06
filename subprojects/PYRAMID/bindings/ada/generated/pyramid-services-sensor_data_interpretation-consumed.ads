@@ -60,6 +60,42 @@ package Pyramid.Services.Sensor_Data_Interpretation.Consumed is
    Svc_Data_Processing_Dependency_Delete_Requirement : constant String :=
      "data_processing_dependency.delete_requirement";
 
+   --  -- ROS2 endpoint constants --------------------------------
+
+   Ros2_Transport_Content_Type : constant String := "application/ros2";
+
+   Data_Provision_Dependency_Create_Requirement_Service : constant String :=
+     "/pyramid/service/data_provision_dependency/create_requirement";
+
+   Data_Provision_Dependency_Read_Requirement_Open_Service : constant String :=
+     "/pyramid/stream/data_provision_dependency/read_requirement/open";
+   Data_Provision_Dependency_Read_Requirement_Frame_Topic : constant String :=
+     "/pyramid/stream/data_provision_dependency/read_requirement/frames";
+   Data_Provision_Dependency_Read_Requirement_Cancel_Topic : constant String :=
+     "/pyramid/stream/data_provision_dependency/read_requirement/cancel";
+
+   Data_Provision_Dependency_Update_Requirement_Service : constant String :=
+     "/pyramid/service/data_provision_dependency/update_requirement";
+
+   Data_Provision_Dependency_Delete_Requirement_Service : constant String :=
+     "/pyramid/service/data_provision_dependency/delete_requirement";
+
+   Data_Processing_Dependency_Create_Requirement_Service : constant String :=
+     "/pyramid/service/data_processing_dependency/create_requirement";
+
+   Data_Processing_Dependency_Read_Requirement_Open_Service : constant String :=
+     "/pyramid/stream/data_processing_dependency/read_requirement/open";
+   Data_Processing_Dependency_Read_Requirement_Frame_Topic : constant String :=
+     "/pyramid/stream/data_processing_dependency/read_requirement/frames";
+   Data_Processing_Dependency_Read_Requirement_Cancel_Topic : constant String :=
+     "/pyramid/stream/data_processing_dependency/read_requirement/cancel";
+
+   Data_Processing_Dependency_Update_Requirement_Service : constant String :=
+     "/pyramid/service/data_processing_dependency/update_requirement";
+
+   Data_Processing_Dependency_Delete_Requirement_Service : constant String :=
+     "/pyramid/service/data_processing_dependency/delete_requirement";
+
    --  -- PCL message utility ------------------------------------
 
    function Msg_To_String
@@ -68,8 +104,12 @@ package Pyramid.Services.Sensor_Data_Interpretation.Consumed is
 
    Json_Content_Type : constant String := "application/json";
    Flatbuffers_Content_Type : constant String := "application/flatbuffers";
+   Grpc_Content_Type : constant String := "application/grpc";
 
    function Supports_Content_Type (Content_Type : String) return Boolean;
+
+   procedure Configure_Grpc_Library (Path : String);
+   procedure Configure_Grpc_Channel (Channel : String);
 
    --  -- EntityActions handler callbacks ----------------------------
    --  Supply these callbacks from your component at registration time.

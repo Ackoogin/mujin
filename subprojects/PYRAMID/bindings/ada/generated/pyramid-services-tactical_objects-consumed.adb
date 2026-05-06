@@ -10,6 +10,7 @@ with System.Storage_Elements;
 with Pyramid.Data_Model.Common.Types_Codec;  use Pyramid.Data_Model.Common.Types_Codec;
 with Pyramid.Data_Model.Tactical.Types_Codec;  use Pyramid.Data_Model.Tactical.Types_Codec;
 with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
+with Pyramid.Components.Tactical_objects.Services.Consumed.GRPC_Transport;
 
 package body Pyramid.Services.Tactical_Objects.Consumed is
    use type System.Address;
@@ -49,13 +50,26 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
    end Msg_To_String;
 
    package Flatbuffers_Codec renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
+   package Grpc_Transport renames Pyramid.Components.Tactical_objects.Services.Consumed.GRPC_Transport;
+   Grpc_Channel : Unbounded_String := Null_Unbounded_String;
 
    function Supports_Content_Type (Content_Type : String) return Boolean is
    begin
       return Content_Type = ""
         or else Content_Type = Json_Content_Type
-        or else Content_Type = Flatbuffers_Content_Type;
+        or else Content_Type = Flatbuffers_Content_Type
+        or else Content_Type = Grpc_Content_Type;
    end Supports_Content_Type;
+
+   procedure Configure_Grpc_Library (Path : String) is
+   begin
+      Grpc_Transport.Configure_Library (Path);
+   end Configure_Grpc_Library;
+
+   procedure Configure_Grpc_Channel (Channel : String) is
+   begin
+      Grpc_Channel := To_Unbounded_String (Channel);
+   end Configure_Grpc_Channel;
 
    function Message_Content_Type
      (Msg : access constant Pcl_Bindings.Pcl_Msg) return String is
@@ -82,6 +96,27 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
       end;
       return To_Unbounded_String (Payload);
    end Decode_Identifier_Payload;
+
+   procedure Emit_Invoke_Response
+     (Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
+      User_Data : System.Address;
+      Payload   : String) is
+      Payload_Bytes : aliased constant String := Payload;
+      Type_Name : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Json_Content_Type);
+      Msg : aliased Pcl_Bindings.Pcl_Msg;
+   begin
+      Msg.Data :=
+        (if Payload_Bytes'Length = 0
+         then System.Null_Address
+         else Payload_Bytes (Payload_Bytes'First)'Address);
+      Msg.Size := Interfaces.C.unsigned (Payload_Bytes'Length);
+      Msg.Type_Name := Type_Name;
+      if Callback /= null then
+         Callback (Msg'Access, User_Data);
+      end if;
+      Interfaces.C.Strings.Free (Type_Name);
+   end Emit_Invoke_Response;
 
    function Decode_Object_Evidence
      (Msg : access constant Pcl_Bindings.Pcl_Msg)

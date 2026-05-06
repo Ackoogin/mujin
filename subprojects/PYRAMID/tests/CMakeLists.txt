@@ -616,9 +616,6 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     if(PYRAMID_ENABLE_PROTOBUF)
         list(APPEND _ada_generated_bindings_commands
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                    ${ADA_GEN_OUT}/protobuf/ada/pyramid_components_tactical_objects-protobuf_codec.ads
-                    ${ADA_GEN_OUT}/protobuf/ada/pyramid-components-tactical_objects-protobuf_codec.ads
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     ${ADA_GEN_OUT}/protobuf/ada/pyramid_data_model_base-protobuf_codec.ads
                     ${ADA_GEN_OUT}/protobuf/ada/pyramid-data_model-base-protobuf_codec.ads
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -645,6 +642,8 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                 -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
                 -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
                 -XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME}
+                -XPYRAMID_PROTOBUF_ADA_DIR=${ADA_GEN_OUT}/protobuf/ada
+                -XPYRAMID_GRPC_ADA_DIR=${ADA_GEN_OUT}/grpc/ada
                 ${_ada_fb_args}
     )
     add_custom_command(
@@ -882,7 +881,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
             COMMAND ${CMAKE_COMMAND}
                     -DOUTPUT=${ADA_GRPC_CPP_INTEROP_EXE}
                     -DWORKING_DIRECTORY=${ADA_TEST_SRC_DIR}
-                    "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD};-p;-P;${ADA_TEST_SRC_DIR}/ada_grpc_cpp_interop_e2e.gpr;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};-XPYRAMID_GEN_LIB_DIR=${ADA_PYRAMID_GEN_LIB_DIR};-XPYRAMID_GEN_LIB_NAME=${ADA_PYRAMID_GEN_LIB_NAME}"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD};-p;-P;${ADA_TEST_SRC_DIR}/ada_grpc_cpp_interop_e2e.gpr;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};-XPYRAMID_GEN_LIB_DIR=${ADA_PYRAMID_GEN_LIB_DIR};-XPYRAMID_GEN_LIB_NAME=${ADA_PYRAMID_GEN_LIB_NAME};-XPYRAMID_PROTOBUF_ADA_DIR=${ADA_GEN_OUT}/protobuf/ada;-XPYRAMID_GRPC_ADA_DIR=${ADA_GEN_OUT}/grpc/ada"
                     -P ${ADA_RUN_IF_MISSING}
             WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
             COMMENT "Building Ada gRPC C++ interop test"

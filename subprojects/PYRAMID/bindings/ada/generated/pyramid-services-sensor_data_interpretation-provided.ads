@@ -51,6 +51,33 @@ package Pyramid.Services.Sensor_Data_Interpretation.Provided is
    Svc_Interpretation_Requirement_Delete_Requirement : constant String :=
      "interpretation_requirement.delete_requirement";
 
+   --  -- ROS2 endpoint constants --------------------------------
+
+   Ros2_Transport_Content_Type : constant String := "application/ros2";
+
+   Interpretation_Requirement_Read_Capability_Open_Service : constant String :=
+     "/pyramid/stream/interpretation_requirement/read_capability/open";
+   Interpretation_Requirement_Read_Capability_Frame_Topic : constant String :=
+     "/pyramid/stream/interpretation_requirement/read_capability/frames";
+   Interpretation_Requirement_Read_Capability_Cancel_Topic : constant String :=
+     "/pyramid/stream/interpretation_requirement/read_capability/cancel";
+
+   Interpretation_Requirement_Create_Requirement_Service : constant String :=
+     "/pyramid/service/interpretation_requirement/create_requirement";
+
+   Interpretation_Requirement_Read_Requirement_Open_Service : constant String :=
+     "/pyramid/stream/interpretation_requirement/read_requirement/open";
+   Interpretation_Requirement_Read_Requirement_Frame_Topic : constant String :=
+     "/pyramid/stream/interpretation_requirement/read_requirement/frames";
+   Interpretation_Requirement_Read_Requirement_Cancel_Topic : constant String :=
+     "/pyramid/stream/interpretation_requirement/read_requirement/cancel";
+
+   Interpretation_Requirement_Update_Requirement_Service : constant String :=
+     "/pyramid/service/interpretation_requirement/update_requirement";
+
+   Interpretation_Requirement_Delete_Requirement_Service : constant String :=
+     "/pyramid/service/interpretation_requirement/delete_requirement";
+
    --  -- PCL message utility ------------------------------------
 
    function Msg_To_String
@@ -59,8 +86,12 @@ package Pyramid.Services.Sensor_Data_Interpretation.Provided is
 
    Json_Content_Type : constant String := "application/json";
    Flatbuffers_Content_Type : constant String := "application/flatbuffers";
+   Grpc_Content_Type : constant String := "application/grpc";
 
    function Supports_Content_Type (Content_Type : String) return Boolean;
+
+   procedure Configure_Grpc_Library (Path : String);
+   procedure Configure_Grpc_Channel (Channel : String);
 
    --  -- EntityActions handler callbacks ----------------------------
    --  Supply these callbacks from your component at registration time.

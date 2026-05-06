@@ -31,6 +31,9 @@ from proto_parser import (
 import codec_backends
 
 
+_PYRAMID_ROOT_DIR = Path(__file__).resolve().parents[2]
+
+
 # -- EntityActions operation detection ----------------------------------------
 
 _OP_PREFIXES = ['Create', 'Read', 'Update', 'Delete']
@@ -115,6 +118,62 @@ def _service_wire_prefix(service_name: str) -> str:
     return camel_to_lower_snake(name)
 
 
+def _component_name(package: str) -> str:
+    parts = [p for p in package.split('.') if p]
+    if 'components' in parts and 'services' in parts:
+        comp_i = parts.index('components')
+        svc_i = parts.index('services')
+        if comp_i + 1 < svc_i:
+            return parts[comp_i + 1]
+    return ''
+
+
+def _package_role(package: str) -> str:
+    parts = [p for p in package.split('.') if p]
+    return parts[-1] if parts else ''
+
+
+def _protobuf_pb_header(type_name: str) -> str:
+    parts = [p for p in type_name.split('.') if p]
+    if len(parts) < 2:
+        return ''
+    return '/'.join(parts[:-1]) + '.pb.h'
+
+
+def _protobuf_shim_header(component: str) -> str:
+    return f'pyramid_services_{component}_protobuf_shim.h'
+
+
+def _protobuf_shim_prefix(component: str) -> str:
+    return f'pyramid_services_{component}'
+
+
+def _grpc_c_api_support_base(component: str) -> str:
+    return f'pyramid_services_{component}_grpc_c_api_support'
+
+
+def _has_protobuf_json_shim(component: str) -> bool:
+    if not component:
+        return False
+    shim_header = (_PYRAMID_ROOT_DIR / 'bindings' / 'protobuf' / 'cpp' /
+                   _protobuf_shim_header(component))
+    return shim_header.exists()
+
+
+def _ada_grpc_rpc_name(service_name: str, rpc_name: str) -> str:
+    return f'{_service_wire_prefix(service_name)}_{camel_to_snake(rpc_name)}'
+
+
+def _grpc_pb_header_path(pf: ProtoFile) -> str:
+    proto_path = Path(pf.path)
+    proto_root = _PYRAMID_ROOT_DIR / 'proto'
+    try:
+        proto_path = proto_path.relative_to(proto_root)
+    except ValueError:
+        pass
+    return str(proto_path.with_suffix('.grpc.pb.h')).replace('\\', '/')
+
+
 def _ensure_parent_packages(output_dir: Path, pkg_names: List[str]) -> None:
     """Generate empty parent package specs required by Ada child packages.
 
@@ -156,6 +215,7 @@ class GrpcBackend(codec_backends.CodecBackend):
     def generate_cpp(self, index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
         output_dir.mkdir(parents=True, exist_ok=True)
         generated = []
+        generated_c_api_support = set()
 
         for pf in index.files:
             if not pf.services:
@@ -167,7 +227,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             ns = facade_ns + '::grpc_transport'
 
             # protoc+grpc_cpp_plugin generated header
-            grpc_header = '/'.join(pf.package.split('.')) + '.grpc.pb.h'
+            grpc_header = _grpc_pb_header_path(pf)
 
             hpp_path = output_dir / (file_base + '_grpc_transport.hpp')
             cpp_path = output_dir / (file_base + '_grpc_transport.cpp')
@@ -176,6 +236,23 @@ class GrpcBackend(codec_backends.CodecBackend):
                                    _facade_header(pf.package), pf, index)
             self._write_cpp_impl(cpp_path, ns, facade_ns, file_base, pf, index)
             generated.extend([hpp_path, cpp_path])
+
+            component = _component_name(pf.package)
+            if _has_protobuf_json_shim(component):
+                support_base = _grpc_c_api_support_base(component)
+                if component not in generated_c_api_support:
+                    support_hpp = output_dir / f'{support_base}.hpp'
+                    support_cpp = output_dir / f'{support_base}.cpp'
+                    self._write_cpp_c_api_support_header(support_hpp, component)
+                    self._write_cpp_c_api_support_impl(support_cpp, component)
+                    generated.extend([support_hpp, support_cpp])
+                    generated_c_api_support.add(component)
+
+                c_api_hpp = output_dir / (file_base + '_grpc_c_api.hpp')
+                c_api_cpp = output_dir / (file_base + '_grpc_c_api.cpp')
+                self._write_cpp_c_api_header(c_api_hpp, pf, component)
+                self._write_cpp_c_api_impl(c_api_cpp, pf, component)
+                generated.extend([c_api_hpp, c_api_cpp])
 
         return generated
 
@@ -516,6 +593,255 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('}\n\n')
             f.write(f'}} // namespace {facade_ns}\n')
 
+    def _write_cpp_c_api_support_header(self, path: Path, component: str):
+        support_ns = f'pyramid::services::{component}::grpc_transport::c_api'
+        free_string_name = f'pyramid_services_{component}_grpc_free_string'
+
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
+            f.write('#pragma once\n\n')
+            f.write('#include <grpcpp/grpcpp.h>\n')
+            f.write('#include <nlohmann/json.hpp>\n\n')
+            f.write('#include <cstdlib>\n')
+            f.write('#include <cstring>\n')
+            f.write('#include <memory>\n')
+            f.write('#include <stdexcept>\n')
+            f.write('#include <string>\n')
+            f.write('#include <utility>\n\n')
+            f.write('#if defined(_WIN32)\n')
+            f.write('#define PYRAMID_GRPC_C_SHIM_EXPORT __declspec(dllexport)\n')
+            f.write('#else\n')
+            f.write('#define PYRAMID_GRPC_C_SHIM_EXPORT\n')
+            f.write('#endif\n\n')
+            f.write(f'namespace {support_ns} {{\n\n')
+            f.write('using EncodeJsonFn = void* (*)(const char*, size_t*);\n')
+            f.write('using DecodeJsonFn = char* (*)(const void*, size_t);\n\n')
+            f.write('inline char* copyCString(const std::string& value) {\n')
+            f.write('  char* out = static_cast<char*>(std::malloc(value.size() + 1));\n')
+            f.write('  if (out == nullptr) {\n')
+            f.write('    return nullptr;\n')
+            f.write('  }\n')
+            f.write('  std::memcpy(out, value.c_str(), value.size() + 1);\n')
+            f.write('  return out;\n')
+            f.write('}\n\n')
+            f.write('inline char* errorCString(const std::string& message) {\n')
+            f.write('  return copyCString("ERROR:" + message);\n')
+            f.write('}\n\n')
+            f.write('template <typename RequestPb>\n')
+            f.write('bool parseRequest(const char* request_json, EncodeJsonFn encode_json,\n')
+            f.write('                  RequestPb* request, std::string* error_message) {\n')
+            f.write('  if (!request_json || !request || !error_message) {\n')
+            f.write('    return false;\n')
+            f.write('  }\n\n')
+            f.write('  size_t request_size = 0;\n')
+            f.write('  std::unique_ptr<void, decltype(&std::free)> request_bytes(\n')
+            f.write('      encode_json(request_json, &request_size), &std::free);\n')
+            f.write('  if (!request_bytes || request_size == 0) {\n')
+            f.write('    *error_message = "encode-request";\n')
+            f.write('    return false;\n')
+            f.write('  }\n')
+            f.write('  if (!request->ParseFromArray(request_bytes.get(),\n')
+            f.write('                               static_cast<int>(request_size))) {\n')
+            f.write('    *error_message = "parse-request";\n')
+            f.write('    return false;\n')
+            f.write('  }\n')
+            f.write('  return true;\n')
+            f.write('}\n\n')
+            f.write('template <typename ResponsePb>\n')
+            f.write('char* renderUnaryResponse(const ResponsePb& response, DecodeJsonFn decode_json) {\n')
+            f.write('  std::string response_bytes;\n')
+            f.write('  if (!response.SerializeToString(&response_bytes)) {\n')
+            f.write('    return errorCString("serialize-response");\n')
+            f.write('  }\n')
+            f.write('  char* response_json = decode_json(response_bytes.data(), response_bytes.size());\n')
+            f.write('  if (!response_json) {\n')
+            f.write('    return errorCString("decode-response");\n')
+            f.write('  }\n')
+            f.write('  return response_json;\n')
+            f.write('}\n\n')
+            f.write('template <typename RequestPb, typename ResponsePb, typename StubFactory,\n')
+            f.write('          typename RpcInvoker>\n')
+            f.write('char* invokeUnaryJsonRpc(const char* endpoint, const char* request_json,\n')
+            f.write('                         EncodeJsonFn encode_json, DecodeJsonFn decode_json,\n')
+            f.write('                         StubFactory stub_factory, RpcInvoker rpc_invoker) {\n')
+            f.write('  if (!endpoint || !request_json) {\n')
+            f.write('    return errorCString("null-argument");\n')
+            f.write('  }\n\n')
+            f.write('  RequestPb request;\n')
+            f.write('  std::string request_error;\n')
+            f.write('  if (!parseRequest(request_json, encode_json, &request, &request_error)) {\n')
+            f.write('    return errorCString(request_error);\n')
+            f.write('  }\n\n')
+            f.write('  auto channel =\n')
+            f.write('      grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials());\n')
+            f.write('  auto stub = stub_factory(channel);\n')
+            f.write('  if (!stub) {\n')
+            f.write('    return errorCString("create-stub");\n')
+            f.write('  }\n\n')
+            f.write('  ResponsePb response;\n')
+            f.write('  grpc::ClientContext context;\n')
+            f.write('  const grpc::Status status =\n')
+            f.write('      rpc_invoker(stub.get(), &context, request, &response);\n')
+            f.write('  if (!status.ok()) {\n')
+            f.write('    return errorCString(status.error_message());\n')
+            f.write('  }\n\n')
+            f.write('  return renderUnaryResponse(response, decode_json);\n')
+            f.write('}\n\n')
+            f.write('template <typename RequestPb, typename ItemPb, typename StubFactory,\n')
+            f.write('          typename RpcInvoker>\n')
+            f.write('char* invokeServerStreamJsonRpc(const char* endpoint, const char* request_json,\n')
+            f.write('                                EncodeJsonFn encode_json,\n')
+            f.write('                                DecodeJsonFn decode_json,\n')
+            f.write('                                StubFactory stub_factory,\n')
+            f.write('                                RpcInvoker rpc_invoker) {\n')
+            f.write('  if (!endpoint || !request_json) {\n')
+            f.write('    return errorCString("null-argument");\n')
+            f.write('  }\n\n')
+            f.write('  RequestPb request;\n')
+            f.write('  std::string request_error;\n')
+            f.write('  if (!parseRequest(request_json, encode_json, &request, &request_error)) {\n')
+            f.write('    return errorCString(request_error);\n')
+            f.write('  }\n\n')
+            f.write('  auto channel =\n')
+            f.write('      grpc::CreateChannel(endpoint, grpc::InsecureChannelCredentials());\n')
+            f.write('  auto stub = stub_factory(channel);\n')
+            f.write('  if (!stub) {\n')
+            f.write('    return errorCString("create-stub");\n')
+            f.write('  }\n\n')
+            f.write('  grpc::ClientContext context;\n')
+            f.write('  auto reader = rpc_invoker(stub.get(), &context, request);\n')
+            f.write('  if (!reader) {\n')
+            f.write('    return errorCString("create-reader");\n')
+            f.write('  }\n\n')
+            f.write('  nlohmann::json items = nlohmann::json::array();\n')
+            f.write('  ItemPb item;\n')
+            f.write('  while (reader->Read(&item)) {\n')
+            f.write('    std::string item_bytes;\n')
+            f.write('    if (!item.SerializeToString(&item_bytes)) {\n')
+            f.write('      return errorCString("serialize-stream-item");\n')
+            f.write('    }\n\n')
+            f.write('    std::unique_ptr<char, decltype(&std::free)> item_json(\n')
+            f.write('        decode_json(item_bytes.data(), item_bytes.size()), &std::free);\n')
+            f.write('    if (!item_json) {\n')
+            f.write('      return errorCString("decode-stream-item");\n')
+            f.write('    }\n\n')
+            f.write('    auto parsed = nlohmann::json::parse(item_json.get(), nullptr, false);\n')
+            f.write('    if (parsed.is_discarded()) {\n')
+            f.write('      return errorCString("parse-stream-item-json");\n')
+            f.write('    }\n')
+            f.write('    items.push_back(std::move(parsed));\n')
+            f.write('  }\n\n')
+            f.write('  const grpc::Status status = reader->Finish();\n')
+            f.write('  if (!status.ok()) {\n')
+            f.write('    return errorCString(status.error_message());\n')
+            f.write('  }\n\n')
+            f.write('  return copyCString(items.dump());\n')
+            f.write('}\n\n')
+            f.write(f'}}  // namespace {support_ns}\n\n')
+            f.write('extern "C" {\n')
+            f.write(f'PYRAMID_GRPC_C_SHIM_EXPORT void {free_string_name}(void* value);\n')
+            f.write('}\n')
+
+    def _write_cpp_c_api_support_impl(self, path: Path, component: str):
+        support_base = _grpc_c_api_support_base(component)
+        free_string_name = f'pyramid_services_{component}_grpc_free_string'
+
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
+            f.write(f'#include "{support_base}.hpp"\n\n')
+            f.write('extern "C" {\n\n')
+            f.write(f'void {free_string_name}(void* value) {{\n')
+            f.write('  std::free(value);\n')
+            f.write('}\n\n')
+            f.write('}  // extern "C"\n')
+
+    def _write_cpp_c_api_header(self, path: Path, pf: ProtoFile, component: str):
+        pkg_parts = [p for p in pf.package.split('.') if p]
+        pkg_prefix = '_'.join(pkg_parts)
+        package_role = _package_role(pf.package)
+        support_base = _grpc_c_api_support_base(component)
+
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
+            f.write('#pragma once\n\n')
+            f.write(f'#include "{support_base}.hpp"\n\n')
+            f.write('extern "C" {\n\n')
+
+            for svc in pf.services:
+                svc_name = _service_wire_prefix(svc.name)
+                for rpc in svc.rpcs:
+                    rpc_name = camel_to_lower_snake(rpc.name)
+                    long_name = (
+                        f'{pkg_prefix}_{svc_name}_{rpc_name}_json'
+                    )
+                    short_name = f'grpc_{package_role}_{svc_name}_{rpc_name}_json'
+                    f.write('PYRAMID_GRPC_C_SHIM_EXPORT char*\n')
+                    f.write(f'{long_name}(\n')
+                    f.write('    const char* endpoint, const char* request_json);\n')
+                    f.write(f'PYRAMID_GRPC_C_SHIM_EXPORT char* {short_name}(\n')
+                    f.write('    const char* endpoint, const char* request_json);\n\n')
+
+            f.write('}\n')
+
+    def _write_cpp_c_api_impl(self, path: Path, pf: ProtoFile, component: str):
+        pkg_parts = [p for p in pf.package.split('.') if p]
+        file_base = '_'.join(pkg_parts)
+        package_role = _package_role(pf.package)
+        shim_prefix = _protobuf_shim_prefix(component)
+        grpc_header = _grpc_pb_header_path(pf)
+
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
+            f.write(f'#include "{file_base}_grpc_c_api.hpp"\n\n')
+            f.write(f'#include "{_protobuf_shim_header(component)}"\n\n')
+            f.write(f'#include "{grpc_header}"\n\n')
+            f.write(f'namespace grpc_c_api = pyramid::services::{component}::grpc_transport::c_api;\n')
+            f.write(f'namespace proto_services = {"::".join(pkg_parts)};\n\n')
+            f.write('extern "C" {\n\n')
+
+            for svc in pf.services:
+                svc_name = _service_wire_prefix(svc.name)
+                for rpc in svc.rpcs:
+                    rpc_name = camel_to_lower_snake(rpc.name)
+                    long_name = (
+                        f'{"_".join(pkg_parts)}_{svc_name}_{rpc_name}_json'
+                    )
+                    short_name = f'grpc_{package_role}_{svc_name}_{rpc_name}_json'
+                    req_cpp = '::' + '::'.join(rpc.request_type.split('.'))
+                    rsp_cpp = '::' + '::'.join(rpc.response_type.split('.'))
+                    req_encode = f'{shim_prefix}_{_short_type(rpc.request_type)}_to_protobuf_json'
+                    rsp_decode = f'{shim_prefix}_{_short_type(rpc.response_type)}_from_protobuf_json'
+
+                    f.write('char*\n')
+                    f.write(f'{long_name}(\n')
+                    f.write('    const char* endpoint, const char* request_json) {\n')
+                    if rpc.server_streaming:
+                        f.write(f'  return grpc_c_api::invokeServerStreamJsonRpc<\n')
+                        f.write(f'      {req_cpp}, {rsp_cpp}>(\n')
+                    else:
+                        f.write(f'  return grpc_c_api::invokeUnaryJsonRpc<\n')
+                        f.write(f'      {req_cpp}, {rsp_cpp}>(\n')
+                    f.write('      endpoint, request_json,\n')
+                    f.write(f'      {req_encode},\n')
+                    f.write(f'      {rsp_decode},\n')
+                    f.write('      [](const std::shared_ptr<grpc::Channel>& channel) {\n')
+                    f.write(f'        return proto_services::{svc.name}::NewStub(channel);\n')
+                    f.write('      },\n')
+                    if rpc.server_streaming:
+                        f.write('      [](auto* stub, grpc::ClientContext* context,\n')
+                        f.write(f'         const {req_cpp}& request) {{\n')
+                        f.write(f'        return stub->{rpc.name}(context, request);\n')
+                        f.write('      });\n')
+                    else:
+                        f.write('      [](auto* stub, grpc::ClientContext* context,\n')
+                        f.write(f'         const {req_cpp}& request,\n')
+                        f.write(f'         {rsp_cpp}* response) {{\n')
+                        f.write(f'        return stub->{rpc.name}(context, request, response);\n')
+                        f.write('      });\n')
+                    f.write('}\n\n')
+                    f.write(f'char* {short_name}(\n')
+                    f.write('    const char* endpoint, const char* request_json) {\n')
+                    f.write(f'  return {long_name}(endpoint, request_json);\n')
+                    f.write('}\n\n')
+
+            f.write('}  // extern "C"\n')
+
     # -- Ada spec --------------------------------------------------------------
 
     def _write_ada_spec(self, path: Path, pf: ProtoFile, index: ProtoTypeIndex):
@@ -559,7 +885,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             for svc in pf.services:
                 f.write(f'   --  {svc.name}\n\n')
                 for rpc in svc.rpcs:
-                    ada_rpc = camel_to_snake(rpc.name)
+                    ada_rpc = _ada_grpc_rpc_name(svc.name, rpc.name)
                     req_t = _ada_type(rpc.request_type)
                     rsp_t = (_ada_array_type(rpc.response_type)
                              if rpc.server_streaming
@@ -750,7 +1076,7 @@ class GrpcBackend(codec_backends.CodecBackend):
 
             for svc in pf.services:
                 for rpc in svc.rpcs:
-                    ada_rpc = camel_to_snake(rpc.name)
+                    ada_rpc = _ada_grpc_rpc_name(svc.name, rpc.name)
                     req_t = _ada_type(rpc.request_type)
                     rsp_t = (_ada_array_type(rpc.response_type)
                              if rpc.server_streaming

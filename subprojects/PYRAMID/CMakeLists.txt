@@ -453,7 +453,7 @@ if(PYRAMID_ENABLE_GRPC)
         )
 
         set(PYRAMID_GRPC_C_SHIM_DIR
-            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/grpc/cpp")
+            "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp")
         pyramid_glob_generated(PYRAMID_GRPC_C_SHIM_SRCS
             "${PYRAMID_GRPC_C_SHIM_DIR}/*_grpc_c_api*.cpp")
         pyramid_require_generated(PYRAMID_GRPC_C_SHIM_SRCS
@@ -483,7 +483,7 @@ endif()
 
 if(PYRAMID_ENABLE_ROS2)
     set(PYRAMID_ROS2_SUPPORT_DIR
-        "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/ros2/cpp")
+        "${PYRAMID_CPP_BINDINGS_DIR}/ros2/cpp")
     pyramid_glob_generated(PYRAMID_ROS2_TRANSPORT_SRCS
         "${PYRAMID_ROS2_SUPPORT_DIR}/*.cpp")
     pyramid_require_generated(PYRAMID_ROS2_TRANSPORT_SRCS
@@ -497,7 +497,9 @@ if(PYRAMID_ENABLE_ROS2)
     target_include_directories(pyramid_ros2_transport
         PUBLIC
             "${PCL_ROOT_DIR}/include"
+            "${PYRAMID_CPP_BINDINGS_DIR}"
             "${PYRAMID_ROS2_SUPPORT_DIR}"
+            "${PYRAMID_ROOT_DIR}/core/external"
             "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
     )
 endif()
