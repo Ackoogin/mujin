@@ -29,12 +29,12 @@ package Pyramid.Services.Tactical_Objects.Consumed is
       Op_Delete);
 
    type Service_Channel is
-     (Ch_Read_Detail,
-      Ch_Create_Requirement,
-      Ch_Read_Requirement,
-      Ch_Update_Requirement,
-      Ch_Delete_Requirement,
-      Ch_Read_Capability);
+     (Ch_Object_Evidence_Read_Detail,
+      Ch_Object_Solution_Evidence_Create_Requirement,
+      Ch_Object_Solution_Evidence_Read_Requirement,
+      Ch_Object_Solution_Evidence_Update_Requirement,
+      Ch_Object_Solution_Evidence_Delete_Requirement,
+      Ch_Object_Source_Capability_Read_Capability);
 
    type Capability_Array is array (Positive range <>) of Capability;
    type Object_Detail_Array is array (Positive range <>) of Object_Detail;
@@ -42,17 +42,17 @@ package Pyramid.Services.Tactical_Objects.Consumed is
 
    --  -- Service wire-name constants (generated from proto) --------
 
-   Svc_Read_Detail : constant String :=
+   Svc_Object_Evidence_Read_Detail : constant String :=
      "object_evidence.read_detail";
-   Svc_Create_Requirement : constant String :=
+   Svc_Object_Solution_Evidence_Create_Requirement : constant String :=
      "object_solution_evidence.create_requirement";
-   Svc_Read_Requirement : constant String :=
+   Svc_Object_Solution_Evidence_Read_Requirement : constant String :=
      "object_solution_evidence.read_requirement";
-   Svc_Update_Requirement : constant String :=
+   Svc_Object_Solution_Evidence_Update_Requirement : constant String :=
      "object_solution_evidence.update_requirement";
-   Svc_Delete_Requirement : constant String :=
+   Svc_Object_Solution_Evidence_Delete_Requirement : constant String :=
      "object_solution_evidence.delete_requirement";
-   Svc_Read_Capability : constant String :=
+   Svc_Object_Source_Capability_Read_Capability : constant String :=
      "object_source_capability.read_capability";
 
    --  -- Standard topic name constants --------------------------
@@ -75,31 +75,31 @@ package Pyramid.Services.Tactical_Objects.Consumed is
    --  Supply these callbacks from your component at registration time.
 
    --  Object_Evidence_Service
-   type Handle_Read_Detail_Access is access function
+   type Handle_Object_Evidence_Read_Detail_Access is access function
      (Request : Query) return Object_Detail_Array;
    --  Object_Solution_Evidence_Service
-   type Handle_Create_Requirement_Access is access procedure
+   type Handle_Object_Solution_Evidence_Create_Requirement_Access is access procedure
      (Request  : in  Object_Evidence_Requirement;
       Response : out Identifier);
-   type Handle_Read_Requirement_Access is access function
+   type Handle_Object_Solution_Evidence_Read_Requirement_Access is access function
      (Request : Query) return Object_Evidence_Requirement_Array;
-   type Handle_Update_Requirement_Access is access procedure
+   type Handle_Object_Solution_Evidence_Update_Requirement_Access is access procedure
      (Request  : in  Object_Evidence_Requirement;
       Response : out Ack);
-   type Handle_Delete_Requirement_Access is access procedure
+   type Handle_Object_Solution_Evidence_Delete_Requirement_Access is access procedure
      (Request  : in  Identifier;
       Response : out Ack);
    --  Object_Source_Capability_Service
-   type Handle_Read_Capability_Access is access function
+   type Handle_Object_Source_Capability_Read_Capability_Access is access function
      (Request : Query) return Capability_Array;
 
    type Service_Handlers is record
-      On_Read_Detail : Handle_Read_Detail_Access := null;
-      On_Create_Requirement : Handle_Create_Requirement_Access := null;
-      On_Read_Requirement : Handle_Read_Requirement_Access := null;
-      On_Update_Requirement : Handle_Update_Requirement_Access := null;
-      On_Delete_Requirement : Handle_Delete_Requirement_Access := null;
-      On_Read_Capability : Handle_Read_Capability_Access := null;
+      On_Object_Evidence_Read_Detail : Handle_Object_Evidence_Read_Detail_Access := null;
+      On_Object_Solution_Evidence_Create_Requirement : Handle_Object_Solution_Evidence_Create_Requirement_Access := null;
+      On_Object_Solution_Evidence_Read_Requirement : Handle_Object_Solution_Evidence_Read_Requirement_Access := null;
+      On_Object_Solution_Evidence_Update_Requirement : Handle_Object_Solution_Evidence_Update_Requirement_Access := null;
+      On_Object_Solution_Evidence_Delete_Requirement : Handle_Object_Solution_Evidence_Delete_Requirement_Access := null;
+      On_Object_Source_Capability_Read_Capability : Handle_Object_Source_Capability_Read_Capability_Access := null;
    end record;
 
    --  -- PCL binding procedures ------------------------------------

@@ -6,6 +6,9 @@
 #include "pyramid_data_model_autonomy_types.hpp"
 #include "pyramid_data_model_base_types.hpp"
 #include "pyramid_data_model_common_types.hpp"
+#include "pyramid_data_model_radar_types.hpp"
+#include "pyramid_data_model_sensorproducts_types.hpp"
+#include "pyramid_data_model_sensors_types.hpp"
 #include "pyramid_data_model_tactical_types.hpp"
 
 // Re-export all sub-namespace types into the common namespace
@@ -14,5 +17,8 @@ namespace pyramid::domain_model {
 using namespace pyramid::domain_model::autonomy;
 using namespace pyramid::domain_model::base;
 using namespace pyramid::domain_model::common;
+using namespace pyramid::domain_model::radar;
+using namespace pyramid::domain_model::sensorproducts;
+using namespace pyramid::domain_model::sensors;
 using namespace pyramid::domain_model::tactical;
 } // namespace pyramid::domain_model

@@ -108,6 +108,64 @@ def _service_wire_prefix(service_name: str) -> str:
     return _camel_to_lower_snake(name)
 
 
+def _service_ada_prefix(service_name: str) -> str:
+    """Data_Provision_Dependency_Service -> Data_Provision_Dependency."""
+    name = service_name
+    if name.endswith('_Service'):
+        name = name[:-len('_Service')]
+    return _camel_to_snake(name)
+
+
+def _duplicate_rpc_names(all_rpcs: List[Tuple[str, 'ProtoRpc']]) -> set[str]:
+    counts: Dict[str, int] = {}
+    for _svc_name, rpc in all_rpcs:
+        counts[rpc.name] = counts.get(rpc.name, 0) + 1
+    return {name for name, count in counts.items() if count > 1}
+
+
+def _rpc_ada_base(svc_name: str, rpc: 'ProtoRpc',
+                  duplicate_rpc_names: set[str]) -> str:
+    del duplicate_rpc_names
+    rpc_name = _camel_to_snake(rpc.name)
+    return f'{_service_ada_prefix(svc_name)}_{rpc_name}'
+
+
+def _rpc_ada_handler(svc_name: str, rpc: 'ProtoRpc',
+                     duplicate_rpc_names: set[str]) -> str:
+    return f'Handle_{_rpc_ada_base(svc_name, rpc, duplicate_rpc_names)}'
+
+
+def _rpc_ada_channel(svc_name: str, rpc: 'ProtoRpc',
+                     duplicate_rpc_names: set[str]) -> str:
+    return f'Ch_{_rpc_ada_base(svc_name, rpc, duplicate_rpc_names)}'
+
+
+def _rpc_ada_invoke_name(svc_name: str, rpc: 'ProtoRpc',
+                         duplicate_rpc_names: set[str]) -> str:
+    return f'Invoke_{_rpc_ada_base(svc_name, rpc, duplicate_rpc_names)}'
+
+
+def _rpc_ada_decode_response_name(svc_name: str, rpc: 'ProtoRpc',
+                                  duplicate_rpc_names: set[str]) -> str:
+    return f'Decode_{_rpc_ada_base(svc_name, rpc, duplicate_rpc_names)}_Response'
+
+
+def _rpc_ada_svc_const(svc_name: str, rpc: 'ProtoRpc',
+                       duplicate_rpc_names: set[str]) -> str:
+    return f'Svc_{_rpc_ada_base(svc_name, rpc, duplicate_rpc_names)}'
+
+
+def _rpc_ada_handler_field(svc_name: str, rpc: 'ProtoRpc',
+                           duplicate_rpc_names: set[str]) -> str:
+    return _rpc_ada_handler(svc_name, rpc, duplicate_rpc_names).replace(
+        'Handle_', 'On_')
+
+
+def _rpc_ada_callback_name(svc_name: str, rpc: 'ProtoRpc',
+                           duplicate_rpc_names: set[str]) -> str:
+    return f'Service_{_rpc_ada_base(svc_name, rpc, duplicate_rpc_names)}'
+
+
 class ProtoRpc:
     """One rpc entry extracted from a proto service block."""
 
@@ -514,6 +572,7 @@ class AdaServiceGenerator:
             _proto_type_to_ada(_short_type(rpc.rsp))
             for _, rpc in all_rpcs if rpc.streaming
         })
+        duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
 
         is_provided = _is_provided(parsed)
         has_grpc = 'grpc' in self._enabled_backends
@@ -556,7 +615,10 @@ class AdaServiceGenerator:
 
             # Service_Channel enumeration
             f.write(f'   type Service_Channel is\n')
-            channel_values = [f'      {rpc.ada_channel}' for _, rpc in all_rpcs]
+            channel_values = [
+                f'      {_rpc_ada_channel(svc_name, rpc, duplicate_rpc_names)}'
+                for svc_name, rpc in all_rpcs
+            ]
             if channel_values:
                 f.write('     (' + ',\n'.join(channel_values).lstrip() + ');\n')
             else:
@@ -576,7 +638,8 @@ class AdaServiceGenerator:
             for svc in parsed.services:
                 prefix = svc.wire_prefix
                 for rpc in svc.rpcs:
-                    const_name = f'Svc_{_camel_to_snake(rpc.name)}'
+                    const_name = _rpc_ada_svc_const(
+                        svc.name, rpc, duplicate_rpc_names)
                     wire_name = f'{prefix}.{rpc.wire_name}'
                     f.write(f'   {const_name} : constant String :=\n')
                     f.write(f'     "{wire_name}";\n')
@@ -654,20 +717,25 @@ class AdaServiceGenerator:
 
                 req_t = rpc.ada_req_type
                 rsp_t = rpc.ada_rsp_type
+                handler_name = _rpc_ada_handler(
+                    svc_name, rpc, duplicate_rpc_names)
 
                 if rpc.streaming:
-                    f.write(f'   type {rpc.ada_handler}_Access is access function\n')
+                    f.write(f'   type {handler_name}_Access is access function\n')
                     f.write(f'     (Request : {req_t}) return {rsp_t};\n')
                 else:
-                    f.write(f'   type {rpc.ada_handler}_Access is access procedure\n')
+                    f.write(f'   type {handler_name}_Access is access procedure\n')
                     f.write(f'     (Request  : in  {req_t};\n')
                     f.write(f'      Response : out {rsp_t});\n')
 
             f.write(f'\n')
             f.write(f'   type Service_Handlers is record\n')
-            for _, rpc in all_rpcs:
-                field_name = rpc.ada_handler.replace('Handle_', 'On_')
-                f.write(f'      {field_name} : {rpc.ada_handler}_Access := null;\n')
+            for svc_name, rpc in all_rpcs:
+                field_name = _rpc_ada_handler_field(
+                    svc_name, rpc, duplicate_rpc_names)
+                handler_name = _rpc_ada_handler(
+                    svc_name, rpc, duplicate_rpc_names)
+                f.write(f'      {field_name} : {handler_name}_Access := null;\n')
             f.write(f'   end record;\n')
 
             f.write('\n')
@@ -709,12 +777,16 @@ class AdaServiceGenerator:
             if is_provided:
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
-                        f.write(f'   function {rpc.ada_decode_response_name}\n')
+                        decode_name = _rpc_ada_decode_response_name(
+                            svc.name, rpc, duplicate_rpc_names)
+                        invoke_name = _rpc_ada_invoke_name(
+                            svc.name, rpc, duplicate_rpc_names)
+                        f.write(f'   function {decode_name}\n')
                         f.write(f'     (Msg : access constant Pcl_Bindings.Pcl_Msg)\n')
                         f.write(f'      return {rpc.ada_rsp_type};\n')
                         f.write(f'\n')
                         f.write(f'   --  Invoke via executor transport (transport-agnostic).\n')
-                        f.write(f'   procedure {rpc.ada_invoke_name}\n')
+                        f.write(f'   procedure {invoke_name}\n')
                         f.write(f'     (Executor  : Pcl_Bindings.Pcl_Executor_Access;\n')
                         f.write(f'      Request   : {rpc.ada_req_type};\n')
                         f.write(f'      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
@@ -760,6 +832,7 @@ class AdaServiceGenerator:
         is_provided = _is_provided(parsed)
         has_grpc = 'grpc' in self._enabled_backends
         sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
+        duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'--  Auto-generated service binding body\n')
@@ -974,7 +1047,7 @@ class AdaServiceGenerator:
                     spec.flatbuffers_suffix)
 
             if is_provided:
-                for _, rpc in all_rpcs:
+                for svc_name, rpc in all_rpcs:
                     rsp_short = _short_type(rpc.rsp)
                     rsp_fb_suffix = (
                         _flatbuffers_func_suffix_for_stream(rpc.rsp)
@@ -982,7 +1055,8 @@ class AdaServiceGenerator:
                         _flatbuffers_func_suffix_for_type(rpc.rsp)
                     )
                     write_payload_decode_function(
-                        rpc.ada_decode_response_name,
+                        _rpc_ada_decode_response_name(
+                            svc_name, rpc, duplicate_rpc_names),
                         rpc.ada_rsp_type,
                         rsp_short,
                         rpc.streaming,
@@ -997,9 +1071,11 @@ class AdaServiceGenerator:
 
                 req_t = rpc.ada_req_type
                 rsp_t = rpc.ada_rsp_type
+                handler_name = _rpc_ada_handler(
+                    svc_name, rpc, duplicate_rpc_names)
 
                 if rpc.streaming:
-                    f.write(f'   function Default_{rpc.ada_handler}\n')
+                    f.write(f'   function Default_{handler_name}\n')
                     f.write(f'     (Request : {req_t}) return {rsp_t}\n')
                     f.write(f'   is\n')
                     f.write(f'      pragma Unreferenced (Request);\n')
@@ -1007,7 +1083,7 @@ class AdaServiceGenerator:
                     f.write(f'   begin\n')
                     f.write(f'      return Empty;\n')
                 else:
-                    f.write(f'   procedure Default_{rpc.ada_handler}\n')
+                    f.write(f'   procedure Default_{handler_name}\n')
                     f.write(f'     (Request  : in  {req_t};\n')
                     f.write(f'      Response : out {rsp_t})\n')
                     f.write(f'   is\n')
@@ -1025,11 +1101,12 @@ class AdaServiceGenerator:
                         f.write(f'   begin\n')
                         f.write(f'      Response := Default_Val;\n')
 
-                f.write(f'   end Default_{rpc.ada_handler};\n')
+                f.write(f'   end Default_{handler_name};\n')
                 f.write(f'\n')
 
-            for _, rpc in all_rpcs:
-                callback_name = f'Service_{_camel_to_snake(rpc.name)}'
+            for svc_name, rpc in all_rpcs:
+                callback_name = _rpc_ada_callback_name(
+                    svc_name, rpc, duplicate_rpc_names)
                 f.write(f'   function {callback_name}\n')
                 f.write(f'     (Self      : Pcl_Bindings.Pcl_Container_Access;\n')
                 f.write(f'      Request   : access constant Pcl_Bindings.Pcl_Msg;\n')
@@ -1046,11 +1123,14 @@ class AdaServiceGenerator:
             f.write(f'   is\n')
             f.write(f'      Handler_Ptr : constant System.Address := Handler_Address (Handlers);\n')
             f.write(f'   begin\n')
-            for _, rpc in all_rpcs:
-                callback_name = f'Service_{_camel_to_snake(rpc.name)}'
+            for svc_name, rpc in all_rpcs:
+                callback_name = _rpc_ada_callback_name(
+                    svc_name, rpc, duplicate_rpc_names)
+                service_const = _rpc_ada_svc_const(
+                    svc_name, rpc, duplicate_rpc_names)
                 f.write(f'      declare\n')
                 f.write(f'         Service_Name : Interfaces.C.Strings.chars_ptr :=\n')
-                f.write(f'           Interfaces.C.Strings.New_String ({rpc.ada_svc_const});\n')
+                f.write(f'           Interfaces.C.Strings.New_String ({service_const});\n')
                 f.write(f'         Type_Name : Interfaces.C.Strings.chars_ptr :=\n')
                 f.write(f'           Interfaces.C.Strings.New_String (Content_Type);\n')
                 f.write(f'         Port : Pcl_Bindings.Pcl_Port_Access;\n')
@@ -1068,8 +1148,11 @@ class AdaServiceGenerator:
             f.write(f'   end Register_Services;\n')
             f.write(f'\n')
 
-            for _, rpc in all_rpcs:
-                callback_name = f'Service_{_camel_to_snake(rpc.name)}'
+            for svc_name, rpc in all_rpcs:
+                callback_name = _rpc_ada_callback_name(
+                    svc_name, rpc, duplicate_rpc_names)
+                channel_name = _rpc_ada_channel(
+                    svc_name, rpc, duplicate_rpc_names)
                 f.write(f'   function {callback_name}\n')
                 f.write(f'     (Self      : Pcl_Bindings.Pcl_Container_Access;\n')
                 f.write(f'      Request   : access constant Pcl_Bindings.Pcl_Msg;\n')
@@ -1089,7 +1172,7 @@ class AdaServiceGenerator:
                 f.write(f'   begin\n')
                 f.write(f'      Dispatch\n')
                 f.write(f'        (Handlers      => Handlers_Ptr,\n')
-                f.write(f'         Channel       => {rpc.ada_channel},\n')
+                f.write(f'         Channel       => {channel_name},\n')
                 f.write(f'         Request_Buf   => Request.Data,\n')
                 f.write(f'         Request_Size  => Natural (Request.Size),\n')
                 f.write(f'         Content_Type  => Req_Type,\n')
@@ -1148,8 +1231,12 @@ class AdaServiceGenerator:
             if is_provided:
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
+                        invoke_name = _rpc_ada_invoke_name(
+                            svc.name, rpc, duplicate_rpc_names)
+                        service_const = _rpc_ada_svc_const(
+                            svc.name, rpc, duplicate_rpc_names)
                         req_fb_suffix = _flatbuffers_func_suffix_for_type(rpc.req)
-                        f.write(f'   procedure {rpc.ada_invoke_name}\n')
+                        f.write(f'   procedure {invoke_name}\n')
                         f.write(f'     (Executor  : Pcl_Bindings.Pcl_Executor_Access;\n')
                         f.write(f'      Request   : {rpc.ada_req_type};\n')
                         f.write(f'      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
@@ -1173,7 +1260,7 @@ class AdaServiceGenerator:
                         f.write(f'      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;\n')
                         f.write(f'      Payload_Bytes : aliased constant String := Payload;\n')
                         f.write(f'      Svc_C  : Interfaces.C.Strings.chars_ptr :=\n')
-                        f.write(f'        Interfaces.C.Strings.New_String ({rpc.ada_svc_const});\n')
+                        f.write(f'        Interfaces.C.Strings.New_String ({service_const});\n')
                         f.write(f'      Msg    : aliased Pcl_Bindings.Pcl_Msg;\n')
                         f.write(f'      Status : Pcl_Bindings.Pcl_Status;\n')
                         f.write(f'      pragma Unreferenced (Status);\n')
@@ -1190,7 +1277,7 @@ class AdaServiceGenerator:
                                             if elem_type == 'Identifier'
                                             else 'To_Json (Rsp (I))')
                                 f.write(f'            Rsp : constant Grpc_Transport.{rpc.ada_rsp_type} :=\n')
-                                f.write(f'              Grpc_Transport.{rpc.ada_invoke_name}\n')
+                                f.write(f'              Grpc_Transport.{invoke_name}\n')
                                 f.write(f'                (To_String (Grpc_Channel), Request);\n')
                                 f.write(f'            Acc : Unbounded_String := To_Unbounded_String ("[");\n')
                                 f.write(f'         begin\n')
@@ -1205,7 +1292,7 @@ class AdaServiceGenerator:
                                 f.write(f'              (Callback, User_Data, To_String (Acc));\n')
                             else:
                                 f.write(f'            Rsp : constant {rpc.ada_rsp_type} :=\n')
-                                f.write(f'              Grpc_Transport.{rpc.ada_invoke_name}\n')
+                                f.write(f'              Grpc_Transport.{invoke_name}\n')
                                 f.write(f'                (To_String (Grpc_Channel), Request);\n')
                                 if rpc.ada_rsp_type == 'Identifier':
                                     f.write(f'            Response_Payload : constant String :=\n')
@@ -1237,7 +1324,7 @@ class AdaServiceGenerator:
                         f.write(f'      end if;\n')
                         f.write(f'      Interfaces.C.Strings.Free (Svc_C);\n')
                         f.write(f'      Interfaces.C.Strings.Free (Msg.Type_Name);\n')
-                        f.write(f'   end {rpc.ada_invoke_name};\n')
+                        f.write(f'   end {invoke_name};\n')
                         f.write(f'\n')
 
             # Publish helpers (consumed topics -- Ada client publishes to server)
@@ -1356,17 +1443,22 @@ class AdaServiceGenerator:
             f.write(f'      Response_Size := 0;\n')
             f.write(f'      case Channel is\n')
 
-            for _, rpc in all_rpcs:
+            for svc_name, rpc in all_rpcs:
                 req_t = rpc.ada_req_type
                 rsp_t = rpc.ada_rsp_type
-                handler_fn = rpc.ada_handler
+                handler_fn = _rpc_ada_handler(
+                    svc_name, rpc, duplicate_rpc_names)
+                handler_field = _rpc_ada_handler_field(
+                    svc_name, rpc, duplicate_rpc_names)
+                channel_name = _rpc_ada_channel(
+                    svc_name, rpc, duplicate_rpc_names)
                 req_fb_suffix = _flatbuffers_func_suffix_for_type(rpc.req)
                 rsp_fb_suffix = (
                     _flatbuffers_func_suffix_for_stream(rpc.rsp)
                     if rpc.streaming else
                     _flatbuffers_func_suffix_for_type(rpc.rsp)
                 )
-                f.write(f'         when {rpc.ada_channel} =>\n')
+                f.write(f'         when {channel_name} =>\n')
                 f.write(f'            declare\n')
                 if req_t == 'Identifier':
                     json_decode = 'To_Unbounded_String (Request_Payload)'
@@ -1382,9 +1474,8 @@ class AdaServiceGenerator:
                 if rpc.streaming:
                     # Streaming: handler is a function returning unconstrained array
                     f.write(f'               Rsp : constant {rsp_t} :=\n')
-                    field_name = handler_fn.replace('Handle_', 'On_')
-                    f.write(f'                 (if Handlers /= null and then Handlers.{field_name} /= null\n')
-                    f.write(f'                  then Handlers.{field_name}.all (Req)\n')
+                    f.write(f'                 (if Handlers /= null and then Handlers.{handler_field} /= null\n')
+                    f.write(f'                  then Handlers.{handler_field}.all (Req)\n')
                     f.write(f'                  else Default_{handler_fn} (Req));\n')
                     f.write(f'            begin\n')
 
@@ -1399,7 +1490,6 @@ class AdaServiceGenerator:
                     f.write(f'                  use Ada.Strings.Unbounded;\n')
                     f.write(f'                  Acc : Unbounded_String :=\n')
                     f.write(f'                    To_Unbounded_String ("[");\n')
-                    f.write(f'                  Json_Response : String := "";\n')
                     f.write(f'               begin\n')
                     f.write(f"                  for I in Rsp'Range loop\n")
                     f.write(f"                     if I > Rsp'First then\n")
@@ -1408,35 +1498,33 @@ class AdaServiceGenerator:
                     f.write(f'                     Append (Acc, {elem_ser});\n')
                     f.write(f'                  end loop;\n')
                     f.write(f'                  Append (Acc, "]");\n')
-                    f.write(f'                  Json_Response := To_String (Acc);\n')
                     f.write(f'                  Copy_To_Buf\n')
                     f.write(f'                    ((if Content_Type = "" or else Content_Type = "application/json"\n')
-                    f.write(f'                      then Json_Response\n')
+                    f.write(f'                      then To_String (Acc)\n')
                     f.write(f'                      elsif Content_Type = "application/flatbuffers"\n')
-                    f.write(f'                      then Flatbuffers_Codec.To_Binary_{rsp_fb_suffix} (Json_Response)\n')
+                    f.write(f'                      then Flatbuffers_Codec.To_Binary_{rsp_fb_suffix} (To_String (Acc))\n')
                     f.write(f'                      else raise Constraint_Error with "Unsupported content type: " & Content_Type),\n')
                     f.write(f'                    Response_Buf, Response_Size);\n')
                     f.write(f'               end;\n')
                 else:
                     # Non-streaming: handler is a procedure with out parameter
                     f.write(f'               Rsp : {rsp_t};\n')
-                    f.write(f'               Json_Response : String := "";\n')
+                    f.write(f'               Json_Response : Unbounded_String := Null_Unbounded_String;\n')
                     f.write(f'            begin\n')
-                    field_name = handler_fn.replace('Handle_', 'On_')
-                    f.write(f'               if Handlers /= null and then Handlers.{field_name} /= null then\n')
-                    f.write(f'                  Handlers.{field_name}.all (Req, Rsp);\n')
+                    f.write(f'               if Handlers /= null and then Handlers.{handler_field} /= null then\n')
+                    f.write(f'                  Handlers.{handler_field}.all (Req, Rsp);\n')
                     f.write(f'               else\n')
                     f.write(f'                  Default_{handler_fn} (Req, Rsp);\n')
                     f.write(f'               end if;\n')
 
                     # Serialise response and copy to buffer
                     if rsp_t == 'Identifier':
-                        f.write(f'               Json_Response := To_String (Rsp);\n')
+                        f.write(f'               Json_Response := To_Unbounded_String (To_String (Rsp));\n')
                     else:
-                        f.write(f'               Json_Response := To_Json (Rsp);\n')
+                        f.write(f'               Json_Response := To_Unbounded_String (To_Json (Rsp));\n')
                     f.write(f'               Copy_To_Buf\n')
                     f.write(f'                 ((if Content_Type = "" or else Content_Type = "application/json"\n')
-                    f.write(f'                   then Json_Response\n')
+                    f.write(f'                   then To_String (Json_Response)\n')
                     f.write(f'                   elsif Content_Type = "application/flatbuffers"\n')
                     f.write(f'                   then Flatbuffers_Codec.To_Binary_{rsp_fb_suffix} (Rsp)\n')
                     f.write(f'                   else raise Constraint_Error with "Unsupported content type: " & Content_Type),\n')
@@ -1474,11 +1562,34 @@ _ADA_UNIT_FIELD_NAMES = frozenset({
     'value', 'radians', 'meters', 'meters_per_second', 'seconds',
 })
 
+_ADA_RESERVED_WORDS = frozenset({
+    'abort', 'abs', 'abstract', 'accept', 'access', 'aliased', 'all', 'and',
+    'array', 'at', 'begin', 'body', 'case', 'constant', 'declare', 'delay',
+    'delta', 'digits', 'do', 'else', 'elsif', 'end', 'entry', 'exception',
+    'exit', 'for', 'function', 'generic', 'goto', 'if', 'in', 'interface',
+    'is', 'limited', 'loop', 'mod', 'new', 'not', 'null', 'of', 'or',
+    'others', 'out', 'overriding', 'package', 'pragma', 'private',
+    'procedure', 'protected', 'raise', 'range', 'record', 'rem', 'renames',
+    'requeue', 'return', 'reverse', 'select', 'separate', 'subtype',
+    'synchronized', 'tagged', 'task', 'terminate', 'then', 'type', 'until',
+    'use', 'when', 'while', 'with', 'xor',
+})
+
 
 def _ada_name(cpp_or_proto_name: str) -> str:
     """Convert CamelCase or snake_case proto name to Ada Title_Case."""
     s = camel_to_snake(cpp_or_proto_name)   # CamelCase -> Camel_Case
     return '_'.join(w.capitalize() for w in s.split('_'))
+
+
+def _ada_field_name(proto_name: str, ada_type: Optional[str] = None) -> str:
+    """Return a legal Ada record/component identifier for a proto field name."""
+    name = _ada_name(proto_name)
+    if name.lower() in _ADA_RESERVED_WORDS:
+        name = name + '_Field'
+    if ada_type is not None and name == ada_type:
+        name = 'Val_' + name
+    return name
 
 
 def _common_ada_pkg(index: ProtoTypeIndex) -> str:
@@ -1589,8 +1700,8 @@ class AdaTypesGenerator:
             if msg.name in alias_names:
                 continue
             for field, fname in self._inline_base_fields(msg):
-                ada_fname = _ada_name(fname)
                 ada_type, arr = self._ada_field_type(field.type, field.is_repeated, fname)
+                ada_fname = _ada_field_name(fname, ada_type)
                 if arr is None and ada_fname == ada_type:
                     short = field.type.split('.')[-1]
                     pkg = self._ada_pkg_for_type(short)
@@ -1734,8 +1845,8 @@ class AdaTypesGenerator:
         shadow = shadow_subtypes or {}
         f.write(f'   type {ada_name} is record\n')
         for field, fname in self._inline_base_fields(msg):
-            ada_fname = _ada_name(fname)
             ada_type, arr = self._ada_field_type(field.type, field.is_repeated, fname)
+            ada_fname = _ada_field_name(fname, ada_type)
             if arr:
                 # Access-to-array fields default to null (no allocation)
                 f.write(f'      {ada_fname} : {ada_type} := null;\n')
@@ -1757,11 +1868,8 @@ class AdaTypesGenerator:
         for oo in msg.oneofs:
             f.write(f'      --  oneof {oo.name}\n')
             for fld in oo.fields:
-                ada_fname = _ada_name(fld.name)
                 ada_type, _ = self._ada_field_type(fld.type, False, fld.name)
-                # Avoid field name colliding with its type name (Ada visibility)
-                if ada_fname == ada_type:
-                    ada_fname = 'Val_' + ada_fname
+                ada_fname = _ada_field_name(fld.name, ada_type)
                 f.write(f'      Has_{ada_fname} : Boolean := False;\n')
                 dflt = self._ada_default(ada_type, fld.type)
                 init = f' := {dflt}' if dflt else ''
@@ -2010,6 +2118,28 @@ class AdaDataModelCodecGenerator:
                         deps.add(codec)
         return sorted(deps)
 
+    def _ada_base_type(self, field_type: str) -> str:
+        short = field_type.split('.')[-1]
+        if field_type in _ADA_SCALAR_MAP:
+            return _ADA_SCALAR_MAP[field_type]
+        if short in self._aliases:
+            return self._aliases[short]
+        if self._index.is_enum_type(field_type) or self._index.is_enum_type(short):
+            return _ada_name(short)
+        if self._index.is_message_type(field_type) or self._index.is_message_type(short):
+            if short in self._aliases:
+                return self._aliases[short]
+            return _ada_name(short)
+        return _ada_name(short)
+
+    def _ada_field_type(self, field_type: str, repeated: bool,
+                        field_name: str) -> Tuple[str, Optional[str]]:
+        base = self._ada_base_type(field_type)
+        if repeated:
+            arr = _ada_name(field_name) + '_Array'
+            return (arr + '_Acc', arr)
+        return (base, None)
+
     # -- field-level serialisation helpers ------------------------------------
 
     def _to_json_expr(self, fld, ada_fname: str) -> str:
@@ -2148,7 +2278,8 @@ class AdaDataModelCodecGenerator:
         parts = []
         for fld in fields:
             wire = camel_to_snake(fld.name)
-            ada_fname = _ada_name(fld.name)
+            ada_type, _ = self._ada_field_type(fld.type, fld.is_repeated, fld.name)
+            ada_fname = _ada_field_name(fld.name, ada_type)
             expr = self._to_json_expr(fld, ada_fname)
             parts.append(f'        """{wire}"":" & {expr}')
         f.write(' &\n        "," &\n'.join(parts))
@@ -2166,7 +2297,8 @@ class AdaDataModelCodecGenerator:
         f.write(f'   begin\n')
         for fld in fields:
             wire = camel_to_snake(fld.name)
-            ada_fname = _ada_name(fld.name)
+            ada_type, _ = self._ada_field_type(fld.type, fld.is_repeated, fld.name)
+            ada_fname = _ada_field_name(fld.name, ada_type)
             self._from_json_stmts(f, fld, ada_fname, wire)
         f.write(f'      return Result;\n')
         f.write(f'   exception\n')
@@ -2204,19 +2336,17 @@ class AdaDataModelCodecGenerator:
 
         for fld, fname in regular_fields:
             wire = camel_to_snake(fname)
-            ada_fname = _ada_name(fname)
+            ada_type, _ = self._ada_field_type(fld.type, fld.is_repeated, fname)
+            ada_fname = _ada_field_name(fname, ada_type)
             self._emit_to_json_field(f, fld, ada_fname, wire)
 
         # Oneofs
         for group, variants in oneof_groups.items():
             for fld, fname in variants:
                 wire = camel_to_snake(fname)
-                ada_fname = _ada_name(fname)
-                # Apply same collision-avoidance as types generator
                 oo_short = fld.type.split('.')[-1]
                 oo_ada_type = _ada_name(oo_short)
-                if ada_fname == oo_ada_type:
-                    ada_fname = 'Val_' + ada_fname
+                ada_fname = _ada_field_name(fname, oo_ada_type)
                 has_flag = 'Has_' + ada_fname
                 # Only emit the variant that is set
                 f.write(f'      if Msg.{has_flag} then\n')
@@ -2243,18 +2373,16 @@ class AdaDataModelCodecGenerator:
 
         for fld, fname in regular_fields:
             wire = camel_to_snake(fname)
-            ada_fname = _ada_name(fname)
+            ada_type, _ = self._ada_field_type(fld.type, fld.is_repeated, fname)
+            ada_fname = _ada_field_name(fname, ada_type)
             self._emit_from_json_field(f, fld, ada_fname, wire)
 
         for group, variants in oneof_groups.items():
             for fld, fname in variants:
                 wire = camel_to_snake(fname)
-                ada_fname = _ada_name(fname)
-                # Apply same collision-avoidance as types generator
                 oo_short = fld.type.split('.')[-1]
                 oo_ada_type = _ada_name(oo_short)
-                if ada_fname == oo_ada_type:
-                    ada_fname = 'Val_' + ada_fname
+                ada_fname = _ada_field_name(fname, oo_ada_type)
                 has_flag = 'Has_' + ada_fname
                 short = fld.type.split('.')[-1]
                 f.write(f'      if Has_Field (J, "{wire}") then\n')

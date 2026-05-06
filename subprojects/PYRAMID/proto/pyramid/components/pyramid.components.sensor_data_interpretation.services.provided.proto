@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package pyramid.components.sensor_data_interpretation.services.provided;
+
+import "google/protobuf/empty.proto";
+import "pyramid/data_model/pyramid.data_model.base.proto";
+import "pyramid/data_model/pyramid.data_model.common.proto";
+import "pyramid/data_model/pyramid.data_model.sensors.proto";
+
+// gRPC Service for Interpretation_Requirement
+service Interpretation_Requirement_Service {
+  // Read capability (output only)
+  rpc ReadCapability(pyramid.data_model.common.Query) returns (stream pyramid.data_model.common.Capability);
+
+  // Create requirement
+  rpc CreateRequirement(pyramid.data_model.sensors.InterpretationRequirement) returns (pyramid.data_model.base.Identifier);
+  
+  // Read requirement
+  rpc ReadRequirement(pyramid.data_model.common.Query) returns (stream pyramid.data_model.sensors.InterpretationRequirement);
+  
+  // Update requirement
+  rpc UpdateRequirement(pyramid.data_model.sensors.InterpretationRequirement) returns (pyramid.data_model.common.Ack);
+  
+  // Delete requirement
+  rpc DeleteRequirement(pyramid.data_model.base.Identifier) returns (pyramid.data_model.common.Ack);
+}
+

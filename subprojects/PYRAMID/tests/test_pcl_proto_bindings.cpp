@@ -45,14 +45,14 @@ namespace {
 
 std::string makeProvidedFlatbuffersRequest(prov::ServiceChannel ch) {
     switch (ch) {
-    case prov::ServiceChannel::ReadMatch:
-    case prov::ServiceChannel::ReadRequirement:
-    case prov::ServiceChannel::ReadDetail:
+    case prov::ServiceChannel::MatchingObjectsReadMatch:
+    case prov::ServiceChannel::ObjectOfInterestReadRequirement:
+    case prov::ServiceChannel::SpecificObjectDetailReadDetail:
         return flatbuffers_codec::toBinary(types::Query{});
-    case prov::ServiceChannel::CreateRequirement:
-    case prov::ServiceChannel::UpdateRequirement:
+    case prov::ServiceChannel::ObjectOfInterestCreateRequirement:
+    case prov::ServiceChannel::ObjectOfInterestUpdateRequirement:
         return flatbuffers_codec::toBinary(types::ObjectInterestRequirement{});
-    case prov::ServiceChannel::DeleteRequirement:
+    case prov::ServiceChannel::ObjectOfInterestDeleteRequirement:
         return flatbuffers_codec::toBinary(types::Identifier{});
     }
     return {};
@@ -60,14 +60,14 @@ std::string makeProvidedFlatbuffersRequest(prov::ServiceChannel ch) {
 
 std::string makeConsumedFlatbuffersRequest(cons::ServiceChannel ch) {
     switch (ch) {
-    case cons::ServiceChannel::ReadDetail:
-    case cons::ServiceChannel::ReadRequirement:
-    case cons::ServiceChannel::ReadCapability:
+    case cons::ServiceChannel::ObjectEvidenceReadDetail:
+    case cons::ServiceChannel::ObjectSolutionEvidenceReadRequirement:
+    case cons::ServiceChannel::ObjectSourceCapabilityReadCapability:
         return flatbuffers_codec::toBinary(types::Query{});
-    case cons::ServiceChannel::CreateRequirement:
-    case cons::ServiceChannel::UpdateRequirement:
+    case cons::ServiceChannel::ObjectSolutionEvidenceCreateRequirement:
+    case cons::ServiceChannel::ObjectSolutionEvidenceUpdateRequirement:
         return flatbuffers_codec::toBinary(types::ObjectEvidenceRequirement{});
-    case cons::ServiceChannel::DeleteRequirement:
+    case cons::ServiceChannel::ObjectSolutionEvidenceDeleteRequirement:
         return flatbuffers_codec::toBinary(types::Identifier{});
     }
     return {};
@@ -75,14 +75,14 @@ std::string makeConsumedFlatbuffersRequest(cons::ServiceChannel ch) {
 
 std::string makeProvidedProtobufRequest(prov::ServiceChannel ch) {
     switch (ch) {
-    case prov::ServiceChannel::ReadMatch:
-    case prov::ServiceChannel::ReadRequirement:
-    case prov::ServiceChannel::ReadDetail:
+    case prov::ServiceChannel::MatchingObjectsReadMatch:
+    case prov::ServiceChannel::ObjectOfInterestReadRequirement:
+    case prov::ServiceChannel::SpecificObjectDetailReadDetail:
         return protobuf_codec::toBinary(types::Query{});
-    case prov::ServiceChannel::CreateRequirement:
-    case prov::ServiceChannel::UpdateRequirement:
+    case prov::ServiceChannel::ObjectOfInterestCreateRequirement:
+    case prov::ServiceChannel::ObjectOfInterestUpdateRequirement:
         return protobuf_codec::toBinary(types::ObjectInterestRequirement{});
-    case prov::ServiceChannel::DeleteRequirement:
+    case prov::ServiceChannel::ObjectOfInterestDeleteRequirement:
         return protobuf_codec::toBinary(types::Identifier{});
     }
     return {};
@@ -90,14 +90,14 @@ std::string makeProvidedProtobufRequest(prov::ServiceChannel ch) {
 
 std::string makeConsumedProtobufRequest(cons::ServiceChannel ch) {
     switch (ch) {
-    case cons::ServiceChannel::ReadDetail:
-    case cons::ServiceChannel::ReadRequirement:
-    case cons::ServiceChannel::ReadCapability:
+    case cons::ServiceChannel::ObjectEvidenceReadDetail:
+    case cons::ServiceChannel::ObjectSolutionEvidenceReadRequirement:
+    case cons::ServiceChannel::ObjectSourceCapabilityReadCapability:
         return protobuf_codec::toBinary(types::Query{});
-    case cons::ServiceChannel::CreateRequirement:
-    case cons::ServiceChannel::UpdateRequirement:
+    case cons::ServiceChannel::ObjectSolutionEvidenceCreateRequirement:
+    case cons::ServiceChannel::ObjectSolutionEvidenceUpdateRequirement:
         return protobuf_codec::toBinary(types::ObjectEvidenceRequirement{});
-    case cons::ServiceChannel::DeleteRequirement:
+    case cons::ServiceChannel::ObjectSolutionEvidenceDeleteRequirement:
         return protobuf_codec::toBinary(types::Identifier{});
     }
     return {};
@@ -110,12 +110,17 @@ std::string makeConsumedProtobufRequest(cons::ServiceChannel ch) {
 // ===========================================================================
 
 TEST(ProtoBindingsProvided, WireNames) {
-    EXPECT_STREQ(prov::kSvcReadMatch,         "matching_objects.read_match");
-    EXPECT_STREQ(prov::kSvcCreateRequirement, "object_of_interest.create_requirement");
-    EXPECT_STREQ(prov::kSvcReadRequirement,   "object_of_interest.read_requirement");
-    EXPECT_STREQ(prov::kSvcUpdateRequirement, "object_of_interest.update_requirement");
-    EXPECT_STREQ(prov::kSvcDeleteRequirement, "object_of_interest.delete_requirement");
-    EXPECT_STREQ(prov::kSvcReadDetail,        "specific_object_detail.read_detail");
+    EXPECT_STREQ(prov::kSvcMatchingObjectsReadMatch, "matching_objects.read_match");
+    EXPECT_STREQ(prov::kSvcObjectOfInterestCreateRequirement,
+                 "object_of_interest.create_requirement");
+    EXPECT_STREQ(prov::kSvcObjectOfInterestReadRequirement,
+                 "object_of_interest.read_requirement");
+    EXPECT_STREQ(prov::kSvcObjectOfInterestUpdateRequirement,
+                 "object_of_interest.update_requirement");
+    EXPECT_STREQ(prov::kSvcObjectOfInterestDeleteRequirement,
+                 "object_of_interest.delete_requirement");
+    EXPECT_STREQ(prov::kSvcSpecificObjectDetailReadDetail,
+                 "specific_object_detail.read_detail");
 }
 
 TEST(ProtoBindingsProvided, TopicNames) {
@@ -124,12 +129,17 @@ TEST(ProtoBindingsProvided, TopicNames) {
 }
 
 TEST(ProtoBindingsConsumed, WireNames) {
-    EXPECT_STREQ(cons::kSvcReadDetail,         "object_evidence.read_detail");
-    EXPECT_STREQ(cons::kSvcCreateRequirement,  "object_solution_evidence.create_requirement");
-    EXPECT_STREQ(cons::kSvcReadRequirement,    "object_solution_evidence.read_requirement");
-    EXPECT_STREQ(cons::kSvcUpdateRequirement,  "object_solution_evidence.update_requirement");
-    EXPECT_STREQ(cons::kSvcDeleteRequirement,  "object_solution_evidence.delete_requirement");
-    EXPECT_STREQ(cons::kSvcReadCapability,     "object_source_capability.read_capability");
+    EXPECT_STREQ(cons::kSvcObjectEvidenceReadDetail, "object_evidence.read_detail");
+    EXPECT_STREQ(cons::kSvcObjectSolutionEvidenceCreateRequirement,
+                 "object_solution_evidence.create_requirement");
+    EXPECT_STREQ(cons::kSvcObjectSolutionEvidenceReadRequirement,
+                 "object_solution_evidence.read_requirement");
+    EXPECT_STREQ(cons::kSvcObjectSolutionEvidenceUpdateRequirement,
+                 "object_solution_evidence.update_requirement");
+    EXPECT_STREQ(cons::kSvcObjectSolutionEvidenceDeleteRequirement,
+                 "object_solution_evidence.delete_requirement");
+    EXPECT_STREQ(cons::kSvcObjectSourceCapabilityReadCapability,
+                 "object_source_capability.read_capability");
 }
 
 TEST(ProtoBindingsConsumed, TopicNames) {
@@ -325,39 +335,41 @@ public:
     bool read_detail_called       = false;
 
     std::vector<types::ObjectMatch>
-    handleReadMatch(const types::Query& q) override {
+    handleMatchingObjectsReadMatch(const types::Query& q) override {
         read_match_called = true;
-        return prov::ServiceHandler::handleReadMatch(q);  // call stub
+        return prov::ServiceHandler::handleMatchingObjectsReadMatch(q);  // call stub
     }
 
     types::Identifier
-    handleCreateRequirement(const types::ObjectInterestRequirement& r) override {
+    handleObjectOfInterestCreateRequirement(
+        const types::ObjectInterestRequirement& r) override {
         create_req_called = true;
-        return prov::ServiceHandler::handleCreateRequirement(r);
+        return prov::ServiceHandler::handleObjectOfInterestCreateRequirement(r);
     }
 
     std::vector<types::ObjectInterestRequirement>
-    handleReadRequirement(const types::Query& q) override {
+    handleObjectOfInterestReadRequirement(const types::Query& q) override {
         read_req_called = true;
-        return prov::ServiceHandler::handleReadRequirement(q);
+        return prov::ServiceHandler::handleObjectOfInterestReadRequirement(q);
     }
 
     types::Ack
-    handleUpdateRequirement(const types::ObjectInterestRequirement& r) override {
+    handleObjectOfInterestUpdateRequirement(
+        const types::ObjectInterestRequirement& r) override {
         update_req_called = true;
-        return prov::ServiceHandler::handleUpdateRequirement(r);
+        return prov::ServiceHandler::handleObjectOfInterestUpdateRequirement(r);
     }
 
     types::Ack
-    handleDeleteRequirement(const types::Identifier& id) override {
+    handleObjectOfInterestDeleteRequirement(const types::Identifier& id) override {
         delete_req_called = true;
-        return prov::ServiceHandler::handleDeleteRequirement(id);
+        return prov::ServiceHandler::handleObjectOfInterestDeleteRequirement(id);
     }
 
     std::vector<types::ObjectDetail>
-    handleReadDetail(const types::Query& q) override {
+    handleSpecificObjectDetailReadDetail(const types::Query& q) override {
         read_detail_called = true;
-        return prov::ServiceHandler::handleReadDetail(q);
+        return prov::ServiceHandler::handleSpecificObjectDetailReadDetail(q);
     }
 };
 
@@ -365,28 +377,28 @@ TEST(ProtoBindingsProvided, HandlerStubsReturnEmpty) {
     TestProvidedHandler handler;
 
     types::Query q;
-    auto matches = handler.handleReadMatch(q);
+    auto matches = handler.handleMatchingObjectsReadMatch(q);
     EXPECT_TRUE(matches.empty());
     EXPECT_TRUE(handler.read_match_called);
 
     types::ObjectInterestRequirement req;
-    auto id = handler.handleCreateRequirement(req);
+    auto id = handler.handleObjectOfInterestCreateRequirement(req);
     EXPECT_TRUE(id.empty());
     EXPECT_TRUE(handler.create_req_called);
 
-    auto reqs = handler.handleReadRequirement(q);
+    auto reqs = handler.handleObjectOfInterestReadRequirement(q);
     EXPECT_TRUE(reqs.empty());
     EXPECT_TRUE(handler.read_req_called);
 
-    auto ack_update = handler.handleUpdateRequirement(req);
+    auto ack_update = handler.handleObjectOfInterestUpdateRequirement(req);
     EXPECT_TRUE(ack_update.success);
     EXPECT_TRUE(handler.update_req_called);
 
-    auto ack_delete = handler.handleDeleteRequirement("some-id");
+    auto ack_delete = handler.handleObjectOfInterestDeleteRequirement("some-id");
     EXPECT_TRUE(ack_delete.success);
     EXPECT_TRUE(handler.delete_req_called);
 
-    auto details = handler.handleReadDetail(q);
+    auto details = handler.handleSpecificObjectDetailReadDetail(q);
     EXPECT_TRUE(details.empty());
     EXPECT_TRUE(handler.read_detail_called);
 }
@@ -401,39 +413,42 @@ public:
     bool read_cap_called       = false;
 
     std::vector<types::ObjectDetail>
-    handleReadDetail(const types::Query& q) override {
+    handleObjectEvidenceReadDetail(const types::Query& q) override {
         read_detail_called = true;
-        return cons::ServiceHandler::handleReadDetail(q);
+        return cons::ServiceHandler::handleObjectEvidenceReadDetail(q);
     }
 
     types::Identifier
-    handleCreateRequirement(const types::ObjectEvidenceRequirement& r) override {
+    handleObjectSolutionEvidenceCreateRequirement(
+        const types::ObjectEvidenceRequirement& r) override {
         create_req_called = true;
-        return cons::ServiceHandler::handleCreateRequirement(r);
+        return cons::ServiceHandler::handleObjectSolutionEvidenceCreateRequirement(r);
     }
 
     std::vector<types::ObjectEvidenceRequirement>
-    handleReadRequirement(const types::Query& q) override {
+    handleObjectSolutionEvidenceReadRequirement(const types::Query& q) override {
         read_req_called = true;
-        return cons::ServiceHandler::handleReadRequirement(q);
+        return cons::ServiceHandler::handleObjectSolutionEvidenceReadRequirement(q);
     }
 
     types::Ack
-    handleUpdateRequirement(const types::ObjectEvidenceRequirement& r) override {
+    handleObjectSolutionEvidenceUpdateRequirement(
+        const types::ObjectEvidenceRequirement& r) override {
         update_req_called = true;
-        return cons::ServiceHandler::handleUpdateRequirement(r);
+        return cons::ServiceHandler::handleObjectSolutionEvidenceUpdateRequirement(r);
     }
 
     types::Ack
-    handleDeleteRequirement(const types::Identifier& id) override {
+    handleObjectSolutionEvidenceDeleteRequirement(
+        const types::Identifier& id) override {
         delete_req_called = true;
-        return cons::ServiceHandler::handleDeleteRequirement(id);
+        return cons::ServiceHandler::handleObjectSolutionEvidenceDeleteRequirement(id);
     }
 
     std::vector<types::Capability>
-    handleReadCapability(const types::Query& q) override {
+    handleObjectSourceCapabilityReadCapability(const types::Query& q) override {
         read_cap_called = true;
-        return cons::ServiceHandler::handleReadCapability(q);
+        return cons::ServiceHandler::handleObjectSourceCapabilityReadCapability(q);
     }
 };
 
@@ -441,28 +456,28 @@ TEST(ProtoBindingsConsumed, HandlerStubsReturnEmpty) {
     TestConsumedHandler handler;
 
     types::Query q;
-    auto details = handler.handleReadDetail(q);
+    auto details = handler.handleObjectEvidenceReadDetail(q);
     EXPECT_TRUE(details.empty());
     EXPECT_TRUE(handler.read_detail_called);
 
     types::ObjectEvidenceRequirement req;
-    auto id = handler.handleCreateRequirement(req);
+    auto id = handler.handleObjectSolutionEvidenceCreateRequirement(req);
     EXPECT_TRUE(id.empty());
     EXPECT_TRUE(handler.create_req_called);
 
-    auto reqs = handler.handleReadRequirement(q);
+    auto reqs = handler.handleObjectSolutionEvidenceReadRequirement(q);
     EXPECT_TRUE(reqs.empty());
     EXPECT_TRUE(handler.read_req_called);
 
-    auto ack_update = handler.handleUpdateRequirement(req);
+    auto ack_update = handler.handleObjectSolutionEvidenceUpdateRequirement(req);
     EXPECT_TRUE(ack_update.success);
     EXPECT_TRUE(handler.update_req_called);
 
-    auto ack_delete = handler.handleDeleteRequirement("ev-id");
+    auto ack_delete = handler.handleObjectSolutionEvidenceDeleteRequirement("ev-id");
     EXPECT_TRUE(ack_delete.success);
     EXPECT_TRUE(handler.delete_req_called);
 
-    auto caps = handler.handleReadCapability(q);
+    auto caps = handler.handleObjectSourceCapabilityReadCapability(q);
     EXPECT_TRUE(caps.empty());
     EXPECT_TRUE(handler.read_cap_called);
 }
@@ -531,7 +546,8 @@ static pcl_status_t handle_consumed_create_requirement(
         explicit CapturingHandler(ConsumedInvokeCtx& ctx) : ctx(ctx) {}
 
         types::Identifier
-        handleCreateRequirement(const types::ObjectEvidenceRequirement& req) override {
+        handleObjectSolutionEvidenceCreateRequirement(
+            const types::ObjectEvidenceRequirement& req) override {
             ctx.service_count++;
             ctx.captured_req = req;
             return "evidence-requirement-typed";
@@ -543,7 +559,8 @@ static pcl_status_t handle_consumed_create_requirement(
     CapturingHandler handler(*ctx);
     void* resp_buf = nullptr;
     size_t resp_size = 0;
-    cons::dispatch(handler, cons::ServiceChannel::CreateRequirement,
+    cons::dispatch(handler,
+                   cons::ServiceChannel::ObjectSolutionEvidenceCreateRequirement,
                    request ? request->data : nullptr,
                    request ? request->size : 0u,
                    request ? request->type_name : cons::kJsonContentType,
@@ -566,7 +583,8 @@ static pcl_status_t handle_consumed_create_requirement(
 static pcl_status_t configure_consumed_create_requirement(
     pcl_container_t* c, void* ud) {
     auto* port = pcl_container_add_service(
-        c, cons::kSvcCreateRequirement, cons::kJsonContentType,
+        c, cons::kSvcObjectSolutionEvidenceCreateRequirement,
+        cons::kJsonContentType,
         handle_consumed_create_requirement, ud);
     return port ? PCL_OK : PCL_ERR_NOMEM;
 }
@@ -575,7 +593,8 @@ static void consumed_create_requirement_response(
     const pcl_msg_t* response, void* user_data) {
     auto* ctx = static_cast<ConsumedInvokeCtx*>(user_data);
     ctx->decoded_response =
-        cons::decodeCreateRequirementResponse(response, &ctx->response_id);
+        cons::decodeObjectSolutionEvidenceCreateRequirementResponse(
+            response, &ctx->response_id);
     ctx->callback_count++;
 }
 
@@ -617,7 +636,7 @@ TEST(ProtoBindingsConsumed, InvokeCreateRequirementUsesTypedFacade) {
     req.base.id = "typed-evidence-interest";
     req.policy = types::DataPolicy::Obtain;
 
-    const pcl_status_t rc = cons::invokeCreateRequirement(
+    const pcl_status_t rc = cons::invokeObjectSolutionEvidenceCreateRequirement(
         exec, req, consumed_create_requirement_response, &ctx);
 
     EXPECT_EQ(rc, PCL_OK);
@@ -629,7 +648,8 @@ TEST(ProtoBindingsConsumed, InvokeCreateRequirementUsesTypedFacade) {
     EXPECT_EQ(ctx.response_id, "evidence-requirement-typed");
 
     const pcl_status_t fire_and_forget_rc =
-        cons::invokeCreateRequirement(exec, req, cons::kJsonContentType);
+        cons::invokeObjectSolutionEvidenceCreateRequirement(
+            exec, req, cons::kJsonContentType);
 
     EXPECT_EQ(fire_and_forget_rc, PCL_OK);
     EXPECT_EQ(ctx.service_count.load(), 2);
@@ -685,12 +705,12 @@ TEST(ProtoBindingsConsumed, PublishSucceedsWhenActive) {
 TEST(ProtoBindingsProvided, DispatchAllChannelsNoCrash) {
     prov::ServiceHandler handler;  // default stubs
     const prov::ServiceChannel channels[] = {
-        prov::ServiceChannel::ReadMatch,
-        prov::ServiceChannel::CreateRequirement,
-        prov::ServiceChannel::ReadRequirement,
-        prov::ServiceChannel::UpdateRequirement,
-        prov::ServiceChannel::DeleteRequirement,
-        prov::ServiceChannel::ReadDetail,
+        prov::ServiceChannel::MatchingObjectsReadMatch,
+        prov::ServiceChannel::ObjectOfInterestCreateRequirement,
+        prov::ServiceChannel::ObjectOfInterestReadRequirement,
+        prov::ServiceChannel::ObjectOfInterestUpdateRequirement,
+        prov::ServiceChannel::ObjectOfInterestDeleteRequirement,
+        prov::ServiceChannel::SpecificObjectDetailReadDetail,
     };
 
     // Empty JSON object as minimal valid request for all channels
@@ -709,12 +729,12 @@ TEST(ProtoBindingsProvided, DispatchAllChannelsNoCrash) {
 TEST(ProtoBindingsConsumed, DispatchAllChannelsNoCrash) {
     cons::ServiceHandler handler;  // default stubs
     const cons::ServiceChannel channels[] = {
-        cons::ServiceChannel::ReadDetail,
-        cons::ServiceChannel::CreateRequirement,
-        cons::ServiceChannel::ReadRequirement,
-        cons::ServiceChannel::UpdateRequirement,
-        cons::ServiceChannel::DeleteRequirement,
-        cons::ServiceChannel::ReadCapability,
+        cons::ServiceChannel::ObjectEvidenceReadDetail,
+        cons::ServiceChannel::ObjectSolutionEvidenceCreateRequirement,
+        cons::ServiceChannel::ObjectSolutionEvidenceReadRequirement,
+        cons::ServiceChannel::ObjectSolutionEvidenceUpdateRequirement,
+        cons::ServiceChannel::ObjectSolutionEvidenceDeleteRequirement,
+        cons::ServiceChannel::ObjectSourceCapabilityReadCapability,
     };
 
     std::string empty_req = "{}";
@@ -731,12 +751,12 @@ TEST(ProtoBindingsConsumed, DispatchAllChannelsNoCrash) {
 TEST(ProtoBindingsProvided, DispatchAllChannelsFlatBuffersNoCrash) {
     prov::ServiceHandler handler;
     const prov::ServiceChannel channels[] = {
-        prov::ServiceChannel::ReadMatch,
-        prov::ServiceChannel::CreateRequirement,
-        prov::ServiceChannel::ReadRequirement,
-        prov::ServiceChannel::UpdateRequirement,
-        prov::ServiceChannel::DeleteRequirement,
-        prov::ServiceChannel::ReadDetail,
+        prov::ServiceChannel::MatchingObjectsReadMatch,
+        prov::ServiceChannel::ObjectOfInterestCreateRequirement,
+        prov::ServiceChannel::ObjectOfInterestReadRequirement,
+        prov::ServiceChannel::ObjectOfInterestUpdateRequirement,
+        prov::ServiceChannel::ObjectOfInterestDeleteRequirement,
+        prov::ServiceChannel::SpecificObjectDetailReadDetail,
     };
 
     for (auto ch : channels) {
@@ -753,12 +773,12 @@ TEST(ProtoBindingsProvided, DispatchAllChannelsFlatBuffersNoCrash) {
 TEST(ProtoBindingsConsumed, DispatchAllChannelsFlatBuffersNoCrash) {
     cons::ServiceHandler handler;
     const cons::ServiceChannel channels[] = {
-        cons::ServiceChannel::ReadDetail,
-        cons::ServiceChannel::CreateRequirement,
-        cons::ServiceChannel::ReadRequirement,
-        cons::ServiceChannel::UpdateRequirement,
-        cons::ServiceChannel::DeleteRequirement,
-        cons::ServiceChannel::ReadCapability,
+        cons::ServiceChannel::ObjectEvidenceReadDetail,
+        cons::ServiceChannel::ObjectSolutionEvidenceCreateRequirement,
+        cons::ServiceChannel::ObjectSolutionEvidenceReadRequirement,
+        cons::ServiceChannel::ObjectSolutionEvidenceUpdateRequirement,
+        cons::ServiceChannel::ObjectSolutionEvidenceDeleteRequirement,
+        cons::ServiceChannel::ObjectSourceCapabilityReadCapability,
     };
 
     for (auto ch : channels) {
@@ -775,12 +795,12 @@ TEST(ProtoBindingsConsumed, DispatchAllChannelsFlatBuffersNoCrash) {
 TEST(ProtoBindingsProvided, DispatchAllChannelsProtobufNoCrash) {
     prov::ServiceHandler handler;
     const prov::ServiceChannel channels[] = {
-        prov::ServiceChannel::ReadMatch,
-        prov::ServiceChannel::CreateRequirement,
-        prov::ServiceChannel::ReadRequirement,
-        prov::ServiceChannel::UpdateRequirement,
-        prov::ServiceChannel::DeleteRequirement,
-        prov::ServiceChannel::ReadDetail,
+        prov::ServiceChannel::MatchingObjectsReadMatch,
+        prov::ServiceChannel::ObjectOfInterestCreateRequirement,
+        prov::ServiceChannel::ObjectOfInterestReadRequirement,
+        prov::ServiceChannel::ObjectOfInterestUpdateRequirement,
+        prov::ServiceChannel::ObjectOfInterestDeleteRequirement,
+        prov::ServiceChannel::SpecificObjectDetailReadDetail,
     };
 
     for (auto ch : channels) {
@@ -797,12 +817,12 @@ TEST(ProtoBindingsProvided, DispatchAllChannelsProtobufNoCrash) {
 TEST(ProtoBindingsConsumed, DispatchAllChannelsProtobufNoCrash) {
     cons::ServiceHandler handler;
     const cons::ServiceChannel channels[] = {
-        cons::ServiceChannel::ReadDetail,
-        cons::ServiceChannel::CreateRequirement,
-        cons::ServiceChannel::ReadRequirement,
-        cons::ServiceChannel::UpdateRequirement,
-        cons::ServiceChannel::DeleteRequirement,
-        cons::ServiceChannel::ReadCapability,
+        cons::ServiceChannel::ObjectEvidenceReadDetail,
+        cons::ServiceChannel::ObjectSolutionEvidenceCreateRequirement,
+        cons::ServiceChannel::ObjectSolutionEvidenceReadRequirement,
+        cons::ServiceChannel::ObjectSolutionEvidenceUpdateRequirement,
+        cons::ServiceChannel::ObjectSolutionEvidenceDeleteRequirement,
+        cons::ServiceChannel::ObjectSourceCapabilityReadCapability,
     };
 
     for (auto ch : channels) {
@@ -825,7 +845,8 @@ TEST(ProtoBindingsProvided, DispatchCreateRequirementRoundTrip) {
     struct CapturingHandler : public prov::ServiceHandler {
         types::ObjectInterestRequirement captured_req;
         types::Identifier
-        handleCreateRequirement(const types::ObjectInterestRequirement& req) override {
+        handleObjectOfInterestCreateRequirement(
+            const types::ObjectInterestRequirement& req) override {
             captured_req = req;
             return "new-id-42";
         }
@@ -839,7 +860,8 @@ TEST(ProtoBindingsProvided, DispatchCreateRequirementRoundTrip) {
 
     void*  resp_buf  = nullptr;
     size_t resp_size = 0;
-    prov::dispatch(handler, prov::ServiceChannel::CreateRequirement,
+    prov::dispatch(handler,
+                   prov::ServiceChannel::ObjectOfInterestCreateRequirement,
                    req_json.data(), req_json.size(),
                    &resp_buf, &resp_size);
 
@@ -858,7 +880,8 @@ TEST(ProtoBindingsProvided, DispatchCreateRequirementFlatBuffersRoundTrip) {
     struct CapturingHandler : public prov::ServiceHandler {
         types::ObjectInterestRequirement captured_req;
         types::Identifier
-        handleCreateRequirement(const types::ObjectInterestRequirement& req) override {
+        handleObjectOfInterestCreateRequirement(
+            const types::ObjectInterestRequirement& req) override {
             captured_req = req;
             return "new-id-42";
         }
@@ -871,7 +894,8 @@ TEST(ProtoBindingsProvided, DispatchCreateRequirementFlatBuffersRoundTrip) {
 
     void* resp_buf = nullptr;
     size_t resp_size = 0;
-    prov::dispatch(handler, prov::ServiceChannel::CreateRequirement,
+    prov::dispatch(handler,
+                   prov::ServiceChannel::ObjectOfInterestCreateRequirement,
                    req_payload.data(), req_payload.size(),
                    "application/flatbuffers", &resp_buf, &resp_size);
 
@@ -886,7 +910,7 @@ TEST(ProtoBindingsProvided, DispatchCreateRequirementFlatBuffersRoundTrip) {
 TEST(ProtoBindingsProvided, DispatchReadMatchReturnsJsonArray) {
     struct MatchHandler : public prov::ServiceHandler {
         std::vector<types::ObjectMatch>
-        handleReadMatch(const types::Query& /*req*/) override {
+        handleMatchingObjectsReadMatch(const types::Query& /*req*/) override {
             types::ObjectMatch m;
             m.id = "obj-1";
             m.matching_object_id = "match-1";
@@ -899,7 +923,7 @@ TEST(ProtoBindingsProvided, DispatchReadMatchReturnsJsonArray) {
 
     void*  resp_buf  = nullptr;
     size_t resp_size = 0;
-    prov::dispatch(handler, prov::ServiceChannel::ReadMatch,
+    prov::dispatch(handler, prov::ServiceChannel::MatchingObjectsReadMatch,
                    req_json.data(), req_json.size(),
                    &resp_buf, &resp_size);
 
@@ -916,7 +940,8 @@ TEST(ProtoBindingsConsumed, DispatchUpdateRequirementRoundTrip) {
     struct AckHandler : public cons::ServiceHandler {
         types::ObjectEvidenceRequirement captured_req;
         types::Ack
-        handleUpdateRequirement(const types::ObjectEvidenceRequirement& req) override {
+        handleObjectSolutionEvidenceUpdateRequirement(
+            const types::ObjectEvidenceRequirement& req) override {
             captured_req = req;
             return types::kAckOk;
         }
@@ -929,7 +954,8 @@ TEST(ProtoBindingsConsumed, DispatchUpdateRequirementRoundTrip) {
 
     void*  resp_buf  = nullptr;
     size_t resp_size = 0;
-    cons::dispatch(handler, cons::ServiceChannel::UpdateRequirement,
+    cons::dispatch(handler,
+                   cons::ServiceChannel::ObjectSolutionEvidenceUpdateRequirement,
                    req_json.data(), req_json.size(),
                    &resp_buf, &resp_size);
 
@@ -946,7 +972,8 @@ TEST(ProtoBindingsConsumed, DispatchUpdateRequirementFlatBuffersRoundTrip) {
     struct AckHandler : public cons::ServiceHandler {
         types::ObjectEvidenceRequirement captured_req;
         types::Ack
-        handleUpdateRequirement(const types::ObjectEvidenceRequirement& req) override {
+        handleObjectSolutionEvidenceUpdateRequirement(
+            const types::ObjectEvidenceRequirement& req) override {
             captured_req = req;
             return types::kAckOk;
         }
@@ -959,7 +986,8 @@ TEST(ProtoBindingsConsumed, DispatchUpdateRequirementFlatBuffersRoundTrip) {
 
     void* resp_buf = nullptr;
     size_t resp_size = 0;
-    cons::dispatch(handler, cons::ServiceChannel::UpdateRequirement,
+    cons::dispatch(handler,
+                   cons::ServiceChannel::ObjectSolutionEvidenceUpdateRequirement,
                    req_payload.data(), req_payload.size(),
                    "application/flatbuffers", &resp_buf, &resp_size);
 
@@ -975,7 +1003,8 @@ TEST(ProtoBindingsProvided, DispatchCreateRequirementProtobufRoundTrip) {
     struct CapturingHandler : public prov::ServiceHandler {
         types::ObjectInterestRequirement captured_req;
         types::Identifier
-        handleCreateRequirement(const types::ObjectInterestRequirement& req) override {
+        handleObjectOfInterestCreateRequirement(
+            const types::ObjectInterestRequirement& req) override {
             captured_req = req;
             return "new-id-4242";
         }
@@ -988,7 +1017,8 @@ TEST(ProtoBindingsProvided, DispatchCreateRequirementProtobufRoundTrip) {
 
     void* resp_buf = nullptr;
     size_t resp_size = 0;
-    prov::dispatch(handler, prov::ServiceChannel::CreateRequirement,
+    prov::dispatch(handler,
+                   prov::ServiceChannel::ObjectOfInterestCreateRequirement,
                    req_payload.data(), req_payload.size(),
                    "application/protobuf", &resp_buf, &resp_size);
 
@@ -1003,7 +1033,8 @@ TEST(ProtoBindingsConsumed, DispatchUpdateRequirementProtobufRoundTrip) {
     struct AckHandler : public cons::ServiceHandler {
         types::ObjectEvidenceRequirement captured_req;
         types::Ack
-        handleUpdateRequirement(const types::ObjectEvidenceRequirement& req) override {
+        handleObjectSolutionEvidenceUpdateRequirement(
+            const types::ObjectEvidenceRequirement& req) override {
             captured_req = req;
             return types::kAckOk;
         }
@@ -1016,7 +1047,8 @@ TEST(ProtoBindingsConsumed, DispatchUpdateRequirementProtobufRoundTrip) {
 
     void* resp_buf = nullptr;
     size_t resp_size = 0;
-    cons::dispatch(handler, cons::ServiceChannel::UpdateRequirement,
+    cons::dispatch(handler,
+                   cons::ServiceChannel::ObjectSolutionEvidenceUpdateRequirement,
                    req_payload.data(), req_payload.size(),
                    "application/protobuf", &resp_buf, &resp_size);
 

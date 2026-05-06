@@ -144,7 +144,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       raise Constraint_Error with "Unsupported content type: " & Content_Type;
    end Decode_Evidence_Requirements;
 
-   function Decode_Read_Match_Response
+   function Decode_Matching_Objects_Read_Match_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Object_Match_Array
    is
@@ -181,9 +181,9 @@ package body Pyramid.Services.Tactical_Objects.Provided is
             return Result;
          end;
       end;
-   end Decode_Read_Match_Response;
+   end Decode_Matching_Objects_Read_Match_Response;
 
-   function Decode_Create_Requirement_Response
+   function Decode_Object_Of_Interest_Create_Requirement_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Identifier
    is
@@ -203,9 +203,9 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          return Flatbuffers_Codec.From_Binary_Identifier (Payload, null);
       end if;
       raise Constraint_Error with "Unsupported content type: " & Content_Type;
-   end Decode_Create_Requirement_Response;
+   end Decode_Object_Of_Interest_Create_Requirement_Response;
 
-   function Decode_Read_Requirement_Response
+   function Decode_Object_Of_Interest_Read_Requirement_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Object_Interest_Requirement_Array
    is
@@ -242,9 +242,9 @@ package body Pyramid.Services.Tactical_Objects.Provided is
             return Result;
          end;
       end;
-   end Decode_Read_Requirement_Response;
+   end Decode_Object_Of_Interest_Read_Requirement_Response;
 
-   function Decode_Update_Requirement_Response
+   function Decode_Object_Of_Interest_Update_Requirement_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Ack
    is
@@ -264,9 +264,9 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          return Flatbuffers_Codec.From_Binary_Ack (Payload, null);
       end if;
       raise Constraint_Error with "Unsupported content type: " & Content_Type;
-   end Decode_Update_Requirement_Response;
+   end Decode_Object_Of_Interest_Update_Requirement_Response;
 
-   function Decode_Delete_Requirement_Response
+   function Decode_Object_Of_Interest_Delete_Requirement_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Ack
    is
@@ -286,9 +286,9 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          return Flatbuffers_Codec.From_Binary_Ack (Payload, null);
       end if;
       raise Constraint_Error with "Unsupported content type: " & Content_Type;
-   end Decode_Delete_Requirement_Response;
+   end Decode_Object_Of_Interest_Delete_Requirement_Response;
 
-   function Decode_Read_Detail_Response
+   function Decode_Specific_Object_Detail_Read_Detail_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Object_Detail_Array
    is
@@ -325,112 +325,112 @@ package body Pyramid.Services.Tactical_Objects.Provided is
             return Result;
          end;
       end;
-   end Decode_Read_Detail_Response;
+   end Decode_Specific_Object_Detail_Read_Detail_Response;
 
    --  -- Matching_Objects_Service ------------------------------------
-   function Default_Handle_Read_Match
+   function Default_Handle_Matching_Objects_Read_Match
      (Request : Query) return Object_Match_Array
    is
       pragma Unreferenced (Request);
       Empty : Object_Match_Array (1 .. 0);
    begin
       return Empty;
-   end Default_Handle_Read_Match;
+   end Default_Handle_Matching_Objects_Read_Match;
 
    --  -- Object_Of_Interest_Service ------------------------------------
-   procedure Default_Handle_Create_Requirement
+   procedure Default_Handle_Object_Of_Interest_Create_Requirement
      (Request  : in  Object_Interest_Requirement;
       Response : out Identifier)
    is
       pragma Unreferenced (Request);
    begin
       Response := Null_Unbounded_String;
-   end Default_Handle_Create_Requirement;
+   end Default_Handle_Object_Of_Interest_Create_Requirement;
 
-   function Default_Handle_Read_Requirement
+   function Default_Handle_Object_Of_Interest_Read_Requirement
      (Request : Query) return Object_Interest_Requirement_Array
    is
       pragma Unreferenced (Request);
       Empty : Object_Interest_Requirement_Array (1 .. 0);
    begin
       return Empty;
-   end Default_Handle_Read_Requirement;
+   end Default_Handle_Object_Of_Interest_Read_Requirement;
 
-   procedure Default_Handle_Update_Requirement
+   procedure Default_Handle_Object_Of_Interest_Update_Requirement
      (Request  : in  Object_Interest_Requirement;
       Response : out Ack)
    is
       pragma Unreferenced (Request);
    begin
       Response := (Success => True);
-   end Default_Handle_Update_Requirement;
+   end Default_Handle_Object_Of_Interest_Update_Requirement;
 
-   procedure Default_Handle_Delete_Requirement
+   procedure Default_Handle_Object_Of_Interest_Delete_Requirement
      (Request  : in  Identifier;
       Response : out Ack)
    is
       pragma Unreferenced (Request);
    begin
       Response := (Success => True);
-   end Default_Handle_Delete_Requirement;
+   end Default_Handle_Object_Of_Interest_Delete_Requirement;
 
    --  -- Specific_Object_Detail_Service ------------------------------------
-   function Default_Handle_Read_Detail
+   function Default_Handle_Specific_Object_Detail_Read_Detail
      (Request : Query) return Object_Detail_Array
    is
       pragma Unreferenced (Request);
       Empty : Object_Detail_Array (1 .. 0);
    begin
       return Empty;
-   end Default_Handle_Read_Detail;
+   end Default_Handle_Specific_Object_Detail_Read_Detail;
 
-   function Service_Read_Match
+   function Service_Matching_Objects_Read_Match
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
       Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
       User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
-   pragma Convention (C, Service_Read_Match);
+   pragma Convention (C, Service_Matching_Objects_Read_Match);
 
-   function Service_Create_Requirement
+   function Service_Object_Of_Interest_Create_Requirement
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
       Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
       User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
-   pragma Convention (C, Service_Create_Requirement);
+   pragma Convention (C, Service_Object_Of_Interest_Create_Requirement);
 
-   function Service_Read_Requirement
+   function Service_Object_Of_Interest_Read_Requirement
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
       Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
       User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
-   pragma Convention (C, Service_Read_Requirement);
+   pragma Convention (C, Service_Object_Of_Interest_Read_Requirement);
 
-   function Service_Update_Requirement
+   function Service_Object_Of_Interest_Update_Requirement
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
       Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
       User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
-   pragma Convention (C, Service_Update_Requirement);
+   pragma Convention (C, Service_Object_Of_Interest_Update_Requirement);
 
-   function Service_Delete_Requirement
+   function Service_Object_Of_Interest_Delete_Requirement
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
       Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
       User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
-   pragma Convention (C, Service_Delete_Requirement);
+   pragma Convention (C, Service_Object_Of_Interest_Delete_Requirement);
 
-   function Service_Read_Detail
+   function Service_Specific_Object_Detail_Read_Detail
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
       Ctx       : Pcl_Bindings.Pcl_Svc_Context_Access;
       User_Data : System.Address) return Pcl_Bindings.Pcl_Status;
-   pragma Convention (C, Service_Read_Detail);
+   pragma Convention (C, Service_Specific_Object_Detail_Read_Detail);
 
    procedure Register_Services
      (Container : Pcl_Bindings.Pcl_Container_Access;
@@ -441,7 +441,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    begin
       declare
          Service_Name : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String (Svc_Read_Match);
+           Interfaces.C.Strings.New_String (Svc_Matching_Objects_Read_Match);
          Type_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Content_Type);
          Port : Pcl_Bindings.Pcl_Port_Access;
@@ -451,14 +451,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
            (Container    => Container,
             Service_Name => Service_Name,
             Type_Name    => Type_Name,
-            Handler      => Service_Read_Match'Access,
+            Handler      => Service_Matching_Objects_Read_Match'Access,
             User_Data    => Handler_Ptr);
          Interfaces.C.Strings.Free (Service_Name);
          Interfaces.C.Strings.Free (Type_Name);
       end;
       declare
          Service_Name : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String (Svc_Create_Requirement);
+           Interfaces.C.Strings.New_String (Svc_Object_Of_Interest_Create_Requirement);
          Type_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Content_Type);
          Port : Pcl_Bindings.Pcl_Port_Access;
@@ -468,14 +468,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
            (Container    => Container,
             Service_Name => Service_Name,
             Type_Name    => Type_Name,
-            Handler      => Service_Create_Requirement'Access,
+            Handler      => Service_Object_Of_Interest_Create_Requirement'Access,
             User_Data    => Handler_Ptr);
          Interfaces.C.Strings.Free (Service_Name);
          Interfaces.C.Strings.Free (Type_Name);
       end;
       declare
          Service_Name : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String (Svc_Read_Requirement);
+           Interfaces.C.Strings.New_String (Svc_Object_Of_Interest_Read_Requirement);
          Type_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Content_Type);
          Port : Pcl_Bindings.Pcl_Port_Access;
@@ -485,14 +485,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
            (Container    => Container,
             Service_Name => Service_Name,
             Type_Name    => Type_Name,
-            Handler      => Service_Read_Requirement'Access,
+            Handler      => Service_Object_Of_Interest_Read_Requirement'Access,
             User_Data    => Handler_Ptr);
          Interfaces.C.Strings.Free (Service_Name);
          Interfaces.C.Strings.Free (Type_Name);
       end;
       declare
          Service_Name : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String (Svc_Update_Requirement);
+           Interfaces.C.Strings.New_String (Svc_Object_Of_Interest_Update_Requirement);
          Type_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Content_Type);
          Port : Pcl_Bindings.Pcl_Port_Access;
@@ -502,14 +502,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
            (Container    => Container,
             Service_Name => Service_Name,
             Type_Name    => Type_Name,
-            Handler      => Service_Update_Requirement'Access,
+            Handler      => Service_Object_Of_Interest_Update_Requirement'Access,
             User_Data    => Handler_Ptr);
          Interfaces.C.Strings.Free (Service_Name);
          Interfaces.C.Strings.Free (Type_Name);
       end;
       declare
          Service_Name : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String (Svc_Delete_Requirement);
+           Interfaces.C.Strings.New_String (Svc_Object_Of_Interest_Delete_Requirement);
          Type_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Content_Type);
          Port : Pcl_Bindings.Pcl_Port_Access;
@@ -519,14 +519,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
            (Container    => Container,
             Service_Name => Service_Name,
             Type_Name    => Type_Name,
-            Handler      => Service_Delete_Requirement'Access,
+            Handler      => Service_Object_Of_Interest_Delete_Requirement'Access,
             User_Data    => Handler_Ptr);
          Interfaces.C.Strings.Free (Service_Name);
          Interfaces.C.Strings.Free (Type_Name);
       end;
       declare
          Service_Name : Interfaces.C.Strings.chars_ptr :=
-           Interfaces.C.Strings.New_String (Svc_Read_Detail);
+           Interfaces.C.Strings.New_String (Svc_Specific_Object_Detail_Read_Detail);
          Type_Name : Interfaces.C.Strings.chars_ptr :=
            Interfaces.C.Strings.New_String (Content_Type);
          Port : Pcl_Bindings.Pcl_Port_Access;
@@ -536,14 +536,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
            (Container    => Container,
             Service_Name => Service_Name,
             Type_Name    => Type_Name,
-            Handler      => Service_Read_Detail'Access,
+            Handler      => Service_Specific_Object_Detail_Read_Detail'Access,
             User_Data    => Handler_Ptr);
          Interfaces.C.Strings.Free (Service_Name);
          Interfaces.C.Strings.Free (Type_Name);
       end;
    end Register_Services;
 
-   function Service_Read_Match
+   function Service_Matching_Objects_Read_Match
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
@@ -562,7 +562,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    begin
       Dispatch
         (Handlers      => Handlers_Ptr,
-         Channel       => Ch_Read_Match,
+         Channel       => Ch_Matching_Objects_Read_Match,
          Request_Buf   => Request.Data,
          Request_Size  => Natural (Request.Size),
          Content_Type  => Req_Type,
@@ -579,9 +579,9 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Response.Size := 0;
          Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
          return Pcl_Bindings.PCL_ERR_INVALID;
-   end Service_Read_Match;
+   end Service_Matching_Objects_Read_Match;
 
-   function Service_Create_Requirement
+   function Service_Object_Of_Interest_Create_Requirement
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
@@ -600,7 +600,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    begin
       Dispatch
         (Handlers      => Handlers_Ptr,
-         Channel       => Ch_Create_Requirement,
+         Channel       => Ch_Object_Of_Interest_Create_Requirement,
          Request_Buf   => Request.Data,
          Request_Size  => Natural (Request.Size),
          Content_Type  => Req_Type,
@@ -617,9 +617,9 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Response.Size := 0;
          Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
          return Pcl_Bindings.PCL_ERR_INVALID;
-   end Service_Create_Requirement;
+   end Service_Object_Of_Interest_Create_Requirement;
 
-   function Service_Read_Requirement
+   function Service_Object_Of_Interest_Read_Requirement
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
@@ -638,7 +638,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    begin
       Dispatch
         (Handlers      => Handlers_Ptr,
-         Channel       => Ch_Read_Requirement,
+         Channel       => Ch_Object_Of_Interest_Read_Requirement,
          Request_Buf   => Request.Data,
          Request_Size  => Natural (Request.Size),
          Content_Type  => Req_Type,
@@ -655,9 +655,9 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Response.Size := 0;
          Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
          return Pcl_Bindings.PCL_ERR_INVALID;
-   end Service_Read_Requirement;
+   end Service_Object_Of_Interest_Read_Requirement;
 
-   function Service_Update_Requirement
+   function Service_Object_Of_Interest_Update_Requirement
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
@@ -676,7 +676,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    begin
       Dispatch
         (Handlers      => Handlers_Ptr,
-         Channel       => Ch_Update_Requirement,
+         Channel       => Ch_Object_Of_Interest_Update_Requirement,
          Request_Buf   => Request.Data,
          Request_Size  => Natural (Request.Size),
          Content_Type  => Req_Type,
@@ -693,9 +693,9 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Response.Size := 0;
          Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
          return Pcl_Bindings.PCL_ERR_INVALID;
-   end Service_Update_Requirement;
+   end Service_Object_Of_Interest_Update_Requirement;
 
-   function Service_Delete_Requirement
+   function Service_Object_Of_Interest_Delete_Requirement
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
@@ -714,7 +714,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    begin
       Dispatch
         (Handlers      => Handlers_Ptr,
-         Channel       => Ch_Delete_Requirement,
+         Channel       => Ch_Object_Of_Interest_Delete_Requirement,
          Request_Buf   => Request.Data,
          Request_Size  => Natural (Request.Size),
          Content_Type  => Req_Type,
@@ -731,9 +731,9 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Response.Size := 0;
          Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
          return Pcl_Bindings.PCL_ERR_INVALID;
-   end Service_Delete_Requirement;
+   end Service_Object_Of_Interest_Delete_Requirement;
 
-   function Service_Read_Detail
+   function Service_Specific_Object_Detail_Read_Detail
      (Self      : Pcl_Bindings.Pcl_Container_Access;
       Request   : access constant Pcl_Bindings.Pcl_Msg;
       Response  : access Pcl_Bindings.Pcl_Msg;
@@ -752,7 +752,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
    begin
       Dispatch
         (Handlers      => Handlers_Ptr,
-         Channel       => Ch_Read_Detail,
+         Channel       => Ch_Specific_Object_Detail_Read_Detail,
          Request_Buf   => Request.Data,
          Request_Size  => Natural (Request.Size),
          Content_Type  => Req_Type,
@@ -769,7 +769,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
          Response.Size := 0;
          Response.Type_Name := Interfaces.C.Strings.Null_Ptr;
          return Pcl_Bindings.PCL_ERR_INVALID;
-   end Service_Read_Detail;
+   end Service_Specific_Object_Detail_Read_Detail;
 
    --  -- PCL binding implementations -------------------------------
 
@@ -819,7 +819,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Interfaces.C.Strings.Free (Type_N);
    end Subscribe_Evidence_Requirements;
 
-   procedure Invoke_Read_Match
+   procedure Invoke_Matching_Objects_Read_Match
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
@@ -837,7 +837,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Svc_Read_Match);
+        Interfaces.C.Strings.New_String (Svc_Matching_Objects_Read_Match);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
@@ -860,9 +860,9 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       end if;
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
-   end Invoke_Read_Match;
+   end Invoke_Matching_Objects_Read_Match;
 
-   procedure Invoke_Create_Requirement
+   procedure Invoke_Object_Of_Interest_Create_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Object_Interest_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
@@ -880,7 +880,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Svc_Create_Requirement);
+        Interfaces.C.Strings.New_String (Svc_Object_Of_Interest_Create_Requirement);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
@@ -903,9 +903,9 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       end if;
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
-   end Invoke_Create_Requirement;
+   end Invoke_Object_Of_Interest_Create_Requirement;
 
-   procedure Invoke_Read_Requirement
+   procedure Invoke_Object_Of_Interest_Read_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
@@ -923,7 +923,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Svc_Read_Requirement);
+        Interfaces.C.Strings.New_String (Svc_Object_Of_Interest_Read_Requirement);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
@@ -946,9 +946,9 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       end if;
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
-   end Invoke_Read_Requirement;
+   end Invoke_Object_Of_Interest_Read_Requirement;
 
-   procedure Invoke_Update_Requirement
+   procedure Invoke_Object_Of_Interest_Update_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Object_Interest_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
@@ -966,7 +966,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Svc_Update_Requirement);
+        Interfaces.C.Strings.New_String (Svc_Object_Of_Interest_Update_Requirement);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
@@ -989,9 +989,9 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       end if;
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
-   end Invoke_Update_Requirement;
+   end Invoke_Object_Of_Interest_Update_Requirement;
 
-   procedure Invoke_Delete_Requirement
+   procedure Invoke_Object_Of_Interest_Delete_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Identifier;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
@@ -1009,7 +1009,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Svc_Delete_Requirement);
+        Interfaces.C.Strings.New_String (Svc_Object_Of_Interest_Delete_Requirement);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
@@ -1032,9 +1032,9 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       end if;
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
-   end Invoke_Delete_Requirement;
+   end Invoke_Object_Of_Interest_Delete_Requirement;
 
-   procedure Invoke_Read_Detail
+   procedure Invoke_Specific_Object_Detail_Read_Detail
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
@@ -1052,7 +1052,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Svc_Read_Detail);
+        Interfaces.C.Strings.New_String (Svc_Specific_Object_Detail_Read_Detail);
       Msg    : aliased Pcl_Bindings.Pcl_Msg;
       Status : Pcl_Bindings.Pcl_Status;
       pragma Unreferenced (Status);
@@ -1075,7 +1075,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       end if;
       Interfaces.C.Strings.Free (Svc_C);
       Interfaces.C.Strings.Free (Msg.Type_Name);
-   end Invoke_Read_Detail;
+   end Invoke_Specific_Object_Detail_Read_Detail;
 
    procedure Copy_To_Buf
      (S    : in  String;
@@ -1104,7 +1104,7 @@ package body Pyramid.Services.Tactical_Objects.Provided is
       Response_Buf  := System.Null_Address;
       Response_Size := 0;
       case Channel is
-         when Ch_Read_Match =>
+         when Ch_Matching_Objects_Read_Match =>
             declare
                Req : constant Query :=
                  (if Content_Type = "" or else Content_Type = "application/json"
@@ -1113,15 +1113,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
                   then Flatbuffers_Codec.From_Binary_Query (Request_Payload, null)
                   else raise Constraint_Error with "Unsupported content type: " & Content_Type);
                Rsp : constant Object_Match_Array :=
-                 (if Handlers /= null and then Handlers.On_Read_Match /= null
-                  then Handlers.On_Read_Match.all (Req)
-                  else Default_Handle_Read_Match (Req));
+                 (if Handlers /= null and then Handlers.On_Matching_Objects_Read_Match /= null
+                  then Handlers.On_Matching_Objects_Read_Match.all (Req)
+                  else Default_Handle_Matching_Objects_Read_Match (Req));
             begin
                declare
                   use Ada.Strings.Unbounded;
                   Acc : Unbounded_String :=
                     To_Unbounded_String ("[");
-                  Json_Response : String := "";
                begin
                   for I in Rsp'Range loop
                      if I > Rsp'First then
@@ -1130,17 +1129,16 @@ package body Pyramid.Services.Tactical_Objects.Provided is
                      Append (Acc, To_Json (Rsp (I)));
                   end loop;
                   Append (Acc, "]");
-                  Json_Response := To_String (Acc);
                   Copy_To_Buf
                     ((if Content_Type = "" or else Content_Type = "application/json"
-                      then Json_Response
+                      then To_String (Acc)
                       elsif Content_Type = "application/flatbuffers"
-                      then Flatbuffers_Codec.To_Binary_Object_Match_Array (Json_Response)
+                      then Flatbuffers_Codec.To_Binary_Object_Match_Array (To_String (Acc))
                       else raise Constraint_Error with "Unsupported content type: " & Content_Type),
                     Response_Buf, Response_Size);
                end;
             end;
-         when Ch_Create_Requirement =>
+         when Ch_Object_Of_Interest_Create_Requirement =>
             declare
                Req : constant Object_Interest_Requirement :=
                  (if Content_Type = "" or else Content_Type = "application/json"
@@ -1149,23 +1147,23 @@ package body Pyramid.Services.Tactical_Objects.Provided is
                   then Flatbuffers_Codec.From_Binary_Object_Interest_Requirement (Request_Payload, null)
                   else raise Constraint_Error with "Unsupported content type: " & Content_Type);
                Rsp : Identifier;
-               Json_Response : String := "";
+               Json_Response : Unbounded_String := Null_Unbounded_String;
             begin
-               if Handlers /= null and then Handlers.On_Create_Requirement /= null then
-                  Handlers.On_Create_Requirement.all (Req, Rsp);
+               if Handlers /= null and then Handlers.On_Object_Of_Interest_Create_Requirement /= null then
+                  Handlers.On_Object_Of_Interest_Create_Requirement.all (Req, Rsp);
                else
-                  Default_Handle_Create_Requirement (Req, Rsp);
+                  Default_Handle_Object_Of_Interest_Create_Requirement (Req, Rsp);
                end if;
-               Json_Response := To_String (Rsp);
+               Json_Response := To_Unbounded_String (To_String (Rsp));
                Copy_To_Buf
                  ((if Content_Type = "" or else Content_Type = "application/json"
-                   then Json_Response
+                   then To_String (Json_Response)
                    elsif Content_Type = "application/flatbuffers"
                    then Flatbuffers_Codec.To_Binary_Identifier (Rsp)
                    else raise Constraint_Error with "Unsupported content type: " & Content_Type),
                   Response_Buf, Response_Size);
             end;
-         when Ch_Read_Requirement =>
+         when Ch_Object_Of_Interest_Read_Requirement =>
             declare
                Req : constant Query :=
                  (if Content_Type = "" or else Content_Type = "application/json"
@@ -1174,15 +1172,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
                   then Flatbuffers_Codec.From_Binary_Query (Request_Payload, null)
                   else raise Constraint_Error with "Unsupported content type: " & Content_Type);
                Rsp : constant Object_Interest_Requirement_Array :=
-                 (if Handlers /= null and then Handlers.On_Read_Requirement /= null
-                  then Handlers.On_Read_Requirement.all (Req)
-                  else Default_Handle_Read_Requirement (Req));
+                 (if Handlers /= null and then Handlers.On_Object_Of_Interest_Read_Requirement /= null
+                  then Handlers.On_Object_Of_Interest_Read_Requirement.all (Req)
+                  else Default_Handle_Object_Of_Interest_Read_Requirement (Req));
             begin
                declare
                   use Ada.Strings.Unbounded;
                   Acc : Unbounded_String :=
                     To_Unbounded_String ("[");
-                  Json_Response : String := "";
                begin
                   for I in Rsp'Range loop
                      if I > Rsp'First then
@@ -1191,17 +1188,16 @@ package body Pyramid.Services.Tactical_Objects.Provided is
                      Append (Acc, To_Json (Rsp (I)));
                   end loop;
                   Append (Acc, "]");
-                  Json_Response := To_String (Acc);
                   Copy_To_Buf
                     ((if Content_Type = "" or else Content_Type = "application/json"
-                      then Json_Response
+                      then To_String (Acc)
                       elsif Content_Type = "application/flatbuffers"
-                      then Flatbuffers_Codec.To_Binary_Object_Interest_Requirement_Array (Json_Response)
+                      then Flatbuffers_Codec.To_Binary_Object_Interest_Requirement_Array (To_String (Acc))
                       else raise Constraint_Error with "Unsupported content type: " & Content_Type),
                     Response_Buf, Response_Size);
                end;
             end;
-         when Ch_Update_Requirement =>
+         when Ch_Object_Of_Interest_Update_Requirement =>
             declare
                Req : constant Object_Interest_Requirement :=
                  (if Content_Type = "" or else Content_Type = "application/json"
@@ -1210,23 +1206,23 @@ package body Pyramid.Services.Tactical_Objects.Provided is
                   then Flatbuffers_Codec.From_Binary_Object_Interest_Requirement (Request_Payload, null)
                   else raise Constraint_Error with "Unsupported content type: " & Content_Type);
                Rsp : Ack;
-               Json_Response : String := "";
+               Json_Response : Unbounded_String := Null_Unbounded_String;
             begin
-               if Handlers /= null and then Handlers.On_Update_Requirement /= null then
-                  Handlers.On_Update_Requirement.all (Req, Rsp);
+               if Handlers /= null and then Handlers.On_Object_Of_Interest_Update_Requirement /= null then
+                  Handlers.On_Object_Of_Interest_Update_Requirement.all (Req, Rsp);
                else
-                  Default_Handle_Update_Requirement (Req, Rsp);
+                  Default_Handle_Object_Of_Interest_Update_Requirement (Req, Rsp);
                end if;
-               Json_Response := To_Json (Rsp);
+               Json_Response := To_Unbounded_String (To_Json (Rsp));
                Copy_To_Buf
                  ((if Content_Type = "" or else Content_Type = "application/json"
-                   then Json_Response
+                   then To_String (Json_Response)
                    elsif Content_Type = "application/flatbuffers"
                    then Flatbuffers_Codec.To_Binary_Ack (Rsp)
                    else raise Constraint_Error with "Unsupported content type: " & Content_Type),
                   Response_Buf, Response_Size);
             end;
-         when Ch_Delete_Requirement =>
+         when Ch_Object_Of_Interest_Delete_Requirement =>
             declare
                Req : constant Identifier :=
                  (if Content_Type = "" or else Content_Type = "application/json"
@@ -1235,23 +1231,23 @@ package body Pyramid.Services.Tactical_Objects.Provided is
                   then Flatbuffers_Codec.From_Binary_Identifier (Request_Payload, null)
                   else raise Constraint_Error with "Unsupported content type: " & Content_Type);
                Rsp : Ack;
-               Json_Response : String := "";
+               Json_Response : Unbounded_String := Null_Unbounded_String;
             begin
-               if Handlers /= null and then Handlers.On_Delete_Requirement /= null then
-                  Handlers.On_Delete_Requirement.all (Req, Rsp);
+               if Handlers /= null and then Handlers.On_Object_Of_Interest_Delete_Requirement /= null then
+                  Handlers.On_Object_Of_Interest_Delete_Requirement.all (Req, Rsp);
                else
-                  Default_Handle_Delete_Requirement (Req, Rsp);
+                  Default_Handle_Object_Of_Interest_Delete_Requirement (Req, Rsp);
                end if;
-               Json_Response := To_Json (Rsp);
+               Json_Response := To_Unbounded_String (To_Json (Rsp));
                Copy_To_Buf
                  ((if Content_Type = "" or else Content_Type = "application/json"
-                   then Json_Response
+                   then To_String (Json_Response)
                    elsif Content_Type = "application/flatbuffers"
                    then Flatbuffers_Codec.To_Binary_Ack (Rsp)
                    else raise Constraint_Error with "Unsupported content type: " & Content_Type),
                   Response_Buf, Response_Size);
             end;
-         when Ch_Read_Detail =>
+         when Ch_Specific_Object_Detail_Read_Detail =>
             declare
                Req : constant Query :=
                  (if Content_Type = "" or else Content_Type = "application/json"
@@ -1260,15 +1256,14 @@ package body Pyramid.Services.Tactical_Objects.Provided is
                   then Flatbuffers_Codec.From_Binary_Query (Request_Payload, null)
                   else raise Constraint_Error with "Unsupported content type: " & Content_Type);
                Rsp : constant Object_Detail_Array :=
-                 (if Handlers /= null and then Handlers.On_Read_Detail /= null
-                  then Handlers.On_Read_Detail.all (Req)
-                  else Default_Handle_Read_Detail (Req));
+                 (if Handlers /= null and then Handlers.On_Specific_Object_Detail_Read_Detail /= null
+                  then Handlers.On_Specific_Object_Detail_Read_Detail.all (Req)
+                  else Default_Handle_Specific_Object_Detail_Read_Detail (Req));
             begin
                declare
                   use Ada.Strings.Unbounded;
                   Acc : Unbounded_String :=
                     To_Unbounded_String ("[");
-                  Json_Response : String := "";
                begin
                   for I in Rsp'Range loop
                      if I > Rsp'First then
@@ -1277,12 +1272,11 @@ package body Pyramid.Services.Tactical_Objects.Provided is
                      Append (Acc, To_Json (Rsp (I)));
                   end loop;
                   Append (Acc, "]");
-                  Json_Response := To_String (Acc);
                   Copy_To_Buf
                     ((if Content_Type = "" or else Content_Type = "application/json"
-                      then Json_Response
+                      then To_String (Acc)
                       elsif Content_Type = "application/flatbuffers"
-                      then Flatbuffers_Codec.To_Binary_Object_Detail_Array (Json_Response)
+                      then Flatbuffers_Codec.To_Binary_Object_Detail_Array (To_String (Acc))
                       else raise Constraint_Error with "Unsupported content type: " & Content_Type),
                     Response_Buf, Response_Size);
                end;

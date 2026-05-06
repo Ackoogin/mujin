@@ -1,0 +1,15 @@
+// Auto-generated FlatBuffers schema from pyramid.data_model.sensorproducts.proto
+// Do not edit -- regenerate from proto source
+
+include "pyramid_data_model_common.fbs";
+
+namespace pyramid.data_model.sensorproducts;
+
+table RadarDisplayProductRequirement {
+  base:pyramid.data_model.common.Requirement;
+}
+
+table RadarProductRequirement {
+  base:pyramid.data_model.common.Requirement;
+}
+

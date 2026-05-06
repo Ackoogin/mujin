@@ -199,13 +199,14 @@ int main(int argc, char* argv[]) {
   request.point->position.latitude = 50.0 * 0.017453292519943295;
   request.point->position.longitude = -1.0 * 0.017453292519943295;
 
-  const pcl_status_t invoke_rc = Provided::invokeCreateRequirement(
+  const pcl_status_t invoke_rc =
+      Provided::invokeObjectOfInterestCreateRequirement(
       exec, request, onCreateRequirementResponse, &state, nullptr,
       state.content_type.c_str());
   if (invoke_rc != PCL_OK) {
     std::fprintf(stderr,
                  "[tactical_objects_test_client] Failed to invoke %s\n",
-                 Provided::kSvcCreateRequirement);
+                 Provided::kSvcObjectOfInterestCreateRequirement);
     pcl_socket_transport_destroy(transport);
     pcl_executor_destroy(exec);
     pcl_container_destroy(container);

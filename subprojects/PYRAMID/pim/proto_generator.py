@@ -38,24 +38,9 @@ class ProtobufGenerator:
                 ('string', 'value', 1, 'UUID string representation (e.g., "550e8400-e29b-41d4-a716-446655440000")')
             ]
         },
-        'Query': {
-            'comment': 'EntityActions query scope',
-            'fields': [
-                ('repeated Identifier', 'id', 1, 'Filter by specific IDs; empty = all'),
-                ('bool', 'one_shot', 2, 'true = single response; false = continuous stream'),
-            ]
-        },
-        'Ack': {
-            'comment': 'EntityActions acknowledgment',
-            'fields': [
-                ('bool', 'success', 1, 'Operation success/failure'),
-            ]
-        },
         'Timestamp': {
-            'comment': 'Point in time (epoch milliseconds)',
-            'fields': [
-                ('int64', 'epoch_ms', 1, 'Milliseconds since Unix epoch'),
-            ]
+            'comment': 'Point in time (uses google.protobuf.Timestamp)',
+            'use_google_timestamp': True  # Special flag to use google timestamp directly
         },
         'Angle': {
             'comment': 'Angular measurement in radians (SI unit)',
@@ -99,7 +84,10 @@ class ProtobufGenerator:
         self.field_counter = 1  # Protobuf field numbers start at 1
         
         # Build a complete type-to-package map for qualified names
-        self.type_to_package = {}
+        self.type_to_package = {}  # Backward-compatible name -> package map
+        self.type_id_to_package = {}
+        self.type_id_to_name = {}
+        self.name_to_ids = {}
         self._build_type_package_map()
     
     def _build_type_package_map(self):
@@ -109,12 +97,42 @@ class ProtobufGenerator:
             pkg = 'pyramid.' + '.'.join(sanitized) if sanitized else 'pyramid.model'
             
             for dt in namespace_types['dataTypes']:
-                self.type_to_package[dt['name']] = pkg
+                self._register_type(dt, pkg)
             for enum in namespace_types['enumerations']:
-                self.type_to_package[enum['name']] = pkg
+                self._register_type(enum, pkg)
             for cls in namespace_types['classes']:
-                self.type_to_package[cls['name']] = pkg
+                self._register_type(cls, pkg)
         
+    def _register_type(self, type_def: Dict[str, Any], pkg: str):
+        """Register a type by UUID/XMI id first, with name lookup as a fallback."""
+        name = type_def.get('name')
+        type_id = type_def.get('id')
+        if not name:
+            return
+
+        if type_id:
+            self.type_id_to_package[type_id] = pkg
+            self.type_id_to_name[type_id] = name
+            self.name_to_ids.setdefault(name, set()).add(type_id)
+
+        # Preserve old behavior for models that do not carry ids. If duplicate names exist,
+        # UUID-based lookup remains authoritative via typeId/generalizesIds.
+        self.type_to_package.setdefault(name, pkg)
+
+    def _type_name(self, ref: Optional[str]) -> Optional[str]:
+        """Return the display/type name for a UUID/XMI id or already-resolved name."""
+        if not ref:
+            return ref
+        return self.type_id_to_name.get(ref, ref)
+
+    def _prop_type_ref(self, prop: Dict[str, Any]) -> Optional[str]:
+        """Prefer the original UUID/XMI type reference; fall back to resolved name."""
+        return prop.get('typeId') or prop.get('type') or prop.get('typeName')
+
+    def _generalization_refs(self, element: Dict[str, Any]) -> List[str]:
+        """Prefer original generalization UUID/XMI refs; fall back to names."""
+        return element.get('generalizesIds') or element.get('generalizes', [])
+
     def generate(self):
         """Generate all .proto files from the model"""
         print(f"Generating protobuf files in {self.output_dir}/")
@@ -126,7 +144,7 @@ class ProtobufGenerator:
         for namespace_path, types in types_by_namespace.items():
             self._generate_proto_file(namespace_path, types)
         
-        print(f"[x] Generated {len(types_by_namespace)} .proto files")
+        print(f"? Generated {len(types_by_namespace)} .proto files")
     
     def _group_by_namespace(self) -> Dict[tuple, Dict[str, List]]:
         """Group all types by their namespace, combining consumed/provided into components"""
@@ -267,13 +285,11 @@ class ProtobufGenerator:
             # Add imports
             imports = []
             
-            # Add pyramid.base import if services use Identifier
-            if google_imports['base_for_identifier']:
-                # Check if Identifier is not in current package
-                if 'Identifier' in self.type_to_package and self.type_to_package['Identifier'] != package_name:
-                    imports.append(
-                        f'import "{self._proto_relpath_for_package(self.type_to_package["Identifier"]).as_posix()}";'
-                    )
+            # Add google protobuf imports if needed
+            if google_imports['timestamp']:
+                imports.append('import "google/protobuf/timestamp.proto";')
+            if google_imports['empty']:
+                imports.append('import "google/protobuf/empty.proto";')
             
             # Add imports for types from other packages
             type_imports = self._collect_imports(types, package_name)
@@ -319,23 +335,29 @@ class ProtobufGenerator:
             pkg = 'pyramid.' + '.'.join(sanitized) if sanitized else 'pyramid.model'
             
             for dt in namespace_types['dataTypes']:
-                type_to_package[dt['name']] = pkg
+                if dt.get('id'):
+                    type_to_package[dt['id']] = pkg
+                type_to_package.setdefault(dt['name'], pkg)
             for enum in namespace_types['enumerations']:
-                type_to_package[enum['name']] = pkg
+                if enum.get('id'):
+                    type_to_package[enum['id']] = pkg
+                type_to_package.setdefault(enum['name'], pkg)
             for cls in namespace_types['classes']:
-                type_to_package[cls['name']] = pkg
+                if cls.get('id'):
+                    type_to_package[cls['id']] = pkg
+                type_to_package.setdefault(cls['name'], pkg)
         
         # Check data types for external references
         for dt in types['dataTypes']:
             for prop in dt.get('properties', []):
-                type_name = prop.get('typeName')
+                type_name = self._prop_type_ref(prop)
                 if type_name and type_name in type_to_package:
                     ref_package = type_to_package[type_name]
                     if ref_package != package_name:
                         imports.add(self._proto_relpath_for_package(ref_package).as_posix())
             
             # Check parent types
-            for parent in dt.get('generalizes', []):
+            for parent in self._generalization_refs(dt):
                 if parent in type_to_package:
                     ref_package = type_to_package[parent]
                     if ref_package != package_name:
@@ -344,21 +366,21 @@ class ProtobufGenerator:
         # Check classes for external references
         for cls in types['classes']:
             for prop in cls.get('properties', []):
-                type_name = prop.get('typeName')
+                type_name = self._prop_type_ref(prop)
                 if type_name and type_name in type_to_package:
                     ref_package = type_to_package[type_name]
                     if ref_package != package_name:
                         imports.add(self._proto_relpath_for_package(ref_package).as_posix())
             
             # Check parent types - only import if they have non-entity properties
-            for parent in cls.get('generalizes', []):
+            for parent in self._generalization_refs(cls):
                 if parent in type_to_package:
                     # Check if parent has non-entity properties before importing
                     if self._type_has_non_entity_properties(parent):
                         ref_package = type_to_package[parent]
                         if ref_package != package_name:
                             imports.add(self._proto_relpath_for_package(ref_package).as_posix())
-
+        
         # Service generation introduces RPC signature dependencies that are not
         # present as ordinary message fields. In particular EntityActions
         # services synthesize Query/Ack/Identifier plus inherited entity
@@ -388,7 +410,7 @@ class ProtobufGenerator:
                         imports.add(self._proto_relpath_for_package(ref_package).as_posix())
 
         return sorted(imports)
-
+    
     def _proto_relpath_for_package(self, package_name: str) -> Path:
         """Map a proto package to the repo's foldered proto layout."""
         parts = package_name.split('.')
@@ -398,16 +420,28 @@ class ProtobufGenerator:
     
     def _needs_google_imports(self, types: Dict[str, List]) -> Dict[str, bool]:
         """Check which google protobuf imports are needed"""
-        needs = {'timestamp': False, 'base_for_identifier': False}
-
-        # No google.protobuf.Empty -- EntityActions uses Ack instead
-
+        needs = {'timestamp': False, 'empty': False, 'base_for_identifier': False}
+        
+        # Check if Timestamp base type is in this file (needs google import)
+        for dt in types['dataTypes']:
+            if dt['name'] == 'Timestamp':
+                needs['timestamp'] = True
+        
+        # Check for Timestamp usage in properties
+        for dt in types['dataTypes']:
+            for prop in dt.get('properties', []):
+                if self._type_name(self._prop_type_ref(prop)) == 'Timestamp':
+                    needs['timestamp'] = True
         for cls in types['classes']:
             for prop in cls.get('properties', []):
-                type_name = prop.get('typeName')
+                if self._type_name(self._prop_type_ref(prop)) == 'Timestamp':
+                    needs['timestamp'] = True
+                # Check if property is entity-derived (will generate service with Empty and Identifier)
+                type_name = self._prop_type_ref(prop)
                 if type_name and self._is_entity_derived(type_name):
+                    needs['empty'] = True
                     needs['base_for_identifier'] = True
-
+        
         return needs
     
     def _write_enum(self, f, enum: Dict[str, Any]):
@@ -487,7 +521,7 @@ class ProtobufGenerator:
         f.write(f'message {name} {{\n')
         
         # Handle inheritance using composition
-        generalizes = datatype.get('generalizes', [])
+        generalizes = self._generalization_refs(datatype)
         field_num = 1
         
         if generalizes:
@@ -499,14 +533,14 @@ class ProtobufGenerator:
                 if parent_has_properties:
                     # Qualify parent type if from different package
                     qualified_parent = self._get_qualified_type(parent_name, current_package)
-                    f.write(f'  {qualified_parent} base = {field_num};  // Inherited from {parent_name}\n')
+                    f.write(f'  {qualified_parent} base = {field_num};  // Inherited from {self._type_name(parent_name)}\n')
                     field_num += 1
             if datatype.get('properties') and field_num > 1:
                 f.write('\n')  # Blank line between base and own fields only if base was written
         
         # Write own fields
         for prop in datatype.get('properties', []):
-            type_name = prop.get('typeName')
+            type_name = self._prop_type_ref(prop)
             field_name = self._to_snake_case(prop['name'])
             
             # Check if property type is abstract - generate oneof
@@ -557,7 +591,7 @@ class ProtobufGenerator:
         all_entity_props = []
         
         # First collect from parent classes (depth-first)
-        for parent_name in cls.get('generalizes', []):
+        for parent_name in self._generalization_refs(cls):
             parent_class = self._find_class_by_name(parent_name)
             if parent_class:
                 # Recursively collect from parent
@@ -566,7 +600,7 @@ class ProtobufGenerator:
         
         # Then add this class's entity properties
         for prop in cls.get('properties', []):
-            type_name = prop.get('typeName')
+            type_name = self._prop_type_ref(prop)
             if type_name and self._is_entity_derived(type_name):
                 all_entity_props.append({
                     'name': self._to_snake_case(prop['name']),
@@ -585,23 +619,22 @@ class ProtobufGenerator:
         
         # Check this class's properties
         for prop in cls.get('properties', []):
-            type_name = prop.get('typeName')
+            type_name = self._prop_type_ref(prop)
             if not (type_name and self._is_entity_derived(type_name)):
                 # Found a non-entity property
                 return True
         
         # Recursively check parents
-        for parent_name in cls.get('generalizes', []):
+        for parent_name in self._generalization_refs(cls):
             if self._class_has_non_entity_content(parent_name):
                 return True
         
         return False
     
     def _find_class_by_name(self, class_name: str) -> Optional[Dict]:
-        """Find a class definition by name"""
-        # Search through all classes in the model
+        """Find a class definition by UUID/XMI id or, for legacy JSON, by name."""
         for cls in self.model.get('classes', []):
-            if cls['name'] == class_name:
+            if cls.get('id') == class_name or cls.get('name') == class_name:
                 return cls
         return None
     
@@ -621,7 +654,7 @@ class ProtobufGenerator:
         non_entity_properties = []
         
         for prop in cls.get('properties', []):
-            type_name = prop.get('typeName')
+            type_name = self._prop_type_ref(prop)
             if type_name and self._is_entity_derived(type_name):
                 entity_properties.append({
                     'name': self._to_snake_case(prop['name']),
@@ -637,7 +670,7 @@ class ProtobufGenerator:
         
         # Check if any parent has non-entity content
         parent_has_non_entity = False
-        for parent_name in cls.get('generalizes', []):
+        for parent_name in self._generalization_refs(cls):
             if self._class_has_non_entity_content(parent_name):
                 parent_has_non_entity = True
                 break
@@ -650,7 +683,7 @@ class ProtobufGenerator:
         # If skipping message, just generate service
         if skip_message:
             self._write_grpc_service(f, name, all_entity_properties, current_package)
-            return True  # Service was written, counts as content
+            return True
         
         # Write service type indicator
         if service_type in ['provided', 'consumed']:
@@ -667,7 +700,7 @@ class ProtobufGenerator:
         f.write(f'message {name} {{\n')
         
         # Handle inheritance using composition
-        generalizes = cls.get('generalizes', [])
+        generalizes = self._generalization_refs(cls)
         field_num = 1
         
         if generalizes:
@@ -678,14 +711,14 @@ class ProtobufGenerator:
                 parent_has_non_entity_properties = self._type_has_non_entity_properties(parent_name)
                 if parent_has_non_entity_properties:
                     qualified_parent = self._get_qualified_type(parent_name, current_package)
-                    f.write(f'  {qualified_parent} base = {field_num};  // Inherited from {parent_name}\n')
+                    f.write(f'  {qualified_parent} base = {field_num};  // Inherited from {self._type_name(parent_name)}\n')
                     field_num += 1
             if cls.get('properties') and field_num > 1:
                 f.write('\n')  # Blank line between base and own fields only if base was written
         
         # Write only non-entity fields (entity fields become service operations)
         for prop in non_entity_properties:
-            type_name = prop.get('typeName')
+            type_name = self._prop_type_ref(prop)
             field_name = self._to_snake_case(prop['name'])
             
             # Check if property type is abstract - generate oneof
@@ -746,9 +779,9 @@ class ProtobufGenerator:
         # Search through all data types to see if this type derives from Entity
         for namespace_types in self._group_by_namespace().values():
             for dt in namespace_types['dataTypes']:
-                if dt['name'] == type_name:
-                    generalizes = dt.get('generalizes', [])
-                    if 'Entity' in generalizes:
+                if dt.get('id') == type_name or dt['name'] == self._type_name(type_name):
+                    generalizes = self._generalization_refs(dt)
+                    if any(self._type_name(g) == 'Entity' for g in generalizes):
                         return True
                     # Recursively check parent types
                     for parent in generalizes:
@@ -756,59 +789,82 @@ class ProtobufGenerator:
                             return True
             # Also check classes
             for cls in namespace_types['classes']:
-                if cls['name'] == type_name:
-                    generalizes = cls.get('generalizes', [])
-                    if 'Entity' in generalizes:
+                if cls.get('id') == type_name or cls['name'] == self._type_name(type_name):
+                    generalizes = self._generalization_refs(cls)
+                    if any(self._type_name(g) == 'Entity' for g in generalizes):
                         return True
                     for parent in generalizes:
                         if self._is_entity_derived(parent):
                             return True
         return False
     
-    def _write_entity_service(self, f, service_name: str, entity_properties: List[Dict], current_package: str):
-        """Generate EntityActions service definition for entity-derived properties.
-
-        Produces Create/Read/Update/Delete RPCs with correct EntityActions signatures.
-        This is a semantic contract consumed by codex generators -- not a gRPC endpoint.
-        """
-        f.write(f'// EntityActions Service for {service_name}\n')
+    def _write_grpc_service(self, f, service_name: str, entity_properties: List[Dict], current_package: str):
+        """Generate gRPC service definition for entity-derived properties"""
+        f.write(f'// gRPC Service for {service_name}\n')
         f.write(f'service {service_name}_Service {{\n')
-
+        
         for prop in entity_properties:
             prop_name = prop['name']
             prop_type = prop['type']
+            # Qualify the property type if from different package
             qualified_type = self._get_qualified_type(prop_type, current_package)
             flow_direction = prop.get('flow_direction', 'inout')
-
+            
+            # Get qualified Identifier type
             qualified_identifier = self._get_qualified_type('Identifier', current_package)
             qualified_query = self._get_qualified_type('Query', current_package)
-            qualified_ack = self._get_qualified_type('Ack', current_package)
-
+            qualified_ack = self._get_qualified_type('Ack', current_package)            
+            
+            # CamelCase the property name for RPC method names
             prop_camel = ''.join(word.capitalize() for word in prop_name.split('_'))
-
-            # inout -> full CRUD
-            # out   -> Read only
-            # in    -> Create + Update + Delete (no Read)
-
+            
+            # Determine operations based on flow direction
+            # inout = full CRUD
+            # out = read only
+            # in = write only (create, update, delete)
+            
+            # Generate operations based on flow direction and EntityActions semantics
             if flow_direction == 'inout' or flow_direction is None:
-                f.write(f'  rpc Create{prop_camel} ({qualified_type}) returns ({qualified_identifier});\n')
-                f.write(f'  rpc Read{prop_camel}   ({qualified_query}) returns (stream {qualified_type});\n')
-                f.write(f'  rpc Update{prop_camel} ({qualified_type}) returns ({qualified_ack});\n')
-                f.write(f'  rpc Delete{prop_camel} ({qualified_identifier}) returns ({qualified_ack});\n')
+                # Full CRUD using EntityActions semantics
+                f.write(f'  // Create {prop_name}\n')
+                f.write(f'  rpc Create{prop_camel}({qualified_type}) returns ({qualified_identifier});\n')
+                f.write(f'  \n')
+                
+                f.write(f'  // Read {prop_name}\n')
+                f.write(f'  rpc Read{prop_camel}({qualified_query}) returns (stream {qualified_type});\n')
+                f.write(f'  \n')
+                
+                f.write(f'  // Update {prop_name}\n')
+                f.write(f'  rpc Update{prop_camel}({qualified_type}) returns ({qualified_ack});\n')
+                f.write(f'  \n')
+                
+                f.write(f'  // Delete {prop_name}\n')
+                f.write(f'  rpc Delete{prop_camel}({qualified_identifier}) returns ({qualified_ack});\n')
+                
             elif flow_direction == 'out':
-                f.write(f'  rpc Read{prop_camel} ({qualified_query}) returns (stream {qualified_type});\n')
+                # Read operations only
+                f.write(f'  // Read {prop_name} (output only)\n')
+                f.write(f'  rpc Read{prop_camel}({qualified_query}) returns (stream {qualified_type});\n')
+                
             elif flow_direction == 'in':
-                f.write(f'  rpc Create{prop_camel} ({qualified_type}) returns ({qualified_identifier});\n')
-                f.write(f'  rpc Update{prop_camel} ({qualified_type}) returns ({qualified_ack});\n')
-                f.write(f'  rpc Delete{prop_camel} ({qualified_identifier}) returns ({qualified_ack});\n')
-
+                # Write operations only
+                f.write(f'  // Create {prop_name} (input only)\n')
+                f.write(f'  rpc Create{prop_camel}({qualified_type}) returns ({qualified_identifier});\n')
+                f.write(f'  \n')
+                
+                f.write(f'  // Update {prop_name} (input only)\n')
+                f.write(f'  rpc Update{prop_camel}({qualified_type}) returns ({qualified_ack});\n')
+                f.write(f'  \n')
+                
+                f.write(f'  // Delete {prop_name} (input only)\n')
+                f.write(f'  rpc Delete{prop_camel}({qualified_identifier}) returns ({qualified_ack});\n')
+        
+            
+            # Add blank line between properties
             if entity_properties.index(prop) < len(entity_properties) - 1:
                 f.write('\n')
-
+        
         f.write('}\n')
-
-    # Keep old name as alias so callers that weren't updated still work
-    _write_grpc_service = _write_entity_service
     
     def _map_type(self, sysml_type: str) -> str:
         """Map SysML type to protobuf type"""
@@ -823,38 +879,46 @@ class ProtobufGenerator:
         return sysml_type
     
     def _get_qualified_type(self, type_name: str, current_package: str) -> str:
-        """Get fully qualified type name if type is from different package"""
+        """Get fully qualified type name, resolving UUID/XMI ids before name fallback."""
         if not type_name:
             return 'int32'
-        
+
+        original_ref = type_name
+        resolved_name = self._type_name(type_name)
+
         # Check if it's a mapped type
-        if type_name in self.TYPE_MAPPING:
-            mapped_type = self.TYPE_MAPPING[type_name]
+        if resolved_name in self.TYPE_MAPPING:
+            mapped_type = self.TYPE_MAPPING[resolved_name]
             # If mapped to a custom type (not a proto primitive), need to qualify it
             if mapped_type in self.type_to_package:
                 mapped_package = self.type_to_package[mapped_type]
                 if mapped_package != current_package:
                     return f'{mapped_package}.{mapped_type}'
             return mapped_type
-        
-        # Check if type is from another package
-        if type_name in self.type_to_package:
-            type_package = self.type_to_package[type_name]
+
+        # UUID/XMI id lookup is authoritative
+        if original_ref in self.type_id_to_package:
+            type_package = self.type_id_to_package[original_ref]
             if type_package != current_package:
-                # Need to qualify with package name
-                return f'{type_package}.{type_name}'
-        
-        # Same package or unknown - use unqualified name
-        return type_name
-    
+                return f'{type_package}.{resolved_name}'
+            return resolved_name
+
+        # Name lookup is retained for primitive hrefs/legacy JSON
+        if resolved_name in self.type_to_package:
+            type_package = self.type_to_package[resolved_name]
+            if type_package != current_package:
+                return f'{type_package}.{resolved_name}'
+
+        return resolved_name
+
     def _is_abstract(self, type_name: str) -> bool:
         """Check if a type is marked as abstract"""
         for namespace_types in self._group_by_namespace().values():
             for dt in namespace_types['dataTypes']:
-                if dt['name'] == type_name:
+                if dt.get('id') == type_name or dt['name'] == self._type_name(type_name):
                     return dt.get('isAbstract', False)
             for cls in namespace_types['classes']:
-                if cls['name'] == type_name:
+                if cls.get('id') == type_name or cls['name'] == self._type_name(type_name):
                     return cls.get('isAbstract', False)
         return False
     
@@ -863,11 +927,11 @@ class ProtobufGenerator:
         children = []
         for namespace_types in self._group_by_namespace().values():
             for dt in namespace_types['dataTypes']:
-                if abstract_type in dt.get('generalizes', []):
+                if abstract_type in dt.get('generalizes', []) or abstract_type in dt.get('generalizesIds', []):
                     if not dt.get('isAbstract', False):
                         children.append(dt['name'])
             for cls in namespace_types['classes']:
-                if abstract_type in cls.get('generalizes', []):
+                if abstract_type in cls.get('generalizes', []) or abstract_type in cls.get('generalizesIds', []):
                     if not cls.get('isAbstract', False):
                         children.append(cls['name'])
         return children
@@ -876,14 +940,14 @@ class ProtobufGenerator:
         """Check if a type has any non-entity properties defined"""
         for namespace_types in self._group_by_namespace().values():
             for dt in namespace_types['dataTypes']:
-                if dt['name'] == type_name:
+                if dt.get('id') == type_name or dt['name'] == self._type_name(type_name):
                     # DataTypes always have non-entity properties
                     return len(dt.get('properties', [])) > 0
             for cls in namespace_types['classes']:
-                if cls['name'] == type_name:
+                if cls.get('id') == type_name or cls['name'] == self._type_name(type_name):
                     # Check if has any non-entity properties
                     for prop in cls.get('properties', []):
-                        type_name_prop = prop.get('typeName')
+                        type_name_prop = self._prop_type_ref(prop)
                         if not (type_name_prop and self._is_entity_derived(type_name_prop)):
                             return True  # Has at least one non-entity property
                     return False
@@ -893,13 +957,13 @@ class ProtobufGenerator:
         """Check if a type has any non-entity properties defined"""
         for namespace_types in self._group_by_namespace().values():
             for dt in namespace_types['dataTypes']:
-                if dt['name'] == type_name:
+                if dt.get('id') == type_name or dt['name'] == self._type_name(type_name):
                     return len(dt.get('properties', [])) > 0
             for cls in namespace_types['classes']:
-                if cls['name'] == type_name:
+                if cls.get('id') == type_name or cls['name'] == self._type_name(type_name):
                     # Check if class has any non-entity properties
                     for prop in cls.get('properties', []):
-                        type_name_prop = prop.get('typeName')
+                        type_name_prop = self._prop_type_ref(prop)
                         if not (type_name_prop and self._is_entity_derived(type_name_prop)):
                             # Found a non-entity property
                             return True
@@ -939,7 +1003,7 @@ def main():
     generator = ProtobufGenerator(model, output_dir)
     generator.generate()
     
-    print(f"\n[x] Protobuf generation complete!")
+    print(f"\n? Protobuf generation complete!")
     print(f"  Output directory: {output_dir}/")
 
 

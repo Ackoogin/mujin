@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package pyramid.data_model.sensorproducts;
+
+import "pyramid/data_model/pyramid.data_model.common.proto";
+
+message RadarDisplayProductRequirement {
+  pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
+}
+
+message RadarProductRequirement {
+  pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
+}
+

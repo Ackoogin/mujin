@@ -134,6 +134,52 @@ def _service_wire_prefix(service_name: str) -> str:
     return _camel_to_lower_snake(name)
 
 
+def _service_cpp_prefix(service_name: str) -> str:
+    """Data_Provision_Dependency_Service -> DataProvisionDependency."""
+    name = service_name
+    if name.endswith('_Service'):
+        name = name[:-len('_Service')]
+    return ''.join(part.capitalize() for part in name.split('_') if part)
+
+
+def _duplicate_rpc_names(all_rpcs: List[tuple[str, 'ProtoRpc']]) -> set[str]:
+    counts: Dict[str, int] = {}
+    for _svc_name, rpc in all_rpcs:
+        counts[rpc.name] = counts.get(rpc.name, 0) + 1
+    return {name for name, count in counts.items() if count > 1}
+
+
+def _rpc_symbol_base(svc_name: str, rpc: 'ProtoRpc',
+                     duplicate_rpc_names: set[str]) -> str:
+    del duplicate_rpc_names
+    return _service_cpp_prefix(svc_name) + rpc.name
+
+
+def _rpc_handler_name(svc_name: str, rpc: 'ProtoRpc',
+                      duplicate_rpc_names: set[str]) -> str:
+    return f'handle{_rpc_symbol_base(svc_name, rpc, duplicate_rpc_names)}'
+
+
+def _rpc_enum_value(svc_name: str, rpc: 'ProtoRpc',
+                    duplicate_rpc_names: set[str]) -> str:
+    return _rpc_symbol_base(svc_name, rpc, duplicate_rpc_names)
+
+
+def _rpc_service_const(svc_name: str, rpc: 'ProtoRpc',
+                       duplicate_rpc_names: set[str]) -> str:
+    return f'kSvc{_rpc_symbol_base(svc_name, rpc, duplicate_rpc_names)}'
+
+
+def _rpc_invoke_func(svc_name: str, rpc: 'ProtoRpc',
+                     duplicate_rpc_names: set[str]) -> str:
+    return f'invoke{_rpc_symbol_base(svc_name, rpc, duplicate_rpc_names)}'
+
+
+def _rpc_decode_response_func(svc_name: str, rpc: 'ProtoRpc',
+                              duplicate_rpc_names: set[str]) -> str:
+    return f'decode{_rpc_symbol_base(svc_name, rpc, duplicate_rpc_names)}Response'
+
+
 # -- Proto model ---------------------------------------------------------------
 
 class ProtoRpc:
@@ -327,6 +373,41 @@ def _topics_for_proto(
     return topics_for_service(parsed.package, is_provided)
 
 
+def _data_model_package_for_type(full_type: str) -> str:
+    if not full_type.startswith(_DATA_MODEL_PROTO_ROOT + '.'):
+        return ''
+    if '.' not in full_type:
+        return ''
+    return full_type.rsplit('.', 1)[0]
+
+
+def _service_codec_imports(
+        data_model_files: List[ProtoFile],
+        all_rpcs: List[Tuple[str, ProtoRpc]],
+        topic_keys: List[str],
+) -> List[Tuple[str, str]]:
+    packages_with_messages = {
+        pf.package for pf in data_model_files
+        if pf.messages
+    }
+    packages_with_messages.discard('pyramid.data_model.base')
+    needed_packages = set()
+    for _svc_name, rpc in all_rpcs:
+        for full_type in (rpc.req, rpc.rsp):
+            package = _data_model_package_for_type(full_type)
+            if package in packages_with_messages:
+                needed_packages.add(package)
+    for key in topic_keys:
+        package = _data_model_package_for_type(topic_spec(key).full_type)
+        if package in packages_with_messages:
+            needed_packages.add(package)
+    return [
+        (_cpp_ns_for_proto_package(package),
+         f'{package.replace(".", "_")}_codec.hpp')
+        for package in sorted(needed_packages)
+    ]
+
+
 # -- Code generation -----------------------------------------------------------
 
 class CppServiceGenerator:
@@ -452,6 +533,7 @@ class CppServiceGenerator:
         all_topics = dict(sub_topics)
         all_topics.update(pub_topics)
         topic_set = all_topics
+        duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
 
         # Collect raw type names (no BASE_TYPE_MAP) for using declarations
         raw_types = sorted({
@@ -515,16 +597,20 @@ class CppServiceGenerator:
             f.write(_SEP + '\n\n')
 
             # Align '=' across all constant declarations
-            const_names = [rpc.cpp_svc_const
-                           for svc in parsed.services
-                           for rpc in svc.rpcs]
+            const_names = [
+                _rpc_service_const(svc.name, rpc, duplicate_rpc_names)
+                for svc in parsed.services
+                for rpc in svc.rpcs
+            ]
             max_const = max((len(n) for n in const_names), default=0)
 
             for svc in parsed.services:
                 for rpc in svc.rpcs:
                     wire = f'{svc.wire_prefix}.{rpc.wire_name}'
-                    pad = max_const - len(rpc.cpp_svc_const)
-                    f.write(f'constexpr const char* {rpc.cpp_svc_const}'
+                    service_const = _rpc_service_const(
+                        svc.name, rpc, duplicate_rpc_names)
+                    pad = max_const - len(service_const)
+                    f.write(f'constexpr const char* {service_const}'
                             f'{" " * pad}  = "{wire}";\n')
             f.write('\n')
 
@@ -552,8 +638,9 @@ class CppServiceGenerator:
             f.write('// Service channel discriminant\n')
             f.write(_SEP + '\n\n')
             f.write('enum class ServiceChannel {\n')
-            for _, rpc in all_rpcs:
-                f.write(f'    {rpc.cpp_enum_value},\n')
+            for svc_name, rpc in all_rpcs:
+                f.write(
+                    f'    {_rpc_enum_value(svc_name, rpc, duplicate_rpc_names)},\n')
             f.write('};\n\n')
 
             # ---- msgToString -------------------------------------------------
@@ -587,7 +674,10 @@ class CppServiceGenerator:
                     f.write(f'\n    // {svc_name}\n')
                     current_svc = svc_name
                 f.write(f'    virtual {rpc.cpp_rsp_type}\n')
-                f.write(f'    {rpc.cpp_handler}(const {rpc.cpp_req_type}& request);\n')
+                handler_name = _rpc_handler_name(
+                    svc_name, rpc, duplicate_rpc_names)
+                f.write(
+                    f'    {handler_name}(const {rpc.cpp_req_type}& request);\n')
                 # Blank line after method unless: last method, or next method
                 # is a new service section (its leading \n already provides spacing)
                 is_last = i == len(all_rpcs) - 1
@@ -677,21 +767,25 @@ class CppServiceGenerator:
                 for rpc in svc.rpcs:
                     wire_full = f'{svc.wire_prefix}.{rpc.wire_name}'
                     rsp_decl_t = rpc.cpp_rsp_type
-                    decode_col = len(f'bool {rpc.cpp_decode_response_func}(')
+                    decode_func = _rpc_decode_response_func(
+                        svc.name, rpc, duplicate_rpc_names)
+                    invoke_func = _rpc_invoke_func(
+                        svc.name, rpc, duplicate_rpc_names)
+                    decode_col = len(f'bool {decode_func}(')
                     decode_sp = ' ' * decode_col
                     f.write(f'/// \\brief Decode a response from {wire_full}.\n')
-                    f.write(f'bool {rpc.cpp_decode_response_func}'
+                    f.write(f'bool {decode_func}'
                             f'(const pcl_msg_t* msg,\n')
                     f.write(f'{decode_sp}{rsp_decl_t}* out);\n\n')
                     req_decl_t = rpc.cpp_req_type
-                    col = 13 + len(rpc.cpp_invoke_func) + 1
+                    col = 13 + len(invoke_func) + 1
                     sp = ' ' * col
                     f.write(f'/// \\brief Invoke {wire_full}'
                             f' (typed, serialisation handled internally).\n')
                     f.write(f'///\n')
                     f.write(f'/// Uses the configured endpoint route, or the legacy\n')
                     f.write(f'/// executor transport fallback when no route is supplied.\n')
-                    f.write(f'pcl_status_t {rpc.cpp_invoke_func}'
+                    f.write(f'pcl_status_t {invoke_func}'
                             f'(pcl_executor_t* executor,\n')
                     f.write(f'{sp}const {req_decl_t}&'
                             f'{" " * max(1, 22 - len(req_decl_t))}'
@@ -706,7 +800,7 @@ class CppServiceGenerator:
                     f.write(f'{sp}const char*       content_type'
                             f' = "{_DEFAULT_CONTENT_TYPE}");\n\n')
                     f.write(f'/// \\brief Invoke {wire_full} and ignore the async response.\n')
-                    f.write(f'pcl_status_t {rpc.cpp_invoke_func}'
+                    f.write(f'pcl_status_t {invoke_func}'
                             f'(pcl_executor_t* executor,\n')
                     f.write(f'{sp}const {req_decl_t}&'
                             f'{" " * max(1, 22 - len(req_decl_t))}'
@@ -761,8 +855,10 @@ class CppServiceGenerator:
                         bind_func = ('bindStreamServiceIngress'
                                      if rpc.streaming
                                      else 'bindUnaryServiceIngress')
+                        service_const = _rpc_service_const(
+                            svc.name, rpc, duplicate_rpc_names)
                         f.write(f'    pyramid::transport::ros2::{bind_func}'
-                                f'(adapter, executor, {rpc.cpp_svc_const});\n')
+                                f'(adapter, executor, {service_const});\n')
                 f.write('}\n\n')
 
             # ---- dispatch() --------------------------------------------------
@@ -823,22 +919,16 @@ class CppServiceGenerator:
         all_topics.update(pub_topics)
         topic_set = all_topics
         hpp_name = file_prefix + '.hpp'
+        duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
 
-        # Determine which data model codec namespaces to use. Service request
-        # and response payloads can reference any data-model package, so bring
-        # every generated data-model codec into scope rather than hard-coding
-        # the current Tactical Objects subset.
-        dm_codec_nss = []
-        dm_codec_headers = []
         data_model_files = self._discover_data_model_proto_files()
-        for indexed_pf in data_model_files:
-            if not indexed_pf.package.startswith('pyramid.data_model'):
-                continue
-            if indexed_pf.package == 'pyramid.data_model.base':
-                continue
-            dm_codec_nss.append(_cpp_ns_for_proto_package(indexed_pf.package))
-            dm_codec_headers.append(
-                f'{indexed_pf.package.replace(".", "_")}_codec.hpp')
+        codec_imports = _service_codec_imports(
+            data_model_files,
+            all_rpcs,
+            list(topic_set.keys()),
+        )
+        dm_codec_nss = [ns for ns, _header in codec_imports]
+        dm_codec_headers = [header for _ns, header in codec_imports]
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             # File-level comment block
@@ -895,12 +985,14 @@ class CppServiceGenerator:
             f.write('// ServiceHandler \u2014 default stub implementations\n')
             f.write(_SEP + '\n\n')
 
-            for _svc_name, rpc in all_rpcs:
+            for svc_name, rpc in all_rpcs:
                 rsp_t = rpc.cpp_rsp_type
                 req_t = rpc.cpp_req_type
+                handler_name = _rpc_handler_name(
+                    svc_name, rpc, duplicate_rpc_names)
 
                 f.write(f'{rsp_t}\n')
-                f.write(f'ServiceHandler::{rpc.cpp_handler}'
+                f.write(f'ServiceHandler::{handler_name}'
                         f'(const {req_t}& /*request*/) {{\n')
 
                 if rsp_t == 'Ack':
@@ -1061,9 +1153,11 @@ class CppServiceGenerator:
                 for rpc in svc.rpcs:
                     rsp_decl_t = rpc.cpp_rsp_type
                     rsp_raw_t = rpc.raw_rsp_type
-                    col = len(f'bool {rpc.cpp_decode_response_func}(')
+                    decode_func = _rpc_decode_response_func(
+                        svc.name, rpc, duplicate_rpc_names)
+                    col = len(f'bool {decode_func}(')
                     sp = ' ' * col
-                    f.write(f'bool {rpc.cpp_decode_response_func}'
+                    f.write(f'bool {decode_func}'
                             f'(const pcl_msg_t* msg,\n')
                     f.write(f'{sp}{rsp_decl_t}* out)\n')
                     f.write('{\n')
@@ -1118,9 +1212,13 @@ class CppServiceGenerator:
             for svc in parsed.services:
                 for rpc in svc.rpcs:
                     req_decl_t = rpc.cpp_req_type
-                    col = 13 + len(rpc.cpp_invoke_func) + 1
+                    invoke_func = _rpc_invoke_func(
+                        svc.name, rpc, duplicate_rpc_names)
+                    service_const = _rpc_service_const(
+                        svc.name, rpc, duplicate_rpc_names)
+                    col = 13 + len(invoke_func) + 1
                     sp = ' ' * col
-                    f.write(f'pcl_status_t {rpc.cpp_invoke_func}'
+                    f.write(f'pcl_status_t {invoke_func}'
                             f'(pcl_executor_t* executor,\n')
                     f.write(f'{sp}const {req_decl_t}&'
                             f'{" " * max(1, 22 - len(req_decl_t))}'
@@ -1148,10 +1246,10 @@ class CppServiceGenerator:
                     f.write('        return PCL_ERR_INVALID;\n')
                     f.write('    }\n')
                     f.write('    return invoke_async(executor,'
-                            f' {rpc.cpp_svc_const},'
+                            f' {service_const},'
                             f' payload, callback, user_data, route, content_type);\n')
                     f.write('}\n\n')
-                    f.write(f'pcl_status_t {rpc.cpp_invoke_func}'
+                    f.write(f'pcl_status_t {invoke_func}'
                             f'(pcl_executor_t* executor,\n')
                     f.write(f'{sp}const {req_decl_t}&'
                             f'{" " * max(1, 22 - len(req_decl_t))}'
@@ -1159,7 +1257,7 @@ class CppServiceGenerator:
                     f.write(f'{sp}const char*       content_type,\n')
                     f.write(f'{sp}const pcl_endpoint_route_t* route)\n')
                     f.write('{\n')
-                    f.write(f'    return {rpc.cpp_invoke_func}'
+                    f.write(f'    return {invoke_func}'
                             '(executor, request, ignore_async_response,\n')
                     f.write('                         nullptr, route, content_type);\n')
                     f.write('}\n\n')
@@ -1325,9 +1423,10 @@ class CppServiceGenerator:
             f.write('    try {\n')
             f.write('    switch (channel) {\n')
 
-            for _, rpc in all_rpcs:
-                enum_val = rpc.cpp_enum_value
-                handler_fn = rpc.cpp_handler
+            for svc_name, rpc in all_rpcs:
+                enum_val = _rpc_enum_value(svc_name, rpc, duplicate_rpc_names)
+                handler_fn = _rpc_handler_name(
+                    svc_name, rpc, duplicate_rpc_names)
                 req_t = rpc.cpp_req_type
                 rsp_t = rpc.cpp_rsp_type
 

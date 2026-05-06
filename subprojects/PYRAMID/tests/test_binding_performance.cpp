@@ -334,7 +334,8 @@ struct UnaryResponseState {
 
 static void createRequirementResponse(const pcl_msg_t* msg, void* ud) {
   auto* s = static_cast<UnaryResponseState*>(ud);
-  s->decoded = svc::decodeCreateRequirementResponse(msg, &s->response_id);
+  s->decoded =
+      svc::decodeObjectOfInterestCreateRequirementResponse(msg, &s->response_id);
   s->count.fetch_add(1, std::memory_order_release);
   s->cv.notify_all();
 }
@@ -359,7 +360,7 @@ struct UnaryServiceSetup {
 
 class UnaryServiceHandler : public svc::ServiceHandler {
 public:
-  svc::Identifier handleCreateRequirement(
+  svc::Identifier handleObjectOfInterestCreateRequirement(
       const svc::ObjectInterestRequirement&) override {
     return "binding-perf-interest-000000000001-abcdef";
   }
@@ -378,7 +379,7 @@ static pcl_status_t handleCreateRequirement(pcl_container_t*,
   UnaryServiceHandler handler;
   void* response_buf = nullptr;
   size_t response_size = 0;
-  svc::dispatch(handler, svc::ServiceChannel::CreateRequirement,
+  svc::dispatch(handler, svc::ServiceChannel::ObjectOfInterestCreateRequirement,
                 request ? request->data : nullptr,
                 request ? request->size : 0u,
                 request ? request->type_name : setup->content_type,
@@ -403,7 +404,7 @@ static pcl_status_t onConfigureUnaryService(pcl_container_t* container,
                                             void* ud) {
   auto* setup = static_cast<UnaryServiceSetup*>(ud);
   auto* port = pcl_container_add_service(
-      container, svc::kSvcCreateRequirement, setup->content_type,
+      container, svc::kSvcObjectOfInterestCreateRequirement, setup->content_type,
       handleCreateRequirement, ud);
   if (port == nullptr) {
     return PCL_ERR_NOMEM;
@@ -496,7 +497,7 @@ static PerfResult runLocal(const char* label, const char* ct,
     auto t0 = Clock::now();
     double cpu_t0 = threadCpuNowNs();
     response_state.decoded = false;
-    const auto rc = svc::invokeCreateRequirement(
+    const auto rc = svc::invokeObjectOfInterestCreateRequirement(
         exec, request, createRequirementResponse, &response_state, nullptr, ct);
 
     bool delivered = false;
@@ -600,7 +601,7 @@ static PerfResult runShmem(const char* label, const char* ct,
     auto t0 = Clock::now();
     double cpu_t0 = threadCpuNowNs();
     response_state.decoded = false;
-    const auto rc = svc::invokeCreateRequirement(
+    const auto rc = svc::invokeObjectOfInterestCreateRequirement(
         client_exec, request, createRequirementResponse, &response_state,
         nullptr, ct);
 
@@ -791,7 +792,8 @@ static PerfResult runSocket(const char* label, const char* ct,
       pcl_socket_transport_get_transport(client_t));
   pcl_executor_register_transport(client_exec, "server",
       pcl_socket_transport_get_transport(client_t));
-  if (!setRemoteEndpointRoute(client_exec, svc::kSvcCreateRequirement,
+  if (!setRemoteEndpointRoute(client_exec,
+                              svc::kSvcObjectOfInterestCreateRequirement,
                               "server")) {
     ctx.stop.store(true);
     pcl_socket_transport_destroy(client_t);
@@ -828,7 +830,7 @@ static PerfResult runSocket(const char* label, const char* ct,
     auto t0 = Clock::now();
     double cpu_t0 = threadCpuNowNs();
     response_state.decoded = false;
-    const auto rc = svc::invokeCreateRequirement(
+    const auto rc = svc::invokeObjectOfInterestCreateRequirement(
         client_exec, request, createRequirementResponse, &response_state,
         nullptr, ct);
 

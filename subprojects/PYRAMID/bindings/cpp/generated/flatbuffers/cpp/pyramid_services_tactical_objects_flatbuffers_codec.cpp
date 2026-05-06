@@ -1,8 +1,6 @@
 // Auto-generated service FlatBuffers codec
 #include "pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 
-#include "pyramid_data_model_autonomy_codec.hpp"
-#include "pyramid_data_model_base_codec.hpp"
 #include "pyramid_data_model_common_codec.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
 #include <cstdlib>
@@ -1201,7 +1199,7 @@ char* pyramid_services_tactical_objects_Capability_from_flatbuffer_json(const vo
 void* pyramid_services_tactical_objects_Identifier_to_flatbuffer_json(const char* json, size_t* size_out) {
     if (size_out) *size_out = 0;
     try {
-        auto value = [&]() { auto j = nlohmann::json::parse(std::string(json ? json : "")); return j.is_string() ? j.get<pyramid::domain_model::Identifier>() : pyramid::domain_model::Identifier{}; }();
+        auto value = nlohmann::json::parse(std::string(json ? json : "")).get<pyramid::domain_model::Identifier>();
         auto payload = pyramid::services::tactical_objects::flatbuffers_codec::toBinary(value);
         if (size_out) *size_out = payload.size();
         if (payload.empty()) return nullptr;

@@ -29,12 +29,12 @@ package Pyramid.Services.Tactical_Objects.Provided is
       Op_Delete);
 
    type Service_Channel is
-     (Ch_Read_Match,
-      Ch_Create_Requirement,
-      Ch_Read_Requirement,
-      Ch_Update_Requirement,
-      Ch_Delete_Requirement,
-      Ch_Read_Detail);
+     (Ch_Matching_Objects_Read_Match,
+      Ch_Object_Of_Interest_Create_Requirement,
+      Ch_Object_Of_Interest_Read_Requirement,
+      Ch_Object_Of_Interest_Update_Requirement,
+      Ch_Object_Of_Interest_Delete_Requirement,
+      Ch_Specific_Object_Detail_Read_Detail);
 
    type Object_Detail_Array is array (Positive range <>) of Object_Detail;
    type Object_Interest_Requirement_Array is array (Positive range <>) of Object_Interest_Requirement;
@@ -42,17 +42,17 @@ package Pyramid.Services.Tactical_Objects.Provided is
 
    --  -- Service wire-name constants (generated from proto) --------
 
-   Svc_Read_Match : constant String :=
+   Svc_Matching_Objects_Read_Match : constant String :=
      "matching_objects.read_match";
-   Svc_Create_Requirement : constant String :=
+   Svc_Object_Of_Interest_Create_Requirement : constant String :=
      "object_of_interest.create_requirement";
-   Svc_Read_Requirement : constant String :=
+   Svc_Object_Of_Interest_Read_Requirement : constant String :=
      "object_of_interest.read_requirement";
-   Svc_Update_Requirement : constant String :=
+   Svc_Object_Of_Interest_Update_Requirement : constant String :=
      "object_of_interest.update_requirement";
-   Svc_Delete_Requirement : constant String :=
+   Svc_Object_Of_Interest_Delete_Requirement : constant String :=
      "object_of_interest.delete_requirement";
-   Svc_Read_Detail : constant String :=
+   Svc_Specific_Object_Detail_Read_Detail : constant String :=
      "specific_object_detail.read_detail";
 
    --  -- Standard topic name constants --------------------------
@@ -77,31 +77,31 @@ package Pyramid.Services.Tactical_Objects.Provided is
    --  Supply these callbacks from your component at registration time.
 
    --  Matching_Objects_Service
-   type Handle_Read_Match_Access is access function
+   type Handle_Matching_Objects_Read_Match_Access is access function
      (Request : Query) return Object_Match_Array;
    --  Object_Of_Interest_Service
-   type Handle_Create_Requirement_Access is access procedure
+   type Handle_Object_Of_Interest_Create_Requirement_Access is access procedure
      (Request  : in  Object_Interest_Requirement;
       Response : out Identifier);
-   type Handle_Read_Requirement_Access is access function
+   type Handle_Object_Of_Interest_Read_Requirement_Access is access function
      (Request : Query) return Object_Interest_Requirement_Array;
-   type Handle_Update_Requirement_Access is access procedure
+   type Handle_Object_Of_Interest_Update_Requirement_Access is access procedure
      (Request  : in  Object_Interest_Requirement;
       Response : out Ack);
-   type Handle_Delete_Requirement_Access is access procedure
+   type Handle_Object_Of_Interest_Delete_Requirement_Access is access procedure
      (Request  : in  Identifier;
       Response : out Ack);
    --  Specific_Object_Detail_Service
-   type Handle_Read_Detail_Access is access function
+   type Handle_Specific_Object_Detail_Read_Detail_Access is access function
      (Request : Query) return Object_Detail_Array;
 
    type Service_Handlers is record
-      On_Read_Match : Handle_Read_Match_Access := null;
-      On_Create_Requirement : Handle_Create_Requirement_Access := null;
-      On_Read_Requirement : Handle_Read_Requirement_Access := null;
-      On_Update_Requirement : Handle_Update_Requirement_Access := null;
-      On_Delete_Requirement : Handle_Delete_Requirement_Access := null;
-      On_Read_Detail : Handle_Read_Detail_Access := null;
+      On_Matching_Objects_Read_Match : Handle_Matching_Objects_Read_Match_Access := null;
+      On_Object_Of_Interest_Create_Requirement : Handle_Object_Of_Interest_Create_Requirement_Access := null;
+      On_Object_Of_Interest_Read_Requirement : Handle_Object_Of_Interest_Read_Requirement_Access := null;
+      On_Object_Of_Interest_Update_Requirement : Handle_Object_Of_Interest_Update_Requirement_Access := null;
+      On_Object_Of_Interest_Delete_Requirement : Handle_Object_Of_Interest_Delete_Requirement_Access := null;
+      On_Specific_Object_Detail_Read_Detail : Handle_Specific_Object_Detail_Read_Detail_Access := null;
    end record;
 
    --  -- PCL binding procedures ------------------------------------
@@ -133,72 +133,72 @@ package Pyramid.Services.Tactical_Objects.Provided is
       Handlers  : access constant Service_Handlers := null;
       Content_Type : String := "application/json");
 
-   function Decode_Read_Match_Response
+   function Decode_Matching_Objects_Read_Match_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Object_Match_Array;
 
    --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Read_Match
+   procedure Invoke_Matching_Objects_Read_Match
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
-   function Decode_Create_Requirement_Response
+   function Decode_Object_Of_Interest_Create_Requirement_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Identifier;
 
    --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Create_Requirement
+   procedure Invoke_Object_Of_Interest_Create_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Object_Interest_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
-   function Decode_Read_Requirement_Response
+   function Decode_Object_Of_Interest_Read_Requirement_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Object_Interest_Requirement_Array;
 
    --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Read_Requirement
+   procedure Invoke_Object_Of_Interest_Read_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
-   function Decode_Update_Requirement_Response
+   function Decode_Object_Of_Interest_Update_Requirement_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Ack;
 
    --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Update_Requirement
+   procedure Invoke_Object_Of_Interest_Update_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Object_Interest_Requirement;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
-   function Decode_Delete_Requirement_Response
+   function Decode_Object_Of_Interest_Delete_Requirement_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Ack;
 
    --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Delete_Requirement
+   procedure Invoke_Object_Of_Interest_Delete_Requirement
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Identifier;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;
       User_Data : System.Address := System.Null_Address;
       Content_Type : String := "application/json");
 
-   function Decode_Read_Detail_Response
+   function Decode_Specific_Object_Detail_Read_Detail_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
       return Object_Detail_Array;
 
    --  Invoke via executor transport (transport-agnostic).
-   procedure Invoke_Read_Detail
+   procedure Invoke_Specific_Object_Detail_Read_Detail
      (Executor  : Pcl_Bindings.Pcl_Executor_Access;
       Request   : Query;
       Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;

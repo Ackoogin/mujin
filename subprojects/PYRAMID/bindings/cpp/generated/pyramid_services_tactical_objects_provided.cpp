@@ -5,7 +5,6 @@
 #include "pyramid_services_tactical_objects_provided.hpp"
 
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
-#include "pyramid_data_model_autonomy_codec.hpp"
 #include "pyramid_data_model_common_codec.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
 
@@ -23,8 +22,6 @@
 namespace pyramid::components::tactical_objects::services::provided {
 
 // Bring data model codec functions into scope
-using pyramid::domain_model::autonomy::toJson;
-using pyramid::domain_model::autonomy::fromJson;
 using pyramid::domain_model::common::toJson;
 using pyramid::domain_model::common::fromJson;
 using pyramid::domain_model::tactical::toJson;
@@ -44,32 +41,32 @@ std::string msgToString(const void* data, unsigned size) {
 // ---------------------------------------------------------------------------
 
 std::vector<ObjectMatch>
-ServiceHandler::handleReadMatch(const Query& /*request*/) {
+ServiceHandler::handleMatchingObjectsReadMatch(const Query& /*request*/) {
     return {};
 }
 
 Identifier
-ServiceHandler::handleCreateRequirement(const ObjectInterestRequirement& /*request*/) {
+ServiceHandler::handleObjectOfInterestCreateRequirement(const ObjectInterestRequirement& /*request*/) {
     return {};
 }
 
 std::vector<ObjectInterestRequirement>
-ServiceHandler::handleReadRequirement(const Query& /*request*/) {
+ServiceHandler::handleObjectOfInterestReadRequirement(const Query& /*request*/) {
     return {};
 }
 
 Ack
-ServiceHandler::handleUpdateRequirement(const ObjectInterestRequirement& /*request*/) {
+ServiceHandler::handleObjectOfInterestUpdateRequirement(const ObjectInterestRequirement& /*request*/) {
     return pyramid::domain_model::kAckOk;
 }
 
 Ack
-ServiceHandler::handleDeleteRequirement(const Identifier& /*request*/) {
+ServiceHandler::handleObjectOfInterestDeleteRequirement(const Identifier& /*request*/) {
     return pyramid::domain_model::kAckOk;
 }
 
 std::vector<ObjectDetail>
-ServiceHandler::handleReadDetail(const Query& /*request*/) {
+ServiceHandler::handleSpecificObjectDetailReadDetail(const Query& /*request*/) {
     return {};
 }
 
@@ -198,8 +195,8 @@ pcl_port_t* subscribeEvidenceRequirements(pcl_container_t*   container,
 // Typed response decode wrappers
 // ---------------------------------------------------------------------------
 
-bool decodeReadMatchResponse(const pcl_msg_t* msg,
-                             std::vector<ObjectMatch>* out)
+bool decodeMatchingObjectsReadMatchResponse(const pcl_msg_t* msg,
+                                            std::vector<ObjectMatch>* out)
 {
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
@@ -224,8 +221,8 @@ bool decodeReadMatchResponse(const pcl_msg_t* msg,
     }
 }
 
-bool decodeCreateRequirementResponse(const pcl_msg_t* msg,
-                                     Identifier* out)
+bool decodeObjectOfInterestCreateRequirementResponse(const pcl_msg_t* msg,
+                                                     Identifier* out)
 {
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
@@ -246,8 +243,8 @@ bool decodeCreateRequirementResponse(const pcl_msg_t* msg,
     }
 }
 
-bool decodeReadRequirementResponse(const pcl_msg_t* msg,
-                                   std::vector<ObjectInterestRequirement>* out)
+bool decodeObjectOfInterestReadRequirementResponse(const pcl_msg_t* msg,
+                                                   std::vector<ObjectInterestRequirement>* out)
 {
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
@@ -272,8 +269,8 @@ bool decodeReadRequirementResponse(const pcl_msg_t* msg,
     }
 }
 
-bool decodeUpdateRequirementResponse(const pcl_msg_t* msg,
-                                     Ack* out)
+bool decodeObjectOfInterestUpdateRequirementResponse(const pcl_msg_t* msg,
+                                                     Ack* out)
 {
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
@@ -294,8 +291,8 @@ bool decodeUpdateRequirementResponse(const pcl_msg_t* msg,
     }
 }
 
-bool decodeDeleteRequirementResponse(const pcl_msg_t* msg,
-                                     Ack* out)
+bool decodeObjectOfInterestDeleteRequirementResponse(const pcl_msg_t* msg,
+                                                     Ack* out)
 {
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
@@ -316,8 +313,8 @@ bool decodeDeleteRequirementResponse(const pcl_msg_t* msg,
     }
 }
 
-bool decodeReadDetailResponse(const pcl_msg_t* msg,
-                              std::vector<ObjectDetail>* out)
+bool decodeSpecificObjectDetailReadDetailResponse(const pcl_msg_t* msg,
+                                                  std::vector<ObjectDetail>* out)
 {
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
@@ -346,12 +343,12 @@ bool decodeReadDetailResponse(const pcl_msg_t* msg,
 // Typed invoke wrappers — serialise and dispatch via executor transport
 // ---------------------------------------------------------------------------
 
-pcl_status_t invokeReadMatch(pcl_executor_t* executor,
-                             const Query&                 request,
-                             pcl_resp_cb_fn_t        callback,
-                             void*                   user_data,
-                             const pcl_endpoint_route_t* route,
-                             const char*       content_type)
+pcl_status_t invokeMatchingObjectsReadMatch(pcl_executor_t* executor,
+                                            const Query&                 request,
+                                            pcl_resp_cb_fn_t        callback,
+                                            void*                   user_data,
+                                            const pcl_endpoint_route_t* route,
+                                            const char*       content_type)
 {
     std::string payload;
     if (is_json_content_type(content_type)) {
@@ -361,24 +358,24 @@ pcl_status_t invokeReadMatch(pcl_executor_t* executor,
     } else {
         return PCL_ERR_INVALID;
     }
-    return invoke_async(executor, kSvcReadMatch, payload, callback, user_data, route, content_type);
+    return invoke_async(executor, kSvcMatchingObjectsReadMatch, payload, callback, user_data, route, content_type);
 }
 
-pcl_status_t invokeReadMatch(pcl_executor_t* executor,
-                             const Query&                 request,
-                             const char*       content_type,
-                             const pcl_endpoint_route_t* route)
+pcl_status_t invokeMatchingObjectsReadMatch(pcl_executor_t* executor,
+                                            const Query&                 request,
+                                            const char*       content_type,
+                                            const pcl_endpoint_route_t* route)
 {
-    return invokeReadMatch(executor, request, ignore_async_response,
+    return invokeMatchingObjectsReadMatch(executor, request, ignore_async_response,
                          nullptr, route, content_type);
 }
 
-pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
-                                     const ObjectInterestRequirement& request,
-                                     pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data,
-                                     const pcl_endpoint_route_t* route,
-                                     const char*       content_type)
+pcl_status_t invokeObjectOfInterestCreateRequirement(pcl_executor_t* executor,
+                                                     const ObjectInterestRequirement& request,
+                                                     pcl_resp_cb_fn_t        callback,
+                                                     void*                   user_data,
+                                                     const pcl_endpoint_route_t* route,
+                                                     const char*       content_type)
 {
     std::string payload;
     if (is_json_content_type(content_type)) {
@@ -388,24 +385,24 @@ pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
     } else {
         return PCL_ERR_INVALID;
     }
-    return invoke_async(executor, kSvcCreateRequirement, payload, callback, user_data, route, content_type);
+    return invoke_async(executor, kSvcObjectOfInterestCreateRequirement, payload, callback, user_data, route, content_type);
 }
 
-pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
-                                     const ObjectInterestRequirement& request,
-                                     const char*       content_type,
-                                     const pcl_endpoint_route_t* route)
+pcl_status_t invokeObjectOfInterestCreateRequirement(pcl_executor_t* executor,
+                                                     const ObjectInterestRequirement& request,
+                                                     const char*       content_type,
+                                                     const pcl_endpoint_route_t* route)
 {
-    return invokeCreateRequirement(executor, request, ignore_async_response,
+    return invokeObjectOfInterestCreateRequirement(executor, request, ignore_async_response,
                          nullptr, route, content_type);
 }
 
-pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
-                                   const Query&                 request,
-                                   pcl_resp_cb_fn_t        callback,
-                                   void*                   user_data,
-                                   const pcl_endpoint_route_t* route,
-                                   const char*       content_type)
+pcl_status_t invokeObjectOfInterestReadRequirement(pcl_executor_t* executor,
+                                                   const Query&                 request,
+                                                   pcl_resp_cb_fn_t        callback,
+                                                   void*                   user_data,
+                                                   const pcl_endpoint_route_t* route,
+                                                   const char*       content_type)
 {
     std::string payload;
     if (is_json_content_type(content_type)) {
@@ -415,24 +412,24 @@ pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
     } else {
         return PCL_ERR_INVALID;
     }
-    return invoke_async(executor, kSvcReadRequirement, payload, callback, user_data, route, content_type);
+    return invoke_async(executor, kSvcObjectOfInterestReadRequirement, payload, callback, user_data, route, content_type);
 }
 
-pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
-                                   const Query&                 request,
-                                   const char*       content_type,
-                                   const pcl_endpoint_route_t* route)
+pcl_status_t invokeObjectOfInterestReadRequirement(pcl_executor_t* executor,
+                                                   const Query&                 request,
+                                                   const char*       content_type,
+                                                   const pcl_endpoint_route_t* route)
 {
-    return invokeReadRequirement(executor, request, ignore_async_response,
+    return invokeObjectOfInterestReadRequirement(executor, request, ignore_async_response,
                          nullptr, route, content_type);
 }
 
-pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
-                                     const ObjectInterestRequirement& request,
-                                     pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data,
-                                     const pcl_endpoint_route_t* route,
-                                     const char*       content_type)
+pcl_status_t invokeObjectOfInterestUpdateRequirement(pcl_executor_t* executor,
+                                                     const ObjectInterestRequirement& request,
+                                                     pcl_resp_cb_fn_t        callback,
+                                                     void*                   user_data,
+                                                     const pcl_endpoint_route_t* route,
+                                                     const char*       content_type)
 {
     std::string payload;
     if (is_json_content_type(content_type)) {
@@ -442,24 +439,24 @@ pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
     } else {
         return PCL_ERR_INVALID;
     }
-    return invoke_async(executor, kSvcUpdateRequirement, payload, callback, user_data, route, content_type);
+    return invoke_async(executor, kSvcObjectOfInterestUpdateRequirement, payload, callback, user_data, route, content_type);
 }
 
-pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
-                                     const ObjectInterestRequirement& request,
-                                     const char*       content_type,
-                                     const pcl_endpoint_route_t* route)
+pcl_status_t invokeObjectOfInterestUpdateRequirement(pcl_executor_t* executor,
+                                                     const ObjectInterestRequirement& request,
+                                                     const char*       content_type,
+                                                     const pcl_endpoint_route_t* route)
 {
-    return invokeUpdateRequirement(executor, request, ignore_async_response,
+    return invokeObjectOfInterestUpdateRequirement(executor, request, ignore_async_response,
                          nullptr, route, content_type);
 }
 
-pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
-                                     const Identifier&            request,
-                                     pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data,
-                                     const pcl_endpoint_route_t* route,
-                                     const char*       content_type)
+pcl_status_t invokeObjectOfInterestDeleteRequirement(pcl_executor_t* executor,
+                                                     const Identifier&            request,
+                                                     pcl_resp_cb_fn_t        callback,
+                                                     void*                   user_data,
+                                                     const pcl_endpoint_route_t* route,
+                                                     const char*       content_type)
 {
     std::string payload;
     if (is_json_content_type(content_type)) {
@@ -469,24 +466,24 @@ pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
     } else {
         return PCL_ERR_INVALID;
     }
-    return invoke_async(executor, kSvcDeleteRequirement, payload, callback, user_data, route, content_type);
+    return invoke_async(executor, kSvcObjectOfInterestDeleteRequirement, payload, callback, user_data, route, content_type);
 }
 
-pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
-                                     const Identifier&            request,
-                                     const char*       content_type,
-                                     const pcl_endpoint_route_t* route)
+pcl_status_t invokeObjectOfInterestDeleteRequirement(pcl_executor_t* executor,
+                                                     const Identifier&            request,
+                                                     const char*       content_type,
+                                                     const pcl_endpoint_route_t* route)
 {
-    return invokeDeleteRequirement(executor, request, ignore_async_response,
+    return invokeObjectOfInterestDeleteRequirement(executor, request, ignore_async_response,
                          nullptr, route, content_type);
 }
 
-pcl_status_t invokeReadDetail(pcl_executor_t* executor,
-                              const Query&                 request,
-                              pcl_resp_cb_fn_t        callback,
-                              void*                   user_data,
-                              const pcl_endpoint_route_t* route,
-                              const char*       content_type)
+pcl_status_t invokeSpecificObjectDetailReadDetail(pcl_executor_t* executor,
+                                                  const Query&                 request,
+                                                  pcl_resp_cb_fn_t        callback,
+                                                  void*                   user_data,
+                                                  const pcl_endpoint_route_t* route,
+                                                  const char*       content_type)
 {
     std::string payload;
     if (is_json_content_type(content_type)) {
@@ -496,15 +493,15 @@ pcl_status_t invokeReadDetail(pcl_executor_t* executor,
     } else {
         return PCL_ERR_INVALID;
     }
-    return invoke_async(executor, kSvcReadDetail, payload, callback, user_data, route, content_type);
+    return invoke_async(executor, kSvcSpecificObjectDetailReadDetail, payload, callback, user_data, route, content_type);
 }
 
-pcl_status_t invokeReadDetail(pcl_executor_t* executor,
-                              const Query&                 request,
-                              const char*       content_type,
-                              const pcl_endpoint_route_t* route)
+pcl_status_t invokeSpecificObjectDetailReadDetail(pcl_executor_t* executor,
+                                                  const Query&                 request,
+                                                  const char*       content_type,
+                                                  const pcl_endpoint_route_t* route)
 {
-    return invokeReadDetail(executor, request, ignore_async_response,
+    return invokeSpecificObjectDetailReadDetail(executor, request, ignore_async_response,
                          nullptr, route, content_type);
 }
 
@@ -682,7 +679,7 @@ void dispatch(ServiceHandler& handler,
 
     try {
     switch (channel) {
-    case ServiceChannel::ReadMatch: {
+    case ServiceChannel::MatchingObjectsReadMatch: {
         Query req;
         if (is_json_content_type(content_type))
             req = fromJson(req_str, static_cast<Query*>(nullptr));
@@ -690,7 +687,7 @@ void dispatch(ServiceHandler& handler,
             req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
         else
             break;
-        auto rsp = handler.handleReadMatch(req);
+        auto rsp = handler.handleMatchingObjectsReadMatch(req);
         if (is_json_content_type(content_type)) {
             rsp_payload = "[";
             for (size_t i = 0; i < rsp.size(); ++i) {
@@ -706,7 +703,7 @@ void dispatch(ServiceHandler& handler,
         }
         break;
     }
-    case ServiceChannel::CreateRequirement: {
+    case ServiceChannel::ObjectOfInterestCreateRequirement: {
         ObjectInterestRequirement req;
         if (is_json_content_type(content_type))
             req = fromJson(req_str, static_cast<ObjectInterestRequirement*>(nullptr));
@@ -714,7 +711,7 @@ void dispatch(ServiceHandler& handler,
             req = flatbuffers_codec::fromBinaryObjectInterestRequirement(request_buf, request_size);
         else
             break;
-        auto rsp = handler.handleCreateRequirement(req);
+        auto rsp = handler.handleObjectOfInterestCreateRequirement(req);
         if (is_json_content_type(content_type)) {
             rsp_payload = encode_identifier_payload(rsp);
         } else if (is_flatbuffers_content_type(content_type)) {
@@ -725,7 +722,7 @@ void dispatch(ServiceHandler& handler,
         }
         break;
     }
-    case ServiceChannel::ReadRequirement: {
+    case ServiceChannel::ObjectOfInterestReadRequirement: {
         Query req;
         if (is_json_content_type(content_type))
             req = fromJson(req_str, static_cast<Query*>(nullptr));
@@ -733,7 +730,7 @@ void dispatch(ServiceHandler& handler,
             req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
         else
             break;
-        auto rsp = handler.handleReadRequirement(req);
+        auto rsp = handler.handleObjectOfInterestReadRequirement(req);
         if (is_json_content_type(content_type)) {
             rsp_payload = "[";
             for (size_t i = 0; i < rsp.size(); ++i) {
@@ -749,7 +746,7 @@ void dispatch(ServiceHandler& handler,
         }
         break;
     }
-    case ServiceChannel::UpdateRequirement: {
+    case ServiceChannel::ObjectOfInterestUpdateRequirement: {
         ObjectInterestRequirement req;
         if (is_json_content_type(content_type))
             req = fromJson(req_str, static_cast<ObjectInterestRequirement*>(nullptr));
@@ -757,7 +754,7 @@ void dispatch(ServiceHandler& handler,
             req = flatbuffers_codec::fromBinaryObjectInterestRequirement(request_buf, request_size);
         else
             break;
-        auto rsp = handler.handleUpdateRequirement(req);
+        auto rsp = handler.handleObjectOfInterestUpdateRequirement(req);
         if (is_json_content_type(content_type)) {
             rsp_payload = toJson(rsp);
         } else if (is_flatbuffers_content_type(content_type)) {
@@ -768,7 +765,7 @@ void dispatch(ServiceHandler& handler,
         }
         break;
     }
-    case ServiceChannel::DeleteRequirement: {
+    case ServiceChannel::ObjectOfInterestDeleteRequirement: {
         Identifier req;
         if (is_json_content_type(content_type))
             req = decode_identifier_payload(req_str);
@@ -776,7 +773,7 @@ void dispatch(ServiceHandler& handler,
             req = flatbuffers_codec::fromBinaryIdentifier(request_buf, request_size);
         else
             break;
-        auto rsp = handler.handleDeleteRequirement(req);
+        auto rsp = handler.handleObjectOfInterestDeleteRequirement(req);
         if (is_json_content_type(content_type)) {
             rsp_payload = toJson(rsp);
         } else if (is_flatbuffers_content_type(content_type)) {
@@ -787,7 +784,7 @@ void dispatch(ServiceHandler& handler,
         }
         break;
     }
-    case ServiceChannel::ReadDetail: {
+    case ServiceChannel::SpecificObjectDetailReadDetail: {
         Query req;
         if (is_json_content_type(content_type))
             req = fromJson(req_str, static_cast<Query*>(nullptr));
@@ -795,7 +792,7 @@ void dispatch(ServiceHandler& handler,
             req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
         else
             break;
-        auto rsp = handler.handleReadDetail(req);
+        auto rsp = handler.handleSpecificObjectDetailReadDetail(req);
         if (is_json_content_type(content_type)) {
             rsp_payload = "[";
             for (size_t i = 0; i < rsp.size(); ++i) {

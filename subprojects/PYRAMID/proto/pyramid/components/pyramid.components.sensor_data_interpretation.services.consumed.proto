@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package pyramid.components.sensor_data_interpretation.services.consumed;
+
+import "google/protobuf/empty.proto";
+import "pyramid/data_model/pyramid.data_model.base.proto";
+import "pyramid/data_model/pyramid.data_model.common.proto";
+import "pyramid/data_model/pyramid.data_model.sensors.proto";
+
+// gRPC Service for Data_Provision_Dependency
+service Data_Provision_Dependency_Service {
+  // Create requirement
+  rpc CreateRequirement(pyramid.data_model.sensors.ObjectEvidenceProvisionRequirement) returns (pyramid.data_model.base.Identifier);
+  
+  // Read requirement
+  rpc ReadRequirement(pyramid.data_model.common.Query) returns (stream pyramid.data_model.sensors.ObjectEvidenceProvisionRequirement);
+  
+  // Update requirement
+  rpc UpdateRequirement(pyramid.data_model.sensors.ObjectEvidenceProvisionRequirement) returns (pyramid.data_model.common.Ack);
+  
+  // Delete requirement
+  rpc DeleteRequirement(pyramid.data_model.base.Identifier) returns (pyramid.data_model.common.Ack);
+}
+
+// gRPC Service for Data_Processing_Dependency
+service Data_Processing_Dependency_Service {
+  // Create requirement
+  rpc CreateRequirement(pyramid.data_model.sensors.ObjectAquisitionRequirement) returns (pyramid.data_model.base.Identifier);
+  
+  // Read requirement
+  rpc ReadRequirement(pyramid.data_model.common.Query) returns (stream pyramid.data_model.sensors.ObjectAquisitionRequirement);
+  
+  // Update requirement
+  rpc UpdateRequirement(pyramid.data_model.sensors.ObjectAquisitionRequirement) returns (pyramid.data_model.common.Ack);
+  
+  // Delete requirement
+  rpc DeleteRequirement(pyramid.data_model.base.Identifier) returns (pyramid.data_model.common.Ack);
+}
+

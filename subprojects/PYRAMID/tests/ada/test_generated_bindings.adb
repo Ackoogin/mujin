@@ -8,26 +8,35 @@
 
 with Ada.Text_IO;                use Ada.Text_IO;
 with Ada.Strings.Unbounded;      use Ada.Strings.Unbounded;
+with Interfaces.C;               use Interfaces.C;
 with System;
 
 --  Generated data model types
 with Pyramid.Data_Model.Base.Types;     use Pyramid.Data_Model.Base.Types;
 with Pyramid.Data_Model.Common.Types;   use Pyramid.Data_Model.Common.Types;
+with Pyramid.Data_Model.Sensors.Types;  use Pyramid.Data_Model.Sensors.Types;
 with Pyramid.Data_Model.Tactical.Types; use Pyramid.Data_Model.Tactical.Types;
 
 --  Generated data model codecs
 with Pyramid.Data_Model.Common.Types_Codec;    use Pyramid.Data_Model.Common.Types_Codec;
+with Pyramid.Data_Model.Sensors.Types_Codec;   use Pyramid.Data_Model.Sensors.Types_Codec;
 with Pyramid.Data_Model.Tactical.Types_Codec;  use Pyramid.Data_Model.Tactical.Types_Codec;
 
 --  Generated service bindings (validates with clauses and typed interfaces)
 with Pyramid.Services.Tactical_Objects.Provided;
 with Pyramid.Services.Tactical_Objects.Consumed;
 with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
+with Pyramid.Services.Sensor_Data_Interpretation.Provided;
+with Pyramid.Services.Sensor_Data_Interpretation.Consumed;
+with Pyramid.Services.Sensor_Data_Interpretation.Flatbuffers_Codec;
 
 procedure Test_Generated_Bindings is
    package Prov renames Pyramid.Services.Tactical_Objects.Provided;
    package Cons renames Pyramid.Services.Tactical_Objects.Consumed;
    package Flat renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
+   package Sensor_Prov renames Pyramid.Services.Sensor_Data_Interpretation.Provided;
+   package Sensor_Cons renames Pyramid.Services.Sensor_Data_Interpretation.Consumed;
+   package Sensor_Flat renames Pyramid.Services.Sensor_Data_Interpretation.Flatbuffers_Codec;
 
    Pass_Count : Natural := 0;
    Fail_Count : Natural := 0;
@@ -43,6 +52,41 @@ procedure Test_Generated_Bindings is
          Put_Line ("FAIL: " & Name);
       end if;
    end Check;
+
+   function Buffer_To_String (Data : System.Address; Size : Natural) return String is
+   begin
+      if Data = System.Null_Address or else Size = 0 then
+         return "";
+      end if;
+      return Prov.Msg_To_String (Data, Interfaces.C.unsigned (Size));
+   end Buffer_To_String;
+
+   procedure Sensor_Create_Handler
+     (Request  : in  Interpretation_Requirement;
+      Response : out Identifier)
+   is
+      pragma Unreferenced (Request);
+   begin
+      Response := To_Unbounded_String ("sensor-create");
+   end Sensor_Create_Handler;
+
+   procedure Data_Provision_Create_Handler
+     (Request  : in  Object_Evidence_Provision_Requirement;
+      Response : out Identifier)
+   is
+      pragma Unreferenced (Request);
+   begin
+      Response := To_Unbounded_String ("provision-create");
+   end Data_Provision_Create_Handler;
+
+   procedure Data_Processing_Create_Handler
+     (Request  : in  Object_Aquisition_Requirement;
+      Response : out Identifier)
+   is
+      pragma Unreferenced (Request);
+   begin
+      Response := To_Unbounded_String ("processing-create");
+   end Data_Processing_Create_Handler;
 
 begin
    Put_Line ("=== Generated Ada Binding Validation ===");
@@ -86,9 +130,9 @@ begin
 
    --  5. Service wire-name constants are non-empty
    Check ("Provided wire-name constant",
-          Prov.Svc_Create_Requirement'Length > 0);
+          Prov.Svc_Object_Of_Interest_Create_Requirement'Length > 0);
    Check ("Consumed wire-name constant",
-          Cons.Svc_Create_Requirement'Length > 0);
+          Cons.Svc_Object_Solution_Evidence_Create_Requirement'Length > 0);
 
    --  6. Topic constants
    Check ("Provided topic constant",
@@ -96,14 +140,15 @@ begin
 
    --  7. Service channel enumeration compiles and is usable
    declare
-      Ch : constant Prov.Service_Channel := Prov.Ch_Create_Requirement;
+      Ch : constant Prov.Service_Channel :=
+        Prov.Ch_Object_Of_Interest_Create_Requirement;
       Handlers : aliased constant Prov.Service_Handlers :=
-        (On_Read_Match          => null,
-         On_Create_Requirement  => null,
-         On_Read_Requirement    => null,
-         On_Update_Requirement  => null,
-         On_Delete_Requirement  => null,
-         On_Read_Detail         => null);
+        (On_Matching_Objects_Read_Match             => null,
+         On_Object_Of_Interest_Create_Requirement  => null,
+         On_Object_Of_Interest_Read_Requirement    => null,
+         On_Object_Of_Interest_Update_Requirement  => null,
+         On_Object_Of_Interest_Delete_Requirement  => null,
+         On_Specific_Object_Detail_Read_Detail     => null);
       pragma Unreferenced (Ch);
       pragma Unreferenced (Handlers);
    begin
@@ -122,7 +167,7 @@ begin
    begin
       Prov.Dispatch
         (Handlers      => null,
-         Channel       => Prov.Ch_Create_Requirement,
+         Channel       => Prov.Ch_Object_Of_Interest_Create_Requirement,
          Request_Buf   => Req_Json (Req_Json'First)'Address,
          Request_Size  => Req_Json'Length,
          Response_Buf  => Resp_Buf,
@@ -155,7 +200,7 @@ begin
    begin
       Prov.Dispatch
         (Handlers      => null,
-         Channel       => Prov.Ch_Create_Requirement,
+         Channel       => Prov.Ch_Object_Of_Interest_Create_Requirement,
          Request_Buf   => Req_Flat (Req_Flat'First)'Address,
          Request_Size  => Req_Flat'Length,
          Content_Type  => Flat.Content_Type,
@@ -163,6 +208,109 @@ begin
          Response_Size => Resp_Size);
       Check ("Dispatch CreateRequirement flatbuffers returns buffer",
              Resp_Buf /= System.Null_Address or Resp_Size = 0);
+   end;
+
+   --  11. Sensor InterpretationRequirement codec round-trip
+   declare
+      Req : Interpretation_Requirement;
+   begin
+      Req.Policy := Policy_IncludeObjects;
+      Req.Type_Field := Type_LocateSeaSurfaceObjects;
+      declare
+         J : constant String := To_Json (Req);
+         R : constant Interpretation_Requirement := From_Json (J, null);
+      begin
+         Check ("Sensor InterpretationRequirement codec round-trip",
+                R.Policy = Policy_IncludeObjects
+                and R.Type_Field = Type_LocateSeaSurfaceObjects);
+      end;
+   end;
+
+   --  12. Sensor FlatBuffers round-trip for InterpretationRequirement
+   declare
+      Req : Interpretation_Requirement;
+   begin
+      Req.Policy := Policy_IncludeObjects;
+      Req.Type_Field := Type_LocateSeaSurfaceObjects;
+      declare
+         Encoded : constant String :=
+           Sensor_Flat.To_Binary_Interpretation_Requirement (Req);
+         Decoded : constant Interpretation_Requirement :=
+           Sensor_Flat.From_Binary_Interpretation_Requirement (Encoded, null);
+      begin
+         Check ("Sensor FlatBuffers round-trip",
+                Decoded.Policy = Policy_IncludeObjects
+                and Decoded.Type_Field = Type_LocateSeaSurfaceObjects);
+      end;
+   end;
+
+   --  13. Sensor provided dispatch routes CreateRequirement handler
+   declare
+      Handlers : aliased constant Sensor_Prov.Service_Handlers :=
+        (On_Interpretation_Requirement_Read_Capability    => null,
+         On_Interpretation_Requirement_Create_Requirement => Sensor_Create_Handler'Unrestricted_Access,
+         On_Interpretation_Requirement_Read_Requirement   => null,
+         On_Interpretation_Requirement_Update_Requirement => null,
+         On_Interpretation_Requirement_Delete_Requirement => null);
+      Req_Json  : constant String := "{}";
+      Resp_Buf  : System.Address;
+      Resp_Size : Natural;
+   begin
+      Sensor_Prov.Dispatch
+        (Handlers      => Handlers'Access,
+         Channel       => Sensor_Prov.Ch_Interpretation_Requirement_Create_Requirement,
+         Request_Buf   => Req_Json (Req_Json'First)'Address,
+         Request_Size  => Req_Json'Length,
+         Response_Buf  => Resp_Buf,
+         Response_Size => Resp_Size);
+      Check ("Sensor provided dispatch CreateRequirement",
+             Buffer_To_String (Resp_Buf, Resp_Size) = "sensor-create");
+   end;
+
+   --  14. Sensor consumed bindings expose disambiguated symbols
+   Check ("Sensor consumed service constants are distinct",
+          Sensor_Cons.Svc_Data_Provision_Dependency_Create_Requirement /=
+          Sensor_Cons.Svc_Data_Processing_Dependency_Create_Requirement);
+
+   declare
+      Provision_Channel : constant Sensor_Cons.Service_Channel :=
+        Sensor_Cons.Ch_Data_Provision_Dependency_Create_Requirement;
+      Processing_Channel : constant Sensor_Cons.Service_Channel :=
+        Sensor_Cons.Ch_Data_Processing_Dependency_Create_Requirement;
+      Handlers : aliased constant Sensor_Cons.Service_Handlers :=
+        (On_Data_Provision_Dependency_Create_Requirement => Data_Provision_Create_Handler'Unrestricted_Access,
+         On_Data_Provision_Dependency_Read_Requirement   => null,
+         On_Data_Provision_Dependency_Update_Requirement => null,
+         On_Data_Provision_Dependency_Delete_Requirement => null,
+         On_Data_Processing_Dependency_Create_Requirement => Data_Processing_Create_Handler'Unrestricted_Access,
+         On_Data_Processing_Dependency_Read_Requirement   => null,
+         On_Data_Processing_Dependency_Update_Requirement => null,
+         On_Data_Processing_Dependency_Delete_Requirement => null);
+      Req_Json  : constant String := "{}";
+      Resp_Buf  : System.Address;
+      Resp_Size : Natural;
+   begin
+      pragma Unreferenced (Provision_Channel, Processing_Channel);
+
+      Sensor_Cons.Dispatch
+        (Handlers      => Handlers'Access,
+         Channel       => Sensor_Cons.Ch_Data_Provision_Dependency_Create_Requirement,
+         Request_Buf   => Req_Json (Req_Json'First)'Address,
+         Request_Size  => Req_Json'Length,
+         Response_Buf  => Resp_Buf,
+         Response_Size => Resp_Size);
+      Check ("Sensor consumed provision dispatch CreateRequirement",
+             Buffer_To_String (Resp_Buf, Resp_Size) = "provision-create");
+
+      Sensor_Cons.Dispatch
+        (Handlers      => Handlers'Access,
+         Channel       => Sensor_Cons.Ch_Data_Processing_Dependency_Create_Requirement,
+         Request_Buf   => Req_Json (Req_Json'First)'Address,
+         Request_Size  => Req_Json'Length,
+         Response_Buf  => Resp_Buf,
+         Response_Size => Resp_Size);
+      Check ("Sensor consumed processing dispatch CreateRequirement",
+             Buffer_To_String (Resp_Buf, Resp_Size) = "processing-create");
    end;
 
    --  Summary

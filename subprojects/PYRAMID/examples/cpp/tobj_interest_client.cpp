@@ -57,7 +57,8 @@ void onCreateRequirementResponse(const pcl_msg_t* resp, void* user_data) {
     auto* state = static_cast<InterestClientState*>(user_data);
     if (resp && resp->data && resp->size > 0) {
         Identifier interest_id;
-        if (Provided::decodeCreateRequirementResponse(resp, &interest_id) &&
+        if (Provided::decodeObjectOfInterestCreateRequirementResponse(
+                resp, &interest_id) &&
             !interest_id.empty()) {
             log(("create_requirement response id: " + interest_id).c_str());
             state->interest_id_received.store(true);
@@ -100,7 +101,7 @@ pcl_status_t sendCreateRequirement(
     }
 
     log("create_requirement request (proto-native typed)");
-    return Provided::invokeCreateRequirement(
+    return Provided::invokeObjectOfInterestCreateRequirement(
         executor, req, onCreateRequirementResponse, state, nullptr,
         content_type);
 }

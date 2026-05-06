@@ -430,7 +430,7 @@ TEST(CodecDispatchE2E, FlatBuffersCodecUnitRoundTrip) {
 TEST(CodecDispatchE2E, JsonCreateRequirementDispatchRoundTrip) {
     struct CapturingHandler : public prov::ServiceHandler {
         types::ObjectInterestRequirement captured_req;
-        types::Identifier handleCreateRequirement(
+        types::Identifier handleObjectOfInterestCreateRequirement(
             const types::ObjectInterestRequirement& req) override {
             captured_req = req;
             return "new-id-42";
@@ -443,7 +443,8 @@ TEST(CodecDispatchE2E, JsonCreateRequirementDispatchRoundTrip) {
     auto payload = tactical_codec::toJson(req);
     void* resp_buf = nullptr;
     size_t resp_size = 0;
-    prov::dispatch(handler, prov::ServiceChannel::CreateRequirement,
+    prov::dispatch(handler,
+                   prov::ServiceChannel::ObjectOfInterestCreateRequirement,
                    payload.data(), payload.size(),
                    "application/json", &resp_buf, &resp_size);
 
@@ -458,7 +459,7 @@ TEST(CodecDispatchE2E, JsonCreateRequirementDispatchRoundTrip) {
 TEST(CodecDispatchE2E, FlatBuffersCreateRequirementDispatchRoundTrip) {
     struct CapturingHandler : public prov::ServiceHandler {
         types::ObjectInterestRequirement captured_req;
-        types::Identifier handleCreateRequirement(
+        types::Identifier handleObjectOfInterestCreateRequirement(
             const types::ObjectInterestRequirement& req) override {
             captured_req = req;
             return "new-id-84";
@@ -472,7 +473,8 @@ TEST(CodecDispatchE2E, FlatBuffersCreateRequirementDispatchRoundTrip) {
     auto payload = flatbuffers_codec::toBinary(req);
     void* resp_buf = nullptr;
     size_t resp_size = 0;
-    prov::dispatch(handler, prov::ServiceChannel::CreateRequirement,
+    prov::dispatch(handler,
+                   prov::ServiceChannel::ObjectOfInterestCreateRequirement,
                    payload.data(), payload.size(),
                    "application/flatbuffers", &resp_buf, &resp_size);
 
@@ -488,7 +490,7 @@ TEST(CodecDispatchE2E, FlatBuffersCreateRequirementDispatchRoundTrip) {
 TEST(CodecDispatchE2E, ProtobufCreateRequirementDispatchRoundTrip) {
     struct CapturingHandler : public prov::ServiceHandler {
         types::ObjectInterestRequirement captured_req;
-        types::Identifier handleCreateRequirement(
+        types::Identifier handleObjectOfInterestCreateRequirement(
             const types::ObjectInterestRequirement& req) override {
             captured_req = req;
             return "new-id-168";
@@ -502,7 +504,8 @@ TEST(CodecDispatchE2E, ProtobufCreateRequirementDispatchRoundTrip) {
     auto payload = protobuf_codec::toBinary(req);
     void* resp_buf = nullptr;
     size_t resp_size = 0;
-    prov::dispatch(handler, prov::ServiceChannel::CreateRequirement,
+    prov::dispatch(handler,
+                   prov::ServiceChannel::ObjectOfInterestCreateRequirement,
                    payload.data(), payload.size(),
                    "application/protobuf", &resp_buf, &resp_size);
 

@@ -1,0 +1,140 @@
+// Auto-generated service FlatBuffers schema
+// Generated from proto service closure for pyramid.components.sensor_data_interpretation.services
+
+namespace pyramid.services.sensor_data_interpretation;
+
+enum Feasibility : int {
+  UNSPECIFIED = 0,
+  FEASIBLE = 1,
+  NOT_FEASIBLE = 2,
+  PARTIALLY_FEASIBLE = 3,
+  PENDING = 4
+}
+
+enum Progress : int {
+  UNSPECIFIED = 0,
+  NOT_STARTED = 1,
+  IN_PROGRESS = 2,
+  COMPLETED = 3,
+  CANCELLED = 4,
+  FAILED = 5
+}
+
+enum InterpretationPolicy : int {
+  UNSPECIFIED = 0,
+  IGNORE_OBJECTS = 1,
+  INCLUDE_OBJECTS = 2
+}
+
+enum InterpretationType : int {
+  UNSPECIFIED = 0,
+  LOCATE_SEA_SURFACE_OBJECTS = 1
+}
+
+table GeodeticPosition {
+  latitude:double;
+  longitude:double;
+}
+
+table PolyArea {
+  points:[GeodeticPosition];
+}
+
+table Achievement {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+  status:Progress;
+  has_quality:bool;
+  quality:double;
+  achieveability:Feasibility;
+}
+
+table Entity {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+}
+
+table CircleArea {
+  position:GeodeticPosition;
+  radius:double;
+}
+
+table Point {
+  position:GeodeticPosition;
+}
+
+table Contraint {
+  name:string;
+  value:int;
+}
+
+table Ack {
+  success:bool;
+}
+
+table Query {
+  id:[string];
+  has_one_shot:bool;
+  one_shot:bool;
+}
+
+table InterpretationRequirement {
+  base:Entity;
+  status:Achievement;
+  policy:InterpretationPolicy;
+  type:InterpretationType;
+  poly_area:PolyArea;
+  circle_area:CircleArea;
+  point:Point;
+}
+
+table ObjectEvidenceProvisionRequirement {
+  base:Entity;
+  status:Achievement;
+  poly_area:PolyArea;
+  circle_area:CircleArea;
+  point:Point;
+}
+
+table ObjectAquisitionRequirement {
+  base:Entity;
+  status:Achievement;
+  poly_area:PolyArea;
+  circle_area:CircleArea;
+  point:Point;
+}
+
+table Capability {
+  has_update_time:bool;
+  update_time:double;
+  id:string;
+  source:string;
+  availability:bool;
+  name:string;
+  contraint:[Contraint];
+}
+
+table IdentifierValue {
+  value:string;
+}
+
+table ObjectEvidenceProvisionRequirementArrayHolder {
+  items:[ObjectEvidenceProvisionRequirement];
+}
+
+table ObjectAquisitionRequirementArrayHolder {
+  items:[ObjectAquisitionRequirement];
+}
+
+table CapabilityArrayHolder {
+  items:[Capability];
+}
+
+table InterpretationRequirementArrayHolder {
+  items:[InterpretationRequirement];
+}
+

@@ -209,15 +209,15 @@ def _field_kind_and_type(
 
 
 def _json_codec_namespace_for_type(full_type: str) -> str:
-    if '.autonomy.' in full_type:
-        return 'autonomy'
-    if '.common.' in full_type:
+    parts = [part for part in full_type.split('.') if part]
+    try:
+        data_model_index = parts.index('data_model')
+    except ValueError:
         return 'common'
-    if '.tactical.' in full_type:
-        return 'tactical'
-    if '.base.' in full_type and full_type.split('.')[-1] == 'Identifier':
-        return 'identifier'
-    return 'common'
+    namespace_index = data_model_index + 1
+    if namespace_index >= len(parts) - 1:
+        return 'common'
+    return parts[namespace_index]
 
 
 def _is_generated_string_like(
@@ -732,10 +732,18 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated service FlatBuffers codec\n')
             f.write(f'#include "{group.file_base}_flatbuffers_codec.hpp"\n\n')
-            f.write('#include "pyramid_data_model_autonomy_codec.hpp"\n')
-            f.write('#include "pyramid_data_model_base_codec.hpp"\n')
-            f.write('#include "pyramid_data_model_common_codec.hpp"\n')
-            f.write('#include "pyramid_data_model_tactical_codec.hpp"\n')
+            codec_namespaces = {
+                spec.json_codec_ns
+                for spec in group.message_specs
+                if spec.json_codec_ns not in ('base', 'wire')
+            }
+            codec_namespaces.update(
+                spec.json_codec_ns
+                for spec in group.array_specs
+                if spec.json_codec_ns not in ('base', 'wire')
+            )
+            for codec_ns in sorted(codec_namespaces):
+                f.write(f'#include "pyramid_data_model_{codec_ns}_codec.hpp"\n')
             f.write('#include <cstdlib>\n')
             f.write('#include <cstdint>\n')
             f.write('#include <cstring>\n')
@@ -931,35 +939,20 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
         return f'{group.file_base}_{short_name}_{direction}_json'
 
     def _cpp_json_encode_expr(self, group: ServiceCodecGroup, json_ns: str, cpp_type: str, expr: str) -> str:
-        if json_ns == 'autonomy':
-            return f'pyramid::domain_model::autonomy::toJson({expr})'
-        if json_ns == 'common':
-            return f'pyramid::domain_model::common::toJson({expr})'
-        if json_ns == 'tactical':
-            return f'pyramid::domain_model::tactical::toJson({expr})'
-        if json_ns == 'identifier':
+        if json_ns == 'base':
             return f'nlohmann::json({expr}).dump()'
         if json_ns == 'wire':
             return f'{group.cpp_base_ns}::json_codec::toJson({expr})'
-        raise ValueError(f'Unsupported JSON codec namespace: {json_ns}')
+        return f'pyramid::domain_model::{json_ns}::toJson({expr})'
 
     def _cpp_json_decode_expr(self, group: ServiceCodecGroup, json_ns: str, cpp_type: str, expr: str) -> str:
-        if json_ns == 'autonomy':
-            return f'pyramid::domain_model::autonomy::fromJson({expr}, static_cast<{cpp_type}*>(nullptr))'
-        if json_ns == 'common':
-            return f'pyramid::domain_model::common::fromJson({expr}, static_cast<{cpp_type}*>(nullptr))'
-        if json_ns == 'tactical':
-            return f'pyramid::domain_model::tactical::fromJson({expr}, static_cast<{cpp_type}*>(nullptr))'
-        if json_ns == 'identifier':
-            return (
-                '[&]() { auto j = nlohmann::json::parse(' + expr + '); '
-                f'return j.is_string() ? j.get<{cpp_type}>() : {cpp_type}{{}}; }}()'
-            )
+        if json_ns == 'base':
+            return f'nlohmann::json::parse({expr}).get<{cpp_type}>()'
         if json_ns == 'wire':
             short = cpp_type.split('::')[-1]
             snake = short[0].lower() + short[1:]
             return f'{group.cpp_base_ns}::json_codec::{snake}FromJson({expr})'
-        raise ValueError(f'Unsupported JSON codec namespace: {json_ns}')
+        return f'pyramid::domain_model::{json_ns}::fromJson({expr}, static_cast<{cpp_type}*>(nullptr))'
 
     def _emit_service_cpp_json_bridge_exports(self, f, group: ServiceCodecGroup):
         f.write('\nextern "C" {\n\n')
@@ -1013,11 +1006,8 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write('        if (arr.is_array()) {\n')
             f.write('            values.reserve(arr.size());\n')
             f.write('            for (const auto& item : arr) {\n')
-            if array_spec.json_codec_ns == 'identifier':
-                f.write(f'                values.push_back(item.is_string() ? item.get<{array_spec.element_cpp_type}>() : {array_spec.element_cpp_type}{{}});\n')
-            else:
-                decode_expr = self._cpp_json_decode_expr(group, array_spec.json_codec_ns, array_spec.element_cpp_type, 'item.dump()')
-                f.write(f'                values.push_back({decode_expr});\n')
+            decode_expr = self._cpp_json_decode_expr(group, array_spec.json_codec_ns, array_spec.element_cpp_type, 'item.dump()')
+            f.write(f'                values.push_back({decode_expr});\n')
             f.write('            }\n')
             f.write('        }\n')
             f.write(f'        auto payload = {group.cpp_codec_ns}::toBinary(values);\n')
@@ -1036,11 +1026,8 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write(f'        auto values = {group.cpp_codec_ns}::fromBinary{short}(data, size);\n')
             f.write('        nlohmann::json arr = nlohmann::json::array();\n')
             f.write('        for (const auto& item : values) {\n')
-            if array_spec.json_codec_ns == 'identifier':
-                f.write('            arr.push_back(item);\n')
-            else:
-                encode_expr = self._cpp_json_encode_expr(group, array_spec.json_codec_ns, array_spec.element_cpp_type, 'item')
-                f.write(f'            arr.push_back(nlohmann::json::parse({encode_expr}));\n')
+            encode_expr = self._cpp_json_encode_expr(group, array_spec.json_codec_ns, array_spec.element_cpp_type, 'item')
+            f.write(f'            arr.push_back(nlohmann::json::parse({encode_expr}));\n')
             f.write('        }\n')
             f.write('        auto json = arr.dump();\n')
             f.write('        char* out = static_cast<char*>(std::malloc(json.size() + 1));\n')

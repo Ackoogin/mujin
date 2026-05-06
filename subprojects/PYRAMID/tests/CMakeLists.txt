@@ -134,6 +134,25 @@ endif()
 # Binding performance benchmark
 # ---------------------------------------------------------------------------
 if(PYRAMID_ENABLE_FLATBUFFERS)
+    add_executable(test_sensor_data_interpretation_bindings
+        test_sensor_data_interpretation_bindings.cpp
+        ${PROTO_BINDINGS_DIR}/pyramid_services_sensor_data_interpretation_provided.cpp
+        ${PROTO_BINDINGS_DIR}/pyramid_services_sensor_data_interpretation_consumed.cpp
+    )
+    target_link_libraries(test_sensor_data_interpretation_bindings PRIVATE
+        pcl_core
+        pyramid_generated_codecs
+        pyramid_flatbuffers_support
+        GTest::gtest_main
+    )
+    target_include_directories(test_sensor_data_interpretation_bindings PRIVATE
+        ${PROTO_BINDINGS_DIR}
+    )
+    if(NOT WIN32)
+        target_link_libraries(test_sensor_data_interpretation_bindings PRIVATE pthread)
+    endif()
+    gtest_discover_tests(test_sensor_data_interpretation_bindings DISCOVERY_MODE PRE_TEST)
+
     add_executable(test_binding_performance
         test_binding_performance.cpp
         ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp

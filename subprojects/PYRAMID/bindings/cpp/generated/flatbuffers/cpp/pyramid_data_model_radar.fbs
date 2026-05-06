@@ -1,0 +1,29 @@
+// Auto-generated FlatBuffers schema from pyramid.data_model.radar.proto
+// Do not edit -- regenerate from proto source
+
+namespace pyramid.data_model.radar;
+
+enum Radar_Operational_Mode : byte {
+  UNSPECIFIED = 0,
+  MARITIME_SURVEILLANCE = 1,
+  SHORT_RANGE_AWARENESS = 2,
+  TRANSPONDER = 3,
+  A_MTI = 4,
+  ENHANCED_MOVING_TARGET_INDICATOR = 5,
+  WEATHER = 6,
+  AIR_TO_AIR_SURVEILLANCE = 7,
+  SMALL_TARGET = 8,
+  TURBULENCE = 9,
+  ISAR = 10,
+  SPOT_SAR = 11,
+  STRIP_SAR = 12,
+  HRR = 13,
+  PLANNED_SAR = 14,
+  G_MTI = 15,
+  M_MTI = 16
+}
+
+enum Radar_Operational_State : byte {
+  UNSPECIFIED = 0
+}
+

@@ -1217,7 +1217,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
          Append (Result, "]");
       end if;
       Comma;
-      Append (Result, """progress"":" & """" & Pyramid.Data_Model.Common.Types_Codec.To_String (Msg.Progress) & """");
+      Append (Result, """progress"":" & """" & Pyramid.Data_Model.Common.Types_Codec.To_String (Msg.Val_Progress) & """");
       Append (Result, "}");
       return To_String (Result);
    end To_Json;
@@ -1342,7 +1342,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
             Val : constant JSON_Value := Get (J, "progress");
             Str : constant String := Get (Val);
          begin
-            Result.Progress := Pyramid.Data_Model.Common.Types_Codec.Progress_From_String (Str);
+            Result.Val_Progress := Pyramid.Data_Model.Common.Types_Codec.Progress_From_String (Str);
          end;
       end if;
       return Result;
@@ -1374,7 +1374,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
       Comma;
       Append (Result, """state"":" & """" & To_String (Msg.State) & """");
       Comma;
-      Append (Result, """achievement"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Achievement));
+      Append (Result, """achievement"":" & Pyramid.Data_Model.Common.Types_Codec.To_Json (Msg.Val_Achievement));
       Comma;
       Append (Result, """replan_count"":" & Natural'Image (Msg.Replan_Count));
       if Msg.Outstanding_Placement /= null then
@@ -1452,7 +1452,7 @@ package body Pyramid.Data_Model.Autonomy.Types_Codec is
          declare
             Sub : constant String := Write (Get (J, "achievement"));
          begin
-            Result.Achievement := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
+            Result.Val_Achievement := Pyramid.Data_Model.Common.Types_Codec.From_Json (Sub, null);
          end;
       end if;
       if Has_Field (J, "replan_count") then

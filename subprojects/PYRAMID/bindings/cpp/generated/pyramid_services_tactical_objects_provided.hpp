@@ -37,12 +37,12 @@ std::vector<const char*> supportedContentTypes();
 // Service wire-name constants (generated from proto)
 // ---------------------------------------------------------------------------
 
-constexpr const char* kSvcReadMatch          = "matching_objects.read_match";
-constexpr const char* kSvcCreateRequirement  = "object_of_interest.create_requirement";
-constexpr const char* kSvcReadRequirement    = "object_of_interest.read_requirement";
-constexpr const char* kSvcUpdateRequirement  = "object_of_interest.update_requirement";
-constexpr const char* kSvcDeleteRequirement  = "object_of_interest.delete_requirement";
-constexpr const char* kSvcReadDetail         = "specific_object_detail.read_detail";
+constexpr const char* kSvcMatchingObjectsReadMatch           = "matching_objects.read_match";
+constexpr const char* kSvcObjectOfInterestCreateRequirement  = "object_of_interest.create_requirement";
+constexpr const char* kSvcObjectOfInterestReadRequirement    = "object_of_interest.read_requirement";
+constexpr const char* kSvcObjectOfInterestUpdateRequirement  = "object_of_interest.update_requirement";
+constexpr const char* kSvcObjectOfInterestDeleteRequirement  = "object_of_interest.delete_requirement";
+constexpr const char* kSvcSpecificObjectDetailReadDetail     = "specific_object_detail.read_detail";
 
 // ---------------------------------------------------------------------------
 // Standard topic name constants
@@ -56,12 +56,12 @@ constexpr const char* kTopicEvidenceRequirements  = "standard.evidence_requireme
 // ---------------------------------------------------------------------------
 
 enum class ServiceChannel {
-    ReadMatch,
-    CreateRequirement,
-    ReadRequirement,
-    UpdateRequirement,
-    DeleteRequirement,
-    ReadDetail,
+    MatchingObjectsReadMatch,
+    ObjectOfInterestCreateRequirement,
+    ObjectOfInterestReadRequirement,
+    ObjectOfInterestUpdateRequirement,
+    ObjectOfInterestDeleteRequirement,
+    SpecificObjectDetailReadDetail,
 };
 
 // ---------------------------------------------------------------------------
@@ -92,24 +92,24 @@ public:
 
     // Matching_Objects_Service
     virtual std::vector<ObjectMatch>
-    handleReadMatch(const Query& request);
+    handleMatchingObjectsReadMatch(const Query& request);
 
     // Object_Of_Interest_Service
     virtual Identifier
-    handleCreateRequirement(const ObjectInterestRequirement& request);
+    handleObjectOfInterestCreateRequirement(const ObjectInterestRequirement& request);
 
     virtual std::vector<ObjectInterestRequirement>
-    handleReadRequirement(const Query& request);
+    handleObjectOfInterestReadRequirement(const Query& request);
 
     virtual Ack
-    handleUpdateRequirement(const ObjectInterestRequirement& request);
+    handleObjectOfInterestUpdateRequirement(const ObjectInterestRequirement& request);
 
     virtual Ack
-    handleDeleteRequirement(const Identifier& request);
+    handleObjectOfInterestDeleteRequirement(const Identifier& request);
 
     // Specific_Object_Detail_Service
     virtual std::vector<ObjectDetail>
-    handleReadDetail(const Query& request);
+    handleSpecificObjectDetailReadDetail(const Query& request);
 };
 
 // ---------------------------------------------------------------------------
@@ -172,130 +172,130 @@ bool decodeEvidenceRequirements(const pcl_msg_t* msg,
                                 ObjectEvidenceRequirement* out);
 
 /// \brief Decode a response from matching_objects.read_match.
-bool decodeReadMatchResponse(const pcl_msg_t* msg,
-                             std::vector<ObjectMatch>* out);
+bool decodeMatchingObjectsReadMatchResponse(const pcl_msg_t* msg,
+                                            std::vector<ObjectMatch>* out);
 
 /// \brief Invoke matching_objects.read_match (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
-pcl_status_t invokeReadMatch(pcl_executor_t* executor,
-                             const Query&                 request,
-                             pcl_resp_cb_fn_t        callback,
-                             void*                   user_data = nullptr,
-                             const pcl_endpoint_route_t* route = nullptr,
-                             const char*       content_type = "application/json");
+pcl_status_t invokeMatchingObjectsReadMatch(pcl_executor_t* executor,
+                                            const Query&                 request,
+                                            pcl_resp_cb_fn_t        callback,
+                                            void*                   user_data = nullptr,
+                                            const pcl_endpoint_route_t* route = nullptr,
+                                            const char*       content_type = "application/json");
 
 /// \brief Invoke matching_objects.read_match and ignore the async response.
-pcl_status_t invokeReadMatch(pcl_executor_t* executor,
-                             const Query&                 request,
-                             const char*       content_type = "application/json",
-                             const pcl_endpoint_route_t* route = nullptr);
+pcl_status_t invokeMatchingObjectsReadMatch(pcl_executor_t* executor,
+                                            const Query&                 request,
+                                            const char*       content_type = "application/json",
+                                            const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Decode a response from object_of_interest.create_requirement.
-bool decodeCreateRequirementResponse(const pcl_msg_t* msg,
-                                     Identifier* out);
+bool decodeObjectOfInterestCreateRequirementResponse(const pcl_msg_t* msg,
+                                                     Identifier* out);
 
 /// \brief Invoke object_of_interest.create_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
-pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
-                                     const ObjectInterestRequirement& request,
-                                     pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr,
-                                     const pcl_endpoint_route_t* route = nullptr,
-                                     const char*       content_type = "application/json");
+pcl_status_t invokeObjectOfInterestCreateRequirement(pcl_executor_t* executor,
+                                                     const ObjectInterestRequirement& request,
+                                                     pcl_resp_cb_fn_t        callback,
+                                                     void*                   user_data = nullptr,
+                                                     const pcl_endpoint_route_t* route = nullptr,
+                                                     const char*       content_type = "application/json");
 
 /// \brief Invoke object_of_interest.create_requirement and ignore the async response.
-pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
-                                     const ObjectInterestRequirement& request,
-                                     const char*       content_type = "application/json",
-                                     const pcl_endpoint_route_t* route = nullptr);
+pcl_status_t invokeObjectOfInterestCreateRequirement(pcl_executor_t* executor,
+                                                     const ObjectInterestRequirement& request,
+                                                     const char*       content_type = "application/json",
+                                                     const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Decode a response from object_of_interest.read_requirement.
-bool decodeReadRequirementResponse(const pcl_msg_t* msg,
-                                   std::vector<ObjectInterestRequirement>* out);
+bool decodeObjectOfInterestReadRequirementResponse(const pcl_msg_t* msg,
+                                                   std::vector<ObjectInterestRequirement>* out);
 
 /// \brief Invoke object_of_interest.read_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
-pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
-                                   const Query&                 request,
-                                   pcl_resp_cb_fn_t        callback,
-                                   void*                   user_data = nullptr,
-                                   const pcl_endpoint_route_t* route = nullptr,
-                                   const char*       content_type = "application/json");
+pcl_status_t invokeObjectOfInterestReadRequirement(pcl_executor_t* executor,
+                                                   const Query&                 request,
+                                                   pcl_resp_cb_fn_t        callback,
+                                                   void*                   user_data = nullptr,
+                                                   const pcl_endpoint_route_t* route = nullptr,
+                                                   const char*       content_type = "application/json");
 
 /// \brief Invoke object_of_interest.read_requirement and ignore the async response.
-pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
-                                   const Query&                 request,
-                                   const char*       content_type = "application/json",
-                                   const pcl_endpoint_route_t* route = nullptr);
+pcl_status_t invokeObjectOfInterestReadRequirement(pcl_executor_t* executor,
+                                                   const Query&                 request,
+                                                   const char*       content_type = "application/json",
+                                                   const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Decode a response from object_of_interest.update_requirement.
-bool decodeUpdateRequirementResponse(const pcl_msg_t* msg,
-                                     Ack* out);
+bool decodeObjectOfInterestUpdateRequirementResponse(const pcl_msg_t* msg,
+                                                     Ack* out);
 
 /// \brief Invoke object_of_interest.update_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
-pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
-                                     const ObjectInterestRequirement& request,
-                                     pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr,
-                                     const pcl_endpoint_route_t* route = nullptr,
-                                     const char*       content_type = "application/json");
+pcl_status_t invokeObjectOfInterestUpdateRequirement(pcl_executor_t* executor,
+                                                     const ObjectInterestRequirement& request,
+                                                     pcl_resp_cb_fn_t        callback,
+                                                     void*                   user_data = nullptr,
+                                                     const pcl_endpoint_route_t* route = nullptr,
+                                                     const char*       content_type = "application/json");
 
 /// \brief Invoke object_of_interest.update_requirement and ignore the async response.
-pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
-                                     const ObjectInterestRequirement& request,
-                                     const char*       content_type = "application/json",
-                                     const pcl_endpoint_route_t* route = nullptr);
+pcl_status_t invokeObjectOfInterestUpdateRequirement(pcl_executor_t* executor,
+                                                     const ObjectInterestRequirement& request,
+                                                     const char*       content_type = "application/json",
+                                                     const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Decode a response from object_of_interest.delete_requirement.
-bool decodeDeleteRequirementResponse(const pcl_msg_t* msg,
-                                     Ack* out);
+bool decodeObjectOfInterestDeleteRequirementResponse(const pcl_msg_t* msg,
+                                                     Ack* out);
 
 /// \brief Invoke object_of_interest.delete_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
-pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
-                                     const Identifier&            request,
-                                     pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr,
-                                     const pcl_endpoint_route_t* route = nullptr,
-                                     const char*       content_type = "application/json");
+pcl_status_t invokeObjectOfInterestDeleteRequirement(pcl_executor_t* executor,
+                                                     const Identifier&            request,
+                                                     pcl_resp_cb_fn_t        callback,
+                                                     void*                   user_data = nullptr,
+                                                     const pcl_endpoint_route_t* route = nullptr,
+                                                     const char*       content_type = "application/json");
 
 /// \brief Invoke object_of_interest.delete_requirement and ignore the async response.
-pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
-                                     const Identifier&            request,
-                                     const char*       content_type = "application/json",
-                                     const pcl_endpoint_route_t* route = nullptr);
+pcl_status_t invokeObjectOfInterestDeleteRequirement(pcl_executor_t* executor,
+                                                     const Identifier&            request,
+                                                     const char*       content_type = "application/json",
+                                                     const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Decode a response from specific_object_detail.read_detail.
-bool decodeReadDetailResponse(const pcl_msg_t* msg,
-                              std::vector<ObjectDetail>* out);
+bool decodeSpecificObjectDetailReadDetailResponse(const pcl_msg_t* msg,
+                                                  std::vector<ObjectDetail>* out);
 
 /// \brief Invoke specific_object_detail.read_detail (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
-pcl_status_t invokeReadDetail(pcl_executor_t* executor,
-                              const Query&                 request,
-                              pcl_resp_cb_fn_t        callback,
-                              void*                   user_data = nullptr,
-                              const pcl_endpoint_route_t* route = nullptr,
-                              const char*       content_type = "application/json");
+pcl_status_t invokeSpecificObjectDetailReadDetail(pcl_executor_t* executor,
+                                                  const Query&                 request,
+                                                  pcl_resp_cb_fn_t        callback,
+                                                  void*                   user_data = nullptr,
+                                                  const pcl_endpoint_route_t* route = nullptr,
+                                                  const char*       content_type = "application/json");
 
 /// \brief Invoke specific_object_detail.read_detail and ignore the async response.
-pcl_status_t invokeReadDetail(pcl_executor_t* executor,
-                              const Query&                 request,
-                              const char*       content_type = "application/json",
-                              const pcl_endpoint_route_t* route = nullptr);
+pcl_status_t invokeSpecificObjectDetailReadDetail(pcl_executor_t* executor,
+                                                  const Query&                 request,
+                                                  const char*       content_type = "application/json",
+                                                  const pcl_endpoint_route_t* route = nullptr);
 
 // ---------------------------------------------------------------------------
 // Dispatch -- deserialises request, calls handler, serialises response.

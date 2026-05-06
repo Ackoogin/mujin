@@ -37,12 +37,12 @@ std::vector<const char*> supportedContentTypes();
 // Service wire-name constants (generated from proto)
 // ---------------------------------------------------------------------------
 
-constexpr const char* kSvcReadDetail         = "object_evidence.read_detail";
-constexpr const char* kSvcCreateRequirement  = "object_solution_evidence.create_requirement";
-constexpr const char* kSvcReadRequirement    = "object_solution_evidence.read_requirement";
-constexpr const char* kSvcUpdateRequirement  = "object_solution_evidence.update_requirement";
-constexpr const char* kSvcDeleteRequirement  = "object_solution_evidence.delete_requirement";
-constexpr const char* kSvcReadCapability     = "object_source_capability.read_capability";
+constexpr const char* kSvcObjectEvidenceReadDetail                 = "object_evidence.read_detail";
+constexpr const char* kSvcObjectSolutionEvidenceCreateRequirement  = "object_solution_evidence.create_requirement";
+constexpr const char* kSvcObjectSolutionEvidenceReadRequirement    = "object_solution_evidence.read_requirement";
+constexpr const char* kSvcObjectSolutionEvidenceUpdateRequirement  = "object_solution_evidence.update_requirement";
+constexpr const char* kSvcObjectSolutionEvidenceDeleteRequirement  = "object_solution_evidence.delete_requirement";
+constexpr const char* kSvcObjectSourceCapabilityReadCapability     = "object_source_capability.read_capability";
 
 // ---------------------------------------------------------------------------
 // Standard topic name constants
@@ -55,12 +55,12 @@ constexpr const char* kTopicObjectEvidence = "standard.object_evidence";
 // ---------------------------------------------------------------------------
 
 enum class ServiceChannel {
-    ReadDetail,
-    CreateRequirement,
-    ReadRequirement,
-    UpdateRequirement,
-    DeleteRequirement,
-    ReadCapability,
+    ObjectEvidenceReadDetail,
+    ObjectSolutionEvidenceCreateRequirement,
+    ObjectSolutionEvidenceReadRequirement,
+    ObjectSolutionEvidenceUpdateRequirement,
+    ObjectSolutionEvidenceDeleteRequirement,
+    ObjectSourceCapabilityReadCapability,
 };
 
 // ---------------------------------------------------------------------------
@@ -90,24 +90,24 @@ public:
 
     // Object_Evidence_Service
     virtual std::vector<ObjectDetail>
-    handleReadDetail(const Query& request);
+    handleObjectEvidenceReadDetail(const Query& request);
 
     // Object_Solution_Evidence_Service
     virtual Identifier
-    handleCreateRequirement(const ObjectEvidenceRequirement& request);
+    handleObjectSolutionEvidenceCreateRequirement(const ObjectEvidenceRequirement& request);
 
     virtual std::vector<ObjectEvidenceRequirement>
-    handleReadRequirement(const Query& request);
+    handleObjectSolutionEvidenceReadRequirement(const Query& request);
 
     virtual Ack
-    handleUpdateRequirement(const ObjectEvidenceRequirement& request);
+    handleObjectSolutionEvidenceUpdateRequirement(const ObjectEvidenceRequirement& request);
 
     virtual Ack
-    handleDeleteRequirement(const Identifier& request);
+    handleObjectSolutionEvidenceDeleteRequirement(const Identifier& request);
 
     // Object_Source_Capability_Service
     virtual std::vector<Capability>
-    handleReadCapability(const Query& request);
+    handleObjectSourceCapabilityReadCapability(const Query& request);
 };
 
 // ---------------------------------------------------------------------------
@@ -142,130 +142,130 @@ bool decodeObjectEvidence(const pcl_msg_t* msg,
                           ObjectDetail* out);
 
 /// \brief Decode a response from object_evidence.read_detail.
-bool decodeReadDetailResponse(const pcl_msg_t* msg,
-                              std::vector<ObjectDetail>* out);
+bool decodeObjectEvidenceReadDetailResponse(const pcl_msg_t* msg,
+                                            std::vector<ObjectDetail>* out);
 
 /// \brief Invoke object_evidence.read_detail (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
-pcl_status_t invokeReadDetail(pcl_executor_t* executor,
-                              const Query&                 request,
-                              pcl_resp_cb_fn_t        callback,
-                              void*                   user_data = nullptr,
-                              const pcl_endpoint_route_t* route = nullptr,
-                              const char*       content_type = "application/json");
+pcl_status_t invokeObjectEvidenceReadDetail(pcl_executor_t* executor,
+                                            const Query&                 request,
+                                            pcl_resp_cb_fn_t        callback,
+                                            void*                   user_data = nullptr,
+                                            const pcl_endpoint_route_t* route = nullptr,
+                                            const char*       content_type = "application/json");
 
 /// \brief Invoke object_evidence.read_detail and ignore the async response.
-pcl_status_t invokeReadDetail(pcl_executor_t* executor,
-                              const Query&                 request,
-                              const char*       content_type = "application/json",
-                              const pcl_endpoint_route_t* route = nullptr);
+pcl_status_t invokeObjectEvidenceReadDetail(pcl_executor_t* executor,
+                                            const Query&                 request,
+                                            const char*       content_type = "application/json",
+                                            const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Decode a response from object_solution_evidence.create_requirement.
-bool decodeCreateRequirementResponse(const pcl_msg_t* msg,
-                                     Identifier* out);
+bool decodeObjectSolutionEvidenceCreateRequirementResponse(const pcl_msg_t* msg,
+                                                           Identifier* out);
 
 /// \brief Invoke object_solution_evidence.create_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
-pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
-                                     const ObjectEvidenceRequirement& request,
-                                     pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr,
-                                     const pcl_endpoint_route_t* route = nullptr,
-                                     const char*       content_type = "application/json");
+pcl_status_t invokeObjectSolutionEvidenceCreateRequirement(pcl_executor_t* executor,
+                                                           const ObjectEvidenceRequirement& request,
+                                                           pcl_resp_cb_fn_t        callback,
+                                                           void*                   user_data = nullptr,
+                                                           const pcl_endpoint_route_t* route = nullptr,
+                                                           const char*       content_type = "application/json");
 
 /// \brief Invoke object_solution_evidence.create_requirement and ignore the async response.
-pcl_status_t invokeCreateRequirement(pcl_executor_t* executor,
-                                     const ObjectEvidenceRequirement& request,
-                                     const char*       content_type = "application/json",
-                                     const pcl_endpoint_route_t* route = nullptr);
+pcl_status_t invokeObjectSolutionEvidenceCreateRequirement(pcl_executor_t* executor,
+                                                           const ObjectEvidenceRequirement& request,
+                                                           const char*       content_type = "application/json",
+                                                           const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Decode a response from object_solution_evidence.read_requirement.
-bool decodeReadRequirementResponse(const pcl_msg_t* msg,
-                                   std::vector<ObjectEvidenceRequirement>* out);
+bool decodeObjectSolutionEvidenceReadRequirementResponse(const pcl_msg_t* msg,
+                                                         std::vector<ObjectEvidenceRequirement>* out);
 
 /// \brief Invoke object_solution_evidence.read_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
-pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
-                                   const Query&                 request,
-                                   pcl_resp_cb_fn_t        callback,
-                                   void*                   user_data = nullptr,
-                                   const pcl_endpoint_route_t* route = nullptr,
-                                   const char*       content_type = "application/json");
+pcl_status_t invokeObjectSolutionEvidenceReadRequirement(pcl_executor_t* executor,
+                                                         const Query&                 request,
+                                                         pcl_resp_cb_fn_t        callback,
+                                                         void*                   user_data = nullptr,
+                                                         const pcl_endpoint_route_t* route = nullptr,
+                                                         const char*       content_type = "application/json");
 
 /// \brief Invoke object_solution_evidence.read_requirement and ignore the async response.
-pcl_status_t invokeReadRequirement(pcl_executor_t* executor,
-                                   const Query&                 request,
-                                   const char*       content_type = "application/json",
-                                   const pcl_endpoint_route_t* route = nullptr);
+pcl_status_t invokeObjectSolutionEvidenceReadRequirement(pcl_executor_t* executor,
+                                                         const Query&                 request,
+                                                         const char*       content_type = "application/json",
+                                                         const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Decode a response from object_solution_evidence.update_requirement.
-bool decodeUpdateRequirementResponse(const pcl_msg_t* msg,
-                                     Ack* out);
+bool decodeObjectSolutionEvidenceUpdateRequirementResponse(const pcl_msg_t* msg,
+                                                           Ack* out);
 
 /// \brief Invoke object_solution_evidence.update_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
-pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
-                                     const ObjectEvidenceRequirement& request,
-                                     pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr,
-                                     const pcl_endpoint_route_t* route = nullptr,
-                                     const char*       content_type = "application/json");
+pcl_status_t invokeObjectSolutionEvidenceUpdateRequirement(pcl_executor_t* executor,
+                                                           const ObjectEvidenceRequirement& request,
+                                                           pcl_resp_cb_fn_t        callback,
+                                                           void*                   user_data = nullptr,
+                                                           const pcl_endpoint_route_t* route = nullptr,
+                                                           const char*       content_type = "application/json");
 
 /// \brief Invoke object_solution_evidence.update_requirement and ignore the async response.
-pcl_status_t invokeUpdateRequirement(pcl_executor_t* executor,
-                                     const ObjectEvidenceRequirement& request,
-                                     const char*       content_type = "application/json",
-                                     const pcl_endpoint_route_t* route = nullptr);
+pcl_status_t invokeObjectSolutionEvidenceUpdateRequirement(pcl_executor_t* executor,
+                                                           const ObjectEvidenceRequirement& request,
+                                                           const char*       content_type = "application/json",
+                                                           const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Decode a response from object_solution_evidence.delete_requirement.
-bool decodeDeleteRequirementResponse(const pcl_msg_t* msg,
-                                     Ack* out);
+bool decodeObjectSolutionEvidenceDeleteRequirementResponse(const pcl_msg_t* msg,
+                                                           Ack* out);
 
 /// \brief Invoke object_solution_evidence.delete_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
-pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
-                                     const Identifier&            request,
-                                     pcl_resp_cb_fn_t        callback,
-                                     void*                   user_data = nullptr,
-                                     const pcl_endpoint_route_t* route = nullptr,
-                                     const char*       content_type = "application/json");
+pcl_status_t invokeObjectSolutionEvidenceDeleteRequirement(pcl_executor_t* executor,
+                                                           const Identifier&            request,
+                                                           pcl_resp_cb_fn_t        callback,
+                                                           void*                   user_data = nullptr,
+                                                           const pcl_endpoint_route_t* route = nullptr,
+                                                           const char*       content_type = "application/json");
 
 /// \brief Invoke object_solution_evidence.delete_requirement and ignore the async response.
-pcl_status_t invokeDeleteRequirement(pcl_executor_t* executor,
-                                     const Identifier&            request,
-                                     const char*       content_type = "application/json",
-                                     const pcl_endpoint_route_t* route = nullptr);
+pcl_status_t invokeObjectSolutionEvidenceDeleteRequirement(pcl_executor_t* executor,
+                                                           const Identifier&            request,
+                                                           const char*       content_type = "application/json",
+                                                           const pcl_endpoint_route_t* route = nullptr);
 
 /// \brief Decode a response from object_source_capability.read_capability.
-bool decodeReadCapabilityResponse(const pcl_msg_t* msg,
-                                  std::vector<Capability>* out);
+bool decodeObjectSourceCapabilityReadCapabilityResponse(const pcl_msg_t* msg,
+                                                        std::vector<Capability>* out);
 
 /// \brief Invoke object_source_capability.read_capability (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
 /// executor transport fallback when no route is supplied.
-pcl_status_t invokeReadCapability(pcl_executor_t* executor,
-                                  const Query&                 request,
-                                  pcl_resp_cb_fn_t        callback,
-                                  void*                   user_data = nullptr,
-                                  const pcl_endpoint_route_t* route = nullptr,
-                                  const char*       content_type = "application/json");
+pcl_status_t invokeObjectSourceCapabilityReadCapability(pcl_executor_t* executor,
+                                                        const Query&                 request,
+                                                        pcl_resp_cb_fn_t        callback,
+                                                        void*                   user_data = nullptr,
+                                                        const pcl_endpoint_route_t* route = nullptr,
+                                                        const char*       content_type = "application/json");
 
 /// \brief Invoke object_source_capability.read_capability and ignore the async response.
-pcl_status_t invokeReadCapability(pcl_executor_t* executor,
-                                  const Query&                 request,
-                                  const char*       content_type = "application/json",
-                                  const pcl_endpoint_route_t* route = nullptr);
+pcl_status_t invokeObjectSourceCapabilityReadCapability(pcl_executor_t* executor,
+                                                        const Query&                 request,
+                                                        const char*       content_type = "application/json",
+                                                        const pcl_endpoint_route_t* route = nullptr);
 
 // ---------------------------------------------------------------------------
 // Dispatch -- deserialises request, calls handler, serialises response.

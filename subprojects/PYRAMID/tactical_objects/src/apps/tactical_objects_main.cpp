@@ -41,7 +41,7 @@ protected:
   pcl_status_t on_configure() override {
     addSubscriber("standard.evidence_requirements", content_type_.c_str(),
                   onEvidenceRequirements, this);
-    addService(consumed::kSvcCreateRequirement, content_type_.c_str(),
+    addService(consumed::kSvcObjectSolutionEvidenceCreateRequirement, content_type_.c_str(),
                handleCreateRequirement, this);
     return PCL_OK;
   }
@@ -50,7 +50,8 @@ private:
   class Handler : public consumed::ServiceHandler {
   public:
     pyramid::domain_model::Identifier
-    handleCreateRequirement(const pyramid::domain_model::ObjectEvidenceRequirement&) override {
+    handleObjectSolutionEvidenceCreateRequirement(
+        const pyramid::domain_model::ObjectEvidenceRequirement&) override {
       return "stub-evidence-requirement-001";
     }
   };
@@ -79,7 +80,8 @@ private:
     Handler handler;
     void* response_buf = nullptr;
     size_t response_size = 0;
-    consumed::dispatch(handler, consumed::ServiceChannel::CreateRequirement,
+    consumed::dispatch(
+        handler, consumed::ServiceChannel::ObjectSolutionEvidenceCreateRequirement,
                        request->data, request->size, self->content_type_.c_str(),
                        &response_buf, &response_size);
 

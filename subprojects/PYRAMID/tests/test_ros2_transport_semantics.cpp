@@ -155,7 +155,7 @@ pcl_status_t handleCreateRequirement(pcl_container_t*, const pcl_msg_t* request,
 
 pcl_status_t configureUnaryContainer(pcl_container_t* container, void* user_data) {
   auto* port = pcl_container_add_service(
-      container, provided::kSvcCreateRequirement, "application/protobuf",
+      container, provided::kSvcObjectOfInterestCreateRequirement, "application/protobuf",
       handleCreateRequirement, user_data);
   return port ? PCL_OK : PCL_ERR_NOMEM;
 }
@@ -192,7 +192,7 @@ pcl_status_t handleReadMatch(pcl_container_t*, const pcl_msg_t* request,
 
 pcl_status_t configureStreamContainer(pcl_container_t* container, void* user_data) {
   auto* port = pcl_container_add_service(
-      container, provided::kSvcReadMatch, "application/protobuf", handleReadMatch,
+      container, provided::kSvcMatchingObjectsReadMatch, "application/protobuf", handleReadMatch,
       user_data);
   return port ? PCL_OK : PCL_ERR_NOMEM;
 }
@@ -205,12 +205,12 @@ TEST(Ros2TransportSemantics, CanonicalNameMappingUsesRos2Channels) {
   EXPECT_EQ(topic.ros2_topic, "/pyramid/topic/standard/entity_matches");
 
   const auto unary =
-      ros2_support::makeUnaryServiceBinding(provided::kSvcCreateRequirement);
+      ros2_support::makeUnaryServiceBinding(provided::kSvcObjectOfInterestCreateRequirement);
   EXPECT_EQ(unary.ros2_service,
             "/pyramid/service/object_of_interest/create_requirement");
 
   const auto stream =
-      ros2_support::makeStreamServiceBinding(provided::kSvcReadMatch);
+      ros2_support::makeStreamServiceBinding(provided::kSvcMatchingObjectsReadMatch);
   EXPECT_EQ(stream.ros2_open_service,
             "/pyramid/stream/matching_objects/read_match/open");
   EXPECT_EQ(stream.ros2_frame_topic,
@@ -310,7 +310,7 @@ TEST(Ros2TransportSemantics, UnaryServiceBridgeRunsHandlerOnExecutorThread) {
   std::thread client_thread([&] {
     client_thread_id = std::this_thread::get_id();
     const auto binding = ros2_support::makeUnaryServiceBinding(
-        provided::kSvcCreateRequirement);
+        provided::kSvcObjectOfInterestCreateRequirement);
     response = adapter.callUnary(binding.ros2_service, request);
   });
   client_thread.join();
@@ -372,7 +372,7 @@ TEST(Ros2TransportSemantics, StreamServiceBridgePreservesFramesAndExecutorThread
   std::thread client_thread([&] {
     client_thread_id = std::this_thread::get_id();
     const auto binding =
-        ros2_support::makeStreamServiceBinding(provided::kSvcReadMatch);
+        ros2_support::makeStreamServiceBinding(provided::kSvcMatchingObjectsReadMatch);
     frames = adapter.callStream(binding.ros2_open_service, request);
   });
   client_thread.join();

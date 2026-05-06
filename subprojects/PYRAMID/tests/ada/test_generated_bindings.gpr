@@ -5,10 +5,12 @@
 --  Build:  gprbuild -p -P test_generated_bindings.gpr
 --  Run:    bin/test_generated_bindings
 
-with "gnatcoll_json.gpr";
-
 project Test_Generated_Bindings is
   Root_Dir := external("UNMANNED_ROOT", ".." & "/.." & "/..");
+  Gnatcoll_Root := external("GNATCOLL_ROOT", "C:/GNAT/2021");
+  Gnatcoll_Include_Dir := external("GNATCOLL_INCLUDE_DIR", Gnatcoll_Root & "/include/gnatcoll");
+  Gnatcoll_Lib_Dir := external("GNATCOLL_LIB_DIR", Gnatcoll_Root & "/lib/gnatcoll.static");
+  Gnatcoll_Lib_Name := external("GNATCOLL_LIB_NAME", "gnatcoll");
   Pcl_Include_Dir := external("PCL_INCLUDE_DIR", Root_Dir & "/include");
   Pcl_Lib_Dir := external("PCL_LIB_DIR", Root_Dir & "/build/install/lib");
   Pcl_Lib_Name := external("PCL_LIB_NAME", "pcl_core");
@@ -22,6 +24,7 @@ project Test_Generated_Bindings is
 
   for Source_Dirs use
     (".",
+     Gnatcoll_Include_Dir,
      Root_Dir & "/subprojects/PCL/bindings/ada",
      Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated",
      Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/flatbuffers/ada",
@@ -46,8 +49,10 @@ project Test_Generated_Bindings is
     case OS is
       when "Windows_NT" =>
         for Default_Switches ("Ada") use
-          ("-L" & Pcl_Lib_Dir,
+          ("-L" & Gnatcoll_Lib_Dir,
+           "-L" & Pcl_Lib_Dir,
            "-L" & Pyramid_Gen_Lib_Dir,
+           "-l" & Gnatcoll_Lib_Name,
            "-l" & Pcl_Lib_Name,
            "-l" & Pcl_Socket_Lib_Name,
            "-l" & Pyramid_Gen_Lib_Name,
@@ -56,8 +61,10 @@ project Test_Generated_Bindings is
            "-lkernel32");
       when others =>
         for Default_Switches ("Ada") use
-          ("-L" & Pcl_Lib_Dir,
+          ("-L" & Gnatcoll_Lib_Dir,
+           "-L" & Pcl_Lib_Dir,
            "-L" & Pyramid_Gen_Lib_Dir,
+           "-l" & Gnatcoll_Lib_Name,
            "-l" & Pcl_Lib_Name,
            "-l" & Pcl_Socket_Lib_Name,
            "-l" & Pyramid_Gen_Lib_Name,

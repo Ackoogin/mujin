@@ -270,22 +270,27 @@ public:
   explicit BridgeServiceHandler(StandardBridge& bridge) : bridge_(bridge) {}
 
   data_model::Identifier
-  handleCreateRequirement(const data_model::ObjectInterestRequirement& request) override;
+  handleObjectOfInterestCreateRequirement(
+      const data_model::ObjectInterestRequirement& request) override;
 
   std::vector<data_model::ObjectInterestRequirement>
-  handleReadRequirement(const data_model::Query& request) override;
+  handleObjectOfInterestReadRequirement(
+      const data_model::Query& request) override;
 
   data_model::Ack
-  handleUpdateRequirement(const data_model::ObjectInterestRequirement& request) override;
+  handleObjectOfInterestUpdateRequirement(
+      const data_model::ObjectInterestRequirement& request) override;
 
   data_model::Ack
-  handleDeleteRequirement(const data_model::Identifier& request) override;
+  handleObjectOfInterestDeleteRequirement(
+      const data_model::Identifier& request) override;
 
   std::vector<data_model::ObjectMatch>
-  handleReadMatch(const data_model::Query& request) override;
+  handleMatchingObjectsReadMatch(const data_model::Query& request) override;
 
   std::vector<data_model::ObjectDetail>
-  handleReadDetail(const data_model::Query& request) override;
+  handleSpecificObjectDetailReadDetail(
+      const data_model::Query& request) override;
 
 private:
   StandardBridge& bridge_;
@@ -310,27 +315,27 @@ pcl_status_t StandardBridge::on_configure() {
     return PCL_ERR_INVALID;
   }
 
-  if (!addService(prov::kSvcCreateRequirement, frontend_content_type_.c_str(),
+  if (!addService(prov::kSvcObjectOfInterestCreateRequirement, frontend_content_type_.c_str(),
                   handleCreateRequirement, this)) {
     return PCL_ERR_CALLBACK;
   }
-  if (!addService(prov::kSvcReadRequirement, frontend_content_type_.c_str(),
+  if (!addService(prov::kSvcObjectOfInterestReadRequirement, frontend_content_type_.c_str(),
                   handleReadRequirement, this)) {
     return PCL_ERR_CALLBACK;
   }
-  if (!addService(prov::kSvcUpdateRequirement, frontend_content_type_.c_str(),
+  if (!addService(prov::kSvcObjectOfInterestUpdateRequirement, frontend_content_type_.c_str(),
                   handleUpdateRequirement, this)) {
     return PCL_ERR_CALLBACK;
   }
-  if (!addService(prov::kSvcDeleteRequirement, frontend_content_type_.c_str(),
+  if (!addService(prov::kSvcObjectOfInterestDeleteRequirement, frontend_content_type_.c_str(),
                   handleDeleteRequirement, this)) {
     return PCL_ERR_CALLBACK;
   }
-  if (!addService(prov::kSvcReadMatch, frontend_content_type_.c_str(),
+  if (!addService(prov::kSvcMatchingObjectsReadMatch, frontend_content_type_.c_str(),
                   handleReadMatch, this)) {
     return PCL_ERR_CALLBACK;
   }
-  if (!addService(prov::kSvcReadDetail, frontend_content_type_.c_str(),
+  if (!addService(prov::kSvcSpecificObjectDetailReadDetail, frontend_content_type_.c_str(),
                   handleReadDetail, this)) {
     return PCL_ERR_CALLBACK;
   }
@@ -369,9 +374,9 @@ pcl_status_t StandardBridge::dispatchProvidedService(int channel, const pcl_msg_
 
   const auto service_channel = static_cast<prov::ServiceChannel>(channel);
   const bool query_service =
-      service_channel == prov::ServiceChannel::ReadMatch ||
-      service_channel == prov::ServiceChannel::ReadRequirement ||
-      service_channel == prov::ServiceChannel::ReadDetail;
+      service_channel == prov::ServiceChannel::MatchingObjectsReadMatch ||
+      service_channel == prov::ServiceChannel::ObjectOfInterestReadRequirement ||
+      service_channel == prov::ServiceChannel::SpecificObjectDetailReadDetail;
   const bool empty_json_query =
       query_service &&
       frontend_content_type_ == prov::kJsonContentType &&
@@ -410,7 +415,8 @@ pcl_status_t StandardBridge::handleCreateRequirement(pcl_container_t*,
                                                      void* user_data) {
   auto* self = static_cast<StandardBridge*>(user_data);
   return self->dispatchProvidedService(
-      static_cast<int>(prov::ServiceChannel::CreateRequirement), request, response);
+      static_cast<int>(prov::ServiceChannel::ObjectOfInterestCreateRequirement),
+      request, response);
 }
 
 pcl_status_t StandardBridge::handleReadRequirement(pcl_container_t*,
@@ -420,7 +426,8 @@ pcl_status_t StandardBridge::handleReadRequirement(pcl_container_t*,
                                                    void* user_data) {
   auto* self = static_cast<StandardBridge*>(user_data);
   return self->dispatchProvidedService(
-      static_cast<int>(prov::ServiceChannel::ReadRequirement), request, response);
+      static_cast<int>(prov::ServiceChannel::ObjectOfInterestReadRequirement),
+      request, response);
 }
 
 pcl_status_t StandardBridge::handleUpdateRequirement(pcl_container_t*,
@@ -430,7 +437,8 @@ pcl_status_t StandardBridge::handleUpdateRequirement(pcl_container_t*,
                                                      void* user_data) {
   auto* self = static_cast<StandardBridge*>(user_data);
   return self->dispatchProvidedService(
-      static_cast<int>(prov::ServiceChannel::UpdateRequirement), request, response);
+      static_cast<int>(prov::ServiceChannel::ObjectOfInterestUpdateRequirement),
+      request, response);
 }
 
 pcl_status_t StandardBridge::handleDeleteRequirement(pcl_container_t*,
@@ -440,7 +448,8 @@ pcl_status_t StandardBridge::handleDeleteRequirement(pcl_container_t*,
                                                      void* user_data) {
   auto* self = static_cast<StandardBridge*>(user_data);
   return self->dispatchProvidedService(
-      static_cast<int>(prov::ServiceChannel::DeleteRequirement), request, response);
+      static_cast<int>(prov::ServiceChannel::ObjectOfInterestDeleteRequirement),
+      request, response);
 }
 
 pcl_status_t StandardBridge::handleReadMatch(pcl_container_t*,
@@ -450,7 +459,8 @@ pcl_status_t StandardBridge::handleReadMatch(pcl_container_t*,
                                              void* user_data) {
   auto* self = static_cast<StandardBridge*>(user_data);
   return self->dispatchProvidedService(
-      static_cast<int>(prov::ServiceChannel::ReadMatch), request, response);
+      static_cast<int>(prov::ServiceChannel::MatchingObjectsReadMatch),
+      request, response);
 }
 
 pcl_status_t StandardBridge::handleReadDetail(pcl_container_t*,
@@ -460,7 +470,8 @@ pcl_status_t StandardBridge::handleReadDetail(pcl_container_t*,
                                               void* user_data) {
   auto* self = static_cast<StandardBridge*>(user_data);
   return self->dispatchProvidedService(
-      static_cast<int>(prov::ServiceChannel::ReadDetail), request, response);
+      static_cast<int>(prov::ServiceChannel::SpecificObjectDetailReadDetail),
+      request, response);
 }
 
 void StandardBridge::publishEntityMatches(const std::vector<std::string>& entity_ids) {
@@ -544,7 +555,7 @@ void StandardBridge::onStandardObjectEvidence(pcl_container_t*, const pcl_msg_t*
   self->runtime_.processObservationBatch(batch);
 }
 
-data_model::Identifier BridgeServiceHandler::handleCreateRequirement(
+data_model::Identifier BridgeServiceHandler::handleObjectOfInterestCreateRequirement(
     const data_model::ObjectInterestRequirement& request) {
   double expires_at = 0.0;
   const auto criteria = criteria_from_standard(request, &expires_at);
@@ -574,7 +585,7 @@ data_model::Identifier BridgeServiceHandler::handleCreateRequirement(
             bridge_.frontend_content_type_.c_str());
       }
 
-      cons::invokeCreateRequirement(
+      cons::invokeObjectSolutionEvidenceCreateRequirement(
           bridge_.exec_, standard_req, bridge_.frontend_content_type_.c_str());
     }
   }
@@ -583,7 +594,8 @@ data_model::Identifier BridgeServiceHandler::handleCreateRequirement(
 }
 
 std::vector<data_model::ObjectInterestRequirement>
-BridgeServiceHandler::handleReadRequirement(const data_model::Query& request) {
+BridgeServiceHandler::handleObjectOfInterestReadRequirement(
+    const data_model::Query& request) {
   std::vector<data_model::ObjectInterestRequirement> requirements;
 
   auto append_interest = [&](const UUIDKey& interest_id) {
@@ -607,7 +619,7 @@ BridgeServiceHandler::handleReadRequirement(const data_model::Query& request) {
   return requirements;
 }
 
-data_model::Ack BridgeServiceHandler::handleUpdateRequirement(
+data_model::Ack BridgeServiceHandler::handleObjectOfInterestUpdateRequirement(
     const data_model::ObjectInterestRequirement& request) {
   const auto parsed = UUIDHelper::fromString(request.base.id);
   if (!parsed.second) {
@@ -655,7 +667,7 @@ data_model::Ack BridgeServiceHandler::handleUpdateRequirement(
   return data_model::kAckOk;
 }
 
-data_model::Ack BridgeServiceHandler::handleDeleteRequirement(
+data_model::Ack BridgeServiceHandler::handleObjectOfInterestDeleteRequirement(
     const data_model::Identifier& request) {
   const auto parsed = UUIDHelper::fromString(request);
   if (!parsed.second) {
@@ -682,7 +694,8 @@ data_model::Ack BridgeServiceHandler::handleDeleteRequirement(
 }
 
 std::vector<data_model::ObjectMatch>
-BridgeServiceHandler::handleReadMatch(const data_model::Query& request) {
+BridgeServiceHandler::handleMatchingObjectsReadMatch(
+    const data_model::Query& request) {
   std::vector<data_model::ObjectMatch> matches;
 
   auto append_query = [&](const QueryRequest& qreq) {
@@ -709,7 +722,8 @@ BridgeServiceHandler::handleReadMatch(const data_model::Query& request) {
 }
 
 std::vector<data_model::ObjectDetail>
-BridgeServiceHandler::handleReadDetail(const data_model::Query& request) {
+BridgeServiceHandler::handleSpecificObjectDetailReadDetail(
+    const data_model::Query& request) {
   std::vector<data_model::ObjectDetail> details;
 
   auto append_detail = [&](const UUIDKey& id) {

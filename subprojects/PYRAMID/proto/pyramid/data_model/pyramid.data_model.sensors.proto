@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+package pyramid.data_model.sensors;
+
+import "google/protobuf/timestamp.proto";
+import "pyramid/data_model/pyramid.data_model.base.proto";
+import "pyramid/data_model/pyramid.data_model.common.proto";
+import "pyramid/data_model/pyramid.data_model.radar.proto";
+import "pyramid/data_model/pyramid.data_model.sensorproducts.proto";
+
+enum InterpretationPolicy {
+  INTERPRETATION_POLICY_UNSPECIFIED = 0;
+  INTERPRETATION_POLICY_IGNORE_OBJECTS = 1;
+  INTERPRETATION_POLICY_INCLUDE_OBJECTS = 2;
+}
+
+enum InterpretationType {
+  INTERPRETATION_TYPE_UNSPECIFIED = 0;
+  // Use active Tracking to locate and provide evidence for the existence of Sea Surface Tactical Objects
+  INTERPRETATION_TYPE_LOCATE_SEA_SURFACE_OBJECTS = 1;
+}
+
+// Requirement to coordinate Sensor Data to support the requested specification
+message InterpretationRequirement {
+  pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
+
+  InterpretationPolicy policy = 2;
+  oneof location {
+    pyramid.data_model.common.PolyArea poly_area = 3;
+    pyramid.data_model.common.CircleArea circle_area = 4;
+    pyramid.data_model.common.Point point = 5;
+  }
+  InterpretationType type = 6;
+}
+
+// Requirement to Create and Maintain active Tracking of a Tactical Object based on the provided position
+message ManualTrackRequirement {
+  pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
+
+  pyramid.data_model.common.GeodeticPosition position = 2;
+}
+
+message ATIRequirement {
+  pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
+
+  pyramid.data_model.common.PolyArea auto_zone = 2;
+}
+
+// Requirement to provide Tactical Object Evidence for the requested Location
+message TrackProvisionRequirement {
+  pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
+
+  oneof location {
+    pyramid.data_model.common.PolyArea poly_area = 2;
+    pyramid.data_model.common.CircleArea circle_area = 3;
+    pyramid.data_model.common.Point point = 4;
+  }
+}
+
+// Requirement to provide Tactical Object Evidence for the requested Location
+message ObjectEvidenceProvisionRequirement {
+  pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
+
+  oneof location {
+    pyramid.data_model.common.PolyArea poly_area = 2;
+    pyramid.data_model.common.CircleArea circle_area = 3;
+    pyramid.data_model.common.Point point = 4;
+  }
+}
+
+// Requirement to coordinate Sensor Data to support the requested specification
+message ObjectAquisitionRequirement {
+  pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
+
+  oneof location {
+    pyramid.data_model.common.PolyArea poly_area = 2;
+    pyramid.data_model.common.CircleArea circle_area = 3;
+    pyramid.data_model.common.Point point = 4;
+  }
+}
+
+// Standard properties of a Tactical Object
+message SensorObject {
+  pyramid.data_model.common.Entity base = 1;  // Inherited from Entity
+
+  pyramid.data_model.common.GeodeticPosition position = 2;
+  pyramid.data_model.base.Timestamp creation_time = 3;
+  optional pyramid.data_model.base.Percentage quality = 4;
+  optional pyramid.data_model.base.Angle course = 5;
+  optional pyramid.data_model.base.Speed speed = 6;
+  optional pyramid.data_model.base.Length length = 7;
+}
+
+message RadarModeChangeRequirement {
+  pyramid.data_model.common.Requirement base = 1;  // Inherited from Requirement
+
+  pyramid.data_model.radar.Radar_Operational_Mode mode = 2;
+}
+

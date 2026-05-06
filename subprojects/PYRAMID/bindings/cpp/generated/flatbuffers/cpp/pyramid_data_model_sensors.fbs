@@ -1,0 +1,74 @@
+// Auto-generated FlatBuffers schema from pyramid.data_model.sensors.proto
+// Do not edit -- regenerate from proto source
+
+include "pyramid_data_model_base.fbs";
+include "pyramid_data_model_common.fbs";
+include "pyramid_data_model_radar.fbs";
+include "pyramid_data_model_sensorproducts.fbs";
+
+namespace pyramid.data_model.sensors;
+
+enum InterpretationPolicy : byte {
+  UNSPECIFIED = 0,
+  IGNORE_OBJECTS = 1,
+  INCLUDE_OBJECTS = 2
+}
+
+enum InterpretationType : byte {
+  UNSPECIFIED = 0,
+  LOCATE_SEA_SURFACE_OBJECTS = 1
+}
+
+union LocationUnion {
+  pyramid.data_model.common.PolyArea,
+  pyramid.data_model.common.CircleArea,
+  pyramid.data_model.common.Point
+}
+
+table InterpretationRequirement {
+  base:pyramid.data_model.common.Requirement;
+  policy:InterpretationPolicy;
+  type:InterpretationType;
+  location:LocationUnion;
+}
+
+table ManualTrackRequirement {
+  base:pyramid.data_model.common.Requirement;
+  position:pyramid.data_model.common.GeodeticPosition;
+}
+
+table ATIRequirement {
+  base:pyramid.data_model.common.Requirement;
+  auto_zone:pyramid.data_model.common.PolyArea;
+}
+
+table TrackProvisionRequirement {
+  base:pyramid.data_model.common.Requirement;
+  location:LocationUnion;
+}
+
+table ObjectEvidenceProvisionRequirement {
+  base:pyramid.data_model.common.Requirement;
+  location:LocationUnion;
+}
+
+table ObjectAquisitionRequirement {
+  base:pyramid.data_model.common.Requirement;
+  location:LocationUnion;
+}
+
+table SensorObject {
+  base:pyramid.data_model.common.Entity;
+  position:pyramid.data_model.common.GeodeticPosition;
+  creation_time:pyramid.data_model.base.Timestamp;
+  quality:pyramid.data_model.base.Percentage;
+  course:pyramid.data_model.base.Angle;
+  speed:pyramid.data_model.base.Speed;
+  length:pyramid.data_model.base.Length;
+}
+
+table RadarModeChangeRequirement {
+  base:pyramid.data_model.common.Requirement;
+  mode:pyramid.data_model.radar.Radar_Operational_Mode;
+}
+
