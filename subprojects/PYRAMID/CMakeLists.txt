@@ -162,9 +162,9 @@ if(PYRAMID_ENABLE_FLATBUFFERS)
     set(PYRAMID_FLATBUFFERS_SCHEMA_DIR "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp")
     set(PYRAMID_FLATBUFFERS_GEN_DIR "${CMAKE_BINARY_DIR}/generated/flatbuffers/cpp")
     pyramid_glob_generated(PYRAMID_FLATBUFFERS_SCHEMAS
-        "${PYRAMID_FLATBUFFERS_SCHEMA_DIR}/pyramid_services_*.fbs")
+        "${PYRAMID_FLATBUFFERS_SCHEMA_DIR}/pyramid_*.fbs")
     pyramid_require_generated(PYRAMID_FLATBUFFERS_SCHEMAS
-        "generated FlatBuffers service schemas")
+        "generated FlatBuffers schemas")
     set(PYRAMID_FLATBUFFERS_OUTPUTS)
     foreach(PYRAMID_FLATBUFFERS_SCHEMA IN LISTS PYRAMID_FLATBUFFERS_SCHEMAS)
         get_filename_component(PYRAMID_FLATBUFFERS_STEM "${PYRAMID_FLATBUFFERS_SCHEMA}" NAME_WE)

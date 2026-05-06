@@ -433,16 +433,35 @@ _FBS_SCALAR_MAP = {
 }
 
 
-def _fbs_type(field: ProtoField, index: ProtoTypeIndex) -> str:
+def _fbs_type_name(type_name: str, current_package: str) -> str:
+    if type_name in _FBS_SCALAR_MAP:
+        return _FBS_SCALAR_MAP[type_name]
+    if type_name == 'google.protobuf.Timestamp':
+        return 'double'
+    if '.' not in type_name:
+        return type_name
+    package_name, short_name = type_name.rsplit('.', 1)
+    if package_name == current_package:
+        return short_name
+    return type_name
+
+
+def _fbs_type(field: ProtoField, index: ProtoTypeIndex, current_package: str = '') -> str:
     """Map a proto field to its FlatBuffers schema type."""
-    if field.type in _FBS_SCALAR_MAP:
-        base = _FBS_SCALAR_MAP[field.type]
-    else:
-        base = field.short_type
+    base = _fbs_type_name(field.type, current_package)
 
     if field.is_repeated:
         return f'[{base}]'
     return base
+
+
+def _flatbuffers_union_name(oneof_name: str) -> str:
+    return ''.join(w.capitalize() for w in oneof_name.split('_')) + 'Union'
+
+
+def _flatbuffers_oneof_wrapper_name(msg_name: str, oneof_name: str, field_name: str) -> str:
+    field_part = ''.join(w.capitalize() for w in field_name.split('_'))
+    return f'{msg_name}{_flatbuffers_union_name(oneof_name)}{field_part}Value'
 
 
 def _has_tactical_service_wire(index: ProtoTypeIndex) -> bool:
@@ -533,6 +552,19 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write(f'// Auto-generated FlatBuffers schema from {pf.path.name}\n')
             f.write('// Do not edit -- regenerate from proto source\n\n')
 
+            for imported in pf.imports:
+                if not imported.endswith('.proto') or imported.startswith('google/protobuf/'):
+                    continue
+                include_base = imported[:-6].replace('/', '_')
+                f.write(f'include "{include_base}.fbs";\n')
+            if pf.imports:
+                filtered_imports = [
+                    imported for imported in pf.imports
+                    if imported.endswith('.proto') and not imported.startswith('google/protobuf/')
+                ]
+                if filtered_imports:
+                    f.write('\n')
+
             if pf.package:
                 f.write(f'namespace {pf.package};\n\n')
 
@@ -547,25 +579,42 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                     f.write(f'  {fbs_name} = {v.number}{comma}\n')
                 f.write('}\n\n')
 
+            emitted_oneof_wrappers = set()
+            for msg in pf.messages:
+                for oo in msg.oneofs:
+                    for field in oo.fields:
+                        if field.type not in _FBS_SCALAR_MAP:
+                            continue
+                        wrapper_name = _flatbuffers_oneof_wrapper_name(msg.name, oo.name, field.name)
+                        if wrapper_name in emitted_oneof_wrappers:
+                            continue
+                        emitted_oneof_wrappers.add(wrapper_name)
+                        f.write(f'table {wrapper_name} {{\n')
+                        f.write(f'  value:{_fbs_type(field, index, pf.package)};\n')
+                        f.write('}\n\n')
+
             emitted_unions = set()
             for msg in pf.messages:
                 for oo in msg.oneofs:
-                    union_name = ''.join(w.capitalize() for w in oo.name.split('_')) + 'Union'
+                    union_name = _flatbuffers_union_name(oo.name)
                     if union_name in emitted_unions:
                         continue
                     emitted_unions.add(union_name)
                     f.write(f'union {union_name} {{\n')
                     for i, field in enumerate(oo.fields):
+                        member_type = _fbs_type_name(field.type, pf.package)
+                        if field.type in _FBS_SCALAR_MAP:
+                            member_type = _flatbuffers_oneof_wrapper_name(msg.name, oo.name, field.name)
                         comma = ',' if i < len(oo.fields) - 1 else ''
-                        f.write(f'  {field.short_type}{comma}\n')
+                        f.write(f'  {member_type}{comma}\n')
                     f.write('}\n\n')
 
             for msg in pf.messages:
                 f.write(f'table {msg.name} {{\n')
                 for fld in msg.fields:
-                    f.write(f'  {fld.name}:{_fbs_type(fld, index)};\n')
+                    f.write(f'  {fld.name}:{_fbs_type(fld, index, pf.package)};\n')
                 for oo in msg.oneofs:
-                    union_name = ''.join(w.capitalize() for w in oo.name.split('_')) + 'Union'
+                    union_name = _flatbuffers_union_name(oo.name)
                     f.write(f'  {oo.name}:{union_name};\n')
                 f.write('}\n\n')
 

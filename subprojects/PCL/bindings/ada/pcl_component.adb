@@ -73,12 +73,16 @@ package body Pcl_Component is
 
   function To_C_Bool(Value : Boolean) return Pcl_Bindings.C_Bool is
   begin
-    return Pcl_Bindings.C_Bool(Value);
+    if Value then
+      return Pcl_Bindings.C_Bool'Val(1);
+    end if;
+
+    return Pcl_Bindings.C_Bool'Val(0);
   end To_C_Bool;
 
   function To_Boolean(Value : Pcl_Bindings.C_Bool) return Boolean is
   begin
-    return Boolean(Value);
+    return Pcl_Bindings.C_Bool'Pos(Value) /= 0;
   end To_Boolean;
 
   procedure Check(Status : Pcl_Bindings.Pcl_Status;
