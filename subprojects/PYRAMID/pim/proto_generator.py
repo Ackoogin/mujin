@@ -359,6 +359,34 @@ class ProtobufGenerator:
                         if ref_package != package_name:
                             imports.add(self._proto_relpath_for_package(ref_package).as_posix())
 
+        # Service generation introduces RPC signature dependencies that are not
+        # present as ordinary message fields. In particular EntityActions
+        # services synthesize Query/Ack/Identifier plus inherited entity
+        # payload types, so force imports for those packages here.
+        for cls in types['classes']:
+            entity_properties = self._collect_all_entity_properties(cls)
+            if not entity_properties:
+                continue
+
+            for prop in entity_properties:
+                prop_type = prop.get('type')
+                if prop_type and prop_type in type_to_package:
+                    ref_package = type_to_package[prop_type]
+                    if ref_package != package_name:
+                        imports.add(self._proto_relpath_for_package(ref_package).as_posix())
+
+                flow_direction = prop.get('flow_direction', 'inout') or 'inout'
+                support_types = {'Identifier'}
+                if flow_direction in ('inout', 'out'):
+                    support_types.add('Query')
+                if flow_direction in ('inout', 'in'):
+                    support_types.add('Ack')
+
+                for support_type in support_types:
+                    ref_package = type_to_package.get(support_type)
+                    if ref_package and ref_package != package_name:
+                        imports.add(self._proto_relpath_for_package(ref_package).as_posix())
+
         return sorted(imports)
 
     def _proto_relpath_for_package(self, package_name: str) -> Path:
