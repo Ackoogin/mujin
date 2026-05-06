@@ -158,76 +158,76 @@ package body Pyramid.Components.Tactical_objects.Services.Consumed.GRPC_Transpor
       return Result;
    end Decode_Capability_Array;
 
-   function Invoke_Read_Detail
+   function Invoke_object_evidence_Read_Detail
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Object_Detail_Array
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Common.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_consumed_object_evidence_service_read_detail_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_consumed_object_evidence_read_detail_json")));
    begin
       return Decode_Object_Detail_Array (Response_Json);
-   end Invoke_Read_Detail;
+   end Invoke_object_evidence_Read_Detail;
 
-   function Invoke_Create_Requirement
+   function Invoke_object_solution_evidence_Create_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Tactical.Types.Object_Evidence_Requirement)
       return Pyramid.Data_Model.Base.Types.Identifier
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Tactical.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_consumed_object_solution_evidence_service_create_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_consumed_object_solution_evidence_create_requirement_json")));
    begin
       return Ada.Strings.Unbounded.To_Unbounded_String (Normalise_Json_String (Response_Json));
-   end Invoke_Create_Requirement;
+   end Invoke_object_solution_evidence_Create_Requirement;
 
-   function Invoke_Read_Requirement
+   function Invoke_object_solution_evidence_Read_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Object_Evidence_Requirement_Array
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Common.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_consumed_object_solution_evidence_service_read_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_consumed_object_solution_evidence_read_requirement_json")));
    begin
       return Decode_Object_Evidence_Requirement_Array (Response_Json);
-   end Invoke_Read_Requirement;
+   end Invoke_object_solution_evidence_Read_Requirement;
 
-   function Invoke_Update_Requirement
+   function Invoke_object_solution_evidence_Update_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Tactical.Types.Object_Evidence_Requirement)
       return Pyramid.Data_Model.Common.Types.Ack
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Tactical.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_consumed_object_solution_evidence_service_update_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_consumed_object_solution_evidence_update_requirement_json")));
    begin
       return Pyramid.Data_Model.Common.Types_Codec.From_Json (Response_Json, null);
-   end Invoke_Update_Requirement;
+   end Invoke_object_solution_evidence_Update_Requirement;
 
-   function Invoke_Delete_Requirement
+   function Invoke_object_solution_evidence_Delete_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Base.Types.Identifier)
       return Pyramid.Data_Model.Common.Types.Ack
    is
       Response_Json : constant String :=
         Call_Json (Channel, Encode_Identifier (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_consumed_object_solution_evidence_service_delete_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_consumed_object_solution_evidence_delete_requirement_json")));
    begin
       return Pyramid.Data_Model.Common.Types_Codec.From_Json (Response_Json, null);
-   end Invoke_Delete_Requirement;
+   end Invoke_object_solution_evidence_Delete_Requirement;
 
-   function Invoke_Read_Capability
+   function Invoke_object_source_capability_Read_Capability
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Capability_Array
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Common.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_consumed_object_source_capability_service_read_capability_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_consumed_object_source_capability_read_capability_json")));
    begin
       return Decode_Capability_Array (Response_Json);
-   end Invoke_Read_Capability;
+   end Invoke_object_source_capability_Read_Capability;
 
 end Pyramid.Components.Tactical_objects.Services.Consumed.GRPC_Transport;

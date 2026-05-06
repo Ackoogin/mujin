@@ -68,7 +68,9 @@ procedure Ada_Grpc_Cpp_Interop_E2E is
    is
       pragma Unreferenced (User_Data);
    begin
-      Response_Id := Provided.Decode_Create_Requirement_Response (Resp);
+      Response_Id :=
+        Provided.Decode_Object_Of_Interest_Create_Requirement_Response
+          (Resp);
    end On_Create_Requirement_Response;
 
    procedure Parse_Args is
@@ -103,7 +105,7 @@ begin
    delay 0.05;
    declare
    begin
-      Provided.Invoke_Create_Requirement
+      Provided.Invoke_Object_Of_Interest_Create_Requirement
         (Executor     => null,
          Request      => Make_Request,
          Callback     => On_Create_Requirement_Response'Unrestricted_Access,

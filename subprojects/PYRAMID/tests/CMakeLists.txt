@@ -649,6 +649,11 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     add_custom_command(
         OUTPUT ${ADA_GENERATED_BINDINGS_EXE}
         ${_ada_generated_bindings_commands}
+        DEPENDS
+            ${PYRAMID_BINDING_GENERATOR_INPUTS}
+            ${PYRAMID_PROTO_INPUTS}
+            ${ADA_TEST_SRC_DIR}/test_generated_bindings.adb
+            ${ADA_TEST_SRC_DIR}/test_generated_bindings.gpr
         WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
         COMMENT "Building Ada generated-bindings test"
         VERBATIM
@@ -881,8 +886,13 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
             COMMAND ${CMAKE_COMMAND}
                     -DOUTPUT=${ADA_GRPC_CPP_INTEROP_EXE}
                     -DWORKING_DIRECTORY=${ADA_TEST_SRC_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD};-p;-P;${ADA_TEST_SRC_DIR}/ada_grpc_cpp_interop_e2e.gpr;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};-XPYRAMID_GEN_LIB_DIR=${ADA_PYRAMID_GEN_LIB_DIR};-XPYRAMID_GEN_LIB_NAME=${ADA_PYRAMID_GEN_LIB_NAME};-XPYRAMID_PROTOBUF_ADA_DIR=${ADA_GEN_OUT}/protobuf/ada;-XPYRAMID_GRPC_ADA_DIR=${ADA_GEN_OUT}/grpc/ada"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args};-p;-P;${ADA_TEST_SRC_DIR}/ada_grpc_cpp_interop_e2e.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};-XPYRAMID_GEN_LIB_DIR=${ADA_PYRAMID_GEN_LIB_DIR};-XPYRAMID_GEN_LIB_NAME=${ADA_PYRAMID_GEN_LIB_NAME};-XPYRAMID_PROTOBUF_ADA_DIR=${ADA_GEN_OUT}/protobuf/ada;-XPYRAMID_GRPC_ADA_DIR=${ADA_GEN_OUT}/grpc/ada"
                     -P ${ADA_RUN_IF_MISSING}
+            DEPENDS
+                ${PYRAMID_BINDING_GENERATOR_INPUTS}
+                ${PYRAMID_PROTO_INPUTS}
+                ${ADA_TEST_SRC_DIR}/ada_grpc_cpp_interop_e2e.adb
+                ${ADA_TEST_SRC_DIR}/ada_grpc_cpp_interop_e2e.gpr
             WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
             COMMENT "Building Ada gRPC C++ interop test"
             VERBATIM
@@ -901,7 +911,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_ada_grpc_cpp_interop_e2e.bat
                     -DSERVER_BIN=$<TARGET_FILE:tobj_grpc_server>
                     -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_grpc_cpp_interop_e2e
-                    -DSCRIPT_ARGS=--dll-bin|$<TARGET_FILE:pyramid_grpc_c_shim>|--address|127.0.0.1:50111
+                    -DSCRIPT_ARGS=--dll-bin|$<TARGET_FILE:pyramid_grpc_c_shim>|--address|auto
                     -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
         set_tests_properties(tobj_ada_grpc_cpp_interop_e2e PROPERTIES
             LABELS "cross_language;integration;grpc"

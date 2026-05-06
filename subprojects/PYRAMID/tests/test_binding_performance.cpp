@@ -1187,7 +1187,9 @@ TEST_F(BindingPerformanceTest, Socket_Protobuf) {
 
 #if defined(PYRAMID_HAS_GRPC)
 TEST_F(BindingPerformanceTest, Grpc_Tcp) {
-  auto r = runGrpc("grpc / tcp", "127.0.0.1:50171");
+  const auto port = pickSocketPort();
+  ASSERT_NE(port, 0);
+  auto r = runGrpc("grpc / tcp", "127.0.0.1:" + std::to_string(port));
   results_.push_back(r);
   EXPECT_EQ(r.completed_msgs, kNMsgsGrpc);
   std::printf("[PERF] %-24s  done=%3d/%d  avg_wall=%6.1f us  min_wall=%6.1f us  avg_thr=%6.1f us  payload=%zu B\n",

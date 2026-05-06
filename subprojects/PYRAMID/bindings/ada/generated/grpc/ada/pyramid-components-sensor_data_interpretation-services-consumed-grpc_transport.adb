@@ -146,100 +146,100 @@ package body Pyramid.Components.Sensor_data_interpretation.Services.Consumed.GRP
       return Result;
    end Decode_Object_Aquisition_Requirement_Array;
 
-   function Invoke_Create_Requirement
+   function Invoke_data_provision_dependency_Create_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Sensors.Types.Object_Evidence_Provision_Requirement)
       return Pyramid.Data_Model.Base.Types.Identifier
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Sensors.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_consumed_data_provision_dependency_service_create_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_consumed_data_provision_dependency_create_requirement_json")));
    begin
       return Ada.Strings.Unbounded.To_Unbounded_String (Normalise_Json_String (Response_Json));
-   end Invoke_Create_Requirement;
+   end Invoke_data_provision_dependency_Create_Requirement;
 
-   function Invoke_Read_Requirement
+   function Invoke_data_provision_dependency_Read_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Object_Evidence_Provision_Requirement_Array
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Common.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_consumed_data_provision_dependency_service_read_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_consumed_data_provision_dependency_read_requirement_json")));
    begin
       return Decode_Object_Evidence_Provision_Requirement_Array (Response_Json);
-   end Invoke_Read_Requirement;
+   end Invoke_data_provision_dependency_Read_Requirement;
 
-   function Invoke_Update_Requirement
+   function Invoke_data_provision_dependency_Update_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Sensors.Types.Object_Evidence_Provision_Requirement)
       return Pyramid.Data_Model.Common.Types.Ack
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Sensors.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_consumed_data_provision_dependency_service_update_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_consumed_data_provision_dependency_update_requirement_json")));
    begin
       return Pyramid.Data_Model.Common.Types_Codec.From_Json (Response_Json, null);
-   end Invoke_Update_Requirement;
+   end Invoke_data_provision_dependency_Update_Requirement;
 
-   function Invoke_Delete_Requirement
+   function Invoke_data_provision_dependency_Delete_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Base.Types.Identifier)
       return Pyramid.Data_Model.Common.Types.Ack
    is
       Response_Json : constant String :=
         Call_Json (Channel, Encode_Identifier (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_consumed_data_provision_dependency_service_delete_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_consumed_data_provision_dependency_delete_requirement_json")));
    begin
       return Pyramid.Data_Model.Common.Types_Codec.From_Json (Response_Json, null);
-   end Invoke_Delete_Requirement;
+   end Invoke_data_provision_dependency_Delete_Requirement;
 
-   function Invoke_Create_Requirement
+   function Invoke_data_processing_dependency_Create_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Sensors.Types.Object_Aquisition_Requirement)
       return Pyramid.Data_Model.Base.Types.Identifier
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Sensors.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_consumed_data_processing_dependency_service_create_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_consumed_data_processing_dependency_create_requirement_json")));
    begin
       return Ada.Strings.Unbounded.To_Unbounded_String (Normalise_Json_String (Response_Json));
-   end Invoke_Create_Requirement;
+   end Invoke_data_processing_dependency_Create_Requirement;
 
-   function Invoke_Read_Requirement
+   function Invoke_data_processing_dependency_Read_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Object_Aquisition_Requirement_Array
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Common.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_consumed_data_processing_dependency_service_read_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_consumed_data_processing_dependency_read_requirement_json")));
    begin
       return Decode_Object_Aquisition_Requirement_Array (Response_Json);
-   end Invoke_Read_Requirement;
+   end Invoke_data_processing_dependency_Read_Requirement;
 
-   function Invoke_Update_Requirement
+   function Invoke_data_processing_dependency_Update_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Sensors.Types.Object_Aquisition_Requirement)
       return Pyramid.Data_Model.Common.Types.Ack
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Sensors.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_consumed_data_processing_dependency_service_update_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_consumed_data_processing_dependency_update_requirement_json")));
    begin
       return Pyramid.Data_Model.Common.Types_Codec.From_Json (Response_Json, null);
-   end Invoke_Update_Requirement;
+   end Invoke_data_processing_dependency_Update_Requirement;
 
-   function Invoke_Delete_Requirement
+   function Invoke_data_processing_dependency_Delete_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Base.Types.Identifier)
       return Pyramid.Data_Model.Common.Types.Ack
    is
       Response_Json : constant String :=
         Call_Json (Channel, Encode_Identifier (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_consumed_data_processing_dependency_service_delete_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_consumed_data_processing_dependency_delete_requirement_json")));
    begin
       return Pyramid.Data_Model.Common.Types_Codec.From_Json (Response_Json, null);
-   end Invoke_Delete_Requirement;
+   end Invoke_data_processing_dependency_Delete_Requirement;
 
 end Pyramid.Components.Sensor_data_interpretation.Services.Consumed.GRPC_Transport;

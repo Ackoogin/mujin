@@ -18,44 +18,44 @@ package Pyramid.Components.Sensor_data_interpretation.Services.Consumed.GRPC_Tra
 
    --  Data_Provision_Dependency_Service
 
-   function Invoke_Create_Requirement
+   function Invoke_data_provision_dependency_Create_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Sensors.Types.Object_Evidence_Provision_Requirement)
       return Pyramid.Data_Model.Base.Types.Identifier;
 
-   function Invoke_Read_Requirement
+   function Invoke_data_provision_dependency_Read_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Object_Evidence_Provision_Requirement_Array;
 
-   function Invoke_Update_Requirement
+   function Invoke_data_provision_dependency_Update_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Sensors.Types.Object_Evidence_Provision_Requirement)
       return Pyramid.Data_Model.Common.Types.Ack;
 
-   function Invoke_Delete_Requirement
+   function Invoke_data_provision_dependency_Delete_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Base.Types.Identifier)
       return Pyramid.Data_Model.Common.Types.Ack;
 
    --  Data_Processing_Dependency_Service
 
-   function Invoke_Create_Requirement
+   function Invoke_data_processing_dependency_Create_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Sensors.Types.Object_Aquisition_Requirement)
       return Pyramid.Data_Model.Base.Types.Identifier;
 
-   function Invoke_Read_Requirement
+   function Invoke_data_processing_dependency_Read_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Object_Aquisition_Requirement_Array;
 
-   function Invoke_Update_Requirement
+   function Invoke_data_processing_dependency_Update_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Sensors.Types.Object_Aquisition_Requirement)
       return Pyramid.Data_Model.Common.Types.Ack;
 
-   function Invoke_Delete_Requirement
+   function Invoke_data_processing_dependency_Delete_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Base.Types.Identifier)
       return Pyramid.Data_Model.Common.Types.Ack;

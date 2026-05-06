@@ -18,27 +18,27 @@ package Pyramid.Components.Sensor_data_interpretation.Services.Provided.GRPC_Tra
 
    --  Interpretation_Requirement_Service
 
-   function Invoke_Read_Capability
+   function Invoke_interpretation_requirement_Read_Capability
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Capability_Array;
 
-   function Invoke_Create_Requirement
+   function Invoke_interpretation_requirement_Create_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Sensors.Types.Interpretation_Requirement)
       return Pyramid.Data_Model.Base.Types.Identifier;
 
-   function Invoke_Read_Requirement
+   function Invoke_interpretation_requirement_Read_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Interpretation_Requirement_Array;
 
-   function Invoke_Update_Requirement
+   function Invoke_interpretation_requirement_Update_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Sensors.Types.Interpretation_Requirement)
       return Pyramid.Data_Model.Common.Types.Ack;
 
-   function Invoke_Delete_Requirement
+   function Invoke_interpretation_requirement_Delete_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Base.Types.Identifier)
       return Pyramid.Data_Model.Common.Types.Ack;

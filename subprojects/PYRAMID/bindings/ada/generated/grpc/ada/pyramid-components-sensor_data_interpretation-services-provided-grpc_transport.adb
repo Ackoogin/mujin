@@ -146,64 +146,64 @@ package body Pyramid.Components.Sensor_data_interpretation.Services.Provided.GRP
       return Result;
    end Decode_Interpretation_Requirement_Array;
 
-   function Invoke_Read_Capability
+   function Invoke_interpretation_requirement_Read_Capability
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Capability_Array
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Common.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_provided_interpretation_requirement_service_read_capability_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_interpretation_requirement_read_capability_json")));
    begin
       return Decode_Capability_Array (Response_Json);
-   end Invoke_Read_Capability;
+   end Invoke_interpretation_requirement_Read_Capability;
 
-   function Invoke_Create_Requirement
+   function Invoke_interpretation_requirement_Create_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Sensors.Types.Interpretation_Requirement)
       return Pyramid.Data_Model.Base.Types.Identifier
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Sensors.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_provided_interpretation_requirement_service_create_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_interpretation_requirement_create_requirement_json")));
    begin
       return Ada.Strings.Unbounded.To_Unbounded_String (Normalise_Json_String (Response_Json));
-   end Invoke_Create_Requirement;
+   end Invoke_interpretation_requirement_Create_Requirement;
 
-   function Invoke_Read_Requirement
+   function Invoke_interpretation_requirement_Read_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Interpretation_Requirement_Array
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Common.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_provided_interpretation_requirement_service_read_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_interpretation_requirement_read_requirement_json")));
    begin
       return Decode_Interpretation_Requirement_Array (Response_Json);
-   end Invoke_Read_Requirement;
+   end Invoke_interpretation_requirement_Read_Requirement;
 
-   function Invoke_Update_Requirement
+   function Invoke_interpretation_requirement_Update_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Sensors.Types.Interpretation_Requirement)
       return Pyramid.Data_Model.Common.Types.Ack
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Sensors.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_provided_interpretation_requirement_service_update_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_interpretation_requirement_update_requirement_json")));
    begin
       return Pyramid.Data_Model.Common.Types_Codec.From_Json (Response_Json, null);
-   end Invoke_Update_Requirement;
+   end Invoke_interpretation_requirement_Update_Requirement;
 
-   function Invoke_Delete_Requirement
+   function Invoke_interpretation_requirement_Delete_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Base.Types.Identifier)
       return Pyramid.Data_Model.Common.Types.Ack
    is
       Response_Json : constant String :=
         Call_Json (Channel, Encode_Identifier (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_provided_interpretation_requirement_service_delete_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_interpretation_requirement_delete_requirement_json")));
    begin
       return Pyramid.Data_Model.Common.Types_Codec.From_Json (Response_Json, null);
-   end Invoke_Delete_Requirement;
+   end Invoke_interpretation_requirement_Delete_Requirement;
 
 end Pyramid.Components.Sensor_data_interpretation.Services.Provided.GRPC_Transport;

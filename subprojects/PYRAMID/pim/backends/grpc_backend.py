@@ -1087,7 +1087,7 @@ class GrpcBackend(codec_backends.CodecBackend):
                     f.write(f'      return {rsp_t}\n')
                     f.write('   is\n')
                     f.write('      Response_Json : constant String :=\n')
-                    svc_name = camel_to_lower_snake(svc.name)
+                    svc_name = _service_wire_prefix(svc.name)
                     rpc_name = camel_to_lower_snake(rpc.name)
                     symbol_name = f'grpc_{package_role}_{svc_name}_{rpc_name}_json'
                     f.write(f'        Call_Json (Channel, {encode_expr(rpc.request_type, "Request")},\n')

@@ -158,76 +158,76 @@ package body Pyramid.Components.Tactical_objects.Services.Provided.GRPC_Transpor
       return Result;
    end Decode_Object_Detail_Array;
 
-   function Invoke_Read_Match
+   function Invoke_matching_objects_Read_Match
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Object_Match_Array
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Common.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_provided_matching_objects_service_read_match_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_matching_objects_read_match_json")));
    begin
       return Decode_Object_Match_Array (Response_Json);
-   end Invoke_Read_Match;
+   end Invoke_matching_objects_Read_Match;
 
-   function Invoke_Create_Requirement
+   function Invoke_object_of_interest_Create_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Tactical.Types.Object_Interest_Requirement)
       return Pyramid.Data_Model.Base.Types.Identifier
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Tactical.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_provided_object_of_interest_service_create_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_object_of_interest_create_requirement_json")));
    begin
       return Ada.Strings.Unbounded.To_Unbounded_String (Normalise_Json_String (Response_Json));
-   end Invoke_Create_Requirement;
+   end Invoke_object_of_interest_Create_Requirement;
 
-   function Invoke_Read_Requirement
+   function Invoke_object_of_interest_Read_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Object_Interest_Requirement_Array
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Common.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_provided_object_of_interest_service_read_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_object_of_interest_read_requirement_json")));
    begin
       return Decode_Object_Interest_Requirement_Array (Response_Json);
-   end Invoke_Read_Requirement;
+   end Invoke_object_of_interest_Read_Requirement;
 
-   function Invoke_Update_Requirement
+   function Invoke_object_of_interest_Update_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Tactical.Types.Object_Interest_Requirement)
       return Pyramid.Data_Model.Common.Types.Ack
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Tactical.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_provided_object_of_interest_service_update_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_object_of_interest_update_requirement_json")));
    begin
       return Pyramid.Data_Model.Common.Types_Codec.From_Json (Response_Json, null);
-   end Invoke_Update_Requirement;
+   end Invoke_object_of_interest_Update_Requirement;
 
-   function Invoke_Delete_Requirement
+   function Invoke_object_of_interest_Delete_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Base.Types.Identifier)
       return Pyramid.Data_Model.Common.Types.Ack
    is
       Response_Json : constant String :=
         Call_Json (Channel, Encode_Identifier (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_provided_object_of_interest_service_delete_requirement_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_object_of_interest_delete_requirement_json")));
    begin
       return Pyramid.Data_Model.Common.Types_Codec.From_Json (Response_Json, null);
-   end Invoke_Delete_Requirement;
+   end Invoke_object_of_interest_Delete_Requirement;
 
-   function Invoke_Read_Detail
+   function Invoke_specific_object_detail_Read_Detail
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Object_Detail_Array
    is
       Response_Json : constant String :=
         Call_Json (Channel, Pyramid.Data_Model.Common.Types_Codec.To_Json (Request),
-                   To_Invoke_Json (Symbol_Address ("grpc_provided_specific_object_detail_service_read_detail_json")));
+                   To_Invoke_Json (Symbol_Address ("grpc_provided_specific_object_detail_read_detail_json")));
    begin
       return Decode_Object_Detail_Array (Response_Json);
-   end Invoke_Read_Detail;
+   end Invoke_specific_object_detail_Read_Detail;
 
 end Pyramid.Components.Tactical_objects.Services.Provided.GRPC_Transport;

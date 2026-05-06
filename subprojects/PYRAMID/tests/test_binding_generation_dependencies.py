@@ -112,9 +112,25 @@ def check_cpp(generator: Path, proto_dir: Path) -> None:
             r"bindUnaryServiceIngress",
         ],
     )
-    ros2_files = sorted((out_dir / "ros2").rglob("*")) if (out_dir / "ros2").exists() else []
-    if ros2_files:
-        raise AssertionError("cpp json,ros2: parallel ROS2 transport files were generated")
+    ros2_support_files = sorted((out_dir / "ros2" / "cpp").glob("pyramid_ros2_transport_support.*"))
+    _assert_present(
+        "cpp json,ros2 transport support",
+        _read(ros2_support_files),
+        [
+            r"class\s+Adapter",
+            r"makeUnaryServiceBinding",
+            r"bindUnaryServiceIngress",
+        ],
+    )
+    unexpected_ros2_files = [
+        path for path in sorted((out_dir / "ros2").rglob("*"))
+        if path.is_file() and path not in ros2_support_files
+    ]
+    if unexpected_ros2_files:
+        raise AssertionError(
+            "cpp json,ros2: unexpected generated ROS2 files "
+            + ", ".join(str(path.relative_to(out_dir)) for path in unexpected_ros2_files)
+        )
     shutil.rmtree(out_dir)
 
     out_dir = _case(generator, proto_dir, "cpp", "json,grpc")
@@ -210,8 +226,7 @@ def check_ada(generator: Path, proto_dir: Path) -> None:
             r"/pyramid/stream/",
         ],
     )
-    ros2_specs = sorted((out_dir / "ros2").rglob("*")) if (out_dir / "ros2").exists() else []
-    if ros2_specs:
+    if (out_dir / "ros2").exists():
         raise AssertionError("ada json,ros2: parallel ROS2 transport specs were generated")
     shutil.rmtree(out_dir)
 
@@ -245,7 +260,7 @@ def check_facade_tests(pyramid_root: Path) -> None:
         [
             r"Provided\.Configure_Grpc_Library",
             r"Provided\.Configure_Grpc_Channel",
-            r"Provided\.Invoke_Create_Requirement",
+            r"Provided\.Invoke_Object_Of_Interest_Create_Requirement",
             r"Content_Type\s*=>\s*Provided\.Grpc_Content_Type",
         ],
     )

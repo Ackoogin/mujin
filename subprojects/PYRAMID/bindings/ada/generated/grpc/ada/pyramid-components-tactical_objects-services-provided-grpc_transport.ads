@@ -19,36 +19,36 @@ package Pyramid.Components.Tactical_objects.Services.Provided.GRPC_Transport is
 
    --  Matching_Objects_Service
 
-   function Invoke_Read_Match
+   function Invoke_matching_objects_Read_Match
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Object_Match_Array;
 
    --  Object_Of_Interest_Service
 
-   function Invoke_Create_Requirement
+   function Invoke_object_of_interest_Create_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Tactical.Types.Object_Interest_Requirement)
       return Pyramid.Data_Model.Base.Types.Identifier;
 
-   function Invoke_Read_Requirement
+   function Invoke_object_of_interest_Read_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Object_Interest_Requirement_Array;
 
-   function Invoke_Update_Requirement
+   function Invoke_object_of_interest_Update_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Tactical.Types.Object_Interest_Requirement)
       return Pyramid.Data_Model.Common.Types.Ack;
 
-   function Invoke_Delete_Requirement
+   function Invoke_object_of_interest_Delete_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Base.Types.Identifier)
       return Pyramid.Data_Model.Common.Types.Ack;
 
    --  Specific_Object_Detail_Service
 
-   function Invoke_Read_Detail
+   function Invoke_specific_object_detail_Read_Detail
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Object_Detail_Array;

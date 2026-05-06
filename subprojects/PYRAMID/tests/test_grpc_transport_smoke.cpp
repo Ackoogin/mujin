@@ -15,6 +15,16 @@
 #include <string>
 #include <thread>
 
+#if defined(_WIN32)
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
+
 namespace pyramid::components::tactical_objects::services::provided {
 
 class GrpcServer {
@@ -146,8 +156,68 @@ TEST(GrpcTransportSmoke, DomainAndWireTypesCoexist) {
   EXPECT_EQ(wire_value.identity(), proto_common::STANDARD_IDENTITY_FRIENDLY);
 }
 
+uint16_t pickLoopbackPort() {
+#if defined(_WIN32)
+  WSADATA wsa{};
+  if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) {
+    return 0;
+  }
+  SOCKET tmp = socket(AF_INET, SOCK_STREAM, 0);
+  if (tmp == INVALID_SOCKET) {
+    WSACleanup();
+    return 0;
+  }
+#else
+  int tmp = socket(AF_INET, SOCK_STREAM, 0);
+  if (tmp < 0) {
+    return 0;
+  }
+#endif
+
+  sockaddr_in addr{};
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  addr.sin_port = 0;
+
+  if (bind(tmp, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+#if defined(_WIN32)
+    closesocket(tmp);
+    WSACleanup();
+#else
+    close(tmp);
+#endif
+    return 0;
+  }
+
+#if defined(_WIN32)
+  int len = static_cast<int>(sizeof(addr));
+#else
+  socklen_t len = sizeof(addr);
+#endif
+  if (getsockname(tmp, reinterpret_cast<sockaddr*>(&addr), &len) != 0) {
+#if defined(_WIN32)
+    closesocket(tmp);
+    WSACleanup();
+#else
+    close(tmp);
+#endif
+    return 0;
+  }
+
+  const auto port = ntohs(addr.sin_port);
+#if defined(_WIN32)
+  closesocket(tmp);
+  WSACleanup();
+#else
+  close(tmp);
+#endif
+  return port;
+}
+
 TEST(GrpcTransportSmoke, UnaryCreateRequirementRoundTrip) {
-  constexpr auto kAddress = "127.0.0.1:50091";
+  const auto port = pickLoopbackPort();
+  ASSERT_NE(port, 0);
+  const auto address = std::string("127.0.0.1:") + std::to_string(port);
 
   g_handler_called.store(false);
   g_captured_policy.store(
@@ -177,11 +247,11 @@ TEST(GrpcTransportSmoke, UnaryCreateRequirementRoundTrip) {
     }
   });
 
-  auto host = provided::buildGrpcServer(kAddress, executor);
+  auto host = provided::buildGrpcServer(address, executor);
   ASSERT_TRUE(host.started());
 
   auto channel =
-      grpc::CreateChannel(kAddress, grpc::InsecureChannelCredentials());
+      grpc::CreateChannel(address, grpc::InsecureChannelCredentials());
   auto stub = proto_services::Object_Of_Interest_Service::NewStub(channel);
   ASSERT_NE(stub, nullptr);
 

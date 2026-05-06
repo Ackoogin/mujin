@@ -12,7 +12,7 @@ setlocal enabledelayedexpansion
 set "SERVER_BIN="
 set "CLIENT_BIN="
 set "DLL_BIN="
-set "ADDRESS=127.0.0.1:50111"
+set "ADDRESS=auto"
 set "TIMEOUT_SEC=20"
 set "BUILD_DIR=%PYRAMID_BUILD_DIR%"
 set "BUILD_CONFIG=%PYRAMID_BUILD_CONFIG%"
@@ -88,6 +88,15 @@ if not exist "%DLL_BIN%" (
     exit /b 1
 )
 
+if /i "%ADDRESS%"=="auto" set "ADDRESS="
+if "%ADDRESS%"=="" (
+    call :pick_loopback_address
+    if errorlevel 1 (
+        echo [driver] FAIL: could not allocate a loopback gRPC port
+        exit /b 1
+    )
+)
+
 echo [driver] Starting gRPC server on %ADDRESS%...
 start /b "" "%SERVER_BIN%" --address "%ADDRESS%" --ready-file "%READY_FILE%" --timeout %TIMEOUT_SEC% >nul 2>&1
 
@@ -132,4 +141,16 @@ exit /b 1
 :cleanup
 taskkill /f /im tobj_grpc_server.exe >nul 2>&1
 if exist "%READY_FILE%" del /f "%READY_FILE%" >nul 2>&1
+goto :eof
+
+:pick_loopback_address
+set "GRPC_PORT="
+set "PORT_FILE=%TEMP%\pyramid_grpc_port_%RANDOM%.tmp"
+python "%SCRIPT_BASE%pick_loopback_port.py" > "%PORT_FILE%" 2>nul
+if exist "%PORT_FILE%" (
+    set /p GRPC_PORT=<"%PORT_FILE%"
+    del /f "%PORT_FILE%" >nul 2>&1
+)
+if not defined GRPC_PORT exit /b 1
+set "ADDRESS=127.0.0.1:%GRPC_PORT%"
 goto :eof

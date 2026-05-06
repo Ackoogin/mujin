@@ -19,36 +19,36 @@ package Pyramid.Components.Tactical_objects.Services.Consumed.GRPC_Transport is
 
    --  Object_Evidence_Service
 
-   function Invoke_Read_Detail
+   function Invoke_object_evidence_Read_Detail
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Object_Detail_Array;
 
    --  Object_Solution_Evidence_Service
 
-   function Invoke_Create_Requirement
+   function Invoke_object_solution_evidence_Create_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Tactical.Types.Object_Evidence_Requirement)
       return Pyramid.Data_Model.Base.Types.Identifier;
 
-   function Invoke_Read_Requirement
+   function Invoke_object_solution_evidence_Read_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Object_Evidence_Requirement_Array;
 
-   function Invoke_Update_Requirement
+   function Invoke_object_solution_evidence_Update_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Tactical.Types.Object_Evidence_Requirement)
       return Pyramid.Data_Model.Common.Types.Ack;
 
-   function Invoke_Delete_Requirement
+   function Invoke_object_solution_evidence_Delete_Requirement
      (Channel : String;
       Request : Pyramid.Data_Model.Base.Types.Identifier)
       return Pyramid.Data_Model.Common.Types.Ack;
 
    --  Object_Source_Capability_Service
 
-   function Invoke_Read_Capability
+   function Invoke_object_source_capability_Read_Capability
      (Channel : String;
       Request : Pyramid.Data_Model.Common.Types.Query)
       return Capability_Array;

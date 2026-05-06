@@ -7,8 +7,7 @@ if(NOT DEFINED RUN_COMMAND)
 endif()
 
 if(EXISTS "${OUTPUT}")
-  message(STATUS "Already present: ${OUTPUT}")
-  return()
+  message(STATUS "Refreshing: ${OUTPUT}")
 endif()
 
 set(_working_directory_args)
