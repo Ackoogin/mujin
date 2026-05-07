@@ -163,7 +163,8 @@ package body Bridge_Entity_Tracker is
         and then Resp.Size > 0
       then
          This.Interest_Id_Value :=
-           Provided_Tobj.Decode_Create_Requirement_Response (Resp);
+           Provided_Tobj.Decode_Object_Of_Interest_Create_Requirement_Response
+             (Resp);
          Log ("create_requirement response: interest_id=" &
               To_String (This.Interest_Id_Value));
       end if;

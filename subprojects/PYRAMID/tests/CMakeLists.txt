@@ -481,6 +481,17 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     endif()
 
     set(ADA_EXAMPLE_DIR ${PYRAMID_ROOT_DIR}/examples/ada)
+    set(ADA_PCL_SENSOR_DEMO_SOURCES
+        ${ADA_EXAMPLE_DIR}/pcl_sensor_demo.adb
+        ${ADA_EXAMPLE_DIR}/pcl_sensor_demo.gpr)
+    set(ADA_PCL_COMPONENT_TESTS_SOURCES
+        ${ADA_TEST_SRC_DIR}/pcl_component_tests.adb
+        ${ADA_TEST_SRC_DIR}/pcl_component_tests.gpr)
+    set(ADA_PYRAMID_UUID_TEST_SOURCES
+        ${ADA_TEST_SRC_DIR}/test_pyramid_uuids.adb
+        ${ADA_TEST_SRC_DIR}/test_pyramid_uuids.gpr
+        ${ADA_EXAMPLE_DIR}/pyramid-uuids.adb
+        ${ADA_EXAMPLE_DIR}/pyramid-uuids.ads)
     set(ADA_PCL_SENSOR_DEMO_EXE
         ${ADA_EXAMPLE_DIR}/bin/pcl_sensor_demo${CMAKE_EXECUTABLE_SUFFIX})
     add_custom_command(
@@ -492,6 +503,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                 "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args};-p;-P;${ADA_EXAMPLE_DIR}/pcl_sensor_demo.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_EXAMPLE_DIR}
+        DEPENDS ${ADA_PCL_SENSOR_DEMO_SOURCES}
         COMMENT "Building Ada PCL sensor demo"
         VERBATIM)
     add_custom_target(ada_pcl_sensor_demo_build
@@ -509,6 +521,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                 "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args};-p;-P;${ADA_TEST_SRC_DIR}/pcl_component_tests.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
+        DEPENDS ${ADA_PCL_COMPONENT_TESTS_SOURCES}
         COMMENT "Building Ada PCL component tests"
         VERBATIM)
     add_custom_target(ada_pcl_component_tests_build
@@ -526,6 +539,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                 "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args};-p;-P;${ADA_TEST_SRC_DIR}/test_pyramid_uuids.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
+        DEPENDS ${ADA_PYRAMID_UUID_TEST_SOURCES}
         COMMENT "Building Ada Pyramid UUID test"
         VERBATIM)
     add_custom_target(ada_pyramid_uuid_test_build
@@ -778,6 +792,10 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
 
     # -- Pyramid Bridge Ada build + E2E test -----------------------------------
     set(ADA_BRIDGE_SRC_DIR ${PYRAMID_ROOT_DIR}/pyramid_bridge/ada)
+    file(GLOB ADA_BRIDGE_SOURCES CONFIGURE_DEPENDS
+        "${ADA_BRIDGE_SRC_DIR}/*.adb"
+        "${ADA_BRIDGE_SRC_DIR}/*.ads"
+        "${ADA_BRIDGE_SRC_DIR}/*.gpr")
 
     set(ADA_PYRAMID_BRIDGE_EXE
         ${ADA_BRIDGE_SRC_DIR}/bin/pyramid_bridge_main${CMAKE_EXECUTABLE_SUFFIX})
@@ -792,6 +810,10 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                 "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args};-p;-P;${ADA_BRIDGE_SRC_DIR}/pyramid_bridge.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};-XPCL_UDP_LIB_NAME=${ADA_PCL_UDP_LIB_NAME};-XPCL_SHMEM_LIB_NAME=${ADA_PCL_SHMEM_LIB_NAME};${_ada_fb_args}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_BRIDGE_SRC_DIR}
+        DEPENDS
+            ${ADA_BRIDGE_SOURCES}
+            ${PYRAMID_BINDING_GENERATOR_INPUTS}
+            ${PYRAMID_PROTO_INPUTS}
         COMMENT "Building Ada Pyramid Bridge"
         VERBATIM
     )
@@ -827,6 +849,10 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
 
     # Ada example client — built by cmake --build --target pyramid_ada_all
     set(ADA_EXAMPLE_DIR ${PYRAMID_ROOT_DIR}/examples/ada)
+    file(GLOB ADA_EXAMPLE_SOURCES CONFIGURE_DEPENDS
+        "${ADA_EXAMPLE_DIR}/*.adb"
+        "${ADA_EXAMPLE_DIR}/*.ads"
+        "${ADA_EXAMPLE_DIR}/*.gpr")
     set(ADA_TOBJ_CLIENT_EXE
         ${ADA_EXAMPLE_DIR}/bin/ada_tobj_client${CMAKE_EXECUTABLE_SUFFIX})
     add_custom_command(
@@ -838,6 +864,10 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                 "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args};-p;-P;${ADA_EXAMPLE_DIR}/ada_tobj_client.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};${_ada_fb_args}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_EXAMPLE_DIR}
+        DEPENDS
+            ${ADA_EXAMPLE_SOURCES}
+            ${PYRAMID_BINDING_GENERATOR_INPUTS}
+            ${PYRAMID_PROTO_INPUTS}
         COMMENT "Building Ada tactical objects client"
         VERBATIM
     )
@@ -860,6 +890,12 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                 "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args};-p;-P;${ADA_TEST_SRC_DIR}/ada_active_find_e2e.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};${_ada_fb_args}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
+        DEPENDS
+            ${ADA_TEST_SRC_DIR}/ada_active_find_e2e.adb
+            ${ADA_TEST_SRC_DIR}/ada_active_find_e2e.gpr
+            ${ADA_EXAMPLE_SOURCES}
+            ${PYRAMID_BINDING_GENERATOR_INPUTS}
+            ${PYRAMID_PROTO_INPUTS}
         COMMENT "Building Ada active-find E2E test client"
         VERBATIM
     )

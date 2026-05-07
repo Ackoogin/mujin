@@ -8,6 +8,7 @@ endif()
 
 if(EXISTS "${OUTPUT}")
   message(STATUS "Refreshing: ${OUTPUT}")
+  file(REMOVE "${OUTPUT}")
 endif()
 
 set(_working_directory_args)
@@ -21,4 +22,8 @@ execute_process(
   RESULT_VARIABLE _result)
 if(NOT _result EQUAL 0)
   message(FATAL_ERROR "Command failed with exit code ${_result}: ${RUN_COMMAND}")
+endif()
+
+if(NOT EXISTS "${OUTPUT}")
+  message(FATAL_ERROR "Command completed but did not produce expected output: ${OUTPUT}")
 endif()

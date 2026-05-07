@@ -171,7 +171,7 @@ procedure Pyramid_Bridge_Main is
       --  Leave Dimension null and area unset for a global (all-entity) query.
 
       Log ("placing global ObjectInterestRequirement (Policy_Obtain, all entities)");
-      Provided_Tobj.Invoke_Create_Requirement
+      Provided_Tobj.Invoke_Object_Of_Interest_Create_Requirement
         (Executor     => Pcl_Component.Handle (Tobj_Exec),
          Request      => Req,
          Callback     => Bridge_Entity_Tracker.On_Create_Req_Response'Access,
@@ -203,7 +203,7 @@ procedure Pyramid_Bridge_Main is
       Update.Source      := To_Unbounded_String ("pyramid_bridge");
       Update.Fact_Update := new Fact_Update_Array'(Facts);
 
-      Provided_Ame.Invoke_Update_State
+      Provided_Ame.Invoke_State_Update_State
         (Executor     => Pcl_Component.Handle (Ame_Exec),
          Request      => Update,
          Callback     =>

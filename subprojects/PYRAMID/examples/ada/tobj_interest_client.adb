@@ -84,7 +84,8 @@ package body Tobj_Interest_Client is
       then
          declare
             Interest_Id : constant Identifier :=
-              Provided.Decode_Create_Requirement_Response (Resp);
+              Provided.Decode_Object_Of_Interest_Create_Requirement_Response
+                (Resp);
          begin
             Log ("create_requirement response id: " & To_String (Interest_Id));
             if Interest_Id /= Null_Unbounded_String then
@@ -132,7 +133,7 @@ package body Tobj_Interest_Client is
       declare
          Status : Pcl_Bindings.Pcl_Status;
       begin
-         Provided.Invoke_Create_Requirement
+         Provided.Invoke_Object_Of_Interest_Create_Requirement
            (Executor     => Exec,
             Request      => Req,
             Callback     => On_Create_Requirement_Response'Unrestricted_Access,

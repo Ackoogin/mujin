@@ -162,12 +162,12 @@ procedure Example_Server_Wiring is
    end Read_Requirement;
 
    Handlers : aliased constant Prov.Service_Handlers :=
-     (On_Read_Match          => null,
-      On_Create_Requirement  => Create_Requirement'Access,
-      On_Read_Requirement    => Read_Requirement'Access,
-      On_Update_Requirement  => null,
-      On_Delete_Requirement  => null,
-      On_Read_Detail         => null);
+     (On_Matching_Objects_Read_Match             => null,
+      On_Object_Of_Interest_Create_Requirement  => Create_Requirement'Access,
+      On_Object_Of_Interest_Read_Requirement    => Read_Requirement'Access,
+      On_Object_Of_Interest_Update_Requirement  => null,
+      On_Object_Of_Interest_Delete_Requirement  => null,
+      On_Specific_Object_Detail_Read_Detail     => null);
 begin
    --  Inside your container On_Configure:
    Prov.Register_Services
@@ -181,7 +181,7 @@ begin
       Peer_List : aliased constant System.Address := Peer'Address;
       Route     : aliased Pcl_Bindings.Pcl_Endpoint_Route :=
         (Endpoint_Name => Interfaces.C.Strings.New_String
-           (Prov.Svc_Create_Requirement),
+           (Prov.Svc_Object_Of_Interest_Create_Requirement),
          Endpoint_Kind => Pcl_Bindings.PCL_ENDPOINT_CONSUMED,
          Route_Mode    => Pcl_Bindings.PCL_ROUTE_REMOTE,
          Peer_Ids      => Peer_List,
@@ -228,7 +228,7 @@ procedure Example_Invoke_Create_Requirement is
    is
       pragma Unreferenced (User_Data);
       Interest_Id : constant Identifier :=
-        Prov.Decode_Create_Requirement_Response (Resp);
+        Prov.Decode_Object_Of_Interest_Create_Requirement_Response (Resp);
    begin
       pragma Assert (Interest_Id = To_Unbounded_String ("created-by-test"));
    end Response_Cb;
@@ -243,7 +243,7 @@ begin
    Request_Value.Val_Point.Position.Latitude := 0.1;
    Request_Value.Val_Point.Position.Longitude := 0.3;
 
-   Prov.Invoke_Create_Requirement
+   Prov.Invoke_Object_Of_Interest_Create_Requirement
      (Executor     => Exec,
       Request      => Request_Value,
       Callback     => Response_Cb'Access,
@@ -338,7 +338,7 @@ declare
    Peer_List : aliased constant System.Address := Peer'Address;
    Route     : aliased Pcl_Bindings.Pcl_Endpoint_Route :=
      (Endpoint_Name => Interfaces.C.Strings.New_String
-        (Prov.Svc_Read_Detail),
+        (Prov.Svc_Specific_Object_Detail_Read_Detail),
       Endpoint_Kind => Pcl_Bindings.PCL_ENDPOINT_CONSUMED,
       Route_Mode    => Pcl_Bindings.PCL_ROUTE_REMOTE,
       Peer_Ids      => Peer_List,
