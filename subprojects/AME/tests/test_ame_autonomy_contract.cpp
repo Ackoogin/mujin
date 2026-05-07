@@ -184,7 +184,7 @@ TEST(AmeAutonomyContract, PlansThroughGeneratedJsonServiceContract) {
 
   const auto state_id_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::CreateState,
+                   provided::ServiceChannel::StateCreateState,
                    autonomy_codec::toJson(state));
   const auto state_id =
       nlohmann::json::parse(state_id_payload).get<std::string>();
@@ -195,7 +195,7 @@ TEST(AmeAutonomyContract, PlansThroughGeneratedJsonServiceContract) {
 
   const auto requirement_id_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::CreatePlanningRequirement,
+                   provided::ServiceChannel::PlanningRequirementCreatePlanningRequirement,
                    autonomy_codec::toJson(requirement));
   const auto requirement_id =
       nlohmann::json::parse(requirement_id_payload).get<std::string>();
@@ -203,7 +203,7 @@ TEST(AmeAutonomyContract, PlansThroughGeneratedJsonServiceContract) {
 
   const auto read_requirement_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadPlanningRequirement,
+                   provided::ServiceChannel::PlanningRequirementReadPlanningRequirement,
                    common_codec::toJson(queryId(requirement_id)));
   const auto requirements =
       decodeJsonArray<model::PlanningRequirement>(
@@ -218,7 +218,7 @@ TEST(AmeAutonomyContract, PlansThroughGeneratedJsonServiceContract) {
 
   const auto read_plan_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadPlan,
+                   provided::ServiceChannel::PlanReadPlan,
                    common_codec::toJson(queryAll()));
   const auto plans =
       decodeJsonArray<model::Plan>(
@@ -235,7 +235,7 @@ TEST(AmeAutonomyContract, PlansThroughGeneratedJsonServiceContract) {
 
   const auto second_plan_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadPlan,
+                   provided::ServiceChannel::PlanReadPlan,
                    common_codec::toJson(queryAll()));
   const auto second_plans =
       decodeJsonArray<model::Plan>(
@@ -262,7 +262,7 @@ TEST(AmeAutonomyContract, PlansThroughGeneratedJsonServiceContract) {
   const auto imported_plan_id =
       nlohmann::json::parse(
           dispatchJson(bridge,
-                       provided::ServiceChannel::CreatePlan,
+                       provided::ServiceChannel::PlanCreatePlan,
                        autonomy_codec::toJson(imported_plan)))
           .get<std::string>();
   EXPECT_EQ(imported_plan_id, imported_plan.id);
@@ -271,14 +271,14 @@ TEST(AmeAutonomyContract, PlansThroughGeneratedJsonServiceContract) {
   const auto update_plan_ack =
       common_codec::fromJson(
           dispatchJson(bridge,
-                       provided::ServiceChannel::UpdatePlan,
+                       provided::ServiceChannel::PlanUpdatePlan,
                        autonomy_codec::toJson(imported_plan)),
           static_cast<model::Ack*>(nullptr));
   EXPECT_TRUE(update_plan_ack.success);
 
   const auto read_imported_plan_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadPlan,
+                   provided::ServiceChannel::PlanReadPlan,
                    common_codec::toJson(queryId(imported_plan_id)));
   const auto imported_plans =
       decodeJsonArray<model::Plan>(
@@ -294,14 +294,14 @@ TEST(AmeAutonomyContract, PlansThroughGeneratedJsonServiceContract) {
   const auto delete_plan_ack =
       common_codec::fromJson(
           dispatchJson(bridge,
-                       provided::ServiceChannel::DeletePlan,
+                       provided::ServiceChannel::PlanDeletePlan,
                        nlohmann::json(imported_plan_id).dump()),
           static_cast<model::Ack*>(nullptr));
   EXPECT_TRUE(delete_plan_ack.success);
 
   const auto read_run_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadRun,
+                   provided::ServiceChannel::ExecutionRunReadRun,
                    common_codec::toJson(queryAll()));
   const auto runs =
       decodeJsonArray<model::ExecutionRun>(
@@ -314,7 +314,7 @@ TEST(AmeAutonomyContract, PlansThroughGeneratedJsonServiceContract) {
 
   const auto read_placement_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadPlacement,
+                   provided::ServiceChannel::RequirementPlacementReadPlacement,
                    common_codec::toJson(queryAll()));
   const auto placements =
       decodeJsonArray<model::RequirementPlacement>(
@@ -333,7 +333,7 @@ TEST(AmeAutonomyContract, PlanAndExecuteCompletesFromStateFeedback) {
 
   const auto capabilities_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadCapabilities,
+                   provided::ServiceChannel::CapabilitiesReadCapabilities,
                    common_codec::toJson(queryAll()));
   const auto capabilities =
       decodeJsonArray<model::Capabilities>(
@@ -357,7 +357,7 @@ TEST(AmeAutonomyContract, PlanAndExecuteCompletesFromStateFeedback) {
   const auto initial_state_id =
       nlohmann::json::parse(
           dispatchJson(bridge,
-                       provided::ServiceChannel::CreateState,
+                       provided::ServiceChannel::StateCreateState,
                        autonomy_codec::toJson(initial_state)))
           .get<std::string>();
   ASSERT_FALSE(initial_state_id.empty());
@@ -365,14 +365,14 @@ TEST(AmeAutonomyContract, PlanAndExecuteCompletesFromStateFeedback) {
   const auto planning_requirement_id =
       nlohmann::json::parse(
           dispatchJson(bridge,
-                       provided::ServiceChannel::CreatePlanningRequirement,
+                       provided::ServiceChannel::PlanningRequirementCreatePlanningRequirement,
                        autonomy_codec::toJson(planningRequirement())))
           .get<std::string>();
   ASSERT_FALSE(planning_requirement_id.empty());
 
   const auto plan_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadPlan,
+                   provided::ServiceChannel::PlanReadPlan,
                    common_codec::toJson(queryAll()));
   const auto plans =
       decodeJsonArray<model::Plan>(
@@ -387,7 +387,7 @@ TEST(AmeAutonomyContract, PlanAndExecuteCompletesFromStateFeedback) {
   const auto execution_requirement_id =
       nlohmann::json::parse(
           dispatchJson(bridge,
-                       provided::ServiceChannel::CreateExecutionRequirement,
+                       provided::ServiceChannel::ExecutionRequirementCreateExecutionRequirement,
                        autonomy_codec::toJson(executionRequirement(
                            plans.front().id, planning_requirement_id))))
           .get<std::string>();
@@ -395,7 +395,7 @@ TEST(AmeAutonomyContract, PlanAndExecuteCompletesFromStateFeedback) {
 
   const auto initial_run_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadRun,
+                   provided::ServiceChannel::ExecutionRunReadRun,
                    common_codec::toJson(queryAll()));
   const auto initial_runs =
       decodeJsonArray<model::ExecutionRun>(
@@ -417,7 +417,7 @@ TEST(AmeAutonomyContract, PlanAndExecuteCompletesFromStateFeedback) {
 
   const auto initial_placement_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadPlacement,
+                   provided::ServiceChannel::RequirementPlacementReadPlacement,
                    common_codec::toJson(queryAll()));
   const auto initial_placements =
       decodeJsonArray<model::RequirementPlacement>(
@@ -459,7 +459,7 @@ TEST(AmeAutonomyContract, PlanAndExecuteCompletesFromStateFeedback) {
 
   const auto update_ack_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::UpdateState,
+                   provided::ServiceChannel::StateUpdateState,
                    autonomy_codec::toJson(completion_state));
   const auto update_ack =
       common_codec::fromJson(update_ack_payload,
@@ -468,7 +468,7 @@ TEST(AmeAutonomyContract, PlanAndExecuteCompletesFromStateFeedback) {
 
   const auto completed_run_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadRun,
+                   provided::ServiceChannel::ExecutionRunReadRun,
                    common_codec::toJson(queryAll()));
   const auto completed_runs =
       decodeJsonArray<model::ExecutionRun>(
@@ -486,7 +486,7 @@ TEST(AmeAutonomyContract, PlanAndExecuteCompletesFromStateFeedback) {
 
   const auto completed_requirement_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadExecutionRequirement,
+                   provided::ServiceChannel::ExecutionRequirementReadExecutionRequirement,
                    common_codec::toJson(queryId(execution_requirement_id)));
   const auto completed_requirements =
       decodeJsonArray<model::ExecutionRequirement>(
@@ -501,7 +501,7 @@ TEST(AmeAutonomyContract, PlanAndExecuteCompletesFromStateFeedback) {
 
   const auto completed_placement_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadPlacement,
+                   provided::ServiceChannel::RequirementPlacementReadPlacement,
                    common_codec::toJson(queryAll()));
   const auto completed_placements =
       decodeJsonArray<model::RequirementPlacement>(
@@ -530,7 +530,7 @@ TEST(AmeAutonomyContract, HostCanRegisterExecutionBindingsForProjection) {
   const auto state_id =
       nlohmann::json::parse(
           dispatchJson(bridge,
-                       provided::ServiceChannel::CreateState,
+                       provided::ServiceChannel::StateCreateState,
                        autonomy_codec::toJson(initialAtBaseState())))
           .get<std::string>();
   ASSERT_FALSE(state_id.empty());
@@ -538,14 +538,14 @@ TEST(AmeAutonomyContract, HostCanRegisterExecutionBindingsForProjection) {
   const auto planning_requirement_id =
       nlohmann::json::parse(
           dispatchJson(bridge,
-                       provided::ServiceChannel::CreatePlanningRequirement,
+                       provided::ServiceChannel::PlanningRequirementCreatePlanningRequirement,
                        autonomy_codec::toJson(planningRequirement())))
           .get<std::string>();
   ASSERT_FALSE(planning_requirement_id.empty());
 
   const auto plan_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadPlan,
+                   provided::ServiceChannel::PlanReadPlan,
                    common_codec::toJson(queryAll()));
   const auto plans =
       decodeJsonArray<model::Plan>(
@@ -559,7 +559,7 @@ TEST(AmeAutonomyContract, HostCanRegisterExecutionBindingsForProjection) {
   const auto execution_requirement_id =
       nlohmann::json::parse(
           dispatchJson(bridge,
-                       provided::ServiceChannel::CreateExecutionRequirement,
+                       provided::ServiceChannel::ExecutionRequirementCreateExecutionRequirement,
                        autonomy_codec::toJson(executionRequirement(
                            plans.front().id, planning_requirement_id))))
           .get<std::string>();
@@ -567,7 +567,7 @@ TEST(AmeAutonomyContract, HostCanRegisterExecutionBindingsForProjection) {
 
   const auto placement_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadPlacement,
+                   provided::ServiceChannel::RequirementPlacementReadPlacement,
                    common_codec::toJson(queryAll()));
   const auto placements =
       decodeJsonArray<model::RequirementPlacement>(
@@ -612,7 +612,7 @@ TEST(AmeAutonomyContract, StrictPolicyFailsRunWhenNoBindingExists) {
   const auto state_id =
       nlohmann::json::parse(
           dispatchJson(bridge,
-                       provided::ServiceChannel::CreateState,
+                       provided::ServiceChannel::StateCreateState,
                        autonomy_codec::toJson(initialAtBaseState())))
           .get<std::string>();
   ASSERT_FALSE(state_id.empty());
@@ -620,14 +620,14 @@ TEST(AmeAutonomyContract, StrictPolicyFailsRunWhenNoBindingExists) {
   const auto planning_requirement_id =
       nlohmann::json::parse(
           dispatchJson(bridge,
-                       provided::ServiceChannel::CreatePlanningRequirement,
+                       provided::ServiceChannel::PlanningRequirementCreatePlanningRequirement,
                        autonomy_codec::toJson(planningRequirement())))
           .get<std::string>();
   ASSERT_FALSE(planning_requirement_id.empty());
 
   const auto plan_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadPlan,
+                   provided::ServiceChannel::PlanReadPlan,
                    common_codec::toJson(queryAll()));
   const auto plans =
       decodeJsonArray<model::Plan>(
@@ -641,7 +641,7 @@ TEST(AmeAutonomyContract, StrictPolicyFailsRunWhenNoBindingExists) {
   const auto execution_requirement_id =
       nlohmann::json::parse(
           dispatchJson(bridge,
-                       provided::ServiceChannel::CreateExecutionRequirement,
+                       provided::ServiceChannel::ExecutionRequirementCreateExecutionRequirement,
                        autonomy_codec::toJson(executionRequirement(
                            plans.front().id, planning_requirement_id))))
           .get<std::string>();
@@ -649,7 +649,7 @@ TEST(AmeAutonomyContract, StrictPolicyFailsRunWhenNoBindingExists) {
 
   const auto run_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadRun,
+                   provided::ServiceChannel::ExecutionRunReadRun,
                    common_codec::toJson(queryAll()));
   const auto runs =
       decodeJsonArray<model::ExecutionRun>(
@@ -664,7 +664,7 @@ TEST(AmeAutonomyContract, StrictPolicyFailsRunWhenNoBindingExists) {
 
   const auto requirement_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadExecutionRequirement,
+                   provided::ServiceChannel::ExecutionRequirementReadExecutionRequirement,
                    common_codec::toJson(queryId(execution_requirement_id)));
   const auto requirements =
       decodeJsonArray<model::ExecutionRequirement>(
@@ -678,7 +678,7 @@ TEST(AmeAutonomyContract, StrictPolicyFailsRunWhenNoBindingExists) {
 
   const auto placement_payload =
       dispatchJson(bridge,
-                   provided::ServiceChannel::ReadPlacement,
+                   provided::ServiceChannel::RequirementPlacementReadPlacement,
                    common_codec::toJson(queryAll()));
   const auto placements =
       decodeJsonArray<model::RequirementPlacement>(

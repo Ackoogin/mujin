@@ -27,8 +27,10 @@ try:
     from rclpy.callback_groups import ReentrantCallbackGroup
 
     _HAS_RCLPY = True
-except ImportError:
+    _RCLPY_IMPORT_ERROR = ""
+except ImportError as e:
     _HAS_RCLPY = False
+    _RCLPY_IMPORT_ERROR = str(e)
 
 
 @dataclass
@@ -70,7 +72,7 @@ class AmeRos2Client:
         self._connected = False
         self._pending_calls: deque[tuple[str, tuple[Any, ...]]] = deque()
         self._dispatch_timer: Any = None
-        self.last_error: str = ""
+        self.last_error: str = "" if self.available else _RCLPY_IMPORT_ERROR
 
         # Latest world state from subscription
         self._latest_snapshot: Optional[WorldSnapshot] = None

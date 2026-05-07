@@ -47,4 +47,6 @@ echo "Installing dependencies..."
 "${VENV_PYTHON}" -m pip install -r "${SCRIPT_DIR}/requirements.txt" --quiet
 
 echo
-echo "Setup complete. Run subprojects/AME/tools/devenv/start_devenv_pcl.sh to launch the PCL backend."
+echo "Setup complete."
+echo "Run subprojects/AME/tools/devenv/start_devenv.sh to launch the ROS2 backend."
+echo "Run subprojects/AME/tools/devenv/start_devenv_pcl.sh to launch the PCL backend."
