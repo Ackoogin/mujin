@@ -64,31 +64,36 @@ public:
   /// does not support binding registration.
   bool registerExecutionBinding(const ExecutionBinding& binding);
 
-  std::vector<Capabilities> handleReadCapabilities(
+  std::vector<Capabilities> handleCapabilitiesReadCapabilities(
       const Query& request) override;
-  Identifier handleCreatePlanningRequirement(
+  Identifier handlePlanningRequirementCreatePlanningRequirement(
       const PlanningRequirement& request) override;
-  std::vector<PlanningRequirement> handleReadPlanningRequirement(
+  std::vector<PlanningRequirement>
+  handlePlanningRequirementReadPlanningRequirement(
       const Query& request) override;
-  Ack handleUpdatePlanningRequirement(
+  Ack handlePlanningRequirementUpdatePlanningRequirement(
       const PlanningRequirement& request) override;
-  Ack handleDeletePlanningRequirement(const Identifier& request) override;
-  Identifier handleCreateExecutionRequirement(
+  Ack handlePlanningRequirementDeletePlanningRequirement(
+      const Identifier& request) override;
+  Identifier handleExecutionRequirementCreateExecutionRequirement(
       const ExecutionRequirement& request) override;
-  std::vector<ExecutionRequirement> handleReadExecutionRequirement(
+  std::vector<ExecutionRequirement>
+  handleExecutionRequirementReadExecutionRequirement(
       const Query& request) override;
-  Ack handleUpdateExecutionRequirement(
+  Ack handleExecutionRequirementUpdateExecutionRequirement(
       const ExecutionRequirement& request) override;
-  Ack handleDeleteExecutionRequirement(const Identifier& request) override;
-  Identifier handleCreateState(const StateUpdate& request) override;
-  Ack handleUpdateState(const StateUpdate& request) override;
-  Ack handleDeleteState(const Identifier& request) override;
-  Identifier handleCreatePlan(const Plan& request) override;
-  std::vector<Plan> handleReadPlan(const Query& request) override;
-  Ack handleUpdatePlan(const Plan& request) override;
-  Ack handleDeletePlan(const Identifier& request) override;
-  std::vector<ExecutionRun> handleReadRun(const Query& request) override;
-  std::vector<RequirementPlacement> handleReadPlacement(
+  Ack handleExecutionRequirementDeleteExecutionRequirement(
+      const Identifier& request) override;
+  Identifier handleStateCreateState(const StateUpdate& request) override;
+  Ack handleStateUpdateState(const StateUpdate& request) override;
+  Ack handleStateDeleteState(const Identifier& request) override;
+  Identifier handlePlanCreatePlan(const Plan& request) override;
+  std::vector<Plan> handlePlanReadPlan(const Query& request) override;
+  Ack handlePlanUpdatePlan(const Plan& request) override;
+  Ack handlePlanDeletePlan(const Identifier& request) override;
+  std::vector<ExecutionRun> handleExecutionRunReadRun(
+      const Query& request) override;
+  std::vector<RequirementPlacement> handleRequirementPlacementReadPlacement(
       const Query& request) override;
 
 private:

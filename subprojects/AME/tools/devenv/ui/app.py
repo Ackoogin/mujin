@@ -96,7 +96,8 @@ class App:
 
         # Font
         font = setup_font()
-        dpg.bind_font(font)
+        if font:
+            dpg.bind_font(font)
 
         # Global theme
         theme = create_global_theme()

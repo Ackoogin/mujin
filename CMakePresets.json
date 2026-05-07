@@ -41,6 +41,23 @@
                 "PYRAMID_ENABLE_PROTOBUF": "OFF",
                 "PYRAMID_ENABLE_ROS2": "OFF"
             }
+        },
+        {
+            "name": "ame-devenv",
+            "displayName": "AME DevEnv",
+            "description": "Build AME core and Python bindings for the PCL DevEnv with only required PYRAMID JSON bindings enabled.",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "UNMANNED_BUILD_PYRAMID": "ON",
+                "UNMANNED_BUILD_AME": "ON",
+                "CMAKE_POSITION_INDEPENDENT_CODE": "ON",
+                "AME_BUILD_PYTHON": "ON",
+                "AME_FOXGLOVE": "OFF",
+                "PYRAMID_ENABLE_FLATBUFFERS": "OFF",
+                "PYRAMID_ENABLE_GRPC": "OFF",
+                "PYRAMID_ENABLE_PROTOBUF": "OFF",
+                "PYRAMID_ENABLE_ROS2": "OFF"
+            }
         }
     ],
     "buildPresets": [
@@ -78,6 +95,22 @@
             "name": "flatbuffers-only-debug",
             "configurePreset": "flatbuffers-only",
             "configuration": "Debug"
+        },
+        {
+            "name": "ame-devenv-release",
+            "configurePreset": "ame-devenv",
+            "configuration": "Release",
+            "targets": [
+                "_ame_py"
+            ]
+        },
+        {
+            "name": "ame-devenv-debug",
+            "configurePreset": "ame-devenv",
+            "configuration": "Debug",
+            "targets": [
+                "_ame_py"
+            ]
         }
     ],
     "testPresets": [

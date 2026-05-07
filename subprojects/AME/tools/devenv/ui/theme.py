@@ -1,5 +1,7 @@
 """Dear PyGui theme definitions for the AME Dev Environment."""
 
+from pathlib import Path
+
 import dearpygui.dearpygui as dpg
 
 # -- Holo-Cyan palette -- dark industrial / cyberpunk dashboard ----------
@@ -30,9 +32,18 @@ _FONT_SIZE = 15
 
 def setup_font() -> int:
     """Register Consolas (or fallback) and return the font id."""
+    font_paths = [
+        Path("C:/Windows/Fonts/consola.ttf"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"),
+        Path("/usr/share/fonts/truetype/liberation2/LiberationMono-Regular.ttf"),
+        Path("/System/Library/Fonts/Menlo.ttc"),
+    ]
+
     with dpg.font_registry():
-        font = dpg.add_font("C:/Windows/Fonts/consola.ttf", _FONT_SIZE)
-    return font
+        for font_path in font_paths:
+            if font_path.exists():
+                return dpg.add_font(str(font_path), _FONT_SIZE)
+    return 0
 
 
 def create_global_theme() -> int:

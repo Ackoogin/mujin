@@ -124,7 +124,8 @@ bool PyramidAutonomyBridge::registerExecutionBinding(
 }
 
 std::vector<PyramidAutonomyBridge::Capabilities>
-PyramidAutonomyBridge::handleReadCapabilities(const Query& request) {
+PyramidAutonomyBridge::handleCapabilitiesReadCapabilities(
+    const Query& request) {
   Capabilities capabilities;
   capabilities.id = "ame.current_stack";
   capabilities.backend_id = "ame.current_stack";
@@ -141,7 +142,7 @@ PyramidAutonomyBridge::handleReadCapabilities(const Query& request) {
 }
 
 PyramidAutonomyBridge::Identifier
-PyramidAutonomyBridge::handleCreatePlanningRequirement(
+PyramidAutonomyBridge::handlePlanningRequirementCreatePlanningRequirement(
     const PlanningRequirement& request) {
   auto requirement = request;
   auto requirement_id = requirement.base.id;
@@ -166,12 +167,13 @@ PyramidAutonomyBridge::handleCreatePlanningRequirement(
 }
 
 std::vector<PyramidAutonomyBridge::PlanningRequirement>
-PyramidAutonomyBridge::handleReadPlanningRequirement(const Query& request) {
+PyramidAutonomyBridge::handlePlanningRequirementReadPlanningRequirement(
+    const Query& request) {
   return readStore(planning_requirements_, request);
 }
 
 PyramidAutonomyBridge::Ack
-PyramidAutonomyBridge::handleUpdatePlanningRequirement(
+PyramidAutonomyBridge::handlePlanningRequirementUpdatePlanningRequirement(
     const PlanningRequirement& request) {
   if (request.base.id.empty()) {
     return model::kAckFail;
@@ -185,14 +187,14 @@ PyramidAutonomyBridge::handleUpdatePlanningRequirement(
 }
 
 PyramidAutonomyBridge::Ack
-PyramidAutonomyBridge::handleDeletePlanningRequirement(
+PyramidAutonomyBridge::handlePlanningRequirementDeletePlanningRequirement(
     const Identifier& request) {
   const auto erased = planning_requirements_.erase(request);
   return erased > 0 ? model::kAckOk : model::kAckFail;
 }
 
 PyramidAutonomyBridge::Identifier
-PyramidAutonomyBridge::handleCreateExecutionRequirement(
+PyramidAutonomyBridge::handleExecutionRequirementCreateExecutionRequirement(
     const ExecutionRequirement& request) {
   auto requirement = request;
   auto requirement_id = requirement.base.id;
@@ -268,12 +270,13 @@ PyramidAutonomyBridge::handleCreateExecutionRequirement(
 }
 
 std::vector<PyramidAutonomyBridge::ExecutionRequirement>
-PyramidAutonomyBridge::handleReadExecutionRequirement(const Query& request) {
+PyramidAutonomyBridge::handleExecutionRequirementReadExecutionRequirement(
+    const Query& request) {
   return readStore(execution_requirements_, request);
 }
 
 PyramidAutonomyBridge::Ack
-PyramidAutonomyBridge::handleUpdateExecutionRequirement(
+PyramidAutonomyBridge::handleExecutionRequirementUpdateExecutionRequirement(
     const ExecutionRequirement& request) {
   if (request.base.id.empty()) {
     return model::kAckFail;
@@ -288,7 +291,7 @@ PyramidAutonomyBridge::handleUpdateExecutionRequirement(
 }
 
 PyramidAutonomyBridge::Ack
-PyramidAutonomyBridge::handleDeleteExecutionRequirement(
+PyramidAutonomyBridge::handleExecutionRequirementDeleteExecutionRequirement(
     const Identifier& request) {
   auto erased = execution_requirements_.erase(request);
   for (auto& [id, run] : runs_) {
@@ -300,7 +303,7 @@ PyramidAutonomyBridge::handleDeleteExecutionRequirement(
   return erased > 0 ? model::kAckOk : model::kAckFail;
 }
 
-PyramidAutonomyBridge::Identifier PyramidAutonomyBridge::handleCreateState(
+PyramidAutonomyBridge::Identifier PyramidAutonomyBridge::handleStateCreateState(
     const StateUpdate& request) {
   auto update = request;
   if (update.id.empty()) {
@@ -310,18 +313,18 @@ PyramidAutonomyBridge::Identifier PyramidAutonomyBridge::handleCreateState(
   return update.id;
 }
 
-PyramidAutonomyBridge::Ack PyramidAutonomyBridge::handleUpdateState(
+PyramidAutonomyBridge::Ack PyramidAutonomyBridge::handleStateUpdateState(
     const StateUpdate& request) {
   applyStateUpdate(request);
   return model::kAckOk;
 }
 
-PyramidAutonomyBridge::Ack PyramidAutonomyBridge::handleDeleteState(
+PyramidAutonomyBridge::Ack PyramidAutonomyBridge::handleStateDeleteState(
     const Identifier& request) {
   return request.empty() ? model::kAckFail : model::kAckOk;
 }
 
-PyramidAutonomyBridge::Identifier PyramidAutonomyBridge::handleCreatePlan(
+PyramidAutonomyBridge::Identifier PyramidAutonomyBridge::handlePlanCreatePlan(
     const Plan& request) {
   auto plan = request;
   auto plan_id = plan.id;
@@ -334,13 +337,13 @@ PyramidAutonomyBridge::Identifier PyramidAutonomyBridge::handleCreatePlan(
 }
 
 std::vector<PyramidAutonomyBridge::Plan>
-PyramidAutonomyBridge::handleReadPlan(const Query& request) {
+PyramidAutonomyBridge::handlePlanReadPlan(const Query& request) {
   auto result = readStore(plans_, request);
   eraseReadItems(plans_, request);
   return result;
 }
 
-PyramidAutonomyBridge::Ack PyramidAutonomyBridge::handleUpdatePlan(
+PyramidAutonomyBridge::Ack PyramidAutonomyBridge::handlePlanUpdatePlan(
     const Plan& request) {
   if (request.id.empty()) {
     return model::kAckFail;
@@ -353,7 +356,7 @@ PyramidAutonomyBridge::Ack PyramidAutonomyBridge::handleUpdatePlan(
   return model::kAckOk;
 }
 
-PyramidAutonomyBridge::Ack PyramidAutonomyBridge::handleDeletePlan(
+PyramidAutonomyBridge::Ack PyramidAutonomyBridge::handlePlanDeletePlan(
     const Identifier& request) {
   const auto erased = plans_.erase(request);
   for (auto& [id, run] : runs_) {
@@ -368,14 +371,15 @@ PyramidAutonomyBridge::Ack PyramidAutonomyBridge::handleDeletePlan(
 }
 
 std::vector<PyramidAutonomyBridge::ExecutionRun>
-PyramidAutonomyBridge::handleReadRun(const Query& request) {
+PyramidAutonomyBridge::handleExecutionRunReadRun(const Query& request) {
   auto result = readStore(runs_, request);
   eraseReadItems(runs_, request);
   return result;
 }
 
 std::vector<PyramidAutonomyBridge::RequirementPlacement>
-PyramidAutonomyBridge::handleReadPlacement(const Query& request) {
+PyramidAutonomyBridge::handleRequirementPlacementReadPlacement(
+    const Query& request) {
   syncPlacementRecordsFromSink();
   auto result = readStore(placements_, request);
   eraseReadItems(placements_, request);

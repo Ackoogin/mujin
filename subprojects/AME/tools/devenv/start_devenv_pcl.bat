@@ -52,8 +52,8 @@ if not exist "%REPO_ROOT%\build\python\_ame_py.!PY_ABI!-win_amd64.pyd" (
     echo ERROR: Python bindings not found for venv Python !PY_ABI! ^(%PY_VER%^)
     echo.
     echo Please build with Python bindings enabled:
-    echo   cmake -B build -DAME_BUILD_PYTHON=ON -DPython3_EXECUTABLE="%PYTHON%"
-    echo   cmake --build build --config Release --target _ame_py
+    echo   cmake --preset ame-devenv -DPython3_EXECUTABLE="%PYTHON%"
+    echo   cmake --build --preset ame-devenv-release
     echo.
     pause
     exit /b 1
