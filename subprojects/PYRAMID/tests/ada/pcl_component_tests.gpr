@@ -29,7 +29,8 @@ project Pcl_Component_Tests is
         for Default_Switches ("Ada") use
           ("-L" & Pcl_Lib_Dir,
            "-l" & Pcl_Lib_Name,
-           "-lws2_32");
+           "-lws2_32",
+           "-lkernel32");
       when others =>
         for Default_Switches ("Ada") use
           ("-L" & Pcl_Lib_Dir,
