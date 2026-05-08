@@ -125,8 +125,8 @@ struct pcl_transport_template_t {
   // not on a hot path).
   pcl_template_peer_alias_t* peer_aliases;
 
-  // Send-side: queue + lock + cond.  send_thread waits on send_cond
-  // for new work or stop; vtable publish() pushes and signals.
+  // Send-side: queue + lock + wake primitive.  send_thread waits for
+  // new work or stop; vtable publish() pushes and signals.
   volatile int                  send_stop;
   pcl_template_outbound_t*      send_head;
   pcl_template_outbound_t*      send_tail;
@@ -144,7 +144,7 @@ struct pcl_transport_template_t {
   HANDLE             send_thread;
   HANDLE             recv_thread;
   CRITICAL_SECTION   send_lock;
-  CONDITION_VARIABLE send_cond;
+  HANDLE             send_event;
   CRITICAL_SECTION   pending_lock;
 #else
   pthread_t       send_thread;
@@ -175,7 +175,7 @@ static void tpl_unlock(struct pcl_transport_template_t* ctx) {
 
 static void tpl_signal(struct pcl_transport_template_t* ctx) {
 #ifdef _WIN32
-  WakeAllConditionVariable(&ctx->send_cond);
+  SetEvent(ctx->send_event);
 #else
   pthread_cond_broadcast(&ctx->send_cond);
 #endif
@@ -183,7 +183,9 @@ static void tpl_signal(struct pcl_transport_template_t* ctx) {
 
 static void tpl_wait(struct pcl_transport_template_t* ctx) {
 #ifdef _WIN32
-  SleepConditionVariableCS(&ctx->send_cond, &ctx->send_lock, INFINITE);
+  LeaveCriticalSection(&ctx->send_lock);
+  WaitForSingleObject(ctx->send_event, INFINITE);
+  EnterCriticalSection(&ctx->send_lock);
 #else
   pthread_cond_wait(&ctx->send_cond, &ctx->send_lock);
 #endif
@@ -773,7 +775,13 @@ pcl_transport_template_t* pcl_transport_template_create(
 #ifdef _WIN32
   InitializeCriticalSection(&ctx->send_lock);
   InitializeCriticalSection(&ctx->pending_lock);
-  InitializeConditionVariable(&ctx->send_cond);
+  ctx->send_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+  if (ctx->send_event == NULL) {
+    DeleteCriticalSection(&ctx->pending_lock);
+    DeleteCriticalSection(&ctx->send_lock);
+    free(ctx);
+    return NULL;
+  }
 #else
   if (pthread_mutex_init(&ctx->send_lock, NULL) != 0) {
     free(ctx);
@@ -801,6 +809,7 @@ pcl_transport_template_t* pcl_transport_template_create(
     pcl_status_t rc = ctx->hooks.open(ctx->hooks.user_data);
     if (rc != PCL_OK) {
 #ifdef _WIN32
+      CloseHandle(ctx->send_event);
       DeleteCriticalSection(&ctx->pending_lock);
       DeleteCriticalSection(&ctx->send_lock);
 #else
@@ -818,6 +827,7 @@ pcl_transport_template_t* pcl_transport_template_create(
       CreateThread(NULL, 0, tpl_send_thread_main, ctx, 0, NULL);
   if (!ctx->send_thread) {
     if (ctx->hooks.close) ctx->hooks.close(ctx->hooks.user_data);
+    CloseHandle(ctx->send_event);
     DeleteCriticalSection(&ctx->pending_lock);
     DeleteCriticalSection(&ctx->send_lock);
     free(ctx);
@@ -831,6 +841,7 @@ pcl_transport_template_t* pcl_transport_template_create(
     WaitForSingleObject(ctx->send_thread, INFINITE);
     CloseHandle(ctx->send_thread);
     if (ctx->hooks.close) ctx->hooks.close(ctx->hooks.user_data);
+    CloseHandle(ctx->send_event);
     DeleteCriticalSection(&ctx->pending_lock);
     DeleteCriticalSection(&ctx->send_lock);
     free(ctx);
@@ -991,6 +1002,7 @@ void pcl_transport_template_destroy(pcl_transport_template_t* ctx) {
   tpl_pending_drain(ctx);
 
 #ifdef _WIN32
+  CloseHandle(ctx->send_event);
   DeleteCriticalSection(&ctx->pending_lock);
   DeleteCriticalSection(&ctx->send_lock);
 #else

@@ -22,6 +22,7 @@
 #ifdef _WIN32
 #  define WIN32_LEAN_AND_MEAN
 #  include <winsock2.h>
+#  include <windows.h>
 #  include <ws2tcpip.h>
 #  pragma comment(lib, "Ws2_32.lib")
 #  define SHUT_RDWR SD_BOTH
@@ -89,8 +90,8 @@ struct pcl_socket_transport_t {
 #ifdef _WIN32
   HANDLE             recv_thread;
   HANDLE             send_thread;
-  CRITICAL_SECTION   send_lock;    /* guards send_head/send_tail + send_cond */
-  CONDITION_VARIABLE send_cond;
+  CRITICAL_SECTION   send_lock;    /* guards send_head/send_tail */
+  HANDLE             send_event;
   CRITICAL_SECTION   pending_lock;
 #else
   pthread_t          recv_thread;
@@ -156,7 +157,18 @@ static void pcl_sleep_ms(uint32_t ms) {
 /// \brief Monotonic milliseconds since some fixed epoch.
 static uint64_t pcl_now_ms(void) {
 #ifdef _WIN32
-  return (uint64_t)GetTickCount64();
+  typedef ULONGLONG (WINAPI *pcl_get_tick_count64_fn)(void);
+  HMODULE kernel32 = GetModuleHandleA("kernel32.dll");
+
+  if (kernel32 != NULL) {
+    pcl_get_tick_count64_fn get_tick_count64 =
+      (pcl_get_tick_count64_fn)GetProcAddress(kernel32, "GetTickCount64");
+    if (get_tick_count64 != NULL) {
+      return (uint64_t)get_tick_count64();
+    }
+  }
+
+  return (uint64_t)GetTickCount();
 #else
   struct timespec ts;
   clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -369,8 +381,8 @@ static pcl_status_t enqueue_outbound_frame(struct pcl_socket_transport_t* ctx,
   EnterCriticalSection(&ctx->send_lock);
   if (ctx->send_tail) { ctx->send_tail->next = f; } else { ctx->send_head = f; }
   ctx->send_tail = f;
-  WakeConditionVariable(&ctx->send_cond);
   LeaveCriticalSection(&ctx->send_lock);
+  SetEvent(ctx->send_event);
 #else
   pthread_mutex_lock(&ctx->send_lock);
   if (ctx->send_tail) { ctx->send_tail->next = f; } else { ctx->send_head = f; }
@@ -397,16 +409,18 @@ static void* send_thread_main(void* arg)
     pcl_outbound_frame_t* f;
 
 #ifdef _WIN32
-    EnterCriticalSection(&ctx->send_lock);
-    while (ctx->send_head == NULL && !ctx->send_stop) {
-      SleepConditionVariableCS(&ctx->send_cond, &ctx->send_lock, INFINITE);
+    for (;;) {
+      EnterCriticalSection(&ctx->send_lock);
+      f = ctx->send_head;
+      if (f) {
+        ctx->send_head = f->next;
+        if (!ctx->send_head) ctx->send_tail = NULL;
+      }
+      LeaveCriticalSection(&ctx->send_lock);
+
+      if (f || ctx->send_stop) break;
+      WaitForSingleObject(ctx->send_event, INFINITE);
     }
-    f = ctx->send_head;
-    if (f) {
-      ctx->send_head = f->next;
-      if (!ctx->send_head) ctx->send_tail = NULL;
-    }
-    LeaveCriticalSection(&ctx->send_lock);
 #else
     pthread_mutex_lock(&ctx->send_lock);
     while (ctx->send_head == NULL && !ctx->send_stop) {
@@ -860,8 +874,8 @@ static pcl_status_t gateway_on_configure(pcl_container_t* c, void* ud) {
 
 // -- Common initialisation ------------------------------------------------
 
-static void socket_transport_create_common(struct pcl_socket_transport_t* ctx,
-                                           pcl_executor_t*               executor) {
+static int socket_transport_create_common(struct pcl_socket_transport_t* ctx,
+                                          pcl_executor_t*               executor) {
   memset(&ctx->transport, 0, sizeof(ctx->transport));
   ctx->transport.publish     = socket_publish;
   ctx->transport.subscribe   = socket_subscribe;
@@ -889,13 +903,19 @@ static void socket_transport_create_common(struct pcl_socket_transport_t* ctx,
 
 #ifdef _WIN32
   InitializeCriticalSection(&ctx->send_lock);
-  InitializeConditionVariable(&ctx->send_cond);
+  ctx->send_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+  if (ctx->send_event == NULL) {
+    DeleteCriticalSection(&ctx->send_lock);
+    return 0;
+  }
   InitializeCriticalSection(&ctx->pending_lock);
 #else
   pthread_mutex_init(&ctx->send_lock, NULL);
   pthread_cond_init(&ctx->send_cond, NULL);
   pthread_mutex_init(&ctx->pending_lock, NULL);
 #endif
+
+  return 1;
 }
 
 // -- Public create: server ------------------------------------------------
@@ -919,7 +939,10 @@ pcl_socket_transport_t* pcl_socket_transport_create_server_ex(
 
   ctx->is_server = 1;
   ctx->port      = port;
-  socket_transport_create_common(ctx, executor);
+  if (!socket_transport_create_common(ctx, executor)) {
+    free(ctx);
+    return NULL;
+  }
 
   ctx->listen_sock = socket(AF_INET, SOCK_STREAM, 0);
   if (ctx->listen_sock == PCL_INVALID_SOCKET) {
@@ -1028,7 +1051,10 @@ pcl_socket_transport_t* pcl_socket_transport_create_client_ex(
   ctx->is_server = 0;
   ctx->port      = port;
   snprintf(ctx->host, sizeof(ctx->host), "%s", host);
-  socket_transport_create_common(ctx, executor);
+  if (!socket_transport_create_common(ctx, executor)) {
+    free(ctx);
+    return NULL;
+  }
 
   if (opts) {
     ctx->connect_timeout_ms = opts->connect_timeout_ms;
@@ -1284,9 +1310,7 @@ void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx_opaque) {
 
   /* Wake send_thread (may be waiting on empty queue) */
 #ifdef _WIN32
-  EnterCriticalSection(&ctx->send_lock);
-  WakeConditionVariable(&ctx->send_cond);
-  LeaveCriticalSection(&ctx->send_lock);
+  SetEvent(ctx->send_event);
 #else
   pthread_mutex_lock(&ctx->send_lock);
   pthread_cond_signal(&ctx->send_cond);
@@ -1306,6 +1330,10 @@ void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx_opaque) {
     ctx->send_thread = NULL;
   }
   DeleteCriticalSection(&ctx->send_lock);
+  if (ctx->send_event) {
+    CloseHandle(ctx->send_event);
+    ctx->send_event = NULL;
+  }
   DeleteCriticalSection(&ctx->pending_lock);
 #else
   if (ctx->recv_thread) {
