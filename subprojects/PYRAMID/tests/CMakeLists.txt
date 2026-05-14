@@ -217,6 +217,34 @@ if(PYRAMID_ENABLE_PROTOBUF)
     gtest_discover_tests(test_codec_dispatch_e2e DISCOVERY_MODE PRE_TEST)
 endif()
 
+if(PYRAMID_ENABLE_FLATBUFFERS)
+    add_executable(tobj_service_binding_example
+        ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_service_binding_example.cpp
+        ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
+    )
+    add_dependencies(tobj_service_binding_example pyramid_cpp_bindings_codegen)
+    target_link_libraries(tobj_service_binding_example PRIVATE
+        pcl_core
+        pcl_transport_shared_memory
+        pyramid_generated_codecs
+        pyramid_flatbuffers_support
+    )
+    target_include_directories(tobj_service_binding_example PRIVATE
+        ${PCL_ROOT_DIR}/include
+        ${PROTO_BINDINGS_DIR}
+    )
+    if(NOT WIN32)
+        target_link_libraries(tobj_service_binding_example PRIVATE pthread)
+    endif()
+    add_test(NAME tobj_service_binding_example
+        COMMAND tobj_service_binding_example)
+    set_tests_properties(tobj_service_binding_example
+        PROPERTIES
+            LABELS "example;binding;transport"
+            TIMEOUT 15
+            RESOURCE_LOCK pyramid_process_e2e)
+endif()
+
 add_executable(tobj_socket_server
     ${TOBJ_TEST_DIR}/tobj_socket_server.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp

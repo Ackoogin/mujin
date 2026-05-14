@@ -232,7 +232,10 @@ Rules:
 
 ## C++ Service Usage
 
-Implement the generated handler interface:
+Implement the generated handler interface. The generated method names are
+proto-derived and include the service/entity name, so Tactical Objects
+`object_of_interest.create_requirement` maps to
+`handleObjectOfInterestCreateRequirement(...)`:
 
 ```cpp
 namespace prov = pyramid::components::tactical_objects::services::provided;
@@ -240,7 +243,7 @@ namespace model = pyramid::domain_model;
 
 class Handler : public prov::ServiceHandler {
 public:
-  model::Identifier handleCreateRequirement(
+  model::Identifier handleObjectOfInterestCreateRequirement(
       const model::ObjectInterestRequirement& request) override {
     return request.base.id;
   }
@@ -254,7 +257,7 @@ void* response_buf = nullptr;
 size_t response_size = 0;
 
 prov::dispatch(handler,
-               prov::ServiceChannel::CreateRequirement,
+               prov::ServiceChannel::ObjectOfInterestCreateRequirement,
                request->data,
                request->size,
                configured_content_type,
@@ -265,16 +268,83 @@ prov::dispatch(handler,
 Invoke provided services with typed requests:
 
 ```cpp
-prov::invokeCreateRequirement(exec,
-                              request,
-                              response_callback,
-                              user_data,
-                              nullptr,
-                              configured_content_type);
+prov::invokeObjectOfInterestCreateRequirement(exec,
+                                              request,
+                                              response_callback,
+                                              user_data,
+                                              nullptr,
+                                              configured_content_type);
 ```
 
 The generated binding owns encode/decode. The application owns runtime state
 and handler behavior.
+
+### Worked C++ Component Example
+
+The compiled example at
+`subprojects/PYRAMID/examples/cpp/tobj_service_binding_example.cpp` is the
+current reference for a user-provided service implementation.
+
+It demonstrates:
+
+- a user subclass of `prov::ServiceHandler`
+- a provider component registering
+  `object_of_interest.create_requirement`,
+  `object_of_interest.read_requirement`, and
+  `object_of_interest.delete_requirement`
+- a client component invoking the typed generated helpers in this order:
+  `create_requirement -> read_requirement -> delete_requirement`
+- two separate PCL executors joined by `pcl_transport_shared_memory`
+- the shared-memory gateway container required on the service-provider side
+
+Build and run the example through the FlatBuffers-only preset:
+
+```bat
+cmake --preset flatbuffers-only
+cmake --build --preset flatbuffers-only-release --target tobj_service_binding_example
+ctest --test-dir build-flatbuffers-only -R tobj_service_binding_example --output-on-failure
+```
+
+If the preset build directory contains an old cache from another source path,
+use a fresh binary directory while retaining the preset variables:
+
+```sh
+cmake --preset flatbuffers-only -B /tmp/unmanned-flatbuffers-only
+cmake --build /tmp/unmanned-flatbuffers-only --target tobj_service_binding_example
+ctest --test-dir /tmp/unmanned-flatbuffers-only -R tobj_service_binding_example --output-on-failure
+```
+
+Provider-side registration follows this shape:
+
+```cpp
+pcl::Port port = addService(
+    prov::kSvcObjectOfInterestCreateRequirement,
+    configured_content_type,
+    &ObjectInterestServiceComponent::dispatchGeneratedService,
+    &binding);
+port.routeRemote("client");
+```
+
+The dispatch callback should call the generated service binding, not decode
+payloads in component logic:
+
+```cpp
+prov::dispatch(handler,
+               prov::ServiceChannel::ObjectOfInterestCreateRequirement,
+               request->data,
+               request->size,
+               request->type_name,
+               &response_buf,
+               &response_size);
+```
+
+Client-side calls stay typed:
+
+```cpp
+prov::invokeObjectOfInterestCreateRequirement(
+    executor, request, response_callback, user_data, nullptr,
+    configured_content_type);
+```
 
 ## C++ Topic Usage
 

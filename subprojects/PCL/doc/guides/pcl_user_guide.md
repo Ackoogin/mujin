@@ -417,6 +417,8 @@ Provided_Tobj.Invoke_Create_Requirement
 
 Good workspace references:
 
+- C++ generated service binding example:
+  `subprojects/PYRAMID/examples/cpp/tobj_service_binding_example.cpp`
 - C++ wrapper tests:
   `subprojects/PCL/tests/test_pcl_cpp_wrappers.cpp`
 - Ada wrapper demo:
