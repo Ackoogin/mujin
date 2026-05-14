@@ -281,21 +281,35 @@ and handler behavior.
 
 ### Worked C++ Component Example
 
-The compiled example at
-`subprojects/PYRAMID/examples/cpp/tobj_service_binding_example.cpp` is the
-current reference for a user-provided service implementation.
+The compiled example under `subprojects/PYRAMID/examples/cpp/` is the current
+reference for a user-provided C++ service implementation.
 
 It demonstrates:
 
-- a user subclass of `prov::ServiceHandler`
+- `tobj_service_binding_handler.*`: a user subclass of
+  `prov::ServiceHandler`
 - a provider component registering
   `object_of_interest.create_requirement`,
   `object_of_interest.read_requirement`, and
   `object_of_interest.delete_requirement`
-- a client component invoking the typed generated helpers in this order:
+- `tobj_service_client_component.*`: typed generated client calls in this order:
   `create_requirement -> read_requirement -> delete_requirement`
+- `tobj_generated_service_registry.*`: a small C++ bridge from PCL
+  `addService(...)` callbacks to generated `dispatch(...)`
 - two separate PCL executors joined by `pcl_transport_shared_memory`
 - the shared-memory gateway container required on the service-provider side
+
+There is no generated C++ equivalent of the Ada `Register_Services` helper at
+the moment. The standard C++ pieces are:
+
+- generated `ServiceHandler`
+- generated `dispatch(...)`
+- generated typed `invoke*` and response `decode*` helpers
+- PCL `Component::addService(...)`
+
+The example-local `GeneratedServiceRegistry` exists to keep the remaining
+`pcl_msg_t` callback boilerplate in one place. If the generator grows a C++
+`registerServices(...)` helper later, this is the layer it should replace.
 
 Build and run the example through the FlatBuffers-only preset:
 
@@ -317,16 +331,16 @@ ctest --test-dir /tmp/unmanned-flatbuffers-only -R tobj_service_binding_example 
 Provider-side registration follows this shape:
 
 ```cpp
-pcl::Port port = addService(
+GeneratedServiceRegistry services(*this, handler, configured_content_type);
+
+services.addRemote(
     prov::kSvcObjectOfInterestCreateRequirement,
-    configured_content_type,
-    &ObjectInterestServiceComponent::dispatchGeneratedService,
-    &binding);
-port.routeRemote("client");
+    prov::ServiceChannel::ObjectOfInterestCreateRequirement,
+    "client");
 ```
 
-The dispatch callback should call the generated service binding, not decode
-payloads in component logic:
+Inside that registry, the dispatch callback calls the generated service
+binding. Component logic should not decode payloads itself:
 
 ```cpp
 prov::dispatch(handler,

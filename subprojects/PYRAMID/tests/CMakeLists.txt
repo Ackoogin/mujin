@@ -220,6 +220,11 @@ endif()
 if(PYRAMID_ENABLE_FLATBUFFERS)
     add_executable(tobj_service_binding_example
         ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_service_binding_example.cpp
+        ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_generated_service_registry.cpp
+        ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_service_binding_handler.cpp
+        ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_service_client_component.cpp
+        ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_service_provider_component.cpp
+        ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_shared_memory_example.cpp
         ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
     )
     add_dependencies(tobj_service_binding_example pyramid_cpp_bindings_codegen)
