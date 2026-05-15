@@ -1,0 +1,53 @@
+// Auto-generated FlatBuffers schema from pyramid.data_model.tactical.proto
+// Do not edit -- regenerate from proto source
+
+include "pyramid_data_model_base.fbs";
+include "pyramid_data_model_common.fbs";
+
+namespace pyramid.data_model.tactical;
+
+enum ObjectSource : byte {
+  UNSPECIFIED = 0,
+  RADAR = 1,
+  LOCAL = 2
+}
+
+union LocationUnion {
+  pyramid.data_model.common.PolyArea,
+  pyramid.data_model.common.CircleArea,
+  pyramid.data_model.common.Point
+}
+
+table ObjectDetail {
+  base:pyramid.data_model.common.Entity;
+  source:[ObjectSource];
+  position:pyramid.data_model.common.GeodeticPosition;
+  creation_time:pyramid.data_model.base.Timestamp;
+  quality:pyramid.data_model.base.Percentage;
+  course:pyramid.data_model.base.Angle;
+  speed:pyramid.data_model.base.Speed;
+  length:pyramid.data_model.base.Length;
+  identity:pyramid.data_model.common.StandardIdentity;
+  dimension:pyramid.data_model.common.BattleDimension;
+}
+
+table ObjectEvidenceRequirement {
+  base:pyramid.data_model.common.Requirement;
+  policy:pyramid.data_model.common.DataPolicy;
+  dimension:[pyramid.data_model.common.BattleDimension];
+  location:LocationUnion;
+}
+
+table ObjectInterestRequirement {
+  base:pyramid.data_model.common.Requirement;
+  source:ObjectSource;
+  policy:pyramid.data_model.common.DataPolicy;
+  dimension:[pyramid.data_model.common.BattleDimension];
+  location:LocationUnion;
+}
+
+table ObjectMatch {
+  base:pyramid.data_model.common.Entity;
+  matching_object_id:pyramid.data_model.base.Identifier;
+}
+

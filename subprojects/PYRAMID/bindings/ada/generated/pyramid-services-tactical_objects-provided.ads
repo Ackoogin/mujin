@@ -62,40 +62,6 @@ package Pyramid.Services.Tactical_Objects.Provided is
    Topic_Evidence_Requirements : constant String :=
      "standard.evidence_requirements";
 
-   --  -- ROS2 endpoint constants --------------------------------
-
-   Ros2_Transport_Content_Type : constant String := "application/ros2";
-
-   Matching_Objects_Read_Match_Open_Service : constant String :=
-     "/pyramid/stream/matching_objects/read_match/open";
-   Matching_Objects_Read_Match_Frame_Topic : constant String :=
-     "/pyramid/stream/matching_objects/read_match/frames";
-   Matching_Objects_Read_Match_Cancel_Topic : constant String :=
-     "/pyramid/stream/matching_objects/read_match/cancel";
-
-   Object_Of_Interest_Create_Requirement_Service : constant String :=
-     "/pyramid/service/object_of_interest/create_requirement";
-
-   Object_Of_Interest_Read_Requirement_Open_Service : constant String :=
-     "/pyramid/stream/object_of_interest/read_requirement/open";
-   Object_Of_Interest_Read_Requirement_Frame_Topic : constant String :=
-     "/pyramid/stream/object_of_interest/read_requirement/frames";
-   Object_Of_Interest_Read_Requirement_Cancel_Topic : constant String :=
-     "/pyramid/stream/object_of_interest/read_requirement/cancel";
-
-   Object_Of_Interest_Update_Requirement_Service : constant String :=
-     "/pyramid/service/object_of_interest/update_requirement";
-
-   Object_Of_Interest_Delete_Requirement_Service : constant String :=
-     "/pyramid/service/object_of_interest/delete_requirement";
-
-   Specific_Object_Detail_Read_Detail_Open_Service : constant String :=
-     "/pyramid/stream/specific_object_detail/read_detail/open";
-   Specific_Object_Detail_Read_Detail_Frame_Topic : constant String :=
-     "/pyramid/stream/specific_object_detail/read_detail/frames";
-   Specific_Object_Detail_Read_Detail_Cancel_Topic : constant String :=
-     "/pyramid/stream/specific_object_detail/read_detail/cancel";
-
    --  -- PCL message utility ------------------------------------
 
    function Msg_To_String
@@ -104,12 +70,8 @@ package Pyramid.Services.Tactical_Objects.Provided is
 
    Json_Content_Type : constant String := "application/json";
    Flatbuffers_Content_Type : constant String := "application/flatbuffers";
-   Grpc_Content_Type : constant String := "application/grpc";
 
    function Supports_Content_Type (Content_Type : String) return Boolean;
-
-   procedure Configure_Grpc_Library (Path : String);
-   procedure Configure_Grpc_Channel (Channel : String);
 
    --  -- EntityActions handler callbacks ----------------------------
    --  Supply these callbacks from your component at registration time.
