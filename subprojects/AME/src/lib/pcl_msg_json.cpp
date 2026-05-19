@@ -353,7 +353,8 @@ SetFactRequest ame_unpack_set_fact_request(const pcl_msg_t* msg) {
 std::string ame_pack_set_fact_response(const SetFactResult& result) {
     std::ostringstream os;
     os << "{\"success\":" << (result.success ? "true" : "false")
-       << ",\"wm_version\":" << result.wm_version << '}';
+       << ",\"wm_version\":" << result.wm_version
+       << ",\"error_msg\":\"" << jsonEscape(result.error_msg) << "\"}";
     return os.str();
 }
 
@@ -363,6 +364,7 @@ SetFactResult ame_unpack_set_fact_response(const pcl_msg_t* msg) {
     std::string json(static_cast<const char*>(msg->data), msg->size);
     r.success    = jsonGetBool(json, "success");
     r.wm_version = jsonGetU64(json, "wm_version");
+    r.error_msg  = jsonGetStr(json, "error_msg");
     return r;
 }
 

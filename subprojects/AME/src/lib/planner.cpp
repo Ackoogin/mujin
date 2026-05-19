@@ -58,6 +58,10 @@ PlanResult Planner::solve(const WorldModel& wm) const {
                 result.steps.push_back({it->second});
             }
         }
+    } else {
+        result.error_msg = "No plan found";
+        result.expanded = engine.expanded();
+        result.generated = engine.generated();
     }
 
     auto t1 = std::chrono::steady_clock::now();

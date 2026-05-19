@@ -111,6 +111,37 @@ TEST(PclIntegration, WorldModelSetFactService) {
     EXPECT_EQ(wm_comp.cleanup(), PCL_OK);
 }
 
+///< REQ_PCL_002: set_fact failures shall report a diagnostic message.
+TEST(PclIntegration, WorldModelSetFactServiceReportsUnknownFluent) {
+    ame::WorldModelComponent wm_comp;
+    wm_comp.setParam("audit_log.enabled", false);
+    wm_comp.setParam("perception.enabled", false);
+
+    pcl::Executor executor;
+    executor.add(wm_comp);
+    ASSERT_EQ(wm_comp.configure(), PCL_OK);
+    ASSERT_EQ(wm_comp.activate(), PCL_OK);
+
+    ame::SetFactRequest sreq;
+    sreq.key    = "(missing fluent)";
+    sreq.value  = true;
+    sreq.source = "integration_test";
+    std::string req_json = ame::ame_pack_set_fact_request(sreq);
+    pcl_msg_t   req_msg  = makePclMsg(req_json, "ame/SetFact_Request");
+    pcl_msg_t   resp_msg{};
+
+    pcl_status_t rc = pcl_executor_invoke_service(
+        executor.handle(), "set_fact", &req_msg, &resp_msg);
+    ASSERT_EQ(rc, PCL_OK);
+
+    auto result = ame::ame_unpack_set_fact_response(&resp_msg);
+    EXPECT_FALSE(result.success);
+    EXPECT_NE(result.error_msg.find("unknown fluent"), std::string::npos);
+
+    EXPECT_EQ(wm_comp.deactivate(), PCL_OK);
+    EXPECT_EQ(wm_comp.cleanup(), PCL_OK);
+}
+
 ///< REQ_PCL_003: WorldModelComponent shall handle query_state service via PCL executor.
 TEST(PclIntegration, WorldModelQueryStateService) {
     ame::WorldModelComponent wm_comp;

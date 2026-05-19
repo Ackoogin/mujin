@@ -331,11 +331,12 @@ class PlanningTab:
                 f"Steps:       {len(result.plan_actions)}"
             )
         else:
+            error_msg = getattr(result, "error_msg", "") or "Planning failed"
             dpg.set_value(
                 self._feedback_text,
-                f"Planning FAILED: {result.error_msg}"
+                f"Planning FAILED: {error_msg}"
             )
-            dpg.set_value(self._stats_text, f"Failed: {result.error_msg}")
+            dpg.set_value(self._stats_text, f"Failed: {error_msg}")
 
         # Update plan steps table
         self._clear_table(self._steps_table)

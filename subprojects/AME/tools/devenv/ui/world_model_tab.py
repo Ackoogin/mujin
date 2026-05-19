@@ -255,15 +255,27 @@ class WorldModelTab:
         key = dpg.get_value(self._inject_key_input)
         val = dpg.get_value(self._inject_value_check)
         source = dpg.get_value(self._inject_source_input)
-        if not key.strip():
+        key = key.strip()
+        if not key:
             return
+        if not self._app.ros2.connected:
+            dpg.set_value(self._status_text, "Set FAILED: backend is not connected")
+            return
+        dpg.set_value(self._status_text, "Setting fact...")
         self._app.ros2.set_fact(
-            key.strip(), val, source.strip(),
-            callback=lambda ok, ver: dpg.set_value(
-                self._status_text,
-                f"Set OK (v{ver})" if ok else "Set FAILED"
-            ),
+            key, val, source.strip(),
+            callback=lambda ok, ver: self._on_set_fact_result(ok, ver, key),
         )
+
+    def _on_set_fact_result(self, ok: bool, version: int, key: str) -> None:
+        if ok:
+            dpg.set_value(self._status_text, f"Set OK (v{version})")
+            return
+
+        error_msg = getattr(self._app.ros2, "last_error", "") or (
+            f"Unknown fluent or rejected request: {key}"
+        )
+        dpg.set_value(self._status_text, f"Set FAILED: {error_msg}")
 
     def _on_add_goal(self, sender=None, value=None, user_data=None) -> None:
         goal = dpg.get_value(self._goal_input).strip()

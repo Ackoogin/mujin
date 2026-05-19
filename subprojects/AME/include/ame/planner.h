@@ -16,6 +16,7 @@ struct PlanResult {
     unsigned expanded = 0;
     unsigned generated = 0;
     double solve_time_ms = 0.0;  // Wall-clock solve duration
+    std::string error_msg;
 };
 
 class Planner {

@@ -30,6 +30,7 @@ struct GetFactResult {
 struct SetFactResult {
   bool success = false;
   uint64_t wm_version = 0;
+  std::string error_msg;
 };
 
 struct WorldStateSnapshot {

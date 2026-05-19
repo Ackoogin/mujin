@@ -451,17 +451,33 @@ class AmeRos2Client:
         self, key: str, value: bool, source: str, callback: Any
     ) -> None:
         if not self._set_fact_cli.wait_for_service(timeout_sec=2.0):
+            self.last_error = "SetFact service unavailable"
+            if callback:
+                callback(False, 0)
             return
         req = self._SetFact.Request()
         req.key = key
         req.value = value
         req.source = source
         future = self._set_fact_cli.call_async(req)
-        future.add_done_callback(
-            lambda f: callback(f.result().success, f.result().wm_version)
-            if callback and f.result()
-            else None
-        )
+
+        def _on_done(f):
+            try:
+                result = f.result()
+                if not result:
+                    self.last_error = "SetFact returned no result"
+                    if callback:
+                        callback(False, 0)
+                    return
+                self.last_error = getattr(result, "error_msg", "") or ""
+                if callback:
+                    callback(result.success, result.wm_version)
+            except Exception as e:
+                self.last_error = str(e)
+                if callback:
+                    callback(False, 0)
+
+        future.add_done_callback(_on_done)
 
     def _do_get_fact(self, key: str, callback: Any) -> None:
         if not self._get_fact_cli.wait_for_service(timeout_sec=2.0):

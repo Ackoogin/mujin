@@ -58,6 +58,7 @@ class AmePclClient:
         self._node_name = node_name
         self._lock = threading.RLock()  # Reentrant lock to avoid deadlock
         self._connected = False
+        self.last_error: str = ""
 
         # Core components
         self._wm: Any = None
@@ -162,16 +163,24 @@ class AmePclClient:
     ) -> None:
         """Set a fact in the world model."""
         if not self.available or not self._connected:
+            self.last_error = "PCL client is not connected"
             return
 
         with self._lock:
             try:
-                self._wm.set_fact(key, value)
+                if hasattr(self._wm, "set_fact_with_metadata"):
+                    self._wm.set_fact_with_metadata(
+                        key, value, source, _ame_py.FactAuthority.BELIEVED
+                    )
+                else:
+                    self._wm.set_fact(key, value)
                 ver = self._wm.version()
                 success = True
-            except Exception:
+                self.last_error = ""
+            except Exception as e:
                 success = False
                 ver = 0
+                self.last_error = str(e)
 
         if callback:
             callback(success, ver)
@@ -260,7 +269,10 @@ class AmePclClient:
                             plan_result.steps, self._wm, self._registry
                         )
                     else:
-                        result.error_msg = plan_result.error_msg or "Planning failed"
+                        result.error_msg = (
+                            getattr(plan_result, "error_msg", "")
+                            or "No plan found"
+                        )
 
             except Exception as e:
                 result.success = False

@@ -52,7 +52,8 @@ PlannerExecutionResult PlannerComponent::solveGoal(
   execution_result.cost          = plan_result.cost;
 
   if (!plan_result.success) {
-    execution_result.error_msg = "No plan found";
+    execution_result.error_msg =
+        plan_result.error_msg.empty() ? "No plan found" : plan_result.error_msg;
     return execution_result;
   }
 

@@ -71,6 +71,7 @@ WorldModelNode::on_configure(const rclcpp_lifecycle::State&) {
         auto r = component_->setFact(req->key, req->value, req->source);
         resp->success    = r.success;
         resp->wm_version = r.wm_version;
+        resp->error_msg  = r.error_msg;
         RCLCPP_INFO(get_logger(), "set_fact: success=%d v%lu",
                     resp->success, resp->wm_version);
       });

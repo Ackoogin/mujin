@@ -285,7 +285,8 @@ PYBIND11_MODULE(_ame_py, m) {
         .def_readonly("solve_time_ms", &ame::PlanResult::solve_time_ms)
         .def_readonly("expanded", &ame::PlanResult::expanded)
         .def_readonly("generated", &ame::PlanResult::generated)
-        .def_readonly("cost", &ame::PlanResult::cost);
+        .def_readonly("cost", &ame::PlanResult::cost)
+        .def_readonly("error_msg", &ame::PlanResult::error_msg);
 
     // -------------------------------------------------------------------------
     // Planner

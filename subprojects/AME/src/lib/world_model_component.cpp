@@ -37,8 +37,12 @@ SetFactResult WorldModelComponent::setFact(const std::string& key,
   try {
     wm_.setFact(key, value, source);
     result.success = true;
+  } catch (const std::exception& e) {
+    result.success = false;
+    result.error_msg = e.what();
   } catch (...) {
     result.success = false;
+    result.error_msg = "Unknown set_fact failure";
   }
   result.wm_version = wm_.version();
   return result;
