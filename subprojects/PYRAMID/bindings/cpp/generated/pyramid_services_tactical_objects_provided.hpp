@@ -94,12 +94,30 @@ public:
     virtual std::vector<ObjectMatch>
     handleMatchingObjectsReadMatch(const Query& request);
 
+    /// \brief Begin an asynchronous stream for this RPC.
+    ///
+    /// Override this for true server streaming. Store stream_context,
+    /// return PCL_STREAMING, then emit frames with send*StreamFrame().
+    virtual pcl_status_t
+    streamMatchingObjectsReadMatch(const Query& request,
+                                   pcl_stream_context_t* stream_context,
+                                   const char* content_type);
+
     // Object_Of_Interest_Service
     virtual Identifier
     handleObjectOfInterestCreateRequirement(const ObjectInterestRequirement& request);
 
     virtual std::vector<ObjectInterestRequirement>
     handleObjectOfInterestReadRequirement(const Query& request);
+
+    /// \brief Begin an asynchronous stream for this RPC.
+    ///
+    /// Override this for true server streaming. Store stream_context,
+    /// return PCL_STREAMING, then emit frames with send*StreamFrame().
+    virtual pcl_status_t
+    streamObjectOfInterestReadRequirement(const Query& request,
+                                          pcl_stream_context_t* stream_context,
+                                          const char* content_type);
 
     virtual Ack
     handleObjectOfInterestUpdateRequirement(const ObjectInterestRequirement& request);
@@ -110,6 +128,15 @@ public:
     // Specific_Object_Detail_Service
     virtual std::vector<ObjectDetail>
     handleSpecificObjectDetailReadDetail(const Query& request);
+
+    /// \brief Begin an asynchronous stream for this RPC.
+    ///
+    /// Override this for true server streaming. Store stream_context,
+    /// return PCL_STREAMING, then emit frames with send*StreamFrame().
+    virtual pcl_status_t
+    streamSpecificObjectDetailReadDetail(const Query& request,
+                                         pcl_stream_context_t* stream_context,
+                                         const char* content_type);
 };
 
 // ---------------------------------------------------------------------------
@@ -175,6 +202,20 @@ bool decodeEvidenceRequirements(const pcl_msg_t* msg,
 bool decodeMatchingObjectsReadMatchResponse(const pcl_msg_t* msg,
                                             std::vector<ObjectMatch>* out);
 
+/// \brief Encode one stream frame for matching_objects.read_match.
+bool encodeMatchingObjectsReadMatchStreamFrame(const ObjectMatch& payload,
+                                               const char*        content_type,
+                                               std::string*       out);
+
+/// \brief Decode one stream frame from matching_objects.read_match.
+bool decodeMatchingObjectsReadMatchStreamFrame(const pcl_msg_t* msg,
+                                               ObjectMatch* out);
+
+/// \brief Send one typed stream frame for matching_objects.read_match.
+pcl_status_t sendMatchingObjectsReadMatchStreamFrame(pcl_stream_context_t* stream_context,
+                                                     const ObjectMatch& payload,
+                                                     const char*        content_type = "application/json");
+
 /// \brief Invoke matching_objects.read_match (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -191,6 +232,15 @@ pcl_status_t invokeMatchingObjectsReadMatch(pcl_executor_t* executor,
                                             const Query&                 request,
                                             const char*       content_type = "application/json",
                                             const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Invoke matching_objects.read_match as an asynchronous stream.
+pcl_status_t invokeMatchingObjectsReadMatchStream(pcl_executor_t* executor,
+                                                  const Query&                 request,
+                                                  pcl_stream_msg_fn_t   callback,
+                                                  void*                   user_data = nullptr,
+                                                  pcl_stream_context_t** out_context = nullptr,
+                                                  const pcl_endpoint_route_t* route = nullptr,
+                                                  const char*       content_type = "application/json");
 
 /// \brief Decode a response from object_of_interest.create_requirement.
 bool decodeObjectOfInterestCreateRequirementResponse(const pcl_msg_t* msg,
@@ -217,6 +267,20 @@ pcl_status_t invokeObjectOfInterestCreateRequirement(pcl_executor_t* executor,
 bool decodeObjectOfInterestReadRequirementResponse(const pcl_msg_t* msg,
                                                    std::vector<ObjectInterestRequirement>* out);
 
+/// \brief Encode one stream frame for object_of_interest.read_requirement.
+bool encodeObjectOfInterestReadRequirementStreamFrame(const ObjectInterestRequirement& payload,
+                                                      const char*        content_type,
+                                                      std::string*       out);
+
+/// \brief Decode one stream frame from object_of_interest.read_requirement.
+bool decodeObjectOfInterestReadRequirementStreamFrame(const pcl_msg_t* msg,
+                                                      ObjectInterestRequirement* out);
+
+/// \brief Send one typed stream frame for object_of_interest.read_requirement.
+pcl_status_t sendObjectOfInterestReadRequirementStreamFrame(pcl_stream_context_t* stream_context,
+                                                            const ObjectInterestRequirement& payload,
+                                                            const char*        content_type = "application/json");
+
 /// \brief Invoke object_of_interest.read_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -233,6 +297,15 @@ pcl_status_t invokeObjectOfInterestReadRequirement(pcl_executor_t* executor,
                                                    const Query&                 request,
                                                    const char*       content_type = "application/json",
                                                    const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Invoke object_of_interest.read_requirement as an asynchronous stream.
+pcl_status_t invokeObjectOfInterestReadRequirementStream(pcl_executor_t* executor,
+                                                         const Query&                 request,
+                                                         pcl_stream_msg_fn_t   callback,
+                                                         void*                   user_data = nullptr,
+                                                         pcl_stream_context_t** out_context = nullptr,
+                                                         const pcl_endpoint_route_t* route = nullptr,
+                                                         const char*       content_type = "application/json");
 
 /// \brief Decode a response from object_of_interest.update_requirement.
 bool decodeObjectOfInterestUpdateRequirementResponse(const pcl_msg_t* msg,
@@ -280,6 +353,20 @@ pcl_status_t invokeObjectOfInterestDeleteRequirement(pcl_executor_t* executor,
 bool decodeSpecificObjectDetailReadDetailResponse(const pcl_msg_t* msg,
                                                   std::vector<ObjectDetail>* out);
 
+/// \brief Encode one stream frame for specific_object_detail.read_detail.
+bool encodeSpecificObjectDetailReadDetailStreamFrame(const ObjectDetail& payload,
+                                                     const char*        content_type,
+                                                     std::string*       out);
+
+/// \brief Decode one stream frame from specific_object_detail.read_detail.
+bool decodeSpecificObjectDetailReadDetailStreamFrame(const pcl_msg_t* msg,
+                                                     ObjectDetail* out);
+
+/// \brief Send one typed stream frame for specific_object_detail.read_detail.
+pcl_status_t sendSpecificObjectDetailReadDetailStreamFrame(pcl_stream_context_t* stream_context,
+                                                           const ObjectDetail& payload,
+                                                           const char*        content_type = "application/json");
+
 /// \brief Invoke specific_object_detail.read_detail (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -296,6 +383,15 @@ pcl_status_t invokeSpecificObjectDetailReadDetail(pcl_executor_t* executor,
                                                   const Query&                 request,
                                                   const char*       content_type = "application/json",
                                                   const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Invoke specific_object_detail.read_detail as an asynchronous stream.
+pcl_status_t invokeSpecificObjectDetailReadDetailStream(pcl_executor_t* executor,
+                                                        const Query&                 request,
+                                                        pcl_stream_msg_fn_t   callback,
+                                                        void*                   user_data = nullptr,
+                                                        pcl_stream_context_t** out_context = nullptr,
+                                                        const pcl_endpoint_route_t* route = nullptr,
+                                                        const char*       content_type = "application/json");
 
 // ---------------------------------------------------------------------------
 // Dispatch -- deserialises request, calls handler, serialises response.
@@ -319,6 +415,23 @@ inline void dispatch(ServiceHandler& handler,
                      size_t*         response_size)
 {
     dispatch(handler, channel, request_buf, request_size, "application/json", response_buf, response_size);
+}
+
+/// \brief Dispatch a server-streaming service request.
+pcl_status_t dispatchStream(ServiceHandler& handler,
+                            ServiceChannel  channel,
+                            const void*     request_buf,
+                            size_t          request_size,
+                            const char*     content_type,
+                            pcl_stream_context_t* stream_context);
+
+inline pcl_status_t dispatchStream(ServiceHandler& handler,
+                                   ServiceChannel  channel,
+                                   const void*     request_buf,
+                                   size_t          request_size,
+                                   pcl_stream_context_t* stream_context)
+{
+    return dispatchStream(handler, channel, request_buf, request_size, "application/json", stream_context);
 }
 
 } // namespace pyramid::components::tactical_objects::services::provided

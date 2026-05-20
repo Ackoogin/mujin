@@ -45,6 +45,13 @@ ServiceHandler::handleMatchingObjectsReadMatch(const Query& /*request*/) {
     return {};
 }
 
+pcl_status_t
+ServiceHandler::streamMatchingObjectsReadMatch(const Query& /*request*/,
+    pcl_stream_context_t* /*stream_context*/,
+    const char* /*content_type*/) {
+    return PCL_ERR_INVALID;
+}
+
 Identifier
 ServiceHandler::handleObjectOfInterestCreateRequirement(const ObjectInterestRequirement& /*request*/) {
     return {};
@@ -53,6 +60,13 @@ ServiceHandler::handleObjectOfInterestCreateRequirement(const ObjectInterestRequ
 std::vector<ObjectInterestRequirement>
 ServiceHandler::handleObjectOfInterestReadRequirement(const Query& /*request*/) {
     return {};
+}
+
+pcl_status_t
+ServiceHandler::streamObjectOfInterestReadRequirement(const Query& /*request*/,
+    pcl_stream_context_t* /*stream_context*/,
+    const char* /*content_type*/) {
+    return PCL_ERR_INVALID;
 }
 
 Ack
@@ -68,6 +82,13 @@ ServiceHandler::handleObjectOfInterestDeleteRequirement(const Identifier& /*requ
 std::vector<ObjectDetail>
 ServiceHandler::handleSpecificObjectDetailReadDetail(const Query& /*request*/) {
     return {};
+}
+
+pcl_status_t
+ServiceHandler::streamSpecificObjectDetailReadDetail(const Query& /*request*/,
+    pcl_stream_context_t* /*stream_context*/,
+    const char* /*content_type*/) {
+    return PCL_ERR_INVALID;
 }
 
 // ---------------------------------------------------------------------------
@@ -221,6 +242,60 @@ bool decodeMatchingObjectsReadMatchResponse(const pcl_msg_t* msg,
     }
 }
 
+bool encodeMatchingObjectsReadMatchStreamFrame(const ObjectMatch& payload,
+                                               const char*        content_type,
+                                               std::string*       out)
+{
+    if (!out) {
+        return false;
+    }
+    if (is_json_content_type(content_type)) {
+        *out = toJson(payload);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        *out = flatbuffers_codec::toBinary(payload);
+    } else {
+        return false;
+    }
+    return true;
+}
+
+bool decodeMatchingObjectsReadMatchStreamFrame(const pcl_msg_t* msg,
+                                               ObjectMatch* out)
+{
+    if (!msg || !msg->data || msg->size == 0 || !out) {
+        return false;
+    }
+    try {
+        if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryObjectMatch(msg->data, msg->size);
+                return true;
+            }
+            return false;
+        }
+        const std::string payload = msgToString(msg->data, msg->size);
+        *out = fromJson(payload, static_cast<ObjectMatch*>(nullptr));
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+pcl_status_t sendMatchingObjectsReadMatchStreamFrame(pcl_stream_context_t* stream_context,
+                                                     const ObjectMatch& payload,
+                                                     const char*        content_type)
+{
+    std::string wire_payload;
+    if (!encodeMatchingObjectsReadMatchStreamFrame(payload, content_type, &wire_payload)) {
+        return PCL_ERR_INVALID;
+    }
+    pcl_msg_t msg{};
+    msg.data = wire_payload.data();
+    msg.size = static_cast<uint32_t>(wire_payload.size());
+    msg.type_name = content_type;
+    return pcl_stream_send(stream_context, &msg);
+}
+
 bool decodeObjectOfInterestCreateRequirementResponse(const pcl_msg_t* msg,
                                                      Identifier* out)
 {
@@ -267,6 +342,60 @@ bool decodeObjectOfInterestReadRequirementResponse(const pcl_msg_t* msg,
     } catch (...) {
         return false;
     }
+}
+
+bool encodeObjectOfInterestReadRequirementStreamFrame(const ObjectInterestRequirement& payload,
+                                                      const char*        content_type,
+                                                      std::string*       out)
+{
+    if (!out) {
+        return false;
+    }
+    if (is_json_content_type(content_type)) {
+        *out = toJson(payload);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        *out = flatbuffers_codec::toBinary(payload);
+    } else {
+        return false;
+    }
+    return true;
+}
+
+bool decodeObjectOfInterestReadRequirementStreamFrame(const pcl_msg_t* msg,
+                                                      ObjectInterestRequirement* out)
+{
+    if (!msg || !msg->data || msg->size == 0 || !out) {
+        return false;
+    }
+    try {
+        if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryObjectInterestRequirement(msg->data, msg->size);
+                return true;
+            }
+            return false;
+        }
+        const std::string payload = msgToString(msg->data, msg->size);
+        *out = fromJson(payload, static_cast<ObjectInterestRequirement*>(nullptr));
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+pcl_status_t sendObjectOfInterestReadRequirementStreamFrame(pcl_stream_context_t* stream_context,
+                                                            const ObjectInterestRequirement& payload,
+                                                            const char*        content_type)
+{
+    std::string wire_payload;
+    if (!encodeObjectOfInterestReadRequirementStreamFrame(payload, content_type, &wire_payload)) {
+        return PCL_ERR_INVALID;
+    }
+    pcl_msg_t msg{};
+    msg.data = wire_payload.data();
+    msg.size = static_cast<uint32_t>(wire_payload.size());
+    msg.type_name = content_type;
+    return pcl_stream_send(stream_context, &msg);
 }
 
 bool decodeObjectOfInterestUpdateRequirementResponse(const pcl_msg_t* msg,
@@ -339,6 +468,60 @@ bool decodeSpecificObjectDetailReadDetailResponse(const pcl_msg_t* msg,
     }
 }
 
+bool encodeSpecificObjectDetailReadDetailStreamFrame(const ObjectDetail& payload,
+                                                     const char*        content_type,
+                                                     std::string*       out)
+{
+    if (!out) {
+        return false;
+    }
+    if (is_json_content_type(content_type)) {
+        *out = toJson(payload);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        *out = flatbuffers_codec::toBinary(payload);
+    } else {
+        return false;
+    }
+    return true;
+}
+
+bool decodeSpecificObjectDetailReadDetailStreamFrame(const pcl_msg_t* msg,
+                                                     ObjectDetail* out)
+{
+    if (!msg || !msg->data || msg->size == 0 || !out) {
+        return false;
+    }
+    try {
+        if (!is_json_content_type(msg->type_name)) {
+            if (is_flatbuffers_content_type(msg->type_name)) {
+                *out = flatbuffers_codec::fromBinaryObjectDetail(msg->data, msg->size);
+                return true;
+            }
+            return false;
+        }
+        const std::string payload = msgToString(msg->data, msg->size);
+        *out = fromJson(payload, static_cast<ObjectDetail*>(nullptr));
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+pcl_status_t sendSpecificObjectDetailReadDetailStreamFrame(pcl_stream_context_t* stream_context,
+                                                           const ObjectDetail& payload,
+                                                           const char*        content_type)
+{
+    std::string wire_payload;
+    if (!encodeSpecificObjectDetailReadDetailStreamFrame(payload, content_type, &wire_payload)) {
+        return PCL_ERR_INVALID;
+    }
+    pcl_msg_t msg{};
+    msg.data = wire_payload.data();
+    msg.size = static_cast<uint32_t>(wire_payload.size());
+    msg.type_name = content_type;
+    return pcl_stream_send(stream_context, &msg);
+}
+
 // ---------------------------------------------------------------------------
 // Typed invoke wrappers — serialise and dispatch via executor transport
 // ---------------------------------------------------------------------------
@@ -368,6 +551,37 @@ pcl_status_t invokeMatchingObjectsReadMatch(pcl_executor_t* executor,
 {
     return invokeMatchingObjectsReadMatch(executor, request, ignore_async_response,
                          nullptr, route, content_type);
+}
+
+pcl_status_t invokeMatchingObjectsReadMatchStream(pcl_executor_t* executor,
+                                                  const Query&                 request,
+                                                  pcl_stream_msg_fn_t   callback,
+                                                  void*                   user_data,
+                                                  pcl_stream_context_t** out_context,
+                                                  const pcl_endpoint_route_t* route,
+                                                  const char*       content_type)
+{
+    std::string payload;
+    if (is_json_content_type(content_type)) {
+        payload = toJson(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
+    }
+    if (route) {
+        const pcl_status_t route_rc = pcl_executor_set_endpoint_route(executor, route);
+        if (route_rc != PCL_OK) {
+            return route_rc;
+        }
+    }
+    pcl_msg_t msg{};
+    msg.data = payload.data();
+    msg.size = static_cast<uint32_t>(payload.size());
+    msg.type_name = content_type;
+    return pcl_executor_invoke_stream(executor, kSvcMatchingObjectsReadMatch,
+                                      &msg, callback, user_data,
+                                      out_context);
 }
 
 pcl_status_t invokeObjectOfInterestCreateRequirement(pcl_executor_t* executor,
@@ -422,6 +636,37 @@ pcl_status_t invokeObjectOfInterestReadRequirement(pcl_executor_t* executor,
 {
     return invokeObjectOfInterestReadRequirement(executor, request, ignore_async_response,
                          nullptr, route, content_type);
+}
+
+pcl_status_t invokeObjectOfInterestReadRequirementStream(pcl_executor_t* executor,
+                                                         const Query&                 request,
+                                                         pcl_stream_msg_fn_t   callback,
+                                                         void*                   user_data,
+                                                         pcl_stream_context_t** out_context,
+                                                         const pcl_endpoint_route_t* route,
+                                                         const char*       content_type)
+{
+    std::string payload;
+    if (is_json_content_type(content_type)) {
+        payload = toJson(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
+    }
+    if (route) {
+        const pcl_status_t route_rc = pcl_executor_set_endpoint_route(executor, route);
+        if (route_rc != PCL_OK) {
+            return route_rc;
+        }
+    }
+    pcl_msg_t msg{};
+    msg.data = payload.data();
+    msg.size = static_cast<uint32_t>(payload.size());
+    msg.type_name = content_type;
+    return pcl_executor_invoke_stream(executor, kSvcObjectOfInterestReadRequirement,
+                                      &msg, callback, user_data,
+                                      out_context);
 }
 
 pcl_status_t invokeObjectOfInterestUpdateRequirement(pcl_executor_t* executor,
@@ -503,6 +748,37 @@ pcl_status_t invokeSpecificObjectDetailReadDetail(pcl_executor_t* executor,
 {
     return invokeSpecificObjectDetailReadDetail(executor, request, ignore_async_response,
                          nullptr, route, content_type);
+}
+
+pcl_status_t invokeSpecificObjectDetailReadDetailStream(pcl_executor_t* executor,
+                                                        const Query&                 request,
+                                                        pcl_stream_msg_fn_t   callback,
+                                                        void*                   user_data,
+                                                        pcl_stream_context_t** out_context,
+                                                        const pcl_endpoint_route_t* route,
+                                                        const char*       content_type)
+{
+    std::string payload;
+    if (is_json_content_type(content_type)) {
+        payload = toJson(request);
+    } else if (is_flatbuffers_content_type(content_type)) {
+        payload = flatbuffers_codec::toBinary(request);
+    } else {
+        return PCL_ERR_INVALID;
+    }
+    if (route) {
+        const pcl_status_t route_rc = pcl_executor_set_endpoint_route(executor, route);
+        if (route_rc != PCL_OK) {
+            return route_rc;
+        }
+    }
+    pcl_msg_t msg{};
+    msg.data = payload.data();
+    msg.size = static_cast<uint32_t>(payload.size());
+    msg.type_name = content_type;
+    return pcl_executor_invoke_stream(executor, kSvcSpecificObjectDetailReadDetail,
+                                      &msg, callback, user_data,
+                                      out_context);
 }
 
 // ---------------------------------------------------------------------------
@@ -825,6 +1101,68 @@ void dispatch(ServiceHandler& handler,
         *response_buf = nullptr;
         *response_size = 0;
     }
+}
+
+// ---------------------------------------------------------------------------
+// Stream dispatch — deserialise request and open stream
+// ---------------------------------------------------------------------------
+
+pcl_status_t dispatchStream(ServiceHandler& handler,
+                            ServiceChannel  channel,
+                            const void*     request_buf,
+                            size_t          request_size,
+                            const char*     content_type,
+                            pcl_stream_context_t* stream_context)
+{
+    std::string req_str;
+
+    if (is_json_content_type(content_type)) {
+        req_str = json_request_body(request_buf, request_size);
+        if (request_size != 0 && req_str.empty()) {
+            return PCL_ERR_INVALID;
+        }
+    } else if (is_flatbuffers_content_type(content_type)) {
+    } else {
+        return PCL_ERR_INVALID;
+    }
+
+    try {
+    switch (channel) {
+    case ServiceChannel::MatchingObjectsReadMatch: {
+        Query req;
+        if (is_json_content_type(content_type))
+            req = fromJson(req_str, static_cast<Query*>(nullptr));
+        else if (is_flatbuffers_content_type(content_type))
+            req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
+        else
+            break;
+        return handler.streamMatchingObjectsReadMatch(req, stream_context, content_type);
+    }
+    case ServiceChannel::ObjectOfInterestReadRequirement: {
+        Query req;
+        if (is_json_content_type(content_type))
+            req = fromJson(req_str, static_cast<Query*>(nullptr));
+        else if (is_flatbuffers_content_type(content_type))
+            req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
+        else
+            break;
+        return handler.streamObjectOfInterestReadRequirement(req, stream_context, content_type);
+    }
+    case ServiceChannel::SpecificObjectDetailReadDetail: {
+        Query req;
+        if (is_json_content_type(content_type))
+            req = fromJson(req_str, static_cast<Query*>(nullptr));
+        else if (is_flatbuffers_content_type(content_type))
+            req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
+        else
+            break;
+        return handler.streamSpecificObjectDetailReadDetail(req, stream_context, content_type);
+    }
+    }
+    } catch (...) {
+        return PCL_ERR_INVALID;
+    }
+    return PCL_ERR_INVALID;
 }
 
 } // namespace pyramid::components::tactical_objects::services::provided

@@ -180,6 +180,31 @@ def _rpc_decode_response_func(svc_name: str, rpc: 'ProtoRpc',
     return f'decode{_rpc_symbol_base(svc_name, rpc, duplicate_rpc_names)}Response'
 
 
+def _rpc_stream_handler_name(svc_name: str, rpc: 'ProtoRpc',
+                             duplicate_rpc_names: set[str]) -> str:
+    return f'stream{_rpc_symbol_base(svc_name, rpc, duplicate_rpc_names)}'
+
+
+def _rpc_encode_stream_frame_func(svc_name: str, rpc: 'ProtoRpc',
+                                  duplicate_rpc_names: set[str]) -> str:
+    return f'encode{_rpc_symbol_base(svc_name, rpc, duplicate_rpc_names)}StreamFrame'
+
+
+def _rpc_decode_stream_frame_func(svc_name: str, rpc: 'ProtoRpc',
+                                  duplicate_rpc_names: set[str]) -> str:
+    return f'decode{_rpc_symbol_base(svc_name, rpc, duplicate_rpc_names)}StreamFrame'
+
+
+def _rpc_send_stream_frame_func(svc_name: str, rpc: 'ProtoRpc',
+                                duplicate_rpc_names: set[str]) -> str:
+    return f'send{_rpc_symbol_base(svc_name, rpc, duplicate_rpc_names)}StreamFrame'
+
+
+def _rpc_invoke_stream_func(svc_name: str, rpc: 'ProtoRpc',
+                            duplicate_rpc_names: set[str]) -> str:
+    return f'invoke{_rpc_symbol_base(svc_name, rpc, duplicate_rpc_names)}Stream'
+
+
 # -- Proto model ---------------------------------------------------------------
 
 class ProtoRpc:
@@ -678,6 +703,20 @@ class CppServiceGenerator:
                     svc_name, rpc, duplicate_rpc_names)
                 f.write(
                     f'    {handler_name}(const {rpc.cpp_req_type}& request);\n')
+                if rpc.streaming:
+                    stream_name = _rpc_stream_handler_name(
+                        svc_name, rpc, duplicate_rpc_names)
+                    f.write('\n')
+                    f.write('    /// \\brief Begin an asynchronous stream for this RPC.\n')
+                    f.write('    ///\n')
+                    f.write('    /// Override this for true server streaming. Store stream_context,\n')
+                    f.write('    /// return PCL_STREAMING, then emit frames with send*StreamFrame().\n')
+                    f.write('    virtual pcl_status_t\n')
+                    f.write(f'    {stream_name}(const {rpc.cpp_req_type}& request,\n')
+                    f.write('    ' + ' ' * len(stream_name)
+                            + ' pcl_stream_context_t* stream_context,\n')
+                    f.write('    ' + ' ' * len(stream_name)
+                            + ' const char* content_type);\n')
                 # Blank line after method unless: last method, or next method
                 # is a new service section (its leading \n already provides spacing)
                 is_last = i == len(all_rpcs) - 1
@@ -777,6 +816,33 @@ class CppServiceGenerator:
                     f.write(f'bool {decode_func}'
                             f'(const pcl_msg_t* msg,\n')
                     f.write(f'{decode_sp}{rsp_decl_t}* out);\n\n')
+                    if rpc.streaming:
+                        frame_t = rpc.cpp_rsp_type[len('std::vector<'):-1]
+                        encode_frame = _rpc_encode_stream_frame_func(
+                            svc.name, rpc, duplicate_rpc_names)
+                        decode_frame = _rpc_decode_stream_frame_func(
+                            svc.name, rpc, duplicate_rpc_names)
+                        send_frame = _rpc_send_stream_frame_func(
+                            svc.name, rpc, duplicate_rpc_names)
+                        f.write(f'/// \\brief Encode one stream frame for {wire_full}.\n')
+                        col = len(f'bool {encode_frame}(')
+                        sp = ' ' * col
+                        f.write(f'bool {encode_frame}(const {frame_t}& payload,\n')
+                        f.write(f'{sp}const char*        content_type,\n')
+                        f.write(f'{sp}std::string*       out);\n\n')
+                        f.write(f'/// \\brief Decode one stream frame from {wire_full}.\n')
+                        col = len(f'bool {decode_frame}(')
+                        sp = ' ' * col
+                        f.write(f'bool {decode_frame}(const pcl_msg_t* msg,\n')
+                        f.write(f'{sp}{frame_t}* out);\n\n')
+                        f.write(f'/// \\brief Send one typed stream frame for {wire_full}.\n')
+                        col = 13 + len(send_frame) + 1
+                        sp = ' ' * col
+                        f.write(f'pcl_status_t {send_frame}'
+                                f'(pcl_stream_context_t* stream_context,\n')
+                        f.write(f'{sp}const {frame_t}& payload,\n')
+                        f.write(f'{sp}const char*        content_type'
+                                f' = "{_DEFAULT_CONTENT_TYPE}");\n\n')
                     req_decl_t = rpc.cpp_req_type
                     col = 13 + len(invoke_func) + 1
                     sp = ' ' * col
@@ -809,6 +875,28 @@ class CppServiceGenerator:
                             f' = "{_DEFAULT_CONTENT_TYPE}",\n')
                     f.write(f'{sp}const pcl_endpoint_route_t* route'
                             f' = nullptr);\n\n')
+                    if rpc.streaming:
+                        invoke_stream = _rpc_invoke_stream_func(
+                            svc.name, rpc, duplicate_rpc_names)
+                        col = 13 + len(invoke_stream) + 1
+                        sp = ' ' * col
+                        f.write(f'/// \\brief Invoke {wire_full} as an asynchronous stream.\n')
+                        f.write(f'pcl_status_t {invoke_stream}'
+                                f'(pcl_executor_t* executor,\n')
+                        f.write(f'{sp}const {req_decl_t}&'
+                                f'{" " * max(1, 22 - len(req_decl_t))}'
+                                f'request,\n')
+                        f.write(f'{sp}pcl_stream_msg_fn_t'
+                                f'   callback,\n')
+                        f.write(f'{sp}void*'
+                                f'                   user_data'
+                                f' = nullptr,\n')
+                        f.write(f'{sp}pcl_stream_context_t** out_context'
+                                f' = nullptr,\n')
+                        f.write(f'{sp}const pcl_endpoint_route_t* route'
+                                f' = nullptr,\n')
+                        f.write(f'{sp}const char*       content_type'
+                                f' = "{_DEFAULT_CONTENT_TYPE}");\n\n')
 
             if has_grpc:
                 f.write(_SEP + '\n')
@@ -884,6 +972,21 @@ class CppServiceGenerator:
             f.write('                     size_t*         response_size)\n')
             f.write('{\n')
             f.write(f'    dispatch(handler, channel, request_buf, request_size, "{_DEFAULT_CONTENT_TYPE}", response_buf, response_size);\n')
+            f.write('}\n\n')
+            f.write('/// \\brief Dispatch a server-streaming service request.\n')
+            f.write('pcl_status_t dispatchStream(ServiceHandler& handler,\n')
+            f.write('                            ServiceChannel  channel,\n')
+            f.write('                            const void*     request_buf,\n')
+            f.write('                            size_t          request_size,\n')
+            f.write('                            const char*     content_type,\n')
+            f.write('                            pcl_stream_context_t* stream_context);\n\n')
+            f.write('inline pcl_status_t dispatchStream(ServiceHandler& handler,\n')
+            f.write('                                   ServiceChannel  channel,\n')
+            f.write('                                   const void*     request_buf,\n')
+            f.write('                                   size_t          request_size,\n')
+            f.write('                                   pcl_stream_context_t* stream_context)\n')
+            f.write('{\n')
+            f.write(f'    return dispatchStream(handler, channel, request_buf, request_size, "{_DEFAULT_CONTENT_TYPE}", stream_context);\n')
             f.write('}\n\n')
 
             # Namespace close
@@ -1001,6 +1104,17 @@ class CppServiceGenerator:
                     f.write('    return {};\n')
 
                 f.write('}\n\n')
+
+                if rpc.streaming:
+                    stream_name = _rpc_stream_handler_name(
+                        svc_name, rpc, duplicate_rpc_names)
+                    f.write('pcl_status_t\n')
+                    f.write(f'ServiceHandler::{stream_name}'
+                            f'(const {req_t}& /*request*/,\n')
+                    f.write('    pcl_stream_context_t* /*stream_context*/,\n')
+                    f.write('    const char* /*content_type*/) {\n')
+                    f.write('    return PCL_ERR_INVALID;\n')
+                    f.write('}\n\n')
 
             # ---- Internal PCL helpers (anonymous namespace) ------------------
             f.write(_SEP + '\n')
@@ -1205,6 +1319,92 @@ class CppServiceGenerator:
                     f.write('    }\n')
                     f.write('}\n\n')
 
+                    if rpc.streaming:
+                        frame_t = rpc.cpp_rsp_type[len('std::vector<'):-1]
+                        encode_frame = _rpc_encode_stream_frame_func(
+                            svc.name, rpc, duplicate_rpc_names)
+                        decode_frame = _rpc_decode_stream_frame_func(
+                            svc.name, rpc, duplicate_rpc_names)
+                        send_frame = _rpc_send_stream_frame_func(
+                            svc.name, rpc, duplicate_rpc_names)
+
+                        col = len(f'bool {encode_frame}(')
+                        sp = ' ' * col
+                        f.write(f'bool {encode_frame}(const {frame_t}& payload,\n')
+                        f.write(f'{sp}const char*        content_type,\n')
+                        f.write(f'{sp}std::string*       out)\n')
+                        f.write('{\n')
+                        f.write('    if (!out) {\n')
+                        f.write('        return false;\n')
+                        f.write('    }\n')
+                        f.write('    if (is_json_content_type(content_type)) {\n')
+                        if frame_t == 'Identifier':
+                            f.write('        *out = encode_identifier_payload(payload);\n')
+                        else:
+                            f.write('        *out = toJson(payload);\n')
+                        if has_flatbuffers:
+                            f.write('    } else if (is_flatbuffers_content_type(content_type)) {\n')
+                            f.write('        *out = flatbuffers_codec::toBinary(payload);\n')
+                        if has_protobuf:
+                            f.write('    } else if (is_protobuf_content_type(content_type)) {\n')
+                            f.write('        *out = protobuf_codec::toBinary(payload);\n')
+                        f.write('    } else {\n')
+                        f.write('        return false;\n')
+                        f.write('    }\n')
+                        f.write('    return true;\n')
+                        f.write('}\n\n')
+
+                        col = len(f'bool {decode_frame}(')
+                        sp = ' ' * col
+                        f.write(f'bool {decode_frame}(const pcl_msg_t* msg,\n')
+                        f.write(f'{sp}{frame_t}* out)\n')
+                        f.write('{\n')
+                        f.write('    if (!msg || !msg->data || msg->size == 0 || !out) {\n')
+                        f.write('        return false;\n')
+                        f.write('    }\n')
+                        f.write('    try {\n')
+                        f.write('        if (!is_json_content_type(msg->type_name)) {\n')
+                        if has_flatbuffers:
+                            f.write('            if (is_flatbuffers_content_type(msg->type_name)) {\n')
+                            f.write(f'                *out = flatbuffers_codec::fromBinary{rpc.raw_rsp_type}(msg->data, msg->size);\n')
+                            f.write('                return true;\n')
+                            f.write('            }\n')
+                        if has_protobuf:
+                            f.write('            if (is_protobuf_content_type(msg->type_name)) {\n')
+                            f.write(f'                *out = protobuf_codec::fromBinary{rpc.raw_rsp_type}(msg->data, msg->size);\n')
+                            f.write('                return true;\n')
+                            f.write('            }\n')
+                        f.write('            return false;\n')
+                        f.write('        }\n')
+                        f.write('        const std::string payload = msgToString(msg->data, msg->size);\n')
+                        if frame_t == 'Identifier':
+                            f.write('        *out = decode_identifier_payload(payload);\n')
+                        else:
+                            f.write(f'        *out = fromJson(payload, static_cast<{rpc.raw_rsp_type}*>(nullptr));\n')
+                        f.write('        return true;\n')
+                        f.write('    } catch (...) {\n')
+                        f.write('        return false;\n')
+                        f.write('    }\n')
+                        f.write('}\n\n')
+
+                        col = 13 + len(send_frame) + 1
+                        sp = ' ' * col
+                        f.write(f'pcl_status_t {send_frame}'
+                                f'(pcl_stream_context_t* stream_context,\n')
+                        f.write(f'{sp}const {frame_t}& payload,\n')
+                        f.write(f'{sp}const char*        content_type)\n')
+                        f.write('{\n')
+                        f.write('    std::string wire_payload;\n')
+                        f.write(f'    if (!{encode_frame}(payload, content_type, &wire_payload)) {{\n')
+                        f.write('        return PCL_ERR_INVALID;\n')
+                        f.write('    }\n')
+                        f.write('    pcl_msg_t msg{};\n')
+                        f.write('    msg.data = wire_payload.data();\n')
+                        f.write('    msg.size = static_cast<uint32_t>(wire_payload.size());\n')
+                        f.write('    msg.type_name = content_type;\n')
+                        f.write('    return pcl_stream_send(stream_context, &msg);\n')
+                        f.write('}\n\n')
+
             # Typed invoke wrappers -- serialize request, then PCL
             f.write(_SEP + '\n')
             f.write('// Typed invoke wrappers \u2014 serialise and dispatch via executor transport\n')
@@ -1261,6 +1461,53 @@ class CppServiceGenerator:
                             '(executor, request, ignore_async_response,\n')
                     f.write('                         nullptr, route, content_type);\n')
                     f.write('}\n\n')
+                    if rpc.streaming:
+                        invoke_stream = _rpc_invoke_stream_func(
+                            svc.name, rpc, duplicate_rpc_names)
+                        col = 13 + len(invoke_stream) + 1
+                        sp = ' ' * col
+                        f.write(f'pcl_status_t {invoke_stream}'
+                                f'(pcl_executor_t* executor,\n')
+                        f.write(f'{sp}const {req_decl_t}&'
+                                f'{" " * max(1, 22 - len(req_decl_t))}'
+                                f'request,\n')
+                        f.write(f'{sp}pcl_stream_msg_fn_t'
+                                f'   callback,\n')
+                        f.write(f'{sp}void*'
+                                f'                   user_data,\n')
+                        f.write(f'{sp}pcl_stream_context_t** out_context,\n')
+                        f.write(f'{sp}const pcl_endpoint_route_t* route,\n')
+                        f.write(f'{sp}const char*       content_type)\n')
+                        f.write('{\n')
+                        f.write('    std::string payload;\n')
+                        f.write('    if (is_json_content_type(content_type)) {\n')
+                        if req_decl_t == 'Identifier':
+                            f.write('        payload = encode_identifier_payload(request);\n')
+                        else:
+                            f.write('        payload = toJson(request);\n')
+                        if has_flatbuffers:
+                            f.write('    } else if (is_flatbuffers_content_type(content_type)) {\n')
+                            f.write('        payload = flatbuffers_codec::toBinary(request);\n')
+                        if has_protobuf:
+                            f.write('    } else if (is_protobuf_content_type(content_type)) {\n')
+                            f.write('        payload = protobuf_codec::toBinary(request);\n')
+                        f.write('    } else {\n')
+                        f.write('        return PCL_ERR_INVALID;\n')
+                        f.write('    }\n')
+                        f.write('    if (route) {\n')
+                        f.write('        const pcl_status_t route_rc = pcl_executor_set_endpoint_route(executor, route);\n')
+                        f.write('        if (route_rc != PCL_OK) {\n')
+                        f.write('            return route_rc;\n')
+                        f.write('        }\n')
+                        f.write('    }\n')
+                        f.write('    pcl_msg_t msg{};\n')
+                        f.write('    msg.data = payload.data();\n')
+                        f.write('    msg.size = static_cast<uint32_t>(payload.size());\n')
+                        f.write('    msg.type_name = content_type;\n')
+                        f.write(f'    return pcl_executor_invoke_stream(executor, {service_const},\n')
+                        f.write('                                      &msg, callback, user_data,\n')
+                        f.write('                                      out_context);\n')
+                        f.write('}\n\n')
             # Publish and topic decode wrappers
             n_pubs = len(topic_set)
             if n_pubs:
@@ -1533,6 +1780,75 @@ class CppServiceGenerator:
             f.write('        *response_buf = nullptr;\n')
             f.write('        *response_size = 0;\n')
             f.write('    }\n')
+            f.write('}\n\n')
+
+            # ---- dispatchStream() -------------------------------------------
+            f.write(_SEP + '\n')
+            f.write('// Stream dispatch \u2014 deserialise request and open stream\n')
+            f.write(_SEP + '\n\n')
+            f.write('pcl_status_t dispatchStream(ServiceHandler& handler,\n')
+            f.write('                            ServiceChannel  channel,\n')
+            f.write('                            const void*     request_buf,\n')
+            f.write('                            size_t          request_size,\n')
+            f.write('                            const char*     content_type,\n')
+            f.write('                            pcl_stream_context_t* stream_context)\n')
+            f.write('{\n')
+            f.write('    std::string req_str;\n\n')
+            f.write('    if (is_json_content_type(content_type)) {\n')
+            f.write('        req_str = json_request_body(request_buf, request_size);\n')
+            f.write('        if (request_size != 0 && req_str.empty()) {\n')
+            f.write('            return PCL_ERR_INVALID;\n')
+            f.write('        }\n')
+            if has_flatbuffers:
+                f.write('    } else if (is_flatbuffers_content_type(content_type)) {\n')
+            if has_protobuf:
+                f.write('    } else if (is_protobuf_content_type(content_type)) {\n')
+            f.write('    } else {\n')
+            f.write('        return PCL_ERR_INVALID;\n')
+            f.write('    }\n\n')
+            f.write('    try {\n')
+            f.write('    switch (channel) {\n')
+
+            for svc_name, rpc in all_rpcs:
+                if not rpc.streaming:
+                    continue
+                enum_val = _rpc_enum_value(svc_name, rpc, duplicate_rpc_names)
+                stream_fn = _rpc_stream_handler_name(
+                    svc_name, rpc, duplicate_rpc_names)
+                req_t = rpc.cpp_req_type
+                f.write(f'    case ServiceChannel::{enum_val}: {{\n')
+                if req_t == 'Identifier':
+                    f.write(f'        {req_t} req;\n')
+                    f.write('        if (is_json_content_type(content_type))\n')
+                    f.write('            req = decode_identifier_payload(req_str);\n')
+                    if has_flatbuffers:
+                        f.write('        else if (is_flatbuffers_content_type(content_type))\n')
+                        f.write(f'            req = flatbuffers_codec::fromBinary{req_t}(request_buf, request_size);\n')
+                    if has_protobuf:
+                        f.write('        else if (is_protobuf_content_type(content_type))\n')
+                        f.write(f'            req = protobuf_codec::fromBinary{req_t}(request_buf, request_size);\n')
+                    f.write('        else\n')
+                    f.write('            break;\n')
+                else:
+                    f.write(f'        {req_t} req;\n')
+                    f.write('        if (is_json_content_type(content_type))\n')
+                    f.write(f'            req = fromJson(req_str, static_cast<{req_t}*>(nullptr));\n')
+                    if has_flatbuffers:
+                        f.write('        else if (is_flatbuffers_content_type(content_type))\n')
+                        f.write(f'            req = flatbuffers_codec::fromBinary{req_t}(request_buf, request_size);\n')
+                    if has_protobuf:
+                        f.write('        else if (is_protobuf_content_type(content_type))\n')
+                        f.write(f'            req = protobuf_codec::fromBinary{req_t}(request_buf, request_size);\n')
+                    f.write('        else\n')
+                    f.write('            break;\n')
+                f.write(f'        return handler.{stream_fn}(req, stream_context, content_type);\n')
+                f.write('    }\n')
+
+            f.write('    }\n')
+            f.write('    } catch (...) {\n')
+            f.write('        return PCL_ERR_INVALID;\n')
+            f.write('    }\n')
+            f.write('    return PCL_ERR_INVALID;\n')
             f.write('}\n\n')
 
             # Namespace close

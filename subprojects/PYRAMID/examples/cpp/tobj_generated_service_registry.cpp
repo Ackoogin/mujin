@@ -79,4 +79,42 @@ pcl_status_t GeneratedServiceRegistry::dispatch(pcl_container_t*,
   return PCL_OK;
 }
 
+bool GeneratedServiceRegistry::addRemoteStream(const char* service_name,
+                                               svc::ServiceChannel channel,
+                                               const char* peer_id) {
+  stream_bindings_.push_back(StreamBinding{&handler_, channel, content_type_});
+  StreamBinding& binding = stream_bindings_.back();
+
+  pcl::Port port = owner_.addStreamService(
+      service_name,
+      content_type_.c_str(),
+      &GeneratedServiceRegistry::dispatchStream,
+      &binding);
+  if (!port) {
+    stream_bindings_.pop_back();
+    return false;
+  }
+
+  ports_.push_back(port);
+  return ports_.back().routeRemote(peer_id) == PCL_OK;
+}
+
+pcl_status_t GeneratedServiceRegistry::dispatchStream(pcl_container_t*,
+                                                      const pcl_msg_t* request,
+                                                      pcl_stream_context_t* stream_context,
+                                                      void* user_data) {
+  auto* binding = static_cast<StreamBinding*>(user_data);
+  if (!binding || !binding->handler) {
+    return PCL_ERR_INVALID;
+  }
+  return svc::dispatchStream(
+      *binding->handler,
+      binding->channel,
+      request ? request->data : nullptr,
+      request ? request->size : 0u,
+      request && request->type_name ? request->type_name
+                                    : binding->content_type.c_str(),
+      stream_context);
+}
+
 }  // namespace tobj_example

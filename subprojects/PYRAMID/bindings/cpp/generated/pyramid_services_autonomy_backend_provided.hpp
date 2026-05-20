@@ -114,12 +114,30 @@ public:
     virtual std::vector<Capabilities>
     handleCapabilitiesReadCapabilities(const Query& request);
 
+    /// \brief Begin an asynchronous stream for this RPC.
+    ///
+    /// Override this for true server streaming. Store stream_context,
+    /// return PCL_STREAMING, then emit frames with send*StreamFrame().
+    virtual pcl_status_t
+    streamCapabilitiesReadCapabilities(const Query& request,
+                                       pcl_stream_context_t* stream_context,
+                                       const char* content_type);
+
     // Planning_Requirement_Service
     virtual Identifier
     handlePlanningRequirementCreatePlanningRequirement(const PlanningRequirement& request);
 
     virtual std::vector<PlanningRequirement>
     handlePlanningRequirementReadPlanningRequirement(const Query& request);
+
+    /// \brief Begin an asynchronous stream for this RPC.
+    ///
+    /// Override this for true server streaming. Store stream_context,
+    /// return PCL_STREAMING, then emit frames with send*StreamFrame().
+    virtual pcl_status_t
+    streamPlanningRequirementReadPlanningRequirement(const Query& request,
+                                                     pcl_stream_context_t* stream_context,
+                                                     const char* content_type);
 
     virtual Ack
     handlePlanningRequirementUpdatePlanningRequirement(const PlanningRequirement& request);
@@ -133,6 +151,15 @@ public:
 
     virtual std::vector<ExecutionRequirement>
     handleExecutionRequirementReadExecutionRequirement(const Query& request);
+
+    /// \brief Begin an asynchronous stream for this RPC.
+    ///
+    /// Override this for true server streaming. Store stream_context,
+    /// return PCL_STREAMING, then emit frames with send*StreamFrame().
+    virtual pcl_status_t
+    streamExecutionRequirementReadExecutionRequirement(const Query& request,
+                                                       pcl_stream_context_t* stream_context,
+                                                       const char* content_type);
 
     virtual Ack
     handleExecutionRequirementUpdateExecutionRequirement(const ExecutionRequirement& request);
@@ -157,6 +184,15 @@ public:
     virtual std::vector<Plan>
     handlePlanReadPlan(const Query& request);
 
+    /// \brief Begin an asynchronous stream for this RPC.
+    ///
+    /// Override this for true server streaming. Store stream_context,
+    /// return PCL_STREAMING, then emit frames with send*StreamFrame().
+    virtual pcl_status_t
+    streamPlanReadPlan(const Query& request,
+                       pcl_stream_context_t* stream_context,
+                       const char* content_type);
+
     virtual Ack
     handlePlanUpdatePlan(const Plan& request);
 
@@ -167,9 +203,27 @@ public:
     virtual std::vector<ExecutionRun>
     handleExecutionRunReadRun(const Query& request);
 
+    /// \brief Begin an asynchronous stream for this RPC.
+    ///
+    /// Override this for true server streaming. Store stream_context,
+    /// return PCL_STREAMING, then emit frames with send*StreamFrame().
+    virtual pcl_status_t
+    streamExecutionRunReadRun(const Query& request,
+                              pcl_stream_context_t* stream_context,
+                              const char* content_type);
+
     // Requirement_Placement_Service
     virtual std::vector<RequirementPlacement>
     handleRequirementPlacementReadPlacement(const Query& request);
+
+    /// \brief Begin an asynchronous stream for this RPC.
+    ///
+    /// Override this for true server streaming. Store stream_context,
+    /// return PCL_STREAMING, then emit frames with send*StreamFrame().
+    virtual pcl_status_t
+    streamRequirementPlacementReadPlacement(const Query& request,
+                                            pcl_stream_context_t* stream_context,
+                                            const char* content_type);
 };
 
 // ---------------------------------------------------------------------------
@@ -179,6 +233,20 @@ public:
 /// \brief Decode a response from capabilities.read_capabilities.
 bool decodeCapabilitiesReadCapabilitiesResponse(const pcl_msg_t* msg,
                                                 std::vector<Capabilities>* out);
+
+/// \brief Encode one stream frame for capabilities.read_capabilities.
+bool encodeCapabilitiesReadCapabilitiesStreamFrame(const Capabilities& payload,
+                                                   const char*        content_type,
+                                                   std::string*       out);
+
+/// \brief Decode one stream frame from capabilities.read_capabilities.
+bool decodeCapabilitiesReadCapabilitiesStreamFrame(const pcl_msg_t* msg,
+                                                   Capabilities* out);
+
+/// \brief Send one typed stream frame for capabilities.read_capabilities.
+pcl_status_t sendCapabilitiesReadCapabilitiesStreamFrame(pcl_stream_context_t* stream_context,
+                                                         const Capabilities& payload,
+                                                         const char*        content_type = "application/json");
 
 /// \brief Invoke capabilities.read_capabilities (typed, serialisation handled internally).
 ///
@@ -196,6 +264,15 @@ pcl_status_t invokeCapabilitiesReadCapabilities(pcl_executor_t* executor,
                                                 const Query&                 request,
                                                 const char*       content_type = "application/json",
                                                 const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Invoke capabilities.read_capabilities as an asynchronous stream.
+pcl_status_t invokeCapabilitiesReadCapabilitiesStream(pcl_executor_t* executor,
+                                                      const Query&                 request,
+                                                      pcl_stream_msg_fn_t   callback,
+                                                      void*                   user_data = nullptr,
+                                                      pcl_stream_context_t** out_context = nullptr,
+                                                      const pcl_endpoint_route_t* route = nullptr,
+                                                      const char*       content_type = "application/json");
 
 /// \brief Decode a response from planning_requirement.create_planning_requirement.
 bool decodePlanningRequirementCreatePlanningRequirementResponse(const pcl_msg_t* msg,
@@ -222,6 +299,20 @@ pcl_status_t invokePlanningRequirementCreatePlanningRequirement(pcl_executor_t* 
 bool decodePlanningRequirementReadPlanningRequirementResponse(const pcl_msg_t* msg,
                                                               std::vector<PlanningRequirement>* out);
 
+/// \brief Encode one stream frame for planning_requirement.read_planning_requirement.
+bool encodePlanningRequirementReadPlanningRequirementStreamFrame(const PlanningRequirement& payload,
+                                                                 const char*        content_type,
+                                                                 std::string*       out);
+
+/// \brief Decode one stream frame from planning_requirement.read_planning_requirement.
+bool decodePlanningRequirementReadPlanningRequirementStreamFrame(const pcl_msg_t* msg,
+                                                                 PlanningRequirement* out);
+
+/// \brief Send one typed stream frame for planning_requirement.read_planning_requirement.
+pcl_status_t sendPlanningRequirementReadPlanningRequirementStreamFrame(pcl_stream_context_t* stream_context,
+                                                                       const PlanningRequirement& payload,
+                                                                       const char*        content_type = "application/json");
+
 /// \brief Invoke planning_requirement.read_planning_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -238,6 +329,15 @@ pcl_status_t invokePlanningRequirementReadPlanningRequirement(pcl_executor_t* ex
                                                               const Query&                 request,
                                                               const char*       content_type = "application/json",
                                                               const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Invoke planning_requirement.read_planning_requirement as an asynchronous stream.
+pcl_status_t invokePlanningRequirementReadPlanningRequirementStream(pcl_executor_t* executor,
+                                                                    const Query&                 request,
+                                                                    pcl_stream_msg_fn_t   callback,
+                                                                    void*                   user_data = nullptr,
+                                                                    pcl_stream_context_t** out_context = nullptr,
+                                                                    const pcl_endpoint_route_t* route = nullptr,
+                                                                    const char*       content_type = "application/json");
 
 /// \brief Decode a response from planning_requirement.update_planning_requirement.
 bool decodePlanningRequirementUpdatePlanningRequirementResponse(const pcl_msg_t* msg,
@@ -306,6 +406,20 @@ pcl_status_t invokeExecutionRequirementCreateExecutionRequirement(pcl_executor_t
 bool decodeExecutionRequirementReadExecutionRequirementResponse(const pcl_msg_t* msg,
                                                                 std::vector<ExecutionRequirement>* out);
 
+/// \brief Encode one stream frame for execution_requirement.read_execution_requirement.
+bool encodeExecutionRequirementReadExecutionRequirementStreamFrame(const ExecutionRequirement& payload,
+                                                                   const char*        content_type,
+                                                                   std::string*       out);
+
+/// \brief Decode one stream frame from execution_requirement.read_execution_requirement.
+bool decodeExecutionRequirementReadExecutionRequirementStreamFrame(const pcl_msg_t* msg,
+                                                                   ExecutionRequirement* out);
+
+/// \brief Send one typed stream frame for execution_requirement.read_execution_requirement.
+pcl_status_t sendExecutionRequirementReadExecutionRequirementStreamFrame(pcl_stream_context_t* stream_context,
+                                                                         const ExecutionRequirement& payload,
+                                                                         const char*        content_type = "application/json");
+
 /// \brief Invoke execution_requirement.read_execution_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -322,6 +436,15 @@ pcl_status_t invokeExecutionRequirementReadExecutionRequirement(pcl_executor_t* 
                                                                 const Query&                 request,
                                                                 const char*       content_type = "application/json",
                                                                 const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Invoke execution_requirement.read_execution_requirement as an asynchronous stream.
+pcl_status_t invokeExecutionRequirementReadExecutionRequirementStream(pcl_executor_t* executor,
+                                                                      const Query&                 request,
+                                                                      pcl_stream_msg_fn_t   callback,
+                                                                      void*                   user_data = nullptr,
+                                                                      pcl_stream_context_t** out_context = nullptr,
+                                                                      const pcl_endpoint_route_t* route = nullptr,
+                                                                      const char*       content_type = "application/json");
 
 /// \brief Decode a response from execution_requirement.update_execution_requirement.
 bool decodeExecutionRequirementUpdateExecutionRequirementResponse(const pcl_msg_t* msg,
@@ -453,6 +576,20 @@ pcl_status_t invokePlanCreatePlan(pcl_executor_t* executor,
 bool decodePlanReadPlanResponse(const pcl_msg_t* msg,
                                 std::vector<Plan>* out);
 
+/// \brief Encode one stream frame for plan.read_plan.
+bool encodePlanReadPlanStreamFrame(const Plan& payload,
+                                   const char*        content_type,
+                                   std::string*       out);
+
+/// \brief Decode one stream frame from plan.read_plan.
+bool decodePlanReadPlanStreamFrame(const pcl_msg_t* msg,
+                                   Plan* out);
+
+/// \brief Send one typed stream frame for plan.read_plan.
+pcl_status_t sendPlanReadPlanStreamFrame(pcl_stream_context_t* stream_context,
+                                         const Plan& payload,
+                                         const char*        content_type = "application/json");
+
 /// \brief Invoke plan.read_plan (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -469,6 +606,15 @@ pcl_status_t invokePlanReadPlan(pcl_executor_t* executor,
                                 const Query&                 request,
                                 const char*       content_type = "application/json",
                                 const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Invoke plan.read_plan as an asynchronous stream.
+pcl_status_t invokePlanReadPlanStream(pcl_executor_t* executor,
+                                      const Query&                 request,
+                                      pcl_stream_msg_fn_t   callback,
+                                      void*                   user_data = nullptr,
+                                      pcl_stream_context_t** out_context = nullptr,
+                                      const pcl_endpoint_route_t* route = nullptr,
+                                      const char*       content_type = "application/json");
 
 /// \brief Decode a response from plan.update_plan.
 bool decodePlanUpdatePlanResponse(const pcl_msg_t* msg,
@@ -516,6 +662,20 @@ pcl_status_t invokePlanDeletePlan(pcl_executor_t* executor,
 bool decodeExecutionRunReadRunResponse(const pcl_msg_t* msg,
                                        std::vector<ExecutionRun>* out);
 
+/// \brief Encode one stream frame for execution_run.read_run.
+bool encodeExecutionRunReadRunStreamFrame(const ExecutionRun& payload,
+                                          const char*        content_type,
+                                          std::string*       out);
+
+/// \brief Decode one stream frame from execution_run.read_run.
+bool decodeExecutionRunReadRunStreamFrame(const pcl_msg_t* msg,
+                                          ExecutionRun* out);
+
+/// \brief Send one typed stream frame for execution_run.read_run.
+pcl_status_t sendExecutionRunReadRunStreamFrame(pcl_stream_context_t* stream_context,
+                                                const ExecutionRun& payload,
+                                                const char*        content_type = "application/json");
+
 /// \brief Invoke execution_run.read_run (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -533,9 +693,32 @@ pcl_status_t invokeExecutionRunReadRun(pcl_executor_t* executor,
                                        const char*       content_type = "application/json",
                                        const pcl_endpoint_route_t* route = nullptr);
 
+/// \brief Invoke execution_run.read_run as an asynchronous stream.
+pcl_status_t invokeExecutionRunReadRunStream(pcl_executor_t* executor,
+                                             const Query&                 request,
+                                             pcl_stream_msg_fn_t   callback,
+                                             void*                   user_data = nullptr,
+                                             pcl_stream_context_t** out_context = nullptr,
+                                             const pcl_endpoint_route_t* route = nullptr,
+                                             const char*       content_type = "application/json");
+
 /// \brief Decode a response from requirement_placement.read_placement.
 bool decodeRequirementPlacementReadPlacementResponse(const pcl_msg_t* msg,
                                                      std::vector<RequirementPlacement>* out);
+
+/// \brief Encode one stream frame for requirement_placement.read_placement.
+bool encodeRequirementPlacementReadPlacementStreamFrame(const RequirementPlacement& payload,
+                                                        const char*        content_type,
+                                                        std::string*       out);
+
+/// \brief Decode one stream frame from requirement_placement.read_placement.
+bool decodeRequirementPlacementReadPlacementStreamFrame(const pcl_msg_t* msg,
+                                                        RequirementPlacement* out);
+
+/// \brief Send one typed stream frame for requirement_placement.read_placement.
+pcl_status_t sendRequirementPlacementReadPlacementStreamFrame(pcl_stream_context_t* stream_context,
+                                                              const RequirementPlacement& payload,
+                                                              const char*        content_type = "application/json");
 
 /// \brief Invoke requirement_placement.read_placement (typed, serialisation handled internally).
 ///
@@ -553,6 +736,15 @@ pcl_status_t invokeRequirementPlacementReadPlacement(pcl_executor_t* executor,
                                                      const Query&                 request,
                                                      const char*       content_type = "application/json",
                                                      const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Invoke requirement_placement.read_placement as an asynchronous stream.
+pcl_status_t invokeRequirementPlacementReadPlacementStream(pcl_executor_t* executor,
+                                                           const Query&                 request,
+                                                           pcl_stream_msg_fn_t   callback,
+                                                           void*                   user_data = nullptr,
+                                                           pcl_stream_context_t** out_context = nullptr,
+                                                           const pcl_endpoint_route_t* route = nullptr,
+                                                           const char*       content_type = "application/json");
 
 // ---------------------------------------------------------------------------
 // Dispatch -- deserialises request, calls handler, serialises response.
@@ -576,6 +768,23 @@ inline void dispatch(ServiceHandler& handler,
                      size_t*         response_size)
 {
     dispatch(handler, channel, request_buf, request_size, "application/json", response_buf, response_size);
+}
+
+/// \brief Dispatch a server-streaming service request.
+pcl_status_t dispatchStream(ServiceHandler& handler,
+                            ServiceChannel  channel,
+                            const void*     request_buf,
+                            size_t          request_size,
+                            const char*     content_type,
+                            pcl_stream_context_t* stream_context);
+
+inline pcl_status_t dispatchStream(ServiceHandler& handler,
+                                   ServiceChannel  channel,
+                                   const void*     request_buf,
+                                   size_t          request_size,
+                                   pcl_stream_context_t* stream_context)
+{
+    return dispatchStream(handler, channel, request_buf, request_size, "application/json", stream_context);
 }
 
 } // namespace pyramid::components::autonomy_backend::services::provided

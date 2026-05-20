@@ -92,6 +92,15 @@ public:
     virtual std::vector<ObjectEvidenceProvisionRequirement>
     handleDataProvisionDependencyReadRequirement(const Query& request);
 
+    /// \brief Begin an asynchronous stream for this RPC.
+    ///
+    /// Override this for true server streaming. Store stream_context,
+    /// return PCL_STREAMING, then emit frames with send*StreamFrame().
+    virtual pcl_status_t
+    streamDataProvisionDependencyReadRequirement(const Query& request,
+                                                 pcl_stream_context_t* stream_context,
+                                                 const char* content_type);
+
     virtual Ack
     handleDataProvisionDependencyUpdateRequirement(const ObjectEvidenceProvisionRequirement& request);
 
@@ -104,6 +113,15 @@ public:
 
     virtual std::vector<ObjectAquisitionRequirement>
     handleDataProcessingDependencyReadRequirement(const Query& request);
+
+    /// \brief Begin an asynchronous stream for this RPC.
+    ///
+    /// Override this for true server streaming. Store stream_context,
+    /// return PCL_STREAMING, then emit frames with send*StreamFrame().
+    virtual pcl_status_t
+    streamDataProcessingDependencyReadRequirement(const Query& request,
+                                                  pcl_stream_context_t* stream_context,
+                                                  const char* content_type);
 
     virtual Ack
     handleDataProcessingDependencyUpdateRequirement(const ObjectAquisitionRequirement& request);
@@ -141,6 +159,20 @@ pcl_status_t invokeDataProvisionDependencyCreateRequirement(pcl_executor_t* exec
 bool decodeDataProvisionDependencyReadRequirementResponse(const pcl_msg_t* msg,
                                                           std::vector<ObjectEvidenceProvisionRequirement>* out);
 
+/// \brief Encode one stream frame for data_provision_dependency.read_requirement.
+bool encodeDataProvisionDependencyReadRequirementStreamFrame(const ObjectEvidenceProvisionRequirement& payload,
+                                                             const char*        content_type,
+                                                             std::string*       out);
+
+/// \brief Decode one stream frame from data_provision_dependency.read_requirement.
+bool decodeDataProvisionDependencyReadRequirementStreamFrame(const pcl_msg_t* msg,
+                                                             ObjectEvidenceProvisionRequirement* out);
+
+/// \brief Send one typed stream frame for data_provision_dependency.read_requirement.
+pcl_status_t sendDataProvisionDependencyReadRequirementStreamFrame(pcl_stream_context_t* stream_context,
+                                                                   const ObjectEvidenceProvisionRequirement& payload,
+                                                                   const char*        content_type = "application/json");
+
 /// \brief Invoke data_provision_dependency.read_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -157,6 +189,15 @@ pcl_status_t invokeDataProvisionDependencyReadRequirement(pcl_executor_t* execut
                                                           const Query&                 request,
                                                           const char*       content_type = "application/json",
                                                           const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Invoke data_provision_dependency.read_requirement as an asynchronous stream.
+pcl_status_t invokeDataProvisionDependencyReadRequirementStream(pcl_executor_t* executor,
+                                                                const Query&                 request,
+                                                                pcl_stream_msg_fn_t   callback,
+                                                                void*                   user_data = nullptr,
+                                                                pcl_stream_context_t** out_context = nullptr,
+                                                                const pcl_endpoint_route_t* route = nullptr,
+                                                                const char*       content_type = "application/json");
 
 /// \brief Decode a response from data_provision_dependency.update_requirement.
 bool decodeDataProvisionDependencyUpdateRequirementResponse(const pcl_msg_t* msg,
@@ -225,6 +266,20 @@ pcl_status_t invokeDataProcessingDependencyCreateRequirement(pcl_executor_t* exe
 bool decodeDataProcessingDependencyReadRequirementResponse(const pcl_msg_t* msg,
                                                            std::vector<ObjectAquisitionRequirement>* out);
 
+/// \brief Encode one stream frame for data_processing_dependency.read_requirement.
+bool encodeDataProcessingDependencyReadRequirementStreamFrame(const ObjectAquisitionRequirement& payload,
+                                                              const char*        content_type,
+                                                              std::string*       out);
+
+/// \brief Decode one stream frame from data_processing_dependency.read_requirement.
+bool decodeDataProcessingDependencyReadRequirementStreamFrame(const pcl_msg_t* msg,
+                                                              ObjectAquisitionRequirement* out);
+
+/// \brief Send one typed stream frame for data_processing_dependency.read_requirement.
+pcl_status_t sendDataProcessingDependencyReadRequirementStreamFrame(pcl_stream_context_t* stream_context,
+                                                                    const ObjectAquisitionRequirement& payload,
+                                                                    const char*        content_type = "application/json");
+
 /// \brief Invoke data_processing_dependency.read_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -241,6 +296,15 @@ pcl_status_t invokeDataProcessingDependencyReadRequirement(pcl_executor_t* execu
                                                            const Query&                 request,
                                                            const char*       content_type = "application/json",
                                                            const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Invoke data_processing_dependency.read_requirement as an asynchronous stream.
+pcl_status_t invokeDataProcessingDependencyReadRequirementStream(pcl_executor_t* executor,
+                                                                 const Query&                 request,
+                                                                 pcl_stream_msg_fn_t   callback,
+                                                                 void*                   user_data = nullptr,
+                                                                 pcl_stream_context_t** out_context = nullptr,
+                                                                 const pcl_endpoint_route_t* route = nullptr,
+                                                                 const char*       content_type = "application/json");
 
 /// \brief Decode a response from data_processing_dependency.update_requirement.
 bool decodeDataProcessingDependencyUpdateRequirementResponse(const pcl_msg_t* msg,
@@ -306,6 +370,23 @@ inline void dispatch(ServiceHandler& handler,
                      size_t*         response_size)
 {
     dispatch(handler, channel, request_buf, request_size, "application/json", response_buf, response_size);
+}
+
+/// \brief Dispatch a server-streaming service request.
+pcl_status_t dispatchStream(ServiceHandler& handler,
+                            ServiceChannel  channel,
+                            const void*     request_buf,
+                            size_t          request_size,
+                            const char*     content_type,
+                            pcl_stream_context_t* stream_context);
+
+inline pcl_status_t dispatchStream(ServiceHandler& handler,
+                                   ServiceChannel  channel,
+                                   const void*     request_buf,
+                                   size_t          request_size,
+                                   pcl_stream_context_t* stream_context)
+{
+    return dispatchStream(handler, channel, request_buf, request_size, "application/json", stream_context);
 }
 
 } // namespace pyramid::components::sensor_data_interpretation::services::consumed

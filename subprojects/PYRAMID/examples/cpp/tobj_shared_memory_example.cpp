@@ -138,7 +138,7 @@ bool runSharedMemoryExample(const char* content_type) {
   const bool final_ok =
       sequence_ok &&
       handler.createCount() == 1 &&
-      handler.readCount() == 1 &&
+      handler.streamCount() == 1 &&
       handler.deleteCount() == 1 &&
       handler.empty();
 

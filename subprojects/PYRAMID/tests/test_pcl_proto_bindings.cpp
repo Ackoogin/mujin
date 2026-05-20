@@ -659,6 +659,260 @@ TEST(ProtoBindingsConsumed, InvokeCreateRequirementUsesTypedFacade) {
     pcl_container_destroy(c);
 }
 
+TEST(ProtoBindingsProvided, InvokeReadRequirementStreamUsesTypedFacade) {
+    struct StreamHandler : public prov::ServiceHandler {
+        types::Query captured_query;
+        pcl_stream_context_t* stream_context = nullptr;
+        std::string content_type;
+        int stream_count = 0;
+
+        pcl_status_t streamObjectOfInterestReadRequirement(
+            const types::Query& request,
+            pcl_stream_context_t* context,
+            const char* request_content_type) override {
+            captured_query = request;
+            stream_context = context;
+            content_type = request_content_type ? request_content_type
+                                                : prov::kJsonContentType;
+            ++stream_count;
+            return PCL_STREAMING;
+        }
+    };
+
+    struct ServerCtx {
+        StreamHandler handler;
+    } server_ctx;
+
+    struct ClientCtx {
+        std::vector<types::Identifier> ids;
+        int frame_count = 0;
+        bool decoded = true;
+        bool ended = false;
+        pcl_status_t final_status = PCL_ERR_INVALID;
+    } client_ctx;
+
+    pcl_callbacks_t cbs{};
+    cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+        auto* ctx = static_cast<ServerCtx*>(ud);
+        auto* port = pcl_container_add_stream_service(
+            c,
+            prov::kSvcObjectOfInterestReadRequirement,
+            prov::kJsonContentType,
+            [](pcl_container_t*,
+               const pcl_msg_t* request,
+               pcl_stream_context_t* stream_context,
+               void* user_data) -> pcl_status_t {
+                auto* ctx = static_cast<ServerCtx*>(user_data);
+                return prov::dispatchStream(
+                    ctx->handler,
+                    prov::ServiceChannel::ObjectOfInterestReadRequirement,
+                    request ? request->data : nullptr,
+                    request ? request->size : 0u,
+                    request && request->type_name ? request->type_name
+                                                  : prov::kJsonContentType,
+                    stream_context);
+            },
+            ud);
+        return port ? PCL_OK : PCL_ERR_NOMEM;
+    };
+
+    pcl_executor_t* exec = pcl_executor_create();
+    ASSERT_NE(exec, nullptr);
+
+    pcl_container_t* c =
+        pcl_container_create("prov_invoke_read_requirement_stream",
+                             &cbs,
+                             &server_ctx);
+    ASSERT_NE(c, nullptr);
+    ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+    ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+    ASSERT_EQ(pcl_executor_add(exec, c), PCL_OK);
+
+    types::Query query;
+    query.id.push_back("stream-interest-001");
+
+    pcl_stream_context_t* client_stream = nullptr;
+    const pcl_status_t rc = prov::invokeObjectOfInterestReadRequirementStream(
+        exec,
+        query,
+        [](const pcl_msg_t* msg,
+           bool end,
+           pcl_status_t status,
+           void* user_data) {
+            auto* ctx = static_cast<ClientCtx*>(user_data);
+            if (end) {
+                ctx->ended = true;
+                ctx->final_status = status;
+                return;
+            }
+            types::ObjectInterestRequirement frame;
+            if (!prov::decodeObjectOfInterestReadRequirementStreamFrame(
+                    msg, &frame)) {
+                ctx->decoded = false;
+                return;
+            }
+            ctx->ids.push_back(frame.base.id);
+            ++ctx->frame_count;
+        },
+        &client_ctx,
+        &client_stream);
+
+    EXPECT_EQ(rc, PCL_OK);
+    ASSERT_NE(server_ctx.handler.stream_context, nullptr);
+    EXPECT_NE(client_stream, nullptr);
+    ASSERT_EQ(server_ctx.handler.captured_query.id.size(), 1u);
+    EXPECT_EQ(server_ctx.handler.captured_query.id.front(), "stream-interest-001");
+    EXPECT_EQ(server_ctx.handler.stream_count, 1);
+
+    types::ObjectInterestRequirement frame;
+    frame.base.id = "stream-interest-001";
+    frame.policy = types::DataPolicy::Obtain;
+    EXPECT_EQ(prov::sendObjectOfInterestReadRequirementStreamFrame(
+                  server_ctx.handler.stream_context,
+                  frame,
+                  server_ctx.handler.content_type.c_str()),
+              PCL_OK);
+    EXPECT_EQ(pcl_stream_end(server_ctx.handler.stream_context), PCL_OK);
+
+    EXPECT_TRUE(client_ctx.decoded);
+    EXPECT_TRUE(client_ctx.ended);
+    EXPECT_EQ(client_ctx.final_status, PCL_OK);
+    EXPECT_EQ(client_ctx.frame_count, 1);
+    ASSERT_EQ(client_ctx.ids.size(), 1u);
+    EXPECT_EQ(client_ctx.ids.front(), "stream-interest-001");
+
+    pcl_executor_destroy(exec);
+    pcl_container_destroy(c);
+}
+
+TEST(ProtoBindingsProvided, InvokeReadRequirementStreamFlatBuffersRoundTrip) {
+    struct StreamHandler : public prov::ServiceHandler {
+        types::Query captured_query;
+        pcl_stream_context_t* stream_context = nullptr;
+        std::string content_type;
+        int stream_count = 0;
+
+        pcl_status_t streamObjectOfInterestReadRequirement(
+            const types::Query& request,
+            pcl_stream_context_t* context,
+            const char* request_content_type) override {
+            captured_query = request;
+            stream_context = context;
+            content_type = request_content_type ? request_content_type
+                                                : prov::kFlatBuffersContentType;
+            ++stream_count;
+            return PCL_STREAMING;
+        }
+    };
+
+    struct ServerCtx {
+        StreamHandler handler;
+    } server_ctx;
+
+    struct ClientCtx {
+        std::vector<types::Identifier> ids;
+        int frame_count = 0;
+        bool decoded = true;
+        bool ended = false;
+        pcl_status_t final_status = PCL_ERR_INVALID;
+    } client_ctx;
+
+    pcl_callbacks_t cbs{};
+    cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+        auto* ctx = static_cast<ServerCtx*>(ud);
+        auto* port = pcl_container_add_stream_service(
+            c,
+            prov::kSvcObjectOfInterestReadRequirement,
+            prov::kFlatBuffersContentType,
+            [](pcl_container_t*,
+               const pcl_msg_t* request,
+               pcl_stream_context_t* stream_context,
+               void* user_data) -> pcl_status_t {
+                auto* ctx = static_cast<ServerCtx*>(user_data);
+                return prov::dispatchStream(
+                    ctx->handler,
+                    prov::ServiceChannel::ObjectOfInterestReadRequirement,
+                    request ? request->data : nullptr,
+                    request ? request->size : 0u,
+                    request && request->type_name ? request->type_name
+                                                  : prov::kFlatBuffersContentType,
+                    stream_context);
+            },
+            ud);
+        return port ? PCL_OK : PCL_ERR_NOMEM;
+    };
+
+    pcl_executor_t* exec = pcl_executor_create();
+    ASSERT_NE(exec, nullptr);
+
+    pcl_container_t* c =
+        pcl_container_create("prov_invoke_read_requirement_stream_fb",
+                             &cbs,
+                             &server_ctx);
+    ASSERT_NE(c, nullptr);
+    ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+    ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+    ASSERT_EQ(pcl_executor_add(exec, c), PCL_OK);
+
+    types::Query query;
+    query.id.push_back("stream-fb-001");
+
+    pcl_stream_context_t* client_stream = nullptr;
+    const pcl_status_t rc = prov::invokeObjectOfInterestReadRequirementStream(
+        exec,
+        query,
+        [](const pcl_msg_t* msg,
+           bool end,
+           pcl_status_t status,
+           void* user_data) {
+            auto* ctx = static_cast<ClientCtx*>(user_data);
+            if (end) {
+                ctx->ended = true;
+                ctx->final_status = status;
+                return;
+            }
+            types::ObjectInterestRequirement frame;
+            if (!prov::decodeObjectOfInterestReadRequirementStreamFrame(
+                    msg, &frame)) {
+                ctx->decoded = false;
+                return;
+            }
+            ctx->ids.push_back(frame.base.id);
+            ++ctx->frame_count;
+        },
+        &client_ctx,
+        &client_stream,
+        nullptr,
+        prov::kFlatBuffersContentType);
+
+    EXPECT_EQ(rc, PCL_OK);
+    ASSERT_NE(server_ctx.handler.stream_context, nullptr);
+    EXPECT_NE(client_stream, nullptr);
+    EXPECT_EQ(server_ctx.handler.stream_count, 1);
+    ASSERT_EQ(server_ctx.handler.captured_query.id.size(), 1u);
+    EXPECT_EQ(server_ctx.handler.captured_query.id.front(), "stream-fb-001");
+
+    types::ObjectInterestRequirement frame;
+    frame.base.id = "stream-fb-001";
+    frame.policy = types::DataPolicy::Obtain;
+    EXPECT_EQ(prov::sendObjectOfInterestReadRequirementStreamFrame(
+                  server_ctx.handler.stream_context,
+                  frame,
+                  server_ctx.handler.content_type.c_str()),
+              PCL_OK);
+    EXPECT_EQ(pcl_stream_end(server_ctx.handler.stream_context), PCL_OK);
+
+    EXPECT_TRUE(client_ctx.decoded);
+    EXPECT_TRUE(client_ctx.ended);
+    EXPECT_EQ(client_ctx.final_status, PCL_OK);
+    EXPECT_EQ(client_ctx.frame_count, 1);
+    ASSERT_EQ(client_ctx.ids.size(), 1u);
+    EXPECT_EQ(client_ctx.ids.front(), "stream-fb-001");
+
+    pcl_executor_destroy(exec);
+    pcl_container_destroy(c);
+}
+
 // ===========================================================================
 // publishObjectEvidence -- verify publish returns an error when not active
 // (port is closed when container is not ACTIVE)

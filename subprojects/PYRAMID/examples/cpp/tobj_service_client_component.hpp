@@ -32,17 +32,24 @@ private:
     std::atomic<bool> done{false};
     bool decoded = false;
     model::Identifier id;
-    std::vector<model::ObjectInterestRequirement> requirements;
     model::Ack ack{};
   };
 
+  struct StreamResponseState {
+    std::atomic<bool> ended{false};
+    std::vector<model::ObjectInterestRequirement> requirements;
+    bool decode_error = false;
+  };
+
   bool waitForResponse(pcl_executor_t* executor, ResponseState& state);
+  bool waitForStreamEnd(pcl_executor_t* executor, StreamResponseState& state);
+
   bool invokeCreate(pcl_executor_t* executor,
                     const model::ObjectInterestRequirement& request,
                     model::Identifier* out);
-  bool invokeRead(pcl_executor_t* executor,
-                  const model::Query& request,
-                  std::vector<model::ObjectInterestRequirement>* out);
+  bool invokeReadStream(pcl_executor_t* executor,
+                        const model::Query& request,
+                        std::vector<model::ObjectInterestRequirement>* out);
   bool invokeDelete(pcl_executor_t* executor,
                     const model::Identifier& request,
                     model::Ack* out);

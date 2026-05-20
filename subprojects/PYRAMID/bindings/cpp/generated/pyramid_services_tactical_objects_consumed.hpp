@@ -92,12 +92,30 @@ public:
     virtual std::vector<ObjectDetail>
     handleObjectEvidenceReadDetail(const Query& request);
 
+    /// \brief Begin an asynchronous stream for this RPC.
+    ///
+    /// Override this for true server streaming. Store stream_context,
+    /// return PCL_STREAMING, then emit frames with send*StreamFrame().
+    virtual pcl_status_t
+    streamObjectEvidenceReadDetail(const Query& request,
+                                   pcl_stream_context_t* stream_context,
+                                   const char* content_type);
+
     // Object_Solution_Evidence_Service
     virtual Identifier
     handleObjectSolutionEvidenceCreateRequirement(const ObjectEvidenceRequirement& request);
 
     virtual std::vector<ObjectEvidenceRequirement>
     handleObjectSolutionEvidenceReadRequirement(const Query& request);
+
+    /// \brief Begin an asynchronous stream for this RPC.
+    ///
+    /// Override this for true server streaming. Store stream_context,
+    /// return PCL_STREAMING, then emit frames with send*StreamFrame().
+    virtual pcl_status_t
+    streamObjectSolutionEvidenceReadRequirement(const Query& request,
+                                                pcl_stream_context_t* stream_context,
+                                                const char* content_type);
 
     virtual Ack
     handleObjectSolutionEvidenceUpdateRequirement(const ObjectEvidenceRequirement& request);
@@ -108,6 +126,15 @@ public:
     // Object_Source_Capability_Service
     virtual std::vector<Capability>
     handleObjectSourceCapabilityReadCapability(const Query& request);
+
+    /// \brief Begin an asynchronous stream for this RPC.
+    ///
+    /// Override this for true server streaming. Store stream_context,
+    /// return PCL_STREAMING, then emit frames with send*StreamFrame().
+    virtual pcl_status_t
+    streamObjectSourceCapabilityReadCapability(const Query& request,
+                                               pcl_stream_context_t* stream_context,
+                                               const char* content_type);
 };
 
 // ---------------------------------------------------------------------------
@@ -145,6 +172,20 @@ bool decodeObjectEvidence(const pcl_msg_t* msg,
 bool decodeObjectEvidenceReadDetailResponse(const pcl_msg_t* msg,
                                             std::vector<ObjectDetail>* out);
 
+/// \brief Encode one stream frame for object_evidence.read_detail.
+bool encodeObjectEvidenceReadDetailStreamFrame(const ObjectDetail& payload,
+                                               const char*        content_type,
+                                               std::string*       out);
+
+/// \brief Decode one stream frame from object_evidence.read_detail.
+bool decodeObjectEvidenceReadDetailStreamFrame(const pcl_msg_t* msg,
+                                               ObjectDetail* out);
+
+/// \brief Send one typed stream frame for object_evidence.read_detail.
+pcl_status_t sendObjectEvidenceReadDetailStreamFrame(pcl_stream_context_t* stream_context,
+                                                     const ObjectDetail& payload,
+                                                     const char*        content_type = "application/json");
+
 /// \brief Invoke object_evidence.read_detail (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -161,6 +202,15 @@ pcl_status_t invokeObjectEvidenceReadDetail(pcl_executor_t* executor,
                                             const Query&                 request,
                                             const char*       content_type = "application/json",
                                             const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Invoke object_evidence.read_detail as an asynchronous stream.
+pcl_status_t invokeObjectEvidenceReadDetailStream(pcl_executor_t* executor,
+                                                  const Query&                 request,
+                                                  pcl_stream_msg_fn_t   callback,
+                                                  void*                   user_data = nullptr,
+                                                  pcl_stream_context_t** out_context = nullptr,
+                                                  const pcl_endpoint_route_t* route = nullptr,
+                                                  const char*       content_type = "application/json");
 
 /// \brief Decode a response from object_solution_evidence.create_requirement.
 bool decodeObjectSolutionEvidenceCreateRequirementResponse(const pcl_msg_t* msg,
@@ -187,6 +237,20 @@ pcl_status_t invokeObjectSolutionEvidenceCreateRequirement(pcl_executor_t* execu
 bool decodeObjectSolutionEvidenceReadRequirementResponse(const pcl_msg_t* msg,
                                                          std::vector<ObjectEvidenceRequirement>* out);
 
+/// \brief Encode one stream frame for object_solution_evidence.read_requirement.
+bool encodeObjectSolutionEvidenceReadRequirementStreamFrame(const ObjectEvidenceRequirement& payload,
+                                                            const char*        content_type,
+                                                            std::string*       out);
+
+/// \brief Decode one stream frame from object_solution_evidence.read_requirement.
+bool decodeObjectSolutionEvidenceReadRequirementStreamFrame(const pcl_msg_t* msg,
+                                                            ObjectEvidenceRequirement* out);
+
+/// \brief Send one typed stream frame for object_solution_evidence.read_requirement.
+pcl_status_t sendObjectSolutionEvidenceReadRequirementStreamFrame(pcl_stream_context_t* stream_context,
+                                                                  const ObjectEvidenceRequirement& payload,
+                                                                  const char*        content_type = "application/json");
+
 /// \brief Invoke object_solution_evidence.read_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -203,6 +267,15 @@ pcl_status_t invokeObjectSolutionEvidenceReadRequirement(pcl_executor_t* executo
                                                          const Query&                 request,
                                                          const char*       content_type = "application/json",
                                                          const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Invoke object_solution_evidence.read_requirement as an asynchronous stream.
+pcl_status_t invokeObjectSolutionEvidenceReadRequirementStream(pcl_executor_t* executor,
+                                                               const Query&                 request,
+                                                               pcl_stream_msg_fn_t   callback,
+                                                               void*                   user_data = nullptr,
+                                                               pcl_stream_context_t** out_context = nullptr,
+                                                               const pcl_endpoint_route_t* route = nullptr,
+                                                               const char*       content_type = "application/json");
 
 /// \brief Decode a response from object_solution_evidence.update_requirement.
 bool decodeObjectSolutionEvidenceUpdateRequirementResponse(const pcl_msg_t* msg,
@@ -250,6 +323,20 @@ pcl_status_t invokeObjectSolutionEvidenceDeleteRequirement(pcl_executor_t* execu
 bool decodeObjectSourceCapabilityReadCapabilityResponse(const pcl_msg_t* msg,
                                                         std::vector<Capability>* out);
 
+/// \brief Encode one stream frame for object_source_capability.read_capability.
+bool encodeObjectSourceCapabilityReadCapabilityStreamFrame(const Capability& payload,
+                                                           const char*        content_type,
+                                                           std::string*       out);
+
+/// \brief Decode one stream frame from object_source_capability.read_capability.
+bool decodeObjectSourceCapabilityReadCapabilityStreamFrame(const pcl_msg_t* msg,
+                                                           Capability* out);
+
+/// \brief Send one typed stream frame for object_source_capability.read_capability.
+pcl_status_t sendObjectSourceCapabilityReadCapabilityStreamFrame(pcl_stream_context_t* stream_context,
+                                                                 const Capability& payload,
+                                                                 const char*        content_type = "application/json");
+
 /// \brief Invoke object_source_capability.read_capability (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -266,6 +353,15 @@ pcl_status_t invokeObjectSourceCapabilityReadCapability(pcl_executor_t* executor
                                                         const Query&                 request,
                                                         const char*       content_type = "application/json",
                                                         const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Invoke object_source_capability.read_capability as an asynchronous stream.
+pcl_status_t invokeObjectSourceCapabilityReadCapabilityStream(pcl_executor_t* executor,
+                                                              const Query&                 request,
+                                                              pcl_stream_msg_fn_t   callback,
+                                                              void*                   user_data = nullptr,
+                                                              pcl_stream_context_t** out_context = nullptr,
+                                                              const pcl_endpoint_route_t* route = nullptr,
+                                                              const char*       content_type = "application/json");
 
 // ---------------------------------------------------------------------------
 // Dispatch -- deserialises request, calls handler, serialises response.
@@ -289,6 +385,23 @@ inline void dispatch(ServiceHandler& handler,
                      size_t*         response_size)
 {
     dispatch(handler, channel, request_buf, request_size, "application/json", response_buf, response_size);
+}
+
+/// \brief Dispatch a server-streaming service request.
+pcl_status_t dispatchStream(ServiceHandler& handler,
+                            ServiceChannel  channel,
+                            const void*     request_buf,
+                            size_t          request_size,
+                            const char*     content_type,
+                            pcl_stream_context_t* stream_context);
+
+inline pcl_status_t dispatchStream(ServiceHandler& handler,
+                                   ServiceChannel  channel,
+                                   const void*     request_buf,
+                                   size_t          request_size,
+                                   pcl_stream_context_t* stream_context)
+{
+    return dispatchStream(handler, channel, request_buf, request_size, "application/json", stream_context);
 }
 
 } // namespace pyramid::components::tactical_objects::services::consumed

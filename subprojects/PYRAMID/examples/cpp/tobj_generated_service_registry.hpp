@@ -24,11 +24,16 @@ public:
                            svc::ServiceHandler& handler,
                            std::string content_type);
 
-  // Register one generated service operation as a PCL service port.
-  // The returned port is routed to the named remote peer.
+  // Register one generated unary service operation as a PCL service port.
   bool addRemote(const char* service_name,
                  svc::ServiceChannel channel,
                  const char* peer_id);
+
+  // Register one generated server-streaming service operation as a PCL stream
+  // service port. Use for RPCs whose proto definition returns (stream Xxx).
+  bool addRemoteStream(const char* service_name,
+                       svc::ServiceChannel channel,
+                       const char* peer_id);
 
 private:
   struct Binding {
@@ -39,11 +44,23 @@ private:
     std::string response_storage;
   };
 
+  struct StreamBinding {
+    svc::ServiceHandler* handler = nullptr;
+    svc::ServiceChannel channel =
+        svc::ServiceChannel::ObjectOfInterestCreateRequirement;
+    std::string content_type;
+  };
+
   static pcl_status_t dispatch(pcl_container_t* container,
                                const pcl_msg_t* request,
                                pcl_msg_t* response,
                                pcl_svc_context_t* context,
                                void* user_data);
+
+  static pcl_status_t dispatchStream(pcl_container_t* container,
+                                     const pcl_msg_t* request,
+                                     pcl_stream_context_t* stream_context,
+                                     void* user_data);
 
   pcl::Component& owner_;
   svc::ServiceHandler& handler_;
@@ -52,6 +69,7 @@ private:
   // std::list keeps Binding addresses stable after subsequent registrations;
   // PCL stores the Binding pointer as the service callback user_data.
   std::list<Binding> bindings_;
+  std::list<StreamBinding> stream_bindings_;
   std::vector<pcl::Port> ports_;
 };
 

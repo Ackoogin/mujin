@@ -83,11 +83,29 @@ public:
     virtual std::vector<Capability>
     handleInterpretationRequirementReadCapability(const Query& request);
 
+    /// \brief Begin an asynchronous stream for this RPC.
+    ///
+    /// Override this for true server streaming. Store stream_context,
+    /// return PCL_STREAMING, then emit frames with send*StreamFrame().
+    virtual pcl_status_t
+    streamInterpretationRequirementReadCapability(const Query& request,
+                                                  pcl_stream_context_t* stream_context,
+                                                  const char* content_type);
+
     virtual Identifier
     handleInterpretationRequirementCreateRequirement(const InterpretationRequirement& request);
 
     virtual std::vector<InterpretationRequirement>
     handleInterpretationRequirementReadRequirement(const Query& request);
+
+    /// \brief Begin an asynchronous stream for this RPC.
+    ///
+    /// Override this for true server streaming. Store stream_context,
+    /// return PCL_STREAMING, then emit frames with send*StreamFrame().
+    virtual pcl_status_t
+    streamInterpretationRequirementReadRequirement(const Query& request,
+                                                   pcl_stream_context_t* stream_context,
+                                                   const char* content_type);
 
     virtual Ack
     handleInterpretationRequirementUpdateRequirement(const InterpretationRequirement& request);
@@ -103,6 +121,20 @@ public:
 /// \brief Decode a response from interpretation_requirement.read_capability.
 bool decodeInterpretationRequirementReadCapabilityResponse(const pcl_msg_t* msg,
                                                            std::vector<Capability>* out);
+
+/// \brief Encode one stream frame for interpretation_requirement.read_capability.
+bool encodeInterpretationRequirementReadCapabilityStreamFrame(const Capability& payload,
+                                                              const char*        content_type,
+                                                              std::string*       out);
+
+/// \brief Decode one stream frame from interpretation_requirement.read_capability.
+bool decodeInterpretationRequirementReadCapabilityStreamFrame(const pcl_msg_t* msg,
+                                                              Capability* out);
+
+/// \brief Send one typed stream frame for interpretation_requirement.read_capability.
+pcl_status_t sendInterpretationRequirementReadCapabilityStreamFrame(pcl_stream_context_t* stream_context,
+                                                                    const Capability& payload,
+                                                                    const char*        content_type = "application/json");
 
 /// \brief Invoke interpretation_requirement.read_capability (typed, serialisation handled internally).
 ///
@@ -120,6 +152,15 @@ pcl_status_t invokeInterpretationRequirementReadCapability(pcl_executor_t* execu
                                                            const Query&                 request,
                                                            const char*       content_type = "application/json",
                                                            const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Invoke interpretation_requirement.read_capability as an asynchronous stream.
+pcl_status_t invokeInterpretationRequirementReadCapabilityStream(pcl_executor_t* executor,
+                                                                 const Query&                 request,
+                                                                 pcl_stream_msg_fn_t   callback,
+                                                                 void*                   user_data = nullptr,
+                                                                 pcl_stream_context_t** out_context = nullptr,
+                                                                 const pcl_endpoint_route_t* route = nullptr,
+                                                                 const char*       content_type = "application/json");
 
 /// \brief Decode a response from interpretation_requirement.create_requirement.
 bool decodeInterpretationRequirementCreateRequirementResponse(const pcl_msg_t* msg,
@@ -146,6 +187,20 @@ pcl_status_t invokeInterpretationRequirementCreateRequirement(pcl_executor_t* ex
 bool decodeInterpretationRequirementReadRequirementResponse(const pcl_msg_t* msg,
                                                             std::vector<InterpretationRequirement>* out);
 
+/// \brief Encode one stream frame for interpretation_requirement.read_requirement.
+bool encodeInterpretationRequirementReadRequirementStreamFrame(const InterpretationRequirement& payload,
+                                                               const char*        content_type,
+                                                               std::string*       out);
+
+/// \brief Decode one stream frame from interpretation_requirement.read_requirement.
+bool decodeInterpretationRequirementReadRequirementStreamFrame(const pcl_msg_t* msg,
+                                                               InterpretationRequirement* out);
+
+/// \brief Send one typed stream frame for interpretation_requirement.read_requirement.
+pcl_status_t sendInterpretationRequirementReadRequirementStreamFrame(pcl_stream_context_t* stream_context,
+                                                                     const InterpretationRequirement& payload,
+                                                                     const char*        content_type = "application/json");
+
 /// \brief Invoke interpretation_requirement.read_requirement (typed, serialisation handled internally).
 ///
 /// Uses the configured endpoint route, or the legacy
@@ -162,6 +217,15 @@ pcl_status_t invokeInterpretationRequirementReadRequirement(pcl_executor_t* exec
                                                             const Query&                 request,
                                                             const char*       content_type = "application/json",
                                                             const pcl_endpoint_route_t* route = nullptr);
+
+/// \brief Invoke interpretation_requirement.read_requirement as an asynchronous stream.
+pcl_status_t invokeInterpretationRequirementReadRequirementStream(pcl_executor_t* executor,
+                                                                  const Query&                 request,
+                                                                  pcl_stream_msg_fn_t   callback,
+                                                                  void*                   user_data = nullptr,
+                                                                  pcl_stream_context_t** out_context = nullptr,
+                                                                  const pcl_endpoint_route_t* route = nullptr,
+                                                                  const char*       content_type = "application/json");
 
 /// \brief Decode a response from interpretation_requirement.update_requirement.
 bool decodeInterpretationRequirementUpdateRequirementResponse(const pcl_msg_t* msg,
@@ -227,6 +291,23 @@ inline void dispatch(ServiceHandler& handler,
                      size_t*         response_size)
 {
     dispatch(handler, channel, request_buf, request_size, "application/json", response_buf, response_size);
+}
+
+/// \brief Dispatch a server-streaming service request.
+pcl_status_t dispatchStream(ServiceHandler& handler,
+                            ServiceChannel  channel,
+                            const void*     request_buf,
+                            size_t          request_size,
+                            const char*     content_type,
+                            pcl_stream_context_t* stream_context);
+
+inline pcl_status_t dispatchStream(ServiceHandler& handler,
+                                   ServiceChannel  channel,
+                                   const void*     request_buf,
+                                   size_t          request_size,
+                                   pcl_stream_context_t* stream_context)
+{
+    return dispatchStream(handler, channel, request_buf, request_size, "application/json", stream_context);
 }
 
 } // namespace pyramid::components::sensor_data_interpretation::services::provided

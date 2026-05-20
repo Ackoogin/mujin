@@ -40,12 +40,12 @@ bool ObjectInterestClientComponent::runCreateReadDelete(
     return false;
   }
 
-  // Read back only the requirement we created. This proves request/response
-  // typing works in both directions over the transport.
+  // Read back via server-streaming invoke. Frames arrive as a typed stream;
+  // the generated binding handles serialization on both sides.
   std::vector<model::ObjectInterestRequirement> read_back;
   model::Query query;
   query.id.push_back(created_id);
-  if (!invokeRead(executor, query, &read_back) ||
+  if (!invokeReadStream(executor, query, &read_back) ||
       read_back.size() != 1u ||
       read_back.front().base.id != created_id ||
       read_back.front().policy != model::DataPolicy::Obtain) {
@@ -66,6 +66,17 @@ bool ObjectInterestClientComponent::waitForResponse(pcl_executor_t* executor,
     std::this_thread::yield();
   }
   return state.done.load(std::memory_order_acquire) && state.decoded;
+}
+
+bool ObjectInterestClientComponent::waitForStreamEnd(pcl_executor_t* executor,
+                                                     StreamResponseState& state) {
+  const auto deadline = std::chrono::steady_clock::now() + kTimeout;
+  while (!state.ended.load(std::memory_order_acquire) &&
+         std::chrono::steady_clock::now() < deadline) {
+    pcl_executor_spin_once(executor, 10);
+    std::this_thread::yield();
+  }
+  return state.ended.load(std::memory_order_acquire) && !state.decode_error;
 }
 
 bool ObjectInterestClientComponent::invokeCreate(
@@ -95,30 +106,41 @@ bool ObjectInterestClientComponent::invokeCreate(
   return true;
 }
 
-bool ObjectInterestClientComponent::invokeRead(
+bool ObjectInterestClientComponent::invokeReadStream(
     pcl_executor_t* executor,
     const model::Query& request,
     std::vector<model::ObjectInterestRequirement>* out) {
-  ResponseState state;
-  const pcl_status_t rc = svc::invokeObjectOfInterestReadRequirement(
+  StreamResponseState state;
+  const pcl_status_t rc = svc::invokeObjectOfInterestReadRequirementStream(
       executor,
       request,
-      [](const pcl_msg_t* msg, void* user_data) {
-        auto* response = static_cast<ResponseState*>(user_data);
-        response->decoded =
-            svc::decodeObjectOfInterestReadRequirementResponse(
-                msg,
-                &response->requirements);
-        response->done.store(true, std::memory_order_release);
+      [](const pcl_msg_t* msg, bool end, pcl_status_t /*status*/,
+         void* user_data) {
+        auto* s = static_cast<StreamResponseState*>(user_data);
+        if (end) {
+          s->ended.store(true, std::memory_order_release);
+          return;
+        }
+        model::ObjectInterestRequirement frame;
+        if (!svc::decodeObjectOfInterestReadRequirementStreamFrame(msg, &frame)) {
+          s->decode_error = true;
+          return;
+        }
+        s->requirements.push_back(std::move(frame));
       },
       &state,
       nullptr,
+      nullptr,
       content_type_.c_str());
 
-  if (rc != PCL_OK || !waitForResponse(executor, state)) {
+  // Local invoke returns PCL_OK; remote (transport) invoke returns PCL_STREAMING.
+  if (rc != PCL_OK && rc != PCL_STREAMING) {
     return false;
   }
-  *out = state.requirements;
+  if (!waitForStreamEnd(executor, state)) {
+    return false;
+  }
+  *out = std::move(state.requirements);
   return true;
 }
 
