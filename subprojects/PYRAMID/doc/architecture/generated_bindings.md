@@ -9,6 +9,10 @@ For a shorter engineer-facing overview of how the generated binding layer plugs
 into PCL containers, executors, ports, and transport adapters, start with
 [pcl_pyramid_binding_generation_overview.md](pcl_pyramid_binding_generation_overview.md).
 
+For writing C++ components (`ProvidedHandler`, `ProvidedComponent`,
+`ConsumedComponent`, `pcl::SharedMemoryParticipant`, async-shaped client API),
+see [cpp_component_authoring.md](cpp_component_authoring.md).
+
 Use this page when you need to:
 
 - understand the binding architecture

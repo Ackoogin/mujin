@@ -32,6 +32,8 @@
 
 #define PCL_SHM_INTERNAL_TOPIC_SVC_REQ "__pcl_shm_svc_req"
 #define PCL_SHM_INTERNAL_REQ_TYPE "pcl_shared_memory_service_request"
+#define PCL_SHM_INTERNAL_TOPIC_STREAM_REQ "__pcl_shm_stream_req"
+#define PCL_SHM_INTERNAL_STREAM_REQ_TYPE "pcl_shared_memory_stream_request"
 
 #define PCL_SHM_MAGIC 0x50434C53u
 #define PCL_SHM_VERSION 2u
@@ -52,6 +54,9 @@ typedef enum {
   PCL_SHM_FRAME_PUBLISH = 1,
   PCL_SHM_FRAME_SVC_REQ = 2,
   PCL_SHM_FRAME_SVC_RESP = 3,
+  PCL_SHM_FRAME_STREAM_REQ = 4,
+  PCL_SHM_FRAME_STREAM_FRAME = 5,
+  PCL_SHM_FRAME_STREAM_END = 6,
 } pcl_shm_frame_kind_t;
 
 typedef struct {
@@ -90,10 +95,49 @@ typedef struct pcl_shm_pending_request_t {
   struct pcl_shm_pending_request_t* next;
 } pcl_shm_pending_request_t;
 
+typedef struct pcl_shm_pending_stream_t {
+  uint32_t                          seq_id;
+  pcl_stream_msg_fn_t               callback;
+  void*                             user_data;
+  struct pcl_shm_pending_stream_t*  next;
+} pcl_shm_pending_stream_t;
+
 typedef struct {
   uint32_t seq_id;
   char     requester_id[PCL_SHM_MAX_ID];
 } pcl_shm_response_target_t;
+
+/* Stream send target shared with pcl_stream_context_t::transport_ctx. The
+ * server-side stream handler uses this to address frames + end back to the
+ * original requester via the bus. The owning transport links each live
+ * target into active_stream_targets so destroy can abort lingering streams
+ * (handler returned PCL_STREAMING but never called pcl_stream_end). */
+typedef struct pcl_shm_stream_send_target_t {
+  pcl_shared_memory_transport_t*       owner;
+  uint32_t                             seq_id;
+  char                                 requester_id[PCL_SHM_MAX_ID];
+  pcl_stream_context_t*                stream_ctx;   /* for abort on destroy */
+  struct pcl_shm_stream_send_target_t* prev;
+  struct pcl_shm_stream_send_target_t* next;
+} pcl_shm_stream_send_target_t;
+
+/* Client-side stream handle returned via invoke_stream out param. */
+typedef struct {
+  pcl_shared_memory_transport_t* owner;
+  uint32_t                       seq_id;
+} pcl_shm_stream_client_handle_t;
+
+/* Trampoline plumbed through pcl_executor_post_response_msg to deliver a
+ * stream frame or end on the executor thread without needing a parallel
+ * queue in the executor core. */
+typedef struct {
+  pcl_stream_msg_fn_t            callback;
+  void*                          user_data;
+  pcl_shared_memory_transport_t* owner;
+  uint32_t                       seq_id;
+  int                            end;
+  pcl_status_t                   status;
+} pcl_shm_stream_trampoline_t;
 
 typedef struct pcl_shared_memory_transport_t {
   char                       bus_name[PCL_SHM_MAX_NAME];
@@ -108,6 +152,8 @@ typedef struct pcl_shared_memory_transport_t {
   uint32_t                   next_seq_id;
   volatile int               recv_stop;
   pcl_shm_pending_request_t* pending_head;
+  pcl_shm_pending_stream_t*  pending_stream_head;
+  pcl_shm_stream_send_target_t* active_stream_targets;
 #ifdef _WIN32
   HANDLE                     mapping_handle;
   HANDLE                     lock_handle;
@@ -484,6 +530,40 @@ static pcl_port_t* pcl_shm_find_remote_service(pcl_executor_t* e,
   return NULL;
 }
 
+static pcl_port_t* pcl_shm_find_remote_stream_service(pcl_executor_t* e,
+                                                      const char*     name,
+                                                      const char*     source_peer_id) {
+  uint32_t ci;
+  uint32_t pi;
+
+  if (!e || !name || !source_peer_id) return NULL;
+
+  for (ci = 0; ci < e->container_count; ++ci) {
+    pcl_container_t* c = e->containers[ci];
+    for (pi = 0; pi < c->port_count; ++pi) {
+      pcl_port_t* port = &c->ports[pi];
+      uint32_t route_mode;
+
+      if (port->type != PCL_PORT_STREAM_SERVICE ||
+          strcmp(port->name, name) != 0 ||
+          port->stream_handler == NULL) {
+        continue;
+      }
+
+      route_mode = pcl_shm_port_route_mode(e, port);
+      if (!pcl_shm_route_accepts(route_mode, PCL_ROUTE_REMOTE)) {
+        continue;
+      }
+      if (!pcl_shm_peer_is_allowed(e, port, source_peer_id)) {
+        continue;
+      }
+      return port;
+    }
+  }
+
+  return NULL;
+}
+
 static int pcl_shm_service_list_contains(char services[PCL_SHM_MAX_SERVICES][PCL_SHM_MAX_NAME],
                                          uint32_t count,
                                          const char* name) {
@@ -509,8 +589,12 @@ static void pcl_shm_collect_local_services(
     for (pi = 0; pi < c->port_count; ++pi) {
       pcl_port_t* port = &c->ports[pi];
       uint32_t route_mode;
+      int is_unary;
+      int is_stream;
 
-      if (port->type != PCL_PORT_SERVICE || port->svc_handler == NULL) {
+      is_unary  = (port->type == PCL_PORT_SERVICE        && port->svc_handler    != NULL);
+      is_stream = (port->type == PCL_PORT_STREAM_SERVICE && port->stream_handler != NULL);
+      if (!is_unary && !is_stream) {
         continue;
       }
 
@@ -596,6 +680,155 @@ static void pcl_shm_pending_clear(pcl_shared_memory_transport_t* ctx) {
     free(node);
     node = next;
   }
+}
+
+static pcl_status_t pcl_shm_pending_stream_lookup(
+    pcl_shared_memory_transport_t* ctx,
+    uint32_t                       seq_id,
+    pcl_stream_msg_fn_t*           callback,
+    void**                         user_data) {
+  pcl_shm_pending_stream_t* node;
+
+  if (!ctx) return PCL_ERR_INVALID;
+  pcl_shm_pending_lock_acquire(ctx);
+  for (node = ctx->pending_stream_head; node; node = node->next) {
+    if (node->seq_id == seq_id) {
+      if (callback)  *callback  = node->callback;
+      if (user_data) *user_data = node->user_data;
+      pcl_shm_pending_lock_release(ctx);
+      return PCL_OK;
+    }
+  }
+  pcl_shm_pending_lock_release(ctx);
+  return PCL_ERR_NOT_FOUND;
+}
+
+static pcl_status_t pcl_shm_pending_stream_remove(
+    pcl_shared_memory_transport_t* ctx,
+    uint32_t                       seq_id,
+    pcl_stream_msg_fn_t*           callback,
+    void**                         user_data) {
+  pcl_shm_pending_stream_t** pp;
+
+  if (!ctx) return PCL_ERR_INVALID;
+  pcl_shm_pending_lock_acquire(ctx);
+  for (pp = &ctx->pending_stream_head; *pp; pp = &(*pp)->next) {
+    if ((*pp)->seq_id == seq_id) {
+      pcl_shm_pending_stream_t* node = *pp;
+      *pp = node->next;
+      if (callback)  *callback  = node->callback;
+      if (user_data) *user_data = node->user_data;
+      free(node);
+      pcl_shm_pending_lock_release(ctx);
+      return PCL_OK;
+    }
+  }
+  pcl_shm_pending_lock_release(ctx);
+  return PCL_ERR_NOT_FOUND;
+}
+
+/* Walks the pending-stream list, detaches each entry, and fires its callback
+ * with end=true status=PCL_ERR_CANCELLED so generated holders (futures,
+ * accumulators, push-mode state) are released even if the peer never sent
+ * STREAM_END. Called from destroy after the recv thread has stopped. */
+static void pcl_shm_pending_stream_clear(pcl_shared_memory_transport_t* ctx) {
+  pcl_shm_pending_stream_t* node;
+  if (!ctx) return;
+  pcl_shm_pending_lock_acquire(ctx);
+  node = ctx->pending_stream_head;
+  ctx->pending_stream_head = NULL;
+  pcl_shm_pending_lock_release(ctx);
+  while (node) {
+    pcl_shm_pending_stream_t* next = node->next;
+    if (node->callback) {
+      pcl_msg_t empty = {0};
+      node->callback(&empty, true, PCL_ERR_CANCELLED, node->user_data);
+    }
+    free(node);
+    node = next;
+  }
+}
+
+/* Forward decl -- defined alongside the other stream transport callbacks. */
+static pcl_status_t pcl_shm_stream_send_frame(
+    pcl_shared_memory_transport_t*       ctx,
+    const pcl_shm_stream_send_target_t*  target,
+    pcl_shm_frame_kind_t                 kind,
+    const pcl_msg_t*                     msg,
+    pcl_status_t                         end_status);
+
+static void pcl_shm_active_target_register(pcl_shared_memory_transport_t* ctx,
+                                            pcl_shm_stream_send_target_t*  target) {
+  if (!ctx || !target) return;
+  pcl_shm_pending_lock_acquire(ctx);
+  target->prev = NULL;
+  target->next = ctx->active_stream_targets;
+  if (ctx->active_stream_targets) ctx->active_stream_targets->prev = target;
+  ctx->active_stream_targets = target;
+  pcl_shm_pending_lock_release(ctx);
+}
+
+static void pcl_shm_active_target_unlink(pcl_shared_memory_transport_t* ctx,
+                                         pcl_shm_stream_send_target_t*  target) {
+  if (!ctx || !target) return;
+  pcl_shm_pending_lock_acquire(ctx);
+  if (target->prev) target->prev->next = target->next;
+  if (target->next) target->next->prev = target->prev;
+  if (ctx->active_stream_targets == target) ctx->active_stream_targets = target->next;
+  target->prev = NULL;
+  target->next = NULL;
+  pcl_shm_pending_lock_release(ctx);
+}
+
+/* Abort every server-side stream the gateway opened but the handler never
+ * closed. Called from destroy before the executor and gateway are torn down. */
+static void pcl_shm_active_streams_abort(pcl_shared_memory_transport_t* ctx) {
+  pcl_shm_stream_send_target_t* node;
+  if (!ctx) return;
+  pcl_shm_pending_lock_acquire(ctx);
+  node = ctx->active_stream_targets;
+  ctx->active_stream_targets = NULL;
+  pcl_shm_pending_lock_release(ctx);
+  while (node) {
+    pcl_shm_stream_send_target_t* next = node->next;
+    /* Tell the peer first while the bus is still mapped. */
+    {
+      uint8_t status_byte = (uint8_t)(PCL_ERR_CANCELLED & 0xFFu);
+      pcl_msg_t end_msg;
+      memset(&end_msg, 0, sizeof(end_msg));
+      end_msg.data = &status_byte;
+      end_msg.size = 1u;
+      (void)pcl_shm_stream_send_frame(ctx, node,
+                                      PCL_SHM_FRAME_STREAM_END, &end_msg,
+                                      PCL_ERR_CANCELLED);
+    }
+    /* Mark the executor-side stream context as ended so any subsequent
+     * pcl_stream_{send,end,abort} from the (possibly still-running) handler
+     * becomes a safe no-op, and disconnect its transport reference to avoid
+     * a dangle into freed transport state. The container framework still
+     * owns the stream_ctx allocation. */
+    if (node->stream_ctx) {
+      node->stream_ctx->ended         = 1;
+      node->stream_ctx->transport     = NULL;
+      node->stream_ctx->transport_ctx = NULL;
+    }
+    free(node);
+    node = next;
+  }
+}
+
+/* Unpacks a pcl_shm_stream_trampoline_t queued via the executor's response
+ * queue and dispatches it as a typed stream callback on the executor thread. */
+static void pcl_shm_stream_trampoline_cb(const pcl_msg_t* msg, void* user_data) {
+  pcl_shm_stream_trampoline_t* tr =
+      (pcl_shm_stream_trampoline_t*)user_data;
+  pcl_msg_t empty = {0};
+  const pcl_msg_t* delivered = msg ? msg : &empty;
+  if (!tr) return;
+  if (tr->callback) {
+    tr->callback(delivered, tr->end != 0, tr->status, tr->user_data);
+  }
+  free(tr);
 }
 
 static pcl_status_t pcl_shm_enqueue_frame_locked(
@@ -825,6 +1058,157 @@ static pcl_status_t pcl_shm_invoke_async(void*            adapter_ctx,
   return rc;
 }
 
+static pcl_status_t pcl_shm_invoke_stream(void*               adapter_ctx,
+                                          const char*         service_name,
+                                          const pcl_msg_t*    request,
+                                          pcl_stream_msg_fn_t callback,
+                                          void*               user_data,
+                                          void**              stream_handle) {
+  pcl_shared_memory_transport_t* ctx =
+      (pcl_shared_memory_transport_t*)adapter_ctx;
+  pcl_shm_pending_stream_t* pending;
+  pcl_shm_stream_client_handle_t* handle = NULL;
+  uint32_t seq_id;
+  uint32_t provider_slot = 0u;
+  uint32_t attempts;
+  int found;
+  pcl_status_t rc;
+
+  if (!ctx || !service_name || !request || !callback) return PCL_ERR_INVALID;
+  if (request->size > 0u && !request->data) return PCL_ERR_INVALID;
+  if (request->size > PCL_SHM_MAX_PAYLOAD) return PCL_ERR_NOMEM;
+
+  pending = (pcl_shm_pending_stream_t*)calloc(1, sizeof(*pending));
+  if (!pending) return PCL_ERR_NOMEM;
+
+  pcl_shm_pending_lock_acquire(ctx);
+  seq_id = ++ctx->next_seq_id;
+  if (seq_id == 0u) seq_id = ++ctx->next_seq_id;
+  pending->seq_id   = seq_id;
+  pending->callback = callback;
+  pending->user_data = user_data;
+  pending->next     = ctx->pending_stream_head;
+  ctx->pending_stream_head = pending;
+  pcl_shm_pending_lock_release(ctx);
+
+  found = 0;
+  for (attempts = 0u; attempts < PCL_SHM_DISCOVERY_RETRIES; ++attempts) {
+    if (pcl_shm_bus_lock(ctx) != PCL_OK) break;
+    found = pcl_shm_find_provider_slot_locked(ctx, service_name, &provider_slot);
+    pcl_shm_bus_unlock(ctx);
+    if (found != 0) break;
+    pcl_shm_sleep_ms(PCL_SHM_POLL_MS);
+  }
+
+  if (found == 0) {
+    pcl_shm_pending_stream_remove(ctx, seq_id, NULL, NULL);
+    return PCL_ERR_NOT_FOUND;
+  }
+  if (found < 0) {
+    pcl_shm_pending_stream_remove(ctx, seq_id, NULL, NULL);
+    return PCL_ERR_INVALID;
+  }
+
+  if (pcl_shm_bus_lock(ctx) != PCL_OK) {
+    pcl_shm_pending_stream_remove(ctx, seq_id, NULL, NULL);
+    return PCL_ERR_STATE;
+  }
+  rc = pcl_shm_enqueue_frame_locked(ctx,
+                                    provider_slot,
+                                    PCL_SHM_FRAME_STREAM_REQ,
+                                    ctx->participant_id,
+                                    service_name,
+                                    request->type_name,
+                                    request->data,
+                                    request->size,
+                                    seq_id);
+  pcl_shm_bus_unlock(ctx);
+
+  if (rc != PCL_OK) {
+    pcl_shm_pending_stream_remove(ctx, seq_id, NULL, NULL);
+    return rc;
+  }
+
+  if (stream_handle) {
+    handle = (pcl_shm_stream_client_handle_t*)calloc(1, sizeof(*handle));
+    if (handle) {
+      handle->owner  = ctx;
+      handle->seq_id = seq_id;
+    }
+    *stream_handle = handle;
+  }
+  return PCL_STREAMING;
+}
+
+static pcl_status_t pcl_shm_stream_send_frame(
+    pcl_shared_memory_transport_t* ctx,
+    const pcl_shm_stream_send_target_t* target,
+    pcl_shm_frame_kind_t                kind,
+    const pcl_msg_t*                    msg,
+    pcl_status_t                        end_status) {
+  uint32_t i;
+  pcl_status_t rc = PCL_ERR_NOT_FOUND;
+  const void* data = (msg && msg->size > 0u) ? msg->data : NULL;
+  uint32_t    size = (msg && msg->size > 0u) ? msg->size : 0u;
+  const char* type_name = (msg && msg->type_name) ? msg->type_name : "";
+  uint8_t status_byte[1];
+
+  if (!ctx || !target) return PCL_ERR_INVALID;
+
+  /* STREAM_END carries status in its single payload byte (overrides msg). */
+  if (kind == PCL_SHM_FRAME_STREAM_END) {
+    status_byte[0] = (uint8_t)(end_status & 0xFFu);
+    data = status_byte;
+    size = 1u;
+    type_name = "";
+  }
+
+  if (pcl_shm_bus_lock(ctx) != PCL_OK) return PCL_ERR_STATE;
+  for (i = 0; i < PCL_SHM_MAX_PARTICIPANTS; ++i) {
+    pcl_shm_slot_t* slot = &ctx->region->slots[i];
+    if (!slot->in_use) continue;
+    if (strcmp(slot->participant_id, target->requester_id) == 0) {
+      rc = pcl_shm_enqueue_frame_locked(ctx, i, kind,
+                                        ctx->participant_id, "",
+                                        type_name, data, size,
+                                        target->seq_id);
+      break;
+    }
+  }
+  pcl_shm_bus_unlock(ctx);
+  return rc;
+}
+
+static pcl_status_t pcl_shm_stream_send(void*            adapter_ctx,
+                                        void*            stream_handle,
+                                        const pcl_msg_t* msg) {
+  pcl_shared_memory_transport_t* ctx =
+      (pcl_shared_memory_transport_t*)adapter_ctx;
+  pcl_shm_stream_send_target_t* target =
+      (pcl_shm_stream_send_target_t*)stream_handle;
+  if (!ctx || !target || !msg) return PCL_ERR_INVALID;
+  return pcl_shm_stream_send_frame(ctx, target,
+                                   PCL_SHM_FRAME_STREAM_FRAME, msg,
+                                   PCL_OK);
+}
+
+static pcl_status_t pcl_shm_stream_end(void*        adapter_ctx,
+                                       void*        stream_handle,
+                                       pcl_status_t status) {
+  pcl_shared_memory_transport_t* ctx =
+      (pcl_shared_memory_transport_t*)adapter_ctx;
+  pcl_shm_stream_send_target_t* target =
+      (pcl_shm_stream_send_target_t*)stream_handle;
+  pcl_status_t rc;
+  if (!ctx || !target) return PCL_ERR_INVALID;
+  pcl_shm_active_target_unlink(ctx, target);
+  rc = pcl_shm_stream_send_frame(ctx, target,
+                                 PCL_SHM_FRAME_STREAM_END, NULL,
+                                 status);
+  free(target);
+  return rc;
+}
+
 static void pcl_shm_shutdown(void* adapter_ctx) {
   (void)adapter_ctx;
 }
@@ -954,12 +1338,149 @@ static void pcl_shm_gateway_sub_cb(pcl_container_t* c,
   free(service_name);
 }
 
+static void pcl_shm_gateway_stream_sub_cb(pcl_container_t* c,
+                                          const pcl_msg_t* msg,
+                                          void*            user_data) {
+  pcl_shared_memory_transport_t* ctx =
+      (pcl_shared_memory_transport_t*)user_data;
+  const uint8_t* end;
+  const uint8_t* p;
+  uint32_t seq_id;
+  uint16_t source_len;
+  uint16_t service_len;
+  uint16_t type_len;
+  uint32_t req_len;
+  char source_id[PCL_SHM_MAX_ID];
+  char* service_name = NULL;
+  char* request_type = NULL;
+  pcl_port_t* stream_port;
+  pcl_stream_context_t* stream_ctx = NULL;
+  pcl_shm_stream_send_target_t* target = NULL;
+  pcl_msg_t request;
+  pcl_status_t rc;
+
+  (void)c;
+  if (!ctx || !msg || !msg->data || msg->size < 14u) return;
+
+  p = (const uint8_t*)msg->data;
+  end = p + msg->size;
+  seq_id = pcl_shm_read_u32_be(p);      p += 4u;
+  if ((size_t)(end - p) < 2u) return;
+  source_len = pcl_shm_read_u16_be(p);  p += 2u;
+  if (source_len == 0u || source_len >= sizeof(source_id)) return;
+  if ((size_t)(end - p) < source_len + 2u) return;
+  memcpy(source_id, p, source_len);
+  source_id[source_len] = '\0';         p += source_len;
+
+  service_len = pcl_shm_read_u16_be(p); p += 2u;
+  if ((size_t)(end - p) < service_len + 2u) return;
+  service_name = (char*)malloc((size_t)service_len + 1u);
+  if (!service_name) return;
+  memcpy(service_name, p, service_len);
+  service_name[service_len] = '\0';     p += service_len;
+
+  type_len = pcl_shm_read_u16_be(p);    p += 2u;
+  if ((size_t)(end - p) < type_len + 4u) {
+    free(service_name);
+    return;
+  }
+  if (type_len > 0u) {
+    request_type = (char*)malloc((size_t)type_len + 1u);
+    if (!request_type) {
+      free(service_name);
+      return;
+    }
+    memcpy(request_type, p, type_len);
+    request_type[type_len] = '\0';
+  }
+  p += type_len;
+
+  req_len = pcl_shm_read_u32_be(p);     p += 4u;
+  if ((size_t)(end - p) < req_len) {
+    free(request_type);
+    free(service_name);
+    return;
+  }
+
+  stream_port = pcl_shm_find_remote_stream_service(ctx->executor,
+                                                   service_name,
+                                                   source_id);
+  if (!stream_port) {
+    /* Best-effort: tell the client the stream ended with NOT_FOUND. */
+    pcl_shm_stream_send_target_t end_target;
+    end_target.owner  = ctx;
+    end_target.seq_id = seq_id;
+    snprintf(end_target.requester_id, sizeof(end_target.requester_id), "%s", source_id);
+    pcl_shm_stream_send_frame(ctx, &end_target,
+                              PCL_SHM_FRAME_STREAM_END, NULL,
+                              PCL_ERR_NOT_FOUND);
+    free(request_type);
+    free(service_name);
+    return;
+  }
+
+  target = (pcl_shm_stream_send_target_t*)calloc(1, sizeof(*target));
+  stream_ctx = (pcl_stream_context_t*)calloc(1, sizeof(*stream_ctx));
+  if (!target || !stream_ctx) {
+    free(target);
+    free(stream_ctx);
+    free(request_type);
+    free(service_name);
+    return;
+  }
+  target->owner      = ctx;
+  target->seq_id     = seq_id;
+  target->stream_ctx = stream_ctx;
+  snprintf(target->requester_id, sizeof(target->requester_id), "%s", source_id);
+
+  stream_ctx->executor      = ctx->executor;
+  stream_ctx->transport     = &ctx->transport;
+  stream_ctx->transport_ctx = target;
+
+  /* Register before invoking the handler so destroy can abort it even if
+   * the handler returns PCL_STREAMING and then loses the context. */
+  pcl_shm_active_target_register(ctx, target);
+
+  memset(&request, 0, sizeof(request));
+  request.data      = (req_len > 0u) ? p : NULL;
+  request.size      = req_len;
+  request.type_name = request_type;
+
+  rc = stream_port->stream_handler(stream_port->owner, &request, stream_ctx,
+                                   stream_port->stream_user_data);
+
+  if (rc != PCL_STREAMING) {
+    /* Handler refused -- close the stream immediately with the returned
+     * status and free the resources the handler did not retain. */
+    pcl_shm_active_target_unlink(ctx, target);
+    pcl_shm_stream_send_frame(ctx, target,
+                              PCL_SHM_FRAME_STREAM_END, NULL,
+                              rc == PCL_OK ? PCL_OK : rc);
+    free(target);
+    free(stream_ctx);
+  }
+
+  free(request_type);
+  free(service_name);
+}
+
 static pcl_status_t pcl_shm_gateway_on_configure(pcl_container_t* c, void* ud) {
   pcl_port_t* port;
+  pcl_status_t rc;
+
   port = pcl_container_add_subscriber(c,
                                       PCL_SHM_INTERNAL_TOPIC_SVC_REQ,
                                       PCL_SHM_INTERNAL_REQ_TYPE,
                                       pcl_shm_gateway_sub_cb,
+                                      ud);
+  if (!port) return PCL_ERR_NOMEM;
+  rc = pcl_port_set_route(port, PCL_ROUTE_REMOTE, NULL, 0);
+  if (rc != PCL_OK) return rc;
+
+  port = pcl_container_add_subscriber(c,
+                                      PCL_SHM_INTERNAL_TOPIC_STREAM_REQ,
+                                      PCL_SHM_INTERNAL_STREAM_REQ_TYPE,
+                                      pcl_shm_gateway_stream_sub_cb,
                                       ud);
   if (!port) return PCL_ERR_NOMEM;
   return pcl_port_set_route(port, PCL_ROUTE_REMOTE, NULL, 0);
@@ -1056,6 +1577,111 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
     response.size = frame->data_size;
     response.type_name = frame->type_name[0] ? frame->type_name : NULL;
     return pcl_executor_post_response_msg(ctx->executor, callback, user_data, &response);
+  }
+
+  if (frame->kind == PCL_SHM_FRAME_STREAM_REQ) {
+    /* Same wire layout as SVC_REQ; reroute to the stream gateway topic. */
+    size_t raw_source_len = pcl_shm_strnlen(frame->source_id,
+                                            sizeof(frame->source_id));
+    size_t raw_service_len = pcl_shm_strnlen(frame->name,
+                                             sizeof(frame->name));
+    size_t raw_type_len = pcl_shm_strnlen(frame->type_name,
+                                          sizeof(frame->type_name));
+    uint16_t source_len;
+    uint16_t service_len;
+    uint16_t type_len;
+    uint32_t payload_size;
+    uint8_t* payload;
+    size_t off = 0u;
+    pcl_msg_t msg = {0};
+    pcl_status_t rc;
+
+    if (raw_source_len == sizeof(frame->source_id) ||
+        raw_service_len == sizeof(frame->name) ||
+        raw_type_len == sizeof(frame->type_name)) {
+      return PCL_ERR_INVALID;
+    }
+    source_len = (uint16_t)raw_source_len;
+    service_len = (uint16_t)raw_service_len;
+    type_len = (uint16_t)raw_type_len;
+    payload_size = 4u + 2u + source_len + 2u + service_len +
+                   2u + type_len + 4u + frame->data_size;
+    payload = (uint8_t*)malloc(payload_size);
+    if (!payload) return PCL_ERR_NOMEM;
+    pcl_shm_write_u32_be(payload + off, frame->seq_id);      off += 4u;
+    pcl_shm_write_u16_be(payload + off, source_len);         off += 2u;
+    memcpy(payload + off, frame->source_id, source_len);     off += source_len;
+    pcl_shm_write_u16_be(payload + off, service_len);        off += 2u;
+    memcpy(payload + off, frame->name, service_len);         off += service_len;
+    pcl_shm_write_u16_be(payload + off, type_len);           off += 2u;
+    if (type_len > 0u) memcpy(payload + off, frame->type_name, type_len);
+    off += type_len;
+    pcl_shm_write_u32_be(payload + off, frame->data_size);   off += 4u;
+    if (frame->data_size > 0u) memcpy(payload + off, frame->data, frame->data_size);
+
+    msg.data = payload;
+    msg.size = payload_size;
+    msg.type_name = PCL_SHM_INTERNAL_STREAM_REQ_TYPE;
+    rc = pcl_executor_post_remote_incoming(ctx->executor,
+                                           frame->source_id,
+                                           PCL_SHM_INTERNAL_TOPIC_STREAM_REQ,
+                                           &msg);
+    free(payload);
+    return rc;
+  }
+
+  if (frame->kind == PCL_SHM_FRAME_STREAM_FRAME) {
+    pcl_stream_msg_fn_t callback = NULL;
+    void* user_data = NULL;
+    pcl_msg_t response = {0};
+    pcl_shm_stream_trampoline_t* tr;
+    size_t type_len = pcl_shm_strnlen(frame->type_name,
+                                      sizeof(frame->type_name));
+    if (type_len == sizeof(frame->type_name)) return PCL_ERR_INVALID;
+    if (pcl_shm_pending_stream_lookup(ctx, frame->seq_id,
+                                      &callback, &user_data) != PCL_OK) {
+      return PCL_ERR_NOT_FOUND;
+    }
+    tr = (pcl_shm_stream_trampoline_t*)calloc(1, sizeof(*tr));
+    if (!tr) return PCL_ERR_NOMEM;
+    tr->callback = callback;
+    tr->user_data = user_data;
+    tr->owner = ctx;
+    tr->seq_id = frame->seq_id;
+    tr->end = 0;
+    tr->status = PCL_OK;
+    response.data = (frame->data_size > 0u) ? frame->data : NULL;
+    response.size = frame->data_size;
+    response.type_name = frame->type_name[0] ? frame->type_name : NULL;
+    return pcl_executor_post_response_msg(ctx->executor,
+                                          pcl_shm_stream_trampoline_cb,
+                                          tr, &response);
+  }
+
+  if (frame->kind == PCL_SHM_FRAME_STREAM_END) {
+    pcl_stream_msg_fn_t callback = NULL;
+    void* user_data = NULL;
+    pcl_msg_t empty = {0};
+    pcl_shm_stream_trampoline_t* tr;
+    pcl_status_t end_status = PCL_OK;
+    if (frame->data_size >= 1u) {
+      end_status = (pcl_status_t)(int8_t)frame->data[0];
+    }
+    if (pcl_shm_pending_stream_remove(ctx, frame->seq_id,
+                                      &callback, &user_data) != PCL_OK) {
+      return PCL_ERR_NOT_FOUND;
+    }
+    tr = (pcl_shm_stream_trampoline_t*)calloc(1, sizeof(*tr));
+    if (!tr) return PCL_ERR_NOMEM;
+    tr->callback = callback;
+    tr->user_data = user_data;
+    tr->owner = ctx;
+    tr->seq_id = frame->seq_id;
+    tr->end = 1;
+    tr->status = end_status;
+    return pcl_executor_post_response_msg(ctx->executor,
+                                          pcl_shm_stream_trampoline_cb,
+                                          tr, &empty);
   }
 
   return PCL_ERR_INVALID;
@@ -1191,6 +1817,9 @@ pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
   ctx->transport.subscribe = pcl_shm_subscribe;
   ctx->transport.invoke_async = pcl_shm_invoke_async;
   ctx->transport.respond = pcl_shm_respond;
+  ctx->transport.invoke_stream = pcl_shm_invoke_stream;
+  ctx->transport.stream_send = pcl_shm_stream_send;
+  ctx->transport.stream_end = pcl_shm_stream_end;
   ctx->transport.shutdown = pcl_shm_shutdown;
   ctx->transport.adapter_ctx = ctx;
 
@@ -1279,7 +1908,9 @@ void pcl_shared_memory_transport_destroy(pcl_shared_memory_transport_t* ctx) {
     pcl_shm_bus_unlock(ctx);
   }
 
+  pcl_shm_active_streams_abort(ctx);
   pcl_shm_pending_clear(ctx);
+  pcl_shm_pending_stream_clear(ctx);
   pcl_shm_platform_close(ctx, unlink_objects);
   pcl_shm_pending_lock_destroy(ctx);
   free(ctx);

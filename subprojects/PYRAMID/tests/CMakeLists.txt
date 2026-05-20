@@ -218,32 +218,37 @@ if(PYRAMID_ENABLE_PROTOBUF)
 endif()
 
 if(PYRAMID_ENABLE_FLATBUFFERS)
-    add_executable(tobj_service_binding_example
-        ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_service_binding_example.cpp
-        ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_generated_service_registry.cpp
-        ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_service_binding_handler.cpp
-        ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_service_client_component.cpp
-        ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_service_provider_component.cpp
+    # Showcase for the component-shaped C++ facade emitted by the binding
+    # generator. Split into two user files to make the separation explicit:
+    #   * tobj_interest_store.{hpp,cpp} -- typed business logic (only thing the
+    #     user truly writes).
+    #   * tobj_shared_memory_example.cpp -- bus bring-up, component wiring,
+    #     demonstration sequence. No PCL types in either.
+    # Everything else (registration, dispatch, stream-end deferral, response
+    # buffers, async client trampolines, transport bring-up) lives in generated
+    # code or in PCL helpers.
+    add_executable(tobj_shared_memory_example
+        ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_interest_store.cpp
         ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_shared_memory_example.cpp
         ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
     )
-    add_dependencies(tobj_service_binding_example pyramid_cpp_bindings_codegen)
-    target_link_libraries(tobj_service_binding_example PRIVATE
+    add_dependencies(tobj_shared_memory_example pyramid_cpp_bindings_codegen)
+    target_link_libraries(tobj_shared_memory_example PRIVATE
         pcl_core
         pcl_transport_shared_memory
         pyramid_generated_codecs
         pyramid_flatbuffers_support
     )
-    target_include_directories(tobj_service_binding_example PRIVATE
+    target_include_directories(tobj_shared_memory_example PRIVATE
         ${PCL_ROOT_DIR}/include
         ${PROTO_BINDINGS_DIR}
     )
     if(NOT WIN32)
-        target_link_libraries(tobj_service_binding_example PRIVATE pthread)
+        target_link_libraries(tobj_shared_memory_example PRIVATE pthread)
     endif()
-    add_test(NAME tobj_service_binding_example
-        COMMAND tobj_service_binding_example)
-    set_tests_properties(tobj_service_binding_example
+    add_test(NAME tobj_shared_memory_example
+        COMMAND tobj_shared_memory_example)
+    set_tests_properties(tobj_shared_memory_example
         PROPERTIES
             LABELS "example;binding;transport"
             TIMEOUT 15

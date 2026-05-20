@@ -1,150 +1,220 @@
-#include "tobj_shared_memory_example.hpp"
+// Showcase: two-component shared-memory Tactical Objects service example.
+//
+// Demonstrates the component-shaped C++ facade emitted by the PYRAMID binding
+// generator. The user-facing layer is:
+//
+//   tobj_interest_store.hpp/.cpp
+//       Subclasses the generated ProvidedHandler. Contains nothing but typed
+//       business logic.
+//
+//   tobj_shared_memory_example.cpp (this file)
+//       Bus + executor bring-up, component construction, and the demonstration
+//       sequence. No PCL types, no codec branches, no manual stream plumbing.
+//
+// The streaming RPC (object_of_interest.read_requirement) is exercised in two
+// modes:
+//   1. Server-ended single-frame stream -- ask for exactly one ID. The server
+//      emits one frame, then end. Consumer collects via the future-returning
+//      Async variant.
+//   2. Client-cancelled multi-frame stream -- ask for the full set. The
+//      consumer uses the push-mode Streaming variant, cancels its StreamHandle
+//      after a single frame, and observes on_end firing with PCL_ERR_CANCELLED.
 
-#include "tobj_service_binding_handler.hpp"
-#include "tobj_service_client_component.hpp"
-#include "tobj_service_provider_component.hpp"
+#include "tobj_interest_store.hpp"
 
-#include "pyramid_services_tactical_objects_provided.hpp"
+#include "pyramid_services_tactical_objects_provided_components.hpp"
 
-#include <pcl/executor.hpp>
-#include <pcl/pcl_transport_shared_memory.h>
+#include <pcl/await.hpp>
+#include <pcl/shared_memory_participant.hpp>
+#include <pcl/spin_thread.hpp>
 
 #include <atomic>
 #include <chrono>
+#include <future>
+#include <iostream>
 #include <string>
-#include <thread>
-
-namespace tobj_example {
 
 namespace {
+
+namespace svc   = pyramid::components::tactical_objects::services::provided;
+namespace model = pyramid::domain_model;
 
 std::string uniqueBusName() {
   const auto ticks = std::chrono::steady_clock::now()
                          .time_since_epoch()
                          .count();
-  return "tobj_service_binding_example_" + std::to_string(ticks);
+  return "tobj_showcase_" + std::to_string(ticks);
 }
 
-class SharedMemoryParticipant {
-public:
-  SharedMemoryParticipant(const char* bus_name, const char* participant_id)
-      : transport_(pcl_shared_memory_transport_create(
-            bus_name,
-            participant_id,
-            executor_.handle())) {}
+model::ObjectInterestRequirement makeRequirement(std::string id,
+                                                  double lat, double lon) {
+  model::ObjectInterestRequirement r;
+  r.base.id     = std::move(id);
+  r.base.source = "example-client";
+  r.policy      = model::DataPolicy::Obtain;
+  r.dimension.push_back(model::BattleDimension::Air);
+  model::Point point;
+  point.position.latitude  = lat;
+  point.position.longitude = lon;
+  r.point                  = point;
+  return r;
+}
 
-  ~SharedMemoryParticipant() {
-    if (transport_) {
-      pcl_shared_memory_transport_destroy(transport_);
-    }
+// -- Showcase steps ---------------------------------------------------------
+
+bool createOne(svc::ConsumedComponent& consumer, pcl::Executor& exec,
+               const model::ObjectInterestRequirement& req) {
+  auto fut    = consumer.objectOfInterestCreateRequirementAsync(req);
+  const auto result = pcl::awaitValue(exec, std::move(fut));
+  if (!result || !result->ok() || result->value != req.base.id) {
+    std::cerr << "[showcase] create failed\n";
+    return false;
+  }
+  return true;
+}
+
+// Single-frame stream that ends from the server: query exactly one id.
+bool readOneByIdServerEnded(svc::ConsumedComponent& consumer,
+                            pcl::Executor& exec,
+                            const model::Identifier& id) {
+  model::Query q;
+  q.id.push_back(id);
+  auto fut    = consumer.objectOfInterestReadRequirementAsync(q);
+  const auto r = pcl::awaitValue(exec, std::move(fut));
+  if (!r || !r->ok() || r->value.size() != 1u || r->value.front().base.id != id) {
+    std::cerr << "[showcase] server-ended read failed\n";
+    return false;
+  }
+  std::cout << "[showcase] server-ended stream: 1 frame received from server\n";
+  return true;
+}
+
+// Multi-frame stream that ends from the client: query all, cancel after the
+// first frame. Demonstrates StreamHandle::cancel() suppressing subsequent
+// on_frame callbacks and on_end firing with PCL_ERR_CANCELLED.
+bool readAllClientCancelled(svc::ConsumedComponent& consumer,
+                            pcl::Executor& exec,
+                            int expected_total_seedset) {
+  std::atomic<int>            frames_received{0};
+  std::promise<pcl_status_t>  end_promise;
+  auto                        end_future = end_promise.get_future();
+  std::atomic<bool>           end_fired{false};
+
+  svc::StreamHandle handle;
+  handle = consumer.objectOfInterestReadRequirementStreaming(
+      model::Query{},  // empty -> "all"
+      [&](const model::ObjectInterestRequirement& /*frame*/) {
+        const int seen = ++frames_received;
+        if (seen == 1) {
+          // Client decides the stream is done after one frame.
+          handle.cancel();
+        }
+      },
+      [&](pcl_status_t status) {
+        if (!end_fired.exchange(true)) {
+          end_promise.set_value(status);
+        }
+      });
+  if (!handle) {
+    std::cerr << "[showcase] streaming invoke failed to start\n";
+    return false;
   }
 
-  bool valid() const { return transport_ != nullptr; }
-  pcl::Executor& executor() { return executor_; }
+  const auto end_status_opt = pcl::awaitValue(exec, std::move(end_future));
+  if (!end_status_opt) {
+    std::cerr << "[showcase] client-cancelled stream did not fire on_end\n";
+    return false;
+  }
+  if (*end_status_opt != PCL_ERR_CANCELLED) {
+    std::cerr << "[showcase] client-cancelled stream on_end status="
+              << *end_status_opt << " want=" << PCL_ERR_CANCELLED << "\n";
+    return false;
+  }
+  if (frames_received.load() < 1) {
+    std::cerr << "[showcase] expected at least one frame before cancel\n";
+    return false;
+  }
+  if (frames_received.load() >= expected_total_seedset) {
+    std::cerr << "[showcase] cancel did not suppress later frames (got "
+              << frames_received.load() << " of " << expected_total_seedset
+              << ")\n";
+    return false;
+  }
+  std::cout << "[showcase] client-cancelled stream: "
+            << frames_received.load() << " frame(s) before cancel of "
+            << expected_total_seedset << " available, on_end=CANCELLED\n";
+  return true;
+}
 
-  bool attachTransport(bool with_gateway) {
-    if (!transport_) {
-      return false;
-    }
+bool deleteOne(svc::ConsumedComponent& consumer, pcl::Executor& exec,
+               const model::Identifier& id) {
+  auto fut    = consumer.objectOfInterestDeleteRequirementAsync(id);
+  const auto r = pcl::awaitValue(exec, std::move(fut));
+  if (!r || !r->ok() || !r->value.success) {
+    std::cerr << "[showcase] delete failed\n";
+    return false;
+  }
+  return true;
+}
 
-    // All outbound service calls use this participant's shared-memory
-    // transport unless an endpoint route selects something else.
-    if (executor_.setTransport(
-            pcl_shared_memory_transport_get_transport(transport_)) !=
-        PCL_OK) {
-      return false;
-    }
+// -- Top-level orchestration -----------------------------------------------
 
-    // A participant that provides services must install the transport gateway.
-    // The gateway receives bus service frames and invokes service callbacks on
-    // the PCL executor thread.
-    if (!with_gateway) {
-      return true;
-    }
-    pcl_container_t* gateway =
-        pcl_shared_memory_transport_gateway_container(transport_);
-    return gateway && pcl_container_configure(gateway) == PCL_OK &&
-           pcl_container_activate(gateway) == PCL_OK &&
-           executor_.add(gateway) == PCL_OK;
+bool runSharedMemoryShowcase(const char* content_type) {
+  const auto bus = uniqueBusName();
+
+  pcl::SharedMemoryParticipant server{bus, "server", pcl::WithGateway::Yes};
+  pcl::SharedMemoryParticipant client{bus, "client"};
+  if (!server || !client) return false;
+
+  tobj_example::InterestStore store;
+  svc::ProvidedComponent provider{server.executor(), store, content_type};
+  svc::ConsumedComponent consumer{client.executor(), content_type};
+
+  if (!provider.start() || !consumer.start()) return false;
+  if (provider.routeAllRemote("client") != PCL_OK) return false;
+  if (consumer.routeAllRemote() != PCL_OK)         return false;
+
+  pcl::SpinThread server_spin{server.executor()};
+
+  // Seed three entries so the multi-frame stream has multiple frames.
+  const auto req1 = makeRequirement("interest-1", 51.4778, -0.0015);
+  const auto req2 = makeRequirement("interest-2", 51.5000, -0.1000);
+  const auto req3 = makeRequirement("interest-3", 52.0000, -1.0000);
+  if (!createOne(consumer, client.executor(), req1)) return false;
+  if (!createOne(consumer, client.executor(), req2)) return false;
+  if (!createOne(consumer, client.executor(), req3)) return false;
+
+  // Stream demo 1: server-ended single-frame stream.
+  if (!readOneByIdServerEnded(consumer, client.executor(), req2.base.id)) {
+    return false;
   }
 
-private:
-  pcl::Executor executor_;
-  pcl_shared_memory_transport_t* transport_ = nullptr;
-};
+  // Stream demo 2: client-cancelled multi-frame stream.
+  if (!readAllClientCancelled(consumer, client.executor(),
+                              /*expected_total_seedset=*/3)) {
+    return false;
+  }
 
-bool routeClientToProvider(pcl::Executor& executor) {
-  namespace svc = pyramid::components::tactical_objects::services::provided;
+  // Tidy up.
+  if (!deleteOne(consumer, client.executor(), req1.base.id)) return false;
+  if (!deleteOne(consumer, client.executor(), req2.base.id)) return false;
+  if (!deleteOne(consumer, client.executor(), req3.base.id)) return false;
 
-  // Consumed endpoints are routed remote. With the shared-memory bus the
-  // transport discovers the unique provider for each advertised service.
-  return executor.setEndpointRoute(
-             svc::kSvcObjectOfInterestCreateRequirement,
-             PCL_ENDPOINT_CONSUMED,
-             PCL_ROUTE_REMOTE) == PCL_OK &&
-         executor.setEndpointRoute(
-             svc::kSvcObjectOfInterestReadRequirement,
-             PCL_ENDPOINT_CONSUMED,
-             PCL_ROUTE_REMOTE) == PCL_OK &&
-         executor.setEndpointRoute(
-             svc::kSvcObjectOfInterestDeleteRequirement,
-             PCL_ENDPOINT_CONSUMED,
-             PCL_ROUTE_REMOTE) == PCL_OK;
+  if (!store.empty()) {
+    std::cerr << "[showcase] store should be empty, size=" << store.size()
+              << "\n";
+    return false;
+  }
+  return true;
 }
 
 }  // namespace
 
-bool runSharedMemoryExample(const char* content_type) {
-  const std::string bus = uniqueBusName();
-
-  SharedMemoryParticipant server(bus.c_str(), "server");
-  SharedMemoryParticipant client(bus.c_str(), "client");
-  if (!server.valid() || !client.valid() ||
-      !server.attachTransport(true) ||
-      !client.attachTransport(false)) {
-    return false;
+int main() {
+  if (!runSharedMemoryShowcase(svc::kFlatBuffersContentType)) {
+    std::cerr << "tactical objects shared-memory showcase failed\n";
+    return 1;
   }
-
-  DemoObjectInterestHandler handler;
-  ObjectInterestServiceComponent service(content_type, handler);
-  ObjectInterestClientComponent client_component(content_type);
-
-  if (service.configure() != PCL_OK ||
-      service.activate() != PCL_OK ||
-      server.executor().add(service) != PCL_OK ||
-      client_component.configure() != PCL_OK ||
-      client_component.activate() != PCL_OK ||
-      client.executor().add(client_component) != PCL_OK ||
-      !routeClientToProvider(client.executor())) {
-    return false;
-  }
-
-  // Spin the provider executor in the background while the client performs
-  // blocking request/response waits on its own executor.
-  std::atomic<bool> stop_server{false};
-  std::thread server_thread([&] {
-    while (!stop_server.load(std::memory_order_acquire)) {
-      server.executor().spinOnce(10);
-      std::this_thread::yield();
-    }
-  });
-
-  const bool sequence_ok =
-      client_component.runCreateReadDelete(client.executor().handle());
-
-  stop_server.store(true, std::memory_order_release);
-  server_thread.join();
-
-  const bool final_ok =
-      sequence_ok &&
-      handler.createCount() == 1 &&
-      handler.streamCount() == 1 &&
-      handler.deleteCount() == 1 &&
-      handler.empty();
-
-  client.executor().remove(client_component);
-  server.executor().remove(service);
-  return final_ok;
+  std::cout << "tactical objects shared-memory showcase completed\n";
+  return 0;
 }
-
-}  // namespace tobj_example
