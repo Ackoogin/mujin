@@ -242,18 +242,22 @@ public:
 };
 
 // ---------------------------------------------------------------------------
-// ProvidedComponent -- one PCL component hosting all services in this
-// package. Owns the ServiceHandler-bridge adapter and the per-channel
-// binding storage (response buffer, content type). Lifecycle of any
-// open streams is owned by the user via StreamWriter::end().
+// ProvidedService -- attach to your pcl::Component to host this package's
+// RPCs. Owns the ServiceHandler-bridge adapter and the per-channel binding
+// storage (response buffer, content type). Lifecycle of any open streams is
+// owned by the user via StreamWriter::end().
+//
+// Usage: construct as a member of your component, call bind() from
+// on_configure(); optionally restrict callers with routeAllRemote().
 // ---------------------------------------------------------------------------
 
-class ProvidedComponent : public pcl::Component {
+class ProvidedService {
 public:
-    ProvidedComponent(pcl::Executor& executor,
-                      ProvidedHandler& handler,
-                      std::string content_type = kJsonContentType)
-        : pcl::Component("pyramid_services_autonomy_backend_provided_provider"),
+    ProvidedService(pcl::Component& host,
+                    pcl::Executor& executor,
+                    ProvidedHandler& handler,
+                    std::string content_type = kJsonContentType)
+        : host_(&host),
           executor_(&executor),
           handler_(&handler),
           content_type_(std::move(content_type)),
@@ -261,36 +265,24 @@ public:
 
     /// \brief Owning constructor. \p handler must not be null;
     ///        std::invalid_argument is thrown otherwise.
-    ProvidedComponent(pcl::Executor& executor,
-                      std::unique_ptr<ProvidedHandler> handler,
-                      std::string content_type = kJsonContentType)
-        : ProvidedComponent(executor,
-                            requireHandler(handler.get()),
-                            std::move(content_type)) {
+    ProvidedService(pcl::Component& host,
+                    pcl::Executor& executor,
+                    std::unique_ptr<ProvidedHandler> handler,
+                    std::string content_type = kJsonContentType)
+        : ProvidedService(host, executor,
+                          requireHandler(handler.get()),
+                          std::move(content_type)) {
         owned_handler_ = std::move(handler);
     }
 
-    bool start() {
-        return configure() == PCL_OK
-            && activate()  == PCL_OK
-            && executor_->add(*this) == PCL_OK;
-    }
+    ProvidedService(const ProvidedService&) = delete;
+    ProvidedService& operator=(const ProvidedService&) = delete;
+    ProvidedService(ProvidedService&&) = delete;
+    ProvidedService& operator=(ProvidedService&&) = delete;
 
-    void stop() {
-        if (executor_) executor_->remove(*this);
-    }
-
-    /// \brief Restrict every advertised service to a single peer.
-    pcl_status_t routeAllRemote(std::string_view peer_id) {
-        for (const auto& port : ports_) {
-            const pcl_status_t rc = port.routeRemote(peer_id);
-            if (rc != PCL_OK) return rc;
-        }
-        return PCL_OK;
-    }
-
-protected:
-    pcl_status_t on_configure() override {
+    /// \brief Install the service ports on the host component. Call from
+    ///        the host's on_configure().
+    pcl_status_t bind() {
         if (!supportsContentType(content_type_.c_str())) {
             return PCL_ERR_INVALID;
         }
@@ -315,6 +307,15 @@ protected:
         return PCL_OK;
     }
 
+    /// \brief Restrict every advertised service to a single peer.
+    pcl_status_t routeAllRemote(std::string_view peer_id) {
+        for (const auto& port : ports_) {
+            const pcl_status_t rc = port.routeRemote(peer_id);
+            if (rc != PCL_OK) return rc;
+        }
+        return PCL_OK;
+    }
+
 private:
     static ProvidedHandler& requireHandler(ProvidedHandler* h) {
         if (!h) throw std::invalid_argument("ProvidedHandler must not be null");
@@ -325,7 +326,7 @@ private:
     // forwarding typed requests to the user-supplied ProvidedHandler.
     class Bridge final : public ServiceHandler {
     public:
-        explicit Bridge(ProvidedComponent& owner) : owner_(&owner) {}
+        explicit Bridge(ProvidedService& owner) : owner_(&owner) {}
 
         std::vector<Capabilities>
         handleCapabilitiesReadCapabilities(const Query& request) override {
@@ -490,7 +491,7 @@ private:
             return PCL_STREAMING;
         }
     private:
-        ProvidedComponent* owner_;
+        ProvidedService* owner_;
     };
 
     struct UnaryBinding {
@@ -552,8 +553,8 @@ private:
     bool addUnaryBinding(const char* service_name, ServiceChannel channel) {
         unary_bindings_.push_back(UnaryBinding{&bridge_, channel, content_type_, {}});
         UnaryBinding& binding = unary_bindings_.back();
-        pcl::Port port = addService(service_name, content_type_.c_str(),
-                                    &ProvidedComponent::unaryDispatch, &binding);
+        pcl::Port port = host_->addService(service_name, content_type_.c_str(),
+                                           &ProvidedService::unaryDispatch, &binding);
         if (!port) { unary_bindings_.pop_back(); return false; }
         ports_.push_back(port);
         return true;
@@ -562,13 +563,14 @@ private:
     bool addStreamBinding(const char* service_name, ServiceChannel channel) {
         stream_bindings_.push_back(StreamBinding{&bridge_, channel, content_type_});
         StreamBinding& binding = stream_bindings_.back();
-        pcl::Port port = addStreamService(service_name, content_type_.c_str(),
-                                          &ProvidedComponent::streamDispatch, &binding);
+        pcl::Port port = host_->addStreamService(service_name, content_type_.c_str(),
+                                                 &ProvidedService::streamDispatch, &binding);
         if (!port) { stream_bindings_.pop_back(); return false; }
         ports_.push_back(port);
         return true;
     }
 
+    pcl::Component*                   host_     = nullptr;
     pcl::Executor*                    executor_ = nullptr;
     ProvidedHandler*                  handler_  = nullptr;
     std::unique_ptr<ProvidedHandler>  owned_handler_;
@@ -580,12 +582,15 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// ConsumedComponent -- typed async client for all RPCs in this package.
+// ConsumedService -- attach to your pcl::Component to call this package's
+// RPCs. Per-RPC entry points are async-shaped:
+//   * Unary RPCs return std::future<Result<T>>.
+//   * Streaming RPCs return a StreamHandle and deliver frames via the
+//     supplied on_frame/on_end callbacks (both fire on the executor
+//     thread; together they cover the stream lifetime).
 //
-// Every per-RPC entry point is async-shaped. Unary RPCs return
-// std::future<Result<T>>; streaming RPCs offer two flavours:
-//   * <op>Async(request)            -- collected std::future<Result<vec<T>>>
-//   * <op>Streaming(request, on_frame, on_end=) -- push-mode callbacks
+// Usage: construct as a member of your component; call routeAllRemote()
+// (or routeAllLocal()) once the executor transport is up.
 // ---------------------------------------------------------------------------
 
 /// \brief Move-only handle for an in-flight server-streaming RPC.
@@ -615,29 +620,25 @@ public:
     }
 
 private:
-    friend class ConsumedComponent;
+    friend class ConsumedService;
     explicit StreamHandle(std::function<void()> cancel_fn)
         : cancel_fn_(std::move(cancel_fn)) {}
     std::function<void()> cancel_fn_;
 };
 
-class ConsumedComponent : public pcl::Component {
+class ConsumedService {
 public:
-    ConsumedComponent(pcl::Executor& executor,
-                      std::string content_type = kJsonContentType)
-        : pcl::Component("pyramid_services_autonomy_backend_provided_consumer"),
+    ConsumedService(pcl::Component& host,
+                    pcl::Executor& executor,
+                    std::string content_type = kJsonContentType)
+        : host_(&host),
           executor_(&executor),
           content_type_(std::move(content_type)) {}
 
-    bool start() {
-        return configure() == PCL_OK
-            && activate()  == PCL_OK
-            && executor_->add(*this) == PCL_OK;
-    }
-
-    void stop() {
-        if (executor_) executor_->remove(*this);
-    }
+    ConsumedService(const ConsumedService&) = delete;
+    ConsumedService& operator=(const ConsumedService&) = delete;
+    ConsumedService(ConsumedService&&) = delete;
+    ConsumedService& operator=(ConsumedService&&) = delete;
 
     /// \brief Route every consumed endpoint to the executor's
     ///        default transport. The transport itself picks the peer
@@ -782,27 +783,6 @@ public:
         return PCL_OK;
     }
 
-    std::future<Result<std::vector<Capabilities>>>
-    capabilitiesReadCapabilitiesAsync(const Query& request) {
-        auto state = std::make_shared<StreamCollectState<Capabilities>>();
-        auto future = state->promise.get_future();
-        state->decoder = [](const pcl_msg_t* msg, Capabilities* out) {
-            return decodeCapabilitiesReadCapabilitiesStreamFrame(msg, out);
-        };
-        auto holder = std::make_unique<StreamCollectHolder<Capabilities>>(StreamCollectHolder<Capabilities>{state});
-        const pcl_status_t rc = invokeCapabilitiesReadCapabilitiesStream(
-            executor_->handle(), request,
-            &StreamCollectState<Capabilities>::trampoline,
-            holder.get(),
-            nullptr, nullptr, content_type_.c_str());
-        if (rc == PCL_OK || rc == PCL_STREAMING) {
-            (void)holder.release();
-        } else {
-            state->promise.set_value({rc, {}});
-        }
-        return future;
-    }
-
     StreamHandle
     capabilitiesReadCapabilitiesStreaming(const Query& request,
                 std::function<void(const Capabilities&)> on_frame,
@@ -844,27 +824,6 @@ public:
             holder.get(),
             nullptr, content_type_.c_str());
         if (rc == PCL_OK) {
-            (void)holder.release();
-        } else {
-            state->promise.set_value({rc, {}});
-        }
-        return future;
-    }
-
-    std::future<Result<std::vector<PlanningRequirement>>>
-    planningRequirementReadPlanningRequirementAsync(const Query& request) {
-        auto state = std::make_shared<StreamCollectState<PlanningRequirement>>();
-        auto future = state->promise.get_future();
-        state->decoder = [](const pcl_msg_t* msg, PlanningRequirement* out) {
-            return decodePlanningRequirementReadPlanningRequirementStreamFrame(msg, out);
-        };
-        auto holder = std::make_unique<StreamCollectHolder<PlanningRequirement>>(StreamCollectHolder<PlanningRequirement>{state});
-        const pcl_status_t rc = invokePlanningRequirementReadPlanningRequirementStream(
-            executor_->handle(), request,
-            &StreamCollectState<PlanningRequirement>::trampoline,
-            holder.get(),
-            nullptr, nullptr, content_type_.c_str());
-        if (rc == PCL_OK || rc == PCL_STREAMING) {
             (void)holder.release();
         } else {
             state->promise.set_value({rc, {}});
@@ -955,27 +914,6 @@ public:
             holder.get(),
             nullptr, content_type_.c_str());
         if (rc == PCL_OK) {
-            (void)holder.release();
-        } else {
-            state->promise.set_value({rc, {}});
-        }
-        return future;
-    }
-
-    std::future<Result<std::vector<ExecutionRequirement>>>
-    executionRequirementReadExecutionRequirementAsync(const Query& request) {
-        auto state = std::make_shared<StreamCollectState<ExecutionRequirement>>();
-        auto future = state->promise.get_future();
-        state->decoder = [](const pcl_msg_t* msg, ExecutionRequirement* out) {
-            return decodeExecutionRequirementReadExecutionRequirementStreamFrame(msg, out);
-        };
-        auto holder = std::make_unique<StreamCollectHolder<ExecutionRequirement>>(StreamCollectHolder<ExecutionRequirement>{state});
-        const pcl_status_t rc = invokeExecutionRequirementReadExecutionRequirementStream(
-            executor_->handle(), request,
-            &StreamCollectState<ExecutionRequirement>::trampoline,
-            holder.get(),
-            nullptr, nullptr, content_type_.c_str());
-        if (rc == PCL_OK || rc == PCL_STREAMING) {
             (void)holder.release();
         } else {
             state->promise.set_value({rc, {}});
@@ -1136,27 +1074,6 @@ public:
         return future;
     }
 
-    std::future<Result<std::vector<Plan>>>
-    planReadPlanAsync(const Query& request) {
-        auto state = std::make_shared<StreamCollectState<Plan>>();
-        auto future = state->promise.get_future();
-        state->decoder = [](const pcl_msg_t* msg, Plan* out) {
-            return decodePlanReadPlanStreamFrame(msg, out);
-        };
-        auto holder = std::make_unique<StreamCollectHolder<Plan>>(StreamCollectHolder<Plan>{state});
-        const pcl_status_t rc = invokePlanReadPlanStream(
-            executor_->handle(), request,
-            &StreamCollectState<Plan>::trampoline,
-            holder.get(),
-            nullptr, nullptr, content_type_.c_str());
-        if (rc == PCL_OK || rc == PCL_STREAMING) {
-            (void)holder.release();
-        } else {
-            state->promise.set_value({rc, {}});
-        }
-        return future;
-    }
-
     StreamHandle
     planReadPlanStreaming(const Query& request,
                 std::function<void(const Plan&)> on_frame,
@@ -1226,27 +1143,6 @@ public:
         return future;
     }
 
-    std::future<Result<std::vector<ExecutionRun>>>
-    executionRunReadRunAsync(const Query& request) {
-        auto state = std::make_shared<StreamCollectState<ExecutionRun>>();
-        auto future = state->promise.get_future();
-        state->decoder = [](const pcl_msg_t* msg, ExecutionRun* out) {
-            return decodeExecutionRunReadRunStreamFrame(msg, out);
-        };
-        auto holder = std::make_unique<StreamCollectHolder<ExecutionRun>>(StreamCollectHolder<ExecutionRun>{state});
-        const pcl_status_t rc = invokeExecutionRunReadRunStream(
-            executor_->handle(), request,
-            &StreamCollectState<ExecutionRun>::trampoline,
-            holder.get(),
-            nullptr, nullptr, content_type_.c_str());
-        if (rc == PCL_OK || rc == PCL_STREAMING) {
-            (void)holder.release();
-        } else {
-            state->promise.set_value({rc, {}});
-        }
-        return future;
-    }
-
     StreamHandle
     executionRunReadRunStreaming(const Query& request,
                 std::function<void(const ExecutionRun&)> on_frame,
@@ -1272,27 +1168,6 @@ public:
             push->cancelled = true;
             if (ctx_handle) (void)pcl_stream_cancel(ctx_handle);
         }};
-    }
-
-    std::future<Result<std::vector<RequirementPlacement>>>
-    requirementPlacementReadPlacementAsync(const Query& request) {
-        auto state = std::make_shared<StreamCollectState<RequirementPlacement>>();
-        auto future = state->promise.get_future();
-        state->decoder = [](const pcl_msg_t* msg, RequirementPlacement* out) {
-            return decodeRequirementPlacementReadPlacementStreamFrame(msg, out);
-        };
-        auto holder = std::make_unique<StreamCollectHolder<RequirementPlacement>>(StreamCollectHolder<RequirementPlacement>{state});
-        const pcl_status_t rc = invokeRequirementPlacementReadPlacementStream(
-            executor_->handle(), request,
-            &StreamCollectState<RequirementPlacement>::trampoline,
-            holder.get(),
-            nullptr, nullptr, content_type_.c_str());
-        if (rc == PCL_OK || rc == PCL_STREAMING) {
-            (void)holder.release();
-        } else {
-            state->promise.set_value({rc, {}});
-        }
-        return future;
     }
 
     StreamHandle
@@ -1336,23 +1211,6 @@ private:
     template <class T> using UnaryHolder = UnaryHolderT<T>;
 
     template <class T>
-    struct StreamCollectState {
-        std::promise<Result<std::vector<T>>>          promise;
-        std::function<bool(const pcl_msg_t*, T*)>     decoder;
-        std::vector<T>                                accum;
-        pcl_status_t                                  last_status = PCL_OK;
-
-        static void trampoline(const pcl_msg_t* msg,
-                                bool             end,
-                                pcl_status_t     status,
-                                void*            user_data);
-    };
-
-    template <class T>
-    struct StreamCollectHolderT { std::shared_ptr<StreamCollectState<T>> state; };
-    template <class T> using StreamCollectHolder = StreamCollectHolderT<T>;
-
-    template <class T>
     struct StreamPushState {
         std::function<void(const T&)>                 on_frame;
         std::function<void(pcl_status_t)>             on_end;
@@ -1369,15 +1227,16 @@ private:
     struct StreamPushHolderT { std::shared_ptr<StreamPushState<T>> state; };
     template <class T> using StreamPushHolder = StreamPushHolderT<T>;
 
-    pcl::Executor* executor_ = nullptr;
-    std::string    content_type_;
+    pcl::Component* host_     = nullptr;
+    pcl::Executor*  executor_ = nullptr;
+    std::string     content_type_;
 };
 
 template <class T>
-inline void ConsumedComponent::UnaryState<T>::trampoline(
+inline void ConsumedService::UnaryState<T>::trampoline(
         const pcl_msg_t* msg, void* user_data) {
-    std::unique_ptr<ConsumedComponent::UnaryHolder<T>> holder(
-        static_cast<ConsumedComponent::UnaryHolder<T>*>(user_data));
+    std::unique_ptr<ConsumedService::UnaryHolder<T>> holder(
+        static_cast<ConsumedService::UnaryHolder<T>*>(user_data));
     if (!holder || !holder->state) return;
     auto& state = *holder->state;
     Result<T> result{};
@@ -1390,36 +1249,10 @@ inline void ConsumedComponent::UnaryState<T>::trampoline(
 }
 
 template <class T>
-inline void ConsumedComponent::StreamCollectState<T>::trampoline(
+inline void ConsumedService::StreamPushState<T>::trampoline(
         const pcl_msg_t* msg, bool end, pcl_status_t status,
         void* user_data) {
-    auto* holder = static_cast<ConsumedComponent::StreamCollectHolder<T>*>(
-        user_data);
-    if (!holder || !holder->state) return;
-    auto& state = *holder->state;
-    if (end) {
-        Result<std::vector<T>> result{state.last_status, std::move(state.accum)};
-        state.promise.set_value(std::move(result));
-        delete holder;
-        return;
-    }
-    if (status != PCL_OK) {
-        state.last_status = status;
-        return;
-    }
-    T frame{};
-    if (state.decoder && state.decoder(msg, &frame)) {
-        state.accum.push_back(std::move(frame));
-    } else {
-        state.last_status = PCL_ERR_INVALID;
-    }
-}
-
-template <class T>
-inline void ConsumedComponent::StreamPushState<T>::trampoline(
-        const pcl_msg_t* msg, bool end, pcl_status_t status,
-        void* user_data) {
-    auto* holder = static_cast<ConsumedComponent::StreamPushHolder<T>*>(
+    auto* holder = static_cast<ConsumedService::StreamPushHolder<T>*>(
         user_data);
     if (!holder || !holder->state) {
         if (end) delete holder;

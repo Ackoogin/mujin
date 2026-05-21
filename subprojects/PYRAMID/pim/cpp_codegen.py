@@ -1859,17 +1859,16 @@ class CppServiceGenerator:
 
     # -- Component-shaped facade header (.hpp, header-only) --------------------
     #
-    # Emits ProvidedHandler / ProvidedComponent / ConsumedComponent, layered on
+    # Emits ProvidedHandler / ProvidedService / ConsumedService, layered on
     # top of the existing typed invoke/dispatch/encode/decode primitives. The
-    # user-facing surface is fully typed and async-shaped; PCL machinery
-    # (pcl_msg_t, stream contexts, response buffers, deferred stream_end) lives
-    # inside these classes and not in user code.
+    # generated classes are *service bindings*, not pcl::Component subclasses:
+    # users compose them as members of their own component and call bind() on
+    # the provided side from on_configure().
 
     def _write_components_header(self, path: Path, file_prefix: str,
                                   full_ns: str, parsed: ProtoFile,
                                   all_rpcs: List[Tuple[str, ProtoRpc]]):
         duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
-        component_name_base = file_prefix  # used for pcl::Component naming
         hpp_name = file_prefix + '.hpp'
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
@@ -2035,20 +2034,24 @@ class CppServiceGenerator:
                     f.write('    }\n')
             f.write('};\n\n')
 
-            # ---- ProvidedComponent -----------------------------------------
+            # ---- ProvidedService -------------------------------------------
             f.write(_SEP + '\n')
-            f.write('// ProvidedComponent -- one PCL component hosting all services in this\n')
-            f.write('// package. Owns the ServiceHandler-bridge adapter and the per-channel\n')
-            f.write('// binding storage (response buffer, content type). Lifecycle of any\n')
-            f.write('// open streams is owned by the user via StreamWriter::end().\n')
+            f.write('// ProvidedService -- attach to your pcl::Component to host this package\'s\n')
+            f.write('// RPCs. Owns the ServiceHandler-bridge adapter and the per-channel binding\n')
+            f.write('// storage (response buffer, content type). Lifecycle of any open streams is\n')
+            f.write('// owned by the user via StreamWriter::end().\n')
+            f.write('//\n')
+            f.write('// Usage: construct as a member of your component, call bind() from\n')
+            f.write('// on_configure(); optionally restrict callers with routeAllRemote().\n')
             f.write(_SEP + '\n\n')
 
-            f.write('class ProvidedComponent : public pcl::Component {\n')
+            f.write('class ProvidedService {\n')
             f.write('public:\n')
-            f.write('    ProvidedComponent(pcl::Executor& executor,\n')
-            f.write('                      ProvidedHandler& handler,\n')
-            f.write('                      std::string content_type = kJsonContentType)\n')
-            f.write(f'        : pcl::Component("{component_name_base}_provider"),\n')
+            f.write('    ProvidedService(pcl::Component& host,\n')
+            f.write('                    pcl::Executor& executor,\n')
+            f.write('                    ProvidedHandler& handler,\n')
+            f.write('                    std::string content_type = kJsonContentType)\n')
+            f.write('        : host_(&host),\n')
             f.write('          executor_(&executor),\n')
             f.write('          handler_(&handler),\n')
             f.write('          content_type_(std::move(content_type)),\n')
@@ -2056,36 +2059,24 @@ class CppServiceGenerator:
 
             f.write('    /// \\brief Owning constructor. \\p handler must not be null;\n')
             f.write('    ///        std::invalid_argument is thrown otherwise.\n')
-            f.write('    ProvidedComponent(pcl::Executor& executor,\n')
-            f.write('                      std::unique_ptr<ProvidedHandler> handler,\n')
-            f.write('                      std::string content_type = kJsonContentType)\n')
-            f.write('        : ProvidedComponent(executor,\n')
-            f.write('                            requireHandler(handler.get()),\n')
-            f.write('                            std::move(content_type)) {\n')
+            f.write('    ProvidedService(pcl::Component& host,\n')
+            f.write('                    pcl::Executor& executor,\n')
+            f.write('                    std::unique_ptr<ProvidedHandler> handler,\n')
+            f.write('                    std::string content_type = kJsonContentType)\n')
+            f.write('        : ProvidedService(host, executor,\n')
+            f.write('                          requireHandler(handler.get()),\n')
+            f.write('                          std::move(content_type)) {\n')
             f.write('        owned_handler_ = std::move(handler);\n')
             f.write('    }\n\n')
 
-            f.write('    bool start() {\n')
-            f.write('        return configure() == PCL_OK\n')
-            f.write('            && activate()  == PCL_OK\n')
-            f.write('            && executor_->add(*this) == PCL_OK;\n')
-            f.write('    }\n\n')
+            f.write('    ProvidedService(const ProvidedService&) = delete;\n')
+            f.write('    ProvidedService& operator=(const ProvidedService&) = delete;\n')
+            f.write('    ProvidedService(ProvidedService&&) = delete;\n')
+            f.write('    ProvidedService& operator=(ProvidedService&&) = delete;\n\n')
 
-            f.write('    void stop() {\n')
-            f.write('        if (executor_) executor_->remove(*this);\n')
-            f.write('    }\n\n')
-
-            f.write('    /// \\brief Restrict every advertised service to a single peer.\n')
-            f.write('    pcl_status_t routeAllRemote(std::string_view peer_id) {\n')
-            f.write('        for (const auto& port : ports_) {\n')
-            f.write('            const pcl_status_t rc = port.routeRemote(peer_id);\n')
-            f.write('            if (rc != PCL_OK) return rc;\n')
-            f.write('        }\n')
-            f.write('        return PCL_OK;\n')
-            f.write('    }\n\n')
-
-            f.write('protected:\n')
-            f.write('    pcl_status_t on_configure() override {\n')
+            f.write('    /// \\brief Install the service ports on the host component. Call from\n')
+            f.write('    ///        the host\'s on_configure().\n')
+            f.write('    pcl_status_t bind() {\n')
             f.write('        if (!supportsContentType(content_type_.c_str())) {\n')
             f.write('            return PCL_ERR_INVALID;\n')
             f.write('        }\n')
@@ -2101,6 +2092,14 @@ class CppServiceGenerator:
             f.write('        return PCL_OK;\n')
             f.write('    }\n\n')
 
+            f.write('    /// \\brief Restrict every advertised service to a single peer.\n')
+            f.write('    pcl_status_t routeAllRemote(std::string_view peer_id) {\n')
+            f.write('        for (const auto& port : ports_) {\n')
+            f.write('            const pcl_status_t rc = port.routeRemote(peer_id);\n')
+            f.write('            if (rc != PCL_OK) return rc;\n')
+            f.write('        }\n')
+            f.write('        return PCL_OK;\n')
+            f.write('    }\n\n')
 
             f.write('private:\n')
             f.write('    static ProvidedHandler& requireHandler(ProvidedHandler* h) {\n')
@@ -2111,7 +2110,7 @@ class CppServiceGenerator:
             f.write('    // forwarding typed requests to the user-supplied ProvidedHandler.\n')
             f.write('    class Bridge final : public ServiceHandler {\n')
             f.write('    public:\n')
-            f.write('        explicit Bridge(ProvidedComponent& owner) : owner_(&owner) {}\n\n')
+            f.write('        explicit Bridge(ProvidedService& owner) : owner_(&owner) {}\n\n')
 
             for svc_name, rpc in all_rpcs:
                 on_name = 'on' + _rpc_symbol_base(svc_name, rpc, duplicate_rpc_names)
@@ -2126,8 +2125,9 @@ class CppServiceGenerator:
 
                     # Unary path on a streaming RPC: forward to the user's
                     # streaming handler with a collecting writer and return
-                    # the accumulated vector. Lets legacy unary invoke paths
-                    # work against streaming-shaped user code.
+                    # the accumulated vector. The codec dispatcher still
+                    # exercises this when the wire-level invoke arrives via
+                    # the unary path (e.g. legacy clients).
                     f.write(f'        {rpc.cpp_rsp_type}\n')
                     f.write(f'        {handler_name}(const {rpc.cpp_req_type}& request) override {{\n')
                     f.write(f'            std::vector<{frame_t}> collected;\n')
@@ -2157,7 +2157,7 @@ class CppServiceGenerator:
                     f.write(f'            return owner_->handler_->{on_name}(request);\n')
                     f.write('        }\n')
             f.write('    private:\n')
-            f.write('        ProvidedComponent* owner_;\n')
+            f.write('        ProvidedService* owner_;\n')
             f.write('    };\n\n')
 
             f.write('    struct UnaryBinding {\n')
@@ -2218,8 +2218,8 @@ class CppServiceGenerator:
             f.write('    bool addUnaryBinding(const char* service_name, ServiceChannel channel) {\n')
             f.write('        unary_bindings_.push_back(UnaryBinding{&bridge_, channel, content_type_, {}});\n')
             f.write('        UnaryBinding& binding = unary_bindings_.back();\n')
-            f.write('        pcl::Port port = addService(service_name, content_type_.c_str(),\n')
-            f.write('                                    &ProvidedComponent::unaryDispatch, &binding);\n')
+            f.write('        pcl::Port port = host_->addService(service_name, content_type_.c_str(),\n')
+            f.write('                                           &ProvidedService::unaryDispatch, &binding);\n')
             f.write('        if (!port) { unary_bindings_.pop_back(); return false; }\n')
             f.write('        ports_.push_back(port);\n')
             f.write('        return true;\n')
@@ -2228,13 +2228,14 @@ class CppServiceGenerator:
             f.write('    bool addStreamBinding(const char* service_name, ServiceChannel channel) {\n')
             f.write('        stream_bindings_.push_back(StreamBinding{&bridge_, channel, content_type_});\n')
             f.write('        StreamBinding& binding = stream_bindings_.back();\n')
-            f.write('        pcl::Port port = addStreamService(service_name, content_type_.c_str(),\n')
-            f.write('                                          &ProvidedComponent::streamDispatch, &binding);\n')
+            f.write('        pcl::Port port = host_->addStreamService(service_name, content_type_.c_str(),\n')
+            f.write('                                                 &ProvidedService::streamDispatch, &binding);\n')
             f.write('        if (!port) { stream_bindings_.pop_back(); return false; }\n')
             f.write('        ports_.push_back(port);\n')
             f.write('        return true;\n')
             f.write('    }\n\n')
 
+            f.write('    pcl::Component*                   host_     = nullptr;\n')
             f.write('    pcl::Executor*                    executor_ = nullptr;\n')
             f.write('    ProvidedHandler*                  handler_  = nullptr;\n')
             f.write('    std::unique_ptr<ProvidedHandler>  owned_handler_;\n')
@@ -2245,14 +2246,17 @@ class CppServiceGenerator:
             f.write('    std::vector<pcl::Port>            ports_;\n')
             f.write('};\n\n')
 
-            # ---- ConsumedComponent -----------------------------------------
+            # ---- ConsumedService -------------------------------------------
             f.write(_SEP + '\n')
-            f.write('// ConsumedComponent -- typed async client for all RPCs in this package.\n')
+            f.write('// ConsumedService -- attach to your pcl::Component to call this package\'s\n')
+            f.write('// RPCs. Per-RPC entry points are async-shaped:\n')
+            f.write('//   * Unary RPCs return std::future<Result<T>>.\n')
+            f.write('//   * Streaming RPCs return a StreamHandle and deliver frames via the\n')
+            f.write('//     supplied on_frame/on_end callbacks (both fire on the executor\n')
+            f.write('//     thread; together they cover the stream lifetime).\n')
             f.write('//\n')
-            f.write('// Every per-RPC entry point is async-shaped. Unary RPCs return\n')
-            f.write('// std::future<Result<T>>; streaming RPCs offer two flavours:\n')
-            f.write('//   * <op>Async(request)            -- collected std::future<Result<vec<T>>>\n')
-            f.write('//   * <op>Streaming(request, on_frame, on_end=) -- push-mode callbacks\n')
+            f.write('// Usage: construct as a member of your component; call routeAllRemote()\n')
+            f.write('// (or routeAllLocal()) once the executor transport is up.\n')
             f.write(_SEP + '\n\n')
 
             f.write('/// \\brief Move-only handle for an in-flight server-streaming RPC.\n')
@@ -2279,29 +2283,25 @@ class CppServiceGenerator:
             f.write('        }\n')
             f.write('    }\n\n')
             f.write('private:\n')
-            f.write('    friend class ConsumedComponent;\n')
+            f.write('    friend class ConsumedService;\n')
             f.write('    explicit StreamHandle(std::function<void()> cancel_fn)\n')
             f.write('        : cancel_fn_(std::move(cancel_fn)) {}\n')
             f.write('    std::function<void()> cancel_fn_;\n')
             f.write('};\n\n')
 
-            f.write('class ConsumedComponent : public pcl::Component {\n')
+            f.write('class ConsumedService {\n')
             f.write('public:\n')
-            f.write('    ConsumedComponent(pcl::Executor& executor,\n')
-            f.write('                      std::string content_type = kJsonContentType)\n')
-            f.write(f'        : pcl::Component("{component_name_base}_consumer"),\n')
+            f.write('    ConsumedService(pcl::Component& host,\n')
+            f.write('                    pcl::Executor& executor,\n')
+            f.write('                    std::string content_type = kJsonContentType)\n')
+            f.write('        : host_(&host),\n')
             f.write('          executor_(&executor),\n')
             f.write('          content_type_(std::move(content_type)) {}\n\n')
 
-            f.write('    bool start() {\n')
-            f.write('        return configure() == PCL_OK\n')
-            f.write('            && activate()  == PCL_OK\n')
-            f.write('            && executor_->add(*this) == PCL_OK;\n')
-            f.write('    }\n\n')
-
-            f.write('    void stop() {\n')
-            f.write('        if (executor_) executor_->remove(*this);\n')
-            f.write('    }\n\n')
+            f.write('    ConsumedService(const ConsumedService&) = delete;\n')
+            f.write('    ConsumedService& operator=(const ConsumedService&) = delete;\n')
+            f.write('    ConsumedService(ConsumedService&&) = delete;\n')
+            f.write('    ConsumedService& operator=(ConsumedService&&) = delete;\n\n')
 
             f.write('    /// \\brief Route every consumed endpoint to the executor\'s\n')
             f.write('    ///        default transport. The transport itself picks the peer\n')
@@ -2344,38 +2344,14 @@ class CppServiceGenerator:
                 req_t = rpc.cpp_req_type
                 if rpc.streaming:
                     frame_t = rpc.cpp_rsp_type[len('std::vector<'):-1]
-                    rsp_t = rpc.cpp_rsp_type  # std::vector<T>
                     invoke_stream = _rpc_invoke_stream_func(
                         svc_name, rpc, duplicate_rpc_names)
                     decode_frame = _rpc_decode_stream_frame_func(
                         svc_name, rpc, duplicate_rpc_names)
                     streaming_name = _lc_first(base) + 'Streaming'
 
-                    # Collected async variant -- drives the real stream invoke
-                    # and accumulates typed frames; the future resolves when
-                    # the server signals stream end.
-                    f.write(f'    std::future<Result<{rsp_t}>>\n')
-                    f.write(f'    {async_name}(const {req_t}& request) {{\n')
-                    f.write(f'        auto state = std::make_shared<StreamCollectState<{frame_t}>>();\n')
-                    f.write('        auto future = state->promise.get_future();\n')
-                    f.write(f'        state->decoder = [](const pcl_msg_t* msg, {frame_t}* out) {{\n')
-                    f.write(f'            return {decode_frame}(msg, out);\n')
-                    f.write('        };\n')
-                    f.write(f'        auto holder = std::make_unique<StreamCollectHolder<{frame_t}>>(StreamCollectHolder<{frame_t}>{{state}});\n')
-                    f.write(f'        const pcl_status_t rc = {invoke_stream}(\n')
-                    f.write('            executor_->handle(), request,\n')
-                    f.write(f'            &StreamCollectState<{frame_t}>::trampoline,\n')
-                    f.write('            holder.get(),\n')
-                    f.write('            nullptr, nullptr, content_type_.c_str());\n')
-                    f.write('        if (rc == PCL_OK || rc == PCL_STREAMING) {\n')
-                    f.write('            (void)holder.release();\n')
-                    f.write('        } else {\n')
-                    f.write('            state->promise.set_value({rc, {}});\n')
-                    f.write('        }\n')
-                    f.write('        return future;\n')
-                    f.write('    }\n\n')
-
-                    # Push-mode streaming variant
+                    # Push-mode streaming variant -- callbacks fire on the
+                    # executor thread and together cover the stream lifetime.
                     f.write('    StreamHandle\n')
                     f.write(f'    {streaming_name}(const {req_t}& request,\n')
                     f.write(f'                std::function<void(const {frame_t}&)> on_frame,\n')
@@ -2441,21 +2417,6 @@ class CppServiceGenerator:
             f.write('    template <class T> using UnaryHolder = UnaryHolderT<T>;\n\n')
 
             f.write('    template <class T>\n')
-            f.write('    struct StreamCollectState {\n')
-            f.write('        std::promise<Result<std::vector<T>>>          promise;\n')
-            f.write('        std::function<bool(const pcl_msg_t*, T*)>     decoder;\n')
-            f.write('        std::vector<T>                                accum;\n')
-            f.write('        pcl_status_t                                  last_status = PCL_OK;\n\n')
-            f.write('        static void trampoline(const pcl_msg_t* msg,\n')
-            f.write('                                bool             end,\n')
-            f.write('                                pcl_status_t     status,\n')
-            f.write('                                void*            user_data);\n')
-            f.write('    };\n\n')
-            f.write('    template <class T>\n')
-            f.write('    struct StreamCollectHolderT { std::shared_ptr<StreamCollectState<T>> state; };\n')
-            f.write('    template <class T> using StreamCollectHolder = StreamCollectHolderT<T>;\n\n')
-
-            f.write('    template <class T>\n')
             f.write('    struct StreamPushState {\n')
             f.write('        std::function<void(const T&)>                 on_frame;\n')
             f.write('        std::function<void(pcl_status_t)>             on_end;\n')
@@ -2470,16 +2431,17 @@ class CppServiceGenerator:
             f.write('    struct StreamPushHolderT { std::shared_ptr<StreamPushState<T>> state; };\n')
             f.write('    template <class T> using StreamPushHolder = StreamPushHolderT<T>;\n\n')
 
-            f.write('    pcl::Executor* executor_ = nullptr;\n')
-            f.write('    std::string    content_type_;\n')
+            f.write('    pcl::Component* host_     = nullptr;\n')
+            f.write('    pcl::Executor*  executor_ = nullptr;\n')
+            f.write('    std::string     content_type_;\n')
             f.write('};\n\n')
 
             # Template member-fn definitions outside the class --------------
             f.write('template <class T>\n')
-            f.write('inline void ConsumedComponent::UnaryState<T>::trampoline(\n')
+            f.write('inline void ConsumedService::UnaryState<T>::trampoline(\n')
             f.write('        const pcl_msg_t* msg, void* user_data) {\n')
-            f.write('    std::unique_ptr<ConsumedComponent::UnaryHolder<T>> holder(\n')
-            f.write('        static_cast<ConsumedComponent::UnaryHolder<T>*>(user_data));\n')
+            f.write('    std::unique_ptr<ConsumedService::UnaryHolder<T>> holder(\n')
+            f.write('        static_cast<ConsumedService::UnaryHolder<T>*>(user_data));\n')
             f.write('    if (!holder || !holder->state) return;\n')
             f.write('    auto& state = *holder->state;\n')
             f.write('    Result<T> result{};\n')
@@ -2492,36 +2454,10 @@ class CppServiceGenerator:
             f.write('}\n\n')
 
             f.write('template <class T>\n')
-            f.write('inline void ConsumedComponent::StreamCollectState<T>::trampoline(\n')
+            f.write('inline void ConsumedService::StreamPushState<T>::trampoline(\n')
             f.write('        const pcl_msg_t* msg, bool end, pcl_status_t status,\n')
             f.write('        void* user_data) {\n')
-            f.write('    auto* holder = static_cast<ConsumedComponent::StreamCollectHolder<T>*>(\n')
-            f.write('        user_data);\n')
-            f.write('    if (!holder || !holder->state) return;\n')
-            f.write('    auto& state = *holder->state;\n')
-            f.write('    if (end) {\n')
-            f.write('        Result<std::vector<T>> result{state.last_status, std::move(state.accum)};\n')
-            f.write('        state.promise.set_value(std::move(result));\n')
-            f.write('        delete holder;\n')
-            f.write('        return;\n')
-            f.write('    }\n')
-            f.write('    if (status != PCL_OK) {\n')
-            f.write('        state.last_status = status;\n')
-            f.write('        return;\n')
-            f.write('    }\n')
-            f.write('    T frame{};\n')
-            f.write('    if (state.decoder && state.decoder(msg, &frame)) {\n')
-            f.write('        state.accum.push_back(std::move(frame));\n')
-            f.write('    } else {\n')
-            f.write('        state.last_status = PCL_ERR_INVALID;\n')
-            f.write('    }\n')
-            f.write('}\n\n')
-
-            f.write('template <class T>\n')
-            f.write('inline void ConsumedComponent::StreamPushState<T>::trampoline(\n')
-            f.write('        const pcl_msg_t* msg, bool end, pcl_status_t status,\n')
-            f.write('        void* user_data) {\n')
-            f.write('    auto* holder = static_cast<ConsumedComponent::StreamPushHolder<T>*>(\n')
+            f.write('    auto* holder = static_cast<ConsumedService::StreamPushHolder<T>*>(\n')
             f.write('        user_data);\n')
             f.write('    if (!holder || !holder->state) {\n')
             f.write('        if (end) delete holder;\n')

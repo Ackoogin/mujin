@@ -218,15 +218,17 @@ if(PYRAMID_ENABLE_PROTOBUF)
 endif()
 
 if(PYRAMID_ENABLE_FLATBUFFERS)
-    # Showcase for the component-shaped C++ facade emitted by the binding
-    # generator. Split into two user files to make the separation explicit:
-    #   * tobj_interest_store.{hpp,cpp} -- typed business logic (only thing the
-    #     user truly writes).
-    #   * tobj_shared_memory_example.cpp -- bus bring-up, component wiring,
-    #     demonstration sequence. No PCL types in either.
-    # Everything else (registration, dispatch, stream-end deferral, response
-    # buffers, async client trampolines, transport bring-up) lives in generated
-    # code or in PCL helpers.
+    # Showcase for the service-binding facade emitted by the binding
+    # generator. Layered as four user files to make the separation explicit:
+    #   * tobj_interest_store.{hpp,cpp}    -- typed business logic
+    #     (ProvidedHandler subclass).
+    #   * tactical_objects_component.hpp   -- hand-written pcl::Component
+    #     composing one ProvidedService binding + the store.
+    #   * hmi_client_component.hpp         -- hand-written pcl::Component
+    #     composing one ConsumedService binding, exposing typed accessors.
+    #   * tobj_shared_memory_example.cpp   -- bus bring-up, component
+    #     wiring, single-threaded spinOnce loop, demonstration sequence.
+    # No PCL types in user code; transport bring-up lives in PCL helpers.
     add_executable(tobj_shared_memory_example
         ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_interest_store.cpp
         ${PYRAMID_ROOT_DIR}/examples/cpp/tobj_shared_memory_example.cpp

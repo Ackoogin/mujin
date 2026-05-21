@@ -1,14 +1,14 @@
 # Authoring C++ Components Against Generated PYRAMID Bindings
 
-This guide is the v1 reference for writing a C++ component on top of the
-PYRAMID generated service bindings. It is the companion to
-[`generated_bindings.md`](generated_bindings.md) and uses the **component-shaped
-facade** emitted alongside the low-level binding (`*_components.hpp`).
+This guide is the reference for writing a C++ component on top of the PYRAMID
+generated service bindings. It is the companion to
+[`generated_bindings.md`](generated_bindings.md) and uses the
+**service-binding facade** emitted alongside the low-level binding
+(`*_components.hpp`).
 
 If you only need the low-level invoke/dispatch/encode/decode primitives — for
-custom transports, codec dispatch tests, or framework code — read the v1
-binding guide instead. This page is for application authors writing services
-and clients.
+custom transports, codec dispatch tests, or framework code — read the binding
+guide instead. This page is for application authors writing components.
 
 ## What the generator emits
 
@@ -18,13 +18,16 @@ generator produces two layers under `${binaryDir}/generated/pyramid_cpp_bindings
 | Artifact | Surface | Use |
 |----------|---------|-----|
 | `<prefix>.{hpp,cpp}` | `ServiceHandler`, `invoke*`, `dispatch`, `encode*`, `decode*` | Low-level. Transports, codec round-trip tests. |
-| `<prefix>_components.hpp` | `ProvidedHandler`, `ProvidedComponent`, `ConsumedComponent`, `Result<T>` | Component code. Header-only; layers on top of the low-level surface. |
+| `<prefix>_components.hpp` | `ProvidedHandler`, `ProvidedService`, `ConsumedService`, `Result<T>`, `StreamHandle` | Service bindings you attach to your own `pcl::Component`. |
 
-The component-shaped facade is the v1 application authoring surface. Component
-code should not have to type `pcl_msg_t`, `pcl_stream_context_t`, or any
-codec name.
+`ProvidedService` and `ConsumedService` are **bindings**, not components. A
+PYRAMID component is a deployable unit that may host several services. You
+write a `pcl::Component` subclass and compose one binding per proto as a
+member; that lets a single deployable component own (for example) the
+provided side of Tactical Objects and the consumed side of Sensor Data
+Interpretation in the same class.
 
-## The three classes you write against
+## The pieces you write against
 
 ### `ProvidedHandler` — typed callbacks
 
@@ -67,76 +70,131 @@ class InterestStore final : public svc::ProvidedHandler {
 };
 ```
 
-### `ProvidedComponent` — one PCL component, every service
+### `ProvidedService` — attach to your component
 
-`ProvidedComponent` is a `pcl::Component` that hosts every advertised service
-in the package. Pass it your executor and your handler.
+`ProvidedService` is a binding object. You declare it as a member of your
+own `pcl::Component`, hand it the host component plus the executor plus the
+handler at construction, then call `bind()` from `on_configure()` to install
+the RPC ports on the host.
 
 ```cpp
-InterestStore store;
-svc::ProvidedComponent provider{exec, store, content_type};
-provider.start();                       // configure + activate + add
-provider.routeAllRemote("client");      // restrict callers (optional)
+class TacticalObjectsComponent : public pcl::Component {
+public:
+  TacticalObjectsComponent(pcl::Executor& exec, std::string content_type)
+      : pcl::Component("tactical_objects"),
+        tobj_provided_(*this, exec, store_, std::move(content_type)) {}
+
+  pcl_status_t routeProvidedTo(std::string_view peer) {
+    return tobj_provided_.routeAllRemote(peer);
+  }
+
+protected:
+  pcl_status_t on_configure() override { return tobj_provided_.bind(); }
+
+private:
+  InterestStore store_;
+  svc::ProvidedService tobj_provided_;
+};
 ```
 
 Two constructors are emitted, matching whichever ownership you prefer:
 
-- `(pcl::Executor&, ProvidedHandler&, std::string content_type)` — caller owns
-  the handler.
-- `(pcl::Executor&, std::unique_ptr<ProvidedHandler>, std::string content_type)`
-  — the component takes ownership.
+- `(pcl::Component&, pcl::Executor&, ProvidedHandler&, std::string content_type)` —
+  caller owns the handler.
+- `(pcl::Component&, pcl::Executor&, std::unique_ptr<ProvidedHandler>, std::string content_type)` —
+  the binding takes ownership.
 
-The component:
+`bind()`:
 
-- Registers every RPC port on `start()`.
-- Routes each port to the supplied peer (or to anyone, if you don't call
-  `routeAllRemote`).
-- Owns per-channel response-buffer storage so dispatch is reentrant.
-- Drains its deferred-stream-end queue from `on_tick` — you never call
-  `pcl_stream_end` directly.
+- Validates the content type.
+- Installs each RPC port (unary `addService` / streaming `addStreamService`)
+  on the host component.
+- Stores per-channel response-buffer state so dispatch is reentrant.
 
-### `ConsumedComponent` — async-shaped typed client
+`routeAllRemote(peer)` restricts every advertised RPC to a single peer.
+Stream-end handling is internal — you never call `pcl_stream_end` directly,
+just `writer.end()` from your handler.
 
-Every RPC has typed async entry points. Unary returns
-`std::future<Result<Reply>>`; streaming offers two flavours.
+Composing several `ProvidedService` (or mixing provided and consumed) inside
+one component is just adding more members and another `binding.bind()` call
+in `on_configure`.
+
+### `ConsumedService` — async-shaped typed client
+
+`ConsumedService` is the client-side binding. Like `ProvidedService` it
+attaches to your component and takes the executor; routing happens through
+the executor's transport.
 
 ```cpp
-svc::ConsumedComponent consumer{exec, content_type};
-consumer.start();
-consumer.routeAllRemote();              // use the executor's default transport
-// or: consumer.routeAllRemote("server");   // use a named peer transport
+class HmiClientComponent : public pcl::Component {
+public:
+  HmiClientComponent(pcl::Executor& exec, std::string content_type)
+      : pcl::Component("hmi_client"),
+        tobj_consumed_(*this, exec, std::move(content_type)) {}
 
-// Unary RPC -- async future
-std::future<Result<Identifier>> f = consumer.objectOfInterestCreateRequirementAsync(req);
+  pcl_status_t routeProvidedDefault() {
+    return tobj_consumed_.routeAllRemote();      // executor's default transport
+  }
+  pcl_status_t routeProvidedTo(std::string_view peer) {
+    return tobj_consumed_.routeAllRemote(peer);  // named peer
+  }
 
-// Streaming RPC -- collected vector via async future
-std::future<Result<std::vector<ObjectInterestRequirement>>>
-    fr = consumer.objectOfInterestReadRequirementAsync(query);
+  std::future<svc::Result<Identifier>>
+  createRequirementAsync(const ObjectInterestRequirement& req) {
+    return tobj_consumed_.objectOfInterestCreateRequirementAsync(req);
+  }
 
-// Streaming RPC -- per-frame push callbacks
-consumer.objectOfInterestReadRequirementStreaming(
-    query,
-    [](const ObjectInterestRequirement& frame) { ... },
-    [](pcl_status_t status)                    { ... });    // on_end (optional)
+  svc::StreamHandle
+  streamReadRequirement(
+      const Query& q,
+      std::function<void(const ObjectInterestRequirement&)> on_frame,
+      std::function<void(pcl_status_t)> on_end = {}) {
+    return tobj_consumed_.objectOfInterestReadRequirementStreaming(
+        q, std::move(on_frame), std::move(on_end));
+  }
+
+private:
+  svc::ConsumedService tobj_consumed_;
+};
 ```
 
-`Result<T>` is a generated struct: `.status`, `.value`, `.ok()`. The future
-resolves on the executor thread that processes the response — drive that
-executor yourself (`spinOnce` / `pcl::SpinThread`) and block on the future
-with `pcl::await` / `pcl::awaitValue`.
+The per-RPC API:
 
-There is no synchronous `Result<T> create(...)` form. Every call is
-async-shaped to make the cost of executor-thread coupling explicit.
+- **Unary RPC** → `<op>Async(req)` returns `std::future<Result<T>>`. The
+  future resolves on the executor thread once the response trampoline runs;
+  callers spin the executor (typically by ticking it from the main loop)
+  until the future is ready.
+- **Streaming RPC** → `<op>Streaming(req, on_frame, on_end)` returns a
+  `StreamHandle`. Both callbacks fire on the executor thread and together
+  cover the stream lifetime; there is no future-returning collected variant.
+  Call `handle.cancel()` to stop receiving frames — subsequent on_frame
+  callbacks are suppressed, the underlying stream context is cancelled, and
+  `on_end` fires with `PCL_ERR_CANCELLED`.
+
+`Result<T>` is a generated struct: `.status`, `.value`, `.ok()`. There is no
+synchronous `Result<T> create(...)` form — every unary call is async-shaped
+to make executor-thread coupling explicit.
+
+## Single-threaded executor model
+
+The recommended driving model is single-threaded: the main thread owns the
+executor and drives it with `executor.spinOnce(timeout_ms)` in the
+application's loop. All `pcl::Component` callbacks (lifecycle, subscribers,
+service handlers) and all binding callbacks (unary trampolines, streaming
+`on_frame` / `on_end`) run on that thread. Component-local state therefore
+does not need atomics or other synchronization.
+
+`pcl::SpinThread` exists for cases where you want a background drive thread
+instead, and `pcl::await` / `pcl::awaitValue` block a non-executor thread on
+a future; both belong to the multi-threaded pattern and are not needed for
+the single-threaded showcase.
 
 ## PCL helpers used to wire it all together
 
-Three small header-only helpers in PCL remove the recurring shared-memory
-plumbing patterns:
-
 ```cpp
 #include <pcl/shared_memory_participant.hpp>   // bus, executor, gateway
-#include <pcl/spin_thread.hpp>                 // background spin loop
-#include <pcl/await.hpp>                       // block on future + spin
+#include <pcl/spin_thread.hpp>                 // (optional) background spin
+#include <pcl/await.hpp>                       // (optional) future + spin
 ```
 
 | Helper | Replaces |
@@ -147,12 +205,21 @@ plumbing patterns:
 
 ## Full showcase
 
-The canonical showcase is `subprojects/PYRAMID/examples/cpp/tobj_shared_memory_example.cpp`.
-It brings up a two-participant shared-memory bus, advertises the Tactical
-Objects services on one side, drives the consumer side from `main()` via
-`pcl::await`, and exercises the full Create / Read (streaming) / Delete cycle.
-The user code is one file with no `pcl_msg_t`, no codec branching, and no
-manual streaming plumbing.
+The canonical showcase is in `subprojects/PYRAMID/examples/cpp/`:
+
+- `tobj_interest_store.{hpp,cpp}` — typed business logic
+  (`ProvidedHandler` subclass).
+- `tactical_objects_component.hpp` — hand-written `pcl::Component` that
+  composes one `ProvidedService` binding plus the store.
+- `hmi_client_component.hpp` — hand-written `pcl::Component` that composes
+  one `ConsumedService` binding and exposes typed async accessors.
+- `tobj_shared_memory_example.cpp` — bus bring-up, component wiring,
+  single-threaded `spinOnce` loop, demonstration sequence.
+
+The showcase exercises Create / Read (streaming, server-ended) / Read
+(streaming, client-cancelled) / Delete with no `pcl_msg_t`, no codec
+branching, no manual stream plumbing, no background thread, and no
+`pcl::await`.
 
 ## When to drop down to the low-level surface
 
@@ -164,10 +231,10 @@ The component facade calls into the low-level `invoke*` / `dispatch` /
 - You need to plug the binding into a custom executor lifecycle (e.g. another
   framework's event loop).
 
-For everything else, prefer the component facade — it owns the boilerplate.
+For everything else, prefer the binding facade — it owns the boilerplate.
 
 ## See also
 
-- [`generated_bindings.md`](generated_bindings.md) — v1 binding architecture overview.
+- [`generated_bindings.md`](generated_bindings.md) — binding architecture overview.
 - [`pcl_pyramid_binding_generation_overview.md`](pcl_pyramid_binding_generation_overview.md) — short engineer-facing description of the binding layer.
 - [`PYRAMID_COMPONENT_RESPONSIBILITIES.md`](PYRAMID_COMPONENT_RESPONSIBILITIES.md) — canonical component responsibilities from the technical standard.
