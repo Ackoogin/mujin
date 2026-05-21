@@ -294,6 +294,44 @@ TEST(PclOom, PostServiceRequestDataMallocFails) {
   restore_logs();
 }
 
+// Declared in pcl_transport.h -- forward-declared here to avoid a public
+// header include just for one test.
+extern "C" pcl_status_t pcl_executor_post_service_request_remote(
+    pcl_executor_t*  e,
+    const char*      source_peer_id,
+    const char*      service_name,
+    const pcl_msg_t* request,
+    pcl_resp_cb_fn_t callback,
+    void*            user_data);
+
+TEST(PclOom, PostServiceRequestRemoteSourcePeerIdStrdupFails) {
+  silence_logs();
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  int payload = 7;
+  pcl_msg_t req = {};
+  req.data      = &payload;
+  req.size      = sizeof(payload);
+  req.type_name = "Req";
+  auto cb = [](const pcl_msg_t*, void*) {};
+
+  // Alloc sequence inside enqueue_svc_req when source_peer_id is set:
+  //   #0 calloc(node)
+  //   #1 malloc(service_name copy)
+  //   #2 malloc(type_name copy)
+  //   #3 malloc(data copy)
+  //   #4 malloc(source_peer_id copy)  <-- the new branch
+  g_oom_countdown = 4;
+  pcl_status_t rc = pcl_executor_post_service_request_remote(
+      e, "peer", "svc", &req, cb, nullptr);
+  g_oom_countdown = -1;
+  EXPECT_EQ(rc, PCL_ERR_NOMEM);
+
+  pcl_executor_destroy(e);
+  restore_logs();
+}
+
 TEST(PclOom, DrainingServiceRequestContextAllocFailsFiresEmptyResponse) {
   silence_logs();
 

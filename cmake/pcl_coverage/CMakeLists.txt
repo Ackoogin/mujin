@@ -61,6 +61,89 @@ set_target_properties(pcl_transport_socket PROPERTIES
   C_EXTENSIONS OFF
 )
 
+# -- PCL UDP transport library -------------------------------------------
+add_library(pcl_transport_udp STATIC
+  ${PCL_ROOT}/src/pcl_transport_udp.c
+)
+target_include_directories(pcl_transport_udp PUBLIC  ${PCL_ROOT}/include)
+target_include_directories(pcl_transport_udp PRIVATE ${PCL_ROOT}/src)
+target_link_libraries(pcl_transport_udp PUBLIC pcl_core Threads::Threads)
+if(WIN32)
+  target_link_libraries(pcl_transport_udp PUBLIC ws2_32)
+endif()
+set_target_properties(pcl_transport_udp PROPERTIES
+  LINKER_LANGUAGE C
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+)
+
+# -- PCL shared-memory transport library ---------------------------------
+add_library(pcl_transport_shared_memory STATIC
+  ${PCL_ROOT}/src/pcl_transport_shared_memory.c
+)
+target_include_directories(pcl_transport_shared_memory PUBLIC  ${PCL_ROOT}/include)
+target_include_directories(pcl_transport_shared_memory PRIVATE ${PCL_ROOT}/src)
+target_link_libraries(pcl_transport_shared_memory PUBLIC pcl_core Threads::Threads)
+if(NOT WIN32)
+  # rt is required for shm_open/shm_unlink on Linux glibc.
+  target_link_libraries(pcl_transport_shared_memory PUBLIC rt)
+endif()
+set_target_properties(pcl_transport_shared_memory PROPERTIES
+  LINKER_LANGUAGE C
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+)
+
+# -- PCL template transport library --------------------------------------
+add_library(pcl_transport_template STATIC
+  ${PCL_ROOT}/src/pcl_transport_template.c
+)
+target_include_directories(pcl_transport_template PUBLIC  ${PCL_ROOT}/include)
+target_include_directories(pcl_transport_template PRIVATE ${PCL_ROOT}/src)
+target_link_libraries(pcl_transport_template PUBLIC pcl_core Threads::Threads)
+set_target_properties(pcl_transport_template PROPERTIES
+  LINKER_LANGUAGE C
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+)
+
+# -- APOS stub + APOS transport library ----------------------------------
+add_library(apos_stub STATIC
+  ${PCL_ROOT}/bindings/apos/apos.c
+)
+target_include_directories(apos_stub PUBLIC
+  ${PCL_ROOT}/bindings/apos
+)
+target_link_libraries(apos_stub PUBLIC Threads::Threads)
+set_target_properties(apos_stub PROPERTIES
+  LINKER_LANGUAGE C
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+)
+
+add_library(pcl_transport_apos STATIC
+  ${PCL_ROOT}/src/pcl_transport_apos.c
+)
+target_include_directories(pcl_transport_apos PUBLIC
+  ${PCL_ROOT}/include
+)
+target_include_directories(pcl_transport_apos PRIVATE
+  ${PCL_ROOT}/bindings/apos
+  ${PCL_ROOT}/src
+)
+target_link_libraries(pcl_transport_apos
+  PUBLIC pcl_core pcl_transport_template apos_stub)
+set_target_properties(pcl_transport_apos PROPERTIES
+  LINKER_LANGUAGE C
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+)
+
 # -- Helper to add a PCL test executable --------------------------------
 function(add_pcl_test name src)
   add_executable(${name} ${PCL_ROOT}/tests/${src})
@@ -93,6 +176,44 @@ if(NOT MSVC)
     -Wl,--wrap=malloc,--wrap=calloc)
   gtest_discover_tests(test_pcl_socket_faults DISCOVERY_MODE PRE_TEST)
 endif()
+
+# UDP transport tests
+add_executable(test_pcl_udp_transport ${PCL_ROOT}/tests/test_pcl_udp_transport.cpp)
+target_link_libraries(test_pcl_udp_transport PRIVATE pcl_core pcl_transport_udp GTest::gtest_main)
+gtest_discover_tests(test_pcl_udp_transport DISCOVERY_MODE PRE_TEST)
+
+# Shared-memory transport tests (peer helper + main test process)
+add_executable(pcl_shm_peer_helper ${PCL_ROOT}/tests/pcl_shm_peer_helper.cpp)
+target_link_libraries(pcl_shm_peer_helper PRIVATE pcl_core pcl_transport_shared_memory)
+
+add_executable(test_pcl_shared_memory_transport
+  ${PCL_ROOT}/tests/test_pcl_shared_memory_transport.cpp)
+target_link_libraries(test_pcl_shared_memory_transport
+  PRIVATE pcl_core pcl_transport_shared_memory GTest::gtest_main)
+add_dependencies(test_pcl_shared_memory_transport pcl_shm_peer_helper)
+target_compile_definitions(test_pcl_shared_memory_transport PRIVATE
+  PCL_SHM_PEER_HELPER_PATH="$<TARGET_FILE:pcl_shm_peer_helper>"
+)
+gtest_discover_tests(test_pcl_shared_memory_transport DISCOVERY_MODE PRE_TEST)
+
+# Template transport tests (uses internal conformance header)
+add_executable(test_pcl_template_transport
+  ${PCL_ROOT}/tests/test_pcl_template_transport.cpp)
+target_link_libraries(test_pcl_template_transport
+  PRIVATE pcl_core pcl_transport_template GTest::gtest_main)
+target_include_directories(test_pcl_template_transport PRIVATE
+  ${PCL_ROOT}/tests)
+gtest_discover_tests(test_pcl_template_transport DISCOVERY_MODE PRE_TEST)
+
+# APOS transport tests
+add_executable(test_pcl_apos_transport
+  ${PCL_ROOT}/tests/test_pcl_apos_transport.cpp)
+target_link_libraries(test_pcl_apos_transport
+  PRIVATE pcl_core pcl_transport_apos GTest::gtest_main)
+target_include_directories(test_pcl_apos_transport PRIVATE
+  ${PCL_ROOT}/tests
+  ${PCL_ROOT}/bindings/apos)
+gtest_discover_tests(test_pcl_apos_transport DISCOVERY_MODE PRE_TEST)
 
 # C++ wrapper tests
 add_executable(test_pcl_cpp_wrappers ${PCL_ROOT}/tests/test_pcl_cpp_wrappers.cpp)

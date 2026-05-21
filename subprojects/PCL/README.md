@@ -55,3 +55,4 @@ subprojects\PCL\scripts\build_gnat_pcl_static_libs.bat
 - [Peer and transport configuration guide](doc/guides/peer_transport_configuration.md)
 - [Coverage report](../../doc/reports/PCL/COVERAGE_REPORT.md)
 - [HLR coverage matrix](../../doc/reports/PCL/HLR_COVERAGE.md)
+- [Mutex audit](../../doc/reports/PCL/MUTEX_AUDIT.md)

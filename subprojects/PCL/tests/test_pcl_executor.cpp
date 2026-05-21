@@ -11,7 +11,14 @@ extern "C" {
 #include "pcl/pcl_container.h"
 #include "pcl/pcl_transport.h"
 #include "pcl/pcl_log.h"
+
+// Cross-TU helpers declared in pcl_internal.h. Forward-declared here so the
+// test does not need src/ on its include path.
+void pcl_executor_containers_lock(pcl_executor_t* e);
+void pcl_executor_containers_unlock(pcl_executor_t* e);
 }
+
+#include <atomic>
 
 // -- Helpers -------------------------------------------------------------
 
@@ -890,4 +897,198 @@ TEST(PclExecutor, NullSafety) {
   EXPECT_EQ(pcl_executor_spin_once(nullptr, 0), PCL_ERR_INVALID);
   EXPECT_EQ(pcl_executor_shutdown_graceful(nullptr, 0), PCL_ERR_INVALID);
   EXPECT_EQ(pcl_executor_post_incoming(nullptr, "topic", nullptr), PCL_ERR_INVALID);
+}
+
+// -- Default + named transport accessors --------------------------------
+//
+// Exercises pcl_executor_get_transport and pcl_executor_get_transport_for_peer
+// (the latter was added by the alias-rebinding fix and was unreached by the
+// existing suite).
+
+TEST(PclExecutor, GetTransportReturnsConfiguredDefault) {
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  EXPECT_EQ(pcl_executor_get_transport(e), nullptr);
+  EXPECT_EQ(pcl_executor_get_transport(nullptr), nullptr);
+
+  int marker = 0;
+  pcl_transport_t t = {};
+  t.adapter_ctx = &marker;
+  ASSERT_EQ(pcl_executor_set_transport(e, &t), PCL_OK);
+
+  const pcl_transport_t* got = pcl_executor_get_transport(e);
+  ASSERT_NE(got, nullptr);
+  EXPECT_EQ(got->adapter_ctx, &marker);
+
+  pcl_executor_set_transport(e, nullptr);
+  EXPECT_EQ(pcl_executor_get_transport(e), nullptr);
+
+  pcl_executor_destroy(e);
+}
+
+TEST(PclExecutor, GetTransportForPeerResolvesRegisteredAdapter) {
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  EXPECT_EQ(pcl_executor_get_transport_for_peer(nullptr, "any"), nullptr);
+  EXPECT_EQ(pcl_executor_get_transport_for_peer(e, nullptr), nullptr);
+  EXPECT_EQ(pcl_executor_get_transport_for_peer(e, "ghost"), nullptr);
+
+  int marker_a = 0;
+  int marker_b = 0;
+  pcl_transport_t a = {};
+  pcl_transport_t b = {};
+  a.adapter_ctx = &marker_a;
+  b.adapter_ctx = &marker_b;
+
+  ASSERT_EQ(pcl_executor_register_transport(e, "peer_a", &a), PCL_OK);
+  ASSERT_EQ(pcl_executor_register_transport(e, "peer_b", &b), PCL_OK);
+
+  const pcl_transport_t* got_a = pcl_executor_get_transport_for_peer(e, "peer_a");
+  const pcl_transport_t* got_b = pcl_executor_get_transport_for_peer(e, "peer_b");
+  ASSERT_NE(got_a, nullptr);
+  ASSERT_NE(got_b, nullptr);
+  EXPECT_EQ(got_a->adapter_ctx, &marker_a);
+  EXPECT_EQ(got_b->adapter_ctx, &marker_b);
+
+  // After unregistering a slot, the lookup must return NULL.
+  ASSERT_EQ(pcl_executor_register_transport(e, "peer_a", nullptr), PCL_OK);
+  EXPECT_EQ(pcl_executor_get_transport_for_peer(e, "peer_a"), nullptr);
+  EXPECT_NE(pcl_executor_get_transport_for_peer(e, "peer_b"), nullptr);
+
+  pcl_executor_destroy(e);
+}
+
+// -- Remote service request enqueue -------------------------------------
+//
+// Exercises pcl_executor_post_service_request_remote, which transport recv
+// threads use to flow inbound RPC requests onto the executor thread.  The
+// drain path then invokes find_service with PCL_ROUTE_REMOTE -- previously
+// uncovered by the harness.
+
+TEST(PclExecutor, PostServiceRequestRemoteValidatesPeerId) {
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  pcl_msg_t req = {};
+  req.type_name = "Req";
+
+  // NULL and empty peer id are rejected.
+  EXPECT_EQ(pcl_executor_post_service_request_remote(
+                e, nullptr, "svc", &req,
+                [](const pcl_msg_t*, void*) {}, nullptr),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_post_service_request_remote(
+                e, "", "svc", &req,
+                [](const pcl_msg_t*, void*) {}, nullptr),
+            PCL_ERR_INVALID);
+
+  pcl_executor_destroy(e);
+}
+
+TEST(PclExecutor, PostServiceRequestRemoteDispatchesToRemoteRoutedService) {
+  struct State {
+    std::atomic<bool>      handled{false};
+    std::string            request_payload;
+    std::atomic<bool>      response_received{false};
+    std::string            response_payload;
+  } state;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    const char* peers[] = {"upstream"};
+    pcl_port_t* port = pcl_container_add_service(
+        c, "remote_only_svc", "Req",
+        [](pcl_container_t*, const pcl_msg_t* req, pcl_msg_t* resp,
+           pcl_svc_context_t*, void* ud_inner) -> pcl_status_t {
+          auto* s = static_cast<State*>(ud_inner);
+          if (req->data && req->size > 0u) {
+            s->request_payload.assign(static_cast<const char*>(req->data),
+                                      req->size);
+          }
+          s->handled = true;
+          resp->data = "pong";
+          resp->size = 4;
+          resp->type_name = "Resp";
+          return PCL_OK;
+        },
+        ud);
+    if (!port) return PCL_ERR_NOMEM;
+    // Remote-exposure only -- a local enqueue would be filtered out.
+    return pcl_port_set_route(port, PCL_ROUTE_REMOTE, peers, 1);
+  };
+
+  auto* c = pcl_container_create("remote_svc_node", &cbs, &state);
+  ASSERT_NE(c, nullptr);
+  ASSERT_EQ(pcl_container_configure(c), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(c), PCL_OK);
+
+  auto* e = pcl_executor_create();
+  ASSERT_EQ(pcl_executor_add(e, c), PCL_OK);
+
+  pcl_msg_t req = {};
+  req.data      = "ping";
+  req.size      = 4;
+  req.type_name = "Req";
+
+  ASSERT_EQ(pcl_executor_post_service_request_remote(
+                e, "upstream", "remote_only_svc", &req,
+                [](const pcl_msg_t* resp, void* ud) {
+                  auto* s = static_cast<State*>(ud);
+                  if (resp && resp->data && resp->size > 0u) {
+                    s->response_payload.assign(
+                        static_cast<const char*>(resp->data), resp->size);
+                  }
+                  s->response_received = true;
+                },
+                &state),
+            PCL_OK);
+
+  // Drain the svc_req queue -- find_service runs with PCL_ROUTE_REMOTE.
+  ASSERT_EQ(pcl_executor_spin_once(e, 0), PCL_OK);
+
+  EXPECT_TRUE(state.handled);
+  EXPECT_EQ(state.request_payload, "ping");
+  EXPECT_TRUE(state.response_received);
+  EXPECT_EQ(state.response_payload, "pong");
+
+  pcl_executor_destroy(e);
+  pcl_container_destroy(c);
+}
+
+// -- Spin-once idle wait branch -----------------------------------------
+//
+// When no queue had work to drain and the caller asks for a non-zero
+// timeout, spin_once parks the thread.  Previously uncovered.
+
+TEST(PclExecutor, SpinOnceIdleWaitsWhenNoWorkAvailable) {
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  auto t0 = std::chrono::steady_clock::now();
+  ASSERT_EQ(pcl_executor_spin_once(e, 10), PCL_OK);
+  auto elapsed = std::chrono::steady_clock::now() - t0;
+  // Loose bound -- only checks that the idle-wait branch ran.
+  EXPECT_GE(std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count(),
+            500);
+
+  pcl_executor_destroy(e);
+}
+
+// -- Containers lock public API -----------------------------------------
+//
+// The cross-TU lock helpers are used by transports (e.g. SHM) to walk the
+// container list under the executor's lock.  The unit-level executor tests
+// did not previously exercise them.
+
+TEST(PclExecutor, ContainersLockHelpersAreSafeAroundNull) {
+  pcl_executor_containers_lock(nullptr);    // no-op -- must not crash
+  pcl_executor_containers_unlock(nullptr);  // no-op -- must not crash
+
+  auto* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  pcl_executor_containers_lock(e);
+  pcl_executor_containers_unlock(e);
+  pcl_executor_destroy(e);
 }
