@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -777,6 +778,303 @@ TEST(PclSharedMemoryTransport, InvokeAsyncReturnsNotFoundWithoutProvider) {
                                 [](const pcl_msg_t*, void*) {},
                                 nullptr),
       PCL_ERR_NOT_FOUND);
+
+  client.destroy();
+  restore_logs();
+}
+
+namespace {
+
+struct StreamServerState {
+  std::atomic<bool>     handler_invoked{false};
+  pcl_stream_context_t* saved_ctx = nullptr;
+  std::string           request_payload;
+};
+
+struct StreamClientState {
+  std::vector<std::string> frames;
+  std::atomic<bool>        ended{false};
+  pcl_status_t             final_status = PCL_OK;
+};
+
+void spin_both_until(BusNode& a, BusNode& b,
+                     const std::function<bool()>& done,
+                     int max_iters = 200) {
+  for (int i = 0; i < max_iters && !done(); ++i) {
+    pcl_executor_spin_once(a.exec, 0);
+    pcl_executor_spin_once(b.exec, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+}
+
+void install_stream_service(BusNode& node,
+                            const char*        service_name,
+                            const char*        allowed_peer,
+                            StreamServerState& state,
+                            pcl_container_t**  out_container) {
+  struct ConfigContext {
+    const char*        service_name;
+    const char*        allowed_peer;
+    StreamServerState* state;
+  };
+  static thread_local ConfigContext config{};
+  config.service_name = service_name;
+  config.allowed_peer = allowed_peer;
+  config.state        = &state;
+
+  pcl_callbacks_t cbs = {};
+  cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    auto* cfg = &config;
+    pcl_port_t* port = pcl_container_add_stream_service(
+        c, cfg->service_name, "StreamReq",
+        [](pcl_container_t*, const pcl_msg_t* req,
+           pcl_stream_context_t* sctx, void* state_ud) -> pcl_status_t {
+          auto* s = static_cast<StreamServerState*>(state_ud);
+          s->saved_ctx = sctx;
+          if (req && req->data && req->size > 0u) {
+            s->request_payload.assign(static_cast<const char*>(req->data),
+                                      req->size);
+          }
+          s->handler_invoked = true;
+          return PCL_STREAMING;
+        },
+        ud);
+    if (!port) return PCL_ERR_NOMEM;
+    const char* peers[] = {cfg->allowed_peer};
+    return pcl_port_set_route(port, PCL_ROUTE_REMOTE, peers, 1);
+  };
+
+  *out_container = pcl_container_create("stream_server_node", &cbs, &state);
+  ASSERT_NE(*out_container, nullptr);
+  ASSERT_EQ(pcl_container_configure(*out_container), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(*out_container), PCL_OK);
+  ASSERT_EQ(pcl_executor_add(node.exec, *out_container), PCL_OK);
+}
+
+}  // namespace
+
+///< Stream round-trip across the shared-memory bus (in-process two-executor).
+TEST(PclSharedMemoryTransport, StreamRoundTripSendsAndEnds) {
+  silence_logs();
+
+  const std::string bus = unique_token("shm_bus_stream");
+  BusNode client;
+  BusNode server;
+  ASSERT_TRUE(client.create(bus.c_str(), "stream_client"));
+  ASSERT_TRUE(server.create(bus.c_str(), "stream_server"));
+  ASSERT_TRUE(client.attach_transport(true));
+  ASSERT_TRUE(server.attach_transport(true));
+
+  StreamServerState server_state;
+  pcl_container_t*  svc = nullptr;
+  install_stream_service(server, "shm_echo_stream", "stream_client",
+                         server_state, &svc);
+
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "shm_echo_stream";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode    = PCL_ROUTE_REMOTE;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(client.exec, &route), PCL_OK);
+
+  StreamClientState client_state;
+  pcl_stream_context_t* client_ctx = nullptr;
+
+  pcl_msg_t req = {};
+  req.data      = "go";
+  req.size      = 2;
+  req.type_name = "StreamReq";
+
+  auto cb = [](const pcl_msg_t* msg, bool end, pcl_status_t status, void* ud) {
+    auto* s = static_cast<StreamClientState*>(ud);
+    if (!end && msg && msg->data && msg->size > 0u) {
+      s->frames.emplace_back(static_cast<const char*>(msg->data), msg->size);
+    }
+    if (end) {
+      s->ended        = true;
+      s->final_status = status;
+    }
+  };
+
+  ASSERT_EQ(pcl_executor_invoke_stream(client.exec, "shm_echo_stream",
+                                       &req, cb, &client_state, &client_ctx),
+            PCL_STREAMING);
+
+  spin_both_until(client, server,
+                  [&] { return server_state.handler_invoked.load(); });
+  ASSERT_TRUE(server_state.handler_invoked);
+  ASSERT_NE(server_state.saved_ctx, nullptr);
+  EXPECT_EQ(server_state.request_payload, "go");
+
+  const char* payloads[] = {"one", "two", "three"};
+  for (const char* text : payloads) {
+    pcl_msg_t out = {};
+    out.data      = text;
+    out.size      = static_cast<uint32_t>(strlen(text));
+    out.type_name = "StreamFrame";
+    EXPECT_EQ(pcl_stream_send(server_state.saved_ctx, &out), PCL_OK);
+  }
+
+  spin_both_until(client, server,
+                  [&] { return client_state.frames.size() == 3u; });
+  ASSERT_EQ(client_state.frames.size(), 3u);
+  EXPECT_EQ(client_state.frames[0], "one");
+  EXPECT_EQ(client_state.frames[1], "two");
+  EXPECT_EQ(client_state.frames[2], "three");
+
+  EXPECT_EQ(pcl_stream_end(server_state.saved_ctx), PCL_OK);
+  spin_both_until(client, server, [&] { return client_state.ended.load(); });
+  EXPECT_TRUE(client_state.ended);
+  EXPECT_EQ(client_state.final_status, PCL_OK);
+
+  pcl_executor_remove(server.exec, svc);
+  pcl_container_destroy(svc);
+  server.destroy();
+  client.destroy();
+  restore_logs();
+}
+
+///< Stream invoked against a missing service returns NOT_FOUND.
+TEST(PclSharedMemoryTransport, StreamReturnsNotFoundWithoutProvider) {
+  silence_logs();
+
+  BusNode client;
+  ASSERT_TRUE(client.create(unique_token("shm_stream_none").c_str(),
+                            "stream_only_client"));
+  ASSERT_TRUE(client.attach_transport(true));
+
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "missing_stream";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode    = PCL_ROUTE_REMOTE;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(client.exec, &route), PCL_OK);
+
+  pcl_msg_t req = {};
+  req.data      = "x";
+  req.size      = 1;
+  req.type_name = "StreamReq";
+
+  EXPECT_EQ(
+      pcl_executor_invoke_stream(client.exec, "missing_stream", &req,
+                                 [](const pcl_msg_t*, bool, pcl_status_t, void*) {},
+                                 nullptr, nullptr),
+      PCL_ERR_NOT_FOUND);
+
+  client.destroy();
+  restore_logs();
+}
+
+///< Server-side stream aborted by the handler propagates the status to the client.
+TEST(PclSharedMemoryTransport, StreamAbortPropagatesStatus) {
+  silence_logs();
+
+  const std::string bus = unique_token("shm_bus_stream_abort");
+  BusNode client;
+  BusNode server;
+  ASSERT_TRUE(client.create(bus.c_str(), "stream_client"));
+  ASSERT_TRUE(server.create(bus.c_str(), "stream_server"));
+  ASSERT_TRUE(client.attach_transport(true));
+  ASSERT_TRUE(server.attach_transport(true));
+
+  StreamServerState server_state;
+  pcl_container_t*  svc = nullptr;
+  install_stream_service(server, "abort_stream", "stream_client",
+                         server_state, &svc);
+
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "abort_stream";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode    = PCL_ROUTE_REMOTE;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(client.exec, &route), PCL_OK);
+
+  StreamClientState client_state;
+  pcl_msg_t req = {};
+  req.data      = "go";
+  req.size      = 2;
+  req.type_name = "StreamReq";
+
+  auto cb = [](const pcl_msg_t*, bool end, pcl_status_t status, void* ud) {
+    auto* s = static_cast<StreamClientState*>(ud);
+    if (end) {
+      s->ended        = true;
+      s->final_status = status;
+    }
+  };
+
+  ASSERT_EQ(pcl_executor_invoke_stream(client.exec, "abort_stream",
+                                       &req, cb, &client_state, nullptr),
+            PCL_STREAMING);
+
+  spin_both_until(client, server,
+                  [&] { return server_state.handler_invoked.load(); });
+  ASSERT_TRUE(server_state.handler_invoked);
+  ASSERT_NE(server_state.saved_ctx, nullptr);
+
+  EXPECT_EQ(pcl_stream_abort(server_state.saved_ctx, PCL_ERR_CALLBACK), PCL_OK);
+  spin_both_until(client, server, [&] { return client_state.ended.load(); });
+  EXPECT_TRUE(client_state.ended);
+  EXPECT_EQ(client_state.final_status, PCL_ERR_CALLBACK);
+
+  pcl_executor_remove(server.exec, svc);
+  pcl_container_destroy(svc);
+  server.destroy();
+  client.destroy();
+  restore_logs();
+}
+
+///< Destroy mid-stream aborts pending streams with PCL_ERR_CANCELLED.
+TEST(PclSharedMemoryTransport, DestroyDuringActiveStreamAbortsServer) {
+  silence_logs();
+
+  const std::string bus = unique_token("shm_bus_stream_destroy");
+  BusNode client;
+  BusNode server;
+  ASSERT_TRUE(client.create(bus.c_str(), "stream_client"));
+  ASSERT_TRUE(server.create(bus.c_str(), "stream_server"));
+  ASSERT_TRUE(client.attach_transport(true));
+  ASSERT_TRUE(server.attach_transport(true));
+
+  StreamServerState server_state;
+  pcl_container_t*  svc = nullptr;
+  install_stream_service(server, "destroy_stream", "stream_client",
+                         server_state, &svc);
+
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "destroy_stream";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode    = PCL_ROUTE_REMOTE;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(client.exec, &route), PCL_OK);
+
+  StreamClientState client_state;
+  pcl_msg_t req = {};
+  req.data      = "x";
+  req.size      = 1;
+  req.type_name = "StreamReq";
+
+  auto cb = [](const pcl_msg_t*, bool end, pcl_status_t status, void* ud) {
+    auto* s = static_cast<StreamClientState*>(ud);
+    if (end) {
+      s->ended        = true;
+      s->final_status = status;
+    }
+  };
+
+  ASSERT_EQ(pcl_executor_invoke_stream(client.exec, "destroy_stream",
+                                       &req, cb, &client_state, nullptr),
+            PCL_STREAMING);
+
+  spin_both_until(client, server,
+                  [&] { return server_state.handler_invoked.load(); });
+  ASSERT_TRUE(server_state.handler_invoked);
+
+  // Tear down the server while the stream is still open; the SHM transport
+  // must send STREAM_END(PCL_ERR_CANCELLED) to the client before it goes away.
+  pcl_executor_remove(server.exec, svc);
+  pcl_container_destroy(svc);
+  server.destroy();
+
+  spin_both_until(client, server, [&] { return client_state.ended.load(); });
+  EXPECT_TRUE(client_state.ended);
+  EXPECT_EQ(client_state.final_status, PCL_ERR_CANCELLED);
 
   client.destroy();
   restore_logs();
