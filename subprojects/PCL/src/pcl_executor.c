@@ -250,19 +250,33 @@ pcl_executor_t* pcl_executor_create(void) {
   e->has_transport      = 0;
   e->shutdown_requested = 0;
   e->prev_time          = 0.0;
+  pcl_mutex_init(&e->containers_lock);
   pcl_mutex_init(&e->incoming_lock);
   pcl_mutex_init(&e->resp_cb_lock);
   pcl_mutex_init(&e->svc_req_lock);
   return e;
 }
 
+void pcl_executor_containers_lock(pcl_executor_t* e) {
+  if (!e) return;
+  pcl_mutex_lock(&e->containers_lock);
+}
+
+void pcl_executor_containers_unlock(pcl_executor_t* e) {
+  if (!e) return;
+  pcl_mutex_unlock(&e->containers_lock);
+}
+
 void pcl_executor_destroy(pcl_executor_t* e) {
   pcl_pending_msg_t* pending;
   uint32_t i;
   if (!e) return;
+  pcl_mutex_lock(&e->containers_lock);
   for (i = 0; i < e->container_count; ++i) {
     e->containers[i]->executor = NULL;
   }
+  e->container_count = 0;
+  pcl_mutex_unlock(&e->containers_lock);
   if (e->has_transport && e->transport.shutdown) {
     e->transport.shutdown(e->transport.adapter_ctx);
   }
@@ -322,6 +336,7 @@ void pcl_executor_destroy(pcl_executor_t* e) {
   }
   pcl_mutex_destroy(&e->svc_req_lock);
   pcl_mutex_destroy(&e->incoming_lock);
+  pcl_mutex_destroy(&e->containers_lock);
   free(e);
 }
 
@@ -329,24 +344,32 @@ void pcl_executor_destroy(pcl_executor_t* e) {
 
 pcl_status_t pcl_executor_add(pcl_executor_t* e, pcl_container_t* c) {
   if (!e || !c) return PCL_ERR_INVALID;
-  if (e->container_count >= PCL_MAX_CONTAINERS) return PCL_ERR_NOMEM;
+  pcl_mutex_lock(&e->containers_lock);
+  if (e->container_count >= PCL_MAX_CONTAINERS) {
+    pcl_mutex_unlock(&e->containers_lock);
+    return PCL_ERR_NOMEM;
+  }
   e->containers[e->container_count++] = c;
   c->executor = e;
+  pcl_mutex_unlock(&e->containers_lock);
   return PCL_OK;
 }
 
 pcl_status_t pcl_executor_remove(pcl_executor_t* e, pcl_container_t* c) {
   uint32_t i;
   if (!e || !c) return PCL_ERR_INVALID;
+  pcl_mutex_lock(&e->containers_lock);
   for (i = 0; i < e->container_count; ++i) {
     if (e->containers[i] == c) {
       c->executor = NULL;
       memmove(&e->containers[i], &e->containers[i + 1],
               (e->container_count - i - 1) * sizeof(e->containers[0]));
       e->container_count--;
+      pcl_mutex_unlock(&e->containers_lock);
       return PCL_OK;
     }
   }
+  pcl_mutex_unlock(&e->containers_lock);
   return PCL_ERR_NOT_FOUND;
 }
 

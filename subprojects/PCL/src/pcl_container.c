@@ -87,6 +87,12 @@ pcl_container_t* pcl_container_create(const char*            name,
 
 void pcl_container_destroy(pcl_container_t* c) {
   if (!c) return;
+  // Detach from the executor (if attached) before freeing the storage --
+  // otherwise the executor's container list keeps a dangling pointer that
+  // transport recv threads and pcl_executor_destroy will later dereference.
+  if (c->executor) {
+    pcl_executor_remove(c->executor, c);
+  }
   free(c);
 }
 

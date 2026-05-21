@@ -132,6 +132,11 @@ typedef struct {
 struct pcl_executor_t {
   pcl_container_t* containers[PCL_MAX_CONTAINERS];
   uint32_t         container_count;
+  /// Guards \ref containers and \ref container_count against concurrent
+  /// mutation by the main thread (pcl_executor_add / pcl_executor_remove /
+  /// pcl_container_destroy via auto-detach) and iteration by transport recv
+  /// threads (e.g. shared-memory service lookups).
+  pcl_mutex_t      containers_lock;
 
   pcl_transport_t  transport;
   int              has_transport;
@@ -158,6 +163,13 @@ struct pcl_executor_t {
   pcl_pending_svc_req_t* svc_req_tail;
   pcl_mutex_t            svc_req_lock;
 };
+
+/// Cross-translation-unit access to the executor container list. Holds
+/// \ref pcl_executor_t::containers_lock; pair the two calls in the same
+/// thread. Safe to nest with the transport-internal locks because no PCL
+/// helper acquires this lock while already holding a transport lock.
+void pcl_executor_containers_lock(pcl_executor_t* e);
+void pcl_executor_containers_unlock(pcl_executor_t* e);
 
 // -- Service context for deferred responses -------------------------------
 

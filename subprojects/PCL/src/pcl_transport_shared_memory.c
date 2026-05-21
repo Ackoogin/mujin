@@ -501,10 +501,12 @@ static pcl_port_t* pcl_shm_find_remote_service(pcl_executor_t* e,
                                                const char*     source_peer_id) {
   uint32_t ci;
   uint32_t pi;
+  pcl_port_t* match = NULL;
 
   if (!e || !name || !source_peer_id) return NULL;
 
-  for (ci = 0; ci < e->container_count; ++ci) {
+  pcl_executor_containers_lock(e);
+  for (ci = 0; ci < e->container_count && match == NULL; ++ci) {
     pcl_container_t* c = e->containers[ci];
     for (pi = 0; pi < c->port_count; ++pi) {
       pcl_port_t* port = &c->ports[pi];
@@ -523,11 +525,12 @@ static pcl_port_t* pcl_shm_find_remote_service(pcl_executor_t* e,
       if (!pcl_shm_peer_is_allowed(e, port, source_peer_id)) {
         continue;
       }
-      return port;
+      match = port;
+      break;
     }
   }
-
-  return NULL;
+  pcl_executor_containers_unlock(e);
+  return match;
 }
 
 static pcl_port_t* pcl_shm_find_remote_stream_service(pcl_executor_t* e,
@@ -535,10 +538,12 @@ static pcl_port_t* pcl_shm_find_remote_stream_service(pcl_executor_t* e,
                                                       const char*     source_peer_id) {
   uint32_t ci;
   uint32_t pi;
+  pcl_port_t* match = NULL;
 
   if (!e || !name || !source_peer_id) return NULL;
 
-  for (ci = 0; ci < e->container_count; ++ci) {
+  pcl_executor_containers_lock(e);
+  for (ci = 0; ci < e->container_count && match == NULL; ++ci) {
     pcl_container_t* c = e->containers[ci];
     for (pi = 0; pi < c->port_count; ++pi) {
       pcl_port_t* port = &c->ports[pi];
@@ -557,11 +562,12 @@ static pcl_port_t* pcl_shm_find_remote_stream_service(pcl_executor_t* e,
       if (!pcl_shm_peer_is_allowed(e, port, source_peer_id)) {
         continue;
       }
-      return port;
+      match = port;
+      break;
     }
   }
-
-  return NULL;
+  pcl_executor_containers_unlock(e);
+  return match;
 }
 
 static int pcl_shm_service_list_contains(char services[PCL_SHM_MAX_SERVICES][PCL_SHM_MAX_NAME],
@@ -584,6 +590,7 @@ static void pcl_shm_collect_local_services(
   *count = 0u;
   if (!ctx || !ctx->executor) return;
 
+  pcl_executor_containers_lock(ctx->executor);
   for (ci = 0; ci < ctx->executor->container_count; ++ci) {
     pcl_container_t* c = ctx->executor->containers[ci];
     for (pi = 0; pi < c->port_count; ++pi) {
@@ -606,6 +613,7 @@ static void pcl_shm_collect_local_services(
         continue;
       }
       if (*count >= PCL_SHM_MAX_SERVICES) {
+        pcl_executor_containers_unlock(ctx->executor);
         return;
       }
 
@@ -613,6 +621,7 @@ static void pcl_shm_collect_local_services(
       (*count)++;
     }
   }
+  pcl_executor_containers_unlock(ctx->executor);
 }
 
 static void pcl_shm_sync_local_services(pcl_shared_memory_transport_t* ctx) {
