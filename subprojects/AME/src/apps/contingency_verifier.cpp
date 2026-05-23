@@ -2,14 +2,27 @@
 // contingency_verifier — exhaustive safe-state reachability analysis
 // =========================================================================
 // Accepts a PDDL domain + template problem, automatically identifies
-// static health predicates, enumerates all 2^N combinations, and proves
-// whether every system state has a valid plan to reach the goal.
+// context predicates (system health, environment state), enumerates all
+// 2^N combinations, and proves whether every possible world state has
+// a valid plan to reach the goal.
+//
+// Context predicates represent externally-determined facts — hardware
+// health, sensor status, comms availability, weather — that change due
+// to real-world events outside the planner's control. In the real
+// system these are always CONFIRMED by perception, never BELIEVED by
+// the planner. They are identified as predicates that gate actions
+// (appear in preconditions) but are never produced or consumed by any
+// action (absent from all add/delete effects). The planner treats each
+// snapshot of these predicates as given context and plans accordingly.
+//
+// This tool enumerates every possible context snapshot and verifies
+// that the planner can always find a path to the safety goal.
 //
 // Optimisation: monotone dominance pruning.
-// Static health predicates appear only in positive preconditions and
-// never in effects. Therefore if state S is solvable, every superset
-// S' ⊇ S is also solvable (more capabilities can only help). This
-// lets us skip exponentially many solver calls.
+// Because context predicates only appear as positive preconditions,
+// additional capabilities can only enable actions, never disable them.
+// If a plan exists in context S, the same plan is valid in any context
+// S' ⊇ S. This lets us skip exponentially many solver calls.
 //
 // Usage:
 //   contingency_verifier <domain.pddl> <template_problem.pddl> [options]
@@ -35,15 +48,18 @@
 #include <vector>
 
 // -------------------------------------------------------------------------
-// Static predicate detection
+// Context predicate detection
 // -------------------------------------------------------------------------
-// A predicate is "static" if it never appears in any action's add or delete
-// effects. Static predicates cannot change during plan execution, so their
-// values in the initial state fully determine their truth throughout the plan.
+// A context predicate is one that the planner cannot change — it never
+// appears in any action's add or delete effects. In real systems these
+// represent externally-determined facts (hardware health, sensor status,
+// comms link, weather) that are always CONFIRMED by perception. They
+// change due to real-world events between replanning cycles, but within
+// any single planning snapshot they are fixed context.
 //
-// A static predicate is a "health variable" if it is 0-ary (no parameters)
+// A context predicate is a "health variable" if it is 0-ary (no parameters)
 // and appears in at least one action's preconditions. These are the
-// predicates we enumerate.
+// predicates whose combinations we enumerate.
 
 struct HealthVar {
     unsigned fluent_id;
@@ -53,7 +69,8 @@ struct HealthVar {
 };
 
 static std::vector<HealthVar> identifyHealthVars(const ame::WorldModel& wm) {
-    // Collect all fluent IDs that appear in any action's effects
+    // Collect all fluent IDs that appear in any action's effects.
+    // Context predicates are those used in preconditions but never in effects.
     std::vector<bool> appears_in_effects(wm.numFluents(), false);
     std::vector<bool> appears_in_preconditions(wm.numFluents(), false);
 
@@ -306,8 +323,13 @@ static void printUsage(const char* prog) {
         << "Usage: " << prog << " <domain.pddl> <template_problem.pddl> [options]\n"
         << "\n"
         << "Exhaustive safe-state reachability analysis for PDDL contingency domains.\n"
-        << "Automatically identifies static health predicates and enumerates all 2^N\n"
-        << "combinations, proving whether every system state has a path to the goal.\n"
+        << "Automatically identifies context predicates (system health, environment\n"
+        << "state) and enumerates all 2^N combinations, proving whether every possible\n"
+        << "world state has a valid plan to reach the goal.\n"
+        << "\n"
+        << "Context predicates are externally-determined facts (hardware health, sensor\n"
+        << "status, comms, weather) that change due to real-world events. They are\n"
+        << "always CONFIRMED by perception, never produced by plan actions.\n"
         << "\n"
         << "Options:\n"
         << "  --no-prune     Disable monotonicity pruning (solve every combination)\n"
@@ -316,9 +338,9 @@ static void printUsage(const char* prog) {
         << "  -h, --help     Show this help\n"
         << "\n"
         << "Monotonicity pruning (default ON):\n"
-        << "  Static health predicates never change during a plan. If a state with\n"
-        << "  fewer capabilities is solvable, all supersets are also solvable. This\n"
-        << "  can skip exponentially many solver calls.\n";
+        << "  Context predicates cannot be changed by any action. If a plan exists\n"
+        << "  with fewer capabilities, it also works with more. This can skip\n"
+        << "  exponentially many solver calls.\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -389,9 +411,12 @@ int main(int argc, char* argv[]) {
 
     auto vars = identifyHealthVars(template_wm);
     if (vars.empty()) {
-        std::cerr << "No static health predicates found in domain.\n"
-                  << "Health predicates are 0-ary predicates that appear in\n"
-                  << "action preconditions but never in effects.\n";
+        std::cerr << "No context predicates found in domain.\n"
+                  << "Context predicates are 0-ary predicates that appear in\n"
+                  << "action preconditions but never in any action's effects.\n"
+                  << "These represent externally-determined facts (health,\n"
+                  << "sensor status, comms, weather) that the planner cannot\n"
+                  << "change.\n";
         return 1;
     }
 
@@ -415,7 +440,7 @@ int main(int argc, char* argv[]) {
               << "Template:  " << problem_file << "\n"
               << "Pruning:   " << (prune ? "monotone dominance" : "disabled") << "\n"
               << "\n"
-              << "Identified " << N << " static health variable(s):\n";
+              << "Identified " << N << " context predicate(s):\n";
 
     for (auto& v : vars) {
         std::cout << "  " << std::left << std::setw(4)
@@ -435,33 +460,42 @@ int main(int argc, char* argv[]) {
         std::cout << "\n"
             << "PRUNING JUSTIFICATION (Monotone Dominance)\n"
             << "------------------------------------------------------------\n"
-            << "The identified health variables are STATIC: they appear only\n"
-            << "in action preconditions and never in any action's add or\n"
-            << "delete effects. Their values cannot change during plan\n"
-            << "execution. All occurrences are as POSITIVE preconditions\n"
-            << "(the parser does not support negated preconditions).\n"
+            << "The identified context predicates represent externally-\n"
+            << "determined facts (hardware health, sensor status, comms,\n"
+            << "weather) that change due to real-world events and are always\n"
+            << "CONFIRMED by perception. They are not producible or\n"
+            << "consumable by any plan action — no action adds or deletes\n"
+            << "them. The planner treats each combination as a fixed context\n"
+            << "snapshot and plans within it.\n"
             << "\n"
-            << "Theorem: if a goal is reachable from state S, it is also\n"
-            << "reachable from any state S' where S' has all facts of S\n"
-            << "plus additional static facts.\n"
+            << "Within any single planning snapshot, these predicates are\n"
+            << "fixed and appear only as POSITIVE preconditions (the STRIPS\n"
+            << "parser does not support negated preconditions).\n"
+            << "\n"
+            << "Theorem: if a goal is reachable from context S, it is also\n"
+            << "reachable from any context S' where S' has all facts of S\n"
+            << "plus additional context facts.\n"
             << "\n"
             << "Proof: any plan P valid in S is also valid in S'. Each\n"
             << "action's preconditions are a conjunction of positive atoms.\n"
             << "Since S ⊆ S', every precondition satisfied in S is also\n"
-            << "satisfied in S'. Effects are identical (health vars are not\n"
-            << "in effects), so the plan produces the same state transitions\n"
-            << "and achieves the same goal. QED.\n"
+            << "satisfied in S'. Effects are identical (context predicates\n"
+            << "are not in effects), so the plan produces the same state\n"
+            << "transitions and achieves the same goal. QED.\n"
             << "\n"
-            << "Corollary (safe propagation): if state S is SAFE, all\n"
+            << "Corollary (safe propagation): if context S is SAFE, all\n"
             << "supersets of S are also SAFE.\n"
-            << "Corollary (gap propagation): if state S is a GAP, all\n"
+            << "Corollary (gap propagation): if context S is a GAP, all\n"
             << "subsets of S are also GAPS.\n"
             << "\n"
-            << "Verification: for each health variable, confirm it does not\n"
-            << "appear in any action effect:\n";
+            << "Validity conditions (verified for each context predicate):\n"
+            << "  1. Not in any action's add effects  (planner cannot set)\n"
+            << "  2. Not in any action's delete effects  (planner cannot clear)\n"
+            << "  3. Appears only as positive precondition  (STRIPS guarantee)\n"
+            << "\n";
         for (auto& v : vars) {
             std::cout << "  " << v.fluent_name
-                      << " — not in effects: VERIFIED\n";
+                      << " — conditions 1-3: VERIFIED\n";
         }
         std::cout << "------------------------------------------------------------\n";
     }
