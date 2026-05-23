@@ -23,6 +23,7 @@ from .planning_tab import PlanningTab
 from .execution_tab import ExecutionTab
 from .observability_tab import ObservabilityTab
 from .pddl_editor_tab import PddlEditorTab
+from .contingency_tab import ContingencyVerifierTab
 
 
 class App:
@@ -58,6 +59,7 @@ class App:
         self.execution_tab: Optional[ExecutionTab] = None
         self.observability_tab: Optional[ObservabilityTab] = None
         self.pddl_editor_tab: Optional[PddlEditorTab] = None
+        self.contingency_tab: Optional[ContingencyVerifierTab] = None
 
         # Status bar widgets
         self._foxglove_status: int = 0
@@ -177,6 +179,12 @@ class App:
                         with dpg.child_window(border=False) as container:
                             self.pddl_editor_tab.build(container)
 
+                    # Tab 6: Contingency Verifier
+                    with dpg.tab(label="  Contingency  "):
+                        self.contingency_tab = ContingencyVerifierTab(self)
+                        with dpg.child_window(border=False) as container:
+                            self.contingency_tab.build(container)
+
             # Status bar at bottom -- always visible
             dpg.add_spacer(height=2)
             dpg.add_separator()
@@ -280,6 +288,10 @@ class App:
         # --- Update execution tab controls (status label, tick counter) ---
         if self.execution_tab:
             self.execution_tab.update_controls()
+
+        # --- Check contingency verifier results ---
+        if self.contingency_tab:
+            self.contingency_tab.update()
 
         # --- Periodic plot/display refresh (throttled) ---
         if now - self._last_plot_refresh >= self._plot_refresh_interval:
