@@ -47,6 +47,12 @@
 #include <string>
 #include <vector>
 
+static unsigned portablePopcount(unsigned x) {
+    x = x - ((x >> 1) & 0x55555555u);
+    x = (x & 0x33333333u) + ((x >> 2) & 0x33333333u);
+    return (((x + (x >> 4)) & 0x0F0F0F0Fu) * 0x01010101u) >> 24;
+}
+
 // -------------------------------------------------------------------------
 // Context predicate detection
 // -------------------------------------------------------------------------
@@ -519,7 +525,7 @@ int main(int argc, char* argv[]) {
     std::vector<unsigned> order(num_combos);
     for (unsigned i = 0; i < num_combos; ++i) order[i] = i;
     std::sort(order.begin(), order.end(), [](unsigned a, unsigned b) {
-        return __builtin_popcount(a) < __builtin_popcount(b);
+        return portablePopcount(a) < portablePopcount(b);
     });
 
     for (unsigned combo : order) {
