@@ -91,3 +91,8 @@ add_executable(test_contingency_planning test_contingency_planning.cpp)
 target_link_libraries(test_contingency_planning PRIVATE ame_core GTest::gtest_main)
 target_compile_definitions(test_contingency_planning PRIVATE "PROJECT_SOURCE_DIR=\"${AME_SOURCE_DIR}\"")
 gtest_discover_tests(test_contingency_planning DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_contingency_exhaustive test_contingency_exhaustive.cpp)
+target_link_libraries(test_contingency_exhaustive PRIVATE ame_core GTest::gtest_main)
+target_compile_definitions(test_contingency_exhaustive PRIVATE "PROJECT_SOURCE_DIR=\"${AME_SOURCE_DIR}\"")
+gtest_discover_tests(test_contingency_exhaustive DISCOVERY_MODE PRE_TEST)
