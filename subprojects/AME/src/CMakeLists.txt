@@ -117,6 +117,12 @@ if(AME_FOXGLOVE)
 endif()
 
 # ---------------------------------------------------------------------------
+# Contingency verifier — exhaustive safe-state reachability tool
+# ---------------------------------------------------------------------------
+add_executable(contingency_verifier apps/contingency_verifier.cpp)
+target_link_libraries(contingency_verifier PRIVATE ame_core)
+
+# ---------------------------------------------------------------------------
 # Install rules -- allows ros2/ ament_cmake package to find_package(ame_core)
 #
 # We avoid install(EXPORT) because lapkt_core and behaviortree_cpp are

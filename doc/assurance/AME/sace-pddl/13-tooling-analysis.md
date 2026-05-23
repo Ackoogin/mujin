@@ -127,22 +127,20 @@ However, the SACE safety case requires analyses that go beyond goal-directed STR
 
 **Why manual file creation doesn't scale:** With *n* fault predicates, there are 2^*n* combinations. With 3 perception faults, 2 planning faults, and 2 control faults, that's 128 combinations. Each needs a problem file, planner run, and result classification.
 
-**Recommended approach:** Build a **PDDL Problem Generator** within the ame toolchain:
+**Implemented:** `contingency_verifier` (`subprojects/AME/src/apps/contingency_verifier.cpp`)
+
+The tool automatically identifies context predicates (0-ary predicates that gate actions but never appear in effects), enumerates all 2^N combinations, solves each with the LAPKT planner, and produces a reviewable safety report (text + JSON).
+
+Monotone dominance pruning exploits the fact that context predicates only appear as positive preconditions: if a plan exists with fewer capabilities, it also works with more. This reduces solver calls exponentially (e.g. 32 combinations solved in 1 call when a last-resort action like `emergency-land` exists). The formal proof is included in every report output for reviewer auditability.
 
 ```
-Inputs:
-  - Baseline domain file
-  - Baseline problem file
-  - Fault catalogue (list of predicates to toggle)
-  - Coverage strategy (all-combinations / pairwise / random-N)
+Usage:
+  contingency_verifier <domain.pddl> <template_problem.pddl> [--json report.json]
 
-Outputs:
-  - Generated problem files (one per fault combination)
-  - Batch planner results (plan found / no plan / timeout)
-  - Coverage report (which combinations tested, results)
+Exit code: 0 = all combinations safe, 1 = design gaps found
 ```
 
-This is a Python or C++ tool that reads the baseline PDDL, generates variants by toggling init predicates, runs the ame planner (or an external planner) on each, and collects results. This is the most immediately actionable tooling gap -- it requires no new planner, just automation around the existing one.
+See `subprojects/AME/doc/guides/contingency_verifier.md` for full documentation.
 
 ---
 
@@ -224,7 +222,7 @@ This is a Python or C++ tool that reads the baseline PDDL, generates variants by
 
 | Priority | Tool / Capability | SACE Stages | Effort | Value |
 |----------|------------------|-------------|--------|-------|
-| **1 -- Immediate** | PDDL Problem Generator (custom) | 2, 8, Residual | Low (Python script) | High -- unblocks systematic fault injection |
+| **1 -- DONE** | `contingency_verifier` (C++ tool) | 2, 5, 7, 8 | Done | Exhaustive context-predicate enumeration with monotone pruning. See `subprojects/AME/doc/guides/contingency_verifier.md` |
 | **2 -- Near-term** | VAL (plan validator) | 3, 8 | Low (download + CLI) | High -- validates plans against PDDL 3.0 constraints without changing planner |
 | **3 -- Near-term** | Fast Downward (optimal planner) | 8 | Low (download + CLI) | Medium -- plan quality evidence |
 | **4 -- Medium-term** | ENHSP or OPTIC (constrained planner) | 3, 4 | Medium (CLI integration) | High -- trajectory constraint satisfaction |
