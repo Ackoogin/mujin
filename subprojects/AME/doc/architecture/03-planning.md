@@ -83,3 +83,18 @@ The `reactive` flag controls whether the compiled action unit uses `ReactiveSequ
 4. Register the BT node type with the BT.CPP factory: `factory.registerNodeType<MyNode>("MyNode")`
 5. In ROS2 mode: also register on `ExecutorNode::factory()` in `combined_main.cpp`
 
+## Contingency Domains
+
+Two domain directories model contingency planning at separate levels of abstraction:
+
+- **`domains/vehicle_autonomy/`** -- flight lifecycle with a redundancy ladder (abort-on-ground, emergency-return-nav/gps/inertial, emergency-land).
+- **`domains/mission_autonomy/`** -- multi-agent task reallocation (withdraw-agent, mark-task-failed, reallocate-task, search-degraded).
+
+Both use pure STRIPS with positive preconditions only. Contingency actions are modelled as alternative action sets with relaxed preconditions per SACE Stage 5 design assurance.
+
+## Contingency Verifier
+
+`contingency_verifier` (`src/apps/contingency_verifier.cpp`) is a standalone tool that exhaustively verifies safe-state reachability across all system health combinations. It automatically identifies context predicates (0-ary predicates that gate actions but are never in effects), enumerates all 2^N combinations, and solves each with the LAPKT planner.
+
+Monotone dominance pruning reduces solver calls exponentially when minimal solvable states exist. See `doc/guides/contingency_verifier.md` for full usage and formal pruning justification.
+

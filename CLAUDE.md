@@ -19,6 +19,7 @@ See `README.md` for a comprehensive project overview, and `doc/reports/AME/stake
 | `doc/reports/AME/stakeholder_summary.md` | High-level approach and status for non-technical stakeholders |
 | `subprojects/AME/doc/architecture/` | **Consolidated architecture reference** (see below) |
 | `subprojects/AME/doc/guides/quickstart.md` | Getting started, build, run, Foxglove Studio setup |
+| `subprojects/AME/doc/guides/contingency_verifier.md` | **Contingency verifier tool**: exhaustive safe-state reachability, domains, pruning |
 | `doc/todo/AME/TODO.md` | Consolidated remaining work: temporal planning, hardening, future |
 | `doc/research/AME/temporal_extension_research.md` | **Temporal planner evaluation**: OPTIC, POPF, TFD, Aries, STN, BT.CPP integration |
 | `doc/plans/AME/autonomy_assurance_plan.md` | SACE/AMLAS/DSTL safety assurance framework |
@@ -30,7 +31,7 @@ See `README.md` for a comprehensive project overview, and `doc/reports/AME/stake
 |------|----------|
 | `01-overview.md` | System overview, data flow, design principles, library boundaries, dependencies |
 | `02-world-model.md` | WorldModel API, TypeSystem, eager grounding, authoritative state |
-| `03-planning.md` | PDDL parser, Planner (LAPKT), ActionRegistry API, adding new actions |
+| `03-planning.md` | PDDL parser, Planner (LAPKT), ActionRegistry API, contingency domains, contingency verifier |
 | `04-execution.md` | PlanCompiler algorithm, BT node types, MissionExecutor, replanning |
 | `05-observability.md` | 5-layer observability stack (TreeObserver -> FoxgloveBridge -> PlanAuditLog) |
 | `06-ros2.md` | ROS2 lifecycle nodes, deployment modes, build/run instructions |
