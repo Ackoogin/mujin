@@ -86,3 +86,8 @@ add_executable(test_pcl_integration test_pcl_integration.cpp)
 target_link_libraries(test_pcl_integration PRIVATE ame_core GTest::gtest_main)
 target_include_directories(test_pcl_integration PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 gtest_discover_tests(test_pcl_integration DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_contingency_planning test_contingency_planning.cpp)
+target_link_libraries(test_contingency_planning PRIVATE ame_core GTest::gtest_main)
+target_compile_definitions(test_contingency_planning PRIVATE "PROJECT_SOURCE_DIR=\"${AME_SOURCE_DIR}\"")
+gtest_discover_tests(test_contingency_planning DISCOVERY_MODE PRE_TEST)
