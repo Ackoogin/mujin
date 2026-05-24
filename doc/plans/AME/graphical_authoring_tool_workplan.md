@@ -222,10 +222,10 @@
 **Description:** Populate a `WorldModel` from parsed PDDL and verify that all predicates and actions ground correctly.
 
 **Deliverables:**
-- [ ] After successful parse, populate `WorldModel` with types, objects, predicates, actions
-- [ ] Report grounding statistics: number of ground fluents, number of ground actions
-- [ ] Flag warnings: zero ground instances for a predicate (indicates unused types), zero ground actions for a schema
-- [ ] Display grounded state in a "Grounding Report" sub-panel
+- [x] After successful parse, populate `WorldModel` with types, objects, predicates, actions
+- [x] Report grounding statistics: number of ground fluents, number of ground actions
+- [x] Flag warnings: zero ground instances for a predicate (indicates unused types), zero ground actions for a schema
+- [x] Display grounded state in a "Grounding Report" sub-panel
 
 **Acceptance criteria:** Author a domain with valid types/objects, validate, see grounding stats. Remove a required type, see grounding warning.
 
