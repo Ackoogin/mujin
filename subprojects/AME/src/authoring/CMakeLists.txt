@@ -19,7 +19,7 @@ FetchContent_Declare(
 FetchContent_Declare(
   imgui_node_editor
   GIT_REPOSITORY https://github.com/thedmd/imgui-node-editor
-  GIT_TAG v0.9.3
+  GIT_TAG develop
   GIT_SHALLOW TRUE
   SOURCE_SUBDIR cmake/unused
 )
@@ -45,13 +45,8 @@ if(NOT stb_POPULATED)
   FetchContent_Populate(stb)
 endif()
 
-FetchContent_Declare(
-  nlohmann_json
-  GIT_REPOSITORY https://github.com/nlohmann/json
-  GIT_TAG v3.11.3
-  GIT_SHALLOW TRUE
-)
-FetchContent_MakeAvailable(nlohmann_json)
+# nlohmann_json is already provided by subprojects/PYRAMID as an interface target
+# (nlohmann_json::nlohmann_json alias) — no FetchContent needed here.
 
 add_library(ame_authoring_project_model STATIC
     project_model.cpp
@@ -68,6 +63,7 @@ add_library(imgui_lib STATIC
   ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.cpp
   ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
   ${imgui_node_editor_SOURCE_DIR}/imgui_node_editor.cpp
+  ${imgui_node_editor_SOURCE_DIR}/imgui_node_editor_api.cpp
   ${imgui_node_editor_SOURCE_DIR}/imgui_canvas.cpp
   ${imgui_node_editor_SOURCE_DIR}/crude_json.cpp
 )
