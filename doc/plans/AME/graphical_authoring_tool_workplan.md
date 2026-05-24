@@ -32,11 +32,11 @@
 **Description:** Establish the top-level application structure: main menu bar, docking layout, status bar, and empty placeholder panels for each view.
 
 **Deliverables:**
-- [ ] Main menu bar (File, Edit, View, Validate, Help)
-- [ ] Dockable panel layout with panels: Domain Graph, Properties, PDDL Preview, Validation Output, Plan View, BT View
-- [ ] Persistent layout save/restore (imgui.ini)
-- [ ] Status bar showing project name, validation state, and last operation
-- [ ] File > New / Open / Save / Save As with native file dialog (ImGui-FileBrowser or tinyfiledialogs)
+- [x] Main menu bar (File, Edit, View, Validate, Help)
+- [x] Dockable panel layout with panels: Domain Graph, Properties, PDDL Preview, Validation Output, Plan View, BT View
+- [x] Persistent layout save/restore (imgui.ini → ame_authoring_tool.ini)
+- [x] Status bar showing project name, validation state, and last operation
+- [ ] File > New / Open / Save / Save As with native file dialog (ImGui-FileBrowser or tinyfiledialogs) — Open/SaveAs stubbed as TODO; file dialog deferred to WI-0.3
 
 **Acceptance criteria:** Application opens with empty docked panels; layout persists across restarts; File dialogs functional.
 
