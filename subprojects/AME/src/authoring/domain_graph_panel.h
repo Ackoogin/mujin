@@ -12,10 +12,14 @@ public:
 
   void render(ProjectModel& model);
   int selectedPredicateIndex() const { return m_selectedPredIdx; }
+  int selectedActionIndex() const { return m_selectedActionIdx; }
 
 private:
   ed::EditorContext* m_context = nullptr;
   int m_selectedPredIdx = -1;
+  int m_selectedActionIdx = -1;
   bool m_openAddPredicatePopup = false;
+  bool m_openAddActionPopup = false;
   char m_newPredName[64] = {};
+  char m_newActionName[64] = {};
 };

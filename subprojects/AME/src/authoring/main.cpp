@@ -290,6 +290,13 @@ int main(int argc, char* argv[]) {
     shell.selfTestAddType("location", "object");
     shell.selfTestAddPredicate("at");
     shell.selfTestAddPredicate("connected");
+    shell.selfTestAddAction("move");
+    shell.selfTestAddActionParam(0, "?r", "robot");
+    shell.selfTestAddActionParam(0, "?from", "location");
+    shell.selfTestAddActionParam(0, "?to", "location");
+    shell.selfTestAddActionPrecondition(0, "at", {"?r", "?from"});
+    shell.selfTestAddActionAddEffect(0, "at", {"?r", "?to"});
+    shell.selfTestAddActionDelEffect(0, "at", {"?r", "?from"});
 
     // Phase 3: inject an SDL key (Escape would quit; pick something benign)
     injectSdlKey(SDLK_F1);
@@ -311,6 +318,26 @@ int main(int argc, char* argv[]) {
     report.check("model_has_two_predicates",
                  shell.selfTestModel().predicates.size() == 2,
                  "expected 2 predicates in model");
+    const ProjectModel& model = shell.selfTestModel();
+    const bool hasOneAction = (model.actions.size() == 1);
+    report.check("model_has_one_action",
+                 hasOneAction,
+                 "expected 1 action in model");
+    report.check("action_name_is_move",
+                 hasOneAction && model.actions[0].name == "move",
+                 "expected action name to be move");
+    report.check("action_has_three_params",
+                 hasOneAction && model.actions[0].params.size() == 3,
+                 "expected move action to have 3 params");
+    report.check("action_has_one_precondition",
+                 hasOneAction && model.actions[0].preconditions.size() == 1,
+                 "expected move action to have 1 precondition");
+    report.check("action_has_one_add_effect",
+                 hasOneAction && model.actions[0].addEffects.size() == 1,
+                 "expected move action to have 1 add-effect");
+    report.check("action_has_one_del_effect",
+                 hasOneAction && model.actions[0].delEffects.size() == 1,
+                 "expected move action to have 1 del-effect");
     report.check("panel_domain_graph",
                  report.windowActive("Domain Graph"),
                  "Domain Graph panel not active");
