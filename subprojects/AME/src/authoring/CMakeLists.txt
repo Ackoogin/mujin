@@ -74,9 +74,9 @@ target_link_libraries(imgui_lib
 )
 
 if(WIN32)
-  add_executable(ame_authoring_tool WIN32 main.cpp)
+  add_executable(ame_authoring_tool WIN32 main.cpp app_shell.cpp)
 else()
-  add_executable(ame_authoring_tool main.cpp)
+  add_executable(ame_authoring_tool main.cpp app_shell.cpp)
 endif()
 
 set(AME_AUTHORING_SDL_MAIN_TARGET)

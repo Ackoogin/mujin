@@ -1,6 +1,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
 
+#include "app_shell.h"
+
 #include <SDL.h>
 
 #if defined(_WIN32)
@@ -127,6 +129,8 @@ int main(int argc, char* argv[]) {
   // Disable imgui.ini writes during self-test to keep the filesystem clean
   if (selfTestMode) {
     io.IniFilename = nullptr;
+  } else {
+    io.IniFilename = "ame_authoring_tool.ini";
   }
 
   ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
@@ -191,8 +195,8 @@ int main(int argc, char* argv[]) {
   // ---------------------------------------------------------------------------
   // Normal interactive loop
   // ---------------------------------------------------------------------------
+  AppShell shell;
   bool running = true;
-  bool show_demo_window = true;
   while (running) {
     SDL_Event event;
     while (SDL_PollEvent(&event) != 0) {
@@ -209,9 +213,12 @@ int main(int argc, char* argv[]) {
     ImGui_ImplSDL2_NewFrame();
     ImGui::NewFrame();
 
-    ImGui::ShowDemoWindow(&show_demo_window);
-    ImGui::Begin("AME Authoring Tool");
-    ImGui::End();
+    shell.renderMenuBar();
+    shell.renderPanels();
+    shell.renderStatusBar();
+    if (shell.wantsQuit) {
+      running = false;
+    }
 
     ImGui::Render();
 
