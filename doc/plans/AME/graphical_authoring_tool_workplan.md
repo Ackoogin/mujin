@@ -239,11 +239,11 @@
 **Description:** Run the AME planner against authored scenarios to verify that goals are reachable.
 
 **Deliverables:**
-- [ ] Scenario definition UI: initial state (fact checkboxes from grounded fluents) + goal fluents
-- [ ] "Check Feasibility" button: generates PDDL, parses, grounds, calls `Planner::solve()`
-- [ ] Results: plan found (show step count, time), no plan (show "no plan exists"), error (show message)
-- [ ] If plan found: store plan steps for Plan View (Phase 3)
-- [ ] Multiple scenarios per project (scenario list panel)
+- [x] Scenario definition UI: initial state (fact checkboxes from grounded fluents) + goal fluents — text-input based rather than checkboxes; serves the same role
+- [x] "Check Feasibility" button: generates PDDL, parses, grounds, calls `Planner::solve()`
+- [x] Results: plan found (show step count, time), no plan (show "no plan exists"), error (show message)
+- [x] If plan found: store plan steps for Plan View (Phase 3)
+- [x] Multiple scenarios per project (scenario list panel)
 
 **Acceptance criteria:** Define UAV search scenario with goals `(searched sector_a) (classified sector_a)`, run planner, get valid plan. Change goal to impossible state, verify "no plan" result.
 
