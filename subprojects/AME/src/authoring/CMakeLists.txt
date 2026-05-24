@@ -31,7 +31,19 @@ FetchContent_Declare(
   GIT_SHALLOW TRUE
 )
 
+# stb — single-header libs; we only need stb_image_write.h for self-test screenshots
+FetchContent_Declare(
+  stb
+  GIT_REPOSITORY https://github.com/nothings/stb
+  GIT_TAG 5736b15f7ea0ffb08dd38af21067c314d6a3aae9
+  GIT_SHALLOW FALSE
+)
+
 FetchContent_MakeAvailable(imgui imgui_node_editor sdl2)
+FetchContent_GetProperties(stb)
+if(NOT stb_POPULATED)
+  FetchContent_Populate(stb)
+endif()
 
 add_library(imgui_lib STATIC
   ${imgui_SOURCE_DIR}/imgui.cpp
@@ -52,6 +64,7 @@ target_include_directories(imgui_lib
   PUBLIC
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
+    ${stb_SOURCE_DIR}
 )
 
 target_link_libraries(imgui_lib
