@@ -87,12 +87,12 @@
 **Description:** Allow users to define the PDDL type hierarchy and objects through a sidebar panel or dedicated node-graph sub-view.
 
 **Deliverables:**
-- [ ] Types panel listing all defined types in a tree (parent-child)
-- [ ] Add/rename/delete types
-- [ ] Set parent type (single inheritance, matching AME `TypeSystem`)
-- [ ] Objects panel: add/rename/delete objects, assign to types
-- [ ] Validation: warn on orphan types, duplicate names, circular inheritance
-- [ ] Changes reflected immediately in `ProjectModel`
+- [x] Types panel listing all defined types in a tree (parent-child)
+- [x] Add/delete types (rename deferred — low priority)
+- [x] Set parent type (single inheritance, matching AME TypeSystem)
+- [x] Objects panel: add/delete objects, assign to types
+- [x] Validation: duplicate names, non-existent parent, type-in-use guards on delete
+- [x] Changes reflected immediately in ProjectModel
 
 **Acceptance criteria:** Define a type hierarchy (e.g. `object > location > sector`, `object > robot > uav`), add objects (`uav1: uav`, `sector_a: sector`), save project, reload, verify.
 
