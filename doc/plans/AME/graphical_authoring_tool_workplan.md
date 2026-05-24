@@ -69,11 +69,11 @@
 **Description:** Integrate imgui-node-editor into the Domain Graph panel. Implement pan, zoom, selection, and an empty canvas with grid background.
 
 **Deliverables:**
-- [ ] imgui-node-editor context created and rendered in the Domain Graph panel
-- [ ] Pan/zoom with mouse wheel and middle-click drag
-- [ ] Multi-select with box selection
+- [x] imgui-node-editor context created and rendered in the Domain Graph panel
+- [x] Pan/zoom with mouse wheel and middle-click drag (built into imgui-node-editor)
+- [x] Multi-select with box selection (built into imgui-node-editor)
 - [ ] Right-click context menu (empty placeholder: "Add Action", "Add Predicate", "Add Type")
-- [ ] Canvas background grid
+- [x] Canvas background grid (built into imgui-node-editor)
 
 **Acceptance criteria:** Empty interactive canvas in the Domain Graph panel with functional navigation.
 
