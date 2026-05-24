@@ -166,6 +166,19 @@
     )
   )
 
+  ;; --- Declare emergency ---
+  ;; Formal emergency declaration, required before using emergency
+  ;; return actions. This ensures BRFS always prefers nominal transit
+  ;; (1 step) over emergency return (2+ steps: declare + return).
+  (:action declare-emergency
+    :parameters (?r - robot ?l - location)
+    :precondition (and
+      (at ?r ?l)
+      (airborne ?r)
+    )
+    :effect (emergency-declared ?r)
+  )
+
   ;; --- Emergency return: nav available ---
   ;; Nav works but comms lost or mission aborted. Bypasses comms
   ;; requirement to fly back to any base.
@@ -174,6 +187,7 @@
     :precondition (and
       (at ?r ?from)
       (airborne ?r)
+      (emergency-declared ?r)
       (nav-operational)
       (engines-operational)
       (airspace-clear ?to)
@@ -181,7 +195,6 @@
     :effect (and
       (at ?r ?to)
       (not (at ?r ?from))
-      (emergency-declared ?r)
     )
   )
 
@@ -192,6 +205,7 @@
     :precondition (and
       (at ?r ?from)
       (airborne ?r)
+      (emergency-declared ?r)
       (gps-available)
       (engines-operational)
       (airspace-clear ?to)
@@ -199,7 +213,6 @@
     :effect (and
       (at ?r ?to)
       (not (at ?r ?from))
-      (emergency-declared ?r)
     )
   )
 
@@ -210,13 +223,13 @@
     :precondition (and
       (at ?r ?from)
       (airborne ?r)
+      (emergency-declared ?r)
       (inertial-nav-available)
       (engines-operational)
     )
     :effect (and
       (at ?r ?to)
       (not (at ?r ?from))
-      (emergency-declared ?r)
     )
   )
 
@@ -267,7 +280,7 @@
   ;; Post-mission ditch ladder (most controlled → last resort):
   ;;   ditch-controlled-gps (1 step)
   ;;     > ditch-controlled-inertial (1 step)
-  ;;       > declare-ditch-emergency + terminal-ditch (2 steps)
+  ;;       > declare-emergency + terminal-ditch (2 steps)
   ;;
   ;; Controlled ditch actions are single-step (fly + crash), so BRFS
   ;; always prefers them over the two-step terminal-ditch path.
@@ -357,26 +370,11 @@
     )
   )
 
-  ;; --- Declare ditch emergency ---
-  ;; Formal emergency declaration before terminal ditch. Combined
-  ;; with terminal-ditch this is a two-step path, so BRFS only
-  ;; selects it when single-step controlled ditch is unavailable.
-  (:action declare-ditch-emergency
-    :parameters (?r - robot ?l - location)
-    :precondition (and
-      (at ?r ?l)
-      (airborne ?r)
-      (mission-complete ?r)
-      (mission-priority-critical)
-    )
-    :effect (emergency-declared ?r)
-  )
-
   ;; --- Terminal ditch (absolute last resort) ---
   ;; Deliberate self-destruction at current position. Requires a prior
-  ;; emergency declaration. Used when the vehicle cannot reach a
-  ;; designated ditch zone (e.g., engines failed after mission
-  ;; completion, or all navigation lost).
+  ;; emergency declaration (via declare-emergency). Used when the
+  ;; vehicle cannot reach a designated ditch zone (e.g., engines failed
+  ;; after mission completion, or all navigation lost).
   (:action terminal-ditch
     :parameters (?r - robot ?l - location)
     :precondition (and

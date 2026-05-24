@@ -48,6 +48,7 @@ TEST(VehicleContingency, NominalMission) {
     EXPECT_TRUE(planHas(wm, r, "takeoff"));
     EXPECT_TRUE(planHas(wm, r, "execute-mission"));
     EXPECT_TRUE(planHas(wm, r, "land"));
+    EXPECT_FALSE(planHas(wm, r, "emergency"));
     EXPECT_FALSE(planHas(wm, r, "abort"));
     EXPECT_FALSE(planHas(wm, r, "ditch"));
 }
@@ -97,6 +98,7 @@ TEST(VehicleContingency, CommsLostAirborne) {
     auto r = planner.solve(wm);
 
     ASSERT_TRUE(r.success);
+    EXPECT_TRUE(planHas(wm, r, "declare-emergency"));
     EXPECT_TRUE(planHas(wm, r, "emergency-return"));
     EXPECT_FALSE(planHas(wm, r, "fly"));
 }
@@ -226,7 +228,7 @@ TEST(VehicleContingency, CriticalTotalFailureDitch) {
 
     ASSERT_TRUE(r.success) << "Terminal ditch must always work for critical missions";
     EXPECT_TRUE(planHas(wm, r, "execute-mission-critical"));
-    EXPECT_TRUE(planHas(wm, r, "declare-ditch-emergency"));
+    EXPECT_TRUE(planHas(wm, r, "declare-emergency"));
     EXPECT_TRUE(planHas(wm, r, "terminal-ditch"));
     EXPECT_EQ(r.steps.size(), 3u);
 }
@@ -237,7 +239,7 @@ TEST(VehicleContingency, CriticalEngineFailDitch) {
     auto r = planner.solve(wm);
 
     ASSERT_TRUE(r.success);
-    EXPECT_TRUE(planHas(wm, r, "declare-ditch-emergency"));
+    EXPECT_TRUE(planHas(wm, r, "declare-emergency"));
     EXPECT_TRUE(planHas(wm, r, "terminal-ditch"));
     EXPECT_EQ(r.steps.size(), 2u);
 }
