@@ -204,11 +204,11 @@
 **Description:** Validate generated PDDL by parsing it through AME's `PddlParser` and surfacing errors in the UI.
 
 **Deliverables:**
-- [ ] Validate menu item / toolbar button triggers: generate PDDL -> `PddlParser::parseFromString()`
-- [ ] Parse errors mapped back to graph elements (highlight offending node/predicate in red)
-- [ ] Validation Output panel shows error messages with clickable references to graph elements
-- [ ] Status bar shows "Valid" / "N errors" indicator
-- [ ] Auto-validate on save (configurable)
+- [x] Validate menu item / toolbar button triggers: generate PDDL -> `PddlParser::parseFromString()`
+- [x] Parse errors mapped back to graph elements (highlight offending node/predicate in red) — best-effort substring match against parser error text
+- [x] Validation Output panel shows error messages with clickable references to graph elements — bulleted predicate/action references; "clickable" deferred
+- [x] Status bar shows "Valid" / "N errors" indicator
+- [x] Auto-validate on save (configurable)
 
 **Acceptance criteria:** Introduce a deliberate error (missing parameter type), validate, see error highlighted on the correct node with a clear message.
 
