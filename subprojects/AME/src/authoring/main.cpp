@@ -3,6 +3,7 @@
 
 #include "app_shell.h"
 #include "app_theme.h"
+#include "pddl_generator.h"
 
 #include <SDL.h>
 
@@ -288,7 +289,11 @@ int main(int argc, char* argv[]) {
     shell.selfTestAddType("robot", "object");
     shell.selfTestAddType("location", "object");
     shell.selfTestAddPredicate("at");
+    shell.selfTestAddPredicateParam(0, "?r", "robot");
+    shell.selfTestAddPredicateParam(0, "?l", "location");
     shell.selfTestAddPredicate("connected");
+    shell.selfTestAddPredicateParam(1, "?from", "location");
+    shell.selfTestAddPredicateParam(1, "?to", "location");
     shell.selfTestAddAction("move");
     shell.selfTestAddActionParam(0, "?r", "robot");
     shell.selfTestAddActionParam(0, "?from", "location");
@@ -302,6 +307,7 @@ int main(int argc, char* argv[]) {
     shell.selfTestAddActionPrecondition(1, "at", {"?r", "?where"});
     const bool addCausalLinkOk = shell.selfTestAddCausalLink(0, 0, 1, 0);
     const bool rejectSelfLinkOk = !shell.selfTestAddCausalLink(0, 0, 0, 0);
+    const std::string pddl = PddlGenerator::generateDomain(shell.selfTestModel());
 
     // Phase 3: inject an SDL key (Escape would quit; pick something benign)
     injectSdlKey(SDLK_F1);
@@ -367,6 +373,18 @@ int main(int argc, char* argv[]) {
     report.check("self_causal_link_rejected",
                  rejectSelfLinkOk,
                  "expected self causal link to be rejected");
+    report.check("pddl_contains_define_domain",
+                 pddl.find("(define (domain ") != std::string::npos,
+                 "expected generated PDDL to contain domain definition");
+    report.check("pddl_contains_types_section",
+                 pddl.find("(:types") != std::string::npos,
+                 "expected generated PDDL to contain types section");
+    report.check("pddl_contains_at_predicate",
+                 pddl.find("(at ?r - robot") != std::string::npos,
+                 "expected generated PDDL to contain typed at predicate");
+    report.check("pddl_contains_move_action",
+                 pddl.find("(:action move") != std::string::npos,
+                 "expected generated PDDL to contain move action");
 
     const size_t predCountBefore = shell.selfTestModel().predicates.size();
     shell.selfTestAddPredicate("__undo_probe__");

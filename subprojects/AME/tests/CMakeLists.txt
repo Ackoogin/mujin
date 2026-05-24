@@ -108,4 +108,13 @@ if(AME_BUILD_AUTHORING)
   )
   target_link_libraries(test_command_stack PRIVATE ame_authoring_project_model GTest::gtest_main)
   gtest_discover_tests(test_command_stack DISCOVERY_MODE PRE_TEST)
+
+  add_executable(test_pddl_generator test_pddl_generator.cpp)
+  target_link_libraries(test_pddl_generator
+    PRIVATE
+      ame_authoring_project_model
+      ame_core
+      GTest::gtest_main
+  )
+  gtest_discover_tests(test_pddl_generator DISCOVERY_MODE PRE_TEST)
 endif()

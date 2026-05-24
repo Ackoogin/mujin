@@ -1,12 +1,50 @@
 #include "app_shell.h"
 
 #include "imgui.h"
+#include "pddl_generator.h"
 
+#include <cctype>
 #include <cstdio>
+#include <fstream>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
+
+static std::string slugifyForFilename(const std::string& text) {
+  std::string out;
+  bool lastWasDash = false;
+
+  for (unsigned char ch : text) {
+    const char lower = static_cast<char>(std::tolower(ch));
+    const bool isSlugChar =
+        (lower >= 'a' && lower <= 'z') || (lower >= '0' && lower <= '9') ||
+        lower == '-';
+    if (isSlugChar) {
+      if (lower == '-') {
+        if (!out.empty() && !lastWasDash) {
+          out.push_back(lower);
+        }
+        lastWasDash = true;
+      } else {
+        out.push_back(lower);
+        lastWasDash = false;
+      }
+    } else if (!out.empty() && !lastWasDash) {
+      out.push_back('-');
+      lastWasDash = true;
+    }
+  }
+
+  while (!out.empty() && out.back() == '-') {
+    out.pop_back();
+  }
+
+  if (out.empty()) {
+    return "untitled";
+  }
+  return out;
+}
 
 static std::string formatRef(const EffectRef& r) {
   std::ostringstream out;
@@ -37,6 +75,35 @@ static std::vector<std::string> parseArgList(const char* text) {
     args.push_back(arg);
   }
   return args;
+}
+
+static bool isPddlKeywordLine(const std::string& line) {
+  const size_t start = line.find_first_not_of(" \t");
+  if (start == std::string::npos) {
+    return false;
+  }
+
+  const std::string text = line.substr(start);
+  return text.rfind("(define", 0) == 0 ||
+         text.rfind("(:", 0) == 0 ||
+         text.rfind(":requirements", 0) == 0 ||
+         text.rfind(":parameters", 0) == 0 ||
+         text.rfind(":precondition", 0) == 0 ||
+         text.rfind(":effect", 0) == 0 ||
+         text.rfind("(:goal", 0) == 0;
+}
+
+static void renderPddlText(const std::string& pddl) {
+  const ImVec4 keywordColor(0.0F, 1.0F, 1.0F, 1.0F);
+  std::istringstream input(pddl);
+  std::string line;
+  while (std::getline(input, line)) {
+    if (isPddlKeywordLine(line)) {
+      ImGui::TextColored(keywordColor, "%s", line.c_str());
+    } else {
+      ImGui::TextUnformatted(line.c_str());
+    }
+  }
 }
 
 static void renderActionRefSection(const char* title,
@@ -144,6 +211,27 @@ void AppShell::renderMenuBar() {
       }
       if (ImGui::MenuItem("Save As...")) {
         lastOperation = "TODO: save-as dialog";
+      }
+      if (ImGui::MenuItem("Export Domain PDDL...")) {
+        const std::string slug = slugifyForFilename(m_model.projectName);
+        const std::string path = "./" + slug + "-domain.pddl";
+        std::ofstream file(path);
+        file << PddlGenerator::generateDomain(m_model);
+        lastOperation = file.good() ? "Wrote " + path : "Failed to write " + path;
+      }
+      if (ImGui::MenuItem("Export Problem PDDL...")) {
+        if (m_model.scenarios.empty()) {
+          lastOperation = "No scenarios to export";
+        } else {
+          const std::string slug = slugifyForFilename(m_model.projectName);
+          const std::string scenarioSlug =
+              slugifyForFilename(m_model.scenarios.front().name);
+          const std::string path =
+              "./" + slug + "-problem-" + scenarioSlug + ".pddl";
+          std::ofstream file(path);
+          file << PddlGenerator::generateProblem(m_model, m_model.scenarios.front().name);
+          lastOperation = file.good() ? "Wrote " + path : "Failed to write " + path;
+        }
       }
       ImGui::Separator();
       if (ImGui::MenuItem("Exit")) {
@@ -269,7 +357,8 @@ void AppShell::renderPddlTab() {
   const float halfH = ImGui::GetContentRegionAvail().y * 0.5F - 4.0F;
   ImGui::BeginChild("##PddlPreview", ImVec2(0.0F, halfH),
                     ImGuiChildFlags_Border);
-  ImGui::TextDisabled("PDDL Preview");
+  const std::string pddl = PddlGenerator::generateDomain(m_model);
+  renderPddlText(pddl);
   ImGui::EndChild();
   ImGui::BeginChild("##ValidationOutput", ImVec2(0.0F, 0.0F),
                     ImGuiChildFlags_Border);
@@ -433,6 +522,18 @@ void AppShell::selfTestAddPredicate(const std::string& name) {
     model.predicates.push_back(p);
   });
   lastOperation = "Added predicate: " + name;
+}
+
+void AppShell::selfTestAddPredicateParam(int predicateIdx,
+                                         const std::string& name,
+                                         const std::string& type) {
+  if (predicateIdx < 0 || predicateIdx >= static_cast<int>(m_model.predicates.size())) {
+    return;
+  }
+  m_commandStack.execute(m_model, "Add predicate parameter",
+                         [predicateIdx, name, type](ProjectModel& model) {
+    model.predicates[static_cast<size_t>(predicateIdx)].params.push_back({name, type});
+  });
 }
 
 void AppShell::selfTestAddType(const std::string& name, const std::string& parent) {

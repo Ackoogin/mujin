@@ -27,6 +27,9 @@ public:
   // --- Test interface (used by --self-test mode only) ---
   void selfTestNew();
   void selfTestAddPredicate(const std::string& name);
+  void selfTestAddPredicateParam(int predicateIdx,
+                                 const std::string& name,
+                                 const std::string& type);
   void selfTestAddType(const std::string& name, const std::string& parent = "object");
   void selfTestAddAction(const std::string& name);
   void selfTestAddActionParam(int actionIdx,
