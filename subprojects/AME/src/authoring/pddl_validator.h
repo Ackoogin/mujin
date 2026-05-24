@@ -4,6 +4,9 @@
 #include <vector>
 
 struct ProjectModel;
+namespace ame {
+class WorldModel;
+}
 
 struct ValidationError {
   std::string message;
@@ -36,4 +39,9 @@ public:
   /// \brief Generate and parse PDDL for the domain and optional scenario problem.
   static ValidationReport validate(const ProjectModel& model,
                                    const std::string& scenarioName = "");
+
+  /// \brief Generate and parse PDDL, returning the populated WorldModel on success.
+  static ValidationReport validateAndBuildWorldModel(const ProjectModel& model,
+                                                     const std::string& scenarioName,
+                                                     ame::WorldModel& wm);
 };

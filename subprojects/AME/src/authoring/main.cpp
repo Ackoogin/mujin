@@ -364,6 +364,28 @@ int main(int argc, char* argv[]) {
                  shell.selfTestValidation().ok,
                  "expected validation to pass after undoing corruption");
 
+    shell.selfTestAddObject("uav1", "robot");
+    shell.selfTestAddObject("base", "location");
+    shell.selfTestAddScenario("nominal");
+    shell.selfTestAddInitialFact(0, "at", {"uav1", "base"});
+    shell.selfTestAddGoal(0, "at", {"uav1", "base"});
+    shell.selfTestRunFeasibility("nominal");
+    report.check("feasibility_plan_returned",
+                 shell.selfTestLastPlan().success,
+                 "expected trivially satisfied goal to be feasible");
+    report.check("feasibility_no_error",
+                 shell.selfTestLastPlan().error_msg.empty(),
+                 "expected feasible plan to have no error message");
+
+    shell.selfTestAddObject("sector_x", "location");
+    shell.selfTestAddScenario("infeasible");
+    shell.selfTestAddInitialFact(1, "at", {"uav1", "base"});
+    shell.selfTestAddGoal(1, "connected", {"base", "sector_x"});
+    shell.selfTestRunFeasibility("infeasible");
+    report.check("feasibility_infeasible_returns_false",
+                 !shell.selfTestLastPlan().success,
+                 "expected unreachable connected goal to be infeasible");
+
     // Phase 3: inject an SDL key (Escape would quit; pick something benign)
     injectSdlKey(SDLK_F1);
 

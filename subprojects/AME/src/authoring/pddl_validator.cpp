@@ -145,10 +145,9 @@ GroundingReport buildGroundingReport(const ProjectModel& model,
   return grounding;
 }
 
-} // namespace
-
-ValidationReport PddlValidator::validate(const ProjectModel& model,
-                                         const std::string& scenarioName) {
+ValidationReport validateImpl(const ProjectModel& model,
+                              const std::string& scenarioName,
+                              ame::WorldModel* outWm) {
   ValidationReport report;
   addAuthoringPrecheckErrors(model, report);
 
@@ -159,9 +158,12 @@ ValidationReport PddlValidator::validate(const ProjectModel& model,
           : emptyProblemForDomain(model);
 
   try {
-    ame::WorldModel wm;
-    ame::PddlParser::parseFromString(domain, problem, wm);
-    report.grounding = buildGroundingReport(model, wm);
+    ame::WorldModel parsedWm;
+    ame::PddlParser::parseFromString(domain, problem, parsedWm);
+    report.grounding = buildGroundingReport(model, parsedWm);
+    if (outWm != nullptr && report.errors.empty()) {
+      *outWm = parsedWm;
+    }
   } catch (const std::runtime_error& e) {
     ValidationError error;
     error.message = e.what();
@@ -171,4 +173,18 @@ ValidationReport PddlValidator::validate(const ProjectModel& model,
 
   report.ok = report.errors.empty();
   return report;
+}
+
+} // namespace
+
+ValidationReport PddlValidator::validate(const ProjectModel& model,
+                                         const std::string& scenarioName) {
+  return validateImpl(model, scenarioName, nullptr);
+}
+
+ValidationReport PddlValidator::validateAndBuildWorldModel(
+    const ProjectModel& model,
+    const std::string& scenarioName,
+    ame::WorldModel& wm) {
+  return validateImpl(model, scenarioName, &wm);
 }
