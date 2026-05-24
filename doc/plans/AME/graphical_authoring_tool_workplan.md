@@ -147,12 +147,12 @@
 **Description:** Allow users to visually link action effects to action preconditions, showing the causal relationships between actions.
 
 **Deliverables:**
-- [ ] Drag from an action's add-effect output pin to another action's precondition input pin to create a causal link
-- [ ] Links rendered as coloured Bezier curves
-- [ ] Link validation: effect predicate signature must match precondition predicate signature
-- [ ] Invalid link attempts rejected with visual feedback
-- [ ] Delete links via right-click or selection + Delete key
-- [ ] Links are informational/layout aids (the formal semantics come from the PDDL precondition/effect declarations, not the visual links)
+- [x] Drag from an action's add-effect output pin to another action's precondition input pin to create a causal link
+- [x] Links rendered as coloured Bezier curves
+- [x] Link validation: effect predicate signature must match precondition predicate signature
+- [x] Invalid link attempts rejected with visual feedback
+- [x] Delete links via right-click or selection + Delete key
+- [x] Links are informational/layout aids (the formal semantics come from the PDDL precondition/effect declarations, not the visual links)
 
 **Acceptance criteria:** Link `move`'s add-effect `(at ?r ?to)` to `search`'s precondition `(at ?r ?s)`. Invalid links (type mismatch) are rejected visually.
 
