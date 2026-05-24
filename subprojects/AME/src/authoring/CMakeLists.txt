@@ -59,8 +59,6 @@ add_library(ame_authoring_project_model STATIC
 target_include_directories(ame_authoring_project_model PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(ame_authoring_project_model PUBLIC nlohmann_json::nlohmann_json)
 
-target_link_libraries(ame_authoring_tool PRIVATE ame_authoring_project_model)
-
 add_library(imgui_lib STATIC
   ${imgui_SOURCE_DIR}/imgui.cpp
   ${imgui_SOURCE_DIR}/imgui_draw.cpp
@@ -69,6 +67,9 @@ add_library(imgui_lib STATIC
   ${imgui_SOURCE_DIR}/imgui_demo.cpp
   ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl2.cpp
   ${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
+  ${imgui_node_editor_SOURCE_DIR}/imgui_node_editor.cpp
+  ${imgui_node_editor_SOURCE_DIR}/imgui_canvas.cpp
+  ${imgui_node_editor_SOURCE_DIR}/crude_json.cpp
 )
 
 target_compile_definitions(imgui_lib
@@ -80,6 +81,7 @@ target_include_directories(imgui_lib
   PUBLIC
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
+    ${imgui_node_editor_SOURCE_DIR}
     ${stb_SOURCE_DIR}
 )
 
@@ -90,9 +92,9 @@ target_link_libraries(imgui_lib
 )
 
 if(WIN32)
-  add_executable(ame_authoring_tool WIN32 main.cpp app_shell.cpp)
+  add_executable(ame_authoring_tool WIN32 main.cpp app_shell.cpp domain_graph_panel.cpp)
 else()
-  add_executable(ame_authoring_tool main.cpp app_shell.cpp)
+  add_executable(ame_authoring_tool main.cpp app_shell.cpp domain_graph_panel.cpp)
 endif()
 
 set(AME_AUTHORING_SDL_MAIN_TARGET)
@@ -107,6 +109,7 @@ target_link_libraries(ame_authoring_tool
     SDL2::SDL2
     OpenGL::GL
     ame_core
+    ame_authoring_project_model
 )
 
 set_target_properties(ame_authoring_tool PROPERTIES

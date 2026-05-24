@@ -1,5 +1,7 @@
 #pragma once
 
+#include "domain_graph_panel.h"
+
 #include <string>
 
 /// \brief Main application shell for the AME graphical authoring tool.
@@ -17,5 +19,6 @@ public:
   void renderStatusBar();
 
 private:
+  DomainGraphPanel m_domainGraph;
   bool showAboutModal = false;
 };

@@ -63,7 +63,7 @@ void AppShell::renderPanels() {
   ImGui::DockSpaceOverViewport();
 
   ImGui::Begin("Domain Graph", nullptr);
-  ImGui::TextDisabled("Domain Graph panel");
+  m_domainGraph.render();
   ImGui::End();
 
   ImGui::Begin("Properties", nullptr);
