@@ -166,11 +166,11 @@
 **Description:** Implement a command-pattern undo/redo system for all authoring operations.
 
 **Deliverables:**
-- [ ] `CommandStack` class with `execute(cmd)`, `undo()`, `redo()`
-- [ ] Commands for: add/delete/edit type, add/delete/edit predicate, add/delete/edit action, add/delete link, move node
-- [ ] Ctrl+Z / Ctrl+Y keyboard shortcuts
-- [ ] Edit menu entries: Undo, Redo (greyed when unavailable)
-- [ ] Undo history limited to configurable depth (default 100)
+- [x] `CommandStack` class with `execute(cmd)`, `undo()`, `redo()`
+- [x] Commands for: add/delete/edit type, add/delete/edit predicate, add/delete/edit action, add/delete link, move node — add/delete only; text-input edits deferred (TODO in code)
+- [x] Ctrl+Z / Ctrl+Y keyboard shortcuts
+- [x] Edit menu entries: Undo, Redo (greyed when unavailable)
+- [x] Undo history limited to configurable depth (default 100)
 
 **Acceptance criteria:** Create nodes, undo creation, redo creation. Edit action parameters, undo edit. All operations reversible.
 
