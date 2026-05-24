@@ -389,6 +389,48 @@ void AppShell::renderPddlTab() {
       }
     }
   }
+  if (m_lastValidation.grounding.valid) {
+    ImGui::Separator();
+    ImGui::TextDisabled("Grounding Report");
+    ImGui::Text("Total fluents:        %u",
+                m_lastValidation.grounding.totalFluents);
+    ImGui::Text("Total ground actions: %u",
+                m_lastValidation.grounding.totalGroundActions);
+    for (const auto& warning : m_lastValidation.grounding.warnings) {
+      ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.2f, 1.0f),
+                         "WARNING: %s", warning.c_str());
+    }
+
+    if (ImGui::BeginTable("##predcounts", 2,
+                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+      ImGui::TableSetupColumn("Predicate");
+      ImGui::TableSetupColumn("Ground instances");
+      ImGui::TableHeadersRow();
+      for (const auto& stat : m_lastValidation.grounding.predicateStats) {
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::TextUnformatted(stat.elementName.c_str());
+        ImGui::TableSetColumnIndex(1);
+        ImGui::Text("%u", stat.count);
+      }
+      ImGui::EndTable();
+    }
+
+    if (ImGui::BeginTable("##actioncounts", 2,
+                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+      ImGui::TableSetupColumn("Action schema");
+      ImGui::TableSetupColumn("Ground actions");
+      ImGui::TableHeadersRow();
+      for (const auto& stat : m_lastValidation.grounding.actionStats) {
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::TextUnformatted(stat.elementName.c_str());
+        ImGui::TableSetColumnIndex(1);
+        ImGui::Text("%u", stat.count);
+      }
+      ImGui::EndTable();
+    }
+  }
   ImGui::EndChild();
 }
 
@@ -673,6 +715,12 @@ void AppShell::selfTestCorruptPredicateName(int idx) {
   }
   m_commandStack.execute(m_model, "Corrupt for test", [idx](ProjectModel& model) {
     model.predicates[static_cast<size_t>(idx)].name.clear();
+  });
+}
+
+void AppShell::selfTestRemoveAllObjects() {
+  m_commandStack.execute(m_model, "Remove all objects", [](ProjectModel& model) {
+    model.objects.clear();
   });
 }
 

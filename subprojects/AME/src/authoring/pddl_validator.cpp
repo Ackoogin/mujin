@@ -96,6 +96,55 @@ void addAuthoringPrecheckErrors(const ProjectModel& model,
   }
 }
 
+bool fluentMatchesPredicate(const std::string& fluentName,
+                            const std::string& predicateName) {
+  const std::string exact = "(" + predicateName + ")";
+  const std::string prefix = "(" + predicateName + " ";
+  return fluentName == exact || fluentName.rfind(prefix, 0) == 0;
+}
+
+GroundingReport buildGroundingReport(const ProjectModel& model,
+                                     const ame::WorldModel& wm) {
+  GroundingReport grounding;
+  grounding.valid = true;
+  grounding.totalFluents = wm.numFluents();
+  grounding.totalGroundActions = wm.numGroundActions();
+
+  for (const auto& predicate : model.predicates) {
+    GroundingStat stat;
+    stat.elementName = predicate.name;
+    for (unsigned i = 0; i < wm.numFluents(); ++i) {
+      if (fluentMatchesPredicate(wm.fluentName(i), predicate.name)) {
+        ++stat.count;
+      }
+    }
+    if (stat.count == 0U) {
+      grounding.warnings.push_back(
+          "Predicate '" + predicate.name +
+          "' has no ground instances (no matching objects)");
+    }
+    grounding.predicateStats.push_back(std::move(stat));
+  }
+
+  for (size_t actionIdx = 0; actionIdx < model.actions.size(); ++actionIdx) {
+    const auto& action = model.actions[actionIdx];
+    GroundingStat stat;
+    stat.elementName = action.name;
+    for (const auto& groundAction : wm.groundActions()) {
+      if (groundAction.schema_index == static_cast<unsigned>(actionIdx)) {
+        ++stat.count;
+      }
+    }
+    if (stat.count == 0U) {
+      grounding.warnings.push_back("Action schema '" + action.name +
+                                   "' has no ground actions");
+    }
+    grounding.actionStats.push_back(std::move(stat));
+  }
+
+  return grounding;
+}
+
 } // namespace
 
 ValidationReport PddlValidator::validate(const ProjectModel& model,
@@ -112,6 +161,7 @@ ValidationReport PddlValidator::validate(const ProjectModel& model,
   try {
     ame::WorldModel wm;
     ame::PddlParser::parseFromString(domain, problem, wm);
+    report.grounding = buildGroundingReport(model, wm);
   } catch (const std::runtime_error& e) {
     ValidationError error;
     error.message = e.what();

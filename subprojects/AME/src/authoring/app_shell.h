@@ -53,6 +53,7 @@ public:
   bool selfTestRedo();
   void selfTestValidate();
   void selfTestCorruptPredicateName(int idx);
+  void selfTestRemoveAllObjects();
   size_t selfTestUndoDepth() const;
   const ProjectModel& selfTestModel() const { return m_model; }
   const ValidationReport& selfTestValidation() const { return m_lastValidation; }

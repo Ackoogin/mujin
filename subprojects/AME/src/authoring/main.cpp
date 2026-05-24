@@ -18,6 +18,7 @@
 
 #include <imgui_internal.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -312,6 +313,42 @@ int main(int argc, char* argv[]) {
     report.check("validation_ok_for_valid_model",
                  shell.selfTestValidation().ok,
                  "expected valid generated PDDL to parse");
+    const GroundingReport& initialGrounding =
+        shell.selfTestValidation().grounding;
+    report.check("grounding_valid",
+                 initialGrounding.valid,
+                 "expected grounding report after valid parse");
+    report.check("grounding_has_predicate_stats",
+                 initialGrounding.predicateStats.size() ==
+                     shell.selfTestModel().predicates.size(),
+                 "expected one grounding stat per predicate");
+    report.check("grounding_has_action_stats",
+                 initialGrounding.actionStats.size() ==
+                     shell.selfTestModel().actions.size(),
+                 "expected one grounding stat per action schema");
+    const bool predicateCountsZeroOrPositive =
+        std::all_of(initialGrounding.predicateStats.begin(),
+                    initialGrounding.predicateStats.end(),
+                    [](const GroundingStat& stat) {
+                      return static_cast<long long>(stat.count) >= 0LL;
+                    });
+    report.check("grounding_predicate_counts_zero_or_positive",
+                 predicateCountsZeroOrPositive,
+                 "expected predicate grounding counts to be zero or positive");
+
+    shell.selfTestRemoveAllObjects();
+    shell.selfTestValidate();
+    const bool zeroGroundActionsWarns =
+        std::any_of(shell.selfTestValidation().grounding.warnings.begin(),
+                    shell.selfTestValidation().grounding.warnings.end(),
+                    [](const std::string& warning) {
+                      return warning.find("no ground actions") != std::string::npos;
+                    });
+    report.check("grounding_zero_ground_actions_warns",
+                 zeroGroundActionsWarns,
+                 "expected warning for action schemas with no ground actions");
+    shell.selfTestUndo();
+    shell.selfTestValidate();
 
     shell.selfTestCorruptPredicateName(0);
     shell.selfTestValidate();
