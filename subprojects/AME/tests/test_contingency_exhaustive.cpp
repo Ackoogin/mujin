@@ -225,6 +225,110 @@ TEST_F(VehicleExhaustive, AllHealthCombos_ReachSafeState) {
 }
 
 // =========================================================================
+// Vehicle Autonomy — critical mission exhaustive ditch reachability
+// =========================================================================
+// Proves that for EVERY health state combination, a critical-priority
+// mission can be completed and the vehicle ditched. This demonstrates
+// the core guarantee of expendable-vehicle doctrine: the mission always
+// succeeds (at the cost of the airframe).
+
+TEST_F(VehicleExhaustive, CriticalMission_ExhaustiveDitch) {
+    ame::Planner planner;
+    unsigned num_combos = 1u << VEHICLE_HEALTH.size();
+    unsigned total = 0, passed = 0, failed = 0;
+    std::vector<std::string> failures;
+
+    std::cout << "\n=========================================="
+              << "==========================================\n"
+              << "VEHICLE AUTONOMY — CRITICAL MISSION EXHAUSTIVE DITCH\n"
+              << "(Airborne at wp1, critical priority, "
+              << "goal: complete mission + ditch)\n"
+              << "=========================================="
+              << "==========================================\n\n";
+
+    std::cout << std::left
+              << std::setw(40) << "Health Configuration"
+              << std::setw(10) << "Result"
+              << std::setw(6)  << "Steps"
+              << "Recovery Path\n";
+    std::cout << std::string(100, '-') << "\n";
+
+    for (unsigned combo = 0; combo < num_combos; ++combo) {
+        std::ostringstream prob;
+        prob << "(define (problem critical-exhaustive)\n"
+             << "  (:domain vehicle-autonomy)\n"
+             << "  (:objects uav1 - robot home - base "
+             << "wp1 - waypoint dz1 - waypoint)\n"
+             << "  (:init\n"
+             << "    (at uav1 wp1)\n"
+             << "    (airborne uav1)\n"
+             << "    (preflight-done uav1)\n"
+             << "    (mission-priority-critical)\n"
+             << "    (ditch-zone-designated dz1)\n";
+
+        for (auto& f : VEHICLE_ODD_FACTS)
+            prob << "    " << f << "\n";
+        prob << "    (airspace-clear dz1)\n"
+             << "    (weather-ok dz1)\n";
+
+        for (size_t i = 0; i < VEHICLE_HEALTH.size(); ++i) {
+            if ((combo >> i) & 1)
+                prob << "    " << VEHICLE_HEALTH[i].fluent_key << "\n";
+        }
+
+        prob << "  )\n"
+             << "  (:goal (and\n"
+             << "    (mission-complete uav1)\n"
+             << "    (vehicle-ditched uav1)\n"
+             << "    (safe-state uav1)\n"
+             << "  ))\n)\n";
+
+        ame::WorldModel wm;
+        ame::PddlParser::parseFromString(domain_pddl_, prob.str(), wm);
+        auto result = planner.solve(wm);
+        total++;
+
+        std::string label = comboLabel(VEHICLE_HEALTH, combo);
+        std::string status = result.success ? "DITCH" : "GAP";
+        std::string steps = result.success
+                                ? std::to_string(result.steps.size())
+                                : "-";
+        std::string actions = actionNames(wm, result);
+
+        std::cout << std::left
+                  << std::setw(40) << label
+                  << std::setw(10) << status
+                  << std::setw(6)  << steps
+                  << actions << "\n";
+
+        if (result.success) {
+            passed++;
+        } else {
+            failed++;
+            failures.push_back(label);
+        }
+    }
+
+    std::cout << "\n=========================================="
+              << "==========================================\n"
+              << "SUMMARY: " << passed << "/" << total
+              << " can complete mission + ditch, "
+              << failed << " gaps\n";
+
+    if (!failures.empty()) {
+        std::cout << "\nDESIGN GAPS:\n";
+        for (auto& f : failures)
+            std::cout << "  * " << f << "\n";
+    }
+
+    std::cout << "=========================================="
+              << "==========================================\n\n";
+
+    EXPECT_EQ(failed, 0u)
+        << failed << " health state(s) cannot complete critical mission + ditch";
+}
+
+// =========================================================================
 // Vehicle Autonomy — airborne return-to-base redundancy ladder
 // =========================================================================
 // Stronger goal: return to base AND land. This differentiates between
