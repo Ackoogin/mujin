@@ -27,6 +27,8 @@
 
     (mission-priority-critical)
 
+    (mission-objective wp1)
+
     ;; FAULTS: nav-operational, gps-available, comms-available all ABSENT
     (engines-operational)
     (inertial-nav-available)

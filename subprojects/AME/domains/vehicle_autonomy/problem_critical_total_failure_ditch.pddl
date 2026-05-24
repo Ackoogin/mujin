@@ -27,6 +27,8 @@
 
     (mission-priority-critical)
 
+    (mission-objective wp1)
+
     ;; ALL SYSTEMS DOWN
 
     (airspace-clear home)

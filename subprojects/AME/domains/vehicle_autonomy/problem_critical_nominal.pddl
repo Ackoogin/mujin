@@ -31,6 +31,8 @@
     (gps-available)
     (inertial-nav-available)
 
+    (mission-objective wp1)
+
     (airspace-clear home)
     (airspace-clear wp1)
     (airspace-clear dz1)

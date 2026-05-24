@@ -18,7 +18,7 @@
 ;;;
 ;;; Critical mission ditch ladder (post-mission, expendable vehicle):
 ;;;   fly-to-ditch-gps + hard-land-ditch > fly-to-ditch-inertial
-;;;   + hard-land-ditch > terminal-ditch
+;;;   + hard-land-ditch > declare-ditch-emergency + terminal-ditch
 ;;;
 ;;; STRIPS-only — compatible with the ame planner (LAPKT BRFS).
 ;;; ==========================================================================
@@ -41,6 +41,7 @@
     (preflight-done ?r - robot)
 
     ;; --- Mission (abstract) ---
+    (mission-objective ?l - location)
     (mission-complete ?r - robot)
 
     ;; --- System health ---
@@ -125,6 +126,7 @@
       (at ?r ?l)
       (airborne ?r)
       (comms-available)
+      (mission-objective ?l)
     )
     :effect (mission-complete ?r)
   )
@@ -277,6 +279,7 @@
       (at ?r ?l)
       (airborne ?r)
       (mission-priority-critical)
+      (mission-objective ?l)
     )
     :effect (mission-complete ?r)
   )
@@ -363,12 +366,27 @@
     )
   )
 
+  ;; --- Declare ditch emergency ---
+  ;; Formal emergency declaration before terminal ditch. This extra
+  ;; step ensures terminal-ditch is never shorter than the controlled
+  ;; ditch path (fly-to-ditch + hard-land-ditch), so the planner
+  ;; only reaches terminal-ditch when the controlled path is blocked.
+  (:action declare-ditch-emergency
+    :parameters (?r - robot ?l - location)
+    :precondition (and
+      (at ?r ?l)
+      (airborne ?r)
+      (mission-complete ?r)
+      (mission-priority-critical)
+    )
+    :effect (emergency-declared ?r)
+  )
+
   ;; --- Terminal ditch (absolute last resort) ---
-  ;; Deliberate self-destruction at current position. Used when the
-  ;; vehicle cannot reach a designated ditch zone (e.g., engines failed
-  ;; after mission completion, or all navigation lost). No system
-  ;; requirements beyond being airborne with a completed critical
-  ;; mission.
+  ;; Deliberate self-destruction at current position. Requires a prior
+  ;; emergency declaration. Used when the vehicle cannot reach a
+  ;; designated ditch zone (e.g., engines failed after mission
+  ;; completion, or all navigation lost).
   (:action terminal-ditch
     :parameters (?r - robot ?l - location)
     :precondition (and
@@ -376,6 +394,7 @@
       (airborne ?r)
       (mission-complete ?r)
       (mission-priority-critical)
+      (emergency-declared ?r)
     )
     :effect (and
       (on-ground ?r)

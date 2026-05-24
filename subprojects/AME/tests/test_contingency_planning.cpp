@@ -223,8 +223,9 @@ TEST(VehicleContingency, CriticalTotalFailureDitch) {
 
     ASSERT_TRUE(r.success) << "Terminal ditch must always work for critical missions";
     EXPECT_TRUE(planHas(wm, r, "execute-mission-critical"));
+    EXPECT_TRUE(planHas(wm, r, "declare-ditch-emergency"));
     EXPECT_TRUE(planHas(wm, r, "terminal-ditch"));
-    EXPECT_EQ(r.steps.size(), 2u);
+    EXPECT_EQ(r.steps.size(), 3u);
 }
 
 TEST(VehicleContingency, CriticalEngineFailDitch) {
@@ -233,8 +234,9 @@ TEST(VehicleContingency, CriticalEngineFailDitch) {
     auto r = planner.solve(wm);
 
     ASSERT_TRUE(r.success);
+    EXPECT_TRUE(planHas(wm, r, "declare-ditch-emergency"));
     EXPECT_TRUE(planHas(wm, r, "terminal-ditch"));
-    EXPECT_EQ(r.steps.size(), 1u);
+    EXPECT_EQ(r.steps.size(), 2u);
 }
 
 // =========================================================================

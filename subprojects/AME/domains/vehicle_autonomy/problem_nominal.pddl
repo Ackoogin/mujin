@@ -25,6 +25,8 @@
     (gps-available)
     (inertial-nav-available)
 
+    (mission-objective wp1)
+
     (airspace-clear home)
     (airspace-clear wp1)
     (weather-ok home)

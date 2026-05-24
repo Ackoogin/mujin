@@ -264,6 +264,7 @@ TEST_F(VehicleExhaustive, CriticalMission_ExhaustiveDitch) {
              << "    (airborne uav1)\n"
              << "    (preflight-done uav1)\n"
              << "    (mission-priority-critical)\n"
+             << "    (mission-objective wp1)\n"
              << "    (ditch-zone-designated dz1)\n";
 
         for (auto& f : VEHICLE_ODD_FACTS)

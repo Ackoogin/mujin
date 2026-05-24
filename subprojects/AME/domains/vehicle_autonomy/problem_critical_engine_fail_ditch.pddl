@@ -26,6 +26,7 @@
     (mission-complete uav1)
 
     (mission-priority-critical)
+    (mission-objective wp1)
 
     (nav-operational)
     ;; FAULT: engines-operational ABSENT (failed after mission completion)
