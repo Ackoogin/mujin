@@ -101,4 +101,11 @@ if(AME_BUILD_AUTHORING)
   add_executable(test_project_model test_project_model.cpp)
   target_link_libraries(test_project_model PRIVATE ame_authoring_project_model GTest::gtest_main)
   gtest_discover_tests(test_project_model DISCOVERY_MODE PRE_TEST)
+
+  add_executable(test_command_stack
+    test_command_stack.cpp
+    ${CMAKE_SOURCE_DIR}/subprojects/AME/src/authoring/command_stack.cpp
+  )
+  target_link_libraries(test_command_stack PRIVATE ame_authoring_project_model GTest::gtest_main)
+  gtest_discover_tests(test_command_stack DISCOVERY_MODE PRE_TEST)
 endif()

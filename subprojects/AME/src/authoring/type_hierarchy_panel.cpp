@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-void TypeHierarchyPanel::render(ProjectModel& model) {
+void TypeHierarchyPanel::render(ProjectModel& model, CommandStack& stack) {
   auto typeExists = [&](const std::string& name) {
     if (name == "object") {
       return true;
@@ -54,11 +54,13 @@ void TypeHierarchyPanel::render(ProjectModel& model) {
           ImGui::SetTooltip("Type in use");
         }
       } else if (ImGui::SmallButton("x")) {
-        model.types.erase(
-          std::remove_if(model.types.begin(),
-                         model.types.end(),
-                         [&](const TypeDef& type) { return type.name == typeName; }),
-          model.types.end());
+        stack.execute(model, "Delete type", [typeName](ProjectModel& m) {
+          m.types.erase(
+            std::remove_if(m.types.begin(),
+                           m.types.end(),
+                           [&](const TypeDef& type) { return type.name == typeName; }),
+            m.types.end());
+        });
       }
 
       if (open) {
@@ -92,7 +94,9 @@ void TypeHierarchyPanel::render(ProjectModel& model) {
       } else if (!typeExists(parent)) {
         m_validationMsg = "Parent type does not exist";
       } else {
-        model.types.push_back({name, parent});
+        stack.execute(model, "Add type", [name, parent](ProjectModel& m) {
+          m.types.push_back({name, parent});
+        });
         m_newTypeName[0] = '\0';
         m_newParentName[0] = '\0';
         m_validationMsg.clear();
@@ -118,7 +122,9 @@ void TypeHierarchyPanel::render(ProjectModel& model) {
         ImGui::TableSetColumnIndex(2);
         const std::string deleteButtonId = "x##obj" + std::to_string(i);
         if (ImGui::SmallButton(deleteButtonId.c_str())) {
-          model.objects.erase(model.objects.begin() + static_cast<std::ptrdiff_t>(i));
+          stack.execute(model, "Delete object", [i](ProjectModel& m) {
+            m.objects.erase(m.objects.begin() + static_cast<std::ptrdiff_t>(i));
+          });
           continue;
         }
         ++i;
@@ -144,7 +150,9 @@ void TypeHierarchyPanel::render(ProjectModel& model) {
       } else if (!typeExists(type)) {
         m_validationMsg = "Object type does not exist";
       } else {
-        model.objects.push_back({name, type});
+        stack.execute(model, "Add object", [name, type](ProjectModel& m) {
+          m.objects.push_back({name, type});
+        });
         m_newObjName[0] = '\0';
         m_newObjType[0] = '\0';
         m_validationMsg.clear();

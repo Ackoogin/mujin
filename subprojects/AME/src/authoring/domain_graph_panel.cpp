@@ -54,7 +54,7 @@ DomainGraphPanel::~DomainGraphPanel() {
   ed::DestroyEditor(m_context);
 }
 
-void DomainGraphPanel::render(ProjectModel& model) {
+void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
   ed::SetCurrentEditor(m_context);
   ed::Begin("DomainGraphCanvas");
 
@@ -185,7 +185,9 @@ void DomainGraphPanel::render(ProjectModel& model) {
       const bool compatible = hasCandidate && causalLinkCompatible(model, candidate);
       if (compatible) {
         if (ed::AcceptNewItem(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), 2.0f)) {
-          model.causalLinks.push_back(candidate);
+          stack.execute(model, "Add causal link", [candidate](ProjectModel& m) {
+            m.causalLinks.push_back(candidate);
+          });
         }
       } else if (startPinId && endPinId) {
         ed::RejectNewItem(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
@@ -200,7 +202,9 @@ void DomainGraphPanel::render(ProjectModel& model) {
       const int linkIdx = static_cast<int>(deletedLinkId.Get()) - 6000;
       if (linkIdx >= 0 && linkIdx < static_cast<int>(model.causalLinks.size()) &&
           ed::AcceptDeletedItem()) {
-        model.causalLinks.erase(model.causalLinks.begin() + linkIdx);
+        stack.execute(model, "Delete causal link", [linkIdx](ProjectModel& m) {
+          m.causalLinks.erase(m.causalLinks.begin() + linkIdx);
+        });
       }
     }
     ed::EndDelete();
@@ -268,9 +272,12 @@ void DomainGraphPanel::render(ProjectModel& model) {
                               ImGuiWindowFlags_AlwaysAutoResize)) {
     ImGui::InputText("Name##newpred", m_newPredName, sizeof(m_newPredName));
     if (ImGui::Button("Add") && m_newPredName[0] != '\0') {
-      PredicateDef p;
-      p.name = m_newPredName;
-      model.predicates.push_back(p);
+      const std::string name = m_newPredName;
+      stack.execute(model, "Add predicate", [name](ProjectModel& m) {
+        PredicateDef p;
+        p.name = name;
+        m.predicates.push_back(p);
+      });
       ImGui::CloseCurrentPopup();
     }
     ImGui::SameLine();
@@ -289,9 +296,12 @@ void DomainGraphPanel::render(ProjectModel& model) {
                               ImGuiWindowFlags_AlwaysAutoResize)) {
     ImGui::InputText("Name##newaction", m_newActionName, sizeof(m_newActionName));
     if (ImGui::Button("Add") && m_newActionName[0] != '\0') {
-      ActionDef action;
-      action.name = m_newActionName;
-      model.actions.push_back(action);
+      const std::string name = m_newActionName;
+      stack.execute(model, "Add action", [name](ProjectModel& m) {
+        ActionDef action;
+        action.name = name;
+        m.actions.push_back(action);
+      });
       ImGui::CloseCurrentPopup();
     }
     ImGui::SameLine();

@@ -42,8 +42,11 @@ static std::vector<std::string> parseArgList(const char* text) {
 static void renderActionRefSection(const char* title,
                                    const char* tableId,
                                    const char* addButtonLabel,
+                                   const char* removeCommandLabel,
+                                   const char* addCommandLabel,
                                    std::vector<EffectRef>& refs,
-                                   const ProjectModel& model,
+                                   ProjectModel& model,
+                                   CommandStack& stack,
                                    int& selectedPredicate,
                                    char* argBuffer,
                                    size_t argBufferSize) {
@@ -64,7 +67,10 @@ static void renderActionRefSection(const char* title,
       ImGui::TableSetColumnIndex(2);
       ImGui::PushID(ri);
       if (ImGui::SmallButton("Remove")) {
-        refs.erase(refs.begin() + ri);
+        const int removeIdx = ri;
+        stack.execute(model, removeCommandLabel, [&](ProjectModel&) {
+          refs.erase(refs.begin() + removeIdx);
+        });
         ImGui::PopID();
         --ri;
         continue;
@@ -101,9 +107,12 @@ static void renderActionRefSection(const char* title,
   }
   ImGui::InputText("Args", argBuffer, argBufferSize);
   if (ImGui::Button(addButtonLabel)) {
-    refs.push_back({
+    const EffectRef ref{
       model.predicates[static_cast<size_t>(selectedPredicate)].name,
       parseArgList(argBuffer)
+    };
+    stack.execute(model, addCommandLabel, [ref, &refs](ProjectModel&) {
+      refs.push_back(ref);
     });
     argBuffer[0] = '\0';
   }
@@ -120,6 +129,7 @@ void AppShell::renderMenuBar() {
   if (ImGui::BeginMainMenuBar()) {
     if (ImGui::BeginMenu("File")) {
       if (ImGui::MenuItem("New")) {
+        m_commandStack.clear();
         projectName = "[Untitled]";
         m_model.clear();
         m_model.projectName = projectName;
@@ -143,10 +153,12 @@ void AppShell::renderMenuBar() {
     }
 
     if (ImGui::BeginMenu("Edit")) {
-      ImGui::BeginDisabled();
-      ImGui::MenuItem("Undo");
-      ImGui::MenuItem("Redo");
-      ImGui::EndDisabled();
+      if (ImGui::MenuItem("Undo", "Ctrl+Z", false, m_commandStack.canUndo())) {
+        m_commandStack.undo(m_model);
+      }
+      if (ImGui::MenuItem("Redo", "Ctrl+Y", false, m_commandStack.canRedo())) {
+        m_commandStack.redo(m_model);
+      }
       ImGui::EndMenu();
     }
 
@@ -170,14 +182,24 @@ void AppShell::renderMenuBar() {
 }
 
 void AppShell::renderPanels() {
+  ImGuiIO& io = ImGui::GetIO();
+  if (io.KeyCtrl && !io.WantTextInput) {
+    if (ImGui::IsKeyPressed(ImGuiKey_Z, false) && m_commandStack.canUndo()) {
+      m_commandStack.undo(m_model);
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_Y, false) && m_commandStack.canRedo()) {
+      m_commandStack.redo(m_model);
+    }
+  }
+
   ImGui::DockSpaceOverViewport();
 
   ImGui::Begin("Domain Graph", nullptr);
-  m_domainGraph.render(m_model);
+  m_domainGraph.render(m_model, m_commandStack);
   ImGui::End();
 
   ImGui::Begin("Properties", nullptr);
-  m_typeHierarchy.render(m_model);
+  m_typeHierarchy.render(m_model, m_commandStack);
 
   // Selected predicate editor
   const int selPred = m_domainGraph.selectedPredicateIndex();
@@ -205,7 +227,12 @@ void AppShell::renderPanels() {
     ImGui::InputText("Param##ppn", s_pname, sizeof(s_pname));
     ImGui::InputText("Type##ppt",  s_ptype, sizeof(s_ptype));
     if (ImGui::Button("Add Param") && s_pname[0] != '\0' && s_ptype[0] != '\0') {
-      pred.params.push_back({s_pname, s_ptype});
+      const std::string paramName = s_pname;
+      const std::string paramType = s_ptype;
+      m_commandStack.execute(m_model, "Add predicate parameter",
+                             [selPred, paramName, paramType](ProjectModel& model) {
+        model.predicates[static_cast<size_t>(selPred)].params.push_back({paramName, paramType});
+      });
       s_pname[0] = s_ptype[0] = '\0';
     }
   }
@@ -232,10 +259,12 @@ void AppShell::renderPanels() {
         std::snprintf(type, sizeof(type), "%s", action.params[pi].type.c_str());
 
         ImGui::TableSetColumnIndex(0);
+        // TODO: Route text-field edits through CommandStack in a later WI.
         if (ImGui::InputText("##name", name, sizeof(name))) {
           action.params[pi].name = name;
         }
         ImGui::TableSetColumnIndex(1);
+        // TODO: Route text-field edits through CommandStack in a later WI.
         if (ImGui::InputText("##type", type, sizeof(type))) {
           action.params[pi].type = type;
         }
@@ -250,7 +279,12 @@ void AppShell::renderPanels() {
     ImGui::InputText("Type##apt",  s_atype, sizeof(s_atype));
     if (ImGui::Button("Add Param##action") &&
         s_aname[0] != '\0' && s_atype[0] != '\0') {
-      action.params.push_back({s_aname, s_atype});
+      const std::string paramName = s_aname;
+      const std::string paramType = s_atype;
+      m_commandStack.execute(m_model, "Add action parameter",
+                             [selAction, paramName, paramType](ProjectModel& model) {
+        model.actions[static_cast<size_t>(selAction)].params.push_back({paramName, paramType});
+      });
       s_aname[0] = s_atype[0] = '\0';
     }
 
@@ -263,15 +297,18 @@ void AppShell::renderPanels() {
 
     ImGui::Separator();
     renderActionRefSection("Preconditions", "##preconditions", "Add Precondition",
-                           action.preconditions, m_model, s_prePredIdx,
+                           "Remove precondition", "Add precondition",
+                           action.preconditions, m_model, m_commandStack, s_prePredIdx,
                            s_preArgs, sizeof(s_preArgs));
     ImGui::Separator();
     renderActionRefSection("Add-effects", "##addeffects", "Add Add-effect",
-                           action.addEffects, m_model, s_addPredIdx,
+                           "Remove add-effect", "Add add-effect",
+                           action.addEffects, m_model, m_commandStack, s_addPredIdx,
                            s_addArgs, sizeof(s_addArgs));
     ImGui::Separator();
     renderActionRefSection("Del-effects", "##deleffects", "Add Del-effect",
-                           action.delEffects, m_model, s_delPredIdx,
+                           "Remove del-effect", "Add del-effect",
+                           action.delEffects, m_model, m_commandStack, s_delPredIdx,
                            s_delArgs, sizeof(s_delArgs));
 
     if (!action.preconditions.empty() ||
@@ -328,6 +365,7 @@ void AppShell::renderPanels() {
 }
 
 void AppShell::selfTestNew() {
+  m_commandStack.clear();
   projectName     = "[Untitled]";
   validationState = "Not validated";
   lastOperation   = "New project";
@@ -336,21 +374,27 @@ void AppShell::selfTestNew() {
 }
 
 void AppShell::selfTestAddPredicate(const std::string& name) {
-  PredicateDef p;
-  p.name = name;
-  m_model.predicates.push_back(p);
+  m_commandStack.execute(m_model, "Add predicate", [name](ProjectModel& model) {
+    PredicateDef p;
+    p.name = name;
+    model.predicates.push_back(p);
+  });
   lastOperation = "Added predicate: " + name;
 }
 
 void AppShell::selfTestAddType(const std::string& name, const std::string& parent) {
-  m_model.types.push_back({name, parent});
+  m_commandStack.execute(m_model, "Add type", [name, parent](ProjectModel& model) {
+    model.types.push_back({name, parent});
+  });
   lastOperation = "Added type: " + name;
 }
 
 void AppShell::selfTestAddAction(const std::string& name) {
-  ActionDef action;
-  action.name = name;
-  m_model.actions.push_back(action);
+  m_commandStack.execute(m_model, "Add action", [name](ProjectModel& model) {
+    ActionDef action;
+    action.name = name;
+    model.actions.push_back(action);
+  });
   lastOperation = "Added action: " + name;
 }
 
@@ -360,7 +404,10 @@ void AppShell::selfTestAddActionParam(int actionIdx,
   if (actionIdx < 0 || actionIdx >= static_cast<int>(m_model.actions.size())) {
     return;
   }
-  m_model.actions[static_cast<size_t>(actionIdx)].params.push_back({name, type});
+  m_commandStack.execute(m_model, "Add action parameter",
+                         [actionIdx, name, type](ProjectModel& model) {
+    model.actions[static_cast<size_t>(actionIdx)].params.push_back({name, type});
+  });
 }
 
 void AppShell::selfTestAddActionPrecondition(int actionIdx,
@@ -369,9 +416,12 @@ void AppShell::selfTestAddActionPrecondition(int actionIdx,
   if (actionIdx < 0 || actionIdx >= static_cast<int>(m_model.actions.size())) {
     return;
   }
-  m_model.actions[static_cast<size_t>(actionIdx)].preconditions.push_back({
-    predName,
-    std::move(argNames)
+  m_commandStack.execute(m_model, "Add precondition", [actionIdx, predName, argNames](
+                                                      ProjectModel& model) {
+    model.actions[static_cast<size_t>(actionIdx)].preconditions.push_back({
+      predName,
+      argNames
+    });
   });
 }
 
@@ -381,9 +431,12 @@ void AppShell::selfTestAddActionAddEffect(int actionIdx,
   if (actionIdx < 0 || actionIdx >= static_cast<int>(m_model.actions.size())) {
     return;
   }
-  m_model.actions[static_cast<size_t>(actionIdx)].addEffects.push_back({
-    predName,
-    std::move(argNames)
+  m_commandStack.execute(m_model, "Add add-effect", [actionIdx, predName, argNames](
+                                                  ProjectModel& model) {
+    model.actions[static_cast<size_t>(actionIdx)].addEffects.push_back({
+      predName,
+      argNames
+    });
   });
 }
 
@@ -393,9 +446,12 @@ void AppShell::selfTestAddActionDelEffect(int actionIdx,
   if (actionIdx < 0 || actionIdx >= static_cast<int>(m_model.actions.size())) {
     return;
   }
-  m_model.actions[static_cast<size_t>(actionIdx)].delEffects.push_back({
-    predName,
-    std::move(argNames)
+  m_commandStack.execute(m_model, "Add del-effect", [actionIdx, predName, argNames](
+                                                  ProjectModel& model) {
+    model.actions[static_cast<size_t>(actionIdx)].delEffects.push_back({
+      predName,
+      argNames
+    });
   });
 }
 
@@ -411,8 +467,22 @@ bool AppShell::selfTestAddCausalLink(int fromAction,
   if (!causalLinkCompatible(m_model, link)) {
     return false;
   }
-  m_model.causalLinks.push_back(link);
+  m_commandStack.execute(m_model, "Add causal link", [link](ProjectModel& model) {
+    model.causalLinks.push_back(link);
+  });
   return true;
+}
+
+bool AppShell::selfTestUndo() {
+  return m_commandStack.undo(m_model);
+}
+
+bool AppShell::selfTestRedo() {
+  return m_commandStack.redo(m_model);
+}
+
+size_t AppShell::selfTestUndoDepth() const {
+  return m_commandStack.undoDepth();
 }
 
 void AppShell::renderStatusBar() {

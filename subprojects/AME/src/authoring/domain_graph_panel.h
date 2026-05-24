@@ -1,6 +1,7 @@
 #pragma once
 
 #include <imgui_node_editor.h>
+#include "command_stack.h"
 #include "project_model.h"
 
 namespace ed = ax::NodeEditor;
@@ -10,7 +11,7 @@ public:
   DomainGraphPanel();
   ~DomainGraphPanel();
 
-  void render(ProjectModel& model);
+  void render(ProjectModel& model, CommandStack& stack);
   int selectedPredicateIndex() const { return m_selectedPredIdx; }
   int selectedActionIndex() const { return m_selectedActionIdx; }
 

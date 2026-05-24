@@ -90,7 +90,14 @@ target_link_libraries(imgui_lib
 # Console subsystem on Windows: keeps stdout/stderr available for --self-test
 # JSON reports and lets users see any runtime diagnostic messages. SDL2 still
 # brings up the window regardless of subsystem.
-add_executable(ame_authoring_tool main.cpp app_shell.cpp domain_graph_panel.cpp type_hierarchy_panel.cpp app_theme.cpp)
+add_executable(ame_authoring_tool
+  main.cpp
+  app_shell.cpp
+  command_stack.cpp
+  domain_graph_panel.cpp
+  type_hierarchy_panel.cpp
+  app_theme.cpp
+)
 
 set(AME_AUTHORING_SDL_MAIN_TARGET)
 if(WIN32 AND TARGET SDL2::SDL2main)

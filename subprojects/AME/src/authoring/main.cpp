@@ -368,6 +368,23 @@ int main(int argc, char* argv[]) {
     report.check("self_causal_link_rejected",
                  rejectSelfLinkOk,
                  "expected self causal link to be rejected");
+
+    const size_t predCountBefore = shell.selfTestModel().predicates.size();
+    shell.selfTestAddPredicate("__undo_probe__");
+    const bool undoProbeAdded = (shell.selfTestModel().predicates.size() == predCountBefore + 1);
+    const bool undoOk = shell.selfTestUndo();
+    const bool undoRestored = (shell.selfTestModel().predicates.size() == predCountBefore);
+    const bool redoOk = shell.selfTestRedo();
+    const bool redoRestored = (shell.selfTestModel().predicates.size() == predCountBefore + 1);
+    const size_t undoDepthAfter = shell.selfTestUndoDepth();
+
+    report.check("undo_probe_added", undoProbeAdded, "selfTestAddPredicate failed to grow predicates");
+    report.check("undo_call_ok", undoOk, "selfTestUndo returned false");
+    report.check("undo_restored_predicate_count", undoRestored, "predicates size mismatch after undo");
+    report.check("redo_call_ok", redoOk, "selfTestRedo returned false");
+    report.check("redo_restored_predicate_count", redoRestored, "predicates size mismatch after redo");
+    report.check("undo_depth_positive", undoDepthAfter > 0, "undo depth should be > 0");
+
     report.check("panel_domain_graph",
                  report.windowActive("Domain Graph"),
                  "Domain Graph panel not active");

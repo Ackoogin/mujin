@@ -1,5 +1,6 @@
 #pragma once
 
+#include "command_stack.h"
 #include "domain_graph_panel.h"
 #include "type_hierarchy_panel.h"
 
@@ -41,9 +42,13 @@ public:
                              int fromAddEffectIdx,
                              int toAction,
                              int toPreconditionIdx);
+  bool selfTestUndo();
+  bool selfTestRedo();
+  size_t selfTestUndoDepth() const;
   const ProjectModel& selfTestModel() const { return m_model; }
 
 private:
+  CommandStack m_commandStack;
   DomainGraphPanel m_domainGraph;
   ProjectModel m_model;
   TypeHierarchyPanel m_typeHierarchy;
