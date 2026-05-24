@@ -12,10 +12,13 @@
 **Description:** Add `ame_authoring_tool` executable target to the build system. Fetch Dear ImGui, imgui-node-editor, and a platform backend (SDL2 or GLFW + OpenGL3) via FetchContent.
 
 **Deliverables:**
-- [ ] `subprojects/AME/src/authoring/CMakeLists.txt` with FetchContent for Dear ImGui, imgui-node-editor, SDL2/GLFW
-- [ ] Minimal `main.cpp` that opens an empty ImGui window with docking enabled
+- [x] `subprojects/AME/src/authoring/CMakeLists.txt` with FetchContent for Dear ImGui, imgui-node-editor, SDL2/GLFW
+- [x] Minimal `main.cpp` that opens an empty ImGui window with docking enabled
 - [ ] Build succeeds on Windows (MSVC 2022) and Linux (GCC/Clang)
-- [ ] New configure preset `authoring` or integrated into existing `default` preset (gated by `AME_BUILD_AUTHORING=ON`)
+- [x] New configure preset `authoring` or integrated into existing `default` preset (gated by `AME_BUILD_AUTHORING=ON`)
+
+**Bonus (agent self-test):**
+- [x] `--self-test [output.png]` CLI flag: hidden window, 3 rendered frames, glReadPixels PNG capture, JSON result to stdout — enables agent-driven screenshot verification with no user in the loop
 
 **Acceptance criteria:** `cmake --preset default -DAME_BUILD_AUTHORING=ON && cmake --build --preset release --target ame_authoring_tool` produces a running window.
 
