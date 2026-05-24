@@ -50,6 +50,7 @@ TEST(VehicleContingency, NominalMission) {
     EXPECT_TRUE(planHas(wm, r, "land"));
     EXPECT_FALSE(planHas(wm, r, "emergency"));
     EXPECT_FALSE(planHas(wm, r, "abort"));
+    EXPECT_FALSE(planHas(wm, r, "ditch"));
 }
 
 // =========================================================================
@@ -97,7 +98,8 @@ TEST(VehicleContingency, CommsLostAirborne) {
     auto r = planner.solve(wm);
 
     ASSERT_TRUE(r.success);
-    EXPECT_TRUE(planHas(wm, r, "emergency-return-nav"));
+    EXPECT_TRUE(planHas(wm, r, "declare-emergency"));
+    EXPECT_TRUE(planHas(wm, r, "emergency-return"));
     EXPECT_FALSE(planHas(wm, r, "fly"));
 }
 
@@ -165,6 +167,81 @@ TEST(VehicleContingency, PlanLengthOrdering) {
     EXPECT_GT(r_emret.steps.size(), r_abort.steps.size());
     EXPECT_EQ(r_land.steps.size(), 1u);
     EXPECT_EQ(r_abort.steps.size(), 1u);
+}
+
+// =========================================================================
+// Vehicle Autonomy — critical mission priority (ditch doctrine)
+// =========================================================================
+
+TEST(VehicleContingency, CriticalNominal) {
+    auto wm = loadVehicle("problem_critical_nominal.pddl");
+    ame::Planner planner;
+    auto r = planner.solve(wm);
+
+    ASSERT_TRUE(r.success);
+    EXPECT_TRUE(planHas(wm, r, "preflight-check"));
+    EXPECT_TRUE(planHas(wm, r, "takeoff"));
+    EXPECT_TRUE(planHas(wm, r, "execute-mission"));
+    EXPECT_TRUE(planHas(wm, r, "land"));
+    EXPECT_FALSE(planHas(wm, r, "ditch"));
+    EXPECT_FALSE(planHas(wm, r, "terminal"));
+}
+
+TEST(VehicleContingency, CriticalPushThroughDitch) {
+    auto wm = loadVehicle("problem_critical_push_through_ditch.pddl");
+    ame::Planner planner;
+    auto r = planner.solve(wm);
+
+    ASSERT_TRUE(r.success) << "Critical mission must push through degradation";
+    EXPECT_TRUE(planHas(wm, r, "execute-mission-critical"));
+    EXPECT_TRUE(planHas(wm, r, "ditch-controlled"));
+    EXPECT_FALSE(planHas(wm, r, "terminal-ditch"));
+    EXPECT_FALSE(planHas(wm, r, "emergency-return"));
+}
+
+TEST(VehicleContingency, CriticalNavFailDitch) {
+    auto wm = loadVehicle("problem_critical_nav_fail_ditch.pddl");
+    ame::Planner planner;
+    auto r = planner.solve(wm);
+
+    ASSERT_TRUE(r.success);
+    EXPECT_TRUE(planHas(wm, r, "execute-mission-critical"));
+    EXPECT_TRUE(planHas(wm, r, "ditch-controlled-gps"));
+    EXPECT_FALSE(planHas(wm, r, "terminal-ditch"));
+}
+
+TEST(VehicleContingency, CriticalSevereDegradeDitch) {
+    auto wm = loadVehicle("problem_critical_severe_degrade_ditch.pddl");
+    ame::Planner planner;
+    auto r = planner.solve(wm);
+
+    ASSERT_TRUE(r.success);
+    EXPECT_TRUE(planHas(wm, r, "execute-mission-critical"));
+    EXPECT_TRUE(planHas(wm, r, "ditch-controlled-inertial"));
+    EXPECT_FALSE(planHas(wm, r, "terminal-ditch"));
+}
+
+TEST(VehicleContingency, CriticalTotalFailureDitch) {
+    auto wm = loadVehicle("problem_critical_total_failure_ditch.pddl");
+    ame::Planner planner;
+    auto r = planner.solve(wm);
+
+    ASSERT_TRUE(r.success) << "Terminal ditch must always work for critical missions";
+    EXPECT_TRUE(planHas(wm, r, "execute-mission-critical"));
+    EXPECT_TRUE(planHas(wm, r, "declare-emergency"));
+    EXPECT_TRUE(planHas(wm, r, "terminal-ditch"));
+    EXPECT_EQ(r.steps.size(), 3u);
+}
+
+TEST(VehicleContingency, CriticalEngineFailDitch) {
+    auto wm = loadVehicle("problem_critical_engine_fail_ditch.pddl");
+    ame::Planner planner;
+    auto r = planner.solve(wm);
+
+    ASSERT_TRUE(r.success);
+    EXPECT_TRUE(planHas(wm, r, "declare-emergency"));
+    EXPECT_TRUE(planHas(wm, r, "terminal-ditch"));
+    EXPECT_EQ(r.steps.size(), 2u);
 }
 
 // =========================================================================
