@@ -45,6 +45,22 @@ if(NOT stb_POPULATED)
   FetchContent_Populate(stb)
 endif()
 
+FetchContent_Declare(
+  nlohmann_json
+  GIT_REPOSITORY https://github.com/nlohmann/json
+  GIT_TAG v3.11.3
+  GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(nlohmann_json)
+
+add_library(ame_authoring_project_model STATIC
+    project_model.cpp
+)
+target_include_directories(ame_authoring_project_model PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(ame_authoring_project_model PUBLIC nlohmann_json::nlohmann_json)
+
+target_link_libraries(ame_authoring_tool PRIVATE ame_authoring_project_model)
+
 add_library(imgui_lib STATIC
   ${imgui_SOURCE_DIR}/imgui.cpp
   ${imgui_SOURCE_DIR}/imgui_draw.cpp
