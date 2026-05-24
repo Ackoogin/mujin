@@ -65,11 +65,43 @@ void AppShell::renderPanels() {
   ImGui::DockSpaceOverViewport();
 
   ImGui::Begin("Domain Graph", nullptr);
-  m_domainGraph.render();
+  m_domainGraph.render(m_model);
   ImGui::End();
 
   ImGui::Begin("Properties", nullptr);
   m_typeHierarchy.render(m_model);
+
+  // Selected predicate editor
+  const int selPred = m_domainGraph.selectedPredicateIndex();
+  if (selPred >= 0 && selPred < static_cast<int>(m_model.predicates.size())) {
+    PredicateDef& pred = m_model.predicates[selPred];
+    ImGui::Separator();
+    ImGui::TextColored(ImVec4(0.25f, 0.90f, 0.40f, 1.0f),
+                       "Predicate: %s", pred.name.c_str());
+    if (ImGui::BeginTable("##predparams", 2,
+                           ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+      ImGui::TableSetupColumn("Param");
+      ImGui::TableSetupColumn("Type");
+      ImGui::TableHeadersRow();
+      for (int pi = 0; pi < static_cast<int>(pred.params.size()); ++pi) {
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::TextUnformatted(pred.params[pi].name.c_str());
+        ImGui::TableSetColumnIndex(1);
+        ImGui::TextUnformatted(pred.params[pi].type.c_str());
+      }
+      ImGui::EndTable();
+    }
+    static char s_pname[32] = {};
+    static char s_ptype[32] = {};
+    ImGui::InputText("Param##ppn", s_pname, sizeof(s_pname));
+    ImGui::InputText("Type##ppt",  s_ptype, sizeof(s_ptype));
+    if (ImGui::Button("Add Param") && s_pname[0] != '\0' && s_ptype[0] != '\0') {
+      pred.params.push_back({s_pname, s_ptype});
+      s_pname[0] = s_ptype[0] = '\0';
+    }
+  }
+
   ImGui::End();
 
   ImGui::Begin("PDDL Preview", nullptr);

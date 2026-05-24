@@ -2,6 +2,7 @@
 #include <stb_image_write.h>
 
 #include "app_shell.h"
+#include "app_theme.h"
 
 #include <SDL.h>
 
@@ -126,6 +127,7 @@ int main(int argc, char* argv[]) {
   ImGui::CreateContext();
   ImGuiIO& io = ImGui::GetIO();
   io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+  applyHoloCyanTheme();
   // Disable imgui.ini writes during self-test to keep the filesystem clean
   if (selfTestMode) {
     io.IniFilename = nullptr;
