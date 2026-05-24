@@ -216,3 +216,8 @@ if(AME_BUILD_PYTHON)
     # Ensure build/python directory exists
     file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/python)
 endif()
+
+option(AME_BUILD_AUTHORING "Build the graphical AME authoring tool (requires SDL2/OpenGL)" OFF)
+if(AME_BUILD_AUTHORING)
+    add_subdirectory(authoring)
+endif()

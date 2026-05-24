@@ -7,6 +7,15 @@
             "binaryDir": "${sourceDir}/build"
         },
         {
+            "name": "authoring",
+            "inherits": "default",
+            "displayName": "Authoring Tool",
+            "description": "Builds the graphical authoring tool alongside the default configuration",
+            "cacheVariables": {
+                "AME_BUILD_AUTHORING": "ON"
+            }
+        },
+        {
             "name": "all-on",
             "displayName": "All Optional Dependencies Enabled",
             "binaryDir": "${sourceDir}/build-all-enabled",
