@@ -4,6 +4,9 @@
 #include "command_stack.h"
 #include "project_model.h"
 
+#include <string>
+#include <vector>
+
 namespace ed = ax::NodeEditor;
 
 class DomainGraphPanel {
@@ -12,6 +15,8 @@ public:
   ~DomainGraphPanel();
 
   void render(ProjectModel& model, CommandStack& stack);
+  void setHighlightedElements(std::vector<std::string> predicateNames,
+                              std::vector<std::string> actionNames);
   int selectedPredicateIndex() const { return m_selectedPredIdx; }
   int selectedActionIndex() const { return m_selectedActionIdx; }
 
@@ -23,4 +28,6 @@ private:
   bool m_openAddActionPopup = false;
   char m_newPredName[64] = {};
   char m_newActionName[64] = {};
+  std::vector<std::string> m_highlightedPredicates;
+  std::vector<std::string> m_highlightedActions;
 };

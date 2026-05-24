@@ -51,9 +51,14 @@ endif()
 add_library(ame_authoring_project_model STATIC
     project_model.cpp
     pddl_generator.cpp
+    pddl_validator.cpp
 )
 target_include_directories(ame_authoring_project_model PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(ame_authoring_project_model PUBLIC nlohmann_json::nlohmann_json)
+target_link_libraries(ame_authoring_project_model
+  PUBLIC
+    nlohmann_json::nlohmann_json
+    ame_core
+)
 
 add_library(imgui_lib STATIC
   ${imgui_SOURCE_DIR}/imgui.cpp

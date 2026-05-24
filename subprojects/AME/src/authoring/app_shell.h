@@ -2,6 +2,7 @@
 
 #include "command_stack.h"
 #include "domain_graph_panel.h"
+#include "pddl_validator.h"
 #include "type_hierarchy_panel.h"
 
 #include <string>
@@ -50,8 +51,11 @@ public:
                              int toPreconditionIdx);
   bool selfTestUndo();
   bool selfTestRedo();
+  void selfTestValidate();
+  void selfTestCorruptPredicateName(int idx);
   size_t selfTestUndoDepth() const;
   const ProjectModel& selfTestModel() const { return m_model; }
+  const ValidationReport& selfTestValidation() const { return m_lastValidation; }
 
 private:
   void renderDomainTab();
@@ -59,10 +63,14 @@ private:
   void renderPlanTab();
   void renderBtTab();
   void renderSelectedElementEditor();
+  void runValidation();
 
   CommandStack m_commandStack;
   DomainGraphPanel m_domainGraph;
+  ValidationReport m_lastValidation;
   ProjectModel m_model;
   TypeHierarchyPanel m_typeHierarchy;
+  std::string m_validationScenario;
+  bool m_autoValidateOnSave = true;
   bool showAboutModal = false;
 };

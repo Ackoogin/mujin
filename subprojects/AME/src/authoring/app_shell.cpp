@@ -200,6 +200,8 @@ void AppShell::renderMenuBar() {
         projectName = "[Untitled]";
         m_model.clear();
         m_model.projectName = projectName;
+        m_lastValidation = ValidationReport{};
+        m_domainGraph.setHighlightedElements({}, {});
         validationState = "Not validated";
         lastOperation = "New project";
       }
@@ -208,9 +210,15 @@ void AppShell::renderMenuBar() {
       }
       if (ImGui::MenuItem("Save")) {
         lastOperation = "TODO: save";
+        if (m_autoValidateOnSave) {
+          runValidation();
+        }
       }
       if (ImGui::MenuItem("Save As...")) {
         lastOperation = "TODO: save-as dialog";
+        if (m_autoValidateOnSave) {
+          runValidation();
+        }
       }
       if (ImGui::MenuItem("Export Domain PDDL...")) {
         const std::string slug = slugifyForFilename(m_model.projectName);
@@ -251,10 +259,14 @@ void AppShell::renderMenuBar() {
     }
 
     if (ImGui::BeginMenu("View")) {
+      ImGui::MenuItem("Auto-validate on Save", nullptr, &m_autoValidateOnSave);
       ImGui::EndMenu();
     }
 
     if (ImGui::BeginMenu("Validate")) {
+      if (ImGui::MenuItem("Validate Now")) {
+        runValidation();
+      }
       ImGui::EndMenu();
     }
 
@@ -362,7 +374,21 @@ void AppShell::renderPddlTab() {
   ImGui::EndChild();
   ImGui::BeginChild("##ValidationOutput", ImVec2(0.0F, 0.0F),
                     ImGuiChildFlags_Border);
-  ImGui::TextDisabled("Validation Output");
+  if (m_lastValidation.ok) {
+    ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.3f, 1.0f), "Validation passed");
+  } else if (m_lastValidation.errors.empty()) {
+    ImGui::TextDisabled("Click Validate > Validate Now");
+  } else {
+    for (const auto& err : m_lastValidation.errors) {
+      ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", err.message.c_str());
+      for (const auto& pn : err.predicateNames) {
+        ImGui::BulletText("predicate: %s", pn.c_str());
+      }
+      for (const auto& an : err.actionNames) {
+        ImGui::BulletText("action: %s", an.c_str());
+      }
+    }
+  }
   ImGui::EndChild();
 }
 
@@ -511,6 +537,8 @@ void AppShell::selfTestNew() {
   projectName     = "[Untitled]";
   validationState = "Not validated";
   lastOperation   = "New project";
+  m_lastValidation = ValidationReport{};
+  m_domainGraph.setHighlightedElements({}, {});
   m_model.clear();
   m_model.projectName = projectName;
 }
@@ -635,8 +663,41 @@ bool AppShell::selfTestRedo() {
   return m_commandStack.redo(m_model);
 }
 
+void AppShell::selfTestValidate() {
+  runValidation();
+}
+
+void AppShell::selfTestCorruptPredicateName(int idx) {
+  if (idx < 0 || idx >= static_cast<int>(m_model.predicates.size())) {
+    return;
+  }
+  m_commandStack.execute(m_model, "Corrupt for test", [idx](ProjectModel& model) {
+    model.predicates[static_cast<size_t>(idx)].name.clear();
+  });
+}
+
 size_t AppShell::selfTestUndoDepth() const {
   return m_commandStack.undoDepth();
+}
+
+void AppShell::runValidation() {
+  m_lastValidation = PddlValidator::validate(m_model, m_validationScenario);
+
+  if (m_lastValidation.ok) {
+    validationState = "Valid";
+    m_domainGraph.setHighlightedElements({}, {});
+  } else {
+    validationState = std::to_string(m_lastValidation.errors.size()) + " error(s)";
+    std::vector<std::string> preds;
+    std::vector<std::string> acts;
+    for (const auto& e : m_lastValidation.errors) {
+      preds.insert(preds.end(), e.predicateNames.begin(), e.predicateNames.end());
+      acts.insert(acts.end(), e.actionNames.begin(), e.actionNames.end());
+    }
+    m_domainGraph.setHighlightedElements(std::move(preds), std::move(acts));
+  }
+
+  lastOperation = "Validated PDDL";
 }
 
 void AppShell::renderStatusBar() {

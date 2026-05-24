@@ -308,6 +308,24 @@ int main(int argc, char* argv[]) {
     const bool addCausalLinkOk = shell.selfTestAddCausalLink(0, 0, 1, 0);
     const bool rejectSelfLinkOk = !shell.selfTestAddCausalLink(0, 0, 0, 0);
     const std::string pddl = PddlGenerator::generateDomain(shell.selfTestModel());
+    shell.selfTestValidate();
+    report.check("validation_ok_for_valid_model",
+                 shell.selfTestValidation().ok,
+                 "expected valid generated PDDL to parse");
+
+    shell.selfTestCorruptPredicateName(0);
+    shell.selfTestValidate();
+    report.check("validation_failed_after_corruption",
+                 !shell.selfTestValidation().ok,
+                 "expected empty predicate name to fail validation");
+    report.check("validation_has_at_least_one_error",
+                 !shell.selfTestValidation().errors.empty(),
+                 "expected validation failure to include at least one error");
+    shell.selfTestUndo();
+    shell.selfTestValidate();
+    report.check("validation_ok_after_undo",
+                 shell.selfTestValidation().ok,
+                 "expected validation to pass after undoing corruption");
 
     // Phase 3: inject an SDL key (Escape would quit; pick something benign)
     injectSdlKey(SDLK_F1);

@@ -2,8 +2,10 @@
 
 #include "imgui.h"
 
+#include <algorithm>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 static std::string formatRef(const EffectRef& r) {
@@ -46,12 +48,23 @@ static bool decodeEffectPin(ed::PinId pinId, int& actionIdx, int& slotIdx) {
   return true;
 }
 
+static bool containsName(const std::vector<std::string>& names,
+                         const std::string& name) {
+  return std::find(names.begin(), names.end(), name) != names.end();
+}
+
 DomainGraphPanel::DomainGraphPanel() {
   m_context = ed::CreateEditor(nullptr);
 }
 
 DomainGraphPanel::~DomainGraphPanel() {
   ed::DestroyEditor(m_context);
+}
+
+void DomainGraphPanel::setHighlightedElements(std::vector<std::string> predicateNames,
+                                              std::vector<std::string> actionNames) {
+  m_highlightedPredicates = std::move(predicateNames);
+  m_highlightedActions = std::move(actionNames);
 }
 
 void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
@@ -72,6 +85,10 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
       ed::SetNodePosition(nodeId, ImVec2(60.0f + static_cast<float>(i) * 230.0f, 60.0f));
     }
 
+    const bool highlighted = containsName(m_highlightedPredicates, pred.name);
+    if (highlighted) {
+      ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(1.0f, 0.2f, 0.2f, 1.0f));
+    }
     ed::BeginNode(nodeId);
 
     ImGui::TextColored(ImVec4(0.25f, 0.90f, 0.40f, 1.0f), "[Predicate]");
@@ -86,6 +103,9 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
     ed::EndPin();
 
     ed::EndNode();
+    if (highlighted) {
+      ed::PopStyleColor();
+    }
   }
 
   ed::PopStyleColor(2);
@@ -102,6 +122,10 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
       ed::SetNodePosition(nodeId, ImVec2(80.0f + static_cast<float>(i) * 260.0f, 300.0f));
     }
 
+    const bool highlighted = containsName(m_highlightedActions, action.name);
+    if (highlighted) {
+      ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(1.0f, 0.2f, 0.2f, 1.0f));
+    }
     ed::BeginNode(nodeId);
 
     ImGui::TextColored(ImVec4(0.30f, 0.85f, 1.0f, 1.0f), "[Action]");
@@ -143,6 +167,9 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
     }
 
     ed::EndNode();
+    if (highlighted) {
+      ed::PopStyleColor();
+    }
   }
 
   ed::PopStyleColor(2);
