@@ -125,15 +125,15 @@
 **Description:** Implement PDDL action schema definition as the primary node type on the Domain Graph canvas.
 
 **Deliverables:**
-- [ ] "Add Action" from context menu or palette creates an action node
-- [ ] Action node displays: name, parameters, precondition input pins, effect output pins (add/del)
-- [ ] Editable name and typed parameter list
-- [ ] Precondition section: add/remove precondition references (link to predicate nodes)
-- [ ] Add-effect section: add/remove add-effect references
-- [ ] Delete-effect section: add/remove delete-effect references
-- [ ] Each precondition/effect shows the grounded template (e.g. `(at ?r ?from)`)
-- [ ] Blueprint-style header with action name and colour coding
-- [ ] Properties panel shows full action details for editing
+- [x] "Add Action" from context menu or palette creates an action node
+- [x] Action node displays: name, parameters, precondition input pins, effect output pins (add/del)
+- [x] Editable name and typed parameter list
+- [x] Precondition section: add/remove precondition references (link to predicate nodes)
+- [x] Add-effect section: add/remove add-effect references
+- [x] Delete-effect section: add/remove delete-effect references
+- [x] Each precondition/effect shows the grounded template (e.g. `(at ?r ?from)`)
+- [x] Blueprint-style header with action name and colour coding
+- [x] Properties panel shows full action details for editing
 
 **Acceptance criteria:** Create action `move(?r - robot, ?from - location, ?to - location)` with precondition `(at ?r ?from)`, add-effect `(at ?r ?to)`, del-effect `(at ?r ?from)`. Verify in `ProjectModel`.
 
