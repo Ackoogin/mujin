@@ -21,6 +21,9 @@ public:
   void renderPanels();
   void renderStatusBar();
 
+  /// Workflow-ordered tab labels. Stable list — self-tests assert against it.
+  static const std::vector<std::string>& tabLabels();
+
   // --- Test interface (used by --self-test mode only) ---
   void selfTestNew();
   void selfTestAddPredicate(const std::string& name);
@@ -48,6 +51,12 @@ public:
   const ProjectModel& selfTestModel() const { return m_model; }
 
 private:
+  void renderDomainTab();
+  void renderPddlTab();
+  void renderPlanTab();
+  void renderBtTab();
+  void renderSelectedElementEditor();
+
   CommandStack m_commandStack;
   DomainGraphPanel m_domainGraph;
   ProjectModel m_model;

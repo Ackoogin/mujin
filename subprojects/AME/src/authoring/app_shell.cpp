@@ -181,6 +181,12 @@ void AppShell::renderMenuBar() {
   }
 }
 
+const std::vector<std::string>& AppShell::tabLabels() {
+  // Workflow order: author the domain -> generate PDDL -> see the plan -> see the BT.
+  static const std::vector<std::string> labels = {"Domain", "PDDL", "Plan", "BT"};
+  return labels;
+}
+
 void AppShell::renderPanels() {
   ImGuiIO& io = ImGui::GetIO();
   if (io.KeyCtrl && !io.WantTextInput) {
@@ -192,15 +198,94 @@ void AppShell::renderPanels() {
     }
   }
 
-  ImGui::DockSpaceOverViewport();
+  // Single full-viewport host window holds the workflow tab bar. The menu bar
+  // and the 22px status bar overlay carve out the top and bottom margins.
+  const ImGuiViewport* vp = ImGui::GetMainViewport();
+  const float menuH = ImGui::GetFrameHeight();
+  constexpr float kStatusBarHeight = 22.0F;
+  ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + menuH));
+  ImGui::SetNextWindowSize(ImVec2(vp->Size.x,
+                                  vp->Size.y - menuH - kStatusBarHeight));
+  const ImGuiWindowFlags hostFlags =
+      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+      ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoBringToFrontOnFocus |
+      ImGuiWindowFlags_NoNavFocus;
+  ImGui::Begin("##MainHost", nullptr, hostFlags);
 
-  ImGui::Begin("Domain Graph", nullptr);
-  m_domainGraph.render(m_model, m_commandStack);
+  if (ImGui::BeginTabBar("##MainTabs", ImGuiTabBarFlags_None)) {
+    if (ImGui::BeginTabItem(tabLabels()[0].c_str())) {
+      renderDomainTab();
+      ImGui::EndTabItem();
+    }
+    if (ImGui::BeginTabItem(tabLabels()[1].c_str())) {
+      renderPddlTab();
+      ImGui::EndTabItem();
+    }
+    if (ImGui::BeginTabItem(tabLabels()[2].c_str())) {
+      renderPlanTab();
+      ImGui::EndTabItem();
+    }
+    if (ImGui::BeginTabItem(tabLabels()[3].c_str())) {
+      renderBtTab();
+      ImGui::EndTabItem();
+    }
+    ImGui::EndTabBar();
+  }
+
   ImGui::End();
 
-  ImGui::Begin("Properties", nullptr);
-  m_typeHierarchy.render(m_model, m_commandStack);
+  if (showAboutModal) {
+    ImGui::OpenPopup("About##modal");
+    showAboutModal = false;
+  }
+  if (ImGui::BeginPopupModal("About##modal", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::Text("AME Authoring Tool");
+    ImGui::Text("Version: 0.1.0-dev");
+    if (ImGui::Button("OK")) {
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+  }
+}
 
+void AppShell::renderDomainTab() {
+  // Left sidebar: type hierarchy + selected-element editor.
+  ImGui::BeginChild("##DomainSidebar", ImVec2(360.0F, 0.0F),
+                    ImGuiChildFlags_Border);
+  m_typeHierarchy.render(m_model, m_commandStack);
+  renderSelectedElementEditor();
+  ImGui::EndChild();
+
+  ImGui::SameLine();
+
+  // Right area: node-editor canvas.
+  ImGui::BeginChild("##DomainCanvas", ImVec2(0.0F, 0.0F),
+                    ImGuiChildFlags_Border);
+  m_domainGraph.render(m_model, m_commandStack);
+  ImGui::EndChild();
+}
+
+void AppShell::renderPddlTab() {
+  const float halfH = ImGui::GetContentRegionAvail().y * 0.5F - 4.0F;
+  ImGui::BeginChild("##PddlPreview", ImVec2(0.0F, halfH),
+                    ImGuiChildFlags_Border);
+  ImGui::TextDisabled("PDDL Preview");
+  ImGui::EndChild();
+  ImGui::BeginChild("##ValidationOutput", ImVec2(0.0F, 0.0F),
+                    ImGuiChildFlags_Border);
+  ImGui::TextDisabled("Validation Output");
+  ImGui::EndChild();
+}
+
+void AppShell::renderPlanTab() {
+  ImGui::TextDisabled("Plan View");
+}
+
+void AppShell::renderBtTab() {
+  ImGui::TextDisabled("BT View");
+}
+
+void AppShell::renderSelectedElementEditor() {
   // Selected predicate editor
   const int selPred = m_domainGraph.selectedPredicateIndex();
   if (selPred >= 0 && selPred < static_cast<int>(m_model.predicates.size())) {
@@ -329,38 +414,6 @@ void AppShell::renderPanels() {
         ImGui::Text("%s", label.c_str());
       }
     }
-  }
-
-  ImGui::End();
-
-  ImGui::Begin("PDDL Preview", nullptr);
-  ImGui::TextDisabled("PDDL Preview panel");
-  ImGui::End();
-
-  ImGui::Begin("Validation Output", nullptr);
-  ImGui::TextDisabled("Validation Output panel");
-  ImGui::End();
-
-  ImGui::Begin("Plan View", nullptr);
-  ImGui::TextDisabled("Plan View panel");
-  ImGui::End();
-
-  ImGui::Begin("BT View", nullptr);
-  ImGui::TextDisabled("BT View panel");
-  ImGui::End();
-
-  if (showAboutModal) {
-    ImGui::OpenPopup("About##modal");
-    showAboutModal = false;
-  }
-
-  if (ImGui::BeginPopupModal("About##modal", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-    ImGui::Text("AME Authoring Tool");
-    ImGui::Text("Version: 0.1.0-dev");
-    if (ImGui::Button("OK")) {
-      ImGui::CloseCurrentPopup();
-    }
-    ImGui::EndPopup();
   }
 }
 

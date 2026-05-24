@@ -259,7 +259,6 @@ int main(int argc, char* argv[]) {
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
   ImGuiIO& io = ImGui::GetIO();
-  io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
   applyHoloCyanTheme();
   // Disable imgui.ini writes during self-test to keep the filesystem clean
   if (selfTestMode) {
@@ -385,27 +384,21 @@ int main(int argc, char* argv[]) {
     report.check("redo_restored_predicate_count", redoRestored, "predicates size mismatch after redo");
     report.check("undo_depth_positive", undoDepthAfter > 0, "undo depth should be > 0");
 
-    report.check("panel_domain_graph",
-                 report.windowActive("Domain Graph"),
-                 "Domain Graph panel not active");
-    report.check("panel_properties",
-                 report.windowActive("Properties"),
-                 "Properties panel not active");
-    report.check("panel_pddl_preview",
-                 report.windowActive("PDDL Preview"),
-                 "PDDL Preview panel not active");
-    report.check("panel_validation_output",
-                 report.windowActive("Validation Output"),
-                 "Validation Output panel not active");
-    report.check("panel_plan_view",
-                 report.windowActive("Plan View"),
-                 "Plan View panel not active");
-    report.check("panel_bt_view",
-                 report.windowActive("BT View"),
-                 "BT View panel not active");
+    // Tab labels are declared by AppShell::tabLabels() and rendered by
+    // renderPanels(). The main host window must be present in the window list;
+    // the per-tab content lives inside it, not as separate windows.
+    report.check("host_window_present",
+                 report.windowActive("##MainHost"),
+                 "Main host window not active");
     report.check("status_bar_present",
                  report.windowActive("##StatusBar"),
                  "Status bar overlay not active");
+    const auto& labels = AppShell::tabLabels();
+    report.check("tabs_in_workflow_order",
+                 labels.size() == 4 &&
+                     labels[0] == "Domain" && labels[1] == "PDDL" &&
+                     labels[2] == "Plan"   && labels[3] == "BT",
+                 "AppShell::tabLabels() must be {Domain, PDDL, Plan, BT}");
 
     // Phase 6: capture and print
     bool ok = captureScreenshot(window, selfTestPath.c_str());
