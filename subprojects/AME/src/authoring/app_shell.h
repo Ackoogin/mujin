@@ -1,6 +1,7 @@
 #pragma once
 
 #include "domain_graph_panel.h"
+#include "type_hierarchy_panel.h"
 
 #include <string>
 
@@ -20,5 +21,7 @@ public:
 
 private:
   DomainGraphPanel m_domainGraph;
+  ProjectModel m_model;
+  TypeHierarchyPanel m_typeHierarchy;
   bool showAboutModal = false;
 };

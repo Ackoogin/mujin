@@ -13,6 +13,8 @@ void AppShell::renderMenuBar() {
     if (ImGui::BeginMenu("File")) {
       if (ImGui::MenuItem("New")) {
         projectName = "[Untitled]";
+        m_model.clear();
+        m_model.projectName = projectName;
         validationState = "Not validated";
         lastOperation = "New project";
       }
@@ -67,7 +69,7 @@ void AppShell::renderPanels() {
   ImGui::End();
 
   ImGui::Begin("Properties", nullptr);
-  ImGui::TextDisabled("Properties panel");
+  m_typeHierarchy.render(m_model);
   ImGui::End();
 
   ImGui::Begin("PDDL Preview", nullptr);
