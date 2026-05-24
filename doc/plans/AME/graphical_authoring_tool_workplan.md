@@ -186,11 +186,11 @@
 **Description:** Generate syntactically correct PDDL domain and problem files from the `ProjectModel`.
 
 **Deliverables:**
-- [ ] `PddlGenerator` class: `generateDomain(model) -> string`, `generateProblem(model, scenario) -> string`
-- [ ] Output matches STRIPS subset that AME's `PddlParser` accepts
-- [ ] PDDL Preview panel shows live-generated PDDL (updates on model changes)
-- [ ] Syntax highlighting in the preview panel (keyword colouring via ImGui text)
-- [ ] Export to `.pddl` files via File > Export PDDL
+- [x] `PddlGenerator` class: `generateDomain(model) -> string`, `generateProblem(model, scenario) -> string`
+- [x] Output matches STRIPS subset that AME's `PddlParser` accepts (round-trip test green)
+- [x] PDDL Preview panel shows live-generated PDDL (updates on model changes)
+- [x] Syntax highlighting in the preview panel (keyword colouring via ImGui text)
+- [x] Export to `.pddl` files via File > Export PDDL
 
 **Acceptance criteria:** Author UAV search domain graphically, generate PDDL, verify it matches the existing `domains/uav_search/domain.pddl` semantically.
 
