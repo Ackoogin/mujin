@@ -50,10 +50,10 @@
 **Description:** Define the internal structured data model for an authoring project. Implement JSON serialisation using nlohmann/json.
 
 **Deliverables:**
-- [ ] `ProjectModel` class holding: type hierarchy, predicates, action schemas, objects, scenario definitions (initial state + goals), node layout positions
-- [ ] JSON schema definition (documented in a `.schema.json` or header comments)
-- [ ] `ProjectModel::save(path)` / `ProjectModel::load(path)` with versioned format
-- [ ] Unit tests for round-trip serialisation
+- [x] `ProjectModel` class holding: type hierarchy, predicates, action schemas, objects, scenario definitions (initial state + goals), node layout positions
+- [x] JSON schema definition (documented in header comments; version field in JSON)
+- [x] `ProjectModel::save(path)` / `ProjectModel::load(path)` with versioned format (rejects version != 1)
+- [x] Unit tests for round-trip serialisation (RoundTrip, LoadMissingFile, LoadBadJson, ClearResetsVersion)
 
 **Acceptance criteria:** Create a model programmatically, save to JSON, reload, verify equality. Schema supports all PDDL STRIPS elements that AME handles.
 
