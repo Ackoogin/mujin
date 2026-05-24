@@ -48,9 +48,25 @@ void DomainGraphPanel::render(ProjectModel& model) {
 
   ed::PopStyleColor(2);
 
+  // ---- Right-click context menu on empty canvas (must be inside Begin/End)
+  ed::Suspend();
+  if (ed::ShowBackgroundContextMenu()) {
+    ImGui::OpenPopup("##CanvasCtx");
+  }
+  if (ImGui::BeginPopup("##CanvasCtx")) {
+    if (ImGui::MenuItem("Add Predicate")) {
+      m_openAddPredicatePopup = true;
+      m_newPredName[0] = '\0';
+    }
+    ImGui::MenuItem("Add Action");  // placeholder (WI-1.4)
+    ImGui::MenuItem("Add Type");    // placeholder
+    ImGui::EndPopup();
+  }
+  ed::Resume();
+
   ed::End();
 
-  // ---- Track selection -------------------------------------------------
+  // ---- Track selection (after End so selection state is finalised) ----
   m_selectedPredIdx = -1;
   {
     const int total = ed::GetSelectedObjectCount();
@@ -72,22 +88,6 @@ void DomainGraphPanel::render(ProjectModel& model) {
     model.predicates[i].posX = pos.x;
     model.predicates[i].posY = pos.y;
   }
-
-  // ---- Right-click context menu on empty canvas -----------------------
-  ed::Suspend();
-  if (ed::ShowBackgroundContextMenu()) {
-    ImGui::OpenPopup("##CanvasCtx");
-  }
-  if (ImGui::BeginPopup("##CanvasCtx")) {
-    if (ImGui::MenuItem("Add Predicate")) {
-      m_openAddPredicatePopup = true;
-      m_newPredName[0] = '\0';
-    }
-    ImGui::MenuItem("Add Action");  // placeholder (WI-1.4)
-    ImGui::MenuItem("Add Type");    // placeholder
-    ImGui::EndPopup();
-  }
-  ed::Resume();
 
   // ---- Add Predicate modal --------------------------------------------
   if (m_openAddPredicatePopup) {

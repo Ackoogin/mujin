@@ -135,6 +135,26 @@ void AppShell::renderPanels() {
   }
 }
 
+void AppShell::selfTestNew() {
+  projectName     = "[Untitled]";
+  validationState = "Not validated";
+  lastOperation   = "New project";
+  m_model.clear();
+  m_model.projectName = projectName;
+}
+
+void AppShell::selfTestAddPredicate(const std::string& name) {
+  PredicateDef p;
+  p.name = name;
+  m_model.predicates.push_back(p);
+  lastOperation = "Added predicate: " + name;
+}
+
+void AppShell::selfTestAddType(const std::string& name, const std::string& parent) {
+  m_model.types.push_back({name, parent});
+  lastOperation = "Added type: " + name;
+}
+
 void AppShell::renderStatusBar() {
   const ImGuiViewport* viewport = ImGui::GetMainViewport();
   constexpr float kStatusBarHeight = 22.0F;

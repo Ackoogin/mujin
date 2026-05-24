@@ -15,6 +15,8 @@
 #include <imgui_impl_opengl3.h>
 #include <imgui_impl_sdl2.h>
 
+#include <imgui_internal.h>
+
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -45,7 +47,138 @@ static bool captureScreenshot(SDL_Window* window, const char* path) {
   return stbi_write_png(path, w, h, 4, pixels.data(), w * 4) != 0;
 }
 
-// Prints a JSON result object to stdout and flushes — agents read this.
+// ---------------------------------------------------------------------------
+// Self-test framework
+// ---------------------------------------------------------------------------
+
+struct SelfTestAssertion {
+  std::string name;
+  bool        pass = false;
+  std::string detail;
+};
+
+struct SelfTestReport {
+  std::vector<SelfTestAssertion> assertions;
+  std::vector<std::string>       windowsFound;
+  int failures = 0;
+
+  void check(const char* name, bool condition, const char* failDetail = "") {
+    SelfTestAssertion a;
+    a.name   = name;
+    a.pass   = condition;
+    a.detail = condition ? "" : failDetail;
+    if (!condition) { ++failures; }
+    assertions.push_back(std::move(a));
+  }
+
+  // Call after ImGui::Render() — enumerates active windows this frame.
+  void collectWindows() {
+    windowsFound.clear();
+    ImGuiContext& g = *GImGui;
+    for (ImGuiWindow* w : g.Windows) {
+      if (w != nullptr && w->Active && w->Name != nullptr && w->Name[0] != '\0') {
+        windowsFound.push_back(w->Name);
+      }
+    }
+  }
+
+  bool windowActive(const char* name) const {
+    for (const auto& n : windowsFound) {
+      if (n == name) { return true; }
+    }
+    return false;
+  }
+
+  void print(const char* screenshotPath, int w, int h) const {
+    const char* status = (failures == 0) ? "ok" : "fail";
+    std::printf("{\n");
+    std::printf("  \"status\": \"%s\",\n", status);
+    std::printf("  \"screenshot\": \"%s\",\n", screenshotPath);
+    std::printf("  \"width\": %d,\n", w);
+    std::printf("  \"height\": %d,\n", h);
+    std::printf("  \"failures\": %d,\n", failures);
+
+    // Assertions array
+    std::printf("  \"assertions\": [\n");
+    for (size_t i = 0; i < assertions.size(); ++i) {
+      const auto& a = assertions[i];
+      const char* sep = (i + 1 < assertions.size()) ? "," : "";
+      if (a.detail.empty()) {
+        std::printf("    { \"name\": \"%s\", \"pass\": %s }%s\n",
+                    a.name.c_str(), a.pass ? "true" : "false", sep);
+      } else {
+        std::printf("    { \"name\": \"%s\", \"pass\": %s, \"detail\": \"%s\" }%s\n",
+                    a.name.c_str(), a.pass ? "true" : "false",
+                    a.detail.c_str(), sep);
+      }
+    }
+    std::printf("  ],\n");
+
+    // Windows found
+    std::printf("  \"windows_found\": [");
+    for (size_t i = 0; i < windowsFound.size(); ++i) {
+      std::printf("\"%s\"%s", windowsFound[i].c_str(),
+                  (i + 1 < windowsFound.size()) ? ", " : "");
+    }
+    std::printf("]\n}\n");
+    std::fflush(stdout);
+  }
+};
+
+static void injectSdlKey(SDL_Keycode key) {
+  SDL_Event dn;
+  SDL_memset(&dn, 0, sizeof(dn));
+  dn.type             = SDL_KEYDOWN;
+  dn.key.keysym.sym   = key;
+  dn.key.keysym.scancode = SDL_GetScancodeFromKey(key);
+  SDL_PushEvent(&dn);
+
+  SDL_Event up = dn;
+  up.type = SDL_KEYUP;
+  SDL_PushEvent(&up);
+}
+
+static void injectSdlMouseClick(int x, int y) {
+  SDL_Event dn;
+  SDL_memset(&dn, 0, sizeof(dn));
+  dn.type         = SDL_MOUSEBUTTONDOWN;
+  dn.button.button = SDL_BUTTON_LEFT;
+  dn.button.state  = SDL_PRESSED;
+  dn.button.x      = x;
+  dn.button.y      = y;
+  SDL_PushEvent(&dn);
+
+  SDL_Event up = dn;
+  up.type          = SDL_MOUSEBUTTONUP;
+  up.button.state  = SDL_RELEASED;
+  SDL_PushEvent(&up);
+}
+
+static void renderAppShellFrame(SDL_Window* window, AppShell& shell,
+                                const ImVec4& clearColor) {
+  SDL_Event event;
+  while (SDL_PollEvent(&event) != 0) {
+    ImGui_ImplSDL2_ProcessEvent(&event);
+  }
+  ImGui_ImplOpenGL3_NewFrame();
+  ImGui_ImplSDL2_NewFrame();
+  ImGui::NewFrame();
+
+  shell.renderMenuBar();
+  shell.renderPanels();
+  shell.renderStatusBar();
+
+  ImGui::Render();
+
+  int dw = 0, dh = 0;
+  SDL_GL_GetDrawableSize(window, &dw, &dh);
+  glViewport(0, 0, dw, dh);
+  glClearColor(clearColor.x, clearColor.y, clearColor.z, clearColor.w);
+  glClear(GL_COLOR_BUFFER_BIT);
+  ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+  SDL_GL_SwapWindow(window);
+}
+
 static void printSelfTestResult(const char* status, const char* screenshotPath,
                                 int w, int h, const char* detail) {
   std::printf(
@@ -139,51 +272,77 @@ int main(int argc, char* argv[]) {
   ImGui_ImplOpenGL3_Init("#version 130");
 
   // ---------------------------------------------------------------------------
-  // Self-test: render a fixed number of frames, capture, report, exit
+  // Self-test: drive the real AppShell, inject actions, validate UI, capture
   // ---------------------------------------------------------------------------
   if (selfTestMode) {
-    const int kFrames = 3;
-    bool show_demo = true;
-    for (int frame = 0; frame < kFrames; ++frame) {
-      // Pump events so ImGui state is consistent
-      SDL_Event event;
-      while (SDL_PollEvent(&event) != 0) {
-        ImGui_ImplSDL2_ProcessEvent(&event);
-      }
+    const ImVec4   clearColor(0.06F, 0.10F, 0.14F, 1.0F);
+    AppShell       shell;
+    SelfTestReport report;
 
-      ImGui_ImplOpenGL3_NewFrame();
-      ImGui_ImplSDL2_NewFrame();
-      ImGui::NewFrame();
-
-      ImGui::ShowDemoWindow(&show_demo);
-      ImGui::Begin("AME Authoring Tool");
-      ImGui::TextUnformatted("Self-test frame");
-      ImGui::End();
-
-      ImGui::Render();
-
-      int dw = 0, dh = 0;
-      SDL_GL_GetDrawableSize(window, &dw, &dh);
-      glViewport(0, 0, dw, dh);
-      glClearColor(0.1F, 0.1F, 0.1F, 1.0F);
-      glClear(GL_COLOR_BUFFER_BIT);
-      ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-      // Capture on the last frame (before SwapWindow — reads back buffer)
-      if (frame == kFrames - 1) {
-        bool ok = captureScreenshot(window, selfTestPath.c_str());
-        int dw2 = 0, dh2 = 0;
-        SDL_GL_GetDrawableSize(window, &dw2, &dh2);
-        if (ok) {
-          printSelfTestResult("ok", selfTestPath.c_str(), dw2, dh2, "");
-        } else {
-          printSelfTestResult("error", selfTestPath.c_str(), dw2, dh2,
-                              "stbi_write_png failed");
-        }
-      }
-
-      SDL_GL_SwapWindow(window);
+    // Phase 1: warm-up — let ImGui settle docking/layout
+    for (int i = 0; i < 3; ++i) {
+      renderAppShellFrame(window, shell, clearColor);
     }
+
+    // Phase 2: inject programmatic actions through the test interface
+    shell.selfTestNew();
+    shell.selfTestAddType("robot", "object");
+    shell.selfTestAddType("location", "object");
+    shell.selfTestAddPredicate("at");
+    shell.selfTestAddPredicate("connected");
+
+    // Phase 3: inject an SDL key (Escape would quit; pick something benign)
+    injectSdlKey(SDLK_F1);
+
+    // Phase 4: render a few more frames so the new state is reflected
+    for (int i = 0; i < 3; ++i) {
+      renderAppShellFrame(window, shell, clearColor);
+    }
+
+    // Phase 5: collect window list after the final render and validate
+    report.collectWindows();
+
+    report.check("project_name_set",
+                 shell.projectName == "[Untitled]",
+                 "expected projectName to be [Untitled] after New");
+    report.check("model_has_two_types",
+                 shell.selfTestModel().types.size() == 2,
+                 "expected 2 types in model");
+    report.check("model_has_two_predicates",
+                 shell.selfTestModel().predicates.size() == 2,
+                 "expected 2 predicates in model");
+    report.check("panel_domain_graph",
+                 report.windowActive("Domain Graph"),
+                 "Domain Graph panel not active");
+    report.check("panel_properties",
+                 report.windowActive("Properties"),
+                 "Properties panel not active");
+    report.check("panel_pddl_preview",
+                 report.windowActive("PDDL Preview"),
+                 "PDDL Preview panel not active");
+    report.check("panel_validation_output",
+                 report.windowActive("Validation Output"),
+                 "Validation Output panel not active");
+    report.check("panel_plan_view",
+                 report.windowActive("Plan View"),
+                 "Plan View panel not active");
+    report.check("panel_bt_view",
+                 report.windowActive("BT View"),
+                 "BT View panel not active");
+    report.check("status_bar_present",
+                 report.windowActive("##StatusBar"),
+                 "Status bar overlay not active");
+
+    // Phase 6: capture and print
+    bool ok = captureScreenshot(window, selfTestPath.c_str());
+    int dw = 0, dh = 0;
+    SDL_GL_GetDrawableSize(window, &dw, &dh);
+    if (!ok) {
+      report.check("screenshot_written", false, "stbi_write_png failed");
+    } else {
+      report.check("screenshot_written", true);
+    }
+    report.print(selfTestPath.c_str(), dw, dh);
 
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplSDL2_Shutdown();
@@ -191,7 +350,7 @@ int main(int argc, char* argv[]) {
     SDL_GL_DeleteContext(gl_context);
     SDL_DestroyWindow(window);
     SDL_Quit();
-    return 0;
+    return report.failures == 0 ? 0 : 2;
   }
 
   // ---------------------------------------------------------------------------

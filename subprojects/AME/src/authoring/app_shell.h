@@ -19,6 +19,12 @@ public:
   void renderPanels();
   void renderStatusBar();
 
+  // --- Test interface (used by --self-test mode only) ---
+  void selfTestNew();
+  void selfTestAddPredicate(const std::string& name);
+  void selfTestAddType(const std::string& name, const std::string& parent = "object");
+  const ProjectModel& selfTestModel() const { return m_model; }
+
 private:
   DomainGraphPanel m_domainGraph;
   ProjectModel m_model;
