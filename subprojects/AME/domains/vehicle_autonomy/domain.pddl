@@ -317,6 +317,7 @@
       (ditch-zone-designated ?to)
       (engines-operational)
       (gps-available)
+      (airspace-clear ?to)
     )
     :effect (and
       (at ?r ?to)
