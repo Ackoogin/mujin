@@ -17,8 +17,8 @@
 ;;;                > emergency-return-inertial > emergency-land
 ;;;
 ;;; Critical mission ditch ladder (post-mission, expendable vehicle):
-;;;   fly-to-ditch-gps + hard-land-ditch > fly-to-ditch-inertial
-;;;   + hard-land-ditch > declare-ditch-emergency + terminal-ditch
+;;;   ditch-controlled-gps > ditch-controlled-inertial
+;;;     > declare-ditch-emergency + terminal-ditch
 ;;;
 ;;; STRIPS-only — compatible with the ame planner (LAPKT BRFS).
 ;;; ==========================================================================
@@ -265,9 +265,12 @@
   ;; outweighs preservation of the airframe.
   ;;
   ;; Post-mission ditch ladder (most controlled → last resort):
-  ;;   fly-to-ditch-gps + hard-land-ditch
-  ;;     > fly-to-ditch-inertial + hard-land-ditch
-  ;;       > terminal-ditch
+  ;;   ditch-controlled-gps (1 step)
+  ;;     > ditch-controlled-inertial (1 step)
+  ;;       > declare-ditch-emergency + terminal-ditch (2 steps)
+  ;;
+  ;; Controlled ditch actions are single-step (fly + crash), so BRFS
+  ;; always prefers them over the two-step terminal-ditch path.
   ;; =====================================================================
 
   ;; --- Execute mission without comms (critical priority) ---
@@ -304,10 +307,11 @@
     )
   )
 
-  ;; --- Fly to designated ditch zone via GPS ---
-  ;; After completing a critical mission, navigate to a pre-approved
-  ;; ditch zone for controlled destruction. GPS-guided.
-  (:action fly-to-ditch-gps
+  ;; --- Controlled ditch via GPS ---
+  ;; Fly to a designated ditch zone and perform controlled destruction.
+  ;; Single-step action so BRFS always prefers it over the two-step
+  ;; terminal-ditch path when GPS and engines are available.
+  (:action ditch-controlled-gps
     :parameters (?r - robot ?from - location ?to - location)
     :precondition (and
       (at ?r ?from)
@@ -322,14 +326,17 @@
     :effect (and
       (at ?r ?to)
       (not (at ?r ?from))
-      (emergency-declared ?r)
+      (on-ground ?r)
+      (vehicle-ditched ?r)
+      (safe-state ?r)
+      (not (airborne ?r))
     )
   )
 
-  ;; --- Fly to designated ditch zone via inertial nav ---
-  ;; GPS also failed. Last-resort navigation to ditch zone using
-  ;; only inertial reference.
-  (:action fly-to-ditch-inertial
+  ;; --- Controlled ditch via inertial nav ---
+  ;; GPS also failed. Inertial-guided transit to ditch zone with
+  ;; controlled destruction. Single step, preferred over terminal-ditch.
+  (:action ditch-controlled-inertial
     :parameters (?r - robot ?from - location ?to - location)
     :precondition (and
       (at ?r ?from)
@@ -343,23 +350,6 @@
     :effect (and
       (at ?r ?to)
       (not (at ?r ?from))
-      (emergency-declared ?r)
-    )
-  )
-
-  ;; --- Hard land at designated ditch zone ---
-  ;; Controlled crash at a pre-approved area. Vehicle is deliberately
-  ;; destroyed on impact. Requires being at the ditch zone.
-  (:action hard-land-ditch
-    :parameters (?r - robot ?l - location)
-    :precondition (and
-      (at ?r ?l)
-      (airborne ?r)
-      (mission-complete ?r)
-      (mission-priority-critical)
-      (ditch-zone-designated ?l)
-    )
-    :effect (and
       (on-ground ?r)
       (vehicle-ditched ?r)
       (safe-state ?r)
@@ -368,10 +358,9 @@
   )
 
   ;; --- Declare ditch emergency ---
-  ;; Formal emergency declaration before terminal ditch. This extra
-  ;; step ensures terminal-ditch is never shorter than the controlled
-  ;; ditch path (fly-to-ditch + hard-land-ditch), so the planner
-  ;; only reaches terminal-ditch when the controlled path is blocked.
+  ;; Formal emergency declaration before terminal ditch. Combined
+  ;; with terminal-ditch this is a two-step path, so BRFS only
+  ;; selects it when single-step controlled ditch is unavailable.
   (:action declare-ditch-emergency
     :parameters (?r - robot ?l - location)
     :precondition (and

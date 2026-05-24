@@ -192,7 +192,8 @@ TEST(VehicleContingency, CriticalPushThroughDitch) {
 
     ASSERT_TRUE(r.success) << "Critical mission must push through degradation";
     EXPECT_TRUE(planHas(wm, r, "execute-mission-critical"));
-    EXPECT_TRUE(planHas(wm, r, "ditch"));
+    EXPECT_TRUE(planHas(wm, r, "ditch-controlled"));
+    EXPECT_FALSE(planHas(wm, r, "terminal-ditch"));
     EXPECT_FALSE(planHas(wm, r, "emergency-return"));
 }
 
@@ -203,7 +204,8 @@ TEST(VehicleContingency, CriticalNavFailDitch) {
 
     ASSERT_TRUE(r.success);
     EXPECT_TRUE(planHas(wm, r, "execute-mission-critical"));
-    EXPECT_TRUE(planHas(wm, r, "ditch"));
+    EXPECT_TRUE(planHas(wm, r, "ditch-controlled-gps"));
+    EXPECT_FALSE(planHas(wm, r, "terminal-ditch"));
 }
 
 TEST(VehicleContingency, CriticalSevereDegradeDitch) {
@@ -213,7 +215,8 @@ TEST(VehicleContingency, CriticalSevereDegradeDitch) {
 
     ASSERT_TRUE(r.success);
     EXPECT_TRUE(planHas(wm, r, "execute-mission-critical"));
-    EXPECT_TRUE(planHas(wm, r, "ditch"));
+    EXPECT_TRUE(planHas(wm, r, "ditch-controlled-inertial"));
+    EXPECT_FALSE(planHas(wm, r, "terminal-ditch"));
 }
 
 TEST(VehicleContingency, CriticalTotalFailureDitch) {
