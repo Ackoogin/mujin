@@ -16,6 +16,36 @@ static std::string formatRef(const EffectRef& r) {
   return out.str();
 }
 
+static ed::PinId actionPreconditionPinId(int actionIdx, int slotIdx) {
+  return 4000 + actionIdx * 100 + slotIdx;
+}
+
+static ed::PinId actionEffectPinId(int actionIdx, int slotIdx) {
+  return 5000 + actionIdx * 100 + slotIdx;
+}
+
+static bool decodePreconditionPin(ed::PinId pinId, int& actionIdx, int& slotIdx) {
+  const int id = static_cast<int>(pinId.Get());
+  if (id < 4000 || id >= 5000) {
+    return false;
+  }
+  const int localId = id - 4000;
+  actionIdx = localId / 100;
+  slotIdx = localId % 100;
+  return true;
+}
+
+static bool decodeEffectPin(ed::PinId pinId, int& actionIdx, int& slotIdx) {
+  const int id = static_cast<int>(pinId.Get());
+  if (id < 5000 || id >= 6000) {
+    return false;
+  }
+  const int localId = id - 5000;
+  actionIdx = localId / 100;
+  slotIdx = localId % 100;
+  return true;
+}
+
 DomainGraphPanel::DomainGraphPanel() {
   m_context = ed::CreateEditor(nullptr);
 }
@@ -85,8 +115,7 @@ void DomainGraphPanel::render(ProjectModel& model) {
       ImGui::TextDisabled("Preconditions");
     }
     for (int pi = 0; pi < static_cast<int>(action.preconditions.size()); ++pi) {
-      // Action input pins: 4000 + actionIdx * 100 + slotIdx.
-      const ed::PinId pinId = 4000 + i * 100 + pi;
+      const ed::PinId pinId = actionPreconditionPinId(i, pi);
       ed::BeginPin(pinId, ed::PinKind::Input);
       const std::string label = formatRef(action.preconditions[pi]);
       ImGui::Text("%s", label.c_str());
@@ -98,8 +127,7 @@ void DomainGraphPanel::render(ProjectModel& model) {
       ImGui::TextDisabled("Effects");
     }
     for (int ai = 0; ai < static_cast<int>(action.addEffects.size()); ++ai) {
-      // Action effect pins: 5000 + actionIdx * 100 + combined add/del slotIdx.
-      const ed::PinId pinId = 5000 + i * 100 + ai;
+      const ed::PinId pinId = actionEffectPinId(i, ai);
       ed::BeginPin(pinId, ed::PinKind::Output);
       const std::string label = "+" + formatRef(action.addEffects[ai]);
       ImGui::Text("%s", label.c_str());
@@ -107,7 +135,7 @@ void DomainGraphPanel::render(ProjectModel& model) {
     }
     for (int di = 0; di < static_cast<int>(action.delEffects.size()); ++di) {
       const int slotIdx = static_cast<int>(action.addEffects.size()) + di;
-      const ed::PinId pinId = 5000 + i * 100 + slotIdx;
+      const ed::PinId pinId = actionEffectPinId(i, slotIdx);
       ed::BeginPin(pinId, ed::PinKind::Output);
       const std::string label = "-" + formatRef(action.delEffects[di]);
       ImGui::Text("%s", label.c_str());
@@ -118,6 +146,65 @@ void DomainGraphPanel::render(ProjectModel& model) {
   }
 
   ed::PopStyleColor(2);
+
+  for (int i = 0; i < static_cast<int>(model.causalLinks.size()); ++i) {
+    const CausalLink& link = model.causalLinks[static_cast<size_t>(i)];
+    const ed::PinId effectPin = actionEffectPinId(link.fromAction, link.fromAddEffectIdx);
+    const ed::PinId precPin = actionPreconditionPinId(link.toAction, link.toPreconditionIdx);
+    ed::Link(6000 + i, effectPin, precPin, ImVec4(0.0f, 1.0f, 1.0f, 1.0f));
+  }
+
+  if (ed::BeginCreate()) {
+    ed::PinId startPinId = 0;
+    ed::PinId endPinId = 0;
+    if (ed::QueryNewLink(&startPinId, &endPinId)) {
+      int startEffectAction = -1;
+      int startEffectSlot = -1;
+      int endEffectAction = -1;
+      int endEffectSlot = -1;
+      int startPreAction = -1;
+      int startPreSlot = -1;
+      int endPreAction = -1;
+      int endPreSlot = -1;
+      const bool startIsEffect = decodeEffectPin(startPinId, startEffectAction, startEffectSlot);
+      const bool endIsEffect = decodeEffectPin(endPinId, endEffectAction, endEffectSlot);
+      const bool startIsPrecondition =
+          decodePreconditionPin(startPinId, startPreAction, startPreSlot);
+      const bool endIsPrecondition = decodePreconditionPin(endPinId, endPreAction, endPreSlot);
+
+      CausalLink candidate;
+      bool hasCandidate = false;
+      if (startIsEffect && endIsPrecondition) {
+        candidate = {startEffectAction, startEffectSlot, endPreAction, endPreSlot};
+        hasCandidate = true;
+      } else if (endIsEffect && startIsPrecondition) {
+        candidate = {endEffectAction, endEffectSlot, startPreAction, startPreSlot};
+        hasCandidate = true;
+      }
+
+      const bool compatible = hasCandidate && causalLinkCompatible(model, candidate);
+      if (compatible) {
+        if (ed::AcceptNewItem(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), 2.0f)) {
+          model.causalLinks.push_back(candidate);
+        }
+      } else if (startPinId && endPinId) {
+        ed::RejectNewItem(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
+      }
+    }
+    ed::EndCreate();
+  }
+
+  if (ed::BeginDelete()) {
+    ed::LinkId deletedLinkId = 0;
+    while (ed::QueryDeletedLink(&deletedLinkId)) {
+      const int linkIdx = static_cast<int>(deletedLinkId.Get()) - 6000;
+      if (linkIdx >= 0 && linkIdx < static_cast<int>(model.causalLinks.size()) &&
+          ed::AcceptDeletedItem()) {
+        model.causalLinks.erase(model.causalLinks.begin() + linkIdx);
+      }
+    }
+    ed::EndDelete();
+  }
 
   // ---- Right-click context menu on empty canvas (must be inside Begin/End)
   ed::Suspend();

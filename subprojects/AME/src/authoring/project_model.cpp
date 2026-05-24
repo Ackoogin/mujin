@@ -67,6 +67,22 @@ void from_json(const nlohmann::json& j, ActionDef& value) {
     j.at("posY").get_to(value.posY);
 }
 
+void to_json(nlohmann::json& j, const CausalLink& value) {
+    j = nlohmann::json{
+        {"fromAction", value.fromAction},
+        {"fromAddEffectIdx", value.fromAddEffectIdx},
+        {"toAction", value.toAction},
+        {"toPreconditionIdx", value.toPreconditionIdx},
+    };
+}
+
+void from_json(const nlohmann::json& j, CausalLink& value) {
+    j.at("fromAction").get_to(value.fromAction);
+    j.at("fromAddEffectIdx").get_to(value.fromAddEffectIdx);
+    j.at("toAction").get_to(value.toAction);
+    j.at("toPreconditionIdx").get_to(value.toPreconditionIdx);
+}
+
 void to_json(nlohmann::json& j, const ObjectDef& value) {
     j = nlohmann::json{{"name", value.name}, {"type", value.type}};
 }
@@ -106,6 +122,7 @@ void to_json(nlohmann::json& j, const ProjectModel& value) {
         {"types", value.types},
         {"predicates", value.predicates},
         {"actions", value.actions},
+        {"causalLinks", value.causalLinks},
         {"objects", value.objects},
         {"scenarios", value.scenarios},
     };
@@ -117,8 +134,41 @@ void from_json(const nlohmann::json& j, ProjectModel& value) {
     j.at("types").get_to(value.types);
     j.at("predicates").get_to(value.predicates);
     j.at("actions").get_to(value.actions);
+    value.causalLinks.clear();
+    if (j.contains("causalLinks")) {
+        j.at("causalLinks").get_to(value.causalLinks);
+    }
     j.at("objects").get_to(value.objects);
     j.at("scenarios").get_to(value.scenarios);
+}
+
+bool causalLinkCompatible(const ProjectModel& model, const CausalLink& link) {
+    if (link.fromAction < 0 ||
+        link.toAction < 0 ||
+        link.fromAddEffectIdx < 0 ||
+        link.toPreconditionIdx < 0) {
+        return false;
+    }
+    if (link.fromAction == link.toAction) {
+        return false;
+    }
+    if (link.fromAction >= static_cast<int>(model.actions.size()) ||
+        link.toAction >= static_cast<int>(model.actions.size())) {
+        return false;
+    }
+
+    const ActionDef& fromAction = model.actions[static_cast<size_t>(link.fromAction)];
+    const ActionDef& toAction = model.actions[static_cast<size_t>(link.toAction)];
+    if (link.fromAddEffectIdx >= static_cast<int>(fromAction.addEffects.size()) ||
+        link.toPreconditionIdx >= static_cast<int>(toAction.preconditions.size())) {
+        return false;
+    }
+
+    const EffectRef& effect = fromAction.addEffects[static_cast<size_t>(link.fromAddEffectIdx)];
+    const EffectRef& precondition =
+        toAction.preconditions[static_cast<size_t>(link.toPreconditionIdx)];
+    return effect.predicateName == precondition.predicateName &&
+           effect.argNames.size() == precondition.argNames.size();
 }
 
 bool ProjectModel::save(const std::string& path) const {

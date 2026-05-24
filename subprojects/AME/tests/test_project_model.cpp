@@ -17,6 +17,12 @@ TEST(ProjectModel, RoundTrip) {
     a.addEffects.push_back({"at",{"?r","?to"}});
     a.delEffects.push_back({"at",{"?r","?from"}});
     m.actions.push_back(a);
+    ActionDef search;
+    search.name = "search";
+    search.params = {{"?r","robot"}, {"?where","location"}};
+    search.preconditions.push_back({"at",{"?r","?where"}});
+    m.actions.push_back(search);
+    m.causalLinks.push_back({0, 0, 1, 0});
     m.objects.push_back({"uav1","robot"});
     ScenarioDef s; s.name="nominal"; s.goals.push_back({"at",{"uav1","base"}});
     m.scenarios.push_back(s);
@@ -29,7 +35,7 @@ TEST(ProjectModel, RoundTrip) {
     EXPECT_EQ(m2.projectName, "Test");
     ASSERT_EQ(m2.types.size(), 1u); EXPECT_EQ(m2.types[0].name, "robot");
     ASSERT_EQ(m2.predicates.size(), 1u); EXPECT_EQ(m2.predicates[0].posX, 10.0f);
-    ASSERT_EQ(m2.actions.size(), 1u);
+    ASSERT_EQ(m2.actions.size(), 2u);
     EXPECT_EQ(m2.actions[0].name, "move");
     ASSERT_EQ(m2.actions[0].params.size(), 3u);
     EXPECT_EQ(m2.actions[0].params[0].name, "?r");
@@ -55,9 +61,54 @@ TEST(ProjectModel, RoundTrip) {
     ASSERT_EQ(m2.actions[0].delEffects[0].argNames.size(), 2u);
     EXPECT_EQ(m2.actions[0].delEffects[0].argNames[0], "?r");
     EXPECT_EQ(m2.actions[0].delEffects[0].argNames[1], "?from");
+    EXPECT_EQ(m2.actions[1].name, "search");
+    ASSERT_EQ(m2.actions[1].preconditions.size(), 1u);
+    EXPECT_EQ(m2.actions[1].preconditions[0].predicateName, "at");
+    ASSERT_EQ(m2.causalLinks.size(), 1u);
+    EXPECT_EQ(m2.causalLinks[0].fromAction, 0);
+    EXPECT_EQ(m2.causalLinks[0].fromAddEffectIdx, 0);
+    EXPECT_EQ(m2.causalLinks[0].toAction, 1);
+    EXPECT_EQ(m2.causalLinks[0].toPreconditionIdx, 0);
     ASSERT_EQ(m2.objects.size(), 1u); EXPECT_EQ(m2.objects[0].type, "robot");
     ASSERT_EQ(m2.scenarios.size(), 1u);
     std::remove(path);
+}
+
+TEST(ProjectModel, CausalLinkValidation) {
+    ProjectModel m;
+    ActionDef move;
+    move.name = "move";
+    move.preconditions.push_back({"at",{"?r","?from"}});
+    move.addEffects.push_back({"at",{"?r","?to"}});
+    m.actions.push_back(move);
+
+    ActionDef search;
+    search.name = "search";
+    search.preconditions.push_back({"at",{"?agent","?where"}});
+    search.preconditions.push_back({"connected",{"?from","?to"}});
+    search.preconditions.push_back({"at",{"?agent"}});
+    m.actions.push_back(search);
+
+    EXPECT_TRUE(causalLinkCompatible(m, {0, 0, 1, 0}));
+    EXPECT_FALSE(causalLinkCompatible(m, {0, 0, 1, 1}));
+    EXPECT_FALSE(causalLinkCompatible(m, {0, 0, 1, 2}));
+    EXPECT_FALSE(causalLinkCompatible(m, {0, 0, 0, 0}));
+    EXPECT_FALSE(causalLinkCompatible(m, {2, 0, 1, 0}));
+}
+
+TEST(ProjectModel, MissingCausalLinksDefaultsEmpty) {
+    nlohmann::json j = {
+        {"version", 1},
+        {"projectName", "OldProject"},
+        {"types", nlohmann::json::array()},
+        {"predicates", nlohmann::json::array()},
+        {"actions", nlohmann::json::array()},
+        {"objects", nlohmann::json::array()},
+        {"scenarios", nlohmann::json::array()},
+    };
+
+    ProjectModel m = j.get<ProjectModel>();
+    EXPECT_TRUE(m.causalLinks.empty());
 }
 
 TEST(ProjectModel, LoadMissingFile) {

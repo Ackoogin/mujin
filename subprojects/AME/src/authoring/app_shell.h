@@ -37,6 +37,10 @@ public:
   void selfTestAddActionDelEffect(int actionIdx,
                                   const std::string& predName,
                                   std::vector<std::string> argNames);
+  bool selfTestAddCausalLink(int fromAction,
+                             int fromAddEffectIdx,
+                             int toAction,
+                             int toPreconditionIdx);
   const ProjectModel& selfTestModel() const { return m_model; }
 
 private:

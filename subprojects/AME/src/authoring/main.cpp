@@ -297,6 +297,12 @@ int main(int argc, char* argv[]) {
     shell.selfTestAddActionPrecondition(0, "at", {"?r", "?from"});
     shell.selfTestAddActionAddEffect(0, "at", {"?r", "?to"});
     shell.selfTestAddActionDelEffect(0, "at", {"?r", "?from"});
+    shell.selfTestAddAction("search");
+    shell.selfTestAddActionParam(1, "?r", "robot");
+    shell.selfTestAddActionParam(1, "?where", "location");
+    shell.selfTestAddActionPrecondition(1, "at", {"?r", "?where"});
+    const bool addCausalLinkOk = shell.selfTestAddCausalLink(0, 0, 1, 0);
+    const bool rejectSelfLinkOk = !shell.selfTestAddCausalLink(0, 0, 0, 0);
 
     // Phase 3: inject an SDL key (Escape would quit; pick something benign)
     injectSdlKey(SDLK_F1);
@@ -319,25 +325,49 @@ int main(int argc, char* argv[]) {
                  shell.selfTestModel().predicates.size() == 2,
                  "expected 2 predicates in model");
     const ProjectModel& model = shell.selfTestModel();
-    const bool hasOneAction = (model.actions.size() == 1);
-    report.check("model_has_one_action",
-                 hasOneAction,
-                 "expected 1 action in model");
+    const bool hasMoveAction = (model.actions.size() >= 1);
+    const bool hasSearchAction = (model.actions.size() >= 2);
+    report.check("model_has_two_actions",
+                 model.actions.size() == 2,
+                 "expected 2 actions in model");
     report.check("action_name_is_move",
-                 hasOneAction && model.actions[0].name == "move",
+                 hasMoveAction && model.actions[0].name == "move",
                  "expected action name to be move");
     report.check("action_has_three_params",
-                 hasOneAction && model.actions[0].params.size() == 3,
+                 hasMoveAction && model.actions[0].params.size() == 3,
                  "expected move action to have 3 params");
     report.check("action_has_one_precondition",
-                 hasOneAction && model.actions[0].preconditions.size() == 1,
+                 hasMoveAction && model.actions[0].preconditions.size() == 1,
                  "expected move action to have 1 precondition");
     report.check("action_has_one_add_effect",
-                 hasOneAction && model.actions[0].addEffects.size() == 1,
+                 hasMoveAction && model.actions[0].addEffects.size() == 1,
                  "expected move action to have 1 add-effect");
     report.check("action_has_one_del_effect",
-                 hasOneAction && model.actions[0].delEffects.size() == 1,
+                 hasMoveAction && model.actions[0].delEffects.size() == 1,
                  "expected move action to have 1 del-effect");
+    const bool searchPreconditionMatches =
+        hasSearchAction &&
+        !model.actions[0].addEffects.empty() &&
+        model.actions[1].preconditions.size() == 1 &&
+        model.actions[1].preconditions[0].predicateName ==
+            model.actions[0].addEffects[0].predicateName;
+    report.check("search_action_has_matching_precondition",
+                 searchPreconditionMatches,
+                 "expected search precondition to match move add-effect predicate");
+    report.check("causal_link_added",
+                 addCausalLinkOk,
+                 "expected matching causal link to be accepted");
+    report.check("causal_links_size_one",
+                 model.causalLinks.size() == 1,
+                 "expected exactly 1 causal link");
+    report.check("causal_link_endpoints",
+                 model.causalLinks.size() == 1 &&
+                     model.causalLinks[0].fromAction == 0 &&
+                     model.causalLinks[0].toAction == 1,
+                 "expected causal link from action 0 to action 1");
+    report.check("self_causal_link_rejected",
+                 rejectSelfLinkOk,
+                 "expected self causal link to be rejected");
     report.check("panel_domain_graph",
                  report.windowActive("Domain Graph"),
                  "Domain Graph panel not active");

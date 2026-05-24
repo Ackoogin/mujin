@@ -399,6 +399,22 @@ void AppShell::selfTestAddActionDelEffect(int actionIdx,
   });
 }
 
+bool AppShell::selfTestAddCausalLink(int fromAction,
+                                     int fromAddEffectIdx,
+                                     int toAction,
+                                     int toPreconditionIdx) {
+  CausalLink link;
+  link.fromAction = fromAction;
+  link.fromAddEffectIdx = fromAddEffectIdx;
+  link.toAction = toAction;
+  link.toPreconditionIdx = toPreconditionIdx;
+  if (!causalLinkCompatible(m_model, link)) {
+    return false;
+  }
+  m_model.causalLinks.push_back(link);
+  return true;
+}
+
 void AppShell::renderStatusBar() {
   const ImGuiViewport* viewport = ImGui::GetMainViewport();
   constexpr float kStatusBarHeight = 22.0F;
