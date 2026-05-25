@@ -335,11 +335,11 @@
 **Description:** Full scenario authoring with initial state, goals, and expected outcomes.
 
 **Deliverables:**
-- [ ] Scenario list panel: create, rename, duplicate, delete scenarios
-- [ ] Per-scenario: initial state editor (checkboxes for each grounded fluent)
-- [ ] Per-scenario: goal editor (select goal fluents)
-- [ ] Per-scenario: expected outcome metadata (plan length range, specific actions expected/forbidden, expected success/failure)
-- [ ] Scenarios stored in `ProjectModel` and serialised to project JSON
+- [x] Scenario list panel: create, rename, duplicate, delete scenarios
+- [x] Per-scenario: initial state editor (checkboxes for each grounded fluent) — text-input fact rows in lieu of checkboxes; same effect
+- [x] Per-scenario: goal editor (select goal fluents)
+- [x] Per-scenario: expected outcome metadata (plan length range, specific actions expected/forbidden, expected success/failure)
+- [x] Scenarios stored in `ProjectModel` and serialised to project JSON
 
 **Acceptance criteria:** Create nominal scenario and off-nominal scenario (e.g. comms loss). Both stored and reloadable.
 
