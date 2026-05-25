@@ -49,6 +49,7 @@ endif()
 # (nlohmann_json::nlohmann_json alias) — no FetchContent needed here.
 
 add_library(ame_authoring_project_model STATIC
+    contingency_analyser.cpp
     project_model.cpp
     pddl_generator.cpp
     pddl_importer.cpp

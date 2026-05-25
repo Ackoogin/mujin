@@ -359,6 +359,8 @@ int main(int argc, char* argv[]) {
     shell.selfTestAddPredicate("connected");
     shell.selfTestAddPredicateParam(1, "?from", "location");
     shell.selfTestAddPredicateParam(1, "?to", "location");
+    shell.selfTestAddPredicate("comms_ok");
+    shell.selfTestAddPredicateParam(2, "?l", "location");
     shell.selfTestAddAction("move");
     shell.selfTestAddActionParam(0, "?r", "robot");
     shell.selfTestAddActionParam(0, "?from", "location");
@@ -370,6 +372,7 @@ int main(int argc, char* argv[]) {
     shell.selfTestAddActionParam(1, "?r", "robot");
     shell.selfTestAddActionParam(1, "?where", "location");
     shell.selfTestAddActionPrecondition(1, "at", {"?r", "?where"});
+    shell.selfTestAddActionPrecondition(1, "comms_ok", {"?where"});
     const bool addCausalLinkOk = shell.selfTestAddCausalLink(0, 0, 1, 0);
     const bool rejectSelfLinkOk = !shell.selfTestAddCausalLink(0, 0, 0, 0);
     const std::string pddl = PddlGenerator::generateDomain(shell.selfTestModel());
@@ -470,6 +473,25 @@ int main(int argc, char* argv[]) {
     report.check("feasibility_no_error",
                  shell.selfTestLastPlan().error_msg.empty(),
                  "expected feasible plan to have no error message");
+    shell.selfTestRunContingencyAnalysis();
+    const ContingencyReport& contingencyReport =
+        shell.selfTestContingencyReport();
+    report.check("contingency_ok",
+                 contingencyReport.ok,
+                 "expected contingency analysis to complete");
+    report.check("contingency_identifies_context_preds",
+                 contingencyReport.contextPredicates.size() >= 1U,
+                 "expected at least one context predicate");
+    report.check("contingency_enumerates_subsets",
+                 contingencyReport.results.size() ==
+                     (size_t{1} << contingencyReport.contextFluents.size()),
+                 "expected contingency analysis to enumerate every subset");
+    report.check("contingency_counts_add_up",
+                 contingencyReport.feasibleCount +
+                         contingencyReport.infeasibleCount +
+                         contingencyReport.errorCount ==
+                     contingencyReport.results.size(),
+                 "expected contingency result counts to sum to result count");
 
     shell.selfTestAddObject("sector_a", "location");
     shell.selfTestAddScenario("preview");
@@ -570,9 +592,9 @@ int main(int argc, char* argv[]) {
     report.check("model_has_two_types",
                  shell.selfTestModel().types.size() == 2,
                  "expected 2 types in model");
-    report.check("model_has_two_predicates",
-                 shell.selfTestModel().predicates.size() == 2,
-                 "expected 2 predicates in model");
+    report.check("model_has_three_predicates",
+                 shell.selfTestModel().predicates.size() == 3,
+                 "expected 3 predicates in model");
     const ProjectModel& model = shell.selfTestModel();
     const bool hasMoveAction = (model.actions.size() >= 1);
     const bool hasSearchAction = (model.actions.size() >= 2);
@@ -594,12 +616,19 @@ int main(int argc, char* argv[]) {
     report.check("action_has_one_del_effect",
                  hasMoveAction && model.actions[0].delEffects.size() == 1,
                  "expected move action to have 1 del-effect");
-    const bool searchPreconditionMatches =
-        hasSearchAction &&
-        !model.actions[0].addEffects.empty() &&
-        model.actions[1].preconditions.size() == 1 &&
-        model.actions[1].preconditions[0].predicateName ==
-            model.actions[0].addEffects[0].predicateName;
+    // Any of search's preconditions matching move's add-effect predicate is
+    // sufficient — WI-4.4 added a second precondition (comms_ok) so don't
+    // require preconditions.size() == 1.
+    bool searchPreconditionMatches =
+        hasSearchAction && !model.actions[0].addEffects.empty();
+    if (searchPreconditionMatches) {
+      const auto& targetPred = model.actions[0].addEffects[0].predicateName;
+      bool anyMatch = false;
+      for (const auto& pre : model.actions[1].preconditions) {
+        if (pre.predicateName == targetPred) { anyMatch = true; break; }
+      }
+      searchPreconditionMatches = anyMatch;
+    }
     report.check("search_action_has_matching_precondition",
                  searchPreconditionMatches,
                  "expected search precondition to match move add-effect predicate");

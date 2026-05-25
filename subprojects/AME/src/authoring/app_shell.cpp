@@ -453,6 +453,7 @@ void AppShell::renderMenuBar() {
         m_lastValidation = ValidationReport{};
         m_structuralReport = StructuralReport{};
         m_lastBatchReport = ScenarioBatchReport{};
+        m_lastContingencyReport = ContingencyReport{};
         m_lastPlan = ame::PlanResult{};
         m_lastPlanScenarioName.clear();
         m_lastPlanStepLabels.clear();
@@ -497,6 +498,7 @@ void AppShell::renderMenuBar() {
             m_lastValidation = ValidationReport{};
             m_structuralReport = StructuralReport{};
             m_lastBatchReport = ScenarioBatchReport{};
+            m_lastContingencyReport = ContingencyReport{};
             m_lastPlan = ame::PlanResult{};
             m_lastPlanScenarioName.clear();
             m_lastPlanStepLabels.clear();
@@ -526,6 +528,7 @@ void AppShell::renderMenuBar() {
             m_lastValidation = ValidationReport{};
             m_structuralReport = StructuralReport{};
             m_lastBatchReport = ScenarioBatchReport{};
+            m_lastContingencyReport = ContingencyReport{};
             m_lastPlan = ame::PlanResult{};
             m_lastPlanScenarioName.clear();
             m_lastPlanStepLabels.clear();
@@ -617,6 +620,9 @@ void AppShell::renderMenuBar() {
       if (ImGui::MenuItem("Run All Scenarios")) {
         runAllScenarios();
       }
+      if (ImGui::MenuItem("Run Contingency Analysis")) {
+        runContingencyAnalysis();
+      }
       if (ImGui::MenuItem("Plan & Preview")) {
         runPlanAndPreview();
       }
@@ -666,6 +672,11 @@ void AppShell::renderPanels() {
   const std::string selectedPlanAction = m_planGraph.selectedActionSchemaName();
   if (!selectedPlanAction.empty()) {
     warnActs.push_back(selectedPlanAction);
+  }
+  if (m_lastContingencyReport.ok) {
+    warnPreds.insert(warnPreds.end(),
+                     m_lastContingencyReport.contextPredicates.begin(),
+                     m_lastContingencyReport.contextPredicates.end());
   }
   m_domainGraph.setStructuralHighlights(std::move(errPreds),
                                         std::move(errActs),
@@ -1083,6 +1094,52 @@ void AppShell::renderPddlTab() {
         ImGui::Text("%.2f", r.solveTimeMs);
         ImGui::TableSetColumnIndex(4);
         ImGui::TextWrapped("%s", r.reason.c_str());
+      }
+      ImGui::EndTable();
+    }
+  }
+  if (!m_lastContingencyReport.contextFluents.empty()) {
+    const ImVec4 red(1.0F, 0.3F, 0.3F, 1.0F);
+    const ImVec4 green(0.3F, 0.9F, 0.3F, 1.0F);
+    const ImVec4 orange(1.0F, 0.6F, 0.2F, 1.0F);
+    ImGui::Separator();
+    ImGui::TextDisabled(
+        "Contingency analysis: %zu feasible / %zu infeasible / %zu error  (%zu context fluents)",
+        m_lastContingencyReport.feasibleCount,
+        m_lastContingencyReport.infeasibleCount,
+        m_lastContingencyReport.errorCount,
+        m_lastContingencyReport.contextFluents.size());
+    if (!m_lastContingencyReport.error.empty()) {
+      ImGui::TextColored(red, "Error: %s", m_lastContingencyReport.error.c_str());
+    }
+    if (ImGui::BeginTable("##contingency", 3,
+                          ImGuiTableFlags_Borders |
+                              ImGuiTableFlags_RowBg |
+                              ImGuiTableFlags_ScrollY,
+                          ImVec2(0.0F, 200.0F))) {
+      ImGui::TableSetupColumn("Context (true fluents)");
+      ImGui::TableSetupColumn("Outcome");
+      ImGui::TableSetupColumn("Plan steps");
+      ImGui::TableHeadersRow();
+      for (const auto& ctx : m_lastContingencyReport.results) {
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        std::string contextStr;
+        for (const auto& fluent : ctx.trueFluents) {
+          contextStr += fluent + " ";
+        }
+        ImGui::TextWrapped("%s",
+                           contextStr.empty() ? "(none)" : contextStr.c_str());
+        ImGui::TableSetColumnIndex(1);
+        if (!ctx.errorMessage.empty()) {
+          ImGui::TextColored(red, "ERROR");
+        } else if (ctx.planFound) {
+          ImGui::TextColored(green, "OK");
+        } else {
+          ImGui::TextColored(orange, "NO PLAN");
+        }
+        ImGui::TableSetColumnIndex(2);
+        ImGui::Text("%zu", ctx.planSteps);
       }
       ImGui::EndTable();
     }
@@ -1513,6 +1570,10 @@ void AppShell::selfTestRunAllScenarios() {
   runAllScenarios();
 }
 
+void AppShell::selfTestRunContingencyAnalysis() {
+  runContingencyAnalysis();
+}
+
 bool AppShell::selfTestAddCausalLink(int fromAction,
                                      int fromAddEffectIdx,
                                      int toAction,
@@ -1582,6 +1643,7 @@ bool AppShell::selfTestImportDomain(const std::string& pddl) {
   m_lastValidation = ValidationReport{};
   m_structuralReport = StructuralReport{};
   m_lastBatchReport = ScenarioBatchReport{};
+  m_lastContingencyReport = ContingencyReport{};
   m_lastPlan = ame::PlanResult{};
   m_lastPlanScenarioName.clear();
   m_lastPlanStepLabels.clear();
@@ -1610,6 +1672,7 @@ bool AppShell::selfTestImportProblem(const std::string& pddl,
   m_lastValidation = ValidationReport{};
   m_structuralReport = StructuralReport{};
   m_lastBatchReport = ScenarioBatchReport{};
+  m_lastContingencyReport = ContingencyReport{};
   m_lastPlan = ame::PlanResult{};
   m_lastPlanScenarioName.clear();
   m_lastPlanStepLabels.clear();
@@ -1712,6 +1775,27 @@ void AppShell::runAllScenarios() {
                     "/" + std::to_string(total) + " passed";
   lastOperation = "Ran " + std::to_string(m_lastBatchReport.results.size()) +
                   " scenarios";
+}
+
+void AppShell::runContingencyAnalysis() {
+  if (m_selectedScenarioIdx < 0 ||
+      m_selectedScenarioIdx >= static_cast<int>(m_model.scenarios.size())) {
+    lastOperation = "No scenario selected";
+    return;
+  }
+
+  const std::string scenarioName =
+      m_model.scenarios[static_cast<size_t>(m_selectedScenarioIdx)].name;
+  m_lastContingencyReport =
+      ContingencyAnalyser::analyse(m_model, scenarioName);
+  validationState = "Contingency: " +
+                    std::to_string(m_lastContingencyReport.feasibleCount) +
+                    " feasible, " +
+                    std::to_string(m_lastContingencyReport.infeasibleCount) +
+                    " infeasible, " +
+                    std::to_string(m_lastContingencyReport.errorCount) +
+                    " error";
+  lastOperation = "Ran contingency analysis on: " + scenarioName;
 }
 
 void AppShell::runPlanAndPreview() {

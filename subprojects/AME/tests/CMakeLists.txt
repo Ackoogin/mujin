@@ -160,4 +160,13 @@ if(AME_BUILD_AUTHORING)
       GTest::gtest_main
   )
   gtest_discover_tests(test_scenario_runner DISCOVERY_MODE PRE_TEST)
+
+  add_executable(test_contingency_analyser test_contingency_analyser.cpp)
+  target_link_libraries(test_contingency_analyser
+    PRIVATE
+      ame_authoring_project_model
+      ame_core
+      GTest::gtest_main
+  )
+  gtest_discover_tests(test_contingency_analyser DISCOVERY_MODE PRE_TEST)
 endif()

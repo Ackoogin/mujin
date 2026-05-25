@@ -2,6 +2,7 @@
 
 #include "bt_graph_panel.h"
 #include "command_stack.h"
+#include "contingency_analyser.h"
 #include "domain_graph_panel.h"
 #include "pddl_validator.h"
 #include "plan_graph_panel.h"
@@ -68,6 +69,7 @@ public:
   const ScenarioExpectation& selfTestScenarioExpectation(int scenarioIdx) const;
   void selfTestRunFeasibility(const std::string& scenarioName);
   void selfTestRunAllScenarios();
+  void selfTestRunContingencyAnalysis();
   bool selfTestAddCausalLink(int fromAction,
                              int fromAddEffectIdx,
                              int toAction,
@@ -87,6 +89,9 @@ public:
   const ValidationReport& selfTestValidation() const { return m_lastValidation; }
   const ame::PlanResult& selfTestLastPlan() const { return m_lastPlan; }
   const ScenarioBatchReport& selfTestBatchReport() const { return m_lastBatchReport; }
+  const ContingencyReport& selfTestContingencyReport() const {
+    return m_lastContingencyReport;
+  }
   const PlanGraphPanel& selfTestPlanGraph() const { return m_planGraph; }
   size_t selfTestPlanGraphStepCount() const { return m_planGraph.stepCount(); }
   size_t selfTestBtNodeCount() const { return m_btGraph.nodeCount(); }
@@ -101,6 +106,7 @@ private:
   void runValidation();
   void runFeasibilityCheck();
   void runAllScenarios();
+  void runContingencyAnalysis();
   void runPlanAndPreview();
   void compileAndShowBt();
 
@@ -111,6 +117,7 @@ private:
   ValidationReport m_lastValidation;
   StructuralReport m_structuralReport;
   ScenarioBatchReport m_lastBatchReport;
+  ContingencyReport m_lastContingencyReport;
   ame::PlanResult m_lastPlan;
   ProjectModel m_model;
   TypeHierarchyPanel m_typeHierarchy;
