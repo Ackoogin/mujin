@@ -368,6 +368,7 @@ int main(int argc, char* argv[]) {
     shell.selfTestAddActionPrecondition(0, "at", {"?r", "?from"});
     shell.selfTestAddActionAddEffect(0, "at", {"?r", "?to"});
     shell.selfTestAddActionDelEffect(0, "at", {"?r", "?from"});
+    shell.selfTestSetActionBtBinding(0, "MoveToLocation", "", false);
     shell.selfTestAddAction("search");
     shell.selfTestAddActionParam(1, "?r", "robot");
     shell.selfTestAddActionParam(1, "?where", "location");
@@ -402,6 +403,12 @@ int main(int argc, char* argv[]) {
     report.check("grounding_predicate_counts_zero_or_positive",
                  predicateCountsZeroOrPositive,
                  "expected predicate grounding counts to be zero or positive");
+    report.check("bt_binding_node_type_set",
+                 shell.selfTestActionBtBinding(0).nodeType == "MoveToLocation",
+                 "expected move action BT node type binding to be set");
+    report.check("bt_binding_reactive_default_false",
+                 !shell.selfTestActionBtBinding(0).reactive,
+                 "expected move action BT binding to default to non-reactive");
 
     shell.selfTestRemoveAllObjects();
     shell.selfTestValidate();
@@ -470,6 +477,9 @@ int main(int argc, char* argv[]) {
     report.check("bt_graph_has_nodes",
                  shell.selfTestBtNodeCount() > 0U,
                  "expected feasible plan to compile into a visible BT graph");
+    report.check("bt_graph_has_nodes_after_binding",
+                 shell.selfTestBtNodeCount() > 0U,
+                 "expected BT binding to preserve visible BT compilation");
     report.check("feasibility_no_error",
                  shell.selfTestLastPlan().error_msg.empty(),
                  "expected feasible plan to have no error message");

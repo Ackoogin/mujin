@@ -52,6 +52,10 @@ public:
   void selfTestAddActionDelEffect(int actionIdx,
                                   const std::string& predName,
                                   std::vector<std::string> argNames);
+  void selfTestSetActionBtBinding(int actionIdx,
+                                  std::string nodeType,
+                                  std::string subtreeXml,
+                                  bool reactive);
   void selfTestAddObject(const std::string& name, const std::string& type);
   void selfTestAddScenario(const std::string& name);
   void selfTestAddInitialFact(int scenarioIdx,
@@ -85,6 +89,7 @@ public:
   bool selfTestImportProblem(const std::string& pddl,
                              const std::string& scenarioName);
   size_t selfTestUndoDepth() const;
+  const BtBinding& selfTestActionBtBinding(int actionIdx) const;
   const ProjectModel& selfTestModel() const { return m_model; }
   const ValidationReport& selfTestValidation() const { return m_lastValidation; }
   const ame::PlanResult& selfTestLastPlan() const { return m_lastPlan; }

@@ -45,6 +45,27 @@ void from_json(const nlohmann::json& j, EffectRef& value) {
     j.at("argNames").get_to(value.argNames);
 }
 
+void to_json(nlohmann::json& j, const BtBinding& value) {
+    j = nlohmann::json{
+        {"nodeType", value.nodeType},
+        {"subtreeXml", value.subtreeXml},
+        {"reactive", value.reactive},
+    };
+}
+
+void from_json(const nlohmann::json& j, BtBinding& value) {
+    value = BtBinding{};
+    if (j.contains("nodeType")) {
+        j.at("nodeType").get_to(value.nodeType);
+    }
+    if (j.contains("subtreeXml")) {
+        j.at("subtreeXml").get_to(value.subtreeXml);
+    }
+    if (j.contains("reactive")) {
+        j.at("reactive").get_to(value.reactive);
+    }
+}
+
 void to_json(nlohmann::json& j, const ActionDef& value) {
     j = nlohmann::json{
         {"name", value.name},
@@ -54,10 +75,12 @@ void to_json(nlohmann::json& j, const ActionDef& value) {
         {"delEffects", value.delEffects},
         {"posX", value.posX},
         {"posY", value.posY},
+        {"btBinding", value.btBinding},
     };
 }
 
 void from_json(const nlohmann::json& j, ActionDef& value) {
+    value = ActionDef{};
     j.at("name").get_to(value.name);
     j.at("params").get_to(value.params);
     j.at("preconditions").get_to(value.preconditions);
@@ -65,6 +88,9 @@ void from_json(const nlohmann::json& j, ActionDef& value) {
     j.at("delEffects").get_to(value.delEffects);
     j.at("posX").get_to(value.posX);
     j.at("posY").get_to(value.posY);
+    if (j.contains("btBinding")) {
+        j.at("btBinding").get_to(value.btBinding);
+    }
 }
 
 void to_json(nlohmann::json& j, const CausalLink& value) {

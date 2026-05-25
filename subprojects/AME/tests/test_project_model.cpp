@@ -16,6 +16,9 @@ TEST(ProjectModel, RoundTrip) {
     a.preconditions.push_back({"at",{"?r","?from"}});
     a.addEffects.push_back({"at",{"?r","?to"}});
     a.delEffects.push_back({"at",{"?r","?from"}});
+    a.btBinding.nodeType = "MoveToLocation";
+    a.btBinding.subtreeXml = "<MoveTo goal=\"{param2}\"/>";
+    a.btBinding.reactive = true;
     m.actions.push_back(a);
     ActionDef search;
     search.name = "search";
@@ -66,6 +69,9 @@ TEST(ProjectModel, RoundTrip) {
     ASSERT_EQ(m2.actions[0].delEffects[0].argNames.size(), 2u);
     EXPECT_EQ(m2.actions[0].delEffects[0].argNames[0], "?r");
     EXPECT_EQ(m2.actions[0].delEffects[0].argNames[1], "?from");
+    EXPECT_EQ(m2.actions[0].btBinding.nodeType, "MoveToLocation");
+    EXPECT_EQ(m2.actions[0].btBinding.subtreeXml, "<MoveTo goal=\"{param2}\"/>");
+    EXPECT_TRUE(m2.actions[0].btBinding.reactive);
     EXPECT_EQ(m2.actions[1].name, "search");
     ASSERT_EQ(m2.actions[1].preconditions.size(), 1u);
     EXPECT_EQ(m2.actions[1].preconditions[0].predicateName, "at");
@@ -83,6 +89,40 @@ TEST(ProjectModel, RoundTrip) {
               std::vector<std::string>{"move"});
     EXPECT_EQ(m2.scenarios[0].expectation.forbiddenActions,
               std::vector<std::string>{"explode"});
+    std::remove(path);
+}
+
+TEST(ProjectModel, LoadOldActionWithoutBindingDefaults) {
+    const char* path = "test_old_action_tmp.json";
+    std::ofstream f(path);
+    f << R"json({
+  "version": 1,
+  "projectName": "OldActionProject",
+  "types": [],
+  "predicates": [],
+  "actions": [
+    {
+      "name": "move",
+      "params": [],
+      "preconditions": [],
+      "addEffects": [],
+      "delEffects": [],
+      "posX": 0.0,
+      "posY": 0.0
+    }
+  ],
+  "causalLinks": [],
+  "objects": [],
+  "scenarios": []
+})json";
+    f.close();
+
+    ProjectModel m;
+    ASSERT_TRUE(m.load(path));
+    ASSERT_EQ(m.actions.size(), 1u);
+    EXPECT_TRUE(m.actions[0].btBinding.nodeType.empty());
+    EXPECT_TRUE(m.actions[0].btBinding.subtreeXml.empty());
+    EXPECT_FALSE(m.actions[0].btBinding.reactive);
     std::remove(path);
 }
 

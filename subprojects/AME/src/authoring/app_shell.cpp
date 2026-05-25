@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cfloat>
 #include <cstdio>
 #include <cstring>
 #include <exception>
@@ -1353,6 +1354,60 @@ void AppShell::renderSelectedElementEditor() {
         ImGui::Text("%s", label.c_str());
       }
     }
+
+    ImGui::Separator();
+    ImGui::TextDisabled("BT binding");
+    static int s_lastBtSelAction = -1;
+    static std::string s_lastBtNodeType;
+    static std::string s_lastBtSubtreeXml;
+    static char s_nodeType[64] = {};
+    static char s_subtreeXml[1024] = {};
+    if (selAction != s_lastBtSelAction ||
+        action.btBinding.nodeType != s_lastBtNodeType ||
+        action.btBinding.subtreeXml != s_lastBtSubtreeXml) {
+      std::snprintf(s_nodeType,
+                    sizeof(s_nodeType),
+                    "%s",
+                    action.btBinding.nodeType.c_str());
+      std::snprintf(s_subtreeXml,
+                    sizeof(s_subtreeXml),
+                    "%s",
+                    action.btBinding.subtreeXml.c_str());
+      s_lastBtSelAction = selAction;
+      s_lastBtNodeType = action.btBinding.nodeType;
+      s_lastBtSubtreeXml = action.btBinding.subtreeXml;
+    }
+
+    // TODO: Route BT binding edits through CommandStack in a later WI.
+    if (ImGui::InputText("Node type##bt", s_nodeType, sizeof(s_nodeType))) {
+      action.btBinding.nodeType = s_nodeType;
+      s_lastBtNodeType = action.btBinding.nodeType;
+    }
+    ImGui::Checkbox("Reactive##bt", &action.btBinding.reactive);
+    if (ImGui::InputTextMultiline("Subtree XML##bt",
+                                  s_subtreeXml,
+                                  sizeof(s_subtreeXml),
+                                  ImVec2(-FLT_MIN, 120.0F))) {
+      action.btBinding.subtreeXml = s_subtreeXml;
+      s_lastBtSubtreeXml = action.btBinding.subtreeXml;
+    }
+    if (!action.btBinding.subtreeXml.empty() && !action.params.empty()) {
+      ImGui::TextDisabled("Resolved preview (first grounding):");
+      std::vector<std::string> sampleArgs;
+      for (size_t i = 0; i < action.params.size(); ++i) {
+        sampleArgs.push_back("obj" + std::to_string(i + 1));
+      }
+      std::string resolved = action.btBinding.subtreeXml;
+      for (size_t i = 0; i < sampleArgs.size(); ++i) {
+        const std::string placeholder = "{param" + std::to_string(i) + "}";
+        size_t pos = 0;
+        while ((pos = resolved.find(placeholder, pos)) != std::string::npos) {
+          resolved.replace(pos, placeholder.size(), sampleArgs[i]);
+          pos += sampleArgs[i].size();
+        }
+      }
+      ImGui::TextWrapped("%s", resolved.c_str());
+    }
   }
 }
 
@@ -1468,6 +1523,24 @@ void AppShell::selfTestAddActionDelEffect(int actionIdx,
       predName,
       argNames
     });
+  });
+}
+
+void AppShell::selfTestSetActionBtBinding(int actionIdx,
+                                          std::string nodeType,
+                                          std::string subtreeXml,
+                                          bool reactive) {
+  if (actionIdx < 0 || actionIdx >= static_cast<int>(m_model.actions.size())) {
+    return;
+  }
+  m_commandStack.execute(m_model,
+                         "Set action BT binding",
+                         [actionIdx, nodeType, subtreeXml, reactive](ProjectModel& model) {
+    BtBinding& binding =
+        model.actions[static_cast<size_t>(actionIdx)].btBinding;
+    binding.nodeType = nodeType;
+    binding.subtreeXml = subtreeXml;
+    binding.reactive = reactive;
   });
 }
 
@@ -1687,6 +1760,14 @@ size_t AppShell::selfTestUndoDepth() const {
   return m_commandStack.undoDepth();
 }
 
+const BtBinding& AppShell::selfTestActionBtBinding(int actionIdx) const {
+  static const BtBinding kDefaultBinding;
+  if (actionIdx < 0 || actionIdx >= static_cast<int>(m_model.actions.size())) {
+    return kDefaultBinding;
+  }
+  return m_model.actions[static_cast<size_t>(actionIdx)].btBinding;
+}
+
 void AppShell::runValidation() {
   m_lastValidation = PddlValidator::validate(m_model, m_validationScenario);
 
@@ -1825,6 +1906,17 @@ void AppShell::compileAndShowBt() {
 
   try {
     ame::ActionRegistry registry;
+    for (const auto& act : m_model.actions) {
+      if (!act.btBinding.subtreeXml.empty()) {
+        registry.registerActionSubTree(act.name,
+                                       act.btBinding.subtreeXml,
+                                       act.btBinding.reactive);
+      } else if (!act.btBinding.nodeType.empty()) {
+        registry.registerAction(act.name,
+                                act.btBinding.nodeType,
+                                act.btBinding.reactive);
+      }
+    }
     ame::PlanCompiler compiler;
     const std::string xml = compiler.compile(m_lastPlan.steps, wm, registry);
     m_btGraph.setXml(xml);

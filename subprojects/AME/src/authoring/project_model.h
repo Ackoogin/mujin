@@ -7,11 +7,17 @@ struct TypeDef { std::string name, parent; };
 struct Parameter { std::string name, type; };
 struct PredicateDef { std::string name; std::vector<Parameter> params; float posX=0,posY=0; };
 struct EffectRef { std::string predicateName; std::vector<std::string> argNames; };
+struct BtBinding {
+    std::string nodeType;
+    std::string subtreeXml;
+    bool reactive = false;
+};
 struct ActionDef {
     std::string name;
     std::vector<Parameter> params;
     std::vector<EffectRef> preconditions, addEffects, delEffects;
     float posX=0,posY=0;
+    BtBinding btBinding;
 };
 struct CausalLink {
     int fromAction = -1;
@@ -57,6 +63,8 @@ void to_json(nlohmann::json&, const PredicateDef&);
 void from_json(const nlohmann::json&, PredicateDef&);
 void to_json(nlohmann::json&, const EffectRef&);
 void from_json(const nlohmann::json&, EffectRef&);
+void to_json(nlohmann::json&, const BtBinding&);
+void from_json(const nlohmann::json&, BtBinding&);
 void to_json(nlohmann::json&, const ActionDef&);
 void from_json(const nlohmann::json&, ActionDef&);
 void to_json(nlohmann::json&, const CausalLink&);
