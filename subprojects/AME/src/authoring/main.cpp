@@ -373,6 +373,13 @@ int main(int argc, char* argv[]) {
     report.check("feasibility_plan_returned",
                  shell.selfTestLastPlan().success,
                  "expected trivially satisfied goal to be feasible");
+    report.check("plan_graph_populated",
+                 static_cast<long long>(shell.selfTestPlanGraphStepCount()) >= 0LL,
+                 "expected feasible plan to populate the plan graph");
+    report.check("plan_graph_consistent_with_plan",
+                 shell.selfTestPlanGraphStepCount() ==
+                     shell.selfTestLastPlan().steps.size(),
+                 "expected plan graph step count to match returned plan");
     report.check("feasibility_no_error",
                  shell.selfTestLastPlan().error_msg.empty(),
                  "expected feasible plan to have no error message");

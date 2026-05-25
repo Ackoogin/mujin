@@ -102,6 +102,7 @@ add_executable(ame_authoring_tool
   app_shell.cpp
   command_stack.cpp
   domain_graph_panel.cpp
+  plan_graph_panel.cpp
   type_hierarchy_panel.cpp
   app_theme.cpp
 )

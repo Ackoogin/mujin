@@ -3,6 +3,7 @@
 #include "command_stack.h"
 #include "domain_graph_panel.h"
 #include "pddl_validator.h"
+#include "plan_graph_panel.h"
 #include "structural_validator.h"
 #include "type_hierarchy_panel.h"
 
@@ -70,6 +71,7 @@ public:
   const ProjectModel& selfTestModel() const { return m_model; }
   const ValidationReport& selfTestValidation() const { return m_lastValidation; }
   const ame::PlanResult& selfTestLastPlan() const { return m_lastPlan; }
+  size_t selfTestPlanGraphStepCount() const { return m_planGraph.stepCount(); }
   const StructuralReport& selfTestStructuralReport() const { return m_structuralReport; }
 
 private:
@@ -83,6 +85,7 @@ private:
 
   CommandStack m_commandStack;
   DomainGraphPanel m_domainGraph;
+  PlanGraphPanel m_planGraph;
   ValidationReport m_lastValidation;
   StructuralReport m_structuralReport;
   ame::PlanResult m_lastPlan;

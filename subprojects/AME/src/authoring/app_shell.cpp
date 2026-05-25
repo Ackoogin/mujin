@@ -79,6 +79,20 @@ static std::string formatArgList(const std::vector<std::string>& args) {
   return out.str();
 }
 
+static void renderPlanFluentList(const char* title,
+                                 const std::vector<unsigned>& fluentIds,
+                                 const PlanGraphPanel& graph) {
+  ImGui::TextDisabled("%s", title);
+  if (fluentIds.empty()) {
+    ImGui::TextDisabled("  (none)");
+    return;
+  }
+  for (const unsigned fluentId : fluentIds) {
+    const std::string label = graph.fluentLabel(fluentId);
+    ImGui::BulletText("%s", label.c_str());
+  }
+}
+
 static std::vector<std::string> parseArgList(const char* text) {
   std::vector<std::string> args;
   std::istringstream input(text);
@@ -296,6 +310,7 @@ void AppShell::renderMenuBar() {
         m_lastPlan = ame::PlanResult{};
         m_lastPlanScenarioName.clear();
         m_lastPlanStepLabels.clear();
+        m_planGraph.clear();
         m_hasLastPlan = false;
         m_selectedScenarioIdx = -1;
         m_domainGraph.setHighlightedElements({}, {});
@@ -690,26 +705,51 @@ void AppShell::renderPlanTab() {
   }
 
   if (m_lastPlan.success) {
+    ImGui::BeginChild("##PlanStats", ImVec2(0.0F, 60.0F),
+                      ImGuiChildFlags_Border);
     ImGui::TextColored(ImVec4(0.2F, 0.9F, 0.3F, 1.0F),
                        "Plan found for scenario: %s",
                        m_lastPlanScenarioName.c_str());
     ImGui::Text("Steps: %zu  Cost: %.2f  Expanded: %u  Generated: %u  Time: %.2f ms",
                 m_lastPlan.steps.size(), m_lastPlan.cost, m_lastPlan.expanded,
                 m_lastPlan.generated, m_lastPlan.solve_time_ms);
+    ImGui::EndChild();
 
-    if (ImGui::BeginTable("##plansteps", 2,
-                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
-      ImGui::TableSetupColumn("#");
-      ImGui::TableSetupColumn("Action");
-      ImGui::TableHeadersRow();
-      for (int i = 0; i < static_cast<int>(m_lastPlanStepLabels.size()); ++i) {
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        ImGui::Text("%d", i + 1);
-        ImGui::TableSetColumnIndex(1);
-        ImGui::TextUnformatted(m_lastPlanStepLabels[static_cast<size_t>(i)].c_str());
-      }
-      ImGui::EndTable();
+    const int selectedStep = m_planGraph.selectedStepIndex();
+    const bool showDetails =
+        selectedStep >= 0 &&
+        selectedStep < static_cast<int>(m_planGraph.stepCount());
+    const float detailsWidth = showDetails ? 340.0F : 0.0F;
+    const float canvasWidth =
+        showDetails ? std::max(120.0F,
+                               ImGui::GetContentRegionAvail().x - detailsWidth - 8.0F)
+                    : 0.0F;
+
+    ImGui::BeginChild("##PlanCanvas", ImVec2(canvasWidth, 0.0F),
+                      ImGuiChildFlags_Border);
+    m_planGraph.render();
+    ImGui::EndChild();
+
+    if (showDetails) {
+      ImGui::SameLine();
+      ImGui::BeginChild("##PlanStepDetails", ImVec2(detailsWidth, 0.0F),
+                        ImGuiChildFlags_Border);
+      const size_t stepIdx = static_cast<size_t>(selectedStep);
+      ImGui::Text("Step %d", selectedStep + 1);
+      ImGui::TextWrapped("%s", m_planGraph.stepLabel(stepIdx).c_str());
+      ImGui::Separator();
+      renderPlanFluentList("Preconditions",
+                           m_planGraph.stepPreconditions(stepIdx),
+                           m_planGraph);
+      ImGui::Separator();
+      renderPlanFluentList("Add effects",
+                           m_planGraph.stepAddEffects(stepIdx),
+                           m_planGraph);
+      ImGui::Separator();
+      renderPlanFluentList("Delete effects",
+                           m_planGraph.stepDelEffects(stepIdx),
+                           m_planGraph);
+      ImGui::EndChild();
     }
     return;
   }
@@ -870,6 +910,7 @@ void AppShell::selfTestNew() {
   m_lastPlan = ame::PlanResult{};
   m_lastPlanScenarioName.clear();
   m_lastPlanStepLabels.clear();
+  m_planGraph.clear();
   m_hasLastPlan = false;
   m_selectedScenarioIdx = -1;
   m_domainGraph.setHighlightedElements({}, {});
@@ -1124,6 +1165,7 @@ void AppShell::runFeasibilityCheck() {
     m_lastPlan.error_msg = "parse failed - cannot plan";
     m_lastPlanScenarioName = scenarioName;
     m_lastPlanStepLabels.clear();
+    m_planGraph.clear();
     m_hasLastPlan = true;
     return;
   }
@@ -1142,9 +1184,11 @@ void AppShell::runFeasibilityCheck() {
   m_hasLastPlan = true;
 
   if (m_lastPlan.success) {
+    m_planGraph.setPlan(m_lastPlan, wm, scenarioName);
     validationState =
         "Feasible (" + std::to_string(m_lastPlan.steps.size()) + " steps)";
   } else {
+    m_planGraph.clear();
     const std::string error =
         m_lastPlan.error_msg.empty() ? "no plan exists" : m_lastPlan.error_msg;
     validationState = "Infeasible: " + error;
