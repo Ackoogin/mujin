@@ -426,10 +426,10 @@
 **Description:** Provide a searchable palette of available node types for quick authoring.
 
 **Deliverables:**
-- [ ] Draggable palette panel with categories: Actions, Predicates, Types
-- [ ] Search/filter box
-- [ ] Drag from palette to canvas to create node
-- [ ] Double-click canvas for quick-add popup (type to search, Enter to create)
+- [x] Draggable palette panel with categories: Actions, Predicates, Types — sidebar palette with Predicate/Action sections (Types live in their own TypeHierarchy section below)
+- [x] Search/filter box
+- [~] Drag from palette to canvas to create node — palette click selects the existing node instead; true drag-drop deferred (imgui-node-editor positioning is hairy)
+- [~] Double-click canvas for quick-add popup — Quick Add small-button in the palette opens the popup; double-click hook deferred to keyboard polish WI
 
 **Acceptance criteria:** Open palette, search "move", drag to canvas, node created with default parameters ready for editing.
 
