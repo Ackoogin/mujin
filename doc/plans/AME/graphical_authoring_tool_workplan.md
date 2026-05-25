@@ -257,10 +257,10 @@
 **Description:** Continuous authoring-time validation without requiring PDDL generation.
 
 **Deliverables:**
-- [ ] Real-time validation as user edits: missing names, undeclared types in parameters, duplicate predicate names, unreferenced predicates
-- [ ] Visual indicators on nodes: warning badges, red outlines for errors, yellow for warnings
-- [ ] Validation Output panel shows all current issues (live-updated)
-- [ ] Validation severity levels: Error (blocks PDDL generation), Warning (informational)
+- [x] Real-time validation as user edits: missing names, undeclared types in parameters, duplicate predicate names, unreferenced predicates
+- [x] Visual indicators on nodes: warning badges, red outlines for errors, yellow for warnings — red/yellow node borders
+- [x] Validation Output panel shows all current issues (live-updated)
+- [x] Validation severity levels: Error (blocks PDDL generation), Warning (informational)
 
 **Acceptance criteria:** Create action with parameter of undeclared type — see warning immediately without explicitly running validation.
 
