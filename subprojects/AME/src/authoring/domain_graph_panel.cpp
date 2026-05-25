@@ -149,7 +149,10 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
     }
 
     if (!action.preconditions.empty()) {
-      ImGui::Separator();
+      // No ImGui::Separator here — it would stretch across the full canvas
+      // width inside an ed::BeginNode block. The TextDisabled label alone
+      // is enough to demarcate the section.
+      ImGui::Spacing();
       ImGui::TextDisabled("Preconditions");
     }
     for (int pi = 0; pi < static_cast<int>(action.preconditions.size()); ++pi) {
@@ -162,7 +165,7 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
     }
 
     if (!action.addEffects.empty() || !action.delEffects.empty()) {
-      ImGui::Separator();
+      ImGui::Spacing();
       ImGui::TextDisabled("Effects");
     }
     for (int ai = 0; ai < static_cast<int>(action.addEffects.size()); ++ai) {
