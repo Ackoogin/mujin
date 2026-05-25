@@ -35,6 +35,12 @@ public:
   /// \brief Index of the currently selected plan step, or -1 if none.
   int selectedStepIndex() const { return m_selectedStep; }
 
+  /// \brief Action schema name for the selected step, or empty if none.
+  std::string selectedActionSchemaName() const;
+
+  /// \brief Test-only selection hook for --self-test.
+  void setSelectedStepForTest(int stepIdx);
+
   /// \brief Number of plan steps currently displayed.
   size_t stepCount() const { return m_stepData.size(); }
 

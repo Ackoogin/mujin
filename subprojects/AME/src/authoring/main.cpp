@@ -387,10 +387,27 @@ int main(int argc, char* argv[]) {
                  shell.selfTestLastPlan().error_msg.empty(),
                  "expected feasible plan to have no error message");
 
+    shell.selfTestAddObject("sector_a", "location");
+    shell.selfTestAddScenario("preview");
+    shell.selfTestAddInitialFact(1, "at", {"uav1", "base"});
+    shell.selfTestAddGoal(1, "at", {"uav1", "sector_a"});
+    shell.selfTestPlanAndPreview();
+    for (int i = 0; i < 3; ++i) {
+      renderAppShellFrame(window, shell, clearColor);
+    }
+    report.check("plan_and_preview_runs_without_error",
+                 shell.selfTestLastPlan().error_msg.empty(),
+                 "expected Plan & Preview to complete without a planner error");
+    shell.selfTestSetSelectedPlanStep(0);
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("cross_view_schema_extracted",
+                 shell.selfTestPlanGraph().selectedActionSchemaName() == "move",
+                 "expected selected plan step to extract move action schema");
+
     shell.selfTestAddObject("sector_x", "location");
     shell.selfTestAddScenario("infeasible");
-    shell.selfTestAddInitialFact(1, "at", {"uav1", "base"});
-    shell.selfTestAddGoal(1, "connected", {"base", "sector_x"});
+    shell.selfTestAddInitialFact(2, "at", {"uav1", "base"});
+    shell.selfTestAddGoal(2, "connected", {"base", "sector_x"});
     shell.selfTestRunFeasibility("infeasible");
     report.check("feasibility_infeasible_returns_false",
                  !shell.selfTestLastPlan().success,

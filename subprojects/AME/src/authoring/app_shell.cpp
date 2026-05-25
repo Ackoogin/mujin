@@ -314,6 +314,7 @@ void AppShell::renderMenuBar() {
         m_lastPlan = ame::PlanResult{};
         m_lastPlanScenarioName.clear();
         m_lastPlanStepLabels.clear();
+        m_requestedTab.clear();
         m_planGraph.clear();
         m_btGraph.setXml("");
         m_hasLastPlan = false;
@@ -400,6 +401,9 @@ void AppShell::renderMenuBar() {
       if (ImGui::MenuItem("Check Feasibility")) {
         runFeasibilityCheck();
       }
+      if (ImGui::MenuItem("Plan & Preview")) {
+        runPlanAndPreview();
+      }
       ImGui::EndMenu();
     }
 
@@ -443,6 +447,10 @@ void AppShell::renderPanels() {
       }
     }
   }
+  const std::string selectedPlanAction = m_planGraph.selectedActionSchemaName();
+  if (!selectedPlanAction.empty()) {
+    warnActs.push_back(selectedPlanAction);
+  }
   m_domainGraph.setStructuralHighlights(std::move(errPreds),
                                         std::move(errActs),
                                         std::move(warnPreds),
@@ -473,22 +481,26 @@ void AppShell::renderPanels() {
   ImGui::Begin("##MainHost", nullptr, hostFlags);
 
   if (ImGui::BeginTabBar("##MainTabs", ImGuiTabBarFlags_None)) {
-    if (ImGui::BeginTabItem(tabLabels()[0].c_str())) {
-      renderDomainTab();
-      ImGui::EndTabItem();
+    const auto& labels = tabLabels();
+    for (size_t i = 0; i < labels.size(); ++i) {
+      ImGuiTabItemFlags tabFlags = ImGuiTabItemFlags_None;
+      if (m_requestedTab == labels[i]) {
+        tabFlags |= ImGuiTabItemFlags_SetSelected;
+      }
+      if (ImGui::BeginTabItem(labels[i].c_str(), nullptr, tabFlags)) {
+        if (i == 0U) {
+          renderDomainTab();
+        } else if (i == 1U) {
+          renderPddlTab();
+        } else if (i == 2U) {
+          renderPlanTab();
+        } else if (i == 3U) {
+          renderBtTab();
+        }
+        ImGui::EndTabItem();
+      }
     }
-    if (ImGui::BeginTabItem(tabLabels()[1].c_str())) {
-      renderPddlTab();
-      ImGui::EndTabItem();
-    }
-    if (ImGui::BeginTabItem(tabLabels()[2].c_str())) {
-      renderPlanTab();
-      ImGui::EndTabItem();
-    }
-    if (ImGui::BeginTabItem(tabLabels()[3].c_str())) {
-      renderBtTab();
-      ImGui::EndTabItem();
-    }
+    m_requestedTab.clear();
     ImGui::EndTabBar();
   }
 
@@ -922,6 +934,7 @@ void AppShell::selfTestNew() {
   m_lastPlan = ame::PlanResult{};
   m_lastPlanScenarioName.clear();
   m_lastPlanStepLabels.clear();
+  m_requestedTab.clear();
   m_planGraph.clear();
   m_btGraph.setXml("");
   m_hasLastPlan = false;
@@ -1130,6 +1143,14 @@ void AppShell::selfTestRemoveAllObjects() {
   });
 }
 
+void AppShell::selfTestPlanAndPreview() {
+  runPlanAndPreview();
+}
+
+void AppShell::selfTestSetSelectedPlanStep(int idx) {
+  m_planGraph.setSelectedStepForTest(idx);
+}
+
 size_t AppShell::selfTestUndoDepth() const {
   return m_commandStack.undoDepth();
 }
@@ -1211,6 +1232,15 @@ void AppShell::runFeasibilityCheck() {
   }
   lastOperation = "Checked feasibility: " + scenarioName;
   compileAndShowBt();
+}
+
+void AppShell::runPlanAndPreview() {
+  runFeasibilityCheck();
+  m_requestedTab = "Plan";
+  const std::string successOperation = "Checked feasibility: " + m_lastPlanScenarioName;
+  if (m_hasLastPlan && m_lastPlan.success && lastOperation == successOperation) {
+    lastOperation = "Planned & previewed: " + m_lastPlanScenarioName;
+  }
 }
 
 void AppShell::compileAndShowBt() {

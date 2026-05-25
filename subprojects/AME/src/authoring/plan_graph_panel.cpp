@@ -119,6 +119,39 @@ std::string PlanGraphPanel::fluentLabel(unsigned fluentId) const {
   return "fluent #" + std::to_string(fluentId);
 }
 
+std::string PlanGraphPanel::selectedActionSchemaName() const {
+  if (m_selectedStep < 0 ||
+      m_selectedStep >= static_cast<int>(m_stepData.size())) {
+    return {};
+  }
+
+  const std::string& label = m_stepData[static_cast<size_t>(m_selectedStep)].label;
+  const size_t paren = label.find('(');
+  if (paren == std::string::npos) {
+    return label;
+  }
+  return label.substr(0, paren);
+}
+
+void PlanGraphPanel::setSelectedStepForTest(int stepIdx) {
+  if (stepIdx < 0 || stepIdx >= static_cast<int>(m_stepData.size())) {
+    m_selectedStep = -1;
+    if (m_context != nullptr) {
+      ed::SetCurrentEditor(m_context);
+      ed::ClearSelection();
+      ed::SetCurrentEditor(nullptr);
+    }
+    return;
+  }
+
+  m_selectedStep = stepIdx;
+  if (m_context != nullptr) {
+    ed::SetCurrentEditor(m_context);
+    ed::SelectNode(kNodeBase + stepIdx, false);
+    ed::SetCurrentEditor(nullptr);
+  }
+}
+
 void PlanGraphPanel::render() {
   ed::SetCurrentEditor(m_context);
   ed::Begin("##PlanGraph");

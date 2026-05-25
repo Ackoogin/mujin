@@ -68,10 +68,13 @@ public:
   void selfTestValidate();
   void selfTestCorruptPredicateName(int idx);
   void selfTestRemoveAllObjects();
+  void selfTestPlanAndPreview();
+  void selfTestSetSelectedPlanStep(int idx);
   size_t selfTestUndoDepth() const;
   const ProjectModel& selfTestModel() const { return m_model; }
   const ValidationReport& selfTestValidation() const { return m_lastValidation; }
   const ame::PlanResult& selfTestLastPlan() const { return m_lastPlan; }
+  const PlanGraphPanel& selfTestPlanGraph() const { return m_planGraph; }
   size_t selfTestPlanGraphStepCount() const { return m_planGraph.stepCount(); }
   size_t selfTestBtNodeCount() const { return m_btGraph.nodeCount(); }
   const StructuralReport& selfTestStructuralReport() const { return m_structuralReport; }
@@ -84,6 +87,7 @@ private:
   void renderSelectedElementEditor();
   void runValidation();
   void runFeasibilityCheck();
+  void runPlanAndPreview();
   void compileAndShowBt();
 
   CommandStack m_commandStack;
@@ -98,6 +102,7 @@ private:
   std::vector<std::string> m_lastPlanStepLabels;
   std::string m_lastPlanScenarioName;
   std::string m_validationScenario;
+  std::string m_requestedTab;
   int m_selectedScenarioIdx = -1;
   bool m_autoValidateOnSave = true;
   bool m_hasLastPlan = false;
