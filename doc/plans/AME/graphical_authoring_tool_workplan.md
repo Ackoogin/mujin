@@ -371,11 +371,11 @@
 **Description:** Import existing `.pddl` domain and problem files into the structured `ProjectModel`.
 
 **Deliverables:**
-- [ ] File > Import PDDL Domain / Import PDDL Problem
-- [ ] Parse via `PddlParser::parseFromString()`, extract types, predicates, actions, objects, initial state, goals
-- [ ] Populate `ProjectModel` from parsed data
-- [ ] Auto-layout imported nodes on canvas (topological layout algorithm)
-- [ ] Handle import conflicts (merge vs overwrite if project already has content)
+- [x] File > Import PDDL Domain / Import PDDL Problem
+- [~] Parse via `PddlParser::parseFromString()`, extract... — used a dedicated PddlImporter with a hand-rolled S-expression parser instead so we get rich struct data directly (parser-only path discards positions, names, etc.). Generator-importer round-trip is unit-tested.
+- [x] Populate `ProjectModel` from parsed data
+- [x] Auto-layout imported nodes on canvas (topological layout algorithm) — simple row layout (predicates Y=80, actions Y=300); proper topo layout deferred to polish
+- [~] Handle import conflicts (merge vs overwrite if project already has content) — domain import currently overwrites + clears CommandStack; merge UI deferred
 
 **Acceptance criteria:** Import `domains/uav_search/domain.pddl` + `problem.pddl`, see all elements appear on canvas, save project, verify round-trip.
 
