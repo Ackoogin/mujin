@@ -353,11 +353,11 @@
 **Description:** Batch-run all scenarios and compare results against expected outcomes.
 
 **Deliverables:**
-- [ ] "Run All Scenarios" button
-- [ ] Progress indicator (scenario N of M)
-- [ ] Results table: scenario name, status (pass/fail/error), plan length, time, deviation from expected
-- [ ] Detailed failure report: which expectation failed and why
-- [ ] Export results to JSON report file
+- [x] "Run All Scenarios" button — `Validate > Run All Scenarios` menu item
+- [~] Progress indicator (scenario N of M) — synchronous run; no progress bar yet (small N), deferred to polish
+- [x] Results table: scenario name, status (pass/fail/error), plan length, time, deviation from expected
+- [x] Detailed failure report: which expectation failed and why
+- [x] Export results to JSON report file — `File > Export Regression Report...`
 
 **Acceptance criteria:** Define 3 scenarios with expectations, run batch, see pass/fail results. Deliberately break a domain element, rerun, see regressions flagged.
 
