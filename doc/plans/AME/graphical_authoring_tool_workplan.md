@@ -409,10 +409,10 @@
 **Description:** Allow users to define the BT node mappings for PDDL actions (the `ActionRegistry` configuration).
 
 **Deliverables:**
-- [ ] Per-action: assign BT node type or subtree XML template
-- [ ] Per-action: set reactive flag
-- [ ] Subtree template editor with `{param0}`, `{param1}` placeholder support
-- [ ] Preview resolved BT fragment for a given grounding
+- [x] Per-action: assign BT node type or subtree XML template
+- [x] Per-action: set reactive flag
+- [x] Subtree template editor with `{param0}`, `{param1}` placeholder support
+- [x] Preview resolved BT fragment for a given grounding — uses stand-in args (obj1, obj2, ...) for preview
 
 **Acceptance criteria:** Define `move` action mapped to a `MoveToLocation` BT node type. Compile a plan using it, see the correct BT node in BT View.
 
