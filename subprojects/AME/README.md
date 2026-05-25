@@ -13,6 +13,7 @@ It depends on the `PCL` and `PYRAMID` subprojects and is structured as a future 
 | `ame_test_app` | Standalone UAV search-and-classify demo |
 | `ame_pcl_main` | PCL-hosted AME component executable |
 | `ame_ros2_lib` | ROS2 lifecycle wrappers under `ros2/` |
+| `ame_authoring_tool` | Optional graphical PDDL/scenario authoring tool, enabled with `AME_BUILD_AUTHORING=ON` |
 
 ## Build And Test
 
@@ -38,6 +39,7 @@ subprojects\AME\scripts\build.bat
 | `src/lib/` | Core implementation |
 | `src/nodes/` | BehaviorTree.CPP nodes |
 | `src/apps/` | Standalone/demo executables |
+| `src/authoring/` | Optional native graphical authoring tool |
 | `tests/` | AME unit and integration tests |
 | `domains/` | PDDL domain/problem fixtures |
 | `ros2/` | ROS2 lifecycle package, messages, services, launch files, and tests |
@@ -58,4 +60,5 @@ subprojects\AME\scripts\build.bat
 | [ROS2](doc/architecture/06-ros2.md) | Lifecycle nodes and deployment modes |
 | [Quick start](doc/guides/quickstart.md) | Build, run, tests, and Foxglove setup |
 | [Planning and execution guide](doc/guides/planning_execution_user_guide.md) | Mission flow, PDDL terms, BT nodes, and PYRAMID integration |
+| [Authoring tool user guide](doc/guides/authoring_tool_user_guide.md) | Graphical domain/scenario authoring, validation, preview, and import/export workflow |
 | [Remaining work](../../doc/todo/AME/TODO.md) | Open AME roadmap items |
