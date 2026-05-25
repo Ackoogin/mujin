@@ -5,6 +5,8 @@
 #include "pddl_generator.h"
 #include "pddl_importer.h"
 
+#include <tinyfiledialogs.h>
+
 #include <ame/action_registry.h>
 #include <ame/plan_compiler.h>
 
@@ -21,6 +23,31 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+// ---------------------------------------------------------------------------
+// Native file-dialog helpers (tinyfiledialogs). Return empty string if the
+// user cancels. The const-char* return from tinyfd points to its own static
+// buffer; copy immediately into std::string so it survives.
+// ---------------------------------------------------------------------------
+static std::string pickOpenFile(const char* title,
+                                const std::string& defaultPath,
+                                const char* filterPattern,
+                                const char* filterDesc) {
+  const char* patterns[1] = { filterPattern };
+  const char* p = tinyfd_openFileDialog(title, defaultPath.c_str(),
+                                        1, patterns, filterDesc, 0);
+  return p != nullptr ? std::string(p) : std::string();
+}
+
+static std::string pickSaveFile(const char* title,
+                                const std::string& defaultPath,
+                                const char* filterPattern,
+                                const char* filterDesc) {
+  const char* patterns[1] = { filterPattern };
+  const char* p = tinyfd_saveFileDialog(title, defaultPath.c_str(),
+                                        1, patterns, filterDesc);
+  return p != nullptr ? std::string(p) : std::string();
+}
 
 // Forward declarations for helpers defined later in this file.
 static void SectionAccent();
@@ -398,76 +425,115 @@ void AppShell::renderMenuBar() {
         lastOperation = "New project";
       }
       if (ImGui::MenuItem("Open...")) {
-        // File dialog deferred; read from a conventional project path.
-        const std::string path = authoring::projectFilePath(m_model.projectName);
-        ProjectModel loaded;
-        if (loaded.load(path)) {
-          m_commandStack.clear();
-          m_model = std::move(loaded);
-          projectName = m_model.projectName;
-          m_selectedScenarioIdx = -1;
-          clearDerivedResults();
-          resetScenarioEditorState();
-          lastOperation = "Loaded " + path;
+        const std::string defaultPath =
+            authoring::projectFilePath(m_model.projectName);
+        const std::string path = pickOpenFile("Open AME project",
+                                              defaultPath,
+                                              "*.ameproj.json",
+                                              "AME project (*.ameproj.json)");
+        if (path.empty()) {
+          lastOperation = "Open cancelled";
         } else {
-          lastOperation = "Failed to load " + path;
-        }
-      }
-      if (ImGui::MenuItem("Save")) {
-        const std::string path = authoring::projectFilePath(m_model.projectName);
-        lastOperation = m_model.save(path) ? "Saved " + path
-                                            : "Failed to save " + path;
-        if (m_autoValidateOnSave) {
-          runValidation();
-        }
-      }
-      if (ImGui::MenuItem("Save As...")) {
-        // No native file picker yet; uses the same path as Save.
-        const std::string path = authoring::projectFilePath(m_model.projectName);
-        lastOperation = m_model.save(path) ? "Saved as " + path
-                                            : "Failed to save as " + path;
-        if (m_autoValidateOnSave) {
-          runValidation();
-        }
-      }
-      if (ImGui::MenuItem("Import PDDL Domain...")) {
-        const std::string path = authoring::importDomainPath();
-        std::string pddl;
-        if (!readTextFile(path, pddl)) {
-          lastOperation = "Failed to read " + path;
-        } else {
-          const PddlImportResult import = PddlImporter::importDomain(pddl);
-          if (!import.ok) {
-            lastOperation = "Import failed: " + import.error;
-          } else {
+          ProjectModel loaded;
+          if (loaded.load(path)) {
             m_commandStack.clear();
-            m_model = import.model;
+            m_model = std::move(loaded);
             projectName = m_model.projectName;
             m_selectedScenarioIdx = -1;
             clearDerivedResults();
             resetScenarioEditorState();
-            lastOperation = "Imported domain: " + projectName;
+            lastOperation = "Loaded " + path;
+          } else {
+            lastOperation = "Failed to load " + path;
+          }
+        }
+      }
+      if (ImGui::MenuItem("Save")) {
+        const std::string defaultPath =
+            authoring::projectFilePath(m_model.projectName);
+        const std::string path = pickSaveFile("Save AME project",
+                                              defaultPath,
+                                              "*.ameproj.json",
+                                              "AME project (*.ameproj.json)");
+        if (path.empty()) {
+          lastOperation = "Save cancelled";
+        } else {
+          lastOperation = m_model.save(path) ? "Saved " + path
+                                              : "Failed to save " + path;
+          if (m_autoValidateOnSave) {
+            runValidation();
+          }
+        }
+      }
+      if (ImGui::MenuItem("Save As...")) {
+        const std::string defaultPath =
+            authoring::projectFilePath(m_model.projectName);
+        const std::string path = pickSaveFile("Save AME project as",
+                                              defaultPath,
+                                              "*.ameproj.json",
+                                              "AME project (*.ameproj.json)");
+        if (path.empty()) {
+          lastOperation = "Save As cancelled";
+        } else {
+          lastOperation = m_model.save(path) ? "Saved as " + path
+                                              : "Failed to save as " + path;
+          if (m_autoValidateOnSave) {
+            runValidation();
+          }
+        }
+      }
+      if (ImGui::MenuItem("Import PDDL Domain...")) {
+        const std::string path = pickOpenFile("Import PDDL domain",
+                                              authoring::importDomainPath(),
+                                              "*.pddl",
+                                              "PDDL domain (*.pddl)");
+        if (path.empty()) {
+          lastOperation = "Import cancelled";
+        } else {
+          std::string pddl;
+          if (!readTextFile(path, pddl)) {
+            lastOperation = "Failed to read " + path;
+          } else {
+            const PddlImportResult import = PddlImporter::importDomain(pddl);
+            if (!import.ok) {
+              lastOperation = "Import failed: " + import.error;
+            } else {
+              m_commandStack.clear();
+              m_model = import.model;
+              projectName = m_model.projectName;
+              m_selectedScenarioIdx = -1;
+              clearDerivedResults();
+              resetScenarioEditorState();
+              lastOperation = "Imported domain: " + projectName;
+            }
           }
         }
       }
       if (ImGui::MenuItem("Import PDDL Problem...")) {
-        const std::string path = authoring::importProblemPath();
-        std::string pddl;
-        if (!readTextFile(path, pddl)) {
-          lastOperation = "Failed to read " + path;
+        const std::string path = pickOpenFile("Import PDDL problem",
+                                              authoring::importProblemPath(),
+                                              "*.pddl",
+                                              "PDDL problem (*.pddl)");
+        if (path.empty()) {
+          lastOperation = "Import cancelled";
         } else {
-          const PddlImportResult import = PddlImporter::importProblem(m_model, pddl);
-          if (!import.ok) {
-            lastOperation = "Import failed: " + import.error;
+          std::string pddl;
+          if (!readTextFile(path, pddl)) {
+            lastOperation = "Failed to read " + path;
           } else {
-            m_model = import.model;
-            clearDerivedResults();
-            resetScenarioEditorState();
-            m_selectedScenarioIdx =
-                static_cast<int>(m_model.scenarios.size()) - 1;
-            const std::string scenarioName =
-                m_model.scenarios.empty() ? "" : m_model.scenarios.back().name;
-            lastOperation = "Imported problem: " + scenarioName;
+            const PddlImportResult import = PddlImporter::importProblem(m_model, pddl);
+            if (!import.ok) {
+              lastOperation = "Import failed: " + import.error;
+            } else {
+              m_model = import.model;
+              clearDerivedResults();
+              resetScenarioEditorState();
+              m_selectedScenarioIdx =
+                  static_cast<int>(m_model.scenarios.size()) - 1;
+              const std::string scenarioName =
+                  m_model.scenarios.empty() ? "" : m_model.scenarios.back().name;
+              lastOperation = "Imported problem: " + scenarioName;
+            }
           }
         }
       }
@@ -478,10 +544,17 @@ void AppShell::renderMenuBar() {
               "Refusing: " + std::to_string(m_structuralReport.errorCount) +
               " structural error(s)";
         } else {
-          const std::string path = authoring::domainPddlPath(m_model.projectName);
-          std::ofstream file(path);
-          file << PddlGenerator::generateDomain(m_model);
-          lastOperation = file.good() ? "Wrote " + path : "Failed to write " + path;
+          const std::string path = pickSaveFile("Export PDDL domain",
+                                                authoring::domainPddlPath(m_model.projectName),
+                                                "*.pddl",
+                                                "PDDL domain (*.pddl)");
+          if (path.empty()) {
+            lastOperation = "Export cancelled";
+          } else {
+            std::ofstream file(path);
+            file << PddlGenerator::generateDomain(m_model);
+            lastOperation = file.good() ? "Wrote " + path : "Failed to write " + path;
+          }
         }
       }
       if (ImGui::MenuItem("Export Problem PDDL...")) {
@@ -493,23 +566,39 @@ void AppShell::renderMenuBar() {
         } else if (m_model.scenarios.empty()) {
           lastOperation = "No scenarios to export";
         } else {
-          const std::string path =
+          const std::string defaultPath =
               authoring::problemPddlPath(m_model.projectName,
                                          m_model.scenarios.front().name);
-          std::ofstream file(path);
-          file << PddlGenerator::generateProblem(m_model, m_model.scenarios.front().name);
-          lastOperation = file.good() ? "Wrote " + path : "Failed to write " + path;
+          const std::string path = pickSaveFile("Export PDDL problem",
+                                                defaultPath,
+                                                "*.pddl",
+                                                "PDDL problem (*.pddl)");
+          if (path.empty()) {
+            lastOperation = "Export cancelled";
+          } else {
+            std::ofstream file(path);
+            file << PddlGenerator::generateProblem(m_model, m_model.scenarios.front().name);
+            lastOperation = file.good() ? "Wrote " + path : "Failed to write " + path;
+          }
         }
       }
       if (ImGui::MenuItem("Export Regression Report...")) {
         if (m_lastBatchReport.results.empty()) {
           lastOperation = "No batch report to export";
         } else {
-          const std::string path =
+          const std::string defaultPath =
               authoring::regressionReportPath(m_model.projectName);
-          std::ofstream file(path);
-          file << ScenarioRunner::toJson(m_lastBatchReport);
-          lastOperation = file.good() ? "Wrote " + path : "Failed to write " + path;
+          const std::string path = pickSaveFile("Export regression report",
+                                                defaultPath,
+                                                "*.json",
+                                                "JSON report (*.json)");
+          if (path.empty()) {
+            lastOperation = "Export cancelled";
+          } else {
+            std::ofstream file(path);
+            file << ScenarioRunner::toJson(m_lastBatchReport);
+            lastOperation = file.good() ? "Wrote " + path : "Failed to write " + path;
+          }
         }
       }
       ImGui::Separator();
@@ -677,10 +766,12 @@ void AppShell::renderPanels() {
   }
 
   // Single full-viewport host window holds the workflow tab bar. The menu bar
-  // and the 22px status bar overlay carve out the top and bottom margins.
+  // and the status-bar overlay carve out the top and bottom margins. The
+  // height must match kStatusBarHeight in renderStatusBar() — keep them in
+  // sync via the same constant.
   const ImGuiViewport* vp = ImGui::GetMainViewport();
   const float menuH = ImGui::GetFrameHeight();
-  constexpr float kStatusBarHeight = 22.0F;
+  constexpr float kStatusBarHeight = 26.0F;
   ImGui::SetNextWindowPos(ImVec2(vp->Pos.x, vp->Pos.y + menuH));
   ImGui::SetNextWindowSize(ImVec2(vp->Size.x,
                                   vp->Size.y - menuH - kStatusBarHeight));

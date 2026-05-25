@@ -49,6 +49,15 @@ FetchContent_Declare(
   GIT_SHALLOW TRUE
 )
 
+# tinyfiledialogs — single-file C library for native open/save dialogs.
+# Cross-platform; on Windows pops up the standard comdlg32 dialogs.
+FetchContent_Declare(
+  tinyfiledialogs
+  GIT_REPOSITORY https://git.code.sf.net/p/tinyfiledialogs/code
+  GIT_TAG master
+  GIT_SHALLOW TRUE
+)
+
 FetchContent_MakeAvailable(imgui imgui_node_editor sdl2)
 FetchContent_GetProperties(stb)
 if(NOT stb_POPULATED)
@@ -57,6 +66,18 @@ endif()
 FetchContent_GetProperties(jetbrains_mono)
 if(NOT jetbrains_mono_POPULATED)
   FetchContent_Populate(jetbrains_mono)
+endif()
+FetchContent_GetProperties(tinyfiledialogs)
+if(NOT tinyfiledialogs_POPULATED)
+  FetchContent_Populate(tinyfiledialogs)
+endif()
+
+add_library(tinyfiledialogs STATIC
+  ${tinyfiledialogs_SOURCE_DIR}/tinyfiledialogs.c
+)
+target_include_directories(tinyfiledialogs PUBLIC ${tinyfiledialogs_SOURCE_DIR})
+if(WIN32)
+  target_link_libraries(tinyfiledialogs PUBLIC comdlg32 ole32)
 endif()
 
 # nlohmann_json is already provided by subprojects/PYRAMID as an interface target
@@ -138,6 +159,7 @@ target_link_libraries(ame_authoring_tool
     OpenGL::GL
     ame_core
     ame_authoring_project_model
+    tinyfiledialogs
 )
 
 set_target_properties(ame_authoring_tool PROPERTIES
