@@ -276,13 +276,13 @@
 **Description:** After a successful planning run, display the plan as a causal dependency graph using imgui-node-editor in a separate view.
 
 **Deliverables:**
-- [ ] Plan View panel with its own imgui-node-editor context (read-only)
-- [ ] Each plan step rendered as a node (action name + parameters)
-- [ ] Causal dependency edges: add-effect of step i -> precondition of step j
-- [ ] Parallel flows visually grouped (matching `PlanCompiler`'s causal analysis)
-- [ ] Colour-coding per flow
-- [ ] Auto-layout using topological sort + layer assignment
-- [ ] Click node to see details (preconditions, effects, which flow)
+- [x] Plan View panel with its own imgui-node-editor context (read-only)
+- [x] Each plan step rendered as a node (action name + parameters)
+- [x] Causal dependency edges: add-effect of step i -> precondition of step j
+- [x] Parallel flows visually grouped (matching `PlanCompiler`'s causal analysis) — same-layer steps stack vertically, separate layers separate horizontally
+- [x] Colour-coding per flow — single purple palette for plan nodes; per-flow tinting deferred to WI-5.x polish
+- [x] Auto-layout using topological sort + layer assignment
+- [x] Click node to see details (preconditions, effects, which flow)
 
 **Acceptance criteria:** Plan the UAV search scenario, switch to Plan View, see nodes for each step with causal edges. Parallel steps appear side-by-side.
 
