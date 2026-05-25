@@ -292,12 +292,14 @@ void AppShell::renderMenuBar() {
         m_model.clear();
         m_model.projectName = projectName;
         m_lastValidation = ValidationReport{};
+        m_structuralReport = StructuralReport{};
         m_lastPlan = ame::PlanResult{};
         m_lastPlanScenarioName.clear();
         m_lastPlanStepLabels.clear();
         m_hasLastPlan = false;
         m_selectedScenarioIdx = -1;
         m_domainGraph.setHighlightedElements({}, {});
+        m_domainGraph.setStructuralHighlights({}, {}, {}, {});
         validationState = "Not validated";
         lastOperation = "New project";
       }
@@ -317,14 +319,26 @@ void AppShell::renderMenuBar() {
         }
       }
       if (ImGui::MenuItem("Export Domain PDDL...")) {
-        const std::string slug = slugifyForFilename(m_model.projectName);
-        const std::string path = "./" + slug + "-domain.pddl";
-        std::ofstream file(path);
-        file << PddlGenerator::generateDomain(m_model);
-        lastOperation = file.good() ? "Wrote " + path : "Failed to write " + path;
+        m_structuralReport = StructuralValidator::check(m_model);
+        if (m_structuralReport.hasErrors()) {
+          lastOperation =
+              "Refusing: " + std::to_string(m_structuralReport.errorCount) +
+              " structural error(s)";
+        } else {
+          const std::string slug = slugifyForFilename(m_model.projectName);
+          const std::string path = "./" + slug + "-domain.pddl";
+          std::ofstream file(path);
+          file << PddlGenerator::generateDomain(m_model);
+          lastOperation = file.good() ? "Wrote " + path : "Failed to write " + path;
+        }
       }
       if (ImGui::MenuItem("Export Problem PDDL...")) {
-        if (m_model.scenarios.empty()) {
+        m_structuralReport = StructuralValidator::check(m_model);
+        if (m_structuralReport.hasErrors()) {
+          lastOperation =
+              "Refusing: " + std::to_string(m_structuralReport.errorCount) +
+              " structural error(s)";
+        } else if (m_model.scenarios.empty()) {
           lastOperation = "No scenarios to export";
         } else {
           const std::string slug = slugifyForFilename(m_model.projectName);
@@ -387,6 +401,33 @@ const std::vector<std::string>& AppShell::tabLabels() {
 }
 
 void AppShell::renderPanels() {
+  m_structuralReport = StructuralValidator::check(m_model);
+  std::vector<std::string> errPreds;
+  std::vector<std::string> errActs;
+  std::vector<std::string> warnPreds;
+  std::vector<std::string> warnActs;
+  for (const auto& issue : m_structuralReport.issues) {
+    if (issue.severity == Severity::Error) {
+      if (!issue.predicateName.empty()) {
+        errPreds.push_back(issue.predicateName);
+      }
+      if (!issue.actionName.empty()) {
+        errActs.push_back(issue.actionName);
+      }
+    } else {
+      if (!issue.predicateName.empty()) {
+        warnPreds.push_back(issue.predicateName);
+      }
+      if (!issue.actionName.empty()) {
+        warnActs.push_back(issue.actionName);
+      }
+    }
+  }
+  m_domainGraph.setStructuralHighlights(std::move(errPreds),
+                                        std::move(errActs),
+                                        std::move(warnPreds),
+                                        std::move(warnActs));
+
   ImGuiIO& io = ImGui::GetIO();
   if (io.KeyCtrl && !io.WantTextInput) {
     if (ImGui::IsKeyPressed(ImGuiKey_Z, false) && m_commandStack.canUndo()) {
@@ -622,6 +663,23 @@ void AppShell::renderPddlTab() {
       ImGui::EndTable();
     }
   }
+  ImGui::Separator();
+  ImGui::TextDisabled("Structural Issues");
+  if (m_structuralReport.issues.empty()) {
+    ImGui::TextColored(ImVec4(0.2F, 0.9F, 0.3F, 1.0F), "No structural issues");
+  } else {
+    for (const auto& issue : m_structuralReport.issues) {
+      if (issue.severity == Severity::Error) {
+        ImGui::TextColored(ImVec4(1.0F, 0.4F, 0.4F, 1.0F),
+                           "ERR: %s",
+                           issue.message.c_str());
+      } else {
+        ImGui::TextColored(ImVec4(1.0F, 0.8F, 0.2F, 1.0F),
+                           "WARN: %s",
+                           issue.message.c_str());
+      }
+    }
+  }
   ImGui::EndChild();
 }
 
@@ -808,12 +866,14 @@ void AppShell::selfTestNew() {
   validationState = "Not validated";
   lastOperation   = "New project";
   m_lastValidation = ValidationReport{};
+  m_structuralReport = StructuralReport{};
   m_lastPlan = ame::PlanResult{};
   m_lastPlanScenarioName.clear();
   m_lastPlanStepLabels.clear();
   m_hasLastPlan = false;
   m_selectedScenarioIdx = -1;
   m_domainGraph.setHighlightedElements({}, {});
+  m_domainGraph.setStructuralHighlights({}, {}, {}, {});
   m_model.clear();
   m_model.projectName = projectName;
 }
@@ -1041,6 +1101,12 @@ void AppShell::runValidation() {
 }
 
 void AppShell::runFeasibilityCheck() {
+  m_structuralReport = StructuralValidator::check(m_model);
+  if (m_structuralReport.hasErrors()) {
+    lastOperation = "Cannot plan: fix structural errors first";
+    return;
+  }
+
   if (m_selectedScenarioIdx < 0 ||
       m_selectedScenarioIdx >= static_cast<int>(m_model.scenarios.size())) {
     lastOperation = "No scenario selected";
@@ -1104,9 +1170,15 @@ void AppShell::renderStatusBar() {
   ImGui::SetNextWindowBgAlpha(0.85F);
 
   ImGui::Begin("##StatusBar", nullptr, flags);
+  std::string validationFragment = validationState;
+  const size_t structuralIssueCount =
+      m_structuralReport.errorCount + m_structuralReport.warningCount;
+  if (structuralIssueCount > 0U) {
+    validationFragment += " | " + std::to_string(structuralIssueCount) + " issue(s)";
+  }
   ImGui::Text("%s  |  %s  |  %s",
               projectName.c_str(),
-              validationState.c_str(),
+              validationFragment.c_str(),
               lastOperation.c_str());
   ImGui::End();
 }

@@ -67,6 +67,16 @@ void DomainGraphPanel::setHighlightedElements(std::vector<std::string> predicate
   m_highlightedActions = std::move(actionNames);
 }
 
+void DomainGraphPanel::setStructuralHighlights(std::vector<std::string> errPreds,
+                                               std::vector<std::string> errActs,
+                                               std::vector<std::string> warnPreds,
+                                               std::vector<std::string> warnActs) {
+  m_structuralErrorPredicates = std::move(errPreds);
+  m_structuralErrorActions = std::move(errActs);
+  m_structuralWarningPredicates = std::move(warnPreds);
+  m_structuralWarningActions = std::move(warnActs);
+}
+
 void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
   ed::SetCurrentEditor(m_context);
   ed::Begin("DomainGraphCanvas");
@@ -85,9 +95,16 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
       ed::SetNodePosition(nodeId, ImVec2(60.0f + static_cast<float>(i) * 230.0f, 60.0f));
     }
 
-    const bool highlighted = containsName(m_highlightedPredicates, pred.name);
-    if (highlighted) {
+    const bool errorHighlighted =
+        containsName(m_highlightedPredicates, pred.name) ||
+        containsName(m_structuralErrorPredicates, pred.name);
+    const bool warningHighlighted =
+        !errorHighlighted &&
+        containsName(m_structuralWarningPredicates, pred.name);
+    if (errorHighlighted) {
       ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(1.0f, 0.2f, 0.2f, 1.0f));
+    } else if (warningHighlighted) {
+      ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
     }
     ed::BeginNode(nodeId);
 
@@ -103,7 +120,7 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
     ed::EndPin();
 
     ed::EndNode();
-    if (highlighted) {
+    if (errorHighlighted || warningHighlighted) {
       ed::PopStyleColor();
     }
   }
@@ -122,9 +139,16 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
       ed::SetNodePosition(nodeId, ImVec2(80.0f + static_cast<float>(i) * 260.0f, 300.0f));
     }
 
-    const bool highlighted = containsName(m_highlightedActions, action.name);
-    if (highlighted) {
+    const bool errorHighlighted =
+        containsName(m_highlightedActions, action.name) ||
+        containsName(m_structuralErrorActions, action.name);
+    const bool warningHighlighted =
+        !errorHighlighted &&
+        containsName(m_structuralWarningActions, action.name);
+    if (errorHighlighted) {
       ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(1.0f, 0.2f, 0.2f, 1.0f));
+    } else if (warningHighlighted) {
+      ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(1.0f, 0.8f, 0.2f, 1.0f));
     }
     ed::BeginNode(nodeId);
 
@@ -167,7 +191,7 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
     }
 
     ed::EndNode();
-    if (highlighted) {
+    if (errorHighlighted || warningHighlighted) {
       ed::PopStyleColor();
     }
   }

@@ -3,6 +3,7 @@
 #include "command_stack.h"
 #include "domain_graph_panel.h"
 #include "pddl_validator.h"
+#include "structural_validator.h"
 #include "type_hierarchy_panel.h"
 
 #include <ame/planner.h>
@@ -69,6 +70,7 @@ public:
   const ProjectModel& selfTestModel() const { return m_model; }
   const ValidationReport& selfTestValidation() const { return m_lastValidation; }
   const ame::PlanResult& selfTestLastPlan() const { return m_lastPlan; }
+  const StructuralReport& selfTestStructuralReport() const { return m_structuralReport; }
 
 private:
   void renderDomainTab();
@@ -82,6 +84,7 @@ private:
   CommandStack m_commandStack;
   DomainGraphPanel m_domainGraph;
   ValidationReport m_lastValidation;
+  StructuralReport m_structuralReport;
   ame::PlanResult m_lastPlan;
   ProjectModel m_model;
   TypeHierarchyPanel m_typeHierarchy;

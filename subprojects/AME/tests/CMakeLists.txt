@@ -127,6 +127,14 @@ if(AME_BUILD_AUTHORING)
   )
   gtest_discover_tests(test_pddl_validator DISCOVERY_MODE PRE_TEST)
 
+  add_executable(test_structural_validator test_structural_validator.cpp)
+  target_link_libraries(test_structural_validator
+    PRIVATE
+      ame_authoring_project_model
+      GTest::gtest_main
+  )
+  gtest_discover_tests(test_structural_validator DISCOVERY_MODE PRE_TEST)
+
   add_executable(test_feasibility test_feasibility.cpp)
   target_link_libraries(test_feasibility
     PRIVATE

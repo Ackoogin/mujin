@@ -17,6 +17,10 @@ public:
   void render(ProjectModel& model, CommandStack& stack);
   void setHighlightedElements(std::vector<std::string> predicateNames,
                               std::vector<std::string> actionNames);
+  void setStructuralHighlights(std::vector<std::string> errPreds,
+                               std::vector<std::string> errActs,
+                               std::vector<std::string> warnPreds,
+                               std::vector<std::string> warnActs);
   int selectedPredicateIndex() const { return m_selectedPredIdx; }
   int selectedActionIndex() const { return m_selectedActionIdx; }
 
@@ -30,4 +34,8 @@ private:
   char m_newActionName[64] = {};
   std::vector<std::string> m_highlightedPredicates;
   std::vector<std::string> m_highlightedActions;
+  std::vector<std::string> m_structuralErrorPredicates;
+  std::vector<std::string> m_structuralErrorActions;
+  std::vector<std::string> m_structuralWarningPredicates;
+  std::vector<std::string> m_structuralWarningActions;
 };

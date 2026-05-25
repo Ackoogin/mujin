@@ -488,6 +488,20 @@ int main(int argc, char* argv[]) {
     report.check("status_bar_present",
                  report.windowActive("##StatusBar"),
                  "Status bar overlay not active");
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("structural_no_errors_for_valid_model",
+                 shell.selfTestStructuralReport().errorCount == 0U,
+                 "expected continuous structural validation to report no errors");
+    shell.selfTestCorruptPredicateName(0);
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("structural_detects_empty_predicate_name",
+                 shell.selfTestStructuralReport().errorCount >= 1U,
+                 "expected empty predicate name to be a structural error");
+    shell.selfTestUndo();
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("structural_clears_after_undo",
+                 shell.selfTestStructuralReport().errorCount == 0U,
+                 "expected structural errors to clear after undo");
     const auto& labels = AppShell::tabLabels();
     report.check("tabs_in_workflow_order",
                  labels.size() == 4 &&
