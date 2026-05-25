@@ -380,6 +380,9 @@ int main(int argc, char* argv[]) {
                  shell.selfTestPlanGraphStepCount() ==
                      shell.selfTestLastPlan().steps.size(),
                  "expected plan graph step count to match returned plan");
+    report.check("bt_graph_has_nodes",
+                 shell.selfTestBtNodeCount() > 0U,
+                 "expected feasible plan to compile into a visible BT graph");
     report.check("feasibility_no_error",
                  shell.selfTestLastPlan().error_msg.empty(),
                  "expected feasible plan to have no error message");

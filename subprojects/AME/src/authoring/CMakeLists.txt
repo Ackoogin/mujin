@@ -100,6 +100,7 @@ target_link_libraries(imgui_lib
 add_executable(ame_authoring_tool
   main.cpp
   app_shell.cpp
+  bt_graph_panel.cpp
   command_stack.cpp
   domain_graph_panel.cpp
   plan_graph_panel.cpp

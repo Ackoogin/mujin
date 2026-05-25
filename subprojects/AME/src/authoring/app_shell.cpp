@@ -3,9 +3,13 @@
 #include "imgui.h"
 #include "pddl_generator.h"
 
+#include <ame/action_registry.h>
+#include <ame/plan_compiler.h>
+
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <exception>
 #include <fstream>
 #include <iterator>
 #include <sstream>
@@ -311,6 +315,7 @@ void AppShell::renderMenuBar() {
         m_lastPlanScenarioName.clear();
         m_lastPlanStepLabels.clear();
         m_planGraph.clear();
+        m_btGraph.setXml("");
         m_hasLastPlan = false;
         m_selectedScenarioIdx = -1;
         m_domainGraph.setHighlightedElements({}, {});
@@ -765,7 +770,14 @@ void AppShell::renderPlanTab() {
 }
 
 void AppShell::renderBtTab() {
-  ImGui::TextDisabled("BT View");
+  if (!m_btGraph.lastError().empty()) {
+    ImGui::TextColored(ImVec4(1.0F, 0.35F, 0.35F, 1.0F),
+                       "Parse error: %s",
+                       m_btGraph.lastError().c_str());
+  }
+  ImGui::BeginChild("##BtCanvas", ImVec2(0.0F, 0.0F), ImGuiChildFlags_Border);
+  m_btGraph.render();
+  ImGui::EndChild();
 }
 
 void AppShell::renderSelectedElementEditor() {
@@ -911,6 +923,7 @@ void AppShell::selfTestNew() {
   m_lastPlanScenarioName.clear();
   m_lastPlanStepLabels.clear();
   m_planGraph.clear();
+  m_btGraph.setXml("");
   m_hasLastPlan = false;
   m_selectedScenarioIdx = -1;
   m_domainGraph.setHighlightedElements({}, {});
@@ -1145,12 +1158,14 @@ void AppShell::runFeasibilityCheck() {
   m_structuralReport = StructuralValidator::check(m_model);
   if (m_structuralReport.hasErrors()) {
     lastOperation = "Cannot plan: fix structural errors first";
+    m_btGraph.setXml("");
     return;
   }
 
   if (m_selectedScenarioIdx < 0 ||
       m_selectedScenarioIdx >= static_cast<int>(m_model.scenarios.size())) {
     lastOperation = "No scenario selected";
+    m_btGraph.setXml("");
     return;
   }
 
@@ -1166,6 +1181,7 @@ void AppShell::runFeasibilityCheck() {
     m_lastPlanScenarioName = scenarioName;
     m_lastPlanStepLabels.clear();
     m_planGraph.clear();
+    m_btGraph.setXml("");
     m_hasLastPlan = true;
     return;
   }
@@ -1194,6 +1210,37 @@ void AppShell::runFeasibilityCheck() {
     validationState = "Infeasible: " + error;
   }
   lastOperation = "Checked feasibility: " + scenarioName;
+  compileAndShowBt();
+}
+
+void AppShell::compileAndShowBt() {
+  if (!m_lastPlan.success) {
+    lastOperation = "No plan to compile";
+    m_btGraph.setXml("");
+    return;
+  }
+
+  ame::WorldModel wm;
+  const ValidationReport report =
+      PddlValidator::validateAndBuildWorldModel(m_model, m_lastPlanScenarioName, wm);
+  if (!report.ok) {
+    m_btGraph.setXml("");
+    lastOperation = "BT compile failed: scenario validation failed";
+    return;
+  }
+
+  try {
+    ame::ActionRegistry registry;
+    ame::PlanCompiler compiler;
+    const std::string xml = compiler.compile(m_lastPlan.steps, wm, registry);
+    m_btGraph.setXml(xml);
+    if (!m_btGraph.lastError().empty()) {
+      lastOperation = "BT parse failed: " + m_btGraph.lastError();
+    }
+  } catch (const std::exception& ex) {
+    m_btGraph.setXml("");
+    lastOperation = std::string("BT compile failed: ") + ex.what();
+  }
 }
 
 void AppShell::renderStatusBar() {

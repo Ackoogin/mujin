@@ -1,5 +1,6 @@
 #pragma once
 
+#include "bt_graph_panel.h"
 #include "command_stack.h"
 #include "domain_graph_panel.h"
 #include "pddl_validator.h"
@@ -72,6 +73,7 @@ public:
   const ValidationReport& selfTestValidation() const { return m_lastValidation; }
   const ame::PlanResult& selfTestLastPlan() const { return m_lastPlan; }
   size_t selfTestPlanGraphStepCount() const { return m_planGraph.stepCount(); }
+  size_t selfTestBtNodeCount() const { return m_btGraph.nodeCount(); }
   const StructuralReport& selfTestStructuralReport() const { return m_structuralReport; }
 
 private:
@@ -82,10 +84,12 @@ private:
   void renderSelectedElementEditor();
   void runValidation();
   void runFeasibilityCheck();
+  void compileAndShowBt();
 
   CommandStack m_commandStack;
   DomainGraphPanel m_domainGraph;
   PlanGraphPanel m_planGraph;
+  BtGraphPanel m_btGraph;
   ValidationReport m_lastValidation;
   StructuralReport m_structuralReport;
   ame::PlanResult m_lastPlan;
