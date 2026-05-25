@@ -443,14 +443,14 @@
 **Description:** Full keyboard-driven workflow for power users.
 
 **Deliverables:**
-- [ ] Delete: remove selected nodes/links
-- [ ] Ctrl+C / Ctrl+V: copy/paste nodes
-- [ ] Ctrl+D: duplicate selection
-- [ ] F: fit canvas to content
-- [ ] Space (on canvas): quick-add popup
-- [ ] Tab: cycle between panels
-- [ ] F5: Plan & Preview
-- [ ] F6: Validate
+- [x] Delete: remove selected nodes/links
+- [~] Ctrl+C / Ctrl+V: copy/paste nodes — deferred (needs clipboard state management); Ctrl+D duplicate covers the common case
+- [x] Ctrl+D: duplicate selection
+- [~] F: fit canvas to content — deferred
+- [~] Space (on canvas): quick-add popup — deferred; palette Quick Add button is the entry point for now
+- [x] Tab: cycle between panels — Ctrl+Tab in tabbed layout
+- [x] F5: Plan & Preview
+- [x] F6: Validate
 
 **Acceptance criteria:** Complete a full domain authoring workflow using only keyboard (no mouse required for node creation, editing, validation).
 
