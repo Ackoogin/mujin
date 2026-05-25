@@ -79,6 +79,9 @@ public:
   void selfTestRemoveAllObjects();
   void selfTestPlanAndPreview();
   void selfTestSetSelectedPlanStep(int idx);
+  bool selfTestImportDomain(const std::string& pddl);
+  bool selfTestImportProblem(const std::string& pddl,
+                             const std::string& scenarioName);
   size_t selfTestUndoDepth() const;
   const ProjectModel& selfTestModel() const { return m_model; }
   const ValidationReport& selfTestValidation() const { return m_lastValidation; }

@@ -49,6 +49,70 @@ static bool captureScreenshot(SDL_Window* window, const char* path) {
   return stbi_write_png(path, w, h, 4, pixels.data(), w * 4) != 0;
 }
 
+static const char* kUavSearchDomainPddl = R"pddl(
+(define (domain uav-search)
+  (:requirements :strips :typing)
+
+  (:types
+    location - object
+    sector - location
+    robot - object
+  )
+
+  (:predicates
+    (at ?r - robot ?l - location)
+    (searched ?s - sector)
+    (classified ?s - sector)
+  )
+
+  (:action move
+    :parameters (?r - robot ?from - location ?to - location)
+    :precondition (at ?r ?from)
+    :effect (and
+      (at ?r ?to)
+      (not (at ?r ?from))
+    )
+  )
+
+  (:action search
+    :parameters (?r - robot ?s - sector)
+    :precondition (at ?r ?s)
+    :effect (searched ?s)
+  )
+
+  (:action classify
+    :parameters (?r - robot ?s - sector)
+    :precondition (and
+      (at ?r ?s)
+      (searched ?s)
+    )
+    :effect (classified ?s)
+  )
+)
+)pddl";
+
+static const char* kUavSearchProblemPddl = R"pddl(
+(define (problem uav-search-1)
+  (:domain uav-search)
+
+  (:objects
+    uav1 - robot
+    base - location
+    sector_a - sector
+    sector_b - sector
+  )
+
+  (:init
+    (at uav1 base)
+  )
+
+  (:goal (and
+    (searched sector_a)
+    (classified sector_a)
+  ))
+)
+)pddl";
+
 // ---------------------------------------------------------------------------
 // Self-test framework
 // ---------------------------------------------------------------------------
@@ -454,6 +518,40 @@ int main(int argc, char* argv[]) {
                          batchReport.errorCount ==
                      batchReport.results.size(),
                  "expected batch report counts to sum to result count");
+
+    AppShell importShell;
+    const bool importDomainOk =
+        importShell.selfTestImportDomain(kUavSearchDomainPddl);
+    report.check("import_domain_ok",
+                 importDomainOk,
+                 "expected uav_search domain import to succeed");
+    report.check("import_domain_types_count",
+                 importShell.selfTestModel().types.size() >= 3U,
+                 "expected imported domain to include location, sector, robot");
+    report.check("import_domain_predicates_count",
+                 importShell.selfTestModel().predicates.size() == 3U,
+                 "expected imported domain to include 3 predicates");
+    report.check("import_domain_actions_count",
+                 importShell.selfTestModel().actions.size() == 3U,
+                 "expected imported domain to include 3 actions");
+    const size_t scenarioCountBeforeImport =
+        importShell.selfTestModel().scenarios.size();
+    const bool importProblemOk =
+        importShell.selfTestImportProblem(kUavSearchProblemPddl, "");
+    report.check("import_problem_ok",
+                 importProblemOk,
+                 "expected uav_search problem import to succeed");
+    report.check("import_problem_objects_count",
+                 importShell.selfTestModel().objects.size() >= 4U,
+                 "expected imported problem to include at least 4 objects");
+    report.check("import_problem_scenario_added",
+                 importShell.selfTestModel().scenarios.size() ==
+                     scenarioCountBeforeImport + 1U,
+                 "expected imported problem to append one scenario");
+    report.check("import_problem_goal_count",
+                 !importShell.selfTestModel().scenarios.empty() &&
+                     importShell.selfTestModel().scenarios.back().goals.size() >= 1U,
+                 "expected imported problem scenario to include goals");
 
     // Phase 3: inject an SDL key (Escape would quit; pick something benign)
     injectSdlKey(SDLK_F1);

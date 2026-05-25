@@ -2,6 +2,7 @@
 
 #include "imgui.h"
 #include "pddl_generator.h"
+#include "pddl_importer.h"
 
 #include <ame/action_registry.h>
 #include <ame/plan_compiler.h>
@@ -106,6 +107,17 @@ static std::vector<std::string> parseArgList(const char* text) {
     args.push_back(arg);
   }
   return args;
+}
+
+static bool readTextFile(const std::string& path, std::string& out) {
+  std::ifstream file(path);
+  if (!file.good()) {
+    return false;
+  }
+
+  out.assign(std::istreambuf_iterator<char>(file),
+             std::istreambuf_iterator<char>());
+  return file.good() || file.eof();
 }
 
 static bool isPddlKeywordLine(const std::string& line) {
@@ -467,6 +479,66 @@ void AppShell::renderMenuBar() {
         lastOperation = "TODO: save-as dialog";
         if (m_autoValidateOnSave) {
           runValidation();
+        }
+      }
+      if (ImGui::MenuItem("Import PDDL Domain...")) {
+        const std::string path = "./import_domain.pddl";
+        std::string pddl;
+        if (!readTextFile(path, pddl)) {
+          lastOperation = "Failed to read " + path;
+        } else {
+          const PddlImportResult import = PddlImporter::importDomain(pddl);
+          if (!import.ok) {
+            lastOperation = "Import failed: " + import.error;
+          } else {
+            m_commandStack.clear();
+            m_model = import.model;
+            projectName = m_model.projectName;
+            m_lastValidation = ValidationReport{};
+            m_structuralReport = StructuralReport{};
+            m_lastBatchReport = ScenarioBatchReport{};
+            m_lastPlan = ame::PlanResult{};
+            m_lastPlanScenarioName.clear();
+            m_lastPlanStepLabels.clear();
+            m_requestedTab.clear();
+            m_planGraph.clear();
+            m_btGraph.setXml("");
+            m_hasLastPlan = false;
+            m_selectedScenarioIdx = -1;
+            m_domainGraph.setHighlightedElements({}, {});
+            m_domainGraph.setStructuralHighlights({}, {}, {}, {});
+            validationState = "Not validated";
+            lastOperation = "Imported domain: " + projectName;
+          }
+        }
+      }
+      if (ImGui::MenuItem("Import PDDL Problem...")) {
+        const std::string path = "./import_problem.pddl";
+        std::string pddl;
+        if (!readTextFile(path, pddl)) {
+          lastOperation = "Failed to read " + path;
+        } else {
+          const PddlImportResult import = PddlImporter::importProblem(m_model, pddl);
+          if (!import.ok) {
+            lastOperation = "Import failed: " + import.error;
+          } else {
+            m_model = import.model;
+            m_lastValidation = ValidationReport{};
+            m_structuralReport = StructuralReport{};
+            m_lastBatchReport = ScenarioBatchReport{};
+            m_lastPlan = ame::PlanResult{};
+            m_lastPlanScenarioName.clear();
+            m_lastPlanStepLabels.clear();
+            m_planGraph.clear();
+            m_btGraph.setXml("");
+            m_hasLastPlan = false;
+            m_selectedScenarioIdx =
+                static_cast<int>(m_model.scenarios.size()) - 1;
+            validationState = "Not validated";
+            const std::string scenarioName =
+                m_model.scenarios.empty() ? "" : m_model.scenarios.back().name;
+            lastOperation = "Imported problem: " + scenarioName;
+          }
         }
       }
       if (ImGui::MenuItem("Export Domain PDDL...")) {
@@ -1492,6 +1564,60 @@ void AppShell::selfTestPlanAndPreview() {
 
 void AppShell::selfTestSetSelectedPlanStep(int idx) {
   m_planGraph.setSelectedStepForTest(idx);
+}
+
+bool AppShell::selfTestImportDomain(const std::string& pddl) {
+  const PddlImportResult import = PddlImporter::importDomain(pddl);
+  if (!import.ok) {
+    lastOperation = "Import failed: " + import.error;
+    return false;
+  }
+
+  m_commandStack.clear();
+  m_model = import.model;
+  projectName = m_model.projectName;
+  validationState = "Not validated";
+  lastOperation = "Imported domain: " + projectName;
+  m_selectedScenarioIdx = -1;
+  m_lastValidation = ValidationReport{};
+  m_structuralReport = StructuralReport{};
+  m_lastBatchReport = ScenarioBatchReport{};
+  m_lastPlan = ame::PlanResult{};
+  m_lastPlanScenarioName.clear();
+  m_lastPlanStepLabels.clear();
+  m_requestedTab.clear();
+  m_planGraph.clear();
+  m_btGraph.setXml("");
+  m_hasLastPlan = false;
+  return true;
+}
+
+bool AppShell::selfTestImportProblem(const std::string& pddl,
+                                     const std::string& scenarioName) {
+  const PddlImportResult import =
+      PddlImporter::importProblem(m_model, pddl, scenarioName);
+  if (!import.ok) {
+    lastOperation = "Import failed: " + import.error;
+    return false;
+  }
+
+  m_model = import.model;
+  validationState = "Not validated";
+  m_selectedScenarioIdx = static_cast<int>(m_model.scenarios.size()) - 1;
+  const std::string importedScenario =
+      m_model.scenarios.empty() ? "" : m_model.scenarios.back().name;
+  lastOperation = "Imported problem: " + importedScenario;
+  m_lastValidation = ValidationReport{};
+  m_structuralReport = StructuralReport{};
+  m_lastBatchReport = ScenarioBatchReport{};
+  m_lastPlan = ame::PlanResult{};
+  m_lastPlanScenarioName.clear();
+  m_lastPlanStepLabels.clear();
+  m_requestedTab.clear();
+  m_planGraph.clear();
+  m_btGraph.setXml("");
+  m_hasLastPlan = false;
+  return true;
 }
 
 size_t AppShell::selfTestUndoDepth() const {

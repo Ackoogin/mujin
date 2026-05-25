@@ -51,6 +51,7 @@ endif()
 add_library(ame_authoring_project_model STATIC
     project_model.cpp
     pddl_generator.cpp
+    pddl_importer.cpp
     pddl_validator.cpp
     scenario_runner.cpp
     structural_validator.cpp
