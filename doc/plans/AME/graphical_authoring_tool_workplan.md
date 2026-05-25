@@ -296,13 +296,13 @@
 **Description:** Display the compiled BT XML as a visual tree using imgui-node-editor.
 
 **Deliverables:**
-- [ ] BT View panel with its own imgui-node-editor context (read-only)
-- [ ] Parse BT XML output from `PlanCompiler::compile()`
-- [ ] Render tree structure: Sequence, Parallel, ReactiveFallback as container nodes; CheckWorldPredicate, SetWorldPredicate, action nodes as leaf nodes
-- [ ] Parent-child edges showing tree hierarchy
-- [ ] Colour-coding by node type (control flow = blue, condition = green, action = orange, effect = purple)
-- [ ] Expand/collapse subtrees
-- [ ] Click node to see port values / parameters
+- [x] BT View panel with its own imgui-node-editor context (read-only)
+- [x] Parse BT XML output from `PlanCompiler::compile()` — hand-rolled subset parser, no new library
+- [x] Render tree structure: Sequence, Parallel, ReactiveFallback as container nodes; CheckWorldPredicate, SetWorldPredicate, action nodes as leaf nodes
+- [x] Parent-child edges showing tree hierarchy
+- [x] Colour-coding by node type (control flow = blue, condition = green, action = orange, effect = purple)
+- [ ] Expand/collapse subtrees — deferred to polish phase
+- [x] Click node to see port values / parameters — selection tracked, single attribute shown in node body
 
 **Acceptance criteria:** Compile a plan, switch to BT View, see the full compiled tree matching the XML structure.
 
