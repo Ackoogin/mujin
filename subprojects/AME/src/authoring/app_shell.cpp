@@ -692,6 +692,56 @@ void AppShell::renderPanels() {
     if (ImGui::IsKeyPressed(ImGuiKey_Y, false) && m_commandStack.canRedo()) {
       m_commandStack.redo(m_model);
     }
+    // Ctrl+D: duplicate selected predicate or action
+    if (ImGui::IsKeyPressed(ImGuiKey_D, false)) {
+      const int selPred = m_domainGraph.selectedPredicateIndex();
+      const int selAct  = m_domainGraph.selectedActionIndex();
+      if (selPred >= 0 && selPred < static_cast<int>(m_model.predicates.size())) {
+        const PredicateDef src = m_model.predicates[static_cast<size_t>(selPred)];
+        m_commandStack.execute(m_model, "Duplicate predicate", [src](ProjectModel& m) {
+          PredicateDef d = src; d.name = src.name + "_copy"; d.posX = 0; d.posY = 0;
+          m.predicates.push_back(d);
+        });
+      } else if (selAct >= 0 && selAct < static_cast<int>(m_model.actions.size())) {
+        const ActionDef src = m_model.actions[static_cast<size_t>(selAct)];
+        m_commandStack.execute(m_model, "Duplicate action", [src](ProjectModel& m) {
+          ActionDef d = src; d.name = src.name + "_copy"; d.posX = 0; d.posY = 0;
+          m.actions.push_back(d);
+        });
+      }
+    }
+  }
+  // Function-key shortcuts (no Ctrl needed)
+  if (!io.WantTextInput) {
+    if (ImGui::IsKeyPressed(ImGuiKey_F5, false)) {
+      runPlanAndPreview();
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_F6, false)) {
+      runValidation();
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_Tab, false) && io.KeyCtrl) {
+      // Ctrl+Tab cycles through workflow tabs
+      const auto& labels = tabLabels();
+      size_t currentIdx = 0;
+      for (size_t i = 0; i < labels.size(); ++i) {
+        if (labels[i] == m_requestedTab) { currentIdx = i; break; }
+      }
+      m_requestedTab = labels[(currentIdx + 1) % labels.size()];
+    }
+    if (ImGui::IsKeyPressed(ImGuiKey_Delete, false)) {
+      // Delete: remove selected predicate or action
+      const int selPred = m_domainGraph.selectedPredicateIndex();
+      const int selAct  = m_domainGraph.selectedActionIndex();
+      if (selPred >= 0 && selPred < static_cast<int>(m_model.predicates.size())) {
+        m_commandStack.execute(m_model, "Delete predicate", [selPred](ProjectModel& m) {
+          m.predicates.erase(m.predicates.begin() + selPred);
+        });
+      } else if (selAct >= 0 && selAct < static_cast<int>(m_model.actions.size())) {
+        m_commandStack.execute(m_model, "Delete action", [selAct](ProjectModel& m) {
+          m.actions.erase(m.actions.begin() + selAct);
+        });
+      }
+    }
   }
 
   // Single full-viewport host window holds the workflow tab bar. The menu bar
