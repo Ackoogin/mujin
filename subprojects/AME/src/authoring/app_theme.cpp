@@ -24,11 +24,13 @@ void applyHoloCyanTheme() {
   col[ImGuiCol_TitleBgCollapsed]  = rgb(  2,   4,   6);
 
   // -- Tabs (ImGui 1.90.7+ names) ----------------------------------------
-  col[ImGuiCol_Tab]               = rgb( 10,  18,  26);
-  col[ImGuiCol_TabHovered]        = rgb(  0, 120, 150, 200);
-  col[ImGuiCol_TabSelected]       = rgb(  0,  60,  80);   // was TabActive
-  col[ImGuiCol_TabDimmed]         = rgb(  6,  10,  14);   // was TabUnfocused
-  col[ImGuiCol_TabDimmedSelected] = rgb(  8,  16,  24);   // was TabUnfocusedActive
+  col[ImGuiCol_Tab]                       = rgb(  4,   8,  12);
+  col[ImGuiCol_TabHovered]                = rgb(  0, 140, 170, 220);
+  col[ImGuiCol_TabSelected]               = rgb(  0,  90, 120);   // brighter "lit up" fill
+  col[ImGuiCol_TabSelectedOverline]       = rgb(  0, 230, 255, 255);
+  col[ImGuiCol_TabDimmed]                 = rgb(  4,   8,  12);
+  col[ImGuiCol_TabDimmedSelected]         = rgb(  6,  18,  26);
+  col[ImGuiCol_TabDimmedSelectedOverline] = rgb(  0, 140, 170,  90);
 
   // -- Frames / inputs ---------------------------------------------------
   col[ImGuiCol_FrameBg]           = rgb(  4,   8,  14);
@@ -58,12 +60,12 @@ void applyHoloCyanTheme() {
   col[ImGuiCol_ScrollbarGrabHovered]  = rgb( 30,  80, 100, 220);
   col[ImGuiCol_ScrollbarGrabActive]   = rgb(  0, 120, 150, 200);
 
-  // -- Borders: fully transparent (flat shading only) -------------------
-  col[ImGuiCol_Border]            = rgb(  0,   0,   0,   0);
-  col[ImGuiCol_BorderShadow]      = rgb(  0,   0,   0,   0);
+  // -- Borders: crisp cyan outline (HUD chrome) -------------------------
+  col[ImGuiCol_Border]            = rgb(  0, 140, 180, 200);
+  col[ImGuiCol_BorderShadow]      = rgb(  0,  40,  60, 120);
 
   // -- Misc chrome -------------------------------------------------------
-  col[ImGuiCol_Separator]         = rgb(  0, 100, 130, 160);
+  col[ImGuiCol_Separator]         = rgb(  0, 180, 220, 200);
   col[ImGuiCol_ResizeGrip]        = rgb(  0,  80, 110, 100);
   col[ImGuiCol_ResizeGripHovered] = rgb(  0, 120, 150, 200);
   col[ImGuiCol_ResizeGripActive]  = rgb(  0, 180, 210, 230);
@@ -104,12 +106,14 @@ void applyHoloCyanTheme() {
   s.CellPadding   = ImVec2(6.0f, 3.0f);
   s.WindowPadding = ImVec2(6.0f, 6.0f);
 
-  // -- Borders OFF -------------------------------------------------------
-  s.FrameBorderSize   = 0.0f;
-  s.WindowBorderSize  = 0.0f;
-  s.ChildBorderSize   = 0.0f;
-  s.PopupBorderSize   = 0.0f;
-  s.TabBorderSize     = 0.0f;
+  // -- Borders ON (HUD framing) -----------------------------------------
+  s.FrameBorderSize   = 1.0f;
+  s.WindowBorderSize  = 1.0f;
+  s.ChildBorderSize   = 1.0f;
+  s.PopupBorderSize   = 1.0f;
+  s.TabBorderSize     = 1.0f;
+  s.TabBarBorderSize  = 2.0f;
+  s.TabBarOverlineSize = 2.0f;
 
   // -- Scrollbar ---------------------------------------------------------
   s.ScrollbarSize = 10.0f;

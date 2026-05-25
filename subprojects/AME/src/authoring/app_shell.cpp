@@ -20,6 +20,10 @@
 #include <utility>
 #include <vector>
 
+// Forward declarations for helpers defined later in this file.
+static void SectionAccent();
+static void StatusPill(const char* text, ImVec4 borderColor, ImVec4 textColor);
+
 static std::string slugifyForFilename(const std::string& text) {
   std::string out;
   bool lastWasDash = false;
@@ -665,6 +669,15 @@ void AppShell::renderMenuBar() {
 
     ImGui::EndMainMenuBar();
   }
+
+  // HUD-chrome: cyan hairline immediately below the menu bar.
+  const ImGuiViewport* vp = ImGui::GetMainViewport();
+  const float menuH = ImGui::GetFrameHeight();
+  ImDrawList* fg = ImGui::GetForegroundDrawList();
+  fg->AddLine(ImVec2(vp->Pos.x, vp->Pos.y + menuH - 0.5F),
+              ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + menuH - 0.5F),
+              ImGui::GetColorU32(ImVec4(0.0F, 0.85F, 1.0F, 0.55F)),
+              1.0F);
 }
 
 const std::vector<std::string>& AppShell::tabLabels() {
@@ -859,6 +872,7 @@ void AppShell::renderDomainTab() {
                     ImGuiChildFlags_Border);
 
   // ---- Palette ----------------------------------------------------------
+  SectionAccent();
   if (ImGui::CollapsingHeader("Palette", ImGuiTreeNodeFlags_DefaultOpen)) {
     static char s_paletteFilter[64] = {};
     ImGui::InputText("Filter##palette", s_paletteFilter, sizeof(s_paletteFilter));
@@ -927,6 +941,7 @@ void AppShell::renderDomainTab() {
   m_typeHierarchy.render(m_model, m_commandStack);
   renderSelectedElementEditor();
   ImGui::Separator();
+  SectionAccent();
   if (ImGui::CollapsingHeader("Scenarios", ImGuiTreeNodeFlags_DefaultOpen)) {
     if (m_selectedScenarioIdx < 0 ||
         m_selectedScenarioIdx >= static_cast<int>(m_model.scenarios.size())) {
@@ -2101,9 +2116,40 @@ void AppShell::compileAndShowBt() {
   }
 }
 
+// Draw a small framed "HUD pill" — filled background tinted from the border
+// colour, 1px outline in `borderColor`, text inside in `textColor`. Advances
+// the ImGui cursor horizontally (call before the next pill, no SameLine needed).
+// Draws a 3px cyan vertical bar overlaid on the upcoming line — call
+// just before a CollapsingHeader to give it the HUD section-marker look.
+// Does NOT touch indent state, so it composes safely.
+static void SectionAccent() {
+  ImDrawList* dl = ImGui::GetWindowDrawList();
+  const ImVec2 p = ImGui::GetCursorScreenPos();
+  const float h = ImGui::GetFrameHeight();
+  dl->AddRectFilled(ImVec2(p.x - 4.0F, p.y),
+                    ImVec2(p.x - 1.0F, p.y + h),
+                    ImGui::GetColorU32(ImVec4(0.0F, 0.85F, 1.0F, 1.0F)));
+}
+
+static void StatusPill(const char* text, ImVec4 borderColor, ImVec4 textColor) {
+  ImDrawList* dl = ImGui::GetWindowDrawList();
+  const ImVec2 padding(8.0F, 2.0F);
+  const ImVec2 textSize = ImGui::CalcTextSize(text);
+  const ImVec2 pos = ImGui::GetCursorScreenPos();
+  const ImVec2 rectMax(pos.x + textSize.x + padding.x * 2.0F,
+                       pos.y + textSize.y + padding.y * 2.0F);
+  const ImVec4 bg(borderColor.x * 0.15F, borderColor.y * 0.15F,
+                  borderColor.z * 0.15F, 1.0F);
+  dl->AddRectFilled(pos, rectMax, ImGui::GetColorU32(bg));
+  dl->AddRect(pos, rectMax, ImGui::GetColorU32(borderColor), 0.0F, 0, 1.0F);
+  ImGui::SetCursorScreenPos(ImVec2(pos.x + padding.x, pos.y + padding.y));
+  ImGui::TextColored(textColor, "%s", text);
+  ImGui::SetCursorScreenPos(ImVec2(rectMax.x + 6.0F, pos.y));
+}
+
 void AppShell::renderStatusBar() {
   const ImGuiViewport* viewport = ImGui::GetMainViewport();
-  constexpr float kStatusBarHeight = 22.0F;
+  constexpr float kStatusBarHeight = 26.0F;  // slightly taller for pill padding
   const ImGuiWindowFlags flags =
     ImGuiWindowFlags_NoDecoration |
     ImGuiWindowFlags_NoInputs |
@@ -2113,21 +2159,56 @@ void AppShell::renderStatusBar() {
     ImGuiWindowFlags_NoBringToFrontOnFocus |
     ImGuiWindowFlags_NoScrollbar;
 
-  ImGui::SetNextWindowPos(
-    ImVec2(viewport->Pos.x, viewport->Pos.y + viewport->Size.y - kStatusBarHeight));
+  // Cyan hairline immediately above the status bar (mirrors the menu-bar line).
+  ImDrawList* fg = ImGui::GetForegroundDrawList();
+  const float topY = viewport->Pos.y + viewport->Size.y - kStatusBarHeight;
+  fg->AddLine(ImVec2(viewport->Pos.x, topY - 0.5F),
+              ImVec2(viewport->Pos.x + viewport->Size.x, topY - 0.5F),
+              ImGui::GetColorU32(ImVec4(0.0F, 0.85F, 1.0F, 0.55F)),
+              1.0F);
+
+  ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, topY));
   ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, kStatusBarHeight));
   ImGui::SetNextWindowBgAlpha(0.85F);
 
   ImGui::Begin("##StatusBar", nullptr, flags);
-  std::string validationFragment = validationState;
+  // Pull cursor up a couple px so pills sit nicely centered in the strip.
+  ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 2.0F);
+
+  const ImVec4 cyan(0.0F, 0.85F, 1.0F, 1.0F);
+  const ImVec4 ok(0.2F, 0.9F, 0.4F, 1.0F);
+  const ImVec4 warn(1.0F, 0.7F, 0.2F, 1.0F);
+  const ImVec4 err(1.0F, 0.35F, 0.35F, 1.0F);
+  const ImVec4 dim(0.55F, 0.7F, 0.8F, 1.0F);
+
+  // Project name pill (always cyan)
+  StatusPill(projectName.c_str(), cyan, cyan);
+
+  // Validation state pill — colour reflects outcome
+  ImVec4 vColor = dim;
+  if (validationState == "Valid" ||
+      validationState.rfind("Feasible", 0U) == 0U) {
+    vColor = ok;
+  } else if (validationState.find("error") != std::string::npos ||
+             validationState.find("Infeasible") != std::string::npos) {
+    vColor = err;
+  }
+  StatusPill(validationState.c_str(), vColor, vColor);
+
+  // Structural issue count pill (only when non-zero)
   const size_t structuralIssueCount =
       m_structuralReport.errorCount + m_structuralReport.warningCount;
   if (structuralIssueCount > 0U) {
-    validationFragment += " | " + std::to_string(structuralIssueCount) + " issue(s)";
+    char buf[64];
+    std::snprintf(buf, sizeof(buf), "%zu issue%s",
+                  structuralIssueCount,
+                  structuralIssueCount == 1U ? "" : "s");
+    const ImVec4 issueColor = m_structuralReport.hasErrors() ? err : warn;
+    StatusPill(buf, issueColor, issueColor);
   }
-  ImGui::Text("%s  |  %s  |  %s",
-              projectName.c_str(),
-              validationFragment.c_str(),
-              lastOperation.c_str());
+
+  // Last operation pill (dim — informational)
+  StatusPill(lastOperation.c_str(), dim, dim);
+
   ImGui::End();
 }
