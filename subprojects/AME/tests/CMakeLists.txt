@@ -169,4 +169,19 @@ if(AME_BUILD_AUTHORING)
       GTest::gtest_main
   )
   gtest_discover_tests(test_contingency_analyser DISCOVERY_MODE PRE_TEST)
+
+  # End-to-end workflow: import a real-world PDDL domain + problem set
+  # through the authoring tool's pipeline (PddlImporter -> Validator ->
+  # PddlGenerator round-trip -> Planner), exercising the same code paths
+  # the UI uses but headlessly.
+  add_executable(test_vehicle_autonomy_workflow test_vehicle_autonomy_workflow.cpp)
+  target_link_libraries(test_vehicle_autonomy_workflow
+    PRIVATE
+      ame_authoring_project_model
+      ame_core
+      GTest::gtest_main
+  )
+  target_compile_definitions(test_vehicle_autonomy_workflow
+    PRIVATE "AME_DOMAINS_DIR=\"${AME_SOURCE_DIR}/domains\"")
+  gtest_discover_tests(test_vehicle_autonomy_workflow DISCOVERY_MODE PRE_TEST)
 endif()
