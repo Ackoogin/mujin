@@ -440,6 +440,7 @@ void AppShell::renderMenuBar() {
         m_model.projectName = projectName;
         m_lastValidation = ValidationReport{};
         m_structuralReport = StructuralReport{};
+        m_lastBatchReport = ScenarioBatchReport{};
         m_lastPlan = ame::PlanResult{};
         m_lastPlanScenarioName.clear();
         m_lastPlanStepLabels.clear();
@@ -501,6 +502,17 @@ void AppShell::renderMenuBar() {
           lastOperation = file.good() ? "Wrote " + path : "Failed to write " + path;
         }
       }
+      if (ImGui::MenuItem("Export Regression Report...")) {
+        if (m_lastBatchReport.results.empty()) {
+          lastOperation = "No batch report to export";
+        } else {
+          const std::string slug = slugifyForFilename(m_model.projectName);
+          const std::string path = "./" + slug + "-regression-report.json";
+          std::ofstream file(path);
+          file << ScenarioRunner::toJson(m_lastBatchReport);
+          lastOperation = file.good() ? "Wrote " + path : "Failed to write " + path;
+        }
+      }
       ImGui::Separator();
       if (ImGui::MenuItem("Exit")) {
         wantsQuit = true;
@@ -529,6 +541,9 @@ void AppShell::renderMenuBar() {
       }
       if (ImGui::MenuItem("Check Feasibility")) {
         runFeasibilityCheck();
+      }
+      if (ImGui::MenuItem("Run All Scenarios")) {
+        runAllScenarios();
       }
       if (ImGui::MenuItem("Plan & Preview")) {
         runPlanAndPreview();
@@ -960,6 +975,46 @@ void AppShell::renderPddlTab() {
       }
     }
   }
+  if (!m_lastBatchReport.results.empty()) {
+    ImGui::Separator();
+    ImGui::TextDisabled("Scenario regression: %zu pass, %zu fail, %zu error",
+                        m_lastBatchReport.passCount,
+                        m_lastBatchReport.failCount,
+                        m_lastBatchReport.errorCount);
+    if (ImGui::BeginTable("##regressionResults", 5,
+                          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+      ImGui::TableSetupColumn("Scenario");
+      ImGui::TableSetupColumn("Outcome");
+      ImGui::TableSetupColumn("Steps");
+      ImGui::TableSetupColumn("Time (ms)");
+      ImGui::TableSetupColumn("Notes");
+      ImGui::TableHeadersRow();
+      for (const auto& r : m_lastBatchReport.results) {
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::TextUnformatted(r.scenarioName.c_str());
+        ImGui::TableSetColumnIndex(1);
+        ImVec4 c = (r.outcome == ScenarioOutcome::Pass)
+                       ? ImVec4(0.3F, 0.9F, 0.3F, 1.0F)
+                       : (r.outcome == ScenarioOutcome::Fail)
+                             ? ImVec4(1.0F, 0.5F, 0.3F, 1.0F)
+                             : ImVec4(1.0F, 0.3F, 0.3F, 1.0F);
+        const char* label = (r.outcome == ScenarioOutcome::Pass)
+                                ? "PASS"
+                                : (r.outcome == ScenarioOutcome::Fail)
+                                      ? "FAIL"
+                                      : "ERROR";
+        ImGui::TextColored(c, "%s", label);
+        ImGui::TableSetColumnIndex(2);
+        ImGui::Text("%zu", r.planStepCount);
+        ImGui::TableSetColumnIndex(3);
+        ImGui::Text("%.2f", r.solveTimeMs);
+        ImGui::TableSetColumnIndex(4);
+        ImGui::TextWrapped("%s", r.reason.c_str());
+      }
+      ImGui::EndTable();
+    }
+  }
   ImGui::EndChild();
 }
 
@@ -1382,6 +1437,10 @@ void AppShell::selfTestRunFeasibility(const std::string& scenarioName) {
   runFeasibilityCheck();
 }
 
+void AppShell::selfTestRunAllScenarios() {
+  runAllScenarios();
+}
+
 bool AppShell::selfTestAddCausalLink(int fromAction,
                                      int fromAddEffectIdx,
                                      int toAction,
@@ -1516,6 +1575,17 @@ void AppShell::runFeasibilityCheck() {
   }
   lastOperation = "Checked feasibility: " + scenarioName;
   compileAndShowBt();
+}
+
+void AppShell::runAllScenarios() {
+  m_lastBatchReport = ScenarioRunner::runAll(m_model);
+  const size_t total =
+      m_lastBatchReport.passCount + m_lastBatchReport.failCount +
+      m_lastBatchReport.errorCount;
+  validationState = "Scenarios: " + std::to_string(m_lastBatchReport.passCount) +
+                    "/" + std::to_string(total) + " passed";
+  lastOperation = "Ran " + std::to_string(m_lastBatchReport.results.size()) +
+                  " scenarios";
 }
 
 void AppShell::runPlanAndPreview() {

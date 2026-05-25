@@ -52,6 +52,7 @@ add_library(ame_authoring_project_model STATIC
     project_model.cpp
     pddl_generator.cpp
     pddl_validator.cpp
+    scenario_runner.cpp
     structural_validator.cpp
 )
 target_include_directories(ame_authoring_project_model PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

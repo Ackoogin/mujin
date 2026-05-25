@@ -5,6 +5,7 @@
 #include "domain_graph_panel.h"
 #include "pddl_validator.h"
 #include "plan_graph_panel.h"
+#include "scenario_runner.h"
 #include "structural_validator.h"
 #include "type_hierarchy_panel.h"
 
@@ -66,6 +67,7 @@ public:
                                       std::vector<std::string> forbidden);
   const ScenarioExpectation& selfTestScenarioExpectation(int scenarioIdx) const;
   void selfTestRunFeasibility(const std::string& scenarioName);
+  void selfTestRunAllScenarios();
   bool selfTestAddCausalLink(int fromAction,
                              int fromAddEffectIdx,
                              int toAction,
@@ -81,6 +83,7 @@ public:
   const ProjectModel& selfTestModel() const { return m_model; }
   const ValidationReport& selfTestValidation() const { return m_lastValidation; }
   const ame::PlanResult& selfTestLastPlan() const { return m_lastPlan; }
+  const ScenarioBatchReport& selfTestBatchReport() const { return m_lastBatchReport; }
   const PlanGraphPanel& selfTestPlanGraph() const { return m_planGraph; }
   size_t selfTestPlanGraphStepCount() const { return m_planGraph.stepCount(); }
   size_t selfTestBtNodeCount() const { return m_btGraph.nodeCount(); }
@@ -94,6 +97,7 @@ private:
   void renderSelectedElementEditor();
   void runValidation();
   void runFeasibilityCheck();
+  void runAllScenarios();
   void runPlanAndPreview();
   void compileAndShowBt();
 
@@ -103,6 +107,7 @@ private:
   BtGraphPanel m_btGraph;
   ValidationReport m_lastValidation;
   StructuralReport m_structuralReport;
+  ScenarioBatchReport m_lastBatchReport;
   ame::PlanResult m_lastPlan;
   ProjectModel m_model;
   TypeHierarchyPanel m_typeHierarchy;

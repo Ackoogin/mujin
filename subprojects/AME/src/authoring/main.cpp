@@ -432,6 +432,28 @@ int main(int argc, char* argv[]) {
     report.check("feasibility_infeasible_returns_false",
                  !shell.selfTestLastPlan().success,
                  "expected unreachable connected goal to be infeasible");
+    const bool hasScenarioExpectation =
+        std::any_of(shell.selfTestModel().scenarios.begin(),
+                    shell.selfTestModel().scenarios.end(),
+                    [](const ScenarioDef& scenario) {
+                      return scenario.expectation.minPlanSteps > 0 ||
+                             scenario.expectation.maxPlanSteps > 0 ||
+                             !scenario.expectation.expectedActions.empty() ||
+                             !scenario.expectation.forbiddenActions.empty();
+                    });
+    report.check("scenario_expectation_available",
+                 hasScenarioExpectation,
+                 "expected at least one scenario expectation before batch run");
+    shell.selfTestRunAllScenarios();
+    const ScenarioBatchReport& batchReport = shell.selfTestBatchReport();
+    report.check("batch_report_has_results",
+                 batchReport.results.size() >= 1U,
+                 "expected Run All Scenarios to produce at least one result");
+    report.check("batch_report_counts_consistent",
+                 batchReport.passCount + batchReport.failCount +
+                         batchReport.errorCount ==
+                     batchReport.results.size(),
+                 "expected batch report counts to sum to result count");
 
     // Phase 3: inject an SDL key (Escape would quit; pick something benign)
     injectSdlKey(SDLK_F1);

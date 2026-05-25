@@ -143,4 +143,13 @@ if(AME_BUILD_AUTHORING)
       GTest::gtest_main
   )
   gtest_discover_tests(test_feasibility DISCOVERY_MODE PRE_TEST)
+
+  add_executable(test_scenario_runner test_scenario_runner.cpp)
+  target_link_libraries(test_scenario_runner
+    PRIVATE
+      ame_authoring_project_model
+      ame_core
+      GTest::gtest_main
+  )
+  gtest_discover_tests(test_scenario_runner DISCOVERY_MODE PRE_TEST)
 endif()
