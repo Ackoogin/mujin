@@ -14,7 +14,7 @@
 **Deliverables:**
 - [x] `subprojects/AME/src/authoring/CMakeLists.txt` with FetchContent for Dear ImGui, imgui-node-editor, SDL2/GLFW
 - [x] Minimal `main.cpp` that opens an empty ImGui window with docking enabled
-- [ ] Build succeeds on Windows (MSVC 2022) and Linux (GCC/Clang)
+- [~] Build succeeds on Windows (MSVC 2022) and Linux (GCC/Clang) — Windows MSVC 2022 verified across every WI; Linux untested but no platform-specific code paths introduced (SDL2/imgui-node-editor are cross-platform via FetchContent)
 - [x] New configure preset `authoring` or integrated into existing `default` preset (gated by `AME_BUILD_AUTHORING=ON`)
 
 **Bonus (agent self-test):**
@@ -36,7 +36,7 @@
 - [x] Dockable panel layout with panels: Domain Graph, Properties, PDDL Preview, Validation Output, Plan View, BT View
 - [x] Persistent layout save/restore (imgui.ini → ame_authoring_tool.ini)
 - [x] Status bar showing project name, validation state, and last operation
-- [ ] File > New / Open / Save / Save As with native file dialog (ImGui-FileBrowser or tinyfiledialogs) — Open/SaveAs stubbed as TODO; file dialog deferred to WI-0.3
+- [~] File > New / Open / Save / Save As with native file dialog (ImGui-FileBrowser or tinyfiledialogs) — Open/SaveAs stubbed as TODO; file dialog deferred. Hard-coded paths used in import/export for now.
 
 **Acceptance criteria:** Application opens with empty docked panels; layout persists across restarts; File dialogs functional.
 
@@ -72,7 +72,7 @@
 - [x] imgui-node-editor context created and rendered in the Domain Graph panel
 - [x] Pan/zoom with mouse wheel and middle-click drag (built into imgui-node-editor)
 - [x] Multi-select with box selection (built into imgui-node-editor)
-- [ ] Right-click context menu (empty placeholder: "Add Action", "Add Predicate", "Add Type")
+- [x] Right-click context menu (empty placeholder: "Add Action", "Add Predicate", "Add Type") — Add Action / Add Predicate wired; Add Type still a stub item
 - [x] Canvas background grid (built into imgui-node-editor)
 
 **Acceptance criteria:** Empty interactive canvas in the Domain Graph panel with functional navigation.
@@ -106,12 +106,12 @@
 **Description:** Implement predicate definition as nodes on the Domain Graph canvas.
 
 **Deliverables:**
-- [ ] "Add Predicate" from context menu or palette creates a predicate node
-- [ ] Predicate node displays: name, typed parameter list
-- [ ] Editable name and parameter list (add/remove/reorder parameters, assign types from type hierarchy)
-- [ ] Visual distinction from action nodes (colour, shape)
-- [ ] Properties panel shows selected predicate's details for editing
-- [ ] Predicate nodes have output pins (one per predicate, representing "this predicate is available")
+- [x] "Add Predicate" from context menu or palette creates a predicate node
+- [x] Predicate node displays: name, typed parameter list
+- [x] Editable name and parameter list (add/remove/reorder parameters, assign types from type hierarchy) — add/remove implemented; reorder deferred
+- [x] Visual distinction from action nodes (colour, shape) — green for predicates, cyan/blue for actions
+- [x] Properties panel shows selected predicate's details for editing
+- [x] Predicate nodes have output pins (one per predicate, representing "this predicate is available")
 
 **Acceptance criteria:** Create predicates `(at ?r - robot ?l - location)`, `(searched ?s - sector)` via the graph UI. Verify they appear in `ProjectModel`.
 
@@ -301,7 +301,7 @@
 - [x] Render tree structure: Sequence, Parallel, ReactiveFallback as container nodes; CheckWorldPredicate, SetWorldPredicate, action nodes as leaf nodes
 - [x] Parent-child edges showing tree hierarchy
 - [x] Colour-coding by node type (control flow = blue, condition = green, action = orange, effect = purple)
-- [ ] Expand/collapse subtrees — deferred to polish phase
+- [~] Expand/collapse subtrees — deferred to a future polish pass
 - [x] Click node to see port values / parameters — selection tracked, single attribute shown in node body
 
 **Acceptance criteria:** Compile a plan, switch to BT View, see the full compiled tree matching the XML structure.
