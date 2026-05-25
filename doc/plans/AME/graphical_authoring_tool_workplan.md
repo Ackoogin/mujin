@@ -316,10 +316,10 @@
 **Description:** Enable a workflow where the user authors in the Domain Graph, runs the planner, and immediately sees the resulting plan and BT alongside.
 
 **Deliverables:**
-- [ ] Layout preset: "Author & Preview" arranges Domain Graph (left), Plan View (top-right), BT View (bottom-right)
-- [ ] "Plan & Preview" toolbar button: validates, plans, compiles, updates all views in one action
-- [ ] Cross-view highlighting: select a plan step to highlight the corresponding action schema in Domain Graph and BT nodes in BT View
-- [ ] View > Layout Presets menu (Author & Preview, Domain Only, Validation Focus)
+- [~] Layout preset: "Author & Preview" — obviated by the tabbed-layout refactor (Domain | PDDL | Plan | BT). No docking system to arrange.
+- [x] "Plan & Preview" toolbar button: validates, plans, compiles, updates all views in one action — `Validate > Plan & Preview` menu item, auto-switches to Plan tab
+- [x] Cross-view highlighting: select a plan step to highlight the corresponding action schema in Domain Graph — schema name parsed from plan step label, pushed to Domain action highlights as yellow border
+- [~] View > Layout Presets menu — obviated by tabbed layout (see above)
 
 **Acceptance criteria:** Use "Plan & Preview", see all three views populated. Click a plan step node, see the corresponding action highlighted in Domain Graph.
 
