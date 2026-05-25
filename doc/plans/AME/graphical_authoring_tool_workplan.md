@@ -464,12 +464,12 @@
 **Description:** Professional appearance matching the project's aesthetic.
 
 **Deliverables:**
-- [ ] Dark theme (default) matching DevEnv colour scheme
-- [ ] Light theme option
-- [ ] Consistent node colouring: actions (blue header), predicates (green header), types (grey header)
-- [ ] Link colouring by type: precondition links (orange), effect links (purple), causal links (teal)
-- [ ] Icon set for node types (optional, can use text labels initially)
-- [ ] Smooth animations for canvas navigation
+- [x] Dark theme (default) matching DevEnv colour scheme — Holo-Cyan theme ported from `subprojects/AME/tools/devenv/ui/theme.py` (applied in `applyHoloCyanTheme()`)
+- [~] Light theme option — deferred; single dark theme has been the consistent house style across DevEnv and this tool
+- [x] Consistent node colouring: actions (cyan/blue), predicates (green) — assigned in DomainGraphPanel; types use the standard ImGui tree style
+- [x] Link colouring by type: causal links cyan (WI-1.5); pre/effect "links" are inline pins on action nodes rather than separate link types in the editor
+- [~] Icon set for node types — deferred; text labels are sufficient
+- [~] Smooth animations for canvas navigation — driven by imgui-node-editor's built-in behaviour; no custom animation layer added
 
 **Acceptance criteria:** Tool looks professional and visually consistent. Non-technical stakeholders find it legible.
 
