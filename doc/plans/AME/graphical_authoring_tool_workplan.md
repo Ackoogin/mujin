@@ -389,11 +389,11 @@
 **Description:** Integrate the existing `contingency_verifier` for safe-state reachability analysis from within the authoring tool.
 
 **Deliverables:**
-- [ ] "Run Contingency Analysis" menu item
-- [ ] Configure contingency predicates and safe-state predicates in scenario editor
-- [ ] Run verifier against generated PDDL
-- [ ] Display results: reachable/unreachable states, pruning statistics, coverage percentage
-- [ ] Highlight actions/predicates involved in unreachable contingency paths
+- [x] "Run Contingency Analysis" menu item
+- [~] Configure contingency predicates and safe-state predicates in scenario editor — automatically identified from predicate/action structure (in-precondition, not-in-effect); explicit per-scenario tagging deferred
+- [x] Run verifier against generated PDDL — in-process via PddlValidator + Planner; uses existing infrastructure, no shelling out to standalone binary
+- [x] Display results: reachable/unreachable states, pruning statistics, coverage percentage — feasible/infeasible/error counts + per-context table; monotonicity pruning deferred (acceptable up to maxFluents=8)
+- [x] Highlight actions/predicates involved in unreachable contingency paths — context predicate nodes highlighted in yellow when a report is present
 
 **Acceptance criteria:** Run contingency analysis on a domain with fault predicates, see reachability report.
 
