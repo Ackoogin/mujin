@@ -463,6 +463,19 @@ int main(int argc, char* argv[]) {
                  nominalExpectation.forbiddenActions ==
                      std::vector<std::string>{"explode"},
                  "expected nominal scenario to forbid explode action");
+
+    // Palette selection (WI-5.2)
+    shell.selfTestSelectPredicateFromPalette(1);
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("palette_selects_predicate",
+                 shell.selfTestSelectedPredicateIndex() == 1,
+                 "expected palette to select predicate index 1");
+    shell.selfTestSelectActionFromPalette(0);
+    renderAppShellFrame(window, shell, clearColor);
+    report.check("palette_selects_action",
+                 shell.selfTestSelectedActionIndex() == 0,
+                 "expected palette to select action index 0");
+
     shell.selfTestRunFeasibility("nominal");
     report.check("feasibility_plan_returned",
                  shell.selfTestLastPlan().success,

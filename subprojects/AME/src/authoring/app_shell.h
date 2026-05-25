@@ -134,4 +134,16 @@ private:
   bool m_autoValidateOnSave = true;
   bool m_hasLastPlan = false;
   bool showAboutModal = false;
+
+  // Palette quick-add state (WI-5.2)
+  bool m_paletteQuickAddOpen = false;
+  int  m_paletteQuickAddKind = 0;             // 0 = Predicate, 1 = Action
+  char m_paletteQuickAddName[64] = {};
+
+public:
+  // Palette test helpers
+  void selfTestSelectPredicateFromPalette(int idx) { m_domainGraph.setSelectedPredicate(idx); }
+  void selfTestSelectActionFromPalette(int idx) { m_domainGraph.setSelectedAction(idx); }
+  int  selfTestSelectedPredicateIndex() const { return m_domainGraph.selectedPredicateIndex(); }
+  int  selfTestSelectedActionIndex() const { return m_domainGraph.selectedActionIndex(); }
 };

@@ -748,10 +748,106 @@ void AppShell::renderPanels() {
   }
 }
 
+static bool containsCaseInsensitive(const std::string& haystack, const char* needle) {
+  if (needle == nullptr || needle[0] == '\0') { return true; }
+  std::string h = haystack;
+  std::string n = needle;
+  std::transform(h.begin(), h.end(), h.begin(), [](unsigned char c){ return std::tolower(c); });
+  std::transform(n.begin(), n.end(), n.begin(), [](unsigned char c){ return std::tolower(c); });
+  return h.find(n) != std::string::npos;
+}
+
+static std::string formatPredicateSignature(const PredicateDef& p) {
+  std::string sig = p.name + "(";
+  for (size_t i = 0; i < p.params.size(); ++i) {
+    if (i > 0) { sig += ", "; }
+    sig += p.params[i].type.empty() ? p.params[i].name : p.params[i].type;
+  }
+  sig += ")";
+  return sig;
+}
+
+static std::string formatActionSignature(const ActionDef& a) {
+  std::string sig = a.name + "(";
+  for (size_t i = 0; i < a.params.size(); ++i) {
+    if (i > 0) { sig += ", "; }
+    sig += a.params[i].type.empty() ? a.params[i].name : a.params[i].type;
+  }
+  sig += ")";
+  return sig;
+}
+
 void AppShell::renderDomainTab() {
-  // Left sidebar: type hierarchy + selected-element editor.
+  // Left sidebar: palette + type hierarchy + selected-element editor.
   ImGui::BeginChild("##DomainSidebar", ImVec2(360.0F, 0.0F),
                     ImGuiChildFlags_Border);
+
+  // ---- Palette ----------------------------------------------------------
+  if (ImGui::CollapsingHeader("Palette", ImGuiTreeNodeFlags_DefaultOpen)) {
+    static char s_paletteFilter[64] = {};
+    ImGui::InputText("Filter##palette", s_paletteFilter, sizeof(s_paletteFilter));
+    if (ImGui::SmallButton("Quick Add##palette")) {
+      m_paletteQuickAddOpen = true;
+      m_paletteQuickAddName[0] = '\0';
+    }
+
+    ImGui::Indent();
+    ImGui::TextDisabled("Predicates");
+    for (int i = 0; i < static_cast<int>(m_model.predicates.size()); ++i) {
+      const auto& p = m_model.predicates[static_cast<size_t>(i)];
+      if (!containsCaseInsensitive(p.name, s_paletteFilter)) { continue; }
+      const std::string label = formatPredicateSignature(p);
+      ImGui::PushID(10000 + i);
+      if (ImGui::Selectable(label.c_str(), m_domainGraph.selectedPredicateIndex() == i)) {
+        m_domainGraph.setSelectedPredicate(i);
+      }
+      ImGui::PopID();
+    }
+    ImGui::TextDisabled("Actions");
+    for (int i = 0; i < static_cast<int>(m_model.actions.size()); ++i) {
+      const auto& a = m_model.actions[static_cast<size_t>(i)];
+      if (!containsCaseInsensitive(a.name, s_paletteFilter)) { continue; }
+      const std::string label = formatActionSignature(a);
+      ImGui::PushID(20000 + i);
+      if (ImGui::Selectable(label.c_str(), m_domainGraph.selectedActionIndex() == i)) {
+        m_domainGraph.setSelectedAction(i);
+      }
+      ImGui::PopID();
+    }
+    ImGui::Unindent();
+  }
+
+  // Quick-add modal
+  if (m_paletteQuickAddOpen) {
+    ImGui::OpenPopup("Quick Add##palette-modal");
+    m_paletteQuickAddOpen = false;
+  }
+  if (ImGui::BeginPopupModal("Quick Add##palette-modal", nullptr,
+                              ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::InputText("Name##qa", m_paletteQuickAddName, sizeof(m_paletteQuickAddName));
+    ImGui::RadioButton("Predicate", &m_paletteQuickAddKind, 0); ImGui::SameLine();
+    ImGui::RadioButton("Action",    &m_paletteQuickAddKind, 1);
+    const bool canAdd = m_paletteQuickAddName[0] != '\0';
+    if (ImGui::Button("Add") && canAdd) {
+      const std::string nm = m_paletteQuickAddName;
+      if (m_paletteQuickAddKind == 0) {
+        m_commandStack.execute(m_model, "Quick add predicate", [nm](ProjectModel& m) {
+          PredicateDef p; p.name = nm; m.predicates.push_back(p);
+        });
+      } else {
+        m_commandStack.execute(m_model, "Quick add action", [nm](ProjectModel& m) {
+          ActionDef a; a.name = nm; m.actions.push_back(a);
+        });
+      }
+      m_paletteQuickAddName[0] = '\0';
+      ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) { ImGui::CloseCurrentPopup(); }
+    ImGui::EndPopup();
+  }
+
+  ImGui::Separator();
   m_typeHierarchy.render(m_model, m_commandStack);
   renderSelectedElementEditor();
   ImGui::Separator();

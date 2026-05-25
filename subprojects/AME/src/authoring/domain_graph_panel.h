@@ -24,6 +24,12 @@ public:
   int selectedPredicateIndex() const { return m_selectedPredIdx; }
   int selectedActionIndex() const { return m_selectedActionIdx; }
 
+  /// Programmatic selection used by the palette / cross-view highlights.
+  /// The next ed::GetSelectedNodes call inside render() will overwrite these
+  /// when the user clicks the canvas — palette selection is one-shot.
+  void setSelectedPredicate(int idx) { m_selectedPredIdx = idx; m_selectedActionIdx = -1; }
+  void setSelectedAction(int idx) { m_selectedActionIdx = idx; m_selectedPredIdx = -1; }
+
 private:
   ed::EditorContext* m_context = nullptr;
   int m_selectedPredIdx = -1;

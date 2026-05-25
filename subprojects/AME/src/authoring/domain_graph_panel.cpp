@@ -283,11 +283,13 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
   ed::End();
 
   // ---- Track selection (after End so selection state is finalised) ----
-  m_selectedPredIdx = -1;
-  m_selectedActionIdx = -1;
+  // Only overwrite when the canvas reports an active selection; otherwise
+  // preserve whatever the palette / cross-view caller set via setSelectedXxx.
   {
     const int total = ed::GetSelectedObjectCount();
     if (total > 0) {
+      m_selectedPredIdx = -1;
+      m_selectedActionIdx = -1;
       std::vector<ed::NodeId> sel(static_cast<size_t>(total));
       const int cnt = ed::GetSelectedNodes(sel.data(), total);
       for (int i = 0; i < cnt; ++i) {
