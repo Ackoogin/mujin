@@ -1,5 +1,6 @@
 #include "pddl_validator.h"
 
+#include "authoring_utils.h"
 #include "pddl_generator.h"
 #include "project_model.h"
 
@@ -7,47 +8,11 @@
 #include <ame/world_model.h>
 
 #include <algorithm>
-#include <cctype>
 #include <stdexcept>
 #include <string>
 #include <utility>
 
 namespace {
-
-std::string slugify(const std::string& text) {
-  std::string out;
-  bool lastWasDash = false;
-
-  for (unsigned char ch : text) {
-    const char lower = static_cast<char>(std::tolower(ch));
-    const bool isSlugChar =
-        (lower >= 'a' && lower <= 'z') || (lower >= '0' && lower <= '9') ||
-        lower == '-';
-    if (isSlugChar) {
-      if (lower == '-') {
-        if (!out.empty() && !lastWasDash) {
-          out.push_back(lower);
-        }
-        lastWasDash = true;
-      } else {
-        out.push_back(lower);
-        lastWasDash = false;
-      }
-    } else if (!out.empty() && !lastWasDash) {
-      out.push_back('-');
-      lastWasDash = true;
-    }
-  }
-
-  while (!out.empty() && out.back() == '-') {
-    out.pop_back();
-  }
-
-  if (out.empty()) {
-    return "untitled";
-  }
-  return out;
-}
 
 bool hasScenario(const ProjectModel& model, const std::string& scenarioName) {
   return std::any_of(model.scenarios.begin(), model.scenarios.end(),
@@ -58,7 +23,7 @@ bool hasScenario(const ProjectModel& model, const std::string& scenarioName) {
 
 std::string emptyProblemForDomain(const ProjectModel& model) {
   return "(define (problem __validate__) (:domain " +
-         slugify(model.projectName) + "))\n";
+         authoring::slugify(model.projectName) + "))\n";
 }
 
 void addNameMatches(const ProjectModel& model,

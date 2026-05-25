@@ -1,5 +1,7 @@
 #include "pddl_importer.h"
 
+#include "authoring_utils.h"
+
 #include <algorithm>
 #include <cctype>
 #include <sstream>
@@ -30,41 +32,6 @@ bool isAtom(const Sexpr& expr, const std::string& text) {
 
 bool isKeyword(const Sexpr& expr, const std::string& text) {
   return isAtom(expr, text);
-}
-
-std::string slugify(const std::string& text) {
-  std::string out;
-  bool lastWasDash = false;
-
-  for (unsigned char ch : text) {
-    const char lower = static_cast<char>(std::tolower(ch));
-    const bool isSlugChar =
-        (lower >= 'a' && lower <= 'z') || (lower >= '0' && lower <= '9') ||
-        lower == '-';
-    if (isSlugChar) {
-      if (lower == '-') {
-        if (!out.empty() && !lastWasDash) {
-          out.push_back(lower);
-        }
-        lastWasDash = true;
-      } else {
-        out.push_back(lower);
-        lastWasDash = false;
-      }
-    } else if (!out.empty() && !lastWasDash) {
-      out.push_back('-');
-      lastWasDash = true;
-    }
-  }
-
-  while (!out.empty() && out.back() == '-') {
-    out.pop_back();
-  }
-
-  if (out.empty()) {
-    return "untitled";
-  }
-  return out;
 }
 
 std::vector<std::string> tokenize(const std::string& pddl) {
@@ -489,7 +456,8 @@ PddlImportResult PddlImporter::importProblem(const ProjectModel& model,
     imported.scenarios.push_back(std::move(scenario));
 
     const std::string problemDomain = domain->children[1].atom;
-    if (slugify(problemDomain) != slugify(model.projectName)) {
+    if (authoring::slugify(problemDomain) !=
+        authoring::slugify(model.projectName)) {
       result.error = "Warning: problem domain '" + problemDomain +
                      "' does not match project domain '" + model.projectName + "'";
     }

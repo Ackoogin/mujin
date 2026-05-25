@@ -1,5 +1,6 @@
 #include "contingency_analyser.h"
 
+#include "authoring_utils.h"
 #include "pddl_validator.h"
 #include "project_model.h"
 
@@ -31,10 +32,6 @@ std::string formatFluent(const std::string& predicateName,
   }
   out << ")";
   return out.str();
-}
-
-std::string formatFact(const FactRef& fact) {
-  return formatFluent(fact.predicateName, fact.objectNames);
 }
 
 std::vector<std::string> validationErrorMessages(const ValidationReport& report) {
@@ -169,10 +166,10 @@ FactRef parseGroundFluent(const std::string& fluent) {
 }
 
 void addUniqueFact(std::vector<FactRef>& facts, FactRef fact) {
-  const std::string key = formatFact(fact);
+  const std::string key = authoring::formatFactRef(fact);
   const bool exists =
       std::any_of(facts.begin(), facts.end(), [&key](const FactRef& existing) {
-        return formatFact(existing) == key;
+        return authoring::formatFactRef(existing) == key;
       });
   if (!exists) {
     facts.push_back(std::move(fact));

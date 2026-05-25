@@ -1,22 +1,12 @@
 #include "domain_graph_panel.h"
 
+#include "authoring_utils.h"
 #include "imgui.h"
 
 #include <algorithm>
-#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
-
-static std::string formatRef(const EffectRef& r) {
-  std::ostringstream out;
-  out << "(" << r.predicateName;
-  for (const auto& arg : r.argNames) {
-    out << " " << arg;
-  }
-  out << ")";
-  return out.str();
-}
 
 static ed::PinId actionPreconditionPinId(int actionIdx, int slotIdx) {
   return 4000 + actionIdx * 100 + slotIdx;
@@ -165,7 +155,8 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
     for (int pi = 0; pi < static_cast<int>(action.preconditions.size()); ++pi) {
       const ed::PinId pinId = actionPreconditionPinId(i, pi);
       ed::BeginPin(pinId, ed::PinKind::Input);
-      const std::string label = formatRef(action.preconditions[pi]);
+      const std::string label =
+          authoring::formatEffectRef(action.preconditions[pi]);
       ImGui::Text("%s", label.c_str());
       ed::EndPin();
     }
@@ -177,7 +168,8 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
     for (int ai = 0; ai < static_cast<int>(action.addEffects.size()); ++ai) {
       const ed::PinId pinId = actionEffectPinId(i, ai);
       ed::BeginPin(pinId, ed::PinKind::Output);
-      const std::string label = "+" + formatRef(action.addEffects[ai]);
+      const std::string label =
+          "+" + authoring::formatEffectRef(action.addEffects[ai]);
       ImGui::Text("%s", label.c_str());
       ed::EndPin();
     }
@@ -185,7 +177,8 @@ void DomainGraphPanel::render(ProjectModel& model, CommandStack& stack) {
       const int slotIdx = static_cast<int>(action.addEffects.size()) + di;
       const ed::PinId pinId = actionEffectPinId(i, slotIdx);
       ed::BeginPin(pinId, ed::PinKind::Output);
-      const std::string label = "-" + formatRef(action.delEffects[di]);
+      const std::string label =
+          "-" + authoring::formatEffectRef(action.delEffects[di]);
       ImGui::Text("%s", label.c_str());
       ed::EndPin();
     }

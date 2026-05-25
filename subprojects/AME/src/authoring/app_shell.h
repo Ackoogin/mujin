@@ -108,6 +108,8 @@ private:
   void renderPlanTab();
   void renderBtTab();
   void renderSelectedElementEditor();
+  void clearDerivedResults();
+  void resetScenarioEditorState();
   void runValidation();
   void runFeasibilityCheck();
   void runAllScenarios();
@@ -134,6 +136,15 @@ private:
   bool m_autoValidateOnSave = true;
   bool m_hasLastPlan = false;
   bool showAboutModal = false;
+
+  char m_scenarioNameInput[64] = {};
+  char m_renameScenarioNameInput[64] = {};
+  int m_renameScenarioIdx = -2;
+  int m_initPredIdx = 0;
+  int m_goalPredIdx = 0;
+  char m_initArgsInput[128] = {};
+  char m_goalArgsInput[128] = {};
+  std::string m_renameScenarioSource;
 
   // Palette quick-add state (WI-5.2)
   bool m_paletteQuickAddOpen = false;

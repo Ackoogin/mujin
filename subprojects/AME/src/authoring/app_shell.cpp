@@ -1,5 +1,6 @@
 #include "app_shell.h"
 
+#include "authoring_utils.h"
 #include "imgui.h"
 #include "pddl_generator.h"
 #include "pddl_importer.h"
@@ -8,6 +9,7 @@
 #include <ame/plan_compiler.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cfloat>
 #include <cstdio>
@@ -23,72 +25,6 @@
 // Forward declarations for helpers defined later in this file.
 static void SectionAccent();
 static void StatusPill(const char* text, ImVec4 borderColor, ImVec4 textColor);
-
-static std::string slugifyForFilename(const std::string& text) {
-  std::string out;
-  bool lastWasDash = false;
-
-  for (unsigned char ch : text) {
-    const char lower = static_cast<char>(std::tolower(ch));
-    const bool isSlugChar =
-        (lower >= 'a' && lower <= 'z') || (lower >= '0' && lower <= '9') ||
-        lower == '-';
-    if (isSlugChar) {
-      if (lower == '-') {
-        if (!out.empty() && !lastWasDash) {
-          out.push_back(lower);
-        }
-        lastWasDash = true;
-      } else {
-        out.push_back(lower);
-        lastWasDash = false;
-      }
-    } else if (!out.empty() && !lastWasDash) {
-      out.push_back('-');
-      lastWasDash = true;
-    }
-  }
-
-  while (!out.empty() && out.back() == '-') {
-    out.pop_back();
-  }
-
-  if (out.empty()) {
-    return "untitled";
-  }
-  return out;
-}
-
-static std::string formatRef(const EffectRef& r) {
-  std::ostringstream out;
-  out << "(" << r.predicateName;
-  for (const auto& arg : r.argNames) {
-    out << " " << arg;
-  }
-  out << ")";
-  return out.str();
-}
-
-static std::string formatFact(const FactRef& fact) {
-  std::ostringstream out;
-  out << "(" << fact.predicateName;
-  for (const auto& arg : fact.objectNames) {
-    out << " " << arg;
-  }
-  out << ")";
-  return out.str();
-}
-
-static std::string formatArgList(const std::vector<std::string>& args) {
-  std::ostringstream out;
-  for (size_t i = 0; i < args.size(); ++i) {
-    if (i > 0U) {
-      out << " ";
-    }
-    out << args[i];
-  }
-  return out.str();
-}
 
 static void renderPlanFluentList(const char* title,
                                  const std::vector<unsigned>& fluentIds,
@@ -177,7 +113,7 @@ static void renderActionRefSection(const char* title,
       ImGui::TableSetColumnIndex(0);
       ImGui::TextUnformatted(refs[ri].predicateName.c_str());
       ImGui::TableSetColumnIndex(1);
-      const std::string args = formatArgList(refs[ri].argNames);
+      const std::string args = authoring::formatArgList(refs[ri].argNames);
       ImGui::TextUnformatted(args.c_str());
       ImGui::TableSetColumnIndex(2);
       ImGui::PushID(ri);
@@ -254,7 +190,8 @@ static void renderFactSection(const char* title,
     for (int fi = 0; fi < static_cast<int>(facts.size()); ++fi) {
       ImGui::TableNextRow();
       ImGui::TableSetColumnIndex(0);
-      const std::string label = formatFact(facts[static_cast<size_t>(fi)]);
+      const std::string label =
+          authoring::formatFactRef(facts[static_cast<size_t>(fi)]);
       ImGui::TextUnformatted(label.c_str());
       ImGui::TableSetColumnIndex(1);
       ImGui::PushID(fi);
@@ -455,48 +392,29 @@ void AppShell::renderMenuBar() {
         projectName = "[Untitled]";
         m_model.clear();
         m_model.projectName = projectName;
-        m_lastValidation = ValidationReport{};
-        m_structuralReport = StructuralReport{};
-        m_lastBatchReport = ScenarioBatchReport{};
-        m_lastContingencyReport = ContingencyReport{};
-        m_lastPlan = ame::PlanResult{};
-        m_lastPlanScenarioName.clear();
-        m_lastPlanStepLabels.clear();
-        m_requestedTab.clear();
-        m_planGraph.clear();
-        m_btGraph.setXml("");
-        m_hasLastPlan = false;
         m_selectedScenarioIdx = -1;
-        m_domainGraph.setHighlightedElements({}, {});
-        m_domainGraph.setStructuralHighlights({}, {}, {}, {});
-        validationState = "Not validated";
+        clearDerivedResults();
+        resetScenarioEditorState();
         lastOperation = "New project";
       }
       if (ImGui::MenuItem("Open...")) {
-        // File dialog deferred; read from a conventional hardcoded path.
-        const std::string slug = slugifyForFilename(m_model.projectName);
-        const std::string path = "./" + slug + ".ameproj.json";
+        // File dialog deferred; read from a conventional project path.
+        const std::string path = authoring::projectFilePath(m_model.projectName);
         ProjectModel loaded;
         if (loaded.load(path)) {
           m_commandStack.clear();
           m_model = std::move(loaded);
           projectName = m_model.projectName;
-          m_lastValidation = ValidationReport{};
-          m_lastPlan = ame::PlanResult{};
-          m_lastPlanStepLabels.clear();
-          m_planGraph.clear();
-          m_btGraph.setXml("");
-          m_hasLastPlan = false;
           m_selectedScenarioIdx = -1;
-          validationState = "Not validated";
+          clearDerivedResults();
+          resetScenarioEditorState();
           lastOperation = "Loaded " + path;
         } else {
           lastOperation = "Failed to load " + path;
         }
       }
       if (ImGui::MenuItem("Save")) {
-        const std::string slug = slugifyForFilename(m_model.projectName);
-        const std::string path = "./" + slug + ".ameproj.json";
+        const std::string path = authoring::projectFilePath(m_model.projectName);
         lastOperation = m_model.save(path) ? "Saved " + path
                                             : "Failed to save " + path;
         if (m_autoValidateOnSave) {
@@ -505,8 +423,7 @@ void AppShell::renderMenuBar() {
       }
       if (ImGui::MenuItem("Save As...")) {
         // No native file picker yet; uses the same path as Save.
-        const std::string slug = slugifyForFilename(m_model.projectName);
-        const std::string path = "./" + slug + ".ameproj.json";
+        const std::string path = authoring::projectFilePath(m_model.projectName);
         lastOperation = m_model.save(path) ? "Saved as " + path
                                             : "Failed to save as " + path;
         if (m_autoValidateOnSave) {
@@ -514,7 +431,7 @@ void AppShell::renderMenuBar() {
         }
       }
       if (ImGui::MenuItem("Import PDDL Domain...")) {
-        const std::string path = "./import_domain.pddl";
+        const std::string path = authoring::importDomainPath();
         std::string pddl;
         if (!readTextFile(path, pddl)) {
           lastOperation = "Failed to read " + path;
@@ -526,27 +443,15 @@ void AppShell::renderMenuBar() {
             m_commandStack.clear();
             m_model = import.model;
             projectName = m_model.projectName;
-            m_lastValidation = ValidationReport{};
-            m_structuralReport = StructuralReport{};
-            m_lastBatchReport = ScenarioBatchReport{};
-            m_lastContingencyReport = ContingencyReport{};
-            m_lastPlan = ame::PlanResult{};
-            m_lastPlanScenarioName.clear();
-            m_lastPlanStepLabels.clear();
-            m_requestedTab.clear();
-            m_planGraph.clear();
-            m_btGraph.setXml("");
-            m_hasLastPlan = false;
             m_selectedScenarioIdx = -1;
-            m_domainGraph.setHighlightedElements({}, {});
-            m_domainGraph.setStructuralHighlights({}, {}, {}, {});
-            validationState = "Not validated";
+            clearDerivedResults();
+            resetScenarioEditorState();
             lastOperation = "Imported domain: " + projectName;
           }
         }
       }
       if (ImGui::MenuItem("Import PDDL Problem...")) {
-        const std::string path = "./import_problem.pddl";
+        const std::string path = authoring::importProblemPath();
         std::string pddl;
         if (!readTextFile(path, pddl)) {
           lastOperation = "Failed to read " + path;
@@ -556,19 +461,10 @@ void AppShell::renderMenuBar() {
             lastOperation = "Import failed: " + import.error;
           } else {
             m_model = import.model;
-            m_lastValidation = ValidationReport{};
-            m_structuralReport = StructuralReport{};
-            m_lastBatchReport = ScenarioBatchReport{};
-            m_lastContingencyReport = ContingencyReport{};
-            m_lastPlan = ame::PlanResult{};
-            m_lastPlanScenarioName.clear();
-            m_lastPlanStepLabels.clear();
-            m_planGraph.clear();
-            m_btGraph.setXml("");
-            m_hasLastPlan = false;
+            clearDerivedResults();
+            resetScenarioEditorState();
             m_selectedScenarioIdx =
                 static_cast<int>(m_model.scenarios.size()) - 1;
-            validationState = "Not validated";
             const std::string scenarioName =
                 m_model.scenarios.empty() ? "" : m_model.scenarios.back().name;
             lastOperation = "Imported problem: " + scenarioName;
@@ -582,8 +478,7 @@ void AppShell::renderMenuBar() {
               "Refusing: " + std::to_string(m_structuralReport.errorCount) +
               " structural error(s)";
         } else {
-          const std::string slug = slugifyForFilename(m_model.projectName);
-          const std::string path = "./" + slug + "-domain.pddl";
+          const std::string path = authoring::domainPddlPath(m_model.projectName);
           std::ofstream file(path);
           file << PddlGenerator::generateDomain(m_model);
           lastOperation = file.good() ? "Wrote " + path : "Failed to write " + path;
@@ -598,11 +493,9 @@ void AppShell::renderMenuBar() {
         } else if (m_model.scenarios.empty()) {
           lastOperation = "No scenarios to export";
         } else {
-          const std::string slug = slugifyForFilename(m_model.projectName);
-          const std::string scenarioSlug =
-              slugifyForFilename(m_model.scenarios.front().name);
           const std::string path =
-              "./" + slug + "-problem-" + scenarioSlug + ".pddl";
+              authoring::problemPddlPath(m_model.projectName,
+                                         m_model.scenarios.front().name);
           std::ofstream file(path);
           file << PddlGenerator::generateProblem(m_model, m_model.scenarios.front().name);
           lastOperation = file.good() ? "Wrote " + path : "Failed to write " + path;
@@ -612,8 +505,8 @@ void AppShell::renderMenuBar() {
         if (m_lastBatchReport.results.empty()) {
           lastOperation = "No batch report to export";
         } else {
-          const std::string slug = slugifyForFilename(m_model.projectName);
-          const std::string path = "./" + slug + "-regression-report.json";
+          const std::string path =
+              authoring::regressionReportPath(m_model.projectName);
           std::ofstream file(path);
           file << ScenarioRunner::toJson(m_lastBatchReport);
           lastOperation = file.good() ? "Wrote " + path : "Failed to write " + path;
@@ -798,22 +691,24 @@ void AppShell::renderPanels() {
   ImGui::Begin("##MainHost", nullptr, hostFlags);
 
   if (ImGui::BeginTabBar("##MainTabs", ImGuiTabBarFlags_None)) {
-    const auto& labels = tabLabels();
-    for (size_t i = 0; i < labels.size(); ++i) {
+    struct TabDescriptor {
+      const char* label;
+      void (AppShell::*render)();
+    };
+    static constexpr std::array<TabDescriptor, 4> kTabs = {{
+        {"Domain", &AppShell::renderDomainTab},
+        {"PDDL", &AppShell::renderPddlTab},
+        {"Plan", &AppShell::renderPlanTab},
+        {"BT", &AppShell::renderBtTab},
+    }};
+
+    for (const TabDescriptor& tab : kTabs) {
       ImGuiTabItemFlags tabFlags = ImGuiTabItemFlags_None;
-      if (m_requestedTab == labels[i]) {
+      if (m_requestedTab == tab.label) {
         tabFlags |= ImGuiTabItemFlags_SetSelected;
       }
-      if (ImGui::BeginTabItem(labels[i].c_str(), nullptr, tabFlags)) {
-        if (i == 0U) {
-          renderDomainTab();
-        } else if (i == 1U) {
-          renderPddlTab();
-        } else if (i == 2U) {
-          renderPlanTab();
-        } else if (i == 3U) {
-          renderBtTab();
-        }
+      if (ImGui::BeginTabItem(tab.label, nullptr, tabFlags)) {
+        (this->*tab.render)();
         ImGui::EndTabItem();
       }
     }
@@ -868,7 +763,7 @@ static std::string formatActionSignature(const ActionDef& a) {
 
 void AppShell::renderDomainTab() {
   // Left sidebar: palette + type hierarchy + selected-element editor.
-  ImGui::BeginChild("##DomainSidebar", ImVec2(360.0F, 0.0F),
+  ImGui::BeginChild("##DomainSidebar", ImVec2(420.0F, 0.0F),
                     ImGuiChildFlags_Border);
 
   // ---- Palette ----------------------------------------------------------
@@ -1006,11 +901,12 @@ void AppShell::renderDomainTab() {
       ImGui::EndDisabled();
     }
 
-    static char s_scenarioName[64] = {};
-    ImGui::InputText("Name##scenario", s_scenarioName, sizeof(s_scenarioName));
+    ImGui::InputText("Name##scenario",
+                     m_scenarioNameInput,
+                     sizeof(m_scenarioNameInput));
     ImGui::SameLine();
     if (ImGui::Button("Add Scenario")) {
-      const std::string name = s_scenarioName;
+      const std::string name = m_scenarioNameInput;
       const bool taken = std::any_of(
           m_model.scenarios.begin(), m_model.scenarios.end(),
           [&name](const ScenarioDef& scenario) {
@@ -1023,47 +919,45 @@ void AppShell::renderDomainTab() {
           model.scenarios.push_back(std::move(scenario));
         });
         m_selectedScenarioIdx = static_cast<int>(m_model.scenarios.size()) - 1;
-        s_scenarioName[0] = '\0';
+        m_scenarioNameInput[0] = '\0';
       }
     }
 
-    static char s_renameScenarioName[64] = {};
-    static int s_renameScenarioIdx = -2;
-    static std::string s_renameScenarioSource;
     if (hasSelection) {
       const std::string currentName =
           m_model.scenarios[static_cast<size_t>(m_selectedScenarioIdx)].name;
-      if (s_renameScenarioIdx != m_selectedScenarioIdx ||
-          s_renameScenarioSource != currentName) {
-        std::snprintf(s_renameScenarioName,
-                      sizeof(s_renameScenarioName),
+      if (m_renameScenarioIdx != m_selectedScenarioIdx ||
+          m_renameScenarioSource != currentName) {
+        std::snprintf(m_renameScenarioNameInput,
+                      sizeof(m_renameScenarioNameInput),
                       "%s",
                       currentName.c_str());
-        s_renameScenarioIdx = m_selectedScenarioIdx;
-        s_renameScenarioSource = currentName;
+        m_renameScenarioIdx = m_selectedScenarioIdx;
+        m_renameScenarioSource = currentName;
       }
     } else {
-      s_renameScenarioName[0] = '\0';
-      s_renameScenarioIdx = -2;
-      s_renameScenarioSource.clear();
+      m_renameScenarioNameInput[0] = '\0';
+      m_renameScenarioIdx = -2;
+      m_renameScenarioSource.clear();
     }
 
     if (!hasSelection) {
       ImGui::BeginDisabled();
     }
-    ImGui::InputText("Rename to##scenario", s_renameScenarioName,
-                     sizeof(s_renameScenarioName));
+    ImGui::InputText("Rename to##scenario",
+                     m_renameScenarioNameInput,
+                     sizeof(m_renameScenarioNameInput));
     ImGui::SameLine();
     if (ImGui::Button("Rename") && hasSelection) {
       const int renameIdx = m_selectedScenarioIdx;
-      const std::string newName = s_renameScenarioName;
+      const std::string newName = m_renameScenarioNameInput;
       if (!newName.empty() &&
           !scenarioNameTaken(m_model, newName, renameIdx)) {
         m_commandStack.execute(m_model, "Rename scenario",
                                [renameIdx, newName](ProjectModel& model) {
-          model.scenarios[static_cast<size_t>(renameIdx)].name = newName;
+            model.scenarios[static_cast<size_t>(renameIdx)].name = newName;
         });
-        s_renameScenarioSource = newName;
+        m_renameScenarioSource = newName;
       }
     }
     if (!hasSelection) {
@@ -1074,21 +968,17 @@ void AppShell::renderDomainTab() {
         m_selectedScenarioIdx < static_cast<int>(m_model.scenarios.size())) {
       ScenarioDef& scenario =
           m_model.scenarios[static_cast<size_t>(m_selectedScenarioIdx)];
-      static int s_initPredIdx = 0;
-      static int s_goalPredIdx = 0;
-      static char s_initArgs[128] = {};
-      static char s_goalArgs[128] = {};
 
       ImGui::Separator();
       renderFactSection("Initial state", "##initialfacts", "Add Fact",
                         "Remove initial fact", "Add initial fact",
                         scenario.initialState, m_model, m_commandStack,
-                        s_initPredIdx, s_initArgs, sizeof(s_initArgs));
+                        m_initPredIdx, m_initArgsInput, sizeof(m_initArgsInput));
       ImGui::Separator();
       renderFactSection("Goals", "##goalfacts", "Add Fact##goal",
                         "Remove goal fact", "Add goal fact",
                         scenario.goals, m_model, m_commandStack,
-                        s_goalPredIdx, s_goalArgs, sizeof(s_goalArgs));
+                        m_goalPredIdx, m_goalArgsInput, sizeof(m_goalArgsInput));
       if (ImGui::CollapsingHeader("Expected outcome")) {
         ScenarioExpectation& expectation = scenario.expectation;
         bool shouldSucceed = expectation.shouldSucceed;
@@ -1471,14 +1361,24 @@ void AppShell::renderSelectedElementEditor() {
         std::snprintf(type, sizeof(type), "%s", action.params[pi].type.c_str());
 
         ImGui::TableSetColumnIndex(0);
-        // TODO: Route text-field edits through CommandStack in a later WI.
         if (ImGui::InputText("##name", name, sizeof(name))) {
-          action.params[pi].name = name;
+          const int paramIdx = pi;
+          const std::string newName = name;
+          m_commandStack.execute(m_model, "Rename action parameter",
+                                 [selAction, paramIdx, newName](ProjectModel& model) {
+            model.actions[static_cast<size_t>(selAction)]
+                .params[static_cast<size_t>(paramIdx)].name = newName;
+          });
         }
         ImGui::TableSetColumnIndex(1);
-        // TODO: Route text-field edits through CommandStack in a later WI.
         if (ImGui::InputText("##type", type, sizeof(type))) {
-          action.params[pi].type = type;
+          const int paramIdx = pi;
+          const std::string newType = type;
+          m_commandStack.execute(m_model, "Retype action parameter",
+                                 [selAction, paramIdx, newType](ProjectModel& model) {
+            model.actions[static_cast<size_t>(selAction)]
+                .params[static_cast<size_t>(paramIdx)].type = newType;
+          });
         }
         ImGui::PopID();
       }
@@ -1529,15 +1429,15 @@ void AppShell::renderSelectedElementEditor() {
       ImGui::Separator();
       ImGui::TextDisabled("Templates");
       for (const auto& ref : action.preconditions) {
-        const std::string label = formatRef(ref);
+        const std::string label = authoring::formatEffectRef(ref);
         ImGui::Text("%s", label.c_str());
       }
       for (const auto& ref : action.addEffects) {
-        const std::string label = "+" + formatRef(ref);
+        const std::string label = "+" + authoring::formatEffectRef(ref);
         ImGui::Text("%s", label.c_str());
       }
       for (const auto& ref : action.delEffects) {
-        const std::string label = "-" + formatRef(ref);
+        const std::string label = "-" + authoring::formatEffectRef(ref);
         ImGui::Text("%s", label.c_str());
       }
     }
@@ -1565,18 +1465,34 @@ void AppShell::renderSelectedElementEditor() {
       s_lastBtSubtreeXml = action.btBinding.subtreeXml;
     }
 
-    // TODO: Route BT binding edits through CommandStack in a later WI.
     if (ImGui::InputText("Node type##bt", s_nodeType, sizeof(s_nodeType))) {
-      action.btBinding.nodeType = s_nodeType;
-      s_lastBtNodeType = action.btBinding.nodeType;
+      const std::string nodeType = s_nodeType;
+      m_commandStack.execute(m_model, "Set BT node type",
+                             [selAction, nodeType](ProjectModel& model) {
+        model.actions[static_cast<size_t>(selAction)].btBinding.nodeType =
+            nodeType;
+      });
+      s_lastBtNodeType = nodeType;
     }
-    ImGui::Checkbox("Reactive##bt", &action.btBinding.reactive);
+    bool reactive = action.btBinding.reactive;
+    if (ImGui::Checkbox("Reactive##bt", &reactive)) {
+      m_commandStack.execute(m_model, "Set BT reactive binding",
+                             [selAction, reactive](ProjectModel& model) {
+        model.actions[static_cast<size_t>(selAction)].btBinding.reactive =
+            reactive;
+      });
+    }
     if (ImGui::InputTextMultiline("Subtree XML##bt",
                                   s_subtreeXml,
                                   sizeof(s_subtreeXml),
                                   ImVec2(-FLT_MIN, 120.0F))) {
-      action.btBinding.subtreeXml = s_subtreeXml;
-      s_lastBtSubtreeXml = action.btBinding.subtreeXml;
+      const std::string subtreeXml = s_subtreeXml;
+      m_commandStack.execute(m_model, "Set BT subtree XML",
+                             [selAction, subtreeXml](ProjectModel& model) {
+        model.actions[static_cast<size_t>(selAction)].btBinding.subtreeXml =
+            subtreeXml;
+      });
+      s_lastBtSubtreeXml = subtreeXml;
     }
     if (!action.btBinding.subtreeXml.empty() && !action.params.empty()) {
       ImGui::TextDisabled("Resolved preview (first grounding):");
@@ -1598,13 +1514,11 @@ void AppShell::renderSelectedElementEditor() {
   }
 }
 
-void AppShell::selfTestNew() {
-  m_commandStack.clear();
-  projectName     = "[Untitled]";
-  validationState = "Not validated";
-  lastOperation   = "New project";
+void AppShell::clearDerivedResults() {
   m_lastValidation = ValidationReport{};
   m_structuralReport = StructuralReport{};
+  m_lastBatchReport = ScenarioBatchReport{};
+  m_lastContingencyReport = ContingencyReport{};
   m_lastPlan = ame::PlanResult{};
   m_lastPlanScenarioName.clear();
   m_lastPlanStepLabels.clear();
@@ -1612,9 +1526,29 @@ void AppShell::selfTestNew() {
   m_planGraph.clear();
   m_btGraph.setXml("");
   m_hasLastPlan = false;
-  m_selectedScenarioIdx = -1;
   m_domainGraph.setHighlightedElements({}, {});
   m_domainGraph.setStructuralHighlights({}, {}, {}, {});
+  validationState = "Not validated";
+}
+
+void AppShell::resetScenarioEditorState() {
+  m_scenarioNameInput[0] = '\0';
+  m_renameScenarioNameInput[0] = '\0';
+  m_renameScenarioIdx = -2;
+  m_renameScenarioSource.clear();
+  m_initPredIdx = 0;
+  m_goalPredIdx = 0;
+  m_initArgsInput[0] = '\0';
+  m_goalArgsInput[0] = '\0';
+}
+
+void AppShell::selfTestNew() {
+  m_commandStack.clear();
+  projectName     = "[Untitled]";
+  lastOperation   = "New project";
+  m_selectedScenarioIdx = -1;
+  clearDerivedResults();
+  resetScenarioEditorState();
   m_model.clear();
   m_model.projectName = projectName;
 }
@@ -1897,20 +1831,10 @@ bool AppShell::selfTestImportDomain(const std::string& pddl) {
   m_commandStack.clear();
   m_model = import.model;
   projectName = m_model.projectName;
-  validationState = "Not validated";
   lastOperation = "Imported domain: " + projectName;
   m_selectedScenarioIdx = -1;
-  m_lastValidation = ValidationReport{};
-  m_structuralReport = StructuralReport{};
-  m_lastBatchReport = ScenarioBatchReport{};
-  m_lastContingencyReport = ContingencyReport{};
-  m_lastPlan = ame::PlanResult{};
-  m_lastPlanScenarioName.clear();
-  m_lastPlanStepLabels.clear();
-  m_requestedTab.clear();
-  m_planGraph.clear();
-  m_btGraph.setXml("");
-  m_hasLastPlan = false;
+  clearDerivedResults();
+  resetScenarioEditorState();
   return true;
 }
 
@@ -1924,22 +1848,12 @@ bool AppShell::selfTestImportProblem(const std::string& pddl,
   }
 
   m_model = import.model;
-  validationState = "Not validated";
   m_selectedScenarioIdx = static_cast<int>(m_model.scenarios.size()) - 1;
   const std::string importedScenario =
       m_model.scenarios.empty() ? "" : m_model.scenarios.back().name;
   lastOperation = "Imported problem: " + importedScenario;
-  m_lastValidation = ValidationReport{};
-  m_structuralReport = StructuralReport{};
-  m_lastBatchReport = ScenarioBatchReport{};
-  m_lastContingencyReport = ContingencyReport{};
-  m_lastPlan = ame::PlanResult{};
-  m_lastPlanScenarioName.clear();
-  m_lastPlanStepLabels.clear();
-  m_requestedTab.clear();
-  m_planGraph.clear();
-  m_btGraph.setXml("");
-  m_hasLastPlan = false;
+  clearDerivedResults();
+  resetScenarioEditorState();
   return true;
 }
 

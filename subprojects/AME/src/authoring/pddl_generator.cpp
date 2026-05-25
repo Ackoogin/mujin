@@ -1,50 +1,16 @@
 #include "pddl_generator.h"
 
+#include "authoring_utils.h"
+
 #include <algorithm>
-#include <cctype>
 #include <sstream>
 #include <string>
 #include <vector>
 
 namespace {
 
-std::string slugify(const std::string& text) {
-  std::string out;
-  bool lastWasDash = false;
-
-  for (unsigned char ch : text) {
-    const char lower = static_cast<char>(std::tolower(ch));
-    const bool isSlugChar =
-        (lower >= 'a' && lower <= 'z') || (lower >= '0' && lower <= '9') ||
-        lower == '-';
-    if (isSlugChar) {
-      if (lower == '-') {
-        if (!out.empty() && !lastWasDash) {
-          out.push_back(lower);
-        }
-        lastWasDash = true;
-      } else {
-        out.push_back(lower);
-        lastWasDash = false;
-      }
-    } else if (!out.empty() && !lastWasDash) {
-      out.push_back('-');
-      lastWasDash = true;
-    }
-  }
-
-  while (!out.empty() && out.back() == '-') {
-    out.pop_back();
-  }
-
-  if (out.empty()) {
-    return "untitled";
-  }
-  return out;
-}
-
 std::string domainName(const ProjectModel& model) {
-  return slugify(model.projectName);
+  return authoring::slugify(model.projectName);
 }
 
 std::string parameterName(const std::string& name) {
