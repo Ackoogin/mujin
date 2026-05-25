@@ -369,6 +369,26 @@ int main(int argc, char* argv[]) {
     shell.selfTestAddScenario("nominal");
     shell.selfTestAddInitialFact(0, "at", {"uav1", "base"});
     shell.selfTestAddGoal(0, "at", {"uav1", "base"});
+    shell.selfTestSetScenarioExpectation(0, true, 1, 10, {"move"}, {"explode"});
+    const ScenarioExpectation& nominalExpectation =
+        shell.selfTestScenarioExpectation(0);
+    report.check("scenario_expectation_should_succeed",
+                 nominalExpectation.shouldSucceed == true,
+                 "expected nominal scenario to expect success");
+    report.check("scenario_expectation_min_steps",
+                 nominalExpectation.minPlanSteps == 1,
+                 "expected nominal scenario min plan steps to be 1");
+    report.check("scenario_expectation_max_steps",
+                 nominalExpectation.maxPlanSteps == 10,
+                 "expected nominal scenario max plan steps to be 10");
+    report.check("scenario_expectation_expected_actions",
+                 nominalExpectation.expectedActions ==
+                     std::vector<std::string>{"move"},
+                 "expected nominal scenario to require move action");
+    report.check("scenario_expectation_forbidden_actions",
+                 nominalExpectation.forbiddenActions ==
+                     std::vector<std::string>{"explode"},
+                 "expected nominal scenario to forbid explode action");
     shell.selfTestRunFeasibility("nominal");
     report.check("feasibility_plan_returned",
                  shell.selfTestLastPlan().success,

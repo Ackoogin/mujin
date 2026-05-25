@@ -58,6 +58,13 @@ public:
   void selfTestAddGoal(int scenarioIdx,
                        const std::string& predicateName,
                        std::vector<std::string> objectNames);
+  void selfTestSetScenarioExpectation(int scenarioIdx,
+                                      bool shouldSucceed,
+                                      int minSteps,
+                                      int maxSteps,
+                                      std::vector<std::string> expected,
+                                      std::vector<std::string> forbidden);
+  const ScenarioExpectation& selfTestScenarioExpectation(int scenarioIdx) const;
   void selfTestRunFeasibility(const std::string& scenarioName);
   bool selfTestAddCausalLink(int fromAction,
                              int fromAddEffectIdx,

@@ -21,7 +21,18 @@ struct CausalLink {
 };
 struct ObjectDef { std::string name, type; };
 struct FactRef { std::string predicateName; std::vector<std::string> objectNames; };
-struct ScenarioDef { std::string name; std::vector<FactRef> initialState, goals; };
+struct ScenarioExpectation {
+    bool shouldSucceed = true;
+    int minPlanSteps = 0;
+    int maxPlanSteps = 0;
+    std::vector<std::string> expectedActions;
+    std::vector<std::string> forbiddenActions;
+};
+struct ScenarioDef {
+    std::string name;
+    std::vector<FactRef> initialState, goals;
+    ScenarioExpectation expectation;
+};
 
 struct ProjectModel {
     int version = 1;
@@ -54,6 +65,8 @@ void to_json(nlohmann::json&, const ObjectDef&);
 void from_json(const nlohmann::json&, ObjectDef&);
 void to_json(nlohmann::json&, const FactRef&);
 void from_json(const nlohmann::json&, FactRef&);
+void to_json(nlohmann::json&, const ScenarioExpectation&);
+void from_json(const nlohmann::json&, ScenarioExpectation&);
 void to_json(nlohmann::json&, const ScenarioDef&);
 void from_json(const nlohmann::json&, ScenarioDef&);
 void to_json(nlohmann::json&, const ProjectModel&);

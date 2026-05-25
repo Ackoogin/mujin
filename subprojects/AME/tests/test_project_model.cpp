@@ -25,6 +25,11 @@ TEST(ProjectModel, RoundTrip) {
     m.causalLinks.push_back({0, 0, 1, 0});
     m.objects.push_back({"uav1","robot"});
     ScenarioDef s; s.name="nominal"; s.goals.push_back({"at",{"uav1","base"}});
+    s.expectation.shouldSucceed = true;
+    s.expectation.minPlanSteps = 1;
+    s.expectation.maxPlanSteps = 10;
+    s.expectation.expectedActions = {"move"};
+    s.expectation.forbiddenActions = {"explode"};
     m.scenarios.push_back(s);
 
     const char* path = "test_project_model_tmp.json";
@@ -71,6 +76,45 @@ TEST(ProjectModel, RoundTrip) {
     EXPECT_EQ(m2.causalLinks[0].toPreconditionIdx, 0);
     ASSERT_EQ(m2.objects.size(), 1u); EXPECT_EQ(m2.objects[0].type, "robot");
     ASSERT_EQ(m2.scenarios.size(), 1u);
+    EXPECT_TRUE(m2.scenarios[0].expectation.shouldSucceed);
+    EXPECT_EQ(m2.scenarios[0].expectation.minPlanSteps, 1);
+    EXPECT_EQ(m2.scenarios[0].expectation.maxPlanSteps, 10);
+    EXPECT_EQ(m2.scenarios[0].expectation.expectedActions,
+              std::vector<std::string>{"move"});
+    EXPECT_EQ(m2.scenarios[0].expectation.forbiddenActions,
+              std::vector<std::string>{"explode"});
+    std::remove(path);
+}
+
+TEST(ProjectModel, LoadOldScenarioWithoutExpectationDefaults) {
+    const char* path = "test_old_scenario_tmp.json";
+    std::ofstream f(path);
+    f << R"json({
+  "version": 1,
+  "projectName": "OldScenarioProject",
+  "types": [],
+  "predicates": [],
+  "actions": [],
+  "causalLinks": [],
+  "objects": [],
+  "scenarios": [
+    {
+      "name": "nominal",
+      "initialState": [],
+      "goals": []
+    }
+  ]
+})json";
+    f.close();
+
+    ProjectModel m;
+    ASSERT_TRUE(m.load(path));
+    ASSERT_EQ(m.scenarios.size(), 1u);
+    EXPECT_TRUE(m.scenarios[0].expectation.shouldSucceed);
+    EXPECT_EQ(m.scenarios[0].expectation.minPlanSteps, 0);
+    EXPECT_EQ(m.scenarios[0].expectation.maxPlanSteps, 0);
+    EXPECT_TRUE(m.scenarios[0].expectation.expectedActions.empty());
+    EXPECT_TRUE(m.scenarios[0].expectation.forbiddenActions.empty());
     std::remove(path);
 }
 

@@ -101,18 +101,52 @@ void from_json(const nlohmann::json& j, FactRef& value) {
     j.at("objectNames").get_to(value.objectNames);
 }
 
+void to_json(nlohmann::json& j, const ScenarioExpectation& value) {
+    j = nlohmann::json{
+        {"shouldSucceed", value.shouldSucceed},
+        {"minPlanSteps", value.minPlanSteps},
+        {"maxPlanSteps", value.maxPlanSteps},
+        {"expectedActions", value.expectedActions},
+        {"forbiddenActions", value.forbiddenActions},
+    };
+}
+
+void from_json(const nlohmann::json& j, ScenarioExpectation& value) {
+    value = ScenarioExpectation{};
+    if (j.contains("shouldSucceed")) {
+        j.at("shouldSucceed").get_to(value.shouldSucceed);
+    }
+    if (j.contains("minPlanSteps")) {
+        j.at("minPlanSteps").get_to(value.minPlanSteps);
+    }
+    if (j.contains("maxPlanSteps")) {
+        j.at("maxPlanSteps").get_to(value.maxPlanSteps);
+    }
+    if (j.contains("expectedActions")) {
+        j.at("expectedActions").get_to(value.expectedActions);
+    }
+    if (j.contains("forbiddenActions")) {
+        j.at("forbiddenActions").get_to(value.forbiddenActions);
+    }
+}
+
 void to_json(nlohmann::json& j, const ScenarioDef& value) {
     j = nlohmann::json{
         {"name", value.name},
         {"initialState", value.initialState},
         {"goals", value.goals},
+        {"expectation", value.expectation},
     };
 }
 
 void from_json(const nlohmann::json& j, ScenarioDef& value) {
+    value = ScenarioDef{};
     j.at("name").get_to(value.name);
     j.at("initialState").get_to(value.initialState);
     j.at("goals").get_to(value.goals);
+    if (j.contains("expectation")) {
+        j.at("expectation").get_to(value.expectation);
+    }
 }
 
 void to_json(nlohmann::json& j, const ProjectModel& value) {

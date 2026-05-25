@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
+#include <cstring>
 #include <exception>
 #include <fstream>
 #include <iterator>
@@ -295,6 +296,134 @@ static void renderFactSection(const char* title,
   ImGui::PopID();
 }
 
+static bool scenarioNameTaken(const ProjectModel& model,
+                              const std::string& name,
+                              int exceptIdx = -1) {
+  for (int si = 0; si < static_cast<int>(model.scenarios.size()); ++si) {
+    if (si != exceptIdx &&
+        model.scenarios[static_cast<size_t>(si)].name == name) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static std::string uniqueScenarioCopyName(const ProjectModel& model,
+                                          const std::string& originalName) {
+  const std::string baseName = originalName + " (copy)";
+  if (!scenarioNameTaken(model, baseName)) {
+    return baseName;
+  }
+
+  for (int copyNumber = 2; copyNumber < 1000; ++copyNumber) {
+    const std::string candidate =
+        originalName + " (copy " + std::to_string(copyNumber) + ")";
+    if (!scenarioNameTaken(model, candidate)) {
+      return candidate;
+    }
+  }
+
+  return originalName + " (copy)";
+}
+
+static std::vector<std::string>& expectationActionList(ProjectModel& model,
+                                                       int scenarioIdx,
+                                                       bool forbidden) {
+  ScenarioExpectation& expectation =
+      model.scenarios[static_cast<size_t>(scenarioIdx)].expectation;
+  return forbidden ? expectation.forbiddenActions : expectation.expectedActions;
+}
+
+static void renderExpectationActionSection(const char* title,
+                                           const char* tableId,
+                                           const char* removeCommandLabel,
+                                           const char* addCommandLabel,
+                                           std::vector<std::string>& actionNames,
+                                           ProjectModel& model,
+                                           CommandStack& stack,
+                                           int scenarioIdx,
+                                           bool forbidden,
+                                           int& selectedAction) {
+  ImGui::TextUnformatted(title);
+  if (ImGui::BeginTable(tableId, 2,
+                        ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg)) {
+    ImGui::TableSetupColumn("Action schema");
+    ImGui::TableSetupColumn("");
+    ImGui::TableHeadersRow();
+    for (int ai = 0; ai < static_cast<int>(actionNames.size()); ++ai) {
+      ImGui::TableNextRow();
+      ImGui::TableSetColumnIndex(0);
+      ImGui::TextUnformatted(actionNames[static_cast<size_t>(ai)].c_str());
+      ImGui::TableSetColumnIndex(1);
+      ImGui::PushID(ai);
+      if (ImGui::SmallButton("Remove")) {
+        const int removeIdx = ai;
+        stack.execute(model, removeCommandLabel,
+                      [scenarioIdx, forbidden, removeIdx](ProjectModel& target) {
+          std::vector<std::string>& names =
+              expectationActionList(target, scenarioIdx, forbidden);
+          if (removeIdx >= 0 && removeIdx < static_cast<int>(names.size())) {
+            names.erase(names.begin() + removeIdx);
+          }
+        });
+        ImGui::PopID();
+        --ai;
+        continue;
+      }
+      ImGui::PopID();
+    }
+    ImGui::EndTable();
+  }
+
+  ImGui::PushID(tableId);
+  if (model.actions.empty()) {
+    ImGui::TextDisabled("No action schemas available");
+    ImGui::PopID();
+    return;
+  }
+
+  if (selectedAction < 0 ||
+      selectedAction >= static_cast<int>(model.actions.size())) {
+    selectedAction = 0;
+  }
+
+  const char* preview =
+      model.actions[static_cast<size_t>(selectedAction)].name.c_str();
+  ImGui::SetNextItemWidth(180.0F);
+  if (ImGui::BeginCombo("Action", preview)) {
+    for (int ai = 0; ai < static_cast<int>(model.actions.size()); ++ai) {
+      const bool selected = (ai == selectedAction);
+      if (ImGui::Selectable(model.actions[static_cast<size_t>(ai)].name.c_str(),
+                            selected)) {
+        selectedAction = ai;
+      }
+      if (selected) {
+        ImGui::SetItemDefaultFocus();
+      }
+    }
+    ImGui::EndCombo();
+  }
+  ImGui::SameLine();
+  if (ImGui::SmallButton("Add")) {
+    const std::string actionName =
+        model.actions[static_cast<size_t>(selectedAction)].name;
+    const bool alreadyListed =
+        std::find(actionNames.begin(), actionNames.end(), actionName) !=
+        actionNames.end();
+    if (!actionName.empty() && !alreadyListed) {
+      stack.execute(model, addCommandLabel,
+                    [scenarioIdx, forbidden, actionName](ProjectModel& target) {
+        std::vector<std::string>& names =
+            expectationActionList(target, scenarioIdx, forbidden);
+        if (std::find(names.begin(), names.end(), actionName) == names.end()) {
+          names.push_back(actionName);
+        }
+      });
+    }
+  }
+  ImGui::PopID();
+}
+
 AppShell::AppShell()
   : projectName("[No Project]"),
     validationState("Not validated"),
@@ -557,10 +686,24 @@ void AppShell::renderDomainTab() {
     }
 
     ImGui::SameLine();
-    const bool hasSelection = (m_selectedScenarioIdx >= 0);
-    if (!hasSelection) {
+    bool hasSelection = (m_selectedScenarioIdx >= 0);
+    const bool scenarioButtonsDisabled = !hasSelection;
+    if (scenarioButtonsDisabled) {
       ImGui::BeginDisabled();
     }
+    if (ImGui::SmallButton("Duplicate") && hasSelection) {
+      const int duplicateIdx = m_selectedScenarioIdx;
+      const std::string copyName = uniqueScenarioCopyName(
+          m_model, m_model.scenarios[static_cast<size_t>(duplicateIdx)].name);
+      m_commandStack.execute(m_model, "Duplicate scenario",
+                             [duplicateIdx, copyName](ProjectModel& model) {
+        ScenarioDef scenario = model.scenarios[static_cast<size_t>(duplicateIdx)];
+        scenario.name = copyName;
+        model.scenarios.push_back(std::move(scenario));
+      });
+      m_selectedScenarioIdx = static_cast<int>(m_model.scenarios.size()) - 1;
+    }
+    ImGui::SameLine();
     if (ImGui::SmallButton("Delete Scenario") && hasSelection) {
       const int deleteIdx = m_selectedScenarioIdx;
       m_commandStack.execute(m_model, "Delete scenario", [deleteIdx](ProjectModel& model) {
@@ -571,8 +714,9 @@ void AppShell::renderDomainTab() {
       } else if (m_selectedScenarioIdx >= static_cast<int>(m_model.scenarios.size())) {
         m_selectedScenarioIdx = static_cast<int>(m_model.scenarios.size()) - 1;
       }
+      hasSelection = (m_selectedScenarioIdx >= 0);
     }
-    if (!hasSelection) {
+    if (scenarioButtonsDisabled) {
       ImGui::EndDisabled();
     }
 
@@ -597,6 +741,49 @@ void AppShell::renderDomainTab() {
       }
     }
 
+    static char s_renameScenarioName[64] = {};
+    static int s_renameScenarioIdx = -2;
+    static std::string s_renameScenarioSource;
+    if (hasSelection) {
+      const std::string currentName =
+          m_model.scenarios[static_cast<size_t>(m_selectedScenarioIdx)].name;
+      if (s_renameScenarioIdx != m_selectedScenarioIdx ||
+          s_renameScenarioSource != currentName) {
+        std::snprintf(s_renameScenarioName,
+                      sizeof(s_renameScenarioName),
+                      "%s",
+                      currentName.c_str());
+        s_renameScenarioIdx = m_selectedScenarioIdx;
+        s_renameScenarioSource = currentName;
+      }
+    } else {
+      s_renameScenarioName[0] = '\0';
+      s_renameScenarioIdx = -2;
+      s_renameScenarioSource.clear();
+    }
+
+    if (!hasSelection) {
+      ImGui::BeginDisabled();
+    }
+    ImGui::InputText("Rename to##scenario", s_renameScenarioName,
+                     sizeof(s_renameScenarioName));
+    ImGui::SameLine();
+    if (ImGui::Button("Rename") && hasSelection) {
+      const int renameIdx = m_selectedScenarioIdx;
+      const std::string newName = s_renameScenarioName;
+      if (!newName.empty() &&
+          !scenarioNameTaken(m_model, newName, renameIdx)) {
+        m_commandStack.execute(m_model, "Rename scenario",
+                               [renameIdx, newName](ProjectModel& model) {
+          model.scenarios[static_cast<size_t>(renameIdx)].name = newName;
+        });
+        s_renameScenarioSource = newName;
+      }
+    }
+    if (!hasSelection) {
+      ImGui::EndDisabled();
+    }
+
     if (m_selectedScenarioIdx >= 0 &&
         m_selectedScenarioIdx < static_cast<int>(m_model.scenarios.size())) {
       ScenarioDef& scenario =
@@ -616,6 +803,67 @@ void AppShell::renderDomainTab() {
                         "Remove goal fact", "Add goal fact",
                         scenario.goals, m_model, m_commandStack,
                         s_goalPredIdx, s_goalArgs, sizeof(s_goalArgs));
+      if (ImGui::CollapsingHeader("Expected outcome")) {
+        ScenarioExpectation& expectation = scenario.expectation;
+        bool shouldSucceed = expectation.shouldSucceed;
+        if (ImGui::Checkbox("Should succeed (expect feasible)",
+                            &shouldSucceed)) {
+          const int scenarioIdx = m_selectedScenarioIdx;
+          m_commandStack.execute(m_model, "Set scenario expected success",
+                                 [scenarioIdx, shouldSucceed](ProjectModel& model) {
+            model.scenarios[static_cast<size_t>(scenarioIdx)]
+                .expectation.shouldSucceed = shouldSucceed;
+          });
+        }
+
+        int minPlanSteps = expectation.minPlanSteps;
+        if (ImGui::InputInt("Min plan steps", &minPlanSteps)) {
+          const int scenarioIdx = m_selectedScenarioIdx;
+          minPlanSteps = std::max(0, minPlanSteps);
+          m_commandStack.execute(m_model, "Set scenario min plan steps",
+                                 [scenarioIdx, minPlanSteps](ProjectModel& model) {
+            model.scenarios[static_cast<size_t>(scenarioIdx)]
+                .expectation.minPlanSteps = minPlanSteps;
+          });
+        }
+
+        int maxPlanSteps = expectation.maxPlanSteps;
+        if (ImGui::InputInt("Max plan steps", &maxPlanSteps)) {
+          const int scenarioIdx = m_selectedScenarioIdx;
+          maxPlanSteps = std::max(0, maxPlanSteps);
+          m_commandStack.execute(m_model, "Set scenario max plan steps",
+                                 [scenarioIdx, maxPlanSteps](ProjectModel& model) {
+            model.scenarios[static_cast<size_t>(scenarioIdx)]
+                .expectation.maxPlanSteps = maxPlanSteps;
+          });
+        }
+        ImGui::TextDisabled("Use 0 for no bound.");
+
+        static int s_expectedActionIdx = 0;
+        static int s_forbiddenActionIdx = 0;
+        ImGui::Separator();
+        renderExpectationActionSection("Expected actions",
+                                       "##expectedactions",
+                                       "Remove expected action",
+                                       "Add expected action",
+                                       expectation.expectedActions,
+                                       m_model,
+                                       m_commandStack,
+                                       m_selectedScenarioIdx,
+                                       false,
+                                       s_expectedActionIdx);
+        ImGui::Separator();
+        renderExpectationActionSection("Forbidden actions",
+                                       "##forbiddenactions",
+                                       "Remove forbidden action",
+                                       "Add forbidden action",
+                                       expectation.forbiddenActions,
+                                       m_model,
+                                       m_commandStack,
+                                       m_selectedScenarioIdx,
+                                       true,
+                                       s_forbiddenActionIdx);
+      }
     }
   }
   ImGui::EndChild();
@@ -1082,6 +1330,42 @@ void AppShell::selfTestAddGoal(int scenarioIdx,
       objectNames
     });
   });
+}
+
+void AppShell::selfTestSetScenarioExpectation(int scenarioIdx,
+                                              bool shouldSucceed,
+                                              int minSteps,
+                                              int maxSteps,
+                                              std::vector<std::string> expected,
+                                              std::vector<std::string> forbidden) {
+  if (scenarioIdx < 0 || scenarioIdx >= static_cast<int>(m_model.scenarios.size())) {
+    return;
+  }
+  minSteps = std::max(0, minSteps);
+  maxSteps = std::max(0, maxSteps);
+  m_commandStack.execute(m_model, "Set scenario expectation",
+                         [scenarioIdx,
+                          shouldSucceed,
+                          minSteps,
+                          maxSteps,
+                          expected,
+                          forbidden](ProjectModel& model) {
+    ScenarioExpectation& expectation =
+        model.scenarios[static_cast<size_t>(scenarioIdx)].expectation;
+    expectation.shouldSucceed = shouldSucceed;
+    expectation.minPlanSteps = minSteps;
+    expectation.maxPlanSteps = maxSteps;
+    expectation.expectedActions = expected;
+    expectation.forbiddenActions = forbidden;
+  });
+}
+
+const ScenarioExpectation& AppShell::selfTestScenarioExpectation(int scenarioIdx) const {
+  static const ScenarioExpectation kDefaultExpectation;
+  if (scenarioIdx < 0 || scenarioIdx >= static_cast<int>(m_model.scenarios.size())) {
+    return kDefaultExpectation;
+  }
+  return m_model.scenarios[static_cast<size_t>(scenarioIdx)].expectation;
 }
 
 void AppShell::selfTestRunFeasibility(const std::string& scenarioName) {
