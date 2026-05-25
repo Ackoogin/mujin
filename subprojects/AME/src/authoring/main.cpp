@@ -326,6 +326,26 @@ int main(int argc, char* argv[]) {
   ImGui::CreateContext();
   ImGuiIO& io = ImGui::GetIO();
   applyHoloCyanTheme();
+
+  // Load JetBrains Mono if present alongside the executable (copied there by
+  // the build's post-build step). SDL_GetBasePath returns the directory of
+  // the running exe so the file resolves regardless of CWD. Silently falls
+  // back to the default ProggyClean if the file isn't found.
+  {
+    char* basePath = SDL_GetBasePath();
+    if (basePath != nullptr) {
+      std::string fontPath = std::string(basePath) + "JetBrainsMono-Regular.ttf";
+      SDL_free(basePath);
+      if (FILE* f = std::fopen(fontPath.c_str(), "rb")) {
+        std::fclose(f);
+        ImFontConfig cfg;
+        cfg.OversampleH = 2;
+        cfg.OversampleV = 2;
+        io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 15.0F, &cfg);
+      }
+    }
+  }
+
   // Disable imgui.ini writes during self-test to keep the filesystem clean
   if (selfTestMode) {
     io.IniFilename = nullptr;

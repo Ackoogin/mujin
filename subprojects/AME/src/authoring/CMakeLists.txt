@@ -39,10 +39,24 @@ FetchContent_Declare(
   GIT_SHALLOW FALSE
 )
 
+# JetBrains Mono — distinctive technical UI font that fits the HUD aesthetic.
+# Vendored at build time and copied next to the executable so the runtime can
+# load it via AddFontFromFileTTF.
+FetchContent_Declare(
+  jetbrains_mono
+  GIT_REPOSITORY https://github.com/JetBrains/JetBrainsMono
+  GIT_TAG v2.304
+  GIT_SHALLOW TRUE
+)
+
 FetchContent_MakeAvailable(imgui imgui_node_editor sdl2)
 FetchContent_GetProperties(stb)
 if(NOT stb_POPULATED)
   FetchContent_Populate(stb)
+endif()
+FetchContent_GetProperties(jetbrains_mono)
+if(NOT jetbrains_mono_POPULATED)
+  FetchContent_Populate(jetbrains_mono)
 endif()
 
 # nlohmann_json is already provided by subprojects/PYRAMID as an interface target
@@ -138,3 +152,11 @@ if(WIN32)
     COMMENT "Copying SDL2.dll to output directory"
   )
 endif()
+
+# Copy JetBrains Mono Regular next to the executable so runtime can load it.
+add_custom_command(TARGET ame_authoring_tool POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    ${jetbrains_mono_SOURCE_DIR}/fonts/ttf/JetBrainsMono-Regular.ttf
+    $<TARGET_FILE_DIR:ame_authoring_tool>/JetBrainsMono-Regular.ttf
+  COMMENT "Copying JetBrainsMono-Regular.ttf to output directory"
+)

@@ -848,8 +848,9 @@ void AppShell::renderDomainTab() {
       preview = m_model.scenarios[static_cast<size_t>(m_selectedScenarioIdx)].name.c_str();
     }
 
-    ImGui::SetNextItemWidth(220.0F);
-    if (ImGui::BeginCombo("Scenario", preview)) {
+    // Combo gets the full row so its preview text isn't clipped.
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::BeginCombo("##scenarioCombo", preview)) {
       for (int si = 0; si < static_cast<int>(m_model.scenarios.size()); ++si) {
         const bool selected = (si == m_selectedScenarioIdx);
         if (ImGui::Selectable(m_model.scenarios[static_cast<size_t>(si)].name.c_str(),
@@ -866,7 +867,7 @@ void AppShell::renderDomainTab() {
       ImGui::EndCombo();
     }
 
-    ImGui::SameLine();
+    // Duplicate / Delete on their own row below the combo so labels fit.
     bool hasSelection = (m_selectedScenarioIdx >= 0);
     const bool scenarioButtonsDisabled = !hasSelection;
     if (scenarioButtonsDisabled) {
@@ -885,7 +886,7 @@ void AppShell::renderDomainTab() {
       m_selectedScenarioIdx = static_cast<int>(m_model.scenarios.size()) - 1;
     }
     ImGui::SameLine();
-    if (ImGui::SmallButton("Delete Scenario") && hasSelection) {
+    if (ImGui::SmallButton("Delete") && hasSelection) {
       const int deleteIdx = m_selectedScenarioIdx;
       m_commandStack.execute(m_model, "Delete scenario", [deleteIdx](ProjectModel& model) {
         model.scenarios.erase(model.scenarios.begin() + deleteIdx);
