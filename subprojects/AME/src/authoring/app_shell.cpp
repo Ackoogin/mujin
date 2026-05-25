@@ -469,16 +469,42 @@ void AppShell::renderMenuBar() {
         lastOperation = "New project";
       }
       if (ImGui::MenuItem("Open...")) {
-        lastOperation = "TODO: open dialog";
+        // File dialog deferred; read from a conventional hardcoded path.
+        const std::string slug = slugifyForFilename(m_model.projectName);
+        const std::string path = "./" + slug + ".ameproj.json";
+        ProjectModel loaded;
+        if (loaded.load(path)) {
+          m_commandStack.clear();
+          m_model = std::move(loaded);
+          projectName = m_model.projectName;
+          m_lastValidation = ValidationReport{};
+          m_lastPlan = ame::PlanResult{};
+          m_lastPlanStepLabels.clear();
+          m_planGraph.clear();
+          m_btGraph.setXml("");
+          m_hasLastPlan = false;
+          m_selectedScenarioIdx = -1;
+          validationState = "Not validated";
+          lastOperation = "Loaded " + path;
+        } else {
+          lastOperation = "Failed to load " + path;
+        }
       }
       if (ImGui::MenuItem("Save")) {
-        lastOperation = "TODO: save";
+        const std::string slug = slugifyForFilename(m_model.projectName);
+        const std::string path = "./" + slug + ".ameproj.json";
+        lastOperation = m_model.save(path) ? "Saved " + path
+                                            : "Failed to save " + path;
         if (m_autoValidateOnSave) {
           runValidation();
         }
       }
       if (ImGui::MenuItem("Save As...")) {
-        lastOperation = "TODO: save-as dialog";
+        // No native file picker yet; uses the same path as Save.
+        const std::string slug = slugifyForFilename(m_model.projectName);
+        const std::string path = "./" + slug + ".ameproj.json";
+        lastOperation = m_model.save(path) ? "Saved as " + path
+                                            : "Failed to save as " + path;
         if (m_autoValidateOnSave) {
           runValidation();
         }
