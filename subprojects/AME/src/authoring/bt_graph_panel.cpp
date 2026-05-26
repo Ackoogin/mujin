@@ -16,6 +16,8 @@ constexpr int kNodeBase = 12000;
 constexpr int kInputPinBase = 13000;
 constexpr int kOutputPinBase = 14000;
 constexpr int kLinkBase = 15000;
+constexpr float kNodeGapX = 230.0f;
+constexpr float kNodeGapY = 130.0f;
 
 struct ParsedTag {
   std::string name;
@@ -360,6 +362,76 @@ void BtGraphPanel::setXml(const std::string& xml) {
     return dstIdx;
   };
   copySubtree(rootIdx, -1);
+  updateVisibility();
+}
+
+void BtGraphPanel::collapseAll() {
+  for (BtNode& node : m_nodes) {
+    node.collapsed = !node.children.empty();
+  }
+  updateVisibility();
+  m_layoutDone = false;
+}
+
+void BtGraphPanel::expandAll() {
+  for (BtNode& node : m_nodes) {
+    node.collapsed = false;
+  }
+  updateVisibility();
+  m_layoutDone = false;
+}
+
+void BtGraphPanel::updateVisibility() {
+  for (int i = 0; i < static_cast<int>(m_nodes.size()); ++i) {
+    BtNode& node = m_nodes[static_cast<size_t>(i)];
+    if (node.parent < 0) {
+      node.visible = true;
+      node.depth = 0;
+      continue;
+    }
+
+    const BtNode& parent = m_nodes[static_cast<size_t>(node.parent)];
+    node.visible = parent.visible && !parent.collapsed;
+    node.depth = parent.depth + 1;
+  }
+}
+
+void BtGraphPanel::applyLayout() {
+  updateVisibility();
+
+  std::vector<int> depthCounts;
+  for (int i = 0; i < static_cast<int>(m_nodes.size()); ++i) {
+    BtNode& node = m_nodes[static_cast<size_t>(i)];
+    if (!node.visible) {
+      continue;
+    }
+    if (depthCounts.size() <= static_cast<size_t>(node.depth)) {
+      depthCounts.resize(static_cast<size_t>(node.depth + 1), 0);
+    }
+    node.siblingIdx = depthCounts[static_cast<size_t>(node.depth)]++;
+    ed::SetNodePosition(kNodeBase + i,
+                        ImVec2(80.0f + static_cast<float>(node.siblingIdx) * kNodeGapX,
+                               80.0f + static_cast<float>(node.depth) * kNodeGapY));
+  }
+  m_layoutDone = true;
+}
+
+int BtGraphPanel::selectedNodeFromEditor() const {
+  const int total = ed::GetSelectedObjectCount();
+  if (total <= 0) {
+    return -1;
+  }
+
+  std::vector<ed::NodeId> selectedNodes(static_cast<size_t>(total));
+  const int count = ed::GetSelectedNodes(selectedNodes.data(), total);
+  for (int i = 0; i < count; ++i) {
+    const int id = static_cast<int>(selectedNodes[static_cast<size_t>(i)].Get());
+    if (id >= kNodeBase && id < kNodeBase + static_cast<int>(m_nodes.size()) &&
+        m_nodes[static_cast<size_t>(id - kNodeBase)].visible) {
+      return id - kNodeBase;
+    }
+  }
+  return -1;
 }
 
 void BtGraphPanel::render() {
@@ -377,23 +449,16 @@ void BtGraphPanel::render() {
   ed::Begin("##BtGraph");
 
   if (!m_layoutDone) {
-    std::vector<int> depthCounts;
-    for (int i = 0; i < static_cast<int>(m_nodes.size()); ++i) {
-      BtNode& node = m_nodes[static_cast<size_t>(i)];
-      node.depth = node.parent < 0 ? 0 : m_nodes[static_cast<size_t>(node.parent)].depth + 1;
-      if (depthCounts.size() <= static_cast<size_t>(node.depth)) {
-        depthCounts.resize(static_cast<size_t>(node.depth + 1), 0);
-      }
-      node.siblingIdx = depthCounts[static_cast<size_t>(node.depth)]++;
-      ed::SetNodePosition(kNodeBase + i,
-                          ImVec2(80.0f + static_cast<float>(node.siblingIdx) * 220.0f,
-                                 80.0f + static_cast<float>(node.depth) * 130.0f));
-    }
-    m_layoutDone = true;
+    applyLayout();
   }
 
+  bool collapseChanged = false;
   for (int i = 0; i < static_cast<int>(m_nodes.size()); ++i) {
-    const BtNode& node = m_nodes[static_cast<size_t>(i)];
+    BtNode& node = m_nodes[static_cast<size_t>(i)];
+    if (!node.visible) {
+      continue;
+    }
+
     const ImVec4 bg = nodeColor(node.kind);
     ed::PushStyleColor(ed::StyleColor_NodeBg, bg);
     ed::PushStyleColor(ed::StyleColor_NodeBorder, ImVec4(0.75f, 0.75f, 0.80f, 0.95f));
@@ -403,6 +468,15 @@ void BtGraphPanel::render() {
     ImGui::TextUnformatted("");
     ed::EndPin();
     ImGui::SameLine();
+    if (!node.children.empty()) {
+      const std::string toggleLabel =
+          std::string(node.collapsed ? "+" : "-") + "##bt_toggle_" + std::to_string(i);
+      if (ImGui::SmallButton(toggleLabel.c_str())) {
+        node.collapsed = !node.collapsed;
+        collapseChanged = true;
+      }
+      ImGui::SameLine();
+    }
     ImGui::BeginGroup();
     ImGui::TextUnformatted(node.label.c_str());
     if (!node.attributes.empty()) {
@@ -421,7 +495,11 @@ void BtGraphPanel::render() {
 
   for (int i = 0; i < static_cast<int>(m_nodes.size()); ++i) {
     const BtNode& node = m_nodes[static_cast<size_t>(i)];
-    if (node.parent < 0) {
+    if (!node.visible || node.parent < 0) {
+      continue;
+    }
+    const BtNode& parent = m_nodes[static_cast<size_t>(node.parent)];
+    if (!parent.visible || parent.collapsed) {
       continue;
     }
     ed::Link(kLinkBase + i,
@@ -430,22 +508,16 @@ void BtGraphPanel::render() {
              ImVec4(0.4f, 0.4f, 0.4f, 1.0f));
   }
 
+  if (collapseChanged) {
+    updateVisibility();
+    m_layoutDone = false;
+  }
+
   ed::Suspend();
   ed::Resume();
   ed::End();
 
-  m_selectedNode = -1;
-  const int total = ed::GetSelectedObjectCount();
-  if (total > 0) {
-    std::vector<ed::NodeId> selectedNodes(static_cast<size_t>(total));
-    const int count = ed::GetSelectedNodes(selectedNodes.data(), total);
-    for (int i = 0; i < count; ++i) {
-      const int id = static_cast<int>(selectedNodes[static_cast<size_t>(i)].Get());
-      if (id >= kNodeBase && id < kNodeBase + static_cast<int>(m_nodes.size())) {
-        m_selectedNode = id - kNodeBase;
-      }
-    }
-  }
+  m_selectedNode = selectedNodeFromEditor();
 
   ed::SetCurrentEditor(nullptr);
 }

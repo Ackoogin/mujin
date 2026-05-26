@@ -1,0 +1,1563 @@
+{
+  "actions": [
+    {
+      "addEffects": [
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "preflight-done"
+        }
+      ],
+      "btBinding": {
+        "nodeType": "",
+        "reactive": false,
+        "subtreeXml": ""
+      },
+      "delEffects": [],
+      "name": "preflight-check",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?l",
+          "type": "base"
+        }
+      ],
+      "posX": 80.0,
+      "posY": 300.0,
+      "preconditions": [
+        {
+          "argNames": [
+            "?r",
+            "?l"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "on-ground"
+        },
+        {
+          "argNames": [],
+          "predicateName": "nav-operational"
+        },
+        {
+          "argNames": [],
+          "predicateName": "engines-operational"
+        },
+        {
+          "argNames": [],
+          "predicateName": "comms-available"
+        }
+      ]
+    },
+    {
+      "addEffects": [
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        }
+      ],
+      "btBinding": {
+        "nodeType": "",
+        "reactive": false,
+        "subtreeXml": ""
+      },
+      "delEffects": [
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "on-ground"
+        }
+      ],
+      "name": "takeoff",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?l",
+          "type": "base"
+        }
+      ],
+      "posX": 340.0,
+      "posY": 300.0,
+      "preconditions": [
+        {
+          "argNames": [
+            "?r",
+            "?l"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "on-ground"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "preflight-done"
+        },
+        {
+          "argNames": [],
+          "predicateName": "nav-operational"
+        },
+        {
+          "argNames": [],
+          "predicateName": "engines-operational"
+        },
+        {
+          "argNames": [
+            "?l"
+          ],
+          "predicateName": "airspace-clear"
+        },
+        {
+          "argNames": [
+            "?l"
+          ],
+          "predicateName": "weather-ok"
+        },
+        {
+          "argNames": [],
+          "predicateName": "comms-available"
+        }
+      ]
+    },
+    {
+      "addEffects": [
+        {
+          "argNames": [
+            "?r",
+            "?to"
+          ],
+          "predicateName": "at"
+        }
+      ],
+      "btBinding": {
+        "nodeType": "",
+        "reactive": false,
+        "subtreeXml": ""
+      },
+      "delEffects": [
+        {
+          "argNames": [
+            "?r",
+            "?from"
+          ],
+          "predicateName": "at"
+        }
+      ],
+      "name": "fly",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?from",
+          "type": "location"
+        },
+        {
+          "name": "?to",
+          "type": "location"
+        }
+      ],
+      "posX": 600.0,
+      "posY": 300.0,
+      "preconditions": [
+        {
+          "argNames": [
+            "?r",
+            "?from"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        },
+        {
+          "argNames": [],
+          "predicateName": "nav-operational"
+        },
+        {
+          "argNames": [],
+          "predicateName": "engines-operational"
+        },
+        {
+          "argNames": [
+            "?to"
+          ],
+          "predicateName": "airspace-clear"
+        },
+        {
+          "argNames": [
+            "?to"
+          ],
+          "predicateName": "weather-ok"
+        },
+        {
+          "argNames": [],
+          "predicateName": "comms-available"
+        }
+      ]
+    },
+    {
+      "addEffects": [
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "mission-complete"
+        }
+      ],
+      "btBinding": {
+        "nodeType": "",
+        "reactive": false,
+        "subtreeXml": ""
+      },
+      "delEffects": [],
+      "name": "execute-mission",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?l",
+          "type": "waypoint"
+        }
+      ],
+      "posX": 860.0,
+      "posY": 300.0,
+      "preconditions": [
+        {
+          "argNames": [
+            "?r",
+            "?l"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        },
+        {
+          "argNames": [],
+          "predicateName": "comms-available"
+        },
+        {
+          "argNames": [
+            "?l"
+          ],
+          "predicateName": "mission-objective"
+        }
+      ]
+    },
+    {
+      "addEffects": [
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "on-ground"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "landed-safe"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "safe-state"
+        }
+      ],
+      "btBinding": {
+        "nodeType": "",
+        "reactive": false,
+        "subtreeXml": ""
+      },
+      "delEffects": [
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        }
+      ],
+      "name": "land",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?l",
+          "type": "base"
+        }
+      ],
+      "posX": 1120.0,
+      "posY": 300.0,
+      "preconditions": [
+        {
+          "argNames": [
+            "?r",
+            "?l"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        },
+        {
+          "argNames": [],
+          "predicateName": "nav-operational"
+        },
+        {
+          "argNames": [],
+          "predicateName": "engines-operational"
+        },
+        {
+          "argNames": [
+            "?l"
+          ],
+          "predicateName": "weather-ok"
+        }
+      ]
+    },
+    {
+      "addEffects": [
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "mission-aborted"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "safe-state"
+        }
+      ],
+      "btBinding": {
+        "nodeType": "",
+        "reactive": false,
+        "subtreeXml": ""
+      },
+      "delEffects": [],
+      "name": "abort-on-ground",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?l",
+          "type": "location"
+        }
+      ],
+      "posX": 1380.0,
+      "posY": 300.0,
+      "preconditions": [
+        {
+          "argNames": [
+            "?r",
+            "?l"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "on-ground"
+        }
+      ]
+    },
+    {
+      "addEffects": [
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "emergency-declared"
+        }
+      ],
+      "btBinding": {
+        "nodeType": "",
+        "reactive": false,
+        "subtreeXml": ""
+      },
+      "delEffects": [],
+      "name": "declare-emergency",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?l",
+          "type": "location"
+        }
+      ],
+      "posX": 1640.0,
+      "posY": 300.0,
+      "preconditions": [
+        {
+          "argNames": [
+            "?r",
+            "?l"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        }
+      ]
+    },
+    {
+      "addEffects": [
+        {
+          "argNames": [
+            "?r",
+            "?to"
+          ],
+          "predicateName": "at"
+        }
+      ],
+      "btBinding": {
+        "nodeType": "",
+        "reactive": false,
+        "subtreeXml": ""
+      },
+      "delEffects": [
+        {
+          "argNames": [
+            "?r",
+            "?from"
+          ],
+          "predicateName": "at"
+        }
+      ],
+      "name": "emergency-return-nav",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?from",
+          "type": "location"
+        },
+        {
+          "name": "?to",
+          "type": "base"
+        }
+      ],
+      "posX": 1900.0,
+      "posY": 300.0,
+      "preconditions": [
+        {
+          "argNames": [
+            "?r",
+            "?from"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "emergency-declared"
+        },
+        {
+          "argNames": [],
+          "predicateName": "nav-operational"
+        },
+        {
+          "argNames": [],
+          "predicateName": "engines-operational"
+        },
+        {
+          "argNames": [
+            "?to"
+          ],
+          "predicateName": "airspace-clear"
+        }
+      ]
+    },
+    {
+      "addEffects": [
+        {
+          "argNames": [
+            "?r",
+            "?to"
+          ],
+          "predicateName": "at"
+        }
+      ],
+      "btBinding": {
+        "nodeType": "",
+        "reactive": false,
+        "subtreeXml": ""
+      },
+      "delEffects": [
+        {
+          "argNames": [
+            "?r",
+            "?from"
+          ],
+          "predicateName": "at"
+        }
+      ],
+      "name": "emergency-return-gps",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?from",
+          "type": "location"
+        },
+        {
+          "name": "?to",
+          "type": "base"
+        }
+      ],
+      "posX": 2160.0,
+      "posY": 300.0,
+      "preconditions": [
+        {
+          "argNames": [
+            "?r",
+            "?from"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "emergency-declared"
+        },
+        {
+          "argNames": [],
+          "predicateName": "gps-available"
+        },
+        {
+          "argNames": [],
+          "predicateName": "engines-operational"
+        },
+        {
+          "argNames": [
+            "?to"
+          ],
+          "predicateName": "airspace-clear"
+        }
+      ]
+    },
+    {
+      "addEffects": [
+        {
+          "argNames": [
+            "?r",
+            "?to"
+          ],
+          "predicateName": "at"
+        }
+      ],
+      "btBinding": {
+        "nodeType": "",
+        "reactive": false,
+        "subtreeXml": ""
+      },
+      "delEffects": [
+        {
+          "argNames": [
+            "?r",
+            "?from"
+          ],
+          "predicateName": "at"
+        }
+      ],
+      "name": "emergency-return-inertial",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?from",
+          "type": "location"
+        },
+        {
+          "name": "?to",
+          "type": "base"
+        }
+      ],
+      "posX": 2420.0,
+      "posY": 300.0,
+      "preconditions": [
+        {
+          "argNames": [
+            "?r",
+            "?from"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "emergency-declared"
+        },
+        {
+          "argNames": [],
+          "predicateName": "inertial-nav-available"
+        },
+        {
+          "argNames": [],
+          "predicateName": "engines-operational"
+        }
+      ]
+    },
+    {
+      "addEffects": [
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "on-ground"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "landed-safe"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "emergency-declared"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "safe-state"
+        }
+      ],
+      "btBinding": {
+        "nodeType": "",
+        "reactive": false,
+        "subtreeXml": ""
+      },
+      "delEffects": [
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        }
+      ],
+      "name": "emergency-land",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?l",
+          "type": "location"
+        }
+      ],
+      "posX": 2680.0,
+      "posY": 300.0,
+      "preconditions": [
+        {
+          "argNames": [
+            "?r",
+            "?l"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        }
+      ]
+    },
+    {
+      "addEffects": [
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "on-ground"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "landed-safe"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "safe-state"
+        }
+      ],
+      "btBinding": {
+        "nodeType": "",
+        "reactive": false,
+        "subtreeXml": ""
+      },
+      "delEffects": [
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        }
+      ],
+      "name": "emergency-land-at-base",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?l",
+          "type": "base"
+        }
+      ],
+      "posX": 2940.0,
+      "posY": 300.0,
+      "preconditions": [
+        {
+          "argNames": [
+            "?r",
+            "?l"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "emergency-declared"
+        }
+      ]
+    },
+    {
+      "addEffects": [
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "mission-complete"
+        }
+      ],
+      "btBinding": {
+        "nodeType": "",
+        "reactive": false,
+        "subtreeXml": ""
+      },
+      "delEffects": [],
+      "name": "execute-mission-critical",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?l",
+          "type": "waypoint"
+        }
+      ],
+      "posX": 3200.0,
+      "posY": 300.0,
+      "preconditions": [
+        {
+          "argNames": [
+            "?r",
+            "?l"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        },
+        {
+          "argNames": [],
+          "predicateName": "mission-priority-critical"
+        },
+        {
+          "argNames": [
+            "?l"
+          ],
+          "predicateName": "mission-objective"
+        }
+      ]
+    },
+    {
+      "addEffects": [
+        {
+          "argNames": [
+            "?r",
+            "?to"
+          ],
+          "predicateName": "at"
+        }
+      ],
+      "btBinding": {
+        "nodeType": "",
+        "reactive": false,
+        "subtreeXml": ""
+      },
+      "delEffects": [
+        {
+          "argNames": [
+            "?r",
+            "?from"
+          ],
+          "predicateName": "at"
+        }
+      ],
+      "name": "fly-critical-gps",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?from",
+          "type": "location"
+        },
+        {
+          "name": "?to",
+          "type": "location"
+        }
+      ],
+      "posX": 3459.0,
+      "posY": 300.0,
+      "preconditions": [
+        {
+          "argNames": [
+            "?r",
+            "?from"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        },
+        {
+          "argNames": [],
+          "predicateName": "mission-priority-critical"
+        },
+        {
+          "argNames": [],
+          "predicateName": "engines-operational"
+        },
+        {
+          "argNames": [],
+          "predicateName": "gps-available"
+        },
+        {
+          "argNames": [
+            "?to"
+          ],
+          "predicateName": "airspace-clear"
+        }
+      ]
+    },
+    {
+      "addEffects": [
+        {
+          "argNames": [
+            "?r",
+            "?to"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "on-ground"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "vehicle-ditched"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "safe-state"
+        }
+      ],
+      "btBinding": {
+        "nodeType": "",
+        "reactive": false,
+        "subtreeXml": ""
+      },
+      "delEffects": [
+        {
+          "argNames": [
+            "?r",
+            "?from"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        }
+      ],
+      "name": "ditch-controlled-gps",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?from",
+          "type": "location"
+        },
+        {
+          "name": "?to",
+          "type": "location"
+        }
+      ],
+      "posX": 3720.0,
+      "posY": 300.0,
+      "preconditions": [
+        {
+          "argNames": [
+            "?r",
+            "?from"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "mission-complete"
+        },
+        {
+          "argNames": [],
+          "predicateName": "mission-priority-critical"
+        },
+        {
+          "argNames": [
+            "?to"
+          ],
+          "predicateName": "ditch-zone-designated"
+        },
+        {
+          "argNames": [],
+          "predicateName": "engines-operational"
+        },
+        {
+          "argNames": [],
+          "predicateName": "gps-available"
+        },
+        {
+          "argNames": [
+            "?to"
+          ],
+          "predicateName": "airspace-clear"
+        }
+      ]
+    },
+    {
+      "addEffects": [
+        {
+          "argNames": [
+            "?r",
+            "?to"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "on-ground"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "vehicle-ditched"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "safe-state"
+        }
+      ],
+      "btBinding": {
+        "nodeType": "",
+        "reactive": false,
+        "subtreeXml": ""
+      },
+      "delEffects": [
+        {
+          "argNames": [
+            "?r",
+            "?from"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        }
+      ],
+      "name": "ditch-controlled-inertial",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?from",
+          "type": "location"
+        },
+        {
+          "name": "?to",
+          "type": "location"
+        }
+      ],
+      "posX": 3980.0,
+      "posY": 300.0,
+      "preconditions": [
+        {
+          "argNames": [
+            "?r",
+            "?from"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "mission-complete"
+        },
+        {
+          "argNames": [],
+          "predicateName": "mission-priority-critical"
+        },
+        {
+          "argNames": [
+            "?to"
+          ],
+          "predicateName": "ditch-zone-designated"
+        },
+        {
+          "argNames": [],
+          "predicateName": "engines-operational"
+        },
+        {
+          "argNames": [],
+          "predicateName": "inertial-nav-available"
+        }
+      ]
+    },
+    {
+      "addEffects": [
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "on-ground"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "vehicle-ditched"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "safe-state"
+        }
+      ],
+      "btBinding": {
+        "nodeType": "",
+        "reactive": false,
+        "subtreeXml": ""
+      },
+      "delEffects": [
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        }
+      ],
+      "name": "terminal-ditch",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?l",
+          "type": "location"
+        }
+      ],
+      "posX": 4240.0,
+      "posY": 300.0,
+      "preconditions": [
+        {
+          "argNames": [
+            "?r",
+            "?l"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "airborne"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "mission-complete"
+        },
+        {
+          "argNames": [],
+          "predicateName": "mission-priority-critical"
+        },
+        {
+          "argNames": [
+            "?r"
+          ],
+          "predicateName": "emergency-declared"
+        }
+      ]
+    }
+  ],
+  "causalLinks": [],
+  "objects": [
+    {
+      "name": "uav1",
+      "type": "robot"
+    },
+    {
+      "name": "home",
+      "type": "base"
+    },
+    {
+      "name": "wp1",
+      "type": "waypoint"
+    }
+  ],
+  "predicates": [
+    {
+      "name": "at",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        },
+        {
+          "name": "?l",
+          "type": "location"
+        }
+      ],
+      "posX": 60.0,
+      "posY": 60.0
+    },
+    {
+      "name": "on-ground",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        }
+      ],
+      "posX": 290.0,
+      "posY": 60.0
+    },
+    {
+      "name": "airborne",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        }
+      ],
+      "posX": 520.0,
+      "posY": 60.0
+    },
+    {
+      "name": "preflight-done",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        }
+      ],
+      "posX": 750.0,
+      "posY": 60.0
+    },
+    {
+      "name": "mission-objective",
+      "params": [
+        {
+          "name": "?l",
+          "type": "location"
+        }
+      ],
+      "posX": 980.0,
+      "posY": 60.0
+    },
+    {
+      "name": "mission-complete",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        }
+      ],
+      "posX": 1210.0,
+      "posY": 60.0
+    },
+    {
+      "name": "nav-operational",
+      "params": [],
+      "posX": 1440.0,
+      "posY": 60.0
+    },
+    {
+      "name": "engines-operational",
+      "params": [],
+      "posX": 1670.0,
+      "posY": 60.0
+    },
+    {
+      "name": "comms-available",
+      "params": [],
+      "posX": 1900.0,
+      "posY": 60.0
+    },
+    {
+      "name": "gps-available",
+      "params": [],
+      "posX": 2130.0,
+      "posY": 60.0
+    },
+    {
+      "name": "inertial-nav-available",
+      "params": [],
+      "posX": 2360.0,
+      "posY": 60.0
+    },
+    {
+      "name": "airspace-clear",
+      "params": [
+        {
+          "name": "?l",
+          "type": "location"
+        }
+      ],
+      "posX": 2590.0,
+      "posY": 60.0
+    },
+    {
+      "name": "weather-ok",
+      "params": [
+        {
+          "name": "?l",
+          "type": "location"
+        }
+      ],
+      "posX": 2820.0,
+      "posY": 60.0
+    },
+    {
+      "name": "mission-priority-critical",
+      "params": [],
+      "posX": 3050.0,
+      "posY": 60.0
+    },
+    {
+      "name": "ditch-zone-designated",
+      "params": [
+        {
+          "name": "?l",
+          "type": "location"
+        }
+      ],
+      "posX": 3280.0,
+      "posY": 60.0
+    },
+    {
+      "name": "vehicle-ditched",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        }
+      ],
+      "posX": 3524.0,
+      "posY": 49.0
+    },
+    {
+      "name": "mission-aborted",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        }
+      ],
+      "posX": 3732.0,
+      "posY": 49.0
+    },
+    {
+      "name": "emergency-declared",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        }
+      ],
+      "posX": 3970.0,
+      "posY": 60.0
+    },
+    {
+      "name": "safe-state",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        }
+      ],
+      "posX": 4200.0,
+      "posY": 60.0
+    },
+    {
+      "name": "landed-safe",
+      "params": [
+        {
+          "name": "?r",
+          "type": "robot"
+        }
+      ],
+      "posX": 4430.0,
+      "posY": 60.0
+    }
+  ],
+  "projectName": "vehicle-autonomy",
+  "scenarios": [
+    {
+      "expectation": {
+        "expectedActions": [],
+        "forbiddenActions": [],
+        "maxPlanSteps": 0,
+        "minPlanSteps": 0,
+        "shouldSucceed": true
+      },
+      "goals": [
+        {
+          "objectNames": [
+            "uav1"
+          ],
+          "predicateName": "mission-complete"
+        },
+        {
+          "objectNames": [
+            "uav1"
+          ],
+          "predicateName": "landed-safe"
+        },
+        {
+          "objectNames": [
+            "uav1",
+            "home"
+          ],
+          "predicateName": "at"
+        }
+      ],
+      "initialState": [
+        {
+          "objectNames": [
+            "uav1",
+            "home"
+          ],
+          "predicateName": "at"
+        },
+        {
+          "objectNames": [
+            "uav1"
+          ],
+          "predicateName": "on-ground"
+        },
+        {
+          "objectNames": [],
+          "predicateName": "nav-operational"
+        },
+        {
+          "objectNames": [],
+          "predicateName": "engines-operational"
+        },
+        {
+          "objectNames": [],
+          "predicateName": "comms-available"
+        },
+        {
+          "objectNames": [],
+          "predicateName": "gps-available"
+        },
+        {
+          "objectNames": [],
+          "predicateName": "inertial-nav-available"
+        },
+        {
+          "objectNames": [
+            "wp1"
+          ],
+          "predicateName": "mission-objective"
+        },
+        {
+          "objectNames": [
+            "home"
+          ],
+          "predicateName": "airspace-clear"
+        },
+        {
+          "objectNames": [
+            "wp1"
+          ],
+          "predicateName": "airspace-clear"
+        },
+        {
+          "objectNames": [
+            "home"
+          ],
+          "predicateName": "weather-ok"
+        },
+        {
+          "objectNames": [
+            "wp1"
+          ],
+          "predicateName": "weather-ok"
+        }
+      ],
+      "name": "vehicle-nominal"
+    }
+  ],
+  "types": [
+    {
+      "name": "location",
+      "parent": "object"
+    },
+    {
+      "name": "base",
+      "parent": "location"
+    },
+    {
+      "name": "waypoint",
+      "parent": "location"
+    },
+    {
+      "name": "robot",
+      "parent": "object"
+    }
+  ],
+  "version": 1
+}

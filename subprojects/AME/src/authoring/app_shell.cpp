@@ -1389,6 +1389,15 @@ void AppShell::renderBtTab() {
                        "Parse error: %s",
                        m_btGraph.lastError().c_str());
   }
+  if (m_btGraph.nodeCount() > 0U) {
+    if (ImGui::Button("Collapse all")) {
+      m_btGraph.collapseAll();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Expand all")) {
+      m_btGraph.expandAll();
+    }
+  }
   ImGui::BeginChild("##BtCanvas", ImVec2(0.0F, 0.0F), ImGuiChildFlags_Border);
   m_btGraph.render();
   ImGui::EndChild();

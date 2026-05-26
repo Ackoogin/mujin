@@ -24,8 +24,14 @@ public:
   /// \brief Last parse error, empty when the XML was accepted.
   const std::string& lastError() const { return m_lastError; }
 
-  /// \brief Number of BT nodes currently displayed.
+  /// \brief Number of BT nodes in the parsed tree, including collapsed nodes.
   size_t nodeCount() const;
+
+  /// \brief Collapse every BT node that has children.
+  void collapseAll();
+
+  /// \brief Expand every BT node.
+  void expandAll();
 
   /// \brief Index of the currently selected BT node, or -1 if none.
   int selectedNodeIndex() const { return m_selectedNode; }
@@ -39,6 +45,8 @@ private:
     int parent = -1;
     int depth = 0;
     int siblingIdx = 0;
+    bool collapsed = false;
+    bool visible = true;
   };
 
   std::vector<BtNode> m_nodes;
@@ -46,4 +54,8 @@ private:
   ed::EditorContext* m_context = nullptr;
   int m_selectedNode = -1;
   bool m_layoutDone = false;
+
+  void updateVisibility();
+  void applyLayout();
+  int selectedNodeFromEditor() const;
 };

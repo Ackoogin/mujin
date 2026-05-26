@@ -71,7 +71,9 @@ private:
     std::vector<unsigned> preconditions;
     std::vector<unsigned> add_effects;
     std::vector<unsigned> del_effects;
+    ImVec2 size = ImVec2(0.0f, 0.0f);
     int layer = 0;
+    int order = 0;
   };
 
   struct EdgeData {
@@ -87,4 +89,10 @@ private:
   ed::EditorContext* m_context = nullptr;
   int m_selectedStep = -1;
   bool m_layoutDone = false;
+  bool m_navigateToContent = false;
+
+  void orderLayersForFewerCrossings();
+  void applyLayout();
+  bool updateMeasuredNodeSizes();
+  int selectedStepFromEditor() const;
 };
