@@ -323,6 +323,11 @@ The shared-memory transport shall support async remote service invocation across
 
 **Rationale**: Request/reply traffic must be transport-pluggable just like pub/sub, including across process boundaries on the same host.
 
+### PCL.036g - Shared Memory Atomic Fan-Out And Topic Backpressure
+The shared-memory transport shall treat each published fan-out as one transaction: before writing a published frame, it shall verify that every target participant mailbox can accept the frame; if any target lacks capacity, no target shall receive that frame. The default publish path shall remain non-blocking and return an error on congestion. The transport shall also provide a per-topic configuration API allowing selected topics to wait for mailbox capacity up to a bounded timeout, so deployments can bind topics either to the generic non-blocking output path or to a topic-specific backpressure policy.
+
+**Rationale**: Safety-relevant pub/sub traffic must not silently split fan-out delivery across a subset of peers. Optional per-topic backpressure allows reliable low-rate command/state topics to tolerate transient mailbox pressure without forcing high-rate telemetry topics to block component output paths. Any component that enables topic-specific blocking must review its output threading and deadline budget.
+
 ### PCL.036f - UDP Datagram Transport (Pub/Sub Only)
 PCL shall ship a connectionless UDP datagram transport for best-effort publish/subscribe traffic.
 Each datagram shall carry exactly one PUBLISH message serialised without a length prefix (UDP preserves message boundaries).
@@ -496,6 +501,7 @@ PCL shall expose a public C ABI for configuring endpoint locality and peer selec
 | `PCL.036b` | `D3`, `D5` |
 | `PCL.036c` | `D3`, `D5` |
 | `PCL.036d` | `D3`, `D5` |
+| `PCL.036g` | `D3`, `D5` |
 | `PCL.037` | `D1` |
 | `PCL.038` | `D3` |
 | `PCL.039` | `D1` |

@@ -280,6 +280,22 @@ begin
 end;
 ```
 
+Shared-memory publishes are atomic across the bus: if one target
+participant mailbox is full, the frame is not written to any participant.
+The default behavior is non-blocking and returns an error on congestion.
+For topics where transient mailbox pressure should stall the publisher
+instead of failing immediately, configure a bounded per-topic wait policy:
+
+```c
+pcl_shared_memory_transport_set_topic_backpressure(bus,
+                                                   "mission/command",
+                                                   250);
+```
+
+Keep high-rate telemetry on the default output path. Apply topic-specific
+backpressure only to low-rate state, command, or audit topics whose
+component output path has been reviewed for bounded blocking.
+
 UDP:
 
 ```ada

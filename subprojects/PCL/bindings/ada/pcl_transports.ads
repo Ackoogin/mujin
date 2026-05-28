@@ -218,6 +218,14 @@ package Pcl_Transports is
      Exec    : in out Pcl_Component.Executor;
      Peer_Id : String);
 
+  --  Configure bounded per-topic output backpressure for shared-memory
+  --  publish fan-out.  ``Timeout_Ms = 0`` removes the topic-specific policy
+  --  and restores the generic non-blocking output queue behavior.
+  procedure Set_Topic_Backpressure
+    (This       : in out Shared_Memory_Transport;
+     Topic      : String;
+     Timeout_Ms : Interfaces.C.unsigned);
+
   --  Configure, activate, and add ``Gateway_Container`` to ``Exec``.
   --  Required on any participant that exposes ``provided`` services to
   --  the bus; without this call the executor never sees inbound service

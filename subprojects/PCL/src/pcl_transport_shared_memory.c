@@ -46,6 +46,7 @@
 #define PCL_SHM_MAX_ID 64u
 #define PCL_SHM_MAX_OBJECT_NAME 256u
 #define PCL_SHM_MAX_PAYLOAD 16384u
+#define PCL_SHM_MAX_BACKPRESSURE_TOPICS 16u
 #define PCL_SHM_DISCOVERY_RETRIES 20u
 #define PCL_SHM_POLL_MS 1u
 
@@ -107,6 +108,12 @@ typedef struct {
   char     requester_id[PCL_SHM_MAX_ID];
 } pcl_shm_response_target_t;
 
+typedef struct {
+  uint32_t timeout_ms;
+  int      in_use;
+  char     topic[PCL_SHM_MAX_NAME];
+} pcl_shm_backpressure_policy_t;
+
 /* Stream send target shared with pcl_stream_context_t::transport_ctx. The
  * server-side stream handler uses this to address frames + end back to the
  * original requester via the bus. The owning transport links each live
@@ -154,6 +161,7 @@ typedef struct pcl_shared_memory_transport_t {
   pcl_shm_pending_request_t* pending_head;
   pcl_shm_pending_stream_t*  pending_stream_head;
   pcl_shm_stream_send_target_t* active_stream_targets;
+  pcl_shm_backpressure_policy_t backpressure[PCL_SHM_MAX_BACKPRESSURE_TOPICS];
 #ifdef _WIN32
   HANDLE                     mapping_handle;
   HANDLE                     lock_handle;
@@ -186,6 +194,18 @@ static void pcl_shm_sleep_ms(uint32_t ms) {
 #endif
 }
 
+static uint64_t pcl_shm_now_ms(void) {
+#ifdef _WIN32
+  return (uint64_t)GetTickCount64();
+#else
+  struct timespec ts;
+  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+    return 0u;
+  }
+  return ((uint64_t)ts.tv_sec * 1000u) + ((uint64_t)ts.tv_nsec / 1000000u);
+#endif
+}
+
 static void pcl_shm_copy_token(const char* src,
                                char*       dst,
                                size_t      dst_size) {
@@ -214,6 +234,30 @@ static size_t pcl_shm_strnlen(const char* src, size_t max_len) {
   for (i = 0u; i < max_len && src[i] != '\0'; ++i) {
   }
   return i;
+}
+
+static void pcl_shm_pending_lock_acquire(pcl_shared_memory_transport_t* ctx);
+static void pcl_shm_pending_lock_release(pcl_shared_memory_transport_t* ctx);
+
+static uint32_t pcl_shm_backpressure_timeout_ms(
+    pcl_shared_memory_transport_t* ctx,
+    const char*                    topic) {
+  uint32_t i;
+  uint32_t timeout_ms = 0u;
+
+  if (!ctx || !topic) return 0u;
+
+  pcl_shm_pending_lock_acquire(ctx);
+  for (i = 0u; i < PCL_SHM_MAX_BACKPRESSURE_TOPICS; ++i) {
+    if (ctx->backpressure[i].in_use &&
+        strcmp(ctx->backpressure[i].topic, topic) == 0) {
+      timeout_ms = ctx->backpressure[i].timeout_ms;
+      break;
+    }
+  }
+  pcl_shm_pending_lock_release(ctx);
+
+  return timeout_ms;
 }
 
 static void pcl_shm_build_object_name(const char* prefix,
@@ -880,6 +924,70 @@ static pcl_status_t pcl_shm_enqueue_frame_locked(
   return PCL_OK;
 }
 
+static int pcl_shm_slot_has_capacity_locked(const pcl_shm_slot_t* slot) {
+  uint32_t next_index;
+
+  if (!slot || !slot->in_use) return 0;
+  next_index = (slot->write_index + 1u) % PCL_SHM_QUEUE_DEPTH;
+  return next_index != slot->read_index;
+}
+
+static pcl_status_t pcl_shm_publish_once_locked(
+    pcl_shared_memory_transport_t* ctx,
+    const char*                    topic,
+    const pcl_msg_t*               msg,
+    uint32_t*                      delivered_count) {
+  uint32_t targets[PCL_SHM_MAX_PARTICIPANTS];
+  uint32_t original_write_index[PCL_SHM_MAX_PARTICIPANTS];
+  uint32_t target_count = 0u;
+  uint32_t i;
+
+  if (!ctx || !topic || !msg || !delivered_count) return PCL_ERR_INVALID;
+  *delivered_count = 0u;
+
+  for (i = 0u; i < PCL_SHM_MAX_PARTICIPANTS; ++i) {
+    pcl_shm_slot_t* slot = &ctx->region->slots[i];
+    if (i == ctx->slot_index || !slot->in_use) continue;
+    targets[target_count] = i;
+    original_write_index[target_count] = slot->write_index;
+    ++target_count;
+  }
+
+  if (target_count == 0u) return PCL_ERR_NOT_FOUND;
+
+  for (i = 0u; i < target_count; ++i) {
+    pcl_shm_slot_t* slot = &ctx->region->slots[targets[i]];
+    if (!pcl_shm_slot_has_capacity_locked(slot)) {
+      return PCL_ERR_NOMEM;
+    }
+  }
+
+  for (i = 0u; i < target_count; ++i) {
+    pcl_status_t rc = pcl_shm_enqueue_frame_locked(ctx,
+                                                   targets[i],
+                                                   PCL_SHM_FRAME_PUBLISH,
+                                                   ctx->participant_id,
+                                                   topic,
+                                                   msg->type_name,
+                                                   msg->data,
+                                                   msg->size,
+                                                   0u);
+    if (rc != PCL_OK) {
+      uint32_t rollback;
+      for (rollback = 0u; rollback < i; ++rollback) {
+        pcl_shm_slot_t* slot = &ctx->region->slots[targets[rollback]];
+        uint32_t frame_index = original_write_index[rollback];
+        memset(&slot->frames[frame_index], 0, sizeof(slot->frames[frame_index]));
+        slot->write_index = original_write_index[rollback];
+      }
+      return rc;
+    }
+  }
+
+  *delivered_count = target_count;
+  return PCL_OK;
+}
+
 static int pcl_shm_find_provider_slot_locked(pcl_shared_memory_transport_t* ctx,
                                              const char*                    service_name,
                                              uint32_t*                      slot_index) {
@@ -909,35 +1017,37 @@ static pcl_status_t pcl_shm_publish(void*            adapter_ctx,
                                     const pcl_msg_t* msg) {
   pcl_shared_memory_transport_t* ctx =
       (pcl_shared_memory_transport_t*)adapter_ctx;
-  uint32_t i;
-  int delivered = 0;
-  pcl_status_t rc = PCL_OK;
+  uint32_t delivered_count = 0u;
+  uint32_t timeout_ms;
+  uint64_t deadline_ms = 0u;
 
   if (!ctx || !topic || !msg || !msg->type_name) return PCL_ERR_INVALID;
   if (msg->size > 0u && !msg->data) return PCL_ERR_INVALID;
+  if (msg->size > PCL_SHM_MAX_PAYLOAD) return PCL_ERR_NOMEM;
 
-  if (pcl_shm_bus_lock(ctx) != PCL_OK) return PCL_ERR_STATE;
-  for (i = 0; i < PCL_SHM_MAX_PARTICIPANTS; ++i) {
-    pcl_status_t enqueue_rc;
-    if (i == ctx->slot_index || !ctx->region->slots[i].in_use) continue;
-    enqueue_rc = pcl_shm_enqueue_frame_locked(ctx,
-                                              i,
-                                              PCL_SHM_FRAME_PUBLISH,
-                                              ctx->participant_id,
-                                              topic,
-                                              msg->type_name,
-                                              msg->data,
-                                              msg->size,
-                                              0u);
-    if (enqueue_rc == PCL_OK) {
-      delivered = 1;
-    } else if (rc == PCL_OK) {
-      rc = enqueue_rc;
-    }
+  timeout_ms = pcl_shm_backpressure_timeout_ms(ctx, topic);
+  if (timeout_ms > 0u) {
+    deadline_ms = pcl_shm_now_ms() + (uint64_t)timeout_ms;
   }
-  pcl_shm_bus_unlock(ctx);
 
-  return delivered ? PCL_OK : (rc == PCL_OK ? PCL_ERR_NOT_FOUND : rc);
+  for (;;) {
+    pcl_status_t rc;
+
+    if (pcl_shm_bus_lock(ctx) != PCL_OK) return PCL_ERR_STATE;
+    rc = pcl_shm_publish_once_locked(ctx, topic, msg, &delivered_count);
+    pcl_shm_bus_unlock(ctx);
+
+    if (rc == PCL_OK || rc == PCL_ERR_NOT_FOUND) {
+      return rc;
+    }
+    if (rc != PCL_ERR_NOMEM || timeout_ms == 0u) {
+      return rc;
+    }
+    if (pcl_shm_now_ms() >= deadline_ms) {
+      return PCL_ERR_TIMEOUT;
+    }
+    pcl_shm_sleep_ms(PCL_SHM_POLL_MS);
+  }
 }
 
 static pcl_status_t pcl_shm_subscribe(void*       adapter_ctx,
@@ -1868,6 +1978,55 @@ pcl_container_t* pcl_shared_memory_transport_gateway_container(
     pcl_shared_memory_transport_t* ctx) {
   if (!ctx) return NULL;
   return ctx->gateway;
+}
+
+pcl_status_t pcl_shared_memory_transport_set_topic_backpressure(
+    pcl_shared_memory_transport_t* ctx,
+    const char*                    topic,
+    uint32_t                       timeout_ms) {
+  uint32_t i;
+  uint32_t free_index = PCL_SHM_MAX_BACKPRESSURE_TOPICS;
+
+  if (!ctx || !topic || !topic[0]) return PCL_ERR_INVALID;
+  if (pcl_shm_strnlen(topic, PCL_SHM_MAX_NAME) == PCL_SHM_MAX_NAME) {
+    return PCL_ERR_INVALID;
+  }
+
+  pcl_shm_pending_lock_acquire(ctx);
+  for (i = 0u; i < PCL_SHM_MAX_BACKPRESSURE_TOPICS; ++i) {
+    if (ctx->backpressure[i].in_use &&
+        strcmp(ctx->backpressure[i].topic, topic) == 0) {
+      if (timeout_ms == 0u) {
+        memset(&ctx->backpressure[i], 0, sizeof(ctx->backpressure[i]));
+      } else {
+        ctx->backpressure[i].timeout_ms = timeout_ms;
+      }
+      pcl_shm_pending_lock_release(ctx);
+      return PCL_OK;
+    }
+    if (!ctx->backpressure[i].in_use &&
+        free_index == PCL_SHM_MAX_BACKPRESSURE_TOPICS) {
+      free_index = i;
+    }
+  }
+
+  if (timeout_ms == 0u) {
+    pcl_shm_pending_lock_release(ctx);
+    return PCL_OK;
+  }
+  if (free_index == PCL_SHM_MAX_BACKPRESSURE_TOPICS) {
+    pcl_shm_pending_lock_release(ctx);
+    return PCL_ERR_NOMEM;
+  }
+
+  ctx->backpressure[free_index].in_use = 1;
+  ctx->backpressure[free_index].timeout_ms = timeout_ms;
+  snprintf(ctx->backpressure[free_index].topic,
+           sizeof(ctx->backpressure[free_index].topic),
+           "%s",
+           topic);
+  pcl_shm_pending_lock_release(ctx);
+  return PCL_OK;
 }
 
 void pcl_shared_memory_transport_destroy(pcl_shared_memory_transport_t* ctx) {

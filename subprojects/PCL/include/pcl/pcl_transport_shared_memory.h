@@ -90,6 +90,25 @@ const pcl_transport_t* pcl_shared_memory_transport_get_transport(
 pcl_container_t* pcl_shared_memory_transport_gateway_container(
     pcl_shared_memory_transport_t* ctx);
 
+/// \brief Configure optional blocking backpressure for a published topic.
+///
+/// By default shared-memory publish remains non-blocking: if any target
+/// mailbox lacks capacity, the whole fan-out fails without enqueuing the
+/// frame to any participant.  Calling this function with a non-zero
+/// \p timeout_ms makes publishes on \p topic wait up to that many
+/// milliseconds for every target mailbox to have capacity, preserving the
+/// all-or-nothing transaction semantics.
+///
+/// Passing \p timeout_ms as zero removes the topic-specific policy and
+/// restores the default non-blocking behavior.  The topic string is copied.
+///
+/// \return PCL_OK on success, PCL_ERR_INVALID for bad arguments, or
+/// PCL_ERR_NOMEM when the per-transport policy table is full.
+pcl_status_t pcl_shared_memory_transport_set_topic_backpressure(
+    pcl_shared_memory_transport_t* ctx,
+    const char*                    topic,
+    uint32_t                       timeout_ms);
+
 /// \brief Detach from the bus and release all transport resources.
 ///
 /// The mailbox slot is freed, the gateway container (if any) is removed

@@ -927,6 +927,16 @@ package Pcl_Bindings is
   pragma Import(C, Shared_Memory_Gateway_Container,
                 "pcl_shared_memory_transport_gateway_container");
 
+  --  Configure a bounded per-topic wait for shared-memory publish fan-out.
+  --  A zero timeout removes the topic-specific policy and restores the
+  --  default non-blocking output path.
+  function Set_Shared_Memory_Topic_Backpressure
+    (Ctx        : Pcl_Shared_Memory_Transport_Access;
+     Topic      : Interfaces.C.Strings.chars_ptr;
+     Timeout_Ms : Interfaces.C.unsigned) return Pcl_Status;
+  pragma Import(C, Set_Shared_Memory_Topic_Backpressure,
+                "pcl_shared_memory_transport_set_topic_backpressure");
+
   --  Detach from the named bus.  When the last participant leaves, the
   --  underlying OS shared-memory object is unlinked.
   procedure Destroy_Shared_Memory_Transport

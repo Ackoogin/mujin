@@ -457,6 +457,28 @@ pcl_executor_set_transport(tx_exec, pcl_udp_transport_get_transport(tx));
   the channel with its own sequencing/retransmit layer.
 - IPv4 only in v1; IPv6 support is a straightforward extension.
 
+## 8.5. Shared-Memory Fan-Out And Backpressure
+
+Shared-memory publish fan-out is treated as a single transaction. Before
+writing a frame, the transport checks every target participant mailbox
+under the bus lock. If any target mailbox is full, the publish fails and
+no participant receives that frame. This avoids partial fan-out where one
+subscriber sees a message and another silently misses the same publish.
+
+The default path is still non-blocking. Configure bounded per-topic
+backpressure only for topics whose component output path can safely wait:
+
+```c
+pcl_shared_memory_transport_set_topic_backpressure(shm,
+                                                   "mission/command",
+                                                   250);
+```
+
+This creates a topic-specific output policy while leaving other topics on
+the generic non-blocking path. Use separate topic policies for low-rate
+command/state/audit traffic; leave high-rate telemetry non-blocking unless
+the component's output threading and deadline budget have been reviewed.
+
 ## 9. Bridge and Chained Topologies
 
 PCL does not do automatic multi-hop forwarding.

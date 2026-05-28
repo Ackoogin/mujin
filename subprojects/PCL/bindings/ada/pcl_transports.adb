@@ -362,6 +362,24 @@ package body Pcl_Transports is
     Register_Peer(Exec, Peer_Id, Transport(This));
   end Register;
 
+  procedure Set_Topic_Backpressure
+    (This       : in out Shared_Memory_Transport;
+     Topic      : String;
+     Timeout_Ms : Interfaces.C.unsigned) is
+    Topic_C : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.New_String(Topic);
+  begin
+    if This.Handle = null then
+      Raise_Error("shared-memory transport has not been created");
+    end if;
+
+    Check(Pcl_Bindings.Set_Shared_Memory_Topic_Backpressure
+            (Ctx        => This.Handle,
+             Topic      => Topic_C,
+             Timeout_Ms => Timeout_Ms),
+          "shared-memory topic backpressure");
+    Interfaces.C.Strings.Free(Topic_C);
+  end Set_Topic_Backpressure;
+
   procedure Start_Gateway
     (This : in out Shared_Memory_Transport;
      Exec : in out Pcl_Component.Executor) is

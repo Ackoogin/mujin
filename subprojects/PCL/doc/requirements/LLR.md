@@ -1545,6 +1545,8 @@ A `pcl::Component` added to a `pcl::Executor` shall receive ticks when active an
 | 187 | 036b, 036c | test_pcl_shared_memory_transport |
 | 188 | 036b, 036d | test_pcl_shared_memory_transport |
 | 189 | 036d, 045 | test_pcl_shared_memory_transport |
+| 211 | 036c, 036g | test_pcl_shared_memory_transport |
+| 212 | 036g, 045 | test_pcl_shared_memory_transport |
 | 167 | 011c | test_pcl_streaming |
 | 168 | 011c | test_pcl_streaming |
 | 169 | 011c | test_pcl_streaming |
@@ -1636,6 +1638,20 @@ The shared-memory transport shall route an async remote service request across p
 **Traces**: PCL.036d, PCL.045
 
 **Verification**: `test_pcl_shared_memory_transport.cpp::InvokeAsyncReturnsNotFoundWithoutProvider`.
+
+### REQ_PCL_211 - Shared Memory Publish Fan-Out Is Atomic
+When a shared-memory publish targets multiple participants, the transport shall pre-check capacity in every target mailbox while holding the bus lock. If any target mailbox is full, the publish shall return an error and shall not enqueue that frame to any target mailbox.
+
+**Traces**: PCL.036c, PCL.036g
+
+**Verification**: `test_pcl_shared_memory_transport.cpp::PublishFanoutIsAtomicWhenAnyMailboxIsFull`.
+
+### REQ_PCL_212 - Shared Memory Topic Backpressure Waits For Capacity
+`pcl_shared_memory_transport_set_topic_backpressure()` shall configure a per-topic bounded wait policy. Publishes on configured topics shall wait for all target mailboxes to have capacity until the timeout expires, while topics without a policy shall remain on the generic non-blocking output path. The API shall reject NULL transport handles or NULL/empty topic names.
+
+**Traces**: PCL.036g, PCL.045
+
+**Verification**: `test_pcl_shared_memory_transport.cpp::TopicBackpressureWaitsForMailboxCapacity`.
 
 ---
 

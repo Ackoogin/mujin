@@ -441,6 +441,154 @@ TEST(PclSharedMemoryTransport, PublishHonoursSubscriberPeerFilter) {
   restore_logs();
 }
 
+static pcl_status_t publish_text(BusNode& node,
+                                 const char* topic,
+                                 const char* type_name,
+                                 const std::string& payload) {
+  pcl_msg_t msg = {};
+  msg.data = payload.data();
+  msg.size = static_cast<uint32_t>(payload.size());
+  msg.type_name = type_name;
+  const pcl_transport_t* transport =
+      pcl_shared_memory_transport_get_transport(node.transport);
+  if (!transport) return PCL_ERR_INVALID;
+  return transport->publish(transport->adapter_ctx, topic, &msg);
+}
+
+static bool publish_until_mailbox_full(BusNode& filler,
+                                       BusNode& publisher,
+                                       const char* probe_topic,
+                                       const std::string& probe_payload_prefix,
+                                       std::string* failed_payload = nullptr) {
+  const std::string big_payload(16384, 'x');
+  for (int attempt = 0; attempt < 200; ++attempt) {
+    const std::string probe_payload =
+        probe_payload_prefix + "_" + std::to_string(attempt);
+    for (int i = 0; i < 32; ++i) {
+      (void)publish_text(filler, "shm/fill", "FillMsg", big_payload);
+    }
+    pcl_status_t rc = publish_text(publisher, probe_topic, "ProbeMsg", probe_payload);
+    if (rc == PCL_ERR_NOMEM) {
+      if (failed_payload) {
+        *failed_payload = probe_payload;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+///< REQ_PCL_211: Shared-memory publish fan-out is all-or-nothing. PCL.036c, PCL.036g.
+TEST(PclSharedMemoryTransport, PublishFanoutIsAtomicWhenAnyMailboxIsFull) {
+  silence_logs();
+
+  const std::string bus = unique_token("atomic_bus");
+  BusNode alpha;
+  BusNode bravo;
+  BusNode charlie;
+  ASSERT_TRUE(alpha.create(bus.c_str(), "alpha"));
+  ASSERT_TRUE(bravo.create(bus.c_str(), "bravo"));
+  ASSERT_TRUE(charlie.create(bus.c_str(), "charlie"));
+  ASSERT_TRUE(alpha.attach_transport());
+  ASSERT_TRUE(bravo.attach_transport());
+  ASSERT_TRUE(charlie.attach_transport());
+
+  std::string failed_payload;
+  ASSERT_TRUE(publish_until_mailbox_full(charlie,
+                                         alpha,
+                                         "atomic/topic",
+                                         "atomic_sentinel",
+                                         &failed_payload));
+
+  struct SubState {
+    std::atomic<bool> received_sentinel{false};
+    std::string expected_payload;
+  } state;
+  state.expected_payload = failed_payload;
+
+  pcl_callbacks_t sub_cbs = {};
+  sub_cbs.on_configure = [](pcl_container_t* c, void* ud) -> pcl_status_t {
+    const char* peers[] = {"alpha"};
+    pcl_port_t* port = pcl_container_add_subscriber(
+        c,
+        "atomic/topic",
+        "AtomicMsg",
+        [](pcl_container_t*, const pcl_msg_t* msg, void* state_ud) {
+          auto* sub_state = static_cast<SubState*>(state_ud);
+          std::string payload(static_cast<const char*>(msg->data), msg->size);
+          if (payload == sub_state->expected_payload) {
+            sub_state->received_sentinel = true;
+          }
+        },
+        ud);
+    if (!port) return PCL_ERR_NOMEM;
+    return pcl_port_set_route(port, PCL_ROUTE_REMOTE, peers, 1);
+  };
+
+  pcl_container_t* charlie_sub =
+      pcl_container_create("charlie_atomic_sub", &sub_cbs, &state);
+  ASSERT_NE(charlie_sub, nullptr);
+  ASSERT_EQ(pcl_container_configure(charlie_sub), PCL_OK);
+  ASSERT_EQ(pcl_container_activate(charlie_sub), PCL_OK);
+  ASSERT_EQ(pcl_executor_add(charlie.exec, charlie_sub), PCL_OK);
+
+  for (int i = 0; i < 100 && !state.received_sentinel; ++i) {
+    pcl_executor_spin_once(charlie.exec, 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+  }
+
+  EXPECT_FALSE(state.received_sentinel);
+
+  pcl_executor_remove(charlie.exec, charlie_sub);
+  pcl_container_destroy(charlie_sub);
+  alpha.destroy();
+  bravo.destroy();
+  charlie.destroy();
+  restore_logs();
+}
+
+///< REQ_PCL_212: Shared-memory topic backpressure can wait for mailbox capacity. PCL.036g.
+TEST(PclSharedMemoryTransport, TopicBackpressureWaitsForMailboxCapacity) {
+  silence_logs();
+
+  const std::string bus = unique_token("backpressure_bus");
+  BusNode alpha;
+  BusNode bravo;
+  BusNode charlie;
+  ASSERT_TRUE(alpha.create(bus.c_str(), "alpha"));
+  ASSERT_TRUE(bravo.create(bus.c_str(), "bravo"));
+  ASSERT_TRUE(charlie.create(bus.c_str(), "charlie"));
+  ASSERT_TRUE(alpha.attach_transport());
+  ASSERT_TRUE(bravo.attach_transport());
+  ASSERT_TRUE(charlie.attach_transport());
+
+  ASSERT_TRUE(publish_until_mailbox_full(charlie, alpha, "pressure/topic", "no_wait"));
+
+  ASSERT_EQ(pcl_shared_memory_transport_set_topic_backpressure(
+                alpha.transport, "pressure/topic", 500),
+            PCL_OK);
+
+  ASSERT_TRUE(publish_until_mailbox_full(charlie,
+                                         alpha,
+                                         "generic/topic",
+                                         "generic_no_wait"));
+
+  EXPECT_EQ(publish_text(alpha, "pressure/topic", "PressureMsg", "wait"),
+            PCL_OK);
+
+  EXPECT_EQ(pcl_shared_memory_transport_set_topic_backpressure(
+                alpha.transport, "pressure/topic", 0),
+            PCL_OK);
+  EXPECT_EQ(pcl_shared_memory_transport_set_topic_backpressure(
+                alpha.transport, nullptr, 100),
+            PCL_ERR_INVALID);
+
+  alpha.destroy();
+  bravo.destroy();
+  charlie.destroy();
+  restore_logs();
+}
+
 TEST(PclSharedMemoryTransport, AsyncDeferredServiceRoundTrip) {
   silence_logs();
 
