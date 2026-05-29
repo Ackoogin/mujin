@@ -6,6 +6,10 @@
 /// receive thread polls the local mailbox and posts work onto the executor
 /// thread. Topic publish fans out across the bus, while async service
 /// requests route to the unique participant advertising the requested service.
+#if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
+#  define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "pcl/pcl_transport_shared_memory.h"
 
 #include "pcl_internal.h"

@@ -95,7 +95,11 @@ target_include_directories(pcl_transport_shared_memory PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-target_link_libraries(pcl_transport_shared_memory PUBLIC pcl_core)
+target_link_libraries(pcl_transport_shared_memory PUBLIC pcl_core Threads::Threads)
+if(UNIX AND NOT APPLE)
+  # Linux/glibc may require librt for shm_open/shm_unlink on older systems.
+  target_link_libraries(pcl_transport_shared_memory PUBLIC rt)
+endif()
 
 set_target_properties(pcl_transport_shared_memory PROPERTIES
   LINKER_LANGUAGE C
