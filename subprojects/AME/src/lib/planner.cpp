@@ -17,6 +17,17 @@ PlanResult Planner::solve(const WorldModel& wm) const {
     PlanResult result;
     auto t0 = std::chrono::steady_clock::now();
 
+#if defined(AME_NEURO)
+    // Consult neural heuristic hook (seam for Options A/D).
+    // Scores influence action ordering in the WorldModel copy passed to LAPKT.
+    // If hook returns empty or is absent, default ordering is used unchanged.
+    std::vector<ActionScore> heuristic_scores;
+    if (heuristic_hook_) {
+        heuristic_scores = heuristic_hook_(wm, wm.goalFluentIds());
+        result.heuristic_source = "neural_hook"; // hook fired, even if scores empty
+    }
+#endif
+
     // Project world model to LAPKT STRIPS problem
     // projectToSTRIPS already calls make_action_tables() as its finalization step;
     // calling it again duplicates LAPKT's internal successor tables and corrupts planning.

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ame/bt_logger.h>
+#include <ame/plan_compiler.h>
 #include <ame/world_model.h>
 #include <pcl/component.hpp>
 
@@ -29,6 +30,14 @@ namespace ame {
 ///   bt_log.tree_id    (string, "MissionPlan")
 class ExecutorComponent : public pcl::Component {
 public:
+#if defined(AME_NEURO)
+  // Repair-proposal hook seam (Option B).
+  // Called before full replanning on BT failure; receives the failed step index
+  // and a snapshot of the current world state.  Return empty to use full replan.
+  using RepairHook = std::function<
+      std::vector<ame::PlanStep>(unsigned failed_step, const WorldModel& wm)>;
+#endif
+
   using BlackboardInitializer = std::function<void(const BT::Blackboard::Ptr&)>;
 
   /// \brief Callback for receiving BT event lines.
@@ -46,6 +55,14 @@ public:
 
   /// \brief Register an event callback (useful for testing; PCL port is the production path).
   void setEventSink(EventSink sink);
+
+#if defined(AME_NEURO)
+  /// \brief Attach a repair-proposal hook (seam for Option B).
+  /// Null-object default leaves baseline behaviour identical.
+  void setRepairHook(RepairHook hook) { repair_hook_ = std::move(hook); }
+  void clearRepairHook() { repair_hook_ = nullptr; }
+  bool hasRepairHook() const { return static_cast<bool>(repair_hook_); }
+#endif
 
   /// \brief Expose the factory for action node registration.
   BT::BehaviorTreeFactory& factory() { return factory_; }
@@ -81,6 +98,9 @@ private:
   std::unique_ptr<BT::Tree> tree_;
   std::unique_ptr<AmeBTLogger> bt_logger_;
   WorldModel* inprocess_wm_ = nullptr;
+#if defined(AME_NEURO)
+  RepairHook repair_hook_;
+#endif
   BlackboardInitializer blackboard_initializer_;
   EventSink event_sink_;
   bool executing_ = false;
