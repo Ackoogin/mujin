@@ -29,6 +29,14 @@ public:
         float       cost = 0.0f;                  // Plan cost
         std::vector<std::string> plan_actions;    // Ordered action signatures
         std::string bt_xml;                       // Compiled BT XML
+
+        // Neuro-symbolic provenance (WI-3.2).  Purely additive: defaults leave
+        // the JSONL shape unchanged when neural is disabled.
+        std::string heuristic_source = "symbolic"; // "symbolic" or backend_id
+        std::string goal_source      = "symbolic"; // "symbolic" or backend_id
+        std::string repair_source    = "symbolic"; // "symbolic" or backend_id
+        std::vector<uint64_t> neuro_record_ids;    // NeuroAuditLog record ids that
+                                                   // influenced this episode
     };
 
     /// Construct without a file sink (in-memory only).
