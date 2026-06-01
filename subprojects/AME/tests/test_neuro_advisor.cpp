@@ -1,0 +1,297 @@
+// Phase 1 tests: IVerifier, FallbackPolicy, Advisor envelope
+// WI-1.1, WI-1.2, WI-1.3
+
+#include "ame/neuro/advisor.h"
+#include "ame/neuro/backend_registry.h"
+#include "ame/neuro/fallback_policy.h"
+#include "ame/neuro/mock_backend.h"
+#include "ame/neuro/neuro_audit_log.h"
+#include "ame/neuro/verifier.h"
+#include "ame/world_model.h"
+
+#include <gtest/gtest.h>
+#include <atomic>
+#include <chrono>
+
+using namespace ame::neuro;
+using namespace std::chrono_literals;
+
+// Helper: build a minimal non-empty WorldModel
+static ame::WorldModel make_wm() {
+    ame::WorldModel wm;
+    wm.typeSystem().addType("object");
+    wm.addObject("a", "object");
+    wm.registerPredicate("done", {"object"});
+    return wm;
+}
+
+// Helper: make a registry with one MockBackend named "mock"
+static BackendRegistry make_registry(std::shared_ptr<MockBackend> mb) {
+    BackendRegistry reg;
+    reg.add(mb);
+    return reg;
+}
+
+using StrAdvisor = Advisor<std::string, std::string>;
+
+// ---------------------------------------------------------------------------
+// IVerifier reference implementations
+// ---------------------------------------------------------------------------
+
+TEST(Verifier, AlwaysAccept) {
+    AlwaysAccept<std::string> v;
+    ame::WorldModel wm = make_wm();
+    auto verdict = v.verify("anything", wm);
+    EXPECT_TRUE(verdict.accepted);
+}
+
+TEST(Verifier, AlwaysReject) {
+    AlwaysReject<std::string> v("my_reason");
+    ame::WorldModel wm = make_wm();
+    auto verdict = v.verify("anything", wm);
+    EXPECT_FALSE(verdict.accepted);
+    EXPECT_EQ(verdict.reason, "my_reason");
+}
+
+// ---------------------------------------------------------------------------
+// Advisor outcomes (WI-1.2)
+// ---------------------------------------------------------------------------
+
+TEST(Advisor, Disabled) {
+    auto mb = std::make_shared<MockBackend>("mock");
+    auto reg = make_registry(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy = FallbackPolicy::disabled(); // enabled=false
+    StrAdvisor advisor("test_kind", reg, v, policy, &audit);
+
+    auto result = advisor.advise("req", wm);
+    EXPECT_EQ(result.outcome, StrAdvisor::Outcome::Disabled);
+    EXPECT_EQ(audit.size(), 1u);
+    EXPECT_EQ(audit.records()[0].outcome, "Disabled");
+    EXPECT_FALSE(audit.records()[0].affected_behaviour);
+}
+
+TEST(Advisor, Accepted) {
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({"the_proposal", true, "", 0.0});
+    auto reg = make_registry(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy = FallbackPolicy::hot_path("mock");
+    StrAdvisor advisor("test_kind", reg, v, policy, &audit);
+
+    auto result = advisor.advise("req", wm);
+    ASSERT_EQ(result.outcome, StrAdvisor::Outcome::Accepted);
+    ASSERT_TRUE(result.proposal.has_value());
+    EXPECT_EQ(*result.proposal, "the_proposal");
+    EXPECT_EQ(audit.size(), 1u);
+    EXPECT_TRUE(audit.records()[0].affected_behaviour);
+}
+
+TEST(Advisor, RejectedFellBack) {
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({"bad_proposal", true, "", 0.0});
+    auto reg = make_registry(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysReject<std::string> v("rejected_by_test");
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy = FallbackPolicy::hot_path("mock");
+    StrAdvisor advisor("test_kind", reg, v, policy, &audit);
+
+    auto result = advisor.advise("req", wm);
+    EXPECT_EQ(result.outcome, StrAdvisor::Outcome::RejectedFellBack);
+    EXPECT_EQ(audit.size(), 1u);
+    EXPECT_FALSE(audit.records()[0].affected_behaviour);
+    EXPECT_EQ(audit.records()[0].verdict_reason, "rejected_by_test");
+}
+
+TEST(Advisor, ErroredFellBack) {
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({"", false, "backend_error", 0.0});
+    auto reg = make_registry(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy = FallbackPolicy::hot_path("mock");
+    StrAdvisor advisor("test_kind", reg, v, policy, &audit);
+
+    auto result = advisor.advise("req", wm);
+    EXPECT_EQ(result.outcome, StrAdvisor::Outcome::ErroredFellBack);
+    EXPECT_EQ(audit.size(), 1u);
+}
+
+TEST(Advisor, UnavailableFellBack) {
+    BackendRegistry empty_reg;
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy;
+    policy.enabled = true;
+    policy.backend_id = "nonexistent";
+    StrAdvisor advisor("test_kind", empty_reg, v, policy, &audit);
+
+    auto result = advisor.advise("req", wm);
+    EXPECT_EQ(result.outcome, StrAdvisor::Outcome::UnavailableFellBack);
+    EXPECT_EQ(audit.size(), 1u);
+    EXPECT_EQ(audit.records()[0].outcome, "UnavailableFellBack");
+}
+
+// ---------------------------------------------------------------------------
+// Timeout + abandonment (WI-1.3 criterion b: non-cooperative hang)
+// ---------------------------------------------------------------------------
+
+TEST(Advisor, TimedOutFellBack_NonCoopHang) {
+    auto mb = std::make_shared<MockBackend>("mock", false);
+    mb->add_script({"", false, "", 10000.0, /*hang=*/true, /*non_cooperative=*/true});
+    BackendExecutorConfig bcfg;
+    bcfg.max_in_flight = 4;
+    BackendRegistry reg;
+    reg.add(mb, BackendTier::Warm, bcfg);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy;
+    policy.enabled = true;
+    policy.latency_budget_ms = 150.0;
+    policy.max_retries = 0;
+    policy.backend_id = "mock";
+
+    StrAdvisor advisor("test_kind", reg, v, policy, &audit);
+
+    auto t0 = std::chrono::steady_clock::now();
+    auto result = advisor.advise("req", wm);
+    double elapsed_ms = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - t0).count();
+
+    EXPECT_EQ(result.outcome, StrAdvisor::Outcome::TimedOutFellBack);
+    // Must return within budget + tolerance
+    EXPECT_LT(elapsed_ms, 450.0); // generous tolerance for CI
+    EXPECT_EQ(audit.size(), 1u);
+    EXPECT_EQ(audit.records()[0].outcome, "TimedOutFellBack");
+}
+
+// ---------------------------------------------------------------------------
+// Retry: errored then accepted on retry (WI-1.3)
+// ---------------------------------------------------------------------------
+
+TEST(Advisor, RetryAfterError) {
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({"", false, "first_err", 0.0}); // first attempt errors
+    mb->add_script({"good_proposal", true, "", 0.0}); // second attempt ok
+    auto reg = make_registry(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy = FallbackPolicy::warm_path("mock");
+    policy.max_retries = 1;
+    policy.retry_backoff_ms = 0.0; // no backoff for test speed
+    StrAdvisor advisor("test_kind", reg, v, policy, &audit);
+
+    auto result = advisor.advise("req", wm);
+    EXPECT_EQ(result.outcome, StrAdvisor::Outcome::Accepted);
+    ASSERT_TRUE(result.proposal.has_value());
+    EXPECT_EQ(*result.proposal, "good_proposal");
+}
+
+// ---------------------------------------------------------------------------
+// Exactly one audit record per advise() call (WI-1.2, WI-3.1)
+// ---------------------------------------------------------------------------
+
+TEST(Advisor, ExactlyOneAuditRecordPerCall) {
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({"ok", true});
+    auto reg = make_registry(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy = FallbackPolicy::hot_path("mock");
+    StrAdvisor advisor("test_kind", reg, v, policy, &audit);
+
+    for (int i = 0; i < 5; ++i) {
+        advisor.advise("r" + std::to_string(i), wm);
+    }
+    EXPECT_EQ(audit.size(), 5u);
+}
+
+// ---------------------------------------------------------------------------
+// Symbolic output unchanged when disabled (WI-4.2, WI-5.3)
+// ---------------------------------------------------------------------------
+
+TEST(Advisor, DisabledNeverAffectsBehaviour) {
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({"irrelevant", true});
+    auto reg = make_registry(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy = FallbackPolicy::disabled();
+    StrAdvisor advisor("test_kind", reg, v, policy, &audit);
+
+    for (int i = 0; i < 3; ++i) {
+        auto r = advisor.advise("req", wm);
+        EXPECT_EQ(r.outcome, StrAdvisor::Outcome::Disabled);
+        EXPECT_FALSE(r.proposal.has_value());
+    }
+    EXPECT_EQ(mb->call_count(), 0u); // backend never called
+}
+
+// ---------------------------------------------------------------------------
+// WI-1.3: wall-time bound holds even when backend errors immediately
+// ---------------------------------------------------------------------------
+
+TEST(Advisor, ImmediateErrorWithinBudget) {
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({"", false, "err", 0.0});
+    auto reg = make_registry(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+
+    FallbackPolicy policy = FallbackPolicy::hot_path("mock");
+    policy.latency_budget_ms = 500.0;
+    StrAdvisor advisor("test_kind", reg, v, policy);
+
+    auto t0 = std::chrono::steady_clock::now();
+    auto result = advisor.advise("req", wm);
+    double elapsed = std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - t0).count();
+
+    EXPECT_EQ(result.outcome, StrAdvisor::Outcome::ErroredFellBack);
+    EXPECT_LT(elapsed, 200.0);
+}
+
+// ---------------------------------------------------------------------------
+// WI-1.3: late result discarded (result after budget is TimedOut, not Accepted)
+// ---------------------------------------------------------------------------
+
+TEST(Advisor, LateResultDiscarded) {
+    auto mb = std::make_shared<MockBackend>("mock");
+    // Latency longer than the budget
+    mb->add_script({"late_proposal", true, "", 200.0});
+    auto reg = make_registry(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy;
+    policy.enabled = true;
+    policy.latency_budget_ms = 50.0; // budget < backend latency
+    policy.max_retries = 0;
+    policy.backend_id = "mock";
+    StrAdvisor advisor("test_kind", reg, v, policy, &audit);
+
+    auto result = advisor.advise("req", wm);
+    EXPECT_EQ(result.outcome, StrAdvisor::Outcome::TimedOutFellBack);
+    EXPECT_FALSE(result.proposal.has_value());
+}
