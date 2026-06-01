@@ -113,8 +113,17 @@ tests with no `ame_core` source changes. All 73 existing tests still pass.
 
 **Description:** Define the single seam through which all proposals are
 requested, independent of whether the backend is a cloud LLM, a local LLM, or an
-ONNX model. Calls are asynchronous and cancellable so the budget can be enforced
-by the caller without backend cooperation.
+ONNX model. Calls are asynchronous. The budget guarantee (WI-1.3) is enforced
+**caller-side by abandonment**, not by trusting the backend: the `Advisor`
+waits on the result only up to the budget and then proceeds to fallback
+regardless of whether the backend has returned. `std::stop_token` is a
+*best-effort, cooperative* signal that lets well-behaved backends release
+resources early — it is explicitly **not** the mechanism that bounds wall-time.
+
+This separation matters because `std::stop_token` cannot stop a backend blocked
+inside HTTP/ONNX work, and `std::future` offers no kill/abort. The contract
+therefore defines *isolation and abandonment* semantics so a non-cooperative or
+stuck backend can never hang the advisor path.
 
 **Deliverables:**
 - [ ] `INeuralBackend` interface in `ame_neuro`:
@@ -126,18 +135,47 @@ by the caller without backend cooperation.
   class INeuralBackend {
   public:
       virtual ~INeuralBackend() = default;
-      virtual BackendInfo info() const = 0;                       // id, modality, nominal latency
+      virtual BackendInfo info() const = 0;   // id, modality, nominal latency, cooperative?
+
+      // Async. Implementations SHOULD observe `stop` to abort early and MUST
+      // set a transport-level deadline <= the advertised max so the call
+      // terminates on its own even if `stop` is ignored. The returned future
+      // may be abandoned by the caller (see contract below); implementations
+      // MUST tolerate their result being discarded.
       virtual std::future<NeuralResponse> submit(const NeuralRequest&,
-                                                 std::stop_token) = 0;  // async, cancellable
+                                                 std::stop_token stop) = 0;
   };
   ```
+- [ ] **Contract clauses (documented in the header):**
+  1. *Cooperation expected, not assumed.* A backend that ignores `stop` is
+     still legal; correctness of the envelope must not depend on cooperation.
+  2. *Self-terminating deadline.* Every backend MUST impose its own transport
+     deadline/timeout so an abandoned call eventually completes and frees its
+     resources, rather than blocking forever.
+  3. *Abandonment is normal.* If the budget elapses first, the `Advisor`
+     requests stop, stops waiting on the future, records `TimedOutFellBack`,
+     and continues. The in-flight call is run on an isolated worker (below);
+     its eventual result is discarded.
+  4. `info().cooperative` advertises whether the backend honours `stop`,
+     letting the policy/registry treat non-cooperative backends more
+     conservatively (smaller pool slice, eager circuit-breaking).
+- [ ] **Isolation:** backend calls execute on a bounded worker pool
+      (`BackendExecutor`) with a max-in-flight cap and a circuit breaker.
+      Abandoned (timed-out) slots are reclaimed only when the underlying call
+      returns or hits its deadline; once outstanding abandoned calls saturate
+      the pool, the breaker opens and further `submit`s report unavailable
+      immediately — bounding resource leakage from a misbehaving backend.
 - [ ] `NullBackend` (always reports unavailable) and `MockBackend` (scripted
-      responses, injectable latency/error) for tests — both in `ame_neuro`.
+      responses, injectable latency/error, *and a non-cooperative/hang mode that
+      ignores `stop`*) for tests — both in `ame_neuro`.
 - [ ] `BackendRegistry` for named lookup and hot-path/warm-path/cold-path tiering.
 
-**Acceptance criteria:** A unit test drives `MockBackend` through the registry,
-verifies cancellation via `stop_token` mid-flight, and verifies latency is
-reported. No real network or model required.
+**Acceptance criteria:** A unit test drives `MockBackend` through the registry
+and verifies: (a) cooperative cancellation via `stop_token` mid-flight; (b) a
+**non-cooperative hanging** backend that ignores `stop` is abandoned and the
+caller still returns within budget; (c) sustained abandonment opens the circuit
+breaker so the pool cannot be exhausted; (d) latency is reported. No real network
+or model required.
 
 **Dependencies:** WI-0.1
 **Effort:** Medium
@@ -231,11 +269,17 @@ data, not code, so it is configurable per integration and per deployment tier.
       real waits.
 - [ ] Hard guarantee: total wall-time across retries never exceeds the budget;
       the symbolic fallback is reachable within a bounded delay regardless of
-      backend behaviour.
+      backend behaviour. This is enforced by **abandonment** (WI-0.2): the
+      advisor `wait_for`s each attempt's future up to the remaining budget,
+      requests cooperative stop, and — whether or not the backend honours it —
+      stops waiting and falls back. The guarantee never depends on the backend
+      cancelling or returning.
 
-**Acceptance criteria:** Unit tests prove the wall-time bound holds under a
-backend that hangs, a backend that errors immediately, and a backend that
-returns just after the budget expires.
+**Acceptance criteria:** Unit tests prove the wall-time bound holds under
+(a) a *cooperative* backend that hangs until `stop`, (b) a *non-cooperative*
+backend that ignores `stop` and blocks past the budget (must be abandoned),
+(c) a backend that errors immediately, and (d) a backend that returns just after
+the budget expires (late result is discarded, outcome is `TimedOutFellBack`).
 
 **Dependencies:** WI-1.2
 **Effort:** Medium
