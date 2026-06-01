@@ -99,10 +99,15 @@ following the established `AME_FOXGLOVE` pattern. Guard all neural code behind
 - [ ] `ame_neuro_onnx` lib gated on `AME_NEURAL` (FetchContent ONNX Runtime, ~5 MB)
 - [ ] New configure preset additions / `all-on` includes the neural flags
 - [ ] CTest preset wiring for neural unit tests
+- [ ] No language-standard change: the neuro libraries build under the
+      workspace-pinned C++17 (`CMAKE_CXX_STANDARD 17`). No C++20 features
+      (e.g. `std::stop_token`/`std::jthread`) are used — see the cancel-token
+      note in WI-0.2.
 
 **Acceptance criteria:** `cmake --preset all-off` is bit-identical in target set
 to today. `cmake --preset default -DAME_NEURO=ON` builds `ame_neuro` and its
-tests with no `ame_core` source changes. All 73 existing tests still pass.
+tests **under C++17** with no `ame_core` source changes and no bump to
+`CMAKE_CXX_STANDARD`. All 73 existing tests still pass.
 
 **Dependencies:** None
 **Effort:** Small
@@ -116,16 +121,42 @@ requested, independent of whether the backend is a cloud LLM, a local LLM, or an
 ONNX model. Calls are asynchronous. The budget guarantee (WI-1.3) is enforced
 **caller-side by abandonment**, not by trusting the backend: the `Advisor`
 waits on the result only up to the budget and then proceeds to fallback
-regardless of whether the backend has returned. `std::stop_token` is a
+regardless of whether the backend has returned. The cancel token is a
 *best-effort, cooperative* signal that lets well-behaved backends release
 resources early — it is explicitly **not** the mechanism that bounds wall-time.
 
-This separation matters because `std::stop_token` cannot stop a backend blocked
-inside HTTP/ONNX work, and `std::future` offers no kill/abort. The contract
-therefore defines *isolation and abandonment* semantics so a non-cooperative or
-stuck backend can never hang the advisor path.
+This separation matters because a cooperative cancel cannot stop a backend
+blocked inside HTTP/ONNX work, and `std::future` offers no kill/abort. The
+contract therefore defines *isolation and abandonment* semantics so a
+non-cooperative or stuck backend can never hang the advisor path.
+
+> **Language standard.** The workspace pins C++17 (root `CMakeLists.txt`:
+> `set(CMAKE_CXX_STANDARD 17)`), so the C++20 `std::stop_token`/`std::jthread`
+> are unavailable. This plan does **not** require a workspace C++20 migration.
+> Instead `ame_neuro` ships a tiny C++17-compatible `CancelToken` (a
+> `shared_ptr<atomic<bool>>` behind a `CancelSource`), used everywhere a cancel
+> signal is passed. If the workspace later moves to C++20, `CancelToken` can
+> become a thin alias over `std::stop_token` without changing the interface.
 
 **Deliverables:**
+- [ ] `CancelToken` / `CancelSource` (C++17) in `ame_neuro`:
+  ```cpp
+  // Minimal cooperative cancellation, C++17-compatible.
+  class CancelToken {
+  public:
+      bool cancelled() const noexcept { return flag_ && flag_->load(); }
+  private:
+      friend class CancelSource;
+      std::shared_ptr<std::atomic<bool>> flag_;
+  };
+  class CancelSource {
+  public:
+      CancelToken token() const;
+      void request_cancel() noexcept;   // sets the shared flag
+  private:
+      std::shared_ptr<std::atomic<bool>> flag_ = std::make_shared<std::atomic<bool>>(false);
+  };
+  ```
 - [ ] `INeuralBackend` interface in `ame_neuro`:
   ```cpp
   struct NeuralRequest  { std::string kind; std::string payload; /* prompt or feature blob */ };
@@ -137,26 +168,26 @@ stuck backend can never hang the advisor path.
       virtual ~INeuralBackend() = default;
       virtual BackendInfo info() const = 0;   // id, modality, nominal latency, cooperative?
 
-      // Async. Implementations SHOULD observe `stop` to abort early and MUST
+      // Async. Implementations SHOULD poll `cancel` to abort early and MUST
       // set a transport-level deadline <= the advertised max so the call
-      // terminates on its own even if `stop` is ignored. The returned future
+      // terminates on its own even if `cancel` is ignored. The returned future
       // may be abandoned by the caller (see contract below); implementations
       // MUST tolerate their result being discarded.
       virtual std::future<NeuralResponse> submit(const NeuralRequest&,
-                                                 std::stop_token stop) = 0;
+                                                 CancelToken cancel) = 0;
   };
   ```
 - [ ] **Contract clauses (documented in the header):**
-  1. *Cooperation expected, not assumed.* A backend that ignores `stop` is
+  1. *Cooperation expected, not assumed.* A backend that ignores `cancel` is
      still legal; correctness of the envelope must not depend on cooperation.
   2. *Self-terminating deadline.* Every backend MUST impose its own transport
      deadline/timeout so an abandoned call eventually completes and frees its
      resources, rather than blocking forever.
   3. *Abandonment is normal.* If the budget elapses first, the `Advisor`
-     requests stop, stops waiting on the future, records `TimedOutFellBack`,
+     requests cancel, stops waiting on the future, records `TimedOutFellBack`,
      and continues. The in-flight call is run on an isolated worker (below);
      its eventual result is discarded.
-  4. `info().cooperative` advertises whether the backend honours `stop`,
+  4. `info().cooperative` advertises whether the backend honours `cancel`,
      letting the policy/registry treat non-cooperative backends more
      conservatively (smaller pool slice, eager circuit-breaking).
 - [ ] **Isolation:** backend calls execute on a bounded worker pool
@@ -167,12 +198,12 @@ stuck backend can never hang the advisor path.
       immediately — bounding resource leakage from a misbehaving backend.
 - [ ] `NullBackend` (always reports unavailable) and `MockBackend` (scripted
       responses, injectable latency/error, *and a non-cooperative/hang mode that
-      ignores `stop`*) for tests — both in `ame_neuro`.
+      ignores `cancel`*) for tests — both in `ame_neuro`.
 - [ ] `BackendRegistry` for named lookup and hot-path/warm-path/cold-path tiering.
 
 **Acceptance criteria:** A unit test drives `MockBackend` through the registry
-and verifies: (a) cooperative cancellation via `stop_token` mid-flight; (b) a
-**non-cooperative hanging** backend that ignores `stop` is abandoned and the
+and verifies: (a) cooperative cancellation via `CancelToken` mid-flight; (b) a
+**non-cooperative hanging** backend that ignores `cancel` is abandoned and the
 caller still returns within budget; (c) sustained abandonment opens the circuit
 breaker so the pool cannot be exhausted; (d) latency is reported. No real network
 or model required.
@@ -271,13 +302,13 @@ data, not code, so it is configurable per integration and per deployment tier.
       the symbolic fallback is reachable within a bounded delay regardless of
       backend behaviour. This is enforced by **abandonment** (WI-0.2): the
       advisor `wait_for`s each attempt's future up to the remaining budget,
-      requests cooperative stop, and — whether or not the backend honours it —
+      requests cooperative cancel, and — whether or not the backend honours it —
       stops waiting and falls back. The guarantee never depends on the backend
       cancelling or returning.
 
 **Acceptance criteria:** Unit tests prove the wall-time bound holds under
-(a) a *cooperative* backend that hangs until `stop`, (b) a *non-cooperative*
-backend that ignores `stop` and blocks past the budget (must be abandoned),
+(a) a *cooperative* backend that hangs until `cancel`, (b) a *non-cooperative*
+backend that ignores `cancel` and blocks past the budget (must be abandoned),
 (c) a backend that errors immediately, and (d) a backend that returns just after
 the budget expires (late result is discarded, outcome is `TimedOutFellBack`).
 
@@ -343,23 +374,47 @@ equivalent to a LAPKT-produced plan for a shared fixture.
 
 **Description:** Resolve the review's open question (gap #4) at the
 infrastructure level: when a verifier simulates from "current state", which facts
-count? The codebase already tags facts `BELIEVED` vs `CONFIRMED`
+count? The codebase already tags each fluent `BELIEVED` vs `CONFIRMED`
 (`FactAuthority` in `world_model.h`, `FactAuthorityLevel` at the backend
 boundary). This WI defines and documents the policy verifiers use, so plan
 repair and analysis rest on explicit semantics rather than ambiguity.
 
+**Storage reality (important — no `WorldModel` change required).** `WorldModel`
+stores exactly **one** value plus **one** `FactMetadata` (authority, source,
+timestamp) per fluent; `setFact` overwrites the prior tag and `hasAuthorityConflict`
+only compares an *incoming* perceived value before the write. There is therefore
+**no parallel believed/confirmed pair** for a fluent in a captured
+`WorldStateData` snapshot. `AuthorityView` is consequently defined as a **filter
+over each fluent's single stored authority tag** — *not* a reconciliation of two
+co-stored values. This is what the existing snapshot can actually express, and it
+still yields distinct verdicts from one snapshot.
+
 **Deliverables:**
-- [ ] `AuthorityView` enum on verifier construction:
-      `ConfirmedOnly` | `ConfirmedThenBelieved` | `All`.
-- [ ] Default `ConfirmedThenBelieved`: confirmed (perception) facts override
-      believed (plan-applied) predictions when both exist.
+- [ ] `AuthorityView` enum on verifier construction, defined over the *single*
+      `(value, authority)` already carried per fluent in the snapshot:
+  - `All` — trust each fluent's stored value regardless of its authority tag
+    (forward-sim default for repair, matching today's behaviour).
+  - `ConfirmedThenBelieved` — trust the stored value, but when acceptance of a
+    precondition relied on a `BELIEVED`-tagged fact, record that reliance in the
+    `Verdict.evidence` so the caller knows the result leaned on a prediction.
+  - `ConfirmedOnly` — a fluent counts as true only if its stored value is true
+    **and** its `metadata.authority == CONFIRMED`; `BELIEVED` facts are treated
+    as not-yet-established. May reject a plan that `All` would accept.
+- [ ] Verifier reads `FactAuthority` straight from the snapshot's
+      `fact_metadata` (`WorldStateData::getMetadata`) — no new storage, no
+      believed/confirmed shadow history, no `WorldModel` API change.
 - [ ] Documented semantics added to `02-world-model.md` cross-reference and the
       assurance plan: believed = optimistic prediction; confirmed = observed
       truth; verifiers must be told which to trust.
+- [ ] **Out of scope / future:** a dual believed-vs-confirmed shadow store (so a
+      fluent could hold both predicted and observed values simultaneously) is a
+      possible later `WorldModel` extension, explicitly *not* required here.
 
-**Acceptance criteria:** A fixture where a believed fact and a confirmed fact
-conflict produces different (documented) verifier verdicts under each
-`AuthorityView`.
+**Acceptance criteria:** A single fixture snapshot in which a precondition is
+satisfied only by a `BELIEVED`-tagged fluent yields three documented verdicts
+from the *same* state: rejected under `ConfirmedOnly`, accepted-with-evidence
+note under `ConfirmedThenBelieved`, and accepted-silently under `All` — using
+only the per-fluent authority tag the snapshot already carries.
 
 **Dependencies:** WI-2.2
 **Effort:** Medium
