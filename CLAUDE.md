@@ -24,6 +24,7 @@ See `README.md` for a comprehensive project overview, and `doc/reports/AME/stake
 | `doc/research/AME/temporal_extension_research.md` | **Temporal planner evaluation**: OPTIC, POPF, TFD, Aries, STN, BT.CPP integration |
 | `doc/plans/AME/autonomy_assurance_plan.md` | SACE/AMLAS/DSTL safety assurance framework |
 | `doc/research/AME/neuro_symbolic_reasoning.md` | Neural/LLM integration options and architecture |
+| `doc/plans/AME/neuro_symbolic_infrastructure_plan.md` | **Neuro-symbolic core infrastructure work plan**: propose-verify-fallback envelope, backend/verifier abstractions, audit, policy, test harness |
 
 ### Architecture Reference (`subprojects/AME/doc/architecture/`)
 

@@ -59,6 +59,11 @@ PDDL 2.1 Domain --> PddlParser (extended) --> IPlannerBackend
 Neural components should remain advisory while the symbolic stack remains authoritative.
 See [`neuro_symbolic_reasoning.md`](../../../../doc/research/AME/neuro_symbolic_reasoning.md) and [`neuro_symbolic_reasoning_review.md`](../../../../doc/reviews/AME/neuro_symbolic_reasoning_review.md).
 
+The use-case-agnostic core infrastructure (the propose-verify-fallback envelope,
+backend/verifier abstractions, neuro audit trail, policy, and test/assurance
+harness that all options share) is planned in
+[`neuro_symbolic_infrastructure_plan.md`](../../../../doc/plans/AME/neuro_symbolic_infrastructure_plan.md).
+
 Adoption order:
 1. Low-risk: goal interpretation and offline mission analysis
 2. Medium-risk: planner-adjacent guidance and repair suggestions
