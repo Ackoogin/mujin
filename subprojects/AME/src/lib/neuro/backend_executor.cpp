@@ -34,7 +34,9 @@ void BackendExecutor::reset_circuit() {
     std::lock_guard<std::mutex> lk(state_->mx);
     state_->circuit_open = false;
     state_->consecutive_failures = 0;
-    state_->in_flight = 0;
+    // in_flight is NOT reset: detached workers are still running and will
+    // decrement it on completion.  Zeroing it here would underflow the
+    // unsigned counter and make available() report pool-saturated forever.
 }
 
 void BackendExecutor::on_abandoned() {

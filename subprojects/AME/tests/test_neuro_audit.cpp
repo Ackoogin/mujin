@@ -6,6 +6,7 @@
 #include "ame/plan_audit_log.h"
 
 #include <gtest/gtest.h>
+#include <fstream>
 #include <sstream>
 
 using namespace ame::neuro;
@@ -241,4 +242,47 @@ TEST(AuditIndex, CiteFindsReferredRecords) {
     auto ids = idx.cite("goal_interpreter");
     EXPECT_FALSE(ids.empty());
     EXPECT_EQ(ids[0], 10u);
+}
+
+// ---------------------------------------------------------------------------
+// Thread GbKDX: json_escape must produce valid JSON for all control bytes
+// ---------------------------------------------------------------------------
+
+TEST(NeuroAuditLog, ControlBytesEscapedInJsonl) {
+    // A payload containing NUL, SOH, and BEL (bytes 0x00, 0x01, 0x07) plus the
+    // already-handled \n so we can verify both paths together.
+    NeuroAuditLog log;
+    NeuroAuditRecord rec;
+    rec.integration_kind = std::string("\x00\x01\x07", 3);  // raw control bytes
+    rec.outcome = "Accepted\nnewline";                        // \n already handled
+    log.append(rec);
+
+    ASSERT_EQ(log.size(), 1u);
+    const auto& stored = log.records()[0];
+    // The in-memory record is unchanged — only the serialised JSONL is escaped.
+    EXPECT_EQ(stored.integration_kind.size(), 3u);
+
+    // Verify the JSONL written to a temp file is valid (no raw control bytes).
+    std::string tmp_path = "/tmp/test_neuro_audit_control_bytes.jsonl";
+    {
+        NeuroAuditLog file_log(tmp_path);
+        NeuroAuditRecord r2;
+        r2.integration_kind = std::string("\x00\x01\x07", 3);
+        r2.outcome = "Accepted";
+        r2.request_digest = std::string(1, '\x05');  // ENQ
+        file_log.append(r2);
+    }
+    std::ifstream fin(tmp_path);
+    ASSERT_TRUE(fin.is_open());
+    std::string line;
+    ASSERT_TRUE(std::getline(fin, line));
+    // No raw bytes below 0x20 should appear in the line.
+    for (unsigned char ch : line) {
+        EXPECT_GE(ch, 0x20u) << "raw control byte 0x"
+            << std::hex << static_cast<unsigned>(ch) << " found in JSONL";
+    }
+    // The escape sequences must be present.
+    EXPECT_NE(line.find("\\u0000"), std::string::npos);
+    EXPECT_NE(line.find("\\u0001"), std::string::npos);
+    EXPECT_NE(line.find("\\u0007"), std::string::npos);
 }

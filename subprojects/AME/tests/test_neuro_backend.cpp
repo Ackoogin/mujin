@@ -335,3 +335,49 @@ TEST(BackendRegistry, UnknownIdReturnsNull) {
     BackendRegistry reg;
     EXPECT_EQ(reg.find("does_not_exist"), nullptr);
 }
+
+// ---------------------------------------------------------------------------
+// Thread GbKDf: reset_circuit must not zero in_flight for running workers
+// ---------------------------------------------------------------------------
+
+TEST(BackendExecutor, ResetCircuit_DoesNotZeroInFlight) {
+    // Fill the pool with hanging workers, open the circuit via on_abandoned(),
+    // then call reset_circuit(). The pool slot count must reflect the still-
+    // running workers; available() should be false (pool full), NOT because of
+    // the circuit, but because in_flight was not reset to 0.
+    auto mb = std::make_shared<MockBackend>("mock", false);
+    // One non-cooperative hanger: stays in flight until the test ends.
+    MockScript hang;
+    hang.hang = true;
+    hang.latency_ms = 5000.0;
+    hang.non_cooperative = true;
+    mb->add_script(hang);
+
+    BackendExecutorConfig cfg;
+    cfg.max_in_flight = 1;
+    cfg.failure_threshold = 1;
+    BackendExecutor exec(mb, cfg);
+
+    // Submit the hanger — fills the pool.
+    CancelSource cs;
+    auto f = exec.submit({}, cs.token());
+
+    // Open the circuit manually.
+    exec.on_abandoned();
+    EXPECT_FALSE(exec.available());
+
+    // Reset circuit — must NOT zero in_flight.
+    exec.reset_circuit();
+
+    // The circuit is closed again, but the pool is still full (1 worker running).
+    // available() must still return false because in_flight == 1 == max_in_flight.
+    EXPECT_FALSE(exec.available());
+
+    // After a subsequent submit the response must be pool_saturated, not circuit_open.
+    CancelSource cs2;
+    auto f2 = exec.submit({}, cs2.token());
+    ASSERT_EQ(f2.wait_for(std::chrono::milliseconds(10)), std::future_status::ready);
+    auto resp = f2.get();
+    EXPECT_FALSE(resp.ok);
+    EXPECT_EQ(resp.error, "pool_saturated");
+}

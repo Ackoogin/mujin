@@ -16,7 +16,17 @@ std::string json_escape(const std::string& s) {
             case '\n': out += "\\n";  break;
             case '\r': out += "\\r";  break;
             case '\t': out += "\\t";  break;
-            default:   out += c;      break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    // \uXXXX escape for remaining ASCII control bytes
+                    static const char hex[] = "0123456789abcdef";
+                    out += "\\u00";
+                    out += hex[(static_cast<unsigned char>(c) >> 4) & 0xf];
+                    out += hex[static_cast<unsigned char>(c) & 0xf];
+                } else {
+                    out += c;
+                }
+                break;
         }
     }
     return out;
