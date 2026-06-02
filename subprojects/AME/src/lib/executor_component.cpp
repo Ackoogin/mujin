@@ -157,9 +157,26 @@ pcl_status_t ExecutorComponent::on_tick(double /*dt*/) {
       // before the failure by inspecting the live tree (not yet halted here).
       unsigned failed_step = 0;
       if (tree_) {
+        // compileSequential() wraps the plan body in a ReactiveFallback goal guard
+        // when the WorldModel has goal fluents:
+        //   ReactiveFallback -> [GoalCheck, Sequence(action units)]
+        // Navigate past the guard to reach the plan Sequence whose children
+        // are the action units we want to count.
+        BT::ControlNode* plan_seq = nullptr;
         auto* root = dynamic_cast<BT::ControlNode*>(tree_->rootNode());
-        if (root) {
-          for (auto* child : root->children()) {
+        if (root && !root->children().empty()) {
+          auto* first = root->children().front();
+          // GoalCheck is either a ConditionNode (single goal) or a Sequence
+          // named "GoalCheck" (multiple goals); action-unit sequences are never
+          // bare ConditionNodes and are not named "GoalCheck".
+          bool goal_guard = dynamic_cast<BT::ConditionNode*>(first) != nullptr
+                            || first->name() == "GoalCheck";
+          if (goal_guard && root->children().size() >= 2)
+            plan_seq = dynamic_cast<BT::ControlNode*>(root->children().back());
+        }
+        if (!plan_seq) plan_seq = root;
+        if (plan_seq) {
+          for (auto* child : plan_seq->children()) {
             if (child->status() == BT::NodeStatus::SUCCESS) ++failed_step;
             else break;
           }

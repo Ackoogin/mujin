@@ -1,5 +1,6 @@
 #include "ame/neuro/backend_executor.h"
 
+#include <atomic>
 #include <chrono>
 #include <mutex>
 #include <thread>
@@ -59,7 +60,8 @@ bool BackendExecutor::available() const {
 }
 
 std::future<NeuralResponse> BackendExecutor::submit(const NeuralRequest& req,
-                                                     CancelToken cancel) {
+                                                     CancelToken cancel,
+                                                     std::shared_ptr<std::atomic<bool>> abandoned_flag) {
     // Check availability under lock; increment in_flight if proceeding.
     {
         std::lock_guard<std::mutex> lk(state_->mx);
@@ -91,7 +93,7 @@ std::future<NeuralResponse> BackendExecutor::submit(const NeuralRequest& req,
     auto backend = backend_; // shared_ptr copy keeps backend alive for the thread's lifetime
     auto cfg = cfg_;
 
-    std::thread([state, backend, req, cancel, promise_ptr, cfg]() mutable {
+    std::thread([state, backend, req, cancel, promise_ptr, cfg, abandoned_flag]() mutable {
         double t0 = now_ms();
         NeuralResponse resp;
         try {
@@ -104,18 +106,14 @@ std::future<NeuralResponse> BackendExecutor::submit(const NeuralRequest& req,
         }
         resp.latency_ms = now_ms() - t0;
 
-        // Try to deliver the result to the caller first.  If the future was
-        // already abandoned (Advisor timed out, called on_abandoned(), and
-        // discarded the future), set_value() throws std::future_error.
-        // Abandoned calls must NOT reset consecutive_failures — the Advisor
-        // already counted this call as a failure via on_abandoned().
-        bool delivered = false;
-        try {
-            promise_ptr->set_value(resp);
-            delivered = true;
-        } catch (...) {
-            // Future abandoned by caller; result discarded. Normal outcome.
-        }
+        // Deliver result unconditionally; set_value() on a valid promise always
+        // succeeds regardless of whether the caller still holds the future.
+        promise_ptr->set_value(resp);
+
+        // If the caller passed an abandoned_flag and set it to true, it already
+        // counted this call as a failure via on_abandoned().  Do not reset the
+        // consecutive_failures streak on a late ok=true result.
+        const bool is_abandoned = abandoned_flag && abandoned_flag->load();
 
         {
             std::lock_guard<std::mutex> lk(state->mx);
@@ -127,12 +125,12 @@ std::future<NeuralResponse> BackendExecutor::submit(const NeuralRequest& req,
                     state->circuit_open = true;
                     state->circuit_open_at_ms = now_ms();
                 }
-            } else if (delivered) {
-                // Success that the caller actually received: clear failure streak.
+            } else if (!is_abandoned) {
+                // Non-abandoned success: clear failure streak.
                 state->consecutive_failures = 0;
             }
-            // else: late success on an abandoned call — leave consecutive_failures
-            // unchanged; on_abandoned() already incremented it for the Advisor's timeout.
+            // else: late ok=true on an abandoned call — on_abandoned() already
+            // incremented consecutive_failures; do not undo that count.
         }
     }).detach();
 

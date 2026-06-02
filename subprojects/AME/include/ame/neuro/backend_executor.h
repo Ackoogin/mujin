@@ -27,7 +27,14 @@ public:
 
     // Submit a request. Returns a future the caller may abandon after budget expires.
     // If pool is saturated or circuit is open, returns NeuralResponse{ok=false} immediately.
-    std::future<NeuralResponse> submit(const NeuralRequest& req, CancelToken cancel);
+    //
+    // abandoned_flag (optional): the caller must store(true) into this flag BEFORE calling
+    // on_abandoned() when it abandons the future.  The worker thread checks the flag on
+    // completion: if set, a late ok=true result does NOT clear consecutive_failures
+    // (on_abandoned() already counted the timeout as a failure).  Pass nullptr to opt out;
+    // the old behaviour (abandoned late successes may clear the streak) applies.
+    std::future<NeuralResponse> submit(const NeuralRequest& req, CancelToken cancel,
+                                       std::shared_ptr<std::atomic<bool>> abandoned_flag = nullptr);
 
     // True if the circuit is closed and the pool has available slots.
     bool available() const;

@@ -216,6 +216,45 @@ TEST(BackendExecutor, PoolSaturationReturnsUnavailable) {
 }
 
 // ---------------------------------------------------------------------------
+// BackendExecutor — abandoned late success does not reset consecutive_failures
+// Regression for PR review Thread 12: std::promise::set_value() does not throw
+// when the future is dropped, so delivered==true for all completions.  The fix
+// uses a per-call abandoned_flag so the circuit breaker still trips when the
+// backend is consistently slower than the latency budget.
+// ---------------------------------------------------------------------------
+
+TEST(BackendExecutor, LateSuccessAfterAbandonDoesNotResetCircuit) {
+    // Backend returns ok=true but only after 300 ms (beyond any budget we use).
+    auto mb = std::make_shared<MockBackend>("mock_slow", false);
+    for (int i = 0; i < 4; ++i)
+        mb->add_script({"ok", true, "", 300.0, /*hang=*/true, /*non_cooperative=*/true});
+
+    BackendExecutorConfig cfg;
+    cfg.max_in_flight = 8;
+    cfg.failure_threshold = 3;
+    cfg.recovery_window_ms = 60000.0; // don't let recovery window interfere
+    BackendExecutor exec(mb, cfg);
+
+    // Abandon three calls (threshold=3).  Each one signals the flag before calling
+    // on_abandoned() so the late ok=true result doesn't reset consecutive_failures.
+    for (int i = 0; i < (int)cfg.failure_threshold; ++i) {
+        ASSERT_TRUE(exec.available()) << "iteration " << i;
+        auto abandoned = std::make_shared<std::atomic<bool>>(false);
+        CancelSource cs;
+        auto fut = exec.submit({}, cs.token(), abandoned);
+        cs.request_cancel();
+        fut.wait_for(5ms); // well short of 300 ms backend latency
+        abandoned->store(true);  // mark BEFORE on_abandoned
+        exec.on_abandoned();
+    }
+
+    // Circuit must be open now despite the backends eventually returning ok=true.
+    EXPECT_FALSE(exec.available())
+        << "circuit should open after " << cfg.failure_threshold
+        << " abandoned calls even when the backend eventually returns ok=true";
+}
+
+// ---------------------------------------------------------------------------
 // BackendRegistry — named lookup
 // ---------------------------------------------------------------------------
 

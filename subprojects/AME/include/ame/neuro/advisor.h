@@ -84,9 +84,14 @@ public:
         while (attempt < max_attempts && remaining_ms > 0.0) {
             const double attempt_start = clock_();
 
+            // Per-attempt abandoned flag: set to true BEFORE on_abandoned() so
+            // the worker thread can detect that its late ok=true result must not
+            // reset consecutive_failures (on_abandoned() already counted the timeout).
+            auto abandoned_flag = std::make_shared<std::atomic<bool>>(false);
+
             CancelSource cs;
             NeuralRequest neural_req = RequestCodec<Request>::encode(req, kind_);
-            std::future<NeuralResponse> fut = exec->submit(neural_req, cs.token());
+            std::future<NeuralResponse> fut = exec->submit(neural_req, cs.token(), abandoned_flag);
 
             // Wait up to remaining budget, then abandon if not ready.
             const auto budget_dur = std::chrono::microseconds(
@@ -99,7 +104,10 @@ public:
             remaining_ms -= elapsed;
 
             if (wait_status != std::future_status::ready) {
-                // Budget elapsed: abandon the future and fall back.
+                // Budget elapsed: signal abandonment then count the failure.
+                // Order matters: set the flag before on_abandoned() so the worker
+                // sees is_abandoned=true if it completes during/after on_abandoned().
+                abandoned_flag->store(true);
                 exec->on_abandoned();
                 result.outcome = Outcome::TimedOutFellBack;
                 emit_audit(req, {}, result, clock_() - start_ms, attempt);
