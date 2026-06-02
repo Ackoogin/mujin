@@ -28,26 +28,31 @@ PlanResult Planner::solve(const WorldModel& wm) const {
     // Consult neural heuristic hook (seam for Options A/D).
     // Non-empty scores reorder the action traversal passed to LAPKT so
     // higher-scored actions are expanded first in BRFS tie-breaking.
-    // If hook returns empty or is absent, default ordering is used unchanged.
+    // If hook returns empty, is absent, or throws, default ordering is used.
+    // Exceptions are swallowed so a neural outage never blocks the symbolic plan.
     if (heuristic_hook_) {
-        auto heuristic_scores = heuristic_hook_(wm, wm.goalFluentIds());
-        result.heuristic_source = "neural_hook"; // set whenever hook fires
+        try {
+            auto heuristic_scores = heuristic_hook_(wm, wm.goalFluentIds());
+            result.heuristic_source = "neural_hook"; // hook fired; may or may not reorder
+            if (!heuristic_scores.empty()) {
+                std::unordered_map<unsigned, float> score_map;
+                score_map.reserve(heuristic_scores.size());
+                for (const auto& s : heuristic_scores)
+                    score_map[s.ground_action_id] = s.score;
 
-        if (!heuristic_scores.empty()) {
-            std::unordered_map<unsigned, float> score_map;
-            score_map.reserve(heuristic_scores.size());
-            for (const auto& s : heuristic_scores)
-                score_map[s.ground_action_id] = s.score;
-
-            // Stable sort preserves tie-breaking order among unscored actions.
-            std::stable_sort(action_order.begin(), action_order.end(),
-                             [&](unsigned a, unsigned b) {
-                                 auto it_a = score_map.find(a);
-                                 auto it_b = score_map.find(b);
-                                 float sa = (it_a != score_map.end()) ? it_a->second : 0.0f;
-                                 float sb = (it_b != score_map.end()) ? it_b->second : 0.0f;
-                                 return sa > sb; // descending
-                             });
+                // Stable sort preserves tie-breaking order among unscored actions.
+                std::stable_sort(action_order.begin(), action_order.end(),
+                                 [&](unsigned a, unsigned b) {
+                                     auto it_a = score_map.find(a);
+                                     auto it_b = score_map.find(b);
+                                     float sa = (it_a != score_map.end()) ? it_a->second : 0.0f;
+                                     float sb = (it_b != score_map.end()) ? it_b->second : 0.0f;
+                                     return sa > sb; // descending
+                                 });
+            }
+        } catch (...) {
+            // Hook/backend/codec failure: continue with default ordering.
+            // heuristic_source stays "symbolic" — hook did not influence the plan.
         }
     }
 #endif
