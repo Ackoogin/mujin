@@ -236,6 +236,13 @@ private:
         rec.integration_kind = kind_;
         rec.backend_id = policy_.backend_id;
         rec.model_id = policy_.model_id;
+        // When backend_id is unpinned (empty), BackendRegistry::find("") routes to
+        // the first registered executor.  Resolve its actual ID so audit records
+        // carry useful provenance for "use default backend" policies.
+        if (rec.backend_id.empty()) {
+            const BackendExecutor* exec = registry_.find({});
+            if (exec) rec.backend_id = exec->info().id;
+        }
         rec.request_digest = RequestCodec<Request>::digest(req);
         rec.proposal_digest = proposal
             ? ProposalCodec<Proposal>::digest(*proposal) : "";

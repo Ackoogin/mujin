@@ -515,3 +515,31 @@ TEST(Advisor, VerboseAuditWithThrowingEncoderDoesNotThrow) {
     EXPECT_EQ(audit.size(), 1u);
     EXPECT_EQ(audit.records()[0].outcome, "ErroredFellBack");
 }
+
+// ---------------------------------------------------------------------------
+// Thread GagZQ: unpinned policy (empty backend_id) resolves actual backend in audit
+// ---------------------------------------------------------------------------
+
+TEST(Advisor, UnpinnedPolicyRecordsActualBackendId) {
+    auto mb = std::make_shared<MockBackend>("my_backend");
+    mb->add_script({"result", true, "", 0.0});
+    BackendRegistry reg;
+    reg.add(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    // Empty backend_id: BackendRegistry::find("") returns the first executor.
+    FallbackPolicy policy;
+    policy.enabled = true;
+    policy.latency_budget_ms = 1000.0;
+    // policy.backend_id left empty (simulates warm_path()-style unpinned config)
+
+    StrAdvisor advisor("test_kind", reg, v, policy, &audit);
+    auto result = advisor.advise("req", wm);
+
+    EXPECT_EQ(result.outcome, StrAdvisor::Outcome::Accepted);
+    ASSERT_EQ(audit.size(), 1u);
+    // Audit record must reflect the actual backend used, not leave backend_id empty.
+    EXPECT_EQ(audit.records()[0].backend_id, "my_backend");
+}
