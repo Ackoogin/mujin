@@ -73,7 +73,8 @@ public:
         BackendExecutor* exec = registry_.find(policy_.backend_id);
         if (!exec || !exec->available()) {
             result.outcome = Outcome::UnavailableFellBack;
-            emit_audit(req, {}, result, clock_() - start_ms, 0, start_ms);
+            result.total_latency_ms = clock_() - start_ms;
+            emit_audit(req, {}, result, result.total_latency_ms, 0, start_ms);
             return result;
         }
 
@@ -95,7 +96,9 @@ public:
                 neural_req = RequestCodec<Request>::encode(req, kind_);
             } catch (...) {
                 result.outcome = Outcome::ErroredFellBack;
-                emit_audit(req, {}, result, clock_() - start_ms, attempt, start_ms);
+                result.total_latency_ms = clock_() - start_ms;
+                result.retries = attempt;
+                emit_audit(req, {}, result, result.total_latency_ms, attempt, start_ms);
                 return result;
             }
             std::future<NeuralResponse> fut = exec->submit(neural_req, cs.token(), abandoned_flag);
@@ -129,7 +132,9 @@ public:
                     continue;
                 }
                 result.outcome = Outcome::TimedOutFellBack;
-                emit_audit(req, {}, result, clock_() - start_ms, attempt - 1, start_ms);
+                result.total_latency_ms = clock_() - start_ms;
+                result.retries = attempt - 1;
+                emit_audit(req, {}, result, result.total_latency_ms, attempt - 1, start_ms);
                 return result;
             }
 
@@ -147,13 +152,17 @@ public:
                 // rather than retrying or misreporting as ErroredFellBack.
                 if (resp.error == "pool_saturated" || resp.error == "circuit_open") {
                     result.outcome = Outcome::UnavailableFellBack;
-                    emit_audit(req, {}, result, clock_() - start_ms, attempt, start_ms);
+                    result.total_latency_ms = clock_() - start_ms;
+                    result.retries = attempt;
+                    emit_audit(req, {}, result, result.total_latency_ms, attempt, start_ms);
                     return result;
                 }
                 ++attempt;
                 if (attempt >= max_attempts) {
                     result.outcome = Outcome::ErroredFellBack;
-                    emit_audit(req, {}, result, clock_() - start_ms, attempt - 1, start_ms);
+                    result.total_latency_ms = clock_() - start_ms;
+                    result.retries = attempt - 1;
+                    emit_audit(req, {}, result, result.total_latency_ms, attempt - 1, start_ms);
                     return result;
                 }
                 if (policy_.retry_backoff_ms > 0.0 && remaining_ms > 0.0) {
@@ -171,14 +180,18 @@ public:
                 proposal_opt = ProposalCodec<Proposal>::decode(resp.payload, decode_err);
             } catch (...) {
                 result.outcome = Outcome::ErroredFellBack;
-                emit_audit(req, {}, result, clock_() - start_ms, attempt, start_ms);
+                result.total_latency_ms = clock_() - start_ms;
+                result.retries = attempt;
+                emit_audit(req, {}, result, result.total_latency_ms, attempt, start_ms);
                 return result;
             }
 
             if (!proposal_opt) {
                 ++attempt;
                 result.outcome = Outcome::ErroredFellBack;
-                emit_audit(req, {}, result, clock_() - start_ms, attempt - 1, start_ms);
+                result.total_latency_ms = clock_() - start_ms;
+                result.retries = attempt - 1;
+                emit_audit(req, {}, result, result.total_latency_ms, attempt - 1, start_ms);
                 return result;
             }
 
@@ -187,7 +200,9 @@ public:
                 verdict = verifier_.verify(*proposal_opt, wm);
             } catch (...) {
                 result.outcome = Outcome::ErroredFellBack;
-                emit_audit(req, {}, result, clock_() - start_ms, attempt, start_ms);
+                result.total_latency_ms = clock_() - start_ms;
+                result.retries = attempt;
+                emit_audit(req, {}, result, result.total_latency_ms, attempt, start_ms);
                 return result;
             }
 
@@ -196,7 +211,9 @@ public:
                     attempt + 1 >= max_attempts) {
                     result.outcome = Outcome::RejectedFellBack;
                     result.verdict = std::move(verdict);
-                    emit_audit(req, proposal_opt, result, clock_() - start_ms, attempt, start_ms, resp.payload);
+                    result.total_latency_ms = clock_() - start_ms;
+                    result.retries = attempt;
+                    emit_audit(req, proposal_opt, result, result.total_latency_ms, attempt, start_ms, resp.payload);
                     return result;
                 }
                 ++attempt;
@@ -219,7 +236,9 @@ public:
         }
 
         result.outcome = Outcome::ErroredFellBack;
-        emit_audit(req, {}, result, clock_() - start_ms, attempt, start_ms);
+        result.total_latency_ms = clock_() - start_ms;
+        result.retries = attempt;
+        emit_audit(req, {}, result, result.total_latency_ms, attempt, start_ms);
         return result;
     }
 

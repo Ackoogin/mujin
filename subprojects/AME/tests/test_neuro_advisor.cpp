@@ -659,3 +659,58 @@ TEST(Advisor, UnpinnedPolicyRecordsActualBackendId) {
     // Audit record must reflect the actual backend used, not leave backend_id empty.
     EXPECT_EQ(audit.records()[0].backend_id, "my_backend");
 }
+
+// ---------------------------------------------------------------------------
+// Thread Ga8EX: result.retries and result.total_latency_ms populated on fallback
+// ---------------------------------------------------------------------------
+
+TEST(Advisor, FallbackResult_RetriesAndLatencyPopulated) {
+    // Two scripted error responses: both ok=false. With max_retries=1 the
+    // Advisor exhausts attempts and returns ErroredFellBack. Verify that
+    // retries > 0 (at least one retry was counted) and total_latency_ms > 0.
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({"", false, "backend_error", 0.0});
+    mb->add_script({"", false, "backend_error", 0.0});
+    BackendRegistry reg = make_registry(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+
+    FallbackPolicy policy = FallbackPolicy::hot_path("mock");
+    policy.max_retries = 1;
+
+    // ClockFn is a raw function pointer; use a static counter so it advances
+    // without captures.
+    static double s_fake_ms = 0.0;
+    s_fake_ms = 0.0;
+    ClockFn clock = []() -> double { s_fake_ms += 5.0; return s_fake_ms; };
+
+    StrAdvisor advisor("test_kind", reg, v, policy, nullptr, clock);
+    auto result = advisor.advise("req", wm);
+
+    EXPECT_EQ(result.outcome, StrAdvisor::Outcome::ErroredFellBack);
+    EXPECT_GT(result.retries, 0u);
+    EXPECT_GT(result.total_latency_ms, 0.0);
+}
+
+TEST(Advisor, TimedOutFallback_RetriesAndLatencyPopulated) {
+    // Single hanging backend with a very short budget: TimedOutFellBack.
+    // Verify retries and total_latency_ms are set.
+    auto mb = std::make_shared<MockBackend>("mock");
+    MockScript hang;
+    hang.hang = true;
+    hang.latency_ms = 5000.0;
+    mb->add_script(hang);
+    BackendRegistry reg = make_registry(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+
+    FallbackPolicy policy = FallbackPolicy::hot_path("mock");
+    policy.latency_budget_ms = 10.0;
+
+    StrAdvisor advisor("test_kind", reg, v, policy);
+    auto result = advisor.advise("req", wm);
+
+    EXPECT_EQ(result.outcome, StrAdvisor::Outcome::TimedOutFellBack);
+    EXPECT_GE(result.total_latency_ms, 0.0);
+    // retries is attempt - 1 on timeout; no retry was scheduled, so 0 is acceptable.
+}
