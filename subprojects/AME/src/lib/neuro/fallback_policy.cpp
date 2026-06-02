@@ -7,7 +7,7 @@ namespace ame::neuro {
 double default_clock_ms() noexcept {
     using namespace std::chrono;
     return duration<double, std::milli>(
-        steady_clock::now().time_since_epoch()).count();
+        system_clock::now().time_since_epoch()).count();
 }
 
 } // namespace ame::neuro

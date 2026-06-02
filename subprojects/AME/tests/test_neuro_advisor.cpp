@@ -295,3 +295,57 @@ TEST(Advisor, LateResultDiscarded) {
     EXPECT_EQ(result.outcome, StrAdvisor::Outcome::TimedOutFellBack);
     EXPECT_FALSE(result.proposal.has_value());
 }
+
+// ---------------------------------------------------------------------------
+// Thread 10: ts_us uses system_clock so it aligns with plan/BT/WM audit streams
+// ---------------------------------------------------------------------------
+
+TEST(Advisor, AuditTimestamp_UsesSystemClock) {
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({"proposal", true, "", 0.0});
+    auto reg = make_registry(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy = FallbackPolicy::hot_path("mock");
+    StrAdvisor advisor("test_kind", reg, v, policy, &audit);
+    advisor.advise("req", wm);
+
+    ASSERT_EQ(audit.size(), 1u);
+    // system_clock epoch in microseconds is ~1.7e18 for year 2024+.
+    // steady_clock epoch (time since boot) is typically <1e13 (< ~115 days).
+    // A threshold of 1e15 us (year ~2001) safely separates the two.
+    const uint64_t epoch_threshold_us = 1'000'000'000'000'000ULL; // 1e15
+    EXPECT_GT(audit.records()[0].ts_us, epoch_threshold_us)
+        << "ts_us looks like a monotonic (steady_clock) value, not an epoch timestamp";
+}
+
+// ---------------------------------------------------------------------------
+// Thread 11: verbosity >= 1 stores raw backend payload in raw_proposal, not digest
+// ---------------------------------------------------------------------------
+
+TEST(Advisor, VerboseAudit_StoresRawPayloadNotDigest) {
+    const std::string raw_backend_payload = "full_proposal_content_from_backend";
+
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({raw_backend_payload, true, "", 0.0});
+    auto reg = make_registry(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy = FallbackPolicy::hot_path("mock");
+    policy.verbosity = 1;
+    StrAdvisor advisor("test_kind", reg, v, policy, &audit);
+    auto result = advisor.advise("req", wm);
+
+    ASSERT_EQ(result.outcome, StrAdvisor::Outcome::Accepted);
+    ASSERT_EQ(audit.size(), 1u);
+    const auto& rec = audit.records()[0];
+    // raw_proposal must be the full backend payload, not a truncated digest.
+    EXPECT_EQ(rec.raw_proposal, raw_backend_payload);
+    // proposal_digest is still the short summary (unchanged).
+    EXPECT_NE(rec.proposal_digest, raw_backend_payload);
+    EXPECT_FALSE(rec.proposal_digest.empty());
+}

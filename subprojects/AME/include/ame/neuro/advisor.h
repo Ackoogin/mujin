@@ -148,7 +148,7 @@ public:
                     attempt + 1 >= max_attempts) {
                     result.outcome = Outcome::RejectedFellBack;
                     result.verdict = std::move(verdict);
-                    emit_audit(req, proposal_opt, result, clock_() - start_ms, attempt);
+                    emit_audit(req, proposal_opt, result, clock_() - start_ms, attempt, resp.payload);
                     return result;
                 }
                 ++attempt;
@@ -166,7 +166,7 @@ public:
             result.verdict = std::move(verdict);
             result.total_latency_ms = clock_() - start_ms;
             result.retries = attempt;
-            emit_audit(req, result.proposal, result, result.total_latency_ms, attempt);
+            emit_audit(req, result.proposal, result, result.total_latency_ms, attempt, resp.payload);
             return result;
         }
 
@@ -187,7 +187,8 @@ private:
                     const std::optional<Proposal>& proposal,
                     const Result& result,
                     double latency_ms,
-                    unsigned retries) {
+                    unsigned retries,
+                    const std::string& raw_payload = {}) {
         if (!audit_) return;
 
         NeuroAuditRecord rec;
@@ -206,7 +207,7 @@ private:
         rec.affected_behaviour = (result.outcome == Outcome::Accepted);
         if (policy_.verbosity >= 1) {
             rec.raw_request = RequestCodec<Request>::encode(req, kind_).payload;
-            if (proposal) rec.raw_proposal = ProposalCodec<Proposal>::digest(*proposal);
+            if (proposal) rec.raw_proposal = raw_payload;
         }
         audit_->append(std::move(rec));
     }
