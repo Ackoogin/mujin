@@ -455,35 +455,38 @@ TEST(Advisor, ThrowingVerifier_ProducesErroredFellBack) {
 }
 
 // ---------------------------------------------------------------------------
-// Thread 23: timeout retries before falling back when retries remain
+// Thread 23 / Thread GaV86: full remaining budget used per attempt — an
+// in-budget response must not be cancelled by a pre-split retry share.
+//
+// Backend responds after 50 ms — within the 80 ms total budget, but more
+// than half.  With max_retries=1 the old split (80/2 = 40 ms each) would
+// cancel the first attempt after 40 ms and then have insufficient remaining
+// budget for the retry.  With the correct full-remaining-ms per attempt the
+// first attempt waits up to 80 ms, the backend replies at 50 ms, and the
+// result is Accepted with zero retries.
 // ---------------------------------------------------------------------------
 
-TEST(Advisor, TimeoutRetriesBeforeFallback) {
-    // First call hangs (non-cooperative); second call succeeds immediately.
-    auto mb = std::make_shared<MockBackend>("mock_retry", /*cooperative=*/false);
-    mb->add_script({"", false, "", 10000.0, /*hang=*/true, /*non_coop=*/true});
-    mb->add_script({"good_proposal", true, "", 0.0});
-
-    BackendExecutorConfig exec_cfg;
-    exec_cfg.max_in_flight = 4; // allow 2 in-flight (first hang + second call)
+TEST(Advisor, FullBudgetUsedPerAttempt) {
+    auto mb = std::make_shared<MockBackend>("mock_delayed", /*cooperative=*/false);
+    // Non-hanging backend that sleeps 50 ms then returns success.
+    mb->add_script({"ok_response", true, "", 50.0, /*hang=*/false});
 
     BackendRegistry reg;
-    reg.add(mb, BackendTier::Warm, exec_cfg);
+    reg.add(mb);
     ame::WorldModel wm = make_wm();
     AlwaysAccept<std::string> v;
 
-    // 120 ms total, 2 attempts → 60 ms each; no backoff so test stays fast.
     FallbackPolicy policy;
     policy.enabled = true;
-    policy.backend_id = "mock_retry";
-    policy.latency_budget_ms = 120.0;
-    policy.max_retries = 1;
+    policy.backend_id = "mock_delayed";
+    policy.latency_budget_ms = 80.0;  // 50 ms < 80 ms → must succeed first try
+    policy.max_retries = 1;           // would split to 40 ms with the old approach
     policy.retry_backoff_ms = 0.0;
 
     StrAdvisor advisor("test_kind", reg, v, policy);
     auto result = advisor.advise("req", wm);
     EXPECT_EQ(result.outcome, StrAdvisor::Outcome::Accepted);
-    EXPECT_EQ(result.retries, 1u);
+    EXPECT_EQ(result.retries, 0u); // no retry needed: first attempt captured the response
 }
 
 // ---------------------------------------------------------------------------

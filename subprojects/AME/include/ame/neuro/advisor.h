@@ -100,12 +100,10 @@ public:
             }
             std::future<NeuralResponse> fut = exec->submit(neural_req, cs.token(), abandoned_flag);
 
-            // Divide the remaining budget equally across remaining attempts so
-            // each attempt has a fair share and timeouts leave room for retries.
-            const double attempt_budget_ms =
-                remaining_ms / static_cast<double>(max_attempts - attempt);
+            // Each attempt waits up to the full remaining budget so an in-budget
+            // first response is never cancelled early by a pre-allocated retry share.
             const auto budget_dur = std::chrono::microseconds(
-                static_cast<long long>(attempt_budget_ms * 1000.0));
+                static_cast<long long>(remaining_ms * 1000.0));
             const auto wait_status = fut.wait_for(budget_dur);
 
             cs.request_cancel(); // cooperative signal; backend may ignore it
