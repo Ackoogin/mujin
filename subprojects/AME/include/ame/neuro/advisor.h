@@ -90,7 +90,14 @@ public:
             auto abandoned_flag = std::make_shared<std::atomic<bool>>(false);
 
             CancelSource cs;
-            NeuralRequest neural_req = RequestCodec<Request>::encode(req, kind_);
+            NeuralRequest neural_req;
+            try {
+                neural_req = RequestCodec<Request>::encode(req, kind_);
+            } catch (...) {
+                result.outcome = Outcome::ErroredFellBack;
+                emit_audit(req, {}, result, clock_() - start_ms, attempt);
+                return result;
+            }
             std::future<NeuralResponse> fut = exec->submit(neural_req, cs.token(), abandoned_flag);
 
             // Wait up to remaining budget, then abandon if not ready.

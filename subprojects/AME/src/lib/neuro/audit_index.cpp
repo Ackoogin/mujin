@@ -175,15 +175,33 @@ std::vector<TrainingSample> AuditIndex::training_export() const {
         s.success = (success_str == "true");
         try { s.cost = std::stof(cost_str); } catch (...) {}
 
-        // Note: init_facts, goal_fluents, plan_actions are JSON arrays.
-        // For simplicity, we store the raw array string as a single entry.
-        // Full parsing can be added when a concrete consumer needs it.
+        auto parse_json_str_array = [](const std::string& arr, std::vector<std::string>& out) {
+            // Parses a JSON string array: ["a","b","c"] → {"a","b","c"}
+            std::size_t pos = 0;
+            while (pos < arr.size() && arr[pos] != '"') ++pos;
+            while (pos < arr.size()) {
+                if (arr[pos] != '"') { ++pos; continue; }
+                ++pos; // skip opening quote
+                std::string elem;
+                while (pos < arr.size() && arr[pos] != '"') {
+                    if (arr[pos] == '\\' && pos + 1 < arr.size()) {
+                        ++pos; // skip backslash, take next char literally
+                    }
+                    elem += arr[pos++];
+                }
+                if (pos < arr.size()) ++pos; // skip closing quote
+                out.push_back(std::move(elem));
+                // advance past comma/whitespace to next element or closing bracket
+                while (pos < arr.size() && arr[pos] != '"' && arr[pos] != ']') ++pos;
+            }
+        };
+
         std::string init = json_get(r.raw, "init_facts");
-        if (!init.empty()) s.init_facts.push_back(init);
+        if (!init.empty()) parse_json_str_array(init, s.init_facts);
         std::string goal = json_get(r.raw, "goal_fluents");
-        if (!goal.empty()) s.goal_fluents.push_back(goal);
+        if (!goal.empty()) parse_json_str_array(goal, s.goal_fluents);
         std::string plan = json_get(r.raw, "plan_actions");
-        if (!plan.empty()) s.plan_actions.push_back(plan);
+        if (!plan.empty()) parse_json_str_array(plan, s.plan_actions);
 
         out.push_back(std::move(s));
     }

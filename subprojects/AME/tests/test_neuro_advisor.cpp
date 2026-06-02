@@ -388,6 +388,44 @@ TEST(Advisor, ThrowingDecoder_ProducesErroredFellBack) {
 }
 
 // ---------------------------------------------------------------------------
+// Thread 21: throwing RequestCodec::encode() produces ErroredFellBack + audit
+// ---------------------------------------------------------------------------
+
+struct ThrowingRequest {};
+
+namespace ame::neuro {
+template <>
+struct RequestCodec<ThrowingRequest> {
+    static NeuralRequest encode(const ThrowingRequest&, const std::string&) {
+        throw std::runtime_error("encoder exploded");
+    }
+    static std::string digest(const ThrowingRequest&) { return "throw_req"; }
+};
+} // namespace ame::neuro
+
+TEST(Advisor, ThrowingEncoder_ProducesErroredFellBack) {
+    using ThrowEncAdvisor = Advisor<ThrowingRequest, std::string>;
+
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({"ok", true, "", 0.0});
+    BackendRegistry reg;
+    reg.add(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy = FallbackPolicy::hot_path("mock");
+    ThrowEncAdvisor advisor("test_kind", reg, v, policy, &audit);
+
+    ThrowEncAdvisor::Result result;
+    EXPECT_NO_THROW(result = advisor.advise(ThrowingRequest{}, wm));
+    EXPECT_EQ(result.outcome, ThrowEncAdvisor::Outcome::ErroredFellBack);
+    // Contract: exactly one audit record per advise() call, even on encode exception.
+    EXPECT_EQ(audit.size(), 1u);
+    EXPECT_EQ(audit.records()[0].outcome, "ErroredFellBack");
+}
+
+// ---------------------------------------------------------------------------
 // Thread 16: throwing verifier produces ErroredFellBack + exactly one audit record
 // ---------------------------------------------------------------------------
 

@@ -181,6 +181,33 @@ TEST(AuditIndex, TrainingExportSuccessful) {
     EXPECT_FLOAT_EQ(samples[0].cost, 2.0f);
 }
 
+// ---------------------------------------------------------------------------
+// Thread 22: training_export parses JSON string arrays into individual elements
+// ---------------------------------------------------------------------------
+
+TEST(AuditIndex, TrainingExportParsesArrayElements) {
+    AuditIndex idx;
+    std::vector<std::string> lines = {
+        R"json({"episode_id":1,"ts_us":100,"success":true,"cost":1.0,)json"
+        R"json("init_facts":["(at uav1 base)","(searched s1)"],)json"
+        R"json("goal_fluents":["(at uav1 target)"],)json"
+        R"json("plan_actions":["(move uav1 base target)","(survey uav1 target)"],)json"
+        R"json("bt_xml":""})json",
+    };
+    idx.load_lines(lines, "plan");
+    auto samples = idx.training_export();
+    ASSERT_EQ(samples.size(), 1u);
+    const auto& s = samples[0];
+    ASSERT_EQ(s.init_facts.size(), 2u);
+    EXPECT_EQ(s.init_facts[0], "(at uav1 base)");
+    EXPECT_EQ(s.init_facts[1], "(searched s1)");
+    ASSERT_EQ(s.goal_fluents.size(), 1u);
+    EXPECT_EQ(s.goal_fluents[0], "(at uav1 target)");
+    ASSERT_EQ(s.plan_actions.size(), 2u);
+    EXPECT_EQ(s.plan_actions[0], "(move uav1 base target)");
+    EXPECT_EQ(s.plan_actions[1], "(survey uav1 target)");
+}
+
 TEST(AuditIndex, CiteFindsReferredRecords) {
     AuditIndex idx;
     idx.load_lines(make_neuro_lines(), "neuro");
