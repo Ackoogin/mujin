@@ -258,6 +258,58 @@ TEST(BackendExecutor, LateSuccessAfterAbandonDoesNotResetCircuit) {
 // BackendRegistry — named lookup
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Thread 19: cooperative abandoned call counts as exactly one failure, not two
+// (on_abandoned() counts the timeout; the resulting ok=false "cancelled" response
+// must NOT also increment consecutive_failures)
+// ---------------------------------------------------------------------------
+
+TEST(BackendExecutor, CooperativeAbandonCountsOnce) {
+    // Cooperative backend: responds to cancel with ok=false, error="cancelled"
+    auto mb = std::make_shared<MockBackend>("mock_coop", /*cooperative=*/true);
+    for (int i = 0; i < 5; ++i)
+        mb->add_script({"", false, "", 5000.0, /*hang=*/true, /*non_cooperative=*/false});
+
+    BackendExecutorConfig cfg;
+    cfg.max_in_flight = 8;
+    cfg.failure_threshold = 3;
+    cfg.recovery_window_ms = 60000.0;
+    BackendExecutor exec(mb, cfg);
+
+    // Abandon 2 cooperative calls. Each should be exactly 1 failure.
+    // With threshold=3, circuit must remain CLOSED after 2.
+    for (int i = 0; i < 2; ++i) {
+        ASSERT_TRUE(exec.available()) << "iteration " << i;
+        auto abandoned = std::make_shared<std::atomic<bool>>(false);
+        CancelSource cs;
+        auto fut = exec.submit({}, cs.token(), abandoned);
+        abandoned->store(true);     // mark before on_abandoned
+        exec.on_abandoned();        // counts failure #(i+1)
+        cs.request_cancel();        // cooperative backend returns ok=false
+        fut.wait_for(200ms);        // wait for backend to react
+    }
+
+    EXPECT_TRUE(exec.available())
+        << "circuit must stay closed after 2 abandoned calls (threshold=3); "
+           "each cooperative cancellation must count as exactly one failure";
+
+    // Third abandoned call reaches threshold — circuit opens.
+    {
+        auto abandoned = std::make_shared<std::atomic<bool>>(false);
+        CancelSource cs;
+        auto fut = exec.submit({}, cs.token(), abandoned);
+        abandoned->store(true);
+        exec.on_abandoned();
+        cs.request_cancel();
+        fut.wait_for(200ms);
+    }
+    EXPECT_FALSE(exec.available()) << "circuit must open after 3 failures";
+}
+
+// ---------------------------------------------------------------------------
+// BackendRegistry — named lookup
+// ---------------------------------------------------------------------------
+
 TEST(BackendRegistry, LookupByName) {
     BackendRegistry reg;
     auto mb = std::make_shared<MockBackend>("my_backend");

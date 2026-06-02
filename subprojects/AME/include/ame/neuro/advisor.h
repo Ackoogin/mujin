@@ -139,8 +139,14 @@ public:
             }
 
             std::string decode_err;
-            std::optional<Proposal> proposal_opt =
-                ProposalCodec<Proposal>::decode(resp.payload, decode_err);
+            std::optional<Proposal> proposal_opt;
+            try {
+                proposal_opt = ProposalCodec<Proposal>::decode(resp.payload, decode_err);
+            } catch (...) {
+                result.outcome = Outcome::ErroredFellBack;
+                emit_audit(req, {}, result, clock_() - start_ms, attempt);
+                return result;
+            }
 
             if (!proposal_opt) {
                 ++attempt;

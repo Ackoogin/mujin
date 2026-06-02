@@ -351,6 +351,43 @@ TEST(Advisor, VerboseAudit_StoresRawPayloadNotDigest) {
 }
 
 // ---------------------------------------------------------------------------
+// Thread 20: throwing ProposalCodec::decode() produces ErroredFellBack + audit
+// ---------------------------------------------------------------------------
+
+struct ThrowingProposal {};
+
+namespace ame::neuro {
+template <>
+struct ProposalCodec<ThrowingProposal> {
+    static std::optional<ThrowingProposal> decode(const std::string&, std::string&) {
+        throw std::runtime_error("decoder exploded");
+    }
+    static std::string digest(const ThrowingProposal&) { return "throwing"; }
+};
+} // namespace ame::neuro
+
+TEST(Advisor, ThrowingDecoder_ProducesErroredFellBack) {
+    using ThrowAdvisor = Advisor<std::string, ThrowingProposal>;
+
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({"some_payload", true, "", 0.0});
+    BackendRegistry reg;
+    reg.add(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<ThrowingProposal> v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy = FallbackPolicy::hot_path("mock");
+    ThrowAdvisor advisor("test_kind", reg, v, policy, &audit);
+
+    ThrowAdvisor::Result result;
+    EXPECT_NO_THROW(result = advisor.advise("req", wm));
+    EXPECT_EQ(result.outcome, ThrowAdvisor::Outcome::ErroredFellBack);
+    EXPECT_EQ(audit.size(), 1u);
+    EXPECT_EQ(audit.records()[0].outcome, "ErroredFellBack");
+}
+
+// ---------------------------------------------------------------------------
 // Thread 16: throwing verifier produces ErroredFellBack + exactly one audit record
 // ---------------------------------------------------------------------------
 

@@ -119,18 +119,21 @@ std::future<NeuralResponse> BackendExecutor::submit(const NeuralRequest& req,
             std::lock_guard<std::mutex> lk(state->mx);
             --state->in_flight;
             if (!resp.ok) {
-                // Hard backend error: always count regardless of abandonment.
-                ++state->consecutive_failures;
-                if (state->consecutive_failures >= cfg.failure_threshold) {
-                    state->circuit_open = true;
-                    state->circuit_open_at_ms = now_ms();
+                if (!is_abandoned) {
+                    // Non-abandoned failure: count it and check circuit threshold.
+                    ++state->consecutive_failures;
+                    if (state->consecutive_failures >= cfg.failure_threshold) {
+                        state->circuit_open = true;
+                        state->circuit_open_at_ms = now_ms();
+                    }
                 }
+                // else: abandoned ok=false (e.g. cooperative cancellation response).
+                // on_abandoned() already counted this call; do not double-count.
             } else if (!is_abandoned) {
                 // Non-abandoned success: clear failure streak.
                 state->consecutive_failures = 0;
             }
-            // else: late ok=true on an abandoned call — on_abandoned() already
-            // incremented consecutive_failures; do not undo that count.
+            // else: late ok=true on an abandoned call — already counted; do not reset.
         }
     }).detach();
 
