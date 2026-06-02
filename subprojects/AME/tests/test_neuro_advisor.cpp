@@ -453,3 +453,62 @@ TEST(Advisor, ThrowingVerifier_ProducesErroredFellBack) {
     EXPECT_EQ(audit.size(), 1u);
     EXPECT_EQ(audit.records()[0].outcome, "ErroredFellBack");
 }
+
+// ---------------------------------------------------------------------------
+// Thread 23: timeout retries before falling back when retries remain
+// ---------------------------------------------------------------------------
+
+TEST(Advisor, TimeoutRetriesBeforeFallback) {
+    // First call hangs (non-cooperative); second call succeeds immediately.
+    auto mb = std::make_shared<MockBackend>("mock_retry", /*cooperative=*/false);
+    mb->add_script({"", false, "", 10000.0, /*hang=*/true, /*non_coop=*/true});
+    mb->add_script({"good_proposal", true, "", 0.0});
+
+    BackendExecutorConfig exec_cfg;
+    exec_cfg.max_in_flight = 4; // allow 2 in-flight (first hang + second call)
+
+    BackendRegistry reg;
+    reg.add(mb, BackendTier::Warm, exec_cfg);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+
+    // 120 ms total, 2 attempts → 60 ms each; no backoff so test stays fast.
+    FallbackPolicy policy;
+    policy.enabled = true;
+    policy.backend_id = "mock_retry";
+    policy.latency_budget_ms = 120.0;
+    policy.max_retries = 1;
+    policy.retry_backoff_ms = 0.0;
+
+    StrAdvisor advisor("test_kind", reg, v, policy);
+    auto result = advisor.advise("req", wm);
+    EXPECT_EQ(result.outcome, StrAdvisor::Outcome::Accepted);
+    EXPECT_EQ(result.retries, 1u);
+}
+
+// ---------------------------------------------------------------------------
+// Thread 24: verbose audit with throwing encoder does not propagate the throw
+// ---------------------------------------------------------------------------
+
+TEST(Advisor, VerboseAuditWithThrowingEncoderDoesNotThrow) {
+    using ThrowEncAdvisor = Advisor<ThrowingRequest, std::string>;
+
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({"ok", true, "", 0.0});
+    BackendRegistry reg;
+    reg.add(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy = FallbackPolicy::hot_path("mock");
+    policy.verbosity = 1; // triggers raw_request encoding in emit_audit
+    ThrowEncAdvisor advisor("test_kind", reg, v, policy, &audit);
+
+    ThrowEncAdvisor::Result result;
+    EXPECT_NO_THROW(result = advisor.advise(ThrowingRequest{}, wm));
+    // Encoder throws in advise() → ErroredFellBack + one audit record
+    EXPECT_EQ(result.outcome, ThrowEncAdvisor::Outcome::ErroredFellBack);
+    EXPECT_EQ(audit.size(), 1u);
+    EXPECT_EQ(audit.records()[0].outcome, "ErroredFellBack");
+}

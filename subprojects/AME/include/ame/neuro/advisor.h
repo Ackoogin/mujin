@@ -100,9 +100,12 @@ public:
             }
             std::future<NeuralResponse> fut = exec->submit(neural_req, cs.token(), abandoned_flag);
 
-            // Wait up to remaining budget, then abandon if not ready.
+            // Divide the remaining budget equally across remaining attempts so
+            // each attempt has a fair share and timeouts leave room for retries.
+            const double attempt_budget_ms =
+                remaining_ms / static_cast<double>(max_attempts - attempt);
             const auto budget_dur = std::chrono::microseconds(
-                static_cast<long long>(remaining_ms * 1000.0));
+                static_cast<long long>(attempt_budget_ms * 1000.0));
             const auto wait_status = fut.wait_for(budget_dur);
 
             cs.request_cancel(); // cooperative signal; backend may ignore it
@@ -116,8 +119,19 @@ public:
                 // sees is_abandoned=true if it completes during/after on_abandoned().
                 abandoned_flag->store(true);
                 exec->on_abandoned();
+                ++attempt;
+                // If retries remain and budget remains, retry the request.
+                if (attempt < max_attempts && remaining_ms > 0.0) {
+                    if (policy_.retry_backoff_ms > 0.0) {
+                        double backoff = std::min(policy_.retry_backoff_ms, remaining_ms);
+                        std::this_thread::sleep_for(std::chrono::microseconds(
+                            static_cast<long long>(backoff * 1000.0)));
+                        remaining_ms -= backoff;
+                    }
+                    continue;
+                }
                 result.outcome = Outcome::TimedOutFellBack;
-                emit_audit(req, {}, result, clock_() - start_ms, attempt);
+                emit_audit(req, {}, result, clock_() - start_ms, attempt - 1);
                 return result;
             }
 
@@ -234,7 +248,11 @@ private:
         rec.retries = retries;
         rec.affected_behaviour = (result.outcome == Outcome::Accepted);
         if (policy_.verbosity >= 1) {
-            rec.raw_request = RequestCodec<Request>::encode(req, kind_).payload;
+            try {
+                rec.raw_request = RequestCodec<Request>::encode(req, kind_).payload;
+            } catch (...) {
+                // Encoder threw; leave raw_request empty rather than propagating.
+            }
             if (proposal) rec.raw_proposal = raw_payload;
         }
         audit_->append(std::move(rec));

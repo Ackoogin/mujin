@@ -211,7 +211,15 @@ pcl_status_t ExecutorComponent::on_tick(double /*dt*/) {
       try {
         std::string repair_xml = repair_hook_(failed_step, *inprocess_wm_);
         if (!repair_xml.empty()) {
-          loadAndExecute(repair_xml);
+          // Save FAILURE status before loadAndExecute resets it; restore on throw
+          // so callers always observe FAILURE when repair loading fails.
+          const auto pre_repair_status = last_status_;
+          try {
+            loadAndExecute(repair_xml);
+          } catch (...) {
+            last_status_ = pre_repair_status;
+            throw; // re-throw → outer catch → baseline FAILURE path
+          }
           if (pub_status_) {
             status_buf_ = "RUNNING";
             pcl_msg_t msg;
@@ -221,7 +229,7 @@ pcl_status_t ExecutorComponent::on_tick(double /*dt*/) {
           return PCL_OK; // continue ticking the repair plan
         }
       } catch (...) {
-        // Hook threw or returned invalid BT XML; fall through to baseline FAILURE.
+        // Hook threw or repair BT XML invalid; fall through to baseline FAILURE.
       }
     }
 #endif

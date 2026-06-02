@@ -9,6 +9,11 @@
 #include "ame/planner.h"
 #include "ame/world_model.h"
 
+#if defined(AME_NEURO)
+#include "ame/executor_component.h"
+#include "ame/planner_component.h"
+#endif
+
 #include <gtest/gtest.h>
 
 using namespace ame::neuro;
@@ -204,3 +209,61 @@ TEST(NeuroConfig, ParseJsonWithSpacesBeforeColons) {
     EXPECT_DOUBLE_EQ(cfg.integrations[0].policy.latency_budget_ms, 150.0);
     EXPECT_EQ(cfg.integrations[0].policy.backend_id, "fast_model");
 }
+
+// ---------------------------------------------------------------------------
+// Thread 25: repair hook loading failure preserves FAILURE in lastStatus()
+// ---------------------------------------------------------------------------
+
+#if defined(AME_NEURO)
+
+namespace {
+
+// Expose on_tick() for white-box testing.
+class TestableExecutorComponent : public ame::ExecutorComponent {
+public:
+    pcl_status_t test_tick() { return on_tick(0.0); }
+};
+
+// Minimal BT that always fails via CheckWorldPredicate on an absent fact.
+const char* k_fail_bt = R"xml(
+<root BTCPP_format="4">
+  <BehaviorTree ID="FailPlan">
+    <CheckWorldPredicate predicate="(absent_fact x)" />
+  </BehaviorTree>
+</root>)xml";
+
+} // namespace
+
+TEST(ExecutorSeam, RepairLoadFailurePreservesFailureStatus) {
+    ame::WorldModel wm;
+    wm.typeSystem().addType("object");
+    wm.addObject("x", "object");
+    wm.registerPredicate("absent_fact", {"object"});
+    // (absent_fact x) is not set → CheckWorldPredicate returns FAILURE.
+
+    TestableExecutorComponent exec;
+    exec.setParam("bt_log.enabled", false);
+    exec.setInProcessWorldModel(&wm);
+    ASSERT_EQ(exec.configure(), PCL_OK);
+    ASSERT_EQ(exec.activate(), PCL_OK);
+
+    exec.loadAndExecute(k_fail_bt);
+
+    // Repair hook: return syntactically invalid BT XML so loadAndExecute throws.
+    exec.setRepairHook([](unsigned, const ame::WorldModel&) -> std::string {
+        return "<invalid_bt_xml_that_will_throw/>";
+    });
+
+    // test_tick() drives the BT to FAILURE and invokes the repair path.
+    EXPECT_EQ(exec.test_tick(), PCL_OK);
+
+    // Even though loadAndExecute reset last_status_ to IDLE before throwing,
+    // the fix must restore it to FAILURE so callers observe the correct status.
+    EXPECT_EQ(exec.lastStatus(), BT::NodeStatus::FAILURE);
+
+    exec.deactivate();
+    exec.cleanup();
+    exec.shutdown();
+}
+
+#endif
