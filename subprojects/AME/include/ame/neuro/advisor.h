@@ -66,14 +66,14 @@ public:
         Result result;
 
         if (!policy_.enabled) {
-            emit_audit(req, {}, result, 0.0, 0);
+            emit_audit(req, {}, result, 0.0, 0, start_ms);
             return result;
         }
 
         BackendExecutor* exec = registry_.find(policy_.backend_id);
         if (!exec || !exec->available()) {
             result.outcome = Outcome::UnavailableFellBack;
-            emit_audit(req, {}, result, clock_() - start_ms, 0);
+            emit_audit(req, {}, result, clock_() - start_ms, 0, start_ms);
             return result;
         }
 
@@ -95,7 +95,7 @@ public:
                 neural_req = RequestCodec<Request>::encode(req, kind_);
             } catch (...) {
                 result.outcome = Outcome::ErroredFellBack;
-                emit_audit(req, {}, result, clock_() - start_ms, attempt);
+                emit_audit(req, {}, result, clock_() - start_ms, attempt, start_ms);
                 return result;
             }
             std::future<NeuralResponse> fut = exec->submit(neural_req, cs.token(), abandoned_flag);
@@ -129,7 +129,7 @@ public:
                     continue;
                 }
                 result.outcome = Outcome::TimedOutFellBack;
-                emit_audit(req, {}, result, clock_() - start_ms, attempt - 1);
+                emit_audit(req, {}, result, clock_() - start_ms, attempt - 1, start_ms);
                 return result;
             }
 
@@ -142,10 +142,18 @@ public:
             }
 
             if (!resp.ok) {
+                // Pool-full/circuit-open responses from BackendExecutor are
+                // availability issues — report UnavailableFellBack immediately
+                // rather than retrying or misreporting as ErroredFellBack.
+                if (resp.error == "pool_saturated" || resp.error == "circuit_open") {
+                    result.outcome = Outcome::UnavailableFellBack;
+                    emit_audit(req, {}, result, clock_() - start_ms, attempt, start_ms);
+                    return result;
+                }
                 ++attempt;
                 if (attempt >= max_attempts) {
                     result.outcome = Outcome::ErroredFellBack;
-                    emit_audit(req, {}, result, clock_() - start_ms, attempt - 1);
+                    emit_audit(req, {}, result, clock_() - start_ms, attempt - 1, start_ms);
                     return result;
                 }
                 if (policy_.retry_backoff_ms > 0.0 && remaining_ms > 0.0) {
@@ -163,14 +171,14 @@ public:
                 proposal_opt = ProposalCodec<Proposal>::decode(resp.payload, decode_err);
             } catch (...) {
                 result.outcome = Outcome::ErroredFellBack;
-                emit_audit(req, {}, result, clock_() - start_ms, attempt);
+                emit_audit(req, {}, result, clock_() - start_ms, attempt, start_ms);
                 return result;
             }
 
             if (!proposal_opt) {
                 ++attempt;
                 result.outcome = Outcome::ErroredFellBack;
-                emit_audit(req, {}, result, clock_() - start_ms, attempt - 1);
+                emit_audit(req, {}, result, clock_() - start_ms, attempt - 1, start_ms);
                 return result;
             }
 
@@ -179,7 +187,7 @@ public:
                 verdict = verifier_.verify(*proposal_opt, wm);
             } catch (...) {
                 result.outcome = Outcome::ErroredFellBack;
-                emit_audit(req, {}, result, clock_() - start_ms, attempt);
+                emit_audit(req, {}, result, clock_() - start_ms, attempt, start_ms);
                 return result;
             }
 
@@ -188,7 +196,7 @@ public:
                     attempt + 1 >= max_attempts) {
                     result.outcome = Outcome::RejectedFellBack;
                     result.verdict = std::move(verdict);
-                    emit_audit(req, proposal_opt, result, clock_() - start_ms, attempt, resp.payload);
+                    emit_audit(req, proposal_opt, result, clock_() - start_ms, attempt, start_ms, resp.payload);
                     return result;
                 }
                 ++attempt;
@@ -206,12 +214,12 @@ public:
             result.verdict = std::move(verdict);
             result.total_latency_ms = clock_() - start_ms;
             result.retries = attempt;
-            emit_audit(req, result.proposal, result, result.total_latency_ms, attempt, resp.payload);
+            emit_audit(req, result.proposal, result, result.total_latency_ms, attempt, start_ms, resp.payload);
             return result;
         }
 
         result.outcome = Outcome::ErroredFellBack;
-        emit_audit(req, {}, result, clock_() - start_ms, attempt);
+        emit_audit(req, {}, result, clock_() - start_ms, attempt, start_ms);
         return result;
     }
 
@@ -228,11 +236,14 @@ private:
                     const Result& result,
                     double latency_ms,
                     unsigned retries,
+                    double start_ms,
                     const std::string& raw_payload = {}) {
         if (!audit_) return;
 
         NeuroAuditRecord rec;
-        rec.ts_us = static_cast<uint64_t>(clock_() * 1000.0);
+        // Use the request's start time, not the emission time, so the record
+        // lines up with the BT/plan event that triggered it in AuditIndex windows.
+        rec.ts_us = static_cast<uint64_t>(start_ms * 1000.0);
         rec.integration_kind = kind_;
         rec.backend_id = policy_.backend_id;
         rec.model_id = policy_.model_id;

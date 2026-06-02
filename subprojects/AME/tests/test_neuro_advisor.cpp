@@ -297,6 +297,82 @@ TEST(Advisor, LateResultDiscarded) {
 }
 
 // ---------------------------------------------------------------------------
+// Thread Gazga: ts_us stamped at request start, not at audit emission
+// ---------------------------------------------------------------------------
+
+TEST(Advisor, AuditTimestamp_StampedAtRequestStart) {
+    // Backend with 50 ms simulated latency.  If ts_us were taken at emission
+    // time it would be ~50 ms later than the advise() start; if taken at start
+    // it must be <= the advise() call time.
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({"proposal", true, "", 50.0});
+    auto reg = make_registry(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    using SC = std::chrono::system_clock;
+    uint64_t before_us = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            SC::now().time_since_epoch()).count());
+
+    FallbackPolicy policy = FallbackPolicy::hot_path("mock");
+    StrAdvisor advisor("test_kind", reg, v, policy, &audit);
+    advisor.advise("req", wm);
+
+    uint64_t after_us = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::microseconds>(
+            SC::now().time_since_epoch()).count());
+
+    ASSERT_EQ(audit.size(), 1u);
+    // ts_us must fall within [before_us, after_us], not shifted forward by latency.
+    EXPECT_GE(audit.records()[0].ts_us, before_us);
+    EXPECT_LE(audit.records()[0].ts_us, after_us);
+}
+
+// ---------------------------------------------------------------------------
+// Thread Gazgf: pool_saturated/circuit_open mid-submit => UnavailableFellBack
+// ---------------------------------------------------------------------------
+
+TEST(Advisor, PoolSaturatedResponse_IsUnavailableFellBack) {
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({"", false, "pool_saturated", 0.0});
+    BackendRegistry reg;
+    reg.add(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy = FallbackPolicy::hot_path("mock");
+    policy.max_retries = 2; // must not retry capacity errors
+    StrAdvisor advisor("test_kind", reg, v, policy, &audit);
+    auto result = advisor.advise("req", wm);
+
+    EXPECT_EQ(result.outcome, StrAdvisor::Outcome::UnavailableFellBack);
+    ASSERT_EQ(audit.size(), 1u);
+    EXPECT_EQ(audit.records()[0].outcome, "UnavailableFellBack");
+    EXPECT_EQ(mb->call_count(), 1u); // no retry
+}
+
+TEST(Advisor, CircuitOpenResponse_IsUnavailableFellBack) {
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({"", false, "circuit_open", 0.0});
+    BackendRegistry reg;
+    reg.add(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy = FallbackPolicy::hot_path("mock");
+    StrAdvisor advisor("test_kind", reg, v, policy, &audit);
+    auto result = advisor.advise("req", wm);
+
+    EXPECT_EQ(result.outcome, StrAdvisor::Outcome::UnavailableFellBack);
+    ASSERT_EQ(audit.size(), 1u);
+    EXPECT_EQ(audit.records()[0].outcome, "UnavailableFellBack");
+}
+
+// ---------------------------------------------------------------------------
 // Thread 10: ts_us uses system_clock so it aligns with plan/BT/WM audit streams
 // ---------------------------------------------------------------------------
 
