@@ -4,6 +4,8 @@
 #include <ame/bt_nodes/check_world_predicate.h>
 #include <ame/bt_nodes/set_world_predicate.h>
 
+#include <behaviortree_cpp/control_node.h>
+
 #include <stdexcept>
 
 namespace ame {
@@ -145,6 +147,93 @@ pcl_status_t ExecutorComponent::on_tick(double /*dt*/) {
   if (last_status_ == BT::NodeStatus::SUCCESS ||
       last_status_ == BT::NodeStatus::FAILURE) {
     const bool success = (last_status_ == BT::NodeStatus::SUCCESS);
+
+#if defined(AME_NEURO)
+    // On failure, consult the repair hook before publishing FAILURE.
+    // If the hook returns non-empty BT XML, restart execution with the repair plan.
+    // Returning empty falls through to the baseline FAILURE path.
+    if (!success && repair_hook_ && inprocess_wm_) {
+      // Compute failed step: count how many top-level action units succeeded
+      // before the failure by inspecting the live tree (not yet halted here).
+      unsigned failed_step = 0;
+      if (tree_) {
+        // compileSequential() wraps the plan body in a ReactiveFallback goal guard
+        // when the WorldModel has goal fluents:
+        //   ReactiveFallback -> [GoalCheck, Sequence(action units)]
+        // Navigate past the guard to reach the plan Sequence whose children
+        // are the action units we want to count.
+        BT::ControlNode* plan_seq = nullptr;
+        auto* root = dynamic_cast<BT::ControlNode*>(tree_->rootNode());
+        if (root && !root->children().empty()) {
+          auto* first = root->children().front();
+          // GoalCheck is either a ConditionNode (single goal) or a Sequence
+          // named "GoalCheck" (multiple goals); action-unit sequences are never
+          // bare ConditionNodes and are not named "GoalCheck".
+          bool goal_guard = dynamic_cast<BT::ConditionNode*>(first) != nullptr
+                            || first->name() == "GoalCheck";
+          if (goal_guard && root->children().size() >= 2)
+            plan_seq = dynamic_cast<BT::ControlNode*>(root->children().back());
+        }
+        if (!plan_seq) plan_seq = root;
+        if (plan_seq) {
+          // Distinguish action units from flow sequences:
+          // - Action units (sequential plans): first child is a ConditionNode
+          //   (CheckWorldPredicate precondition), never a ControlNode.
+          // - Flow sequences (parallel plans): first child is itself a
+          //   ControlNode (an action unit), so compile() emits a Parallel of flows.
+          // For parallel plans, count completed action units across all flows so
+          // failed_step approximates the total number of completed plan steps.
+          auto is_flow = [](BT::ControlNode* node) -> bool {
+              return !node->children().empty() &&
+                     dynamic_cast<BT::ControlNode*>(node->children().front()) != nullptr;
+          };
+          for (auto* child : plan_seq->children()) {
+            auto* ctrl = dynamic_cast<BT::ControlNode*>(child);
+            if (child->status() == BT::NodeStatus::SUCCESS) {
+              // Fully successful: count the child itself (+1) or all its steps.
+              if (ctrl && is_flow(ctrl))
+                failed_step += static_cast<unsigned>(ctrl->children().size());
+              else
+                ++failed_step;
+            } else {
+              // First failing child: if it's a flow, count steps inside it.
+              if (ctrl && is_flow(ctrl)) {
+                for (auto* step : ctrl->children()) {
+                  if (step->status() == BT::NodeStatus::SUCCESS) ++failed_step;
+                  else break;
+                }
+              }
+              break;
+            }
+          }
+        }
+      }
+      try {
+        std::string repair_xml = repair_hook_(failed_step, *inprocess_wm_);
+        if (!repair_xml.empty()) {
+          // Save FAILURE status before loadAndExecute resets it; restore on throw
+          // so callers always observe FAILURE when repair loading fails.
+          const auto pre_repair_status = last_status_;
+          try {
+            loadAndExecute(repair_xml);
+          } catch (...) {
+            last_status_ = pre_repair_status;
+            throw; // re-throw → outer catch → baseline FAILURE path
+          }
+          if (pub_status_) {
+            status_buf_ = "RUNNING";
+            pcl_msg_t msg;
+            ame_make_pcl_msg(status_buf_, "ame/Status", msg);
+            pcl_port_publish(pub_status_, &msg);
+          }
+          return PCL_OK; // continue ticking the repair plan
+        }
+      } catch (...) {
+        // Hook threw or repair BT XML invalid; fall through to baseline FAILURE.
+      }
+    }
+#endif
+
     // Stop ticking but preserve last_status_ for callers to observe.
     // Do NOT call haltExecution() here -- that would reset last_status_ to IDLE.
     executing_ = false;

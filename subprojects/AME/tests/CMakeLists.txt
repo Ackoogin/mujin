@@ -97,6 +97,43 @@ target_link_libraries(test_contingency_exhaustive PRIVATE ame_core GTest::gtest_
 target_compile_definitions(test_contingency_exhaustive PRIVATE "PROJECT_SOURCE_DIR=\"${AME_SOURCE_DIR}\"")
 gtest_discover_tests(test_contingency_exhaustive DISCOVERY_MODE PRE_TEST)
 
+if(AME_NEURO)
+    add_executable(test_neuro_backend test_neuro_backend.cpp)
+    target_link_libraries(test_neuro_backend PRIVATE ame_neuro GTest::gtest_main)
+    target_compile_definitions(test_neuro_backend PRIVATE AME_NEURO=1)
+    gtest_discover_tests(test_neuro_backend DISCOVERY_MODE PRE_TEST)
+
+    add_executable(test_neuro_advisor test_neuro_advisor.cpp)
+    target_link_libraries(test_neuro_advisor PRIVATE ame_neuro GTest::gtest_main)
+    target_compile_definitions(test_neuro_advisor PRIVATE AME_NEURO=1)
+    gtest_discover_tests(test_neuro_advisor DISCOVERY_MODE PRE_TEST)
+
+    add_executable(test_neuro_verifiers test_neuro_verifiers.cpp)
+    target_link_libraries(test_neuro_verifiers PRIVATE ame_neuro GTest::gtest_main)
+    target_compile_definitions(test_neuro_verifiers PRIVATE AME_NEURO=1)
+    gtest_discover_tests(test_neuro_verifiers DISCOVERY_MODE PRE_TEST)
+
+    add_executable(test_neuro_audit test_neuro_audit.cpp)
+    target_link_libraries(test_neuro_audit PRIVATE ame_neuro GTest::gtest_main)
+    target_compile_definitions(test_neuro_audit PRIVATE AME_NEURO=1)
+    gtest_discover_tests(test_neuro_audit DISCOVERY_MODE PRE_TEST)
+
+    add_executable(test_neuro_config test_neuro_config.cpp)
+    target_link_libraries(test_neuro_config PRIVATE ame_neuro GTest::gtest_main)
+    target_compile_definitions(test_neuro_config PRIVATE AME_NEURO=1)
+    gtest_discover_tests(test_neuro_config DISCOVERY_MODE PRE_TEST)
+
+    add_executable(test_neuro_contract test_neuro_contract.cpp)
+    target_link_libraries(test_neuro_contract PRIVATE ame_neuro GTest::gtest_main)
+    target_compile_definitions(test_neuro_contract PRIVATE AME_NEURO=1)
+    gtest_discover_tests(test_neuro_contract DISCOVERY_MODE PRE_TEST)
+
+    add_executable(test_neuro_replay test_neuro_replay.cpp)
+    target_link_libraries(test_neuro_replay PRIVATE ame_neuro GTest::gtest_main)
+    target_compile_definitions(test_neuro_replay PRIVATE AME_NEURO=1)
+    gtest_discover_tests(test_neuro_replay DISCOVERY_MODE PRE_TEST)
+endif()
+
 if(AME_BUILD_AUTHORING)
   add_executable(test_project_model test_project_model.cpp)
   target_link_libraries(test_project_model PRIVATE ame_authoring_project_model GTest::gtest_main)

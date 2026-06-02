@@ -91,15 +91,15 @@ following the established `AME_FOXGLOVE` pattern. Guard all neural code behind
 `#if defined(AME_NEURO)` etc. so `ame_core` and the default build are untouched.
 
 **Deliverables:**
-- [ ] `option(AME_NEURO  "Neuro-symbolic core infrastructure" OFF)`
-- [ ] `option(AME_LLM    "LLM backends (requires libcurl)"     OFF)` (implies `AME_NEURO`)
-- [ ] `option(AME_NEURAL "ONNX Runtime backends"               OFF)` (implies `AME_NEURO`)
-- [ ] `ame_neuro` static lib (`PUBLIC ame_core`, no transport deps)
-- [ ] `ame_neuro_llm` lib gated on `AME_LLM` (`find_package(CURL)`)
-- [ ] `ame_neuro_onnx` lib gated on `AME_NEURAL` (FetchContent ONNX Runtime, ~5 MB)
-- [ ] New configure preset additions / `all-on` includes the neural flags
-- [ ] CTest preset wiring for neural unit tests
-- [ ] No language-standard change: the neuro libraries build under the
+- [x] `option(AME_NEURO  "Neuro-symbolic core infrastructure" OFF)`
+- [x] `option(AME_LLM    "LLM backends (requires libcurl)"     OFF)` (implies `AME_NEURO`)
+- [x] `option(AME_NEURAL "ONNX Runtime backends"               OFF)` (implies `AME_NEURO`)
+- [x] `ame_neuro` static lib (`PUBLIC ame_core`, no transport deps)
+- [x] `ame_neuro_llm` lib gated on `AME_LLM` (`find_package(CURL)`)
+- [x] `ame_neuro_onnx` lib gated on `AME_NEURAL` (FetchContent ONNX Runtime, ~5 MB)
+- [x] New configure preset additions / `all-on` includes the neural flags
+- [x] CTest preset wiring for neural unit tests
+- [x] No language-standard change: the neuro libraries build under the
       workspace-pinned C++17 (`CMAKE_CXX_STANDARD 17`). No C++20 features
       (e.g. `std::stop_token`/`std::jthread`) are used — see the cancel-token
       note in WI-0.2.
@@ -139,7 +139,7 @@ non-cooperative or stuck backend can never hang the advisor path.
 > become a thin alias over `std::stop_token` without changing the interface.
 
 **Deliverables:**
-- [ ] `CancelToken` / `CancelSource` (C++17) in `ame_neuro`:
+- [x] `CancelToken` / `CancelSource` (C++17) in `ame_neuro`:
   ```cpp
   // Minimal cooperative cancellation, C++17-compatible.
   class CancelToken {
@@ -157,7 +157,7 @@ non-cooperative or stuck backend can never hang the advisor path.
       std::shared_ptr<std::atomic<bool>> flag_ = std::make_shared<std::atomic<bool>>(false);
   };
   ```
-- [ ] `INeuralBackend` interface in `ame_neuro`:
+- [x] `INeuralBackend` interface in `ame_neuro`:
   ```cpp
   struct NeuralRequest  { std::string kind; std::string payload; /* prompt or feature blob */ };
   struct NeuralResponse { bool ok; std::string payload; std::string error;
@@ -177,7 +177,7 @@ non-cooperative or stuck backend can never hang the advisor path.
                                                  CancelToken cancel) = 0;
   };
   ```
-- [ ] **Contract clauses (documented in the header):**
+- [x] **Contract clauses (documented in the header):**
   1. *Cooperation expected, not assumed.* A backend that ignores `cancel` is
      still legal; correctness of the envelope must not depend on cooperation.
   2. *Self-terminating deadline.* Every backend MUST impose its own transport
@@ -190,16 +190,16 @@ non-cooperative or stuck backend can never hang the advisor path.
   4. `info().cooperative` advertises whether the backend honours `cancel`,
      letting the policy/registry treat non-cooperative backends more
      conservatively (smaller pool slice, eager circuit-breaking).
-- [ ] **Isolation:** backend calls execute on a bounded worker pool
+- [x] **Isolation:** backend calls execute on a bounded worker pool
       (`BackendExecutor`) with a max-in-flight cap and a circuit breaker.
       Abandoned (timed-out) slots are reclaimed only when the underlying call
       returns or hits its deadline; once outstanding abandoned calls saturate
       the pool, the breaker opens and further `submit`s report unavailable
       immediately — bounding resource leakage from a misbehaving backend.
-- [ ] `NullBackend` (always reports unavailable) and `MockBackend` (scripted
+- [x] `NullBackend` (always reports unavailable) and `MockBackend` (scripted
       responses, injectable latency/error, *and a non-cooperative/hang mode that
       ignores `cancel`*) for tests — both in `ame_neuro`.
-- [ ] `BackendRegistry` for named lookup and hot-path/warm-path/cold-path tiering.
+- [x] `BackendRegistry` for named lookup and hot-path/warm-path/cold-path tiering.
 
 **Acceptance criteria:** A unit test drives `MockBackend` through the registry
 and verifies: (a) cooperative cancellation via `CancelToken` mid-flight; (b) a
@@ -223,7 +223,7 @@ that does not pass. Verifiers are pure functions of symbolic state and proposal 
 no neural dependency — so they are cheap to unit-test exhaustively.
 
 **Deliverables:**
-- [ ] Templated interface:
+- [x] Templated interface:
   ```cpp
   template <class Proposal>
   class IVerifier {
@@ -233,8 +233,8 @@ no neural dependency — so they are cheap to unit-test exhaustively.
       virtual Verdict verify(const Proposal&, const WorldModel&) const = 0;
   };
   ```
-- [ ] `AlwaysReject` / `AlwaysAccept` reference verifiers for tests.
-- [ ] Documented contract: verifiers MUST be deterministic, side-effect-free,
+- [x] `AlwaysReject` / `AlwaysAccept` reference verifiers for tests.
+- [x] Documented contract: verifiers MUST be deterministic, side-effect-free,
       and operate on a `WorldModel` snapshot (no mutation of authoritative state).
 
 **Acceptance criteria:** Verdict carries a machine-usable rejection reason and
@@ -253,7 +253,7 @@ options A–G instantiate it with their own request/proposal/verifier types and
 write almost no orchestration code of their own.
 
 **Deliverables:**
-- [ ] Templated orchestrator:
+- [x] Templated orchestrator:
   ```cpp
   template <class Request, class Proposal>
   class Advisor {
@@ -270,10 +270,10 @@ write almost no orchestration code of their own.
       Result advise(const Request&, const WorldModel&);
   };
   ```
-- [ ] Wiring: serialise `Request` → `NeuralRequest`, submit under budget, parse
+- [x] Wiring: serialise `Request` → `NeuralRequest`, submit under budget, parse
       `NeuralResponse` → `Proposal`, run `IVerifier`, apply `FallbackPolicy`,
       emit one `NeuroAuditTrail` record per call.
-- [ ] Per-proposal-type traits seam: `RequestCodec<Request>` (to payload) and
+- [x] Per-proposal-type traits seam: `RequestCodec<Request>` (to payload) and
       `ProposalCodec<Proposal>` (from payload) — the only thing an option must
       supply besides its verifier.
 
@@ -293,12 +293,12 @@ disabled — each lands on the correct outcome and emits exactly one audit recor
 data, not code, so it is configurable per integration and per deployment tier.
 
 **Deliverables:**
-- [ ] `FallbackPolicy` struct: `latency_budget_ms`, `max_retries`,
+- [x] `FallbackPolicy` struct: `latency_budget_ms`, `max_retries`,
       `retry_backoff_ms`, `on_reject` (FallBack | RetryWithFeedback),
       `enabled` flag, `tier` (Hot/Warm/Cold).
-- [ ] Deterministic clock injection so budget behaviour is testable without
+- [x] Deterministic clock injection so budget behaviour is testable without
       real waits.
-- [ ] Hard guarantee: total wall-time across retries never exceeds the budget;
+- [x] Hard guarantee: total wall-time across retries never exceeds the budget;
       the symbolic fallback is reachable within a bounded delay regardless of
       backend behaviour. This is enforced by **abandonment** (WI-0.2): the
       advisor `wait_for`s each attempt's future up to the remaining budget,
@@ -330,10 +330,10 @@ grounded entries in a `WorldModel`. Shared by any option that proposes
 goals, facts, or fluent references.
 
 **Deliverables:**
-- [ ] `GroundedFluentVerifier`: each proposed fluent key exists in the
+- [x] `GroundedFluentVerifier`: each proposed fluent key exists in the
       `WorldModel` fluent index; unknown keys rejected with the offending key
       cited as evidence.
-- [ ] Optional allow-list hook (`std::function<bool(string)>`) for the review's
+- [x] Optional allow-list hook (`std::function<bool(string)>`) for the review's
       "allowed-goal filtering / goal authorization" governance concern.
 
 **Acceptance criteria:** Accepts only keys present in the grounded model;
@@ -353,13 +353,13 @@ fragments (full plans, suffixes, repairs). Reuses existing grounding and the
 same precondition/effect semantics LAPKT relies on.
 
 **Deliverables:**
-- [ ] `ForwardSimVerifier`: takes proposed `std::vector<PlanStep>` + goal fluents;
+- [x] `ForwardSimVerifier`: takes proposed `std::vector<PlanStep>` + goal fluents;
       returns accept iff every precondition holds in sequence and the goal set is
       satisfied at the end. On reject, cites the first failing step + unmet
       precondition.
-- [ ] Operates on a `WorldStateData` snapshot clone — never mutates authoritative
+- [x] Operates on a `WorldStateData` snapshot clone — never mutates authoritative
       state. Respects `FactAuthority` (see WI-2.3).
-- [ ] Reuses `WorldModel` grounding utilities; no duplicate STRIPS logic.
+- [x] Reuses `WorldModel` grounding utilities; no duplicate STRIPS logic.
 
 **Acceptance criteria:** Hand-built valid plan accepted; plan with a violated
 precondition at step *k* rejected with *k* and the predicate named. Verified
@@ -390,7 +390,7 @@ co-stored values. This is what the existing snapshot can actually express, and i
 still yields distinct verdicts from one snapshot.
 
 **Deliverables:**
-- [ ] `AuthorityView` enum on verifier construction, defined over the *single*
+- [x] `AuthorityView` enum on verifier construction, defined over the *single*
       `(value, authority)` already carried per fluent in the snapshot:
   - `All` — trust each fluent's stored value regardless of its authority tag
     (forward-sim default for repair, matching today's behaviour).
@@ -400,13 +400,13 @@ still yields distinct verdicts from one snapshot.
   - `ConfirmedOnly` — a fluent counts as true only if its stored value is true
     **and** its `metadata.authority == CONFIRMED`; `BELIEVED` facts are treated
     as not-yet-established. May reject a plan that `All` would accept.
-- [ ] Verifier reads `FactAuthority` straight from the snapshot's
+- [x] Verifier reads `FactAuthority` straight from the snapshot's
       `fact_metadata` (`WorldStateData::getMetadata`) — no new storage, no
       believed/confirmed shadow history, no `WorldModel` API change.
-- [ ] Documented semantics added to `02-world-model.md` cross-reference and the
+- [x] Documented semantics added to `02-world-model.md` cross-reference and the
       assurance plan: believed = optimistic prediction; confirmed = observed
       truth; verifiers must be told which to trust.
-- [ ] **Out of scope / future:** a dual believed-vs-confirmed shadow store (so a
+- [x] **Out of scope / future:** a dual believed-vs-confirmed shadow store (so a
       fluent could hold both predicted and observed values simultaneously) is a
       possible later `WorldModel` extension, explicitly *not* required here.
 
@@ -431,16 +431,16 @@ provenance source for replay, assurance, and "did the neural component affect
 behaviour?" questions.
 
 **Deliverables:**
-- [ ] `NeuroAuditLog` (mirrors `PlanAuditLog` design: in-memory + optional JSONL
+- [x] `NeuroAuditLog` (mirrors `PlanAuditLog` design: in-memory + optional JSONL
       sink, `ame_neuro_events.jsonl`). One record per `Advisor::advise` call:
   ```
   record_id, ts_us, integration_kind, backend_id, model_id,
   request_digest, proposal_digest, outcome, verdict_reason,
   evidence[], latency_ms, retries, affected_behaviour(bool)
   ```
-- [ ] Request/proposal stored as digests + bounded raw payload (full payload
+- [x] Request/proposal stored as digests + bounded raw payload (full payload
       gated by a verbosity flag to control log volume).
-- [ ] Foxglove channel registration behind `AME_FOXGLOVE` so neuro events stream
+- [x] Foxglove channel registration behind `AME_FOXGLOVE` so neuro events stream
       alongside existing layers.
 
 **Acceptance criteria:** Every advisor outcome produces exactly one JSONL record;
@@ -459,10 +459,10 @@ the research doc asks for (`heuristic_source` and friends), so a plan episode
 self-documents any neural influence.
 
 **Deliverables:**
-- [ ] Additive optional fields on `PlanAuditLog::Episode`:
+- [x] Additive optional fields on `PlanAuditLog::Episode`:
       `neuro_record_ids[]` (links to Layer 6), `heuristic_source`
       (`"symbolic"` default), `goal_source`, `repair_source`.
-- [ ] Defaults preserve current JSONL shape when neural is off (purely additive).
+- [x] Defaults preserve current JSONL shape when neural is off (purely additive).
 
 **Acceptance criteria:** With neural off, episode JSON is unchanged. With an
 accepted proposal, the episode references the corresponding `NeuroAuditLog`
@@ -482,12 +482,12 @@ neuro audit) by time and entity, returns bounded windows, and exports labelled
 samples — without prescribing how any option consumes them.
 
 **Deliverables:**
-- [ ] `AuditIndex`: load N JSONL streams, build time + entity (object/fluent)
+- [x] `AuditIndex`: load N JSONL streams, build time + entity (object/fluent)
       indices, query `window(t0, t1)` and `around(fact_key, ±k)`.
-- [ ] Token/size-bounded window assembly (for context-limited LLM consumers).
-- [ ] `TrainingExport`: emit `(state, goal, plan, cost, outcome)` tuples from
+- [x] Token/size-bounded window assembly (for context-limited LLM consumers).
+- [x] `TrainingExport`: emit `(state, goal, plan, cost, outcome)` tuples from
       successful plan episodes (feeds learned-heuristic/anomaly options later).
-- [ ] Evidence-citation helper: map a free-form reference back to concrete log
+- [x] Evidence-citation helper: map a free-form reference back to concrete log
       record ids (enforces "cite evidence rather than opinion").
 
 **Acceptance criteria:** Given fixture JSONL, `window()`/`around()` return the
@@ -509,13 +509,13 @@ data, not recompilation. Extends the existing `PolicyEnvelope`
 (`autonomy_backend.h`) rather than inventing a parallel mechanism.
 
 **Deliverables:**
-- [ ] `NeuroConfig` (JSON-loadable): per-integration `{enabled, backend_id,
+- [x] `NeuroConfig` (JSON-loadable): per-integration `{enabled, backend_id,
       model_id, FallbackPolicy, verbosity, authority_view}`.
-- [ ] Extend `PolicyEnvelope` with an optional `neuro` block; default = all
+- [x] Extend `PolicyEnvelope` with an optional `neuro` block; default = all
       disabled (pure symbolic).
-- [ ] Global kill-switch and per-integration kill-switch honoured at runtime by
+- [x] Global kill-switch and per-integration kill-switch honoured at runtime by
       `Advisor` (flips outcome to `Disabled`, logs it).
-- [ ] Model/version pinning recorded in every `NeuroAuditLog` record (data
+- [x] Model/version pinning recorded in every `NeuroAuditLog` record (data
       lineage pre-requisite).
 
 **Acceptance criteria:** Config with everything disabled yields pure-symbolic
@@ -535,14 +535,14 @@ seams — the actual options are out of scope — but they must exist for the
 infrastructure to be usable and must compile/behave identically when unused.
 
 **Deliverables:**
-- [ ] `Planner` gains an optional, default-null hook for action-ordering /
+- [x] `Planner` gains an optional, default-null hook for action-ordering /
       heuristic advice consumed inside search tie-breaking (seam for Options A/D).
       `Planner::solve(const WorldModel&)` signature unchanged.
-- [ ] Executor/replan path gains an optional, default-null repair-proposal hook
+- [x] Executor/replan path gains an optional, default-null repair-proposal hook
       consulted *before* full replanning (seam for Option B).
-- [ ] Goal-ingress and evidence-sink seams (seam for Options E/F/G) exposed via
+- [x] Goal-ingress and evidence-sink seams (seam for Options E/F/G) exposed via
       existing callback/sink patterns (`pushIntent`, execution sinks).
-- [ ] Each hook is `#if defined(AME_NEURO)`-guarded or a null-object default so
+- [x] Each hook is `#if defined(AME_NEURO)`-guarded or a null-object default so
       the symbolic build is unaffected.
 
 **Acceptance criteria:** With no advisor attached, planner/executor outputs are
@@ -564,12 +564,12 @@ dependency, and pin the propose-verify-fallback contract with adversarial cases
 the review explicitly requires.
 
 **Deliverables:**
-- [ ] `MockBackend` scenarios: valid, malformed, empty, oversized, slow,
+- [x] `MockBackend` scenarios: valid, malformed, empty, oversized, slow,
       hanging, erroring, adversarial/out-of-context responses.
-- [ ] Contract test suite asserting: invalid proposals are *always* rejected;
+- [x] Contract test suite asserting: invalid proposals are *always* rejected;
       fallback always reachable within budget; exactly one audit record per call;
       symbolic output unchanged when disabled.
-- [ ] Codec fuzz tests for `RequestCodec`/`ProposalCodec` (garbage in → clean
+- [x] Codec fuzz tests for `RequestCodec`/`ProposalCodec` (garbage in → clean
       rejection, never a crash or unverified apply).
 
 **Acceptance criteria:** Suite runs offline in CI; adversarial responses never
@@ -587,12 +587,12 @@ stress, per the review's "replay tests using audit logs" and "performance tests
 under timeout pressure".
 
 **Deliverables:**
-- [ ] Replay driver: feed recorded JSONL through `AuditIndex` into advisors with
+- [x] Replay driver: feed recorded JSONL through `AuditIndex` into advisors with
       `MockBackend` replaying historical proposals; assert verdicts/outcomes match
       expectations.
-- [ ] Latency-injection runs proving the wall-time bound (WI-1.3) holds
+- [x] Latency-injection runs proving the wall-time bound (WI-1.3) holds
       end-to-end and that planning/execution still complete via fallback.
-- [ ] Determinism check: with neural disabled, replayed runs reproduce baseline
+- [x] Determinism check: with neural disabled, replayed runs reproduce baseline
       plans bit-for-bit.
 
 **Acceptance criteria:** Replays are reproducible; no latency profile causes a
@@ -612,15 +612,15 @@ it may run in the control path. Also fix the cross-document gaps the review
 identified.
 
 **Deliverables:**
-- [ ] "Neural component acceptance criteria" checklist (latency budget, fallback
+- [x] "Neural component acceptance criteria" checklist (latency budget, fallback
       path, minimum logging fields, operator visibility) in this plan, referenced
       from `autonomy_assurance_plan.md`.
-- [ ] Assurance trigger table: advisory/offline (low) vs planner-adjacent
+- [x] Assurance trigger table: advisory/offline (low) vs planner-adjacent
       (medium, bounded experiment) vs in-loop (high, AMLAS required).
-- [ ] Roadmap fix: register "Extension 8: Neuro-Symbolic Reasoning" explicitly
+- [x] Roadmap fix: register "Extension 8: Neuro-Symbolic Reasoning" explicitly
       (research doc says Extension 8; `07-extensions.md` lists it as a
       Candidate — align wording and dependencies).
-- [ ] Align assurance-plan wording so goal *interpretation* is described as a
+- [x] Align assurance-plan wording so goal *interpretation* is described as a
       future capability, not an implemented one (review gap #2).
 
 **Acceptance criteria:** A reviewer can determine, from the docs alone, exactly

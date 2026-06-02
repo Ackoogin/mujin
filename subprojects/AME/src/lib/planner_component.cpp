@@ -167,9 +167,10 @@ void PlannerComponent::recordAuditEpisode(
       std::chrono::duration_cast<std::chrono::microseconds>(
           std::chrono::system_clock::now().time_since_epoch())
           .count());
-  episode.solver        = "BRFS";
-  episode.solve_time_ms = plan_result.solve_time_ms;
-  episode.success       = plan_result.success;
+  episode.solver           = "BRFS";
+  episode.heuristic_source = plan_result.heuristic_source;
+  episode.solve_time_ms    = plan_result.solve_time_ms;
+  episode.success          = plan_result.success;
   episode.expanded      = plan_result.expanded;
   episode.generated     = plan_result.generated;
   episode.cost          = plan_result.cost;

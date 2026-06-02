@@ -21,10 +21,27 @@
             "binaryDir": "${sourceDir}/build-all-enabled",
             "cacheVariables": {
                 "AME_FOXGLOVE": "ON",
+                "AME_NEURO": "ON",
                 "PYRAMID_ENABLE_FLATBUFFERS": "ON",
                 "PYRAMID_ENABLE_GRPC": "ON",
                 "PYRAMID_ENABLE_PROTOBUF": "ON",
                 "PYRAMID_ENABLE_ROS2": "ON"
+            }
+        },
+        {
+            "name": "neuro-dev",
+            "displayName": "AME + Neuro-Symbolic Infrastructure",
+            "description": "Builds AME core and ame_neuro; no Foxglove or gRPC.",
+            "binaryDir": "${sourceDir}/build-neuro",
+            "cacheVariables": {
+                "UNMANNED_BUILD_PYRAMID": "ON",
+                "UNMANNED_BUILD_AME": "ON",
+                "AME_NEURO": "ON",
+                "AME_FOXGLOVE": "OFF",
+                "PYRAMID_ENABLE_FLATBUFFERS": "OFF",
+                "PYRAMID_ENABLE_GRPC": "OFF",
+                "PYRAMID_ENABLE_PROTOBUF": "OFF",
+                "PYRAMID_ENABLE_ROS2": "OFF"
             }
         },
         {
@@ -115,6 +132,16 @@
             "name": "ame-devenv-debug",
             "configurePreset": "ame-devenv",
             "configuration": "Debug"
+        },
+        {
+            "name": "neuro-dev-release",
+            "configurePreset": "neuro-dev",
+            "configuration": "Release"
+        },
+        {
+            "name": "neuro-dev-debug",
+            "configurePreset": "neuro-dev",
+            "configuration": "Debug"
         }
     ],
     "testPresets": [
@@ -165,7 +192,14 @@
             "output": {
                 "outputOnFailure": true
             }
+        },
+        {
+            "name": "neuro-dev-debug",
+            "configurePreset": "neuro-dev",
+            "configuration": "Debug",
+            "output": {
+                "outputOnFailure": true
+            }
         }
-
     ]
 }

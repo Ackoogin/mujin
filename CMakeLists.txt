@@ -94,6 +94,15 @@ endif()
 target_compile_features(lapkt_core PUBLIC cxx_std_17)
 
 option(AME_FOXGLOVE "Enable Foxglove WebSocket bridge for live monitoring" ON)
+option(AME_NEURO   "Neuro-symbolic core infrastructure (ame_neuro)"       OFF)
+option(AME_LLM     "LLM backends via libcurl (implies AME_NEURO)"         OFF)
+option(AME_NEURAL  "ONNX Runtime backends (implies AME_NEURO)"            OFF)
+if(AME_LLM OR AME_NEURAL)
+    set(AME_NEURO ON CACHE BOOL "" FORCE)
+endif()
+if(AME_LLM)
+    find_package(CURL REQUIRED)
+endif()
 if(AME_FOXGLOVE)
     FetchContent_Declare(
         websocketpp

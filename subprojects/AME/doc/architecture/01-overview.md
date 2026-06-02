@@ -1,6 +1,6 @@
 # System Overview
 
-PDDL planning + behaviour tree execution with a shared world model, full observability, and optional ROS2 deployment.
+PDDL planning + behaviour tree execution with a shared world model, full observability, and optional ROS2 deployment. An optional neuro-symbolic layer (`ame_neuro`) provides propose-verify-fallback seams for neural guidance while preserving the symbolic guarantee.
 
 ## Data Flow
 
@@ -23,7 +23,17 @@ PDDL Domain/Problem
                                                          ws://localhost:8765
 
 PlanAuditLog (Layer 5) -- records each planning episode independently
+NeuroAuditLog (Layer 6, optional) -- one record per neural Advisor call
 ```
+
+When `AME_NEURO=ON`, neural backends slot in via two null-object seams:
+
+```
+HeuristicHook (Planner)       -- scores reorder LAPKT action traversal
+RepairHook (ExecutorComponent) -- BT failure → try repair before full replan
+```
+
+Both default to no-op; the symbolic baseline is byte-for-byte identical without hooks.
 
 ## Components
 
@@ -38,6 +48,7 @@ PlanAuditLog (Layer 5) -- records each planning episode independently
 | **BT.CPP Executor** | Ticks the compiled behaviour tree; BT nodes read/write world state directly | `bt_nodes/` |
 | **MissionExecutor** | Top-level tick loop with replan-on-failure | `main.cpp` |
 | **Observability** | 5-layer audit stack: TreeObserver, AmeBTLogger, WmAuditLog, FoxgloveBridge, PlanAuditLog | see [05-observability.md](05-observability.md) |
+| **NeuroSymbolic** (opt.) | Propose-verify-fallback envelope, backend pool, verifiers, audit (Layer 6), config | see [08-neuro-symbolic.md](08-neuro-symbolic.md) |
 
 ## Design Principles
 
@@ -53,10 +64,12 @@ PlanAuditLog (Layer 5) -- records each planning episode independently
 |---------|----------|-------------|
 | `ame_core` | WorldModel, Planner, PlanCompiler, ActionRegistry, PddlParser, BT nodes, all loggers | BT.CPP, lapkt_core |
 | `ame_foxglove` | FoxgloveBridge WebSocket server | ame_core, websocketpp, asio |
-| `ame_test_app` | Demo executable (`src/ame/apps/main.cpp`) | ame_core, optionally ame_foxglove |
+| `ame_neuro` | Neuro-symbolic PVF envelope, backends, verifiers, audit, config (`AME_NEURO=ON`) | ame_core |
+| `ame_test_app` | Demo executable (`src/ame/apps/main.cpp`) | ame_core, optionally ame_foxglove, ame_neuro |
 | `ame_ros2_lib` | WorldModelNode, PlannerNode, ExecutorNode, RosWmBridge, LifecycleManager | ame_core, rclcpp, rclcpp_action, rclcpp_lifecycle |
 
-`ame_foxglove` is a separate static library so `ame_core` stays dependency-free. Guard any Foxglove code with `#if defined(AME_FOXGLOVE)`.
+`ame_foxglove` and `ame_neuro` are separate static libraries so `ame_core` stays dependency-free.
+Guard Foxglove code with `#if defined(AME_FOXGLOVE)` and neuro code with `#if defined(AME_NEURO)`.
 
 ## Dependencies
 

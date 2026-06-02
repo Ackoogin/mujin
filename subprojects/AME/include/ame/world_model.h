@@ -182,6 +182,10 @@ public:
 
     // LAPKT projection
     void projectToSTRIPS(aptk::STRIPS_Problem& prob) const;
+    // Overload: project actions in a caller-specified order (permutation of [0,N)).
+    // Allows heuristic hooks to bias LAPKT action traversal without mutating the WorldModel.
+    void projectToSTRIPS(aptk::STRIPS_Problem& prob,
+                         const std::vector<unsigned>& action_order) const;
     aptk::State* currentStateAsSTRIPS(const aptk::STRIPS_Problem& prob) const;
 
 private:

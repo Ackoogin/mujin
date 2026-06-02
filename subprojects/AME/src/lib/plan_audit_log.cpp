@@ -82,8 +82,19 @@ uint64_t PlanAuditLog::recordEpisode(Episode ep) {
            << "\"init_facts\":" << jsonStringArray(stored.init_facts) << ","
            << "\"goal_fluents\":" << jsonStringArray(stored.goal_fluents) << ","
            << "\"plan_actions\":" << jsonStringArray(stored.plan_actions) << ","
-           << "\"bt_xml\":\"" << jsonEscape(stored.bt_xml) << "\""
-           << "}";
+           << "\"bt_xml\":\"" << jsonEscape(stored.bt_xml) << "\","
+           << "\"heuristic_source\":\"" << jsonEscape(stored.heuristic_source) << "\","
+           << "\"goal_source\":\"" << jsonEscape(stored.goal_source) << "\","
+           << "\"repair_source\":\"" << jsonEscape(stored.repair_source) << "\"";
+        if (!stored.neuro_record_ids.empty()) {
+            os << ",\"neuro_record_ids\":[";
+            for (size_t i = 0; i < stored.neuro_record_ids.size(); ++i) {
+                if (i) os << ",";
+                os << stored.neuro_record_ids[i];
+            }
+            os << "]";
+        }
+        os << "}";
         file_ << os.str() << '\n';
     }
 

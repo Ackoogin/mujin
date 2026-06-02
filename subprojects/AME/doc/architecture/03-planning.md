@@ -43,6 +43,21 @@ When a planner snapshots world state, it queries WorldModelNode for current fact
 
 LAPKT is built from source as the `lapkt_core` static library (not its own CMake project). MSVC compatibility shims are in `cmake/compat/`.
 
+### Heuristic Hook Seam (`AME_NEURO`)
+
+When `ame_neuro` is linked and a `HeuristicHook` is attached, `Planner::solve()`
+consults the hook before building the LAPKT problem:
+
+1. Hook returns `vector<ActionScore>` — per-action preference scores (higher = earlier).
+2. Scores are sorted descending to produce an `action_order` permutation.
+3. `WorldModel::projectToSTRIPS(strips, action_order)` adds actions to LAPKT in
+   score order, biasing BRFS tie-breaking toward preferred actions.
+4. `PlanResult::heuristic_source` is set to `"neural_hook"` and propagated to
+   `PlanAuditLog::Episode` by `PlannerComponent::recordAuditEpisode()`.
+
+No hook → identity permutation → behaviour identical to `AME_NEURO=OFF`.
+See [08-neuro-symbolic.md § 9](08-neuro-symbolic.md) for the full seam specification.
+
 ## ActionRegistry
 
 `ActionRegistry` (`include/ame/action_registry.h`) bridges PDDL action names to BT.CPP implementations.

@@ -92,6 +92,44 @@ if(AME_FOXGLOVE)
 endif()
 
 # ---------------------------------------------------------------------------
+# Neuro-symbolic core infrastructure (optional)
+# ---------------------------------------------------------------------------
+if(AME_NEURO)
+    # Propagate the AME_NEURO flag into ame_core so the thin seam code in
+    # planner.cpp and executor_component.cpp is compiled in.  This adds no
+    # neural dependencies to ame_core — just null-object hook interfaces.
+    target_compile_definitions(ame_core PUBLIC AME_NEURO=1)
+
+    add_library(ame_neuro STATIC
+        lib/neuro/backend_executor.cpp
+        lib/neuro/backend_registry.cpp
+        lib/neuro/mock_backend.cpp
+        lib/neuro/fallback_policy.cpp
+        lib/neuro/grounded_fluent_verifier.cpp
+        lib/neuro/forward_sim_verifier.cpp
+        lib/neuro/neuro_audit_log.cpp
+        lib/neuro/audit_index.cpp
+        lib/neuro/neuro_config.cpp
+    )
+
+    target_include_directories(ame_neuro PUBLIC ${AME_ROOT_DIR}/include)
+    target_link_libraries(ame_neuro PUBLIC ame_core)
+    target_compile_definitions(ame_neuro PUBLIC AME_NEURO=1)
+
+    if(MSVC)
+        target_compile_options(ame_neuro PRIVATE /W3)
+    else()
+        target_compile_options(ame_neuro PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    install(TARGETS ame_neuro
+        ARCHIVE DESTINATION lib
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
+    )
+endif()
+
+# ---------------------------------------------------------------------------
 # Demo / vertical-slice executable
 # ---------------------------------------------------------------------------
 add_executable(ame_test_app apps/main.cpp)
@@ -114,6 +152,10 @@ target_link_libraries(ame_test_app
 if(AME_FOXGLOVE)
     target_link_libraries(ame_test_app PRIVATE ame_foxglove)
     target_compile_definitions(ame_test_app PRIVATE AME_FOXGLOVE=1)
+endif()
+if(AME_NEURO)
+    target_link_libraries(ame_test_app PRIVATE ame_neuro)
+    target_compile_definitions(ame_test_app PRIVATE AME_NEURO=1)
 endif()
 
 # ---------------------------------------------------------------------------

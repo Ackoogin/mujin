@@ -115,3 +115,31 @@ private:
 
 On failure: halt tree, snapshot world model (which may have been updated by perception since the failure), replan from current state, recompile, swap tree, resume ticking.
 
+### Repair Hook Seam (`AME_NEURO`)
+
+`ExecutorComponent` exposes a `RepairHook` that fires before the baseline FAILURE
+path when `ame_neuro` is linked:
+
+```
+BT tick → FAILURE
+  │
+  ├─[repair_hook_ set]──► hook(failed_step, current_wm)
+  │                          │
+  │                          ├─[non-empty BT XML]──► loadAndExecute(xml)
+  │                          │                       publish RUNNING; continue ticking
+  │                          │
+  │                          └─[empty / exception]──► baseline FAILURE path
+  │
+  └─[no hook]──► baseline FAILURE path (ExecutorComponent publishes FAILURE;
+                  PlannerComponent triggers full symbolic replan)
+```
+
+`failed_step` is computed by counting how many top-level action-unit children of
+the root sequence have `SUCCESS` status in the live BT tree at failure time.
+
+The hook closure is responsible for compiling PlanStep proposals to BT XML (it
+captures `PlanCompiler` and `ActionRegistry` from its own scope).
+
+No hook → baseline FAILURE path identical to `AME_NEURO=OFF`.
+See [08-neuro-symbolic.md § 9](08-neuro-symbolic.md) for the full seam specification.
+
