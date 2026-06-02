@@ -152,6 +152,33 @@ TEST(AuditIndex, AroundReturnsNeighbours) {
     EXPECT_LE(around.size(), 3u);
 }
 
+// ---------------------------------------------------------------------------
+// Thread 26: around() uses timestamp order, not load (stream-grouping) order
+// ---------------------------------------------------------------------------
+
+TEST(AuditIndex, AroundUsesTimestampOrderAcrossStreams) {
+    AuditIndex idx;
+    // Load plan stream first, then neuro stream.
+    // Plan ts: 1000, 3000, 5000  (episode_ids 1,2,3)
+    // Neuro ts: 2000, 4000       (record_ids 10,11)
+    // On the shared timeline:  1000(plan1), 2000(neuro10), 3000(plan2), 4000(neuro11), 5000(plan3)
+    idx.load_lines(make_plan_lines(), "plan");
+    idx.load_lines(make_neuro_lines(), "neuro");
+
+    // Around plan episode "2" (ts=3000) with k=1:
+    // Timestamp neighbours are neuro10 (ts=2000) and neuro11 (ts=4000).
+    // Without timestamp sorting, load-order neighbours would be plan1 and plan3.
+    auto result = idx.around("2", 1);
+    ASSERT_EQ(result.size(), 3u);  // 3 records: one before, centre, one after
+
+    // The three records in timestamp order must span neuro10, plan2, neuro11.
+    std::vector<uint64_t> ts_values;
+    for (const auto& r : result) ts_values.push_back(r.ts_us);
+    EXPECT_EQ(ts_values[0], 2000u);  // neuro10
+    EXPECT_EQ(ts_values[1], 3000u);  // plan2
+    EXPECT_EQ(ts_values[2], 4000u);  // neuro11
+}
+
 TEST(AuditIndex, AroundRespectsSizeCap) {
     AuditIndex idx;
     // Load many large records

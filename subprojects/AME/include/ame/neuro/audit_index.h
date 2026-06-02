@@ -57,9 +57,13 @@ private:
     std::vector<LogRecord> records_;
     // entity -> list of record indices
     std::unordered_map<std::string, std::vector<size_t>> entity_index_;
+    // Indices into records_ sorted by ts_us; rebuilt lazily after any load.
+    mutable std::vector<size_t> ts_sorted_;
+    mutable bool ts_sorted_dirty_ = true;
 
     void index_record(size_t idx);
     static LogRecord parse_line(const std::string& line, const std::string& stream);
+    void ensure_ts_sorted() const;
 };
 
 } // namespace ame::neuro

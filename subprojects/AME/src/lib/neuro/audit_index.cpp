@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <numeric>
 #include <sstream>
 
 namespace ame::neuro {
@@ -116,6 +117,16 @@ void AuditIndex::load_lines(const std::vector<std::string>& lines,
         records_.push_back(parse_line(line, stream_name));
         index_record(idx);
     }
+    ts_sorted_dirty_ = true;
+}
+
+void AuditIndex::ensure_ts_sorted() const {
+    if (!ts_sorted_dirty_) return;
+    ts_sorted_.resize(records_.size());
+    std::iota(ts_sorted_.begin(), ts_sorted_.end(), 0);
+    std::stable_sort(ts_sorted_.begin(), ts_sorted_.end(),
+        [&](size_t a, size_t b) { return records_[a].ts_us < records_[b].ts_us; });
+    ts_sorted_dirty_ = false;
 }
 
 void AuditIndex::load(const std::string& filepath, const std::string& stream_name) {
@@ -141,21 +152,33 @@ std::vector<LogRecord> AuditIndex::around(const std::string& entity_key,
                                             unsigned k,
                                             size_t max_bytes) const {
     auto it = entity_index_.find(entity_key);
-    if (it == entity_index_.end()) return {};
+    if (it == entity_index_.end() || it->second.empty()) return {};
 
-    // Find the first matching index
-    if (it->second.empty()) return {};
-    size_t centre = it->second.front();
+    // Work in timestamp-sorted order so k neighbours are the k closest events
+    // on the shared timeline, not k records in load (stream-grouped) order.
+    ensure_ts_sorted();
 
-    size_t lo = (centre >= k) ? (centre - k) : 0;
-    size_t hi = std::min(records_.size() - 1, centre + k);
+    // First matching record index in records_.
+    size_t centre_rec = it->second.front();
+
+    // Locate centre_rec in the sorted order.
+    size_t sorted_pos = 0;
+    bool found = false;
+    for (size_t i = 0; i < ts_sorted_.size(); ++i) {
+        if (ts_sorted_[i] == centre_rec) { sorted_pos = i; found = true; break; }
+    }
+    if (!found) return {};
+
+    size_t lo = (sorted_pos >= k) ? (sorted_pos - k) : 0;
+    size_t hi = std::min(ts_sorted_.size() - 1, sorted_pos + k);
 
     std::vector<LogRecord> out;
     size_t total_bytes = 0;
     for (size_t i = lo; i <= hi; ++i) {
-        total_bytes += records_[i].raw.size();
+        const auto& r = records_[ts_sorted_[i]];
+        total_bytes += r.raw.size();
         if (total_bytes > max_bytes && !out.empty()) break;
-        out.push_back(records_[i]);
+        out.push_back(r);
     }
     return out;
 }
