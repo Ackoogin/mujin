@@ -517,6 +517,46 @@ TEST(Advisor, VerboseAuditWithThrowingEncoderDoesNotThrow) {
 }
 
 // ---------------------------------------------------------------------------
+// Thread Gasdc: throwing digest() must not propagate — audit record still written
+// ---------------------------------------------------------------------------
+
+struct ThrowingDigestRequest {};
+
+namespace ame::neuro {
+template <>
+struct RequestCodec<ThrowingDigestRequest> {
+    static NeuralRequest encode(const ThrowingDigestRequest&, const std::string& kind) {
+        return NeuralRequest{kind, "payload"};
+    }
+    static std::string digest(const ThrowingDigestRequest&) {
+        throw std::runtime_error("digest exploded");
+    }
+};
+} // namespace ame::neuro
+
+TEST(Advisor, ThrowingDigest_DoesNotPropagate) {
+    using ThrowDigAdvisor = Advisor<ThrowingDigestRequest, std::string>;
+
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({"proposal", true, "", 0.0});
+    BackendRegistry reg;
+    reg.add(mb);
+    ame::WorldModel wm = make_wm();
+    AlwaysAccept<std::string> v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy = FallbackPolicy::hot_path("mock");
+    ThrowDigAdvisor advisor("test_kind", reg, v, policy, &audit);
+
+    ThrowDigAdvisor::Result result;
+    EXPECT_NO_THROW(result = advisor.advise(ThrowingDigestRequest{}, wm));
+    // Digest throws during emit_audit(); the record must still be written.
+    ASSERT_EQ(audit.size(), 1u);
+    EXPECT_EQ(audit.records()[0].outcome, "Accepted");
+    EXPECT_EQ(audit.records()[0].request_digest, ""); // swallowed, left empty
+}
+
+// ---------------------------------------------------------------------------
 // Thread GagZQ: unpinned policy (empty backend_id) resolves actual backend in audit
 // ---------------------------------------------------------------------------
 

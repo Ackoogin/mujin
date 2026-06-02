@@ -243,9 +243,17 @@ private:
             const BackendExecutor* exec = registry_.find({});
             if (exec) rec.backend_id = exec->info().id;
         }
-        rec.request_digest = RequestCodec<Request>::digest(req);
-        rec.proposal_digest = proposal
-            ? ProposalCodec<Proposal>::digest(*proposal) : "";
+        try {
+            rec.request_digest = RequestCodec<Request>::digest(req);
+        } catch (...) {
+            // Digest threw; leave empty rather than propagating.
+        }
+        try {
+            rec.proposal_digest = proposal
+                ? ProposalCodec<Proposal>::digest(*proposal) : "";
+        } catch (...) {
+            // Digest threw; leave empty rather than propagating.
+        }
         rec.outcome = outcome_str(result.outcome);
         rec.verdict_reason = result.verdict.reason;
         rec.evidence = result.verdict.evidence;
