@@ -31,7 +31,7 @@ NeuroConfig NeuroConfig::from_json(const std::string& json_text) {
     // We check for the "key": pattern exactly when we encounter a '"' at depth 1
     // (before consuming the string), so the bracket depth is still accurate.
     auto get_top_val = [&](const std::string& key) -> std::string {
-        std::string search = "\"" + key + "\":";
+        std::string search = "\"" + key + "\""; // key without colon; colon matched below
         int depth = 0;
         bool in_str = false;
         size_t i = 0;
@@ -47,6 +47,13 @@ NeuroConfig NeuroConfig::from_json(const std::string& json_text) {
             if (c == '"' && depth == 1 &&
                 json_text.compare(i, search.size(), search) == 0) {
                 size_t pos = i + search.size();
+                // Accept optional whitespace before ':' (pretty-printed JSON).
+                while (pos < json_text.size() && (json_text[pos] == ' ' || json_text[pos] == '\t')) ++pos;
+                if (pos >= json_text.size() || json_text[pos] != ':') {
+                    // This quoted token is a value, not the key we want; enter string mode.
+                    in_str = true; ++i; continue;
+                }
+                ++pos; // skip ':'
                 while (pos < json_text.size() && json_text[pos] == ' ') ++pos;
                 if (pos >= json_text.size()) return {};
                 if (json_text[pos] == '"') {
@@ -84,10 +91,14 @@ NeuroConfig NeuroConfig::from_json(const std::string& json_text) {
         std::string block = json_text.substr(obj_start, obj_end - obj_start + 1);
 
         auto bget = [&](const std::string& k) -> std::string {
-            std::string s = "\"" + k + "\":";
+            std::string s = "\"" + k + "\""; // key without colon
             auto bp = block.find(s);
             if (bp == std::string::npos) return {};
             bp += s.size();
+            // Accept optional whitespace before ':'.
+            while (bp < block.size() && (block[bp] == ' ' || block[bp] == '\t')) ++bp;
+            if (bp >= block.size() || block[bp] != ':') return {};
+            ++bp; // skip ':'
             while (bp < block.size() && block[bp] == ' ') ++bp;
             if (bp >= block.size()) return {};
             if (block[bp] == '"') {

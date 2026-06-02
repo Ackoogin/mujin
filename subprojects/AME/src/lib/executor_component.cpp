@@ -176,9 +176,35 @@ pcl_status_t ExecutorComponent::on_tick(double /*dt*/) {
         }
         if (!plan_seq) plan_seq = root;
         if (plan_seq) {
+          // Distinguish action units from flow sequences:
+          // - Action units (sequential plans): first child is a ConditionNode
+          //   (CheckWorldPredicate precondition), never a ControlNode.
+          // - Flow sequences (parallel plans): first child is itself a
+          //   ControlNode (an action unit), so compile() emits a Parallel of flows.
+          // For parallel plans, count completed action units across all flows so
+          // failed_step approximates the total number of completed plan steps.
+          auto is_flow = [](BT::ControlNode* node) -> bool {
+              return !node->children().empty() &&
+                     dynamic_cast<BT::ControlNode*>(node->children().front()) != nullptr;
+          };
           for (auto* child : plan_seq->children()) {
-            if (child->status() == BT::NodeStatus::SUCCESS) ++failed_step;
-            else break;
+            auto* ctrl = dynamic_cast<BT::ControlNode*>(child);
+            if (child->status() == BT::NodeStatus::SUCCESS) {
+              // Fully successful: count the child itself (+1) or all its steps.
+              if (ctrl && is_flow(ctrl))
+                failed_step += static_cast<unsigned>(ctrl->children().size());
+              else
+                ++failed_step;
+            } else {
+              // First failing child: if it's a flow, count steps inside it.
+              if (ctrl && is_flow(ctrl)) {
+                for (auto* step : ctrl->children()) {
+                  if (step->status() == BT::NodeStatus::SUCCESS) ++failed_step;
+                  else break;
+                }
+              }
+              break;
+            }
           }
         }
       }

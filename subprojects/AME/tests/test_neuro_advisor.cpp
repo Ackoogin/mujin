@@ -349,3 +349,32 @@ TEST(Advisor, VerboseAudit_StoresRawPayloadNotDigest) {
     EXPECT_NE(rec.proposal_digest, raw_backend_payload);
     EXPECT_FALSE(rec.proposal_digest.empty());
 }
+
+// ---------------------------------------------------------------------------
+// Thread 16: throwing verifier produces ErroredFellBack + exactly one audit record
+// ---------------------------------------------------------------------------
+
+struct ThrowingVerifier : public IVerifier<std::string> {
+    Verdict verify(const std::string&, const ame::WorldModel&) const override {
+        throw std::runtime_error("verifier exploded");
+    }
+};
+
+TEST(Advisor, ThrowingVerifier_ProducesErroredFellBack) {
+    auto mb = std::make_shared<MockBackend>("mock");
+    mb->add_script({"proposal", true, "", 0.0});
+    auto reg = make_registry(mb);
+    ame::WorldModel wm = make_wm();
+    ThrowingVerifier v;
+    NeuroAuditLog audit;
+
+    FallbackPolicy policy = FallbackPolicy::hot_path("mock");
+    StrAdvisor advisor("test_kind", reg, v, policy, &audit);
+
+    StrAdvisor::Result result;
+    EXPECT_NO_THROW(result = advisor.advise("req", wm));
+    EXPECT_EQ(result.outcome, StrAdvisor::Outcome::ErroredFellBack);
+    // Contract: exactly one audit record per advise() call, even on verifier exception.
+    EXPECT_EQ(audit.size(), 1u);
+    EXPECT_EQ(audit.records()[0].outcome, "ErroredFellBack");
+}

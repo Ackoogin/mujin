@@ -149,7 +149,14 @@ public:
                 return result;
             }
 
-            auto verdict = verifier_.verify(*proposal_opt, wm);
+            typename IVerifier<Proposal>::Verdict verdict;
+            try {
+                verdict = verifier_.verify(*proposal_opt, wm);
+            } catch (...) {
+                result.outcome = Outcome::ErroredFellBack;
+                emit_audit(req, {}, result, clock_() - start_ms, attempt);
+                return result;
+            }
 
             if (!verdict.accepted) {
                 if (policy_.on_reject == OnRejectAction::FallBack ||

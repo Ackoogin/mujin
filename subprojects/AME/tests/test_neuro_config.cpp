@@ -178,3 +178,29 @@ TEST(PlannerSeam, ClearHookRestoresBaseline) {
     EXPECT_EQ(r.heuristic_source, "symbolic");
 }
 #endif
+
+// ---------------------------------------------------------------------------
+// Thread 17: parser accepts optional whitespace before colons (pretty-printed JSON)
+// ---------------------------------------------------------------------------
+
+TEST(NeuroConfig, ParseJsonWithSpacesBeforeColons) {
+    // Common pretty-printer output: "key" : value  (space before colon)
+    const std::string json = R"({
+        "enabled" : true,
+        "integrations" : [
+            {
+                "integration_kind" : "heuristic_guide",
+                "enabled" : true,
+                "latency_budget_ms" : 150.0,
+                "backend_id" : "fast_model"
+            }
+        ]
+    })";
+    auto cfg = NeuroConfig::from_json(json);
+    EXPECT_TRUE(cfg.enabled);
+    ASSERT_EQ(cfg.integrations.size(), 1u);
+    EXPECT_EQ(cfg.integrations[0].integration_kind, "heuristic_guide");
+    EXPECT_TRUE(cfg.integrations[0].policy.enabled);
+    EXPECT_DOUBLE_EQ(cfg.integrations[0].policy.latency_budget_ms, 150.0);
+    EXPECT_EQ(cfg.integrations[0].policy.backend_id, "fast_model");
+}
