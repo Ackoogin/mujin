@@ -526,20 +526,18 @@ Runtime configuration without recompiling. Loaded from JSON:
 
 ```json
 {
-  "all_disabled": false,
+  "enabled": true,
   "integrations": [
     {
-      "id": "heuristic_hook",
+      "integration_kind": "heuristic_hook",
       "enabled": true,
       "backend_id": "onnx_heuristic",
       "model_id": "heuristic_v2",
-      "model_version_pin": "2.1.0",
       "latency_budget_ms": 50.0,
-      "max_retries": 1,
-      "retry_backoff_ms": 10.0
+      "max_retries": 1
     },
     {
-      "id": "repair_hook",
+      "integration_kind": "repair_hook",
       "enabled": false,
       "backend_id": "llm_repair",
       "latency_budget_ms": 500.0
@@ -548,22 +546,36 @@ Runtime configuration without recompiling. Loaded from JSON:
 }
 ```
 
-```cpp
-auto cfg = NeuroConfig::from_file("neuro.json");
+Top-level fields:
 
-// Kill-switch: disables all integrations
-if (cfg.all_disabled) { /* neural path not taken */ }
+| Field | Type | Meaning |
+|-------|------|---------|
+| `enabled` | bool | Global kill-switch; `false` disables all integrations |
+| `integrations` | array | Per-integration config blocks |
+
+Per-integration block fields:
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `integration_kind` | string | Key passed to `find()` / `policy_for()` |
+| `enabled` | bool | Individual on/off; also gated by top-level `enabled` |
+| `backend_id` | string | Executor looked up in `BackendRegistry` |
+| `model_id` | string | Passed to `FallbackPolicy.model_id` |
+| `latency_budget_ms` | number | Wall-clock budget per `advise()` call |
+| `max_retries` | integer | Retry attempts before `TimedOutFellBack` |
+
+```cpp
+auto cfg = NeuroConfig::from_json(json_text); // or from_file(path)
+
+// Global kill-switch
+if (!cfg.enabled) { /* no neural path taken */ }
 
 // Per-integration config
 const IntegrationConfig* ic = cfg.find("heuristic_hook");
 FallbackPolicy policy = cfg.policy_for("heuristic_hook"); // disabled() if absent
 
-// Model version pinning: reject if backend reports a different version
-if (ic && !ic->model_version_pin.empty()) {
-    auto info = exec->info();
-    if (info.model_version != ic->model_version_pin)
-        throw std::runtime_error("model version mismatch");
-}
+// per-integration enabled respects global kill-switch automatically
+// ic->policy.enabled == false when cfg.enabled == false
 ```
 
 `NeuroConfig` is immutable after construction. Hot-reload is the caller's
@@ -751,10 +763,15 @@ executor.setRepairHook([advisor, &planner, &compiler, &registry]
 
 ```json
 {
-  "id": "my_integration",
   "enabled": true,
-  "backend_id": "my_backend",
-  "latency_budget_ms": 200.0
+  "integrations": [
+    {
+      "integration_kind": "my_integration",
+      "enabled": true,
+      "backend_id": "my_backend",
+      "latency_budget_ms": 200.0
+    }
+  ]
 }
 ```
 
