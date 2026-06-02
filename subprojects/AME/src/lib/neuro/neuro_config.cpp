@@ -25,27 +25,51 @@ FallbackPolicy NeuroConfig::policy_for(const std::string& kind) const {
 NeuroConfig NeuroConfig::from_json(const std::string& json_text) {
     NeuroConfig cfg;
 
-    auto get_val = [&](const std::string& key) -> std::string {
+    // Extracts a value for a key that appears at top-level (depth == 1) only.
+    // Prevents nested integration objects' "enabled" keys from poisoning the
+    // global kill-switch field.
+    // We check for the "key": pattern exactly when we encounter a '"' at depth 1
+    // (before consuming the string), so the bracket depth is still accurate.
+    auto get_top_val = [&](const std::string& key) -> std::string {
         std::string search = "\"" + key + "\":";
-        auto pos = json_text.find(search);
-        if (pos == std::string::npos) return {};
-        pos += search.size();
-        while (pos < json_text.size() && json_text[pos] == ' ') ++pos;
-        if (pos >= json_text.size()) return {};
-        if (json_text[pos] == '"') {
-            ++pos;
-            std::string val;
-            while (pos < json_text.size() && json_text[pos] != '"') val += json_text[pos++];
-            return val;
+        int depth = 0;
+        bool in_str = false;
+        size_t i = 0;
+        while (i < json_text.size()) {
+            char c = json_text[i];
+            if (in_str) {
+                if (c == '\\') { i += 2; continue; } // skip escaped char
+                if (c == '"') { in_str = false; }
+                ++i; continue;
+            }
+            // At depth 1 and starting a quoted token: check for the target key
+            // before entering string mode so we can test from the opening '"'.
+            if (c == '"' && depth == 1 &&
+                json_text.compare(i, search.size(), search) == 0) {
+                size_t pos = i + search.size();
+                while (pos < json_text.size() && json_text[pos] == ' ') ++pos;
+                if (pos >= json_text.size()) return {};
+                if (json_text[pos] == '"') {
+                    ++pos;
+                    std::string val;
+                    while (pos < json_text.size() && json_text[pos] != '"') val += json_text[pos++];
+                    return val;
+                }
+                std::string val;
+                while (pos < json_text.size() && json_text[pos] != ',' &&
+                       json_text[pos] != '}' && json_text[pos] != '\n')
+                    val += json_text[pos++];
+                return val;
+            }
+            if (c == '"')             { in_str = true;  ++i; continue; }
+            if (c == '{' || c == '[') { ++depth;         ++i; continue; }
+            if (c == '}' || c == ']') { --depth;         ++i; continue; }
+            ++i;
         }
-        std::string val;
-        while (pos < json_text.size() && json_text[pos] != ',' &&
-               json_text[pos] != '}' && json_text[pos] != '\n')
-            val += json_text[pos++];
-        return val;
+        return {};
     };
 
-    std::string enabled_str = get_val("enabled");
+    std::string enabled_str = get_top_val("enabled");
     cfg.enabled = (enabled_str == "true");
 
     // Parse integrations array (simplified: one integration per object block).

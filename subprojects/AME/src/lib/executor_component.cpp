@@ -4,6 +4,8 @@
 #include <ame/bt_nodes/check_world_predicate.h>
 #include <ame/bt_nodes/set_world_predicate.h>
 
+#include <behaviortree_cpp/control_node.h>
+
 #include <stdexcept>
 
 namespace ame {
@@ -151,7 +153,19 @@ pcl_status_t ExecutorComponent::on_tick(double /*dt*/) {
     // If the hook returns non-empty BT XML, restart execution with the repair plan.
     // Returning empty falls through to the baseline FAILURE path.
     if (!success && repair_hook_ && inprocess_wm_) {
-      std::string repair_xml = repair_hook_(0u, *inprocess_wm_);
+      // Compute failed step: count how many top-level action units succeeded
+      // before the failure by inspecting the live tree (not yet halted here).
+      unsigned failed_step = 0;
+      if (tree_) {
+        auto* root = dynamic_cast<BT::ControlNode*>(tree_->rootNode());
+        if (root) {
+          for (auto* child : root->children()) {
+            if (child->status() == BT::NodeStatus::SUCCESS) ++failed_step;
+            else break;
+          }
+        }
+      }
+      std::string repair_xml = repair_hook_(failed_step, *inprocess_wm_);
       if (!repair_xml.empty()) {
         try {
           loadAndExecute(repair_xml);

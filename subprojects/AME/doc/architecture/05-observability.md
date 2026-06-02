@@ -1,6 +1,6 @@
 # Observability Stack
 
-A 5-layer audit and monitoring system that replaces the paid Groot2 tool with open, composable, sink-based logging.
+A 6-layer audit and monitoring system (Layer 6 requires `AME_NEURO=ON`) that replaces the paid Groot2 tool with open, composable, sink-based logging.
 
 ## Layer Summary
 
@@ -10,7 +10,8 @@ A 5-layer audit and monitoring system that replaces the paid Groot2 tool with op
 | 2 | AmeBTLogger | Structured JSON events for every BT node state transition | JSONL file + callback sinks |
 | 3 | WmAuditLog | Every world model fact change with source tag and timestamp | JSONL file + callback sinks |
 | 4 | FoxgloveBridge | WebSocket server for live Foxglove Studio visualization | `ws://localhost:8765` |
-| 5 | PlanAuditLog | Full planning episodes: initial state, goals, solver, timing, plan, compiled BT XML | JSONL file |
+| 5 | PlanAuditLog | Full planning episodes: initial state, goals, solver, timing, plan, BT XML, neural provenance | JSONL file |
+| 6 | NeuroAuditLog (opt.) | One record per neural `Advisor` call: outcome, latency, retries, verifier verdict, evidence | JSONL file |
 
 ## Layer 1: Built-in BT.CPP Loggers
 
@@ -130,6 +131,69 @@ Hierarchical missions produce a tree of episodes linked by `parent_episode_id`, 
 ```
 
 Output: `ame_plan_audit.jsonl`. Forms a complete mission audit trail.
+
+When `AME_NEURO=ON`, four provenance fields are appended to each episode record:
+
+| Field | Default | Meaning |
+|-------|---------|---------|
+| `heuristic_source` | `"symbolic"` | `"neural_hook"` when HeuristicHook biased action ordering |
+| `goal_source` | `"symbolic"` | Set by goal-interpretation integrations |
+| `repair_source` | `"symbolic"` | Set by repair integrations |
+| `neuro_record_ids` | `[]` | Layer 6 `NeuroAuditRecord.id` values for cross-referencing |
+
+## Layer 6: Neural Advisor Audit Trail (NeuroAuditLog) — `AME_NEURO=ON`
+
+**Files:** `include/ame/neuro/neuro_audit_log.h`, `src/lib/neuro/neuro_audit_log.cpp`
+
+One `NeuroAuditRecord` is emitted per `Advisor::advise()` call, regardless of outcome:
+
+```json
+{
+  "id": 1,
+  "ts_us": 1702345679000000,
+  "integration_id": "heuristic_hook",
+  "backend_id": "onnx_heuristic",
+  "outcome": "Accepted",
+  "latency_ms": 12.4,
+  "retries": 0,
+  "verify_accepted": true,
+  "reason": "plan_verified",
+  "evidence": ["believed:42"],
+  "request_digest": "{\"fluents\":[\"(at uav1 base)\"]",
+  "proposal_digest": "[{\"ground_action_id\":3,\"score\":0.91}]"
+}
+```
+
+Output: `neuro_audit.jsonl`. IDs are monotonically assigned and globally unique per log.
+
+## AuditIndex: Cross-Stream Query (`AME_NEURO=ON`)
+
+**Files:** `include/ame/neuro/audit_index.h`, `src/lib/neuro/audit_index.cpp`
+
+Loads all JSONL streams and builds time + entity indices for correlated analysis:
+
+```cpp
+AuditIndex idx;
+idx.load("bt_events.jsonl",   "bt");    // Layer 2
+idx.load("wm_audit.jsonl",    "wm");    // Layer 3
+idx.load("plan_audit.jsonl",  "plan");  // Layer 5
+idx.load("neuro_audit.jsonl", "neuro"); // Layer 6
+
+// What happened in a 100ms window?
+auto records = idx.window(t0_us, t0_us + 100'000);
+
+// Context around a specific entity (episode, fact, node)
+auto context = idx.around("episode_42", /*k=*/10, /*max_bytes=*/65536);
+
+// Export plan records as training samples
+auto samples = idx.training_export();   // init_facts, goal_fluents, plan_actions
+
+// Human-readable provenance
+auto ids = idx.cite("uav1_sectorA");
+```
+
+This gives a single unified timeline across BT ticks, WM fact changes, plan episodes,
+and neural advisor calls — enabling full causal traceability of any mission event.
 
 ## What Replaces Groot2
 
