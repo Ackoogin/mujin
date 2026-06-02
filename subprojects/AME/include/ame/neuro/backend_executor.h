@@ -20,7 +20,9 @@ struct BackendExecutorConfig {
 // the pool, the circuit opens and further submits report unavailable immediately.
 class BackendExecutor {
 public:
-    BackendExecutor(INeuralBackend* backend, BackendExecutorConfig cfg = {});
+    // Takes shared ownership of the backend so detached worker threads remain
+    // safe even if the executor or its registry is destroyed before they finish.
+    BackendExecutor(std::shared_ptr<INeuralBackend> backend, BackendExecutorConfig cfg = {});
     ~BackendExecutor();
 
     // Submit a request. Returns a future the caller may abandon after budget expires.
@@ -41,7 +43,7 @@ public:
 
 private:
     struct State;
-    INeuralBackend* backend_;
+    std::shared_ptr<INeuralBackend> backend_;
     BackendExecutorConfig cfg_;
     std::shared_ptr<State> state_;
 };

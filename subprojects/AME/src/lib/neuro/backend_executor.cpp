@@ -19,8 +19,8 @@ static double now_ms() noexcept {
     return duration<double, std::milli>(steady_clock::now().time_since_epoch()).count();
 }
 
-BackendExecutor::BackendExecutor(INeuralBackend* backend, BackendExecutorConfig cfg)
-    : backend_(backend), cfg_(cfg), state_(std::make_shared<State>()) {}
+BackendExecutor::BackendExecutor(std::shared_ptr<INeuralBackend> backend, BackendExecutorConfig cfg)
+    : backend_(std::move(backend)), cfg_(cfg), state_(std::make_shared<State>()) {}
 
 BackendExecutor::~BackendExecutor() = default;
 
@@ -88,7 +88,7 @@ std::future<NeuralResponse> BackendExecutor::submit(const NeuralRequest& req,
     auto promise_ptr = std::make_shared<std::promise<NeuralResponse>>();
     auto future = promise_ptr->get_future();
     auto state = state_;
-    auto* backend = backend_;
+    auto backend = backend_; // shared_ptr copy keeps backend alive for the thread's lifetime
     auto cfg = cfg_;
 
     std::thread([state, backend, req, cancel, promise_ptr, cfg]() mutable {

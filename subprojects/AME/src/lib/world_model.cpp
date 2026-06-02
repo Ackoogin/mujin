@@ -468,6 +468,32 @@ void WorldModel::projectToSTRIPS(aptk::STRIPS_Problem& prob) const {
   prob.make_action_tables();
 }
 
+void WorldModel::projectToSTRIPS(aptk::STRIPS_Problem& prob,
+                                   const std::vector<unsigned>& action_order) const {
+    for (unsigned i = 0; i < fluent_names_.size(); ++i)
+        aptk::STRIPS_Problem::add_fluent(prob, fluent_names_[i]);
+
+    aptk::Conditional_Effect_Vec no_ceffs;
+    for (unsigned idx : action_order) {
+        if (idx >= ground_actions_.size()) continue;
+        const auto& ga = ground_actions_[idx];
+        aptk::Fluent_Vec pre(ga.preconditions.begin(), ga.preconditions.end());
+        aptk::Fluent_Vec add(ga.add_effects.begin(), ga.add_effects.end());
+        aptk::Fluent_Vec del(ga.del_effects.begin(), ga.del_effects.end());
+        aptk::STRIPS_Problem::add_action(prob, ga.signature, pre, add, del, no_ceffs);
+    }
+
+    aptk::Fluent_Vec init;
+    for (unsigned i = 0; i < fluent_names_.size(); ++i)
+        if (getFact(i)) init.push_back(i);
+    aptk::STRIPS_Problem::set_init(prob, init);
+
+    aptk::Fluent_Vec goal(goal_fluent_ids_.begin(), goal_fluent_ids_.end());
+    aptk::STRIPS_Problem::set_goal(prob, goal);
+
+    prob.make_action_tables();
+}
+
 aptk::State* WorldModel::currentStateAsSTRIPS(const aptk::STRIPS_Problem& prob) const {
   auto* state = new aptk::State(prob);
   for (unsigned i = 0; i < fluent_names_.size(); ++i) {

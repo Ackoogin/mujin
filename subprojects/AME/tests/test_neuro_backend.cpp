@@ -128,7 +128,7 @@ TEST(BackendExecutor, NonCoopHangAbandonedWithinBudget) {
 
     BackendExecutorConfig cfg;
     cfg.max_in_flight = 4;
-    BackendExecutor exec(mb.get(), cfg);
+    BackendExecutor exec(mb, cfg);
 
     CancelSource cs;
     auto fut = exec.submit({}, cs.token());
@@ -162,7 +162,7 @@ TEST(BackendExecutor, CircuitBreakerOpensAfterAbandonments) {
     BackendExecutorConfig cfg;
     cfg.max_in_flight = 4;
     cfg.failure_threshold = 3;
-    BackendExecutor exec(mb.get(), cfg);
+    BackendExecutor exec(mb, cfg);
 
     // Submit and abandon until circuit trips
     for (int i = 0; i < (int)cfg.failure_threshold; ++i) {
@@ -196,7 +196,7 @@ TEST(BackendExecutor, PoolSaturationReturnsUnavailable) {
     BackendExecutorConfig cfg;
     cfg.max_in_flight = 2;
     cfg.failure_threshold = 100; // don't trip circuit
-    BackendExecutor exec(mb.get(), cfg);
+    BackendExecutor exec(mb, cfg);
 
     // Fill the pool
     CancelSource cs1, cs2;

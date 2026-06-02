@@ -40,6 +40,31 @@ std::string json_get(const std::string& line, const std::string& key) {
             ++pos;
         }
         return val;
+    } else if (line[pos] == '[' || line[pos] == '{') {
+        // Array or object value — read the full balanced bracket span.
+        char open  = line[pos];
+        char close = (open == '[') ? ']' : '}';
+        int depth = 0;
+        std::string val;
+        bool in_str = false;
+        while (pos < line.size()) {
+            char c = line[pos];
+            if (in_str) {
+                val += c;
+                if (c == '\\' && pos + 1 < line.size()) {
+                    val += line[++pos]; // consume escaped char
+                } else if (c == '"') {
+                    in_str = false;
+                }
+            } else {
+                if (c == '"')       { in_str = true; val += c; }
+                else if (c == open) { ++depth;       val += c; }
+                else if (c == close){ --depth;       val += c; if (depth == 0) { ++pos; break; } }
+                else                {                val += c; }
+            }
+            ++pos;
+        }
+        return val;
     } else {
         // Numeric or bool value — read until , } \n
         std::string val;
