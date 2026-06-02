@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ame/bt_logger.h>
-#include <ame/plan_compiler.h>
 #include <ame/world_model.h>
 #include <pcl/component.hpp>
 
@@ -33,9 +32,13 @@ public:
 #if defined(AME_NEURO)
   // Repair-proposal hook seam (Option B).
   // Called before full replanning on BT failure; receives the failed step index
-  // and a snapshot of the current world state.  Return empty to use full replan.
+  // and the current world model.  Return a non-empty BT XML string to immediately
+  // re-execute a repair plan; return empty to fall through to the baseline FAILURE
+  // path (which triggers external full replanning via PlannerComponent).
+  // The closure is responsible for compiling PlanStep proposals to BT XML — it
+  // can capture PlanCompiler/ActionRegistry from the surrounding context.
   using RepairHook = std::function<
-      std::vector<ame::PlanStep>(unsigned failed_step, const WorldModel& wm)>;
+      std::string(unsigned failed_step, const WorldModel& wm)>;
 #endif
 
   using BlackboardInitializer = std::function<void(const BT::Blackboard::Ptr&)>;

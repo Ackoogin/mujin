@@ -145,6 +145,30 @@ pcl_status_t ExecutorComponent::on_tick(double /*dt*/) {
   if (last_status_ == BT::NodeStatus::SUCCESS ||
       last_status_ == BT::NodeStatus::FAILURE) {
     const bool success = (last_status_ == BT::NodeStatus::SUCCESS);
+
+#if defined(AME_NEURO)
+    // On failure, consult the repair hook before publishing FAILURE.
+    // If the hook returns non-empty BT XML, restart execution with the repair plan.
+    // Returning empty falls through to the baseline FAILURE path.
+    if (!success && repair_hook_ && inprocess_wm_) {
+      std::string repair_xml = repair_hook_(0u, *inprocess_wm_);
+      if (!repair_xml.empty()) {
+        try {
+          loadAndExecute(repair_xml);
+          if (pub_status_) {
+            status_buf_ = "RUNNING";
+            pcl_msg_t msg;
+            ame_make_pcl_msg(status_buf_, "ame/Status", msg);
+            pcl_port_publish(pub_status_, &msg);
+          }
+          return PCL_OK; // continue ticking the repair plan
+        } catch (...) {
+          // Repair BT XML invalid; fall through to baseline FAILURE.
+        }
+      }
+    }
+#endif
+
     // Stop ticking but preserve last_status_ for callers to observe.
     // Do NOT call haltExecution() here -- that would reset last_status_ to IDLE.
     executing_ = false;

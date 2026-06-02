@@ -118,7 +118,7 @@ Two null-object hook seams are compiled into `ame_core` when `AME_NEURO=1`:
 | Seam | Location | Purpose |
 |------|----------|---------|
 | `HeuristicHook` | `Planner` | Called before LAPKT solve; scores influence action ordering (Options A/D) |
-| `RepairHook` | `ExecutorComponent` | Called before full replan on BT failure; return empty to use full replan (Option B) |
+| `RepairHook` | `ExecutorComponent` | Called on BT failure; return non-empty BT XML to re-execute a repair plan, or empty to publish FAILURE and let PlannerComponent do a full replan (Option B) |
 
 Both default to `nullptr`; symbolic behaviour is identical when no hook is attached.
 
