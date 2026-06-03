@@ -1081,6 +1081,112 @@ TEST(PclSharedMemoryTransport, StreamRoundTripSendsAndEnds) {
   restore_logs();
 }
 
+///< Client-side stream cancel propagates to the shared-memory server context.
+TEST(PclSharedMemoryTransport, StreamCancelAfterThreeFramesReachesServer) {
+  silence_logs();
+
+  const std::string bus = unique_token("shm_bus_stream_cancel");
+  BusNode client;
+  BusNode server;
+  ASSERT_TRUE(client.create(bus.c_str(), "stream_client"));
+  ASSERT_TRUE(server.create(bus.c_str(), "stream_server"));
+  ASSERT_TRUE(client.attach_transport(true));
+  ASSERT_TRUE(server.attach_transport(true));
+
+  StreamServerState server_state;
+  pcl_container_t*  svc = nullptr;
+  install_stream_service(server, "cancel_stream", "stream_client",
+                         server_state, &svc);
+
+  pcl_endpoint_route_t route = {};
+  route.endpoint_name = "cancel_stream";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode    = PCL_ROUTE_REMOTE;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(client.exec, &route), PCL_OK);
+
+  struct CancelClientState {
+    std::vector<std::string> frames;
+    std::atomic<bool>        cancel_called{false};
+    std::atomic<bool>        ended{false};
+    pcl_status_t             cancel_status = PCL_OK;
+    pcl_status_t             final_status = PCL_OK;
+    pcl_stream_context_t*    ctx = nullptr;
+  } client_state;
+
+  pcl_msg_t req = {};
+  req.data      = "go";
+  req.size      = 2;
+  req.type_name = "StreamReq";
+
+  auto cb = [](const pcl_msg_t* msg, bool end, pcl_status_t status, void* ud) {
+    auto* s = static_cast<CancelClientState*>(ud);
+    if (!end && msg && msg->data && msg->size > 0u) {
+      s->frames.emplace_back(static_cast<const char*>(msg->data), msg->size);
+      if (s->frames.size() == 3u) {
+        s->cancel_status = pcl_stream_cancel(s->ctx);
+        s->cancel_called = true;
+      }
+    }
+    if (end) {
+      s->ended = true;
+      s->final_status = status;
+    }
+  };
+
+  ASSERT_EQ(pcl_executor_invoke_stream(client.exec, "cancel_stream",
+                                       &req, cb, &client_state,
+                                       &client_state.ctx),
+            PCL_STREAMING);
+  ASSERT_NE(client_state.ctx, nullptr);
+
+  spin_both_until(client, server,
+                  [&] { return server_state.handler_invoked.load(); });
+  ASSERT_TRUE(server_state.handler_invoked);
+  ASSERT_NE(server_state.saved_ctx, nullptr);
+
+  const char* payloads[] = {"one", "two", "three"};
+  for (const char* text : payloads) {
+    pcl_msg_t out = {};
+    out.data      = text;
+    out.size      = static_cast<uint32_t>(strlen(text));
+    out.type_name = "StreamFrame";
+    EXPECT_EQ(pcl_stream_send(server_state.saved_ctx, &out), PCL_OK);
+  }
+
+  spin_both_until(client, server,
+                  [&] { return client_state.cancel_called.load(); });
+  ASSERT_TRUE(client_state.cancel_called);
+  EXPECT_EQ(client_state.cancel_status, PCL_OK);
+  ASSERT_EQ(client_state.frames.size(), 3u);
+  EXPECT_EQ(client_state.frames[0], "one");
+  EXPECT_EQ(client_state.frames[1], "two");
+  EXPECT_EQ(client_state.frames[2], "three");
+
+  spin_both_until(client, server, [&] {
+    return pcl_stream_is_cancelled(server_state.saved_ctx);
+  });
+  EXPECT_TRUE(pcl_stream_is_cancelled(server_state.saved_ctx));
+
+  pcl_msg_t after_cancel = {};
+  after_cancel.data      = "four";
+  after_cancel.size      = 4;
+  after_cancel.type_name = "StreamFrame";
+  EXPECT_EQ(pcl_stream_send(server_state.saved_ctx, &after_cancel),
+            PCL_ERR_CANCELLED);
+
+  spin_both_until(client, server, [&] { return client_state.ended.load(); });
+  EXPECT_TRUE(client_state.ended);
+  EXPECT_EQ(client_state.final_status, PCL_ERR_CANCELLED);
+
+  EXPECT_EQ(pcl_stream_abort(server_state.saved_ctx, PCL_ERR_CANCELLED),
+            PCL_OK);
+  pcl_executor_remove(server.exec, svc);
+  pcl_container_destroy(svc);
+  server.destroy();
+  client.destroy();
+  restore_logs();
+}
+
 ///< Stream invoked against a missing service returns NOT_FOUND.
 TEST(PclSharedMemoryTransport, StreamReturnsNotFoundWithoutProvider) {
   silence_logs();

@@ -62,6 +62,7 @@ typedef enum {
   PCL_SHM_FRAME_STREAM_REQ = 4,
   PCL_SHM_FRAME_STREAM_FRAME = 5,
   PCL_SHM_FRAME_STREAM_END = 6,
+  PCL_SHM_FRAME_STREAM_CANCEL = 7,
 } pcl_shm_frame_kind_t;
 
 typedef struct {
@@ -136,6 +137,7 @@ typedef struct pcl_shm_stream_send_target_t {
 typedef struct {
   pcl_shared_memory_transport_t* owner;
   uint32_t                       seq_id;
+  char                           provider_id[PCL_SHM_MAX_ID];
 } pcl_shm_stream_client_handle_t;
 
 /* Trampoline plumbed through pcl_executor_post_response_msg to deliver a
@@ -874,6 +876,29 @@ static void pcl_shm_active_streams_abort(pcl_shared_memory_transport_t* ctx) {
   }
 }
 
+static pcl_status_t pcl_shm_active_stream_cancel(
+    pcl_shared_memory_transport_t* ctx,
+    uint32_t                       seq_id,
+    const char*                    requester_id) {
+  pcl_shm_stream_send_target_t* node;
+
+  if (!ctx || !requester_id) return PCL_ERR_INVALID;
+
+  pcl_shm_pending_lock_acquire(ctx);
+  for (node = ctx->active_stream_targets; node; node = node->next) {
+    if (node->seq_id == seq_id &&
+        strcmp(node->requester_id, requester_id) == 0) {
+      if (node->stream_ctx && !node->stream_ctx->ended) {
+        node->stream_ctx->cancelled = 1;
+      }
+      pcl_shm_pending_lock_release(ctx);
+      return PCL_OK;
+    }
+  }
+  pcl_shm_pending_lock_release(ctx);
+  return PCL_ERR_NOT_FOUND;
+}
+
 /* Unpacks a pcl_shm_stream_trampoline_t queued via the executor's response
  * queue and dispatches it as a typed stream callback on the executor thread. */
 static void pcl_shm_stream_trampoline_cb(const pcl_msg_t* msg, void* user_data) {
@@ -886,6 +911,37 @@ static void pcl_shm_stream_trampoline_cb(const pcl_msg_t* msg, void* user_data) 
     tr->callback(delivered, tr->end != 0, tr->status, tr->user_data);
   }
   free(tr);
+}
+
+static pcl_status_t pcl_shm_pending_stream_complete(
+    pcl_shared_memory_transport_t* ctx,
+    uint32_t                       seq_id,
+    pcl_status_t                   status) {
+  pcl_stream_msg_fn_t callback = NULL;
+  void* user_data = NULL;
+  pcl_msg_t empty = {0};
+  pcl_shm_stream_trampoline_t* tr;
+  pcl_status_t rc;
+
+  if (!ctx) return PCL_ERR_INVALID;
+  if (pcl_shm_pending_stream_remove(ctx, seq_id, &callback, &user_data) !=
+      PCL_OK) {
+    return PCL_ERR_NOT_FOUND;
+  }
+
+  tr = (pcl_shm_stream_trampoline_t*)calloc(1, sizeof(*tr));
+  if (!tr) return PCL_ERR_NOMEM;
+  tr->callback = callback;
+  tr->user_data = user_data;
+  tr->owner = ctx;
+  tr->seq_id = seq_id;
+  tr->end = 1;
+  tr->status = status;
+  rc = pcl_executor_post_response_msg(ctx->executor,
+                                      pcl_shm_stream_trampoline_cb,
+                                      tr, &empty);
+  if (rc != PCL_OK) free(tr);
+  return rc;
 }
 
 static pcl_status_t pcl_shm_enqueue_frame_locked(
@@ -1191,6 +1247,7 @@ static pcl_status_t pcl_shm_invoke_stream(void*               adapter_ctx,
       (pcl_shared_memory_transport_t*)adapter_ctx;
   pcl_shm_pending_stream_t* pending;
   pcl_shm_stream_client_handle_t* handle = NULL;
+  char provider_id[PCL_SHM_MAX_ID] = {0};
   uint32_t seq_id;
   uint32_t provider_slot = 0u;
   uint32_t attempts;
@@ -1236,6 +1293,8 @@ static pcl_status_t pcl_shm_invoke_stream(void*               adapter_ctx,
     pcl_shm_pending_stream_remove(ctx, seq_id, NULL, NULL);
     return PCL_ERR_STATE;
   }
+  snprintf(provider_id, sizeof(provider_id), "%s",
+           ctx->region->slots[provider_slot].participant_id);
   rc = pcl_shm_enqueue_frame_locked(ctx,
                                     provider_slot,
                                     PCL_SHM_FRAME_STREAM_REQ,
@@ -1257,6 +1316,8 @@ static pcl_status_t pcl_shm_invoke_stream(void*               adapter_ctx,
     if (handle) {
       handle->owner  = ctx;
       handle->seq_id = seq_id;
+      snprintf(handle->provider_id, sizeof(handle->provider_id), "%s",
+               provider_id);
     }
     *stream_handle = handle;
   }
@@ -1330,6 +1391,45 @@ static pcl_status_t pcl_shm_stream_end(void*        adapter_ctx,
                                  status);
   free(target);
   return rc;
+}
+
+static pcl_status_t pcl_shm_stream_cancel(void* adapter_ctx,
+                                          void* stream_handle) {
+  pcl_shared_memory_transport_t* ctx =
+      (pcl_shared_memory_transport_t*)adapter_ctx;
+  pcl_shm_stream_client_handle_t* handle =
+      (pcl_shm_stream_client_handle_t*)stream_handle;
+  uint32_t i;
+  pcl_status_t remote_rc = PCL_ERR_NOT_FOUND;
+  pcl_status_t local_rc;
+
+  if (!ctx || !handle || handle->provider_id[0] == '\0') {
+    return PCL_ERR_INVALID;
+  }
+
+  if (pcl_shm_bus_lock(ctx) == PCL_OK) {
+    for (i = 0; i < PCL_SHM_MAX_PARTICIPANTS; ++i) {
+      pcl_shm_slot_t* slot = &ctx->region->slots[i];
+      if (!slot->in_use) continue;
+      if (strcmp(slot->participant_id, handle->provider_id) == 0) {
+        remote_rc = pcl_shm_enqueue_frame_locked(ctx, i,
+                                                 PCL_SHM_FRAME_STREAM_CANCEL,
+                                                 ctx->participant_id, "",
+                                                 "", NULL, 0u,
+                                                 handle->seq_id);
+        break;
+      }
+    }
+    pcl_shm_bus_unlock(ctx);
+  } else {
+    remote_rc = PCL_ERR_STATE;
+  }
+
+  local_rc = pcl_shm_pending_stream_complete(ctx, handle->seq_id,
+                                             PCL_ERR_CANCELLED);
+  if (remote_rc != PCL_OK) return remote_rc;
+  if (local_rc != PCL_OK && local_rc != PCL_ERR_NOT_FOUND) return local_rc;
+  return PCL_OK;
 }
 
 static void pcl_shm_shutdown(void* adapter_ctx) {
@@ -1753,6 +1853,16 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
     return rc;
   }
 
+  if (frame->kind == PCL_SHM_FRAME_STREAM_CANCEL) {
+    size_t source_len = pcl_shm_strnlen(frame->source_id,
+                                        sizeof(frame->source_id));
+    if (source_len == 0u || source_len == sizeof(frame->source_id)) {
+      return PCL_ERR_INVALID;
+    }
+    return pcl_shm_active_stream_cancel(ctx, frame->seq_id,
+                                        frame->source_id);
+  }
+
   if (frame->kind == PCL_SHM_FRAME_STREAM_FRAME) {
     pcl_stream_msg_fn_t callback = NULL;
     void* user_data = NULL;
@@ -1943,6 +2053,7 @@ pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
   ctx->transport.invoke_stream = pcl_shm_invoke_stream;
   ctx->transport.stream_send = pcl_shm_stream_send;
   ctx->transport.stream_end = pcl_shm_stream_end;
+  ctx->transport.stream_cancel = pcl_shm_stream_cancel;
   ctx->transport.shutdown = pcl_shm_shutdown;
   ctx->transport.adapter_ctx = ctx;
 
