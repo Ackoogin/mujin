@@ -600,30 +600,48 @@ private:
 /// the underlying executor stream context is cancelled (the transport may
 /// notify the server depending on its cancel support), and on_end fires
 /// with PCL_ERR_CANCELLED once the framework finalises the stream.
+/// Destroying or overwriting the handle also cancels, but suppresses
+/// later user callbacks because their captures may be going away.
 class StreamHandle {
 public:
     StreamHandle() = default;
-    StreamHandle(StreamHandle&&) noexcept = default;
-    StreamHandle& operator=(StreamHandle&&) noexcept = default;
+    StreamHandle(StreamHandle&& o) noexcept
+        : cancel_fn_(std::move(o.cancel_fn_)) {
+        o.cancel_fn_ = {};
+    }
+    StreamHandle& operator=(StreamHandle&& o) noexcept {
+        if (this != &o) {
+            cancelImpl(false);
+            cancel_fn_ = std::move(o.cancel_fn_);
+            o.cancel_fn_ = {};
+        }
+        return *this;
+    }
     StreamHandle(const StreamHandle&) = delete;
     StreamHandle& operator=(const StreamHandle&) = delete;
+
+    ~StreamHandle() { cancelImpl(false); }
 
     bool valid() const { return static_cast<bool>(cancel_fn_); }
     explicit operator bool() const { return valid(); }
 
     /// \brief Cancel the stream. Idempotent; subsequent calls no-op.
     void cancel() {
+        cancelImpl(true);
+    }
+
+private:
+    void cancelImpl(bool notify_end) {
         if (cancel_fn_) {
-            cancel_fn_();
+            cancel_fn_(notify_end);
             cancel_fn_ = {};
         }
     }
 
-private:
     friend class ConsumedService;
-    explicit StreamHandle(std::function<void()> cancel_fn)
+    explicit StreamHandle(std::function<void(bool)> cancel_fn)
         : cancel_fn_(std::move(cancel_fn)) {}
-    std::function<void()> cancel_fn_;
+    std::function<void(bool)> cancel_fn_;
 };
 
 class ConsumedService {
@@ -804,9 +822,13 @@ public:
             return StreamHandle{};
         }
         (void)holder.release();
-        return StreamHandle{[push, ctx_handle]() {
+        return StreamHandle{[push, ctx_handle](bool notify_end) {
             push->cancelled = true;
-            if (ctx_handle) (void)pcl_stream_cancel(ctx_handle);
+            if (!notify_end) {
+                push->on_frame = {};
+                push->on_end = {};
+            }
+            if (ctx_handle && !push->closed) (void)pcl_stream_cancel(ctx_handle);
         }};
     }
 
@@ -852,9 +874,13 @@ public:
             return StreamHandle{};
         }
         (void)holder.release();
-        return StreamHandle{[push, ctx_handle]() {
+        return StreamHandle{[push, ctx_handle](bool notify_end) {
             push->cancelled = true;
-            if (ctx_handle) (void)pcl_stream_cancel(ctx_handle);
+            if (!notify_end) {
+                push->on_frame = {};
+                push->on_end = {};
+            }
+            if (ctx_handle && !push->closed) (void)pcl_stream_cancel(ctx_handle);
         }};
     }
 
@@ -942,9 +968,13 @@ public:
             return StreamHandle{};
         }
         (void)holder.release();
-        return StreamHandle{[push, ctx_handle]() {
+        return StreamHandle{[push, ctx_handle](bool notify_end) {
             push->cancelled = true;
-            if (ctx_handle) (void)pcl_stream_cancel(ctx_handle);
+            if (!notify_end) {
+                push->on_frame = {};
+                push->on_end = {};
+            }
+            if (ctx_handle && !push->closed) (void)pcl_stream_cancel(ctx_handle);
         }};
     }
 
@@ -1095,9 +1125,13 @@ public:
             return StreamHandle{};
         }
         (void)holder.release();
-        return StreamHandle{[push, ctx_handle]() {
+        return StreamHandle{[push, ctx_handle](bool notify_end) {
             push->cancelled = true;
-            if (ctx_handle) (void)pcl_stream_cancel(ctx_handle);
+            if (!notify_end) {
+                push->on_frame = {};
+                push->on_end = {};
+            }
+            if (ctx_handle && !push->closed) (void)pcl_stream_cancel(ctx_handle);
         }};
     }
 
@@ -1164,9 +1198,13 @@ public:
             return StreamHandle{};
         }
         (void)holder.release();
-        return StreamHandle{[push, ctx_handle]() {
+        return StreamHandle{[push, ctx_handle](bool notify_end) {
             push->cancelled = true;
-            if (ctx_handle) (void)pcl_stream_cancel(ctx_handle);
+            if (!notify_end) {
+                push->on_frame = {};
+                push->on_end = {};
+            }
+            if (ctx_handle && !push->closed) (void)pcl_stream_cancel(ctx_handle);
         }};
     }
 
@@ -1191,9 +1229,13 @@ public:
             return StreamHandle{};
         }
         (void)holder.release();
-        return StreamHandle{[push, ctx_handle]() {
+        return StreamHandle{[push, ctx_handle](bool notify_end) {
             push->cancelled = true;
-            if (ctx_handle) (void)pcl_stream_cancel(ctx_handle);
+            if (!notify_end) {
+                push->on_frame = {};
+                push->on_end = {};
+            }
+            if (ctx_handle && !push->closed) (void)pcl_stream_cancel(ctx_handle);
         }};
     }
 
@@ -1216,6 +1258,8 @@ private:
         std::function<void(pcl_status_t)>             on_end;
         std::function<bool(const pcl_msg_t*, T*)>     decoder;
         bool                                          cancelled = false;
+
+        bool                                          closed = false;
 
         static void trampoline(const pcl_msg_t* msg,
                                 bool             end,
@@ -1260,6 +1304,7 @@ inline void ConsumedService::StreamPushState<T>::trampoline(
     }
     auto& state = *holder->state;
     if (end) {
+        state.closed = true;
         const pcl_status_t end_status = state.cancelled
             ? PCL_ERR_CANCELLED
             : status;

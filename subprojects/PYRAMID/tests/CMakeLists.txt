@@ -38,6 +38,23 @@ add_executable(test_tobj_correlation ${TOBJ_TEST_DIR}/Test_CorrelationEngine.cpp
 target_link_libraries(test_tobj_correlation PRIVATE tactical_objects GTest::gtest_main)
 gtest_discover_tests(test_tobj_correlation DISCOVERY_MODE PRE_TEST)
 
+add_executable(test_pcl_generated_component_stream_handle
+    test_pcl_generated_component_stream_handle.cpp
+    ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
+)
+add_dependencies(test_pcl_generated_component_stream_handle
+    pyramid_cpp_bindings_codegen)
+target_link_libraries(test_pcl_generated_component_stream_handle PRIVATE
+    pcl_core
+    pyramid_generated_codecs
+    GTest::gtest_main
+)
+target_include_directories(test_pcl_generated_component_stream_handle PRIVATE
+    ${PROTO_BINDINGS_DIR}
+)
+gtest_discover_tests(test_pcl_generated_component_stream_handle
+    DISCOVERY_MODE PRE_TEST)
+
 add_executable(test_tobj_query ${TOBJ_TEST_DIR}/Test_QueryEngine.cpp)
 target_link_libraries(test_tobj_query PRIVATE tactical_objects GTest::gtest_main)
 gtest_discover_tests(test_tobj_query DISCOVERY_MODE PRE_TEST)
