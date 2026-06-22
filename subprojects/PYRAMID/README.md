@@ -64,4 +64,5 @@ subprojects\PYRAMID\scripts\generate_bindings.bat
 | [doc/architecture/ros2_transport_semantics.md](doc/architecture/ros2_transport_semantics.md) | ROS2 topic/service/stream mapping rules |
 | [doc/architecture/PYRAMID_COMPONENT_RESPONSIBILITIES.md](doc/architecture/PYRAMID_COMPONENT_RESPONSIBILITIES.md) | Component responsibility map and standard responsibility IDs |
 | [standard alignment plan](../../doc/plans/PYRAMID/standard_alignment_plan.md) | Tactical Objects alignment with the generated PYRAMID proto interface |
+| [transport/codec plugin transition](../../doc/plans/PYRAMID/transport_codec_plugin_transition.md) | Proposal for swapping transport/codec via runtime plugins/DLLs without rebuilding PCL components |
 | [tactical_objects/README.md](tactical_objects/README.md) | Tactical Objects runtime, app, and test usage |
