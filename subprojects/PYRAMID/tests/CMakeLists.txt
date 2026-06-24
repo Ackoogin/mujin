@@ -454,6 +454,32 @@ else()
                     --content-type application/protobuf)
         list(APPEND _tobj_cpp_app_tests tobj_cpp_app_client_protobuf_e2e)
     endif()
+    if(TARGET pyramid_codec_json_tactical_objects)
+        add_dependencies(tactical_objects_app
+            pyramid_codec_json_tactical_objects)
+        add_dependencies(tactical_objects_test_client
+            pyramid_codec_json_tactical_objects)
+        add_test(NAME tobj_cpp_app_client_json_plugin_e2e
+            COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
+                    --app-bin $<TARGET_FILE:tactical_objects_app>
+                    --client-bin $<TARGET_FILE:tactical_objects_test_client>
+                    --content-type application/json
+                    --codec-plugin $<TARGET_FILE:pyramid_codec_json_tactical_objects>)
+        list(APPEND _tobj_cpp_app_tests tobj_cpp_app_client_json_plugin_e2e)
+    endif()
+    if(PYRAMID_ENABLE_FLATBUFFERS AND TARGET pyramid_codec_flatbuffers_tactical_objects)
+        add_dependencies(tactical_objects_app
+            pyramid_codec_flatbuffers_tactical_objects)
+        add_dependencies(tactical_objects_test_client
+            pyramid_codec_flatbuffers_tactical_objects)
+        add_test(NAME tobj_cpp_app_client_flatbuffers_plugin_e2e
+            COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
+                    --app-bin $<TARGET_FILE:tactical_objects_app>
+                    --client-bin $<TARGET_FILE:tactical_objects_test_client>
+                    --content-type application/flatbuffers
+                    --codec-plugin $<TARGET_FILE:pyramid_codec_flatbuffers_tactical_objects>)
+        list(APPEND _tobj_cpp_app_tests tobj_cpp_app_client_flatbuffers_plugin_e2e)
+    endif()
 endif()
 set_tests_properties(
     ${_tobj_cpp_app_tests}

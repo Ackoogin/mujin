@@ -1397,9 +1397,13 @@ class CppServiceGenerator:
             for ch in dm_codec_headers:
                 f.write(f'#include "{ch}"\n')
             f.write('\n')
+            f.write('extern "C" {\n')
+            f.write('#include <pcl/pcl_codec.h>\n')
+            f.write('#include <pcl/pcl_codec_registry.h>\n')
             f.write('#include <pcl/pcl_container.h>\n')
             f.write('#include <pcl/pcl_executor.h>\n')
             f.write('#include <pcl/pcl_transport.h>\n')
+            f.write('}\n')
             f.write('\n#include <cstdlib>\n')
             f.write('#include <cstdint>\n')
             f.write('#include <cstring>\n')
@@ -1514,6 +1518,47 @@ class CppServiceGenerator:
             f.write('    return payload;\n')
             f.write('}\n\n')
 
+            f.write('static int pyramid_try_registry_encode(const char* content_type,\n')
+            f.write('                                       const char* schema_id,\n')
+            f.write('                                       const void* value,\n')
+            f.write('                                       std::string* out)\n')
+            f.write('{\n')
+            f.write('    const pcl_codec_t* c = pcl_codec_registry_get(\n')
+            f.write('        pcl_codec_registry_default(), content_type);\n')
+            f.write('    if (!c || !c->encode) {\n')
+            f.write('        return -1;\n')
+            f.write('    }\n')
+            f.write('    pcl_msg_t m;\n')
+            f.write('    m.data = nullptr;\n')
+            f.write('    m.size = 0;\n')
+            f.write('    m.type_name = nullptr;\n')
+            f.write('    if (c->encode(c->codec_ctx, schema_id, value, &m) != PCL_OK) {\n')
+            f.write('        return -1;\n')
+            f.write('    }\n')
+            f.write('    out->assign(static_cast<const char*>(m.data), m.size);\n')
+            f.write('    if (c->free_msg) {\n')
+            f.write('        c->free_msg(c->codec_ctx, &m);\n')
+            f.write('    }\n')
+            f.write('    return 1;\n')
+            f.write('}\n\n')
+
+            f.write('static int pyramid_try_registry_decode(const pcl_msg_t* msg,\n')
+            f.write('                                       const char* schema_id,\n')
+            f.write('                                       void* out_value)\n')
+            f.write('{\n')
+            f.write('    if (!msg) {\n')
+            f.write('        return -1;\n')
+            f.write('    }\n')
+            f.write('    const pcl_codec_t* c = pcl_codec_registry_get(\n')
+            f.write('        pcl_codec_registry_default(), msg->type_name);\n')
+            f.write('    if (!c || !c->decode) {\n')
+            f.write('        return -1;\n')
+            f.write('    }\n')
+            f.write('    return c->decode(c->codec_ctx, schema_id, msg, out_value) == PCL_OK\n')
+            f.write('        ? 1\n')
+            f.write('        : -1;\n')
+            f.write('}\n\n')
+
             f.write('void ignore_async_response(const pcl_msg_t*, void*) {}\n\n')
 
             f.write('pcl_status_t invoke_async('
@@ -1575,6 +1620,9 @@ class CppServiceGenerator:
                 f.write('    if (is_protobuf_content_type(content_type)) {\n')
                 f.write('        return true;\n')
                 f.write('    }\n')
+            f.write('    if (pcl_codec_registry_get(pcl_codec_registry_default(), content_type) != nullptr) {\n')
+            f.write('        return true;\n')
+            f.write('    }\n')
             f.write('    return false;\n')
             f.write('}\n\n')
 
@@ -1624,6 +1672,8 @@ class CppServiceGenerator:
                     f.write('    if (!msg || !msg->data || msg->size == 0 || !out) {\n')
                     f.write('        return false;\n')
                     f.write('    }\n')
+                    if not rpc.streaming:
+                        f.write(f'    {{ int r = pyramid_try_registry_decode(msg, "{rsp_raw_t}", out); if (r == 1) return true; }}\n')
                     f.write('    try {\n')
                     f.write('        if (!is_json_content_type(msg->type_name)) {\n')
                     if has_flatbuffers:
@@ -1683,6 +1733,7 @@ class CppServiceGenerator:
                         f.write('    if (!out) {\n')
                         f.write('        return false;\n')
                         f.write('    }\n')
+                        f.write(f'    {{ int r = pyramid_try_registry_encode(content_type, "{rpc.raw_rsp_type}", &payload, out); if (r == 1) return true; }}\n')
                         f.write('    if (is_json_content_type(content_type)) {\n')
                         if frame_t == 'Identifier':
                             f.write('        *out = encode_identifier_payload(payload);\n')
@@ -1708,6 +1759,7 @@ class CppServiceGenerator:
                         f.write('    if (!msg || !msg->data || msg->size == 0 || !out) {\n')
                         f.write('        return false;\n')
                         f.write('    }\n')
+                        f.write(f'    {{ int r = pyramid_try_registry_decode(msg, "{rpc.raw_rsp_type}", out); if (r == 1) return true; }}\n')
                         f.write('    try {\n')
                         f.write('        if (!is_json_content_type(msg->type_name)) {\n')
                         if has_flatbuffers:
@@ -1876,6 +1928,8 @@ class CppServiceGenerator:
                     f.write('    if (!out) {\n')
                     f.write('        return false;\n')
                     f.write('    }\n')
+                    if not spec.is_array:
+                        f.write(f'    {{ int r = pyramid_try_registry_encode(content_type, "{spec.short_type}", &payload, out); if (r == 1) return true; }}\n')
                     f.write('    std::string wire_payload;\n')
                     f.write('    if (is_json_content_type(content_type)) {\n')
                     if spec.is_array:
@@ -1940,6 +1994,8 @@ class CppServiceGenerator:
                     f.write('    if (!msg || !msg->data || msg->size == 0 || !out) {\n')
                     f.write('        return false;\n')
                     f.write('    }\n')
+                    if not spec.is_array:
+                        f.write(f'    {{ int r = pyramid_try_registry_decode(msg, "{spec.short_type}", out); if (r == 1) return true; }}\n')
                     f.write('    try {\n')
                     f.write('        if (!is_json_content_type(msg->type_name)) {\n')
                     if has_flatbuffers:

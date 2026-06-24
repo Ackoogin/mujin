@@ -9,6 +9,11 @@
 #include <pcl/pcl_transport_shared_memory.h>
 #include <pcl/pcl_transport_socket.h>
 
+extern "C" {
+#include <pcl/pcl_codec_registry.h>
+#include <pcl/pcl_plugin_loader.h>
+}
+
 #include <atomic>
 #include <chrono>
 #include <csignal>
@@ -18,6 +23,7 @@
 #include <fstream>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace {
 
@@ -161,6 +167,7 @@ int main(int argc, char* argv[]) {
   int timeout_secs = 0;
   bool emit_demo_evidence = false;
   std::string frontend_content_type = kJsonContentType;
+  std::vector<std::string> codec_plugin_paths;
 
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
@@ -177,7 +184,20 @@ int main(int argc, char* argv[]) {
                 std::strcmp(argv[i], "--frontend-content-type") == 0) &&
                i + 1 < argc) {
       frontend_content_type = argv[++i];
+    } else if (std::strcmp(argv[i], "--codec-plugin") == 0 && i + 1 < argc) {
+      codec_plugin_paths.push_back(argv[++i]);
     }
+  }
+
+  std::vector<pcl_plugin_handle_t*> codec_plugin_handles;
+  for (const auto& path : codec_plugin_paths) {
+    pcl_plugin_handle_t* handle = nullptr;
+    if (pcl_plugin_load_codec(path.c_str(), pcl_codec_registry_default(),
+                              &handle) != PCL_OK) {
+      std::fprintf(stderr, "failed to load codec plugin: %s\n", path.c_str());
+      return 2;
+    }
+    codec_plugin_handles.push_back(handle);
   }
 
   std::signal(SIGINT, signalHandler);
@@ -308,5 +328,8 @@ int main(int argc, char* argv[]) {
   }
   pcl_executor_destroy(remote_exec);
   pcl_executor_destroy(local_exec);
+  for (auto* handle : codec_plugin_handles) {
+    pcl_plugin_unload(handle);
+  }
   return 0;
 }

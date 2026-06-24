@@ -11,6 +11,11 @@
 #include <pcl/pcl_executor.h>
 #include <pcl/pcl_transport_socket.h>
 
+extern "C" {
+#include <pcl/pcl_codec_registry.h>
+#include <pcl/pcl_plugin_loader.h>
+}
+
 #include <nlohmann/json.hpp>
 
 #include <atomic>
@@ -20,6 +25,7 @@
 #include <cstring>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace {
 
@@ -143,6 +149,7 @@ int main(int argc, char* argv[]) {
   uint16_t port = 19123;
   int timeout_ms = 4000;
   std::string content_type = "application/json";
+  std::vector<std::string> codec_plugin_paths;
 
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--host") == 0 && i + 1 < argc) {
@@ -153,7 +160,20 @@ int main(int argc, char* argv[]) {
       timeout_ms = std::atoi(argv[++i]);
     } else if (std::strcmp(argv[i], "--content-type") == 0 && i + 1 < argc) {
       content_type = argv[++i];
+    } else if (std::strcmp(argv[i], "--codec-plugin") == 0 && i + 1 < argc) {
+      codec_plugin_paths.push_back(argv[++i]);
     }
+  }
+
+  std::vector<pcl_plugin_handle_t*> codec_plugin_handles;
+  for (const auto& path : codec_plugin_paths) {
+    pcl_plugin_handle_t* handle = nullptr;
+    if (pcl_plugin_load_codec(path.c_str(), pcl_codec_registry_default(),
+                              &handle) != PCL_OK) {
+      std::fprintf(stderr, "failed to load codec plugin: %s\n", path.c_str());
+      return 2;
+    }
+    codec_plugin_handles.push_back(handle);
   }
 
   pcl_executor_t* exec = pcl_executor_create();
@@ -232,5 +252,8 @@ int main(int argc, char* argv[]) {
   pcl_socket_transport_destroy(transport);
   pcl_executor_destroy(exec);
   pcl_container_destroy(container);
+  for (auto* handle : codec_plugin_handles) {
+    pcl_plugin_unload(handle);
+  }
   return ok ? 0 : 1;
 }
