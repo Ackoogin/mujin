@@ -25,6 +25,33 @@ target_link_libraries(test_pcl_bridge PRIVATE pcl_core GTest::gtest_main)
 target_include_directories(test_pcl_bridge PRIVATE ${PCL_ROOT_DIR}/src)
 gtest_discover_tests(test_pcl_bridge DISCOVERY_MODE PRE_TEST)
 
+add_executable(test_pcl_codec_registry test_pcl_codec_registry.cpp)
+target_link_libraries(test_pcl_codec_registry PRIVATE pcl_core GTest::gtest_main)
+gtest_discover_tests(test_pcl_codec_registry DISCOVERY_MODE PRE_TEST)
+
+add_library(pcl_transport_capture_plugin MODULE pcl_transport_capture_plugin.c)
+target_link_libraries(pcl_transport_capture_plugin PRIVATE pcl_core)
+
+add_library(pcl_codec_stub_plugin MODULE pcl_codec_stub_plugin.c)
+target_link_libraries(pcl_codec_stub_plugin PRIVATE pcl_core)
+
+add_library(pcl_codec_badabi_plugin MODULE pcl_codec_badabi_plugin.c)
+target_link_libraries(pcl_codec_badabi_plugin PRIVATE pcl_core)
+
+add_executable(test_pcl_plugin_loader test_pcl_plugin_loader.cpp)
+target_link_libraries(test_pcl_plugin_loader PRIVATE pcl_core GTest::gtest_main)
+target_compile_definitions(test_pcl_plugin_loader PRIVATE
+    CAPTURE_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_capture_plugin>"
+    STUB_CODEC_PLUGIN_PATH="$<TARGET_FILE:pcl_codec_stub_plugin>"
+    BADABI_CODEC_PLUGIN_PATH="$<TARGET_FILE:pcl_codec_badabi_plugin>"
+)
+add_dependencies(test_pcl_plugin_loader
+    pcl_transport_capture_plugin
+    pcl_codec_stub_plugin
+    pcl_codec_badabi_plugin
+)
+gtest_discover_tests(test_pcl_plugin_loader DISCOVERY_MODE PRE_TEST)
+
 if(NOT MSVC)
     add_executable(test_pcl_oom test_pcl_oom.cpp)
     target_link_libraries(test_pcl_oom PRIVATE pcl_core GTest::gtest_main)

@@ -234,6 +234,33 @@ if(PYRAMID_ENABLE_PROTOBUF)
     gtest_discover_tests(test_codec_dispatch_e2e DISCOVERY_MODE PRE_TEST)
 endif()
 
+if(TARGET pyramid_codec_json_tactical_objects)
+    add_executable(test_codec_plugin_swap
+        test_codec_plugin_swap.cpp
+    )
+    add_dependencies(test_codec_plugin_swap
+        pyramid_codec_json_tactical_objects)
+    target_link_libraries(test_codec_plugin_swap PRIVATE
+        pcl_core
+        pyramid_generated_codecs
+        GTest::gtest_main
+    )
+    target_include_directories(test_codec_plugin_swap PRIVATE
+        ${PROTO_BINDINGS_DIR}
+        ${PYRAMID_ROOT_DIR}/tactical_objects/include
+        ${PYRAMID_ROOT_DIR}/core/include
+    )
+    target_compile_definitions(test_codec_plugin_swap PRIVATE
+        PYRAMID_JSON_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_json_tactical_objects>")
+    if(PYRAMID_ENABLE_FLATBUFFERS AND TARGET pyramid_codec_flatbuffers_tactical_objects)
+        add_dependencies(test_codec_plugin_swap
+            pyramid_codec_flatbuffers_tactical_objects)
+        target_compile_definitions(test_codec_plugin_swap PRIVATE
+            PYRAMID_FLATBUFFERS_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_flatbuffers_tactical_objects>")
+    endif()
+    gtest_discover_tests(test_codec_plugin_swap DISCOVERY_MODE PRE_TEST)
+endif()
+
 if(PYRAMID_ENABLE_FLATBUFFERS)
     # Showcase for the service-binding facade emitted by the binding
     # generator. Layered as four user files to make the separation explicit:

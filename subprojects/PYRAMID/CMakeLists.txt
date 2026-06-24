@@ -209,6 +209,8 @@ pyramid_require_generated(_pyramid_generated_codecs_srcs
 add_library(pyramid_generated_codecs STATIC ${_pyramid_generated_codecs_srcs})
 unset(_pyramid_generated_codecs_srcs)
 add_dependencies(pyramid_generated_codecs pyramid_cpp_bindings_codegen)
+set_target_properties(pyramid_generated_codecs PROPERTIES
+    POSITION_INDEPENDENT_CODE ON)
 
 if(PYRAMID_ENABLE_FLATBUFFERS)
     add_dependencies(pyramid_generated_codecs pyramid_flatbuffers_codegen)
@@ -220,6 +222,74 @@ target_include_directories(pyramid_generated_codecs
         "${PYRAMID_CPP_BINDINGS_DIR}"
         "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
 )
+
+pyramid_glob_generated(_pyramid_generated_json_codec_plugin_srcs
+    "${PYRAMID_CPP_BINDINGS_DIR}/*_json_codec_plugin.cpp")
+set(PYRAMID_CODEC_PLUGIN_TARGETS)
+foreach(PYRAMID_CODEC_PLUGIN_SRC IN LISTS _pyramid_generated_json_codec_plugin_srcs)
+    get_filename_component(PYRAMID_CODEC_PLUGIN_STEM
+        "${PYRAMID_CODEC_PLUGIN_SRC}" NAME_WE)
+    string(REGEX REPLACE
+        "^pyramid_services_(.+)_json_codec_plugin$"
+        "pyramid_codec_json_\\1"
+        PYRAMID_CODEC_PLUGIN_TARGET
+        "${PYRAMID_CODEC_PLUGIN_STEM}")
+    add_library(${PYRAMID_CODEC_PLUGIN_TARGET} MODULE
+        "${PYRAMID_CODEC_PLUGIN_SRC}")
+    add_dependencies(${PYRAMID_CODEC_PLUGIN_TARGET}
+        pyramid_cpp_bindings_codegen)
+    target_link_libraries(${PYRAMID_CODEC_PLUGIN_TARGET}
+        PRIVATE
+            pcl_core
+            pyramid_generated_codecs
+            nlohmann_json::nlohmann_json
+    )
+    target_include_directories(${PYRAMID_CODEC_PLUGIN_TARGET}
+        PRIVATE
+            "${PYRAMID_CPP_BINDINGS_DIR}"
+            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
+    )
+    list(APPEND PYRAMID_CODEC_PLUGIN_TARGETS
+        ${PYRAMID_CODEC_PLUGIN_TARGET})
+endforeach()
+unset(_pyramid_generated_json_codec_plugin_srcs)
+
+if(PYRAMID_ENABLE_FLATBUFFERS)
+    pyramid_glob_generated(_pyramid_generated_flatbuffers_codec_plugin_srcs
+        "${PYRAMID_CPP_BINDINGS_DIR}/*_flatbuffers_codec_plugin.cpp")
+    foreach(PYRAMID_CODEC_PLUGIN_SRC IN LISTS _pyramid_generated_flatbuffers_codec_plugin_srcs)
+        get_filename_component(PYRAMID_CODEC_PLUGIN_STEM
+            "${PYRAMID_CODEC_PLUGIN_SRC}" NAME_WE)
+        string(REGEX REPLACE
+            "^pyramid_services_(.+)_flatbuffers_codec_plugin$"
+            "pyramid_codec_flatbuffers_\\1"
+            PYRAMID_CODEC_PLUGIN_TARGET
+            "${PYRAMID_CODEC_PLUGIN_STEM}")
+        add_library(${PYRAMID_CODEC_PLUGIN_TARGET} MODULE
+            "${PYRAMID_CODEC_PLUGIN_SRC}")
+        add_dependencies(${PYRAMID_CODEC_PLUGIN_TARGET}
+            pyramid_cpp_bindings_codegen
+            pyramid_flatbuffers_codegen)
+        target_link_libraries(${PYRAMID_CODEC_PLUGIN_TARGET}
+            PRIVATE
+                pcl_core
+                pyramid_generated_codecs
+                pyramid_flatbuffers_support
+                nlohmann_json::nlohmann_json
+        )
+        target_include_directories(${PYRAMID_CODEC_PLUGIN_TARGET}
+            PRIVATE
+                "${PYRAMID_CPP_BINDINGS_DIR}"
+                "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
+        )
+        list(APPEND PYRAMID_CODEC_PLUGIN_TARGETS
+            ${PYRAMID_CODEC_PLUGIN_TARGET})
+    endforeach()
+    unset(_pyramid_generated_flatbuffers_codec_plugin_srcs)
+endif()
+unset(PYRAMID_CODEC_PLUGIN_SRC)
+unset(PYRAMID_CODEC_PLUGIN_STEM)
+unset(PYRAMID_CODEC_PLUGIN_TARGET)
 
 if(PYRAMID_ENABLE_PROTOBUF)
     if(NOT TARGET protobuf::libprotobuf)

@@ -1,0 +1,162 @@
+/// \file pcl_plugin_loader.c
+/// \brief Runtime loader for PCL transport and codec plugins.
+#include "pcl/pcl_plugin_loader.h"
+
+#include <stdlib.h>
+
+#ifdef _WIN32
+#  define WIN32_LEAN_AND_MEAN
+#  include <windows.h>
+#else
+#  include <dlfcn.h>
+#endif
+
+struct pcl_plugin_handle_t {
+#ifdef _WIN32
+  HMODULE library;
+#else
+  void* library;
+#endif
+};
+
+static void close_library(pcl_plugin_handle_t* handle) {
+  if (!handle) return;
+#ifdef _WIN32
+  if (handle->library) {
+    FreeLibrary(handle->library);
+  }
+#else
+  if (handle->library) {
+    dlclose(handle->library);
+  }
+#endif
+  free(handle);
+}
+
+static pcl_plugin_handle_t* open_library(const char* path) {
+  pcl_plugin_handle_t* handle;
+
+  if (!path) return NULL;
+
+  handle = (pcl_plugin_handle_t*)calloc(1, sizeof(pcl_plugin_handle_t));
+  if (!handle) return NULL;
+
+#ifdef _WIN32
+  handle->library = LoadLibraryA(path);
+#else
+  handle->library = dlopen(path, RTLD_NOW | RTLD_LOCAL);
+#endif
+  if (!handle->library) {
+    free(handle);
+    return NULL;
+  }
+
+  return handle;
+}
+
+static void* resolve_symbol(pcl_plugin_handle_t* handle, const char* name) {
+  if (!handle || !handle->library || !name) return NULL;
+#ifdef _WIN32
+  return (void*)GetProcAddress(handle->library, name);
+#else
+  return dlsym(handle->library, name);
+#endif
+}
+
+/// \brief Load a codec plugin and register its codec vtable.
+pcl_status_t pcl_plugin_load_codec(const char*             path,
+                                   pcl_codec_registry_t*   registry,
+                                   pcl_plugin_handle_t**   out_handle) {
+  pcl_plugin_handle_t* handle;
+  pcl_codec_plugin_entry_fn entry;
+  const pcl_codec_t* codec;
+  pcl_status_t rc;
+
+  if (!path || !registry || !out_handle) return PCL_ERR_INVALID;
+  *out_handle = NULL;
+
+  handle = open_library(path);
+  if (!handle) return PCL_ERR_NOT_FOUND;
+
+  entry = (pcl_codec_plugin_entry_fn)resolve_symbol(
+      handle, PCL_CODEC_PLUGIN_ENTRY_SYMBOL);
+  if (!entry) {
+    close_library(handle);
+    return PCL_ERR_NOT_FOUND;
+  }
+
+  codec = entry();
+  if (!codec) {
+    close_library(handle);
+    return PCL_ERR_STATE;
+  }
+  if (codec->abi_version != PCL_CODEC_ABI_VERSION) {
+    close_library(handle);
+    return PCL_ERR_STATE;
+  }
+
+  rc = pcl_codec_registry_register(registry, codec);
+  if (rc != PCL_OK) {
+    close_library(handle);
+    return rc;
+  }
+
+  *out_handle = handle;
+  return PCL_OK;
+}
+
+/// \brief Load a transport plugin and return its transport vtable.
+pcl_status_t pcl_plugin_load_transport(const char*             path,
+                                       const char*             config_json,
+                                       pcl_plugin_handle_t**   out_handle,
+                                       const pcl_transport_t** out_vtable) {
+  pcl_plugin_handle_t* handle;
+  pcl_transport_abi_version_fn abi_version;
+  pcl_transport_plugin_entry_fn entry;
+  const pcl_transport_t* transport;
+
+  if (!path || !out_handle || !out_vtable) return PCL_ERR_INVALID;
+  *out_handle = NULL;
+  *out_vtable = NULL;
+
+  handle = open_library(path);
+  if (!handle) return PCL_ERR_NOT_FOUND;
+
+  abi_version = (pcl_transport_abi_version_fn)resolve_symbol(
+      handle, PCL_TRANSPORT_ABI_VERSION_SYMBOL);
+  if (!abi_version) {
+    close_library(handle);
+    return PCL_ERR_NOT_FOUND;
+  }
+  if (abi_version() != PCL_TRANSPORT_ABI_VERSION) {
+    close_library(handle);
+    return PCL_ERR_STATE;
+  }
+
+  entry = (pcl_transport_plugin_entry_fn)resolve_symbol(
+      handle, PCL_TRANSPORT_PLUGIN_ENTRY_SYMBOL);
+  if (!entry) {
+    close_library(handle);
+    return PCL_ERR_NOT_FOUND;
+  }
+
+  transport = entry(config_json);
+  if (!transport) {
+    close_library(handle);
+    return PCL_ERR_STATE;
+  }
+
+  *out_handle = handle;
+  *out_vtable = transport;
+  return PCL_OK;
+}
+
+/// \brief Unload a plugin handle returned by a successful load call.
+void pcl_plugin_unload(pcl_plugin_handle_t* handle) {
+  close_library(handle);
+}
+
+/// \brief Resolve an arbitrary exported symbol from a loaded plugin.
+void* pcl_plugin_symbol(pcl_plugin_handle_t* handle, const char* name) {
+  return resolve_symbol(handle, name);
+}

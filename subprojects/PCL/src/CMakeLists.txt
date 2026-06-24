@@ -6,8 +6,10 @@
 # ---------------------------------------------------------------------------
 
 add_library(pcl_core STATIC
+  pcl_codec_registry.c
   pcl_container.c
   pcl_executor.c
+  pcl_plugin_loader.c
   pcl_log.c
   pcl_bridge.c
 )
@@ -31,6 +33,7 @@ set_target_properties(pcl_core PROPERTIES
 # Platform threading library (needed for sleep/timing)
 find_package(Threads REQUIRED)
 target_link_libraries(pcl_core PRIVATE Threads::Threads)
+target_link_libraries(pcl_core PUBLIC ${CMAKE_DL_LIBS})
 
 # ---------------------------------------------------------------------------
 # pcl_transport_socket -- TCP socket transport (optional, platform sockets)

@@ -63,6 +63,11 @@ _SEP = '// ' + '-' * 75
 # configure per-port codecs at pcl_container_add_* time.
 _DEFAULT_CONTENT_TYPE = 'application/json'
 
+_ALIAS_FIELD_NAMES = frozenset({
+    'value', 'radians', 'meters', 'meters_per_second', 'seconds',
+    'kilograms', 'kelvin', 'pascals', 'hertz',
+})
+
 # -- Proto parser --------------------------------------------------------------
 
 def _strip_comments(text: str) -> str:
@@ -433,6 +438,61 @@ def _service_codec_imports(
     ]
 
 
+def _service_group_key(package: str) -> Optional[str]:
+    """Return the role-independent service contract package key."""
+    if '.services.' not in f'.{package}.':
+        return None
+    parts = [p for p in package.split('.') if p]
+    if parts and parts[-1].lower() in ('provided', 'consumed'):
+        parts = parts[:-1]
+    return '.'.join(parts)
+
+
+def _service_contract_names(base_package: str) -> Tuple[str, str]:
+    """Return (file_base, cpp_base_namespace) for a service contract."""
+    parts = [p for p in base_package.split('.') if p]
+    skip = {'pyramid', 'components', 'services', 'data_model', 'base'}
+    meaningful = [p for p in parts if p.lower() not in skip]
+    ns_parts = ['pyramid', 'services'] + [p.lower() for p in meaningful]
+    return '_'.join(ns_parts), '::'.join(ns_parts)
+
+
+def _json_codec_namespace_for_type(full_type: str) -> str:
+    """Return the generated JSON codec C++ namespace for a proto type."""
+    package = _data_model_package_for_type(full_type)
+    if not package:
+        return _DATA_MODEL_TYPES_NS
+    return _cpp_ns_for_proto_package(package)
+
+
+def _json_codec_header_for_type(full_type: str) -> str:
+    package = _data_model_package_for_type(full_type)
+    if not package:
+        return ''
+    return f'{package.replace(".", "_")}_codec.hpp'
+
+
+def _alias_cpp_types(index: ProtoTypeIndex) -> Dict[str, str]:
+    """Mirror CppTypesGenerator scalar-wrapper aliases."""
+    aliases: Dict[str, str] = dict(_FORCED_ALIASES)
+    for msg in index.all_messages():
+        fields = msg.all_fields()
+        if len(fields) == 1 and not fields[0].is_repeated:
+            field = fields[0]
+            if field.type in _CPP_SCALAR_MAP and field.name in _ALIAS_FIELD_NAMES:
+                aliases[msg.name] = _CPP_SCALAR_MAP[field.type]
+    return aliases
+
+
+def _find_proto_root(proto_input: Path) -> Optional[Path]:
+    if proto_input.is_dir():
+        return proto_input
+    for parent in [proto_input.parent, *proto_input.parents]:
+        if parent.name.lower() == 'proto':
+            return parent
+    return proto_input.parent if proto_input.parent.exists() else None
+
+
 # -- Code generation -----------------------------------------------------------
 
 class CppServiceGenerator:
@@ -507,6 +567,25 @@ class CppServiceGenerator:
                 return dm_files
         return []
 
+    def _discover_all_proto_files(self) -> List[ProtoFile]:
+        root = _find_proto_root(self._proto_input)
+        if root is None or not root.exists() or not root.is_dir():
+            return []
+        try:
+            return parse_proto_tree(root)
+        except OSError:
+            return []
+
+    def _contract_service_files(self, package: str) -> Tuple[str, List[ProtoFile]]:
+        base_package = _service_group_key(package)
+        if not base_package:
+            return '', []
+        files = [
+            pf for pf in self._discover_all_proto_files()
+            if pf.services and _service_group_key(pf.package) == base_package
+        ]
+        return base_package, files
+
     def generate(self, output_dir: str):
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
@@ -544,7 +623,271 @@ class CppServiceGenerator:
             components_path = output_path / (file_prefix + '_components.hpp')
             self._write_components_header(
                 components_path, file_prefix, full_ns, parsed, all_rpcs)
+            self._write_codec_plugins(output_path, parsed)
             print(f'  Generated {full_ns}')
+
+    def _collect_contract_codec_types(
+            self, parsed: ProtoFile,
+    ) -> Tuple[str, str, List[Tuple[str, str, bool, str]]]:
+        """Return contract file base, namespace, and root schema types.
+
+        Type tuples are (short_name, full_type, is_alias, alias_cpp_type).
+        """
+        base_package, service_files = self._contract_service_files(parsed.package)
+        if not base_package:
+            return '', '', []
+        if not service_files:
+            return '', '', []
+
+        index = ProtoTypeIndex([
+            pf for pf in self._discover_all_proto_files()
+            if pf.package == _DATA_MODEL_PROTO_ROOT
+            or pf.package.startswith(_DATA_MODEL_PROTO_ROOT + '.')
+        ])
+        aliases = _alias_cpp_types(index)
+        file_base, cpp_base_ns = _service_contract_names(base_package)
+        root_types: List[str] = []
+
+        for pf in service_files:
+            for svc in pf.services:
+                for rpc in svc.rpcs:
+                    root_types.append(rpc.request_type)
+                    root_types.append(rpc.response_type)
+            is_provided = 'provided' in pf.package.lower()
+            sub_topics, pub_topics = _topics_for_proto(pf, is_provided)
+            topic_keys = list(sub_topics.keys()) + list(pub_topics.keys())
+            for key in topic_keys:
+                root_types.append(topic_spec(key).full_type)
+
+        result: List[Tuple[str, str, bool, str]] = []
+        seen_schema_ids = set()
+        for type_name in root_types:
+            short = type_name.split('.')[-1]
+            if short in seen_schema_ids:
+                continue
+
+            msg = index.resolve_message(type_name) or index.resolve_message(short)
+            if msg is None and short not in aliases:
+                continue
+
+            full_type = type_name
+            if msg is not None and '.' not in type_name:
+                for pf in index.files:
+                    if any(m.name == msg.name for m in pf.messages):
+                        full_type = f'{pf.package}.{msg.name}'
+                        break
+
+            result.append((short, full_type, short in aliases, aliases.get(short, '')))
+            seen_schema_ids.add(short)
+
+        return file_base, cpp_base_ns, result
+
+    def _write_codec_plugins(self, output_path: Path, parsed: ProtoFile) -> None:
+        file_base, cpp_base_ns, codec_types = self._collect_contract_codec_types(parsed)
+        if not file_base or not codec_types:
+            return
+
+        json_path = output_path / (file_base + '_json_codec_plugin.cpp')
+        self._write_codec_plugin_impl(
+            json_path,
+            file_base,
+            cpp_base_ns,
+            'json',
+            'application/json',
+            codec_types,
+        )
+
+        if self._has_backend('flatbuffers'):
+            flatbuffers_path = output_path / (
+                file_base + '_flatbuffers_codec_plugin.cpp')
+            self._write_codec_plugin_impl(
+                flatbuffers_path,
+                file_base,
+                cpp_base_ns,
+                'flatbuffers',
+                'application/flatbuffers',
+                codec_types,
+            )
+
+    def _write_codec_plugin_impl(
+            self,
+            path: Path,
+            file_base: str,
+            cpp_base_ns: str,
+            backend: str,
+            content_type: str,
+            codec_types: List[Tuple[str, str, bool, str]],
+    ) -> None:
+        is_json = backend == 'json'
+        json_headers = sorted({
+            _json_codec_header_for_type(full_type)
+            for _short, full_type, is_alias, _alias_cpp in codec_types
+            if not is_alias and _json_codec_header_for_type(full_type)
+        })
+        flatbuffers_codec_ns = cpp_base_ns + '::flatbuffers_codec'
+        flatbuffers_codec_header = (
+            'flatbuffers/cpp/' + file_base + '_flatbuffers_codec.hpp')
+
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
+            f.write('// Auto-generated PCL codec plugin\n')
+            f.write(f'// Backend: {backend} | Content-Type: {content_type}\n\n')
+            f.write('#include "pyramid_data_model_types.hpp"\n')
+            if is_json:
+                for header in json_headers:
+                    f.write(f'#include "{header}"\n')
+                f.write('#include <nlohmann/json.hpp>\n')
+            else:
+                f.write(f'#include "{flatbuffers_codec_header}"\n')
+            f.write('\n')
+            f.write('extern "C" {\n')
+            f.write('#include <pcl/pcl_codec.h>\n')
+            f.write('}\n\n')
+            f.write('#include <cstdlib>\n')
+            f.write('#include <cstring>\n')
+            f.write('#include <limits>\n')
+            f.write('#include <string>\n\n')
+            f.write('#if defined(_WIN32)\n')
+            f.write('#  define PCL_CODEC_PLUGIN_EXPORT __declspec(dllexport)\n')
+            f.write('#elif defined(__GNUC__) || defined(__clang__)\n')
+            f.write('#  define PCL_CODEC_PLUGIN_EXPORT __attribute__((visibility("default")))\n')
+            f.write('#else\n')
+            f.write('#  define PCL_CODEC_PLUGIN_EXPORT\n')
+            f.write('#endif\n\n')
+            f.write('namespace {\n\n')
+            f.write('namespace data_model = pyramid::domain_model;\n')
+            if not is_json:
+                f.write(f'namespace flatbuffers_codec = {flatbuffers_codec_ns};\n')
+            f.write('\n')
+            f.write('pcl_status_t assign_payload(const std::string& payload,\n')
+            f.write('                            const char* content_type,\n')
+            f.write('                            pcl_msg_t* out_msg)\n')
+            f.write('{\n')
+            f.write('    if (!out_msg) {\n')
+            f.write('        return PCL_ERR_INVALID;\n')
+            f.write('    }\n')
+            f.write('    if (payload.size() > std::numeric_limits<uint32_t>::max()) {\n')
+            f.write('        return PCL_ERR_INVALID;\n')
+            f.write('    }\n')
+            f.write('    void* copy = nullptr;\n')
+            f.write('    if (!payload.empty()) {\n')
+            f.write('        copy = std::malloc(payload.size());\n')
+            f.write('        if (!copy) {\n')
+            f.write('            return PCL_ERR_NOMEM;\n')
+            f.write('        }\n')
+            f.write('        std::memcpy(copy, payload.data(), payload.size());\n')
+            f.write('    }\n')
+            f.write('    out_msg->data = copy;\n')
+            f.write('    out_msg->size = static_cast<uint32_t>(payload.size());\n')
+            f.write('    out_msg->type_name = content_type;\n')
+            f.write('    return PCL_OK;\n')
+            f.write('}\n\n')
+            if is_json:
+                f.write('template <class T>\n')
+                f.write('std::string scalar_to_json(const T& value)\n')
+                f.write('{\n')
+                f.write('    return nlohmann::json(value).dump();\n')
+                f.write('}\n\n')
+                f.write('template <class T>\n')
+                f.write('T scalar_from_json(const std::string& payload)\n')
+                f.write('{\n')
+                f.write('    return nlohmann::json::parse(payload).get<T>();\n')
+                f.write('}\n\n')
+            f.write('} // namespace\n\n')
+
+            f.write('extern "C" {\n\n')
+            f.write('static pcl_status_t plugin_encode(void*       codec_ctx,\n')
+            f.write('                                  const char* schema_id,\n')
+            f.write('                                  const void* value,\n')
+            f.write('                                  pcl_msg_t*  out_msg)\n')
+            f.write('{\n')
+            f.write('    (void)codec_ctx;\n')
+            f.write('    if (!schema_id || !value || !out_msg) {\n')
+            f.write('        return PCL_ERR_INVALID;\n')
+            f.write('    }\n')
+            f.write('    try {\n')
+            for short, full_type, is_alias, _alias_cpp in codec_types:
+                cpp_type = f'data_model::{short}'
+                f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
+                f.write(f'            const auto* typed = static_cast<const {cpp_type}*>(value);\n')
+                if is_json:
+                    if is_alias:
+                        f.write('            return assign_payload(scalar_to_json(*typed),\n')
+                        f.write(f'                                  "{content_type}", out_msg);\n')
+                    else:
+                        codec_ns = _json_codec_namespace_for_type(full_type)
+                        f.write(f'            return assign_payload({codec_ns}::toJson(*typed),\n')
+                        f.write(f'                                  "{content_type}", out_msg);\n')
+                else:
+                    f.write('            return assign_payload(flatbuffers_codec::toBinary(*typed),\n')
+                    f.write(f'                                  "{content_type}", out_msg);\n')
+                f.write('        }\n')
+            f.write('    } catch (...) {\n')
+            f.write('        return PCL_ERR_CALLBACK;\n')
+            f.write('    }\n')
+            f.write('    return PCL_ERR_NOT_FOUND;\n')
+            f.write('}\n\n')
+
+            f.write('static pcl_status_t plugin_decode(void*            codec_ctx,\n')
+            f.write('                                  const char*      schema_id,\n')
+            f.write('                                  const pcl_msg_t* msg,\n')
+            f.write('                                  void*            out_value)\n')
+            f.write('{\n')
+            f.write('    (void)codec_ctx;\n')
+            f.write('    if (!schema_id || !msg || (!msg->data && msg->size != 0) || !out_value) {\n')
+            f.write('        return PCL_ERR_INVALID;\n')
+            f.write('    }\n')
+            f.write('    try {\n')
+            f.write('        const std::string payload = msg->data\n')
+            f.write('            ? std::string(static_cast<const char*>(msg->data), msg->size)\n')
+            f.write('            : std::string();\n')
+            for short, full_type, is_alias, _alias_cpp in codec_types:
+                cpp_type = f'data_model::{short}'
+                f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
+                f.write(f'            auto* typed = static_cast<{cpp_type}*>(out_value);\n')
+                if is_json:
+                    if is_alias:
+                        f.write('            *typed = scalar_from_json<')
+                        f.write(f'{cpp_type}>(payload);\n')
+                    else:
+                        codec_ns = _json_codec_namespace_for_type(full_type)
+                        f.write(f'            *typed = {codec_ns}::fromJson(\n')
+                        f.write(f'                payload, static_cast<{cpp_type}*>(nullptr));\n')
+                else:
+                    f.write(f'            *typed = flatbuffers_codec::fromBinary{short}(\n')
+                    f.write('                msg->data, msg->size);\n')
+                f.write('            return PCL_OK;\n')
+                f.write('        }\n')
+            f.write('    } catch (...) {\n')
+            f.write('        return PCL_ERR_CALLBACK;\n')
+            f.write('    }\n')
+            f.write('    return PCL_ERR_NOT_FOUND;\n')
+            f.write('}\n\n')
+
+            f.write('static void plugin_free_msg(void* codec_ctx, pcl_msg_t* msg)\n')
+            f.write('{\n')
+            f.write('    (void)codec_ctx;\n')
+            f.write('    if (!msg) {\n')
+            f.write('        return;\n')
+            f.write('    }\n')
+            f.write('    std::free(const_cast<void*>(msg->data));\n')
+            f.write('    msg->data = nullptr;\n')
+            f.write('    msg->size = 0u;\n')
+            f.write('    msg->type_name = nullptr;\n')
+            f.write('}\n\n')
+
+            f.write('static const pcl_codec_t k_codec = {\n')
+            f.write('    PCL_CODEC_ABI_VERSION,\n')
+            f.write(f'    "{content_type}",\n')
+            f.write('    plugin_encode,\n')
+            f.write('    plugin_decode,\n')
+            f.write('    plugin_free_msg,\n')
+            f.write('    nullptr\n')
+            f.write('};\n\n')
+            f.write('PCL_CODEC_PLUGIN_EXPORT const pcl_codec_t* pcl_codec_plugin_entry(void)\n')
+            f.write('{\n')
+            f.write('    return &k_codec;\n')
+            f.write('}\n\n')
+            f.write('} // extern "C"\n')
 
     # -- Header (.hpp) ---------------------------------------------------------
 
