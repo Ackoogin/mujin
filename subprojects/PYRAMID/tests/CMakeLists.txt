@@ -597,6 +597,10 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     set(ADA_PCL_COMPONENT_TESTS_SOURCES
         ${ADA_TEST_SRC_DIR}/pcl_component_tests.adb
         ${ADA_TEST_SRC_DIR}/pcl_component_tests.gpr)
+    set(ADA_PCL_PLUGIN_LOADER_TEST_SOURCES
+        ${ADA_TEST_SRC_DIR}/test_pcl_plugin_loader.adb
+        ${ADA_TEST_SRC_DIR}/test_pcl_plugin_loader.gpr
+        ${PCL_ROOT_DIR}/bindings/ada/pcl_plugins.ads)
     set(ADA_PYRAMID_UUID_TEST_SOURCES
         ${ADA_TEST_SRC_DIR}/test_pyramid_uuids.adb
         ${ADA_TEST_SRC_DIR}/test_pyramid_uuids.gpr
@@ -638,6 +642,26 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         DEPENDS ${ADA_PCL_COMPONENT_TESTS_EXE})
     add_dependencies(ada_pcl_component_tests_build ada_pcl_gnat_archives)
 
+    set(ADA_PCL_PLUGIN_LOADER_TEST_EXE
+        ${ADA_TEST_SRC_DIR}/bin/test_pcl_plugin_loader${CMAKE_EXECUTABLE_SUFFIX})
+    add_custom_command(
+        OUTPUT ${ADA_PCL_PLUGIN_LOADER_TEST_EXE}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_TEST_SRC_DIR}/bin
+        COMMAND ${CMAKE_COMMAND}
+                -DOUTPUT=${ADA_PCL_PLUGIN_LOADER_TEST_EXE}
+                -DWORKING_DIRECTORY=${ADA_TEST_SRC_DIR}
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args};-p;-P;${ADA_TEST_SRC_DIR}/test_pcl_plugin_loader.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}"
+                -P ${ADA_RUN_IF_MISSING}
+        WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
+        DEPENDS ${ADA_PCL_PLUGIN_LOADER_TEST_SOURCES}
+        COMMENT "Building Ada PCL plugin-loader ABI test"
+        VERBATIM)
+    add_custom_target(ada_pcl_plugin_loader_tests_build
+        DEPENDS ${ADA_PCL_PLUGIN_LOADER_TEST_EXE})
+    add_dependencies(ada_pcl_plugin_loader_tests_build
+        ada_pcl_gnat_archives
+        pcl_codec_stub_plugin)
+
     set(ADA_PYRAMID_UUID_TEST_EXE
         ${ADA_TEST_SRC_DIR}/bin/test_pyramid_uuids${CMAKE_EXECUTABLE_SUFFIX})
     add_custom_command(
@@ -659,7 +683,18 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         ada_pcl_gnat_archives
         ada_pcl_sensor_demo_build
         ada_pcl_component_tests_build
+        ada_pcl_plugin_loader_tests_build
         ada_pyramid_uuid_test_build)
+
+    set(_pyramid_ada_tests)
+
+    add_test(NAME ada_plugin_loader_abi
+        COMMAND ${ADA_TEST_SRC_DIR}/bin/test_pcl_plugin_loader
+                $<TARGET_FILE:pcl_codec_stub_plugin>)
+    set_tests_properties(ada_plugin_loader_abi PROPERTIES
+        LABELS "ada;cross_language;plugin;codec"
+        TIMEOUT 20)
+    list(APPEND _pyramid_ada_tests ada_plugin_loader_abi)
 
     if(PYRAMID_ENABLE_FLATBUFFERS)
         set(ADA_PYRAMID_GEN_LIB_NAME "pyramid_generated_flatbuffers_codec" CACHE STRING
@@ -787,8 +822,6 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     add_dependencies(ada_test_generated_bindings_build
         ada_pcl_gnat_archives
         ada_pyramid_generated_flatbuffers_archive)
-
-    set(_pyramid_ada_tests)
 
     add_test(NAME ada_generated_bindings_roundtrip
         COMMAND ${ADA_TEST_SRC_DIR}/bin/test_generated_bindings)
