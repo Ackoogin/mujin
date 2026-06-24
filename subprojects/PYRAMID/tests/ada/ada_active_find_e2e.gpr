@@ -51,7 +51,8 @@ project Ada_Active_Find_E2E is
            "-l" & Pcl_Lib_Name,
            "-l" & Pcl_Socket_Lib_Name,
            "-l" & Pyramid_Gen_Lib_Name,
-           "-lstdc++");
+           "-lstdc++",
+           "-ldl");
     end case;
   end Linker;
 end Ada_Active_Find_E2E;

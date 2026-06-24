@@ -23,6 +23,7 @@ CLIENT_BIN="${PYRAMID_ROOT}/tests/ada/bin/ada_active_find_e2e"
 BACKEND_PORT=19235
 FRONTEND_PORT=19236
 CONTENT_TYPE="application/json"
+CODEC_PLUGIN_ARGS=()
 PORT_FILE=$(mktemp /tmp/tobj_port.XXXXXX)
 BRIDGE_PORT_FILE=$(mktemp /tmp/bridge_port.XXXXXX)
 TIMEOUT=25
@@ -36,6 +37,7 @@ while [[ $# -gt 0 ]]; do
     --backend-port) BACKEND_PORT="$2"; shift 2 ;;
     --frontend-port) FRONTEND_PORT="$2"; shift 2 ;;
     --content-type) CONTENT_TYPE="$2"; shift 2 ;;
+    --codec-plugin) CODEC_PLUGIN_ARGS+=(--codec-plugin "$2"); shift 2 ;;
     *)            shift ;;
   esac
 done
@@ -127,7 +129,7 @@ sleep 0.2
 # Step 7: Start Ada active-find client (connects to bridge)
 echo "[driver] Starting Ada active-find client (→ bridge port $ACTUAL_FRONTEND_PORT)..."
 "$CLIENT_BIN" --host 127.0.0.1 --port "$ACTUAL_FRONTEND_PORT" \
-              --content-type "$CONTENT_TYPE"
+              --content-type "$CONTENT_TYPE" "${CODEC_PLUGIN_ARGS[@]}"
 CLIENT_EXIT=$?
 
 # Step 8: Stop bridge and server

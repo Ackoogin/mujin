@@ -19,6 +19,7 @@ with Ada.Text_IO;
 with Interfaces.C;
 with Interfaces.C.Strings;
 with Pcl_Bindings;
+with Pcl_Plugins;
 with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;
 with Tobj_Interest_Client;
 with Tobj_Evidence_Provider;
@@ -30,6 +31,7 @@ procedure Ada_Active_Find_E2E is
    use type Pcl_Bindings.Pcl_Executor_Access;
    use type Pcl_Bindings.Pcl_Container_Access;
    use type Pcl_Bindings.Pcl_Socket_Transport_Access;
+   use type System.Address;
 
    Pi         : constant Long_Float := 3.14159265358979323846;
    Deg_To_Rad : constant Long_Float := Pi / 180.0;
@@ -39,6 +41,43 @@ procedure Ada_Active_Find_E2E is
    Host_Str : Interfaces.C.Strings.chars_ptr :=
      Interfaces.C.Strings.New_String ("127.0.0.1");
    Port_Val : Interfaces.C.unsigned_short := 19000;
+   Max_Codec_Plugins : constant Natural := 16;
+   Codec_Handles : array (Positive range 1 .. Max_Codec_Plugins)
+     of System.Address := (others => System.Null_Address);
+   Codec_Handle_Count : Natural := 0;
+
+   procedure Load_Codec_Plugin (Path : String) is
+      Path_C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Path);
+      Handle : aliased System.Address := System.Null_Address;
+      Status : Pcl_Bindings.Pcl_Status;
+   begin
+      if Codec_Handle_Count = Max_Codec_Plugins then
+         Interfaces.C.Strings.Free (Path_C);
+         raise Program_Error with "too many --codec-plugin arguments";
+      end if;
+
+      Status := Pcl_Plugins.Pcl_Plugin_Load_Codec
+        (Path_C, Pcl_Plugins.Pcl_Codec_Registry_Default, Handle'Access);
+      Interfaces.C.Strings.Free (Path_C);
+      if Status /= Pcl_Bindings.PCL_OK then
+         raise Program_Error with "failed to load codec plugin: " & Path;
+      end if;
+
+      Codec_Handle_Count := Codec_Handle_Count + 1;
+      Codec_Handles (Codec_Handle_Count) := Handle;
+   end Load_Codec_Plugin;
+
+   procedure Unload_Codec_Plugins is
+   begin
+      for I in reverse 1 .. Codec_Handle_Count loop
+         if Codec_Handles (I) /= System.Null_Address then
+            Pcl_Plugins.Pcl_Plugin_Unload (Codec_Handles (I));
+            Codec_Handles (I) := System.Null_Address;
+         end if;
+      end loop;
+      Codec_Handle_Count := 0;
+   end Unload_Codec_Plugins;
 
    procedure Parse_Args is
       use Ada.Command_Line;
@@ -57,6 +96,9 @@ procedure Ada_Active_Find_E2E is
               To_Unbounded_String (Argument (I + 1));
             Tobj_Evidence_Provider.Content_Type :=
               To_Unbounded_String (Argument (I + 1));
+            I := I + 2;
+         elsif Argument (I) = "--codec-plugin" and then I + 1 <= Argument_Count then
+            Load_Codec_Plugin (Argument (I + 1));
             I := I + 2;
          else
             I := I + 1;
@@ -93,6 +135,7 @@ begin
    Exec := Pcl_Bindings.Create_Executor;
    if Exec = null then
       Log ("FAIL: could not create executor");
+      Unload_Codec_Plugins;
       Ada.Command_Line.Set_Exit_Status (1);
       return;
    end if;
@@ -106,6 +149,7 @@ begin
    if Transport = null then
       Log ("FAIL: could not connect to server");
       Pcl_Bindings.Destroy_Executor (Exec);
+      Unload_Codec_Plugins;
       Ada.Command_Line.Set_Exit_Status (1);
       return;
    end if;
@@ -116,6 +160,7 @@ begin
       Log ("FAIL: could not set transport");
       Pcl_Bindings.Destroy_Socket_Transport (Transport);
       Pcl_Bindings.Destroy_Executor (Exec);
+      Unload_Codec_Plugins;
       Ada.Command_Line.Set_Exit_Status (1);
       return;
    end if;
@@ -137,6 +182,7 @@ begin
       Log ("FAIL: could not create client container");
       Pcl_Bindings.Destroy_Socket_Transport (Transport);
       Pcl_Bindings.Destroy_Executor (Exec);
+      Unload_Codec_Plugins;
       Ada.Command_Line.Set_Exit_Status (1);
       return;
    end if;
@@ -163,6 +209,7 @@ begin
       Pcl_Bindings.Destroy_Container (Client_C);
       Pcl_Bindings.Destroy_Socket_Transport (Transport);
       Pcl_Bindings.Destroy_Executor (Exec);
+      Unload_Codec_Plugins;
       Ada.Command_Line.Set_Exit_Status (1);
       return;
    end if;
@@ -239,4 +286,5 @@ begin
    Pcl_Bindings.Destroy_Container (Provider_C);
    Pcl_Bindings.Destroy_Container (Client_C);
    Pcl_Bindings.Destroy_Executor (Exec);
+   Unload_Codec_Plugins;
 end Ada_Active_Find_E2E;

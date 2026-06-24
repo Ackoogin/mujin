@@ -119,3 +119,7 @@ subprojects/AME/scripts/log/*
 build-all-enabled/*
 build-all-off/*
 build-flatbuffers-only/*
+
+# Ada plugin/test gprbuild artifacts (Strategy A codec plugin work)
+subprojects/PYRAMID/bindings/ada/obj_json_codec_plugin/
+subprojects/PYRAMID/bindings/ada/lib/

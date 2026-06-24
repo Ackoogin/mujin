@@ -5,6 +5,8 @@ with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 with Ada.Unchecked_Conversion;
 with GNATCOLL.JSON;  use GNATCOLL.JSON;
 with Interfaces.C.Strings;
+with Pcl_Bindings;
+with Pcl_Plugins;
 with System;
 with System.Storage_Elements;
 with Pyramid.Data_Model.Common.Types_Codec;  use Pyramid.Data_Model.Common.Types_Codec;
@@ -13,8 +15,14 @@ with Pyramid.Services.Sensor_Data_Interpretation.Flatbuffers_Codec;
 
 package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
    use type System.Address;
+   use type Interfaces.C.unsigned;
    use type Interfaces.C.Strings.chars_ptr;
    use type Pcl_Bindings.Pcl_Resp_Cb_Access;
+   use type Pcl_Bindings.Pcl_Status;
+   use type Pcl_Plugins.Pcl_Codec_Const_Access;
+   use type Pcl_Plugins.Pcl_Codec_Decode_Access;
+   use type Pcl_Plugins.Pcl_Codec_Encode_Access;
+   use type Pcl_Plugins.Pcl_Codec_Free_Msg_Access;
 
    function To_Address is new
      Ada.Unchecked_Conversion (Interfaces.C.Strings.chars_ptr, System.Address);
@@ -48,13 +56,153 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
       return String (Chars);
    end Msg_To_String;
 
+   function Registry_Has_Codec (Content_Type : String) return Boolean is
+      Content_C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Content_Type);
+      Codec : Pcl_Plugins.Pcl_Codec_Const_Access := null;
+   begin
+      if Content_Type = "" then
+         Interfaces.C.Strings.Free (Content_C);
+         return False;
+      end if;
+      Codec := Pcl_Plugins.Pcl_Codec_Registry_Get
+        (Pcl_Plugins.Pcl_Codec_Registry_Default, Content_C);
+      Interfaces.C.Strings.Free (Content_C);
+      return Codec /= null;
+   exception
+      when others =>
+         if Content_C /= Interfaces.C.Strings.Null_Ptr then
+            Interfaces.C.Strings.Free (Content_C);
+         end if;
+         return False;
+   end Registry_Has_Codec;
+
+   function Try_Registry_Encode
+     (Content_Type : String;
+      Schema_Id    : String;
+      Value        : System.Address;
+      Wire         : out Unbounded_String) return Boolean
+   is
+      Content_C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Content_Type);
+      Schema_C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Schema_Id);
+      Codec : Pcl_Plugins.Pcl_Codec_Const_Access := null;
+      Msg   : aliased Pcl_Bindings.Pcl_Msg :=
+        (Data      => System.Null_Address,
+         Size      => 0,
+         Type_Name => Interfaces.C.Strings.Null_Ptr);
+      Status : Pcl_Bindings.Pcl_Status := Pcl_Bindings.PCL_ERR_NOT_FOUND;
+   begin
+      Wire := Null_Unbounded_String;
+      if Content_Type = "" then
+         Interfaces.C.Strings.Free (Content_C);
+         Interfaces.C.Strings.Free (Schema_C);
+         return False;
+      end if;
+      Codec := Pcl_Plugins.Pcl_Codec_Registry_Get
+        (Pcl_Plugins.Pcl_Codec_Registry_Default, Content_C);
+      if Codec = null or else Codec.all.Encode = null then
+         Interfaces.C.Strings.Free (Content_C);
+         Interfaces.C.Strings.Free (Schema_C);
+         return False;
+      end if;
+      Status := Codec.all.Encode.all
+        (Codec.all.Codec_Ctx, Schema_C, Value, Msg'Access);
+      if Status = Pcl_Bindings.PCL_OK then
+         if Msg.Data /= System.Null_Address and then Msg.Size > 0 then
+            Wire := To_Unbounded_String (Msg_To_String (Msg.Data, Msg.Size));
+         end if;
+         if Codec.all.Free_Msg /= null then
+            Codec.all.Free_Msg.all (Codec.all.Codec_Ctx, Msg'Access);
+         end if;
+         Interfaces.C.Strings.Free (Content_C);
+         Interfaces.C.Strings.Free (Schema_C);
+         return True;
+      end if;
+      if Msg.Data /= System.Null_Address and then Codec.all.Free_Msg /= null then
+         Codec.all.Free_Msg.all (Codec.all.Codec_Ctx, Msg'Access);
+      end if;
+      Interfaces.C.Strings.Free (Content_C);
+      Interfaces.C.Strings.Free (Schema_C);
+      return False;
+   exception
+      when others =>
+         if Content_C /= Interfaces.C.Strings.Null_Ptr then
+            Interfaces.C.Strings.Free (Content_C);
+         end if;
+         if Schema_C /= Interfaces.C.Strings.Null_Ptr then
+            Interfaces.C.Strings.Free (Schema_C);
+         end if;
+         return False;
+   end Try_Registry_Encode;
+
+   function Try_Registry_Decode
+     (Msg       : access constant Pcl_Bindings.Pcl_Msg;
+      Schema_Id : String;
+      Value     : System.Address) return Boolean
+   is
+      Schema_C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Schema_Id);
+      Codec : Pcl_Plugins.Pcl_Codec_Const_Access := null;
+      Status : Pcl_Bindings.Pcl_Status := Pcl_Bindings.PCL_ERR_NOT_FOUND;
+   begin
+      if Msg = null or else Msg.Type_Name = Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Schema_C);
+         return False;
+      end if;
+      Codec := Pcl_Plugins.Pcl_Codec_Registry_Get
+        (Pcl_Plugins.Pcl_Codec_Registry_Default, Msg.Type_Name);
+      if Codec = null or else Codec.all.Decode = null then
+         Interfaces.C.Strings.Free (Schema_C);
+         return False;
+      end if;
+      Status := Codec.all.Decode.all
+        (Codec.all.Codec_Ctx, Schema_C, Msg, Value);
+      Interfaces.C.Strings.Free (Schema_C);
+      return Status = Pcl_Bindings.PCL_OK;
+   exception
+      when others =>
+         if Schema_C /= Interfaces.C.Strings.Null_Ptr then
+            Interfaces.C.Strings.Free (Schema_C);
+         end if;
+         return False;
+   end Try_Registry_Decode;
+
+   function Try_Registry_Decode_Raw
+     (Content_Type : String;
+      Data         : System.Address;
+      Size         : Natural;
+      Schema_Id    : String;
+      Value        : System.Address) return Boolean
+   is
+      Type_C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Content_Type);
+      Msg : aliased Pcl_Bindings.Pcl_Msg :=
+        (Data      => Data,
+         Size      => Interfaces.C.unsigned (Size),
+         Type_Name => Type_C);
+      Ok : Boolean := False;
+   begin
+      Ok := Try_Registry_Decode (Msg'Access, Schema_Id, Value);
+      Interfaces.C.Strings.Free (Type_C);
+      return Ok;
+   exception
+      when others =>
+         if Type_C /= Interfaces.C.Strings.Null_Ptr then
+            Interfaces.C.Strings.Free (Type_C);
+         end if;
+         return False;
+   end Try_Registry_Decode_Raw;
+
    package Flatbuffers_Codec renames Pyramid.Services.Sensor_Data_Interpretation.Flatbuffers_Codec;
 
    function Supports_Content_Type (Content_Type : String) return Boolean is
    begin
       return Content_Type = ""
         or else Content_Type = Json_Content_Type
-        or else Content_Type = Flatbuffers_Content_Type;
+        or else Content_Type = Flatbuffers_Content_Type
+        or else Registry_Has_Codec (Content_Type);
    end Supports_Content_Type;
 
    function Message_Content_Type
@@ -136,6 +284,14 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
          return Null_Unbounded_String;
       end if;
 
+      declare
+         Result : Identifier;
+      begin
+         if Try_Registry_Decode (Msg, "Identifier", Result'Address) then
+            return Result;
+         end if;
+      end;
+
       if Content_Type = "" or else Content_Type = Json_Content_Type then
          return Decode_Identifier_Payload (Payload);
       elsif Content_Type = Flatbuffers_Content_Type then
@@ -197,6 +353,14 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
          return From_Json ("{}", null);
       end if;
 
+      declare
+         Result : Ack;
+      begin
+         if Try_Registry_Decode (Msg, "Ack", Result'Address) then
+            return Result;
+         end if;
+      end;
+
       if Content_Type = "" or else Content_Type = Json_Content_Type then
          return From_Json (Payload, null);
       elsif Content_Type = Flatbuffers_Content_Type then
@@ -218,6 +382,14 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
       if Payload = "" then
          return From_Json ("{}", null);
       end if;
+
+      declare
+         Result : Ack;
+      begin
+         if Try_Registry_Decode (Msg, "Ack", Result'Address) then
+            return Result;
+         end if;
+      end;
 
       if Content_Type = "" or else Content_Type = Json_Content_Type then
          return From_Json (Payload, null);
@@ -607,13 +779,28 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
       Content_Type : String := "application/json")
    is
       use type Pcl_Bindings.Pcl_Status;
-      Json_Payload : constant String := To_Json (Request);
-      Payload : constant String :=
-        (if Content_Type = "" or else Content_Type = "application/json"
-         then Json_Payload
-         elsif Content_Type = "application/flatbuffers"
-         then Flatbuffers_Codec.To_Binary_Query (Request)
-         else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+      function Build_Payload return String is
+         Registry_Payload : Unbounded_String := Null_Unbounded_String;
+      begin
+         if Try_Registry_Encode
+           (Content_Type, "Query", Request'Address,
+            Registry_Payload)
+         then
+            return To_String (Registry_Payload);
+         end if;
+
+         declare
+            Json_Payload : constant String := To_Json (Request);
+         begin
+            return
+              (if Content_Type = "" or else Content_Type = "application/json"
+               then Json_Payload
+               elsif Content_Type = "application/flatbuffers"
+               then Flatbuffers_Codec.To_Binary_Query (Request)
+               else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+         end;
+      end Build_Payload;
+      Payload : constant String := Build_Payload;
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
@@ -650,13 +837,28 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
       Content_Type : String := "application/json")
    is
       use type Pcl_Bindings.Pcl_Status;
-      Json_Payload : constant String := To_Json (Request);
-      Payload : constant String :=
-        (if Content_Type = "" or else Content_Type = "application/json"
-         then Json_Payload
-         elsif Content_Type = "application/flatbuffers"
-         then Flatbuffers_Codec.To_Binary_Interpretation_Requirement (Request)
-         else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+      function Build_Payload return String is
+         Registry_Payload : Unbounded_String := Null_Unbounded_String;
+      begin
+         if Try_Registry_Encode
+           (Content_Type, "InterpretationRequirement", Request'Address,
+            Registry_Payload)
+         then
+            return To_String (Registry_Payload);
+         end if;
+
+         declare
+            Json_Payload : constant String := To_Json (Request);
+         begin
+            return
+              (if Content_Type = "" or else Content_Type = "application/json"
+               then Json_Payload
+               elsif Content_Type = "application/flatbuffers"
+               then Flatbuffers_Codec.To_Binary_Interpretation_Requirement (Request)
+               else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+         end;
+      end Build_Payload;
+      Payload : constant String := Build_Payload;
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
@@ -693,13 +895,28 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
       Content_Type : String := "application/json")
    is
       use type Pcl_Bindings.Pcl_Status;
-      Json_Payload : constant String := To_Json (Request);
-      Payload : constant String :=
-        (if Content_Type = "" or else Content_Type = "application/json"
-         then Json_Payload
-         elsif Content_Type = "application/flatbuffers"
-         then Flatbuffers_Codec.To_Binary_Query (Request)
-         else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+      function Build_Payload return String is
+         Registry_Payload : Unbounded_String := Null_Unbounded_String;
+      begin
+         if Try_Registry_Encode
+           (Content_Type, "Query", Request'Address,
+            Registry_Payload)
+         then
+            return To_String (Registry_Payload);
+         end if;
+
+         declare
+            Json_Payload : constant String := To_Json (Request);
+         begin
+            return
+              (if Content_Type = "" or else Content_Type = "application/json"
+               then Json_Payload
+               elsif Content_Type = "application/flatbuffers"
+               then Flatbuffers_Codec.To_Binary_Query (Request)
+               else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+         end;
+      end Build_Payload;
+      Payload : constant String := Build_Payload;
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
@@ -736,13 +953,28 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
       Content_Type : String := "application/json")
    is
       use type Pcl_Bindings.Pcl_Status;
-      Json_Payload : constant String := To_Json (Request);
-      Payload : constant String :=
-        (if Content_Type = "" or else Content_Type = "application/json"
-         then Json_Payload
-         elsif Content_Type = "application/flatbuffers"
-         then Flatbuffers_Codec.To_Binary_Interpretation_Requirement (Request)
-         else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+      function Build_Payload return String is
+         Registry_Payload : Unbounded_String := Null_Unbounded_String;
+      begin
+         if Try_Registry_Encode
+           (Content_Type, "InterpretationRequirement", Request'Address,
+            Registry_Payload)
+         then
+            return To_String (Registry_Payload);
+         end if;
+
+         declare
+            Json_Payload : constant String := To_Json (Request);
+         begin
+            return
+              (if Content_Type = "" or else Content_Type = "application/json"
+               then Json_Payload
+               elsif Content_Type = "application/flatbuffers"
+               then Flatbuffers_Codec.To_Binary_Interpretation_Requirement (Request)
+               else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+         end;
+      end Build_Payload;
+      Payload : constant String := Build_Payload;
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
@@ -779,13 +1011,28 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
       Content_Type : String := "application/json")
    is
       use type Pcl_Bindings.Pcl_Status;
-      Json_Payload : constant String := To_String (Request);
-      Payload : constant String :=
-        (if Content_Type = "" or else Content_Type = "application/json"
-         then Json_Payload
-         elsif Content_Type = "application/flatbuffers"
-         then Flatbuffers_Codec.To_Binary_Identifier (Request)
-         else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+      function Build_Payload return String is
+         Registry_Payload : Unbounded_String := Null_Unbounded_String;
+      begin
+         if Try_Registry_Encode
+           (Content_Type, "Identifier", Request'Address,
+            Registry_Payload)
+         then
+            return To_String (Registry_Payload);
+         end if;
+
+         declare
+            Json_Payload : constant String := To_String (Request);
+         begin
+            return
+              (if Content_Type = "" or else Content_Type = "application/json"
+               then Json_Payload
+               elsif Content_Type = "application/flatbuffers"
+               then Flatbuffers_Codec.To_Binary_Identifier (Request)
+               else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+         end;
+      end Build_Payload;
+      Payload : constant String := Build_Payload;
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Payload_Bytes : aliased constant String := Payload;
       Svc_C  : Interfaces.C.Strings.chars_ptr :=
@@ -843,12 +1090,24 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
       case Channel is
          when Ch_Interpretation_Requirement_Read_Capability =>
             declare
-               Req : constant Query :=
-                 (if Content_Type = "" or else Content_Type = "application/json"
-                  then From_Json (Request_Payload, null)
-                  elsif Content_Type = "application/flatbuffers"
-                  then Flatbuffers_Codec.From_Binary_Query (Request_Payload, null)
-                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+               function Decode_Request return Query is
+                  Result : Query;
+               begin
+                  if Try_Registry_Decode_Raw
+                    (Content_Type, Request_Buf, Request_Size,
+                     "Query", Result'Address)
+                  then
+                     return Result;
+                  end if;
+
+                  return
+                    (if Content_Type = "" or else Content_Type = "application/json"
+                     then From_Json (Request_Payload, null)
+                     elsif Content_Type = "application/flatbuffers"
+                     then Flatbuffers_Codec.From_Binary_Query (Request_Payload, null)
+                     else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+               end Decode_Request;
+               Req : constant Query := Decode_Request;
                Rsp : constant Capability_Array :=
                  (if Handlers /= null and then Handlers.On_Interpretation_Requirement_Read_Capability /= null
                   then Handlers.On_Interpretation_Requirement_Read_Capability.all (Req)
@@ -877,37 +1136,67 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
             end;
          when Ch_Interpretation_Requirement_Create_Requirement =>
             declare
-               Req : constant Interpretation_Requirement :=
-                 (if Content_Type = "" or else Content_Type = "application/json"
-                  then From_Json (Request_Payload, null)
-                  elsif Content_Type = "application/flatbuffers"
-                  then Flatbuffers_Codec.From_Binary_Interpretation_Requirement (Request_Payload, null)
-                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+               function Decode_Request return Interpretation_Requirement is
+                  Result : Interpretation_Requirement;
+               begin
+                  if Try_Registry_Decode_Raw
+                    (Content_Type, Request_Buf, Request_Size,
+                     "InterpretationRequirement", Result'Address)
+                  then
+                     return Result;
+                  end if;
+
+                  return
+                    (if Content_Type = "" or else Content_Type = "application/json"
+                     then From_Json (Request_Payload, null)
+                     elsif Content_Type = "application/flatbuffers"
+                     then Flatbuffers_Codec.From_Binary_Interpretation_Requirement (Request_Payload, null)
+                     else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+               end Decode_Request;
+               Req : constant Interpretation_Requirement := Decode_Request;
                Rsp : Identifier;
-               Json_Response : Unbounded_String := Null_Unbounded_String;
+               Wire_Response : Unbounded_String := Null_Unbounded_String;
             begin
                if Handlers /= null and then Handlers.On_Interpretation_Requirement_Create_Requirement /= null then
                   Handlers.On_Interpretation_Requirement_Create_Requirement.all (Req, Rsp);
                else
                   Default_Handle_Interpretation_Requirement_Create_Requirement (Req, Rsp);
                end if;
-               Json_Response := To_Unbounded_String (To_String (Rsp));
+               if not Try_Registry_Encode
+                 (Content_Type, "Identifier", Rsp'Address,
+                  Wire_Response)
+               then
+                  Wire_Response := To_Unbounded_String
+                    ((if Content_Type = "" or else Content_Type = "application/json"
+                      then To_String (Rsp)
+                      elsif Content_Type = "application/flatbuffers"
+                      then Flatbuffers_Codec.To_Binary_Identifier (Rsp)
+                      else raise Constraint_Error with "Unsupported content type: " & Content_Type));
+               end if;
                Copy_To_Buf
-                 ((if Content_Type = "" or else Content_Type = "application/json"
-                   then To_String (Json_Response)
-                   elsif Content_Type = "application/flatbuffers"
-                   then Flatbuffers_Codec.To_Binary_Identifier (Rsp)
-                   else raise Constraint_Error with "Unsupported content type: " & Content_Type),
+                 (To_String (Wire_Response),
                   Response_Buf, Response_Size);
             end;
          when Ch_Interpretation_Requirement_Read_Requirement =>
             declare
-               Req : constant Query :=
-                 (if Content_Type = "" or else Content_Type = "application/json"
-                  then From_Json (Request_Payload, null)
-                  elsif Content_Type = "application/flatbuffers"
-                  then Flatbuffers_Codec.From_Binary_Query (Request_Payload, null)
-                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+               function Decode_Request return Query is
+                  Result : Query;
+               begin
+                  if Try_Registry_Decode_Raw
+                    (Content_Type, Request_Buf, Request_Size,
+                     "Query", Result'Address)
+                  then
+                     return Result;
+                  end if;
+
+                  return
+                    (if Content_Type = "" or else Content_Type = "application/json"
+                     then From_Json (Request_Payload, null)
+                     elsif Content_Type = "application/flatbuffers"
+                     then Flatbuffers_Codec.From_Binary_Query (Request_Payload, null)
+                     else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+               end Decode_Request;
+               Req : constant Query := Decode_Request;
                Rsp : constant Interpretation_Requirement_Array :=
                  (if Handlers /= null and then Handlers.On_Interpretation_Requirement_Read_Requirement /= null
                   then Handlers.On_Interpretation_Requirement_Read_Requirement.all (Req)
@@ -936,52 +1225,88 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
             end;
          when Ch_Interpretation_Requirement_Update_Requirement =>
             declare
-               Req : constant Interpretation_Requirement :=
-                 (if Content_Type = "" or else Content_Type = "application/json"
-                  then From_Json (Request_Payload, null)
-                  elsif Content_Type = "application/flatbuffers"
-                  then Flatbuffers_Codec.From_Binary_Interpretation_Requirement (Request_Payload, null)
-                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+               function Decode_Request return Interpretation_Requirement is
+                  Result : Interpretation_Requirement;
+               begin
+                  if Try_Registry_Decode_Raw
+                    (Content_Type, Request_Buf, Request_Size,
+                     "InterpretationRequirement", Result'Address)
+                  then
+                     return Result;
+                  end if;
+
+                  return
+                    (if Content_Type = "" or else Content_Type = "application/json"
+                     then From_Json (Request_Payload, null)
+                     elsif Content_Type = "application/flatbuffers"
+                     then Flatbuffers_Codec.From_Binary_Interpretation_Requirement (Request_Payload, null)
+                     else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+               end Decode_Request;
+               Req : constant Interpretation_Requirement := Decode_Request;
                Rsp : Ack;
-               Json_Response : Unbounded_String := Null_Unbounded_String;
+               Wire_Response : Unbounded_String := Null_Unbounded_String;
             begin
                if Handlers /= null and then Handlers.On_Interpretation_Requirement_Update_Requirement /= null then
                   Handlers.On_Interpretation_Requirement_Update_Requirement.all (Req, Rsp);
                else
                   Default_Handle_Interpretation_Requirement_Update_Requirement (Req, Rsp);
                end if;
-               Json_Response := To_Unbounded_String (To_Json (Rsp));
+               if not Try_Registry_Encode
+                 (Content_Type, "Ack", Rsp'Address,
+                  Wire_Response)
+               then
+                  Wire_Response := To_Unbounded_String
+                    ((if Content_Type = "" or else Content_Type = "application/json"
+                      then To_Json (Rsp)
+                      elsif Content_Type = "application/flatbuffers"
+                      then Flatbuffers_Codec.To_Binary_Ack (Rsp)
+                      else raise Constraint_Error with "Unsupported content type: " & Content_Type));
+               end if;
                Copy_To_Buf
-                 ((if Content_Type = "" or else Content_Type = "application/json"
-                   then To_String (Json_Response)
-                   elsif Content_Type = "application/flatbuffers"
-                   then Flatbuffers_Codec.To_Binary_Ack (Rsp)
-                   else raise Constraint_Error with "Unsupported content type: " & Content_Type),
+                 (To_String (Wire_Response),
                   Response_Buf, Response_Size);
             end;
          when Ch_Interpretation_Requirement_Delete_Requirement =>
             declare
-               Req : constant Identifier :=
-                 (if Content_Type = "" or else Content_Type = "application/json"
-                  then To_Unbounded_String (Request_Payload)
-                  elsif Content_Type = "application/flatbuffers"
-                  then Flatbuffers_Codec.From_Binary_Identifier (Request_Payload, null)
-                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+               function Decode_Request return Identifier is
+                  Result : Identifier;
+               begin
+                  if Try_Registry_Decode_Raw
+                    (Content_Type, Request_Buf, Request_Size,
+                     "Identifier", Result'Address)
+                  then
+                     return Result;
+                  end if;
+
+                  return
+                    (if Content_Type = "" or else Content_Type = "application/json"
+                     then To_Unbounded_String (Request_Payload)
+                     elsif Content_Type = "application/flatbuffers"
+                     then Flatbuffers_Codec.From_Binary_Identifier (Request_Payload, null)
+                     else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+               end Decode_Request;
+               Req : constant Identifier := Decode_Request;
                Rsp : Ack;
-               Json_Response : Unbounded_String := Null_Unbounded_String;
+               Wire_Response : Unbounded_String := Null_Unbounded_String;
             begin
                if Handlers /= null and then Handlers.On_Interpretation_Requirement_Delete_Requirement /= null then
                   Handlers.On_Interpretation_Requirement_Delete_Requirement.all (Req, Rsp);
                else
                   Default_Handle_Interpretation_Requirement_Delete_Requirement (Req, Rsp);
                end if;
-               Json_Response := To_Unbounded_String (To_Json (Rsp));
+               if not Try_Registry_Encode
+                 (Content_Type, "Ack", Rsp'Address,
+                  Wire_Response)
+               then
+                  Wire_Response := To_Unbounded_String
+                    ((if Content_Type = "" or else Content_Type = "application/json"
+                      then To_Json (Rsp)
+                      elsif Content_Type = "application/flatbuffers"
+                      then Flatbuffers_Codec.To_Binary_Ack (Rsp)
+                      else raise Constraint_Error with "Unsupported content type: " & Content_Type));
+               end if;
                Copy_To_Buf
-                 ((if Content_Type = "" or else Content_Type = "application/json"
-                   then To_String (Json_Response)
-                   elsif Content_Type = "application/flatbuffers"
-                   then Flatbuffers_Codec.To_Binary_Ack (Rsp)
-                   else raise Constraint_Error with "Unsupported content type: " & Content_Type),
+                 (To_String (Wire_Response),
                   Response_Buf, Response_Size);
             end;
       end case;
