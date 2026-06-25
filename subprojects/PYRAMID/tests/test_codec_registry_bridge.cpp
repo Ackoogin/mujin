@@ -100,11 +100,11 @@ TEST(CodecRegistryBridge, TwoComponentCodecPluginsCoexistAndDispatchBySchema) {
   // A bridge loads codec plugins for two distinct components.
   pcl_plugin_handle_t* tactical_handle = nullptr;
   pcl_plugin_handle_t* autonomy_handle = nullptr;
-  ASSERT_EQ(pcl_plugin_load_codec(kPyramidJsonCodecPluginTactical, registry,
-                                  &tactical_handle),
+  ASSERT_EQ(pcl_plugin_load_codec(kPyramidJsonCodecPluginTactical, nullptr,
+                                  registry, &tactical_handle),
             PCL_OK);
-  ASSERT_EQ(pcl_plugin_load_codec(kPyramidJsonCodecPluginAutonomy, registry,
-                                  &autonomy_handle),
+  ASSERT_EQ(pcl_plugin_load_codec(kPyramidJsonCodecPluginAutonomy, nullptr,
+                                  registry, &autonomy_handle),
             PCL_OK);
 
   // Both registered under application/json and both are reachable.

@@ -127,6 +127,20 @@ set_target_properties(pcl_transport_shared_memory PROPERTIES
   C_EXTENSIONS OFF
 )
 
+add_library(pcl_transport_shared_memory_plugin MODULE
+  pcl_transport_shared_memory_plugin.c
+)
+
+target_link_libraries(pcl_transport_shared_memory_plugin
+  PRIVATE pcl_transport_shared_memory Threads::Threads)
+
+set_target_properties(pcl_transport_shared_memory_plugin PROPERTIES
+  LINKER_LANGUAGE C
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+)
+
 # ---------------------------------------------------------------------------
 # pcl_transport_template -- engineer-extendable transport scaffold
 # ---------------------------------------------------------------------------

@@ -20,6 +20,7 @@ with Interfaces.C;
 with Interfaces.C.Strings;
 with Pcl_Bindings;
 with Pcl_Plugins;
+with Pcl_Transport_Plugin;
 with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;
 with Tobj_Interest_Client;
 with System;
@@ -29,7 +30,7 @@ procedure Ada_Tobj_Client is
    use type Pcl_Bindings.Pcl_Status;
    use type Pcl_Bindings.Pcl_Executor_Access;
    use type Pcl_Bindings.Pcl_Container_Access;
-   use type Pcl_Bindings.Pcl_Socket_Transport_Access;
+   use type Pcl_Bindings.Pcl_Transport_Const_Access;
    use type System.Address;
 
    Pi         : constant Long_Float := 3.14159265358979323846;
@@ -40,6 +41,7 @@ procedure Ada_Tobj_Client is
    Host_Str : Interfaces.C.Strings.chars_ptr :=
      Interfaces.C.Strings.New_String ("127.0.0.1");
    Port_Val : Interfaces.C.unsigned_short := 19000;
+   Transport_Plugin_Path : Unbounded_String := Null_Unbounded_String;
    Max_Codec_Plugins : constant Natural := 16;
    Codec_Handles : array (Positive range 1 .. Max_Codec_Plugins)
      of System.Address := (others => System.Null_Address);
@@ -57,7 +59,8 @@ procedure Ada_Tobj_Client is
       end if;
 
       Status := Pcl_Plugins.Pcl_Plugin_Load_Codec
-        (Path_C, Pcl_Plugins.Pcl_Codec_Registry_Default, Handle'Access);
+        (Path_C, Interfaces.C.Strings.Null_Ptr,
+         Pcl_Plugins.Pcl_Codec_Registry_Default, Handle'Access);
       Interfaces.C.Strings.Free (Path_C);
       if Status /= Pcl_Bindings.PCL_OK then
          raise Program_Error with "failed to load codec plugin: " & Path;
@@ -97,6 +100,9 @@ procedure Ada_Tobj_Client is
          elsif Argument (I) = "--codec-plugin" and then I + 1 <= Argument_Count then
             Load_Codec_Plugin (Argument (I + 1));
             I := I + 2;
+         elsif Argument (I) = "--transport-plugin" and then I + 1 <= Argument_Count then
+            Transport_Plugin_Path := To_Unbounded_String (Argument (I + 1));
+            I := I + 2;
          else
             I := I + 1;
          end if;
@@ -113,7 +119,8 @@ procedure Ada_Tobj_Client is
    -- -- Main variables ---------------------------------------------------------
 
    Exec      : Pcl_Bindings.Pcl_Executor_Access;
-   Transport : Pcl_Bindings.Pcl_Socket_Transport_Access;
+   Transport_Handle : System.Address := System.Null_Address;
+   Transport_Vtable : Pcl_Bindings.Pcl_Transport_Const_Access := null;
    Container : Pcl_Bindings.Pcl_Container_Access;
    Name_C    : Interfaces.C.Strings.chars_ptr;
    Cbs       : aliased Pcl_Bindings.Pcl_Callbacks;
@@ -135,24 +142,42 @@ begin
       return;
    end if;
 
-   -- -- Connect via socket client transport ------------------------------------
+   -- -- Connect via the socket transport plugin (loaded at run time) ------------
+   --  The client links no transport library: the socket transport arrives as a
+   --  .so plugin, composed at run time exactly like the codec.
 
-   Transport := Pcl_Bindings.Create_Socket_Client (Host_Str, Port_Val, Exec);
+   declare
+      Plugin_Path : constant String :=
+        Pcl_Transport_Plugin.Resolve_Path (To_String (Transport_Plugin_Path));
+   begin
+      if Plugin_Path'Length = 0 then
+         Log ("FAIL: no transport plugin (pass --transport-plugin or set "
+              & "PCL_TRANSPORT_PLUGIN)");
+         Interfaces.C.Strings.Free (Host_Str);
+         Pcl_Bindings.Destroy_Executor (Exec);
+         Unload_Codec_Plugins;
+         Ada.Command_Line.Set_Exit_Status (1);
+         return;
+      end if;
+
+      if not Pcl_Transport_Plugin.Load_Socket_Client
+               (Plugin_Path, Host_Str, Port_Val, Exec,
+                Transport_Handle, Transport_Vtable)
+      then
+         Log ("FAIL: could not load transport plugin or connect to server");
+         Interfaces.C.Strings.Free (Host_Str);
+         Pcl_Bindings.Destroy_Executor (Exec);
+         Unload_Codec_Plugins;
+         Ada.Command_Line.Set_Exit_Status (1);
+         return;
+      end if;
+   end;
    Interfaces.C.Strings.Free (Host_Str);
 
-   if Transport = null then
-      Log ("FAIL: could not connect to server");
-      Pcl_Bindings.Destroy_Executor (Exec);
-      Unload_Codec_Plugins;
-      Ada.Command_Line.Set_Exit_Status (1);
-      return;
-   end if;
-
-   Status := Pcl_Bindings.Set_Transport
-     (Exec, Pcl_Bindings.Get_Socket_Transport (Transport));
+   Status := Pcl_Bindings.Set_Transport (Exec, Transport_Vtable);
    if Status /= Pcl_Bindings.PCL_OK then
       Log ("FAIL: could not set transport");
-      Pcl_Bindings.Destroy_Socket_Transport (Transport);
+      Pcl_Transport_Plugin.Destroy (Transport_Handle, Transport_Vtable);
       Pcl_Bindings.Destroy_Executor (Exec);
       Unload_Codec_Plugins;
       Ada.Command_Line.Set_Exit_Status (1);
@@ -174,7 +199,7 @@ begin
 
    if Container = null then
       Log ("FAIL: could not create container");
-      Pcl_Bindings.Destroy_Socket_Transport (Transport);
+      Pcl_Transport_Plugin.Destroy (Transport_Handle, Transport_Vtable);
       Pcl_Bindings.Destroy_Executor (Exec);
       Unload_Codec_Plugins;
       Ada.Command_Line.Set_Exit_Status (1);
@@ -232,8 +257,8 @@ begin
 
    -- -- Cleanup ----------------------------------------------------------------
 
-   Pcl_Bindings.Destroy_Socket_Transport (Transport);
    Pcl_Bindings.Destroy_Container (Container);
    Pcl_Bindings.Destroy_Executor (Exec);
+   Pcl_Transport_Plugin.Destroy (Transport_Handle, Transport_Vtable);
    Unload_Codec_Plugins;
 end Ada_Tobj_Client;

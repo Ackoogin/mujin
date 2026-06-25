@@ -209,17 +209,50 @@ pyramid_glob_generated(_pyramid_generated_marshal_srcs
     "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_cabi_marshal.cpp")
 pyramid_require_generated(_pyramid_generated_marshal_srcs
     "generated PYRAMID C-ABI marshalling sources")
-add_library(pyramid_generated_marshal STATIC ${_pyramid_generated_marshal_srcs})
+
+# W6 -- per-data-model-module marshalling libraries (churn isolation).
+# Each data-model module (common, base, tactical, autonomy, sensors, ...) is
+# compiled once into its own OBJECT library and exposed as a standalone static
+# library `pyramid_marshal_<module>.a`, so a deployment ships (and version
+# controls) only the modules a component actually uses: an edit to one module
+# re-versions only that module's artifact, not every component.  The aggregate
+# `pyramid_generated_marshal` static library bundles every module's objects so
+# existing C++ and Ada consumers (which link it by name) keep working unchanged,
+# and the linker still trims each binary to the modules it references.
+set(PYRAMID_MARSHAL_INCLUDE_DIRS
+    "${PYRAMID_CPP_BINDINGS_DIR}"
+    "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
+    "${PYRAMID_ROOT_DIR}/core/external"   # tl/optional.hpp (header-only) used by data-model types
+)
+set(_pyramid_marshal_objects)
+foreach(_marshal_src IN LISTS _pyramid_generated_marshal_srcs)
+    get_filename_component(_marshal_name "${_marshal_src}" NAME)
+    string(REGEX REPLACE "^pyramid_data_model_(.+)_cabi_marshal\\.cpp$" "\\1"
+        _marshal_module "${_marshal_name}")
+    set(_marshal_obj "pyramid_marshal_${_marshal_module}_obj")
+    add_library(${_marshal_obj} OBJECT "${_marshal_src}")
+    add_dependencies(${_marshal_obj} pyramid_cpp_bindings_codegen)
+    set_target_properties(${_marshal_obj} PROPERTIES
+        POSITION_INDEPENDENT_CODE ON)
+    target_include_directories(${_marshal_obj}
+        PUBLIC ${PYRAMID_MARSHAL_INCLUDE_DIRS})
+    # Standalone per-module static library for deployment staging.
+    add_library(pyramid_marshal_${_marshal_module} STATIC
+        $<TARGET_OBJECTS:${_marshal_obj}>)
+    target_include_directories(pyramid_marshal_${_marshal_module}
+        PUBLIC ${PYRAMID_MARSHAL_INCLUDE_DIRS})
+    list(APPEND _pyramid_marshal_objects $<TARGET_OBJECTS:${_marshal_obj}>)
+endforeach()
 unset(_pyramid_generated_marshal_srcs)
+
+# Backward-compatible aggregate static library over every module's objects.
+add_library(pyramid_generated_marshal STATIC ${_pyramid_marshal_objects})
 add_dependencies(pyramid_generated_marshal pyramid_cpp_bindings_codegen)
 set_target_properties(pyramid_generated_marshal PROPERTIES
     POSITION_INDEPENDENT_CODE ON)
 target_include_directories(pyramid_generated_marshal
-    PUBLIC
-        "${PYRAMID_CPP_BINDINGS_DIR}"
-        "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
-        "${PYRAMID_ROOT_DIR}/core/external"   # tl/optional.hpp (header-only) used by data-model types
-)
+    PUBLIC ${PYRAMID_MARSHAL_INCLUDE_DIRS})
+unset(_pyramid_marshal_objects)
 
 # Wire codecs (JSON + optional FlatBuffers). Linked by the codec plugins and by
 # any component still using the in-tree wire codec; re-exports the marshalling.

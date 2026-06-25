@@ -13,7 +13,6 @@
 
 #include <pcl/component.hpp>
 #include <pcl/executor.hpp>
-#include <pcl/pcl_transport_socket.h>
 
 extern "C" {
 #include <pcl/pcl_codec_registry.h>
@@ -21,11 +20,13 @@ extern "C" {
 }
 
 #include <chrono>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <future>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -47,17 +48,58 @@ struct CodecPluginDeleter {
   }
 };
 
-struct SocketTransportDeleter {
-  void operator()(pcl_socket_transport_t* transport) const {
-    if (transport) {
-      pcl_socket_transport_destroy(transport);
+using CodecPlugin = std::unique_ptr<pcl_plugin_handle_t, CodecPluginDeleter>;
+
+// The transport is supplied entirely by a runtime .so: the client links no
+// transport library. The plugin is configured through the same opaque
+// config_json that codec plugins receive (uniform pass-through), with the
+// executor handle threaded through as an integer pointer the plugin reinstalls.
+using TransportDestroyFn = void (*)(const pcl_transport_t*);
+
+class LoadedTransport {
+public:
+  LoadedTransport() = default;
+  LoadedTransport(const LoadedTransport&) = delete;
+  LoadedTransport& operator=(const LoadedTransport&) = delete;
+  ~LoadedTransport() {
+    if (destroy_ && vtable_) {
+      destroy_(vtable_);
+    }
+    if (handle_) {
+      pcl_plugin_unload(handle_);
     }
   }
+
+  bool load(const char* path, const char* config_json) {
+    if (pcl_plugin_load_transport(path, config_json, &handle_, &vtable_) !=
+            PCL_OK ||
+        !vtable_) {
+      return false;
+    }
+    destroy_ = reinterpret_cast<TransportDestroyFn>(
+        pcl_plugin_symbol(handle_, "pcl_socket_transport_plugin_destroy"));
+    return true;
+  }
+
+  const pcl_transport_t* vtable() const { return vtable_; }
+
+private:
+  pcl_plugin_handle_t* handle_ = nullptr;
+  const pcl_transport_t* vtable_ = nullptr;
+  TransportDestroyFn destroy_ = nullptr;
 };
 
-using CodecPlugin = std::unique_ptr<pcl_plugin_handle_t, CodecPluginDeleter>;
-using SocketTransport =
-    std::unique_ptr<pcl_socket_transport_t, SocketTransportDeleter>;
+std::string makeSocketTransportConfig(const char* host,
+                                      uint16_t port,
+                                      pcl_executor_t* executor) {
+  std::ostringstream out;
+  out << "{\"role\":\"client\",\"host\":\"" << host << "\",\"port\":" << port
+      << ",\"executor\":"
+      << static_cast<unsigned long long>(
+             reinterpret_cast<std::uintptr_t>(executor))
+      << "}";
+  return out.str();
+}
 
 class TacticalObjectsTestClient : public pcl::Component {
 public:
@@ -218,6 +260,11 @@ int main(int argc, char* argv[]) {
   int timeout_ms = 4000;
   std::string content_type = "application/json";
   std::vector<std::string> codec_plugin_paths;
+  std::string codec_config;
+  std::string codec_manifest;
+  std::string transport_plugin_path =
+      kTacticalObjectsSocketTransportPlugin ? kTacticalObjectsSocketTransportPlugin
+                                            : "";
 
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--host") == 0 && i + 1 < argc) {
@@ -230,17 +277,49 @@ int main(int argc, char* argv[]) {
       content_type = argv[++i];
     } else if (std::strcmp(argv[i], "--codec-plugin") == 0 && i + 1 < argc) {
       codec_plugin_paths.push_back(argv[++i]);
+    } else if (std::strcmp(argv[i], "--codec-config") == 0 && i + 1 < argc) {
+      codec_config = argv[++i];
+    } else if (std::strcmp(argv[i], "--transport-plugin") == 0 && i + 1 < argc) {
+      transport_plugin_path = argv[++i];
+    } else if (std::strcmp(argv[i], "--codec-manifest") == 0 && i + 1 < argc) {
+      codec_manifest = argv[++i];
+    }
+  }
+  const char* codec_config_json =
+      codec_config.empty() ? nullptr : codec_config.c_str();
+  if (codec_manifest.empty()) {
+    if (const char* env = std::getenv("PCL_CODEC_MANIFEST")) {
+      codec_manifest = env;
     }
   }
 
+  if (transport_plugin_path.empty()) {
+    std::fprintf(stderr,
+                 "[tactical_objects_test_client] no transport plugin: pass "
+                 "--transport-plugin <path>\n");
+    return 2;
+  }
+
   if (codec_plugin_paths.empty()) {
-    const auto rc = pcl_codec_registry_load_plugins_from_paths(
-        pcl_codec_registry_default(),
-        kTacticalObjectsDefaultCodecPlugins.data(),
-        kTacticalObjectsDefaultCodecPlugins.size());
-    if (rc != PCL_OK) {
-      std::fprintf(stderr, "failed to load default codec plugins\n");
-      return 2;
+    // Deployment default: a manifest (from --codec-manifest or
+    // PCL_CODEC_MANIFEST) lets the client run without naming each plugin. Fall
+    // back to the build-tree default plugin set when no manifest is supplied.
+    if (!codec_manifest.empty()) {
+      if (pcl_codec_registry_load_plugins_from_manifest(
+              pcl_codec_registry_default(), codec_manifest.c_str()) != PCL_OK) {
+        std::fprintf(stderr, "failed to load codec manifest: %s\n",
+                     codec_manifest.c_str());
+        return 2;
+      }
+    } else {
+      const auto rc = pcl_codec_registry_load_plugins_from_paths(
+          pcl_codec_registry_default(),
+          kTacticalObjectsDefaultCodecPlugins.data(),
+          kTacticalObjectsDefaultCodecPlugins.size());
+      if (rc != PCL_OK) {
+        std::fprintf(stderr, "failed to load default codec plugins\n");
+        return 2;
+      }
     }
   }
 
@@ -249,7 +328,8 @@ int main(int argc, char* argv[]) {
   std::vector<CodecPlugin> codec_plugins;
   for (const auto& path : codec_plugin_paths) {
     pcl_plugin_handle_t* handle = nullptr;
-    if (pcl_plugin_load_codec(path.c_str(), pcl_codec_registry_default(),
+    if (pcl_plugin_load_codec(path.c_str(), codec_config_json,
+                              pcl_codec_registry_default(),
                               &handle) != PCL_OK) {
       std::fprintf(stderr, "failed to load codec plugin: %s\n", path.c_str());
       return 2;
@@ -264,16 +344,22 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  SocketTransport transport{
-      pcl_socket_transport_create_client(host, port, executor.handle())};
-  if (!transport) {
+  // Load the transport entirely from a runtime .so. The client links no
+  // transport library: the socket implementation arrives as a plugin, composed
+  // at runtime exactly like the codec.
+  LoadedTransport transport;
+  const std::string transport_config =
+      makeSocketTransportConfig(host, port, executor.handle());
+  if (!transport.load(transport_plugin_path.c_str(),
+                      transport_config.c_str())) {
     std::fprintf(stderr,
-                 "[tactical_objects_test_client] Failed to connect to %s:%u\n",
-                 host, port);
+                 "[tactical_objects_test_client] Failed to load transport "
+                 "plugin %s or connect to %s:%u\n",
+                 transport_plugin_path.c_str(), host, port);
     return 1;
   }
 
-  executor.setTransport(pcl_socket_transport_get_transport(transport.get()));
+  executor.setTransport(transport.vtable());
 
   TacticalObjectsTestClient client{executor, content_type};
   if (client.configure() != PCL_OK ||

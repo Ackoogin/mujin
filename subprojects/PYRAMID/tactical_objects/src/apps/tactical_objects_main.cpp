@@ -7,21 +7,22 @@
 #include <pcl/component.hpp>
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
-#include <pcl/pcl_transport_shared_memory.h>
-#include <pcl/pcl_transport_socket.h>
 
 extern "C" {
 #include <pcl/pcl_codec_registry.h>
 #include <pcl/pcl_plugin_loader.h>
+#include <pcl/pcl_transport.h>
 }
 
 #include <atomic>
 #include <chrono>
 #include <csignal>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -169,6 +170,13 @@ int main(int argc, char* argv[]) {
   bool emit_demo_evidence = false;
   std::string frontend_content_type = kJsonContentType;
   std::vector<std::string> codec_plugin_paths;
+  std::string codec_config;
+  std::string codec_manifest;
+  std::string socket_transport_plugin =
+      kTacticalObjectsSocketTransportPlugin ? kTacticalObjectsSocketTransportPlugin
+                                            : "";
+  std::string shm_transport_plugin =
+      kTacticalObjectsShmTransportPlugin ? kTacticalObjectsShmTransportPlugin : "";
 
   for (int i = 1; i < argc; ++i) {
     if (std::strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
@@ -187,24 +195,52 @@ int main(int argc, char* argv[]) {
       frontend_content_type = argv[++i];
     } else if (std::strcmp(argv[i], "--codec-plugin") == 0 && i + 1 < argc) {
       codec_plugin_paths.push_back(argv[++i]);
+    } else if (std::strcmp(argv[i], "--codec-config") == 0 && i + 1 < argc) {
+      codec_config = argv[++i];
+    } else if (std::strcmp(argv[i], "--transport-plugin") == 0 && i + 1 < argc) {
+      socket_transport_plugin = argv[++i];
+    } else if (std::strcmp(argv[i], "--shm-transport-plugin") == 0 &&
+               i + 1 < argc) {
+      shm_transport_plugin = argv[++i];
+    } else if (std::strcmp(argv[i], "--codec-manifest") == 0 && i + 1 < argc) {
+      codec_manifest = argv[++i];
+    }
+  }
+  const char* codec_config_json =
+      codec_config.empty() ? nullptr : codec_config.c_str();
+  if (codec_manifest.empty()) {
+    if (const char* env = std::getenv("PCL_CODEC_MANIFEST")) {
+      codec_manifest = env;
     }
   }
 
   if (codec_plugin_paths.empty()) {
-    const auto rc = pcl_codec_registry_load_plugins_from_paths(
-        pcl_codec_registry_default(),
-        kTacticalObjectsDefaultCodecPlugins.data(),
-        kTacticalObjectsDefaultCodecPlugins.size());
-    if (rc != PCL_OK) {
-      std::fprintf(stderr, "failed to load default codec plugins\n");
-      return 2;
+    // Deployment default: load codecs from a manifest when supplied, else from
+    // the build-tree default plugin set.
+    if (!codec_manifest.empty()) {
+      if (pcl_codec_registry_load_plugins_from_manifest(
+              pcl_codec_registry_default(), codec_manifest.c_str()) != PCL_OK) {
+        std::fprintf(stderr, "failed to load codec manifest: %s\n",
+                     codec_manifest.c_str());
+        return 2;
+      }
+    } else {
+      const auto rc = pcl_codec_registry_load_plugins_from_paths(
+          pcl_codec_registry_default(),
+          kTacticalObjectsDefaultCodecPlugins.data(),
+          kTacticalObjectsDefaultCodecPlugins.size());
+      if (rc != PCL_OK) {
+        std::fprintf(stderr, "failed to load default codec plugins\n");
+        return 2;
+      }
     }
   }
 
   std::vector<pcl_plugin_handle_t*> codec_plugin_handles;
   for (const auto& path : codec_plugin_paths) {
     pcl_plugin_handle_t* handle = nullptr;
-    if (pcl_plugin_load_codec(path.c_str(), pcl_codec_registry_default(),
+    if (pcl_plugin_load_codec(path.c_str(), codec_config_json,
+                              pcl_codec_registry_default(),
                               &handle) != PCL_OK) {
       std::fprintf(stderr, "failed to load codec plugin: %s\n", path.c_str());
       return 2;
@@ -251,46 +287,86 @@ int main(int argc, char* argv[]) {
     pcl_executor_add(remote_exec, demo_evidence_publisher.handle());
   }
 
-  pcl_socket_transport_t* socket_transport = nullptr;
-  pcl_shared_memory_transport_t* shmem_transport = nullptr;
+  // Transport is loaded entirely from a runtime .so: the app links no transport
+  // library. Socket and shared-memory both arrive as plugins, configured via the
+  // same opaque config_json the codec plugins receive (with the executor pointer
+  // threaded through). The plugin also supplies the gateway + destroy hooks.
+  using GatewayFn = pcl_container_t* (*)(const pcl_transport_t*);
+  using TransportDestroyFn = void (*)(const pcl_transport_t*);
+
+  pcl_plugin_handle_t* transport_handle = nullptr;
+  const pcl_transport_t* transport_vtable = nullptr;
+  const char* transport_destroy_sym = nullptr;
   pcl_container_t* gateway = nullptr;
+
+  std::string transport_plugin;
+  std::string transport_config;
+  const char* gateway_sym = nullptr;
 
   if (!shmem_bus.empty()) {
     std::fprintf(stderr,
                  "[tactical_objects_app] Joining shared-memory bus '%s'...\n",
                  shmem_bus.c_str());
-    shmem_transport = pcl_shared_memory_transport_create(
-        shmem_bus.c_str(), "tactical_objects_app", remote_exec);
-    if (!shmem_transport) {
-      std::fprintf(stderr,
-                   "[tactical_objects_app] Failed to join shared-memory bus '%s'\n",
-                   shmem_bus.c_str());
-      pcl_executor_destroy(remote_exec);
-      pcl_executor_destroy(local_exec);
-      return 1;
-    }
-    pcl_executor_set_transport(
-        remote_exec, pcl_shared_memory_transport_get_transport(shmem_transport));
-    gateway = pcl_shared_memory_transport_gateway_container(shmem_transport);
+    transport_plugin = shm_transport_plugin;
+    std::ostringstream cfg;
+    cfg << "{\"bus_name\":\"" << shmem_bus
+        << "\",\"participant_id\":\"tactical_objects_app\",\"executor\":"
+        << static_cast<unsigned long long>(
+               reinterpret_cast<std::uintptr_t>(remote_exec))
+        << "}";
+    transport_config = cfg.str();
+    gateway_sym = "pcl_shm_transport_plugin_gateway";
+    transport_destroy_sym = "pcl_shm_transport_plugin_destroy";
   } else {
     if (!port_file.empty()) {
       std::ofstream stream(port_file);
       stream << port << '\n';
     }
-
     std::fprintf(stderr,
                  "[tactical_objects_app] Waiting for remote PYRAMID client on port %u...\n",
                  port);
-    socket_transport = pcl_socket_transport_create_server(port, remote_exec);
-    if (!socket_transport) {
-      std::fprintf(stderr, "[tactical_objects_app] Failed to create socket server\n");
-      pcl_executor_destroy(remote_exec);
-      pcl_executor_destroy(local_exec);
-      return 1;
-    }
-    pcl_executor_set_transport(
-        remote_exec, pcl_socket_transport_get_transport(socket_transport));
-    gateway = pcl_socket_transport_gateway_container(socket_transport);
+    transport_plugin = socket_transport_plugin;
+    std::ostringstream cfg;
+    cfg << "{\"role\":\"server\",\"port\":" << port << ",\"executor\":"
+        << static_cast<unsigned long long>(
+               reinterpret_cast<std::uintptr_t>(remote_exec))
+        << "}";
+    transport_config = cfg.str();
+    gateway_sym = "pcl_socket_transport_plugin_gateway";
+    transport_destroy_sym = "pcl_socket_transport_plugin_destroy";
+  }
+
+  if (transport_plugin.empty()) {
+    std::fprintf(stderr,
+                 "[tactical_objects_app] no transport plugin: pass "
+                 "--transport-plugin / --shm-transport-plugin\n");
+    pcl_executor_destroy(remote_exec);
+    pcl_executor_destroy(local_exec);
+    return 2;
+  }
+
+  if (pcl_plugin_load_transport(transport_plugin.c_str(),
+                                transport_config.c_str(), &transport_handle,
+                                &transport_vtable) != PCL_OK ||
+      !transport_vtable) {
+    std::fprintf(stderr,
+                 "[tactical_objects_app] Failed to load transport plugin %s\n",
+                 transport_plugin.c_str());
+    pcl_executor_destroy(remote_exec);
+    pcl_executor_destroy(local_exec);
+    return 1;
+  }
+  pcl_executor_set_transport(remote_exec, transport_vtable);
+
+  auto gateway_fn = reinterpret_cast<GatewayFn>(
+      pcl_plugin_symbol(transport_handle, gateway_sym));
+  gateway = gateway_fn ? gateway_fn(transport_vtable) : nullptr;
+  if (!gateway) {
+    std::fprintf(stderr,
+                 "[tactical_objects_app] transport plugin exposed no gateway\n");
+    pcl_executor_destroy(remote_exec);
+    pcl_executor_destroy(local_exec);
+    return 1;
   }
 
   pcl_container_configure(gateway);
@@ -332,14 +408,16 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  if (socket_transport) {
-    pcl_socket_transport_destroy(socket_transport);
-  }
-  if (shmem_transport) {
-    pcl_shared_memory_transport_destroy(shmem_transport);
-  }
   pcl_executor_destroy(remote_exec);
   pcl_executor_destroy(local_exec);
+  if (transport_handle) {
+    auto destroy_fn = reinterpret_cast<TransportDestroyFn>(
+        pcl_plugin_symbol(transport_handle, transport_destroy_sym));
+    if (destroy_fn && transport_vtable) {
+      destroy_fn(transport_vtable);
+    }
+    pcl_plugin_unload(transport_handle);
+  }
   for (auto* handle : codec_plugin_handles) {
     pcl_plugin_unload(handle);
   }

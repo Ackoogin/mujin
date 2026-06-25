@@ -93,7 +93,8 @@ procedure Test_Pcl_Plugin_Loader is
     Registry := Pcl_Plugins.Pcl_Codec_Registry_Create;
     Assert(Registry /= System.Null_Address, "registry create returned null");
 
-    Assert(Pcl_Plugins.Pcl_Plugin_Load_Codec(Path_C, Registry, Handle'Access) =
+    Assert(Pcl_Plugins.Pcl_Plugin_Load_Codec
+             (Path_C, Interfaces.C.Strings.Null_Ptr, Registry, Handle'Access) =
            Pcl_Bindings.PCL_OK,
            "pcl_plugin_load_codec failed for stub plugin");
     Assert(Handle /= System.Null_Address, "plugin load returned null handle");
@@ -122,6 +123,7 @@ procedure Test_Pcl_Plugin_Loader is
            "free_msg did not clear type name");
 
     Assert(Pcl_Plugins.Pcl_Plugin_Load_Codec(Missing_C,
+                                             Interfaces.C.Strings.Null_Ptr,
                                              Registry,
                                              Handle2'Access) =
            Pcl_Bindings.PCL_ERR_NOT_FOUND,

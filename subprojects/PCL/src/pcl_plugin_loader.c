@@ -2,6 +2,7 @@
 /// \brief Runtime loader for PCL transport and codec plugins.
 #include "pcl/pcl_plugin_loader.h"
 
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -93,6 +94,7 @@ static void* resolve_symbol(pcl_plugin_handle_t* handle, const char* name) {
 
 /// \brief Load a codec plugin and register its codec vtable.
 pcl_status_t pcl_plugin_load_codec(const char*             path,
+                                   const char*             config_json,
                                    pcl_codec_registry_t*   registry,
                                    pcl_plugin_handle_t**   out_handle) {
   pcl_plugin_handle_t* handle;
@@ -113,7 +115,7 @@ pcl_status_t pcl_plugin_load_codec(const char*             path,
     return PCL_ERR_NOT_FOUND;
   }
 
-  codec = entry();
+  codec = entry(config_json);
   if (!codec) {
     close_library(handle);
     return PCL_ERR_STATE;
@@ -144,7 +146,7 @@ pcl_status_t pcl_codec_registry_load_plugins_from_paths(
   for (i = 0; i < n; ++i) {
     pcl_plugin_handle_t* handle = NULL;
     if (!paths[i] || paths[i][0] == '\0') continue;
-    if (pcl_plugin_load_codec(paths[i], registry, &handle) != PCL_OK) {
+    if (pcl_plugin_load_codec(paths[i], NULL, registry, &handle) != PCL_OK) {
       continue;
     }
     if (!retain_codec_plugin(handle)) {
@@ -198,6 +200,49 @@ pcl_status_t pcl_codec_registry_load_plugins_from_env(
   }
 
   free(copy);
+  return PCL_OK;
+}
+
+pcl_status_t pcl_codec_registry_load_plugins_from_manifest(
+    pcl_codec_registry_t* registry,
+    const char*           manifest_path) {
+  FILE*  file;
+  char   line[1024];
+  pcl_status_t status;
+
+  if (!registry || !manifest_path || manifest_path[0] == '\0') {
+    return PCL_ERR_INVALID;
+  }
+
+  file = fopen(manifest_path, "r");
+  if (!file) return PCL_ERR_NOT_FOUND;
+
+  while (fgets(line, (int)sizeof(line), file)) {
+    char*  start = line;
+    size_t len;
+
+    /* Trim leading whitespace. */
+    while (*start == ' ' || *start == '\t') ++start;
+
+    /* Trim trailing whitespace / newline. */
+    len = strlen(start);
+    while (len > 0u &&
+           (start[len - 1u] == '\n' || start[len - 1u] == '\r' ||
+            start[len - 1u] == ' ' || start[len - 1u] == '\t')) {
+      start[--len] = '\0';
+    }
+
+    if (len == 0u || start[0] == '#') continue;
+
+    status = pcl_codec_registry_load_plugins_from_paths(
+        registry, (const char* const*)&start, 1u);
+    if (status != PCL_OK) {
+      fclose(file);
+      return status;
+    }
+  }
+
+  fclose(file);
   return PCL_OK;
 }
 

@@ -181,6 +181,7 @@ TEST(TransportCodecPluginComposition,
   pcl_plugin_handle_t* codec_handle = nullptr;
   ASSERT_NE(kPyramidFlatbuffersCodecPluginTactical, nullptr);
   ASSERT_EQ(pcl_plugin_load_codec(kPyramidFlatbuffersCodecPluginTactical,
+                                  nullptr,
                                   default_registry,
                                   &codec_handle),
             PCL_OK);

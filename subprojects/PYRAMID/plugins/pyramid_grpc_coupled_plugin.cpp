@@ -95,7 +95,8 @@ PYRAMID_GRPC_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
   return &grpc_transport;
 }
 
-PYRAMID_GRPC_PLUGIN_EXPORT const pcl_codec_t* pcl_codec_plugin_entry() {
+PYRAMID_GRPC_PLUGIN_EXPORT const pcl_codec_t* pcl_codec_plugin_entry(
+    const char*) {
   return &grpc_codec;
 }
 

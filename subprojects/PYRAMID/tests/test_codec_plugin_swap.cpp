@@ -100,7 +100,8 @@ LoadedCodec loadCodec(const char* path, const char* content_type) {
   if (!loaded.registry) {
     return loaded;
   }
-  EXPECT_EQ(pcl_plugin_load_codec(path, loaded.registry, &loaded.handle),
+  EXPECT_EQ(pcl_plugin_load_codec(path, nullptr, loaded.registry,
+                                  &loaded.handle),
             PCL_OK);
   EXPECT_NE(loaded.handle, nullptr);
   loaded.codec = pcl_codec_registry_get(loaded.registry, content_type);

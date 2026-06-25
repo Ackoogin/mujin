@@ -19,6 +19,8 @@ static pcl_codec_t badabi_codec = {
   NULL
 };
 
-PCL_TEST_PLUGIN_EXPORT const pcl_codec_t* pcl_codec_plugin_entry(void) {
+PCL_TEST_PLUGIN_EXPORT const pcl_codec_t* pcl_codec_plugin_entry(
+    const char* config_json) {
+  (void)config_json;
   return &badabi_codec;
 }

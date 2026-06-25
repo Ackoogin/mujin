@@ -46,7 +46,35 @@ Builds on [`plugin_binding_end_state_review.md`](./plugin_binding_end_state_revi
   / `pcl_plugin_load_transport`).
 - ◑ gRPC coupled target plugin — implemented, **gated** behind `PYRAMID_ENABLE_GRPC`,
   not runtime-verified (restricted network here).
-- Full suite **587/587** green (`build-flatbuffers-only`, GNAT).
+
+### v1 progress (this branch)
+
+- ✅ **W2** Codec config pass-through: `pcl_codec_plugin_entry(config_json)`,
+  `PCL_CODEC_ABI_VERSION=2`, `pcl_plugin_load_codec(path, config_json, …)`; config
+  exposed via `codec_ctx`. Generator + all C++/Ada callers updated. Stub plugin
+  records config; loader test asserts pass-through.
+- ✅ **W1** Clients link only core libs: `tactical_objects_test_client`, **both Ada
+  clients**, and `tactical_objects_app` (server) all load transport via
+  `pcl_plugin_load_transport` (socket + shm) — verified `nm` shows zero static
+  transport-create symbols. `stage_plugin_deploy.sh` link set trimmed.
+- ✅ **W3** shm transport plugin (`pcl_transport_shared_memory_plugin`), config
+  pass-through + fail-closed loader tests; proven end-to-end via
+  `pyramid_bridge_e2e` (app on shm bus ↔ Ada bridge). udp plugin skipped
+  (optional); gRPC runtime verify still network-gated.
+- ✅ **W5** Default-plugin manifest: `pcl_codec_registry_load_plugins_from_manifest`,
+  apps honor `--codec-manifest` / `PCL_CODEC_MANIFEST`; deploy script emits
+  `codec_manifest.txt` + `transport_manifest.txt`; `tobj_cpp_app_client_manifest_e2e`
+  runs app+client with no `--codec-plugin`.
+- ✅ **W6** Per-module marshalling: `pyramid_marshal_<module>.a` per data-model
+  module (+ aggregate `pyramid_generated_marshal` preserved for Ada/C++); deploy
+  stages only each component's module closure (tactical_objects → common+tactical;
+  autonomy_backend → common+autonomy). Verified a deployed client links/runs
+  against its closure alone.
+- ◑ **W4** Ada strict codec fail-closed + scalar-alias marshalling — **remaining**
+  (see below). Ada *transport* already fails closed (W1); C++ codec already fails
+  closed. Ada *codec* still has a static no-plugin fallback for struct + alias
+  schemas.
+- Full suite **592/592** green (`build-flatbuffers-only`, GNAT) after W1/W2/W3/W5/W6.
 
 ## Remaining work to reach v1
 

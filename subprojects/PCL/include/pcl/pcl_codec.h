@@ -13,7 +13,7 @@
 extern "C" {
 #endif
 
-#define PCL_CODEC_ABI_VERSION 1u
+#define PCL_CODEC_ABI_VERSION 2u
 
 // -- Codec adapter vtable ------------------------------------------------
 
@@ -77,8 +77,11 @@ typedef struct {
 /// \brief Function signature exported by each codec plugin.
 ///
 /// A codec plugin exports pcl_codec_plugin_entry() with this signature and
-/// returns a borrowed pointer to a stable codec vtable.
-typedef const pcl_codec_t* (*pcl_codec_plugin_entry_fn)(void);
+/// returns a borrowed pointer to a stable codec vtable.  The \p config_json
+/// string is opaque, plugin-specific configuration threaded through the loader
+/// (uniform with the transport plugin entry contract); it may be NULL when no
+/// configuration is supplied.  Plugins should treat NULL as "no configuration".
+typedef const pcl_codec_t* (*pcl_codec_plugin_entry_fn)(const char* config_json);
 
 #ifdef __cplusplus
 }

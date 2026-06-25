@@ -60,6 +60,7 @@ subprojects\PYRAMID\scripts\generate_bindings.bat
 |----------|---------|
 | [doc/architecture/pcl_pyramid_binding_generation_overview.md](doc/architecture/pcl_pyramid_binding_generation_overview.md) | Broad engineer-facing overview of how PYRAMID generated bindings plug into the PCL runtime |
 | [doc/architecture/generated_bindings.md](doc/architecture/generated_bindings.md) | Canonical v1 guide for proto schemas, generated bindings, codecs, transports, and how components should use them |
+| [doc/architecture/transport_codec_plugin_system.md](doc/architecture/transport_codec_plugin_system.md) | Runtime transport/codec **plugin** system: ABI, loader, config pass-through, build targets, and per-component deployment staging (with diagrams) |
 | [generated bindings status](../../doc/reports/PYRAMID/generated_bindings_status.md) | Current Tactical Objects binding/conformance status, proof matrix, and remaining gaps |
 | [doc/architecture/ros2_transport_semantics.md](doc/architecture/ros2_transport_semantics.md) | ROS2 topic/service/stream mapping rules |
 | [doc/architecture/PYRAMID_COMPONENT_RESPONSIBILITIES.md](doc/architecture/PYRAMID_COMPONENT_RESPONSIBILITIES.md) | Component responsibility map and standard responsibility IDs |

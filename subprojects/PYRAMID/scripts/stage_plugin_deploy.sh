@@ -49,7 +49,10 @@ PCL_INC="${REPO_ROOT}/subprojects/PCL/include/pcl"
 GEN_DIR="${BUILD_DIR}/generated/pyramid_cpp_bindings"
 PYRAMID_LIBDIR="${BUILD_DIR}/subprojects/PYRAMID"
 PCL_SRCDIR="${BUILD_DIR}/subprojects/PCL/src"
-TRANSPORT_PLUGIN="${PCL_SRCDIR}/libpcl_transport_socket_plugin.so"
+TRANSPORT_PLUGINS=(
+  "${PCL_SRCDIR}/libpcl_transport_socket_plugin.so"
+  "${PCL_SRCDIR}/libpcl_transport_shared_memory_plugin.so"
+)
 
 [[ -d "${GEN_DIR}" ]]   || { echo "ERROR: generated bindings not found at ${GEN_DIR} -- build first." >&2; exit 1; }
 [[ -d "${PCL_INC}" ]]   || { echo "ERROR: PCL include dir not found at ${PCL_INC}" >&2; exit 1; }
@@ -58,16 +61,18 @@ echo "build-dir : ${BUILD_DIR}"
 echo "out       : ${OUT_DIR}"
 [[ ${CLEAN} -eq 1 ]] && { echo "cleaning ${OUT_DIR}"; rm -rf "${OUT_DIR:?}"/*; }
 
-# Static libraries a plugin-only client links. The codec (JSON/FlatBuffers) is
-# loaded from a .so at run time, so the client links ONLY the framework
-# (pcl_core) and the native<->C-struct marshalling (no wire codec, no
-# FlatBuffers). pcl_transport_socket is included until the client is migrated to
-# load the transport plugin (then it drops too, and transport is fully .so).
+# Framework library every plugin-only client links. Both the codec
+# (JSON/FlatBuffers) AND the transport (socket/shm) are loaded from .so plugins
+# at run time, so the client links ONLY the framework (pcl_core) and the
+# native<->C-struct marshalling for its data-model module closure (computed
+# per component below) -- no wire codec, no FlatBuffers, no transport library.
 LINK_LIBS=(
   "${PCL_SRCDIR}/libpcl_core.a"
-  "${PCL_SRCDIR}/libpcl_transport_socket.a"
-  "${PYRAMID_LIBDIR}/libpyramid_generated_marshal.a"   # marshalling only (no wire codec)
 )
+
+# All known data-model modules (used as a fallback closure when per-component
+# detection finds nothing).
+ALL_MARSHAL_MODULES=(common base tactical autonomy sensors sensorproducts radar)
 
 # Discover components from the built codec plugin .so names:
 #   libpyramid_codec_<codec>_<component>.so
@@ -93,11 +98,12 @@ for comp in "${COMPONENTS[@]}"; do
     if [[ -f "${so}" ]]; then cp -f "${so}" "${dest}/plugins/"; found_codec=1; fi
   done
   [[ ${found_codec} -eq 1 ]] || echo "   WARN: no codec .so for ${comp}"
-  if [[ -f "${TRANSPORT_PLUGIN}" ]]; then
-    cp -f "${TRANSPORT_PLUGIN}" "${dest}/plugins/"
-  else
-    echo "   WARN: transport plugin not found at ${TRANSPORT_PLUGIN} (build target pcl_transport_socket_plugin)"
-  fi
+  found_transport=0
+  for tp in "${TRANSPORT_PLUGINS[@]}"; do
+    if [[ -f "${tp}" ]]; then cp -f "${tp}" "${dest}/plugins/"; found_transport=1; fi
+  done
+  [[ ${found_transport} -eq 1 ]] || \
+    echo "   WARN: no transport plugin found (build pcl_transport_socket_plugin / pcl_transport_shared_memory_plugin)"
 
   # --- include/pcl: the public PCL headers a client uses ---
   cp -f "${PCL_INC}"/*.h "${PCL_INC}"/*.hpp "${dest}/include/pcl/" 2>/dev/null || true
@@ -123,11 +129,47 @@ for comp in "${COMPONENTS[@]}"; do
     cp -f "${f}" "${dest}/src/"
   done
 
-  # --- lib: static link libraries ---
+  # --- lib: framework + per-module marshalling closure -----------------------
   for l in "${LINK_LIBS[@]}"; do [[ -f "${l}" ]] && cp -f "${l}" "${dest}/lib/"; done
+
+  # Module closure: the data-model modules this component's codec actually
+  # marshals (from the generated codec plugin's *_cabi_marshal.hpp includes).
+  # Staging only these means a tactical_objects deployment changes when
+  # tactical/common/base change -- not when autonomy/sensors/... change.
+  mapfile -t comp_modules < <(
+    grep -rhoE 'pyramid_data_model_[a-z]+_cabi_marshal' \
+      "${GEN_DIR}"/pyramid_services_"${comp}"_*_codec_plugin.cpp 2>/dev/null \
+      | sed -E 's/pyramid_data_model_([a-z]+)_cabi_marshal/\1/' | sort -u
+  )
+  if [[ ${#comp_modules[@]} -eq 0 ]]; then
+    comp_modules=("${ALL_MARSHAL_MODULES[@]}")
+  fi
+  staged_modules=()
+  for m in "${comp_modules[@]}"; do
+    ml="${PYRAMID_LIBDIR}/libpyramid_marshal_${m}.a"
+    if [[ -f "${ml}" ]]; then cp -f "${ml}" "${dest}/lib/"; staged_modules+=("${m}"); fi
+  done
+  echo "   marshalling modules: ${staged_modules[*]:-<none>}"
 
   # --- MANIFEST: absolute plugin paths (for --codec-plugin / PCL_CODEC_PLUGIN_PATH) ---
   ( cd "${dest}/plugins" && ls -1 ./*.so 2>/dev/null | sed "s|^\./|${dest}/plugins/|" ) > "${dest}/MANIFEST.txt" || true
+
+  # --- codec_manifest.txt: codec plugin paths the runtime auto-loads ----------
+  # Point PCL_CODEC_MANIFEST (or --codec-manifest) at this file so a component
+  # runs without naming each codec plugin. Transport plugins are listed
+  # separately because loading a transport needs runtime config (the executor).
+  {
+    echo "# Codec plugins for ${comp} -- auto-loaded via PCL_CODEC_MANIFEST."
+    ( cd "${dest}/plugins" && ls -1 ./libpyramid_codec_*.so 2>/dev/null \
+        | sed "s|^\./|${dest}/plugins/|" )
+  } > "${dest}/codec_manifest.txt" || true
+
+  # --- transport_manifest.txt: transport plugin path(s) for this component ----
+  {
+    echo "# Transport plugins for ${comp} (pass via --transport-plugin)."
+    ( cd "${dest}/plugins" && ls -1 ./libpcl_transport_*_plugin.so 2>/dev/null \
+        | sed "s|^\./|${dest}/plugins/|" )
+  } > "${dest}/transport_manifest.txt" || true
 
   # --- README ---
   cat > "${dest}/README.md" <<EOF
@@ -149,25 +191,35 @@ $(cd "${dest}/plugins" 2>/dev/null && for f in *.so; do echo "- \`$f\`"; done)
 The codec plugin is the **single cross-language** \`.so\` — it consumes the frozen
 \`pyramid_<Type>_c\` C struct and is loaded from both C++ and Ada clients.
 
-## Build a client (plugin-only: no wire codec linked, loaded at runtime)
+## Build a client (plugin-only: no wire codec, no transport linked)
 \`\`\`sh
 g++ -std=c++17 my_client.cpp src/*.cpp \\
     -Iinclude -Iinclude/pyramid \\
-    lib/libpcl_core.a lib/libpcl_transport_socket.a lib/libpyramid_generated_marshal.a \\
-    -lpthread -o my_client
+    lib/libpcl_core.a lib/libpyramid_marshal_*.a \\
+    -lpthread -ldl -o my_client
 \`\`\`
-The client links only the framework + native<->C-struct marshalling — no JSON,
-no FlatBuffers, no codec. (\`pcl_transport_socket\` is still linked until the
-client loads the transport plugin; see the v1 plan.)
+The client links only the framework + the native<->C-struct marshalling for
+this component's data-model module closure (\`lib/libpyramid_marshal_<module>.a\`)
+— no JSON, no FlatBuffers, no codec, and **no transport**. Both the codec and the
+socket transport arrive as \`.so\` plugins composed at run time. Because only the
+closure modules are shipped, an edit to an unrelated data-model module leaves
+this deployment unchanged.
 
-## Run against the plugin
+## Run against the plugins
 \`\`\`sh
-./my_client --codec-plugin "\$(head -1 MANIFEST.txt)"
-# or point the default-load at the dir:
-PCL_CODEC_PLUGIN_PATH="\$(pwd)/plugins" ./my_client
+# Explicit: name each plugin.
+./my_client --codec-plugin "\$(grep -v '^#' codec_manifest.txt | head -1)" \\
+            --transport-plugin "\$(grep -v '^#' transport_manifest.txt | head -1)"
+
+# Config-driven default: the runtime auto-loads every codec in the manifest, so
+# the client only needs the transport plugin path.
+PCL_CODEC_MANIFEST="\$(pwd)/codec_manifest.txt" ./my_client \\
+            --transport-plugin "\$(grep -v '^#' transport_manifest.txt | head -1)"
 \`\`\`
-The client calls the generated service with native types; the loaded \`.so\`
-supplies the codec. With no plugin loaded the C++ facade fails closed.
+The client calls the generated service with native types; the loaded codec
+\`.so\` supplies the wire codec and the transport \`.so\` supplies the socket (or
+shared-memory) transport. With no codec plugin loaded the C++ facade fails
+closed.
 EOF
 done
 

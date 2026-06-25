@@ -69,6 +69,27 @@ static pcl_codec_t stub_codec = {
   NULL
 };
 
-PCL_TEST_PLUGIN_EXPORT const pcl_codec_t* pcl_codec_plugin_entry(void) {
+/// Record the most recent config_json the loader threaded into the entry so
+/// tests can verify codec config pass-through (uniform with the transport
+/// plugin entry contract).
+static char stub_last_config[256] = {0};
+
+PCL_TEST_PLUGIN_EXPORT const char* pcl_stub_last_config(void) {
+  return stub_last_config;
+}
+
+PCL_TEST_PLUGIN_EXPORT const pcl_codec_t* pcl_codec_plugin_entry(
+    const char* config_json) {
+  if (config_json) {
+    size_t n = strlen(config_json);
+    if (n >= sizeof(stub_last_config)) n = sizeof(stub_last_config) - 1u;
+    memcpy(stub_last_config, config_json, n);
+    stub_last_config[n] = '\0';
+    /* Expose the config to the codec callbacks via codec_ctx. */
+    stub_codec.codec_ctx = stub_last_config;
+  } else {
+    stub_last_config[0] = '\0';
+    stub_codec.codec_ctx = NULL;
+  }
   return &stub_codec;
 }

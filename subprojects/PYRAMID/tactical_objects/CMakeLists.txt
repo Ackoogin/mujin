@@ -85,7 +85,23 @@ foreach(_tactical_codec_target IN LISTS _tactical_codec_plugin_targets)
     string(APPEND _tactical_codec_paths_header
         "    \"$<TARGET_FILE:${_tactical_codec_target}>\",\n")
 endforeach()
-string(APPEND _tactical_codec_paths_header "}};\n")
+string(APPEND _tactical_codec_paths_header "}};\n\n")
+# Default transport plugin path so the client runs standalone; overridable with
+# --transport-plugin. nullptr when the plugin target is unavailable.
+if(TARGET pcl_transport_socket_plugin)
+    string(APPEND _tactical_codec_paths_header
+        "inline constexpr const char* kTacticalObjectsSocketTransportPlugin = \"$<TARGET_FILE:pcl_transport_socket_plugin>\";\n")
+else()
+    string(APPEND _tactical_codec_paths_header
+        "inline constexpr const char* kTacticalObjectsSocketTransportPlugin = nullptr;\n")
+endif()
+if(TARGET pcl_transport_shared_memory_plugin)
+    string(APPEND _tactical_codec_paths_header
+        "inline constexpr const char* kTacticalObjectsShmTransportPlugin = \"$<TARGET_FILE:pcl_transport_shared_memory_plugin>\";\n")
+else()
+    string(APPEND _tactical_codec_paths_header
+        "inline constexpr const char* kTacticalObjectsShmTransportPlugin = nullptr;\n")
+endif()
 file(GENERATE
     OUTPUT ${TACTICAL_OBJECTS_GENERATED_DIR}/tactical_objects_codec_plugin_paths.hpp
     CONTENT "${_tactical_codec_paths_header}")
@@ -105,18 +121,25 @@ if(_tactical_codec_plugin_targets)
   add_dependencies(tactical_objects_test_client ${_tactical_codec_plugin_targets})
 endif()
 
+# The app loads its transport (socket/shm) from .so plugins at run time, so it
+# links no transport library -- only the component, framework and codecs.
 target_link_libraries(tactical_objects_app
     PRIVATE
         tactical_objects
         tactical_objects_component
-        pcl_transport_shared_memory
-        pcl_transport_socket
         pyramid_generated_codecs
         pyramid_flatbuffers_support
 )
 if(TARGET pyramid_protobuf_support)
   target_link_libraries(tactical_objects_app PRIVATE pyramid_protobuf_support)
 endif()
+# Ensure the transport plugins the app loads at run time are built first.
+foreach(_tactical_transport_plugin IN ITEMS
+        pcl_transport_socket_plugin pcl_transport_shared_memory_plugin)
+  if(TARGET ${_tactical_transport_plugin})
+    add_dependencies(tactical_objects_app ${_tactical_transport_plugin})
+  endif()
+endforeach()
 
 target_include_directories(tactical_objects_app
     PRIVATE
@@ -128,16 +151,18 @@ target_include_directories(tactical_objects_app
 target_compile_features(tactical_objects_app PRIVATE cxx_std_14)
 
 # Plugin-only client: links the framework + the native<->C-struct marshalling
-# ONLY. The codec (JSON/FlatBuffers) is loaded from a .so at runtime, so the
-# client links neither a wire codec nor FlatBuffers. (Transport is still linked
-# statically here; migrating the client to load the transport plugin removes
-# pcl_transport_socket too.)
+# ONLY. The codec (JSON/FlatBuffers) AND the transport (socket) are both loaded
+# from .so plugins at runtime, so the client links neither a wire codec, nor
+# FlatBuffers, nor any transport library -- only pcl_core + marshalling.
 target_link_libraries(tactical_objects_test_client
     PRIVATE
         pcl_core
-        pcl_transport_socket
         pyramid_generated_marshal
 )
+# The client loads the socket transport plugin at runtime; ensure it is built.
+if(TARGET pcl_transport_socket_plugin)
+  add_dependencies(tactical_objects_test_client pcl_transport_socket_plugin)
+endif()
 
 target_include_directories(tactical_objects_test_client
     PRIVATE

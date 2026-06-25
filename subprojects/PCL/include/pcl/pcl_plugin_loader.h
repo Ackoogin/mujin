@@ -22,8 +22,12 @@ typedef struct pcl_plugin_handle_t pcl_plugin_handle_t;
 ///
 /// The loaded plugin remains owned by \p out_handle on success.  The registry
 /// borrows the codec vtable pointer, so the handle must remain loaded while
-/// the registered codec may be used.
+/// the registered codec may be used.  \p config_json is opaque, plugin-specific
+/// configuration threaded into the plugin's entry point (uniform with
+/// \ref pcl_plugin_load_transport); it may be NULL when no configuration is
+/// supplied.
 pcl_status_t pcl_plugin_load_codec(const char*             path,
+                                   const char*             config_json,
                                    pcl_codec_registry_t*   registry,
                                    pcl_plugin_handle_t**   out_handle);
 
@@ -44,6 +48,20 @@ pcl_status_t pcl_codec_registry_load_plugins_from_paths(
 pcl_status_t pcl_codec_registry_load_plugins_from_env(
     pcl_codec_registry_t* registry,
     const char*           env_var);
+
+/// \brief Load codec plugins listed in a manifest file.
+///
+/// The manifest is a newline-separated list of plugin paths.  Blank lines and
+/// lines whose first non-space character is '#' are ignored, and surrounding
+/// whitespace is trimmed.  Individual paths that do not load as codec plugins
+/// (for example a transport plugin listed in a shared manifest) are skipped, so
+/// a single deployment manifest may enumerate every plugin for a component.
+///
+/// A missing manifest file is reported as PCL_ERR_NOT_FOUND; an empty or
+/// comment-only manifest is PCL_OK with nothing loaded.
+pcl_status_t pcl_codec_registry_load_plugins_from_manifest(
+    pcl_codec_registry_t* registry,
+    const char*           manifest_path);
 
 /// \brief Load a transport plugin and return its transport vtable.
 ///

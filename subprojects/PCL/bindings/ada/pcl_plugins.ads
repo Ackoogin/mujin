@@ -12,7 +12,7 @@ with Pcl_Bindings;
 with System;
 
 package Pcl_Plugins is
-  Pcl_Codec_Abi_Version     : constant Interfaces.C.unsigned := 1;
+  Pcl_Codec_Abi_Version     : constant Interfaces.C.unsigned := 2;
   Pcl_Transport_Abi_Version : constant Interfaces.C.unsigned := 1;
 
   type Pcl_Codec_Encode_Access is access function
@@ -72,11 +72,25 @@ package Pcl_Plugins is
                 "pcl_codec_registry_default");
 
   function Pcl_Plugin_Load_Codec
-    (Path       : Interfaces.C.Strings.chars_ptr;
-     Registry   : System.Address;
-     Out_Handle : access System.Address) return Pcl_Bindings.Pcl_Status;
+    (Path        : Interfaces.C.Strings.chars_ptr;
+     Config_Json : Interfaces.C.Strings.chars_ptr;
+     Registry    : System.Address;
+     Out_Handle  : access System.Address) return Pcl_Bindings.Pcl_Status;
   pragma Import(C, Pcl_Plugin_Load_Codec,
                 "pcl_plugin_load_codec");
+
+  --  Load a transport plugin and return its borrowed transport vtable.
+  --  Config_Json is opaque, plugin-specific configuration (uniform with the
+  --  codec plugin loader); for the socket transport plugin it carries role,
+  --  host, port and the executor pointer.
+  function Pcl_Plugin_Load_Transport
+    (Path        : Interfaces.C.Strings.chars_ptr;
+     Config_Json : Interfaces.C.Strings.chars_ptr;
+     Out_Handle  : access System.Address;
+     Out_Vtable  : access Pcl_Bindings.Pcl_Transport_Const_Access)
+      return Pcl_Bindings.Pcl_Status;
+  pragma Import(C, Pcl_Plugin_Load_Transport,
+                "pcl_plugin_load_transport");
 
   procedure Pcl_Plugin_Unload(Handle : System.Address);
   pragma Import(C, Pcl_Plugin_Unload, "pcl_plugin_unload");

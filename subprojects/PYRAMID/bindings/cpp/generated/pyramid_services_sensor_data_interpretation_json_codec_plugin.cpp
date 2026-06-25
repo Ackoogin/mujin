@@ -439,7 +439,7 @@ static void plugin_free_msg(void* codec_ctx, pcl_msg_t* msg)
     msg->type_name = nullptr;
 }
 
-static const pcl_codec_t k_codec = {
+static pcl_codec_t k_codec = {
     PCL_CODEC_ABI_VERSION,
     "application/json",
     plugin_encode,
@@ -448,8 +448,15 @@ static const pcl_codec_t k_codec = {
     nullptr
 };
 
-PCL_CODEC_PLUGIN_EXPORT const pcl_codec_t* pcl_codec_plugin_entry(void)
+// Opaque, plugin-specific configuration threaded through the loader.
+// Stored here and exposed via codec_ctx so encode/decode can honor it.
+static std::string k_config_json;
+
+PCL_CODEC_PLUGIN_EXPORT const pcl_codec_t* pcl_codec_plugin_entry(
+    const char* config_json)
 {
+    k_config_json = config_json ? config_json : "";
+    k_codec.codec_ctx = k_config_json.empty() ? nullptr : &k_config_json;
     return &k_codec;
 }
 

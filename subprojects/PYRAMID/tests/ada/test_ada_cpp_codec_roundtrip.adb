@@ -142,7 +142,8 @@ procedure Test_Ada_Cpp_Codec_Roundtrip is
               "registry create returned null");
 
       Assert (Pcl_Plugins.Pcl_Plugin_Load_Codec
-                (Path_C, Registry, Handle'Access) = Pcl_Bindings.PCL_OK,
+                (Path_C, Interfaces.C.Strings.Null_Ptr, Registry,
+                 Handle'Access) = Pcl_Bindings.PCL_OK,
               "pcl_plugin_load_codec failed");
       Assert (Handle /= System.Null_Address, "plugin handle is null");
 
