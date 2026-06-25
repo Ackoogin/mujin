@@ -1,5 +1,17 @@
 # Handover: Plugin-Only Binding Model (Option A — marshal to a C ABI)
 
+> **UPDATE 2026-06-25 — implementation complete (one residual).** The end state
+> below is now implemented and verified (`build-flatbuffers-only` → **587/587**).
+> Clients (C++ and Ada) call the generated services with clean native types;
+> all marshalling/codec/transport/plugin detail is hidden. One cross-language
+> codec plugin `.so` serves both languages — **there is no separate Ada plugin**.
+> C++ is strictly plugin-only/fail-closed; transport is a loadable plugin too
+> (gRPC coupled target gated behind `PYRAMID_ENABLE_GRPC`). **Sole residual:**
+> Ada scalar aliases still use a facade-internal path rather than crossing to
+> the plugin as `pyramid_str_t` (hidden from the client; not yet fail-closed).
+> Full diagrams + status: [`plugin_binding_end_state_review.md`](./plugin_binding_end_state_review.md).
+> Commits: `dbc40fa`, `d0d3149`, `53b2cc3`, `c76405a`.
+
 Status: 2026-06-24. Branch `feat/transport-codec-plugin-strategy-a`.
 Companion to
 [`transport_codec_plugin_transition.md`](./transport_codec_plugin_transition.md)
