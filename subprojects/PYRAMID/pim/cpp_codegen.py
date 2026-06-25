@@ -659,7 +659,7 @@ class CppServiceGenerator:
             for key in topic_keys:
                 root_types.append(topic_spec(key).full_type)
 
-        result: List[Tuple[str, str, bool, str]] = []
+        result: List[Tuple[str, str, bool, str, bool]] = []
         seen_schema_ids = set()
         for type_name in root_types:
             short = type_name.split('.')[-1]
@@ -677,8 +677,32 @@ class CppServiceGenerator:
                         full_type = f'{pf.package}.{msg.name}'
                         break
 
-            result.append((short, full_type, short in aliases, aliases.get(short, '')))
+            result.append((short, full_type, short in aliases,
+                           aliases.get(short, ''), False))
             seen_schema_ids.add(short)
+
+        for pf in service_files:
+            for svc in pf.services:
+                for rpc in svc.rpcs:
+                    if not (getattr(rpc, 'streaming', False)
+                            or getattr(rpc, 'server_streaming', False)):
+                        continue
+                    elem_short = rpc.response_type.split('.')[-1]
+                    array_schema = elem_short + 'Array'
+                    if array_schema in seen_schema_ids:
+                        continue
+                    msg = (index.resolve_message(rpc.response_type)
+                           or index.resolve_message(elem_short))
+                    if msg is None:
+                        continue
+                    full_type = rpc.response_type
+                    if '.' not in full_type:
+                        for dm_pf in index.files:
+                            if any(m.name == msg.name for m in dm_pf.messages):
+                                full_type = f'{dm_pf.package}.{msg.name}'
+                                break
+                    result.append((array_schema, full_type, False, '', True))
+                    seen_schema_ids.add(array_schema)
 
         return file_base, cpp_base_ns, result
 
@@ -721,13 +745,13 @@ class CppServiceGenerator:
         is_json = backend == 'json'
         json_headers = sorted({
             _json_codec_header_for_type(full_type)
-            for _short, full_type, is_alias, _alias_cpp in codec_types
+            for _short, full_type, is_alias, _alias_cpp, _is_array in codec_types
             if not is_alias and _json_codec_header_for_type(full_type)
         })
         cabi_marshal_headers = sorted({
             '.'.join(full_type.split('.')[:-1]).replace('.', '_')
             + '_cabi_marshal.hpp'
-            for _short, full_type, is_alias, _alias_cpp in codec_types
+            for _short, full_type, is_alias, _alias_cpp, _is_array in codec_types
             if not is_alias and '.' in full_type
         })
         flatbuffers_codec_ns = cpp_base_ns + '::flatbuffers_codec'
@@ -751,11 +775,13 @@ class CppServiceGenerator:
             f.write('\n')
             f.write('extern "C" {\n')
             f.write('#include <pcl/pcl_codec.h>\n')
+            f.write('#include "pyramid_datamodel_cabi.h"\n')
             f.write('}\n\n')
             f.write('#include <cstdlib>\n')
             f.write('#include <cstring>\n')
             f.write('#include <limits>\n')
-            f.write('#include <string>\n\n')
+            f.write('#include <string>\n')
+            f.write('#include <vector>\n\n')
             f.write('#if defined(_WIN32)\n')
             f.write('#  define PCL_CODEC_PLUGIN_EXPORT __declspec(dllexport)\n')
             f.write('#elif defined(__GNUC__) || defined(__clang__)\n')
@@ -815,25 +841,76 @@ class CppServiceGenerator:
             f.write('        return PCL_ERR_INVALID;\n')
             f.write('    }\n')
             f.write('    try {\n')
-            for short, full_type, is_alias, _alias_cpp in codec_types:
+            for short, full_type, is_alias, _alias_cpp, is_array in codec_types:
                 if is_alias:
-                    # Scalar aliases stay on the component's static codec path;
-                    # they do not cross the C-ABI typed-value boundary.
-                    continue
-                cpp_type = f'data_model::{short}'
-                c_struct = f'pyramid_{short}_c'
-                f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
-                f.write(f'            const auto* cs = static_cast<const {c_struct}*>(value);\n')
-                f.write(f'            {cpp_type} native;\n')
-                f.write('            pyramid::cabi::from_c(cs, native);\n')
-                if is_json:
+                    cpp_type = f'data_model::{short}'
+                    f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
+                    if _alias_cpp == 'std::string':
+                        f.write('            const auto* cs = static_cast<const pyramid_str_t*>(value);\n')
+                        f.write('            const char* data = cs && cs->ptr ? cs->ptr : "";\n')
+                        f.write(f'            {cpp_type} native(data, cs ? cs->len : 0u);\n')
+                    else:
+                        f.write(f'            const auto* native = static_cast<const {cpp_type}*>(value);\n')
+                        f.write('            if (!native) {\n')
+                        f.write('                return PCL_ERR_INVALID;\n')
+                        f.write('            }\n')
+                    if is_json:
+                        if _alias_cpp == 'std::string':
+                            f.write('            return assign_payload(scalar_to_json(native),\n')
+                        else:
+                            f.write('            return assign_payload(scalar_to_json(*native),\n')
+                        f.write(f'                                  "{content_type}", out_msg);\n')
+                    else:
+                        if _alias_cpp == 'std::string':
+                            f.write('            return assign_payload(flatbuffers_codec::toBinary(native),\n')
+                        else:
+                            f.write('            return assign_payload(flatbuffers_codec::toBinary(*native),\n')
+                        f.write(f'                                  "{content_type}", out_msg);\n')
+                    f.write('        }\n')
+                elif is_array:
+                    elem_short = short[:-len('Array')]
+                    cpp_type = f'data_model::{elem_short}'
+                    c_struct = f'pyramid_{elem_short}_c'
                     codec_ns = _json_codec_namespace_for_type(full_type)
-                    f.write(f'            return assign_payload({codec_ns}::toJson(native),\n')
-                    f.write(f'                                  "{content_type}", out_msg);\n')
+                    f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
+                    f.write('            const auto* slice = static_cast<const pyramid_slice_t*>(value);\n')
+                    f.write('            if (!slice || (!slice->ptr && slice->len != 0u)) {\n')
+                    f.write('                return PCL_ERR_INVALID;\n')
+                    f.write('            }\n')
+                    f.write(f'            const auto* values = static_cast<const {c_struct}*>(slice->ptr);\n')
+                    f.write(f'            std::vector<{cpp_type}> native;\n')
+                    f.write('            native.reserve(slice->len);\n')
+                    f.write('            for (uint32_t i = 0; i < slice->len; ++i) {\n')
+                    f.write(f'                {cpp_type} item;\n')
+                    f.write('                pyramid::cabi::from_c(&values[i], item);\n')
+                    f.write('                native.push_back(std::move(item));\n')
+                    f.write('            }\n')
+                    if is_json:
+                        f.write('            nlohmann::json arr = nlohmann::json::array();\n')
+                        f.write('            for (const auto& item : native) {\n')
+                        f.write(f'                arr.push_back(nlohmann::json::parse({codec_ns}::toJson(item)));\n')
+                        f.write('            }\n')
+                        f.write('            return assign_payload(arr.dump(),\n')
+                        f.write(f'                                  "{content_type}", out_msg);\n')
+                    else:
+                        f.write('            return assign_payload(flatbuffers_codec::toBinary(native),\n')
+                        f.write(f'                                  "{content_type}", out_msg);\n')
+                    f.write('        }\n')
                 else:
-                    f.write('            return assign_payload(flatbuffers_codec::toBinary(native),\n')
-                    f.write(f'                                  "{content_type}", out_msg);\n')
-                f.write('        }\n')
+                    cpp_type = f'data_model::{short}'
+                    c_struct = f'pyramid_{short}_c'
+                    f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
+                    f.write(f'            const auto* cs = static_cast<const {c_struct}*>(value);\n')
+                    f.write(f'            {cpp_type} native;\n')
+                    f.write('            pyramid::cabi::from_c(cs, native);\n')
+                    if is_json:
+                        codec_ns = _json_codec_namespace_for_type(full_type)
+                        f.write(f'            return assign_payload({codec_ns}::toJson(native),\n')
+                        f.write(f'                                  "{content_type}", out_msg);\n')
+                    else:
+                        f.write('            return assign_payload(flatbuffers_codec::toBinary(native),\n')
+                        f.write(f'                                  "{content_type}", out_msg);\n')
+                    f.write('        }\n')
             f.write('    } catch (...) {\n')
             f.write('        return PCL_ERR_CALLBACK;\n')
             f.write('    }\n')
@@ -853,24 +930,92 @@ class CppServiceGenerator:
             f.write('        const std::string payload = msg->data\n')
             f.write('            ? std::string(static_cast<const char*>(msg->data), msg->size)\n')
             f.write('            : std::string();\n')
-            for short, full_type, is_alias, _alias_cpp in codec_types:
+            for short, full_type, is_alias, _alias_cpp, is_array in codec_types:
                 if is_alias:
-                    continue
-                cpp_type = f'data_model::{short}'
-                c_struct = f'pyramid_{short}_c'
-                f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
-                f.write(f'            {cpp_type} native;\n')
-                if is_json:
+                    cpp_type = f'data_model::{short}'
+                    f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
+                    f.write(f'            {cpp_type} native;\n')
+                    if is_json:
+                        f.write(f'            native = scalar_from_json<{cpp_type}>(payload);\n')
+                    else:
+                        f.write(f'            native = flatbuffers_codec::fromBinary{short}(\n')
+                        f.write('                msg->data, msg->size);\n')
+                    if _alias_cpp == 'std::string':
+                        f.write('            auto* cs = static_cast<pyramid_str_t*>(out_value);\n')
+                        f.write('            cs->ptr = nullptr;\n')
+                        f.write('            cs->len = 0u;\n')
+                        f.write('            if (native.size() > std::numeric_limits<uint32_t>::max()) {\n')
+                        f.write('                return PCL_ERR_INVALID;\n')
+                        f.write('            }\n')
+                        f.write('            if (!native.empty()) {\n')
+                        f.write('                void* copy = std::malloc(native.size());\n')
+                        f.write('                if (!copy) {\n')
+                        f.write('                    return PCL_ERR_NOMEM;\n')
+                        f.write('                }\n')
+                        f.write('                std::memcpy(copy, native.data(), native.size());\n')
+                        f.write('                cs->ptr = static_cast<const char*>(copy);\n')
+                        f.write('                cs->len = static_cast<uint32_t>(native.size());\n')
+                        f.write('            }\n')
+                    else:
+                        f.write(f'            *static_cast<{cpp_type}*>(out_value) = native;\n')
+                    f.write('            return PCL_OK;\n')
+                    f.write('        }\n')
+                elif is_array:
+                    elem_short = short[:-len('Array')]
+                    cpp_type = f'data_model::{elem_short}'
+                    c_struct = f'pyramid_{elem_short}_c'
                     codec_ns = _json_codec_namespace_for_type(full_type)
-                    f.write(f'            native = {codec_ns}::fromJson(\n')
-                    f.write(f'                payload, static_cast<{cpp_type}*>(nullptr));\n')
+                    f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
+                    f.write(f'            std::vector<{cpp_type}> native;\n')
+                    if is_json:
+                        f.write('            const auto arr = nlohmann::json::parse(payload);\n')
+                        f.write('            if (!arr.is_array()) {\n')
+                        f.write('                return PCL_ERR_INVALID;\n')
+                        f.write('            }\n')
+                        f.write('            native.reserve(arr.size());\n')
+                        f.write('            for (const auto& item : arr) {\n')
+                        f.write(f'                native.push_back({codec_ns}::fromJson(\n')
+                        f.write(f'                    item.dump(), static_cast<{cpp_type}*>(nullptr)));\n')
+                        f.write('            }\n')
+                    else:
+                        f.write(f'            native = flatbuffers_codec::fromBinary{short}(\n')
+                        f.write('                msg->data, msg->size);\n')
+                    f.write('            if (native.size() > std::numeric_limits<uint32_t>::max()) {\n')
+                    f.write('                return PCL_ERR_INVALID;\n')
+                    f.write('            }\n')
+                    f.write('            auto* slice = static_cast<pyramid_slice_t*>(out_value);\n')
+                    f.write('            slice->ptr = nullptr;\n')
+                    f.write('            slice->len = 0u;\n')
+                    f.write('            if (!native.empty()) {\n')
+                    f.write(f'                auto* values = static_cast<{c_struct}*>(\n')
+                    f.write(f'                    std::calloc(native.size(), sizeof({c_struct})));\n')
+                    f.write('                if (!values) {\n')
+                    f.write('                    return PCL_ERR_NOMEM;\n')
+                    f.write('                }\n')
+                    f.write('                for (std::size_t i = 0; i < native.size(); ++i) {\n')
+                    f.write('                    pyramid::cabi::to_c(native[i], &values[i]);\n')
+                    f.write('                }\n')
+                    f.write('                slice->ptr = values;\n')
+                    f.write('                slice->len = static_cast<uint32_t>(native.size());\n')
+                    f.write('            }\n')
+                    f.write('            return PCL_OK;\n')
+                    f.write('        }\n')
                 else:
-                    f.write(f'            native = flatbuffers_codec::fromBinary{short}(\n')
-                    f.write('                msg->data, msg->size);\n')
-                f.write(f'            auto* cs = static_cast<{c_struct}*>(out_value);\n')
-                f.write('            pyramid::cabi::to_c(native, cs);\n')
-                f.write('            return PCL_OK;\n')
-                f.write('        }\n')
+                    cpp_type = f'data_model::{short}'
+                    c_struct = f'pyramid_{short}_c'
+                    f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
+                    f.write(f'            {cpp_type} native;\n')
+                    if is_json:
+                        codec_ns = _json_codec_namespace_for_type(full_type)
+                        f.write(f'            native = {codec_ns}::fromJson(\n')
+                        f.write(f'                payload, static_cast<{cpp_type}*>(nullptr));\n')
+                    else:
+                        f.write(f'            native = flatbuffers_codec::fromBinary{short}(\n')
+                        f.write('                msg->data, msg->size);\n')
+                    f.write(f'            auto* cs = static_cast<{c_struct}*>(out_value);\n')
+                    f.write('            pyramid::cabi::to_c(native, cs);\n')
+                    f.write('            return PCL_OK;\n')
+                    f.write('        }\n')
             f.write('    } catch (...) {\n')
             f.write('        return PCL_ERR_CALLBACK;\n')
             f.write('    }\n')
@@ -1401,7 +1546,7 @@ class CppServiceGenerator:
         cabi_marshal_headers = sorted({
             '.'.join(full_type.split('.')[:-1]).replace('.', '_')
             + '_cabi_marshal.hpp'
-            for _short, full_type, is_alias, _alias_cpp in cabi_codec_types
+            for _short, full_type, is_alias, _alias_cpp, _is_array in cabi_codec_types
             if not is_alias and '.' in full_type
         })
 
@@ -1414,14 +1559,6 @@ class CppServiceGenerator:
 
             # Includes
             f.write(f'#include "{hpp_name}"\n\n')
-            if has_flatbuffers:
-                f.write(f'#include "{flatbuffers_codec_header}"\n')
-            if has_protobuf:
-                f.write(f'#include "{protobuf_codec_header}"\n')
-            # Data model codec headers -- for serialisation inside
-            # invoke/publish/dispatch
-            for ch in dm_codec_headers:
-                f.write(f'#include "{ch}"\n')
             # C-ABI marshalling for the typed-value plugin boundary
             for ch in cabi_marshal_headers:
                 f.write(f'#include "{ch}"\n')
@@ -1432,26 +1569,18 @@ class CppServiceGenerator:
             f.write('#include <pcl/pcl_container.h>\n')
             f.write('#include <pcl/pcl_executor.h>\n')
             f.write('#include <pcl/pcl_transport.h>\n')
+            f.write('#include "pyramid_datamodel_cabi.h"\n')
             f.write('}\n')
             f.write('\n#include <cstdlib>\n')
             f.write('#include <cstdint>\n')
             f.write('#include <cstring>\n')
-            f.write('#include <nlohmann/json.hpp>\n')
+            f.write('#include <limits>\n')
             f.write('#include <string>\n')
             f.write('#include <vector>\n\n')
 
             # Namespace open
             f.write(f'namespace {full_ns} {{\n\n')
 
-            # Bring codec functions into scope for unqualified calls
-            f.write('// Bring data model codec functions into scope\n')
-            for ns in dm_codec_nss:
-                f.write(f'using {ns}::toJson;\n')
-                f.write(f'using {ns}::fromJson;\n')
-            if has_flatbuffers:
-                f.write(f'namespace flatbuffers_codec = {flatbuffers_codec_ns};\n')
-            if has_protobuf:
-                f.write(f'namespace protobuf_codec = {protobuf_codec_ns};\n')
             f.write('\n')
 
             # ---- msgToString -------------------------------------------------
@@ -1501,61 +1630,24 @@ class CppServiceGenerator:
             f.write(_SEP + '\n\n')
             f.write('namespace {\n\n')
 
-            f.write('bool is_json_content_type(const char* content_type)\n')
-            f.write('{\n')
-            f.write('    return !content_type || std::strcmp(content_type, kJsonContentType) == 0;\n')
-            f.write('}\n\n')
-
-            if has_flatbuffers:
-                f.write('bool is_flatbuffers_content_type(const char* content_type)\n')
-                f.write('{\n')
-                f.write('    return content_type && std::strcmp(content_type, kFlatBuffersContentType) == 0;\n')
-                f.write('}\n\n')
-
-            if has_protobuf:
-                f.write('bool is_protobuf_content_type(const char* content_type)\n')
-                f.write('{\n')
-                f.write('    return content_type && std::strcmp(content_type, kProtobufContentType) == 0;\n')
-                f.write('}\n\n')
-
-            f.write('std::string json_request_body(const void* data, size_t size)\n')
-            f.write('{\n')
-            f.write('    if (!data && size != 0) return {};\n')
-            f.write('    return std::string(static_cast<const char*>(data), size);\n')
-            f.write('}\n\n')
-
-            f.write('std::string encode_identifier_payload(const Identifier& value)\n')
-            f.write('{\n')
-            f.write('    return nlohmann::json(value).dump();\n')
-            f.write('}\n\n')
-
-            f.write('Identifier decode_identifier_payload(const std::string& payload)\n')
-            f.write('{\n')
-            f.write('    if (payload.empty()) {\n')
-            f.write('        return {};\n')
-            f.write('    }\n')
-            f.write('    try {\n')
-            f.write('        auto j = nlohmann::json::parse(payload);\n')
-            f.write('        if (j.is_string()) {\n')
-            f.write('            return j.get<std::string>();\n')
-            f.write('        }\n')
-            f.write('        if (j.is_object() && j.contains("uuid") && j["uuid"].is_string()) {\n')
-            f.write('            return j["uuid"].get<std::string>();\n')
-            f.write('        }\n')
-            f.write('    } catch (...) {\n')
-            f.write('    }\n')
-            f.write('    return payload;\n')
-            f.write('}\n\n')
-
             # C-ABI typed-value boundary: marshal the native value to its frozen
             # C struct (to_c), hand the C struct to the registry codec, then free.
-            # Decode is symmetric: the plugin fills the C struct, we from_c it into
-            # the native value and free. Schema types not covered here (scalar
-            # aliases) return 0 so the caller falls back to the static codec.
+            # Decode is symmetric: the plugin fills the C representation, we
+            # move it into the native value and free any C-owned storage.
             non_alias_cabi = [
                 (short, full_type)
-                for short, full_type, is_alias, _alias_cpp in cabi_codec_types
-                if not is_alias
+                for short, full_type, is_alias, _alias_cpp, is_array in cabi_codec_types
+                if not is_alias and not is_array
+            ]
+            alias_cabi = [
+                (short, _alias_cpp)
+                for short, _full_type, is_alias, _alias_cpp, _is_array in cabi_codec_types
+                if is_alias
+            ]
+            array_cabi = [
+                (short, full_type)
+                for short, full_type, is_alias, _alias_cpp, is_array in cabi_codec_types
+                if is_array
             ]
 
             f.write('static int pyramid_cabi_encode(const pcl_codec_t* c,\n')
@@ -1563,6 +1655,24 @@ class CppServiceGenerator:
             f.write('                               const void* value,\n')
             f.write('                               pcl_msg_t* out_msg)\n')
             f.write('{\n')
+            for short, alias_cpp in alias_cabi:
+                native = f'{_DATA_MODEL_TYPES_NS}::{short}'
+                f.write(f'    if (std::strcmp(schema_id, "{short}") == 0) {{\n')
+                if alias_cpp == 'std::string':
+                    f.write(f'        const auto& native = *static_cast<const {native}*>(value);\n')
+                    f.write('        if (native.size() > std::numeric_limits<uint32_t>::max()) {\n')
+                    f.write('            return -1;\n')
+                    f.write('        }\n')
+                    f.write('        pyramid_str_t cs;\n')
+                    f.write('        cs.ptr = native.data();\n')
+                    f.write('        cs.len = static_cast<uint32_t>(native.size());\n')
+                    f.write('        const pcl_status_t rc =\n')
+                    f.write('            c->encode(c->codec_ctx, schema_id, &cs, out_msg);\n')
+                else:
+                    f.write('        const pcl_status_t rc =\n')
+                    f.write('            c->encode(c->codec_ctx, schema_id, value, out_msg);\n')
+                f.write('        return rc == PCL_OK ? 1 : -1;\n')
+                f.write('    }\n')
             for short, _full in non_alias_cabi:
                 native = f'{_DATA_MODEL_TYPES_NS}::{short}'
                 c_struct = f'pyramid_{short}_c'
@@ -1575,6 +1685,32 @@ class CppServiceGenerator:
                 f.write(f'        {c_struct}_free(&cs);\n')
                 f.write('        return rc == PCL_OK ? 1 : -1;\n')
                 f.write('    }\n')
+            for short, _full in array_cabi:
+                elem_short = short[:-len('Array')]
+                native = f'{_DATA_MODEL_TYPES_NS}::{elem_short}'
+                c_struct = f'pyramid_{elem_short}_c'
+                f.write(f'    if (std::strcmp(schema_id, "{short}") == 0) {{\n')
+                f.write(f'        const auto& native = *static_cast<const std::vector<{native}>*>(value);\n')
+                f.write('        if (native.size() > std::numeric_limits<uint32_t>::max()) {\n')
+                f.write('            return -1;\n')
+                f.write('        }\n')
+                f.write(f'        std::vector<{c_struct}> values(native.size());\n')
+                f.write('        if (!values.empty()) {\n')
+                f.write('            std::memset(values.data(), 0, values.size() * sizeof(values[0]));\n')
+                f.write('        }\n')
+                f.write('        for (std::size_t i = 0; i < native.size(); ++i) {\n')
+                f.write('            pyramid::cabi::to_c(native[i], &values[i]);\n')
+                f.write('        }\n')
+                f.write('        pyramid_slice_t slice;\n')
+                f.write('        slice.ptr = values.empty() ? nullptr : values.data();\n')
+                f.write('        slice.len = static_cast<uint32_t>(values.size());\n')
+                f.write('        const pcl_status_t rc =\n')
+                f.write('            c->encode(c->codec_ctx, schema_id, &slice, out_msg);\n')
+                f.write('        for (auto& item : values) {\n')
+                f.write(f'            {c_struct}_free(&item);\n')
+                f.write('        }\n')
+                f.write('        return rc == PCL_OK ? 1 : -1;\n')
+                f.write('    }\n')
             f.write('    (void)c; (void)value; (void)out_msg;\n')
             f.write('    return 0;\n')
             f.write('}\n\n')
@@ -1584,6 +1720,26 @@ class CppServiceGenerator:
             f.write('                               const pcl_msg_t* msg,\n')
             f.write('                               void* out_value)\n')
             f.write('{\n')
+            for short, alias_cpp in alias_cabi:
+                native = f'{_DATA_MODEL_TYPES_NS}::{short}'
+                f.write(f'    if (std::strcmp(schema_id, "{short}") == 0) {{\n')
+                if alias_cpp == 'std::string':
+                    f.write('        pyramid_str_t cs;\n')
+                    f.write('        std::memset(&cs, 0, sizeof(cs));\n')
+                    f.write('        if (c->decode(c->codec_ctx, schema_id, msg, &cs)\n')
+                    f.write('                != PCL_OK) {\n')
+                    f.write('            return -1;\n')
+                    f.write('        }\n')
+                    f.write(f'        auto* native = static_cast<{native}*>(out_value);\n')
+                    f.write('        native->assign(cs.ptr ? cs.ptr : "", cs.len);\n')
+                    f.write('        std::free(const_cast<char*>(cs.ptr));\n')
+                else:
+                    f.write('        if (c->decode(c->codec_ctx, schema_id, msg, out_value)\n')
+                    f.write('                != PCL_OK) {\n')
+                    f.write('            return -1;\n')
+                    f.write('        }\n')
+                f.write('        return 1;\n')
+                f.write('    }\n')
             for short, _full in non_alias_cabi:
                 native = f'{_DATA_MODEL_TYPES_NS}::{short}'
                 c_struct = f'pyramid_{short}_c'
@@ -1598,6 +1754,30 @@ class CppServiceGenerator:
                 f.write(f'        pyramid::cabi::from_c(\n')
                 f.write(f'            &cs, *static_cast<{native}*>(out_value));\n')
                 f.write(f'        {c_struct}_free(&cs);\n')
+                f.write('        return 1;\n')
+                f.write('    }\n')
+            for short, _full in array_cabi:
+                elem_short = short[:-len('Array')]
+                native = f'{_DATA_MODEL_TYPES_NS}::{elem_short}'
+                c_struct = f'pyramid_{elem_short}_c'
+                f.write(f'    if (std::strcmp(schema_id, "{short}") == 0) {{\n')
+                f.write('        pyramid_slice_t slice;\n')
+                f.write('        std::memset(&slice, 0, sizeof(slice));\n')
+                f.write('        if (c->decode(c->codec_ctx, schema_id, msg, &slice)\n')
+                f.write('                != PCL_OK) {\n')
+                f.write('            return -1;\n')
+                f.write('        }\n')
+                f.write(f'        auto* native = static_cast<std::vector<{native}>*>(out_value);\n')
+                f.write('        native->clear();\n')
+                f.write('        native->reserve(slice.len);\n')
+                f.write(f'        auto* values = static_cast<{c_struct}*>(const_cast<void*>(slice.ptr));\n')
+                f.write('        for (uint32_t i = 0; i < slice.len; ++i) {\n')
+                f.write(f'            {native} item;\n')
+                f.write('            pyramid::cabi::from_c(&values[i], item);\n')
+                f.write('            native->push_back(std::move(item));\n')
+                f.write(f'            {c_struct}_free(&values[i]);\n')
+                f.write('        }\n')
+                f.write('        std::free(values);\n')
                 f.write('        return 1;\n')
                 f.write('    }\n')
             f.write('    (void)c; (void)msg; (void)out_value;\n')
@@ -1630,7 +1810,11 @@ class CppServiceGenerator:
             f.write('        m.type_name = nullptr;\n')
             f.write('        const int r = pyramid_cabi_encode(c, schema_id, value, &m);\n')
             f.write('        if (r == 1) {\n')
-            f.write('            out->assign(static_cast<const char*>(m.data), m.size);\n')
+            f.write('            if (m.data && m.size != 0) {\n')
+            f.write('                out->assign(static_cast<const char*>(m.data), m.size);\n')
+            f.write('            } else {\n')
+            f.write('                out->clear();\n')
+            f.write('            }\n')
             f.write('            if (c->free_msg) {\n')
             f.write('                c->free_msg(c->codec_ctx, &m);\n')
             f.write('            }\n')
@@ -1713,30 +1897,26 @@ class CppServiceGenerator:
             f.write(_SEP + '\n\n')
             f.write('std::vector<const char*> supportedContentTypes()\n')
             f.write('{\n')
-            f.write('    std::vector<const char*> result{kJsonContentType};\n')
+            f.write('    std::vector<const char*> result;\n')
+            f.write('    pcl_codec_registry_t* reg = pcl_codec_registry_default();\n')
+            f.write('    if (pcl_codec_registry_get(reg, kJsonContentType) != nullptr) {\n')
+            f.write('        result.push_back(kJsonContentType);\n')
+            f.write('    }\n')
             if has_flatbuffers:
-                f.write('    result.push_back(kFlatBuffersContentType);\n')
+                f.write('    if (pcl_codec_registry_get(reg, kFlatBuffersContentType) != nullptr) {\n')
+                f.write('        result.push_back(kFlatBuffersContentType);\n')
+                f.write('    }\n')
             if has_protobuf:
-                f.write('    result.push_back(kProtobufContentType);\n')
+                f.write('    if (pcl_codec_registry_get(reg, kProtobufContentType) != nullptr) {\n')
+                f.write('        result.push_back(kProtobufContentType);\n')
+                f.write('    }\n')
             f.write('    return result;\n')
             f.write('}\n\n')
             f.write('bool supportsContentType(const char* content_type)\n')
             f.write('{\n')
-            f.write('    if (is_json_content_type(content_type)) {\n')
-            f.write('        return true;\n')
-            f.write('    }\n')
-            if has_flatbuffers:
-                f.write('    if (is_flatbuffers_content_type(content_type)) {\n')
-                f.write('        return true;\n')
-                f.write('    }\n')
-            if has_protobuf:
-                f.write('    if (is_protobuf_content_type(content_type)) {\n')
-                f.write('        return true;\n')
-                f.write('    }\n')
-            f.write('    if (pcl_codec_registry_get(pcl_codec_registry_default(), content_type) != nullptr) {\n')
-            f.write('        return true;\n')
-            f.write('    }\n')
-            f.write('    return false;\n')
+            f.write('    return content_type\n')
+            f.write('        && pcl_codec_registry_get(pcl_codec_registry_default(), content_type)\n')
+            f.write('            != nullptr;\n')
             f.write('}\n\n')
 
             # Subscribe wrappers (unchanged)
@@ -1785,47 +1965,11 @@ class CppServiceGenerator:
                     f.write('    if (!msg || !msg->data || msg->size == 0 || !out) {\n')
                     f.write('        return false;\n')
                     f.write('    }\n')
-                    if not rpc.streaming:
-                        f.write(f'    {{ int r = pyramid_try_registry_decode(msg, "{rsp_raw_t}", out); if (r == 1) return true; }}\n')
-                    f.write('    try {\n')
-                    f.write('        if (!is_json_content_type(msg->type_name)) {\n')
-                    if has_flatbuffers:
-                        f.write('            if (is_flatbuffers_content_type(msg->type_name)) {\n')
-                        if rpc.streaming:
-                            f.write(f'                *out = flatbuffers_codec::fromBinary{rsp_raw_t}Array(msg->data, msg->size);\n')
-                        else:
-                            f.write(f'                *out = flatbuffers_codec::fromBinary{rsp_raw_t}(msg->data, msg->size);\n')
-                        f.write('                return true;\n')
-                        f.write('            }\n')
-                    if has_protobuf:
-                        f.write('            if (is_protobuf_content_type(msg->type_name)) {\n')
-                        if rpc.streaming:
-                            f.write(f'                *out = protobuf_codec::fromBinary{rsp_raw_t}Array(msg->data, msg->size);\n')
-                        else:
-                            f.write(f'                *out = protobuf_codec::fromBinary{rsp_raw_t}(msg->data, msg->size);\n')
-                        f.write('                return true;\n')
-                        f.write('            }\n')
-                    f.write('            return false;\n')
-                    f.write('        }\n')
-                    f.write('        const std::string payload = msgToString(msg->data, msg->size);\n')
                     if rpc.streaming:
-                        f.write('        const auto arr = nlohmann::json::parse(payload);\n')
-                        f.write('        out->clear();\n')
-                        f.write('        for (const auto& item : arr) {\n')
-                        if rsp_decl_t == 'std::vector<Identifier>':
-                            f.write('            out->push_back(decode_identifier_payload(item.dump()));\n')
-                        else:
-                            f.write(f'            out->push_back(fromJson(item.dump(), static_cast<{rsp_raw_t}*>(nullptr)));\n')
-                        f.write('        }\n')
+                        f.write(f'    {{ int r = pyramid_try_registry_decode(msg, "{rsp_raw_t}Array", out); if (r == 1) return true; }}\n')
                     else:
-                        if rsp_decl_t == 'Identifier':
-                            f.write('        *out = decode_identifier_payload(payload);\n')
-                        else:
-                            f.write(f'        *out = fromJson(payload, static_cast<{rsp_raw_t}*>(nullptr));\n')
-                    f.write('        return true;\n')
-                    f.write('    } catch (...) {\n')
-                    f.write('        return false;\n')
-                    f.write('    }\n')
+                        f.write(f'    {{ int r = pyramid_try_registry_decode(msg, "{rsp_raw_t}", out); if (r == 1) return true; }}\n')
+                    f.write('    return false;\n')
                     f.write('}\n\n')
 
                     if rpc.streaming:
@@ -1847,21 +1991,7 @@ class CppServiceGenerator:
                         f.write('        return false;\n')
                         f.write('    }\n')
                         f.write(f'    {{ int r = pyramid_try_registry_encode(content_type, "{rpc.raw_rsp_type}", &payload, out); if (r == 1) return true; }}\n')
-                        f.write('    if (is_json_content_type(content_type)) {\n')
-                        if frame_t == 'Identifier':
-                            f.write('        *out = encode_identifier_payload(payload);\n')
-                        else:
-                            f.write('        *out = toJson(payload);\n')
-                        if has_flatbuffers:
-                            f.write('    } else if (is_flatbuffers_content_type(content_type)) {\n')
-                            f.write('        *out = flatbuffers_codec::toBinary(payload);\n')
-                        if has_protobuf:
-                            f.write('    } else if (is_protobuf_content_type(content_type)) {\n')
-                            f.write('        *out = protobuf_codec::toBinary(payload);\n')
-                        f.write('    } else {\n')
-                        f.write('        return false;\n')
-                        f.write('    }\n')
-                        f.write('    return true;\n')
+                        f.write('    return false;\n')
                         f.write('}\n\n')
 
                         col = len(f'bool {decode_frame}(')
@@ -1873,29 +2003,7 @@ class CppServiceGenerator:
                         f.write('        return false;\n')
                         f.write('    }\n')
                         f.write(f'    {{ int r = pyramid_try_registry_decode(msg, "{rpc.raw_rsp_type}", out); if (r == 1) return true; }}\n')
-                        f.write('    try {\n')
-                        f.write('        if (!is_json_content_type(msg->type_name)) {\n')
-                        if has_flatbuffers:
-                            f.write('            if (is_flatbuffers_content_type(msg->type_name)) {\n')
-                            f.write(f'                *out = flatbuffers_codec::fromBinary{rpc.raw_rsp_type}(msg->data, msg->size);\n')
-                            f.write('                return true;\n')
-                            f.write('            }\n')
-                        if has_protobuf:
-                            f.write('            if (is_protobuf_content_type(msg->type_name)) {\n')
-                            f.write(f'                *out = protobuf_codec::fromBinary{rpc.raw_rsp_type}(msg->data, msg->size);\n')
-                            f.write('                return true;\n')
-                            f.write('            }\n')
-                        f.write('            return false;\n')
-                        f.write('        }\n')
-                        f.write('        const std::string payload = msgToString(msg->data, msg->size);\n')
-                        if frame_t == 'Identifier':
-                            f.write('        *out = decode_identifier_payload(payload);\n')
-                        else:
-                            f.write(f'        *out = fromJson(payload, static_cast<{rpc.raw_rsp_type}*>(nullptr));\n')
-                        f.write('        return true;\n')
-                        f.write('    } catch (...) {\n')
-                        f.write('        return false;\n')
-                        f.write('    }\n')
+                        f.write('    return false;\n')
                         f.write('}\n\n')
 
                         col = 13 + len(send_frame) + 1
@@ -1942,19 +2050,8 @@ class CppServiceGenerator:
                     f.write(f'{sp}const char*       content_type)\n')
                     f.write('{\n')
                     f.write('    std::string payload;\n')
-                    f.write('    if (is_json_content_type(content_type)) {\n')
-                    if req_decl_t == 'Identifier':
-                        f.write('        payload = encode_identifier_payload(request);\n')
-                    else:
-                        f.write('        payload = toJson(request);\n')
-                    if has_flatbuffers:
-                        f.write('    } else if (is_flatbuffers_content_type(content_type)) {\n')
-                        f.write('        payload = flatbuffers_codec::toBinary(request);\n')
-                    if has_protobuf:
-                        f.write('    } else if (is_protobuf_content_type(content_type)) {\n')
-                        f.write('        payload = protobuf_codec::toBinary(request);\n')
-                    f.write('    } else {\n')
-                    f.write('        return PCL_ERR_INVALID;\n')
+                    f.write(f'    if (pyramid_try_registry_encode(content_type, "{rpc.raw_req_type}", &request, &payload) != 1) {{\n')
+                    f.write('        return PCL_ERR_NOT_FOUND;\n')
                     f.write('    }\n')
                     f.write('    return invoke_async(executor,'
                             f' {service_const},'
@@ -1991,19 +2088,8 @@ class CppServiceGenerator:
                         f.write(f'{sp}const char*       content_type)\n')
                         f.write('{\n')
                         f.write('    std::string payload;\n')
-                        f.write('    if (is_json_content_type(content_type)) {\n')
-                        if req_decl_t == 'Identifier':
-                            f.write('        payload = encode_identifier_payload(request);\n')
-                        else:
-                            f.write('        payload = toJson(request);\n')
-                        if has_flatbuffers:
-                            f.write('    } else if (is_flatbuffers_content_type(content_type)) {\n')
-                            f.write('        payload = flatbuffers_codec::toBinary(request);\n')
-                        if has_protobuf:
-                            f.write('    } else if (is_protobuf_content_type(content_type)) {\n')
-                            f.write('        payload = protobuf_codec::toBinary(request);\n')
-                        f.write('    } else {\n')
-                        f.write('        return PCL_ERR_INVALID;\n')
+                        f.write(f'    if (pyramid_try_registry_encode(content_type, "{rpc.raw_req_type}", &request, &payload) != 1) {{\n')
+                        f.write('        return PCL_ERR_NOT_FOUND;\n')
                         f.write('    }\n')
                         f.write('    if (route) {\n')
                         f.write('        const pcl_status_t route_rc = pcl_executor_set_endpoint_route(executor, route);\n')
@@ -2041,35 +2127,9 @@ class CppServiceGenerator:
                     f.write('    if (!out) {\n')
                     f.write('        return false;\n')
                     f.write('    }\n')
-                    if not spec.is_array:
-                        f.write(f'    {{ int r = pyramid_try_registry_encode(content_type, "{spec.short_type}", &payload, out); if (r == 1) return true; }}\n')
-                    f.write('    std::string wire_payload;\n')
-                    f.write('    if (is_json_content_type(content_type)) {\n')
-                    if spec.is_array:
-                        f.write('        wire_payload = "[";\n')
-                        f.write('        bool first = true;\n')
-                        f.write('        for (const auto& item : payload) {\n')
-                        f.write('            if (!first) wire_payload += ",";\n')
-                        f.write('            first = false;\n')
-                        f.write('            wire_payload += toJson(item);\n')
-                        f.write('        }\n')
-                        f.write('        wire_payload += "]";\n')
-                    else:
-                        if spec.short_type == 'Identifier':
-                            f.write('        wire_payload = encode_identifier_payload(payload);\n')
-                        else:
-                            f.write('        wire_payload = toJson(payload);\n')
-                    if has_flatbuffers:
-                        f.write('    } else if (is_flatbuffers_content_type(content_type)) {\n')
-                        f.write('        wire_payload = flatbuffers_codec::toBinary(payload);\n')
-                    if has_protobuf:
-                        f.write('    } else if (is_protobuf_content_type(content_type)) {\n')
-                        f.write('        wire_payload = protobuf_codec::toBinary(payload);\n')
-                    f.write('    } else {\n')
-                    f.write('        return false;\n')
-                    f.write('    }\n')
-                    f.write('    *out = wire_payload;\n')
-                    f.write('    return true;\n')
+                    topic_schema = spec.short_type + ('Array' if spec.is_array else '')
+                    f.write(f'    {{ int r = pyramid_try_registry_encode(content_type, "{topic_schema}", &payload, out); if (r == 1) return true; }}\n')
+                    f.write('    return false;\n')
                     f.write('}\n\n')
 
                     col = 13 + len(fname) + 1
@@ -2107,47 +2167,8 @@ class CppServiceGenerator:
                     f.write('    if (!msg || !msg->data || msg->size == 0 || !out) {\n')
                     f.write('        return false;\n')
                     f.write('    }\n')
-                    if not spec.is_array:
-                        f.write(f'    {{ int r = pyramid_try_registry_decode(msg, "{spec.short_type}", out); if (r == 1) return true; }}\n')
-                    f.write('    try {\n')
-                    f.write('        if (!is_json_content_type(msg->type_name)) {\n')
-                    if has_flatbuffers:
-                        f.write('            if (is_flatbuffers_content_type(msg->type_name)) {\n')
-                        if spec.is_array:
-                            f.write(f'                *out = flatbuffers_codec::fromBinary{spec.short_type}Array(msg->data, msg->size);\n')
-                        else:
-                            f.write(f'                *out = flatbuffers_codec::fromBinary{spec.short_type}(msg->data, msg->size);\n')
-                        f.write('                return true;\n')
-                        f.write('            }\n')
-                    if has_protobuf:
-                        f.write('            if (is_protobuf_content_type(msg->type_name)) {\n')
-                        if spec.is_array:
-                            f.write(f'                *out = protobuf_codec::fromBinary{spec.short_type}Array(msg->data, msg->size);\n')
-                        else:
-                            f.write(f'                *out = protobuf_codec::fromBinary{spec.short_type}(msg->data, msg->size);\n')
-                        f.write('                return true;\n')
-                        f.write('            }\n')
-                    f.write('            return false;\n')
-                    f.write('        }\n')
-                    f.write('        const std::string payload = msgToString(msg->data, msg->size);\n')
-                    if spec.is_array:
-                        f.write('        const auto arr = nlohmann::json::parse(payload);\n')
-                        f.write('        out->clear();\n')
-                        f.write('        for (const auto& item : arr) {\n')
-                        if spec.short_type == 'Identifier':
-                            f.write('            out->push_back(decode_identifier_payload(item.dump()));\n')
-                        else:
-                            f.write(f'            out->push_back(fromJson(item.dump(), static_cast<{spec.short_type}*>(nullptr)));\n')
-                        f.write('        }\n')
-                    else:
-                        if spec.short_type == 'Identifier':
-                            f.write('        *out = decode_identifier_payload(payload);\n')
-                        else:
-                            f.write(f'        *out = fromJson(payload, static_cast<{spec.short_type}*>(nullptr));\n')
-                    f.write('        return true;\n')
-                    f.write('    } catch (...) {\n')
-                    f.write('        return false;\n')
-                    f.write('    }\n')
+                    f.write(f'    {{ int r = pyramid_try_registry_decode(msg, "{topic_schema}", out); if (r == 1) return true; }}\n')
+                    f.write('    return false;\n')
                     f.write('}\n\n')
 
             # ---- dispatch() --------------------------------------------------
@@ -2163,25 +2184,16 @@ class CppServiceGenerator:
             f.write('              void**          response_buf,\n')
             f.write('              size_t*         response_size)\n')
             f.write('{\n')
-            f.write('    std::string req_str;\n')
-            f.write('    std::string rsp_payload;\n\n')
-            f.write('    bool rsp_is_binary = false;\n\n')
-            f.write('    if (is_json_content_type(content_type)) {\n')
-            f.write('        req_str = json_request_body(request_buf, request_size);\n')
-            f.write('        if (request_size != 0 && req_str.empty()) {\n')
-            f.write('            *response_buf = nullptr;\n')
-            f.write('            *response_size = 0;\n')
-            f.write('            return;\n')
-            f.write('        }\n')
-            if has_flatbuffers:
-                f.write('    } else if (is_flatbuffers_content_type(content_type)) {\n')
-            if has_protobuf:
-                f.write('    } else if (is_protobuf_content_type(content_type)) {\n')
-            f.write('    } else {\n')
-            f.write('        *response_buf = nullptr;\n')
-            f.write('        *response_size = 0;\n')
+            f.write('    if (!response_buf || !response_size) {\n')
             f.write('        return;\n')
-            f.write('    }\n\n')
+            f.write('    }\n')
+            f.write('    *response_buf = nullptr;\n')
+            f.write('    *response_size = 0;\n')
+            f.write('    pcl_msg_t req_msg{};\n')
+            f.write('    req_msg.data = request_buf;\n')
+            f.write('    req_msg.size = static_cast<uint32_t>(request_size);\n')
+            f.write('    req_msg.type_name = content_type;\n')
+            f.write('    std::string rsp_payload;\n\n')
             f.write('    try {\n')
             f.write('    switch (channel) {\n')
 
@@ -2193,86 +2205,19 @@ class CppServiceGenerator:
                 rsp_t = rpc.cpp_rsp_type
 
                 f.write(f'    case ServiceChannel::{enum_val}: {{\n')
-                # Deserialize request
-                if req_t == 'Identifier':
-                    f.write(f'        {req_t} req;\n')
-                    f.write('        if (is_json_content_type(content_type))\n')
-                    f.write('            req = decode_identifier_payload(req_str);\n')
-                    if has_flatbuffers:
-                        f.write('        else if (is_flatbuffers_content_type(content_type))\n')
-                        f.write(f'            req = flatbuffers_codec::fromBinary{req_t}(request_buf, request_size);\n')
-                    if has_protobuf:
-                        f.write('        else if (is_protobuf_content_type(content_type))\n')
-                        f.write(f'            req = protobuf_codec::fromBinary{req_t}(request_buf, request_size);\n')
-                    f.write('        else\n')
-                    f.write('            break;\n')
-                else:
-                    f.write(f'        {req_t} req;\n')
-                    f.write('        if (is_json_content_type(content_type))\n')
-                    f.write(f'            req = fromJson(req_str, static_cast<{req_t}*>(nullptr));\n')
-                    if has_flatbuffers:
-                        f.write('        else if (is_flatbuffers_content_type(content_type))\n')
-                        f.write(f'            req = flatbuffers_codec::fromBinary{req_t}(request_buf, request_size);\n')
-                    if has_protobuf:
-                        f.write('        else if (is_protobuf_content_type(content_type))\n')
-                        f.write(f'            req = protobuf_codec::fromBinary{req_t}(request_buf, request_size);\n')
-                    f.write('        else\n')
-                    f.write('            break;\n')
+                f.write(f'        {req_t} req;\n')
+                f.write(f'        if (pyramid_try_registry_decode(&req_msg, "{rpc.raw_req_type}", &req) != 1) {{\n')
+                f.write('            break;\n')
+                f.write('        }\n')
                 f.write(f'        auto rsp = handler.{handler_fn}(req);\n')
-
-                # Serialize response
                 if rsp_t.startswith('std::vector<'):
-                    inner = rsp_t[len('std::vector<'):-1]
-                    f.write('        if (is_json_content_type(content_type)) {\n')
-                    f.write('            rsp_payload = "[";\n')
-                    f.write('            for (size_t i = 0; i < rsp.size(); ++i) {\n')
-                    f.write('                if (i > 0) rsp_payload += ",";\n')
-                    if inner == 'Identifier':
-                        f.write('                rsp_payload += encode_identifier_payload(rsp[i]);\n')
-                    else:
-                        f.write('                rsp_payload += toJson(rsp[i]);\n')
-                    f.write('            }\n')
-                    f.write('            rsp_payload += "]";\n')
-                    if has_flatbuffers:
-                        f.write('        } else if (is_flatbuffers_content_type(content_type)) {\n')
-                        f.write('            rsp_payload = flatbuffers_codec::toBinary(rsp);\n')
-                        f.write('            rsp_is_binary = true;\n')
-                    if has_protobuf:
-                        f.write('        } else if (is_protobuf_content_type(content_type)) {\n')
-                        f.write('            rsp_payload = protobuf_codec::toBinary(rsp);\n')
-                        f.write('            rsp_is_binary = true;\n')
-                    f.write('        } else {\n')
-                    f.write('            break;\n')
-                    f.write('        }\n')
-                elif rsp_t == 'Identifier':
-                    f.write('        if (is_json_content_type(content_type)) {\n')
-                    f.write('            rsp_payload = encode_identifier_payload(rsp);\n')
-                    if has_flatbuffers:
-                        f.write('        } else if (is_flatbuffers_content_type(content_type)) {\n')
-                        f.write('            rsp_payload = flatbuffers_codec::toBinary(rsp);\n')
-                        f.write('            rsp_is_binary = true;\n')
-                    if has_protobuf:
-                        f.write('        } else if (is_protobuf_content_type(content_type)) {\n')
-                        f.write('            rsp_payload = protobuf_codec::toBinary(rsp);\n')
-                        f.write('            rsp_is_binary = true;\n')
-                    f.write('        } else {\n')
+                    f.write(f'        if (pyramid_try_registry_encode(content_type, "{rpc.raw_rsp_type}Array", &rsp, &rsp_payload) != 1) {{\n')
                     f.write('            break;\n')
                     f.write('        }\n')
                 else:
-                    f.write('        if (is_json_content_type(content_type)) {\n')
-                    f.write('            rsp_payload = toJson(rsp);\n')
-                    if has_flatbuffers:
-                        f.write('        } else if (is_flatbuffers_content_type(content_type)) {\n')
-                        f.write('            rsp_payload = flatbuffers_codec::toBinary(rsp);\n')
-                        f.write('            rsp_is_binary = true;\n')
-                    if has_protobuf:
-                        f.write('        } else if (is_protobuf_content_type(content_type)) {\n')
-                        f.write('            rsp_payload = protobuf_codec::toBinary(rsp);\n')
-                        f.write('            rsp_is_binary = true;\n')
-                    f.write('        } else {\n')
+                    f.write(f'        if (pyramid_try_registry_encode(content_type, "{rpc.raw_rsp_type}", &rsp, &rsp_payload) != 1) {{\n')
                     f.write('            break;\n')
                     f.write('        }\n')
-
                 f.write('        break;\n')
                 f.write('    }\n')
 
@@ -2282,8 +2227,6 @@ class CppServiceGenerator:
             f.write('        *response_size = 0;\n')
             f.write('        return;\n')
             f.write('    }\n\n')
-
-            f.write('    (void) rsp_is_binary;\n\n')
 
             # Copy to heap buffer
             f.write('    if (!rsp_payload.empty()) {\n')
@@ -2308,19 +2251,10 @@ class CppServiceGenerator:
             f.write('                            const char*     content_type,\n')
             f.write('                            pcl_stream_context_t* stream_context)\n')
             f.write('{\n')
-            f.write('    std::string req_str;\n\n')
-            f.write('    if (is_json_content_type(content_type)) {\n')
-            f.write('        req_str = json_request_body(request_buf, request_size);\n')
-            f.write('        if (request_size != 0 && req_str.empty()) {\n')
-            f.write('            return PCL_ERR_INVALID;\n')
-            f.write('        }\n')
-            if has_flatbuffers:
-                f.write('    } else if (is_flatbuffers_content_type(content_type)) {\n')
-            if has_protobuf:
-                f.write('    } else if (is_protobuf_content_type(content_type)) {\n')
-            f.write('    } else {\n')
-            f.write('        return PCL_ERR_INVALID;\n')
-            f.write('    }\n\n')
+            f.write('    pcl_msg_t req_msg{};\n')
+            f.write('    req_msg.data = request_buf;\n')
+            f.write('    req_msg.size = static_cast<uint32_t>(request_size);\n')
+            f.write('    req_msg.type_name = content_type;\n\n')
             f.write('    try {\n')
             f.write('    switch (channel) {\n')
 
@@ -2332,30 +2266,10 @@ class CppServiceGenerator:
                     svc_name, rpc, duplicate_rpc_names)
                 req_t = rpc.cpp_req_type
                 f.write(f'    case ServiceChannel::{enum_val}: {{\n')
-                if req_t == 'Identifier':
-                    f.write(f'        {req_t} req;\n')
-                    f.write('        if (is_json_content_type(content_type))\n')
-                    f.write('            req = decode_identifier_payload(req_str);\n')
-                    if has_flatbuffers:
-                        f.write('        else if (is_flatbuffers_content_type(content_type))\n')
-                        f.write(f'            req = flatbuffers_codec::fromBinary{req_t}(request_buf, request_size);\n')
-                    if has_protobuf:
-                        f.write('        else if (is_protobuf_content_type(content_type))\n')
-                        f.write(f'            req = protobuf_codec::fromBinary{req_t}(request_buf, request_size);\n')
-                    f.write('        else\n')
-                    f.write('            break;\n')
-                else:
-                    f.write(f'        {req_t} req;\n')
-                    f.write('        if (is_json_content_type(content_type))\n')
-                    f.write(f'            req = fromJson(req_str, static_cast<{req_t}*>(nullptr));\n')
-                    if has_flatbuffers:
-                        f.write('        else if (is_flatbuffers_content_type(content_type))\n')
-                        f.write(f'            req = flatbuffers_codec::fromBinary{req_t}(request_buf, request_size);\n')
-                    if has_protobuf:
-                        f.write('        else if (is_protobuf_content_type(content_type))\n')
-                        f.write(f'            req = protobuf_codec::fromBinary{req_t}(request_buf, request_size);\n')
-                    f.write('        else\n')
-                    f.write('            break;\n')
+                f.write(f'        {req_t} req;\n')
+                f.write(f'        if (pyramid_try_registry_decode(&req_msg, "{rpc.raw_req_type}", &req) != 1) {{\n')
+                f.write('            return PCL_ERR_NOT_FOUND;\n')
+                f.write('        }\n')
                 f.write(f'        return handler.{stream_fn}(req, stream_context, content_type);\n')
                 f.write('    }\n')
 

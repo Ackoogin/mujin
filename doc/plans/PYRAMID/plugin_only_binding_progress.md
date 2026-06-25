@@ -216,3 +216,24 @@ Change (codec side only; transport is unaffected):
   could not fetch googletest. Verified: `cmake --preset flatbuffers-only`,
   `cmake --build --preset flatbuffers-only-release --parallel 16`, and
   **587/587 CTest green**.
+- 2026-06-25: Phase 2 plugin-only codec flip — **C++ side complete**. The
+  generated C++ facade now encodes/decodes ONLY through the loaded codec
+  registry and fails closed when no plugin handles a schema/content-type pair
+  (no `is_*_content_type` static fallback remains). The codec plugin boundary
+  now covers scalar aliases: string aliases cross as `pyramid_str_t`, numeric
+  aliases cross by scalar pointer, and the generated JSON/FlatBuffers plugins
+  register the alias schema IDs. Added PCL helpers for path/env codec plugin
+  loading (`pcl_codec_registry_load_plugins_from_paths`/`_from_env`), C++ gtest
+  default plugin autoload via a generated path header, app/example default
+  plugin loading, and the `PluginOnly.FacadeFailsClosedWithoutCodec` test.
+- 2026-06-25: Ada plugin-only flip **reverted to interim** for this checkpoint.
+  Codex removed the Ada static fallback but never wired the Ada facade to
+  marshal native records into the shared `pyramid_<Type>_c` C-struct (it still
+  passed `Request'Address` to the registry), so the Ada facade could not defer
+  to the cross-language C++ plugin and every Ada e2e failed closed. Reverted the
+  Ada generator/bindings to the prior interim hybrid (raw-Ada-record codec
+  plugin + static fallback) to keep the tree green (588/588). **Remaining work
+  (correct end shape):** wire the Ada facade to `To_C`/`From_C` the native record
+  to/from the C-struct and defer to the SAME C++ plugin `.so`, then delete the
+  separate hand-written Ada codec plugin. There should be no Ada-specific codec
+  plugin in the end state.

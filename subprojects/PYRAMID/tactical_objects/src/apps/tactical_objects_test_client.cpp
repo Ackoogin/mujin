@@ -9,6 +9,7 @@
 
 #include "pyramid_services_tactical_objects_consumed.hpp"
 #include "pyramid_services_tactical_objects_provided_components.hpp"
+#include "tactical_objects_codec_plugin_paths.hpp"
 
 #include <pcl/component.hpp>
 #include <pcl/executor.hpp>
@@ -229,6 +230,17 @@ int main(int argc, char* argv[]) {
       content_type = argv[++i];
     } else if (std::strcmp(argv[i], "--codec-plugin") == 0 && i + 1 < argc) {
       codec_plugin_paths.push_back(argv[++i]);
+    }
+  }
+
+  if (codec_plugin_paths.empty()) {
+    const auto rc = pcl_codec_registry_load_plugins_from_paths(
+        pcl_codec_registry_default(),
+        kTacticalObjectsDefaultCodecPlugins.data(),
+        kTacticalObjectsDefaultCodecPlugins.size());
+    if (rc != PCL_OK) {
+      std::fprintf(stderr, "failed to load default codec plugins\n");
+      return 2;
     }
   }
 

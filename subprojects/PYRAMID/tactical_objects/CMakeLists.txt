@@ -67,6 +67,29 @@ target_compile_features(tactical_objects_component PUBLIC cxx_std_14)
 # ---------------------------------------------------------------------------
 # tactical_objects_app - standalone runtime demo
 # ---------------------------------------------------------------------------
+set(TACTICAL_OBJECTS_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
+file(MAKE_DIRECTORY ${TACTICAL_OBJECTS_GENERATED_DIR})
+set(_tactical_codec_paths_header "#pragma once\n\n#include <array>\n\n")
+set(_tactical_codec_plugin_targets)
+foreach(_tactical_codec_target IN ITEMS
+        pyramid_codec_json_tactical_objects
+        pyramid_codec_flatbuffers_tactical_objects)
+    if(TARGET ${_tactical_codec_target})
+        list(APPEND _tactical_codec_plugin_targets ${_tactical_codec_target})
+    endif()
+endforeach()
+list(LENGTH _tactical_codec_plugin_targets _tactical_codec_plugin_count)
+string(APPEND _tactical_codec_paths_header
+    "inline constexpr std::array<const char*, ${_tactical_codec_plugin_count}> kTacticalObjectsDefaultCodecPlugins = {{\n")
+foreach(_tactical_codec_target IN LISTS _tactical_codec_plugin_targets)
+    string(APPEND _tactical_codec_paths_header
+        "    \"$<TARGET_FILE:${_tactical_codec_target}>\",\n")
+endforeach()
+string(APPEND _tactical_codec_paths_header "}};\n")
+file(GENERATE
+    OUTPUT ${TACTICAL_OBJECTS_GENERATED_DIR}/tactical_objects_codec_plugin_paths.hpp
+    CONTENT "${_tactical_codec_paths_header}")
+
 add_executable(tactical_objects_app
     src/apps/tactical_objects_main.cpp
 )
@@ -77,6 +100,10 @@ add_executable(tactical_objects_test_client
     ${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
 )
 add_dependencies(tactical_objects_test_client pyramid_cpp_bindings_codegen)
+if(_tactical_codec_plugin_targets)
+  add_dependencies(tactical_objects_app ${_tactical_codec_plugin_targets})
+  add_dependencies(tactical_objects_test_client ${_tactical_codec_plugin_targets})
+endif()
 
 target_link_libraries(tactical_objects_app
     PRIVATE
@@ -95,6 +122,7 @@ target_include_directories(tactical_objects_app
     PRIVATE
         ${PYRAMID_CPP_BINDINGS_DIR}
         ${PYRAMID_ROOT_DIR}/bindings/protobuf/cpp
+        ${TACTICAL_OBJECTS_GENERATED_DIR}
 )
 
 target_compile_features(tactical_objects_app PRIVATE cxx_std_14)
@@ -115,6 +143,7 @@ target_include_directories(tactical_objects_test_client
     PRIVATE
         ${PYRAMID_CPP_BINDINGS_DIR}
         ${PYRAMID_ROOT_DIR}/bindings/protobuf/cpp
+        ${TACTICAL_OBJECTS_GENERATED_DIR}
 )
 
 target_compile_features(tactical_objects_test_client PRIVATE cxx_std_14)

@@ -2,9 +2,12 @@
 /// \brief Test client that publishes standard.object_evidence to Tactical Objects.
 
 #include "pyramid_services_tactical_objects_consumed.hpp"
+#include "pyramid_codec_plugin_test_paths.hpp"
 
 #include <pcl/pcl_container.h>
+#include <pcl/pcl_codec_registry.h>
 #include <pcl/pcl_executor.h>
+#include <pcl/pcl_plugin_loader.h>
 #include <pcl/pcl_transport_shared_memory.h>
 
 #include <atomic>
@@ -40,9 +43,9 @@ pcl_status_t on_configure(pcl_container_t* container, void* user_data) {
   return state->publisher ? PCL_OK : PCL_ERR_CALLBACK;
 }
 
-pyramid::domain_model::ObjectDetail make_evidence() {
+pyramid::domain_model::ObjectDetail make_evidence(int sequence) {
   pyramid::domain_model::ObjectDetail evidence;
-  evidence.id = "bridge-e2e-evidence";
+  evidence.id = "bridge-e2e-evidence-" + std::to_string(sequence);
   evidence.entity_source = "demo-radar";
   evidence.identity = pyramid::domain_model::StandardIdentity::Hostile;
   evidence.dimension = pyramid::domain_model::BattleDimension::SeaSurface;
@@ -72,6 +75,11 @@ int main(int argc, char* argv[]) {
 
   std::signal(SIGINT, signal_handler);
   std::signal(SIGTERM, signal_handler);
+
+  pcl_codec_registry_load_plugins_from_paths(
+      pcl_codec_registry_default(),
+      kPyramidCodecPluginPaths.data(),
+      kPyramidCodecPluginPaths.size());
 
   pcl_executor_t* exec = pcl_executor_create();
   if (!exec) {
@@ -122,7 +130,7 @@ int main(int argc, char* argv[]) {
 
     const auto now = std::chrono::steady_clock::now();
     if (now >= next_publish && state.publisher) {
-      const auto evidence = make_evidence();
+      const auto evidence = make_evidence(state.published_count + 1);
       const pcl_status_t rc = consumed::publishObjectEvidence(
           state.publisher, evidence, state.content_type.c_str());
       if (rc == PCL_OK) {

@@ -8,6 +8,89 @@ if(NOT PYRAMID_PYTHON)
     message(FATAL_ERROR "Python is required for PYRAMID binding generator tests")
 endif()
 
+set(PYRAMID_TEST_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
+file(MAKE_DIRECTORY ${PYRAMID_TEST_GENERATED_DIR})
+
+set(_pyramid_cpp_test_codec_plugin_targets)
+foreach(_pyramid_codec_target IN ITEMS
+        pyramid_codec_json_tactical_objects
+        pyramid_codec_flatbuffers_tactical_objects
+        pyramid_codec_json_autonomy_backend
+        pyramid_codec_flatbuffers_autonomy_backend
+        pyramid_codec_json_sensor_data_interpretation
+        pyramid_codec_flatbuffers_sensor_data_interpretation)
+    if(TARGET ${_pyramid_codec_target})
+        list(APPEND _pyramid_cpp_test_codec_plugin_targets
+            ${_pyramid_codec_target})
+    endif()
+endforeach()
+
+list(LENGTH _pyramid_cpp_test_codec_plugin_targets
+    _pyramid_cpp_test_codec_plugin_count)
+set(_pyramid_codec_plugin_env "")
+foreach(_pyramid_codec_target IN LISTS _pyramid_cpp_test_codec_plugin_targets)
+    if(_pyramid_codec_plugin_env)
+        string(APPEND _pyramid_codec_plugin_env ":")
+    endif()
+    string(APPEND _pyramid_codec_plugin_env "$<TARGET_FILE:${_pyramid_codec_target}>")
+endforeach()
+set(_pyramid_codec_paths_header
+    "#pragma once\n\n#include <array>\n\n")
+string(APPEND _pyramid_codec_paths_header
+    "inline constexpr std::array<const char*, ${_pyramid_cpp_test_codec_plugin_count}> kPyramidCodecPluginPaths = {{\n")
+foreach(_pyramid_codec_target IN LISTS _pyramid_cpp_test_codec_plugin_targets)
+    string(APPEND _pyramid_codec_paths_header
+        "    \"$<TARGET_FILE:${_pyramid_codec_target}>\",\n")
+endforeach()
+string(APPEND _pyramid_codec_paths_header "}};\n\n")
+
+function(pyramid_append_plugin_path_constant out_var constant_name target_name)
+    set(_line "inline constexpr const char* ${constant_name} = nullptr;\n")
+    if(TARGET ${target_name})
+        set(_line
+            "inline constexpr const char* ${constant_name} = \"$<TARGET_FILE:${target_name}>\";\n")
+    endif()
+    set(${out_var} "${${out_var}}${_line}" PARENT_SCOPE)
+endfunction()
+
+pyramid_append_plugin_path_constant(_pyramid_codec_paths_header
+    kPyramidJsonCodecPluginTactical
+    pyramid_codec_json_tactical_objects)
+pyramid_append_plugin_path_constant(_pyramid_codec_paths_header
+    kPyramidFlatbuffersCodecPluginTactical
+    pyramid_codec_flatbuffers_tactical_objects)
+pyramid_append_plugin_path_constant(_pyramid_codec_paths_header
+    kPyramidJsonCodecPluginAutonomy
+    pyramid_codec_json_autonomy_backend)
+pyramid_append_plugin_path_constant(_pyramid_codec_paths_header
+    kPclSocketTransportPlugin
+    pcl_transport_socket_plugin)
+
+file(GENERATE
+    OUTPUT ${PYRAMID_TEST_GENERATED_DIR}/pyramid_codec_plugin_test_paths.hpp
+    CONTENT "${_pyramid_codec_paths_header}")
+
+add_library(pyramid_cpp_test_codec_plugins OBJECT
+    pyramid_cpp_codec_plugin_environment.cpp)
+if(_pyramid_cpp_test_codec_plugin_targets)
+    add_dependencies(pyramid_cpp_test_codec_plugins
+        ${_pyramid_cpp_test_codec_plugin_targets})
+endif()
+target_link_libraries(pyramid_cpp_test_codec_plugins PUBLIC
+    pcl_core
+    GTest::gtest)
+target_include_directories(pyramid_cpp_test_codec_plugins PUBLIC
+    ${PYRAMID_TEST_GENERATED_DIR})
+
+if(TARGET pyramid_bridge_evidence_client)
+    target_include_directories(pyramid_bridge_evidence_client PRIVATE
+        ${PYRAMID_TEST_GENERATED_DIR})
+    if(_pyramid_cpp_test_codec_plugin_targets)
+        add_dependencies(pyramid_bridge_evidence_client
+            ${_pyramid_cpp_test_codec_plugin_targets})
+    endif()
+endif()
+
 add_test(NAME pyramid_binding_generation_dependencies
     COMMAND ${PYRAMID_PYTHON}
             ${CMAKE_CURRENT_SOURCE_DIR}/test_binding_generation_dependencies.py
@@ -53,6 +136,23 @@ target_include_directories(test_pcl_generated_component_stream_handle PRIVATE
     ${PROTO_BINDINGS_DIR}
 )
 gtest_discover_tests(test_pcl_generated_component_stream_handle
+    DISCOVERY_MODE PRE_TEST)
+
+add_executable(test_plugin_only_fail_closed
+    test_plugin_only_fail_closed.cpp
+    ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
+)
+add_dependencies(test_plugin_only_fail_closed
+    pyramid_cpp_bindings_codegen)
+target_link_libraries(test_plugin_only_fail_closed PRIVATE
+    pcl_core
+    pyramid_generated_codecs
+    GTest::gtest_main
+)
+target_include_directories(test_plugin_only_fail_closed PRIVATE
+    ${PROTO_BINDINGS_DIR}
+)
+gtest_discover_tests(test_plugin_only_fail_closed
     DISCOVERY_MODE PRE_TEST)
 
 add_executable(test_tobj_query ${TOBJ_TEST_DIR}/Test_QueryEngine.cpp)
@@ -247,16 +347,13 @@ if(TARGET pyramid_codec_json_tactical_objects)
     )
     target_include_directories(test_codec_plugin_swap PRIVATE
         ${PROTO_BINDINGS_DIR}
+        ${PYRAMID_TEST_GENERATED_DIR}
         ${PYRAMID_ROOT_DIR}/tactical_objects/include
         ${PYRAMID_ROOT_DIR}/core/include
     )
-    target_compile_definitions(test_codec_plugin_swap PRIVATE
-        PYRAMID_JSON_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_json_tactical_objects>")
     if(PYRAMID_ENABLE_FLATBUFFERS AND TARGET pyramid_codec_flatbuffers_tactical_objects)
         add_dependencies(test_codec_plugin_swap
             pyramid_codec_flatbuffers_tactical_objects)
-        target_compile_definitions(test_codec_plugin_swap PRIVATE
-            PYRAMID_FLATBUFFERS_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_flatbuffers_tactical_objects>")
     endif()
     gtest_discover_tests(test_codec_plugin_swap DISCOVERY_MODE PRE_TEST)
 endif()
@@ -280,12 +377,10 @@ if(PYRAMID_ENABLE_FLATBUFFERS
     )
     target_include_directories(test_transport_codec_plugin_composition PRIVATE
         ${PROTO_BINDINGS_DIR}
+        ${PYRAMID_TEST_GENERATED_DIR}
         ${PYRAMID_ROOT_DIR}/tactical_objects/include
         ${PYRAMID_ROOT_DIR}/core/include
     )
-    target_compile_definitions(test_transport_codec_plugin_composition PRIVATE
-        PYRAMID_FLATBUFFERS_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_flatbuffers_tactical_objects>"
-        PCL_SOCKET_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_socket_plugin>")
     if(NOT WIN32)
         target_link_libraries(test_transport_codec_plugin_composition PRIVATE pthread)
     endif()
@@ -314,12 +409,10 @@ if(TARGET pyramid_codec_json_tactical_objects
     )
     target_include_directories(test_codec_registry_bridge PRIVATE
         ${PROTO_BINDINGS_DIR}
+        ${PYRAMID_TEST_GENERATED_DIR}
         ${PYRAMID_ROOT_DIR}/tactical_objects/include
         ${PYRAMID_ROOT_DIR}/core/include
     )
-    target_compile_definitions(test_codec_registry_bridge PRIVATE
-        PYRAMID_JSON_CODEC_PLUGIN_TACTICAL="$<TARGET_FILE:pyramid_codec_json_tactical_objects>"
-        PYRAMID_JSON_CODEC_PLUGIN_AUTONOMY="$<TARGET_FILE:pyramid_codec_json_autonomy_backend>")
     gtest_discover_tests(test_codec_registry_bridge DISCOVERY_MODE PRE_TEST)
 endif()
 
@@ -350,6 +443,7 @@ if(PYRAMID_ENABLE_FLATBUFFERS)
     target_include_directories(tobj_shared_memory_example PRIVATE
         ${PCL_ROOT_DIR}/include
         ${PROTO_BINDINGS_DIR}
+        ${PYRAMID_TEST_GENERATED_DIR}
     )
     if(NOT WIN32)
         target_link_libraries(tobj_shared_memory_example PRIVATE pthread)
@@ -378,6 +472,7 @@ target_link_libraries(tobj_socket_server PRIVATE
 target_include_directories(tobj_socket_server PRIVATE
     ${PCL_ROOT_DIR}/src
     ${PROTO_BINDINGS_DIR}
+    ${PYRAMID_TEST_GENERATED_DIR}
 )
 if(NOT WIN32)
     target_link_libraries(tobj_socket_server PRIVATE pthread)
@@ -906,7 +1001,8 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${ADA_TEST_SRC_DIR}/bin/test_generated_bindings)
     set_tests_properties(ada_generated_bindings_roundtrip PROPERTIES
         LABELS "ada;generated;codec"
-        TIMEOUT 20)
+        TIMEOUT 20
+        ENVIRONMENT "PYRAMID_CODEC_PLUGINS=${_pyramid_codec_plugin_env}")
     list(APPEND _pyramid_ada_tests ada_generated_bindings_roundtrip)
 
     if(WIN32)
@@ -1074,7 +1170,10 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     --server-bin $<TARGET_FILE:tobj_socket_server>
                     --client-bin ${PYRAMID_ROOT_DIR}/examples/ada/bin/ada_tobj_client
                     --content-type application/json
-                    --codec-plugin $<TARGET_FILE:pyramid_codec_json_tactical_objects>)
+                    # The Ada client marshals native Ada records (not the C-ABI
+                    # struct the C++ plugin expects), so it loads the Ada
+                    # raw-record codec plugin here.
+                    --codec-plugin ${ADA_JSON_CODEC_PLUGIN_LIB})
         set_tests_properties(tobj_ada_socket_json_plugin_e2e PROPERTIES
             LABELS "cross_language;integration;codec"
             TIMEOUT 60
@@ -1412,3 +1511,17 @@ if(TARGET pyramid_ros2_transport)
         LABELS "integration;ros2;e2e;facade"
         TIMEOUT 20)
 endif()
+
+get_property(_pyramid_tests_build_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+foreach(_pyramid_test_target IN LISTS _pyramid_tests_build_targets)
+    if(_pyramid_test_target MATCHES "^test_"
+            AND NOT _pyramid_test_target STREQUAL "test_pcl_codec_registry"
+            AND NOT _pyramid_test_target STREQUAL "test_pcl_plugin_loader")
+        target_sources(${_pyramid_test_target} PRIVATE
+            $<TARGET_OBJECTS:pyramid_cpp_test_codec_plugins>)
+        target_link_libraries(${_pyramid_test_target} PRIVATE
+            pcl_core)
+    endif()
+endforeach()
+unset(_pyramid_tests_build_targets)
+unset(_pyramid_test_target)

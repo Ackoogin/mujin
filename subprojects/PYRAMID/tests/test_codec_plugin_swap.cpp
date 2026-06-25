@@ -16,6 +16,7 @@ extern "C" {
 #include "pyramid_data_model_tactical_codec.hpp"
 #include "pyramid_data_model_tactical_cabi_marshal.hpp"
 #include "pyramid_data_model_types.hpp"
+#include "pyramid_codec_plugin_test_paths.hpp"
 
 namespace tactical_codec = pyramid::domain_model::tactical;
 namespace types = pyramid::domain_model;
@@ -161,29 +162,28 @@ TEST(CodecPluginSwap, SwapJsonThenFlatbuffersNoRebuild) {
 
   types::ObjectDetail json_decoded{};
   const std::string json_bytes = roundTripObjectDetail(
-      PYRAMID_JSON_CODEC_PLUGIN_PATH, "application/json", ev, &json_decoded);
+      kPyramidJsonCodecPluginTactical, "application/json", ev, &json_decoded);
   ASSERT_FALSE(json_bytes.empty());
   expectEvidenceEqual(json_decoded, ev);
 
-#if defined(PYRAMID_FLATBUFFERS_CODEC_PLUGIN_PATH)
+  if (!kPyramidFlatbuffersCodecPluginTactical) {
+    GTEST_SKIP() << "FlatBuffers codec plugin target is disabled";
+  }
   types::ObjectDetail flatbuffers_decoded{};
   const std::string flatbuffers_bytes = roundTripObjectDetail(
-      PYRAMID_FLATBUFFERS_CODEC_PLUGIN_PATH, "application/flatbuffers", ev,
+      kPyramidFlatbuffersCodecPluginTactical, "application/flatbuffers", ev,
       &flatbuffers_decoded);
   ASSERT_FALSE(flatbuffers_bytes.empty());
   expectEvidenceEqual(flatbuffers_decoded, ev);
 
   EXPECT_NE(flatbuffers_bytes, json_bytes);
   EXPECT_NE(flatbuffers_bytes.size(), json_bytes.size());
-#else
-  GTEST_SKIP() << "FlatBuffers codec plugin target is disabled";
-#endif
 }
 
 TEST(CodecPluginSwap, LoadedJsonCodecMatchesStaticToJson) {
   const auto ev = makeTestEvidence();
   LoadedCodec loaded = loadCodec(
-      PYRAMID_JSON_CODEC_PLUGIN_PATH, "application/json");
+      kPyramidJsonCodecPluginTactical, "application/json");
   ASSERT_NE(loaded.codec, nullptr);
 
   pcl_msg_t msg{};
@@ -205,7 +205,7 @@ TEST(CodecPluginSwap, LoadedJsonCodecMatchesStaticToJson) {
 TEST(CodecPluginSwap, UnknownSchemaIdFailsClosed) {
   const auto ev = makeTestEvidence();
   LoadedCodec loaded = loadCodec(
-      PYRAMID_JSON_CODEC_PLUGIN_PATH, "application/json");
+      kPyramidJsonCodecPluginTactical, "application/json");
   ASSERT_NE(loaded.codec, nullptr);
 
   pcl_msg_t msg{};

@@ -2,6 +2,7 @@
 /// \brief Runtime loader for PCL transport and codec plugins.
 #include "pcl/pcl_plugin_loader.h"
 
+#include <string.h>
 #include <stdlib.h>
 
 #ifdef _WIN32
@@ -18,6 +19,33 @@ struct pcl_plugin_handle_t {
   void* library;
 #endif
 };
+
+static pcl_plugin_handle_t** pcl_resident_codec_plugins = NULL;
+static size_t pcl_resident_codec_plugin_count = 0;
+static size_t pcl_resident_codec_plugin_capacity = 0;
+
+static int retain_codec_plugin(pcl_plugin_handle_t* handle) {
+  pcl_plugin_handle_t** next;
+  size_t next_capacity;
+
+  if (!handle) return 0;
+  if (pcl_resident_codec_plugin_count < pcl_resident_codec_plugin_capacity) {
+    pcl_resident_codec_plugins[pcl_resident_codec_plugin_count++] = handle;
+    return 1;
+  }
+
+  next_capacity = pcl_resident_codec_plugin_capacity == 0
+      ? 8u
+      : pcl_resident_codec_plugin_capacity * 2u;
+  next = (pcl_plugin_handle_t**)realloc(
+      pcl_resident_codec_plugins, next_capacity * sizeof(*next));
+  if (!next) return 0;
+
+  pcl_resident_codec_plugins = next;
+  pcl_resident_codec_plugin_capacity = next_capacity;
+  pcl_resident_codec_plugins[pcl_resident_codec_plugin_count++] = handle;
+  return 1;
+}
 
 static void close_library(pcl_plugin_handle_t* handle) {
   if (!handle) return;
@@ -102,6 +130,74 @@ pcl_status_t pcl_plugin_load_codec(const char*             path,
   }
 
   *out_handle = handle;
+  return PCL_OK;
+}
+
+pcl_status_t pcl_codec_registry_load_plugins_from_paths(
+    pcl_codec_registry_t* registry,
+    const char* const*    paths,
+    size_t               n) {
+  size_t i;
+
+  if (!registry || (!paths && n != 0)) return PCL_ERR_INVALID;
+
+  for (i = 0; i < n; ++i) {
+    pcl_plugin_handle_t* handle = NULL;
+    if (!paths[i] || paths[i][0] == '\0') continue;
+    if (pcl_plugin_load_codec(paths[i], registry, &handle) != PCL_OK) {
+      continue;
+    }
+    if (!retain_codec_plugin(handle)) {
+      pcl_plugin_unload(handle);
+      return PCL_ERR_NOMEM;
+    }
+  }
+
+  return PCL_OK;
+}
+
+pcl_status_t pcl_codec_registry_load_plugins_from_env(
+    pcl_codec_registry_t* registry,
+    const char*           env_var) {
+  const char* value;
+  char* copy;
+  char* cursor;
+  char* token_start;
+  pcl_status_t status;
+#ifdef _WIN32
+  const char separator = ';';
+#else
+  const char separator = ':';
+#endif
+
+  if (!registry || !env_var || env_var[0] == '\0') return PCL_ERR_INVALID;
+
+  value = getenv(env_var);
+  if (!value || value[0] == '\0') return PCL_OK;
+
+  copy = (char*)malloc(strlen(value) + 1u);
+  if (!copy) return PCL_ERR_NOMEM;
+  strcpy(copy, value);
+
+  token_start = copy;
+  cursor = copy;
+  while (1) {
+    if (*cursor == separator || *cursor == '\0') {
+      const char saved = *cursor;
+      *cursor = '\0';
+      status = pcl_codec_registry_load_plugins_from_paths(
+          registry, (const char* const*)&token_start, 1u);
+      if (status != PCL_OK) {
+        free(copy);
+        return status;
+      }
+      if (saved == '\0') break;
+      token_start = cursor + 1;
+    }
+    ++cursor;
+  }
+
+  free(copy);
   return PCL_OK;
 }
 

@@ -27,6 +27,24 @@ pcl_status_t pcl_plugin_load_codec(const char*             path,
                                    pcl_codec_registry_t*   registry,
                                    pcl_plugin_handle_t**   out_handle);
 
+/// \brief Load codec plugins from a path array into \p registry.
+///
+/// Missing or invalid plugin paths are skipped. Successfully loaded plugins
+/// remain resident for the lifetime of the process because the registry borrows
+/// their codec vtables.
+pcl_status_t pcl_codec_registry_load_plugins_from_paths(
+    pcl_codec_registry_t* registry,
+    const char* const*    paths,
+    size_t               n);
+
+/// \brief Load codec plugins from a path-list environment variable.
+///
+/// The environment value is split on ':' on POSIX and ';' on Windows. Missing
+/// environment variables and individual missing plugin paths are skipped.
+pcl_status_t pcl_codec_registry_load_plugins_from_env(
+    pcl_codec_registry_t* registry,
+    const char*           env_var);
+
 /// \brief Load a transport plugin and return its transport vtable.
 ///
 /// The returned vtable pointer is borrowed from the plugin and remains valid

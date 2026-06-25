@@ -26,6 +26,7 @@ extern "C" {
 #  include <unistd.h>
 #endif
 
+#include "pyramid_codec_plugin_test_paths.hpp"
 #include "pyramid_services_tactical_objects_consumed.hpp"
 
 namespace cons = pyramid::components::tactical_objects::services::consumed;
@@ -136,7 +137,7 @@ void serverThread(ServerState* state, uint16_t port) {
       makeTransportConfig("server", port, state->executor);
 
   state->started.store(true);
-  if (pcl_plugin_load_transport(PCL_SOCKET_TRANSPORT_PLUGIN_PATH,
+  if (pcl_plugin_load_transport(kPclSocketTransportPlugin,
                                 config.c_str(),
                                 &handle,
                                 &transport) != PCL_OK) {
@@ -178,7 +179,8 @@ TEST(TransportCodecPluginComposition,
   pcl_codec_registry_clear(default_registry);
 
   pcl_plugin_handle_t* codec_handle = nullptr;
-  ASSERT_EQ(pcl_plugin_load_codec(PYRAMID_FLATBUFFERS_CODEC_PLUGIN_PATH,
+  ASSERT_NE(kPyramidFlatbuffersCodecPluginTactical, nullptr);
+  ASSERT_EQ(pcl_plugin_load_codec(kPyramidFlatbuffersCodecPluginTactical,
                                   default_registry,
                                   &codec_handle),
             PCL_OK);
@@ -211,7 +213,8 @@ TEST(TransportCodecPluginComposition,
   const pcl_transport_t* client_transport = nullptr;
   const std::string client_config =
       makeTransportConfig("client", port, client_executor);
-  ASSERT_EQ(pcl_plugin_load_transport(PCL_SOCKET_TRANSPORT_PLUGIN_PATH,
+  ASSERT_NE(kPclSocketTransportPlugin, nullptr);
+  ASSERT_EQ(pcl_plugin_load_transport(kPclSocketTransportPlugin,
                                       client_config.c_str(),
                                       &client_transport_handle,
                                       &client_transport),

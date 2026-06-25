@@ -4,9 +4,6 @@
 
 #include "pyramid_services_autonomy_backend_provided.hpp"
 
-#include "flatbuffers/cpp/pyramid_services_autonomy_backend_flatbuffers_codec.hpp"
-#include "pyramid_data_model_autonomy_codec.hpp"
-#include "pyramid_data_model_common_codec.hpp"
 #include "pyramid_data_model_autonomy_cabi_marshal.hpp"
 #include "pyramid_data_model_common_cabi_marshal.hpp"
 
@@ -16,23 +13,18 @@ extern "C" {
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
 #include <pcl/pcl_transport.h>
+#include "pyramid_datamodel_cabi.h"
 }
 
 #include <cstdlib>
 #include <cstdint>
 #include <cstring>
-#include <nlohmann/json.hpp>
+#include <limits>
 #include <string>
 #include <vector>
 
 namespace pyramid::components::autonomy_backend::services::provided {
 
-// Bring data model codec functions into scope
-using pyramid::domain_model::autonomy::toJson;
-using pyramid::domain_model::autonomy::fromJson;
-using pyramid::domain_model::common::toJson;
-using pyramid::domain_model::common::fromJson;
-namespace flatbuffers_codec = pyramid::services::autonomy_backend::flatbuffers_codec;
 
 // ---------------------------------------------------------------------------
 // PCL message utility
@@ -184,50 +176,23 @@ ServiceHandler::streamRequirementPlacementReadPlacement(const Query& /*request*/
 
 namespace {
 
-bool is_json_content_type(const char* content_type)
-{
-    return !content_type || std::strcmp(content_type, kJsonContentType) == 0;
-}
-
-bool is_flatbuffers_content_type(const char* content_type)
-{
-    return content_type && std::strcmp(content_type, kFlatBuffersContentType) == 0;
-}
-
-std::string json_request_body(const void* data, size_t size)
-{
-    if (!data && size != 0) return {};
-    return std::string(static_cast<const char*>(data), size);
-}
-
-std::string encode_identifier_payload(const Identifier& value)
-{
-    return nlohmann::json(value).dump();
-}
-
-Identifier decode_identifier_payload(const std::string& payload)
-{
-    if (payload.empty()) {
-        return {};
-    }
-    try {
-        auto j = nlohmann::json::parse(payload);
-        if (j.is_string()) {
-            return j.get<std::string>();
-        }
-        if (j.is_object() && j.contains("uuid") && j["uuid"].is_string()) {
-            return j["uuid"].get<std::string>();
-        }
-    } catch (...) {
-    }
-    return payload;
-}
-
 static int pyramid_cabi_encode(const pcl_codec_t* c,
                                const char* schema_id,
                                const void* value,
                                pcl_msg_t* out_msg)
 {
+    if (std::strcmp(schema_id, "Identifier") == 0) {
+        const auto& native = *static_cast<const pyramid::domain_model::Identifier*>(value);
+        if (native.size() > std::numeric_limits<uint32_t>::max()) {
+            return -1;
+        }
+        pyramid_str_t cs;
+        cs.ptr = native.data();
+        cs.len = static_cast<uint32_t>(native.size());
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &cs, out_msg);
+        return rc == PCL_OK ? 1 : -1;
+    }
     if (std::strcmp(schema_id, "Query") == 0) {
         pyramid_Query_c cs;
         pyramid::cabi::to_c(
@@ -309,6 +274,138 @@ static int pyramid_cabi_encode(const pcl_codec_t* c,
         pyramid_RequirementPlacement_c_free(&cs);
         return rc == PCL_OK ? 1 : -1;
     }
+    if (std::strcmp(schema_id, "CapabilitiesArray") == 0) {
+        const auto& native = *static_cast<const std::vector<pyramid::domain_model::Capabilities>*>(value);
+        if (native.size() > std::numeric_limits<uint32_t>::max()) {
+            return -1;
+        }
+        std::vector<pyramid_Capabilities_c> values(native.size());
+        if (!values.empty()) {
+            std::memset(values.data(), 0, values.size() * sizeof(values[0]));
+        }
+        for (std::size_t i = 0; i < native.size(); ++i) {
+            pyramid::cabi::to_c(native[i], &values[i]);
+        }
+        pyramid_slice_t slice;
+        slice.ptr = values.empty() ? nullptr : values.data();
+        slice.len = static_cast<uint32_t>(values.size());
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &slice, out_msg);
+        for (auto& item : values) {
+            pyramid_Capabilities_c_free(&item);
+        }
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "PlanningRequirementArray") == 0) {
+        const auto& native = *static_cast<const std::vector<pyramid::domain_model::PlanningRequirement>*>(value);
+        if (native.size() > std::numeric_limits<uint32_t>::max()) {
+            return -1;
+        }
+        std::vector<pyramid_PlanningRequirement_c> values(native.size());
+        if (!values.empty()) {
+            std::memset(values.data(), 0, values.size() * sizeof(values[0]));
+        }
+        for (std::size_t i = 0; i < native.size(); ++i) {
+            pyramid::cabi::to_c(native[i], &values[i]);
+        }
+        pyramid_slice_t slice;
+        slice.ptr = values.empty() ? nullptr : values.data();
+        slice.len = static_cast<uint32_t>(values.size());
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &slice, out_msg);
+        for (auto& item : values) {
+            pyramid_PlanningRequirement_c_free(&item);
+        }
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "ExecutionRequirementArray") == 0) {
+        const auto& native = *static_cast<const std::vector<pyramid::domain_model::ExecutionRequirement>*>(value);
+        if (native.size() > std::numeric_limits<uint32_t>::max()) {
+            return -1;
+        }
+        std::vector<pyramid_ExecutionRequirement_c> values(native.size());
+        if (!values.empty()) {
+            std::memset(values.data(), 0, values.size() * sizeof(values[0]));
+        }
+        for (std::size_t i = 0; i < native.size(); ++i) {
+            pyramid::cabi::to_c(native[i], &values[i]);
+        }
+        pyramid_slice_t slice;
+        slice.ptr = values.empty() ? nullptr : values.data();
+        slice.len = static_cast<uint32_t>(values.size());
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &slice, out_msg);
+        for (auto& item : values) {
+            pyramid_ExecutionRequirement_c_free(&item);
+        }
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "PlanArray") == 0) {
+        const auto& native = *static_cast<const std::vector<pyramid::domain_model::Plan>*>(value);
+        if (native.size() > std::numeric_limits<uint32_t>::max()) {
+            return -1;
+        }
+        std::vector<pyramid_Plan_c> values(native.size());
+        if (!values.empty()) {
+            std::memset(values.data(), 0, values.size() * sizeof(values[0]));
+        }
+        for (std::size_t i = 0; i < native.size(); ++i) {
+            pyramid::cabi::to_c(native[i], &values[i]);
+        }
+        pyramid_slice_t slice;
+        slice.ptr = values.empty() ? nullptr : values.data();
+        slice.len = static_cast<uint32_t>(values.size());
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &slice, out_msg);
+        for (auto& item : values) {
+            pyramid_Plan_c_free(&item);
+        }
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "ExecutionRunArray") == 0) {
+        const auto& native = *static_cast<const std::vector<pyramid::domain_model::ExecutionRun>*>(value);
+        if (native.size() > std::numeric_limits<uint32_t>::max()) {
+            return -1;
+        }
+        std::vector<pyramid_ExecutionRun_c> values(native.size());
+        if (!values.empty()) {
+            std::memset(values.data(), 0, values.size() * sizeof(values[0]));
+        }
+        for (std::size_t i = 0; i < native.size(); ++i) {
+            pyramid::cabi::to_c(native[i], &values[i]);
+        }
+        pyramid_slice_t slice;
+        slice.ptr = values.empty() ? nullptr : values.data();
+        slice.len = static_cast<uint32_t>(values.size());
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &slice, out_msg);
+        for (auto& item : values) {
+            pyramid_ExecutionRun_c_free(&item);
+        }
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "RequirementPlacementArray") == 0) {
+        const auto& native = *static_cast<const std::vector<pyramid::domain_model::RequirementPlacement>*>(value);
+        if (native.size() > std::numeric_limits<uint32_t>::max()) {
+            return -1;
+        }
+        std::vector<pyramid_RequirementPlacement_c> values(native.size());
+        if (!values.empty()) {
+            std::memset(values.data(), 0, values.size() * sizeof(values[0]));
+        }
+        for (std::size_t i = 0; i < native.size(); ++i) {
+            pyramid::cabi::to_c(native[i], &values[i]);
+        }
+        pyramid_slice_t slice;
+        slice.ptr = values.empty() ? nullptr : values.data();
+        slice.len = static_cast<uint32_t>(values.size());
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &slice, out_msg);
+        for (auto& item : values) {
+            pyramid_RequirementPlacement_c_free(&item);
+        }
+        return rc == PCL_OK ? 1 : -1;
+    }
     (void)c; (void)value; (void)out_msg;
     return 0;
 }
@@ -318,6 +415,18 @@ static int pyramid_cabi_decode(const pcl_codec_t* c,
                                const pcl_msg_t* msg,
                                void* out_value)
 {
+    if (std::strcmp(schema_id, "Identifier") == 0) {
+        pyramid_str_t cs;
+        std::memset(&cs, 0, sizeof(cs));
+        if (c->decode(c->codec_ctx, schema_id, msg, &cs)
+                != PCL_OK) {
+            return -1;
+        }
+        auto* native = static_cast<pyramid::domain_model::Identifier*>(out_value);
+        native->assign(cs.ptr ? cs.ptr : "", cs.len);
+        std::free(const_cast<char*>(cs.ptr));
+        return 1;
+    }
     if (std::strcmp(schema_id, "Query") == 0) {
         pyramid_Query_c cs;
         std::memset(&cs, 0, sizeof(cs));
@@ -435,6 +544,126 @@ static int pyramid_cabi_decode(const pcl_codec_t* c,
         pyramid_RequirementPlacement_c_free(&cs);
         return 1;
     }
+    if (std::strcmp(schema_id, "CapabilitiesArray") == 0) {
+        pyramid_slice_t slice;
+        std::memset(&slice, 0, sizeof(slice));
+        if (c->decode(c->codec_ctx, schema_id, msg, &slice)
+                != PCL_OK) {
+            return -1;
+        }
+        auto* native = static_cast<std::vector<pyramid::domain_model::Capabilities>*>(out_value);
+        native->clear();
+        native->reserve(slice.len);
+        auto* values = static_cast<pyramid_Capabilities_c*>(const_cast<void*>(slice.ptr));
+        for (uint32_t i = 0; i < slice.len; ++i) {
+            pyramid::domain_model::Capabilities item;
+            pyramid::cabi::from_c(&values[i], item);
+            native->push_back(std::move(item));
+            pyramid_Capabilities_c_free(&values[i]);
+        }
+        std::free(values);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "PlanningRequirementArray") == 0) {
+        pyramid_slice_t slice;
+        std::memset(&slice, 0, sizeof(slice));
+        if (c->decode(c->codec_ctx, schema_id, msg, &slice)
+                != PCL_OK) {
+            return -1;
+        }
+        auto* native = static_cast<std::vector<pyramid::domain_model::PlanningRequirement>*>(out_value);
+        native->clear();
+        native->reserve(slice.len);
+        auto* values = static_cast<pyramid_PlanningRequirement_c*>(const_cast<void*>(slice.ptr));
+        for (uint32_t i = 0; i < slice.len; ++i) {
+            pyramid::domain_model::PlanningRequirement item;
+            pyramid::cabi::from_c(&values[i], item);
+            native->push_back(std::move(item));
+            pyramid_PlanningRequirement_c_free(&values[i]);
+        }
+        std::free(values);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "ExecutionRequirementArray") == 0) {
+        pyramid_slice_t slice;
+        std::memset(&slice, 0, sizeof(slice));
+        if (c->decode(c->codec_ctx, schema_id, msg, &slice)
+                != PCL_OK) {
+            return -1;
+        }
+        auto* native = static_cast<std::vector<pyramid::domain_model::ExecutionRequirement>*>(out_value);
+        native->clear();
+        native->reserve(slice.len);
+        auto* values = static_cast<pyramid_ExecutionRequirement_c*>(const_cast<void*>(slice.ptr));
+        for (uint32_t i = 0; i < slice.len; ++i) {
+            pyramid::domain_model::ExecutionRequirement item;
+            pyramid::cabi::from_c(&values[i], item);
+            native->push_back(std::move(item));
+            pyramid_ExecutionRequirement_c_free(&values[i]);
+        }
+        std::free(values);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "PlanArray") == 0) {
+        pyramid_slice_t slice;
+        std::memset(&slice, 0, sizeof(slice));
+        if (c->decode(c->codec_ctx, schema_id, msg, &slice)
+                != PCL_OK) {
+            return -1;
+        }
+        auto* native = static_cast<std::vector<pyramid::domain_model::Plan>*>(out_value);
+        native->clear();
+        native->reserve(slice.len);
+        auto* values = static_cast<pyramid_Plan_c*>(const_cast<void*>(slice.ptr));
+        for (uint32_t i = 0; i < slice.len; ++i) {
+            pyramid::domain_model::Plan item;
+            pyramid::cabi::from_c(&values[i], item);
+            native->push_back(std::move(item));
+            pyramid_Plan_c_free(&values[i]);
+        }
+        std::free(values);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "ExecutionRunArray") == 0) {
+        pyramid_slice_t slice;
+        std::memset(&slice, 0, sizeof(slice));
+        if (c->decode(c->codec_ctx, schema_id, msg, &slice)
+                != PCL_OK) {
+            return -1;
+        }
+        auto* native = static_cast<std::vector<pyramid::domain_model::ExecutionRun>*>(out_value);
+        native->clear();
+        native->reserve(slice.len);
+        auto* values = static_cast<pyramid_ExecutionRun_c*>(const_cast<void*>(slice.ptr));
+        for (uint32_t i = 0; i < slice.len; ++i) {
+            pyramid::domain_model::ExecutionRun item;
+            pyramid::cabi::from_c(&values[i], item);
+            native->push_back(std::move(item));
+            pyramid_ExecutionRun_c_free(&values[i]);
+        }
+        std::free(values);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "RequirementPlacementArray") == 0) {
+        pyramid_slice_t slice;
+        std::memset(&slice, 0, sizeof(slice));
+        if (c->decode(c->codec_ctx, schema_id, msg, &slice)
+                != PCL_OK) {
+            return -1;
+        }
+        auto* native = static_cast<std::vector<pyramid::domain_model::RequirementPlacement>*>(out_value);
+        native->clear();
+        native->reserve(slice.len);
+        auto* values = static_cast<pyramid_RequirementPlacement_c*>(const_cast<void*>(slice.ptr));
+        for (uint32_t i = 0; i < slice.len; ++i) {
+            pyramid::domain_model::RequirementPlacement item;
+            pyramid::cabi::from_c(&values[i], item);
+            native->push_back(std::move(item));
+            pyramid_RequirementPlacement_c_free(&values[i]);
+        }
+        std::free(values);
+        return 1;
+    }
     (void)c; (void)msg; (void)out_value;
     return 0;
 }
@@ -460,7 +689,11 @@ static int pyramid_try_registry_encode(const char* content_type,
         m.type_name = nullptr;
         const int r = pyramid_cabi_encode(c, schema_id, value, &m);
         if (r == 1) {
-            out->assign(static_cast<const char*>(m.data), m.size);
+            if (m.data && m.size != 0) {
+                out->assign(static_cast<const char*>(m.data), m.size);
+            } else {
+                out->clear();
+            }
             if (c->free_msg) {
                 c->free_msg(c->codec_ctx, &m);
             }
@@ -534,23 +767,22 @@ pcl_status_t invoke_async(pcl_executor_t* executor,
 
 std::vector<const char*> supportedContentTypes()
 {
-    std::vector<const char*> result{kJsonContentType};
-    result.push_back(kFlatBuffersContentType);
+    std::vector<const char*> result;
+    pcl_codec_registry_t* reg = pcl_codec_registry_default();
+    if (pcl_codec_registry_get(reg, kJsonContentType) != nullptr) {
+        result.push_back(kJsonContentType);
+    }
+    if (pcl_codec_registry_get(reg, kFlatBuffersContentType) != nullptr) {
+        result.push_back(kFlatBuffersContentType);
+    }
     return result;
 }
 
 bool supportsContentType(const char* content_type)
 {
-    if (is_json_content_type(content_type)) {
-        return true;
-    }
-    if (is_flatbuffers_content_type(content_type)) {
-        return true;
-    }
-    if (pcl_codec_registry_get(pcl_codec_registry_default(), content_type) != nullptr) {
-        return true;
-    }
-    return false;
+    return content_type
+        && pcl_codec_registry_get(pcl_codec_registry_default(), content_type)
+            != nullptr;
 }
 
 // ---------------------------------------------------------------------------
@@ -563,24 +795,8 @@ bool decodeCapabilitiesReadCapabilitiesResponse(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryCapabilitiesArray(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        const auto arr = nlohmann::json::parse(payload);
-        out->clear();
-        for (const auto& item : arr) {
-            out->push_back(fromJson(item.dump(), static_cast<Capabilities*>(nullptr)));
-        }
-        return true;
-    } catch (...) {
-        return false;
-    }
+    { int r = pyramid_try_registry_decode(msg, "CapabilitiesArray", out); if (r == 1) return true; }
+    return false;
 }
 
 bool encodeCapabilitiesReadCapabilitiesStreamFrame(const Capabilities& payload,
@@ -591,14 +807,7 @@ bool encodeCapabilitiesReadCapabilitiesStreamFrame(const Capabilities& payload,
         return false;
     }
     { int r = pyramid_try_registry_encode(content_type, "Capabilities", &payload, out); if (r == 1) return true; }
-    if (is_json_content_type(content_type)) {
-        *out = toJson(payload);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        *out = flatbuffers_codec::toBinary(payload);
-    } else {
-        return false;
-    }
-    return true;
+    return false;
 }
 
 bool decodeCapabilitiesReadCapabilitiesStreamFrame(const pcl_msg_t* msg,
@@ -608,20 +817,7 @@ bool decodeCapabilitiesReadCapabilitiesStreamFrame(const pcl_msg_t* msg,
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "Capabilities", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryCapabilities(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = fromJson(payload, static_cast<Capabilities*>(nullptr));
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 pcl_status_t sendCapabilitiesReadCapabilitiesStreamFrame(pcl_stream_context_t* stream_context,
@@ -646,20 +842,7 @@ bool decodePlanningRequirementCreatePlanningRequirementResponse(const pcl_msg_t*
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "Identifier", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryIdentifier(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = decode_identifier_payload(payload);
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 bool decodePlanningRequirementReadPlanningRequirementResponse(const pcl_msg_t* msg,
@@ -668,24 +851,8 @@ bool decodePlanningRequirementReadPlanningRequirementResponse(const pcl_msg_t* m
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryPlanningRequirementArray(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        const auto arr = nlohmann::json::parse(payload);
-        out->clear();
-        for (const auto& item : arr) {
-            out->push_back(fromJson(item.dump(), static_cast<PlanningRequirement*>(nullptr)));
-        }
-        return true;
-    } catch (...) {
-        return false;
-    }
+    { int r = pyramid_try_registry_decode(msg, "PlanningRequirementArray", out); if (r == 1) return true; }
+    return false;
 }
 
 bool encodePlanningRequirementReadPlanningRequirementStreamFrame(const PlanningRequirement& payload,
@@ -696,14 +863,7 @@ bool encodePlanningRequirementReadPlanningRequirementStreamFrame(const PlanningR
         return false;
     }
     { int r = pyramid_try_registry_encode(content_type, "PlanningRequirement", &payload, out); if (r == 1) return true; }
-    if (is_json_content_type(content_type)) {
-        *out = toJson(payload);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        *out = flatbuffers_codec::toBinary(payload);
-    } else {
-        return false;
-    }
-    return true;
+    return false;
 }
 
 bool decodePlanningRequirementReadPlanningRequirementStreamFrame(const pcl_msg_t* msg,
@@ -713,20 +873,7 @@ bool decodePlanningRequirementReadPlanningRequirementStreamFrame(const pcl_msg_t
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "PlanningRequirement", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryPlanningRequirement(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = fromJson(payload, static_cast<PlanningRequirement*>(nullptr));
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 pcl_status_t sendPlanningRequirementReadPlanningRequirementStreamFrame(pcl_stream_context_t* stream_context,
@@ -751,20 +898,7 @@ bool decodePlanningRequirementUpdatePlanningRequirementResponse(const pcl_msg_t*
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = fromJson(payload, static_cast<Ack*>(nullptr));
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 bool decodePlanningRequirementDeletePlanningRequirementResponse(const pcl_msg_t* msg,
@@ -774,20 +908,7 @@ bool decodePlanningRequirementDeletePlanningRequirementResponse(const pcl_msg_t*
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = fromJson(payload, static_cast<Ack*>(nullptr));
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 bool decodeExecutionRequirementCreateExecutionRequirementResponse(const pcl_msg_t* msg,
@@ -797,20 +918,7 @@ bool decodeExecutionRequirementCreateExecutionRequirementResponse(const pcl_msg_
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "Identifier", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryIdentifier(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = decode_identifier_payload(payload);
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 bool decodeExecutionRequirementReadExecutionRequirementResponse(const pcl_msg_t* msg,
@@ -819,24 +927,8 @@ bool decodeExecutionRequirementReadExecutionRequirementResponse(const pcl_msg_t*
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryExecutionRequirementArray(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        const auto arr = nlohmann::json::parse(payload);
-        out->clear();
-        for (const auto& item : arr) {
-            out->push_back(fromJson(item.dump(), static_cast<ExecutionRequirement*>(nullptr)));
-        }
-        return true;
-    } catch (...) {
-        return false;
-    }
+    { int r = pyramid_try_registry_decode(msg, "ExecutionRequirementArray", out); if (r == 1) return true; }
+    return false;
 }
 
 bool encodeExecutionRequirementReadExecutionRequirementStreamFrame(const ExecutionRequirement& payload,
@@ -847,14 +939,7 @@ bool encodeExecutionRequirementReadExecutionRequirementStreamFrame(const Executi
         return false;
     }
     { int r = pyramid_try_registry_encode(content_type, "ExecutionRequirement", &payload, out); if (r == 1) return true; }
-    if (is_json_content_type(content_type)) {
-        *out = toJson(payload);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        *out = flatbuffers_codec::toBinary(payload);
-    } else {
-        return false;
-    }
-    return true;
+    return false;
 }
 
 bool decodeExecutionRequirementReadExecutionRequirementStreamFrame(const pcl_msg_t* msg,
@@ -864,20 +949,7 @@ bool decodeExecutionRequirementReadExecutionRequirementStreamFrame(const pcl_msg
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "ExecutionRequirement", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryExecutionRequirement(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = fromJson(payload, static_cast<ExecutionRequirement*>(nullptr));
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 pcl_status_t sendExecutionRequirementReadExecutionRequirementStreamFrame(pcl_stream_context_t* stream_context,
@@ -902,20 +974,7 @@ bool decodeExecutionRequirementUpdateExecutionRequirementResponse(const pcl_msg_
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = fromJson(payload, static_cast<Ack*>(nullptr));
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 bool decodeExecutionRequirementDeleteExecutionRequirementResponse(const pcl_msg_t* msg,
@@ -925,20 +984,7 @@ bool decodeExecutionRequirementDeleteExecutionRequirementResponse(const pcl_msg_
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = fromJson(payload, static_cast<Ack*>(nullptr));
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 bool decodeStateCreateStateResponse(const pcl_msg_t* msg,
@@ -948,20 +994,7 @@ bool decodeStateCreateStateResponse(const pcl_msg_t* msg,
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "Identifier", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryIdentifier(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = decode_identifier_payload(payload);
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 bool decodeStateUpdateStateResponse(const pcl_msg_t* msg,
@@ -971,20 +1004,7 @@ bool decodeStateUpdateStateResponse(const pcl_msg_t* msg,
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = fromJson(payload, static_cast<Ack*>(nullptr));
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 bool decodeStateDeleteStateResponse(const pcl_msg_t* msg,
@@ -994,20 +1014,7 @@ bool decodeStateDeleteStateResponse(const pcl_msg_t* msg,
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = fromJson(payload, static_cast<Ack*>(nullptr));
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 bool decodePlanCreatePlanResponse(const pcl_msg_t* msg,
@@ -1017,20 +1024,7 @@ bool decodePlanCreatePlanResponse(const pcl_msg_t* msg,
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "Identifier", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryIdentifier(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = decode_identifier_payload(payload);
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 bool decodePlanReadPlanResponse(const pcl_msg_t* msg,
@@ -1039,24 +1033,8 @@ bool decodePlanReadPlanResponse(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryPlanArray(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        const auto arr = nlohmann::json::parse(payload);
-        out->clear();
-        for (const auto& item : arr) {
-            out->push_back(fromJson(item.dump(), static_cast<Plan*>(nullptr)));
-        }
-        return true;
-    } catch (...) {
-        return false;
-    }
+    { int r = pyramid_try_registry_decode(msg, "PlanArray", out); if (r == 1) return true; }
+    return false;
 }
 
 bool encodePlanReadPlanStreamFrame(const Plan& payload,
@@ -1067,14 +1045,7 @@ bool encodePlanReadPlanStreamFrame(const Plan& payload,
         return false;
     }
     { int r = pyramid_try_registry_encode(content_type, "Plan", &payload, out); if (r == 1) return true; }
-    if (is_json_content_type(content_type)) {
-        *out = toJson(payload);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        *out = flatbuffers_codec::toBinary(payload);
-    } else {
-        return false;
-    }
-    return true;
+    return false;
 }
 
 bool decodePlanReadPlanStreamFrame(const pcl_msg_t* msg,
@@ -1084,20 +1055,7 @@ bool decodePlanReadPlanStreamFrame(const pcl_msg_t* msg,
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "Plan", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryPlan(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = fromJson(payload, static_cast<Plan*>(nullptr));
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 pcl_status_t sendPlanReadPlanStreamFrame(pcl_stream_context_t* stream_context,
@@ -1122,20 +1080,7 @@ bool decodePlanUpdatePlanResponse(const pcl_msg_t* msg,
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = fromJson(payload, static_cast<Ack*>(nullptr));
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 bool decodePlanDeletePlanResponse(const pcl_msg_t* msg,
@@ -1145,20 +1090,7 @@ bool decodePlanDeletePlanResponse(const pcl_msg_t* msg,
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryAck(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = fromJson(payload, static_cast<Ack*>(nullptr));
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 bool decodeExecutionRunReadRunResponse(const pcl_msg_t* msg,
@@ -1167,24 +1099,8 @@ bool decodeExecutionRunReadRunResponse(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryExecutionRunArray(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        const auto arr = nlohmann::json::parse(payload);
-        out->clear();
-        for (const auto& item : arr) {
-            out->push_back(fromJson(item.dump(), static_cast<ExecutionRun*>(nullptr)));
-        }
-        return true;
-    } catch (...) {
-        return false;
-    }
+    { int r = pyramid_try_registry_decode(msg, "ExecutionRunArray", out); if (r == 1) return true; }
+    return false;
 }
 
 bool encodeExecutionRunReadRunStreamFrame(const ExecutionRun& payload,
@@ -1195,14 +1111,7 @@ bool encodeExecutionRunReadRunStreamFrame(const ExecutionRun& payload,
         return false;
     }
     { int r = pyramid_try_registry_encode(content_type, "ExecutionRun", &payload, out); if (r == 1) return true; }
-    if (is_json_content_type(content_type)) {
-        *out = toJson(payload);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        *out = flatbuffers_codec::toBinary(payload);
-    } else {
-        return false;
-    }
-    return true;
+    return false;
 }
 
 bool decodeExecutionRunReadRunStreamFrame(const pcl_msg_t* msg,
@@ -1212,20 +1121,7 @@ bool decodeExecutionRunReadRunStreamFrame(const pcl_msg_t* msg,
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "ExecutionRun", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryExecutionRun(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = fromJson(payload, static_cast<ExecutionRun*>(nullptr));
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 pcl_status_t sendExecutionRunReadRunStreamFrame(pcl_stream_context_t* stream_context,
@@ -1249,24 +1145,8 @@ bool decodeRequirementPlacementReadPlacementResponse(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryRequirementPlacementArray(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        const auto arr = nlohmann::json::parse(payload);
-        out->clear();
-        for (const auto& item : arr) {
-            out->push_back(fromJson(item.dump(), static_cast<RequirementPlacement*>(nullptr)));
-        }
-        return true;
-    } catch (...) {
-        return false;
-    }
+    { int r = pyramid_try_registry_decode(msg, "RequirementPlacementArray", out); if (r == 1) return true; }
+    return false;
 }
 
 bool encodeRequirementPlacementReadPlacementStreamFrame(const RequirementPlacement& payload,
@@ -1277,14 +1157,7 @@ bool encodeRequirementPlacementReadPlacementStreamFrame(const RequirementPlaceme
         return false;
     }
     { int r = pyramid_try_registry_encode(content_type, "RequirementPlacement", &payload, out); if (r == 1) return true; }
-    if (is_json_content_type(content_type)) {
-        *out = toJson(payload);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        *out = flatbuffers_codec::toBinary(payload);
-    } else {
-        return false;
-    }
-    return true;
+    return false;
 }
 
 bool decodeRequirementPlacementReadPlacementStreamFrame(const pcl_msg_t* msg,
@@ -1294,20 +1167,7 @@ bool decodeRequirementPlacementReadPlacementStreamFrame(const pcl_msg_t* msg,
         return false;
     }
     { int r = pyramid_try_registry_decode(msg, "RequirementPlacement", out); if (r == 1) return true; }
-    try {
-        if (!is_json_content_type(msg->type_name)) {
-            if (is_flatbuffers_content_type(msg->type_name)) {
-                *out = flatbuffers_codec::fromBinaryRequirementPlacement(msg->data, msg->size);
-                return true;
-            }
-            return false;
-        }
-        const std::string payload = msgToString(msg->data, msg->size);
-        *out = fromJson(payload, static_cast<RequirementPlacement*>(nullptr));
-        return true;
-    } catch (...) {
-        return false;
-    }
+    return false;
 }
 
 pcl_status_t sendRequirementPlacementReadPlacementStreamFrame(pcl_stream_context_t* stream_context,
@@ -1337,12 +1197,8 @@ pcl_status_t invokeCapabilitiesReadCapabilities(pcl_executor_t* executor,
                                                 const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Query", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcCapabilitiesReadCapabilities, payload, callback, user_data, route, content_type);
 }
@@ -1365,12 +1221,8 @@ pcl_status_t invokeCapabilitiesReadCapabilitiesStream(pcl_executor_t* executor,
                                                       const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Query", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     if (route) {
         const pcl_status_t route_rc = pcl_executor_set_endpoint_route(executor, route);
@@ -1395,12 +1247,8 @@ pcl_status_t invokePlanningRequirementCreatePlanningRequirement(pcl_executor_t* 
                                                                 const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "PlanningRequirement", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcPlanningRequirementCreatePlanningRequirement, payload, callback, user_data, route, content_type);
 }
@@ -1422,12 +1270,8 @@ pcl_status_t invokePlanningRequirementReadPlanningRequirement(pcl_executor_t* ex
                                                               const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Query", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcPlanningRequirementReadPlanningRequirement, payload, callback, user_data, route, content_type);
 }
@@ -1450,12 +1294,8 @@ pcl_status_t invokePlanningRequirementReadPlanningRequirementStream(pcl_executor
                                                                     const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Query", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     if (route) {
         const pcl_status_t route_rc = pcl_executor_set_endpoint_route(executor, route);
@@ -1480,12 +1320,8 @@ pcl_status_t invokePlanningRequirementUpdatePlanningRequirement(pcl_executor_t* 
                                                                 const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "PlanningRequirement", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcPlanningRequirementUpdatePlanningRequirement, payload, callback, user_data, route, content_type);
 }
@@ -1507,12 +1343,8 @@ pcl_status_t invokePlanningRequirementDeletePlanningRequirement(pcl_executor_t* 
                                                                 const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = encode_identifier_payload(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Identifier", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcPlanningRequirementDeletePlanningRequirement, payload, callback, user_data, route, content_type);
 }
@@ -1534,12 +1366,8 @@ pcl_status_t invokeExecutionRequirementCreateExecutionRequirement(pcl_executor_t
                                                                   const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "ExecutionRequirement", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcExecutionRequirementCreateExecutionRequirement, payload, callback, user_data, route, content_type);
 }
@@ -1561,12 +1389,8 @@ pcl_status_t invokeExecutionRequirementReadExecutionRequirement(pcl_executor_t* 
                                                                 const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Query", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcExecutionRequirementReadExecutionRequirement, payload, callback, user_data, route, content_type);
 }
@@ -1589,12 +1413,8 @@ pcl_status_t invokeExecutionRequirementReadExecutionRequirementStream(pcl_execut
                                                                       const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Query", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     if (route) {
         const pcl_status_t route_rc = pcl_executor_set_endpoint_route(executor, route);
@@ -1619,12 +1439,8 @@ pcl_status_t invokeExecutionRequirementUpdateExecutionRequirement(pcl_executor_t
                                                                   const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "ExecutionRequirement", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcExecutionRequirementUpdateExecutionRequirement, payload, callback, user_data, route, content_type);
 }
@@ -1646,12 +1462,8 @@ pcl_status_t invokeExecutionRequirementDeleteExecutionRequirement(pcl_executor_t
                                                                   const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = encode_identifier_payload(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Identifier", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcExecutionRequirementDeleteExecutionRequirement, payload, callback, user_data, route, content_type);
 }
@@ -1673,12 +1485,8 @@ pcl_status_t invokeStateCreateState(pcl_executor_t* executor,
                                     const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "StateUpdate", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcStateCreateState, payload, callback, user_data, route, content_type);
 }
@@ -1700,12 +1508,8 @@ pcl_status_t invokeStateUpdateState(pcl_executor_t* executor,
                                     const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "StateUpdate", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcStateUpdateState, payload, callback, user_data, route, content_type);
 }
@@ -1727,12 +1531,8 @@ pcl_status_t invokeStateDeleteState(pcl_executor_t* executor,
                                     const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = encode_identifier_payload(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Identifier", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcStateDeleteState, payload, callback, user_data, route, content_type);
 }
@@ -1754,12 +1554,8 @@ pcl_status_t invokePlanCreatePlan(pcl_executor_t* executor,
                                   const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Plan", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcPlanCreatePlan, payload, callback, user_data, route, content_type);
 }
@@ -1781,12 +1577,8 @@ pcl_status_t invokePlanReadPlan(pcl_executor_t* executor,
                                 const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Query", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcPlanReadPlan, payload, callback, user_data, route, content_type);
 }
@@ -1809,12 +1601,8 @@ pcl_status_t invokePlanReadPlanStream(pcl_executor_t* executor,
                                       const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Query", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     if (route) {
         const pcl_status_t route_rc = pcl_executor_set_endpoint_route(executor, route);
@@ -1839,12 +1627,8 @@ pcl_status_t invokePlanUpdatePlan(pcl_executor_t* executor,
                                   const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Plan", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcPlanUpdatePlan, payload, callback, user_data, route, content_type);
 }
@@ -1866,12 +1650,8 @@ pcl_status_t invokePlanDeletePlan(pcl_executor_t* executor,
                                   const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = encode_identifier_payload(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Identifier", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcPlanDeletePlan, payload, callback, user_data, route, content_type);
 }
@@ -1893,12 +1673,8 @@ pcl_status_t invokeExecutionRunReadRun(pcl_executor_t* executor,
                                        const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Query", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcExecutionRunReadRun, payload, callback, user_data, route, content_type);
 }
@@ -1921,12 +1697,8 @@ pcl_status_t invokeExecutionRunReadRunStream(pcl_executor_t* executor,
                                              const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Query", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     if (route) {
         const pcl_status_t route_rc = pcl_executor_set_endpoint_route(executor, route);
@@ -1951,12 +1723,8 @@ pcl_status_t invokeRequirementPlacementReadPlacement(pcl_executor_t* executor,
                                                      const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Query", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     return invoke_async(executor, kSvcRequirementPlacementReadPlacement, payload, callback, user_data, route, content_type);
 }
@@ -1979,12 +1747,8 @@ pcl_status_t invokeRequirementPlacementReadPlacementStream(pcl_executor_t* execu
                                                            const char*       content_type)
 {
     std::string payload;
-    if (is_json_content_type(content_type)) {
-        payload = toJson(request);
-    } else if (is_flatbuffers_content_type(content_type)) {
-        payload = flatbuffers_codec::toBinary(request);
-    } else {
-        return PCL_ERR_INVALID;
+    if (pyramid_try_registry_encode(content_type, "Query", &request, &payload) != 1) {
+        return PCL_ERR_NOT_FOUND;
     }
     if (route) {
         const pcl_status_t route_rc = pcl_executor_set_endpoint_route(executor, route);
@@ -2013,395 +1777,213 @@ void dispatch(ServiceHandler& handler,
               void**          response_buf,
               size_t*         response_size)
 {
-    std::string req_str;
-    std::string rsp_payload;
-
-    bool rsp_is_binary = false;
-
-    if (is_json_content_type(content_type)) {
-        req_str = json_request_body(request_buf, request_size);
-        if (request_size != 0 && req_str.empty()) {
-            *response_buf = nullptr;
-            *response_size = 0;
-            return;
-        }
-    } else if (is_flatbuffers_content_type(content_type)) {
-    } else {
-        *response_buf = nullptr;
-        *response_size = 0;
+    if (!response_buf || !response_size) {
         return;
     }
+    *response_buf = nullptr;
+    *response_size = 0;
+    pcl_msg_t req_msg{};
+    req_msg.data = request_buf;
+    req_msg.size = static_cast<uint32_t>(request_size);
+    req_msg.type_name = content_type;
+    std::string rsp_payload;
 
     try {
     switch (channel) {
     case ServiceChannel::CapabilitiesReadCapabilities: {
         Query req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<Query*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "Query", &req) != 1) {
             break;
+        }
         auto rsp = handler.handleCapabilitiesReadCapabilities(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = "[";
-            for (size_t i = 0; i < rsp.size(); ++i) {
-                if (i > 0) rsp_payload += ",";
-                rsp_payload += toJson(rsp[i]);
-            }
-            rsp_payload += "]";
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "CapabilitiesArray", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
     }
     case ServiceChannel::PlanningRequirementCreatePlanningRequirement: {
         PlanningRequirement req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<PlanningRequirement*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryPlanningRequirement(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "PlanningRequirement", &req) != 1) {
             break;
+        }
         auto rsp = handler.handlePlanningRequirementCreatePlanningRequirement(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = encode_identifier_payload(rsp);
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "Identifier", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
     }
     case ServiceChannel::PlanningRequirementReadPlanningRequirement: {
         Query req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<Query*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "Query", &req) != 1) {
             break;
+        }
         auto rsp = handler.handlePlanningRequirementReadPlanningRequirement(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = "[";
-            for (size_t i = 0; i < rsp.size(); ++i) {
-                if (i > 0) rsp_payload += ",";
-                rsp_payload += toJson(rsp[i]);
-            }
-            rsp_payload += "]";
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "PlanningRequirementArray", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
     }
     case ServiceChannel::PlanningRequirementUpdatePlanningRequirement: {
         PlanningRequirement req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<PlanningRequirement*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryPlanningRequirement(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "PlanningRequirement", &req) != 1) {
             break;
+        }
         auto rsp = handler.handlePlanningRequirementUpdatePlanningRequirement(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = toJson(rsp);
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "Ack", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
     }
     case ServiceChannel::PlanningRequirementDeletePlanningRequirement: {
         Identifier req;
-        if (is_json_content_type(content_type))
-            req = decode_identifier_payload(req_str);
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryIdentifier(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "Identifier", &req) != 1) {
             break;
+        }
         auto rsp = handler.handlePlanningRequirementDeletePlanningRequirement(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = toJson(rsp);
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "Ack", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
     }
     case ServiceChannel::ExecutionRequirementCreateExecutionRequirement: {
         ExecutionRequirement req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<ExecutionRequirement*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryExecutionRequirement(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "ExecutionRequirement", &req) != 1) {
             break;
+        }
         auto rsp = handler.handleExecutionRequirementCreateExecutionRequirement(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = encode_identifier_payload(rsp);
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "Identifier", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
     }
     case ServiceChannel::ExecutionRequirementReadExecutionRequirement: {
         Query req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<Query*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "Query", &req) != 1) {
             break;
+        }
         auto rsp = handler.handleExecutionRequirementReadExecutionRequirement(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = "[";
-            for (size_t i = 0; i < rsp.size(); ++i) {
-                if (i > 0) rsp_payload += ",";
-                rsp_payload += toJson(rsp[i]);
-            }
-            rsp_payload += "]";
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "ExecutionRequirementArray", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
     }
     case ServiceChannel::ExecutionRequirementUpdateExecutionRequirement: {
         ExecutionRequirement req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<ExecutionRequirement*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryExecutionRequirement(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "ExecutionRequirement", &req) != 1) {
             break;
+        }
         auto rsp = handler.handleExecutionRequirementUpdateExecutionRequirement(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = toJson(rsp);
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "Ack", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
     }
     case ServiceChannel::ExecutionRequirementDeleteExecutionRequirement: {
         Identifier req;
-        if (is_json_content_type(content_type))
-            req = decode_identifier_payload(req_str);
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryIdentifier(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "Identifier", &req) != 1) {
             break;
+        }
         auto rsp = handler.handleExecutionRequirementDeleteExecutionRequirement(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = toJson(rsp);
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "Ack", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
     }
     case ServiceChannel::StateCreateState: {
         StateUpdate req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<StateUpdate*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryStateUpdate(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "StateUpdate", &req) != 1) {
             break;
+        }
         auto rsp = handler.handleStateCreateState(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = encode_identifier_payload(rsp);
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "Identifier", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
     }
     case ServiceChannel::StateUpdateState: {
         StateUpdate req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<StateUpdate*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryStateUpdate(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "StateUpdate", &req) != 1) {
             break;
+        }
         auto rsp = handler.handleStateUpdateState(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = toJson(rsp);
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "Ack", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
     }
     case ServiceChannel::StateDeleteState: {
         Identifier req;
-        if (is_json_content_type(content_type))
-            req = decode_identifier_payload(req_str);
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryIdentifier(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "Identifier", &req) != 1) {
             break;
+        }
         auto rsp = handler.handleStateDeleteState(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = toJson(rsp);
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "Ack", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
     }
     case ServiceChannel::PlanCreatePlan: {
         Plan req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<Plan*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryPlan(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "Plan", &req) != 1) {
             break;
+        }
         auto rsp = handler.handlePlanCreatePlan(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = encode_identifier_payload(rsp);
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "Identifier", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
     }
     case ServiceChannel::PlanReadPlan: {
         Query req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<Query*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "Query", &req) != 1) {
             break;
+        }
         auto rsp = handler.handlePlanReadPlan(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = "[";
-            for (size_t i = 0; i < rsp.size(); ++i) {
-                if (i > 0) rsp_payload += ",";
-                rsp_payload += toJson(rsp[i]);
-            }
-            rsp_payload += "]";
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "PlanArray", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
     }
     case ServiceChannel::PlanUpdatePlan: {
         Plan req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<Plan*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryPlan(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "Plan", &req) != 1) {
             break;
+        }
         auto rsp = handler.handlePlanUpdatePlan(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = toJson(rsp);
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "Ack", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
     }
     case ServiceChannel::PlanDeletePlan: {
         Identifier req;
-        if (is_json_content_type(content_type))
-            req = decode_identifier_payload(req_str);
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryIdentifier(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "Identifier", &req) != 1) {
             break;
+        }
         auto rsp = handler.handlePlanDeletePlan(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = toJson(rsp);
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "Ack", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
     }
     case ServiceChannel::ExecutionRunReadRun: {
         Query req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<Query*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "Query", &req) != 1) {
             break;
+        }
         auto rsp = handler.handleExecutionRunReadRun(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = "[";
-            for (size_t i = 0; i < rsp.size(); ++i) {
-                if (i > 0) rsp_payload += ",";
-                rsp_payload += toJson(rsp[i]);
-            }
-            rsp_payload += "]";
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "ExecutionRunArray", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
     }
     case ServiceChannel::RequirementPlacementReadPlacement: {
         Query req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<Query*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-        else
+        if (pyramid_try_registry_decode(&req_msg, "Query", &req) != 1) {
             break;
+        }
         auto rsp = handler.handleRequirementPlacementReadPlacement(req);
-        if (is_json_content_type(content_type)) {
-            rsp_payload = "[";
-            for (size_t i = 0; i < rsp.size(); ++i) {
-                if (i > 0) rsp_payload += ",";
-                rsp_payload += toJson(rsp[i]);
-            }
-            rsp_payload += "]";
-        } else if (is_flatbuffers_content_type(content_type)) {
-            rsp_payload = flatbuffers_codec::toBinary(rsp);
-            rsp_is_binary = true;
-        } else {
+        if (pyramid_try_registry_encode(content_type, "RequirementPlacementArray", &rsp, &rsp_payload) != 1) {
             break;
         }
         break;
@@ -2412,8 +1994,6 @@ void dispatch(ServiceHandler& handler,
         *response_size = 0;
         return;
     }
-
-    (void) rsp_is_binary;
 
     if (!rsp_payload.empty()) {
         *response_size = rsp_payload.size();
@@ -2436,78 +2016,53 @@ pcl_status_t dispatchStream(ServiceHandler& handler,
                             const char*     content_type,
                             pcl_stream_context_t* stream_context)
 {
-    std::string req_str;
-
-    if (is_json_content_type(content_type)) {
-        req_str = json_request_body(request_buf, request_size);
-        if (request_size != 0 && req_str.empty()) {
-            return PCL_ERR_INVALID;
-        }
-    } else if (is_flatbuffers_content_type(content_type)) {
-    } else {
-        return PCL_ERR_INVALID;
-    }
+    pcl_msg_t req_msg{};
+    req_msg.data = request_buf;
+    req_msg.size = static_cast<uint32_t>(request_size);
+    req_msg.type_name = content_type;
 
     try {
     switch (channel) {
     case ServiceChannel::CapabilitiesReadCapabilities: {
         Query req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<Query*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-        else
-            break;
+        if (pyramid_try_registry_decode(&req_msg, "Query", &req) != 1) {
+            return PCL_ERR_NOT_FOUND;
+        }
         return handler.streamCapabilitiesReadCapabilities(req, stream_context, content_type);
     }
     case ServiceChannel::PlanningRequirementReadPlanningRequirement: {
         Query req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<Query*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-        else
-            break;
+        if (pyramid_try_registry_decode(&req_msg, "Query", &req) != 1) {
+            return PCL_ERR_NOT_FOUND;
+        }
         return handler.streamPlanningRequirementReadPlanningRequirement(req, stream_context, content_type);
     }
     case ServiceChannel::ExecutionRequirementReadExecutionRequirement: {
         Query req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<Query*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-        else
-            break;
+        if (pyramid_try_registry_decode(&req_msg, "Query", &req) != 1) {
+            return PCL_ERR_NOT_FOUND;
+        }
         return handler.streamExecutionRequirementReadExecutionRequirement(req, stream_context, content_type);
     }
     case ServiceChannel::PlanReadPlan: {
         Query req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<Query*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-        else
-            break;
+        if (pyramid_try_registry_decode(&req_msg, "Query", &req) != 1) {
+            return PCL_ERR_NOT_FOUND;
+        }
         return handler.streamPlanReadPlan(req, stream_context, content_type);
     }
     case ServiceChannel::ExecutionRunReadRun: {
         Query req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<Query*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-        else
-            break;
+        if (pyramid_try_registry_decode(&req_msg, "Query", &req) != 1) {
+            return PCL_ERR_NOT_FOUND;
+        }
         return handler.streamExecutionRunReadRun(req, stream_context, content_type);
     }
     case ServiceChannel::RequirementPlacementReadPlacement: {
         Query req;
-        if (is_json_content_type(content_type))
-            req = fromJson(req_str, static_cast<Query*>(nullptr));
-        else if (is_flatbuffers_content_type(content_type))
-            req = flatbuffers_codec::fromBinaryQuery(request_buf, request_size);
-        else
-            break;
+        if (pyramid_try_registry_decode(&req_msg, "Query", &req) != 1) {
+            return PCL_ERR_NOT_FOUND;
+        }
         return handler.streamRequirementPlacementReadPlacement(req, stream_context, content_type);
     }
     }

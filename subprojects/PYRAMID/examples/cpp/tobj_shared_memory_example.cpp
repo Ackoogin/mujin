@@ -19,9 +19,14 @@
 #include "hmi_client_component.hpp"
 #include "tactical_objects_component.hpp"
 
+#include "pyramid_codec_plugin_test_paths.hpp"
 #include "pyramid_services_tactical_objects_provided_components.hpp"
 
 #include <pcl/shared_memory_participant.hpp>
+extern "C" {
+#include <pcl/pcl_codec_registry.h>
+#include <pcl/pcl_plugin_loader.h>
+}
 
 #include <chrono>
 #include <cstring>
@@ -266,6 +271,15 @@ bool runSharedMemoryShowcase(const char* content_type) {
 }  // namespace
 
 int main() {
+  const auto codec_rc = pcl_codec_registry_load_plugins_from_paths(
+      pcl_codec_registry_default(),
+      kPyramidCodecPluginPaths.data(),
+      kPyramidCodecPluginPaths.size());
+  if (codec_rc != PCL_OK) {
+    std::cerr << "[showcase] failed to load codec plugins\n";
+    return 2;
+  }
+
   if (!runSharedMemoryShowcase(ProvidedSvc::kFlatBuffersContentType)) {
     std::cerr << "tactical objects shared-memory showcase failed\n";
     return 1;

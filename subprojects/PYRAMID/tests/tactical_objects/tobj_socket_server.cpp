@@ -9,8 +9,10 @@
 #include <TacticalObjectsComponent.h>
 #include <TacticalObjectsCodec.h>
 #include <StandardBridge.h>
+#include "pyramid_codec_plugin_test_paths.hpp"
 #include <pcl/pcl_executor.h>
 #include <pcl/pcl_container.h>
+#include <pcl/pcl_plugin_loader.h>
 #include <pcl/pcl_transport_socket.h>
 
 #include <atomic>
@@ -50,6 +52,15 @@ int main(int argc, char* argv[]) {
     } else if (std::strcmp(argv[i], "--no-bridge") == 0) {
       use_bridge = false;
     }
+  }
+
+  const auto codec_rc = pcl_codec_registry_load_plugins_from_paths(
+      pcl_codec_registry_default(),
+      kPyramidCodecPluginPaths.data(),
+      kPyramidCodecPluginPaths.size());
+  if (codec_rc != PCL_OK) {
+    std::fprintf(stderr, "[server] Failed to load codec plugins\n");
+    return 2;
   }
 
   std::signal(SIGTERM, signal_handler);
