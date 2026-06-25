@@ -1005,93 +1005,6 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         ENVIRONMENT "PYRAMID_CODEC_PLUGINS=${_pyramid_codec_plugin_env}")
     list(APPEND _pyramid_ada_tests ada_generated_bindings_roundtrip)
 
-    if(WIN32)
-        set(ADA_JSON_CODEC_PLUGIN_LIB
-            ${PYRAMID_ROOT_DIR}/bindings/ada/lib/pyramid_codec_json_tactical_objects_ada.dll)
-    elseif(APPLE)
-        set(ADA_JSON_CODEC_PLUGIN_LIB
-            ${PYRAMID_ROOT_DIR}/bindings/ada/lib/libpyramid_codec_json_tactical_objects_ada.dylib)
-    else()
-        set(ADA_JSON_CODEC_PLUGIN_LIB
-            ${PYRAMID_ROOT_DIR}/bindings/ada/lib/libpyramid_codec_json_tactical_objects_ada.so)
-    endif()
-    set(ADA_JSON_CODEC_PLUGIN_SOURCES
-        ${PYRAMID_ROOT_DIR}/bindings/ada/pyramid-services-tactical_objects-json_codec_plugin.ads
-        ${PYRAMID_ROOT_DIR}/bindings/ada/pyramid-services-tactical_objects-json_codec_plugin.adb
-        ${PYRAMID_ROOT_DIR}/bindings/ada/pyramid_tactical_json_codec_plugin.gpr
-        ${PCL_ROOT_DIR}/bindings/ada/pcl_plugins.ads
-        ${PCL_ROOT_DIR}/bindings/ada/pcl_bindings.ads)
-    add_custom_command(
-        OUTPUT ${ADA_JSON_CODEC_PLUGIN_LIB}
-        COMMAND ${CMAKE_COMMAND} -E make_directory
-                ${PYRAMID_ROOT_DIR}/bindings/ada/lib
-        COMMAND ${CMAKE_COMMAND} -E env
-                UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
-                ${GPRBUILD}
-                ${ADA_GPRBUILD_PROJECT_ARGS}
-                ${ADA_GPRBUILD_PLATFORM_ARGS}
-                -p
-                -P ${PYRAMID_ROOT_DIR}/bindings/ada/pyramid_tactical_json_codec_plugin.gpr
-                -XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
-                -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
-                -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
-                -XLIBRARY_TYPE=static-pic
-        WORKING_DIRECTORY ${PYRAMID_ROOT_DIR}/bindings/ada
-        DEPENDS
-            ${ADA_JSON_CODEC_PLUGIN_SOURCES}
-            ${PYRAMID_BINDING_GENERATOR_INPUTS}
-            ${PYRAMID_PROTO_INPUTS}
-        COMMENT "Building Ada tactical_objects JSON codec plugin"
-        VERBATIM)
-    add_custom_target(ada_tactical_json_codec_plugin_build
-        DEPENDS ${ADA_JSON_CODEC_PLUGIN_LIB})
-    add_dependencies(ada_tactical_json_codec_plugin_build
-        ada_test_generated_bindings_build
-        ada_pcl_gnat_archives)
-
-    set(ADA_JSON_CODEC_ROUNDTRIP_EXE
-        ${ADA_TEST_SRC_DIR}/bin/test_ada_json_codec_roundtrip${CMAKE_EXECUTABLE_SUFFIX})
-    add_custom_command(
-        OUTPUT ${ADA_JSON_CODEC_ROUNDTRIP_EXE}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_TEST_SRC_DIR}/bin
-        COMMAND ${CMAKE_COMMAND} -E env
-                UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
-                ${GPRBUILD}
-                ${ADA_GPRBUILD_PROJECT_ARGS}
-                ${ADA_GPRBUILD_PLATFORM_ARGS}
-                -p
-                -P ${ADA_TEST_SRC_DIR}/test_ada_json_codec_roundtrip.gpr
-                -XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
-                -XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR}
-                -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
-                -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
-        WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
-        DEPENDS
-            ${ADA_TEST_SRC_DIR}/test_ada_json_codec_roundtrip.adb
-            ${ADA_TEST_SRC_DIR}/test_ada_json_codec_roundtrip.gpr
-            ${PCL_ROOT_DIR}/bindings/ada/pcl_plugins.ads
-            ${PCL_ROOT_DIR}/bindings/ada/pcl_bindings.ads
-            ${PYRAMID_BINDING_GENERATOR_INPUTS}
-            ${PYRAMID_PROTO_INPUTS}
-        COMMENT "Building Ada JSON codec round-trip test"
-        VERBATIM)
-    add_custom_target(ada_json_codec_roundtrip_build
-        DEPENDS ${ADA_JSON_CODEC_ROUNDTRIP_EXE})
-    add_dependencies(ada_json_codec_roundtrip_build
-        ada_tactical_json_codec_plugin_build
-        ada_pcl_gnat_archives)
-
-    add_dependencies(pyramid_ada_all
-        ada_tactical_json_codec_plugin_build
-        ada_json_codec_roundtrip_build)
-
-    add_test(NAME ada_json_codec_roundtrip
-        COMMAND ${ADA_JSON_CODEC_ROUNDTRIP_EXE}
-                ${ADA_JSON_CODEC_PLUGIN_LIB})
-    set_tests_properties(ada_json_codec_roundtrip PROPERTIES
-        LABELS "ada;plugin;codec"
-        TIMEOUT 20)
-    list(APPEND _pyramid_ada_tests ada_json_codec_roundtrip)
 
     if(TARGET pyramid_codec_json_tactical_objects)
         set(ADA_CPP_CODEC_ROUNDTRIP_EXE
@@ -1173,7 +1086,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     # The Ada client marshals native Ada records (not the C-ABI
                     # struct the C++ plugin expects), so it loads the Ada
                     # raw-record codec plugin here.
-                    --codec-plugin ${ADA_JSON_CODEC_PLUGIN_LIB})
+                    --codec-plugin $<TARGET_FILE:pyramid_codec_json_tactical_objects>)
         set_tests_properties(tobj_ada_socket_json_plugin_e2e PROPERTIES
             LABELS "cross_language;integration;codec"
             TIMEOUT 60
@@ -1250,7 +1163,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     --app-bin $<TARGET_FILE:tactical_objects_app>
                     --client-bin ${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e
                     --content-type application/json
-                    --codec-plugin ${ADA_JSON_CODEC_PLUGIN_LIB})
+                    --codec-plugin $<TARGET_FILE:pyramid_codec_json_tactical_objects>)
         set_tests_properties(tobj_ada_active_find_app_json_plugin_e2e PROPERTIES
             LABELS "cross_language;integration;codec;real_app"
             TIMEOUT 40

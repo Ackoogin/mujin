@@ -237,3 +237,23 @@ Change (codec side only; transport is unaffected):
   to/from the C-struct and defer to the SAME C++ plugin `.so`, then delete the
   separate hand-written Ada codec plugin. There should be no Ada-specific codec
   plugin in the end state.
+- 2026-06-25: **Ada now uses the same cross-language C++ codec plugin — the
+  separate Ada plugin is removed.** The Ada facade already marshalled message
+  types to the shared `pyramid_<Type>_c` C-struct (`Try_Cabi_Registry_*`); the
+  blocker was the registry path's *raw fallback*, which handed the native Ada
+  record straight to the codec — fine for the old raw-record Ada plugin, but it
+  let the cross-language C++ plugin reinterpret an Ada `Unbounded_String`
+  (e.g. an `Identifier`) as a `pyramid_str_t` and corrupt it (a `finalize/adjust`
+  crash). Removed that raw fallback: only C-ABI-marshalled types (`Try_Cabi`)
+  cross to the plugin; schemas without C-ABI marshalling (scalar aliases) return
+  NOT_FOUND so the facade's own codec path handles them. Repointed all Ada e2e
+  (socket + active-find app plugin variants) to load
+  `pyramid_codec_json_tactical_objects` (the C++ `.so`), and **deleted** the
+  hand-written Ada plugin (`pyramid-services-tactical_objects-json_codec_plugin.*`,
+  `pyramid_tactical_json_codec_plugin.gpr`) and its `test_ada_json_codec_roundtrip`
+  (the cross-language `test_ada_cpp_codec_roundtrip`, which loads the C++ `.so`
+  from Ada, remains the canonical Ada codec proof). No Ada-specific codec plugin
+  remains. Full suite **587/587 green** (one test fewer: the removed Ada-plugin
+  round-trip). Note: the Ada facade still has a static codec path for the
+  no-plugin / scalar-alias case (interim, hidden from the client); full Ada
+  fail-closed plugin-only incl. aliases is a later refinement.

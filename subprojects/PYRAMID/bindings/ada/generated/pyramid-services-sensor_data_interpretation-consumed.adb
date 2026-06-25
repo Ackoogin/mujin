@@ -921,10 +921,6 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Consumed is
       end if;
       Status := Try_Cabi_Registry_Encode
         (Codec, Schema_C, Schema_Id, Value, Msg'Access);
-      if Status = Pcl_Bindings.PCL_ERR_NOT_FOUND then
-         Status := Codec.all.Encode.all
-           (Codec.all.Codec_Ctx, Schema_C, Value, Msg'Access);
-      end if;
       if Status = Pcl_Bindings.PCL_OK then
          if Msg.Data /= System.Null_Address and then Msg.Size > 0 then
             Wire := To_Unbounded_String (Msg_To_String (Msg.Data, Msg.Size));
@@ -975,10 +971,6 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Consumed is
       end if;
       Status := Try_Cabi_Registry_Decode
         (Codec, Schema_C, Schema_Id, Msg, Value);
-      if Status = Pcl_Bindings.PCL_ERR_NOT_FOUND then
-         Status := Codec.all.Decode.all
-           (Codec.all.Codec_Ctx, Schema_C, Msg, Value);
-      end if;
       Interfaces.C.Strings.Free (Schema_C);
       return Status = Pcl_Bindings.PCL_OK;
    exception

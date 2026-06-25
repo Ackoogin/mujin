@@ -1085,12 +1085,14 @@ class AdaServiceGenerator:
             f.write(f'         Interfaces.C.Strings.Free (Schema_C);\n')
             f.write(f'         return False;\n')
             f.write(f'      end if;\n')
+            # Cross-language codec plugins consume the frozen C struct, so only
+            # types with C-ABI marshalling (Try_Cabi) may be handed to the
+            # plugin. Passing the raw native Ada value to the plugin would
+            # corrupt it (the plugin reinterprets the bytes as the C struct).
+            # Schemas without C-ABI marshalling (scalar aliases) return
+            # NOT_FOUND here so the caller uses the facade's own codec path.
             f.write(f'      Status := Try_Cabi_Registry_Encode\n')
             f.write(f"        (Codec, Schema_C, Schema_Id, Value, Msg'Access);\n")
-            f.write(f'      if Status = Pcl_Bindings.PCL_ERR_NOT_FOUND then\n')
-            f.write(f'         Status := Codec.all.Encode.all\n')
-            f.write(f"           (Codec.all.Codec_Ctx, Schema_C, Value, Msg'Access);\n")
-            f.write(f'      end if;\n')
             f.write(f'      if Status = Pcl_Bindings.PCL_OK then\n')
             f.write(f'         if Msg.Data /= System.Null_Address and then Msg.Size > 0 then\n')
             f.write(f'            Wire := To_Unbounded_String (Msg_To_String (Msg.Data, Msg.Size));\n')
@@ -1140,12 +1142,12 @@ class AdaServiceGenerator:
             f.write(f'         Interfaces.C.Strings.Free (Schema_C);\n')
             f.write(f'         return False;\n')
             f.write(f'      end if;\n')
+            # Only C-ABI-marshalled types may cross to the plugin; schemas
+            # without marshalling (scalar aliases) return NOT_FOUND so the
+            # caller uses the facade's own codec path rather than letting the
+            # plugin write a C struct over the native Ada value.
             f.write(f'      Status := Try_Cabi_Registry_Decode\n')
             f.write(f'        (Codec, Schema_C, Schema_Id, Msg, Value);\n')
-            f.write(f'      if Status = Pcl_Bindings.PCL_ERR_NOT_FOUND then\n')
-            f.write(f'         Status := Codec.all.Decode.all\n')
-            f.write(f'           (Codec.all.Codec_Ctx, Schema_C, Msg, Value);\n')
-            f.write(f'      end if;\n')
             f.write(f'      Interfaces.C.Strings.Free (Schema_C);\n')
             f.write(f'      return Status = Pcl_Bindings.PCL_OK;\n')
             f.write(f'   exception\n')
