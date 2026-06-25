@@ -519,6 +519,44 @@ def _collect_cabi_message_bindings(
     return result
 
 
+def _collect_alias_schema_bindings(
+        proto_path: Path,
+        allowed_type_pkgs: List[str]) -> List[Tuple[str, str, str, str]]:
+    """Return (schema_id, native_alias_type, kind, cabi_pkg) for scalar aliases.
+
+    Scalar-wrapper messages (e.g. ``Identifier`` -> string, unit wrappers ->
+    numeric) have no ``pyramid_<Type>_c`` struct; they cross the C-ABI codec
+    boundary as ``pyramid_str_t`` (string) or a bare scalar pointer (numeric).
+    ``kind`` is ``"string"`` or ``"numeric"``; ``cabi_pkg`` is the module's Cabi
+    package (used for ``Pyramid_Str_T`` / ``Dup_Str`` / ``To_Ada_String``).
+    """
+    proto_root = _find_proto_root(proto_path)
+    if proto_root is None:
+        return []
+
+    try:
+        dm_files = [
+            pf for pf in parse_proto_tree(proto_root)
+            if pf.package.startswith('pyramid.data_model')
+        ]
+    except Exception:
+        return []
+
+    aliases = AdaTypesGenerator(dm_files)._find_scalar_wrappers()
+    result: List[Tuple[str, str, str, str]] = []
+    for pf in dm_files:
+        types_pkg = AdaTypesGenerator._ada_pkg_for_file(pf)
+        if types_pkg not in allowed_type_pkgs:
+            continue
+        cabi_pkg = _ada_cabi_pkg_from_proto_pkg(pf.package)
+        for msg in pf.messages:
+            if msg.name not in aliases:
+                continue
+            kind = 'string' if aliases[msg.name] == 'Unbounded_String' else 'numeric'
+            result.append((msg.name, _ada_name(msg.name), kind, cabi_pkg))
+    return result
+
+
 def _flatbuffers_func_suffix_for_type(full_type: str) -> str:
     """Return the Ada suffix used by the generated FlatBuffers bridge package."""
     return _camel_to_snake(_short_type(full_type))
@@ -880,7 +918,12 @@ class AdaServiceGenerator:
         duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
         cabi_bindings = _collect_cabi_message_bindings(
             self._proto_input, type_pkgs)
-        cabi_pkgs = sorted({pkg for _, _, _, pkg in cabi_bindings})
+        alias_bindings = _collect_alias_schema_bindings(
+            self._proto_input, type_pkgs)
+        # String aliases need their module Cabi package (Pyramid_Str_T/Dup_Str).
+        cabi_pkgs = sorted(
+            {pkg for _, _, _, pkg in cabi_bindings}
+            | {pkg for _, _, kind, pkg in alias_bindings if kind == 'string'})
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'--  Auto-generated service binding body\n')
@@ -927,6 +970,18 @@ class AdaServiceGenerator:
             f.write(f'\n')
             for schema, native, _cabi, _pkg in cabi_bindings:
                 del schema, _cabi, _pkg
+                ptr_pkg = f'{native}_Pointers'
+                f.write(f'   package {ptr_pkg} is new\n')
+                f.write(f'     System.Address_To_Access_Conversions ({native});\n')
+                f.write(f'\n')
+            for schema, native, _kind, _pkg in alias_bindings:
+                del schema, _pkg
+                # Only string aliases deref via a pointer package; numeric
+                # aliases pass the scalar address straight through. (And the
+                # native alias name, e.g. Length, can clash with use-visible
+                # functions, so avoid instantiating one unless needed.)
+                if _kind != 'string':
+                    continue
                 ptr_pkg = f'{native}_Pointers'
                 f.write(f'   package {ptr_pkg} is new\n')
                 f.write(f'     System.Address_To_Access_Conversions ({native});\n')
@@ -1013,6 +1068,32 @@ class AdaServiceGenerator:
                 f.write(f'            return Status;\n')
                 f.write(f'         end;\n')
                 f.write(f'      end if;\n')
+            # Scalar aliases: string -> pyramid_str_t, numeric -> scalar pointer.
+            for schema, native, kind, alias_pkg in alias_bindings:
+                ptr_pkg = f'{native}_Pointers'
+                f.write(f'      if Schema_Id = "{schema}" then\n')
+                f.write(f'         if Value = System.Null_Address then\n')
+                f.write(f'            return Pcl_Bindings.PCL_ERR_INVALID;\n')
+                f.write(f'         end if;\n')
+                if kind == 'string':
+                    f.write(f'         declare\n')
+                    f.write(f'            Native : constant {ptr_pkg}.Object_Pointer :=\n')
+                    f.write(f'              {ptr_pkg}.To_Pointer (Value);\n')
+                    f.write(f'            S : constant String := To_String (Native.all);\n')
+                    f.write(f'            C_Value : aliased {alias_pkg}.Pyramid_Str_T;\n')
+                    f.write(f'            Status : Pcl_Bindings.Pcl_Status;\n')
+                    f.write(f'         begin\n')
+                    f.write(f'            C_Value.Ptr := Interfaces.C.Strings.New_String (S);\n')
+                    f.write(f"            C_Value.Len := Interfaces.C.unsigned (S'Length);\n")
+                    f.write(f'            Status := Codec.all.Encode.all\n')
+                    f.write(f"              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);\n")
+                    f.write(f'            Interfaces.C.Strings.Free (C_Value.Ptr);\n')
+                    f.write(f'            return Status;\n')
+                    f.write(f'         end;\n')
+                else:
+                    f.write(f'         return Codec.all.Encode.all\n')
+                    f.write(f'           (Codec.all.Codec_Ctx, Schema_C, Value, Msg);\n')
+                f.write(f'      end if;\n')
             f.write(f'      return Pcl_Bindings.PCL_ERR_NOT_FOUND;\n')
             f.write(f'   end Try_Cabi_Registry_Encode;\n')
             f.write(f'\n')
@@ -1050,6 +1131,41 @@ class AdaServiceGenerator:
                 f.write(f"            Free_{native} (C_Value'Access);\n")
                 f.write(f'            return Status;\n')
                 f.write(f'         end;\n')
+                f.write(f'      end if;\n')
+            # Scalar aliases: string <- pyramid_str_t, numeric <- scalar pointer.
+            for schema, native, kind, alias_pkg in alias_bindings:
+                ptr_pkg = f'{native}_Pointers'
+                f.write(f'      if Schema_Id = "{schema}" then\n')
+                f.write(f'         if Value = System.Null_Address then\n')
+                f.write(f'            return Pcl_Bindings.PCL_ERR_INVALID;\n')
+                f.write(f'         end if;\n')
+                if kind == 'string':
+                    f.write(f'         declare\n')
+                    f.write(f'            Native : constant {ptr_pkg}.Object_Pointer :=\n')
+                    f.write(f'              {ptr_pkg}.To_Pointer (Value);\n')
+                    f.write(f'            C_Value : aliased {alias_pkg}.Pyramid_Str_T;\n')
+                    f.write(f'            Status : Pcl_Bindings.Pcl_Status;\n')
+                    f.write(f'         begin\n')
+                    f.write(f'            Status := Codec.all.Decode.all\n')
+                    f.write(f"              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);\n")
+                    f.write(f'            if Status = Pcl_Bindings.PCL_OK then\n')
+                    f.write(f'               if C_Value.Ptr = Interfaces.C.Strings.Null_Ptr then\n')
+                    f.write(f'                  Native.all := Null_Unbounded_String;\n')
+                    f.write(f'               else\n')
+                    f.write(f'                  Native.all := To_Unbounded_String\n')
+                    f.write(f'                    (Interfaces.C.Strings.Value\n')
+                    f.write(f'                       (C_Value.Ptr,\n')
+                    f.write(f'                        Interfaces.C.size_t (C_Value.Len)));\n')
+                    f.write(f'               end if;\n')
+                    f.write(f'            end if;\n')
+                    f.write(f'            if C_Value.Ptr /= Interfaces.C.Strings.Null_Ptr then\n')
+                    f.write(f'               Interfaces.C.Strings.Free (C_Value.Ptr);\n')
+                    f.write(f'            end if;\n')
+                    f.write(f'            return Status;\n')
+                    f.write(f'         end;\n')
+                else:
+                    f.write(f'         return Codec.all.Decode.all\n')
+                    f.write(f'           (Codec.all.Codec_Ctx, Schema_C, Msg, Value);\n')
                 f.write(f'      end if;\n')
             f.write(f'      return Pcl_Bindings.PCL_ERR_NOT_FOUND;\n')
             f.write(f'   end Try_Cabi_Registry_Decode;\n')

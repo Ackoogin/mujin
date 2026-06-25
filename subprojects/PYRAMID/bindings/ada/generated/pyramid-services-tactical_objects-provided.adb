@@ -12,6 +12,7 @@ with System.Address_To_Access_Conversions;
 with System.Storage_Elements;
 with Pyramid.Data_Model.Common.Types_Codec;  use Pyramid.Data_Model.Common.Types_Codec;
 with Pyramid.Data_Model.Tactical.Types_Codec;  use Pyramid.Data_Model.Tactical.Types_Codec;
+with Pyramid.Data_Model.Base.Cabi;  use Pyramid.Data_Model.Base.Cabi;
 with Pyramid.Data_Model.Common.Cabi;  use Pyramid.Data_Model.Common.Cabi;
 with Pyramid.Data_Model.Tactical.Cabi;  use Pyramid.Data_Model.Tactical.Cabi;
 with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
@@ -79,6 +80,9 @@ package body Pyramid.Services.Tactical_Objects.Provided is
 
    package Object_Match_Pointers is new
      System.Address_To_Access_Conversions (Object_Match);
+
+   package Identifier_Pointers is new
+     System.Address_To_Access_Conversions (Identifier);
 
    function Handler_Address
      (Handlers : access constant Service_Handlers) return System.Address is
@@ -407,6 +411,60 @@ package body Pyramid.Services.Tactical_Objects.Provided is
             return Status;
          end;
       end if;
+      if Schema_Id = "Angle" then
+         if Value = System.Null_Address then
+            return Pcl_Bindings.PCL_ERR_INVALID;
+         end if;
+         return Codec.all.Encode.all
+           (Codec.all.Codec_Ctx, Schema_C, Value, Msg);
+      end if;
+      if Schema_Id = "Length" then
+         if Value = System.Null_Address then
+            return Pcl_Bindings.PCL_ERR_INVALID;
+         end if;
+         return Codec.all.Encode.all
+           (Codec.all.Codec_Ctx, Schema_C, Value, Msg);
+      end if;
+      if Schema_Id = "Timestamp" then
+         if Value = System.Null_Address then
+            return Pcl_Bindings.PCL_ERR_INVALID;
+         end if;
+         return Codec.all.Encode.all
+           (Codec.all.Codec_Ctx, Schema_C, Value, Msg);
+      end if;
+      if Schema_Id = "Identifier" then
+         if Value = System.Null_Address then
+            return Pcl_Bindings.PCL_ERR_INVALID;
+         end if;
+         declare
+            Native : constant Identifier_Pointers.Object_Pointer :=
+              Identifier_Pointers.To_Pointer (Value);
+            S : constant String := To_String (Native.all);
+            C_Value : aliased Pyramid.Data_Model.Base.Cabi.Pyramid_Str_T;
+            Status : Pcl_Bindings.Pcl_Status;
+         begin
+            C_Value.Ptr := Interfaces.C.Strings.New_String (S);
+            C_Value.Len := Interfaces.C.unsigned (S'Length);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Interfaces.C.Strings.Free (C_Value.Ptr);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Speed" then
+         if Value = System.Null_Address then
+            return Pcl_Bindings.PCL_ERR_INVALID;
+         end if;
+         return Codec.all.Encode.all
+           (Codec.all.Codec_Ctx, Schema_C, Value, Msg);
+      end if;
+      if Schema_Id = "Percentage" then
+         if Value = System.Null_Address then
+            return Pcl_Bindings.PCL_ERR_INVALID;
+         end if;
+         return Codec.all.Encode.all
+           (Codec.all.Codec_Ctx, Schema_C, Value, Msg);
+      end if;
       return Pcl_Bindings.PCL_ERR_NOT_FOUND;
    end Try_Cabi_Registry_Encode;
 
@@ -721,6 +779,69 @@ package body Pyramid.Services.Tactical_Objects.Provided is
             Free_Object_Match (C_Value'Access);
             return Status;
          end;
+      end if;
+      if Schema_Id = "Angle" then
+         if Value = System.Null_Address then
+            return Pcl_Bindings.PCL_ERR_INVALID;
+         end if;
+         return Codec.all.Decode.all
+           (Codec.all.Codec_Ctx, Schema_C, Msg, Value);
+      end if;
+      if Schema_Id = "Length" then
+         if Value = System.Null_Address then
+            return Pcl_Bindings.PCL_ERR_INVALID;
+         end if;
+         return Codec.all.Decode.all
+           (Codec.all.Codec_Ctx, Schema_C, Msg, Value);
+      end if;
+      if Schema_Id = "Timestamp" then
+         if Value = System.Null_Address then
+            return Pcl_Bindings.PCL_ERR_INVALID;
+         end if;
+         return Codec.all.Decode.all
+           (Codec.all.Codec_Ctx, Schema_C, Msg, Value);
+      end if;
+      if Schema_Id = "Identifier" then
+         if Value = System.Null_Address then
+            return Pcl_Bindings.PCL_ERR_INVALID;
+         end if;
+         declare
+            Native : constant Identifier_Pointers.Object_Pointer :=
+              Identifier_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid.Data_Model.Base.Cabi.Pyramid_Str_T;
+            Status : Pcl_Bindings.Pcl_Status;
+         begin
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               if C_Value.Ptr = Interfaces.C.Strings.Null_Ptr then
+                  Native.all := Null_Unbounded_String;
+               else
+                  Native.all := To_Unbounded_String
+                    (Interfaces.C.Strings.Value
+                       (C_Value.Ptr,
+                        Interfaces.C.size_t (C_Value.Len)));
+               end if;
+            end if;
+            if C_Value.Ptr /= Interfaces.C.Strings.Null_Ptr then
+               Interfaces.C.Strings.Free (C_Value.Ptr);
+            end if;
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Speed" then
+         if Value = System.Null_Address then
+            return Pcl_Bindings.PCL_ERR_INVALID;
+         end if;
+         return Codec.all.Decode.all
+           (Codec.all.Codec_Ctx, Schema_C, Msg, Value);
+      end if;
+      if Schema_Id = "Percentage" then
+         if Value = System.Null_Address then
+            return Pcl_Bindings.PCL_ERR_INVALID;
+         end if;
+         return Codec.all.Decode.all
+           (Codec.all.Codec_Ctx, Schema_C, Msg, Value);
       end if;
       return Pcl_Bindings.PCL_ERR_NOT_FOUND;
    end Try_Cabi_Registry_Decode;
