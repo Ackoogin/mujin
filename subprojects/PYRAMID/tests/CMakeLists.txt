@@ -261,6 +261,42 @@ if(TARGET pyramid_codec_json_tactical_objects)
     gtest_discover_tests(test_codec_plugin_swap DISCOVERY_MODE PRE_TEST)
 endif()
 
+if(PYRAMID_ENABLE_FLATBUFFERS
+        AND TARGET pyramid_codec_flatbuffers_tactical_objects
+        AND TARGET pcl_transport_socket_plugin)
+    add_executable(test_transport_codec_plugin_composition
+        test_transport_codec_plugin_composition.cpp
+        ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
+    )
+    add_dependencies(test_transport_codec_plugin_composition
+        pyramid_cpp_bindings_codegen
+        pyramid_codec_flatbuffers_tactical_objects
+        pcl_transport_socket_plugin)
+    target_link_libraries(test_transport_codec_plugin_composition PRIVATE
+        pcl_core
+        pyramid_generated_codecs
+        pyramid_flatbuffers_support
+        GTest::gtest_main
+    )
+    target_include_directories(test_transport_codec_plugin_composition PRIVATE
+        ${PROTO_BINDINGS_DIR}
+        ${PYRAMID_ROOT_DIR}/tactical_objects/include
+        ${PYRAMID_ROOT_DIR}/core/include
+    )
+    target_compile_definitions(test_transport_codec_plugin_composition PRIVATE
+        PYRAMID_FLATBUFFERS_CODEC_PLUGIN_PATH="$<TARGET_FILE:pyramid_codec_flatbuffers_tactical_objects>"
+        PCL_SOCKET_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_socket_plugin>")
+    if(NOT WIN32)
+        target_link_libraries(test_transport_codec_plugin_composition PRIVATE pthread)
+    endif()
+    gtest_discover_tests(test_transport_codec_plugin_composition
+        DISCOVERY_MODE PRE_TEST
+        PROPERTIES
+            LABELS "integration;codec;transport;plugin"
+            RESOURCE_LOCK pyramid_process_e2e
+            TIMEOUT 15)
+endif()
+
 # Bridge scenario: a single process loads codec plugins for two distinct
 # components (both under application/json) and dispatches by schema_id.
 if(TARGET pyramid_codec_json_tactical_objects

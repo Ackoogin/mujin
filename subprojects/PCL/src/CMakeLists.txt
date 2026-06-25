@@ -28,6 +28,7 @@ set_target_properties(pcl_core PROPERTIES
   C_STANDARD 11
   C_STANDARD_REQUIRED ON
   C_EXTENSIONS OFF
+  POSITION_INDEPENDENT_CODE ON
 )
 
 # Platform threading library (needed for sleep/timing)
@@ -53,6 +54,21 @@ if(WIN32)
 endif()
 
 set_target_properties(pcl_transport_socket PROPERTIES
+  LINKER_LANGUAGE C
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+  POSITION_INDEPENDENT_CODE ON
+)
+
+add_library(pcl_transport_socket_plugin MODULE
+  pcl_transport_socket_plugin.c
+)
+
+target_link_libraries(pcl_transport_socket_plugin
+  PRIVATE pcl_transport_socket Threads::Threads)
+
+set_target_properties(pcl_transport_socket_plugin PROPERTIES
   LINKER_LANGUAGE C
   C_STANDARD 11
   C_STANDARD_REQUIRED ON

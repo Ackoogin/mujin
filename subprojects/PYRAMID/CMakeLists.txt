@@ -556,6 +556,24 @@ if(PYRAMID_ENABLE_GRPC)
                 "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp"
                 "${PYRAMID_PROTOBUF_GEN_DIR}"
         )
+
+        add_library(pyramid_grpc_coupled_plugin MODULE
+            "${PYRAMID_ROOT_DIR}/plugins/pyramid_grpc_coupled_plugin.cpp")
+        add_dependencies(pyramid_grpc_coupled_plugin
+            pyramid_grpc_transport
+            pyramid_grpc_codegen
+            pyramid_protobuf_codegen)
+        target_link_libraries(pyramid_grpc_coupled_plugin
+            PRIVATE
+                pcl_core
+                pyramid_grpc_transport
+                pyramid_protobuf_support)
+        target_include_directories(pyramid_grpc_coupled_plugin
+            PRIVATE
+                "${PCL_ROOT_DIR}/include"
+                "${PYRAMID_CPP_BINDINGS_DIR}"
+                "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp"
+                "${PYRAMID_PROTOBUF_GEN_DIR}")
     endif()
 endif()
 

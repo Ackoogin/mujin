@@ -199,3 +199,20 @@ Change (codec side only; transport is unaffected):
   `pyramid_generated_codecs` so the shared C free functions resolve. Verified:
   `pyramid_ada_all`, full `flatbuffers-only-release` build, and **586/586 CTest
   green**.
+- 2026-06-25: Phase 4 transport-plugin half implemented. Added
+  `pcl_transport_socket_plugin` as a MODULE wrapping the existing socket
+  transport ABI (`pcl_transport_abi_version` +
+  `pcl_transport_plugin_entry`), with config-driven `role`, `host`, `port`, and
+  executor binding for the current socket constructor contract. Added
+  `TransportCodecPluginComposition.FlatBuffersCodecPluginOverSocketTransportPluginPubSub`,
+  which loads `pyramid_codec_flatbuffers_tactical_objects` through
+  `pcl_plugin_load_codec`, loads client/server socket transports through
+  `pcl_plugin_load_transport`, installs the plugin vtables on executors, and
+  round-trips typed `ObjectDetail` evidence through the generated consumed
+  facade on loopback. Added a structural `pyramid_grpc_coupled_plugin` target
+  gated behind `PYRAMID_ENABLE_GRPC`; it exports both transport and codec plugin
+  entry points under `application/grpc` but was not runtime-verified: a bounded
+  fresh gRPC configure check failed before the gRPC graph because network access
+  could not fetch googletest. Verified: `cmake --preset flatbuffers-only`,
+  `cmake --build --preset flatbuffers-only-release --parallel 16`, and
+  **587/587 CTest green**.
