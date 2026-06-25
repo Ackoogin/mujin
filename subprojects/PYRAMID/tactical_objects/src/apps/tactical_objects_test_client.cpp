@@ -1,14 +1,17 @@
-#include "pyramid_services_tactical_objects_provided.hpp"
-#include "pyramid_data_model_tactical_codec.hpp"
-#if defined(PYRAMID_ENABLE_FLATBUFFERS)
-#include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
-#endif
-#if defined(PYRAMID_ENABLE_PROTOBUF)
-#include "pyramid_services_tactical_objects_protobuf_codec.hpp"
-#endif
+// Tactical Objects test client.
+//
+// Exercises the Tactical Objects provided services purely through the
+// generated, fully-typed bindings: it subscribes to standard.entity_matches
+// and standard.evidence_requirements, issues object_of_interest.create_requirement,
+// and publishes standard.object_evidence through typed generated helpers.
+// All wire encoding/decoding and plugin/codec selection is hidden inside the
+// generated facade -- this client holds zero marshalling or wire knowledge.
 
-#include <pcl/pcl_container.h>
-#include <pcl/pcl_executor.h>
+#include "pyramid_services_tactical_objects_consumed.hpp"
+#include "pyramid_services_tactical_objects_provided_components.hpp"
+
+#include <pcl/component.hpp>
+#include <pcl/executor.hpp>
 #include <pcl/pcl_transport_socket.h>
 
 extern "C" {
@@ -16,133 +19,197 @@ extern "C" {
 #include <pcl/pcl_plugin_loader.h>
 }
 
-#include <nlohmann/json.hpp>
-
-#include <atomic>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <future>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
 
 namespace {
 
-#if defined(PYRAMID_ENABLE_FLATBUFFERS)
-namespace FlatCodec = pyramid::services::tactical_objects::flatbuffers_codec;
-#endif
-#if defined(PYRAMID_ENABLE_PROTOBUF)
-namespace ProtobufCodec = pyramid::services::tactical_objects::protobuf_codec;
-#endif
 namespace Provided = pyramid::components::tactical_objects::services::provided;
-namespace TacticalCodec = pyramid::domain_model::tactical;
+namespace Consumed = pyramid::components::tactical_objects::services::consumed;
 namespace Common = pyramid::domain_model::common;
 using namespace pyramid::domain_model;
 
-struct ClientState {
-    std::atomic<bool> response_ready{false};
-    std::atomic<bool> interest_id_received{false};
-    std::atomic<int> match_count{0};
-    std::string content_type = "application/json";
+constexpr double kDegToRad = 0.017453292519943295;
+
+struct CodecPluginDeleter {
+  void operator()(pcl_plugin_handle_t* handle) const {
+    if (handle) {
+      pcl_plugin_unload(handle);
+    }
+  }
 };
 
-void onEntityMatches(pcl_container_t*, const pcl_msg_t* msg, void* user_data) {
-  auto* state = static_cast<ClientState*>(user_data);
-  if (!msg || !msg->data || msg->size == 0) {
-    return;
-  }
-
-  std::vector<ObjectMatch> matches;
-  std::string payload;
-  try {
-    if (false) {
-#if defined(PYRAMID_ENABLE_FLATBUFFERS)
-    } else if (msg->type_name &&
-               std::strcmp(msg->type_name, FlatCodec::kContentType) == 0) {
-      matches = FlatCodec::fromBinaryObjectMatchArray(msg->data, msg->size);
-      payload = "<flatbuffers>";
-#endif
-#if defined(PYRAMID_ENABLE_PROTOBUF)
-    } else if (msg->type_name &&
-               std::strcmp(msg->type_name, "application/protobuf") == 0) {
-      matches = ProtobufCodec::fromBinaryObjectMatchArray(msg->data, msg->size);
-      payload = "<protobuf>";
-#endif
-    } else {
-      payload.assign(static_cast<const char*>(msg->data), msg->size);
-      auto arr = nlohmann::json::parse(payload);
-      if (!arr.is_array()) {
-        return;
-      }
-      for (const auto& item : arr) {
-        matches.push_back(TacticalCodec::fromJson(
-            item.dump(), static_cast<ObjectMatch*>(nullptr)));
-      }
+struct SocketTransportDeleter {
+  void operator()(pcl_socket_transport_t* transport) const {
+    if (transport) {
+      pcl_socket_transport_destroy(transport);
     }
-  } catch (...) {
-    return;
   }
-  state->match_count.store(static_cast<int>(matches.size()));
+};
 
-  std::fprintf(stderr,
-               "[tactical_objects_test_client] standard.entity_matches type=%s count=%d payload=%s\n",
-               msg->type_name ? msg->type_name : "<null>",
-               static_cast<int>(matches.size()), payload.c_str());
-}
+using CodecPlugin = std::unique_ptr<pcl_plugin_handle_t, CodecPluginDeleter>;
+using SocketTransport =
+    std::unique_ptr<pcl_socket_transport_t, SocketTransportDeleter>;
 
-void onCreateRequirementResponse(const pcl_msg_t* resp, void* user_data) {
-  auto* state = static_cast<ClientState*>(user_data);
-  state->response_ready.store(true);
+class TacticalObjectsTestClient : public pcl::Component {
+public:
+  TacticalObjectsTestClient(pcl::Executor& executor, std::string content_type)
+      : pcl::Component("tactical_objects_test_client"),
+        content_type_(std::move(content_type)),
+        consumer_(*this, executor, content_type_) {}
 
-  if (!resp || !resp->data || resp->size == 0) {
-    std::fprintf(stderr,
-                 "[tactical_objects_test_client] create_requirement returned empty response\n");
-    return;
+  std::future<Provided::Result<Identifier>>
+  createRequirementAsync(const ObjectInterestRequirement& request) {
+    return consumer_.objectOfInterestCreateRequirementAsync(request);
   }
 
-  try {
-    std::string identifier;
-    if (false) {
-#if defined(PYRAMID_ENABLE_FLATBUFFERS)
-    } else if (resp->type_name &&
-               std::strcmp(resp->type_name, FlatCodec::kContentType) == 0) {
-      identifier = FlatCodec::fromBinaryIdentifier(resp->data, resp->size);
-#endif
-#if defined(PYRAMID_ENABLE_PROTOBUF)
-    } else if (resp->type_name &&
-               std::strcmp(resp->type_name, "application/protobuf") == 0) {
-      identifier = ProtobufCodec::fromBinaryIdentifier(resp->data, resp->size);
-#endif
-    } else {
-      const std::string payload(static_cast<const char*>(resp->data), resp->size);
-      const auto response = nlohmann::json::parse(payload);
-      if (response.is_string()) {
-        identifier = response.get<std::string>();
-      }
+  bool responseReady() const { return response_ready_; }
+  bool interestIdReceived() const { return interest_id_received_; }
+  int matchCount() const { return match_count_; }
+  bool evidenceRequirementReceived() const {
+    return evidence_requirement_received_;
+  }
+  bool evidencePublished() const { return evidence_published_; }
+
+  void acceptCreateRequirementResult(Provided::Result<Identifier> result) {
+    response_ready_ = true;
+    if (!result.ok()) {
+      std::fprintf(stderr,
+                   "[tactical_objects_test_client] create_requirement failed: %d\n",
+                   static_cast<int>(result.status));
+      return;
     }
+
     std::fprintf(stderr,
                  "[tactical_objects_test_client] create_requirement identifier: %s\n",
-                 identifier.c_str());
-    if (!identifier.empty()) {
-      state->interest_id_received.store(true);
+                 result.value.c_str());
+    if (!result.value.empty()) {
+      interest_id_received_ = true;
     }
-  } catch (...) {
   }
 
-  if (state->interest_id_received.load()) {
-    state->interest_id_received.store(true);
+protected:
+  pcl_status_t on_configure() override {
+    const pcl_port_t* matches_port = consumer_.subscribeEntityMatches(
+        [this](const std::vector<ObjectMatch>& matches) {
+          onEntityMatches(matches);
+        });
+    const pcl_port_t* requirements_port = consumer_.subscribeEvidenceRequirements(
+        [this](const ObjectEvidenceRequirement& requirement) {
+          onEvidenceRequirement(requirement);
+        });
+    publisher_ =
+        addPublisher(Consumed::kTopicObjectEvidence, content_type_.c_str());
+    return matches_port && requirements_port && publisher_ ? PCL_OK
+                                                           : PCL_ERR_NOMEM;
   }
+
+private:
+  void onEntityMatches(const std::vector<ObjectMatch>& matches) {
+    match_count_ = static_cast<int>(matches.size());
+    std::fprintf(stderr,
+                 "[tactical_objects_test_client] standard.entity_matches count=%d\n",
+                 match_count_);
+  }
+
+  void onEvidenceRequirement(const ObjectEvidenceRequirement& requirement) {
+    evidence_requirement_received_ = true;
+    if (evidence_published_ || !publisher_) {
+      return;
+    }
+
+    ObjectDetail evidence;
+    evidence.id = "tactical-objects-test-evidence";
+    evidence.entity_source = "tactical-objects-test-client";
+    evidence.source.push_back(ObjectSource::Local);
+    evidence.identity = StandardIdentity::Hostile;
+    evidence.dimension = evidenceDimension(requirement);
+    evidence.position = evidencePosition(requirement);
+    evidence.quality = 0.95;
+    evidence.creation_time = 1.0;
+
+    const pcl_status_t rc =
+        Consumed::publishObjectEvidence(publisher_, evidence,
+                                        content_type_.c_str());
+    if (rc == PCL_OK) {
+      evidence_published_ = true;
+      std::fprintf(stderr,
+                   "[tactical_objects_test_client] standard.object_evidence "
+                   "published id=%s\n",
+                   evidence.id.c_str());
+    } else {
+      std::fprintf(stderr,
+                   "[tactical_objects_test_client] standard.object_evidence "
+                   "publish failed: %d\n",
+                   static_cast<int>(rc));
+    }
+  }
+
+  BattleDimension
+  evidenceDimension(const ObjectEvidenceRequirement& requirement) const {
+    if (!requirement.dimension.empty() &&
+        requirement.dimension.front() != BattleDimension::Unspecified) {
+      return requirement.dimension.front();
+    }
+    return BattleDimension::SeaSurface;
+  }
+
+  Common::GeodeticPosition
+  evidencePosition(const ObjectEvidenceRequirement& requirement) const {
+    Common::GeodeticPosition position{};
+    position.latitude = 51.0 * kDegToRad;
+    position.longitude = 0.0;
+
+    if (requirement.point.has_value()) {
+      return requirement.point->position;
+    }
+
+    if (requirement.poly_area.has_value() &&
+        !requirement.poly_area->points.empty()) {
+      double lat_sum = 0.0;
+      double lon_sum = 0.0;
+      for (const auto& point : requirement.poly_area->points) {
+        lat_sum += point.latitude;
+        lon_sum += point.longitude;
+      }
+      const auto count =
+          static_cast<double>(requirement.poly_area->points.size());
+      position.latitude = lat_sum / count;
+      position.longitude = lon_sum / count;
+    }
+
+    return position;
+  }
+
+  std::string content_type_;
+  Provided::ConsumedService consumer_;
+  pcl_port_t* publisher_ = nullptr;
+  bool response_ready_ = false;
+  bool interest_id_received_ = false;
+  bool evidence_requirement_received_ = false;
+  bool evidence_published_ = false;
+  int match_count_ = 0;
+};
+
+ObjectInterestRequirement makeRequirement() {
+  ObjectInterestRequirement request;
+  request.source = ObjectSource::Local;
+  request.policy = DataPolicy::Obtain;
+  request.dimension.push_back(BattleDimension::Unspecified);
+  request.point = Common::Point{};
+  request.point->position.latitude = 50.0 * kDegToRad;
+  request.point->position.longitude = -1.0 * kDegToRad;
+  return request;
 }
 
-pcl_status_t onConfigure(pcl_container_t* container, void* user_data) {
-  auto* state = static_cast<ClientState*>(user_data);
-  Provided::subscribeEntityMatches(
-      container, onEntityMatches, user_data, state->content_type.c_str());
-  return PCL_OK;
-}
-
-} // namespace
+}  // namespace
 
 int main(int argc, char* argv[]) {
   const char* host = "127.0.0.1";
@@ -165,7 +232,9 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  std::vector<pcl_plugin_handle_t*> codec_plugin_handles;
+  // Deployment wiring: load the requested codec plugin(s) into the default
+  // registry. The generated facade picks them up transparently.
+  std::vector<CodecPlugin> codec_plugins;
   for (const auto& path : codec_plugin_paths) {
     pcl_plugin_handle_t* handle = nullptr;
     if (pcl_plugin_load_codec(path.c_str(), pcl_codec_registry_default(),
@@ -173,87 +242,61 @@ int main(int argc, char* argv[]) {
       std::fprintf(stderr, "failed to load codec plugin: %s\n", path.c_str());
       return 2;
     }
-    codec_plugin_handles.push_back(handle);
+    codec_plugins.emplace_back(handle);
   }
 
-  pcl_executor_t* exec = pcl_executor_create();
-  if (!exec) {
-    std::fprintf(stderr, "[tactical_objects_test_client] Failed to create executor\n");
+  pcl::Executor executor;
+  if (!executor.handle()) {
+    std::fprintf(stderr,
+                 "[tactical_objects_test_client] Failed to create executor\n");
     return 1;
   }
 
-  pcl_socket_transport_t* transport =
-      pcl_socket_transport_create_client(host, port, exec);
+  SocketTransport transport{
+      pcl_socket_transport_create_client(host, port, executor.handle())};
   if (!transport) {
     std::fprintf(stderr,
                  "[tactical_objects_test_client] Failed to connect to %s:%u\n",
                  host, port);
-    pcl_executor_destroy(exec);
     return 1;
   }
 
-  pcl_executor_set_transport(exec, pcl_socket_transport_get_transport(transport));
+  executor.setTransport(pcl_socket_transport_get_transport(transport.get()));
 
-  ClientState state;
-  state.content_type = content_type;
-  pcl_callbacks_t callbacks{};
-  callbacks.on_configure = onConfigure;
-  pcl_container_t* container =
-      pcl_container_create("tactical_objects_test_client", &callbacks, &state);
-  if (!container) {
-    std::fprintf(stderr, "[tactical_objects_test_client] Failed to create container\n");
-    pcl_socket_transport_destroy(transport);
-    pcl_executor_destroy(exec);
-    return 1;
-  }
-
-  pcl_container_configure(container);
-  pcl_container_activate(container);
-  pcl_executor_add(exec, container);
-
-  ObjectInterestRequirement request;
-  request.source = ObjectSource::Local;
-  request.policy = DataPolicy::Obtain;
-  request.dimension.push_back(BattleDimension::Unspecified);
-  request.point = Common::Point{};
-  request.point->position.latitude = 50.0 * 0.017453292519943295;
-  request.point->position.longitude = -1.0 * 0.017453292519943295;
-
-  const pcl_status_t invoke_rc =
-      Provided::invokeObjectOfInterestCreateRequirement(
-      exec, request, onCreateRequirementResponse, &state, nullptr,
-      state.content_type.c_str());
-  if (invoke_rc != PCL_OK) {
+  TacticalObjectsTestClient client{executor, content_type};
+  if (client.configure() != PCL_OK ||
+      client.activate() != PCL_OK ||
+      executor.add(client) != PCL_OK) {
     std::fprintf(stderr,
-                 "[tactical_objects_test_client] Failed to invoke %s\n",
-                 Provided::kSvcObjectOfInterestCreateRequirement);
-    pcl_socket_transport_destroy(transport);
-    pcl_executor_destroy(exec);
-    pcl_container_destroy(container);
+                 "[tactical_objects_test_client] Failed to create container\n");
     return 1;
   }
+
+  auto response = client.createRequirementAsync(makeRequirement());
 
   const auto deadline =
       std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
   while (std::chrono::steady_clock::now() < deadline) {
-    pcl_executor_spin_once(exec, 0);
-    if (state.response_ready.load() && state.match_count.load() > 0) {
+    executor.spinOnce(0);
+    if (!client.responseReady() &&
+        response.wait_for(std::chrono::milliseconds(0)) ==
+            std::future_status::ready) {
+      client.acceptCreateRequirementResult(response.get());
+    }
+    if (client.responseReady() && client.matchCount() > 0) {
       break;
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 
   std::fprintf(stderr,
-               "[tactical_objects_test_client] interest_id_received=%s matches=%d\n",
-               state.interest_id_received.load() ? "true" : "false",
-               state.match_count.load());
+               "[tactical_objects_test_client] interest_id_received=%s "
+               "evidence_requirement_received=%s evidence_published=%s "
+               "matches=%d\n",
+               client.interestIdReceived() ? "true" : "false",
+               client.evidenceRequirementReceived() ? "true" : "false",
+               client.evidencePublished() ? "true" : "false",
+               client.matchCount());
 
-  const bool ok = state.interest_id_received.load();
-  pcl_socket_transport_destroy(transport);
-  pcl_executor_destroy(exec);
-  pcl_container_destroy(container);
-  for (auto* handle : codec_plugin_handles) {
-    pcl_plugin_unload(handle);
-  }
-  return ok ? 0 : 1;
+  return client.interestIdReceived() && client.matchCount() > 0 ? 0 : 1;
 }

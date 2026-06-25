@@ -328,11 +328,12 @@ static data_model::ObjectEvidenceRequirement evidence_requirement_from_internal_
   }
   if (j.contains("min_lat_rad") && j.contains("max_lat_rad") &&
       j.contains("min_lon_rad") && j.contains("max_lon_rad")) {
+    constexpr double kDegToRad = 0.017453292519943295;
     req.poly_area = make_poly_area(
-        j.value("min_lat_rad", 0.0),
-        j.value("max_lat_rad", 0.0),
-        j.value("min_lon_rad", 0.0),
-        j.value("max_lon_rad", 0.0));
+        j.value("min_lat_rad", 0.0) * kDegToRad,
+        j.value("max_lat_rad", 0.0) * kDegToRad,
+        j.value("min_lon_rad", 0.0) * kDegToRad,
+        j.value("max_lon_rad", 0.0) * kDegToRad);
   }
   return req;
 }

@@ -7,10 +7,16 @@
 #include "flatbuffers/cpp/pyramid_services_tactical_objects_flatbuffers_codec.hpp"
 #include "pyramid_data_model_common_codec.hpp"
 #include "pyramid_data_model_tactical_codec.hpp"
+#include "pyramid_data_model_common_cabi_marshal.hpp"
+#include "pyramid_data_model_tactical_cabi_marshal.hpp"
 
+extern "C" {
+#include <pcl/pcl_codec.h>
+#include <pcl/pcl_codec_registry.h>
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
 #include <pcl/pcl_transport.h>
+}
 
 #include <cstdlib>
 #include <cstdint>
@@ -136,6 +142,241 @@ Identifier decode_identifier_payload(const std::string& payload)
     return payload;
 }
 
+static int pyramid_cabi_encode(const pcl_codec_t* c,
+                               const char* schema_id,
+                               const void* value,
+                               pcl_msg_t* out_msg)
+{
+    if (std::strcmp(schema_id, "Query") == 0) {
+        pyramid_Query_c cs;
+        pyramid::cabi::to_c(
+            *static_cast<const pyramid::domain_model::Query*>(value), &cs);
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &cs, out_msg);
+        pyramid_Query_c_free(&cs);
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "ObjectDetail") == 0) {
+        pyramid_ObjectDetail_c cs;
+        pyramid::cabi::to_c(
+            *static_cast<const pyramid::domain_model::ObjectDetail*>(value), &cs);
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &cs, out_msg);
+        pyramid_ObjectDetail_c_free(&cs);
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "ObjectEvidenceRequirement") == 0) {
+        pyramid_ObjectEvidenceRequirement_c cs;
+        pyramid::cabi::to_c(
+            *static_cast<const pyramid::domain_model::ObjectEvidenceRequirement*>(value), &cs);
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &cs, out_msg);
+        pyramid_ObjectEvidenceRequirement_c_free(&cs);
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "Ack") == 0) {
+        pyramid_Ack_c cs;
+        pyramid::cabi::to_c(
+            *static_cast<const pyramid::domain_model::Ack*>(value), &cs);
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &cs, out_msg);
+        pyramid_Ack_c_free(&cs);
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "Capability") == 0) {
+        pyramid_Capability_c cs;
+        pyramid::cabi::to_c(
+            *static_cast<const pyramid::domain_model::Capability*>(value), &cs);
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &cs, out_msg);
+        pyramid_Capability_c_free(&cs);
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "ObjectMatch") == 0) {
+        pyramid_ObjectMatch_c cs;
+        pyramid::cabi::to_c(
+            *static_cast<const pyramid::domain_model::ObjectMatch*>(value), &cs);
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &cs, out_msg);
+        pyramid_ObjectMatch_c_free(&cs);
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "ObjectInterestRequirement") == 0) {
+        pyramid_ObjectInterestRequirement_c cs;
+        pyramid::cabi::to_c(
+            *static_cast<const pyramid::domain_model::ObjectInterestRequirement*>(value), &cs);
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &cs, out_msg);
+        pyramid_ObjectInterestRequirement_c_free(&cs);
+        return rc == PCL_OK ? 1 : -1;
+    }
+    (void)c; (void)value; (void)out_msg;
+    return 0;
+}
+
+static int pyramid_cabi_decode(const pcl_codec_t* c,
+                               const char* schema_id,
+                               const pcl_msg_t* msg,
+                               void* out_value)
+{
+    if (std::strcmp(schema_id, "Query") == 0) {
+        pyramid_Query_c cs;
+        std::memset(&cs, 0, sizeof(cs));
+        if (c->decode(c->codec_ctx, schema_id, msg, &cs)
+                != PCL_OK) {
+            pyramid_Query_c_free(&cs);
+            return -1;
+        }
+        pyramid::cabi::from_c(
+            &cs, *static_cast<pyramid::domain_model::Query*>(out_value));
+        pyramid_Query_c_free(&cs);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "ObjectDetail") == 0) {
+        pyramid_ObjectDetail_c cs;
+        std::memset(&cs, 0, sizeof(cs));
+        if (c->decode(c->codec_ctx, schema_id, msg, &cs)
+                != PCL_OK) {
+            pyramid_ObjectDetail_c_free(&cs);
+            return -1;
+        }
+        pyramid::cabi::from_c(
+            &cs, *static_cast<pyramid::domain_model::ObjectDetail*>(out_value));
+        pyramid_ObjectDetail_c_free(&cs);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "ObjectEvidenceRequirement") == 0) {
+        pyramid_ObjectEvidenceRequirement_c cs;
+        std::memset(&cs, 0, sizeof(cs));
+        if (c->decode(c->codec_ctx, schema_id, msg, &cs)
+                != PCL_OK) {
+            pyramid_ObjectEvidenceRequirement_c_free(&cs);
+            return -1;
+        }
+        pyramid::cabi::from_c(
+            &cs, *static_cast<pyramid::domain_model::ObjectEvidenceRequirement*>(out_value));
+        pyramid_ObjectEvidenceRequirement_c_free(&cs);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "Ack") == 0) {
+        pyramid_Ack_c cs;
+        std::memset(&cs, 0, sizeof(cs));
+        if (c->decode(c->codec_ctx, schema_id, msg, &cs)
+                != PCL_OK) {
+            pyramid_Ack_c_free(&cs);
+            return -1;
+        }
+        pyramid::cabi::from_c(
+            &cs, *static_cast<pyramid::domain_model::Ack*>(out_value));
+        pyramid_Ack_c_free(&cs);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "Capability") == 0) {
+        pyramid_Capability_c cs;
+        std::memset(&cs, 0, sizeof(cs));
+        if (c->decode(c->codec_ctx, schema_id, msg, &cs)
+                != PCL_OK) {
+            pyramid_Capability_c_free(&cs);
+            return -1;
+        }
+        pyramid::cabi::from_c(
+            &cs, *static_cast<pyramid::domain_model::Capability*>(out_value));
+        pyramid_Capability_c_free(&cs);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "ObjectMatch") == 0) {
+        pyramid_ObjectMatch_c cs;
+        std::memset(&cs, 0, sizeof(cs));
+        if (c->decode(c->codec_ctx, schema_id, msg, &cs)
+                != PCL_OK) {
+            pyramid_ObjectMatch_c_free(&cs);
+            return -1;
+        }
+        pyramid::cabi::from_c(
+            &cs, *static_cast<pyramid::domain_model::ObjectMatch*>(out_value));
+        pyramid_ObjectMatch_c_free(&cs);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "ObjectInterestRequirement") == 0) {
+        pyramid_ObjectInterestRequirement_c cs;
+        std::memset(&cs, 0, sizeof(cs));
+        if (c->decode(c->codec_ctx, schema_id, msg, &cs)
+                != PCL_OK) {
+            pyramid_ObjectInterestRequirement_c_free(&cs);
+            return -1;
+        }
+        pyramid::cabi::from_c(
+            &cs, *static_cast<pyramid::domain_model::ObjectInterestRequirement*>(out_value));
+        pyramid_ObjectInterestRequirement_c_free(&cs);
+        return 1;
+    }
+    (void)c; (void)msg; (void)out_value;
+    return 0;
+}
+
+static int pyramid_try_registry_encode(const char* content_type,
+                                       const char* schema_id,
+                                       const void* value,
+                                       std::string* out)
+{
+    pcl_codec_registry_t* reg = pcl_codec_registry_default();
+    for (uint32_t i = 0; ; ++i) {
+        const pcl_codec_t* c =
+            pcl_codec_registry_get_at(reg, content_type, i);
+        if (!c) {
+            break;
+        }
+        if (!c->encode) {
+            continue;
+        }
+        pcl_msg_t m;
+        m.data = nullptr;
+        m.size = 0;
+        m.type_name = nullptr;
+        const int r = pyramid_cabi_encode(c, schema_id, value, &m);
+        if (r == 1) {
+            out->assign(static_cast<const char*>(m.data), m.size);
+            if (c->free_msg) {
+                c->free_msg(c->codec_ctx, &m);
+            }
+            return 1;
+        }
+        if (r == 0) {
+            return -1;
+        }
+    }
+    return -1;
+}
+
+static int pyramid_try_registry_decode(const pcl_msg_t* msg,
+                                       const char* schema_id,
+                                       void* out_value)
+{
+    if (!msg) {
+        return -1;
+    }
+    pcl_codec_registry_t* reg = pcl_codec_registry_default();
+    for (uint32_t i = 0; ; ++i) {
+        const pcl_codec_t* c =
+            pcl_codec_registry_get_at(reg, msg->type_name, i);
+        if (!c) {
+            break;
+        }
+        if (!c->decode) {
+            continue;
+        }
+        const int r =
+            pyramid_cabi_decode(c, schema_id, msg, out_value);
+        if (r == 1) {
+            return 1;
+        }
+        if (r == 0) {
+            return -1;
+        }
+    }
+    return -1;
+}
+
 void ignore_async_response(const pcl_msg_t*, void*) {}
 
 pcl_status_t invoke_async(pcl_executor_t* executor,
@@ -179,6 +420,9 @@ bool supportsContentType(const char* content_type)
         return true;
     }
     if (is_flatbuffers_content_type(content_type)) {
+        return true;
+    }
+    if (pcl_codec_registry_get(pcl_codec_registry_default(), content_type) != nullptr) {
         return true;
     }
     return false;
@@ -237,6 +481,7 @@ bool encodeObjectEvidenceReadDetailStreamFrame(const ObjectDetail& payload,
     if (!out) {
         return false;
     }
+    { int r = pyramid_try_registry_encode(content_type, "ObjectDetail", &payload, out); if (r == 1) return true; }
     if (is_json_content_type(content_type)) {
         *out = toJson(payload);
     } else if (is_flatbuffers_content_type(content_type)) {
@@ -253,6 +498,7 @@ bool decodeObjectEvidenceReadDetailStreamFrame(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "ObjectDetail", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -290,6 +536,7 @@ bool decodeObjectSolutionEvidenceCreateRequirementResponse(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Identifier", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -339,6 +586,7 @@ bool encodeObjectSolutionEvidenceReadRequirementStreamFrame(const ObjectEvidence
     if (!out) {
         return false;
     }
+    { int r = pyramid_try_registry_encode(content_type, "ObjectEvidenceRequirement", &payload, out); if (r == 1) return true; }
     if (is_json_content_type(content_type)) {
         *out = toJson(payload);
     } else if (is_flatbuffers_content_type(content_type)) {
@@ -355,6 +603,7 @@ bool decodeObjectSolutionEvidenceReadRequirementStreamFrame(const pcl_msg_t* msg
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "ObjectEvidenceRequirement", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -392,6 +641,7 @@ bool decodeObjectSolutionEvidenceUpdateRequirementResponse(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -414,6 +664,7 @@ bool decodeObjectSolutionEvidenceDeleteRequirementResponse(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -463,6 +714,7 @@ bool encodeObjectSourceCapabilityReadCapabilityStreamFrame(const Capability& pay
     if (!out) {
         return false;
     }
+    { int r = pyramid_try_registry_encode(content_type, "Capability", &payload, out); if (r == 1) return true; }
     if (is_json_content_type(content_type)) {
         *out = toJson(payload);
     } else if (is_flatbuffers_content_type(content_type)) {
@@ -479,6 +731,7 @@ bool decodeObjectSourceCapabilityReadCapabilityStreamFrame(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Capability", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -780,6 +1033,7 @@ bool encodeObjectEvidence(const ObjectDetail& payload,
     if (!out) {
         return false;
     }
+    { int r = pyramid_try_registry_encode(content_type, "ObjectDetail", &payload, out); if (r == 1) return true; }
     std::string wire_payload;
     if (is_json_content_type(content_type)) {
         wire_payload = toJson(payload);
@@ -820,6 +1074,7 @@ bool decodeObjectEvidence(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "ObjectDetail", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {

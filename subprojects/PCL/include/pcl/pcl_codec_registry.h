@@ -46,17 +46,33 @@ void pcl_codec_registry_clear(pcl_codec_registry_t* registry);
 /// \brief Register a codec vtable by content_type.
 ///
 /// The registry borrows \p codec.  NULL arguments are rejected with
-/// PCL_ERR_INVALID.  ABI-version mismatches and duplicate content types are
-/// rejected with PCL_ERR_STATE.
+/// PCL_ERR_INVALID.  ABI-version mismatches are rejected with PCL_ERR_STATE.
+///
+/// Multiple codecs may share the same content_type: a single process (such as
+/// a PYRAMID bridge spanning several components) can load per-component codec
+/// plugins side by side, and dispatch selects among them by schema_id.
+/// Re-registering the identical \p codec vtable pointer is rejected with
+/// PCL_ERR_STATE.
 pcl_status_t pcl_codec_registry_register(pcl_codec_registry_t* registry,
                                          const pcl_codec_t*    codec);
 
-/// \brief Look up a codec by content_type.
+/// \brief Look up the first codec registered for \p content_type.
 ///
 /// Returns NULL when arguments are invalid or the content type is not
-/// registered.
+/// registered.  When several codecs share a content_type, prefer
+/// \ref pcl_codec_registry_get_at to iterate and select by schema_id.
 const pcl_codec_t* pcl_codec_registry_get(const pcl_codec_registry_t* registry,
                                           const char*                 content_type);
+
+/// \brief Look up the \p index-th codec registered for \p content_type.
+///
+/// Codecs are returned in registration order.  Returns NULL when \p index is
+/// out of range, arguments are invalid, or the content type is not registered.
+/// Callers iterate from index 0 upward (stopping at the first NULL) and try
+/// each codec's encode/decode for a given schema_id until one succeeds.
+const pcl_codec_t* pcl_codec_registry_get_at(const pcl_codec_registry_t* registry,
+                                             const char*                 content_type,
+                                             uint32_t                    index);
 
 /// \brief Return the number of registered codecs.
 ///

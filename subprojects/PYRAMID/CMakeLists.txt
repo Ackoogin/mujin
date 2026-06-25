@@ -196,6 +196,14 @@ endif()
 
 pyramid_glob_generated(_pyramid_generated_codecs_srcs
     "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_codec.cpp")
+# C-ABI marshalling (to_c/from_c/_free) for the typed-value plugin boundary.
+# Linked into both components and codec plugins so each side can marshal
+# between the native data-model types and their frozen C structs.
+pyramid_glob_generated(_pyramid_generated_cabi_marshal_srcs
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_cabi_marshal.cpp")
+list(APPEND _pyramid_generated_codecs_srcs
+    ${_pyramid_generated_cabi_marshal_srcs})
+unset(_pyramid_generated_cabi_marshal_srcs)
 if(PYRAMID_ENABLE_FLATBUFFERS)
     pyramid_glob_generated(_pyramid_generated_flatbuffers_codec_srcs
         "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_*_flatbuffers_codec.cpp")

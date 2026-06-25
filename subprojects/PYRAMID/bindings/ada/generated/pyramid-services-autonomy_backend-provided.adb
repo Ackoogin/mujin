@@ -8,9 +8,12 @@ with Interfaces.C.Strings;
 with Pcl_Bindings;
 with Pcl_Plugins;
 with System;
+with System.Address_To_Access_Conversions;
 with System.Storage_Elements;
 with Pyramid.Data_Model.Common.Types_Codec;  use Pyramid.Data_Model.Common.Types_Codec;
 with Pyramid.Data_Model.Autonomy.Types_Codec;  use Pyramid.Data_Model.Autonomy.Types_Codec;
+with Pyramid.Data_Model.Autonomy.Cabi;  use Pyramid.Data_Model.Autonomy.Cabi;
+with Pyramid.Data_Model.Common.Cabi;  use Pyramid.Data_Model.Common.Cabi;
 with Pyramid.Services.Autonomy_Backend.Flatbuffers_Codec;
 
 package body Pyramid.Services.Autonomy_Backend.Provided is
@@ -31,6 +34,84 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
 
    function To_Handlers is new
      Ada.Unchecked_Conversion (System.Address, Service_Handlers_Access);
+
+   package Requirement_Reference_Pointers is new
+     System.Address_To_Access_Conversions (Requirement_Reference);
+
+   package Agent_State_Pointers is new
+     System.Address_To_Access_Conversions (Agent_State);
+
+   package Planning_Policy_Pointers is new
+     System.Address_To_Access_Conversions (Planning_Policy);
+
+   package Planning_Goal_Pointers is new
+     System.Address_To_Access_Conversions (Planning_Goal);
+
+   package Execution_Policy_Pointers is new
+     System.Address_To_Access_Conversions (Execution_Policy);
+
+   package Planning_Requirement_Pointers is new
+     System.Address_To_Access_Conversions (Planning_Requirement);
+
+   package Execution_Requirement_Pointers is new
+     System.Address_To_Access_Conversions (Execution_Requirement);
+
+   package World_Fact_Update_Pointers is new
+     System.Address_To_Access_Conversions (World_Fact_Update);
+
+   package State_Update_Pointers is new
+     System.Address_To_Access_Conversions (State_Update);
+
+   package Capabilities_Pointers is new
+     System.Address_To_Access_Conversions (Capabilities);
+
+   package Planned_Component_Interaction_Pointers is new
+     System.Address_To_Access_Conversions (Planned_Component_Interaction);
+
+   package Plan_Step_Pointers is new
+     System.Address_To_Access_Conversions (Plan_Step);
+
+   package Plan_Pointers is new
+     System.Address_To_Access_Conversions (Plan);
+
+   package Requirement_Placement_Pointers is new
+     System.Address_To_Access_Conversions (Requirement_Placement);
+
+   package Execution_Run_Pointers is new
+     System.Address_To_Access_Conversions (Execution_Run);
+
+   package Geodetic_Position_Pointers is new
+     System.Address_To_Access_Conversions (Geodetic_Position);
+
+   package Poly_Area_Pointers is new
+     System.Address_To_Access_Conversions (Poly_Area);
+
+   package Achievement_Pointers is new
+     System.Address_To_Access_Conversions (Achievement);
+
+   package Requirement_Pointers is new
+     System.Address_To_Access_Conversions (Requirement);
+
+   package Capability_Pointers is new
+     System.Address_To_Access_Conversions (Capability);
+
+   package Entity_Pointers is new
+     System.Address_To_Access_Conversions (Entity);
+
+   package Circle_Area_Pointers is new
+     System.Address_To_Access_Conversions (Circle_Area);
+
+   package Point_Pointers is new
+     System.Address_To_Access_Conversions (Point);
+
+   package Contraint_Pointers is new
+     System.Address_To_Access_Conversions (Contraint);
+
+   package Ack_Pointers is new
+     System.Address_To_Access_Conversions (Ack);
+
+   package Query_Pointers is new
+     System.Address_To_Access_Conversions (Query);
 
    function Handler_Address
      (Handlers : access constant Service_Handlers) return System.Address is
@@ -77,6 +158,1024 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          return False;
    end Registry_Has_Codec;
 
+   function Try_Cabi_Registry_Encode
+     (Codec     : Pcl_Plugins.Pcl_Codec_Const_Access;
+      Schema_C  : Interfaces.C.Strings.chars_ptr;
+      Schema_Id : String;
+      Value     : System.Address;
+      Msg       : access Pcl_Bindings.Pcl_Msg)
+      return Pcl_Bindings.Pcl_Status
+   is
+   begin
+      if Codec = null or else Codec.all.Encode = null then
+         return Pcl_Bindings.PCL_ERR_INVALID;
+      end if;
+      if Schema_Id = "RequirementReference" then
+         declare
+            Native : constant Requirement_Reference_Pointers.Object_Pointer :=
+              Requirement_Reference_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Requirement_Reference_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Requirement_Reference (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "AgentState" then
+         declare
+            Native : constant Agent_State_Pointers.Object_Pointer :=
+              Agent_State_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Agent_State_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Agent_State (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "PlanningPolicy" then
+         declare
+            Native : constant Planning_Policy_Pointers.Object_Pointer :=
+              Planning_Policy_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Planning_Policy_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Planning_Policy (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "PlanningGoal" then
+         declare
+            Native : constant Planning_Goal_Pointers.Object_Pointer :=
+              Planning_Goal_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Planning_Goal_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Planning_Goal (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "ExecutionPolicy" then
+         declare
+            Native : constant Execution_Policy_Pointers.Object_Pointer :=
+              Execution_Policy_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Execution_Policy_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Execution_Policy (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "PlanningRequirement" then
+         declare
+            Native : constant Planning_Requirement_Pointers.Object_Pointer :=
+              Planning_Requirement_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Planning_Requirement_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Planning_Requirement (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "ExecutionRequirement" then
+         declare
+            Native : constant Execution_Requirement_Pointers.Object_Pointer :=
+              Execution_Requirement_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Execution_Requirement_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Execution_Requirement (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "WorldFactUpdate" then
+         declare
+            Native : constant World_Fact_Update_Pointers.Object_Pointer :=
+              World_Fact_Update_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_World_Fact_Update_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_World_Fact_Update (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "StateUpdate" then
+         declare
+            Native : constant State_Update_Pointers.Object_Pointer :=
+              State_Update_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_State_Update_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_State_Update (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Capabilities" then
+         declare
+            Native : constant Capabilities_Pointers.Object_Pointer :=
+              Capabilities_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Capabilities_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Capabilities (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "PlannedComponentInteraction" then
+         declare
+            Native : constant Planned_Component_Interaction_Pointers.Object_Pointer :=
+              Planned_Component_Interaction_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Planned_Component_Interaction_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Planned_Component_Interaction (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "PlanStep" then
+         declare
+            Native : constant Plan_Step_Pointers.Object_Pointer :=
+              Plan_Step_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Plan_Step_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Plan_Step (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Plan" then
+         declare
+            Native : constant Plan_Pointers.Object_Pointer :=
+              Plan_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Plan_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Plan (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "RequirementPlacement" then
+         declare
+            Native : constant Requirement_Placement_Pointers.Object_Pointer :=
+              Requirement_Placement_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Requirement_Placement_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Requirement_Placement (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "ExecutionRun" then
+         declare
+            Native : constant Execution_Run_Pointers.Object_Pointer :=
+              Execution_Run_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Execution_Run_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Execution_Run (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "GeodeticPosition" then
+         declare
+            Native : constant Geodetic_Position_Pointers.Object_Pointer :=
+              Geodetic_Position_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Geodetic_Position_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Geodetic_Position (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "PolyArea" then
+         declare
+            Native : constant Poly_Area_Pointers.Object_Pointer :=
+              Poly_Area_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Poly_Area_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Poly_Area (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Achievement" then
+         declare
+            Native : constant Achievement_Pointers.Object_Pointer :=
+              Achievement_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Achievement_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Achievement (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Requirement" then
+         declare
+            Native : constant Requirement_Pointers.Object_Pointer :=
+              Requirement_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Requirement_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Requirement (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Capability" then
+         declare
+            Native : constant Capability_Pointers.Object_Pointer :=
+              Capability_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Capability_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Capability (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Entity" then
+         declare
+            Native : constant Entity_Pointers.Object_Pointer :=
+              Entity_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Entity_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Entity (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "CircleArea" then
+         declare
+            Native : constant Circle_Area_Pointers.Object_Pointer :=
+              Circle_Area_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Circle_Area_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Circle_Area (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Point" then
+         declare
+            Native : constant Point_Pointers.Object_Pointer :=
+              Point_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Point_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Point (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Contraint" then
+         declare
+            Native : constant Contraint_Pointers.Object_Pointer :=
+              Contraint_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Contraint_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Contraint (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Ack" then
+         declare
+            Native : constant Ack_Pointers.Object_Pointer :=
+              Ack_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Ack_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Ack (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Query" then
+         declare
+            Native : constant Query_Pointers.Object_Pointer :=
+              Query_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Query_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            To_C (Native.all, C_Value);
+            Status := Codec.all.Encode.all
+              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);
+            Free_Query (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      return Pcl_Bindings.PCL_ERR_NOT_FOUND;
+   end Try_Cabi_Registry_Encode;
+
+   function Try_Cabi_Registry_Decode
+     (Codec     : Pcl_Plugins.Pcl_Codec_Const_Access;
+      Schema_C  : Interfaces.C.Strings.chars_ptr;
+      Schema_Id : String;
+      Msg       : access constant Pcl_Bindings.Pcl_Msg;
+      Value     : System.Address)
+      return Pcl_Bindings.Pcl_Status
+   is
+   begin
+      if Codec = null or else Codec.all.Decode = null then
+         return Pcl_Bindings.PCL_ERR_INVALID;
+      end if;
+      if Schema_Id = "RequirementReference" then
+         declare
+            Native : constant Requirement_Reference_Pointers.Object_Pointer :=
+              Requirement_Reference_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Requirement_Reference_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Requirement_Reference (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "AgentState" then
+         declare
+            Native : constant Agent_State_Pointers.Object_Pointer :=
+              Agent_State_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Agent_State_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Agent_State (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "PlanningPolicy" then
+         declare
+            Native : constant Planning_Policy_Pointers.Object_Pointer :=
+              Planning_Policy_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Planning_Policy_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Planning_Policy (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "PlanningGoal" then
+         declare
+            Native : constant Planning_Goal_Pointers.Object_Pointer :=
+              Planning_Goal_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Planning_Goal_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Planning_Goal (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "ExecutionPolicy" then
+         declare
+            Native : constant Execution_Policy_Pointers.Object_Pointer :=
+              Execution_Policy_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Execution_Policy_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Execution_Policy (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "PlanningRequirement" then
+         declare
+            Native : constant Planning_Requirement_Pointers.Object_Pointer :=
+              Planning_Requirement_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Planning_Requirement_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Planning_Requirement (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "ExecutionRequirement" then
+         declare
+            Native : constant Execution_Requirement_Pointers.Object_Pointer :=
+              Execution_Requirement_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Execution_Requirement_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Execution_Requirement (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "WorldFactUpdate" then
+         declare
+            Native : constant World_Fact_Update_Pointers.Object_Pointer :=
+              World_Fact_Update_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_World_Fact_Update_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_World_Fact_Update (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "StateUpdate" then
+         declare
+            Native : constant State_Update_Pointers.Object_Pointer :=
+              State_Update_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_State_Update_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_State_Update (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Capabilities" then
+         declare
+            Native : constant Capabilities_Pointers.Object_Pointer :=
+              Capabilities_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Capabilities_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Capabilities (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "PlannedComponentInteraction" then
+         declare
+            Native : constant Planned_Component_Interaction_Pointers.Object_Pointer :=
+              Planned_Component_Interaction_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Planned_Component_Interaction_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Planned_Component_Interaction (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "PlanStep" then
+         declare
+            Native : constant Plan_Step_Pointers.Object_Pointer :=
+              Plan_Step_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Plan_Step_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Plan_Step (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Plan" then
+         declare
+            Native : constant Plan_Pointers.Object_Pointer :=
+              Plan_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Plan_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Plan (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "RequirementPlacement" then
+         declare
+            Native : constant Requirement_Placement_Pointers.Object_Pointer :=
+              Requirement_Placement_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Requirement_Placement_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Requirement_Placement (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "ExecutionRun" then
+         declare
+            Native : constant Execution_Run_Pointers.Object_Pointer :=
+              Execution_Run_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Execution_Run_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Execution_Run (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "GeodeticPosition" then
+         declare
+            Native : constant Geodetic_Position_Pointers.Object_Pointer :=
+              Geodetic_Position_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Geodetic_Position_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Geodetic_Position (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "PolyArea" then
+         declare
+            Native : constant Poly_Area_Pointers.Object_Pointer :=
+              Poly_Area_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Poly_Area_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Poly_Area (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Achievement" then
+         declare
+            Native : constant Achievement_Pointers.Object_Pointer :=
+              Achievement_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Achievement_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Achievement (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Requirement" then
+         declare
+            Native : constant Requirement_Pointers.Object_Pointer :=
+              Requirement_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Requirement_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Requirement (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Capability" then
+         declare
+            Native : constant Capability_Pointers.Object_Pointer :=
+              Capability_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Capability_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Capability (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Entity" then
+         declare
+            Native : constant Entity_Pointers.Object_Pointer :=
+              Entity_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Entity_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Entity (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "CircleArea" then
+         declare
+            Native : constant Circle_Area_Pointers.Object_Pointer :=
+              Circle_Area_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Circle_Area_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Circle_Area (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Point" then
+         declare
+            Native : constant Point_Pointers.Object_Pointer :=
+              Point_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Point_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Point (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Contraint" then
+         declare
+            Native : constant Contraint_Pointers.Object_Pointer :=
+              Contraint_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Contraint_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Contraint (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Ack" then
+         declare
+            Native : constant Ack_Pointers.Object_Pointer :=
+              Ack_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Ack_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Ack (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      if Schema_Id = "Query" then
+         declare
+            Native : constant Query_Pointers.Object_Pointer :=
+              Query_Pointers.To_Pointer (Value);
+            C_Value : aliased Pyramid_Query_C := (others => <>);
+            Status : Pcl_Bindings.Pcl_Status :=
+              Pcl_Bindings.PCL_ERR_INVALID;
+         begin
+            if Value = System.Null_Address then
+               return Pcl_Bindings.PCL_ERR_INVALID;
+            end if;
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               From_C (C_Value, Native.all);
+            end if;
+            Free_Query (C_Value'Access);
+            return Status;
+         end;
+      end if;
+      return Pcl_Bindings.PCL_ERR_NOT_FOUND;
+   end Try_Cabi_Registry_Decode;
+
    function Try_Registry_Encode
      (Content_Type : String;
       Schema_Id    : String;
@@ -107,8 +1206,12 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          Interfaces.C.Strings.Free (Schema_C);
          return False;
       end if;
-      Status := Codec.all.Encode.all
-        (Codec.all.Codec_Ctx, Schema_C, Value, Msg'Access);
+      Status := Try_Cabi_Registry_Encode
+        (Codec, Schema_C, Schema_Id, Value, Msg'Access);
+      if Status = Pcl_Bindings.PCL_ERR_NOT_FOUND then
+         Status := Codec.all.Encode.all
+           (Codec.all.Codec_Ctx, Schema_C, Value, Msg'Access);
+      end if;
       if Status = Pcl_Bindings.PCL_OK then
          if Msg.Data /= System.Null_Address and then Msg.Size > 0 then
             Wire := To_Unbounded_String (Msg_To_String (Msg.Data, Msg.Size));
@@ -157,8 +1260,12 @@ package body Pyramid.Services.Autonomy_Backend.Provided is
          Interfaces.C.Strings.Free (Schema_C);
          return False;
       end if;
-      Status := Codec.all.Decode.all
-        (Codec.all.Codec_Ctx, Schema_C, Msg, Value);
+      Status := Try_Cabi_Registry_Decode
+        (Codec, Schema_C, Schema_Id, Msg, Value);
+      if Status = Pcl_Bindings.PCL_ERR_NOT_FOUND then
+         Status := Codec.all.Decode.all
+           (Codec.all.Codec_Ctx, Schema_C, Msg, Value);
+      end if;
       Interfaces.C.Strings.Free (Schema_C);
       return Status = Pcl_Bindings.PCL_OK;
    exception

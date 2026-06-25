@@ -130,17 +130,60 @@ TEST(PclCodecRegistry, NullArgsRejectedWithInvalid) {
   pcl_codec_registry_destroy(registry);
 }
 
-TEST(PclCodecRegistry, DuplicateContentTypeRejectedWithStateAndFirstWins) {
+TEST(PclCodecRegistry, MultipleCodecsPerContentTypeAllowedFirstWinsForGet) {
+  // A bridge loads several per-component codec plugins, all under the same
+  // content_type; the registry keeps them all and get() returns the first.
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);
 
-  pcl_codec_t first = makeCodec("application/duplicate");
-  pcl_codec_t second = makeCodec("application/duplicate");
+  pcl_codec_t first = makeCodec("application/shared");
+  pcl_codec_t second = makeCodec("application/shared");
 
   EXPECT_EQ(pcl_codec_registry_register(registry, &first), PCL_OK);
-  EXPECT_EQ(pcl_codec_registry_register(registry, &second), PCL_ERR_STATE);
-  EXPECT_EQ(pcl_codec_registry_get(registry, "application/duplicate"), &first);
+  EXPECT_EQ(pcl_codec_registry_register(registry, &second), PCL_OK);
+  EXPECT_EQ(pcl_codec_registry_count(registry), 2u);
+  EXPECT_EQ(pcl_codec_registry_get(registry, "application/shared"), &first);
+
+  pcl_codec_registry_destroy(registry);
+}
+
+TEST(PclCodecRegistry, SameCodecPointerRejectedWithState) {
+  pcl_codec_registry_t* registry = pcl_codec_registry_create();
+  ASSERT_NE(registry, nullptr);
+
+  pcl_codec_t codec = makeCodec("application/once");
+
+  EXPECT_EQ(pcl_codec_registry_register(registry, &codec), PCL_OK);
+  EXPECT_EQ(pcl_codec_registry_register(registry, &codec), PCL_ERR_STATE);
   EXPECT_EQ(pcl_codec_registry_count(registry), 1u);
+
+  pcl_codec_registry_destroy(registry);
+}
+
+TEST(PclCodecRegistry, GetAtIteratesCodecsForContentTypeInRegistrationOrder) {
+  pcl_codec_registry_t* registry = pcl_codec_registry_create();
+  ASSERT_NE(registry, nullptr);
+
+  pcl_codec_t json_a = makeCodec("application/json");
+  pcl_codec_t other = makeCodec("application/other");
+  pcl_codec_t json_b = makeCodec("application/json");
+
+  EXPECT_EQ(pcl_codec_registry_register(registry, &json_a), PCL_OK);
+  EXPECT_EQ(pcl_codec_registry_register(registry, &other), PCL_OK);
+  EXPECT_EQ(pcl_codec_registry_register(registry, &json_b), PCL_OK);
+
+  // Only the application/json codecs are visited, in registration order.
+  EXPECT_EQ(pcl_codec_registry_get_at(registry, "application/json", 0u),
+            &json_a);
+  EXPECT_EQ(pcl_codec_registry_get_at(registry, "application/json", 1u),
+            &json_b);
+  EXPECT_EQ(pcl_codec_registry_get_at(registry, "application/json", 2u),
+            nullptr);
+  EXPECT_EQ(pcl_codec_registry_get_at(registry, "application/other", 0u),
+            &other);
+  EXPECT_EQ(pcl_codec_registry_get_at(nullptr, "application/json", 0u),
+            nullptr);
+  EXPECT_EQ(pcl_codec_registry_get_at(registry, nullptr, 0u), nullptr);
 
   pcl_codec_registry_destroy(registry);
 }

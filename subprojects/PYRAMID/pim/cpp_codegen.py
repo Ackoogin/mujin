@@ -724,6 +724,12 @@ class CppServiceGenerator:
             for _short, full_type, is_alias, _alias_cpp in codec_types
             if not is_alias and _json_codec_header_for_type(full_type)
         })
+        cabi_marshal_headers = sorted({
+            '.'.join(full_type.split('.')[:-1]).replace('.', '_')
+            + '_cabi_marshal.hpp'
+            for _short, full_type, is_alias, _alias_cpp in codec_types
+            if not is_alias and '.' in full_type
+        })
         flatbuffers_codec_ns = cpp_base_ns + '::flatbuffers_codec'
         flatbuffers_codec_header = (
             'flatbuffers/cpp/' + file_base + '_flatbuffers_codec.hpp')
@@ -738,6 +744,10 @@ class CppServiceGenerator:
                 f.write('#include <nlohmann/json.hpp>\n')
             else:
                 f.write(f'#include "{flatbuffers_codec_header}"\n')
+            # C-ABI marshalling: the plugin receives/returns frozen C structs and
+            # marshals to/from the native type before invoking the wire codec.
+            for header in cabi_marshal_headers:
+                f.write(f'#include "{header}"\n')
             f.write('\n')
             f.write('extern "C" {\n')
             f.write('#include <pcl/pcl_codec.h>\n')
@@ -806,19 +816,22 @@ class CppServiceGenerator:
             f.write('    }\n')
             f.write('    try {\n')
             for short, full_type, is_alias, _alias_cpp in codec_types:
+                if is_alias:
+                    # Scalar aliases stay on the component's static codec path;
+                    # they do not cross the C-ABI typed-value boundary.
+                    continue
                 cpp_type = f'data_model::{short}'
+                c_struct = f'pyramid_{short}_c'
                 f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
-                f.write(f'            const auto* typed = static_cast<const {cpp_type}*>(value);\n')
+                f.write(f'            const auto* cs = static_cast<const {c_struct}*>(value);\n')
+                f.write(f'            {cpp_type} native;\n')
+                f.write('            pyramid::cabi::from_c(cs, native);\n')
                 if is_json:
-                    if is_alias:
-                        f.write('            return assign_payload(scalar_to_json(*typed),\n')
-                        f.write(f'                                  "{content_type}", out_msg);\n')
-                    else:
-                        codec_ns = _json_codec_namespace_for_type(full_type)
-                        f.write(f'            return assign_payload({codec_ns}::toJson(*typed),\n')
-                        f.write(f'                                  "{content_type}", out_msg);\n')
+                    codec_ns = _json_codec_namespace_for_type(full_type)
+                    f.write(f'            return assign_payload({codec_ns}::toJson(native),\n')
+                    f.write(f'                                  "{content_type}", out_msg);\n')
                 else:
-                    f.write('            return assign_payload(flatbuffers_codec::toBinary(*typed),\n')
+                    f.write('            return assign_payload(flatbuffers_codec::toBinary(native),\n')
                     f.write(f'                                  "{content_type}", out_msg);\n')
                 f.write('        }\n')
             f.write('    } catch (...) {\n')
@@ -841,20 +854,21 @@ class CppServiceGenerator:
             f.write('            ? std::string(static_cast<const char*>(msg->data), msg->size)\n')
             f.write('            : std::string();\n')
             for short, full_type, is_alias, _alias_cpp in codec_types:
+                if is_alias:
+                    continue
                 cpp_type = f'data_model::{short}'
+                c_struct = f'pyramid_{short}_c'
                 f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
-                f.write(f'            auto* typed = static_cast<{cpp_type}*>(out_value);\n')
+                f.write(f'            {cpp_type} native;\n')
                 if is_json:
-                    if is_alias:
-                        f.write('            *typed = scalar_from_json<')
-                        f.write(f'{cpp_type}>(payload);\n')
-                    else:
-                        codec_ns = _json_codec_namespace_for_type(full_type)
-                        f.write(f'            *typed = {codec_ns}::fromJson(\n')
-                        f.write(f'                payload, static_cast<{cpp_type}*>(nullptr));\n')
+                    codec_ns = _json_codec_namespace_for_type(full_type)
+                    f.write(f'            native = {codec_ns}::fromJson(\n')
+                    f.write(f'                payload, static_cast<{cpp_type}*>(nullptr));\n')
                 else:
-                    f.write(f'            *typed = flatbuffers_codec::fromBinary{short}(\n')
+                    f.write(f'            native = flatbuffers_codec::fromBinary{short}(\n')
                     f.write('                msg->data, msg->size);\n')
+                f.write(f'            auto* cs = static_cast<{c_struct}*>(out_value);\n')
+                f.write('            pyramid::cabi::to_c(native, cs);\n')
                 f.write('            return PCL_OK;\n')
                 f.write('        }\n')
             f.write('    } catch (...) {\n')
@@ -1379,6 +1393,18 @@ class CppServiceGenerator:
         dm_codec_nss = [ns for ns, _header in codec_imports]
         dm_codec_headers = [header for _ns, header in codec_imports]
 
+        # C-ABI typed-value boundary: schema types this contract marshals
+        # through the runtime codec registry, and the cabi marshalling headers
+        # for the data-model modules in their dependency closure.
+        _cc_base, _cc_ns, cabi_codec_types = \
+            self._collect_contract_codec_types(parsed)
+        cabi_marshal_headers = sorted({
+            '.'.join(full_type.split('.')[:-1]).replace('.', '_')
+            + '_cabi_marshal.hpp'
+            for _short, full_type, is_alias, _alias_cpp in cabi_codec_types
+            if not is_alias and '.' in full_type
+        })
+
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             # File-level comment block
             f.write('// Auto-generated service binding implementation\n')
@@ -1395,6 +1421,9 @@ class CppServiceGenerator:
             # Data model codec headers -- for serialisation inside
             # invoke/publish/dispatch
             for ch in dm_codec_headers:
+                f.write(f'#include "{ch}"\n')
+            # C-ABI marshalling for the typed-value plugin boundary
+            for ch in cabi_marshal_headers:
                 f.write(f'#include "{ch}"\n')
             f.write('\n')
             f.write('extern "C" {\n')
@@ -1518,28 +1547,100 @@ class CppServiceGenerator:
             f.write('    return payload;\n')
             f.write('}\n\n')
 
+            # C-ABI typed-value boundary: marshal the native value to its frozen
+            # C struct (to_c), hand the C struct to the registry codec, then free.
+            # Decode is symmetric: the plugin fills the C struct, we from_c it into
+            # the native value and free. Schema types not covered here (scalar
+            # aliases) return 0 so the caller falls back to the static codec.
+            non_alias_cabi = [
+                (short, full_type)
+                for short, full_type, is_alias, _alias_cpp in cabi_codec_types
+                if not is_alias
+            ]
+
+            f.write('static int pyramid_cabi_encode(const pcl_codec_t* c,\n')
+            f.write('                               const char* schema_id,\n')
+            f.write('                               const void* value,\n')
+            f.write('                               pcl_msg_t* out_msg)\n')
+            f.write('{\n')
+            for short, _full in non_alias_cabi:
+                native = f'{_DATA_MODEL_TYPES_NS}::{short}'
+                c_struct = f'pyramid_{short}_c'
+                f.write(f'    if (std::strcmp(schema_id, "{short}") == 0) {{\n')
+                f.write(f'        {c_struct} cs;\n')
+                f.write(f'        pyramid::cabi::to_c(\n')
+                f.write(f'            *static_cast<const {native}*>(value), &cs);\n')
+                f.write('        const pcl_status_t rc =\n')
+                f.write('            c->encode(c->codec_ctx, schema_id, &cs, out_msg);\n')
+                f.write(f'        {c_struct}_free(&cs);\n')
+                f.write('        return rc == PCL_OK ? 1 : -1;\n')
+                f.write('    }\n')
+            f.write('    (void)c; (void)value; (void)out_msg;\n')
+            f.write('    return 0;\n')
+            f.write('}\n\n')
+
+            f.write('static int pyramid_cabi_decode(const pcl_codec_t* c,\n')
+            f.write('                               const char* schema_id,\n')
+            f.write('                               const pcl_msg_t* msg,\n')
+            f.write('                               void* out_value)\n')
+            f.write('{\n')
+            for short, _full in non_alias_cabi:
+                native = f'{_DATA_MODEL_TYPES_NS}::{short}'
+                c_struct = f'pyramid_{short}_c'
+                f.write(f'    if (std::strcmp(schema_id, "{short}") == 0) {{\n')
+                f.write(f'        {c_struct} cs;\n')
+                f.write('        std::memset(&cs, 0, sizeof(cs));\n')
+                f.write('        if (c->decode(c->codec_ctx, schema_id, msg, &cs)\n')
+                f.write('                != PCL_OK) {\n')
+                f.write(f'            {c_struct}_free(&cs);\n')
+                f.write('            return -1;\n')
+                f.write('        }\n')
+                f.write(f'        pyramid::cabi::from_c(\n')
+                f.write(f'            &cs, *static_cast<{native}*>(out_value));\n')
+                f.write(f'        {c_struct}_free(&cs);\n')
+                f.write('        return 1;\n')
+                f.write('    }\n')
+            f.write('    (void)c; (void)msg; (void)out_value;\n')
+            f.write('    return 0;\n')
+            f.write('}\n\n')
+
+            # A single process (e.g. a PYRAMID bridge) may load codec plugins for
+            # several components, all registered under the same content_type. We
+            # iterate the codecs registered for the content_type and try each by
+            # schema_id until one handles it; if none do (or the schema is a
+            # scalar alias), we return -1 so the caller uses the static codec.
             f.write('static int pyramid_try_registry_encode(const char* content_type,\n')
             f.write('                                       const char* schema_id,\n')
             f.write('                                       const void* value,\n')
             f.write('                                       std::string* out)\n')
             f.write('{\n')
-            f.write('    const pcl_codec_t* c = pcl_codec_registry_get(\n')
-            f.write('        pcl_codec_registry_default(), content_type);\n')
-            f.write('    if (!c || !c->encode) {\n')
-            f.write('        return -1;\n')
+            f.write('    pcl_codec_registry_t* reg = pcl_codec_registry_default();\n')
+            f.write('    for (uint32_t i = 0; ; ++i) {\n')
+            f.write('        const pcl_codec_t* c =\n')
+            f.write('            pcl_codec_registry_get_at(reg, content_type, i);\n')
+            f.write('        if (!c) {\n')
+            f.write('            break;\n')
+            f.write('        }\n')
+            f.write('        if (!c->encode) {\n')
+            f.write('            continue;\n')
+            f.write('        }\n')
+            f.write('        pcl_msg_t m;\n')
+            f.write('        m.data = nullptr;\n')
+            f.write('        m.size = 0;\n')
+            f.write('        m.type_name = nullptr;\n')
+            f.write('        const int r = pyramid_cabi_encode(c, schema_id, value, &m);\n')
+            f.write('        if (r == 1) {\n')
+            f.write('            out->assign(static_cast<const char*>(m.data), m.size);\n')
+            f.write('            if (c->free_msg) {\n')
+            f.write('                c->free_msg(c->codec_ctx, &m);\n')
+            f.write('            }\n')
+            f.write('            return 1;\n')
+            f.write('        }\n')
+            f.write('        if (r == 0) {\n')
+            f.write('            return -1;\n')
+            f.write('        }\n')
             f.write('    }\n')
-            f.write('    pcl_msg_t m;\n')
-            f.write('    m.data = nullptr;\n')
-            f.write('    m.size = 0;\n')
-            f.write('    m.type_name = nullptr;\n')
-            f.write('    if (c->encode(c->codec_ctx, schema_id, value, &m) != PCL_OK) {\n')
-            f.write('        return -1;\n')
-            f.write('    }\n')
-            f.write('    out->assign(static_cast<const char*>(m.data), m.size);\n')
-            f.write('    if (c->free_msg) {\n')
-            f.write('        c->free_msg(c->codec_ctx, &m);\n')
-            f.write('    }\n')
-            f.write('    return 1;\n')
+            f.write('    return -1;\n')
             f.write('}\n\n')
 
             f.write('static int pyramid_try_registry_decode(const pcl_msg_t* msg,\n')
@@ -1549,14 +1650,26 @@ class CppServiceGenerator:
             f.write('    if (!msg) {\n')
             f.write('        return -1;\n')
             f.write('    }\n')
-            f.write('    const pcl_codec_t* c = pcl_codec_registry_get(\n')
-            f.write('        pcl_codec_registry_default(), msg->type_name);\n')
-            f.write('    if (!c || !c->decode) {\n')
-            f.write('        return -1;\n')
+            f.write('    pcl_codec_registry_t* reg = pcl_codec_registry_default();\n')
+            f.write('    for (uint32_t i = 0; ; ++i) {\n')
+            f.write('        const pcl_codec_t* c =\n')
+            f.write('            pcl_codec_registry_get_at(reg, msg->type_name, i);\n')
+            f.write('        if (!c) {\n')
+            f.write('            break;\n')
+            f.write('        }\n')
+            f.write('        if (!c->decode) {\n')
+            f.write('            continue;\n')
+            f.write('        }\n')
+            f.write('        const int r =\n')
+            f.write('            pyramid_cabi_decode(c, schema_id, msg, out_value);\n')
+            f.write('        if (r == 1) {\n')
+            f.write('            return 1;\n')
+            f.write('        }\n')
+            f.write('        if (r == 0) {\n')
+            f.write('            return -1;\n')
+            f.write('        }\n')
             f.write('    }\n')
-            f.write('    return c->decode(c->codec_ctx, schema_id, msg, out_value) == PCL_OK\n')
-            f.write('        ? 1\n')
-            f.write('        : -1;\n')
+            f.write('    return -1;\n')
             f.write('}\n\n')
 
             f.write('void ignore_async_response(const pcl_msg_t*, void*) {}\n\n')
@@ -2269,6 +2382,8 @@ class CppServiceGenerator:
                                   all_rpcs: List[Tuple[str, ProtoRpc]]):
         duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
         hpp_name = file_prefix + '.hpp'
+        is_provided = _is_provided(parsed)
+        sub_topics, _pub_topics = _topics_for_proto(parsed, is_provided)
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated component facade for the service binding.\n')
@@ -2751,6 +2866,28 @@ class CppServiceGenerator:
             f.write('        return PCL_OK;\n')
             f.write('    }\n\n')
 
+            for key in sub_topics:
+                pascal = _snake_to_pascal(key)
+                fname = f'subscribe{pascal}'
+                trampoline = f'trampoline{pascal}'
+                decode_name = f'decode{pascal}'
+                payload_t = topic_spec(key).cpp_payload_type
+                f.write(f'    pcl_port_t* {fname}(\n')
+                f.write(f'        std::function<void(const {payload_t}&)> on_message) {{\n')
+                f.write('        auto callback =\n')
+                f.write(f'            std::make_shared<std::function<void(const {payload_t}&)>>(\n')
+                f.write('                std::move(on_message));\n')
+                f.write('        topic_callbacks_.push_back(callback);\n')
+                f.write('        pcl_port_t* port =\n')
+                f.write(f'            ::{full_ns}::{fname}(\n')
+                f.write(f'                host_->handle(), &ConsumedService::{trampoline},\n')
+                f.write('                callback.get(), content_type_.c_str());\n')
+                f.write('        if (!port) {\n')
+                f.write('            topic_callbacks_.pop_back();\n')
+                f.write('        }\n')
+                f.write('        return port;\n')
+                f.write('    }\n\n')
+
             for svc_name, rpc in all_rpcs:
                 base = _rpc_symbol_base(svc_name, rpc, duplicate_rpc_names)
                 async_name = _lc_first(base) + 'Async'
@@ -2851,9 +2988,29 @@ class CppServiceGenerator:
             f.write('    struct StreamPushHolderT { std::shared_ptr<StreamPushState<T>> state; };\n')
             f.write('    template <class T> using StreamPushHolder = StreamPushHolderT<T>;\n\n')
 
+            for key in sub_topics:
+                pascal = _snake_to_pascal(key)
+                trampoline = f'trampoline{pascal}'
+                decode_name = f'decode{pascal}'
+                payload_t = topic_spec(key).cpp_payload_type
+                f.write(f'    static void {trampoline}(pcl_container_t*,\n')
+                f.write('                           const pcl_msg_t* msg,\n')
+                f.write('                           void* user_data) {\n')
+                f.write('        auto* callback =\n')
+                f.write(f'            static_cast<std::function<void(const {payload_t}&)>*>(\n')
+                f.write('                user_data);\n')
+                f.write('        if (!callback || !*callback) return;\n')
+                f.write(f'        {payload_t} payload{{}};\n')
+                f.write(f'        if ({decode_name}(msg, &payload)) {{\n')
+                f.write('            (*callback)(payload);\n')
+                f.write('        }\n')
+                f.write('    }\n\n')
+
             f.write('    pcl::Component* host_     = nullptr;\n')
             f.write('    pcl::Executor*  executor_ = nullptr;\n')
             f.write('    std::string     content_type_;\n')
+            if sub_topics:
+                f.write('    std::vector<std::shared_ptr<void>> topic_callbacks_;\n')
             f.write('};\n\n')
 
             # Template member-fn definitions outside the class --------------
@@ -2953,6 +3110,19 @@ _STRUCT_CONSTANTS: Dict[str, List[Tuple[str, str]]] = {
 }
 
 
+def find_scalar_wrappers(index: ProtoTypeIndex) -> Dict[str, str]:
+    """Return {message_name: cpp_scalar_type} for transparent wrapper messages."""
+    aliases: Dict[str, str] = dict(_FORCED_ALIASES)
+    for msg in index.all_messages():
+        fields = msg.all_fields()
+        if len(fields) == 1 and not fields[0].is_repeated:
+            ft = fields[0].type
+            fn = fields[0].name
+            if ft in _CPP_SCALAR_MAP and fn in _UNIT_FIELD_NAMES:
+                aliases[msg.name] = _CPP_SCALAR_MAP[ft]
+    return aliases
+
+
 def _common_cpp_ns(index: ProtoTypeIndex) -> str:
     """Derive C++ namespace from common package prefix of data model protos.
 
@@ -2996,7 +3166,7 @@ class CppTypesGenerator:
         self._data_model_dir = data_model_source if isinstance(data_model_source, Path) else None
         self._ns = _common_cpp_ns(self._index)
         self._prefix = '_'.join(self._ns.split('::'))
-        self._aliases = self._find_scalar_wrappers()
+        self._aliases = find_scalar_wrappers(self._index)
 
     # -- public ----------------------------------------------------------------
 
@@ -3014,23 +3184,6 @@ class CppTypesGenerator:
         print(f'  Generated {self._ns} (umbrella)')
 
     # -- internal --------------------------------------------------------------
-
-    def _find_scalar_wrappers(self) -> Dict[str, str]:
-        """Return {message_name: cpp_scalar_type} for transparent wrappers.
-
-        Only messages whose single field has a unit-style name (e.g. "radians",
-        "meters", "value") are inlined as aliases.  Domain fields like "success"
-        are left as structs so their enclosing type retains its semantics.
-        """
-        aliases: Dict[str, str] = dict(_FORCED_ALIASES)
-        for msg in self._index.all_messages():
-            fields = msg.all_fields()
-            if len(fields) == 1 and not fields[0].is_repeated:
-                ft = fields[0].type
-                fn = fields[0].name
-                if ft in _CPP_SCALAR_MAP and fn in _UNIT_FIELD_NAMES:
-                    aliases[msg.name] = _CPP_SCALAR_MAP[ft]
-        return aliases
 
     def _package_of_type(self, name: str) -> str:
         """Return the proto package that defines a type (short name lookup)."""

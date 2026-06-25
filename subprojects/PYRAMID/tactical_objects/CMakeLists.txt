@@ -73,6 +73,7 @@ add_executable(tactical_objects_app
 
 add_executable(tactical_objects_test_client
     src/apps/tactical_objects_test_client.cpp
+    ${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
     ${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
 )
 add_dependencies(tactical_objects_test_client pyramid_cpp_bindings_codegen)

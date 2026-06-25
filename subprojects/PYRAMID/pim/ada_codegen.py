@@ -476,6 +476,49 @@ def _grpc_transport_pkg_from_proto(proto_file: ProtoFile) -> str:
     return '.'.join(pkg_parts) + '.GRPC_Transport'
 
 
+def _ada_cabi_pkg_from_proto_pkg(proto_pkg: str) -> str:
+    parts = proto_pkg.split('.')
+    ada_parts = ['_'.join(w.capitalize() for w in seg.split('_')) for seg in parts]
+    return '.'.join(ada_parts + ['Cabi'])
+
+
+def _collect_cabi_message_bindings(
+        proto_path: Path,
+        allowed_type_pkgs: List[str]) -> List[Tuple[str, str, str, str]]:
+    """Return (schema_id, native_type, cabi_type, cabi_pkg) for real messages.
+
+    Scalar-wrapper messages are intentionally omitted because they do not have
+    generated ``pyramid_<Type>_c`` C structs.
+    """
+    proto_root = _find_proto_root(proto_path)
+    if proto_root is None:
+        return []
+
+    try:
+        dm_files = [
+            pf for pf in parse_proto_tree(proto_root)
+            if pf.package.startswith('pyramid.data_model')
+        ]
+    except Exception:
+        return []
+
+    aliases = AdaTypesGenerator(dm_files)._find_scalar_wrappers()
+    result: List[Tuple[str, str, str, str]] = []
+    for pf in dm_files:
+        types_pkg = AdaTypesGenerator._ada_pkg_for_file(pf)
+        if types_pkg not in allowed_type_pkgs:
+            continue
+        cabi_pkg = _ada_cabi_pkg_from_proto_pkg(pf.package)
+        for msg in pf.messages:
+            if msg.name in aliases:
+                continue
+            schema = msg.name
+            native = _ada_name(msg.name)
+            cabi = 'Pyramid_' + _ada_name(msg.name) + '_C'
+            result.append((schema, native, cabi, cabi_pkg))
+    return result
+
+
 def _flatbuffers_func_suffix_for_type(full_type: str) -> str:
     """Return the Ada suffix used by the generated FlatBuffers bridge package."""
     return _camel_to_snake(_short_type(full_type))
@@ -557,7 +600,8 @@ class AdaServiceGenerator:
             adb_path = output_path / (pkg_name.lower().replace('.', '-') + '.adb')
 
             self._write_spec(ads_path, pkg_name, parsed, all_rpcs, type_pkgs)
-            self._write_body(adb_path, pkg_name, parsed, all_rpcs, codec_pkgs)
+            self._write_body(adb_path, pkg_name, parsed, all_rpcs,
+                             type_pkgs, codec_pkgs)
             generated_pkgs.append(pkg_name)
             print(f'  Generated {pkg_name}')
 
@@ -828,11 +872,15 @@ class AdaServiceGenerator:
 
     def _write_body(self, path: Path, pkg_name: str, parsed: ProtoFile,
                     all_rpcs: List[Tuple[str, ProtoRpc]],
+                    type_pkgs: List[str],
                     codec_pkgs: List[str]):
         is_provided = _is_provided(parsed)
         has_grpc = 'grpc' in self._enabled_backends
         sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
         duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
+        cabi_bindings = _collect_cabi_message_bindings(
+            self._proto_input, type_pkgs)
+        cabi_pkgs = sorted({pkg for _, _, _, pkg in cabi_bindings})
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'--  Auto-generated service binding body\n')
@@ -845,9 +893,12 @@ class AdaServiceGenerator:
             f.write(f'with Pcl_Bindings;\n')
             f.write(f'with Pcl_Plugins;\n')
             f.write(f'with System;\n')
+            f.write(f'with System.Address_To_Access_Conversions;\n')
             f.write(f'with System.Storage_Elements;\n')
             # Only bring in codec packages for the types this service actually uses
             for cp in codec_pkgs:
+                f.write(f'with {cp};  use {cp};\n')
+            for cp in cabi_pkgs:
                 f.write(f'with {cp};  use {cp};\n')
             f.write(f'with {_flatbuffers_codec_pkg_from_proto(parsed)};\n')
             if has_grpc:
@@ -874,6 +925,13 @@ class AdaServiceGenerator:
             f.write(f'   function To_Handlers is new\n')
             f.write(f'     Ada.Unchecked_Conversion (System.Address, Service_Handlers_Access);\n')
             f.write(f'\n')
+            for schema, native, _cabi, _pkg in cabi_bindings:
+                del schema, _cabi, _pkg
+                ptr_pkg = f'{native}_Pointers'
+                f.write(f'   package {ptr_pkg} is new\n')
+                f.write(f'     System.Address_To_Access_Conversions ({native});\n')
+                f.write(f'\n')
+
             f.write(f'   function Handler_Address\n')
             f.write(f'     (Handlers : access constant Service_Handlers) return System.Address is\n')
             f.write(f'   begin\n')
@@ -923,6 +981,80 @@ class AdaServiceGenerator:
             f.write(f'   end Registry_Has_Codec;\n')
             f.write(f'\n')
 
+            f.write(f'   function Try_Cabi_Registry_Encode\n')
+            f.write(f'     (Codec     : Pcl_Plugins.Pcl_Codec_Const_Access;\n')
+            f.write(f'      Schema_C  : Interfaces.C.Strings.chars_ptr;\n')
+            f.write(f'      Schema_Id : String;\n')
+            f.write(f'      Value     : System.Address;\n')
+            f.write(f'      Msg       : access Pcl_Bindings.Pcl_Msg)\n')
+            f.write(f'      return Pcl_Bindings.Pcl_Status\n')
+            f.write(f'   is\n')
+            f.write(f'   begin\n')
+            f.write(f'      if Codec = null or else Codec.all.Encode = null then\n')
+            f.write(f'         return Pcl_Bindings.PCL_ERR_INVALID;\n')
+            f.write(f'      end if;\n')
+            for schema, native, cabi, _pkg in cabi_bindings:
+                ptr_pkg = f'{native}_Pointers'
+                f.write(f'      if Schema_Id = "{schema}" then\n')
+                f.write(f'         declare\n')
+                f.write(f'            Native : constant {ptr_pkg}.Object_Pointer :=\n')
+                f.write(f'              {ptr_pkg}.To_Pointer (Value);\n')
+                f.write(f'            C_Value : aliased {cabi} := (others => <>);\n')
+                f.write(f'            Status : Pcl_Bindings.Pcl_Status :=\n')
+                f.write(f'              Pcl_Bindings.PCL_ERR_INVALID;\n')
+                f.write(f'         begin\n')
+                f.write(f'            if Value = System.Null_Address then\n')
+                f.write(f'               return Pcl_Bindings.PCL_ERR_INVALID;\n')
+                f.write(f'            end if;\n')
+                f.write(f'            To_C (Native.all, C_Value);\n')
+                f.write(f'            Status := Codec.all.Encode.all\n')
+                f.write(f"              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);\n")
+                f.write(f"            Free_{native} (C_Value'Access);\n")
+                f.write(f'            return Status;\n')
+                f.write(f'         end;\n')
+                f.write(f'      end if;\n')
+            f.write(f'      return Pcl_Bindings.PCL_ERR_NOT_FOUND;\n')
+            f.write(f'   end Try_Cabi_Registry_Encode;\n')
+            f.write(f'\n')
+
+            f.write(f'   function Try_Cabi_Registry_Decode\n')
+            f.write(f'     (Codec     : Pcl_Plugins.Pcl_Codec_Const_Access;\n')
+            f.write(f'      Schema_C  : Interfaces.C.Strings.chars_ptr;\n')
+            f.write(f'      Schema_Id : String;\n')
+            f.write(f'      Msg       : access constant Pcl_Bindings.Pcl_Msg;\n')
+            f.write(f'      Value     : System.Address)\n')
+            f.write(f'      return Pcl_Bindings.Pcl_Status\n')
+            f.write(f'   is\n')
+            f.write(f'   begin\n')
+            f.write(f'      if Codec = null or else Codec.all.Decode = null then\n')
+            f.write(f'         return Pcl_Bindings.PCL_ERR_INVALID;\n')
+            f.write(f'      end if;\n')
+            for schema, native, cabi, _pkg in cabi_bindings:
+                ptr_pkg = f'{native}_Pointers'
+                f.write(f'      if Schema_Id = "{schema}" then\n')
+                f.write(f'         declare\n')
+                f.write(f'            Native : constant {ptr_pkg}.Object_Pointer :=\n')
+                f.write(f'              {ptr_pkg}.To_Pointer (Value);\n')
+                f.write(f'            C_Value : aliased {cabi} := (others => <>);\n')
+                f.write(f'            Status : Pcl_Bindings.Pcl_Status :=\n')
+                f.write(f'              Pcl_Bindings.PCL_ERR_INVALID;\n')
+                f.write(f'         begin\n')
+                f.write(f'            if Value = System.Null_Address then\n')
+                f.write(f'               return Pcl_Bindings.PCL_ERR_INVALID;\n')
+                f.write(f'            end if;\n')
+                f.write(f'            Status := Codec.all.Decode.all\n')
+                f.write(f"              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);\n")
+                f.write(f'            if Status = Pcl_Bindings.PCL_OK then\n')
+                f.write(f'               From_C (C_Value, Native.all);\n')
+                f.write(f'            end if;\n')
+                f.write(f"            Free_{native} (C_Value'Access);\n")
+                f.write(f'            return Status;\n')
+                f.write(f'         end;\n')
+                f.write(f'      end if;\n')
+            f.write(f'      return Pcl_Bindings.PCL_ERR_NOT_FOUND;\n')
+            f.write(f'   end Try_Cabi_Registry_Decode;\n')
+            f.write(f'\n')
+
             f.write(f'   function Try_Registry_Encode\n')
             f.write(f'     (Content_Type : String;\n')
             f.write(f'      Schema_Id    : String;\n')
@@ -953,8 +1085,12 @@ class AdaServiceGenerator:
             f.write(f'         Interfaces.C.Strings.Free (Schema_C);\n')
             f.write(f'         return False;\n')
             f.write(f'      end if;\n')
-            f.write(f'      Status := Codec.all.Encode.all\n')
-            f.write(f"        (Codec.all.Codec_Ctx, Schema_C, Value, Msg'Access);\n")
+            f.write(f'      Status := Try_Cabi_Registry_Encode\n')
+            f.write(f"        (Codec, Schema_C, Schema_Id, Value, Msg'Access);\n")
+            f.write(f'      if Status = Pcl_Bindings.PCL_ERR_NOT_FOUND then\n')
+            f.write(f'         Status := Codec.all.Encode.all\n')
+            f.write(f"           (Codec.all.Codec_Ctx, Schema_C, Value, Msg'Access);\n")
+            f.write(f'      end if;\n')
             f.write(f'      if Status = Pcl_Bindings.PCL_OK then\n')
             f.write(f'         if Msg.Data /= System.Null_Address and then Msg.Size > 0 then\n')
             f.write(f'            Wire := To_Unbounded_String (Msg_To_String (Msg.Data, Msg.Size));\n')
@@ -1004,8 +1140,12 @@ class AdaServiceGenerator:
             f.write(f'         Interfaces.C.Strings.Free (Schema_C);\n')
             f.write(f'         return False;\n')
             f.write(f'      end if;\n')
-            f.write(f'      Status := Codec.all.Decode.all\n')
-            f.write(f'        (Codec.all.Codec_Ctx, Schema_C, Msg, Value);\n')
+            f.write(f'      Status := Try_Cabi_Registry_Decode\n')
+            f.write(f'        (Codec, Schema_C, Schema_Id, Msg, Value);\n')
+            f.write(f'      if Status = Pcl_Bindings.PCL_ERR_NOT_FOUND then\n')
+            f.write(f'         Status := Codec.all.Decode.all\n')
+            f.write(f'           (Codec.all.Codec_Ctx, Schema_C, Msg, Value);\n')
+            f.write(f'      end if;\n')
             f.write(f'      Interfaces.C.Strings.Free (Schema_C);\n')
             f.write(f'      return Status = Pcl_Bindings.PCL_OK;\n')
             f.write(f'   exception\n')

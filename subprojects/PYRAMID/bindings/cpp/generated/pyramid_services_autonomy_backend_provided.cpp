@@ -7,10 +7,16 @@
 #include "flatbuffers/cpp/pyramid_services_autonomy_backend_flatbuffers_codec.hpp"
 #include "pyramid_data_model_autonomy_codec.hpp"
 #include "pyramid_data_model_common_codec.hpp"
+#include "pyramid_data_model_autonomy_cabi_marshal.hpp"
+#include "pyramid_data_model_common_cabi_marshal.hpp"
 
+extern "C" {
+#include <pcl/pcl_codec.h>
+#include <pcl/pcl_codec_registry.h>
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
 #include <pcl/pcl_transport.h>
+}
 
 #include <cstdlib>
 #include <cstdint>
@@ -217,6 +223,285 @@ Identifier decode_identifier_payload(const std::string& payload)
     return payload;
 }
 
+static int pyramid_cabi_encode(const pcl_codec_t* c,
+                               const char* schema_id,
+                               const void* value,
+                               pcl_msg_t* out_msg)
+{
+    if (std::strcmp(schema_id, "Query") == 0) {
+        pyramid_Query_c cs;
+        pyramid::cabi::to_c(
+            *static_cast<const pyramid::domain_model::Query*>(value), &cs);
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &cs, out_msg);
+        pyramid_Query_c_free(&cs);
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "Capabilities") == 0) {
+        pyramid_Capabilities_c cs;
+        pyramid::cabi::to_c(
+            *static_cast<const pyramid::domain_model::Capabilities*>(value), &cs);
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &cs, out_msg);
+        pyramid_Capabilities_c_free(&cs);
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "PlanningRequirement") == 0) {
+        pyramid_PlanningRequirement_c cs;
+        pyramid::cabi::to_c(
+            *static_cast<const pyramid::domain_model::PlanningRequirement*>(value), &cs);
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &cs, out_msg);
+        pyramid_PlanningRequirement_c_free(&cs);
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "Ack") == 0) {
+        pyramid_Ack_c cs;
+        pyramid::cabi::to_c(
+            *static_cast<const pyramid::domain_model::Ack*>(value), &cs);
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &cs, out_msg);
+        pyramid_Ack_c_free(&cs);
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "ExecutionRequirement") == 0) {
+        pyramid_ExecutionRequirement_c cs;
+        pyramid::cabi::to_c(
+            *static_cast<const pyramid::domain_model::ExecutionRequirement*>(value), &cs);
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &cs, out_msg);
+        pyramid_ExecutionRequirement_c_free(&cs);
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "StateUpdate") == 0) {
+        pyramid_StateUpdate_c cs;
+        pyramid::cabi::to_c(
+            *static_cast<const pyramid::domain_model::StateUpdate*>(value), &cs);
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &cs, out_msg);
+        pyramid_StateUpdate_c_free(&cs);
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "Plan") == 0) {
+        pyramid_Plan_c cs;
+        pyramid::cabi::to_c(
+            *static_cast<const pyramid::domain_model::Plan*>(value), &cs);
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &cs, out_msg);
+        pyramid_Plan_c_free(&cs);
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "ExecutionRun") == 0) {
+        pyramid_ExecutionRun_c cs;
+        pyramid::cabi::to_c(
+            *static_cast<const pyramid::domain_model::ExecutionRun*>(value), &cs);
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &cs, out_msg);
+        pyramid_ExecutionRun_c_free(&cs);
+        return rc == PCL_OK ? 1 : -1;
+    }
+    if (std::strcmp(schema_id, "RequirementPlacement") == 0) {
+        pyramid_RequirementPlacement_c cs;
+        pyramid::cabi::to_c(
+            *static_cast<const pyramid::domain_model::RequirementPlacement*>(value), &cs);
+        const pcl_status_t rc =
+            c->encode(c->codec_ctx, schema_id, &cs, out_msg);
+        pyramid_RequirementPlacement_c_free(&cs);
+        return rc == PCL_OK ? 1 : -1;
+    }
+    (void)c; (void)value; (void)out_msg;
+    return 0;
+}
+
+static int pyramid_cabi_decode(const pcl_codec_t* c,
+                               const char* schema_id,
+                               const pcl_msg_t* msg,
+                               void* out_value)
+{
+    if (std::strcmp(schema_id, "Query") == 0) {
+        pyramid_Query_c cs;
+        std::memset(&cs, 0, sizeof(cs));
+        if (c->decode(c->codec_ctx, schema_id, msg, &cs)
+                != PCL_OK) {
+            pyramid_Query_c_free(&cs);
+            return -1;
+        }
+        pyramid::cabi::from_c(
+            &cs, *static_cast<pyramid::domain_model::Query*>(out_value));
+        pyramid_Query_c_free(&cs);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "Capabilities") == 0) {
+        pyramid_Capabilities_c cs;
+        std::memset(&cs, 0, sizeof(cs));
+        if (c->decode(c->codec_ctx, schema_id, msg, &cs)
+                != PCL_OK) {
+            pyramid_Capabilities_c_free(&cs);
+            return -1;
+        }
+        pyramid::cabi::from_c(
+            &cs, *static_cast<pyramid::domain_model::Capabilities*>(out_value));
+        pyramid_Capabilities_c_free(&cs);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "PlanningRequirement") == 0) {
+        pyramid_PlanningRequirement_c cs;
+        std::memset(&cs, 0, sizeof(cs));
+        if (c->decode(c->codec_ctx, schema_id, msg, &cs)
+                != PCL_OK) {
+            pyramid_PlanningRequirement_c_free(&cs);
+            return -1;
+        }
+        pyramid::cabi::from_c(
+            &cs, *static_cast<pyramid::domain_model::PlanningRequirement*>(out_value));
+        pyramid_PlanningRequirement_c_free(&cs);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "Ack") == 0) {
+        pyramid_Ack_c cs;
+        std::memset(&cs, 0, sizeof(cs));
+        if (c->decode(c->codec_ctx, schema_id, msg, &cs)
+                != PCL_OK) {
+            pyramid_Ack_c_free(&cs);
+            return -1;
+        }
+        pyramid::cabi::from_c(
+            &cs, *static_cast<pyramid::domain_model::Ack*>(out_value));
+        pyramid_Ack_c_free(&cs);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "ExecutionRequirement") == 0) {
+        pyramid_ExecutionRequirement_c cs;
+        std::memset(&cs, 0, sizeof(cs));
+        if (c->decode(c->codec_ctx, schema_id, msg, &cs)
+                != PCL_OK) {
+            pyramid_ExecutionRequirement_c_free(&cs);
+            return -1;
+        }
+        pyramid::cabi::from_c(
+            &cs, *static_cast<pyramid::domain_model::ExecutionRequirement*>(out_value));
+        pyramid_ExecutionRequirement_c_free(&cs);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "StateUpdate") == 0) {
+        pyramid_StateUpdate_c cs;
+        std::memset(&cs, 0, sizeof(cs));
+        if (c->decode(c->codec_ctx, schema_id, msg, &cs)
+                != PCL_OK) {
+            pyramid_StateUpdate_c_free(&cs);
+            return -1;
+        }
+        pyramid::cabi::from_c(
+            &cs, *static_cast<pyramid::domain_model::StateUpdate*>(out_value));
+        pyramid_StateUpdate_c_free(&cs);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "Plan") == 0) {
+        pyramid_Plan_c cs;
+        std::memset(&cs, 0, sizeof(cs));
+        if (c->decode(c->codec_ctx, schema_id, msg, &cs)
+                != PCL_OK) {
+            pyramid_Plan_c_free(&cs);
+            return -1;
+        }
+        pyramid::cabi::from_c(
+            &cs, *static_cast<pyramid::domain_model::Plan*>(out_value));
+        pyramid_Plan_c_free(&cs);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "ExecutionRun") == 0) {
+        pyramid_ExecutionRun_c cs;
+        std::memset(&cs, 0, sizeof(cs));
+        if (c->decode(c->codec_ctx, schema_id, msg, &cs)
+                != PCL_OK) {
+            pyramid_ExecutionRun_c_free(&cs);
+            return -1;
+        }
+        pyramid::cabi::from_c(
+            &cs, *static_cast<pyramid::domain_model::ExecutionRun*>(out_value));
+        pyramid_ExecutionRun_c_free(&cs);
+        return 1;
+    }
+    if (std::strcmp(schema_id, "RequirementPlacement") == 0) {
+        pyramid_RequirementPlacement_c cs;
+        std::memset(&cs, 0, sizeof(cs));
+        if (c->decode(c->codec_ctx, schema_id, msg, &cs)
+                != PCL_OK) {
+            pyramid_RequirementPlacement_c_free(&cs);
+            return -1;
+        }
+        pyramid::cabi::from_c(
+            &cs, *static_cast<pyramid::domain_model::RequirementPlacement*>(out_value));
+        pyramid_RequirementPlacement_c_free(&cs);
+        return 1;
+    }
+    (void)c; (void)msg; (void)out_value;
+    return 0;
+}
+
+static int pyramid_try_registry_encode(const char* content_type,
+                                       const char* schema_id,
+                                       const void* value,
+                                       std::string* out)
+{
+    pcl_codec_registry_t* reg = pcl_codec_registry_default();
+    for (uint32_t i = 0; ; ++i) {
+        const pcl_codec_t* c =
+            pcl_codec_registry_get_at(reg, content_type, i);
+        if (!c) {
+            break;
+        }
+        if (!c->encode) {
+            continue;
+        }
+        pcl_msg_t m;
+        m.data = nullptr;
+        m.size = 0;
+        m.type_name = nullptr;
+        const int r = pyramid_cabi_encode(c, schema_id, value, &m);
+        if (r == 1) {
+            out->assign(static_cast<const char*>(m.data), m.size);
+            if (c->free_msg) {
+                c->free_msg(c->codec_ctx, &m);
+            }
+            return 1;
+        }
+        if (r == 0) {
+            return -1;
+        }
+    }
+    return -1;
+}
+
+static int pyramid_try_registry_decode(const pcl_msg_t* msg,
+                                       const char* schema_id,
+                                       void* out_value)
+{
+    if (!msg) {
+        return -1;
+    }
+    pcl_codec_registry_t* reg = pcl_codec_registry_default();
+    for (uint32_t i = 0; ; ++i) {
+        const pcl_codec_t* c =
+            pcl_codec_registry_get_at(reg, msg->type_name, i);
+        if (!c) {
+            break;
+        }
+        if (!c->decode) {
+            continue;
+        }
+        const int r =
+            pyramid_cabi_decode(c, schema_id, msg, out_value);
+        if (r == 1) {
+            return 1;
+        }
+        if (r == 0) {
+            return -1;
+        }
+    }
+    return -1;
+}
+
 void ignore_async_response(const pcl_msg_t*, void*) {}
 
 pcl_status_t invoke_async(pcl_executor_t* executor,
@@ -262,6 +547,9 @@ bool supportsContentType(const char* content_type)
     if (is_flatbuffers_content_type(content_type)) {
         return true;
     }
+    if (pcl_codec_registry_get(pcl_codec_registry_default(), content_type) != nullptr) {
+        return true;
+    }
     return false;
 }
 
@@ -302,6 +590,7 @@ bool encodeCapabilitiesReadCapabilitiesStreamFrame(const Capabilities& payload,
     if (!out) {
         return false;
     }
+    { int r = pyramid_try_registry_encode(content_type, "Capabilities", &payload, out); if (r == 1) return true; }
     if (is_json_content_type(content_type)) {
         *out = toJson(payload);
     } else if (is_flatbuffers_content_type(content_type)) {
@@ -318,6 +607,7 @@ bool decodeCapabilitiesReadCapabilitiesStreamFrame(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Capabilities", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -355,6 +645,7 @@ bool decodePlanningRequirementCreatePlanningRequirementResponse(const pcl_msg_t*
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Identifier", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -404,6 +695,7 @@ bool encodePlanningRequirementReadPlanningRequirementStreamFrame(const PlanningR
     if (!out) {
         return false;
     }
+    { int r = pyramid_try_registry_encode(content_type, "PlanningRequirement", &payload, out); if (r == 1) return true; }
     if (is_json_content_type(content_type)) {
         *out = toJson(payload);
     } else if (is_flatbuffers_content_type(content_type)) {
@@ -420,6 +712,7 @@ bool decodePlanningRequirementReadPlanningRequirementStreamFrame(const pcl_msg_t
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "PlanningRequirement", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -457,6 +750,7 @@ bool decodePlanningRequirementUpdatePlanningRequirementResponse(const pcl_msg_t*
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -479,6 +773,7 @@ bool decodePlanningRequirementDeletePlanningRequirementResponse(const pcl_msg_t*
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -501,6 +796,7 @@ bool decodeExecutionRequirementCreateExecutionRequirementResponse(const pcl_msg_
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Identifier", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -550,6 +846,7 @@ bool encodeExecutionRequirementReadExecutionRequirementStreamFrame(const Executi
     if (!out) {
         return false;
     }
+    { int r = pyramid_try_registry_encode(content_type, "ExecutionRequirement", &payload, out); if (r == 1) return true; }
     if (is_json_content_type(content_type)) {
         *out = toJson(payload);
     } else if (is_flatbuffers_content_type(content_type)) {
@@ -566,6 +863,7 @@ bool decodeExecutionRequirementReadExecutionRequirementStreamFrame(const pcl_msg
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "ExecutionRequirement", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -603,6 +901,7 @@ bool decodeExecutionRequirementUpdateExecutionRequirementResponse(const pcl_msg_
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -625,6 +924,7 @@ bool decodeExecutionRequirementDeleteExecutionRequirementResponse(const pcl_msg_
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -647,6 +947,7 @@ bool decodeStateCreateStateResponse(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Identifier", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -669,6 +970,7 @@ bool decodeStateUpdateStateResponse(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -691,6 +993,7 @@ bool decodeStateDeleteStateResponse(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -713,6 +1016,7 @@ bool decodePlanCreatePlanResponse(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Identifier", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -762,6 +1066,7 @@ bool encodePlanReadPlanStreamFrame(const Plan& payload,
     if (!out) {
         return false;
     }
+    { int r = pyramid_try_registry_encode(content_type, "Plan", &payload, out); if (r == 1) return true; }
     if (is_json_content_type(content_type)) {
         *out = toJson(payload);
     } else if (is_flatbuffers_content_type(content_type)) {
@@ -778,6 +1083,7 @@ bool decodePlanReadPlanStreamFrame(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Plan", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -815,6 +1121,7 @@ bool decodePlanUpdatePlanResponse(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -837,6 +1144,7 @@ bool decodePlanDeletePlanResponse(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "Ack", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -886,6 +1194,7 @@ bool encodeExecutionRunReadRunStreamFrame(const ExecutionRun& payload,
     if (!out) {
         return false;
     }
+    { int r = pyramid_try_registry_encode(content_type, "ExecutionRun", &payload, out); if (r == 1) return true; }
     if (is_json_content_type(content_type)) {
         *out = toJson(payload);
     } else if (is_flatbuffers_content_type(content_type)) {
@@ -902,6 +1211,7 @@ bool decodeExecutionRunReadRunStreamFrame(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "ExecutionRun", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
@@ -966,6 +1276,7 @@ bool encodeRequirementPlacementReadPlacementStreamFrame(const RequirementPlaceme
     if (!out) {
         return false;
     }
+    { int r = pyramid_try_registry_encode(content_type, "RequirementPlacement", &payload, out); if (r == 1) return true; }
     if (is_json_content_type(content_type)) {
         *out = toJson(payload);
     } else if (is_flatbuffers_content_type(content_type)) {
@@ -982,6 +1293,7 @@ bool decodeRequirementPlacementReadPlacementStreamFrame(const pcl_msg_t* msg,
     if (!msg || !msg->data || msg->size == 0 || !out) {
         return false;
     }
+    { int r = pyramid_try_registry_decode(msg, "RequirementPlacement", out); if (r == 1) return true; }
     try {
         if (!is_json_content_type(msg->type_name)) {
             if (is_flatbuffers_content_type(msg->type_name)) {
