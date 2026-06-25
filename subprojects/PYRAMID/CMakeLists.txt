@@ -199,11 +199,30 @@ pyramid_glob_generated(_pyramid_generated_codecs_srcs
 # C-ABI marshalling (to_c/from_c/_free) for the typed-value plugin boundary.
 # Linked into both components and codec plugins so each side can marshal
 # between the native data-model types and their frozen C structs.
-pyramid_glob_generated(_pyramid_generated_cabi_marshal_srcs
+# Marshalling-only library: native <-> frozen C struct (to_c/from_c/_free).
+# This is the ONLY codec-side library a plugin-only client/component links: it
+# carries NO wire encoding (no JSON, no FlatBuffers) and NO transport, so a
+# client that links it pulls in neither a wire codec nor a transport. The wire
+# codecs live exclusively in the loaded codec plugin .so (and, for components
+# that still use the in-tree codec, in pyramid_generated_codecs below).
+pyramid_glob_generated(_pyramid_generated_marshal_srcs
     "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_cabi_marshal.cpp")
-list(APPEND _pyramid_generated_codecs_srcs
-    ${_pyramid_generated_cabi_marshal_srcs})
-unset(_pyramid_generated_cabi_marshal_srcs)
+pyramid_require_generated(_pyramid_generated_marshal_srcs
+    "generated PYRAMID C-ABI marshalling sources")
+add_library(pyramid_generated_marshal STATIC ${_pyramid_generated_marshal_srcs})
+unset(_pyramid_generated_marshal_srcs)
+add_dependencies(pyramid_generated_marshal pyramid_cpp_bindings_codegen)
+set_target_properties(pyramid_generated_marshal PROPERTIES
+    POSITION_INDEPENDENT_CODE ON)
+target_include_directories(pyramid_generated_marshal
+    PUBLIC
+        "${PYRAMID_CPP_BINDINGS_DIR}"
+        "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
+        "${PYRAMID_ROOT_DIR}/core/external"   # tl/optional.hpp (header-only) used by data-model types
+)
+
+# Wire codecs (JSON + optional FlatBuffers). Linked by the codec plugins and by
+# any component still using the in-tree wire codec; re-exports the marshalling.
 if(PYRAMID_ENABLE_FLATBUFFERS)
     pyramid_glob_generated(_pyramid_generated_flatbuffers_codec_srcs
         "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_*_flatbuffers_codec.cpp")
@@ -219,6 +238,7 @@ unset(_pyramid_generated_codecs_srcs)
 add_dependencies(pyramid_generated_codecs pyramid_cpp_bindings_codegen)
 set_target_properties(pyramid_generated_codecs PROPERTIES
     POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(pyramid_generated_codecs PUBLIC pyramid_generated_marshal)
 
 if(PYRAMID_ENABLE_FLATBUFFERS)
     add_dependencies(pyramid_generated_codecs pyramid_flatbuffers_codegen)

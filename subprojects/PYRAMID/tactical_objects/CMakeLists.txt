@@ -127,17 +127,17 @@ target_include_directories(tactical_objects_app
 
 target_compile_features(tactical_objects_app PRIVATE cxx_std_14)
 
+# Plugin-only client: links the framework + the native<->C-struct marshalling
+# ONLY. The codec (JSON/FlatBuffers) is loaded from a .so at runtime, so the
+# client links neither a wire codec nor FlatBuffers. (Transport is still linked
+# statically here; migrating the client to load the transport plugin removes
+# pcl_transport_socket too.)
 target_link_libraries(tactical_objects_test_client
     PRIVATE
         pcl_core
         pcl_transport_socket
-        nlohmann_json::nlohmann_json
-        pyramid_generated_codecs
-        pyramid_flatbuffers_support
+        pyramid_generated_marshal
 )
-if(TARGET pyramid_protobuf_support)
-  target_link_libraries(tactical_objects_test_client PRIVATE pyramid_protobuf_support)
-endif()
 
 target_include_directories(tactical_objects_test_client
     PRIVATE

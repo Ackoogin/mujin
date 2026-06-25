@@ -58,14 +58,16 @@ echo "build-dir : ${BUILD_DIR}"
 echo "out       : ${OUT_DIR}"
 [[ ${CLEAN} -eq 1 ]] && { echo "cleaning ${OUT_DIR}"; rm -rf "${OUT_DIR:?}"/*; }
 
-# Static libraries a plugin-only client links (codec comes from the .so at run time).
+# Static libraries a plugin-only client links. The codec (JSON/FlatBuffers) is
+# loaded from a .so at run time, so the client links ONLY the framework
+# (pcl_core) and the native<->C-struct marshalling (no wire codec, no
+# FlatBuffers). pcl_transport_socket is included until the client is migrated to
+# load the transport plugin (then it drops too, and transport is fully .so).
 LINK_LIBS=(
   "${PCL_SRCDIR}/libpcl_core.a"
   "${PCL_SRCDIR}/libpcl_transport_socket.a"
-  "${PYRAMID_LIBDIR}/libpyramid_generated_codecs.a"   # native<->C-struct marshalling
+  "${PYRAMID_LIBDIR}/libpyramid_generated_marshal.a"   # marshalling only (no wire codec)
 )
-[[ -f "${PYRAMID_LIBDIR}/libpyramid_flatbuffers_support.a" ]] && \
-  LINK_LIBS+=("${PYRAMID_LIBDIR}/libpyramid_flatbuffers_support.a")
 
 # Discover components from the built codec plugin .so names:
 #   libpyramid_codec_<codec>_<component>.so
@@ -107,6 +109,10 @@ for comp in "${COMPONENTS[@]}"; do
   cp -f "${GEN_DIR}"/pyramid_datamodel_cabi.h "${dest}/include/pyramid/" 2>/dev/null || true
   # this component's service facade headers
   cp -f "${GEN_DIR}"/pyramid_services_"${comp}"_*.hpp "${dest}/include/pyramid/" 2>/dev/null || true
+  # header-only dep the generated data-model headers include (tl::optional)
+  mkdir -p "${dest}/include/tl"
+  cp -f "${REPO_ROOT}/subprojects/PYRAMID/core/external/tl/optional.hpp" \
+        "${dest}/include/tl/" 2>/dev/null || true
 
   # --- src: the contract facade the client compiles against ---
   # (exclude *_codec_plugin.cpp -- that is the plugin's own source, already
@@ -143,15 +149,16 @@ $(cd "${dest}/plugins" 2>/dev/null && for f in *.so; do echo "- \`$f\`"; done)
 The codec plugin is the **single cross-language** \`.so\` — it consumes the frozen
 \`pyramid_<Type>_c\` C struct and is loaded from both C++ and Ada clients.
 
-## Build a client (plugin-only: no codec linked, loaded at runtime)
+## Build a client (plugin-only: no wire codec linked, loaded at runtime)
 \`\`\`sh
 g++ -std=c++17 my_client.cpp src/*.cpp \\
-    -Iinclude -Iinclude/pyramid -I<nlohmann_json_include> -I<flatbuffers_include> \\
-    lib/libpcl_core.a lib/libpcl_transport_socket.a \\
-    lib/libpyramid_generated_codecs.a lib/libpyramid_flatbuffers_support.a \\
+    -Iinclude -Iinclude/pyramid \\
+    lib/libpcl_core.a lib/libpcl_transport_socket.a lib/libpyramid_generated_marshal.a \\
     -lpthread -o my_client
 \`\`\`
-(nlohmann/flatbuffers headers live under the build tree \`_deps/\`.)
+The client links only the framework + native<->C-struct marshalling — no JSON,
+no FlatBuffers, no codec. (\`pcl_transport_socket\` is still linked until the
+client loads the transport plugin; see the v1 plan.)
 
 ## Run against the plugin
 \`\`\`sh
