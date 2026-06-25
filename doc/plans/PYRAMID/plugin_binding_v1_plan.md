@@ -88,6 +88,28 @@ Builds on [`plugin_binding_end_state_review.md`](./plugin_binding_end_state_revi
 - `stage_plugin_deploy.sh`: stage codec **and** transport plugins per component,
   the minimal core link set, and a manifest the runtime auto-loads.
 
+### W6 — Per-module marshalling (polish; churn isolation)
+Rationale: the data model and generated artifacts are version-controlled, so a
+change in one data-model module must **not** churn the shipped artifacts of
+components that don't use it. Today `pyramid_generated_marshal` is one static lib
+(one `.o` per module — `common`, `base`, `tactical`, `autonomy`, `sensors`,
+`sensorproducts`, `radar`); the linker already trims a client binary to its
+module closure, so *binaries* are minimal, but the single lib (and a deployment
+that ships it whole) re-versions whenever **any** module changes.
+
+Polish (do per **data-model module**, NOT per service component — components
+share `common`/`base`, so per-component would duplicate shared modules):
+- Build a marshalling lib per module (`pyramid_marshal_common.a`, `_base.a`,
+  `_tactical.a`, …); each component/client links only its module closure.
+- `stage_plugin_deploy.sh`: stage only the closure modules per component so a
+  `tactical_objects` deployment changes only when `tactical`/`common`/`base`
+  change — not when `autonomy`/`sensors`/… change.
+- Net effect: unrelated data-model edits produce no diff in an unrelated
+  component's deployment dir / version-controlled artifacts.
+
+(Not required for v1 correctness — link-time trimming already yields minimal
+binaries — but it isolates version-control churn across the modular data model.)
+
 ## Suggested sequencing
 
 1. **W2** (config pass-through) — enables W1/W3 to pass plugin config cleanly.
