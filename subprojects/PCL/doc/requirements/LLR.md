@@ -1,6 +1,6 @@
 # PCL Low-Level Requirements
 
-Low-level requirements for the PYRAMID Container Library (PCL), derived from the high-level requirements in `HLR.md`.
+Low-level requirements for the PYRAMID Composition Library (PCL), derived from the high-level requirements in `HLR.md`.
 
 Each LLR maps to at least one unit or robustness test. Tests use requirement tags in the form `///< REQ_PCL_NNN: ...`.
 

@@ -1,5 +1,5 @@
 /// \file pcl_types.h
-/// \brief PYRAMID Container Library core types.
+/// \brief PYRAMID Composition Library core types.
 ///
 /// All public types used across the PCL API.  Pure C, no external dependencies.
 #ifndef PCL_TYPES_H

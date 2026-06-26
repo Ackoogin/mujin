@@ -1,5 +1,5 @@
 /// \file pcl_plugin.h
-/// \brief PYRAMID Container Library plugin entry-point contracts.
+/// \brief PYRAMID Composition Library plugin entry-point contracts.
 ///
 /// This header defines the stable symbols used by transport plugins.  Loading
 /// code resolves these symbols from a shared library, checks the ABI version,

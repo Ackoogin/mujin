@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# pcl_core -- PYRAMID Container Library (pure C, zero dependencies)
+# pcl_core -- PYRAMID Composition Library (pure C, zero dependencies)
 # ---------------------------------------------------------------------------
 # Compiled as C (not C++) to guarantee ABI stability across compilers.
 # C++ header-only wrappers are in include/pcl/*.hpp.

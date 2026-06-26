@@ -1,5 +1,5 @@
 /// \file pcl_transport.h
-/// \brief PYRAMID Container Library transport adapter interface.
+/// \brief PYRAMID Composition Library transport adapter interface.
 ///
 /// The transport adapter connects container ports to real middleware
 /// (ROS2, DDS, sockets, shared memory, etc.).  If no adapter is set,

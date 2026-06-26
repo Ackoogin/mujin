@@ -1,5 +1,5 @@
 /// \file pcl_codec_registry.h
-/// \brief PYRAMID Container Library runtime codec registry.
+/// \brief PYRAMID Composition Library runtime codec registry.
 ///
 /// The codec registry maps content_type strings to borrowed codec vtables.
 /// It is intentionally small and PCL-only: no dynamic loading, generator
