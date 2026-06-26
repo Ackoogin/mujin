@@ -3,19 +3,18 @@
 
 with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;
 with Ada.Unchecked_Conversion;
-with GNATCOLL.JSON;  use GNATCOLL.JSON;
 with Interfaces.C.Strings;
 with Pcl_Bindings;
 with Pcl_Plugins;
 with System;
 with System.Address_To_Access_Conversions;
 with System.Storage_Elements;
-with Pyramid.Data_Model.Common.Types_Codec;  use Pyramid.Data_Model.Common.Types_Codec;
-with Pyramid.Data_Model.Sensors.Types_Codec;  use Pyramid.Data_Model.Sensors.Types_Codec;
+with Pyramid.Data_Model.Base.Types;  use Pyramid.Data_Model.Base.Types;
+with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;
+with Pyramid.Data_Model.Sensors.Types;  use Pyramid.Data_Model.Sensors.Types;
 with Pyramid.Data_Model.Base.Cabi;  use Pyramid.Data_Model.Base.Cabi;
 with Pyramid.Data_Model.Common.Cabi;  use Pyramid.Data_Model.Common.Cabi;
 with Pyramid.Data_Model.Sensors.Cabi;  use Pyramid.Data_Model.Sensors.Cabi;
-with Pyramid.Services.Sensor_Data_Interpretation.Flatbuffers_Codec;
 
 package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
    use type System.Address;
@@ -30,6 +29,17 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
 
    function To_Address is new
      Ada.Unchecked_Conversion (Interfaces.C.Strings.chars_ptr, System.Address);
+
+   function Pcl_Codec_Registry_Get_At
+     (Registry     : System.Address;
+      Content_Type : Interfaces.C.Strings.chars_ptr;
+      Index        : Interfaces.C.unsigned)
+      return Pcl_Plugins.Pcl_Codec_Const_Access;
+   pragma Import (C, Pcl_Codec_Registry_Get_At,
+                  "pcl_codec_registry_get_at");
+
+   procedure C_Free (Ptr : System.Address);
+   pragma Import (C, C_Free, "free");
 
    type Service_Handlers_Access is access constant Service_Handlers;
 
@@ -1027,8 +1037,10 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
       Value        : System.Address;
       Wire         : out Unbounded_String) return Boolean
    is
+      Effective : constant String :=
+        (if Content_Type = "" then Json_Content_Type else Content_Type);
       Content_C : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Content_Type);
+        Interfaces.C.Strings.New_String (Effective);
       Schema_C : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Schema_Id);
       Codec : Pcl_Plugins.Pcl_Codec_Const_Access := null;
@@ -1037,36 +1049,43 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
          Size      => 0,
          Type_Name => Interfaces.C.Strings.Null_Ptr);
       Status : Pcl_Bindings.Pcl_Status := Pcl_Bindings.PCL_ERR_NOT_FOUND;
+      Index : Interfaces.C.unsigned := 0;
    begin
       Wire := Null_Unbounded_String;
-      if Content_Type = "" then
+      if Effective = "" then
          Interfaces.C.Strings.Free (Content_C);
          Interfaces.C.Strings.Free (Schema_C);
          return False;
       end if;
-      Codec := Pcl_Plugins.Pcl_Codec_Registry_Get
-        (Pcl_Plugins.Pcl_Codec_Registry_Default, Content_C);
-      if Codec = null or else Codec.all.Encode = null then
-         Interfaces.C.Strings.Free (Content_C);
-         Interfaces.C.Strings.Free (Schema_C);
-         return False;
-      end if;
-      Status := Try_Cabi_Registry_Encode
-        (Codec, Schema_C, Schema_Id, Value, Msg'Access);
-      if Status = Pcl_Bindings.PCL_OK then
-         if Msg.Data /= System.Null_Address and then Msg.Size > 0 then
-            Wire := To_Unbounded_String (Msg_To_String (Msg.Data, Msg.Size));
+      loop
+         Codec := Pcl_Codec_Registry_Get_At
+           (Pcl_Plugins.Pcl_Codec_Registry_Default, Content_C, Index);
+         exit when Codec = null;
+         if Codec.all.Encode /= null then
+            Msg :=
+              (Data      => System.Null_Address,
+               Size      => 0,
+               Type_Name => Interfaces.C.Strings.Null_Ptr);
+            Status := Try_Cabi_Registry_Encode
+              (Codec, Schema_C, Schema_Id, Value, Msg'Access);
+            if Status = Pcl_Bindings.PCL_OK then
+               if Msg.Data /= System.Null_Address and then Msg.Size > 0 then
+                  Wire := To_Unbounded_String (Msg_To_String (Msg.Data, Msg.Size));
+               end if;
+               if Codec.all.Free_Msg /= null then
+                  Codec.all.Free_Msg.all (Codec.all.Codec_Ctx, Msg'Access);
+               end if;
+               Interfaces.C.Strings.Free (Content_C);
+               Interfaces.C.Strings.Free (Schema_C);
+               return True;
+            end if;
+            if Msg.Data /= System.Null_Address and then Codec.all.Free_Msg /= null then
+               Codec.all.Free_Msg.all (Codec.all.Codec_Ctx, Msg'Access);
+            end if;
          end if;
-         if Codec.all.Free_Msg /= null then
-            Codec.all.Free_Msg.all (Codec.all.Codec_Ctx, Msg'Access);
-         end if;
-         Interfaces.C.Strings.Free (Content_C);
-         Interfaces.C.Strings.Free (Schema_C);
-         return True;
-      end if;
-      if Msg.Data /= System.Null_Address and then Codec.all.Free_Msg /= null then
-         Codec.all.Free_Msg.all (Codec.all.Codec_Ctx, Msg'Access);
-      end if;
+         exit when Index = Interfaces.C.unsigned'Last;
+         Index := Index + 1;
+      end loop;
       Interfaces.C.Strings.Free (Content_C);
       Interfaces.C.Strings.Free (Schema_C);
       return False;
@@ -1088,27 +1107,50 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
    is
       Schema_C : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Schema_Id);
+      Type_C : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
       Codec : Pcl_Plugins.Pcl_Codec_Const_Access := null;
       Status : Pcl_Bindings.Pcl_Status := Pcl_Bindings.PCL_ERR_NOT_FOUND;
+      Index : Interfaces.C.unsigned := 0;
    begin
-      if Msg = null or else Msg.Type_Name = Interfaces.C.Strings.Null_Ptr then
+      if Msg = null then
          Interfaces.C.Strings.Free (Schema_C);
          return False;
       end if;
-      Codec := Pcl_Plugins.Pcl_Codec_Registry_Get
-        (Pcl_Plugins.Pcl_Codec_Registry_Default, Msg.Type_Name);
-      if Codec = null or else Codec.all.Decode = null then
-         Interfaces.C.Strings.Free (Schema_C);
-         return False;
+      if Msg.Type_Name = Interfaces.C.Strings.Null_Ptr then
+         Type_C := Interfaces.C.Strings.New_String (Json_Content_Type);
       end if;
-      Status := Try_Cabi_Registry_Decode
-        (Codec, Schema_C, Schema_Id, Msg, Value);
+      loop
+         Codec := Pcl_Codec_Registry_Get_At
+           (Pcl_Plugins.Pcl_Codec_Registry_Default,
+            (if Type_C = Interfaces.C.Strings.Null_Ptr then Msg.Type_Name else Type_C),
+            Index);
+         exit when Codec = null;
+         if Codec.all.Decode /= null then
+            Status := Try_Cabi_Registry_Decode
+              (Codec, Schema_C, Schema_Id, Msg, Value);
+            if Status = Pcl_Bindings.PCL_OK then
+               Interfaces.C.Strings.Free (Schema_C);
+               if Type_C /= Interfaces.C.Strings.Null_Ptr then
+                  Interfaces.C.Strings.Free (Type_C);
+               end if;
+               return True;
+            end if;
+         end if;
+         exit when Index = Interfaces.C.unsigned'Last;
+         Index := Index + 1;
+      end loop;
       Interfaces.C.Strings.Free (Schema_C);
-      return Status = Pcl_Bindings.PCL_OK;
+      if Type_C /= Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Type_C);
+      end if;
+      return False;
    exception
       when others =>
          if Schema_C /= Interfaces.C.Strings.Null_Ptr then
             Interfaces.C.Strings.Free (Schema_C);
+         end if;
+         if Type_C /= Interfaces.C.Strings.Null_Ptr then
+            Interfaces.C.Strings.Free (Type_C);
          end if;
          return False;
    end Try_Registry_Decode;
@@ -1120,8 +1162,10 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
       Schema_Id    : String;
       Value        : System.Address) return Boolean
    is
+      Effective : constant String :=
+        (if Content_Type = "" then Json_Content_Type else Content_Type);
       Type_C : Interfaces.C.Strings.chars_ptr :=
-        Interfaces.C.Strings.New_String (Content_Type);
+        Interfaces.C.Strings.New_String (Effective);
       Msg : aliased Pcl_Bindings.Pcl_Msg :=
         (Data      => Data,
          Size      => Interfaces.C.unsigned (Size),
@@ -1139,14 +1183,373 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
          return False;
    end Try_Registry_Decode_Raw;
 
-   package Flatbuffers_Codec renames Pyramid.Services.Sensor_Data_Interpretation.Flatbuffers_Codec;
+   function Try_Registry_Encode_Capability_Array
+     (Content_Type : String;
+      Payload      : Capability_Array;
+      Wire         : out Unbounded_String) return Boolean
+   is
+      Effective : constant String :=
+        (if Content_Type = "" then Json_Content_Type else Content_Type);
+      Content_C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Effective);
+      Schema_C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String ("CapabilityArray");
+      Codec : Pcl_Plugins.Pcl_Codec_Const_Access := null;
+      Msg   : aliased Pcl_Bindings.Pcl_Msg :=
+        (Data      => System.Null_Address,
+         Size      => 0,
+         Type_Name => Interfaces.C.Strings.Null_Ptr);
+      Status : Pcl_Bindings.Pcl_Status := Pcl_Bindings.PCL_ERR_NOT_FOUND;
+      Index : Interfaces.C.unsigned := 0;
+   begin
+      Wire := Null_Unbounded_String;
+      loop
+         Codec := Pcl_Codec_Registry_Get_At
+           (Pcl_Plugins.Pcl_Codec_Registry_Default, Content_C, Index);
+         exit when Codec = null;
+         if Codec.all.Encode /= null then
+            Msg :=
+              (Data      => System.Null_Address,
+               Size      => 0,
+               Type_Name => Interfaces.C.Strings.Null_Ptr);
+            declare
+               Slice : aliased Pyramid.Data_Model.Common.Cabi.Pyramid_Slice_T :=
+                 (Ptr => System.Null_Address, Len => 0);
+            begin
+               if Payload'Length = 0 then
+                  Status := Codec.all.Encode.all
+                    (Codec.all.Codec_Ctx, Schema_C, Slice'Address, Msg'Access);
+               else
+                  declare
+                     Count : constant Natural := Payload'Length;
+                     type Capability_Array_C_Array is array (Positive range 1 .. Count)
+                       of aliased Pyramid_Capability_C;
+                     pragma Convention (C, Capability_Array_C_Array);
+                     Values : Capability_Array_C_Array := (others => (others => <>));
+                  begin
+                     for Offset in 0 .. Count - 1 loop
+                        To_C (Payload (Payload'First + Offset),
+                              Values (Values'First + Offset));
+                     end loop;
+                     Slice.Ptr := Values (Values'First)'Address;
+                     Slice.Len := Interfaces.C.unsigned (Count);
+                     Status := Codec.all.Encode.all
+                       (Codec.all.Codec_Ctx, Schema_C, Slice'Address, Msg'Access);
+                     for I in Values'Range loop
+                        Free_Capability (Values (I)'Access);
+                     end loop;
+                  end;
+               end if;
+            end;
+            if Status = Pcl_Bindings.PCL_OK then
+               if Msg.Data /= System.Null_Address and then Msg.Size > 0 then
+                  Wire := To_Unbounded_String (Msg_To_String (Msg.Data, Msg.Size));
+               end if;
+               if Codec.all.Free_Msg /= null then
+                  Codec.all.Free_Msg.all (Codec.all.Codec_Ctx, Msg'Access);
+               end if;
+               Interfaces.C.Strings.Free (Content_C);
+               Interfaces.C.Strings.Free (Schema_C);
+               return True;
+            end if;
+            if Msg.Data /= System.Null_Address and then Codec.all.Free_Msg /= null then
+               Codec.all.Free_Msg.all (Codec.all.Codec_Ctx, Msg'Access);
+            end if;
+         end if;
+         exit when Index = Interfaces.C.unsigned'Last;
+         Index := Index + 1;
+      end loop;
+      Interfaces.C.Strings.Free (Content_C);
+      Interfaces.C.Strings.Free (Schema_C);
+      return False;
+   exception
+      when others =>
+         if Content_C /= Interfaces.C.Strings.Null_Ptr then
+            Interfaces.C.Strings.Free (Content_C);
+         end if;
+         if Schema_C /= Interfaces.C.Strings.Null_Ptr then
+            Interfaces.C.Strings.Free (Schema_C);
+         end if;
+         return False;
+   end Try_Registry_Encode_Capability_Array;
+
+   function Registry_Decode_Capability_Array
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Capability_Array
+   is
+      Empty : Capability_Array (1 .. 0);
+      Schema_C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String ("CapabilityArray");
+      Type_C : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
+      Codec : Pcl_Plugins.Pcl_Codec_Const_Access := null;
+      Status : Pcl_Bindings.Pcl_Status := Pcl_Bindings.PCL_ERR_NOT_FOUND;
+      Index : Interfaces.C.unsigned := 0;
+      Decoded : Boolean := False;
+      Slice : aliased Pyramid.Data_Model.Common.Cabi.Pyramid_Slice_T :=
+        (Ptr => System.Null_Address, Len => 0);
+   begin
+      if Msg = null then
+         raise Program_Error with "codec registry decode failed for schema CapabilityArray";
+      end if;
+      if Msg.Type_Name = Interfaces.C.Strings.Null_Ptr then
+         Type_C := Interfaces.C.Strings.New_String (Json_Content_Type);
+      end if;
+      loop
+         Codec := Pcl_Codec_Registry_Get_At
+           (Pcl_Plugins.Pcl_Codec_Registry_Default,
+            (if Type_C = Interfaces.C.Strings.Null_Ptr then Msg.Type_Name else Type_C),
+            Index);
+         exit when Codec = null;
+         if Codec.all.Decode /= null then
+            Slice := (Ptr => System.Null_Address, Len => 0);
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, Slice'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               Decoded := True;
+               exit;
+            end if;
+            if Slice.Ptr /= System.Null_Address then
+               C_Free (Slice.Ptr);
+               Slice.Ptr := System.Null_Address;
+            end if;
+         end if;
+         exit when Index = Interfaces.C.unsigned'Last;
+         Index := Index + 1;
+      end loop;
+      if not Decoded then
+         raise Program_Error with "codec registry decode failed for schema CapabilityArray";
+      end if;
+      Interfaces.C.Strings.Free (Schema_C);
+      Schema_C := Interfaces.C.Strings.Null_Ptr;
+      if Type_C /= Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Type_C);
+         Type_C := Interfaces.C.Strings.Null_Ptr;
+      end if;
+      if Slice.Ptr = System.Null_Address or else Slice.Len = 0 then
+         if Slice.Ptr /= System.Null_Address then
+            C_Free (Slice.Ptr);
+            Slice.Ptr := System.Null_Address;
+         end if;
+         return Empty;
+      end if;
+      declare
+         Count : constant Natural := Natural (Slice.Len);
+         type Capability_Array_C_Array is array (Positive range 1 .. Count)
+           of aliased Pyramid_Capability_C;
+         pragma Convention (C, Capability_Array_C_Array);
+         Values : Capability_Array_C_Array;
+         for Values'Address use Slice.Ptr;
+         pragma Import (Ada, Values);
+         Result : Capability_Array (1 .. Count);
+      begin
+         for I in 1 .. Count loop
+            From_C (Values (I), Result (I));
+            Free_Capability (Values (I)'Access);
+         end loop;
+         C_Free (Slice.Ptr);
+         Slice.Ptr := System.Null_Address;
+         return Result;
+      end;
+   exception
+      when others =>
+         if Schema_C /= Interfaces.C.Strings.Null_Ptr then
+            Interfaces.C.Strings.Free (Schema_C);
+         end if;
+         if Type_C /= Interfaces.C.Strings.Null_Ptr then
+            Interfaces.C.Strings.Free (Type_C);
+         end if;
+         if Slice.Ptr /= System.Null_Address then
+            C_Free (Slice.Ptr);
+         end if;
+         raise;
+   end Registry_Decode_Capability_Array;
+
+   function Try_Registry_Encode_Interpretation_Requirement_Array
+     (Content_Type : String;
+      Payload      : Interpretation_Requirement_Array;
+      Wire         : out Unbounded_String) return Boolean
+   is
+      Effective : constant String :=
+        (if Content_Type = "" then Json_Content_Type else Content_Type);
+      Content_C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String (Effective);
+      Schema_C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String ("InterpretationRequirementArray");
+      Codec : Pcl_Plugins.Pcl_Codec_Const_Access := null;
+      Msg   : aliased Pcl_Bindings.Pcl_Msg :=
+        (Data      => System.Null_Address,
+         Size      => 0,
+         Type_Name => Interfaces.C.Strings.Null_Ptr);
+      Status : Pcl_Bindings.Pcl_Status := Pcl_Bindings.PCL_ERR_NOT_FOUND;
+      Index : Interfaces.C.unsigned := 0;
+   begin
+      Wire := Null_Unbounded_String;
+      loop
+         Codec := Pcl_Codec_Registry_Get_At
+           (Pcl_Plugins.Pcl_Codec_Registry_Default, Content_C, Index);
+         exit when Codec = null;
+         if Codec.all.Encode /= null then
+            Msg :=
+              (Data      => System.Null_Address,
+               Size      => 0,
+               Type_Name => Interfaces.C.Strings.Null_Ptr);
+            declare
+               Slice : aliased Pyramid.Data_Model.Sensors.Cabi.Pyramid_Slice_T :=
+                 (Ptr => System.Null_Address, Len => 0);
+            begin
+               if Payload'Length = 0 then
+                  Status := Codec.all.Encode.all
+                    (Codec.all.Codec_Ctx, Schema_C, Slice'Address, Msg'Access);
+               else
+                  declare
+                     Count : constant Natural := Payload'Length;
+                     type Interpretation_Requirement_Array_C_Array is array (Positive range 1 .. Count)
+                       of aliased Pyramid_Interpretation_Requirement_C;
+                     pragma Convention (C, Interpretation_Requirement_Array_C_Array);
+                     Values : Interpretation_Requirement_Array_C_Array := (others => (others => <>));
+                  begin
+                     for Offset in 0 .. Count - 1 loop
+                        To_C (Payload (Payload'First + Offset),
+                              Values (Values'First + Offset));
+                     end loop;
+                     Slice.Ptr := Values (Values'First)'Address;
+                     Slice.Len := Interfaces.C.unsigned (Count);
+                     Status := Codec.all.Encode.all
+                       (Codec.all.Codec_Ctx, Schema_C, Slice'Address, Msg'Access);
+                     for I in Values'Range loop
+                        Free_Interpretation_Requirement (Values (I)'Access);
+                     end loop;
+                  end;
+               end if;
+            end;
+            if Status = Pcl_Bindings.PCL_OK then
+               if Msg.Data /= System.Null_Address and then Msg.Size > 0 then
+                  Wire := To_Unbounded_String (Msg_To_String (Msg.Data, Msg.Size));
+               end if;
+               if Codec.all.Free_Msg /= null then
+                  Codec.all.Free_Msg.all (Codec.all.Codec_Ctx, Msg'Access);
+               end if;
+               Interfaces.C.Strings.Free (Content_C);
+               Interfaces.C.Strings.Free (Schema_C);
+               return True;
+            end if;
+            if Msg.Data /= System.Null_Address and then Codec.all.Free_Msg /= null then
+               Codec.all.Free_Msg.all (Codec.all.Codec_Ctx, Msg'Access);
+            end if;
+         end if;
+         exit when Index = Interfaces.C.unsigned'Last;
+         Index := Index + 1;
+      end loop;
+      Interfaces.C.Strings.Free (Content_C);
+      Interfaces.C.Strings.Free (Schema_C);
+      return False;
+   exception
+      when others =>
+         if Content_C /= Interfaces.C.Strings.Null_Ptr then
+            Interfaces.C.Strings.Free (Content_C);
+         end if;
+         if Schema_C /= Interfaces.C.Strings.Null_Ptr then
+            Interfaces.C.Strings.Free (Schema_C);
+         end if;
+         return False;
+   end Try_Registry_Encode_Interpretation_Requirement_Array;
+
+   function Registry_Decode_Interpretation_Requirement_Array
+     (Msg : access constant Pcl_Bindings.Pcl_Msg)
+      return Interpretation_Requirement_Array
+   is
+      Empty : Interpretation_Requirement_Array (1 .. 0);
+      Schema_C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String ("InterpretationRequirementArray");
+      Type_C : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
+      Codec : Pcl_Plugins.Pcl_Codec_Const_Access := null;
+      Status : Pcl_Bindings.Pcl_Status := Pcl_Bindings.PCL_ERR_NOT_FOUND;
+      Index : Interfaces.C.unsigned := 0;
+      Decoded : Boolean := False;
+      Slice : aliased Pyramid.Data_Model.Sensors.Cabi.Pyramid_Slice_T :=
+        (Ptr => System.Null_Address, Len => 0);
+   begin
+      if Msg = null then
+         raise Program_Error with "codec registry decode failed for schema InterpretationRequirementArray";
+      end if;
+      if Msg.Type_Name = Interfaces.C.Strings.Null_Ptr then
+         Type_C := Interfaces.C.Strings.New_String (Json_Content_Type);
+      end if;
+      loop
+         Codec := Pcl_Codec_Registry_Get_At
+           (Pcl_Plugins.Pcl_Codec_Registry_Default,
+            (if Type_C = Interfaces.C.Strings.Null_Ptr then Msg.Type_Name else Type_C),
+            Index);
+         exit when Codec = null;
+         if Codec.all.Decode /= null then
+            Slice := (Ptr => System.Null_Address, Len => 0);
+            Status := Codec.all.Decode.all
+              (Codec.all.Codec_Ctx, Schema_C, Msg, Slice'Address);
+            if Status = Pcl_Bindings.PCL_OK then
+               Decoded := True;
+               exit;
+            end if;
+            if Slice.Ptr /= System.Null_Address then
+               C_Free (Slice.Ptr);
+               Slice.Ptr := System.Null_Address;
+            end if;
+         end if;
+         exit when Index = Interfaces.C.unsigned'Last;
+         Index := Index + 1;
+      end loop;
+      if not Decoded then
+         raise Program_Error with "codec registry decode failed for schema InterpretationRequirementArray";
+      end if;
+      Interfaces.C.Strings.Free (Schema_C);
+      Schema_C := Interfaces.C.Strings.Null_Ptr;
+      if Type_C /= Interfaces.C.Strings.Null_Ptr then
+         Interfaces.C.Strings.Free (Type_C);
+         Type_C := Interfaces.C.Strings.Null_Ptr;
+      end if;
+      if Slice.Ptr = System.Null_Address or else Slice.Len = 0 then
+         if Slice.Ptr /= System.Null_Address then
+            C_Free (Slice.Ptr);
+            Slice.Ptr := System.Null_Address;
+         end if;
+         return Empty;
+      end if;
+      declare
+         Count : constant Natural := Natural (Slice.Len);
+         type Interpretation_Requirement_Array_C_Array is array (Positive range 1 .. Count)
+           of aliased Pyramid_Interpretation_Requirement_C;
+         pragma Convention (C, Interpretation_Requirement_Array_C_Array);
+         Values : Interpretation_Requirement_Array_C_Array;
+         for Values'Address use Slice.Ptr;
+         pragma Import (Ada, Values);
+         Result : Interpretation_Requirement_Array (1 .. Count);
+      begin
+         for I in 1 .. Count loop
+            From_C (Values (I), Result (I));
+            Free_Interpretation_Requirement (Values (I)'Access);
+         end loop;
+         C_Free (Slice.Ptr);
+         Slice.Ptr := System.Null_Address;
+         return Result;
+      end;
+   exception
+      when others =>
+         if Schema_C /= Interfaces.C.Strings.Null_Ptr then
+            Interfaces.C.Strings.Free (Schema_C);
+         end if;
+         if Type_C /= Interfaces.C.Strings.Null_Ptr then
+            Interfaces.C.Strings.Free (Type_C);
+         end if;
+         if Slice.Ptr /= System.Null_Address then
+            C_Free (Slice.Ptr);
+         end if;
+         raise;
+   end Registry_Decode_Interpretation_Requirement_Array;
+
 
    function Supports_Content_Type (Content_Type : String) return Boolean is
    begin
-      return Content_Type = ""
-        or else Content_Type = Json_Content_Type
-        or else Content_Type = Flatbuffers_Content_Type
-        or else Registry_Has_Codec (Content_Type);
+      return Registry_Has_Codec
+        ((if Content_Type = "" then Json_Content_Type else Content_Type));
    end Supports_Content_Type;
 
    function Message_Content_Type
@@ -1157,23 +1560,6 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
       end if;
       return Interfaces.C.Strings.Value (Msg.Type_Name);
    end Message_Content_Type;
-
-   function Decode_Identifier_Payload (Payload : String) return Identifier is
-   begin
-      declare
-         J : constant JSON_Value := Read (Payload);
-      begin
-         if J.Kind = JSON_String_Type then
-            return To_Unbounded_String (String'(UTF8_String'(Get (J))));
-         elsif J.Kind = JSON_Object_Type and then Has_Field (J, "uuid") then
-            return To_Unbounded_String (String'(UTF8_String'(Get (J, "uuid"))));
-         end if;
-      exception
-         when others =>
-            null;
-      end;
-      return To_Unbounded_String (Payload);
-   end Decode_Identifier_Payload;
 
    function Decode_Interpretation_Requirement_Read_Capability_Response
      (Msg : access constant Pcl_Bindings.Pcl_Msg)
@@ -1191,28 +1577,7 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
       end if;
       Require_Codec (Content_Type);  --  fail closed if no plugin
 
-      declare
-         Json_Payload : constant String :=
-           (if Content_Type = "" or else Content_Type = Json_Content_Type
-            then Payload
-            elsif Content_Type = Flatbuffers_Content_Type
-            then Flatbuffers_Codec.From_Binary_Capability_Array (Payload)
-            else raise Constraint_Error with "Unsupported content type: " & Content_Type);
-         R : constant Read_Result := Read (Json_Payload);
-      begin
-         if not R.Success or else R.Value.Kind /= JSON_Array_Type then
-            return Empty;
-         end if;
-         declare
-            Arr    : constant JSON_Array := Get (R.Value);
-            Result : Capability_Array (1 .. GNATCOLL.JSON.Length (Arr));
-         begin
-            for I in 1 .. GNATCOLL.JSON.Length (Arr) loop
-               Result (I) := From_Json (Write (Get (Arr, I)), null);
-            end loop;
-            return Result;
-         end;
-      end;
+      return Registry_Decode_Capability_Array (Msg);
    end Decode_Interpretation_Requirement_Read_Capability_Response;
 
    function Decode_Interpretation_Requirement_Create_Requirement_Response
@@ -1238,12 +1603,8 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
          end if;
       end;
 
-      if Content_Type = "" or else Content_Type = Json_Content_Type then
-         return Decode_Identifier_Payload (Payload);
-      elsif Content_Type = Flatbuffers_Content_Type then
-         return Flatbuffers_Codec.From_Binary_Identifier (Payload, null);
-      end if;
-      raise Constraint_Error with "Unsupported content type: " & Content_Type;
+      raise Program_Error with
+        "codec registry decode failed for schema Identifier";
    end Decode_Interpretation_Requirement_Create_Requirement_Response;
 
    function Decode_Interpretation_Requirement_Read_Requirement_Response
@@ -1262,28 +1623,7 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
       end if;
       Require_Codec (Content_Type);  --  fail closed if no plugin
 
-      declare
-         Json_Payload : constant String :=
-           (if Content_Type = "" or else Content_Type = Json_Content_Type
-            then Payload
-            elsif Content_Type = Flatbuffers_Content_Type
-            then Flatbuffers_Codec.From_Binary_Interpretation_Requirement_Array (Payload)
-            else raise Constraint_Error with "Unsupported content type: " & Content_Type);
-         R : constant Read_Result := Read (Json_Payload);
-      begin
-         if not R.Success or else R.Value.Kind /= JSON_Array_Type then
-            return Empty;
-         end if;
-         declare
-            Arr    : constant JSON_Array := Get (R.Value);
-            Result : Interpretation_Requirement_Array (1 .. GNATCOLL.JSON.Length (Arr));
-         begin
-            for I in 1 .. GNATCOLL.JSON.Length (Arr) loop
-               Result (I) := From_Json (Write (Get (Arr, I)), null);
-            end loop;
-            return Result;
-         end;
-      end;
+      return Registry_Decode_Interpretation_Requirement_Array (Msg);
    end Decode_Interpretation_Requirement_Read_Requirement_Response;
 
    function Decode_Interpretation_Requirement_Update_Requirement_Response
@@ -1297,7 +1637,11 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
       Content_Type : constant String := Message_Content_Type (Msg);
    begin
       if Payload = "" then
-         return From_Json ("{}", null);
+         declare
+            Result : Ack;
+         begin
+            return Result;
+         end;
       end if;
       Require_Codec (Content_Type);  --  fail closed if no plugin
 
@@ -1309,12 +1653,8 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
          end if;
       end;
 
-      if Content_Type = "" or else Content_Type = Json_Content_Type then
-         return From_Json (Payload, null);
-      elsif Content_Type = Flatbuffers_Content_Type then
-         return Flatbuffers_Codec.From_Binary_Ack (Payload, null);
-      end if;
-      raise Constraint_Error with "Unsupported content type: " & Content_Type;
+      raise Program_Error with
+        "codec registry decode failed for schema Ack";
    end Decode_Interpretation_Requirement_Update_Requirement_Response;
 
    function Decode_Interpretation_Requirement_Delete_Requirement_Response
@@ -1328,7 +1668,11 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
       Content_Type : constant String := Message_Content_Type (Msg);
    begin
       if Payload = "" then
-         return From_Json ("{}", null);
+         declare
+            Result : Ack;
+         begin
+            return Result;
+         end;
       end if;
       Require_Codec (Content_Type);  --  fail closed if no plugin
 
@@ -1340,12 +1684,8 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
          end if;
       end;
 
-      if Content_Type = "" or else Content_Type = Json_Content_Type then
-         return From_Json (Payload, null);
-      elsif Content_Type = Flatbuffers_Content_Type then
-         return Flatbuffers_Codec.From_Binary_Ack (Payload, null);
-      end if;
-      raise Constraint_Error with "Unsupported content type: " & Content_Type;
+      raise Program_Error with
+        "codec registry decode failed for schema Ack";
    end Decode_Interpretation_Requirement_Delete_Requirement_Response;
 
    --  -- Interpretation_Requirement_Service ------------------------------------
@@ -1738,17 +2078,8 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
          then
             return To_String (Registry_Payload);
          end if;
-
-         declare
-            Json_Payload : constant String := To_Json (Request);
-         begin
-            return
-              (if Content_Type = "" or else Content_Type = "application/json"
-               then Json_Payload
-               elsif Content_Type = "application/flatbuffers"
-               then Flatbuffers_Codec.To_Binary_Query (Request)
-               else raise Constraint_Error with "Unsupported content type: " & Content_Type);
-         end;
+         raise Program_Error with
+           "codec registry encode failed for schema Query";
       end Build_Payload;
       Payload : constant String := Build_Payload;
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
@@ -1797,17 +2128,8 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
          then
             return To_String (Registry_Payload);
          end if;
-
-         declare
-            Json_Payload : constant String := To_Json (Request);
-         begin
-            return
-              (if Content_Type = "" or else Content_Type = "application/json"
-               then Json_Payload
-               elsif Content_Type = "application/flatbuffers"
-               then Flatbuffers_Codec.To_Binary_Interpretation_Requirement (Request)
-               else raise Constraint_Error with "Unsupported content type: " & Content_Type);
-         end;
+         raise Program_Error with
+           "codec registry encode failed for schema InterpretationRequirement";
       end Build_Payload;
       Payload : constant String := Build_Payload;
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
@@ -1856,17 +2178,8 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
          then
             return To_String (Registry_Payload);
          end if;
-
-         declare
-            Json_Payload : constant String := To_Json (Request);
-         begin
-            return
-              (if Content_Type = "" or else Content_Type = "application/json"
-               then Json_Payload
-               elsif Content_Type = "application/flatbuffers"
-               then Flatbuffers_Codec.To_Binary_Query (Request)
-               else raise Constraint_Error with "Unsupported content type: " & Content_Type);
-         end;
+         raise Program_Error with
+           "codec registry encode failed for schema Query";
       end Build_Payload;
       Payload : constant String := Build_Payload;
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
@@ -1915,17 +2228,8 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
          then
             return To_String (Registry_Payload);
          end if;
-
-         declare
-            Json_Payload : constant String := To_Json (Request);
-         begin
-            return
-              (if Content_Type = "" or else Content_Type = "application/json"
-               then Json_Payload
-               elsif Content_Type = "application/flatbuffers"
-               then Flatbuffers_Codec.To_Binary_Interpretation_Requirement (Request)
-               else raise Constraint_Error with "Unsupported content type: " & Content_Type);
-         end;
+         raise Program_Error with
+           "codec registry encode failed for schema InterpretationRequirement";
       end Build_Payload;
       Payload : constant String := Build_Payload;
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
@@ -1974,17 +2278,8 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
          then
             return To_String (Registry_Payload);
          end if;
-
-         declare
-            Json_Payload : constant String := To_String (Request);
-         begin
-            return
-              (if Content_Type = "" or else Content_Type = "application/json"
-               then Json_Payload
-               elsif Content_Type = "application/flatbuffers"
-               then Flatbuffers_Codec.To_Binary_Identifier (Request)
-               else raise Constraint_Error with "Unsupported content type: " & Content_Type);
-         end;
+         raise Program_Error with
+           "codec registry encode failed for schema Identifier";
       end Build_Payload;
       Payload : constant String := Build_Payload;
       Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;
@@ -2055,12 +2350,8 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
                      return Result;
                   end if;
 
-                  return
-                    (if Content_Type = "" or else Content_Type = "application/json"
-                     then From_Json (Request_Payload, null)
-                     elsif Content_Type = "application/flatbuffers"
-                     then Flatbuffers_Codec.From_Binary_Query (Request_Payload, null)
-                     else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+                  raise Program_Error with
+                    "codec registry decode failed for schema Query";
                end Decode_Request;
                Req : constant Query := Decode_Request;
                Rsp : constant Capability_Array :=
@@ -2069,24 +2360,17 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
                   else Default_Handle_Interpretation_Requirement_Read_Capability (Req));
             begin
                declare
-                  use Ada.Strings.Unbounded;
-                  Acc : Unbounded_String :=
-                    To_Unbounded_String ("[");
+                  Wire_Response : Unbounded_String := Null_Unbounded_String;
                begin
                   Require_Codec (Content_Type);  --  fail closed if no plugin
-                  for I in Rsp'Range loop
-                     if I > Rsp'First then
-                        Append (Acc, ",");
-                     end if;
-                     Append (Acc, To_Json (Rsp (I)));
-                  end loop;
-                  Append (Acc, "]");
+                  if not Try_Registry_Encode_Capability_Array
+                    (Content_Type, Rsp, Wire_Response)
+                  then
+                     raise Program_Error with
+                       "codec registry encode failed for schema CapabilityArray";
+                  end if;
                   Copy_To_Buf
-                    ((if Content_Type = "" or else Content_Type = "application/json"
-                      then To_String (Acc)
-                      elsif Content_Type = "application/flatbuffers"
-                      then Flatbuffers_Codec.To_Binary_Capability_Array (To_String (Acc))
-                      else raise Constraint_Error with "Unsupported content type: " & Content_Type),
+                    (To_String (Wire_Response),
                     Response_Buf, Response_Size);
                end;
             end;
@@ -2103,12 +2387,8 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
                      return Result;
                   end if;
 
-                  return
-                    (if Content_Type = "" or else Content_Type = "application/json"
-                     then From_Json (Request_Payload, null)
-                     elsif Content_Type = "application/flatbuffers"
-                     then Flatbuffers_Codec.From_Binary_Interpretation_Requirement (Request_Payload, null)
-                     else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+                  raise Program_Error with
+                    "codec registry decode failed for schema InterpretationRequirement";
                end Decode_Request;
                Req : constant Interpretation_Requirement := Decode_Request;
                Rsp : Identifier;
@@ -2124,12 +2404,8 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
                  (Content_Type, "Identifier", Rsp'Address,
                   Wire_Response)
                then
-                  Wire_Response := To_Unbounded_String
-                    ((if Content_Type = "" or else Content_Type = "application/json"
-                      then To_String (Rsp)
-                      elsif Content_Type = "application/flatbuffers"
-                      then Flatbuffers_Codec.To_Binary_Identifier (Rsp)
-                      else raise Constraint_Error with "Unsupported content type: " & Content_Type));
+                  raise Program_Error with
+                    "codec registry encode failed for schema Identifier";
                end if;
                Copy_To_Buf
                  (To_String (Wire_Response),
@@ -2148,12 +2424,8 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
                      return Result;
                   end if;
 
-                  return
-                    (if Content_Type = "" or else Content_Type = "application/json"
-                     then From_Json (Request_Payload, null)
-                     elsif Content_Type = "application/flatbuffers"
-                     then Flatbuffers_Codec.From_Binary_Query (Request_Payload, null)
-                     else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+                  raise Program_Error with
+                    "codec registry decode failed for schema Query";
                end Decode_Request;
                Req : constant Query := Decode_Request;
                Rsp : constant Interpretation_Requirement_Array :=
@@ -2162,24 +2434,17 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
                   else Default_Handle_Interpretation_Requirement_Read_Requirement (Req));
             begin
                declare
-                  use Ada.Strings.Unbounded;
-                  Acc : Unbounded_String :=
-                    To_Unbounded_String ("[");
+                  Wire_Response : Unbounded_String := Null_Unbounded_String;
                begin
                   Require_Codec (Content_Type);  --  fail closed if no plugin
-                  for I in Rsp'Range loop
-                     if I > Rsp'First then
-                        Append (Acc, ",");
-                     end if;
-                     Append (Acc, To_Json (Rsp (I)));
-                  end loop;
-                  Append (Acc, "]");
+                  if not Try_Registry_Encode_Interpretation_Requirement_Array
+                    (Content_Type, Rsp, Wire_Response)
+                  then
+                     raise Program_Error with
+                       "codec registry encode failed for schema InterpretationRequirementArray";
+                  end if;
                   Copy_To_Buf
-                    ((if Content_Type = "" or else Content_Type = "application/json"
-                      then To_String (Acc)
-                      elsif Content_Type = "application/flatbuffers"
-                      then Flatbuffers_Codec.To_Binary_Interpretation_Requirement_Array (To_String (Acc))
-                      else raise Constraint_Error with "Unsupported content type: " & Content_Type),
+                    (To_String (Wire_Response),
                     Response_Buf, Response_Size);
                end;
             end;
@@ -2196,12 +2461,8 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
                      return Result;
                   end if;
 
-                  return
-                    (if Content_Type = "" or else Content_Type = "application/json"
-                     then From_Json (Request_Payload, null)
-                     elsif Content_Type = "application/flatbuffers"
-                     then Flatbuffers_Codec.From_Binary_Interpretation_Requirement (Request_Payload, null)
-                     else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+                  raise Program_Error with
+                    "codec registry decode failed for schema InterpretationRequirement";
                end Decode_Request;
                Req : constant Interpretation_Requirement := Decode_Request;
                Rsp : Ack;
@@ -2217,12 +2478,8 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
                  (Content_Type, "Ack", Rsp'Address,
                   Wire_Response)
                then
-                  Wire_Response := To_Unbounded_String
-                    ((if Content_Type = "" or else Content_Type = "application/json"
-                      then To_Json (Rsp)
-                      elsif Content_Type = "application/flatbuffers"
-                      then Flatbuffers_Codec.To_Binary_Ack (Rsp)
-                      else raise Constraint_Error with "Unsupported content type: " & Content_Type));
+                  raise Program_Error with
+                    "codec registry encode failed for schema Ack";
                end if;
                Copy_To_Buf
                  (To_String (Wire_Response),
@@ -2241,12 +2498,8 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
                      return Result;
                   end if;
 
-                  return
-                    (if Content_Type = "" or else Content_Type = "application/json"
-                     then To_Unbounded_String (Request_Payload)
-                     elsif Content_Type = "application/flatbuffers"
-                     then Flatbuffers_Codec.From_Binary_Identifier (Request_Payload, null)
-                     else raise Constraint_Error with "Unsupported content type: " & Content_Type);
+                  raise Program_Error with
+                    "codec registry decode failed for schema Identifier";
                end Decode_Request;
                Req : constant Identifier := Decode_Request;
                Rsp : Ack;
@@ -2262,12 +2515,8 @@ package body Pyramid.Services.Sensor_Data_Interpretation.Provided is
                  (Content_Type, "Ack", Rsp'Address,
                   Wire_Response)
                then
-                  Wire_Response := To_Unbounded_String
-                    ((if Content_Type = "" or else Content_Type = "application/json"
-                      then To_Json (Rsp)
-                      elsif Content_Type = "application/flatbuffers"
-                      then Flatbuffers_Codec.To_Binary_Ack (Rsp)
-                      else raise Constraint_Error with "Unsupported content type: " & Content_Type));
+                  raise Program_Error with
+                    "codec registry encode failed for schema Ack";
                end if;
                Copy_To_Buf
                  (To_String (Wire_Response),

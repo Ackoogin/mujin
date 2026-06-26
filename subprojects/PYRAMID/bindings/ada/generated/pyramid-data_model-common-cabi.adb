@@ -96,7 +96,7 @@ package body Pyramid.Data_Model.Common.Cabi is
       begin
          if Count > 0 then
             Out_Value.Points.Ptr :=
-              Malloc (Bytes_For (Count, Pyramid_Geodetic_Position_C'Size));
+              Malloc (Bytes_For (Count, Pyramid_Geodetic_Position_C'Object_Size));
             Out_Value.Points.Len := Interfaces.C.unsigned (Count);
             declare
                type Points_Array_C_Array is array (Positive range 1 .. Count)
@@ -231,7 +231,7 @@ package body Pyramid.Data_Model.Common.Cabi is
       begin
          if Count > 0 then
             Out_Value.Contraint.Ptr :=
-              Malloc (Bytes_For (Count, Pyramid_Contraint_C'Size));
+              Malloc (Bytes_For (Count, Pyramid_Contraint_C'Object_Size));
             Out_Value.Contraint.Len := Interfaces.C.unsigned (Count);
             declare
                type Contraint_Array_C_Array is array (Positive range 1 .. Count)
@@ -405,7 +405,7 @@ package body Pyramid.Data_Model.Common.Cabi is
       begin
          if Count > 0 then
             Out_Value.Id.Ptr :=
-              Malloc (Bytes_For (Count, Pyramid_Str_T'Size));
+              Malloc (Bytes_For (Count, Pyramid_Str_T'Object_Size));
             Out_Value.Id.Len := Interfaces.C.unsigned (Count);
             declare
                type Id_Array_C_Array is array (Positive range 1 .. Count)

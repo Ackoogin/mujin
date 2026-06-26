@@ -220,7 +220,7 @@ package body Pyramid.Data_Model.Autonomy.Cabi is
       begin
          if Count > 0 then
             Out_Value.Upstream_Requirement.Ptr :=
-              Malloc (Bytes_For (Count, Pyramid_Requirement_Reference_C'Size));
+              Malloc (Bytes_For (Count, Pyramid_Requirement_Reference_C'Object_Size));
             Out_Value.Upstream_Requirement.Len := Interfaces.C.unsigned (Count);
             declare
                type Upstream_Requirement_Array_C_Array is array (Positive range 1 .. Count)
@@ -243,7 +243,7 @@ package body Pyramid.Data_Model.Autonomy.Cabi is
       begin
          if Count > 0 then
             Out_Value.Goal.Ptr :=
-              Malloc (Bytes_For (Count, Pyramid_Planning_Goal_C'Size));
+              Malloc (Bytes_For (Count, Pyramid_Planning_Goal_C'Object_Size));
             Out_Value.Goal.Len := Interfaces.C.unsigned (Count);
             declare
                type Goal_Array_C_Array is array (Positive range 1 .. Count)
@@ -267,7 +267,7 @@ package body Pyramid.Data_Model.Autonomy.Cabi is
       begin
          if Count > 0 then
             Out_Value.Available_Agents.Ptr :=
-              Malloc (Bytes_For (Count, Pyramid_Agent_State_C'Size));
+              Malloc (Bytes_For (Count, Pyramid_Agent_State_C'Object_Size));
             Out_Value.Available_Agents.Len := Interfaces.C.unsigned (Count);
             declare
                type Available_Agents_Array_C_Array is array (Positive range 1 .. Count)
@@ -371,7 +371,7 @@ package body Pyramid.Data_Model.Autonomy.Cabi is
       begin
          if Count > 0 then
             Out_Value.Upstream_Requirement.Ptr :=
-              Malloc (Bytes_For (Count, Pyramid_Requirement_Reference_C'Size));
+              Malloc (Bytes_For (Count, Pyramid_Requirement_Reference_C'Object_Size));
             Out_Value.Upstream_Requirement.Len := Interfaces.C.unsigned (Count);
             declare
                type Upstream_Requirement_Array_C_Array is array (Positive range 1 .. Count)
@@ -396,7 +396,7 @@ package body Pyramid.Data_Model.Autonomy.Cabi is
       begin
          if Count > 0 then
             Out_Value.Available_Agents.Ptr :=
-              Malloc (Bytes_For (Count, Pyramid_Agent_State_C'Size));
+              Malloc (Bytes_For (Count, Pyramid_Agent_State_C'Object_Size));
             Out_Value.Available_Agents.Len := Interfaces.C.unsigned (Count);
             declare
                type Available_Agents_Array_C_Array is array (Positive range 1 .. Count)
@@ -527,7 +527,7 @@ package body Pyramid.Data_Model.Autonomy.Cabi is
       begin
          if Count > 0 then
             Out_Value.Fact_Update.Ptr :=
-              Malloc (Bytes_For (Count, Pyramid_World_Fact_Update_C'Size));
+              Malloc (Bytes_For (Count, Pyramid_World_Fact_Update_C'Object_Size));
             Out_Value.Fact_Update.Len := Interfaces.C.unsigned (Count);
             declare
                type Fact_Update_Array_C_Array is array (Positive range 1 .. Count)
@@ -677,7 +677,7 @@ package body Pyramid.Data_Model.Autonomy.Cabi is
       begin
          if Count > 0 then
             Out_Value.Interaction.Ptr :=
-              Malloc (Bytes_For (Count, Pyramid_Planned_Component_Interaction_C'Size));
+              Malloc (Bytes_For (Count, Pyramid_Planned_Component_Interaction_C'Object_Size));
             Out_Value.Interaction.Len := Interfaces.C.unsigned (Count);
             declare
                type Interaction_Array_C_Array is array (Positive range 1 .. Count)
@@ -759,7 +759,7 @@ package body Pyramid.Data_Model.Autonomy.Cabi is
       begin
          if Count > 0 then
             Out_Value.Step.Ptr :=
-              Malloc (Bytes_For (Count, Pyramid_Plan_Step_C'Size));
+              Malloc (Bytes_For (Count, Pyramid_Plan_Step_C'Object_Size));
             Out_Value.Step.Len := Interfaces.C.unsigned (Count);
             declare
                type Step_Array_C_Array is array (Positive range 1 .. Count)
@@ -855,7 +855,7 @@ package body Pyramid.Data_Model.Autonomy.Cabi is
       begin
          if Count > 0 then
             Out_Value.Related_Entity_Id.Ptr :=
-              Malloc (Bytes_For (Count, Pyramid_Str_T'Size));
+              Malloc (Bytes_For (Count, Pyramid_Str_T'Object_Size));
             Out_Value.Related_Entity_Id.Len := Interfaces.C.unsigned (Count);
             declare
                type Related_Entity_Id_Array_C_Array is array (Positive range 1 .. Count)
@@ -954,7 +954,7 @@ package body Pyramid.Data_Model.Autonomy.Cabi is
       begin
          if Count > 0 then
             Out_Value.Outstanding_Placement.Ptr :=
-              Malloc (Bytes_For (Count, Pyramid_Requirement_Placement_C'Size));
+              Malloc (Bytes_For (Count, Pyramid_Requirement_Placement_C'Object_Size));
             Out_Value.Outstanding_Placement.Len := Interfaces.C.unsigned (Count);
             declare
                type Outstanding_Placement_Array_C_Array is array (Positive range 1 .. Count)

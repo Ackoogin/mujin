@@ -470,7 +470,7 @@ class AdaCabiGenerator:
         f.write('      begin\n')
         f.write('         if Count > 0 then\n')
         f.write(f'            Out_Value.{c_name}.Ptr :=\n')
-        f.write(f'              Malloc (Bytes_For (Count, {elem_type}\'Size));\n')
+        f.write(f'              Malloc (Bytes_For (Count, {elem_type}\'Object_Size));\n')
         f.write(f'            Out_Value.{c_name}.Len := Interfaces.C.unsigned (Count);\n')
         f.write('            declare\n')
         f.write(f'               type {arr_type} is array (Positive range 1 .. Count)\n')

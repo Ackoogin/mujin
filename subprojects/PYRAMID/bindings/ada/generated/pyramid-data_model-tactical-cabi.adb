@@ -80,7 +80,7 @@ package body Pyramid.Data_Model.Tactical.Cabi is
       begin
          if Count > 0 then
             Out_Value.Source.Ptr :=
-              Malloc (Bytes_For (Count, Interfaces.C.int'Size));
+              Malloc (Bytes_For (Count, Interfaces.C.int'Object_Size));
             Out_Value.Source.Len := Interfaces.C.unsigned (Count);
             declare
                type Source_Array_C_Array is array (Positive range 1 .. Count)
@@ -182,7 +182,7 @@ package body Pyramid.Data_Model.Tactical.Cabi is
       begin
          if Count > 0 then
             Out_Value.Dimension.Ptr :=
-              Malloc (Bytes_For (Count, Interfaces.C.int'Size));
+              Malloc (Bytes_For (Count, Interfaces.C.int'Object_Size));
             Out_Value.Dimension.Len := Interfaces.C.unsigned (Count);
             declare
                type Dimension_Array_C_Array is array (Positive range 1 .. Count)
@@ -273,7 +273,7 @@ package body Pyramid.Data_Model.Tactical.Cabi is
       begin
          if Count > 0 then
             Out_Value.Dimension.Ptr :=
-              Malloc (Bytes_For (Count, Interfaces.C.int'Size));
+              Malloc (Bytes_For (Count, Interfaces.C.int'Object_Size));
             Out_Value.Dimension.Len := Interfaces.C.unsigned (Count);
             declare
                type Dimension_Array_C_Array is array (Positive range 1 .. Count)
