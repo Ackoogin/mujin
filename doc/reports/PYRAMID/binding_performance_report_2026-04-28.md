@@ -382,7 +382,7 @@ holds.
 | socket / json | 378 | ~1095 | ~550 | scheduling/poll-bound |
 | socket / flatbuffers | 216 | ~1066 | ~720 | scheduling/poll-bound |
 | socket / protobuf | — | — | — | **skipped — no protobuf codec plugin** |
-| grpc / tcp | 73 | ~66 | ~38 | |
+| grpc / tcp | 73 | ~66 | ~38 | direct `pyramid_grpc_transport`, not the loadable coupled plugin |
 
 ### Conclusion: no marshalling / JSON-layer regression
 
@@ -406,5 +406,10 @@ plugin was created** in the rework (only json + flatbuffers). So the generic
 transport rows for protobuf (local/shmem/socket) have no codec to resolve and are
 now **skipped honestly** in the benchmark (previously these masked a hard 0/N
 failure). Protobuf itself remains exercised by the **codec microbenchmark**
-(direct) and the **gRPC coupled transport** (`grpc / tcp`). Tracked as follow-up
-in [`doc/todo/PYRAMID/TODO.md`](../../todo/PYRAMID/TODO.md).
+(direct) and the **direct generated gRPC transport** (`grpc / tcp`).
+
+Separate from that, `pyramid_grpc_coupled_plugin` currently proves only
+loadability/ABI shape. Its vtables are not wired to the generated gRPC runtime,
+so it should not be described as a functional plugin until a plugin-loaded unary
+round-trip test passes. Tracked as follow-up in
+[`doc/todo/PYRAMID/TODO.md`](../../todo/PYRAMID/TODO.md).

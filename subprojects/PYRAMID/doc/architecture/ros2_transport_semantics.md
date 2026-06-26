@@ -336,12 +336,34 @@ Implemented today:
   service, and outbound publish
 - runtime cancel subscription support for stream correlation IDs
 - executor-thread assertion for the business-logic path
+- coupled ROS2 target plugin (`libpyramid_ros2_coupled_plugin`, content type
+  `application/ros2`): a single MODULE `.so` that exposes both a PCL transport
+  vtable and a PCL codec vtable through the generic plugin loader, parallel to
+  the coupled gRPC target. Its transport vtable wraps the `RclcppRuntimeAdapter`
+  (rclcpp node + background spin thread), so a dlopen-only client linking only
+  `pcl_core` gets working pub/sub plus service/stream advertising via the
+  `pcl_ros2_transport_plugin_{bind_topic,advertise_unary,advertise_stream,destroy}`
+  entry symbols. Built inside the ament package and verified by
+  `test_ros2_coupled_plugin_load` for ABI/load shape and the pass-through codec.
 
 Not yet implemented:
 
 - ROS2 action mapping
 - Ada ROS2 runtime beyond generated constants/specs
-- top-level plain-CMake integration for the ament package build
+- plugin-loaded live traffic E2E: current live rclcpp tests exercise the
+  adapter library directly, while `test_ros2_coupled_plugin_load` does not yet
+  bind valid endpoints and move topic/service/stream traffic through the loaded
+  `.so`
+- client-side generated consumed-service calls over the generic PCL transport
+  vtable (`invoke_async` / `invoke_stream`) unless ROS2 is intentionally
+  server-ingress/pub-sub only
+- process-safe rclcpp lifecycle ownership for multiple plugin instances and a
+  loader-level destroy/unload discipline
+- reproducible fresh-tree generated support inputs for the ament package
+- a top-level (non-ament) CMake target for the coupled plugin: because rclcpp is
+  only discoverable under ament, the coupled ROS2 plugin is built via colcon
+  inside the ament package (`scripts/build_ros2_transport`) rather than the
+  ament-free top-level `pyramid_plugins` aggregate
 
 ## AME Note
 

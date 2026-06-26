@@ -4,10 +4,12 @@
 
 PYRAMID components and clients run against the generic PCL runtime through
 **runtime-loaded plugins**. A client links only the framework (`pcl_core`) and
-the generated contract (typed facade + native↔C-struct marshalling). Everything
-on the wire — the **codec** (JSON / FlatBuffers, and the coupled gRPC target)
-and the **transport** (socket, shared-memory) — arrives as a `.so` loaded and
-composed at run time.
+the generated contract (typed facade + native↔C-struct marshalling). The
+production plugin path currently covers JSON / FlatBuffers codecs and the
+socket, shared-memory, and UDP transports. gRPC is generated and runtime-tested
+as a direct C++ transport library, but its loadable coupled plugin is not yet a
+functional runtime plugin. ROS2 has a real rclcpp-backed coupled plugin, but it
+still has production-closure gaps tracked in `doc/todo/PYRAMID/TODO.md`.
 
 This isolates churn (a wire-format or transport change ships as a new plugin, not
 a client rebuild), keeps client binaries minimal, and lets one cross-language
@@ -35,8 +37,9 @@ flowchart TB
 
   subgraph Plugins["Runtime .so plugins (composed at load time)"]
     CodecSO["CODEC .so<br/>json | flatbuffers"]
-    TransSO["TRANSPORT .so<br/>socket | shm"]
-    Grpc["coupled gRPC target<br/>codec+transport (gated)"]
+    TransSO["TRANSPORT .so<br/>socket | shm | udp"]
+    Grpc["coupled gRPC target<br/>ABI/load stub only"]
+    Ros2["coupled ROS2 target<br/>codec+transport (gated)"]
   end
 
   Marshal -- "pyramid_&lt;T&gt;_c" --> CodecReg
@@ -45,6 +48,7 @@ flowchart TB
   Loader -- "config_json (opaque)" --> CodecSO
   Loader -- "config_json (opaque)" --> TransSO
   Loader --> Grpc
+  Loader --> Ros2
 ```
 
 Key properties:
@@ -58,6 +62,11 @@ Key properties:
   points (transport carries role/host/port/bus + the executor pointer).
 - **One cross-language codec.** The codec consumes the frozen `pyramid_<T>_c`
   C struct, so the same `.so` is loaded from C++ and Ada.
+- **gRPC split state.** `pyramid_grpc_transport` is the working generated/static
+  C++ transport path and is covered by real unary round-trip tests.
+  `pyramid_grpc_coupled_plugin` currently proves only the loader/ABI shape: it
+  exports transport and codec entry points, but its operational vtable methods
+  return `PCL_ERR_NOT_FOUND`.
 
 ## Code mechanism — ABI contracts
 
@@ -87,7 +96,13 @@ sequenceDiagram
 The opaque `config_json` is stored and exposed to the codec via `codec_ctx`
 (generated plugins) or consumed directly by the transport (e.g. the socket
 plugin reads `{"role","host","port","executor"}`; shm reads
-`{"bus_name","participant_id","executor"}`). Default-plugin auto-load is
+`{"bus_name","participant_id","executor"}`; the coupled ROS2 plugin reads
+`{"node_name","executor"}` and stands up an rclcpp node + spin thread). Coupled
+targets are intended to be loadable twice against the same `.so` -- once via
+`pcl_plugin_load_transport`, once via `pcl_plugin_load_codec` -- presenting both
+vtables under one `content_type`. That contract is implemented structurally for
+gRPC today, but not functionally: the gRPC plugin vtables do not yet adapt the
+working `pyramid_grpc_transport` runtime. Default-plugin auto-load is
 config-driven: `pcl_codec_registry_load_plugins_from_manifest(registry, path)`
 loads every codec listed in a manifest (transport entries are skipped).
 
@@ -109,6 +124,7 @@ flowchart LR
   subgraph PCL["subprojects/PCL/src"]
     Sock["pcl_transport_socket_plugin.so (MODULE)"]
     Shm["pcl_transport_shared_memory_plugin.so (MODULE)"]
+    Udp["pcl_transport_udp_plugin.so (MODULE)"]
     Core["pcl_core.a"]
   end
 
@@ -117,6 +133,11 @@ flowchart LR
 ```
 
 - Codec plugins and transport plugins are CMake `MODULE` libraries (`.so`).
+- `pyramid_grpc_transport` is built as a static library when gRPC is enabled.
+  `pyramid_grpc_coupled_plugin` is also built, but is currently a structural
+  plugin stub. A working gRPC plugin still needs a config contract, lifecycle
+  management, real `invoke_async`/server wiring, and plugin-loaded round-trip
+  tests.
 - Marshalling is compiled **once per data-model module** as an `OBJECT` library,
   exposed both as a standalone `pyramid_marshal_<module>.a` (for per-component
   deployment) and bundled into the aggregate `pyramid_generated_marshal.a` (the
@@ -156,7 +177,7 @@ flowchart LR
 flowchart TB
   subgraph Deploy["dist/plugin_deploy/tactical_objects"]
     Lib["lib/<br/>libpcl_core.a<br/>libpyramid_marshal_common.a<br/>libpyramid_marshal_tactical.a"]
-    Plug["plugins/<br/>libpyramid_codec_json_tactical_objects.so<br/>libpyramid_codec_flatbuffers_tactical_objects.so<br/>libpcl_transport_socket_plugin.so<br/>libpcl_transport_shared_memory_plugin.so"]
+    Plug["plugins/<br/>libpyramid_codec_json_tactical_objects.so<br/>libpyramid_codec_flatbuffers_tactical_objects.so<br/>libpcl_transport_socket_plugin.so<br/>libpcl_transport_shared_memory_plugin.so<br/>libpcl_transport_udp_plugin.so"]
     Man["codec_manifest.txt / transport_manifest.txt"]
   end
   Run["PCL_CODEC_MANIFEST=codec_manifest.txt ./client \\<br/>--transport-plugin &lt;socket|shm&gt;.so"] --> Plug
@@ -175,22 +196,41 @@ component's deployment dir.
 | Capability | C++ | Ada |
 |------------|-----|-----|
 | Client links core libs only (no transport/codec/wire deps) | ✅ | ✅ |
-| Transport via runtime plugin (socket + shm) | ✅ | ✅ |
+| Transport via runtime plugin (socket + shm + udp) | ✅ | ✅ |
 | Codec via runtime plugin (cross-language `.so`) | ✅ | ✅ |
 | Codec config pass-through (`config_json`) | ✅ | ✅ |
 | Fail closed with no transport plugin | ✅ | ✅ |
 | Fail closed with no codec plugin (incl. scalar aliases) | ✅ | ✅ |
+| Coupled target plugin (codec+transport, one content_type) | ROS2 partial; gRPC ABI/load-only | — |
 
 **v1 is complete** (`doc/plans/PYRAMID/plugin_binding_v1_plan.md`, W1–W6): clients
 link core libs only, transport + codec are runtime plugins with uniform
 `config_json`, default-plugin manifests, per-module marshalling, and both
-languages fail closed. The **coupled gRPC target plugin** is built and
+languages fail closed. The **direct generated gRPC C++ transport** is built and
 runtime-verified on Linux (`test_grpc_transport_smoke`,
-`test_grpc_coupled_plugin_load`); enable with `-DPYRAMID_ENABLE_GRPC=ON
--DPYRAMID_ENABLE_PROTOBUF=ON` or `scripts/build_plugins.sh --grpc`.
+`BindingPerformanceTest.Grpc_Tcp`); enable with `-DPYRAMID_ENABLE_GRPC=ON
+-DPYRAMID_ENABLE_PROTOBUF=ON` or `scripts/build_plugins.sh --grpc`. The
+loadable **coupled gRPC target plugin** is also built and passes
+`test_grpc_coupled_plugin_load`, but that test proves only ABI/load shape. The
+plugin is not runtime-functional until its vtables are wired to the generated
+gRPC transport and a plugin-loaded unary round-trip test passes.
 
-Open follow-ups (not blocking v1): a standalone `application/protobuf` codec
-plugin for the generic transports (today protobuf is carried by the gRPC coupled
-target / direct codec only — see [`doc/todo/PYRAMID/TODO.md`](../../../../doc/todo/PYRAMID/TODO.md)),
-and making proto→binding→plugin generation a separately invocable CI/CD stage
+The **coupled ROS2 target plugin** (`libpyramid_ros2_coupled_plugin`, content type
+`application/ros2`) follows the same one-`.so`-two-vtables contract, but -- unlike
+the structural gRPC stub -- its transport vtable is wired to the real
+`RclcppRuntimeAdapter`. Loading it constructs an rclcpp node and background spin
+thread, and plugin-private symbols expose topic binding plus unary/stream service
+advertising. The underlying adapter has live rclcpp tests, and the plugin has an
+ABI/load + pass-through codec test. Production closure is still open: the ament
+package must consume generated ROS2 support files from a reproducible location,
+the plugin-loaded transport needs live traffic E2E, client-side RPC scope must be
+decided, lifecycle ownership must be made process-safe, and staged deployments
+must document ROS2 runtime/type-support dependencies.
+
+Open follow-ups (not blocking v1): a runtime-functional gRPC coupled plugin, ROS2
+coupled plugin production closure, a standalone `application/protobuf` codec
+plugin for the generic transports (today protobuf is carried by the direct
+generated gRPC transport / direct codec only — see
+[`doc/todo/PYRAMID/TODO.md`](../../../../doc/todo/PYRAMID/TODO.md)), and making
+proto→binding→plugin generation a separately invocable CI/CD stage
 (`scripts/build_plugins.sh` is the first step toward that).
