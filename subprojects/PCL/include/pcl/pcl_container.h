@@ -1,5 +1,5 @@
 /// \file pcl_container.h
-/// \brief PYRAMID Container Library container API.
+/// \brief PYRAMID Composition Library container API.
 ///
 /// A container encapsulates a single component's business logic behind a
 /// lifecycle state machine.  All callbacks execute on the owning executor's

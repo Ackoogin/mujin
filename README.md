@@ -2,7 +2,7 @@
 
 This repository is organised as a workspace containing three subprojects that can be split into separate repositories later with much less churn:
 
-- `subprojects/PCL` -- the low-level PYRAMID Container Library runtime and C/C++ wrappers
+- `subprojects/PCL` -- the low-level PYRAMID Composition Library runtime and C/C++ wrappers
 - `subprojects/PYRAMID` -- PYRAMID core and tactical-objects components built on top of PCL
 - `subprojects/AME` -- the Autonomous Mission Engine planning/execution stack built on top of PCL and PYRAMID
 

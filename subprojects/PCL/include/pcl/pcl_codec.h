@@ -1,5 +1,5 @@
 /// \file pcl_codec.h
-/// \brief PYRAMID Container Library codec plugin interface.
+/// \brief PYRAMID Composition Library codec plugin interface.
 ///
 /// Codecs translate typed values to and from generic PCL message buffers.
 /// The codec interface is a stable C ABI vtable so implementations can be
