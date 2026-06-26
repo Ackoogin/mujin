@@ -68,7 +68,7 @@ Builds on [`plugin_binding_end_state_review.md`](./plugin_binding_end_state_revi
 - ✅ **W3** shm transport plugin (`pcl_transport_shared_memory_plugin`), config
   pass-through + fail-closed loader tests; proven end-to-end via
   `pyramid_bridge_e2e` (app on shm bus ↔ Ada bridge). udp plugin skipped
-  (optional); gRPC runtime verify still network-gated.
+  (optional); gRPC coupled target now built + runtime-verified on Linux (`2c9ce2c`).
 - ✅ **W5** Default-plugin manifest: `pcl_codec_registry_load_plugins_from_manifest`,
   apps honor `--codec-manifest` / `PCL_CODEC_MANIFEST`; deploy script emits
   `codec_manifest.txt` + `transport_manifest.txt`; `tobj_cpp_app_client_manifest_e2e`
@@ -167,7 +167,7 @@ binaries — but it isolates version-control churn across the modular data model
 
 1. ✅ **W2** (config pass-through) — enables W1/W3 to pass plugin config cleanly.
 2. ✅ **W1** (client → transport plugin) — proves "core libs only" end-to-end.
-3. ✅ **W3** (shm plugin; gRPC still network-gated for runtime verify).
+3. ✅ **W3** (shm plugin; gRPC coupled target built + runtime-verified, `2c9ce2c`).
 4. ✅ **W4** (Ada alias fail-closed).
 5. ✅ **W5** (default-plugin manifest + deployment polish).
 6. ✅ **W6** (per-module marshalling, churn isolation).

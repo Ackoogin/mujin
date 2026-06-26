@@ -50,8 +50,9 @@ flowchart TB
 Key properties:
 
 - **Fail closed.** With no codec registered for a `content_type`, encode/decode
-  return an error rather than falling back to a built-in codec (C++ today; Ada
-  transport today — Ada codec fail-closed is the remaining v1 item).
+  return an error (C++) or raise (Ada) rather than falling back to a built-in
+  codec; likewise with no transport plugin. This holds for **both languages**,
+  including Ada scalar aliases (`Identifier` etc.).
 - **Uniform config pass-through.** A client switch flows as an opaque
   `config_json` string through the loader into both codec and transport entry
   points (transport carries role/host/port/bus + the executor pointer).
@@ -123,6 +124,11 @@ flowchart LR
 - C++ bindings are regenerated into the build tree on configure/build; the Ada
   build compiles the committed `bindings/ada/generated` sources. Regenerate the
   committed artifacts with `scripts/generate_bindings.sh`.
+- **End-to-end proto→plugins:** `scripts/build_plugins.sh` runs the whole
+  pipeline (regenerate bindings from `.proto`, then build every codec/transport
+  `.so` via the CMake `pyramid_plugins` aggregate target), suitable as a CI/CD
+  stage or a manual engineer step. `--grpc` additionally builds protobuf + the
+  coupled gRPC target plugin; `--stage` chains `stage_plugin_deploy.sh`.
 
 ## Deployment
 
@@ -165,9 +171,18 @@ component's deployment dir.
 | Codec via runtime plugin (cross-language `.so`) | ✅ | ✅ |
 | Codec config pass-through (`config_json`) | ✅ | ✅ |
 | Fail closed with no transport plugin | ✅ | ✅ |
-| Fail closed with no codec plugin | ✅ | ◑ (static fallback still present; see v1 plan W4) |
+| Fail closed with no codec plugin (incl. scalar aliases) | ✅ | ✅ |
 
-The remaining v1 item (`doc/plans/PYRAMID/plugin_binding_v1_plan.md`, W4) is
-making the Ada codec facade strictly plugin-only: marshal scalar aliases across
-the C-ABI boundary (string → `pyramid_str_t`, numeric → scalar pointer) and
-remove the Ada facade's static no-plugin fallback so it fails closed like C++.
+**v1 is complete** (`doc/plans/PYRAMID/plugin_binding_v1_plan.md`, W1–W6): clients
+link core libs only, transport + codec are runtime plugins with uniform
+`config_json`, default-plugin manifests, per-module marshalling, and both
+languages fail closed. The **coupled gRPC target plugin** is built and
+runtime-verified on Linux (`test_grpc_transport_smoke`,
+`test_grpc_coupled_plugin_load`); enable with `-DPYRAMID_ENABLE_GRPC=ON
+-DPYRAMID_ENABLE_PROTOBUF=ON` or `scripts/build_plugins.sh --grpc`.
+
+Open follow-ups (not blocking v1): a standalone `application/protobuf` codec
+plugin for the generic transports (today protobuf is carried by the gRPC coupled
+target / direct codec only — see [`doc/todo/PYRAMID/TODO.md`](../../../../doc/todo/PYRAMID/TODO.md)),
+and making proto→binding→plugin generation a separately invocable CI/CD stage
+(`scripts/build_plugins.sh` is the first step toward that).

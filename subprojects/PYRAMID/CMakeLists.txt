@@ -653,6 +653,24 @@ if(PYRAMID_ENABLE_ROS2)
     )
 endif()
 
+# Aggregate "build every runtime plugin" target. Gives CI and the
+# scripts/build_plugins.sh helper a single handle that produces all codec .so
+# plugins (per component/codec), both transport plugins, and -- when enabled --
+# the coupled gRPC target plugin. Each dependency is added only if its target
+# exists, so the aggregate adapts to the enabled options.
+add_custom_target(pyramid_plugins
+    COMMENT "Built all PYRAMID runtime codec/transport plugins")
+foreach(_pyramid_plugin_dep
+        ${PYRAMID_CODEC_PLUGIN_TARGETS}
+        pcl_transport_socket_plugin
+        pcl_transport_shared_memory_plugin
+        pyramid_grpc_coupled_plugin)
+    if(TARGET ${_pyramid_plugin_dep})
+        add_dependencies(pyramid_plugins ${_pyramid_plugin_dep})
+    endif()
+endforeach()
+unset(_pyramid_plugin_dep)
+
 add_subdirectory(core)
 add_subdirectory(tactical_objects)
 add_subdirectory(pyramid_bridge)

@@ -28,6 +28,33 @@ Generated binding architecture and current coverage status are documented in:
 - [`../doc/architecture/generated_bindings.md`](../doc/architecture/generated_bindings.md)
 - [`../../../doc/reports/PYRAMID/generated_bindings_status.md`](../../../doc/reports/PYRAMID/generated_bindings_status.md)
 
+## Plugin Build (proto → plugins)
+
+`build_plugins.sh` runs the full end-to-end pipeline — regenerate bindings from
+`.proto`, then build every runtime codec/transport `.so` plugin via the CMake
+`pyramid_plugins` aggregate target. Use it as a CI/CD stage or a manual engineer
+step.
+
+```bash
+# JSON + FlatBuffers codecs, socket + shm transports:
+subprojects/PYRAMID/scripts/build_plugins.sh
+
+# Also build protobuf + the coupled gRPC target plugin, and stage per-component
+# deployment dirs (chains stage_plugin_deploy.sh):
+subprojects/PYRAMID/scripts/build_plugins.sh --grpc --stage
+```
+
+Options: `--build-dir DIR`, `--grpc`, `--jobs N`, `--clean`, `--stage`,
+`--stage-out DIR` (run with `--help` for details). Produces
+`libpyramid_codec_<codec>_<component>.so`, `libpcl_transport_{socket,shared_memory}_plugin.so`,
+and (with `--grpc`) `libpyramid_grpc_coupled_plugin.so`. See
+[`../doc/architecture/transport_codec_plugin_system.md`](../doc/architecture/transport_codec_plugin_system.md).
+
+`stage_plugin_deploy.sh` (called by `--stage`, or run standalone against an
+existing build dir) lays out per-component deployment dirs with the plugins,
+client-facing headers/sources, the minimal link libraries, and auto-load
+manifests.
+
 ## Windows (GCC/gcov)
 
 Uses GCC with gcov and gcovr (same toolchain as Linux). Requires:
