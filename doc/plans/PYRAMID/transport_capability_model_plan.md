@@ -255,12 +255,8 @@ dimension: the profile must carry it, and command-style endpoints should pin
 
 ## Open decisions
 
-- Is `RPC_ACTION` a first-class capability/contract construct, or always composed
-  from `RPC_STREAM` + `stream_cancel`?
-- Does QoS belong in the capability mask, a separate profile struct, or the route
-  manifest? (Proposal: profile struct + per-endpoint floor in the manifest.)
-- Adapters: ship any in v1, or document the pattern and keep everything fail-closed
-  until a concrete need (gRPC-only deployment that must carry telemetry)?
-- Single mixed plugin per middleware vs separate server/client `.so`s — settle the
-  `mode`/`role` config convention uniformly across plugins (gRPC uses `mode`,
-  socket uses `role`).
+Decisions are tracked centrally in the WIP doc's decisions table
+([`transport_plugins_wip.md`](transport_plugins_wip.md) §3) — the capability-model
+ones are D2 (ROS2 consumed scope), D3 (`RPC_ACTION` first-class vs composed),
+D4 (QoS placement), D5 (adapters in v1), and D6 (unify the `mode`/`role` config
+convention across plugins).

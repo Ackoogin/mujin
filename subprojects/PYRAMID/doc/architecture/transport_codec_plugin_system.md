@@ -276,37 +276,21 @@ the structural gRPC stub -- its transport vtable is wired to the real
 `RclcppRuntimeAdapter`. Loading it constructs an rclcpp node and background spin
 thread, and plugin-private symbols expose topic binding plus unary/stream service
 advertising. The underlying adapter has live rclcpp tests, and the plugin has an
-ABI/load + pass-through codec test. Production closure is still open: the ament
-package must consume generated ROS2 support files from a reproducible location,
-the plugin-loaded transport needs live traffic E2E, client-side RPC scope must be
-decided, lifecycle ownership must be made process-safe, and staged deployments
-must document ROS2 runtime/type-support dependencies.
+ABI/load + pass-through codec test. Production closure (consumed/client side,
+reproducible ament build, live E2E, process-safe lifecycle, staged deployment) is
+still open.
 
-### gRPC protobuf marshalling and the Ada shim
+**Architectural note — gRPC protobuf marshalling and the Ada shim.** Ada still
+consumes gRPC through a bespoke JSON shim (`pyramid_grpc_c_shim`) that bypasses
+the PCL transport. The intended end-state is for Ada (and C++) to consume gRPC
+**identically to socket/shm** — gRPC coupled plugin as the PCL transport, standard
+facade, no shim, no JSON detour. The blocker is the wire codec: `application/grpc`
+carries protobuf, and **C-ABI marshalling alone is not sufficient** — it produces
+the frozen `pyramid_<T>_c` struct, but something must still turn that struct into
+protobuf wire bytes. The clean home is the coupled plugin's own codec (or a
+standalone `application/protobuf` codec plugin).
 
-Ada currently consumes gRPC through a **bespoke JSON shim**
-(`pyramid_grpc_c_shim`): the generated Ada gRPC transport dlopens the shim and
-exchanges JSON, which the shim converts to/from protobuf and sends over gRPC.
-This path predates the coupled plugin doing both directions and bypasses the PCL
-transport entirely.
-
-Now that the coupled gRPC plugin implements `invoke_async`/`invoke_stream`, the
-intended end-state is for Ada (and C++) to consume gRPC **identically to
-socket/shm** — load the gRPC coupled plugin as the PCL transport and call through
-the standard facade — with **no bespoke shim and no JSON detour**. The blocker is
-the wire codec: `application/grpc` carries protobuf, and **C-ABI marshalling
-alone is not sufficient** — marshalling produces the frozen `pyramid_<T>_c`
-struct, but something must still turn that struct into protobuf wire bytes. The
-clean home for that is the **coupled plugin's own codec** (it is "coupled"
-precisely so it can own protobuf serialization end-to-end), or a standalone
-`application/protobuf` codec plugin. Once the coupled codec marshals
-struct↔protobuf, the Ada gRPC shim and the Ada facade's gRPC special-branch can
-be retired. Tracked in [`doc/todo/PYRAMID/TODO.md`](../../../../doc/todo/PYRAMID/TODO.md).
-
-Open follow-ups (not blocking v1): make the coupled gRPC codec do real
-C-struct↔protobuf marshalling (retire the Ada gRPC JSON shim), ROS2 coupled
-plugin production closure, a standalone `application/protobuf` codec plugin for
-the generic transports (today protobuf is carried by the direct generated gRPC
-transport / direct codec only), and making proto→binding→plugin generation a
-separately invocable CI/CD stage (`scripts/build_plugins.sh` is the first step
-toward that).
+**Live status, pending work, and decisions** for all of the above (gRPC, ROS2
+closure, protobuf codec, shim retirement, the transport capability model) are
+tracked in the single WIP doc:
+[`doc/plans/PYRAMID/transport_plugins_wip.md`](../../../../doc/plans/PYRAMID/transport_plugins_wip.md).
