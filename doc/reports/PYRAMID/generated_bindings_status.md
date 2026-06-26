@@ -45,15 +45,15 @@ Tactical Objects is the current proving-ground component.
 |-------|--------------|------------|-------|
 | JSON | `application/json` | active | default path |
 | FlatBuffers | `application/flatbuffers` | active | C++ native; Ada typed API may use shim |
-| Protobuf | `application/protobuf` | active | covered by generated binding and app E2E tests |
+| Protobuf | `application/protobuf` | partial | direct generated codec works; no runtime `application/protobuf` codec plugin for generic local/shmem/socket transports |
 
 ### Transport projections
 
 | Transport | Status | Notes |
 |-----------|--------|-------|
 | PCL | active baseline | production proving path |
-| gRPC | active optional projection | C++ transport plus Ada/C++ interop proof |
-| ROS2 | active optional projection | generated top-level `bindRos2(...)` hooks/constants plus runtime adapter proof; no service-specific sidecar facade |
+| gRPC | partial optional projection | direct generated C++ transport works; loadable coupled plugin is ABI/load-only, not runtime-functional |
+| ROS2 | partial optional projection | generated top-level `bindRos2(...)` hooks/constants plus runtime adapter proof; coupled plugin still needs fresh-tree build and live plugin-loaded traffic proof |
 | PCL shared-memory bus | foundation active | Tactical Objects-specific projection remains incomplete |
 
 ## Current Proof Matrix
@@ -67,9 +67,13 @@ Tactical Objects is the current proving-ground component.
 | Real app C++ JSON/FlatBuffers/Protobuf | `tobj_cpp_app_client_e2e`, `tobj_cpp_app_client_flatbuffers_e2e`, `tobj_cpp_app_client_protobuf_e2e` |
 | Ada generated binding round-trip | `ada_generated_bindings_roundtrip` |
 | Ada/C++ gRPC single service facade runtime | `tobj_ada_grpc_cpp_interop_e2e`, `ada_grpc_cpp_interop_e2e.gpr` |
+| gRPC direct C++ transport runtime | `test_grpc_transport_smoke`, `BindingPerformanceTest.Grpc_Tcp` |
+| gRPC coupled plugin ABI/load shape | `test_grpc_coupled_plugin_load` only; does not prove runtime RPC functionality |
 | Ada socket active-find JSON/FlatBuffers | `tobj_ada_active_find_e2e`, `tobj_ada_active_find_flatbuffers_e2e` |
 | Real app Ada active-find JSON/FlatBuffers | `tobj_ada_active_find_app_e2e`, `tobj_ada_active_find_app_flatbuffers_e2e` |
 | ROS2 semantic projection | `test_ros2_transport_semantics`, `tobj_ros2_facade_e2e` |
+| ROS2 rclcpp adapter runtime | `test_rclcpp_runtime_adapter` |
+| ROS2 coupled plugin ABI/load shape | `test_ros2_coupled_plugin_load`; does not yet prove live traffic through the plugin-loaded transport |
 | PCL shared-memory bus | `test_pcl_shared_memory_transport` |
 | Binding generator dependency hygiene | `pyramid_binding_generation_dependencies` |
 
@@ -121,6 +125,12 @@ Use this table in reviews:
 The following are still not v1-complete:
 
 - Tactical Objects projection over the PCL shared-memory bus
+- runtime-functional gRPC coupled plugin loaded through the PCL plugin loader
+- `application/protobuf` codec plugin for generic local/shmem/socket transports,
+  unless protobuf is intentionally kept gRPC-coupled only
+- ROS2 coupled plugin production closure: reproducible ament build inputs,
+  plugin-loaded live traffic E2E, client-side RPC decision, lifecycle ownership,
+  and staged runtime dependency docs
 - Ada ROS2 runtime beyond generated top-level endpoint constants
 - ROS2 action mapping for long-running / feedback-style workflows
 - fully Ada-native gRPC runtime without generated C/C++ shim support
@@ -166,7 +176,9 @@ JSON shim details disappear from ordinary component code and copied examples.
    call shape. When `Content_Type => Grpc_Content_Type` is selected and the
    gRPC backend was requested at generation time, it delegates to the generated
    transport adapter, which owns C string handling, JSON/protobuf conversion,
-   shim invocation, response decoding, and error reporting.
+   shim invocation, response decoding, and error reporting. This proof uses the
+   generated gRPC transport/C shim path; it is not proof that
+   `pyramid_grpc_coupled_plugin` works as a loadable runtime plugin.
 
 6. Move interop tests to the typed surface. **Done.**
    The primary Ada/C++ gRPC E2E calls the top-level generated service procedure
@@ -205,6 +217,9 @@ Completion criteria:
   business-call APIs.
 - Ada gRPC examples/tests exercise that top-level typed service procedure,
   with raw C ABI handling hidden in generated transport bodies.
+- The generated/static gRPC transport has runtime proof; the loadable
+  `pyramid_grpc_coupled_plugin` still needs real vtable behavior and a
+  plugin-loaded round-trip test before it can be marked functional.
 - Raw `_Json`, `grpc_*`, and generated-service `pcl_executor_*` calls are
   limited to generated adapters and explicit compatibility tests.
 
