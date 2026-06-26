@@ -45,8 +45,15 @@ Builds on [`plugin_binding_end_state_review.md`](./plugin_binding_end_state_revi
   composition test. `d0d3149`.
 - ✅ Transport config pass-through (`config_json` on `pcl_transport_plugin_entry`
   / `pcl_plugin_load_transport`).
-- ◑ gRPC coupled target plugin — implemented, **gated** behind `PYRAMID_ENABLE_GRPC`,
-  not runtime-verified (restricted network here).
+- ✅ gRPC coupled target plugin — implemented, **gated** behind `PYRAMID_ENABLE_GRPC`,
+  now **built + runtime-verified on Linux** (`2c9ce2c`). gRPC v1.72 + protobuf 30 +
+  abseil + BoringSSL fetch and build from source here (the old "restricted network"
+  caveat no longer holds). `test_grpc_transport_smoke` (real unary round-trip),
+  `BindingPerformanceTest.Grpc_Tcp` (200/200 unary calls), and
+  `test_grpc_coupled_plugin_load` (coupled `.so` exposes transport + codec under
+  `application/grpc`) all pass. Required fixing protobuf `.pb.h` includes
+  (short package-path → dotted protoc names) broken by the proto rename — a latent
+  gap since the JSON/FB/Ada paths never touch `.pb.h`.
 
 ### v1 progress (this branch)
 
@@ -165,7 +172,9 @@ binaries — but it isolates version-control churn across the modular data model
 5. ✅ **W5** (default-plugin manifest + deployment polish).
 6. ✅ **W6** (per-module marshalling, churn isolation).
 
-`build-flatbuffers-only` stayed green per step (592/592). The one remaining
-gap is **gRPC coupled-target runtime verification**, which is gated on a
-network-capable build environment (the coupled plugin is implemented and built
-behind `PYRAMID_ENABLE_GRPC`, but its deps can't be fetched in this sandbox).
+`build-flatbuffers-only` stayed green per step (592/592). **gRPC is now built and
+runtime-verified on Linux** (`2c9ce2c`) — configure with `-DPYRAMID_ENABLE_GRPC=ON
+-DPYRAMID_ENABLE_PROTOBUF=ON` (or the `all-on` preset); the deps fetch and build
+from source. Follow-up direction (not blocking v1): make the proto→binding→plugin
+generation a **separate, CI/CD-controllable step** and drop the committed C++
+protobuf bindings in favour of build-time generation.
