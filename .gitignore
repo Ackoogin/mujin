@@ -126,3 +126,8 @@ subprojects/PYRAMID/bindings/ada/lib/
 
 # Staged plugin deployment output (scripts/stage_plugin_deploy.sh)
 /dist/
+
+# colcon build artifacts for the PYRAMID ROS2 ament package
+subprojects/PYRAMID/ros2/build/
+subprojects/PYRAMID/ros2/install/
+subprojects/PYRAMID/ros2/log/

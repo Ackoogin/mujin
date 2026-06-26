@@ -46,6 +46,7 @@ target_compile_definitions(test_pcl_plugin_loader PRIVATE
     BADABI_CODEC_PLUGIN_PATH="$<TARGET_FILE:pcl_codec_badabi_plugin>"
     SOCKET_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_socket_plugin>"
     SHM_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_shared_memory_plugin>"
+    UDP_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_udp_plugin>"
 )
 add_dependencies(test_pcl_plugin_loader
     pcl_transport_capture_plugin
@@ -53,6 +54,7 @@ add_dependencies(test_pcl_plugin_loader
     pcl_codec_badabi_plugin
     pcl_transport_socket_plugin
     pcl_transport_shared_memory_plugin
+    pcl_transport_udp_plugin
 )
 gtest_discover_tests(test_pcl_plugin_loader DISCOVERY_MODE PRE_TEST)
 

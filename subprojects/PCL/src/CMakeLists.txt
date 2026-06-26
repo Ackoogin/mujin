@@ -99,6 +99,20 @@ set_target_properties(pcl_transport_udp PROPERTIES
   C_EXTENSIONS OFF
 )
 
+add_library(pcl_transport_udp_plugin MODULE
+  pcl_transport_udp_plugin.c
+)
+
+target_link_libraries(pcl_transport_udp_plugin
+  PRIVATE pcl_transport_udp Threads::Threads)
+
+set_target_properties(pcl_transport_udp_plugin PROPERTIES
+  LINKER_LANGUAGE C
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+)
+
 # ---------------------------------------------------------------------------
 # pcl_transport_shared_memory -- central shared-memory bus transport
 # ---------------------------------------------------------------------------

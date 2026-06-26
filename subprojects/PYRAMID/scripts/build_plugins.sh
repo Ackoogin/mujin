@@ -19,6 +19,7 @@
 #     libpyramid_codec_flatbuffers_<component>.so
 #     libpcl_transport_socket_plugin.so
 #     libpcl_transport_shared_memory_plugin.so
+#     libpcl_transport_udp_plugin.so
 #     [libpyramid_grpc_coupled_plugin.so]   (with --grpc)
 #
 #   optionally:  stage per-component deployment dirs (stage_plugin_deploy.sh)
