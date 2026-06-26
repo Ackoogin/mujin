@@ -184,6 +184,50 @@ TEST(PclPluginLoader, SharedMemoryTransportPluginNullConfigFailsClosed) {
   EXPECT_EQ(transport, nullptr);
 }
 
+TEST(PclPluginLoader, LoadUdpTransportPluginViaConfig) {
+  pcl_executor_t* executor = pcl_executor_create();
+  ASSERT_NE(executor, nullptr);
+
+  // Build the opaque config_json the udp transport plugin understands: an
+  // ephemeral local port (0), the remote peer endpoint, an optional peer id,
+  // and the executor pointer it binds to.
+  char config[256];
+  std::snprintf(config, sizeof(config),
+                "{\"local_port\":0,\"remote_host\":\"127.0.0.1\","
+                "\"remote_port\":18745,\"peer_id\":\"loader_test\","
+                "\"executor\":%llu}",
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(executor)));
+
+  pcl_plugin_handle_t* handle = nullptr;
+  const pcl_transport_t* transport = nullptr;
+  ASSERT_EQ(pcl_plugin_load_transport(UDP_TRANSPORT_PLUGIN_PATH, config,
+                                      &handle, &transport),
+            PCL_OK);
+  ASSERT_NE(handle, nullptr);
+  ASSERT_NE(transport, nullptr);
+  EXPECT_NE(transport->publish, nullptr);
+
+  // UDP is pub/sub-only: no gateway hook, but a destroy hook tears it down.
+  auto destroy = reinterpret_cast<void (*)(const pcl_transport_t*)>(
+      pcl_plugin_symbol(handle, "pcl_udp_transport_plugin_destroy"));
+  ASSERT_NE(destroy, nullptr);
+
+  destroy(transport);
+  pcl_plugin_unload(handle);
+  pcl_executor_destroy(executor);
+}
+
+TEST(PclPluginLoader, UdpTransportPluginNullConfigFailsClosed) {
+  pcl_plugin_handle_t* handle = nullptr;
+  const pcl_transport_t* transport = nullptr;
+  EXPECT_EQ(pcl_plugin_load_transport(UDP_TRANSPORT_PLUGIN_PATH, nullptr,
+                                      &handle, &transport),
+            PCL_ERR_STATE);
+  EXPECT_EQ(handle, nullptr);
+  EXPECT_EQ(transport, nullptr);
+}
+
 TEST(PclPluginLoader, LoadCodecPluginsFromManifest) {
   pcl_codec_registry_t* registry = pcl_codec_registry_create();
   ASSERT_NE(registry, nullptr);

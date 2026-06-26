@@ -51,3 +51,29 @@ if(WIN32)
         ENVIRONMENT_MODIFICATION "${test_env_mods}"
     )
 endif()
+
+# Coupled ROS2 target plugin loader test: drives the plugin through the generic
+# PCL loader (transport + codec halves under application/ros2).
+if(TARGET pyramid_ros2_coupled_plugin)
+    ament_add_gtest(test_ros2_coupled_plugin_load test_ros2_coupled_plugin_load.cpp)
+    add_dependencies(test_ros2_coupled_plugin_load pyramid_ros2_coupled_plugin)
+    target_link_libraries(test_ros2_coupled_plugin_load pcl_core_external)
+    target_compile_definitions(test_ros2_coupled_plugin_load PRIVATE
+        PYRAMID_ROS2_COUPLED_PLUGIN_PATH="$<TARGET_FILE:pyramid_ros2_coupled_plugin>"
+    )
+
+    if(WIN32)
+        unset(coupled_test_env_mods)
+        foreach(path_entry IN LISTS pyramid_ros2_test_path_entries)
+            list(APPEND coupled_test_env_mods "PATH=path_list_prepend:${path_entry}")
+        endforeach()
+        if(pyramid_ros2_test_pythonpath)
+            list(APPEND coupled_test_env_mods
+                "PYTHONPATH=path_list_prepend:${pyramid_ros2_test_pythonpath}"
+            )
+        endif()
+        set_tests_properties(test_ros2_coupled_plugin_load PROPERTIES
+            ENVIRONMENT_MODIFICATION "${coupled_test_env_mods}"
+        )
+    endif()
+endif()

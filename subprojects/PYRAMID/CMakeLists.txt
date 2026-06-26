@@ -664,6 +664,7 @@ foreach(_pyramid_plugin_dep
         ${PYRAMID_CODEC_PLUGIN_TARGETS}
         pcl_transport_socket_plugin
         pcl_transport_shared_memory_plugin
+        pcl_transport_udp_plugin
         pyramid_grpc_coupled_plugin)
     if(TARGET ${_pyramid_plugin_dep})
         add_dependencies(pyramid_plugins ${_pyramid_plugin_dep})

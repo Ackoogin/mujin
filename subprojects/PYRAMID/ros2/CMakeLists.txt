@@ -71,6 +71,38 @@ install(TARGETS ${PROJECT_NAME}_lib
 
 install(DIRECTORY include/ DESTINATION include)
 
+# ---------------------------------------------------------------------------
+# pyramid_ros2_coupled_plugin -- coupled ROS2 target plugin (application/ros2)
+# ---------------------------------------------------------------------------
+# Mirrors the coupled gRPC target: a single MODULE .so exporting both a PCL
+# transport vtable and a PCL codec vtable under application/ros2. All ROS2
+# linkage (rclcpp, the RclcppRuntimeAdapter, the generated support layer, the
+# PclEnvelope/PclService/PclOpenStream typesupport) is bundled privately into
+# the .so, so a consumer links only pcl_core and dlopen()s the plugin.
+# ---------------------------------------------------------------------------
+add_library(pyramid_ros2_coupled_plugin MODULE
+    ${UNMANNED_ROOT}/subprojects/PYRAMID/plugins/pyramid_ros2_coupled_plugin.cpp
+)
+set_target_properties(pyramid_ros2_coupled_plugin PROPERTIES
+    WINDOWS_EXPORT_ALL_SYMBOLS ON
+    CXX_VISIBILITY_PRESET hidden
+)
+target_include_directories(pyramid_ros2_coupled_plugin PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${UNMANNED_ROOT}/subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp
+)
+ament_target_dependencies(pyramid_ros2_coupled_plugin rclcpp)
+target_link_libraries(pyramid_ros2_coupled_plugin
+    ${PROJECT_NAME}_lib
+    pcl_core_external
+    ${cpp_typesupport_target}
+)
+
+install(TARGETS pyramid_ros2_coupled_plugin
+    LIBRARY DESTINATION lib
+    RUNTIME DESTINATION bin
+)
+
 if(BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)
     add_subdirectory(test)
