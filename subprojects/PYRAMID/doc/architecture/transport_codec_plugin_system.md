@@ -129,6 +129,14 @@ flowchart LR
   `.so` via the CMake `pyramid_plugins` aggregate target), suitable as a CI/CD
   stage or a manual engineer step. `--grpc` additionally builds protobuf + the
   coupled gRPC target plugin; `--stage` chains `stage_plugin_deploy.sh`.
+- **Ada consumes, it does not produce, plugins.** The codec/transport `.so`s are
+  language-neutral C-ABI artifacts; Ada clients and the Ada bridge load the same
+  files at run time (`PYRAMID_CODEC_PLUGINS` / `PCL_TRANSPORT_PLUGIN`).
+  `scripts/build_ada.sh` is the Ada counterpart to `build_plugins.sh`: it builds
+  the Ada *binaries* via GNAT `gprbuild` (the `pyramid_ada_all` target, which also
+  builds the GNAT FlatBuffers archive) plus `pyramid_plugins` so the `.so`s they
+  load are present. Ada bindings are committed and compiled from source, so
+  refreshing them from `.proto` is opt-in (`--regen`).
 
 ## Deployment
 

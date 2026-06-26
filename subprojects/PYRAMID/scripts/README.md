@@ -55,6 +55,31 @@ existing build dir) lays out per-component deployment dirs with the plugins,
 client-facing headers/sources, the minimal link libraries, and auto-load
 manifests.
 
+### Ada consumers (`build_ada.sh`)
+
+The codec/transport plugins are **language-neutral C-ABI `.so`s built by the C++
+chain above** — Ada does not produce plugins. Ada clients and the Ada bridge
+*consume* the same `.so`s at run time (codec via `PYRAMID_CODEC_PLUGINS`,
+transport via `PCL_TRANSPORT_PLUGIN`); one codec `.so` serves both C++ and Ada.
+
+`build_ada.sh` is the Ada counterpart to `build_plugins.sh` — it builds the Ada
+*binaries* (clients + bridge) via GNAT `gprbuild` and the `pyramid_ada_all`
+target, and also builds `pyramid_plugins` so the `.so`s those binaries load are
+present.
+
+```bash
+# Build the Ada binaries from the committed Ada bindings, then run the Ada tests:
+subprojects/PYRAMID/scripts/build_ada.sh --test
+
+# Full proto -> Ada: also refresh the committed Ada bindings from .proto first:
+subprojects/PYRAMID/scripts/build_ada.sh --regen --test
+```
+
+Requires a GNAT toolchain (`gnat`/`gprbuild`) on the runner. Unlike the C++
+bindings (regenerated into the build tree each configure), the Ada bindings are
+committed and compiled from source, so `--regen` is opt-in. Options:
+`--build-dir DIR`, `--regen`, `--backends LIST`, `--jobs N`, `--clean`, `--test`.
+
 ## Windows (GCC/gcov)
 
 Uses GCC with gcov and gcovr (same toolchain as Linux). Requires:
