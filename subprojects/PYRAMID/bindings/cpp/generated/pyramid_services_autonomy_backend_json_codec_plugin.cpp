@@ -1,0 +1,610 @@
+// Auto-generated PCL codec plugin
+// Backend: json | Content-Type: application/json
+
+#include "pyramid_data_model_types.hpp"
+#include "pyramid_data_model_autonomy_codec.hpp"
+#include "pyramid_data_model_common_codec.hpp"
+#include <nlohmann/json.hpp>
+#include "pyramid_data_model_autonomy_cabi_marshal.hpp"
+#include "pyramid_data_model_common_cabi_marshal.hpp"
+
+extern "C" {
+#include <pcl/pcl_codec.h>
+#include "pyramid_datamodel_cabi.h"
+}
+
+#include <cstdlib>
+#include <cstring>
+#include <limits>
+#include <string>
+#include <vector>
+
+#if defined(_WIN32)
+#  define PCL_CODEC_PLUGIN_EXPORT __declspec(dllexport)
+#elif defined(__GNUC__) || defined(__clang__)
+#  define PCL_CODEC_PLUGIN_EXPORT __attribute__((visibility("default")))
+#else
+#  define PCL_CODEC_PLUGIN_EXPORT
+#endif
+
+namespace {
+
+namespace data_model = pyramid::domain_model;
+
+pcl_status_t assign_payload(const std::string& payload,
+                            const char* content_type,
+                            pcl_msg_t* out_msg)
+{
+    if (!out_msg) {
+        return PCL_ERR_INVALID;
+    }
+    if (payload.size() > std::numeric_limits<uint32_t>::max()) {
+        return PCL_ERR_INVALID;
+    }
+    void* copy = nullptr;
+    if (!payload.empty()) {
+        copy = std::malloc(payload.size());
+        if (!copy) {
+            return PCL_ERR_NOMEM;
+        }
+        std::memcpy(copy, payload.data(), payload.size());
+    }
+    out_msg->data = copy;
+    out_msg->size = static_cast<uint32_t>(payload.size());
+    out_msg->type_name = content_type;
+    return PCL_OK;
+}
+
+template <class T>
+std::string scalar_to_json(const T& value)
+{
+    return nlohmann::json(value).dump();
+}
+
+template <class T>
+T scalar_from_json(const std::string& payload)
+{
+    return nlohmann::json::parse(payload).get<T>();
+}
+
+} // namespace
+
+extern "C" {
+
+static pcl_status_t plugin_encode(void*       codec_ctx,
+                                  const char* schema_id,
+                                  const void* value,
+                                  pcl_msg_t*  out_msg)
+{
+    (void)codec_ctx;
+    if (!schema_id || !value || !out_msg) {
+        return PCL_ERR_INVALID;
+    }
+    try {
+        if (std::strcmp(schema_id, "Query") == 0) {
+            const auto* cs = static_cast<const pyramid_Query_c*>(value);
+            data_model::Query native;
+            pyramid::cabi::from_c(cs, native);
+            return assign_payload(pyramid::domain_model::common::toJson(native),
+                                  "application/json", out_msg);
+        }
+        if (std::strcmp(schema_id, "Capabilities") == 0) {
+            const auto* cs = static_cast<const pyramid_Capabilities_c*>(value);
+            data_model::Capabilities native;
+            pyramid::cabi::from_c(cs, native);
+            return assign_payload(pyramid::domain_model::autonomy::toJson(native),
+                                  "application/json", out_msg);
+        }
+        if (std::strcmp(schema_id, "PlanningRequirement") == 0) {
+            const auto* cs = static_cast<const pyramid_PlanningRequirement_c*>(value);
+            data_model::PlanningRequirement native;
+            pyramid::cabi::from_c(cs, native);
+            return assign_payload(pyramid::domain_model::autonomy::toJson(native),
+                                  "application/json", out_msg);
+        }
+        if (std::strcmp(schema_id, "Identifier") == 0) {
+            const auto* cs = static_cast<const pyramid_str_t*>(value);
+            const char* data = cs && cs->ptr ? cs->ptr : "";
+            data_model::Identifier native(data, cs ? cs->len : 0u);
+            return assign_payload(scalar_to_json(native),
+                                  "application/json", out_msg);
+        }
+        if (std::strcmp(schema_id, "Ack") == 0) {
+            const auto* cs = static_cast<const pyramid_Ack_c*>(value);
+            data_model::Ack native;
+            pyramid::cabi::from_c(cs, native);
+            return assign_payload(pyramid::domain_model::common::toJson(native),
+                                  "application/json", out_msg);
+        }
+        if (std::strcmp(schema_id, "ExecutionRequirement") == 0) {
+            const auto* cs = static_cast<const pyramid_ExecutionRequirement_c*>(value);
+            data_model::ExecutionRequirement native;
+            pyramid::cabi::from_c(cs, native);
+            return assign_payload(pyramid::domain_model::autonomy::toJson(native),
+                                  "application/json", out_msg);
+        }
+        if (std::strcmp(schema_id, "StateUpdate") == 0) {
+            const auto* cs = static_cast<const pyramid_StateUpdate_c*>(value);
+            data_model::StateUpdate native;
+            pyramid::cabi::from_c(cs, native);
+            return assign_payload(pyramid::domain_model::autonomy::toJson(native),
+                                  "application/json", out_msg);
+        }
+        if (std::strcmp(schema_id, "Plan") == 0) {
+            const auto* cs = static_cast<const pyramid_Plan_c*>(value);
+            data_model::Plan native;
+            pyramid::cabi::from_c(cs, native);
+            return assign_payload(pyramid::domain_model::autonomy::toJson(native),
+                                  "application/json", out_msg);
+        }
+        if (std::strcmp(schema_id, "ExecutionRun") == 0) {
+            const auto* cs = static_cast<const pyramid_ExecutionRun_c*>(value);
+            data_model::ExecutionRun native;
+            pyramid::cabi::from_c(cs, native);
+            return assign_payload(pyramid::domain_model::autonomy::toJson(native),
+                                  "application/json", out_msg);
+        }
+        if (std::strcmp(schema_id, "RequirementPlacement") == 0) {
+            const auto* cs = static_cast<const pyramid_RequirementPlacement_c*>(value);
+            data_model::RequirementPlacement native;
+            pyramid::cabi::from_c(cs, native);
+            return assign_payload(pyramid::domain_model::autonomy::toJson(native),
+                                  "application/json", out_msg);
+        }
+        if (std::strcmp(schema_id, "CapabilitiesArray") == 0) {
+            const auto* slice = static_cast<const pyramid_slice_t*>(value);
+            if (!slice || (!slice->ptr && slice->len != 0u)) {
+                return PCL_ERR_INVALID;
+            }
+            const auto* values = static_cast<const pyramid_Capabilities_c*>(slice->ptr);
+            std::vector<data_model::Capabilities> native;
+            native.reserve(slice->len);
+            for (uint32_t i = 0; i < slice->len; ++i) {
+                data_model::Capabilities item;
+                pyramid::cabi::from_c(&values[i], item);
+                native.push_back(std::move(item));
+            }
+            nlohmann::json arr = nlohmann::json::array();
+            for (const auto& item : native) {
+                arr.push_back(nlohmann::json::parse(pyramid::domain_model::autonomy::toJson(item)));
+            }
+            return assign_payload(arr.dump(),
+                                  "application/json", out_msg);
+        }
+        if (std::strcmp(schema_id, "PlanningRequirementArray") == 0) {
+            const auto* slice = static_cast<const pyramid_slice_t*>(value);
+            if (!slice || (!slice->ptr && slice->len != 0u)) {
+                return PCL_ERR_INVALID;
+            }
+            const auto* values = static_cast<const pyramid_PlanningRequirement_c*>(slice->ptr);
+            std::vector<data_model::PlanningRequirement> native;
+            native.reserve(slice->len);
+            for (uint32_t i = 0; i < slice->len; ++i) {
+                data_model::PlanningRequirement item;
+                pyramid::cabi::from_c(&values[i], item);
+                native.push_back(std::move(item));
+            }
+            nlohmann::json arr = nlohmann::json::array();
+            for (const auto& item : native) {
+                arr.push_back(nlohmann::json::parse(pyramid::domain_model::autonomy::toJson(item)));
+            }
+            return assign_payload(arr.dump(),
+                                  "application/json", out_msg);
+        }
+        if (std::strcmp(schema_id, "ExecutionRequirementArray") == 0) {
+            const auto* slice = static_cast<const pyramid_slice_t*>(value);
+            if (!slice || (!slice->ptr && slice->len != 0u)) {
+                return PCL_ERR_INVALID;
+            }
+            const auto* values = static_cast<const pyramid_ExecutionRequirement_c*>(slice->ptr);
+            std::vector<data_model::ExecutionRequirement> native;
+            native.reserve(slice->len);
+            for (uint32_t i = 0; i < slice->len; ++i) {
+                data_model::ExecutionRequirement item;
+                pyramid::cabi::from_c(&values[i], item);
+                native.push_back(std::move(item));
+            }
+            nlohmann::json arr = nlohmann::json::array();
+            for (const auto& item : native) {
+                arr.push_back(nlohmann::json::parse(pyramid::domain_model::autonomy::toJson(item)));
+            }
+            return assign_payload(arr.dump(),
+                                  "application/json", out_msg);
+        }
+        if (std::strcmp(schema_id, "PlanArray") == 0) {
+            const auto* slice = static_cast<const pyramid_slice_t*>(value);
+            if (!slice || (!slice->ptr && slice->len != 0u)) {
+                return PCL_ERR_INVALID;
+            }
+            const auto* values = static_cast<const pyramid_Plan_c*>(slice->ptr);
+            std::vector<data_model::Plan> native;
+            native.reserve(slice->len);
+            for (uint32_t i = 0; i < slice->len; ++i) {
+                data_model::Plan item;
+                pyramid::cabi::from_c(&values[i], item);
+                native.push_back(std::move(item));
+            }
+            nlohmann::json arr = nlohmann::json::array();
+            for (const auto& item : native) {
+                arr.push_back(nlohmann::json::parse(pyramid::domain_model::autonomy::toJson(item)));
+            }
+            return assign_payload(arr.dump(),
+                                  "application/json", out_msg);
+        }
+        if (std::strcmp(schema_id, "ExecutionRunArray") == 0) {
+            const auto* slice = static_cast<const pyramid_slice_t*>(value);
+            if (!slice || (!slice->ptr && slice->len != 0u)) {
+                return PCL_ERR_INVALID;
+            }
+            const auto* values = static_cast<const pyramid_ExecutionRun_c*>(slice->ptr);
+            std::vector<data_model::ExecutionRun> native;
+            native.reserve(slice->len);
+            for (uint32_t i = 0; i < slice->len; ++i) {
+                data_model::ExecutionRun item;
+                pyramid::cabi::from_c(&values[i], item);
+                native.push_back(std::move(item));
+            }
+            nlohmann::json arr = nlohmann::json::array();
+            for (const auto& item : native) {
+                arr.push_back(nlohmann::json::parse(pyramid::domain_model::autonomy::toJson(item)));
+            }
+            return assign_payload(arr.dump(),
+                                  "application/json", out_msg);
+        }
+        if (std::strcmp(schema_id, "RequirementPlacementArray") == 0) {
+            const auto* slice = static_cast<const pyramid_slice_t*>(value);
+            if (!slice || (!slice->ptr && slice->len != 0u)) {
+                return PCL_ERR_INVALID;
+            }
+            const auto* values = static_cast<const pyramid_RequirementPlacement_c*>(slice->ptr);
+            std::vector<data_model::RequirementPlacement> native;
+            native.reserve(slice->len);
+            for (uint32_t i = 0; i < slice->len; ++i) {
+                data_model::RequirementPlacement item;
+                pyramid::cabi::from_c(&values[i], item);
+                native.push_back(std::move(item));
+            }
+            nlohmann::json arr = nlohmann::json::array();
+            for (const auto& item : native) {
+                arr.push_back(nlohmann::json::parse(pyramid::domain_model::autonomy::toJson(item)));
+            }
+            return assign_payload(arr.dump(),
+                                  "application/json", out_msg);
+        }
+    } catch (...) {
+        return PCL_ERR_CALLBACK;
+    }
+    return PCL_ERR_NOT_FOUND;
+}
+
+static pcl_status_t plugin_decode(void*            codec_ctx,
+                                  const char*      schema_id,
+                                  const pcl_msg_t* msg,
+                                  void*            out_value)
+{
+    (void)codec_ctx;
+    if (!schema_id || !msg || (!msg->data && msg->size != 0) || !out_value) {
+        return PCL_ERR_INVALID;
+    }
+    try {
+        const std::string payload = msg->data
+            ? std::string(static_cast<const char*>(msg->data), msg->size)
+            : std::string();
+        if (std::strcmp(schema_id, "Query") == 0) {
+            data_model::Query native;
+            native = pyramid::domain_model::common::fromJson(
+                payload, static_cast<data_model::Query*>(nullptr));
+            auto* cs = static_cast<pyramid_Query_c*>(out_value);
+            pyramid::cabi::to_c(native, cs);
+            return PCL_OK;
+        }
+        if (std::strcmp(schema_id, "Capabilities") == 0) {
+            data_model::Capabilities native;
+            native = pyramid::domain_model::autonomy::fromJson(
+                payload, static_cast<data_model::Capabilities*>(nullptr));
+            auto* cs = static_cast<pyramid_Capabilities_c*>(out_value);
+            pyramid::cabi::to_c(native, cs);
+            return PCL_OK;
+        }
+        if (std::strcmp(schema_id, "PlanningRequirement") == 0) {
+            data_model::PlanningRequirement native;
+            native = pyramid::domain_model::autonomy::fromJson(
+                payload, static_cast<data_model::PlanningRequirement*>(nullptr));
+            auto* cs = static_cast<pyramid_PlanningRequirement_c*>(out_value);
+            pyramid::cabi::to_c(native, cs);
+            return PCL_OK;
+        }
+        if (std::strcmp(schema_id, "Identifier") == 0) {
+            data_model::Identifier native;
+            native = scalar_from_json<data_model::Identifier>(payload);
+            auto* cs = static_cast<pyramid_str_t*>(out_value);
+            cs->ptr = nullptr;
+            cs->len = 0u;
+            if (native.size() > std::numeric_limits<uint32_t>::max()) {
+                return PCL_ERR_INVALID;
+            }
+            if (!native.empty()) {
+                void* copy = std::malloc(native.size());
+                if (!copy) {
+                    return PCL_ERR_NOMEM;
+                }
+                std::memcpy(copy, native.data(), native.size());
+                cs->ptr = static_cast<const char*>(copy);
+                cs->len = static_cast<uint32_t>(native.size());
+            }
+            return PCL_OK;
+        }
+        if (std::strcmp(schema_id, "Ack") == 0) {
+            data_model::Ack native;
+            native = pyramid::domain_model::common::fromJson(
+                payload, static_cast<data_model::Ack*>(nullptr));
+            auto* cs = static_cast<pyramid_Ack_c*>(out_value);
+            pyramid::cabi::to_c(native, cs);
+            return PCL_OK;
+        }
+        if (std::strcmp(schema_id, "ExecutionRequirement") == 0) {
+            data_model::ExecutionRequirement native;
+            native = pyramid::domain_model::autonomy::fromJson(
+                payload, static_cast<data_model::ExecutionRequirement*>(nullptr));
+            auto* cs = static_cast<pyramid_ExecutionRequirement_c*>(out_value);
+            pyramid::cabi::to_c(native, cs);
+            return PCL_OK;
+        }
+        if (std::strcmp(schema_id, "StateUpdate") == 0) {
+            data_model::StateUpdate native;
+            native = pyramid::domain_model::autonomy::fromJson(
+                payload, static_cast<data_model::StateUpdate*>(nullptr));
+            auto* cs = static_cast<pyramid_StateUpdate_c*>(out_value);
+            pyramid::cabi::to_c(native, cs);
+            return PCL_OK;
+        }
+        if (std::strcmp(schema_id, "Plan") == 0) {
+            data_model::Plan native;
+            native = pyramid::domain_model::autonomy::fromJson(
+                payload, static_cast<data_model::Plan*>(nullptr));
+            auto* cs = static_cast<pyramid_Plan_c*>(out_value);
+            pyramid::cabi::to_c(native, cs);
+            return PCL_OK;
+        }
+        if (std::strcmp(schema_id, "ExecutionRun") == 0) {
+            data_model::ExecutionRun native;
+            native = pyramid::domain_model::autonomy::fromJson(
+                payload, static_cast<data_model::ExecutionRun*>(nullptr));
+            auto* cs = static_cast<pyramid_ExecutionRun_c*>(out_value);
+            pyramid::cabi::to_c(native, cs);
+            return PCL_OK;
+        }
+        if (std::strcmp(schema_id, "RequirementPlacement") == 0) {
+            data_model::RequirementPlacement native;
+            native = pyramid::domain_model::autonomy::fromJson(
+                payload, static_cast<data_model::RequirementPlacement*>(nullptr));
+            auto* cs = static_cast<pyramid_RequirementPlacement_c*>(out_value);
+            pyramid::cabi::to_c(native, cs);
+            return PCL_OK;
+        }
+        if (std::strcmp(schema_id, "CapabilitiesArray") == 0) {
+            std::vector<data_model::Capabilities> native;
+            const auto arr = nlohmann::json::parse(payload);
+            if (!arr.is_array()) {
+                return PCL_ERR_INVALID;
+            }
+            native.reserve(arr.size());
+            for (const auto& item : arr) {
+                native.push_back(pyramid::domain_model::autonomy::fromJson(
+                    item.dump(), static_cast<data_model::Capabilities*>(nullptr)));
+            }
+            if (native.size() > std::numeric_limits<uint32_t>::max()) {
+                return PCL_ERR_INVALID;
+            }
+            auto* slice = static_cast<pyramid_slice_t*>(out_value);
+            slice->ptr = nullptr;
+            slice->len = 0u;
+            if (!native.empty()) {
+                auto* values = static_cast<pyramid_Capabilities_c*>(
+                    std::calloc(native.size(), sizeof(pyramid_Capabilities_c)));
+                if (!values) {
+                    return PCL_ERR_NOMEM;
+                }
+                for (std::size_t i = 0; i < native.size(); ++i) {
+                    pyramid::cabi::to_c(native[i], &values[i]);
+                }
+                slice->ptr = values;
+                slice->len = static_cast<uint32_t>(native.size());
+            }
+            return PCL_OK;
+        }
+        if (std::strcmp(schema_id, "PlanningRequirementArray") == 0) {
+            std::vector<data_model::PlanningRequirement> native;
+            const auto arr = nlohmann::json::parse(payload);
+            if (!arr.is_array()) {
+                return PCL_ERR_INVALID;
+            }
+            native.reserve(arr.size());
+            for (const auto& item : arr) {
+                native.push_back(pyramid::domain_model::autonomy::fromJson(
+                    item.dump(), static_cast<data_model::PlanningRequirement*>(nullptr)));
+            }
+            if (native.size() > std::numeric_limits<uint32_t>::max()) {
+                return PCL_ERR_INVALID;
+            }
+            auto* slice = static_cast<pyramid_slice_t*>(out_value);
+            slice->ptr = nullptr;
+            slice->len = 0u;
+            if (!native.empty()) {
+                auto* values = static_cast<pyramid_PlanningRequirement_c*>(
+                    std::calloc(native.size(), sizeof(pyramid_PlanningRequirement_c)));
+                if (!values) {
+                    return PCL_ERR_NOMEM;
+                }
+                for (std::size_t i = 0; i < native.size(); ++i) {
+                    pyramid::cabi::to_c(native[i], &values[i]);
+                }
+                slice->ptr = values;
+                slice->len = static_cast<uint32_t>(native.size());
+            }
+            return PCL_OK;
+        }
+        if (std::strcmp(schema_id, "ExecutionRequirementArray") == 0) {
+            std::vector<data_model::ExecutionRequirement> native;
+            const auto arr = nlohmann::json::parse(payload);
+            if (!arr.is_array()) {
+                return PCL_ERR_INVALID;
+            }
+            native.reserve(arr.size());
+            for (const auto& item : arr) {
+                native.push_back(pyramid::domain_model::autonomy::fromJson(
+                    item.dump(), static_cast<data_model::ExecutionRequirement*>(nullptr)));
+            }
+            if (native.size() > std::numeric_limits<uint32_t>::max()) {
+                return PCL_ERR_INVALID;
+            }
+            auto* slice = static_cast<pyramid_slice_t*>(out_value);
+            slice->ptr = nullptr;
+            slice->len = 0u;
+            if (!native.empty()) {
+                auto* values = static_cast<pyramid_ExecutionRequirement_c*>(
+                    std::calloc(native.size(), sizeof(pyramid_ExecutionRequirement_c)));
+                if (!values) {
+                    return PCL_ERR_NOMEM;
+                }
+                for (std::size_t i = 0; i < native.size(); ++i) {
+                    pyramid::cabi::to_c(native[i], &values[i]);
+                }
+                slice->ptr = values;
+                slice->len = static_cast<uint32_t>(native.size());
+            }
+            return PCL_OK;
+        }
+        if (std::strcmp(schema_id, "PlanArray") == 0) {
+            std::vector<data_model::Plan> native;
+            const auto arr = nlohmann::json::parse(payload);
+            if (!arr.is_array()) {
+                return PCL_ERR_INVALID;
+            }
+            native.reserve(arr.size());
+            for (const auto& item : arr) {
+                native.push_back(pyramid::domain_model::autonomy::fromJson(
+                    item.dump(), static_cast<data_model::Plan*>(nullptr)));
+            }
+            if (native.size() > std::numeric_limits<uint32_t>::max()) {
+                return PCL_ERR_INVALID;
+            }
+            auto* slice = static_cast<pyramid_slice_t*>(out_value);
+            slice->ptr = nullptr;
+            slice->len = 0u;
+            if (!native.empty()) {
+                auto* values = static_cast<pyramid_Plan_c*>(
+                    std::calloc(native.size(), sizeof(pyramid_Plan_c)));
+                if (!values) {
+                    return PCL_ERR_NOMEM;
+                }
+                for (std::size_t i = 0; i < native.size(); ++i) {
+                    pyramid::cabi::to_c(native[i], &values[i]);
+                }
+                slice->ptr = values;
+                slice->len = static_cast<uint32_t>(native.size());
+            }
+            return PCL_OK;
+        }
+        if (std::strcmp(schema_id, "ExecutionRunArray") == 0) {
+            std::vector<data_model::ExecutionRun> native;
+            const auto arr = nlohmann::json::parse(payload);
+            if (!arr.is_array()) {
+                return PCL_ERR_INVALID;
+            }
+            native.reserve(arr.size());
+            for (const auto& item : arr) {
+                native.push_back(pyramid::domain_model::autonomy::fromJson(
+                    item.dump(), static_cast<data_model::ExecutionRun*>(nullptr)));
+            }
+            if (native.size() > std::numeric_limits<uint32_t>::max()) {
+                return PCL_ERR_INVALID;
+            }
+            auto* slice = static_cast<pyramid_slice_t*>(out_value);
+            slice->ptr = nullptr;
+            slice->len = 0u;
+            if (!native.empty()) {
+                auto* values = static_cast<pyramid_ExecutionRun_c*>(
+                    std::calloc(native.size(), sizeof(pyramid_ExecutionRun_c)));
+                if (!values) {
+                    return PCL_ERR_NOMEM;
+                }
+                for (std::size_t i = 0; i < native.size(); ++i) {
+                    pyramid::cabi::to_c(native[i], &values[i]);
+                }
+                slice->ptr = values;
+                slice->len = static_cast<uint32_t>(native.size());
+            }
+            return PCL_OK;
+        }
+        if (std::strcmp(schema_id, "RequirementPlacementArray") == 0) {
+            std::vector<data_model::RequirementPlacement> native;
+            const auto arr = nlohmann::json::parse(payload);
+            if (!arr.is_array()) {
+                return PCL_ERR_INVALID;
+            }
+            native.reserve(arr.size());
+            for (const auto& item : arr) {
+                native.push_back(pyramid::domain_model::autonomy::fromJson(
+                    item.dump(), static_cast<data_model::RequirementPlacement*>(nullptr)));
+            }
+            if (native.size() > std::numeric_limits<uint32_t>::max()) {
+                return PCL_ERR_INVALID;
+            }
+            auto* slice = static_cast<pyramid_slice_t*>(out_value);
+            slice->ptr = nullptr;
+            slice->len = 0u;
+            if (!native.empty()) {
+                auto* values = static_cast<pyramid_RequirementPlacement_c*>(
+                    std::calloc(native.size(), sizeof(pyramid_RequirementPlacement_c)));
+                if (!values) {
+                    return PCL_ERR_NOMEM;
+                }
+                for (std::size_t i = 0; i < native.size(); ++i) {
+                    pyramid::cabi::to_c(native[i], &values[i]);
+                }
+                slice->ptr = values;
+                slice->len = static_cast<uint32_t>(native.size());
+            }
+            return PCL_OK;
+        }
+    } catch (...) {
+        return PCL_ERR_CALLBACK;
+    }
+    return PCL_ERR_NOT_FOUND;
+}
+
+static void plugin_free_msg(void* codec_ctx, pcl_msg_t* msg)
+{
+    (void)codec_ctx;
+    if (!msg) {
+        return;
+    }
+    std::free(const_cast<void*>(msg->data));
+    msg->data = nullptr;
+    msg->size = 0u;
+    msg->type_name = nullptr;
+}
+
+static pcl_codec_t k_codec = {
+    PCL_CODEC_ABI_VERSION,
+    "application/json",
+    plugin_encode,
+    plugin_decode,
+    plugin_free_msg,
+    nullptr
+};
+
+// Opaque, plugin-specific configuration threaded through the loader.
+// Stored here and exposed via codec_ctx so encode/decode can honor it.
+static std::string k_config_json;
+
+PCL_CODEC_PLUGIN_EXPORT const pcl_codec_t* pcl_codec_plugin_entry(
+    const char* config_json)
+{
+    k_config_json = config_json ? config_json : "";
+    k_codec.codec_ctx = k_config_json.empty() ? nullptr : &k_config_json;
+    return &k_codec;
+}
+
+} // extern "C"

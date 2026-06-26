@@ -32,8 +32,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from proto_parser import parse_proto_tree, ProtoTypeIndex
 import codec_backends
+import cabi_codegen
 import cpp_codegen
 import ada_codegen
+import ada_cabi_codegen
 
 # Importing the backends package auto-registers all backends
 import backends  # noqa: F401
@@ -58,6 +60,9 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
         for pf in dm_files:
             cpp_codegen.CppDataModelCodecGenerator(pf, dm_index).generate(str(output_dir))
             total += 1
+        cabi_codegen.CabiTypesGenerator(dm_files).generate(str(output_dir))
+        cabi_codegen.CabiMarshalGenerator(dm_files).generate(str(output_dir))
+        total += 2
 
     for proto_path in sorted(proto_dir.rglob('*.proto')):
         parsed = cpp_codegen.parse_proto(proto_path)
@@ -78,6 +83,8 @@ def _generate_json_ada(proto_dir: Path, output_dir: Path,
     if dm_files:
         gen = ada_codegen.AdaTypesGenerator(dm_files)
         gen.generate(str(output_dir))
+        total += 1
+        ada_cabi_codegen.AdaCabiGenerator(dm_files).generate(str(output_dir))
         total += 1
         dm_index = ProtoTypeIndex(dm_files)
         for pf in dm_files:

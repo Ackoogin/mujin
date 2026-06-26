@@ -15,6 +15,9 @@ project Test_Generated_Bindings is
   Pcl_Socket_Lib_Name := external("PCL_SOCKET_LIB_NAME", "pcl_transport_socket");
   Pyramid_Gen_Lib_Dir := external("PYRAMID_GEN_LIB_DIR", Root_Dir & "/build/ada_gnat_pyramid");
   Pyramid_Gen_Lib_Name := external("PYRAMID_GEN_LIB_NAME", "pyramid_generated_flatbuffers_codec");
+  Pyramid_Codecs_Lib_Dir := external("PYRAMID_CODECS_LIB_DIR", Root_Dir & "/build/subprojects/PYRAMID");
+  Pyramid_Codecs_Lib_Name := external("PYRAMID_CODECS_LIB_NAME", "pyramid_generated_codecs");
+  Cxx_Lib_Dir := external("CXX_LIB_DIR", "/usr/lib/gcc/x86_64-linux-gnu/11");
   Pyramid_Protobuf_Ada_Dir := external("PYRAMID_PROTOBUF_ADA_DIR", ".");
   Pyramid_Grpc_Ada_Dir := external("PYRAMID_GRPC_ADA_DIR", ".");
 
@@ -48,9 +51,12 @@ project Test_Generated_Bindings is
         for Default_Switches ("Ada") use
           ("-L" & Pcl_Lib_Dir,
            "-L" & Pyramid_Gen_Lib_Dir,
+           "-L" & Pyramid_Codecs_Lib_Dir,
+           "-L" & Cxx_Lib_Dir,
            "-l" & Pcl_Lib_Name,
            "-l" & Pcl_Socket_Lib_Name,
            "-l" & Pyramid_Gen_Lib_Name,
+           "-l" & Pyramid_Codecs_Lib_Name,
            "-lstdc++",
            "-lws2_32",
            "-lkernel32");
@@ -58,9 +64,12 @@ project Test_Generated_Bindings is
         for Default_Switches ("Ada") use
           ("-L" & Pcl_Lib_Dir,
            "-L" & Pyramid_Gen_Lib_Dir,
+           "-L" & Pyramid_Codecs_Lib_Dir,
+           "-L" & Cxx_Lib_Dir,
            "-l" & Pcl_Lib_Name,
            "-l" & Pcl_Socket_Lib_Name,
            "-l" & Pyramid_Gen_Lib_Name,
+           "-l" & Pyramid_Codecs_Lib_Name,
            "-lstdc++");
     end case;
   end Linker;

@@ -196,6 +196,66 @@ endif()
 
 pyramid_glob_generated(_pyramid_generated_codecs_srcs
     "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_codec.cpp")
+# C-ABI marshalling (to_c/from_c/_free) for the typed-value plugin boundary.
+# Linked into both components and codec plugins so each side can marshal
+# between the native data-model types and their frozen C structs.
+# Marshalling-only library: native <-> frozen C struct (to_c/from_c/_free).
+# This is the ONLY codec-side library a plugin-only client/component links: it
+# carries NO wire encoding (no JSON, no FlatBuffers) and NO transport, so a
+# client that links it pulls in neither a wire codec nor a transport. The wire
+# codecs live exclusively in the loaded codec plugin .so (and, for components
+# that still use the in-tree codec, in pyramid_generated_codecs below).
+pyramid_glob_generated(_pyramid_generated_marshal_srcs
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_cabi_marshal.cpp")
+pyramid_require_generated(_pyramid_generated_marshal_srcs
+    "generated PYRAMID C-ABI marshalling sources")
+
+# W6 -- per-data-model-module marshalling libraries (churn isolation).
+# Each data-model module (common, base, tactical, autonomy, sensors, ...) is
+# compiled once into its own OBJECT library and exposed as a standalone static
+# library `pyramid_marshal_<module>.a`, so a deployment ships (and version
+# controls) only the modules a component actually uses: an edit to one module
+# re-versions only that module's artifact, not every component.  The aggregate
+# `pyramid_generated_marshal` static library bundles every module's objects so
+# existing C++ and Ada consumers (which link it by name) keep working unchanged,
+# and the linker still trims each binary to the modules it references.
+set(PYRAMID_MARSHAL_INCLUDE_DIRS
+    "${PYRAMID_CPP_BINDINGS_DIR}"
+    "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
+    "${PYRAMID_ROOT_DIR}/core/external"   # tl/optional.hpp (header-only) used by data-model types
+)
+set(_pyramid_marshal_objects)
+foreach(_marshal_src IN LISTS _pyramid_generated_marshal_srcs)
+    get_filename_component(_marshal_name "${_marshal_src}" NAME)
+    string(REGEX REPLACE "^pyramid_data_model_(.+)_cabi_marshal\\.cpp$" "\\1"
+        _marshal_module "${_marshal_name}")
+    set(_marshal_obj "pyramid_marshal_${_marshal_module}_obj")
+    add_library(${_marshal_obj} OBJECT "${_marshal_src}")
+    add_dependencies(${_marshal_obj} pyramid_cpp_bindings_codegen)
+    set_target_properties(${_marshal_obj} PROPERTIES
+        POSITION_INDEPENDENT_CODE ON)
+    target_include_directories(${_marshal_obj}
+        PUBLIC ${PYRAMID_MARSHAL_INCLUDE_DIRS})
+    # Standalone per-module static library for deployment staging.
+    add_library(pyramid_marshal_${_marshal_module} STATIC
+        $<TARGET_OBJECTS:${_marshal_obj}>)
+    target_include_directories(pyramid_marshal_${_marshal_module}
+        PUBLIC ${PYRAMID_MARSHAL_INCLUDE_DIRS})
+    list(APPEND _pyramid_marshal_objects $<TARGET_OBJECTS:${_marshal_obj}>)
+endforeach()
+unset(_pyramid_generated_marshal_srcs)
+
+# Backward-compatible aggregate static library over every module's objects.
+add_library(pyramid_generated_marshal STATIC ${_pyramid_marshal_objects})
+add_dependencies(pyramid_generated_marshal pyramid_cpp_bindings_codegen)
+set_target_properties(pyramid_generated_marshal PROPERTIES
+    POSITION_INDEPENDENT_CODE ON)
+target_include_directories(pyramid_generated_marshal
+    PUBLIC ${PYRAMID_MARSHAL_INCLUDE_DIRS})
+unset(_pyramid_marshal_objects)
+
+# Wire codecs (JSON + optional FlatBuffers). Linked by the codec plugins and by
+# any component still using the in-tree wire codec; re-exports the marshalling.
 if(PYRAMID_ENABLE_FLATBUFFERS)
     pyramid_glob_generated(_pyramid_generated_flatbuffers_codec_srcs
         "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/pyramid_services_*_flatbuffers_codec.cpp")
@@ -209,6 +269,9 @@ pyramid_require_generated(_pyramid_generated_codecs_srcs
 add_library(pyramid_generated_codecs STATIC ${_pyramid_generated_codecs_srcs})
 unset(_pyramid_generated_codecs_srcs)
 add_dependencies(pyramid_generated_codecs pyramid_cpp_bindings_codegen)
+set_target_properties(pyramid_generated_codecs PROPERTIES
+    POSITION_INDEPENDENT_CODE ON)
+target_link_libraries(pyramid_generated_codecs PUBLIC pyramid_generated_marshal)
 
 if(PYRAMID_ENABLE_FLATBUFFERS)
     add_dependencies(pyramid_generated_codecs pyramid_flatbuffers_codegen)
@@ -220,6 +283,74 @@ target_include_directories(pyramid_generated_codecs
         "${PYRAMID_CPP_BINDINGS_DIR}"
         "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
 )
+
+pyramid_glob_generated(_pyramid_generated_json_codec_plugin_srcs
+    "${PYRAMID_CPP_BINDINGS_DIR}/*_json_codec_plugin.cpp")
+set(PYRAMID_CODEC_PLUGIN_TARGETS)
+foreach(PYRAMID_CODEC_PLUGIN_SRC IN LISTS _pyramid_generated_json_codec_plugin_srcs)
+    get_filename_component(PYRAMID_CODEC_PLUGIN_STEM
+        "${PYRAMID_CODEC_PLUGIN_SRC}" NAME_WE)
+    string(REGEX REPLACE
+        "^pyramid_services_(.+)_json_codec_plugin$"
+        "pyramid_codec_json_\\1"
+        PYRAMID_CODEC_PLUGIN_TARGET
+        "${PYRAMID_CODEC_PLUGIN_STEM}")
+    add_library(${PYRAMID_CODEC_PLUGIN_TARGET} MODULE
+        "${PYRAMID_CODEC_PLUGIN_SRC}")
+    add_dependencies(${PYRAMID_CODEC_PLUGIN_TARGET}
+        pyramid_cpp_bindings_codegen)
+    target_link_libraries(${PYRAMID_CODEC_PLUGIN_TARGET}
+        PRIVATE
+            pcl_core
+            pyramid_generated_codecs
+            nlohmann_json::nlohmann_json
+    )
+    target_include_directories(${PYRAMID_CODEC_PLUGIN_TARGET}
+        PRIVATE
+            "${PYRAMID_CPP_BINDINGS_DIR}"
+            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
+    )
+    list(APPEND PYRAMID_CODEC_PLUGIN_TARGETS
+        ${PYRAMID_CODEC_PLUGIN_TARGET})
+endforeach()
+unset(_pyramid_generated_json_codec_plugin_srcs)
+
+if(PYRAMID_ENABLE_FLATBUFFERS)
+    pyramid_glob_generated(_pyramid_generated_flatbuffers_codec_plugin_srcs
+        "${PYRAMID_CPP_BINDINGS_DIR}/*_flatbuffers_codec_plugin.cpp")
+    foreach(PYRAMID_CODEC_PLUGIN_SRC IN LISTS _pyramid_generated_flatbuffers_codec_plugin_srcs)
+        get_filename_component(PYRAMID_CODEC_PLUGIN_STEM
+            "${PYRAMID_CODEC_PLUGIN_SRC}" NAME_WE)
+        string(REGEX REPLACE
+            "^pyramid_services_(.+)_flatbuffers_codec_plugin$"
+            "pyramid_codec_flatbuffers_\\1"
+            PYRAMID_CODEC_PLUGIN_TARGET
+            "${PYRAMID_CODEC_PLUGIN_STEM}")
+        add_library(${PYRAMID_CODEC_PLUGIN_TARGET} MODULE
+            "${PYRAMID_CODEC_PLUGIN_SRC}")
+        add_dependencies(${PYRAMID_CODEC_PLUGIN_TARGET}
+            pyramid_cpp_bindings_codegen
+            pyramid_flatbuffers_codegen)
+        target_link_libraries(${PYRAMID_CODEC_PLUGIN_TARGET}
+            PRIVATE
+                pcl_core
+                pyramid_generated_codecs
+                pyramid_flatbuffers_support
+                nlohmann_json::nlohmann_json
+        )
+        target_include_directories(${PYRAMID_CODEC_PLUGIN_TARGET}
+            PRIVATE
+                "${PYRAMID_CPP_BINDINGS_DIR}"
+                "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
+        )
+        list(APPEND PYRAMID_CODEC_PLUGIN_TARGETS
+            ${PYRAMID_CODEC_PLUGIN_TARGET})
+    endforeach()
+    unset(_pyramid_generated_flatbuffers_codec_plugin_srcs)
+endif()
+unset(PYRAMID_CODEC_PLUGIN_SRC)
+unset(PYRAMID_CODEC_PLUGIN_STEM)
+unset(PYRAMID_CODEC_PLUGIN_TARGET)
 
 if(PYRAMID_ENABLE_PROTOBUF)
     if(NOT TARGET protobuf::libprotobuf)
@@ -478,6 +609,24 @@ if(PYRAMID_ENABLE_GRPC)
                 "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp"
                 "${PYRAMID_PROTOBUF_GEN_DIR}"
         )
+
+        add_library(pyramid_grpc_coupled_plugin MODULE
+            "${PYRAMID_ROOT_DIR}/plugins/pyramid_grpc_coupled_plugin.cpp")
+        add_dependencies(pyramid_grpc_coupled_plugin
+            pyramid_grpc_transport
+            pyramid_grpc_codegen
+            pyramid_protobuf_codegen)
+        target_link_libraries(pyramid_grpc_coupled_plugin
+            PRIVATE
+                pcl_core
+                pyramid_grpc_transport
+                pyramid_protobuf_support)
+        target_include_directories(pyramid_grpc_coupled_plugin
+            PRIVATE
+                "${PCL_ROOT_DIR}/include"
+                "${PYRAMID_CPP_BINDINGS_DIR}"
+                "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp"
+                "${PYRAMID_PROTOBUF_GEN_DIR}")
     endif()
 endif()
 
@@ -503,6 +652,24 @@ if(PYRAMID_ENABLE_ROS2)
             "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
     )
 endif()
+
+# Aggregate "build every runtime plugin" target. Gives CI and the
+# scripts/build_plugins.sh helper a single handle that produces all codec .so
+# plugins (per component/codec), both transport plugins, and -- when enabled --
+# the coupled gRPC target plugin. Each dependency is added only if its target
+# exists, so the aggregate adapts to the enabled options.
+add_custom_target(pyramid_plugins
+    COMMENT "Built all PYRAMID runtime codec/transport plugins")
+foreach(_pyramid_plugin_dep
+        ${PYRAMID_CODEC_PLUGIN_TARGETS}
+        pcl_transport_socket_plugin
+        pcl_transport_shared_memory_plugin
+        pyramid_grpc_coupled_plugin)
+    if(TARGET ${_pyramid_plugin_dep})
+        add_dependencies(pyramid_plugins ${_pyramid_plugin_dep})
+    endif()
+endforeach()
+unset(_pyramid_plugin_dep)
 
 add_subdirectory(core)
 add_subdirectory(tactical_objects)

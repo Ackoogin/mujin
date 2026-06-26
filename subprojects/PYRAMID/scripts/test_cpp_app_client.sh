@@ -12,6 +12,7 @@ PORT=19295
 CONTENT_TYPE="application/json"
 TIMEOUT=20
 PORT_FILE=$(mktemp /tmp/tobj_cpp_app_frontend.XXXXXX)
+CODEC_PLUGIN_ARGS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -19,6 +20,10 @@ while [[ $# -gt 0 ]]; do
     --client-bin) CLIENT_BIN="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
     --content-type) CONTENT_TYPE="$2"; shift 2 ;;
+    --codec-plugin)
+      CODEC_PLUGIN_ARGS+=(--codec-plugin "$2")
+      shift 2
+      ;;
     --timeout) TIMEOUT="$2"; shift 2 ;;
     *) shift ;;
   esac
@@ -36,7 +41,8 @@ trap cleanup EXIT
 echo "=== C++ App Client Test ($CONTENT_TYPE) ==="
 
 "$APP_BIN" --port "$PORT" --port-file "$PORT_FILE" \
-           --timeout "$TIMEOUT" --content-type "$CONTENT_TYPE" &
+           --timeout "$TIMEOUT" --content-type "$CONTENT_TYPE" \
+           "${CODEC_PLUGIN_ARGS[@]}" &
 APP_PID=$!
 
 for i in $(seq 1 50); do
@@ -52,4 +58,5 @@ fi
 ACTUAL_PORT=$(cat "$PORT_FILE")
 
 "$CLIENT_BIN" --host 127.0.0.1 --port "$ACTUAL_PORT" \
-              --content-type "$CONTENT_TYPE"
+              --content-type "$CONTENT_TYPE" \
+              "${CODEC_PLUGIN_ARGS[@]}"

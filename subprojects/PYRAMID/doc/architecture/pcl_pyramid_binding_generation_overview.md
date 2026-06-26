@@ -12,7 +12,10 @@ not know the PYRAMID data model; generated PYRAMID bindings adapt typed
 component code to the generic PCL runtime.
 
 For detailed binding usage and regeneration commands, see
-[generated_bindings.md](generated_bindings.md).
+[generated_bindings.md](generated_bindings.md). For how the generated codecs and
+transports are loaded as runtime `.so` plugins (ABI, config pass-through, build,
+and deployment), see
+[transport_codec_plugin_system.md](transport_codec_plugin_system.md).
 
 ## One Page Summary
 

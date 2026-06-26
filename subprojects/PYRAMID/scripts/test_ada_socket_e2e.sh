@@ -24,6 +24,8 @@ CLIENT_BIN="${PYRAMID_ROOT}/examples/ada/bin/ada_tobj_client"
 PORT=19234
 PORT_FILE=$(mktemp /tmp/tobj_port.XXXXXX)
 TIMEOUT=15
+CONTENT_TYPE="application/json"
+CODEC_PLUGIN_ARGS=()
 
 # Parse args
 while [[ $# -gt 0 ]]; do
@@ -31,6 +33,8 @@ while [[ $# -gt 0 ]]; do
     --server-bin) SERVER_BIN="$2"; shift 2 ;;
     --client-bin) CLIENT_BIN="$2"; shift 2 ;;
     --port)       PORT="$2"; shift 2 ;;
+    --content-type) CONTENT_TYPE="$2"; shift 2 ;;
+    --codec-plugin) CODEC_PLUGIN_ARGS+=(--codec-plugin "$2"); shift 2 ;;
     *)            shift ;;
   esac
 done
@@ -84,7 +88,8 @@ sleep 0.2
 
 # Step 4: Start Ada client
 echo "[driver] Starting Ada client..."
-"$CLIENT_BIN" --host 127.0.0.1 --port "$ACTUAL_PORT"
+"$CLIENT_BIN" --host 127.0.0.1 --port "$ACTUAL_PORT" \
+              --content-type "$CONTENT_TYPE" "${CODEC_PLUGIN_ARGS[@]}"
 CLIENT_EXIT=$?
 
 # Step 5: Stop server

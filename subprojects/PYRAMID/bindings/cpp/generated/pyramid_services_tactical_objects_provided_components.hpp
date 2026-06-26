@@ -550,6 +550,38 @@ public:
         return PCL_OK;
     }
 
+    pcl_port_t* subscribeEntityMatches(
+        std::function<void(const std::vector<ObjectMatch>&)> on_message) {
+        auto callback =
+            std::make_shared<std::function<void(const std::vector<ObjectMatch>&)>>(
+                std::move(on_message));
+        topic_callbacks_.push_back(callback);
+        pcl_port_t* port =
+            ::pyramid::components::tactical_objects::services::provided::subscribeEntityMatches(
+                host_->handle(), &ConsumedService::trampolineEntityMatches,
+                callback.get(), content_type_.c_str());
+        if (!port) {
+            topic_callbacks_.pop_back();
+        }
+        return port;
+    }
+
+    pcl_port_t* subscribeEvidenceRequirements(
+        std::function<void(const ObjectEvidenceRequirement&)> on_message) {
+        auto callback =
+            std::make_shared<std::function<void(const ObjectEvidenceRequirement&)>>(
+                std::move(on_message));
+        topic_callbacks_.push_back(callback);
+        pcl_port_t* port =
+            ::pyramid::components::tactical_objects::services::provided::subscribeEvidenceRequirements(
+                host_->handle(), &ConsumedService::trampolineEvidenceRequirements,
+                callback.get(), content_type_.c_str());
+        if (!port) {
+            topic_callbacks_.pop_back();
+        }
+        return port;
+    }
+
     StreamHandle
     matchingObjectsReadMatchStreaming(const Query& request,
                 std::function<void(const ObjectMatch&)> on_frame,
@@ -738,9 +770,36 @@ private:
     struct StreamPushHolderT { std::shared_ptr<StreamPushState<T>> state; };
     template <class T> using StreamPushHolder = StreamPushHolderT<T>;
 
+    static void trampolineEntityMatches(pcl_container_t*,
+                           const pcl_msg_t* msg,
+                           void* user_data) {
+        auto* callback =
+            static_cast<std::function<void(const std::vector<ObjectMatch>&)>*>(
+                user_data);
+        if (!callback || !*callback) return;
+        std::vector<ObjectMatch> payload{};
+        if (decodeEntityMatches(msg, &payload)) {
+            (*callback)(payload);
+        }
+    }
+
+    static void trampolineEvidenceRequirements(pcl_container_t*,
+                           const pcl_msg_t* msg,
+                           void* user_data) {
+        auto* callback =
+            static_cast<std::function<void(const ObjectEvidenceRequirement&)>*>(
+                user_data);
+        if (!callback || !*callback) return;
+        ObjectEvidenceRequirement payload{};
+        if (decodeEvidenceRequirements(msg, &payload)) {
+            (*callback)(payload);
+        }
+    }
+
     pcl::Component* host_     = nullptr;
     pcl::Executor*  executor_ = nullptr;
     std::string     content_type_;
+    std::vector<std::shared_ptr<void>> topic_callbacks_;
 };
 
 template <class T>

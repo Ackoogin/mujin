@@ -9,7 +9,13 @@
 with Ada.Text_IO;                use Ada.Text_IO;
 with Ada.Strings.Unbounded;      use Ada.Strings.Unbounded;
 with Interfaces.C;               use Interfaces.C;
+with Interfaces.C.Strings;
 with System;
+with GNATCOLL.JSON;              use GNATCOLL.JSON;
+
+--  Plugin-only runtime: the facade fails closed without a registered codec.
+with Pcl_Bindings;
+with Pcl_Plugins;
 
 --  Generated data model types
 with Pyramid.Data_Model.Base.Types;     use Pyramid.Data_Model.Base.Types;
@@ -61,6 +67,25 @@ procedure Test_Generated_Bindings is
       return Prov.Msg_To_String (Data, Interfaces.C.unsigned (Size));
    end Buffer_To_String;
 
+   --  Identifier responses cross the codec plugin as a JSON-encoded scalar
+   --  string (e.g. ``"sensor-create"`` with quotes). Decode back to the bare
+   --  value so the assertions express handler intent, not the wire encoding.
+   --  Falls back to the raw payload when it is not a JSON string.
+   function Decode_Json_String (Payload : String) return String is
+   begin
+      declare
+         J : constant JSON_Value := Read (Payload);
+      begin
+         if J.Kind = JSON_String_Type then
+            return String'(UTF8_String'(Get (J)));
+         end if;
+      end;
+      return Payload;
+   exception
+      when others =>
+         return Payload;
+   end Decode_Json_String;
+
    procedure Sensor_Create_Handler
      (Request  : in  Interpretation_Requirement;
       Response : out Identifier)
@@ -90,6 +115,45 @@ procedure Test_Generated_Bindings is
 
 begin
    Put_Line ("=== Generated Ada Binding Validation ===");
+
+   --  0. Fail-closed proof (must run BEFORE any codec is registered):
+   --  with no codec plugin loaded the facade must refuse to serialise rather
+   --  than fall back to a built-in codec — matching the C++ guarantee. The
+   --  dispatch request-decode is gated by the same Require_Codec check that
+   --  protects struct and scalar-alias schemas alike.
+   declare
+      Req_Json  : constant String := "{}";
+      Resp_Buf  : System.Address;
+      Resp_Size : Natural;
+      Raised    : Boolean := False;
+   begin
+      begin
+         Prov.Dispatch
+           (Handlers      => null,
+            Channel       => Prov.Ch_Object_Of_Interest_Create_Requirement,
+            Request_Buf   => Req_Json (Req_Json'First)'Address,
+            Request_Size  => Req_Json'Length,
+            Response_Buf  => Resp_Buf,
+            Response_Size => Resp_Size);
+      exception
+         when Program_Error =>
+            Raised := True;
+      end;
+      Check ("Fail-closed: facade raises without a registered codec", Raised);
+   end;
+
+   --  Plugin-only: load codec plugins listed in PYRAMID_CODEC_PLUGINS so the
+   --  provided/consumed facades have a registered codec (they fail closed
+   --  otherwise).
+   declare
+      Env_C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String ("PYRAMID_CODEC_PLUGINS");
+      Ignore : Pcl_Bindings.Pcl_Status;
+   begin
+      Ignore := Pcl_Plugins.Pcl_Codec_Registry_Load_Plugins_From_Env
+        (Pcl_Plugins.Pcl_Codec_Registry_Default, Env_C);
+      Interfaces.C.Strings.Free (Env_C);
+   end;
 
    --  1. Enum codec round-trip
    declare
@@ -264,7 +328,8 @@ begin
          Response_Buf  => Resp_Buf,
          Response_Size => Resp_Size);
       Check ("Sensor provided dispatch CreateRequirement",
-             Buffer_To_String (Resp_Buf, Resp_Size) = "sensor-create");
+             Decode_Json_String (Buffer_To_String (Resp_Buf, Resp_Size))
+               = "sensor-create");
    end;
 
    --  14. Sensor consumed bindings expose disambiguated symbols
@@ -300,7 +365,8 @@ begin
          Response_Buf  => Resp_Buf,
          Response_Size => Resp_Size);
       Check ("Sensor consumed provision dispatch CreateRequirement",
-             Buffer_To_String (Resp_Buf, Resp_Size) = "provision-create");
+             Decode_Json_String (Buffer_To_String (Resp_Buf, Resp_Size))
+               = "provision-create");
 
       Sensor_Cons.Dispatch
         (Handlers      => Handlers'Access,
@@ -310,7 +376,8 @@ begin
          Response_Buf  => Resp_Buf,
          Response_Size => Resp_Size);
       Check ("Sensor consumed processing dispatch CreateRequirement",
-             Buffer_To_String (Resp_Buf, Resp_Size) = "processing-create");
+             Decode_Json_String (Buffer_To_String (Resp_Buf, Resp_Size))
+               = "processing-create");
    end;
 
    --  Summary

@@ -123,6 +123,24 @@ if [[ ! -x "$BRIDGE_BIN" ]]; then
   exit 0
 fi
 
+if [[ -z "${PYRAMID_CODEC_PLUGINS:-}" ]]; then
+  PLUGIN_DIR="$(cd "$(dirname "$APP_BIN")/.." && pwd)"
+  PLUGIN_PATHS=()
+  for plugin in \
+    libpyramid_codec_json_tactical_objects.so \
+    libpyramid_codec_flatbuffers_tactical_objects.so \
+    libpyramid_codec_json_autonomy_backend.so \
+    libpyramid_codec_flatbuffers_autonomy_backend.so \
+    libpyramid_codec_json_sensor_data_interpretation.so \
+    libpyramid_codec_flatbuffers_sensor_data_interpretation.so; do
+    if [[ -f "$PLUGIN_DIR/$plugin" ]]; then
+      PLUGIN_PATHS+=("$PLUGIN_DIR/$plugin")
+    fi
+  done
+  PYRAMID_CODEC_PLUGINS="$(IFS=:; echo "${PLUGIN_PATHS[*]}")"
+  export PYRAMID_CODEC_PLUGINS
+fi
+
 # -------------------------------------------------------------------------
 # 1. Start ame_backend_stub (must be up before bridge connects)
 # -------------------------------------------------------------------------

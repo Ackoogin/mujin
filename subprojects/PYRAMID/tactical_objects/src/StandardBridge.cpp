@@ -492,6 +492,7 @@ void StandardBridge::publishEntityMatches(const std::vector<std::string>& entity
   }
 
   if (!prov::encodeEntityMatches(matches, frontend_content_type_.c_str(), &publish_buffer_)) {
+    logWarn("[StandardBridge] failed to encode standard.entity_matches");
     return;
   }
   prov::publishEntityMatches(pub_entity_matches_, publish_buffer_, frontend_content_type_.c_str());
@@ -523,9 +524,9 @@ void StandardBridge::onStandardObjectEvidence(pcl_container_t*, const pcl_msg_t*
   auto* self = static_cast<StandardBridge*>(user_data);
   data_model::ObjectDetail detail;
   if (!cons::decodeObjectEvidence(msg, &detail)) {
+    self->logWarn("[StandardBridge] failed to decode standard.object_evidence");
     return;
   }
-
   Observation obs;
   obs.observation_id = UUIDHelper::generateV4();
   obs.received_at = detail.update_time.value_or(0.0);

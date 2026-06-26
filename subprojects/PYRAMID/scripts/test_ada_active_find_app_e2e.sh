@@ -12,6 +12,7 @@ APP_BIN="${WORKSPACE_ROOT}/build/subprojects/PYRAMID/tactical_objects/tactical_o
 CLIENT_BIN="${PYRAMID_ROOT}/tests/ada/bin/ada_active_find_e2e"
 PORT=19305
 CONTENT_TYPE="application/json"
+CODEC_PLUGIN_ARGS=()
 TIMEOUT=25
 PORT_FILE=$(mktemp /tmp/tobj_app_af.XXXXXX)
 
@@ -21,6 +22,7 @@ while [[ $# -gt 0 ]]; do
     --client-bin) CLIENT_BIN="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
     --content-type) CONTENT_TYPE="$2"; shift 2 ;;
+    --codec-plugin) CODEC_PLUGIN_ARGS+=(--codec-plugin "$2"); shift 2 ;;
     --timeout) TIMEOUT="$2"; shift 2 ;;
     *) shift ;;
   esac
@@ -66,7 +68,7 @@ ACTUAL_PORT=$(cat "$PORT_FILE")
 echo "[driver] App ready on port $ACTUAL_PORT"
 echo "[driver] Starting Ada active-find client..."
 "$CLIENT_BIN" --host 127.0.0.1 --port "$ACTUAL_PORT" \
-              --content-type "$CONTENT_TYPE"
+              --content-type "$CONTENT_TYPE" "${CODEC_PLUGIN_ARGS[@]}"
 CLIENT_EXIT=$?
 
 if [[ $CLIENT_EXIT -eq 0 ]]; then

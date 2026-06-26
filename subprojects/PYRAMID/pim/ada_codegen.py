@@ -476,6 +476,126 @@ def _grpc_transport_pkg_from_proto(proto_file: ProtoFile) -> str:
     return '.'.join(pkg_parts) + '.GRPC_Transport'
 
 
+def _ada_cabi_pkg_from_proto_pkg(proto_pkg: str) -> str:
+    parts = proto_pkg.split('.')
+    ada_parts = ['_'.join(w.capitalize() for w in seg.split('_')) for seg in parts]
+    return '.'.join(ada_parts + ['Cabi'])
+
+
+def _collect_cabi_message_bindings(
+        proto_path: Path,
+        allowed_type_pkgs: List[str]) -> List[Tuple[str, str, str, str]]:
+    """Return (schema_id, native_type, cabi_type, cabi_pkg) for real messages.
+
+    Scalar-wrapper messages are intentionally omitted because they do not have
+    generated ``pyramid_<Type>_c`` C structs.
+    """
+    proto_root = _find_proto_root(proto_path)
+    if proto_root is None:
+        return []
+
+    try:
+        dm_files = [
+            pf for pf in parse_proto_tree(proto_root)
+            if pf.package.startswith('pyramid.data_model')
+        ]
+    except Exception:
+        return []
+
+    aliases = AdaTypesGenerator(dm_files)._find_scalar_wrappers()
+    result: List[Tuple[str, str, str, str]] = []
+    for pf in dm_files:
+        types_pkg = AdaTypesGenerator._ada_pkg_for_file(pf)
+        if types_pkg not in allowed_type_pkgs:
+            continue
+        cabi_pkg = _ada_cabi_pkg_from_proto_pkg(pf.package)
+        for msg in pf.messages:
+            if msg.name in aliases:
+                continue
+            schema = msg.name
+            native = _ada_name(msg.name)
+            cabi = 'Pyramid_' + _ada_name(msg.name) + '_C'
+            result.append((schema, native, cabi, cabi_pkg))
+    return result
+
+
+def _collect_alias_schema_bindings(
+        proto_path: Path,
+        allowed_type_pkgs: List[str]) -> List[Tuple[str, str, str, str]]:
+    """Return (schema_id, native_alias_type, kind, cabi_pkg) for scalar aliases.
+
+    Scalar-wrapper messages (e.g. ``Identifier`` -> string, unit wrappers ->
+    numeric) have no ``pyramid_<Type>_c`` struct; they cross the C-ABI codec
+    boundary as ``pyramid_str_t`` (string) or a bare scalar pointer (numeric).
+    ``kind`` is ``"string"`` or ``"numeric"``; ``cabi_pkg`` is the module's Cabi
+    package (used for ``Pyramid_Str_T`` / ``Dup_Str`` / ``To_Ada_String``).
+    """
+    proto_root = _find_proto_root(proto_path)
+    if proto_root is None:
+        return []
+
+    try:
+        dm_files = [
+            pf for pf in parse_proto_tree(proto_root)
+            if pf.package.startswith('pyramid.data_model')
+        ]
+    except Exception:
+        return []
+
+    aliases = AdaTypesGenerator(dm_files)._find_scalar_wrappers()
+    result: List[Tuple[str, str, str, str]] = []
+    for pf in dm_files:
+        types_pkg = AdaTypesGenerator._ada_pkg_for_file(pf)
+        if types_pkg not in allowed_type_pkgs:
+            continue
+        cabi_pkg = _ada_cabi_pkg_from_proto_pkg(pf.package)
+        for msg in pf.messages:
+            if msg.name not in aliases:
+                continue
+            kind = 'string' if aliases[msg.name] == 'Unbounded_String' else 'numeric'
+            result.append((msg.name, _ada_name(msg.name), kind, cabi_pkg))
+    return result
+
+
+def _collect_array_schema_bindings(
+        cabi_bindings: List[Tuple[str, str, str, str]],
+        all_rpcs: List[Tuple[str, 'ProtoRpc']],
+        sub_topics: Dict[str, str],
+        pub_topics: Dict[str, str]) -> List[Tuple[str, str, str, str, str]]:
+    """Return array payload bindings used by this facade.
+
+    Each tuple is (array_schema_id, ada_array_type, ada_element_type,
+    cabi_element_type, cabi_pkg).  Array schemas use the C++/plugin spelling
+    ``<ProtoShortName>Array`` while Ada array types use ``<Ada_Element>_Array``.
+    """
+    by_schema = {schema: (native, cabi, pkg)
+                 for schema, native, cabi, pkg in cabi_bindings}
+    result: List[Tuple[str, str, str, str, str]] = []
+    seen: set[str] = set()
+
+    def add(short_type: str) -> None:
+        if short_type in seen or short_type not in by_schema:
+            return
+        native, cabi, pkg = by_schema[short_type]
+        result.append((short_type + 'Array',
+                       native + '_Array',
+                       native,
+                       cabi,
+                       pkg))
+        seen.add(short_type)
+
+    for key in list(sub_topics.keys()) + list(pub_topics.keys()):
+        spec = topic_spec(key)
+        if spec.is_array:
+            add(spec.short_type)
+
+    for _svc_name, rpc in all_rpcs:
+        if rpc.streaming:
+            add(_short_type(rpc.rsp))
+
+    return result
+
+
 def _flatbuffers_func_suffix_for_type(full_type: str) -> str:
     """Return the Ada suffix used by the generated FlatBuffers bridge package."""
     return _camel_to_snake(_short_type(full_type))
@@ -557,7 +677,8 @@ class AdaServiceGenerator:
             adb_path = output_path / (pkg_name.lower().replace('.', '-') + '.adb')
 
             self._write_spec(ads_path, pkg_name, parsed, all_rpcs, type_pkgs)
-            self._write_body(adb_path, pkg_name, parsed, all_rpcs, codec_pkgs)
+            self._write_body(adb_path, pkg_name, parsed, all_rpcs,
+                             type_pkgs, codec_pkgs)
             generated_pkgs.append(pkg_name)
             print(f'  Generated {pkg_name}')
 
@@ -828,11 +949,23 @@ class AdaServiceGenerator:
 
     def _write_body(self, path: Path, pkg_name: str, parsed: ProtoFile,
                     all_rpcs: List[Tuple[str, ProtoRpc]],
+                    type_pkgs: List[str],
                     codec_pkgs: List[str]):
         is_provided = _is_provided(parsed)
         has_grpc = 'grpc' in self._enabled_backends
         sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
         duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
+        cabi_bindings = _collect_cabi_message_bindings(
+            self._proto_input, type_pkgs)
+        alias_bindings = _collect_alias_schema_bindings(
+            self._proto_input, type_pkgs)
+        array_bindings = _collect_array_schema_bindings(
+            cabi_bindings, all_rpcs, sub_topics, pub_topics)
+        # String aliases need their module Cabi package (Pyramid_Str_T/Dup_Str).
+        cabi_pkgs = sorted(
+            {pkg for _, _, _, pkg in cabi_bindings}
+            | {pkg for _, _, kind, pkg in alias_bindings if kind == 'string'}
+            | {pkg for _, _, _, _, pkg in array_bindings})
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'--  Auto-generated service binding body\n')
@@ -840,32 +973,71 @@ class AdaServiceGenerator:
             f.write(f'\n')
             f.write(f'with Ada.Strings.Unbounded;  use Ada.Strings.Unbounded;\n')
             f.write(f'with Ada.Unchecked_Conversion;\n')
-            f.write(f'with GNATCOLL.JSON;  use GNATCOLL.JSON;\n')
             f.write(f'with Interfaces.C.Strings;\n')
+            f.write(f'with Pcl_Bindings;\n')
+            f.write(f'with Pcl_Plugins;\n')
             f.write(f'with System;\n')
+            f.write(f'with System.Address_To_Access_Conversions;\n')
             f.write(f'with System.Storage_Elements;\n')
-            # Only bring in codec packages for the types this service actually uses
-            for cp in codec_pkgs:
+            for tp in type_pkgs:
+                f.write(f'with {tp};  use {tp};\n')
+            for cp in cabi_pkgs:
                 f.write(f'with {cp};  use {cp};\n')
-            f.write(f'with {_flatbuffers_codec_pkg_from_proto(parsed)};\n')
             if has_grpc:
                 f.write(f'with {_grpc_transport_pkg_from_proto(parsed)};\n')
             f.write(f'\n')
             f.write(f'package body {pkg_name} is\n')
             f.write(f'   use type System.Address;\n')
+            f.write(f'   use type Interfaces.C.unsigned;\n')
             f.write(f'   use type Interfaces.C.Strings.chars_ptr;\n')
             f.write(f'   use type Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
+            f.write(f'   use type Pcl_Bindings.Pcl_Status;\n')
+            f.write(f'   use type Pcl_Plugins.Pcl_Codec_Const_Access;\n')
+            f.write(f'   use type Pcl_Plugins.Pcl_Codec_Decode_Access;\n')
+            f.write(f'   use type Pcl_Plugins.Pcl_Codec_Encode_Access;\n')
+            f.write(f'   use type Pcl_Plugins.Pcl_Codec_Free_Msg_Access;\n')
             f.write(f'\n')
 
             # -- Internal helpers ----------------------------------------------
             f.write(f'   function To_Address is new\n')
             f.write(f'     Ada.Unchecked_Conversion (Interfaces.C.Strings.chars_ptr, System.Address);\n')
             f.write(f'\n')
+            f.write(f'   function Pcl_Codec_Registry_Get_At\n')
+            f.write(f'     (Registry     : System.Address;\n')
+            f.write(f'      Content_Type : Interfaces.C.Strings.chars_ptr;\n')
+            f.write(f'      Index        : Interfaces.C.unsigned)\n')
+            f.write(f'      return Pcl_Plugins.Pcl_Codec_Const_Access;\n')
+            f.write(f'   pragma Import (C, Pcl_Codec_Registry_Get_At,\n')
+            f.write(f'                  "pcl_codec_registry_get_at");\n')
+            f.write(f'\n')
+            if array_bindings:
+                f.write(f'   procedure C_Free (Ptr : System.Address);\n')
+                f.write(f'   pragma Import (C, C_Free, "free");\n')
+                f.write(f'\n')
             f.write(f'   type Service_Handlers_Access is access constant Service_Handlers;\n')
             f.write(f'\n')
             f.write(f'   function To_Handlers is new\n')
             f.write(f'     Ada.Unchecked_Conversion (System.Address, Service_Handlers_Access);\n')
             f.write(f'\n')
+            for schema, native, _cabi, _pkg in cabi_bindings:
+                del schema, _cabi, _pkg
+                ptr_pkg = f'{native}_Pointers'
+                f.write(f'   package {ptr_pkg} is new\n')
+                f.write(f'     System.Address_To_Access_Conversions ({native});\n')
+                f.write(f'\n')
+            for schema, native, _kind, _pkg in alias_bindings:
+                del schema, _pkg
+                # Only string aliases deref via a pointer package; numeric
+                # aliases pass the scalar address straight through. (And the
+                # native alias name, e.g. Length, can clash with use-visible
+                # functions, so avoid instantiating one unless needed.)
+                if _kind != 'string':
+                    continue
+                ptr_pkg = f'{native}_Pointers'
+                f.write(f'   package {ptr_pkg} is new\n')
+                f.write(f'     System.Address_To_Access_Conversions ({native});\n')
+                f.write(f'\n')
+
             f.write(f'   function Handler_Address\n')
             f.write(f'     (Handlers : access constant Service_Handlers) return System.Address is\n')
             f.write(f'   begin\n')
@@ -893,7 +1065,527 @@ class AdaServiceGenerator:
             f.write(f'   end Msg_To_String;\n')
             f.write(f'\n')
 
-            f.write(f'   package Flatbuffers_Codec renames {_flatbuffers_codec_pkg_from_proto(parsed)};\n')
+            f.write(f'   function Registry_Has_Codec (Content_Type : String) return Boolean is\n')
+            f.write(f'      Content_C : Interfaces.C.Strings.chars_ptr :=\n')
+            f.write(f'        Interfaces.C.Strings.New_String (Content_Type);\n')
+            f.write(f'      Codec : Pcl_Plugins.Pcl_Codec_Const_Access := null;\n')
+            f.write(f'   begin\n')
+            f.write(f'      if Content_Type = "" then\n')
+            f.write(f'         Interfaces.C.Strings.Free (Content_C);\n')
+            f.write(f'         return False;\n')
+            f.write(f'      end if;\n')
+            f.write(f'      Codec := Pcl_Plugins.Pcl_Codec_Registry_Get\n')
+            f.write(f'        (Pcl_Plugins.Pcl_Codec_Registry_Default, Content_C);\n')
+            f.write(f'      Interfaces.C.Strings.Free (Content_C);\n')
+            f.write(f'      return Codec /= null;\n')
+            f.write(f'   exception\n')
+            f.write(f'      when others =>\n')
+            f.write(f'         if Content_C /= Interfaces.C.Strings.Null_Ptr then\n')
+            f.write(f'            Interfaces.C.Strings.Free (Content_C);\n')
+            f.write(f'         end if;\n')
+            f.write(f'         return False;\n')
+            f.write(f'   end Registry_Has_Codec;\n')
+            f.write(f'\n')
+
+            # Fail-closed gate: every encode/decode requires a registered codec
+            # plugin for the content type. With no plugin the facade raises
+            # instead of falling back to a built-in codec (matches C++).
+            f.write(f'   procedure Require_Codec (Content_Type : String) is\n')
+            f.write(f'      Effective : constant String :=\n')
+            f.write(f'        (if Content_Type = "" then Json_Content_Type else Content_Type);\n')
+            f.write(f'   begin\n')
+            if has_grpc:
+                f.write(f'      if Effective = Grpc_Content_Type then\n')
+                f.write(f'         return;  --  gRPC target carries its own transport+codec\n')
+                f.write(f'      end if;\n')
+            f.write(f'      if not Registry_Has_Codec (Effective) then\n')
+            f.write(f'         raise Program_Error with\n')
+            f.write(f'           "fail-closed: no codec plugin registered for content type "\n')
+            f.write(f'           & Effective;\n')
+            f.write(f'      end if;\n')
+            f.write(f'   end Require_Codec;\n')
+            f.write(f'\n')
+
+            f.write(f'   function Try_Cabi_Registry_Encode\n')
+            f.write(f'     (Codec     : Pcl_Plugins.Pcl_Codec_Const_Access;\n')
+            f.write(f'      Schema_C  : Interfaces.C.Strings.chars_ptr;\n')
+            f.write(f'      Schema_Id : String;\n')
+            f.write(f'      Value     : System.Address;\n')
+            f.write(f'      Msg       : access Pcl_Bindings.Pcl_Msg)\n')
+            f.write(f'      return Pcl_Bindings.Pcl_Status\n')
+            f.write(f'   is\n')
+            f.write(f'   begin\n')
+            f.write(f'      if Codec = null or else Codec.all.Encode = null then\n')
+            f.write(f'         return Pcl_Bindings.PCL_ERR_INVALID;\n')
+            f.write(f'      end if;\n')
+            for schema, native, cabi, _pkg in cabi_bindings:
+                ptr_pkg = f'{native}_Pointers'
+                f.write(f'      if Schema_Id = "{schema}" then\n')
+                f.write(f'         declare\n')
+                f.write(f'            Native : constant {ptr_pkg}.Object_Pointer :=\n')
+                f.write(f'              {ptr_pkg}.To_Pointer (Value);\n')
+                f.write(f'            C_Value : aliased {cabi} := (others => <>);\n')
+                f.write(f'            Status : Pcl_Bindings.Pcl_Status :=\n')
+                f.write(f'              Pcl_Bindings.PCL_ERR_INVALID;\n')
+                f.write(f'         begin\n')
+                f.write(f'            if Value = System.Null_Address then\n')
+                f.write(f'               return Pcl_Bindings.PCL_ERR_INVALID;\n')
+                f.write(f'            end if;\n')
+                f.write(f'            To_C (Native.all, C_Value);\n')
+                f.write(f'            Status := Codec.all.Encode.all\n')
+                f.write(f"              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);\n")
+                f.write(f"            Free_{native} (C_Value'Access);\n")
+                f.write(f'            return Status;\n')
+                f.write(f'         end;\n')
+                f.write(f'      end if;\n')
+            # Scalar aliases: string -> pyramid_str_t, numeric -> scalar pointer.
+            for schema, native, kind, alias_pkg in alias_bindings:
+                ptr_pkg = f'{native}_Pointers'
+                f.write(f'      if Schema_Id = "{schema}" then\n')
+                f.write(f'         if Value = System.Null_Address then\n')
+                f.write(f'            return Pcl_Bindings.PCL_ERR_INVALID;\n')
+                f.write(f'         end if;\n')
+                if kind == 'string':
+                    f.write(f'         declare\n')
+                    f.write(f'            Native : constant {ptr_pkg}.Object_Pointer :=\n')
+                    f.write(f'              {ptr_pkg}.To_Pointer (Value);\n')
+                    f.write(f'            S : constant String := To_String (Native.all);\n')
+                    f.write(f'            C_Value : aliased {alias_pkg}.Pyramid_Str_T;\n')
+                    f.write(f'            Status : Pcl_Bindings.Pcl_Status;\n')
+                    f.write(f'         begin\n')
+                    f.write(f'            C_Value.Ptr := Interfaces.C.Strings.New_String (S);\n')
+                    f.write(f"            C_Value.Len := Interfaces.C.unsigned (S'Length);\n")
+                    f.write(f'            Status := Codec.all.Encode.all\n')
+                    f.write(f"              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);\n")
+                    f.write(f'            Interfaces.C.Strings.Free (C_Value.Ptr);\n')
+                    f.write(f'            return Status;\n')
+                    f.write(f'         end;\n')
+                else:
+                    f.write(f'         return Codec.all.Encode.all\n')
+                    f.write(f'           (Codec.all.Codec_Ctx, Schema_C, Value, Msg);\n')
+                f.write(f'      end if;\n')
+            f.write(f'      return Pcl_Bindings.PCL_ERR_NOT_FOUND;\n')
+            f.write(f'   end Try_Cabi_Registry_Encode;\n')
+            f.write(f'\n')
+
+            f.write(f'   function Try_Cabi_Registry_Decode\n')
+            f.write(f'     (Codec     : Pcl_Plugins.Pcl_Codec_Const_Access;\n')
+            f.write(f'      Schema_C  : Interfaces.C.Strings.chars_ptr;\n')
+            f.write(f'      Schema_Id : String;\n')
+            f.write(f'      Msg       : access constant Pcl_Bindings.Pcl_Msg;\n')
+            f.write(f'      Value     : System.Address)\n')
+            f.write(f'      return Pcl_Bindings.Pcl_Status\n')
+            f.write(f'   is\n')
+            f.write(f'   begin\n')
+            f.write(f'      if Codec = null or else Codec.all.Decode = null then\n')
+            f.write(f'         return Pcl_Bindings.PCL_ERR_INVALID;\n')
+            f.write(f'      end if;\n')
+            for schema, native, cabi, _pkg in cabi_bindings:
+                ptr_pkg = f'{native}_Pointers'
+                f.write(f'      if Schema_Id = "{schema}" then\n')
+                f.write(f'         declare\n')
+                f.write(f'            Native : constant {ptr_pkg}.Object_Pointer :=\n')
+                f.write(f'              {ptr_pkg}.To_Pointer (Value);\n')
+                f.write(f'            C_Value : aliased {cabi} := (others => <>);\n')
+                f.write(f'            Status : Pcl_Bindings.Pcl_Status :=\n')
+                f.write(f'              Pcl_Bindings.PCL_ERR_INVALID;\n')
+                f.write(f'         begin\n')
+                f.write(f'            if Value = System.Null_Address then\n')
+                f.write(f'               return Pcl_Bindings.PCL_ERR_INVALID;\n')
+                f.write(f'            end if;\n')
+                f.write(f'            Status := Codec.all.Decode.all\n')
+                f.write(f"              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);\n")
+                f.write(f'            if Status = Pcl_Bindings.PCL_OK then\n')
+                f.write(f'               From_C (C_Value, Native.all);\n')
+                f.write(f'            end if;\n')
+                f.write(f"            Free_{native} (C_Value'Access);\n")
+                f.write(f'            return Status;\n')
+                f.write(f'         end;\n')
+                f.write(f'      end if;\n')
+            # Scalar aliases: string <- pyramid_str_t, numeric <- scalar pointer.
+            for schema, native, kind, alias_pkg in alias_bindings:
+                ptr_pkg = f'{native}_Pointers'
+                f.write(f'      if Schema_Id = "{schema}" then\n')
+                f.write(f'         if Value = System.Null_Address then\n')
+                f.write(f'            return Pcl_Bindings.PCL_ERR_INVALID;\n')
+                f.write(f'         end if;\n')
+                if kind == 'string':
+                    f.write(f'         declare\n')
+                    f.write(f'            Native : constant {ptr_pkg}.Object_Pointer :=\n')
+                    f.write(f'              {ptr_pkg}.To_Pointer (Value);\n')
+                    f.write(f'            C_Value : aliased {alias_pkg}.Pyramid_Str_T;\n')
+                    f.write(f'            Status : Pcl_Bindings.Pcl_Status;\n')
+                    f.write(f'         begin\n')
+                    f.write(f'            Status := Codec.all.Decode.all\n')
+                    f.write(f"              (Codec.all.Codec_Ctx, Schema_C, Msg, C_Value'Address);\n")
+                    f.write(f'            if Status = Pcl_Bindings.PCL_OK then\n')
+                    f.write(f'               if C_Value.Ptr = Interfaces.C.Strings.Null_Ptr then\n')
+                    f.write(f'                  Native.all := Null_Unbounded_String;\n')
+                    f.write(f'               else\n')
+                    f.write(f'                  Native.all := To_Unbounded_String\n')
+                    f.write(f'                    (Interfaces.C.Strings.Value\n')
+                    f.write(f'                       (C_Value.Ptr,\n')
+                    f.write(f'                        Interfaces.C.size_t (C_Value.Len)));\n')
+                    f.write(f'               end if;\n')
+                    f.write(f'            end if;\n')
+                    f.write(f'            if C_Value.Ptr /= Interfaces.C.Strings.Null_Ptr then\n')
+                    f.write(f'               Interfaces.C.Strings.Free (C_Value.Ptr);\n')
+                    f.write(f'            end if;\n')
+                    f.write(f'            return Status;\n')
+                    f.write(f'         end;\n')
+                else:
+                    f.write(f'         return Codec.all.Decode.all\n')
+                    f.write(f'           (Codec.all.Codec_Ctx, Schema_C, Msg, Value);\n')
+                f.write(f'      end if;\n')
+            f.write(f'      return Pcl_Bindings.PCL_ERR_NOT_FOUND;\n')
+            f.write(f'   end Try_Cabi_Registry_Decode;\n')
+            f.write(f'\n')
+
+            f.write(f'   function Try_Registry_Encode\n')
+            f.write(f'     (Content_Type : String;\n')
+            f.write(f'      Schema_Id    : String;\n')
+            f.write(f'      Value        : System.Address;\n')
+            f.write(f'      Wire         : out Unbounded_String) return Boolean\n')
+            f.write(f'   is\n')
+            f.write(f'      Effective : constant String :=\n')
+            f.write(f'        (if Content_Type = "" then Json_Content_Type else Content_Type);\n')
+            f.write(f'      Content_C : Interfaces.C.Strings.chars_ptr :=\n')
+            f.write(f'        Interfaces.C.Strings.New_String (Effective);\n')
+            f.write(f'      Schema_C : Interfaces.C.Strings.chars_ptr :=\n')
+            f.write(f'        Interfaces.C.Strings.New_String (Schema_Id);\n')
+            f.write(f'      Codec : Pcl_Plugins.Pcl_Codec_Const_Access := null;\n')
+            f.write(f'      Msg   : aliased Pcl_Bindings.Pcl_Msg :=\n')
+            f.write(f'        (Data      => System.Null_Address,\n')
+            f.write(f'         Size      => 0,\n')
+            f.write(f'         Type_Name => Interfaces.C.Strings.Null_Ptr);\n')
+            f.write(f'      Status : Pcl_Bindings.Pcl_Status := Pcl_Bindings.PCL_ERR_NOT_FOUND;\n')
+            f.write(f'      Index : Interfaces.C.unsigned := 0;\n')
+            f.write(f'   begin\n')
+            f.write(f'      Wire := Null_Unbounded_String;\n')
+            f.write(f'      if Effective = "" then\n')
+            f.write(f'         Interfaces.C.Strings.Free (Content_C);\n')
+            f.write(f'         Interfaces.C.Strings.Free (Schema_C);\n')
+            f.write(f'         return False;\n')
+            f.write(f'      end if;\n')
+            # Cross-language codec plugins consume the frozen C representation.
+            # If Try_Cabi cannot marshal this schema, callers fail closed rather
+            # than falling back to generated Ada codec sources.
+            f.write(f'      loop\n')
+            f.write(f'         Codec := Pcl_Codec_Registry_Get_At\n')
+            f.write(f'           (Pcl_Plugins.Pcl_Codec_Registry_Default, Content_C, Index);\n')
+            f.write(f'         exit when Codec = null;\n')
+            f.write(f'         if Codec.all.Encode /= null then\n')
+            f.write(f'            Msg :=\n')
+            f.write(f'              (Data      => System.Null_Address,\n')
+            f.write(f'               Size      => 0,\n')
+            f.write(f'               Type_Name => Interfaces.C.Strings.Null_Ptr);\n')
+            f.write(f'            Status := Try_Cabi_Registry_Encode\n')
+            f.write(f"              (Codec, Schema_C, Schema_Id, Value, Msg'Access);\n")
+            f.write(f'            if Status = Pcl_Bindings.PCL_OK then\n')
+            f.write(f'               if Msg.Data /= System.Null_Address and then Msg.Size > 0 then\n')
+            f.write(f'                  Wire := To_Unbounded_String (Msg_To_String (Msg.Data, Msg.Size));\n')
+            f.write(f'               end if;\n')
+            f.write(f'               if Codec.all.Free_Msg /= null then\n')
+            f.write(f"                  Codec.all.Free_Msg.all (Codec.all.Codec_Ctx, Msg'Access);\n")
+            f.write(f'               end if;\n')
+            f.write(f'               Interfaces.C.Strings.Free (Content_C);\n')
+            f.write(f'               Interfaces.C.Strings.Free (Schema_C);\n')
+            f.write(f'               return True;\n')
+            f.write(f'            end if;\n')
+            f.write(f'            if Msg.Data /= System.Null_Address and then Codec.all.Free_Msg /= null then\n')
+            f.write(f"               Codec.all.Free_Msg.all (Codec.all.Codec_Ctx, Msg'Access);\n")
+            f.write(f'            end if;\n')
+            f.write(f'         end if;\n')
+            f.write(f"         exit when Index = Interfaces.C.unsigned'Last;\n")
+            f.write(f'         Index := Index + 1;\n')
+            f.write(f'      end loop;\n')
+            f.write(f'      Interfaces.C.Strings.Free (Content_C);\n')
+            f.write(f'      Interfaces.C.Strings.Free (Schema_C);\n')
+            f.write(f'      return False;\n')
+            f.write(f'   exception\n')
+            f.write(f'      when others =>\n')
+            f.write(f'         if Content_C /= Interfaces.C.Strings.Null_Ptr then\n')
+            f.write(f'            Interfaces.C.Strings.Free (Content_C);\n')
+            f.write(f'         end if;\n')
+            f.write(f'         if Schema_C /= Interfaces.C.Strings.Null_Ptr then\n')
+            f.write(f'            Interfaces.C.Strings.Free (Schema_C);\n')
+            f.write(f'         end if;\n')
+            f.write(f'         return False;\n')
+            f.write(f'   end Try_Registry_Encode;\n')
+            f.write(f'\n')
+
+            f.write(f'   function Try_Registry_Decode\n')
+            f.write(f'     (Msg       : access constant Pcl_Bindings.Pcl_Msg;\n')
+            f.write(f'      Schema_Id : String;\n')
+            f.write(f'      Value     : System.Address) return Boolean\n')
+            f.write(f'   is\n')
+            f.write(f'      Schema_C : Interfaces.C.Strings.chars_ptr :=\n')
+            f.write(f'        Interfaces.C.Strings.New_String (Schema_Id);\n')
+            f.write(f'      Type_C : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;\n')
+            f.write(f'      Codec : Pcl_Plugins.Pcl_Codec_Const_Access := null;\n')
+            f.write(f'      Status : Pcl_Bindings.Pcl_Status := Pcl_Bindings.PCL_ERR_NOT_FOUND;\n')
+            f.write(f'      Index : Interfaces.C.unsigned := 0;\n')
+            f.write(f'   begin\n')
+            f.write(f'      if Msg = null then\n')
+            f.write(f'         Interfaces.C.Strings.Free (Schema_C);\n')
+            f.write(f'         return False;\n')
+            f.write(f'      end if;\n')
+            f.write(f'      if Msg.Type_Name = Interfaces.C.Strings.Null_Ptr then\n')
+            f.write(f'         Type_C := Interfaces.C.Strings.New_String (Json_Content_Type);\n')
+            f.write(f'      end if;\n')
+            # Only C-ABI-marshalled types may cross to the plugin. Schemas
+            # without marshalling fail closed at the caller.
+            f.write(f'      loop\n')
+            f.write(f'         Codec := Pcl_Codec_Registry_Get_At\n')
+            f.write(f'           (Pcl_Plugins.Pcl_Codec_Registry_Default,\n')
+            f.write(f'            (if Type_C = Interfaces.C.Strings.Null_Ptr then Msg.Type_Name else Type_C),\n')
+            f.write(f'            Index);\n')
+            f.write(f'         exit when Codec = null;\n')
+            f.write(f'         if Codec.all.Decode /= null then\n')
+            f.write(f'            Status := Try_Cabi_Registry_Decode\n')
+            f.write(f'              (Codec, Schema_C, Schema_Id, Msg, Value);\n')
+            f.write(f'            if Status = Pcl_Bindings.PCL_OK then\n')
+            f.write(f'               Interfaces.C.Strings.Free (Schema_C);\n')
+            f.write(f'               if Type_C /= Interfaces.C.Strings.Null_Ptr then\n')
+            f.write(f'                  Interfaces.C.Strings.Free (Type_C);\n')
+            f.write(f'               end if;\n')
+            f.write(f'               return True;\n')
+            f.write(f'            end if;\n')
+            f.write(f'         end if;\n')
+            f.write(f"         exit when Index = Interfaces.C.unsigned'Last;\n")
+            f.write(f'         Index := Index + 1;\n')
+            f.write(f'      end loop;\n')
+            f.write(f'      Interfaces.C.Strings.Free (Schema_C);\n')
+            f.write(f'      if Type_C /= Interfaces.C.Strings.Null_Ptr then\n')
+            f.write(f'         Interfaces.C.Strings.Free (Type_C);\n')
+            f.write(f'      end if;\n')
+            f.write(f'      return False;\n')
+            f.write(f'   exception\n')
+            f.write(f'      when others =>\n')
+            f.write(f'         if Schema_C /= Interfaces.C.Strings.Null_Ptr then\n')
+            f.write(f'            Interfaces.C.Strings.Free (Schema_C);\n')
+            f.write(f'         end if;\n')
+            f.write(f'         if Type_C /= Interfaces.C.Strings.Null_Ptr then\n')
+            f.write(f'            Interfaces.C.Strings.Free (Type_C);\n')
+            f.write(f'         end if;\n')
+            f.write(f'         return False;\n')
+            f.write(f'   end Try_Registry_Decode;\n')
+            f.write(f'\n')
+
+            f.write(f'   function Try_Registry_Decode_Raw\n')
+            f.write(f'     (Content_Type : String;\n')
+            f.write(f'      Data         : System.Address;\n')
+            f.write(f'      Size         : Natural;\n')
+            f.write(f'      Schema_Id    : String;\n')
+            f.write(f'      Value        : System.Address) return Boolean\n')
+            f.write(f'   is\n')
+            f.write(f'      Effective : constant String :=\n')
+            f.write(f'        (if Content_Type = "" then Json_Content_Type else Content_Type);\n')
+            f.write(f'      Type_C : Interfaces.C.Strings.chars_ptr :=\n')
+            f.write(f'        Interfaces.C.Strings.New_String (Effective);\n')
+            f.write(f'      Msg : aliased Pcl_Bindings.Pcl_Msg :=\n')
+            f.write(f'        (Data      => Data,\n')
+            f.write(f'         Size      => Interfaces.C.unsigned (Size),\n')
+            f.write(f'         Type_Name => Type_C);\n')
+            f.write(f'      Ok : Boolean := False;\n')
+            f.write(f'   begin\n')
+            f.write(f'      Ok := Try_Registry_Decode (Msg\'Access, Schema_Id, Value);\n')
+            f.write(f'      Interfaces.C.Strings.Free (Type_C);\n')
+            f.write(f'      return Ok;\n')
+            f.write(f'   exception\n')
+            f.write(f'      when others =>\n')
+            f.write(f'         if Type_C /= Interfaces.C.Strings.Null_Ptr then\n')
+            f.write(f'            Interfaces.C.Strings.Free (Type_C);\n')
+            f.write(f'         end if;\n')
+            f.write(f'         return False;\n')
+            f.write(f'   end Try_Registry_Decode_Raw;\n')
+            f.write(f'\n')
+
+            for schema, array_type, native, cabi, cabi_pkg in array_bindings:
+                c_array_type = f'{array_type}_C_Array'
+                f.write(f'   function Try_Registry_Encode_{array_type}\n')
+                f.write(f'     (Content_Type : String;\n')
+                f.write(f'      Payload      : {array_type};\n')
+                f.write(f'      Wire         : out Unbounded_String) return Boolean\n')
+                f.write(f'   is\n')
+                f.write(f'      Effective : constant String :=\n')
+                f.write(f'        (if Content_Type = "" then Json_Content_Type else Content_Type);\n')
+                f.write(f'      Content_C : Interfaces.C.Strings.chars_ptr :=\n')
+                f.write(f'        Interfaces.C.Strings.New_String (Effective);\n')
+                f.write(f'      Schema_C : Interfaces.C.Strings.chars_ptr :=\n')
+                f.write(f'        Interfaces.C.Strings.New_String ("{schema}");\n')
+                f.write(f'      Codec : Pcl_Plugins.Pcl_Codec_Const_Access := null;\n')
+                f.write(f'      Msg   : aliased Pcl_Bindings.Pcl_Msg :=\n')
+                f.write(f'        (Data      => System.Null_Address,\n')
+                f.write(f'         Size      => 0,\n')
+                f.write(f'         Type_Name => Interfaces.C.Strings.Null_Ptr);\n')
+                f.write(f'      Status : Pcl_Bindings.Pcl_Status := Pcl_Bindings.PCL_ERR_NOT_FOUND;\n')
+                f.write(f'      Index : Interfaces.C.unsigned := 0;\n')
+                f.write(f'   begin\n')
+                f.write(f'      Wire := Null_Unbounded_String;\n')
+                f.write(f'      loop\n')
+                f.write(f'         Codec := Pcl_Codec_Registry_Get_At\n')
+                f.write(f'           (Pcl_Plugins.Pcl_Codec_Registry_Default, Content_C, Index);\n')
+                f.write(f'         exit when Codec = null;\n')
+                f.write(f'         if Codec.all.Encode /= null then\n')
+                f.write(f'            Msg :=\n')
+                f.write(f'              (Data      => System.Null_Address,\n')
+                f.write(f'               Size      => 0,\n')
+                f.write(f'               Type_Name => Interfaces.C.Strings.Null_Ptr);\n')
+                f.write(f'            declare\n')
+                f.write(f'               Slice : aliased {cabi_pkg}.Pyramid_Slice_T :=\n')
+                f.write(f'                 (Ptr => System.Null_Address, Len => 0);\n')
+                f.write(f'            begin\n')
+                f.write(f"               if Payload'Length = 0 then\n")
+                f.write(f'                  Status := Codec.all.Encode.all\n')
+                f.write(f"                    (Codec.all.Codec_Ctx, Schema_C, Slice'Address, Msg'Access);\n")
+                f.write(f'               else\n')
+                f.write(f'                  declare\n')
+                f.write(f"                     Count : constant Natural := Payload'Length;\n")
+                f.write(f'                     type {c_array_type} is array (Positive range 1 .. Count)\n')
+                f.write(f'                       of aliased {cabi};\n')
+                f.write(f'                     pragma Convention (C, {c_array_type});\n')
+                f.write(f'                     Values : {c_array_type} := (others => (others => <>));\n')
+                f.write(f'                  begin\n')
+                f.write(f'                     for Offset in 0 .. Count - 1 loop\n')
+                f.write(f"                        To_C (Payload (Payload'First + Offset),\n")
+                f.write(f'                              Values (Values\'First + Offset));\n')
+                f.write(f'                     end loop;\n')
+                f.write(f"                     Slice.Ptr := Values (Values'First)'Address;\n")
+                f.write(f'                     Slice.Len := Interfaces.C.unsigned (Count);\n')
+                f.write(f'                     Status := Codec.all.Encode.all\n')
+                f.write(f"                       (Codec.all.Codec_Ctx, Schema_C, Slice'Address, Msg'Access);\n")
+                f.write(f"                     for I in Values'Range loop\n")
+                f.write(f"                        Free_{native} (Values (I)'Access);\n")
+                f.write(f'                     end loop;\n')
+                f.write(f'                  end;\n')
+                f.write(f'               end if;\n')
+                f.write(f'            end;\n')
+                f.write(f'            if Status = Pcl_Bindings.PCL_OK then\n')
+                f.write(f'               if Msg.Data /= System.Null_Address and then Msg.Size > 0 then\n')
+                f.write(f'                  Wire := To_Unbounded_String (Msg_To_String (Msg.Data, Msg.Size));\n')
+                f.write(f'               end if;\n')
+                f.write(f'               if Codec.all.Free_Msg /= null then\n')
+                f.write(f"                  Codec.all.Free_Msg.all (Codec.all.Codec_Ctx, Msg'Access);\n")
+                f.write(f'               end if;\n')
+                f.write(f'               Interfaces.C.Strings.Free (Content_C);\n')
+                f.write(f'               Interfaces.C.Strings.Free (Schema_C);\n')
+                f.write(f'               return True;\n')
+                f.write(f'            end if;\n')
+                f.write(f'            if Msg.Data /= System.Null_Address and then Codec.all.Free_Msg /= null then\n')
+                f.write(f"               Codec.all.Free_Msg.all (Codec.all.Codec_Ctx, Msg'Access);\n")
+                f.write(f'            end if;\n')
+                f.write(f'         end if;\n')
+                f.write(f"         exit when Index = Interfaces.C.unsigned'Last;\n")
+                f.write(f'         Index := Index + 1;\n')
+                f.write(f'      end loop;\n')
+                f.write(f'      Interfaces.C.Strings.Free (Content_C);\n')
+                f.write(f'      Interfaces.C.Strings.Free (Schema_C);\n')
+                f.write(f'      return False;\n')
+                f.write(f'   exception\n')
+                f.write(f'      when others =>\n')
+                f.write(f'         if Content_C /= Interfaces.C.Strings.Null_Ptr then\n')
+                f.write(f'            Interfaces.C.Strings.Free (Content_C);\n')
+                f.write(f'         end if;\n')
+                f.write(f'         if Schema_C /= Interfaces.C.Strings.Null_Ptr then\n')
+                f.write(f'            Interfaces.C.Strings.Free (Schema_C);\n')
+                f.write(f'         end if;\n')
+                f.write(f'         return False;\n')
+                f.write(f'   end Try_Registry_Encode_{array_type};\n')
+                f.write(f'\n')
+
+                f.write(f'   function Registry_Decode_{array_type}\n')
+                f.write(f'     (Msg : access constant Pcl_Bindings.Pcl_Msg)\n')
+                f.write(f'      return {array_type}\n')
+                f.write(f'   is\n')
+                f.write(f'      Empty : {array_type} (1 .. 0);\n')
+                f.write(f'      Schema_C : Interfaces.C.Strings.chars_ptr :=\n')
+                f.write(f'        Interfaces.C.Strings.New_String ("{schema}");\n')
+                f.write(f'      Type_C : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;\n')
+                f.write(f'      Codec : Pcl_Plugins.Pcl_Codec_Const_Access := null;\n')
+                f.write(f'      Status : Pcl_Bindings.Pcl_Status := Pcl_Bindings.PCL_ERR_NOT_FOUND;\n')
+                f.write(f'      Index : Interfaces.C.unsigned := 0;\n')
+                f.write(f'      Decoded : Boolean := False;\n')
+                f.write(f'      Slice : aliased {cabi_pkg}.Pyramid_Slice_T :=\n')
+                f.write(f'        (Ptr => System.Null_Address, Len => 0);\n')
+                f.write(f'   begin\n')
+                f.write(f'      if Msg = null then\n')
+                f.write(f'         raise Program_Error with "codec registry decode failed for schema {schema}";\n')
+                f.write(f'      end if;\n')
+                f.write(f'      if Msg.Type_Name = Interfaces.C.Strings.Null_Ptr then\n')
+                f.write(f'         Type_C := Interfaces.C.Strings.New_String (Json_Content_Type);\n')
+                f.write(f'      end if;\n')
+                f.write(f'      loop\n')
+                f.write(f'         Codec := Pcl_Codec_Registry_Get_At\n')
+                f.write(f'           (Pcl_Plugins.Pcl_Codec_Registry_Default,\n')
+                f.write(f'            (if Type_C = Interfaces.C.Strings.Null_Ptr then Msg.Type_Name else Type_C),\n')
+                f.write(f'            Index);\n')
+                f.write(f'         exit when Codec = null;\n')
+                f.write(f'         if Codec.all.Decode /= null then\n')
+                f.write(f'            Slice := (Ptr => System.Null_Address, Len => 0);\n')
+                f.write(f'            Status := Codec.all.Decode.all\n')
+                f.write(f"              (Codec.all.Codec_Ctx, Schema_C, Msg, Slice'Address);\n")
+                f.write(f'            if Status = Pcl_Bindings.PCL_OK then\n')
+                f.write(f'               Decoded := True;\n')
+                f.write(f'               exit;\n')
+                f.write(f'            end if;\n')
+                f.write(f'            if Slice.Ptr /= System.Null_Address then\n')
+                f.write(f'               C_Free (Slice.Ptr);\n')
+                f.write(f'               Slice.Ptr := System.Null_Address;\n')
+                f.write(f'            end if;\n')
+                f.write(f'         end if;\n')
+                f.write(f"         exit when Index = Interfaces.C.unsigned'Last;\n")
+                f.write(f'         Index := Index + 1;\n')
+                f.write(f'      end loop;\n')
+                f.write(f'      if not Decoded then\n')
+                f.write(f'         raise Program_Error with "codec registry decode failed for schema {schema}";\n')
+                f.write(f'      end if;\n')
+                f.write(f'      Interfaces.C.Strings.Free (Schema_C);\n')
+                f.write(f'      Schema_C := Interfaces.C.Strings.Null_Ptr;\n')
+                f.write(f'      if Type_C /= Interfaces.C.Strings.Null_Ptr then\n')
+                f.write(f'         Interfaces.C.Strings.Free (Type_C);\n')
+                f.write(f'         Type_C := Interfaces.C.Strings.Null_Ptr;\n')
+                f.write(f'      end if;\n')
+                f.write(f'      if Slice.Ptr = System.Null_Address or else Slice.Len = 0 then\n')
+                f.write(f'         if Slice.Ptr /= System.Null_Address then\n')
+                f.write(f'            C_Free (Slice.Ptr);\n')
+                f.write(f'            Slice.Ptr := System.Null_Address;\n')
+                f.write(f'         end if;\n')
+                f.write(f'         return Empty;\n')
+                f.write(f'      end if;\n')
+                f.write(f'      declare\n')
+                f.write(f'         Count : constant Natural := Natural (Slice.Len);\n')
+                f.write(f'         type {c_array_type} is array (Positive range 1 .. Count)\n')
+                f.write(f'           of aliased {cabi};\n')
+                f.write(f'         pragma Convention (C, {c_array_type});\n')
+                f.write(f'         Values : {c_array_type};\n')
+                f.write(f"         for Values'Address use Slice.Ptr;\n")
+                f.write(f'         pragma Import (Ada, Values);\n')
+                f.write(f'         Result : {array_type} (1 .. Count);\n')
+                f.write(f'      begin\n')
+                f.write(f'         for I in 1 .. Count loop\n')
+                f.write(f'            From_C (Values (I), Result (I));\n')
+                f.write(f"            Free_{native} (Values (I)'Access);\n")
+                f.write(f'         end loop;\n')
+                f.write(f'         C_Free (Slice.Ptr);\n')
+                f.write(f'         Slice.Ptr := System.Null_Address;\n')
+                f.write(f'         return Result;\n')
+                f.write(f'      end;\n')
+                f.write(f'   exception\n')
+                f.write(f'      when others =>\n')
+                f.write(f'         if Schema_C /= Interfaces.C.Strings.Null_Ptr then\n')
+                f.write(f'            Interfaces.C.Strings.Free (Schema_C);\n')
+                f.write(f'         end if;\n')
+                f.write(f'         if Type_C /= Interfaces.C.Strings.Null_Ptr then\n')
+                f.write(f'            Interfaces.C.Strings.Free (Type_C);\n')
+                f.write(f'         end if;\n')
+                f.write(f'         if Slice.Ptr /= System.Null_Address then\n')
+                f.write(f'            C_Free (Slice.Ptr);\n')
+                f.write(f'         end if;\n')
+                f.write(f'         raise;\n')
+                f.write(f'   end Registry_Decode_{array_type};\n')
+                f.write(f'\n')
+
             if has_grpc:
                 f.write(f'   package Grpc_Transport renames {_grpc_transport_pkg_from_proto(parsed)};\n')
                 f.write(f'   Grpc_Channel : Unbounded_String := Null_Unbounded_String;\n')
@@ -901,9 +1593,8 @@ class AdaServiceGenerator:
 
             f.write(f'   function Supports_Content_Type (Content_Type : String) return Boolean is\n')
             f.write(f'   begin\n')
-            f.write(f'      return Content_Type = ""\n')
-            f.write(f'        or else Content_Type = Json_Content_Type\n')
-            f.write(f'        or else Content_Type = Flatbuffers_Content_Type')
+            f.write(f'      return Registry_Has_Codec\n')
+            f.write(f'        ((if Content_Type = "" then Json_Content_Type else Content_Type))')
             if has_grpc:
                 f.write(f'\n')
                 f.write(f'        or else Content_Type = Grpc_Content_Type;\n')
@@ -931,23 +1622,6 @@ class AdaServiceGenerator:
             f.write(f'      return Interfaces.C.Strings.Value (Msg.Type_Name);\n')
             f.write(f'   end Message_Content_Type;\n')
             f.write(f'\n')
-            f.write(f'   function Decode_Identifier_Payload (Payload : String) return Identifier is\n')
-            f.write(f'   begin\n')
-            f.write(f'      declare\n')
-            f.write(f'         J : constant JSON_Value := Read (Payload);\n')
-            f.write(f'      begin\n')
-            f.write(f'         if J.Kind = JSON_String_Type then\n')
-            f.write("            return To_Unbounded_String (String'(UTF8_String'(Get (J))));\n")
-            f.write(f'         elsif J.Kind = JSON_Object_Type and then Has_Field (J, "uuid") then\n')
-            f.write("            return To_Unbounded_String (String'(UTF8_String'(Get (J, \"uuid\"))));\n")
-            f.write(f'         end if;\n')
-            f.write(f'      exception\n')
-            f.write(f'         when others =>\n')
-            f.write(f'            null;\n')
-            f.write(f'      end;\n')
-            f.write(f'      return To_Unbounded_String (Payload);\n')
-            f.write(f'   end Decode_Identifier_Payload;\n')
-            f.write(f'\n')
             if has_grpc:
                 f.write(f'   procedure Emit_Invoke_Response\n')
                 f.write(f'     (Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
@@ -973,7 +1647,8 @@ class AdaServiceGenerator:
 
             def write_payload_decode_function(func_name: str, payload_type: str,
                                               short_type: str, is_array: bool,
-                                              fb_suffix: str) -> None:
+                                              fb_suffix: str,
+                                              schema_id: str) -> None:
                 f.write(f'   function {func_name}\n')
                 f.write(f'     (Msg : access constant Pcl_Bindings.Pcl_Msg)\n')
                 f.write(f'      return {payload_type}\n')
@@ -991,45 +1666,27 @@ class AdaServiceGenerator:
                 elif short_type == 'Identifier':
                     f.write(f'         return Null_Unbounded_String;\n')
                 else:
-                    f.write(f'         return From_Json ("{{}}", null);\n')
-                f.write(f'      end if;\n')
-                f.write(f'\n')
-                if is_array:
-                    f.write(f'      declare\n')
-                    f.write(f'         Json_Payload : constant String :=\n')
-                    f.write(f'           (if Content_Type = "" or else Content_Type = Json_Content_Type\n')
-                    f.write(f'            then Payload\n')
-                    f.write(f'            elsif Content_Type = Flatbuffers_Content_Type\n')
-                    f.write(f'            then Flatbuffers_Codec.From_Binary_{fb_suffix} (Payload)\n')
-                    f.write(f'            else raise Constraint_Error with "Unsupported content type: " & Content_Type);\n')
-                    f.write(f'         R : constant Read_Result := Read (Json_Payload);\n')
-                    f.write(f'      begin\n')
-                    f.write(f'         if not R.Success or else R.Value.Kind /= JSON_Array_Type then\n')
-                    f.write(f'            return Empty;\n')
-                    f.write(f'         end if;\n')
                     f.write(f'         declare\n')
-                    f.write(f'            Arr    : constant JSON_Array := Get (R.Value);\n')
-                    f.write(f'            Result : {payload_type} (1 .. GNATCOLL.JSON.Length (Arr));\n')
+                    f.write(f'            Result : {payload_type};\n')
                     f.write(f'         begin\n')
-                    f.write(f'            for I in 1 .. GNATCOLL.JSON.Length (Arr) loop\n')
-                    if short_type == 'Identifier':
-                        f.write(f'               Result (I) := Decode_Identifier_Payload (Write (Get (Arr, I)));\n')
-                    else:
-                        f.write(f'               Result (I) := From_Json (Write (Get (Arr, I)), null);\n')
-                    f.write(f'            end loop;\n')
                     f.write(f'            return Result;\n')
                     f.write(f'         end;\n')
-                    f.write(f'      end;\n')
+                f.write(f'      end if;\n')
+                f.write(f'      Require_Codec (Content_Type);  --  fail closed if no plugin\n')
+                f.write(f'\n')
+                if is_array:
+                    f.write(f'      return Registry_Decode_{payload_type} (Msg);\n')
                 else:
-                    f.write(f'      if Content_Type = "" or else Content_Type = Json_Content_Type then\n')
-                    if short_type == 'Identifier':
-                        f.write(f'         return Decode_Identifier_Payload (Payload);\n')
-                    else:
-                        f.write(f'         return From_Json (Payload, null);\n')
-                    f.write(f'      elsif Content_Type = Flatbuffers_Content_Type then\n')
-                    f.write(f'         return Flatbuffers_Codec.From_Binary_{fb_suffix} (Payload, null);\n')
-                    f.write(f'      end if;\n')
-                    f.write(f'      raise Constraint_Error with "Unsupported content type: " & Content_Type;\n')
+                    f.write(f'      declare\n')
+                    f.write(f'         Result : {payload_type};\n')
+                    f.write(f'      begin\n')
+                    f.write(f'         if Try_Registry_Decode (Msg, "{schema_id}", Result\'Address) then\n')
+                    f.write(f'            return Result;\n')
+                    f.write(f'         end if;\n')
+                    f.write(f'      end;\n')
+                    f.write(f'\n')
+                    f.write(f'      raise Program_Error with\n')
+                    f.write(f'        "codec registry decode failed for schema {schema_id}";\n')
                 f.write(f'   end {func_name};\n')
                 f.write(f'\n')
 
@@ -1044,7 +1701,8 @@ class AdaServiceGenerator:
                     spec.ada_payload_type,
                     spec.short_type,
                     spec.is_array,
-                    spec.flatbuffers_suffix)
+                    spec.flatbuffers_suffix,
+                    spec.short_type)
 
             if is_provided:
                 for svc_name, rpc in all_rpcs:
@@ -1060,7 +1718,8 @@ class AdaServiceGenerator:
                         rpc.ada_rsp_type,
                         rsp_short,
                         rpc.streaming,
-                        rsp_fb_suffix)
+                        rsp_fb_suffix,
+                        rsp_short)
 
             # Default handler implementations
             current_svc = None
@@ -1244,19 +1903,24 @@ class AdaServiceGenerator:
                         f.write(f'      Content_Type : String := "application/json")\n')
                         f.write(f'   is\n')
                         f.write(f'      use type Pcl_Bindings.Pcl_Status;\n')
-                        if rpc.ada_req_type == 'Identifier':
-                            f.write(f'      Json_Payload : constant String := To_String (Request);\n')
-                        else:
-                            f.write(f'      Json_Payload : constant String := To_Json (Request);\n')
-                        f.write(f'      Payload : constant String :=\n')
-                        f.write(f'        (if Content_Type = "" or else Content_Type = "application/json"\n')
-                        f.write(f'         then Json_Payload\n')
-                        f.write(f'         elsif Content_Type = "application/flatbuffers"\n')
-                        f.write(f'         then Flatbuffers_Codec.To_Binary_{req_fb_suffix} (Request)\n')
+                        f.write(f'      function Build_Payload return String is\n')
+                        f.write(f'         Registry_Payload : Unbounded_String := Null_Unbounded_String;\n')
+                        f.write(f'      begin\n')
+                        f.write(f'         Require_Codec (Content_Type);  --  fail closed if no plugin\n')
                         if has_grpc:
-                            f.write(f'         elsif Content_Type = Grpc_Content_Type\n')
-                            f.write(f'         then ""\n')
-                        f.write(f'         else raise Constraint_Error with "Unsupported content type: " & Content_Type);\n')
+                            f.write(f'         if Content_Type = Grpc_Content_Type then\n')
+                            f.write(f'            return "";\n')
+                            f.write(f'         end if;\n')
+                        f.write(f'         if Try_Registry_Encode\n')
+                        f.write(f'           (Content_Type, "{_short_type(rpc.req)}", Request\'Address,\n')
+                        f.write(f'            Registry_Payload)\n')
+                        f.write(f'         then\n')
+                        f.write(f'            return To_String (Registry_Payload);\n')
+                        f.write(f'         end if;\n')
+                        f.write(f'         raise Program_Error with\n')
+                        f.write(f'           "codec registry encode failed for schema {_short_type(rpc.req)}";\n')
+                        f.write(f'      end Build_Payload;\n')
+                        f.write(f'      Payload : constant String := Build_Payload;\n')
                         f.write(f'      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;\n')
                         f.write(f'      Payload_Bytes : aliased constant String := Payload;\n')
                         f.write(f'      Svc_C  : Interfaces.C.Strings.chars_ptr :=\n')
@@ -1340,38 +2004,33 @@ class AdaServiceGenerator:
                 f.write(f'      Content_Type : String := "application/json")\n')
                 f.write(f'   is\n')
                 if spec.is_array:
-                    f.write(f'      Json_Payload : Unbounded_String := To_Unbounded_String ("[");\n')
+                    f.write(f'      Wire_Payload : Unbounded_String := Null_Unbounded_String;\n')
                     f.write(f'   begin\n')
-                    f.write(f"      if Payload'Length > 0 then\n")
-                    f.write(f"         for I in Payload'Range loop\n")
-                    f.write(f"            if I /= Payload'First then\n")
-                    f.write(f'               Append (Json_Payload, ",");\n')
-                    f.write(f'            end if;\n')
-                    f.write(f'            Append (Json_Payload, To_Json (Payload (I)));\n')
-                    f.write(f'         end loop;\n')
+                    f.write(f'      Require_Codec (Content_Type);  --  fail closed if no plugin\n')
+                    f.write(f'      if not Try_Registry_Encode_{spec.ada_payload_type}\n')
+                    f.write(f'        (Content_Type, Payload, Wire_Payload)\n')
+                    f.write(f'      then\n')
+                    f.write(f'         raise Program_Error with\n')
+                    f.write(f'           "codec registry encode failed for schema {spec.short_type}Array";\n')
                     f.write(f'      end if;\n')
-                    f.write(f'      Append (Json_Payload, "]");\n')
-                    f.write(f'      declare\n')
-                    f.write(f'         Wire_Payload : constant String :=\n')
-                    f.write(f'           (if Content_Type = "" or else Content_Type = "application/json"\n')
-                    f.write(f'            then To_String (Json_Payload)\n')
-                    f.write(f'            elsif Content_Type = "application/flatbuffers"\n')
-                    f.write(f'            then Flatbuffers_Codec.To_Binary_{spec.flatbuffers_suffix} (To_String (Json_Payload))\n')
-                    f.write(f'            else raise Constraint_Error with "Unsupported content type: " & Content_Type);\n')
-                    f.write(f'      begin\n')
-                    f.write(f'         {ada_name} (Exec, Wire_Payload, Content_Type);\n')
-                    f.write(f'      end;\n')
+                    f.write(f'      {ada_name} (Exec, To_String (Wire_Payload), Content_Type);\n')
                     f.write(f'   end {ada_name};\n')
                     f.write(f'\n')
                 else:
-                    json_expr = 'To_String (Payload)' if spec.short_type == 'Identifier' else 'To_Json (Payload)'
-                    f.write(f'      Json_Payload : constant String := {json_expr};\n')
-                    f.write(f'      Wire_Payload : constant String :=\n')
-                    f.write(f'        (if Content_Type = "" or else Content_Type = "application/json"\n')
-                    f.write(f'         then Json_Payload\n')
-                    f.write(f'         elsif Content_Type = "application/flatbuffers"\n')
-                    f.write(f'         then Flatbuffers_Codec.To_Binary_{spec.flatbuffers_suffix} (Payload)\n')
-                    f.write(f'         else raise Constraint_Error with "Unsupported content type: " & Content_Type);\n')
+                    f.write(f'      function Build_Wire_Payload return String is\n')
+                    f.write(f'         Registry_Payload : Unbounded_String := Null_Unbounded_String;\n')
+                    f.write(f'      begin\n')
+                    f.write(f'         Require_Codec (Content_Type);  --  fail closed if no plugin\n')
+                    f.write(f'         if Try_Registry_Encode\n')
+                    f.write(f'           (Content_Type, "{spec.short_type}", Payload\'Address,\n')
+                    f.write(f'            Registry_Payload)\n')
+                    f.write(f'         then\n')
+                    f.write(f'            return To_String (Registry_Payload);\n')
+                    f.write(f'         end if;\n')
+                    f.write(f'         raise Program_Error with\n')
+                    f.write(f'           "codec registry encode failed for schema {spec.short_type}";\n')
+                    f.write(f'      end Build_Wire_Payload;\n')
+                    f.write(f'      Wire_Payload : constant String := Build_Wire_Payload;\n')
                     f.write(f'   begin\n')
                     f.write(f'      {ada_name} (Exec, Wire_Payload, Content_Type);\n')
                     f.write(f'   end {ada_name};\n')
@@ -1460,16 +2119,21 @@ class AdaServiceGenerator:
                 )
                 f.write(f'         when {channel_name} =>\n')
                 f.write(f'            declare\n')
-                if req_t == 'Identifier':
-                    json_decode = 'To_Unbounded_String (Request_Payload)'
-                else:
-                    json_decode = 'From_Json (Request_Payload, null)'
-                f.write(f'               Req : constant {req_t} :=\n')
-                f.write(f'                 (if Content_Type = "" or else Content_Type = "application/json"\n')
-                f.write(f'                  then {json_decode}\n')
-                f.write(f'                  elsif Content_Type = "application/flatbuffers"\n')
-                f.write(f'                  then Flatbuffers_Codec.From_Binary_{req_fb_suffix} (Request_Payload, null)\n')
-                f.write(f'                  else raise Constraint_Error with "Unsupported content type: " & Content_Type);\n')
+                f.write(f'               function Decode_Request return {req_t} is\n')
+                f.write(f'                  Result : {req_t};\n')
+                f.write(f'               begin\n')
+                f.write(f'                  Require_Codec (Content_Type);  --  fail closed if no plugin\n')
+                f.write(f'                  if Try_Registry_Decode_Raw\n')
+                f.write(f'                    (Content_Type, Request_Buf, Request_Size,\n')
+                f.write(f'                     "{_short_type(rpc.req)}", Result\'Address)\n')
+                f.write(f'                  then\n')
+                f.write(f'                     return Result;\n')
+                f.write(f'                  end if;\n')
+                f.write(f'\n')
+                f.write(f'                  raise Program_Error with\n')
+                f.write(f'                    "codec registry decode failed for schema {_short_type(rpc.req)}";\n')
+                f.write(f'               end Decode_Request;\n')
+                f.write(f'               Req : constant {req_t} := Decode_Request;\n')
 
                 if rpc.streaming:
                     # Streaming: handler is a function returning unconstrained array
@@ -1479,37 +2143,24 @@ class AdaServiceGenerator:
                     f.write(f'                  else Default_{handler_fn} (Req));\n')
                     f.write(f'            begin\n')
 
-                    # Determine element serialiser
-                    elem_type = _proto_type_to_ada(rpc.rsp)
-                    if elem_type == 'Identifier':
-                        elem_ser = '"""" & To_String (Rsp (I)) & """"'
-                    else:
-                        elem_ser = 'To_Json (Rsp (I))'
-
                     f.write(f'               declare\n')
-                    f.write(f'                  use Ada.Strings.Unbounded;\n')
-                    f.write(f'                  Acc : Unbounded_String :=\n')
-                    f.write(f'                    To_Unbounded_String ("[");\n')
+                    f.write(f'                  Wire_Response : Unbounded_String := Null_Unbounded_String;\n')
                     f.write(f'               begin\n')
-                    f.write(f"                  for I in Rsp'Range loop\n")
-                    f.write(f"                     if I > Rsp'First then\n")
-                    f.write(f'                        Append (Acc, ",");\n')
-                    f.write(f'                     end if;\n')
-                    f.write(f'                     Append (Acc, {elem_ser});\n')
-                    f.write(f'                  end loop;\n')
-                    f.write(f'                  Append (Acc, "]");\n')
+                    f.write(f'                  Require_Codec (Content_Type);  --  fail closed if no plugin\n')
+                    f.write(f'                  if not Try_Registry_Encode_{rsp_t}\n')
+                    f.write(f'                    (Content_Type, Rsp, Wire_Response)\n')
+                    f.write(f'                  then\n')
+                    f.write(f'                     raise Program_Error with\n')
+                    f.write(f'                       "codec registry encode failed for schema {_short_type(rpc.rsp)}Array";\n')
+                    f.write(f'                  end if;\n')
                     f.write(f'                  Copy_To_Buf\n')
-                    f.write(f'                    ((if Content_Type = "" or else Content_Type = "application/json"\n')
-                    f.write(f'                      then To_String (Acc)\n')
-                    f.write(f'                      elsif Content_Type = "application/flatbuffers"\n')
-                    f.write(f'                      then Flatbuffers_Codec.To_Binary_{rsp_fb_suffix} (To_String (Acc))\n')
-                    f.write(f'                      else raise Constraint_Error with "Unsupported content type: " & Content_Type),\n')
+                    f.write(f'                    (To_String (Wire_Response),\n')
                     f.write(f'                    Response_Buf, Response_Size);\n')
                     f.write(f'               end;\n')
                 else:
                     # Non-streaming: handler is a procedure with out parameter
                     f.write(f'               Rsp : {rsp_t};\n')
-                    f.write(f'               Json_Response : Unbounded_String := Null_Unbounded_String;\n')
+                    f.write(f'               Wire_Response : Unbounded_String := Null_Unbounded_String;\n')
                     f.write(f'            begin\n')
                     f.write(f'               if Handlers /= null and then Handlers.{handler_field} /= null then\n')
                     f.write(f'                  Handlers.{handler_field}.all (Req, Rsp);\n')
@@ -1518,16 +2169,16 @@ class AdaServiceGenerator:
                     f.write(f'               end if;\n')
 
                     # Serialise response and copy to buffer
-                    if rsp_t == 'Identifier':
-                        f.write(f'               Json_Response := To_Unbounded_String (To_String (Rsp));\n')
-                    else:
-                        f.write(f'               Json_Response := To_Unbounded_String (To_Json (Rsp));\n')
+                    f.write(f'               Require_Codec (Content_Type);  --  fail closed if no plugin\n')
+                    f.write(f'               if not Try_Registry_Encode\n')
+                    f.write(f'                 (Content_Type, "{_short_type(rpc.rsp)}", Rsp\'Address,\n')
+                    f.write(f'                  Wire_Response)\n')
+                    f.write(f'               then\n')
+                    f.write(f'                  raise Program_Error with\n')
+                    f.write(f'                    "codec registry encode failed for schema {_short_type(rpc.rsp)}";\n')
+                    f.write(f'               end if;\n')
                     f.write(f'               Copy_To_Buf\n')
-                    f.write(f'                 ((if Content_Type = "" or else Content_Type = "application/json"\n')
-                    f.write(f'                   then To_String (Json_Response)\n')
-                    f.write(f'                   elsif Content_Type = "application/flatbuffers"\n')
-                    f.write(f'                   then Flatbuffers_Codec.To_Binary_{rsp_fb_suffix} (Rsp)\n')
-                    f.write(f'                   else raise Constraint_Error with "Unsupported content type: " & Content_Type),\n')
+                    f.write(f'                 (To_String (Wire_Response),\n')
                     f.write(f'                  Response_Buf, Response_Size);\n')
 
                 f.write(f'            end;\n')
