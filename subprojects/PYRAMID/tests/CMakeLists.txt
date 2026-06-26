@@ -70,7 +70,7 @@ pyramid_append_plugin_path_constant(_pyramid_codec_paths_header
     pyramid_grpc_coupled_plugin)
 
 file(GENERATE
-    OUTPUT ${PYRAMID_TEST_GENERATED_DIR}/pyramid_codec_plugin_test_paths.hpp
+    OUTPUT ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>/pyramid_codec_plugin_test_paths.hpp
     CONTENT "${_pyramid_codec_paths_header}")
 
 add_library(pyramid_cpp_test_codec_plugins OBJECT
@@ -83,11 +83,11 @@ target_link_libraries(pyramid_cpp_test_codec_plugins PUBLIC
     pcl_core
     GTest::gtest)
 target_include_directories(pyramid_cpp_test_codec_plugins PUBLIC
-    ${PYRAMID_TEST_GENERATED_DIR})
+    ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>)
 
 if(TARGET pyramid_bridge_evidence_client)
     target_include_directories(pyramid_bridge_evidence_client PRIVATE
-        ${PYRAMID_TEST_GENERATED_DIR})
+        ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>)
     if(_pyramid_cpp_test_codec_plugin_targets)
         add_dependencies(pyramid_bridge_evidence_client
             ${_pyramid_cpp_test_codec_plugin_targets})
@@ -350,7 +350,7 @@ if(TARGET pyramid_codec_json_tactical_objects)
     )
     target_include_directories(test_codec_plugin_swap PRIVATE
         ${PROTO_BINDINGS_DIR}
-        ${PYRAMID_TEST_GENERATED_DIR}
+        ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>
         ${PYRAMID_ROOT_DIR}/tactical_objects/include
         ${PYRAMID_ROOT_DIR}/core/include
     )
@@ -380,7 +380,7 @@ if(PYRAMID_ENABLE_FLATBUFFERS
     )
     target_include_directories(test_transport_codec_plugin_composition PRIVATE
         ${PROTO_BINDINGS_DIR}
-        ${PYRAMID_TEST_GENERATED_DIR}
+        ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>
         ${PYRAMID_ROOT_DIR}/tactical_objects/include
         ${PYRAMID_ROOT_DIR}/core/include
     )
@@ -412,7 +412,7 @@ if(TARGET pyramid_codec_json_tactical_objects
     )
     target_include_directories(test_codec_registry_bridge PRIVATE
         ${PROTO_BINDINGS_DIR}
-        ${PYRAMID_TEST_GENERATED_DIR}
+        ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>
         ${PYRAMID_ROOT_DIR}/tactical_objects/include
         ${PYRAMID_ROOT_DIR}/core/include
     )
@@ -446,7 +446,7 @@ if(PYRAMID_ENABLE_FLATBUFFERS)
     target_include_directories(tobj_shared_memory_example PRIVATE
         ${PCL_ROOT_DIR}/include
         ${PROTO_BINDINGS_DIR}
-        ${PYRAMID_TEST_GENERATED_DIR}
+        ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>
     )
     if(NOT WIN32)
         target_link_libraries(tobj_shared_memory_example PRIVATE pthread)
@@ -475,7 +475,7 @@ target_link_libraries(tobj_socket_server PRIVATE
 target_include_directories(tobj_socket_server PRIVATE
     ${PCL_ROOT_DIR}/src
     ${PROTO_BINDINGS_DIR}
-    ${PYRAMID_TEST_GENERATED_DIR}
+    ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>
 )
 if(NOT WIN32)
     target_link_libraries(tobj_socket_server PRIVATE pthread)
@@ -746,10 +746,10 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
             "Directory containing libpcl_core/libpcl_transport_socket for Ada gprbuild")
     endif()
 
-    # Aggregate target: a normal cmake build prepares the Ada archives and
-    # executables.  The targets below are backed by concrete file outputs, so
-    # the expensive Ada steps run only when those outputs are missing.
-    add_custom_target(pyramid_ada_all ALL
+    # Aggregate target: explicitly excluded from ALL so routine builds stay fast.
+    # Ada binaries are expensive and GNAT/gprbuild may not be installed.
+    # Build with: cmake --build --preset release --target pyramid_ada_all
+    add_custom_target(pyramid_ada_all
         COMMENT "Build all Ada test binaries and bridges")
 
     set(ADA_PCL_SHMEM_LIB_NAME "pcl_transport_shared_memory" CACHE STRING
@@ -1462,7 +1462,7 @@ if(TARGET pyramid_grpc_coupled_plugin)
         GTest::gtest_main
     )
     target_include_directories(test_grpc_coupled_plugin_load PRIVATE
-        ${PYRAMID_TEST_GENERATED_DIR}
+        ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>
     )
     gtest_discover_tests(test_grpc_coupled_plugin_load DISCOVERY_MODE PRE_TEST)
 endif()
