@@ -129,6 +129,17 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
          return False;
    end Registry_Has_Codec;
 
+   procedure Require_Codec (Content_Type : String) is
+      Effective : constant String :=
+        (if Content_Type = "" then Json_Content_Type else Content_Type);
+   begin
+      if not Registry_Has_Codec (Effective) then
+         raise Program_Error with
+           "fail-closed: no codec plugin registered for content type "
+           & Effective;
+      end if;
+   end Require_Codec;
+
    function Try_Cabi_Registry_Encode
      (Codec     : Pcl_Plugins.Pcl_Codec_Const_Access;
       Schema_C  : Interfaces.C.Strings.chars_ptr;
@@ -1013,6 +1024,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
       if Payload = "" then
          return From_Json ("{}", null);
       end if;
+      Require_Codec (Content_Type);  --  fail closed if no plugin
 
       declare
          Result : Object_Detail;
@@ -1484,6 +1496,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
       function Build_Wire_Payload return String is
          Registry_Payload : Unbounded_String := Null_Unbounded_String;
       begin
+         Require_Codec (Content_Type);  --  fail closed if no plugin
          if Try_Registry_Encode
            (Content_Type, "ObjectDetail", Payload'Address,
             Registry_Payload)
@@ -1572,6 +1585,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                function Decode_Request return Query is
                   Result : Query;
                begin
+                  Require_Codec (Content_Type);  --  fail closed if no plugin
                   if Try_Registry_Decode_Raw
                     (Content_Type, Request_Buf, Request_Size,
                      "Query", Result'Address)
@@ -1597,6 +1611,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                   Acc : Unbounded_String :=
                     To_Unbounded_String ("[");
                begin
+                  Require_Codec (Content_Type);  --  fail closed if no plugin
                   for I in Rsp'Range loop
                      if I > Rsp'First then
                         Append (Acc, ",");
@@ -1618,6 +1633,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                function Decode_Request return Object_Evidence_Requirement is
                   Result : Object_Evidence_Requirement;
                begin
+                  Require_Codec (Content_Type);  --  fail closed if no plugin
                   if Try_Registry_Decode_Raw
                     (Content_Type, Request_Buf, Request_Size,
                      "ObjectEvidenceRequirement", Result'Address)
@@ -1641,6 +1657,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                else
                   Default_Handle_Object_Solution_Evidence_Create_Requirement (Req, Rsp);
                end if;
+               Require_Codec (Content_Type);  --  fail closed if no plugin
                if not Try_Registry_Encode
                  (Content_Type, "Identifier", Rsp'Address,
                   Wire_Response)
@@ -1661,6 +1678,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                function Decode_Request return Query is
                   Result : Query;
                begin
+                  Require_Codec (Content_Type);  --  fail closed if no plugin
                   if Try_Registry_Decode_Raw
                     (Content_Type, Request_Buf, Request_Size,
                      "Query", Result'Address)
@@ -1686,6 +1704,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                   Acc : Unbounded_String :=
                     To_Unbounded_String ("[");
                begin
+                  Require_Codec (Content_Type);  --  fail closed if no plugin
                   for I in Rsp'Range loop
                      if I > Rsp'First then
                         Append (Acc, ",");
@@ -1707,6 +1726,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                function Decode_Request return Object_Evidence_Requirement is
                   Result : Object_Evidence_Requirement;
                begin
+                  Require_Codec (Content_Type);  --  fail closed if no plugin
                   if Try_Registry_Decode_Raw
                     (Content_Type, Request_Buf, Request_Size,
                      "ObjectEvidenceRequirement", Result'Address)
@@ -1730,6 +1750,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                else
                   Default_Handle_Object_Solution_Evidence_Update_Requirement (Req, Rsp);
                end if;
+               Require_Codec (Content_Type);  --  fail closed if no plugin
                if not Try_Registry_Encode
                  (Content_Type, "Ack", Rsp'Address,
                   Wire_Response)
@@ -1750,6 +1771,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                function Decode_Request return Identifier is
                   Result : Identifier;
                begin
+                  Require_Codec (Content_Type);  --  fail closed if no plugin
                   if Try_Registry_Decode_Raw
                     (Content_Type, Request_Buf, Request_Size,
                      "Identifier", Result'Address)
@@ -1773,6 +1795,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                else
                   Default_Handle_Object_Solution_Evidence_Delete_Requirement (Req, Rsp);
                end if;
+               Require_Codec (Content_Type);  --  fail closed if no plugin
                if not Try_Registry_Encode
                  (Content_Type, "Ack", Rsp'Address,
                   Wire_Response)
@@ -1793,6 +1816,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                function Decode_Request return Query is
                   Result : Query;
                begin
+                  Require_Codec (Content_Type);  --  fail closed if no plugin
                   if Try_Registry_Decode_Raw
                     (Content_Type, Request_Buf, Request_Size,
                      "Query", Result'Address)
@@ -1818,6 +1842,7 @@ package body Pyramid.Services.Tactical_Objects.Consumed is
                   Acc : Unbounded_String :=
                     To_Unbounded_String ("[");
                begin
+                  Require_Codec (Content_Type);  --  fail closed if no plugin
                   for I in Rsp'Range loop
                      if I > Rsp'First then
                         Append (Acc, ",");

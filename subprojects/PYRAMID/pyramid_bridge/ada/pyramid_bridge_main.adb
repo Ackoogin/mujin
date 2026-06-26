@@ -44,9 +44,11 @@ with Ada.Strings.Unbounded;      use Ada.Strings.Unbounded;
 with Ada.Text_IO;
 with Ada.Unchecked_Deallocation;
 with Interfaces.C;
+with Interfaces.C.Strings;
 with Pcl_Bindings;
 with Pcl_Component;
 with Pcl_Content_Types;
+with Pcl_Plugins;
 with Pcl_Transports;
 with Pyramid.Data_Model.Base.Types;  use Pyramid.Data_Model.Base.Types;
 with Pyramid.Data_Model.Common.Types;  use Pyramid.Data_Model.Common.Types;
@@ -220,6 +222,18 @@ procedure Pyramid_Bridge_Main is
 
 begin
    Parse_Args;
+   --  Plugin-only: load the codec plugins listed in PYRAMID_CODEC_PLUGINS so
+   --  the provided-service facades have a registered codec (they fail closed
+   --  otherwise).
+   declare
+      Env_C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String ("PYRAMID_CODEC_PLUGINS");
+      Ignore : Pcl_Bindings.Pcl_Status;
+   begin
+      Ignore := Pcl_Plugins.Pcl_Codec_Registry_Load_Plugins_From_Env
+        (Pcl_Plugins.Pcl_Codec_Registry_Default, Env_C);
+      Interfaces.C.Strings.Free (Env_C);
+   end;
 
    if Ada.Strings.Unbounded.Length (Tobj_Bus_Name) > 0 then
       Log ("Tactical Objects shared-memory bus: " &

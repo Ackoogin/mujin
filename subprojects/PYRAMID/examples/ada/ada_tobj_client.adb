@@ -128,6 +128,17 @@ procedure Ada_Tobj_Client is
 
 begin
    Parse_Args;
+   --  Plugin-only: also load codec plugins listed in PYRAMID_CODEC_PLUGINS so
+   --  the facade has a registered codec (it fails closed otherwise).
+   declare
+      Env_C : Interfaces.C.Strings.chars_ptr :=
+        Interfaces.C.Strings.New_String ("PYRAMID_CODEC_PLUGINS");
+      Ignore : Pcl_Bindings.Pcl_Status;
+   begin
+      Ignore := Pcl_Plugins.Pcl_Codec_Registry_Load_Plugins_From_Env
+        (Pcl_Plugins.Pcl_Codec_Registry_Default, Env_C);
+      Interfaces.C.Strings.Free (Env_C);
+   end;
    Log ("Connecting to " & Interfaces.C.Strings.Value (Host_Str) &
         ":" & Interfaces.C.unsigned_short'Image (Port_Val) &
         " content-type=" & To_String (Tobj_Interest_Client.Content_Type));

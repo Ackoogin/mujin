@@ -92,6 +92,15 @@ package Pcl_Plugins is
   pragma Import(C, Pcl_Plugin_Load_Transport,
                 "pcl_plugin_load_transport");
 
+  --  Load codec plugins listed in a path-list environment variable (split on
+  --  ':' POSIX / ';' Windows). Missing vars and individual missing/invalid
+  --  paths are skipped. Returns PCL_OK when the variable is unset/empty.
+  function Pcl_Codec_Registry_Load_Plugins_From_Env
+    (Registry : System.Address;
+     Env_Var  : Interfaces.C.Strings.chars_ptr) return Pcl_Bindings.Pcl_Status;
+  pragma Import(C, Pcl_Codec_Registry_Load_Plugins_From_Env,
+                "pcl_codec_registry_load_plugins_from_env");
+
   procedure Pcl_Plugin_Unload(Handle : System.Address);
   pragma Import(C, Pcl_Plugin_Unload, "pcl_plugin_unload");
 

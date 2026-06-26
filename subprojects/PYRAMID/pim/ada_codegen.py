@@ -1036,6 +1036,25 @@ class AdaServiceGenerator:
             f.write(f'   end Registry_Has_Codec;\n')
             f.write(f'\n')
 
+            # Fail-closed gate: every encode/decode requires a registered codec
+            # plugin for the content type. With no plugin the facade raises
+            # instead of falling back to a built-in codec (matches C++).
+            f.write(f'   procedure Require_Codec (Content_Type : String) is\n')
+            f.write(f'      Effective : constant String :=\n')
+            f.write(f'        (if Content_Type = "" then Json_Content_Type else Content_Type);\n')
+            f.write(f'   begin\n')
+            if has_grpc:
+                f.write(f'      if Effective = Grpc_Content_Type then\n')
+                f.write(f'         return;  --  gRPC target carries its own transport+codec\n')
+                f.write(f'      end if;\n')
+            f.write(f'      if not Registry_Has_Codec (Effective) then\n')
+            f.write(f'         raise Program_Error with\n')
+            f.write(f'           "fail-closed: no codec plugin registered for content type "\n')
+            f.write(f'           & Effective;\n')
+            f.write(f'      end if;\n')
+            f.write(f'   end Require_Codec;\n')
+            f.write(f'\n')
+
             f.write(f'   function Try_Cabi_Registry_Encode\n')
             f.write(f'     (Codec     : Pcl_Plugins.Pcl_Codec_Const_Access;\n')
             f.write(f'      Schema_C  : Interfaces.C.Strings.chars_ptr;\n')
@@ -1405,6 +1424,7 @@ class AdaServiceGenerator:
                 else:
                     f.write(f'         return From_Json ("{{}}", null);\n')
                 f.write(f'      end if;\n')
+                f.write(f'      Require_Codec (Content_Type);  --  fail closed if no plugin\n')
                 f.write(f'\n')
                 if is_array:
                     f.write(f'      declare\n')
@@ -1669,6 +1689,7 @@ class AdaServiceGenerator:
                         f.write(f'      function Build_Payload return String is\n')
                         f.write(f'         Registry_Payload : Unbounded_String := Null_Unbounded_String;\n')
                         f.write(f'      begin\n')
+                        f.write(f'         Require_Codec (Content_Type);  --  fail closed if no plugin\n')
                         f.write(f'         if Try_Registry_Encode\n')
                         f.write(f'           (Content_Type, "{_short_type(rpc.req)}", Request\'Address,\n')
                         f.write(f'            Registry_Payload)\n')
@@ -1806,6 +1827,7 @@ class AdaServiceGenerator:
                     f.write(f'      function Build_Wire_Payload return String is\n')
                     f.write(f'         Registry_Payload : Unbounded_String := Null_Unbounded_String;\n')
                     f.write(f'      begin\n')
+                    f.write(f'         Require_Codec (Content_Type);  --  fail closed if no plugin\n')
                     f.write(f'         if Try_Registry_Encode\n')
                     f.write(f'           (Content_Type, "{spec.short_type}", Payload\'Address,\n')
                     f.write(f'            Registry_Payload)\n')
@@ -1920,6 +1942,7 @@ class AdaServiceGenerator:
                 f.write(f'               function Decode_Request return {req_t} is\n')
                 f.write(f'                  Result : {req_t};\n')
                 f.write(f'               begin\n')
+                f.write(f'                  Require_Codec (Content_Type);  --  fail closed if no plugin\n')
                 f.write(f'                  if Try_Registry_Decode_Raw\n')
                 f.write(f'                    (Content_Type, Request_Buf, Request_Size,\n')
                 f.write(f'                     "{_short_type(rpc.req)}", Result\'Address)\n')
@@ -1956,6 +1979,7 @@ class AdaServiceGenerator:
                     f.write(f'                  Acc : Unbounded_String :=\n')
                     f.write(f'                    To_Unbounded_String ("[");\n')
                     f.write(f'               begin\n')
+                    f.write(f'                  Require_Codec (Content_Type);  --  fail closed if no plugin\n')
                     f.write(f"                  for I in Rsp'Range loop\n")
                     f.write(f"                     if I > Rsp'First then\n")
                     f.write(f'                        Append (Acc, ",");\n')
@@ -1983,6 +2007,7 @@ class AdaServiceGenerator:
                     f.write(f'               end if;\n')
 
                     # Serialise response and copy to buffer
+                    f.write(f'               Require_Codec (Content_Type);  --  fail closed if no plugin\n')
                     f.write(f'               if not Try_Registry_Encode\n')
                     f.write(f'                 (Content_Type, "{_short_type(rpc.rsp)}", Rsp\'Address,\n')
                     f.write(f'                  Wire_Response)\n')

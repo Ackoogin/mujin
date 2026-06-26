@@ -1,6 +1,7 @@
 # PYRAMID Plugin Binding — v1 Plan
 
-Status: 2026-06-25. Branch `feat/transport-codec-plugin-strategy-a`.
+Status: 2026-06-26 — **v1 COMPLETE** (W1–W6 done; criteria 1–4 met; 592/592
+green). Branch `feat/transport-codec-plugin-strategy-a`.
 Builds on [`plugin_binding_end_state_review.md`](./plugin_binding_end_state_review.md)
 (current state + diagrams) and [`plugin_only_binding_handover.md`](./plugin_only_binding_handover.md).
 
@@ -70,11 +71,17 @@ Builds on [`plugin_binding_end_state_review.md`](./plugin_binding_end_state_revi
   stages only each component's module closure (tactical_objects → common+tactical;
   autonomy_backend → common+autonomy). Verified a deployed client links/runs
   against its closure alone.
-- ◑ **W4** Ada strict codec fail-closed + scalar-alias marshalling — **remaining**
-  (see below). Ada *transport* already fails closed (W1); C++ codec already fails
-  closed. Ada *codec* still has a static no-plugin fallback for struct + alias
-  schemas.
-- Full suite **592/592** green (`build-flatbuffers-only`, GNAT) after W1/W2/W3/W5/W6.
+- ✅ **W4** Ada strict codec fail-closed + scalar-alias marshalling. Scalar
+  aliases now cross the C-ABI codec plugin (string → `pyramid_str_t`, numeric →
+  scalar pointer; `<Alias>_Pointers` packages). A `Require_Codec` gate at every
+  encode/decode choke point raises `Program_Error` when no codec plugin is
+  registered — the Ada facade now fails closed like C++ (no static fallback
+  reachable without a plugin). Ada clients, the Ada bridge main, and the
+  generated-bindings test load codecs from `PYRAMID_CODEC_PLUGINS`;
+  `ada_generated_bindings_roundtrip` adds a negative assertion proving the
+  facade raises without a registered codec.
+- Full suite **592/592** green (`build-flatbuffers-only`, GNAT) after
+  W1/W2/W3/W4/W5/W6 — **v1 acceptance criteria 1–4 all met**.
 
 ## Remaining work to reach v1
 
@@ -104,11 +111,22 @@ Builds on [`plugin_binding_end_state_review.md`](./plugin_binding_end_state_revi
 - Runtime-verify the gRPC coupled target in a `PYRAMID_ENABLE_GRPC` build where
   the gRPC deps can be fetched (blocked in this sandbox — needs network).
 
-### W4 — Ada strictly plugin-only (incl. aliases)
-- Marshal scalar aliases across the Ada plugin boundary as the C++ plugin
+### W4 — Ada strictly plugin-only (incl. aliases) — ✅ DONE
+- ✅ Marshal scalar aliases across the Ada plugin boundary as the C++ plugin
   expects (string → `pyramid_str_t`, numeric → scalar pointer): alias branches
-  in `Try_Cabi_Registry_Encode/Decode` + alias pointer packages.
-- Remove the Ada facade's static no-plugin path → fail closed like C++.
+  in `Try_Cabi_Registry_Encode/Decode` + `<Alias>_Pointers` packages.
+  (`pim/ada_codegen.py` `_collect_alias_schema_bindings`.)
+- ✅ Fail closed like C++: a generated `Require_Codec (Content_Type)` gate at
+  each encode/decode choke point raises `Program_Error` when no codec plugin is
+  registered for the content type (gRPC content type exempt — it carries its
+  own transport+codec). The static `To_Json`/`Flatbuffers_Codec` branches remain
+  only as unreachable-without-a-plugin fallbacks behind the gate.
+- ✅ Rewired consumers that relied on the old static path to load codecs from
+  `PYRAMID_CODEC_PLUGINS` (`pcl_codec_registry_load_plugins_from_env`, newly
+  bound in `pcl_plugins.ads`): both Ada clients, the Ada bridge main, and the
+  generated-bindings test. `ada_generated_bindings_roundtrip` now asserts the
+  facade raises without a registered codec, and decodes the (now JSON-encoded)
+  `Identifier` responses via the codec rather than assuming raw bytes.
 
 ### W5 — Deployment / default-plugin load
 - Config-driven default-plugin load (manifest in `<prefix>/lib/pcl/plugins/`)
@@ -138,13 +156,16 @@ share `common`/`base`, so per-component would duplicate shared modules):
 (Not required for v1 correctness — link-time trimming already yields minimal
 binaries — but it isolates version-control churn across the modular data model.)
 
-## Suggested sequencing
+## Sequencing (completed)
 
-1. **W2** (config pass-through) — enables W1/W3 to pass plugin config cleanly.
-2. **W1** (client → transport plugin) — proves "core libs only" end-to-end.
-3. **W3** (shm plugin; gRPC verify where possible).
-4. **W4** (Ada alias fail-closed).
-5. **W5** (default-plugin manifest + deployment polish).
+1. ✅ **W2** (config pass-through) — enables W1/W3 to pass plugin config cleanly.
+2. ✅ **W1** (client → transport plugin) — proves "core libs only" end-to-end.
+3. ✅ **W3** (shm plugin; gRPC still network-gated for runtime verify).
+4. ✅ **W4** (Ada alias fail-closed).
+5. ✅ **W5** (default-plugin manifest + deployment polish).
+6. ✅ **W6** (per-module marshalling, churn isolation).
 
-Keep `build-flatbuffers-only` green per step; gRPC runtime verification is gated
-on a network-capable build environment.
+`build-flatbuffers-only` stayed green per step (592/592). The one remaining
+gap is **gRPC coupled-target runtime verification**, which is gated on a
+network-capable build environment (the coupled plugin is implemented and built
+behind `PYRAMID_ENABLE_GRPC`, but its deps can't be fetched in this sandbox).

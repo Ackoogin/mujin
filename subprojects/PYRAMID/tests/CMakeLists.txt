@@ -1077,13 +1077,23 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         list(APPEND _pyramid_ada_tests ada_cpp_codec_roundtrip)
     endif()
 
-    # Plugin-only Ada clients load the socket transport from a .so at run time.
-    # Thread its path through PCL_TRANSPORT_PLUGIN so the clients need no
-    # transport library linked (uniform with the C++ client).
-    set(_ada_transport_env "")
+    # Plugin-only Ada clients load BOTH the socket transport and the codec from
+    # .so plugins at run time. Thread the transport path through
+    # PCL_TRANSPORT_PLUGIN and the codec paths through PYRAMID_CODEC_PLUGINS so
+    # the (now fail-closed) facade has a registered codec without a static
+    # fallback (uniform with the C++ client).
+    set(_ada_plugin_env "")
     if(TARGET pcl_transport_socket_plugin)
-        set(_ada_transport_env
+        list(APPEND _ada_plugin_env
             "PCL_TRANSPORT_PLUGIN=$<TARGET_FILE:pcl_transport_socket_plugin>")
+    endif()
+    if(TARGET pyramid_codec_json_tactical_objects AND
+       TARGET pyramid_codec_flatbuffers_tactical_objects)
+        list(APPEND _ada_plugin_env
+            "PYRAMID_CODEC_PLUGINS=$<TARGET_FILE:pyramid_codec_json_tactical_objects>:$<TARGET_FILE:pyramid_codec_flatbuffers_tactical_objects>")
+    elseif(TARGET pyramid_codec_json_tactical_objects)
+        list(APPEND _ada_plugin_env
+            "PYRAMID_CODEC_PLUGINS=$<TARGET_FILE:pyramid_codec_json_tactical_objects>")
     endif()
 
     if(WIN32)
@@ -1102,7 +1112,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     set_tests_properties(tobj_ada_socket_e2e PROPERTIES
         LABELS "cross_language;integration"
         TIMEOUT 60
-        ENVIRONMENT "${_ada_transport_env}"
+        ENVIRONMENT "${_ada_plugin_env}"
         RESOURCE_LOCK pyramid_process_e2e)
     list(APPEND _pyramid_ada_tests tobj_ada_socket_e2e)
 
@@ -1119,7 +1129,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         set_tests_properties(tobj_ada_socket_json_plugin_e2e PROPERTIES
             LABELS "cross_language;integration;codec"
             TIMEOUT 60
-            ENVIRONMENT "${_ada_transport_env}"
+            ENVIRONMENT "${_ada_plugin_env}"
             RESOURCE_LOCK pyramid_process_e2e)
         list(APPEND _pyramid_ada_tests tobj_ada_socket_json_plugin_e2e)
     endif()
@@ -1142,7 +1152,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     set_tests_properties(tobj_ada_active_find_e2e PROPERTIES
         LABELS "cross_language;integration"
         TIMEOUT 40
-        ENVIRONMENT "${_ada_transport_env}"
+        ENVIRONMENT "${_ada_plugin_env}"
         RESOURCE_LOCK pyramid_process_e2e)
     list(APPEND _pyramid_ada_tests tobj_ada_active_find_e2e)
 
@@ -1166,7 +1176,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     set_tests_properties(tobj_ada_active_find_flatbuffers_e2e PROPERTIES
         LABELS "cross_language;integration;codec"
         TIMEOUT 40
-        ENVIRONMENT "${_ada_transport_env}"
+        ENVIRONMENT "${_ada_plugin_env}"
         RESOURCE_LOCK pyramid_process_e2e)
     list(APPEND _pyramid_ada_tests tobj_ada_active_find_flatbuffers_e2e)
 
@@ -1186,7 +1196,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     set_tests_properties(tobj_ada_active_find_app_e2e PROPERTIES
         LABELS "cross_language;integration;real_app"
         TIMEOUT 40
-        ENVIRONMENT "${_ada_transport_env}"
+        ENVIRONMENT "${_ada_plugin_env}"
         RESOURCE_LOCK pyramid_process_e2e)
     list(APPEND _pyramid_ada_tests tobj_ada_active_find_app_e2e)
 
@@ -1200,7 +1210,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         set_tests_properties(tobj_ada_active_find_app_json_plugin_e2e PROPERTIES
             LABELS "cross_language;integration;codec;real_app"
             TIMEOUT 40
-            ENVIRONMENT "${_ada_transport_env}"
+            ENVIRONMENT "${_ada_plugin_env}"
             RESOURCE_LOCK pyramid_process_e2e)
         list(APPEND _pyramid_ada_tests tobj_ada_active_find_app_json_plugin_e2e)
     endif()
@@ -1223,7 +1233,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     set_tests_properties(tobj_ada_active_find_app_flatbuffers_e2e PROPERTIES
         LABELS "cross_language;integration;codec;real_app"
         TIMEOUT 40
-        ENVIRONMENT "${_ada_transport_env}"
+        ENVIRONMENT "${_ada_plugin_env}"
         RESOURCE_LOCK pyramid_process_e2e)
     list(APPEND _pyramid_ada_tests tobj_ada_active_find_app_flatbuffers_e2e)
 
