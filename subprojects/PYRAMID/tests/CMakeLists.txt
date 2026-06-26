@@ -65,6 +65,9 @@ pyramid_append_plugin_path_constant(_pyramid_codec_paths_header
 pyramid_append_plugin_path_constant(_pyramid_codec_paths_header
     kPclSocketTransportPlugin
     pcl_transport_socket_plugin)
+pyramid_append_plugin_path_constant(_pyramid_codec_paths_header
+    kPyramidGrpcCoupledPlugin
+    pyramid_grpc_coupled_plugin)
 
 file(GENERATE
     OUTPUT ${PYRAMID_TEST_GENERATED_DIR}/pyramid_codec_plugin_test_paths.hpp
@@ -1447,6 +1450,21 @@ if(TARGET pyramid_grpc_transport)
         ${PYRAMID_PROTOBUF_GEN_DIR}
     )
     gtest_discover_tests(test_grpc_transport_smoke DISCOVERY_MODE PRE_TEST)
+endif()
+
+if(TARGET pyramid_grpc_coupled_plugin)
+    add_executable(test_grpc_coupled_plugin_load
+        test_grpc_coupled_plugin_load.cpp
+    )
+    add_dependencies(test_grpc_coupled_plugin_load pyramid_grpc_coupled_plugin)
+    target_link_libraries(test_grpc_coupled_plugin_load PRIVATE
+        pcl_core
+        GTest::gtest_main
+    )
+    target_include_directories(test_grpc_coupled_plugin_load PRIVATE
+        ${PYRAMID_TEST_GENERATED_DIR}
+    )
+    gtest_discover_tests(test_grpc_coupled_plugin_load DISCOVERY_MODE PRE_TEST)
 endif()
 
 if(TARGET pyramid_ros2_transport)

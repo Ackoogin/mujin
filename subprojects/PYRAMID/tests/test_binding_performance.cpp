@@ -27,7 +27,7 @@ extern "C" {
 #endif
 
 #if defined(PYRAMID_HAS_GRPC)
-#include "pyramid/components/tactical_objects/services/provided.grpc.pb.h"
+#include "pyramid/components/pyramid.components.tactical_objects.services.provided.grpc.pb.h"
 #include <grpcpp/grpcpp.h>
 #endif
 

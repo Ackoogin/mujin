@@ -1,6 +1,6 @@
-#include "pyramid/data_model/base.pb.h"
-#include "pyramid/data_model/common.pb.h"
-#include "pyramid/data_model/tactical.pb.h"
+#include "pyramid/data_model/pyramid.data_model.base.pb.h"
+#include "pyramid/data_model/pyramid.data_model.common.pb.h"
+#include "pyramid/data_model/pyramid.data_model.tactical.pb.h"
 
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>

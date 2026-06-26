@@ -1,8 +1,8 @@
 #include "pyramid_services_tactical_objects_protobuf_codec.hpp"
 
-#include "pyramid/data_model/base.pb.h"
-#include "pyramid/data_model/common.pb.h"
-#include "pyramid/data_model/tactical.pb.h"
+#include "pyramid/data_model/pyramid.data_model.base.pb.h"
+#include "pyramid/data_model/pyramid.data_model.common.pb.h"
+#include "pyramid/data_model/pyramid.data_model.tactical.pb.h"
 
 #include <cmath>
 #include <stdexcept>

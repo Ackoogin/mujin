@@ -24,6 +24,26 @@ from proto_parser import (
 import codec_backends
 
 
+def _proto_pb_header(pf) -> str:
+    """Return the protoc-generated ``.pb.h`` include path for a proto file.
+
+    protoc derives the output filename from the proto file's path relative to
+    the import root (not from its package), so a file at
+    ``proto/pyramid/data_model/pyramid.data_model.base.proto`` yields
+    ``pyramid/data_model/pyramid.data_model.base.pb.h``.
+
+    The import root is the ``proto/`` directory (passed as ``protoc -I``), so the
+    canonical name begins at the ``pyramid`` package root. Anchor on that rather
+    than on an absolute prefix so the result is stable whether ``pf.path`` is
+    absolute or relative — keeping the proto->binding step portable across build
+    systems.
+    """
+    parts = Path(pf.path).with_suffix('.pb.h').parts
+    if 'pyramid' in parts:
+        parts = parts[parts.index('pyramid'):]
+    return '/'.join(parts)
+
+
 class ProtobufBackend(codec_backends.CodecBackend):
 
     @property
@@ -46,10 +66,12 @@ class ProtobufBackend(codec_backends.CodecBackend):
             file_base = '_'.join(pkg_parts)
             ns = '::'.join(pkg_parts) + '::protobuf_codec'
 
-            # The protoc-generated header (e.g. pyramid/data_model/tactical.pb.h)
-            proto_rel = str(pf.path.with_suffix('.pb.h')).replace('\\', '/')
-            # Simplify: use just the stem
-            pb_header = '/'.join(pf.package.split('.')) + '.pb.h'
+            # protoc names its output after the proto FILE path (relative to the
+            # proto import root), not the package, e.g.
+            #   proto/pyramid/data_model/pyramid.data_model.base.proto
+            #   -> pyramid/data_model/pyramid.data_model.base.pb.h
+            # Mirror that here so the generated include resolves against protoc.
+            pb_header = _proto_pb_header(pf)
 
             hpp_path = output_dir / (file_base + '_protobuf_codec.hpp')
             self._write_cpp_wrapper(hpp_path, ns, pb_header, pf, index)

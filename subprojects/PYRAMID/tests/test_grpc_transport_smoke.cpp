@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 
-#include "pyramid/components/tactical_objects/services/provided.grpc.pb.h"
+#include "pyramid/components/pyramid.components.tactical_objects.services.provided.grpc.pb.h"
 #include "pyramid_data_model_types.hpp"
 #include "pyramid_services_tactical_objects_protobuf_codec.hpp"
 
