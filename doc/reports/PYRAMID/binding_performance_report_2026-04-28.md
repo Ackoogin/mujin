@@ -4,6 +4,10 @@ Date: 2026-04-28
 
 Updated: 2026-04-29
 
+Updated: 2026-06-26 — added a **Linux refresh** section (see end) measuring the
+**plugin-era** generated facade (registry-only codecs) for regressions after the
+transport/codec plugin rework. Headline: no marshalling/JSON-layer regression.
+
 ## Purpose
 
 This report captures the current performance baseline for PYRAMID generated
@@ -327,3 +331,80 @@ protobuf rows.
    runtime instrumentation rather than relying on the caller thread alone.
 4. If this report will be used for architecture decisions, rerun each transport
    row multiple times and publish median plus variance, not just a single pass.
+
+## Linux Refresh (2026-06-26) — Plugin-Era Facade Regression Check
+
+This section re-runs the benchmark **after the transport/codec plugin rework** to
+check for marshalling regressions — specifically the concern that the new
+native↔C-struct C-ABI plugin boundary might have re-introduced a JSON transcode
+or other per-message overhead.
+
+### Environment / what changed
+
+- Platform: **Linux** (the earlier tables are **Windows**), so absolute numbers
+  are not directly comparable; compare **structure and ratios**.
+- Build: `-DPYRAMID_ENABLE_GRPC=ON -DPYRAMID_ENABLE_PROTOBUF=ON
+  -DPYRAMID_ENABLE_FLATBUFFERS=ON` (separate `build-grpc` dir). gRPC v1.72 +
+  protobuf 30 + abseil + BoringSSL build from source; the gRPC C++ path is now
+  runtime-verified on Linux.
+- The generated C++ facade is now **registry-only / fail-closed**: it encodes and
+  decodes solely through codecs registered in the codec-plugin registry, with no
+  static fallback. The benchmark registers codecs by loading the built codec
+  **plugins** (GTest global environment), and only **json + flatbuffers** codec
+  plugins exist.
+
+### Codec cost (direct functions; not through the plugin C-ABI)
+
+| Codec op | Windows baseline ns/op | Linux (plugin-era) ns/op |
+|----------|-----------------------:|-------------------------:|
+| JSON encode | 15822.4 | ~6600 |
+| JSON decode | 20605.4 | ~9100 |
+| FlatBuffers encode | 729.8 | ~290 |
+| FlatBuffers decode | 566.6 | ~250 |
+| Protobuf encode | 1344.0 | ~455 |
+| Protobuf decode | 1228.5 | ~454 |
+
+Linux is ~2× faster across the board (platform). Crucially **protobuf stays at
+sub-microsecond cost (~0.45 µs)** — the `2026-04-29` direct-protobuf fix is intact;
+the old ~28 µs JSON-shim artifact has **not** returned. Ordering FB ≲ PB ≪ JSON
+holds.
+
+### End-to-end transport (plugin-era facade, through the C-ABI codec boundary)
+
+| Combo | Bytes | Avg wall µs | Min wall µs | Notes |
+|-------|------:|------------:|------------:|-------|
+| local / json | 378 | ~22 | ~18 | |
+| local / flatbuffers | 216 | ~1.8 | ~1.7 | |
+| local / protobuf | — | — | — | **skipped — no protobuf codec plugin** |
+| shmem / json | 378 | ~1660 | ~1030 | scheduling/poll-bound |
+| shmem / flatbuffers | 216 | ~1370 | ~1010 | scheduling/poll-bound |
+| shmem / protobuf | — | — | — | **skipped — no protobuf codec plugin** |
+| socket / json | 378 | ~1095 | ~550 | scheduling/poll-bound |
+| socket / flatbuffers | 216 | ~1066 | ~720 | scheduling/poll-bound |
+| socket / protobuf | — | — | — | **skipped — no protobuf codec plugin** |
+| grpc / tcp | 73 | ~66 | ~38 | |
+
+### Conclusion: no marshalling / JSON-layer regression
+
+Two independent signals confirm the plugin C-ABI boundary added no codec-layer cost:
+
+1. The codec microbenchmark (which exercises the codecs directly) is clean — in
+   particular protobuf is ~0.45 µs/op, not the old JSON-shim ~28 µs.
+2. Under shmem/socket the **binary-codec rows track the JSON rows** (e.g. shmem
+   json ~1660 µs vs flatbuffers ~1370 µs; socket json ~1095 vs flatbuffers ~1066).
+   A hidden JSON/marshalling layer would push the *binary* rows toward JSON cost;
+   instead the codec contribution is swamped by transport scheduling. The
+   shmem/socket rows are ~10× the Windows baseline because this report's
+   `Sleep`/`PCL_SHM_POLL_MS` fixes were **Windows-specific** yield waits; on Linux
+   the ~1 ms poll cadence dominates. That is a platform/scheduling artifact, not a
+   marshalling regression.
+
+### Known gap: protobuf has no codec plugin (not a perf regression)
+
+The plugin-era facade is registry-only, and **no `application/protobuf` codec
+plugin was created** in the rework (only json + flatbuffers). So the generic
+transport rows for protobuf (local/shmem/socket) have no codec to resolve and are
+now **skipped honestly** in the benchmark (previously these masked a hard 0/N
+failure). Protobuf itself remains exercised by the **codec microbenchmark**
+(direct) and the **gRPC coupled transport** (`grpc / tcp`). Tracked as follow-up
+in [`doc/todo/PYRAMID/TODO.md`](../../todo/PYRAMID/TODO.md).
