@@ -7,9 +7,11 @@ PYRAMID components and clients run against the generic PCL runtime through
 the generated contract (typed facade + native↔C-struct marshalling). The
 production plugin path currently covers JSON / FlatBuffers codecs and the
 socket, shared-memory, and UDP transports. gRPC is generated and runtime-tested
-as a direct C++ transport library, but its loadable coupled plugin is not yet a
-functional runtime plugin. ROS2 has a real rclcpp-backed coupled plugin, but it
-still has production-closure gaps tracked in `doc/todo/PYRAMID/TODO.md`.
+as a direct C++ transport library, and its loadable coupled plugin
+(`pyramid_grpc_coupled_plugin`) is now a real runtime plugin implementing the
+transport contract in both directions (server-mode ingress and client-mode
+`invoke_async`/`invoke_stream`). ROS2 has a real rclcpp-backed coupled plugin,
+but it still has production-closure gaps tracked in `doc/todo/PYRAMID/TODO.md`.
 
 This isolates churn (a wire-format or transport change ships as a new plugin, not
 a client rebuild), keeps client binaries minimal, and lets one cross-language
@@ -62,11 +64,61 @@ Key properties:
   points (transport carries role/host/port/bus + the executor pointer).
 - **One cross-language codec.** The codec consumes the frozen `pyramid_<T>_c`
   C struct, so the same `.so` is loaded from C++ and Ada.
-- **gRPC split state.** `pyramid_grpc_transport` is the working generated/static
-  C++ transport path and is covered by real unary round-trip tests.
-  `pyramid_grpc_coupled_plugin` currently proves only the loader/ABI shape: it
-  exports transport and codec entry points, but its operational vtable methods
-  return `PCL_ERR_NOT_FOUND`.
+
+## Plugin directionality — the core contract
+
+A transport plugin **must implement the full PCL transport contract in both
+directions**. It is not enough to implement "certain bits" (e.g. only inbound
+server ingress): a plugin shall provide everything a component needs to use
+**both provided and consumed** services.
+
+```
+  PCL provider  <- plugin (server / ingress) <-  remote peer (client)
+  PCL consumer  -> plugin (client / egress)  ->  remote peer (server)
+```
+
+The **core requirement is `PCL <-> plugin <-> PCL` both ways**: a PYRAMID
+component on each side, with the plugin bridging the chosen middleware. Concretely
+a complete plugin implements:
+
+- **Provided (ingress):** accept inbound requests/streams/publishes from the wire
+  and dispatch them to the executor's service/subscriber handlers (`serve` /
+  `subscribe`, or a middleware server such as the gRPC/ROS2 coupled plugins start
+  on load).
+- **Consumed (egress):** route a component's outbound calls to a remote peer
+  (`invoke_async` for unary, `invoke_stream` for server-streaming, `publish` for
+  topics).
+
+A plugin instance may be configured for one side (e.g. the socket plugin's
+`role: server|client`, the gRPC plugin's `mode: server|client`), but the plugin
+as a whole must cover both so a deployment can compose providers and consumers
+freely.
+
+### One-sided interop is also supported
+
+Because each side is just the chosen middleware on the wire, a plugin can equally
+bridge a PYRAMID component to a **native, non-PCL** peer — only one side is PCL:
+
+```
+  PCL consumer  -> gRPC plugin (client) -> native gRPC server (non-PCL)
+  native gRPC client -> gRPC plugin (server) -> PCL provider
+```
+
+These one-sided interop cases are first-class use cases, but the **bidirectional
+`PCL <-> plugin <-> PCL` path is the core contract** every transport plugin must
+satisfy.
+
+### Heterogeneous middleware capabilities
+
+Middleware differ in which primitives they provide — gRPC is RPC-only, UDP/MQTT
+are pub/sub-only, ROS2/socket/shm are mixed. A plugin must declare the primitives
+it supports (`PUBSUB`, `RPC_UNARY`, `RPC_STREAM`, `RPC_ACTION`) so the framework
+can validate, at compose time, that each contract endpoint's required primitive is
+carried by its routed transport — failing closed with a precise diagnostic instead
+of a late per-call error — and so deployments can route different endpoints over
+different transports. The capability model, the per-middleware matrix, and the
+staged plan are in
+[`doc/plans/PYRAMID/transport_capability_model_plan.md`](../../../../doc/plans/PYRAMID/transport_capability_model_plan.md).
 
 ## Code mechanism — ABI contracts
 
@@ -201,7 +253,7 @@ component's deployment dir.
 | Codec config pass-through (`config_json`) | ✅ | ✅ |
 | Fail closed with no transport plugin | ✅ | ✅ |
 | Fail closed with no codec plugin (incl. scalar aliases) | ✅ | ✅ |
-| Coupled target plugin (codec+transport, one content_type) | ROS2 partial; gRPC ABI/load-only | — |
+| Coupled target plugin (codec+transport, one content_type) | gRPC both-ways; ROS2 partial | — |
 
 **v1 is complete** (`doc/plans/PYRAMID/plugin_binding_v1_plan.md`, W1–W6): clients
 link core libs only, transport + codec are runtime plugins with uniform
@@ -210,10 +262,13 @@ languages fail closed. The **direct generated gRPC C++ transport** is built and
 runtime-verified on Linux (`test_grpc_transport_smoke`,
 `BindingPerformanceTest.Grpc_Tcp`); enable with `-DPYRAMID_ENABLE_GRPC=ON
 -DPYRAMID_ENABLE_PROTOBUF=ON` or `scripts/build_plugins.sh --grpc`. The
-loadable **coupled gRPC target plugin** is also built and passes
-`test_grpc_coupled_plugin_load`, but that test proves only ABI/load shape. The
-plugin is not runtime-functional until its vtables are wired to the generated
-gRPC transport and a plugin-loaded unary round-trip test passes.
+loadable **coupled gRPC target plugin** is now a real runtime plugin implementing
+the transport contract **both ways**: server mode starts a gRPC server (via a
+proto-driven aggregator, `pyramid_grpc_plugin_aggregator`) that routes inbound
+RPCs to the executor; client mode dials a remote endpoint and implements
+`invoke_async` (unary) and `invoke_stream` (server-streaming) through the
+generated typed stubs. `test_grpc_coupled_plugin_e2e` proves both directions
+through the dlopen'd `.so` (PCL ↔ plugin ↔ plugin ↔ PCL).
 
 The **coupled ROS2 target plugin** (`libpyramid_ros2_coupled_plugin`, content type
 `application/ros2`) follows the same one-`.so`-two-vtables contract, but -- unlike
@@ -227,10 +282,31 @@ the plugin-loaded transport needs live traffic E2E, client-side RPC scope must b
 decided, lifecycle ownership must be made process-safe, and staged deployments
 must document ROS2 runtime/type-support dependencies.
 
-Open follow-ups (not blocking v1): a runtime-functional gRPC coupled plugin, ROS2
-coupled plugin production closure, a standalone `application/protobuf` codec
-plugin for the generic transports (today protobuf is carried by the direct
-generated gRPC transport / direct codec only — see
-[`doc/todo/PYRAMID/TODO.md`](../../../../doc/todo/PYRAMID/TODO.md)), and making
-proto→binding→plugin generation a separately invocable CI/CD stage
-(`scripts/build_plugins.sh` is the first step toward that).
+### gRPC protobuf marshalling and the Ada shim
+
+Ada currently consumes gRPC through a **bespoke JSON shim**
+(`pyramid_grpc_c_shim`): the generated Ada gRPC transport dlopens the shim and
+exchanges JSON, which the shim converts to/from protobuf and sends over gRPC.
+This path predates the coupled plugin doing both directions and bypasses the PCL
+transport entirely.
+
+Now that the coupled gRPC plugin implements `invoke_async`/`invoke_stream`, the
+intended end-state is for Ada (and C++) to consume gRPC **identically to
+socket/shm** — load the gRPC coupled plugin as the PCL transport and call through
+the standard facade — with **no bespoke shim and no JSON detour**. The blocker is
+the wire codec: `application/grpc` carries protobuf, and **C-ABI marshalling
+alone is not sufficient** — marshalling produces the frozen `pyramid_<T>_c`
+struct, but something must still turn that struct into protobuf wire bytes. The
+clean home for that is the **coupled plugin's own codec** (it is "coupled"
+precisely so it can own protobuf serialization end-to-end), or a standalone
+`application/protobuf` codec plugin. Once the coupled codec marshals
+struct↔protobuf, the Ada gRPC shim and the Ada facade's gRPC special-branch can
+be retired. Tracked in [`doc/todo/PYRAMID/TODO.md`](../../../../doc/todo/PYRAMID/TODO.md).
+
+Open follow-ups (not blocking v1): make the coupled gRPC codec do real
+C-struct↔protobuf marshalling (retire the Ada gRPC JSON shim), ROS2 coupled
+plugin production closure, a standalone `application/protobuf` codec plugin for
+the generic transports (today protobuf is carried by the direct generated gRPC
+transport / direct codec only), and making proto→binding→plugin generation a
+separately invocable CI/CD stage (`scripts/build_plugins.sh` is the first step
+toward that).

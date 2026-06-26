@@ -25,26 +25,22 @@ constexpr const char* kGrpcContentType = "application/grpc";
 
 }  // namespace
 
-TEST(GrpcCoupledPluginLoad, ExposesTransportVtable) {
+TEST(GrpcCoupledPluginLoad, TransportFailsClosedWithoutExecutor) {
   ASSERT_NE(kPyramidGrpcCoupledPlugin, nullptr);
 
+  // The transport half needs a live executor and starts a real gRPC server, so
+  // its end-to-end behaviour is covered by test_grpc_coupled_plugin_e2e. With
+  // an empty config the plugin cannot start a server: the entry point returns
+  // NULL and the loader reports PCL_ERR_STATE rather than handing back a
+  // half-initialised transport.
   pcl_plugin_handle_t* handle = nullptr;
   const pcl_transport_t* transport = nullptr;
-  ASSERT_EQ(pcl_plugin_load_transport(kPyramidGrpcCoupledPlugin,
+  EXPECT_EQ(pcl_plugin_load_transport(kPyramidGrpcCoupledPlugin,
                                       "{}",
                                       &handle,
                                       &transport),
-            PCL_OK);
-  ASSERT_NE(handle, nullptr);
-  ASSERT_NE(transport, nullptr);
-  // The coupled transport routes through gRPC, so the basic publish/serve
-  // entry points must be present (callable function pointers).
-  EXPECT_NE(transport->publish, nullptr);
-  EXPECT_NE(transport->serve, nullptr);
-  EXPECT_NE(transport->subscribe, nullptr);
-  EXPECT_NE(transport->invoke_async, nullptr);
-
-  pcl_plugin_unload(handle);
+            PCL_ERR_STATE);
+  EXPECT_EQ(transport, nullptr);
 }
 
 TEST(GrpcCoupledPluginLoad, RegistersCodecUnderGrpcContentType) {
