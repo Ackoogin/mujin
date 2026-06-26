@@ -44,6 +44,23 @@ boundary added no measurable overhead (see the report).
    codec for socket/shmem), document that decision and keep the benchmark skip as
    the permanent, intended behaviour.
 
+## Ada facade strictly codec-source-free (committed bindings = dist)
+
+Status: done. Raised 2026-06-26. Closed 2026-06-26.
+
+The committed `bindings/ada/generated` tree was trimmed to Ada `.ads/.adb` only
+(removed stale C++ `.cpp/.hpp/.fbs` cruft). To make the committed tree match a
+**plugin-only Ada dist**, the in-tree codec sources (json `*-types_codec.adb`,
+`flatbuffers/ada/*`) should also drop out — but the Ada facade still compiles and
+references them: post-W4 it fails closed via `Require_Codec`, yet `ada_codegen.py`
+still emits `with …Types_Codec` clauses and the `From_Json` /
+`Flatbuffers_Codec.From_Binary_*` fallback branches (dead when a codec plugin is
+registered). C++ is already registry-only (no compiled-in codec fallback).
+
+Closed by making `ada_codegen.py` emit registry-only service facades, routing
+array schemas through the C-ABI codec registry, and removing the committed
+json/flatbuffers Ada codec sources from the dist tree.
+
 ### Related direction
 
 Fits the broader goal of making proto→binding→**plugin** a separate,
