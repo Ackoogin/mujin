@@ -72,6 +72,17 @@ pcl_status_t pcl_plugin_load_transport(const char*             path,
                                        pcl_plugin_handle_t**   out_handle,
                                        const pcl_transport_t** out_vtable);
 
+/// \brief Open an arbitrary shared library and return a plugin handle.
+///
+/// Unlike \ref pcl_plugin_load_transport / \ref pcl_plugin_load_codec, this does
+/// not require any PCL entry point: it is a portable wrapper over the platform
+/// dynamic loader (dlopen / LoadLibrary) for libraries that only export plain
+/// C symbols (e.g. the generated gRPC C shim). Resolve symbols with
+/// \ref pcl_plugin_symbol and release the handle with \ref pcl_plugin_unload.
+///
+/// Returns NULL if \p path is NULL or the library cannot be opened.
+pcl_plugin_handle_t* pcl_plugin_open(const char* path);
+
 /// \brief Unload a plugin handle returned by a successful load call.
 ///
 /// NULL-safe.

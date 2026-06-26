@@ -292,6 +292,11 @@ pcl_status_t pcl_plugin_load_transport(const char*             path,
   return PCL_OK;
 }
 
+/// \brief Open an arbitrary shared library (no PCL entry point required).
+pcl_plugin_handle_t* pcl_plugin_open(const char* path) {
+  return open_library(path);
+}
+
 /// \brief Unload a plugin handle returned by a successful load call.
 void pcl_plugin_unload(pcl_plugin_handle_t* handle) {
   close_library(handle);

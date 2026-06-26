@@ -447,6 +447,9 @@ if(PYRAMID_ENABLE_PROTOBUF)
         ${PYRAMID_PROTOBUF_SUPPORT_SRCS}
         ${PYRAMID_PROTOBUF_SRCS}
     )
+    # Linked into the coupled gRPC plugin (a shared MODULE); keep it PIC.
+    set_target_properties(pyramid_protobuf_support PROPERTIES
+        POSITION_INDEPENDENT_CODE ON)
     add_dependencies(pyramid_protobuf_support pyramid_protobuf_codegen)
     target_link_libraries(pyramid_protobuf_support
         PUBLIC
@@ -560,10 +563,23 @@ if(PYRAMID_ENABLE_GRPC)
             "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp/*_grpc_transport.cpp")
         pyramid_require_generated(PYRAMID_GRPC_TRANSPORT_SRCS
             "generated PYRAMID gRPC transport sources")
+        # Proto-driven aggregator: a stable C ABI (pyramid_grpc_plugin_server_*)
+        # the loadable coupled gRPC plugin uses to start/stop real gRPC servers
+        # for any configured component without re-declaring generated types.
+        pyramid_glob_generated(PYRAMID_GRPC_PLUGIN_AGG_SRCS
+            "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp/pyramid_grpc_plugin_aggregator.cpp")
+        pyramid_require_generated(PYRAMID_GRPC_PLUGIN_AGG_SRCS
+            "generated PYRAMID gRPC plugin aggregator source")
         add_library(pyramid_grpc_transport STATIC
             ${PYRAMID_GRPC_TRANSPORT_SRCS}
+            ${PYRAMID_GRPC_PLUGIN_AGG_SRCS}
             ${PYRAMID_GRPC_SRCS}
         )
+        # The coupled gRPC plugin (a shared MODULE) pulls the aggregator and the
+        # generated protobuf/gRPC objects from this static archive, so its
+        # objects must be position-independent.
+        set_target_properties(pyramid_grpc_transport PROPERTIES
+            POSITION_INDEPENDENT_CODE ON)
         add_dependencies(pyramid_grpc_transport
             pyramid_cpp_bindings_codegen
             pyramid_grpc_codegen

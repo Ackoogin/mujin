@@ -1467,6 +1467,26 @@ if(TARGET pyramid_grpc_coupled_plugin)
     gtest_discover_tests(test_grpc_coupled_plugin_load DISCOVERY_MODE PRE_TEST)
 endif()
 
+if(TARGET pyramid_grpc_coupled_plugin AND TARGET pyramid_grpc_transport)
+    add_executable(test_grpc_coupled_plugin_e2e
+        test_grpc_coupled_plugin_e2e.cpp
+    )
+    add_dependencies(test_grpc_coupled_plugin_e2e pyramid_grpc_coupled_plugin)
+    target_link_libraries(test_grpc_coupled_plugin_e2e PRIVATE
+        pcl_core
+        pyramid_grpc_transport
+        pyramid_protobuf_support
+        GTest::gtest_main
+    )
+    target_include_directories(test_grpc_coupled_plugin_e2e PRIVATE
+        ${PYRAMID_TEST_GENERATED_DIR}
+        ${PROTO_BINDINGS_DIR}
+        ${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp
+        ${PYRAMID_PROTOBUF_GEN_DIR}
+    )
+    gtest_discover_tests(test_grpc_coupled_plugin_e2e DISCOVERY_MODE PRE_TEST)
+endif()
+
 if(TARGET pyramid_ros2_transport)
     add_executable(test_ros2_transport_semantics
         test_ros2_transport_semantics.cpp

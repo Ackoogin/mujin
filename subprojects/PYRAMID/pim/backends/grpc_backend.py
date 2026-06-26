@@ -216,6 +216,9 @@ class GrpcBackend(codec_backends.CodecBackend):
         output_dir.mkdir(parents=True, exist_ok=True)
         generated = []
         generated_c_api_support = set()
+        aggregator_entries: List[dict] = []
+        aggregator_rpcs: List[dict] = []
+        seen_service_names: set = set()
 
         for pf in index.files:
             if not pf.services:
@@ -238,6 +241,32 @@ class GrpcBackend(codec_backends.CodecBackend):
             generated.extend([hpp_path, cpp_path])
 
             component = _component_name(pf.package)
+            aggregator_entries.append({
+                'component': component,
+                'role': _package_role(pf.package),
+                'file_base': file_base,
+                'grpc_ns': ns,
+                'services': [svc.name for svc in pf.services],
+            })
+            # Client-side dispatch detail: maps the PCL wire service name to the
+            # typed gRPC stub method, so the plugin can consume (invoke) services
+            # as well as provide them.
+            for svc in pf.services:
+                for rpc in svc.rpcs:
+                    service_name = (f'{_service_wire_prefix(svc.name)}.'
+                                    f'{camel_to_lower_snake(rpc.name)}')
+                    if service_name in seen_service_names:
+                        continue
+                    seen_service_names.add(service_name)
+                    aggregator_rpcs.append({
+                        'service_name': service_name,
+                        'facade_ns': facade_ns,
+                        'svc': svc.name,
+                        'rpc': rpc.name,
+                        'req_cpp': '::'.join(rpc.request_type.split('.')),
+                        'rsp_cpp': '::'.join(rpc.response_type.split('.')),
+                        'streaming': rpc.server_streaming,
+                    })
             if _has_protobuf_json_shim(component):
                 support_base = _grpc_c_api_support_base(component)
                 if component not in generated_c_api_support:
@@ -254,7 +283,235 @@ class GrpcBackend(codec_backends.CodecBackend):
                 self._write_cpp_c_api_impl(c_api_cpp, pf, component)
                 generated.extend([c_api_hpp, c_api_cpp])
 
+        # Single proto-driven aggregator: a stable C ABI a loadable plugin can
+        # call to start/stop real gRPC servers for any configured component,
+        # without re-declaring per-component generated types.
+        if aggregator_entries:
+            agg_hpp = output_dir / 'pyramid_grpc_plugin_aggregator.hpp'
+            agg_cpp = output_dir / 'pyramid_grpc_plugin_aggregator.cpp'
+            self._write_cpp_plugin_aggregator_header(agg_hpp)
+            self._write_cpp_plugin_aggregator_impl(
+                agg_cpp, aggregator_entries, aggregator_rpcs)
+            generated.extend([agg_hpp, agg_cpp])
+
         return generated
+
+    # -- Plugin aggregator -----------------------------------------------------
+
+    def _write_cpp_plugin_aggregator_header(self, path: Path):
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
+            f.write('// Auto-generated gRPC plugin aggregator -- do not edit\n')
+            f.write('//\n')
+            f.write('// Stable C ABI used by the loadable coupled gRPC plugin\n')
+            f.write('// (pyramid_grpc_coupled_plugin) to start and stop real gRPC\n')
+            f.write('// servers that route inbound RPCs to a PCL executor. The set of\n')
+            f.write('// (component, role) pairs is driven by the .proto data model.\n')
+            f.write('#pragma once\n\n')
+            f.write('#include <pcl/pcl_executor.h>\n\n')
+            f.write('#ifdef __cplusplus\n')
+            f.write('extern "C" {\n')
+            f.write('#endif\n\n')
+            f.write('// Opaque handle owning a running gRPC server and its services.\n')
+            f.write('typedef struct pyramid_grpc_plugin_server pyramid_grpc_plugin_server;\n\n')
+            f.write('// Start a gRPC server hosting the services of one configured\n')
+            f.write('// component/role, dispatching inbound RPCs to *executor*.\n')
+            f.write('// component: e.g. "tactical_objects"; role: "provided" or "consumed".\n')
+            f.write('// Returns NULL if the (component, role) is unknown or startup fails.\n')
+            f.write('pyramid_grpc_plugin_server* pyramid_grpc_plugin_server_start(\n')
+            f.write('    const char* component,\n')
+            f.write('    const char* role,\n')
+            f.write('    const char* address,\n')
+            f.write('    pcl_executor_t* executor);\n\n')
+            f.write('// Stop and free a server returned by pyramid_grpc_plugin_server_start.\n')
+            f.write('void pyramid_grpc_plugin_server_stop(pyramid_grpc_plugin_server* server);\n\n')
+            f.write('// --- Consumed (client) side -------------------------------------------\n')
+            f.write('// Invoke a unary gRPC service the configured proto knows about, as a\n')
+            f.write('// client. *service_name* is the PCL wire name (e.g.\n')
+            f.write('// "object_of_interest.create_requirement"); *req*/*req_size* is the\n')
+            f.write('// serialized protobuf request. On success returns 0 and sets *out_data*\n')
+            f.write('// (malloc\'d -- caller frees) / *out_size* to the serialized protobuf\n')
+            f.write('// response. Returns non-zero on unknown service, parse, or RPC failure.\n')
+            f.write('int pyramid_grpc_plugin_client_invoke_unary(\n')
+            f.write('    const char* channel,\n')
+            f.write('    const char* service_name,\n')
+            f.write('    const void* req,\n')
+            f.write('    unsigned    req_size,\n')
+            f.write('    void**      out_data,\n')
+            f.write('    unsigned*   out_size);\n\n')
+            f.write('// Invoke a server-streaming gRPC service as a client, calling *on_item*\n')
+            f.write('// once per serialized protobuf response item. Returns 0 on a clean\n')
+            f.write('// stream finish, non-zero on unknown service / parse / RPC failure.\n')
+            f.write('int pyramid_grpc_plugin_client_invoke_stream(\n')
+            f.write('    const char* channel,\n')
+            f.write('    const char* service_name,\n')
+            f.write('    const void* req,\n')
+            f.write('    unsigned    req_size,\n')
+            f.write('    void (*on_item)(const void* data, unsigned size, void* user),\n')
+            f.write('    void*       user);\n\n')
+            f.write('#ifdef __cplusplus\n')
+            f.write('}  // extern "C"\n')
+            f.write('#endif\n')
+
+    def _write_cpp_plugin_aggregator_impl(self, path: Path, entries: List[dict],
+                                          rpcs: List[dict]):
+        # Deterministic ordering keeps the generated file stable.
+        entries = sorted(entries, key=lambda e: (e['component'], e['role']))
+        rpcs = sorted(rpcs, key=lambda r: r['service_name'])
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
+            f.write('// Auto-generated gRPC plugin aggregator -- do not edit\n\n')
+            f.write('#include "pyramid_grpc_plugin_aggregator.hpp"\n\n')
+            includes = sorted({e['file_base'] + '_grpc_transport.hpp' for e in entries})
+            for inc in includes:
+                f.write(f'#include "{inc}"\n')
+            f.write('\n')
+            f.write('#include <grpcpp/grpcpp.h>\n\n')
+            f.write('#include <cstring>\n')
+            f.write('#include <memory>\n')
+            f.write('#include <string>\n')
+            f.write('#include <utility>\n')
+            f.write('#include <vector>\n\n')
+            f.write('struct pyramid_grpc_plugin_server {\n')
+            f.write('    std::vector<std::unique_ptr<grpc::Service>> services;\n')
+            f.write('    std::unique_ptr<grpc::Server> server;\n')
+            f.write('};\n\n')
+            f.write('namespace {\n\n')
+            f.write('bool eq(const char* a, const char* b) {\n')
+            f.write('    return a && b && std::strcmp(a, b) == 0;\n')
+            f.write('}\n\n')
+            f.write('}  // namespace\n\n')
+            f.write('extern "C" {\n\n')
+            f.write('pyramid_grpc_plugin_server* pyramid_grpc_plugin_server_start(\n')
+            f.write('    const char* component,\n')
+            f.write('    const char* role,\n')
+            f.write('    const char* address,\n')
+            f.write('    pcl_executor_t* executor) {\n')
+            f.write('    if (!component || !role || !address || !address[0] || !executor) {\n')
+            f.write('        return nullptr;\n')
+            f.write('    }\n\n')
+            f.write('    auto host = std::make_unique<pyramid_grpc_plugin_server>();\n')
+            f.write('    grpc::ServerBuilder builder;\n')
+            f.write('    builder.AddListeningPort(address, grpc::InsecureServerCredentials());\n\n')
+            f.write('    bool matched = false;\n')
+            for e in entries:
+                cond = (f'if (eq(component, "{e["component"]}") && '
+                        f'eq(role, "{e["role"]}")) {{')
+                f.write(f'    {cond}\n')
+                f.write('        matched = true;\n')
+                for svc in e['services']:
+                    impl = f'{e["grpc_ns"]}::{svc}Impl'
+                    f.write(f'        {{\n')
+                    f.write(f'            auto svc = std::make_unique<{impl}>(executor);\n')
+                    f.write(f'            builder.RegisterService(svc.get());\n')
+                    f.write(f'            host->services.push_back(std::move(svc));\n')
+                    f.write(f'        }}\n')
+                f.write('    }\n')
+            f.write('\n')
+            f.write('    if (!matched) {\n')
+            f.write('        return nullptr;\n')
+            f.write('    }\n\n')
+            f.write('    host->server = builder.BuildAndStart();\n')
+            f.write('    if (!host->server) {\n')
+            f.write('        return nullptr;\n')
+            f.write('    }\n')
+            f.write('    return host.release();\n')
+            f.write('}\n\n')
+            f.write('void pyramid_grpc_plugin_server_stop(pyramid_grpc_plugin_server* server) {\n')
+            f.write('    if (!server) {\n')
+            f.write('        return;\n')
+            f.write('    }\n')
+            f.write('    if (server->server) {\n')
+            f.write('        server->server->Shutdown();\n')
+            f.write('    }\n')
+            f.write('    delete server;\n')
+            f.write('}\n\n')
+
+            # -- Consumed (client) dispatch ------------------------------------
+            unary_rpcs = [r for r in rpcs if not r['streaming']]
+            stream_rpcs = [r for r in rpcs if r['streaming']]
+
+            f.write('int pyramid_grpc_plugin_client_invoke_unary(\n')
+            f.write('    const char* channel,\n')
+            f.write('    const char* service_name,\n')
+            f.write('    const void* req,\n')
+            f.write('    unsigned    req_size,\n')
+            f.write('    void**      out_data,\n')
+            f.write('    unsigned*   out_size) {\n')
+            f.write('    if (!channel || !service_name || !out_data || !out_size) {\n')
+            f.write('        return -1;\n')
+            f.write('    }\n')
+            f.write('    *out_data = nullptr;\n')
+            f.write('    *out_size = 0U;\n')
+            for r in unary_rpcs:
+                stub_t = f'{r["facade_ns"]}::{r["svc"]}'
+                f.write(f'    if (eq(service_name, "{r["service_name"]}")) {{\n')
+                f.write(f'        ::{r["req_cpp"]} request;\n')
+                f.write('        if (req && req_size > 0U &&\n')
+                f.write('            !request.ParseFromArray(req, static_cast<int>(req_size))) {\n')
+                f.write('            return -2;\n')
+                f.write('        }\n')
+                f.write('        auto chan = grpc::CreateChannel(\n')
+                f.write('            channel, grpc::InsecureChannelCredentials());\n')
+                f.write(f'        auto stub = {stub_t}::NewStub(chan);\n')
+                f.write(f'        ::{r["rsp_cpp"]} response;\n')
+                f.write('        grpc::ClientContext context;\n')
+                f.write(f'        const auto status = stub->{r["rpc"]}(&context, request, &response);\n')
+                f.write('        if (!status.ok()) {\n')
+                f.write('            return -3;\n')
+                f.write('        }\n')
+                f.write('        std::string bytes;\n')
+                f.write('        if (!response.SerializeToString(&bytes)) {\n')
+                f.write('            return -4;\n')
+                f.write('        }\n')
+                f.write('        void* buf = std::malloc(bytes.empty() ? 1U : bytes.size());\n')
+                f.write('        if (!buf) {\n')
+                f.write('            return -5;\n')
+                f.write('        }\n')
+                f.write('        std::memcpy(buf, bytes.data(), bytes.size());\n')
+                f.write('        *out_data = buf;\n')
+                f.write('        *out_size = static_cast<unsigned>(bytes.size());\n')
+                f.write('        return 0;\n')
+                f.write('    }\n')
+            f.write('    return -1;  // unknown unary service\n')
+            f.write('}\n\n')
+
+            f.write('int pyramid_grpc_plugin_client_invoke_stream(\n')
+            f.write('    const char* channel,\n')
+            f.write('    const char* service_name,\n')
+            f.write('    const void* req,\n')
+            f.write('    unsigned    req_size,\n')
+            f.write('    void (*on_item)(const void* data, unsigned size, void* user),\n')
+            f.write('    void*       user) {\n')
+            f.write('    if (!channel || !service_name || !on_item) {\n')
+            f.write('        return -1;\n')
+            f.write('    }\n')
+            for r in stream_rpcs:
+                stub_t = f'{r["facade_ns"]}::{r["svc"]}'
+                f.write(f'    if (eq(service_name, "{r["service_name"]}")) {{\n')
+                f.write(f'        ::{r["req_cpp"]} request;\n')
+                f.write('        if (req && req_size > 0U &&\n')
+                f.write('            !request.ParseFromArray(req, static_cast<int>(req_size))) {\n')
+                f.write('            return -2;\n')
+                f.write('        }\n')
+                f.write('        auto chan = grpc::CreateChannel(\n')
+                f.write('            channel, grpc::InsecureChannelCredentials());\n')
+                f.write(f'        auto stub = {stub_t}::NewStub(chan);\n')
+                f.write('        grpc::ClientContext context;\n')
+                f.write(f'        auto reader = stub->{r["rpc"]}(&context, request);\n')
+                f.write(f'        ::{r["rsp_cpp"]} item;\n')
+                f.write('        while (reader->Read(&item)) {\n')
+                f.write('            std::string bytes;\n')
+                f.write('            if (item.SerializeToString(&bytes)) {\n')
+                f.write('                on_item(bytes.data(),\n')
+                f.write('                        static_cast<unsigned>(bytes.size()), user);\n')
+                f.write('            }\n')
+                f.write('            item.Clear();\n')
+                f.write('        }\n')
+                f.write('        const auto status = reader->Finish();\n')
+                f.write('        return status.ok() ? 0 : -3;\n')
+                f.write('    }\n')
+            f.write('    return -1;  // unknown streaming service\n')
+            f.write('}\n\n')
+            f.write('}  // extern "C"\n')
 
     def generate_ada(self, index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -936,6 +1193,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write(f'with Ada.Unchecked_Conversion;\n')
             f.write(f'with Interfaces.C.Strings;\n')
             f.write(f'with GNATCOLL.JSON; use GNATCOLL.JSON;\n')
+            f.write(f'with Pcl_Plugins;\n')
             f.write(f'with System;\n')
             for pkg in type_packages:
                 f.write(f'with {pkg};\n')
@@ -961,17 +1219,11 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('   function To_Free_String is new Ada.Unchecked_Conversion\n')
             f.write('     (System.Address, Free_String_Access);\n\n')
 
-            f.write('   function Load_Library_A (Name : Interfaces.C.Strings.chars_ptr)\n')
-            f.write('     return System.Address\n')
-            f.write('     with Import, Convention => C, External_Name => "LoadLibraryA";\n\n')
-
-            f.write('   function Get_Proc_Address\n')
-            f.write('     (Module : System.Address; Name : Interfaces.C.Strings.chars_ptr)\n')
-            f.write('      return System.Address\n')
-            f.write('     with Import, Convention => C, External_Name => "GetProcAddress";\n\n')
-
+            f.write('   --  Dynamic loading goes through the portable PCL loader\n')
+            f.write('   --  (pcl_plugin_open / pcl_plugin_symbol), which wraps\n')
+            f.write('   --  dlopen/LoadLibrary, so this transport builds on every platform.\n')
             f.write('   Library_Path : Unbounded_String :=\n')
-            f.write('     To_Unbounded_String ("pyramid_grpc_c_shim.dll");\n')
+            f.write('     To_Unbounded_String ("pyramid_grpc_c_shim");\n')
             f.write('   Library_Module : System.Address := System.Null_Address;\n\n')
 
             f.write('   procedure Configure_Library (Path : String) is\n')
@@ -985,7 +1237,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('        Interfaces.C.Strings.New_String (To_String (Library_Path));\n')
             f.write('   begin\n')
             f.write('      if Library_Module = System.Null_Address then\n')
-            f.write('         Library_Module := Load_Library_A (Path_C);\n')
+            f.write('         Library_Module := Pcl_Plugins.Pcl_Plugin_Open (Path_C);\n')
             f.write('      end if;\n')
             f.write('      Interfaces.C.Strings.Free (Path_C);\n')
             f.write('      if Library_Module = System.Null_Address then\n')
@@ -998,7 +1250,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('      Name_C : Interfaces.C.Strings.chars_ptr :=\n')
             f.write('        Interfaces.C.Strings.New_String (Name);\n')
             f.write('      Result : constant System.Address :=\n')
-            f.write('        Get_Proc_Address (Ensure_Library, Name_C);\n')
+            f.write('        Pcl_Plugins.Pcl_Plugin_Symbol (Ensure_Library, Name_C);\n')
             f.write('   begin\n')
             f.write('      Interfaces.C.Strings.Free (Name_C);\n')
             f.write('      if Result = System.Null_Address then\n')
