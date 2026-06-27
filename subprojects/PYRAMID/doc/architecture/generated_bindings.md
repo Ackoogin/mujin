@@ -62,6 +62,7 @@ the generated service binding layer.
 | Ada service facade | `bindings/ada/generated/pyramid-services-*.ads/.adb` |
 | Ada transport projections | `bindings/ada/generated/{grpc,ros2}/ada/*.ads` |
 | ROS2 mapping rules | [ros2_transport_semantics.md](ros2_transport_semantics.md) |
+| Interaction pattern conventions (pub/sub/RPC/action in `.proto`) | [pyramid_interaction_semantics.md](pyramid_interaction_semantics.md) |
 | Tactical Objects status | [generated_bindings_status.md](../../../../doc/reports/PYRAMID/generated_bindings_status.md) |
 | Historical review | [review_pyramid_bindings_pluggability.md](../../../../doc/reviews/PYRAMID/review_pyramid_bindings_pluggability.md) |
 
