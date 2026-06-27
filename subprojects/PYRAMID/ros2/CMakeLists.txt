@@ -22,11 +22,10 @@ file(TO_CMAKE_PATH "${PCL_CORE_INCLUDE_DIR}" PCL_CORE_INCLUDE_DIR)
 # build time, not committed (WIP §2.G.2). The host workspace generates them into
 # its build tree under generated/pyramid_cpp_bindings; build_ros2_transport.sh
 # passes that path as PYRAMID_CPP_BINDINGS_DIR so colcon compiles the freshly
-# generated support with no committed generated files. Fall back to the in-source
-# tree for back-compat / manual builds.
+# generated support with no committed generated files.
 if(NOT DEFINED PYRAMID_CPP_BINDINGS_DIR)
     set(PYRAMID_CPP_BINDINGS_DIR
-        "${UNMANNED_ROOT}/subprojects/PYRAMID/bindings/cpp/generated")
+        "${UNMANNED_ROOT}/build-ros2/generated/pyramid_cpp_bindings")
 endif()
 file(TO_CMAKE_PATH "${PYRAMID_CPP_BINDINGS_DIR}" PYRAMID_CPP_BINDINGS_DIR)
 set(PYRAMID_ROS2_SUPPORT_DIR "${PYRAMID_CPP_BINDINGS_DIR}/ros2/cpp")

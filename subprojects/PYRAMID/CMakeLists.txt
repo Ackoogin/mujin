@@ -58,12 +58,18 @@ endfunction()
 set(PYRAMID_CPP_BINDINGS_DIR
     "${CMAKE_BINARY_DIR}/generated/pyramid_cpp_bindings"
     CACHE PATH "Directory containing or receiving generated PYRAMID C++ bindings")
+set(PYRAMID_ADA_BINDINGS_DIR
+    "${CMAKE_BINARY_DIR}/generated/pyramid_ada_bindings"
+    CACHE PATH "Directory containing or receiving generated PYRAMID Ada bindings")
 set(PYRAMID_GENERATE_CPP_BINDINGS_DEFAULT ON)
 if(NOT EXISTS "${PYRAMID_PROTO_DIR}")
     set(PYRAMID_GENERATE_CPP_BINDINGS_DEFAULT OFF)
 endif()
 option(PYRAMID_GENERATE_CPP_BINDINGS
     "Generate PYRAMID C++ bindings from proto contracts during configure/build"
+    ${PYRAMID_GENERATE_CPP_BINDINGS_DEFAULT})
+option(PYRAMID_GENERATE_ADA_BINDINGS
+    "Generate PYRAMID Ada bindings from proto contracts during configure/build"
     ${PYRAMID_GENERATE_CPP_BINDINGS_DEFAULT})
 set(PYRAMID_CPP_GENERATOR_BACKENDS json)
 if(PYRAMID_ENABLE_FLATBUFFERS)
@@ -184,7 +190,7 @@ if(PYRAMID_ENABLE_FLATBUFFERS)
     add_dependencies(pyramid_flatbuffers_codegen pyramid_cpp_bindings_codegen)
 
     add_dependencies(pyramid_flatbuffers_support pyramid_flatbuffers_codegen)
-    target_include_directories(pyramid_flatbuffers_support
+target_include_directories(pyramid_flatbuffers_support
         INTERFACE
             "${PYRAMID_FLATBUFFERS_GEN_DIR}"
             "${flatbuffers_SOURCE_DIR}/include"
@@ -221,7 +227,6 @@ pyramid_require_generated(_pyramid_generated_marshal_srcs
 # and the linker still trims each binary to the modules it references.
 set(PYRAMID_MARSHAL_INCLUDE_DIRS
     "${PYRAMID_CPP_BINDINGS_DIR}"
-    "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
     "${PYRAMID_ROOT_DIR}/core/external"   # tl/optional.hpp (header-only) used by data-model types
 )
 set(_pyramid_marshal_objects)
@@ -281,7 +286,6 @@ target_link_libraries(pyramid_generated_codecs PUBLIC nlohmann_json::nlohmann_js
 target_include_directories(pyramid_generated_codecs
     PUBLIC
         "${PYRAMID_CPP_BINDINGS_DIR}"
-        "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
 )
 
 pyramid_glob_generated(_pyramid_generated_json_codec_plugin_srcs
@@ -308,7 +312,6 @@ foreach(PYRAMID_CODEC_PLUGIN_SRC IN LISTS _pyramid_generated_json_codec_plugin_s
     target_include_directories(${PYRAMID_CODEC_PLUGIN_TARGET}
         PRIVATE
             "${PYRAMID_CPP_BINDINGS_DIR}"
-            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
     )
     list(APPEND PYRAMID_CODEC_PLUGIN_TARGETS
         ${PYRAMID_CODEC_PLUGIN_TARGET})
@@ -341,7 +344,6 @@ if(PYRAMID_ENABLE_FLATBUFFERS)
         target_include_directories(${PYRAMID_CODEC_PLUGIN_TARGET}
             PRIVATE
                 "${PYRAMID_CPP_BINDINGS_DIR}"
-                "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
         )
         list(APPEND PYRAMID_CODEC_PLUGIN_TARGETS
             ${PYRAMID_CODEC_PLUGIN_TARGET})
@@ -449,7 +451,7 @@ if(PYRAMID_ENABLE_PROTOBUF)
     add_custom_target(pyramid_protobuf_codegen DEPENDS ${PYRAMID_PROTOBUF_OUTPUTS})
 
     pyramid_glob_generated(PYRAMID_PROTOBUF_SUPPORT_SRCS
-        "${PYRAMID_ROOT_DIR}/bindings/protobuf/cpp/*.cpp")
+        "${PYRAMID_ROOT_DIR}/src/protobuf_support/*.cpp")
     pyramid_require_generated(PYRAMID_PROTOBUF_SUPPORT_SRCS
         "PYRAMID protobuf support sources")
     add_library(pyramid_protobuf_support STATIC
@@ -468,7 +470,7 @@ if(PYRAMID_ENABLE_PROTOBUF)
     target_include_directories(pyramid_protobuf_support
         PUBLIC
             "${PYRAMID_CPP_BINDINGS_DIR}"
-            "${PYRAMID_ROOT_DIR}/bindings/protobuf/cpp"
+            "${PYRAMID_ROOT_DIR}/src/protobuf_support"
             "${PYRAMID_PROTOBUF_GEN_DIR}"
     )
     target_compile_definitions(pyramid_protobuf_support
@@ -507,7 +509,7 @@ if(PYRAMID_ENABLE_PROTOBUF)
         target_include_directories(${PYRAMID_CODEC_PLUGIN_TARGET}
             PRIVATE
                 "${PYRAMID_CPP_BINDINGS_DIR}"
-                "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
+                "${PYRAMID_ROOT_DIR}/src/protobuf_support"
         )
         list(APPEND PYRAMID_CODEC_PLUGIN_TARGETS
             ${PYRAMID_CODEC_PLUGIN_TARGET})
@@ -646,33 +648,6 @@ if(PYRAMID_ENABLE_GRPC)
                 "${PYRAMID_PROTOBUF_GEN_DIR}"
         )
 
-        set(PYRAMID_GRPC_C_SHIM_DIR
-            "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp")
-        pyramid_glob_generated(PYRAMID_GRPC_C_SHIM_SRCS
-            "${PYRAMID_GRPC_C_SHIM_DIR}/*_grpc_c_api*.cpp")
-        pyramid_require_generated(PYRAMID_GRPC_C_SHIM_SRCS
-            "generated PYRAMID gRPC C shim sources")
-        add_library(pyramid_grpc_c_shim SHARED
-            ${PYRAMID_GRPC_C_SHIM_SRCS}
-        )
-        add_dependencies(pyramid_grpc_c_shim
-            pyramid_cpp_bindings_codegen
-            pyramid_grpc_codegen
-            pyramid_protobuf_codegen)
-        target_link_libraries(pyramid_grpc_c_shim
-            PUBLIC
-                gRPC::grpc++
-                protobuf::libprotobuf
-                pyramid_grpc_transport
-                pyramid_protobuf_support
-        )
-        target_include_directories(pyramid_grpc_c_shim
-            PUBLIC
-                "${PYRAMID_GRPC_C_SHIM_DIR}"
-                "${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp"
-                "${PYRAMID_PROTOBUF_GEN_DIR}"
-        )
-
         add_library(pyramid_grpc_coupled_plugin MODULE
             "${PYRAMID_ROOT_DIR}/plugins/pyramid_grpc_coupled_plugin.cpp")
         add_dependencies(pyramid_grpc_coupled_plugin
@@ -712,7 +687,6 @@ if(PYRAMID_ENABLE_ROS2)
             "${PYRAMID_CPP_BINDINGS_DIR}"
             "${PYRAMID_ROS2_SUPPORT_DIR}"
             "${PYRAMID_ROOT_DIR}/core/external"
-            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
     )
 endif()
 

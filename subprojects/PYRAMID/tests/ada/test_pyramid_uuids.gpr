@@ -1,10 +1,12 @@
 project Test_Pyramid_UUIDs is
   Root_Dir := external("UNMANNED_ROOT", ".." & "/.." & "/..");
+  Pyramid_Ada_Bindings_Dir :=
+    external("PYRAMID_ADA_BINDINGS_DIR", Root_Dir & "/build/generated/pyramid_ada_bindings");
 
   for Languages use ("Ada");
   for Source_Dirs use
     (".",
-     Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated",
+     Pyramid_Ada_Bindings_Dir,
      Root_Dir & "/subprojects/PYRAMID/examples/ada");
   for Main use ("test_pyramid_uuids.adb");
 

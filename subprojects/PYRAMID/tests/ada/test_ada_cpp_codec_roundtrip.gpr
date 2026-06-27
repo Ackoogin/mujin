@@ -7,13 +7,15 @@ project Test_Ada_Cpp_Codec_Roundtrip is
     external("PYRAMID_CODECS_LIB_DIR", Root_Dir & "/build/subprojects/PYRAMID");
   Pyramid_Codecs_Lib_Name :=
     external("PYRAMID_CODECS_LIB_NAME", "pyramid_generated_codecs");
+  Pyramid_Ada_Bindings_Dir :=
+    external("PYRAMID_ADA_BINDINGS_DIR", Root_Dir & "/build/generated/pyramid_ada_bindings");
   Cxx_Lib_Dir := external("CXX_LIB_DIR", "/usr/lib/gcc/x86_64-linux-gnu/11");
 
   for Languages use ("Ada");
   for Source_Dirs use
     (".",
      Root_Dir & "/subprojects/PCL/bindings/ada",
-     Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated");
+     Pyramid_Ada_Bindings_Dir);
   for Main use ("test_ada_cpp_codec_roundtrip.adb");
 
   for Object_Dir use "obj_ada_cpp_codec_roundtrip";

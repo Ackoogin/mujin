@@ -46,9 +46,9 @@ flowchart TB
     Backends["backends/*<br/>json, flatbuffers, protobuf, grpc, ros2"]
   end
 
-  subgraph Generated["Checked-in generated outputs"]
-    Cpp["bindings/cpp/generated<br/>types, codecs, services"]
-    Ada["bindings/ada/generated<br/>types, codecs, services"]
+  subgraph Generated["Build-local generated outputs"]
+    Cpp["${binaryDir}/generated/pyramid_cpp_bindings<br/>types, codecs, services"]
+    Ada["${binaryDir}/generated/pyramid_ada_bindings<br/>types, codecs, services"]
     Transport["generated transport projections<br/>grpc, ros2, protobuf shims"]
   end
 
@@ -73,9 +73,8 @@ flowchart TB
 ```
 
 The `.proto` files are the source of truth below any upstream MBSE/SysML
-process. The generated files are checked in because they are part of the current
-component-facing contract and are consumed by production code, examples, and
-tests.
+process. Generated bindings are implementation artifacts refreshed into the
+build tree so each preset gets bindings that match its enabled backends.
 
 ## Runtime Boundary
 
@@ -259,15 +258,15 @@ delivered artifacts directly.
 
 | Output | Role |
 |--------|------|
-| `bindings/cpp/generated/pyramid_data_model_*_types.hpp` | C++ data-model structs and enums |
-| `bindings/cpp/generated/pyramid_data_model_*_codec.*` | C++ JSON data-model codecs |
-| `bindings/cpp/generated/pyramid_services_*_{provided,consumed}.*` | C++ typed service/topic facades |
-| `bindings/cpp/generated/flatbuffers/cpp/*` | FlatBuffers backend projection |
-| `bindings/cpp/generated/protobuf/cpp/*` | Protobuf backend projection stubs |
-| `bindings/cpp/generated/grpc/cpp/*` | gRPC transport projection |
-| `bindings/cpp/generated/ros2/cpp/*` | ROS2 transport projection |
-| `bindings/ada/generated/pyramid-*.ads/.adb` | Ada data-model, codec, and service facades |
-| `bindings/protobuf/cpp/*` | Tactical Objects Protobuf C++ shim used by the active PCL path |
+| `${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_types.hpp` | C++ data-model structs and enums |
+| `${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_codec.*` | C++ JSON data-model codecs |
+| `${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_*_{provided,consumed}.*` | C++ typed service/topic facades |
+| `${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/*` | FlatBuffers backend projection |
+| `${PYRAMID_CPP_BINDINGS_DIR}/protobuf/cpp/*` | Protobuf backend projection stubs |
+| `${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp/*` | gRPC transport projection |
+| `${PYRAMID_CPP_BINDINGS_DIR}/ros2/cpp/*` | ROS2 transport projection |
+| `${PYRAMID_ADA_BINDINGS_DIR}/pyramid-*.ads/.adb` | Ada data-model, codec, and service facades |
+| `src/protobuf_support/*` | Tactical Objects Protobuf C++ support used by the active PCL path |
 
 The generated service facades are the important component-facing artifact. They
 provide typed handlers, `dispatch(...)` helpers, client invocation helpers, topic

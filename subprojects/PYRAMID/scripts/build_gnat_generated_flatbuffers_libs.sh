@@ -72,7 +72,7 @@ if [[ "$FORCE_REBUILD" == "--force" ]]; then
         "$OBJ_DIR"/*.o
 fi
 
-GEN_DIR="$PYRAMID_ROOT/bindings/cpp/generated"
+GEN_DIR="$BUILD_DIR/generated/pyramid_cpp_bindings"
 GEN_FB_DIR="$GEN_DIR/flatbuffers/cpp"
 BUILD_FB_DIR="$BUILD_DIR/generated/flatbuffers/cpp"
 FLATBUFFERS_INCLUDE="$BUILD_DIR/_deps/flatbuffers-src/include"

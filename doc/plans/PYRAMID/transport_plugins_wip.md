@@ -116,13 +116,17 @@ socket/shm, no shim, no JSON detour. Stages:
 2. ✅ **Done** — **CMake**: `pyramid_codec_protobuf_*` MODULE targets link
    `pyramid_protobuf_support` (which carries the protobuf gen include dirs +
    libprotobuf transitively).
-3. **Ada facade**: drop the `Grpc_Transport`/shim special-branch in `ada_codegen.py`;
-   route consumed gRPC through the standard PCL transport-plugin path (gRPC coupled
-   plugin in client mode + protobuf codec), exactly like socket/shm.
-4. **Remove** `pyramid_grpc_c_shim` + generated `*_grpc_c_api*` + Ada
-   `*-grpc_transport.*` once nothing references them.
-5. **Linux Ada gRPC e2e**: Ada client consumes via plugin (no shim) against a
-   plugin-hosted server; `.sh` + ctest, un-gated from WIN32.
+3. ✅ **Done** — **Ada facade**: Ada no longer emits/consumes the generated
+   `Grpc_Transport` shim surface. Consumed gRPC now routes through the standard
+   PCL transport-plugin path: `pyramid_grpc_coupled_plugin` in consumed/client
+   mode plus the `application/protobuf` codec plugin.
+4. ✅ **Done** — removed the `pyramid_grpc_c_shim` target and dropped the
+   generated Ada `*-grpc_transport.*` tree from git. The stale protobuf JSON C
+   shim pair was also removed; `pyramid_protobuf_support` now carries only the
+   typed protobuf codec used by the plugin path.
+5. ✅ **Done** — Linux Ada gRPC e2e is registered and passes via
+   `scripts/test_ada_grpc_cpp_interop_e2e.sh`, using `--transport-plugin`
+   and `--codec-plugin` instead of a shim DLL.
 
 ### B. Protobuf codec plugin (generic transport coverage) — ✅ done
 
@@ -275,7 +279,7 @@ staged:
    content_type, so nullptr is genuinely unsupported (a caller must name a type).
    The stale `ContentTypeMetadata` assertions (expecting `true`, masked by a
    stale binary) were updated to `EXPECT_FALSE`. Both tests green.
-2. **Generated bindings should not be in git (decided 2026-06-27).** Only
+2. ✅ **Resolved.** **Generated bindings should not be in git (decided 2026-06-27).** Only
    interface specs — the `.proto` contracts — are the recorded source of truth;
    build-time-generated *implementations* stay out of git so the tree is
    preset-agnostic. This is the root cause of the drift/pollution seen above:
@@ -283,46 +287,24 @@ staged:
    preset (e.g. Ada facades only emit `application/grpc` + `Configure_Grpc_*`
    under the gRPC backend), so any committed copy is stale for some preset.
 
-   **Migration (medium/structural — own commit):**
-   - Make build-time generation the only source: ensure every preset that
-     consumes bindings sets `PYRAMID_GENERATE_*_BINDINGS=ON` (today `build-grpc`
-     already does; audit the others) and that `pyramid_require_generated`
-     triggers/depends on generation rather than asserting a committed tree.
-   - `git rm --cached` the generated trees (`bindings/cpp/generated`,
-     `bindings/ada/generated`, `bindings/protobuf/cpp`, `bindings/flatbuffers`,
-     generated `*.pb.*`) and add `.gitignore` entries; keep only `proto/`.
-   - Handle the delivery/dist path (`dist/plugin_deploy/*`) which currently
-     vendors generated headers — generate into the package at build/package
-     time instead.
-   - Verify across presets (`default`, `all-off`, `build-grpc`, Ada) that a
-     clean checkout builds + tests with no committed generated files.
-   This also permanently removes the recurring build-time Ada working-tree
-   pollution.
-
-   **Mechanism confirmed (2026-06-27), and it is now *blocking* the Ada plugin
-   tests, not just cosmetic pollution.** GNAT/gprbuild *are* available on the
-   Linux dev box (earlier sessions assumed otherwise), so `build-grpc` detects
-   `gprbuild` and registers the Ada tests with a `pyramid_ada_build_artifacts`
-   fixture that builds `pyramid_ada_all`. But building any binding-consuming
-   target under `build-grpc` regenerates `bindings/ada/generated` **in the source
-   tree** with the gRPC backend enabled, so the committed (non-gRPC) base files
-   are overwritten: `pyramid-services-tactical_objects-consumed.adb` gains
-   `with Pyramid.Components.…Consumed.GRPC_Transport` (emitted only when `grpc` is
-   in the enabled backends — `ada_codegen.py:986`). `ada_active_find_e2e.gpr` is a
-   socket/flatbuffers project whose `Source_Dirs` deliberately exclude
-   `generated/grpc/ada`, so it then fails to compile (`file "pyramid-components.ads"
-   not found`). Because `pyramid_ada_all` builds *every* Ada e2e (socket/flatbuffers
-   `active_find` **and** the gRPC interop) from one in-tree generated set, no single
-   committed backend combination satisfies all gprs at once — and the one failing
-   sub-build fails the whole fixture, so even the Ada **plugin** tests
-   (`ada_plugin_loader_abi`, `tobj_ada_socket_json_plugin_e2e`, `ada_cpp_codec_roundtrip`)
-   never run. The committed tree builds cleanly only in a non-gRPC preset
-   (`build-ada`, flatbuffers/socket). This is why §2.G.2 is the gating prerequisite
-   for the Ada side of the demo: per-preset build-time generation into the build
-   tree (not the source tree) removes both the pollution and the cross-gpr conflict.
-   *(After diagnosing this the polluted working tree was restored via
-   `git checkout -- bindings/ada/generated` + `git clean -fd` on that path — never
-   commit a post-build Ada tree.)*
+   **Migration completed (2026-06-27):**
+   - C++ generation defaults to `${binaryDir}/generated/pyramid_cpp_bindings`;
+     Ada generation defaults to `${binaryDir}/generated/pyramid_ada_bindings`.
+   - `.gitignore` excludes the old generated source-tree locations, and the
+     tracked `bindings/cpp/generated`, `bindings/ada/generated`, and old
+     `bindings/protobuf/cpp` generated/support files were removed or moved to
+     non-generated source locations as appropriate.
+   - GPR projects now consume `PYRAMID_ADA_BINDINGS_DIR` and backend subdirs from
+     the build tree. CMake creates optional backend source dirs even when a
+     preset disables that backend, so GNAT source-dir validation is stable across
+     presets.
+   - Verification:
+     `python3 subprojects/PYRAMID/tests/test_binding_generation_dependencies.py --generator subprojects/PYRAMID/pim/generate_bindings.py --proto-dir subprojects/PYRAMID/proto`;
+     `cmake --preset all-off && cmake --build --preset all-off-release --parallel $(nproc) && ctest --preset all-off-release`;
+     `cmake --preset all-on && cmake --build build-all-enabled --target tobj_grpc_server pyramid_grpc_coupled_plugin pyramid_codec_protobuf_tactical_objects pyramid_ada_all --parallel $(nproc)`;
+     `ctest --test-dir build-all-enabled -R 'tobj_ada_grpc_cpp_interop_e2e|pyramid_binding_generation_dependencies|ada_cpp_codec_roundtrip' --output-on-failure`;
+     `cmake --preset flatbuffers-only && cmake --build --preset flatbuffers-only-release --parallel $(nproc)` plus the Ada fixture subset
+     `ctest --test-dir build-flatbuffers-only -R 'pyramid_ada_build_artifacts|ada_plugin_loader_abi|ada_generated_bindings_roundtrip|ada_cpp_codec_roundtrip|tobj_ada_|pyramid_bridge_e2e' --output-on-failure`.
 
 ### G.3 Socket server load is blocking-by-design (testing note, not a bug)
 

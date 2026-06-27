@@ -18,7 +18,7 @@ The selected service bindings own the service-specific ROS2 surface. C++ emits
 top-level bindRos2(...) startup hooks from cpp_codegen.py, and Ada emits
 top-level endpoint constants from ada_codegen.py. This backend remains
 registered so --backends ros2 selects that facade behavior; the generic runtime
-support layer lives under bindings/cpp/generated/ros2/cpp.
+support layer lives under ${PYRAMID_CPP_BINDINGS_DIR}/ros2/cpp.
 """
 
 from pathlib import Path

@@ -512,7 +512,7 @@ class CppServiceGenerator:
 
         The current protobuf backend emits data-model protobuf wrappers.  The
         generated service facade, however, needs local-struct <-> protobuf
-        conversion helpers.  Those exist today as checked-in service codecs for
+        conversion helpers. Those exist today as source support for
         tactical_objects; do not emit service protobuf dispatch code for service
         packages that do not have that bridge.
         """
@@ -521,7 +521,7 @@ class CppServiceGenerator:
         for parent in [self._proto_input, *self._proto_input.parents]:
             if parent.is_file():
                 parent = parent.parent
-            candidates.append(parent / 'bindings' / 'protobuf' / 'cpp' / header)
+            candidates.append(parent / 'src' / 'protobuf_support' / header)
         return any(path.exists() for path in candidates)
 
     def _discover_data_model_proto_files(self) -> List[ProtoFile]:
@@ -776,11 +776,10 @@ class CppServiceGenerator:
         # fromBinary<Short>(data, size)); only the namespace and header differ.
         if backend == 'protobuf':
             wire_codec_ns = cpp_base_ns + '::protobuf_codec'
-            # The protobuf codec header ships in the source tree under
-            # bindings/protobuf/cpp, which pyramid_protobuf_support exposes as an
-            # include dir, so it is included bare (unlike the flatbuffers codec
-            # header, which is generated into the build bindings dir under
-            # flatbuffers/cpp).
+            # The protobuf service bridge header ships as source support, which
+            # pyramid_protobuf_support exposes as an include dir, so it is
+            # included bare (unlike the flatbuffers codec header, which is
+            # generated into the build bindings dir under flatbuffers/cpp).
             wire_codec_header = file_base + '_protobuf_codec.hpp'
         else:
             wire_codec_ns = cpp_base_ns + '::flatbuffers_codec'
@@ -3719,7 +3718,7 @@ def main():
         if len(sys.argv) < 4:
             print('Usage: python cpp_service_generator.py --types'
                   ' <data_model_dir> <output_dir>')
-            print('  e.g. --types proto/pyramid/data_model bindings/cpp/generated')
+            print('  e.g. --types proto/pyramid/data_model build/generated/pyramid_cpp_bindings')
             sys.exit(1)
         gen = CppTypesGenerator(Path(sys.argv[2]))
         gen.generate(sys.argv[3])

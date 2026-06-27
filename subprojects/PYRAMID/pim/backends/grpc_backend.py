@@ -514,30 +514,10 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('}  // extern "C"\n')
 
     def generate_ada(self, index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
-        output_dir.mkdir(parents=True, exist_ok=True)
-        generated = []
-        generated_pkgs = []
-
-        for pf in index.files:
-            if not pf.services:
-                continue
-
-            pkg_parts = [p.capitalize() for p in pf.package.split('.') if p]
-            pkg_name = '.'.join(pkg_parts) + '.GRPC_Transport'
-            # Use dashes for Ada file naming convention (Pyramid.Foo.Bar -> pyramid-foo-bar)
-            file_base = '-'.join(p.lower() for p in pkg_parts)
-
-            spec_path = output_dir / (file_base + '-grpc_transport.ads')
-            body_path = output_dir / (file_base + '-grpc_transport.adb')
-            self._write_ada_spec(spec_path, pf, index)
-            self._write_ada_body(body_path, pf, index)
-            generated.extend([spec_path, body_path])
-            generated_pkgs.append(pkg_name)
-
-        # Generate empty parent package stubs required by Ada child packages
-        _ensure_parent_packages(output_dir, generated_pkgs)
-
-        return generated
+        # Retired: Ada now consumes gRPC through the normal PCL transport-plugin
+        # path (pyramid_grpc_coupled_plugin + application/protobuf codec), not a
+        # generated Ada-specific C-shim package.
+        return []
 
     # -- C++ header ------------------------------------------------------------
 
@@ -1223,7 +1203,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('   --  (pcl_plugin_open / pcl_plugin_symbol), which wraps\n')
             f.write('   --  dlopen/LoadLibrary, so this transport builds on every platform.\n')
             f.write('   Library_Path : Unbounded_String :=\n')
-            f.write('     To_Unbounded_String ("pyramid_grpc_c_shim");\n')
+            f.write('     To_Unbounded_String ("retired_ada_grpc_transport");\n')
             f.write('   Library_Module : System.Address := System.Null_Address;\n\n')
 
             f.write('   procedure Configure_Library (Path : String) is\n')
@@ -1241,7 +1221,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('      end if;\n')
             f.write('      Interfaces.C.Strings.Free (Path_C);\n')
             f.write('      if Library_Module = System.Null_Address then\n')
-            f.write('         raise Program_Error with "could not load gRPC C shim: " & To_String (Library_Path);\n')
+            f.write('         raise Program_Error with "could not load retired Ada gRPC transport: " & To_String (Library_Path);\n')
             f.write('      end if;\n')
             f.write('      return Library_Module;\n')
             f.write('   end Ensure_Library;\n\n')
@@ -1254,7 +1234,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('   begin\n')
             f.write('      Interfaces.C.Strings.Free (Name_C);\n')
             f.write('      if Result = System.Null_Address then\n')
-            f.write('         raise Program_Error with "gRPC C shim symbol not found: " & Name;\n')
+            f.write('         raise Program_Error with "retired Ada gRPC transport symbol not found: " & Name;\n')
             f.write('      end if;\n')
             f.write('      return Result;\n')
             f.write('   end Symbol_Address;\n\n')

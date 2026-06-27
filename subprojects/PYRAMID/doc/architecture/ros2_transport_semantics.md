@@ -4,8 +4,7 @@ This page defines the canonical ROS2 mapping for PYRAMID/PCL transport
 semantics.
 
 It is the design reference for the generated `ros2` backend and the shared
-support layer under
-[bindings/cpp/generated/ros2/cpp](../../bindings/cpp/generated/ros2/cpp).
+support layer under `${PYRAMID_CPP_BINDINGS_DIR}/ros2/cpp`.
 
 ## Purpose
 
@@ -122,8 +121,8 @@ contract.
 
 | Piece | Location | Role |
 |-------|----------|------|
-| Generated service facade | `bindings/cpp/generated/pyramid_services_*_{provided,consumed}.*` or build-local generated tree | Typed handler APIs, codec dispatch, `bindRos2(...)` hooks |
-| ROS2 support layer | `bindings/cpp/generated/ros2/cpp/pyramid_ros2_transport_support.*` | Transport-neutral ROS2 binding model, envelope helpers, PCL executor handoff |
+| Generated service facade | `${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_*_{provided,consumed}.*` | Typed handler APIs, codec dispatch, `bindRos2(...)` hooks |
+| ROS2 support layer | `${PYRAMID_CPP_BINDINGS_DIR}/ros2/cpp/pyramid_ros2_transport_support.*` | Transport-neutral ROS2 binding model, envelope helpers, PCL executor handoff |
 | ROS2 ament package | `subprojects/PYRAMID/ros2/` | `PclEnvelope`, `PclService`, `PclOpenStream`, and `RclcppRuntimeAdapter` |
 | Runtime adapter | `subprojects/PYRAMID/ros2/include/pyramid_ros2_transport/rclcpp_runtime_adapter.hpp` | Implements the support-layer `Adapter` interface using `rclcpp` |
 | Tests | `tests/test_ros2_transport_semantics.cpp`, `ros2/test/test_rclcpp_runtime_adapter.cpp` | Fake-adapter and real `rclcpp` proofs for naming, handoff, services, streams, and publishing |

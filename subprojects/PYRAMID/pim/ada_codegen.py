@@ -696,7 +696,7 @@ class AdaServiceGenerator:
         duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
 
         is_provided = _is_provided(parsed)
-        has_grpc = 'grpc' in self._enabled_backends
+        has_grpc = False
         has_ros2 = 'ros2' in self._enabled_backends
         sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
 
@@ -952,7 +952,7 @@ class AdaServiceGenerator:
                     type_pkgs: List[str],
                     codec_pkgs: List[str]):
         is_provided = _is_provided(parsed)
-        has_grpc = 'grpc' in self._enabled_backends
+        has_grpc = False
         sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
         duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
         cabi_bindings = _collect_cabi_message_bindings(
@@ -3285,7 +3285,7 @@ def main():
         if len(sys.argv) < 4:
             print('Usage: python ada_service_generator.py --types'
                   ' <data_model_dir> <output_dir>')
-            print('  e.g. --types proto/pyramid/data_model bindings/ada/generated')
+            print('  e.g. --types proto/pyramid/data_model build/generated/pyramid_ada_bindings')
             sys.exit(1)
         gen = AdaTypesGenerator(Path(sys.argv[2]))
         gen.generate(sys.argv[3])

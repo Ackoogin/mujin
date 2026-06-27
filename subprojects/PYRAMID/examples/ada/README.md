@@ -19,7 +19,8 @@ That package set provides:
 - `Pcl_Typed_Ports`
 
 Ada test runners live under `subprojects/PYRAMID/tests/ada`. Generated Ada
-bindings live under `subprojects/PYRAMID/bindings/ada/generated`.
+bindings are build-local and default to
+`${binaryDir}/generated/pyramid_ada_bindings`.
 
 For the full wrapper walkthrough, transport configuration patterns, and C++/Ada
 wrapper examples, see:

@@ -194,9 +194,10 @@ flowchart LR
   exposed both as a standalone `pyramid_marshal_<module>.a` (for per-component
   deployment) and bundled into the aggregate `pyramid_generated_marshal.a` (the
   name C++ and Ada consumers link by, unchanged).
-- C++ bindings are regenerated into the build tree on configure/build; the Ada
-  build compiles the committed `bindings/ada/generated` sources. Regenerate the
-  committed artifacts with `scripts/generate_bindings.sh`.
+- C++ and Ada bindings are regenerated into the build tree on configure/build:
+  `${binaryDir}/generated/pyramid_cpp_bindings` and
+  `${binaryDir}/generated/pyramid_ada_bindings`. Generated source-tree binding
+  outputs are ignored and are not the source of truth.
 - **End-to-end proto→plugins:** `scripts/build_plugins.sh` runs the whole
   pipeline (regenerate bindings from `.proto`, then build every codec/transport
   `.so` via the CMake `pyramid_plugins` aggregate target), suitable as a CI/CD
@@ -208,8 +209,8 @@ flowchart LR
   `scripts/build_ada.sh` is the Ada counterpart to `build_plugins.sh`: it builds
   the Ada *binaries* via GNAT `gprbuild` (the `pyramid_ada_all` target, which also
   builds the GNAT FlatBuffers archive) plus `pyramid_plugins` so the `.so`s they
-  load are present. Ada bindings are committed and compiled from source, so
-  refreshing them from `.proto` is opt-in (`--regen`).
+  load are present. `--regen` refreshes the build-local Ada binding tree from
+  `.proto`.
 
 ## Deployment
 
@@ -280,15 +281,13 @@ ABI/load + pass-through codec test. Production closure (consumed/client side,
 reproducible ament build, live E2E, process-safe lifecycle, staged deployment) is
 still open.
 
-**Architectural note — gRPC protobuf marshalling and the Ada shim.** Ada still
-consumes gRPC through a bespoke JSON shim (`pyramid_grpc_c_shim`) that bypasses
-the PCL transport. The intended end-state is for Ada (and C++) to consume gRPC
-**identically to socket/shm** — gRPC coupled plugin as the PCL transport, standard
-facade, no shim, no JSON detour. The blocker is the wire codec: `application/grpc`
-carries protobuf, and **C-ABI marshalling alone is not sufficient** — it produces
-the frozen `pyramid_<T>_c` struct, but something must still turn that struct into
-protobuf wire bytes. The clean home is the coupled plugin's own codec (or a
-standalone `application/protobuf` codec plugin).
+**Architectural note — gRPC protobuf marshalling and Ada.** Ada consumes gRPC
+the same way it consumes socket/shm: the gRPC coupled plugin is loaded as the PCL
+transport, and the `application/protobuf` codec plugin is loaded through the
+codec registry. There is no Ada-specific gRPC JSON shim in the active path.
+`application/grpc` remains a wire-level gRPC transport detail; the Ada facade
+uses the standard generated service API with `application/protobuf` payload
+encoding.
 
 **Live status, pending work, and decisions** for all of the above (gRPC, ROS2
 closure, protobuf codec, shim retirement, the transport capability model) are

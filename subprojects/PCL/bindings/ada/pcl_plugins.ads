@@ -113,6 +113,13 @@ package Pcl_Plugins is
   procedure Pcl_Plugin_Unload(Handle : System.Address);
   pragma Import(C, Pcl_Plugin_Unload, "pcl_plugin_unload");
 
+  function Pcl_Plugin_Unload_Transport
+    (Handle : System.Address;
+     Vtable : Pcl_Bindings.Pcl_Transport_Const_Access)
+      return Pcl_Bindings.Pcl_Status;
+  pragma Import(C, Pcl_Plugin_Unload_Transport,
+                "pcl_plugin_unload_transport");
+
   function Pcl_Plugin_Symbol
     (Handle : System.Address;
      Name   : Interfaces.C.Strings.chars_ptr) return System.Address;
