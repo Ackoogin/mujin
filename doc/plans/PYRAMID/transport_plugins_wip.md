@@ -166,10 +166,14 @@ closed and `scripts/build_ros2_transport.sh`.
    live adapter — generated unary/stream ServiceBinder serving a real rclcpp
    client via the PCL executor, and publish routing a PclEnvelope onto a ROS2
    topic). 10 tests, 0 failures.
-3. **Consumed/client side** — implement `invoke_async`/`invoke_stream` for ROS2
-   (required for the both-ways core contract), or explicitly document
-   `application/ros2` as ingress/pub-sub only and add fail-closed tests. See §3.
-   *(Open — overlaps §2.D.6.)*
+3. 🟡 **Unary done** (`fe0a7ec`); **stream open.** Consumed/client side for ROS2:
+   `RclcppRuntimeAdapter::invokeUnary` (cached `rclcpp::Client<PclService>`,
+   `async_send_request`, bounded wait serviced by the spin thread, fail-closed on
+   missing/slow server) wired to `transport.invoke_async` via the generated
+   `invokeRemoteUnary` support helper. Both-ways unary core met (D2/§2.D.6). Tests:
+   `ConsumedInvokeUnary{CallsRemoteRos2Service,FailsClosedWithoutServer}` +
+   `invoke_async` non-null in the load test. **Remaining:** consumed *streaming*
+   (`invoke_stream` over the open-stream service + frame topic).
 4. ✅ **Done** (`7d52a4d`) — **Process-safe rclcpp lifecycle.** The
    never-shutdown-unless-creator rule (D7) was already in place (`owns_rclcpp`);
    the real defect was a racy `spin()`/`cancel()` pair — `cancel()` issued before
@@ -224,7 +228,8 @@ staged:
    *(Plugin auto-wiring of declared QoS at compose time lands with stage 5.)*
 5. Manifest-driven per-endpoint routing across multiple transport plugins; one
    mixed-middleware e2e (e.g. services/gRPC + topics/udp on one component).
-6. Close ROS2 consumed `invoke_async` (overlaps §2.C.3) so ROS2 meets the both-ways core.
+6. ✅ **Done** (`fe0a7ec`) — ROS2 consumed `invoke_async` closed (see §2.C.3), so
+   ROS2 meets the both-ways **unary** core. (Consumed streaming still open in §2.C.3.)
 7. **Deferred (D5):** opt-in adapters (`PUBSUB over RPC_STREAM`, `RPC_UNARY over
    PUBSUB`) are *not* in v1 — stay strictly fail-closed until a concrete need.
    When added, each advertises the derived capability behind explicit config.
@@ -343,6 +348,11 @@ All seven are now decided; pending work in §2 follows these.
 
 ## 4. Recently closed
 
+- **ROS2 consumed unary invoke_async (§2.C.3/§2.D.6)** (2026-06-27, `fe0a7ec`) —
+  `RclcppRuntimeAdapter::invokeUnary` + generated `invokeRemoteUnary` helper +
+  plugin `transport.invoke_async`; PCL invokes a remote ROS2 unary service and
+  gets the response (fail-closed without a server). colcon test 12/12. Consumed
+  streaming (`invoke_stream`) is the remaining ROS2 client piece.
 - **ROS2 ament build + live E2E + process-safe lifecycle (§2.C.1/2/4)**
   (2026-06-27, `7d52a4d`) — colcon build+test green on Humble with no committed
   generated files: configurable `PYRAMID_CPP_BINDINGS_DIR` into the ament package,
