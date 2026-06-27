@@ -53,6 +53,9 @@ TEST(Ros2CoupledPluginLoad, ExposesFunctionalTransportVtable) {
   ASSERT_NE(transport, nullptr);
   EXPECT_NE(transport->publish, nullptr);
   EXPECT_NE(transport->subscribe, nullptr);
+  // Consumed (client) side wired: PCL can invoke a remote ROS2 unary service
+  // (§2.C.3 / §2.D.6).
+  EXPECT_NE(transport->invoke_async, nullptr);
 
   // The plugin exposes server-side bind hooks plus a destroy lifecycle hook.
   // Loading the transport already stood up a real rclcpp node + spin thread

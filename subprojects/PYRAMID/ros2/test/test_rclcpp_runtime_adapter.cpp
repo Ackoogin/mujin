@@ -384,3 +384,45 @@ TEST_F(RuntimeAdapterFixture, PublishRoutesPclEnvelopeOntoRos2Topic) {
 
   (void)subscription;
 }
+
+// Consumed (client) side: invokeUnary calls a remote ROS2 service and returns
+// its response -- the both-ways core for application/ros2 (§2.C.3 / §2.D.6).
+TEST_F(RuntimeAdapterFixture, ConsumedInvokeUnaryCallsRemoteRos2Service) {
+  const auto binding = ros2_support::makeUnaryServiceBinding("standard.echo");
+
+  // Server: advertise an echo service on the server adapter/node.
+  adapter_->advertise(binding, [](const ros2_support::Envelope& req) {
+    ros2_support::Envelope resp;
+    resp.content_type = req.content_type;
+    resp.correlation_id = req.correlation_id;
+    resp.payload = req.payload;
+    resp.payload.push_back('!');
+    resp.status = PCL_OK;
+    return resp;
+  });
+
+  // Client: a second adapter on the client node invokes it. invokeUnary blocks
+  // on this (test) thread while the fixture's ROS spin thread services both ends.
+  ros2_support::RclcppRuntimeAdapter client_adapter(client_node_);
+  ros2_support::Envelope request;
+  request.content_type = "application/ros2";
+  request.correlation_id = "consume-1";
+  request.payload.assign({'h', 'i'});
+
+  const auto response = client_adapter.invokeUnary(binding, request);
+
+  EXPECT_EQ(response.status, PCL_OK);
+  EXPECT_EQ(response.correlation_id, "consume-1");
+  ASSERT_EQ(response.payload.size(), 3u);
+  EXPECT_EQ(std::string(response.payload.begin(), response.payload.end()), "hi!");
+}
+
+// A missing server fails closed (no hang) rather than blocking forever.
+TEST_F(RuntimeAdapterFixture, ConsumedInvokeUnaryFailsClosedWithoutServer) {
+  ros2_support::RclcppRuntimeAdapter client_adapter(client_node_);
+  const auto binding = ros2_support::makeUnaryServiceBinding("standard.absent");
+  ros2_support::Envelope request;
+  request.payload.assign({'x'});
+  const auto response = client_adapter.invokeUnary(binding, request);
+  EXPECT_NE(response.status, PCL_OK);
+}

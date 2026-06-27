@@ -1,5 +1,7 @@
 #include "pyramid_ros2_transport/rclcpp_runtime_adapter.hpp"
 
+#include <chrono>
+#include <future>
 #include <utility>
 
 namespace pyramid::transport::ros2 {
@@ -174,6 +176,48 @@ void RclcppRuntimeAdapter::publish(const TopicBinding& binding,
     }
   }
   publisher->publish(toRosMessage(envelope));
+}
+
+Envelope RclcppRuntimeAdapter::invokeUnary(const UnaryServiceBinding& binding,
+                                           const Envelope& request) {
+  rclcpp::Client<UnaryService>::SharedPtr client;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = unary_clients_.find(binding.ros2_service);
+    if (it == unary_clients_.end()) {
+      client = node_->create_client<UnaryService>(binding.ros2_service);
+      unary_clients_.emplace(binding.ros2_service, client);
+    } else {
+      client = it->second;
+    }
+  }
+
+  Envelope response;
+  // We are called on the PCL executor thread; the transport spin thread services
+  // the response. Bound the waits so a missing/slow server fails closed instead
+  // of hanging the caller.
+  using namespace std::chrono_literals;
+  if (!client->wait_for_service(5s)) {
+    response.status = PCL_ERR_NOT_FOUND;
+    return response;
+  }
+
+  auto req = std::make_shared<UnaryService::Request>();
+  req->content_type = request.content_type;
+  req->correlation_id = request.correlation_id;
+  req->payload.assign(request.payload.begin(), request.payload.end());
+
+  auto future = client->async_send_request(req);
+  if (future.wait_for(5s) != std::future_status::ready) {
+    response.status = PCL_ERR_TIMEOUT;
+    return response;
+  }
+  const auto result = future.get();
+  response.content_type = result->content_type;
+  response.correlation_id = result->correlation_id;
+  response.payload.assign(result->payload.begin(), result->payload.end());
+  response.status = static_cast<pcl_status_t>(result->status);
+  return response;
 }
 
 }  // namespace pyramid::transport::ros2

@@ -28,6 +28,11 @@ class RclcppRuntimeAdapter final : public Adapter {
                  StreamHandler handler) override;
   void publish(const TopicBinding& binding, const Envelope& envelope) override;
 
+  // Consumed (client) side: call a remote ROS2 unary service and block for the
+  // response (serviced by the transport's spin thread).
+  Envelope invokeUnary(const UnaryServiceBinding& binding,
+                       const Envelope& request) override;
+
  private:
   using EnvelopeMsg = pyramid_ros2_transport::msg::PclEnvelope;
   using UnaryService = pyramid_ros2_transport::srv::PclService;
@@ -55,6 +60,8 @@ class RclcppRuntimeAdapter final : public Adapter {
       envelope_publishers_;
   std::vector<rclcpp::SubscriptionBase::SharedPtr> subscriptions_;
   std::vector<rclcpp::ServiceBase::SharedPtr> services_;
+  std::unordered_map<std::string, rclcpp::Client<UnaryService>::SharedPtr>
+      unary_clients_;
   std::unordered_set<std::string> cancelled_streams_;
   uint64_t next_correlation_id_ = 1U;
 };

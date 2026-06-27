@@ -182,6 +182,20 @@ pcl_status_t ros2Subscribe(void* ctx_v, const char* topic, const char* /*type_na
   return PCL_OK;
 }
 
+pcl_status_t ros2InvokeAsync(void* ctx_v, const char* service_name,
+                             const pcl_msg_t* request, pcl_resp_cb_fn_t callback,
+                             void* user_data) {
+  auto* ctx = static_cast<Ros2TransportContext*>(ctx_v);
+  if (!ctx || !ctx->adapter || !service_name || !request || !callback) {
+    return PCL_ERR_INVALID;
+  }
+  // Consumed (client) side: PCL invokes a remote ROS2 unary service. The adapter
+  // blocks for the response (serviced by this context's spin thread), then the
+  // support helper delivers it through the PCL callback.
+  return pyramid::transport::ros2::invokeRemoteUnary(
+      *ctx->adapter, service_name, request, callback, user_data);
+}
+
 void ros2Shutdown(void* ctx_v) {
   stopSpin(static_cast<Ros2TransportContext*>(ctx_v));
 }
@@ -314,6 +328,7 @@ PYRAMID_ROS2_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
 
   ctx->transport.publish = ros2Publish;
   ctx->transport.subscribe = ros2Subscribe;
+  ctx->transport.invoke_async = ros2InvokeAsync;
   ctx->transport.shutdown = ros2Shutdown;
   ctx->transport.adapter_ctx = ctx;
   return &ctx->transport;
