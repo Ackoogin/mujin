@@ -180,12 +180,18 @@ closed and `scripts/build_ros2_transport.sh`.
    `spin()` entered its wait was lost, deadlocking teardown for 60 s until a signal
    fired `rclcpp::shutdown()`. Replaced with a cooperative `spin_once(50ms)` loop
    gated on an atomic flag + `rclcpp::ok()`. Deterministic shutdown (60 s → 13 ms).
-5. **Lifecycle enforcement** — a generic helper/wrapper so apps can't
-   `pcl_plugin_unload` without first destroying the transport context (spin thread).
-   *(Open.)*
-6. **Deployment staging** — document/runtime-check the ROS2 runtime env (sourced
-   setup, type-support lib paths, package install dirs) for dlopen-only clients.
-   *(Open; `build_ros2_transport.sh` documents the build-time env.)*
+5. ✅ **Done** (`18b0e3b`) — **Lifecycle enforcement.** Standard optional symbol
+   `pcl_transport_plugin_teardown` + generic `pcl_plugin_unload_transport(handle,
+   vtable)` that tears down (stops spin thread / frees context) **before** dlclose;
+   stateless plugins omit the symbol and it degrades to a plain unload. ROS2 + gRPC
+   coupled plugins export the alias. Tests: `test_pcl_plugin_loader` (degrade +
+   null-handle), `test_ros2_coupled_plugin_load` uses the safe helper.
+6. ✅ **Done** (`18b0e3b`) — **Deployment staging.** `ros2_transport_semantics.md`
+   "Deployment / runtime environment" section: source ROS2,
+   `AMENT_PREFIX_PATH`/`LD_LIBRARY_PATH` for typesupport, `RMW_IMPLEMENTATION`, and
+   a symptom map (`librclcpp` missing → not sourced; `invalid allocator` →
+   typesupport/rmw not on the runtime path). `build_ros2_transport.sh` documents
+   the build-time env.
 
 ### D. Transport capability model (heterogeneous middleware)
 
@@ -348,6 +354,11 @@ All seven are now decided; pending work in §2 follows these.
 
 ## 4. Recently closed
 
+- **Safe teardown-then-unload + ROS2 deployment doc (§2.C.5/§2.C.6)** (2026-06-27,
+  `18b0e3b`) — `pcl_transport_plugin_teardown` symbol + `pcl_plugin_unload_transport`
+  (teardown before dlclose, degrades to plain unload); ROS2/gRPC coupled plugins
+  export it. ROS2 runtime/deployment env documented with a symptom map. Loader
+  test 13/13, ROS2 colcon 12/12.
 - **ROS2 consumed unary invoke_async (§2.C.3/§2.D.6)** (2026-06-27, `fe0a7ec`) —
   `RclcppRuntimeAdapter::invokeUnary` + generated `invokeRemoteUnary` helper +
   plugin `transport.invoke_async`; PCL invokes a remote ROS2 unary service and
