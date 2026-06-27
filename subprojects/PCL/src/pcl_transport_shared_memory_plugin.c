@@ -144,3 +144,12 @@ PCL_SHM_PLUGIN_EXPORT void pcl_shm_transport_plugin_destroy(
   pcl_shared_memory_transport_destroy(
       (pcl_shared_memory_transport_t*)transport->adapter_ctx);
 }
+
+/* Standard teardown symbol (see pcl_plugin_unload_transport): release the
+   executor-bound shared-memory transport before the .so is unloaded. */
+PCL_SHM_PLUGIN_EXPORT void pcl_transport_plugin_teardown(
+    const pcl_transport_t* transport) {
+  if (!transport) return;
+  pcl_shared_memory_transport_destroy(
+      (pcl_shared_memory_transport_t*)transport->adapter_ctx);
+}

@@ -157,3 +157,12 @@ PCL_UDP_PLUGIN_EXPORT void pcl_udp_transport_plugin_destroy(
   if (!transport) return;
   pcl_udp_transport_destroy((pcl_udp_transport_t*)transport->adapter_ctx);
 }
+
+/* Standard teardown symbol: stop the recv thread + close the socket before the
+   .so is unloaded (pcl_plugin_unload_transport), so manifest-driven routing can
+   release the transport without leaking its executor-bound thread. */
+PCL_UDP_PLUGIN_EXPORT void pcl_transport_plugin_teardown(
+    const pcl_transport_t* transport) {
+  if (!transport) return;
+  pcl_udp_transport_destroy((pcl_udp_transport_t*)transport->adapter_ctx);
+}

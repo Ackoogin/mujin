@@ -155,3 +155,11 @@ PCL_SOCKET_PLUGIN_EXPORT void pcl_socket_transport_plugin_destroy(
   if (!transport) return;
   pcl_socket_transport_destroy((pcl_socket_transport_t*)transport->adapter_ctx);
 }
+
+/* Standard teardown symbol (see pcl_plugin_unload_transport): release the
+   executor-bound socket transport before the .so is unloaded. */
+PCL_SOCKET_PLUGIN_EXPORT void pcl_transport_plugin_teardown(
+    const pcl_transport_t* transport) {
+  if (!transport) return;
+  pcl_socket_transport_destroy((pcl_socket_transport_t*)transport->adapter_ctx);
+}
