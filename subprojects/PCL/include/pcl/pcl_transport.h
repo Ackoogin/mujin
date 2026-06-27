@@ -144,9 +144,48 @@ pcl_status_t pcl_executor_set_transport(pcl_executor_t*        e,
 ///
 /// Multiple peer transports may be registered on the same executor. Endpoint
 /// routes can then target a specific \p peer_id.
+///
+/// The transport's interaction capabilities are recorded by deriving them from
+/// the vtable (see \ref pcl_transport_caps_from_vtable). When a plugin declares
+/// capabilities explicitly (which is authoritative -- coupled plugins carry
+/// fail-closed vtable stubs), use \ref pcl_executor_register_transport_caps.
 pcl_status_t pcl_executor_register_transport(pcl_executor_t*        e,
                                              const char*            peer_id,
                                              const pcl_transport_t* transport);
+
+/// \brief Set the default transport with an explicit capability mask.
+///
+/// As \ref pcl_executor_set_transport, but records \p caps (e.g. the mask a
+/// plugin declared via pcl_transport_plugin_caps) instead of deriving it from
+/// the vtable, so compose-time validation is accurate for coupled plugins.
+pcl_status_t pcl_executor_set_transport_caps(pcl_executor_t*        e,
+                                             const pcl_transport_t* transport,
+                                             pcl_transport_caps_t   caps);
+
+/// \brief Register a named peer transport with an explicit capability mask.
+///
+/// As \ref pcl_executor_register_transport, but records \p caps explicitly.
+pcl_status_t pcl_executor_register_transport_caps(pcl_executor_t*        e,
+                                                  const char*            peer_id,
+                                                  const pcl_transport_t* transport,
+                                                  pcl_transport_caps_t   caps);
+
+/// \brief Compose-time check that a routed transport can serve an endpoint.
+///
+/// For each remote peer the \p route targets, verifies the registered
+/// transport's capabilities include the capability the endpoint's kind requires
+/// (\ref pcl_endpoint_required_caps). Fails closed:
+/// - \ref PCL_ERR_NOT_FOUND if a targeted peer has no registered transport;
+/// - \ref PCL_ERR_STATE if a transport lacks the required capability.
+///
+/// On failure, a precise human-readable reason is written to \p diag (when
+/// non-NULL and \p diag_size > 0). Local-only routes and unrecognised endpoint
+/// kinds require nothing and return \ref PCL_OK.
+pcl_status_t pcl_executor_validate_endpoint_route(
+    const pcl_executor_t*       e,
+    const pcl_endpoint_route_t* route,
+    char*                       diag,
+    size_t                      diag_size);
 
 /// \brief Get the currently configured default transport adapter.
 ///

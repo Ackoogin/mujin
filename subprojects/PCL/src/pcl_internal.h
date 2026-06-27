@@ -66,6 +66,7 @@ struct pcl_port_t {
 
 // -- Internal executor representation ------------------------------------
 
+#include "pcl/pcl_capabilities.h"
 #include "pcl/pcl_transport.h"
 
 #ifdef _WIN32
@@ -115,9 +116,10 @@ typedef struct pcl_pending_svc_req_t {
 } pcl_pending_svc_req_t;
 
 typedef struct {
-  char            peer_id[64];
-  pcl_transport_t transport;
-  int             in_use;
+  char                 peer_id[64];
+  pcl_transport_t      transport;
+  pcl_transport_caps_t caps;
+  int                  in_use;
 } pcl_registered_transport_t;
 
 typedef struct {
@@ -140,6 +142,7 @@ struct pcl_executor_t {
 
   pcl_transport_t  transport;
   int              has_transport;
+  pcl_transport_caps_t transport_caps;
   pcl_registered_transport_t transports[PCL_MAX_TRANSPORTS];
   uint32_t                 transport_count;
   pcl_endpoint_route_entry_t endpoint_routes[PCL_MAX_ENDPOINT_ROUTES];

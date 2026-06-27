@@ -173,8 +173,13 @@ staged:
    and `test_ros2_coupled_plugin_load`. *(ROS2 assertion added but unbuilt in the
    Linux `build-grpc` env — no ament/rclcpp toolchain here; runs under the ROS2
    build.)*
-3. Compose-time validation — endpoint required-capability vs routed transport mask,
-   fail closed with a precise diagnostic; negative tests.
+3. ✅ **Done** — compose-time validation: `pcl_executor_validate_endpoint_route()`
+   checks each remote peer transport's recorded caps against the endpoint kind's
+   required cap (`pcl_endpoint_required_caps`), failing closed with a precise
+   `diag` (`PCL_ERR_NOT_FOUND` missing peer, `PCL_ERR_STATE` missing cap). Caps
+   recorded per transport (`*_caps` register/set variants take the declared mask;
+   plain variants derive from the vtable). Positive + negative tests in
+   `test_pcl_capabilities` (19/19). Callable pass; auto-wiring waits on stage 5.
 4. QoS floor carried on endpoints + validated (start with reliability).
 5. Manifest-driven per-endpoint routing across multiple transport plugins; one
    mixed-middleware e2e (e.g. services/gRPC + topics/udp on one component).
@@ -272,6 +277,17 @@ All seven are now decided; pending work in §2 follows these.
 
 ## 4. Recently closed
 
+- **Compose-time capability validation (§2.D.3)** (2026-06-27) —
+  `pcl_executor_validate_endpoint_route()` + `pcl_endpoint_required_caps` +
+  `pcl_transport_caps_supports`; per-transport recorded caps (declared via new
+  `*_caps` register/set variants, else derived). Fails closed with a precise
+  diagnostic. `test_pcl_capabilities` 19/19; PCL suite 340/340.
+- **Config selector unified on role: provided|consumed (D6 / §2.F)** (2026-06-27)
+  — additive (socket + gRPC accept `role`; `mode`/`server`/`client` kept as
+  aliases). gRPC e2e 2/2, socket 31/31, loader 11/11.
+- **§2.B / §2.G.1 / §2.E** (2026-06-27) — protobuf benchmark rows un-skip;
+  `supportsContentType(nullptr)` test corrected to fail-closed; plugin build
+  stage covers the protobuf codec plugin.
 - **Protobuf codec plugin (D1 / §2.A.1–A.2, §2.B)** (2026-06-27) — generator
   emits `pyramid_codec_protobuf_<component>` (tactical_objects), CMake builds it,
   C++ test env loads it. 7 of 9 previously-red proto tests now green

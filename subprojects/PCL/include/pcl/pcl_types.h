@@ -82,6 +82,20 @@ typedef struct {
   uint32_t                  peer_count;
 } pcl_endpoint_route_t;
 
+// -- Transport interaction capabilities ----------------------------------
+//
+// Bitmask of the interaction patterns a transport can carry. Helpers live in
+// pcl_capabilities.h; the type is here so the transport/executor API can use it
+// without a circular include.
+
+typedef uint32_t pcl_transport_caps_t;
+
+#define PCL_CAP_NONE        0x0u  ///< No interaction capability.
+#define PCL_CAP_PUBSUB      0x1u  ///< Publish/subscribe (topic).
+#define PCL_CAP_RPC_UNARY   0x2u  ///< Unary request/response RPC.
+#define PCL_CAP_RPC_STREAM  0x4u  ///< Server-streaming (or richer) RPC.
+#define PCL_CAP_RPC_ACTION  0x8u  ///< Action (goal/feedback/result).
+
 // -- Log levels ----------------------------------------------------------
 
 typedef enum {

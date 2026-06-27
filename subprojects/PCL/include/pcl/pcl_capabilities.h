@@ -19,27 +19,11 @@
 extern "C" {
 #endif
 
-/// \brief Bitmask of transport interaction capabilities.
-typedef uint32_t pcl_transport_caps_t;
-
-/// \brief No interaction capability.
-#define PCL_CAP_NONE        0x0u
-
-/// \brief Publish/subscribe (topic) interaction.
-#define PCL_CAP_PUBSUB      0x1u
-
-/// \brief Unary request/response RPC (provided or consumed).
-#define PCL_CAP_RPC_UNARY   0x2u
-
-/// \brief Server-streaming (or richer streaming) RPC.
-#define PCL_CAP_RPC_STREAM  0x4u
-
-/// \brief Action interaction (goal / feedback / result).
-///
-/// There is no vtable slot for actions, so this capability can only be
-/// advertised by an explicit pcl_transport_plugin_caps symbol; it is never
-/// derived from the vtable.
-#define PCL_CAP_RPC_ACTION  0x8u
+// pcl_transport_caps_t and the PCL_CAP_* flags are defined in pcl_types.h so the
+// transport/executor API can reference them without a circular include.
+//
+// PCL_CAP_RPC_ACTION has no vtable slot, so it can only be advertised by an
+// explicit pcl_transport_plugin_caps symbol; it is never derived from a vtable.
 
 /// \brief Conservatively derive capabilities from non-NULL vtable slots.
 ///
@@ -56,6 +40,22 @@ typedef uint32_t pcl_transport_caps_t;
 /// Returns \ref PCL_CAP_NONE when \p transport is NULL.
 pcl_transport_caps_t pcl_transport_caps_from_vtable(
     const pcl_transport_t* transport);
+
+/// \brief The transport capability an endpoint of \p kind requires.
+///
+/// - PUBLISHER / SUBSCRIBER        -> \ref PCL_CAP_PUBSUB
+/// - PROVIDED / CONSUMED           -> \ref PCL_CAP_RPC_UNARY
+/// - STREAM_PROVIDED               -> \ref PCL_CAP_RPC_STREAM
+///
+/// Returns \ref PCL_CAP_NONE for an unrecognised kind (no requirement).
+pcl_transport_caps_t pcl_endpoint_required_caps(pcl_endpoint_kind_t kind);
+
+/// \brief Whether \p have includes every capability in \p required.
+///
+/// Returns 1 if `(have & required) == required` (vacuously true when
+/// \p required is \ref PCL_CAP_NONE), else 0.
+int pcl_transport_caps_supports(pcl_transport_caps_t have,
+                                pcl_transport_caps_t required);
 
 #ifdef __cplusplus
 }

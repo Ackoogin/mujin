@@ -727,17 +727,26 @@ pcl_status_t pcl_executor_shutdown_graceful(pcl_executor_t* e,
 
 // -- Transport -----------------------------------------------------------
 
-pcl_status_t pcl_executor_set_transport(pcl_executor_t*        e,
-                                        const pcl_transport_t* transport) {
+pcl_status_t pcl_executor_set_transport_caps(pcl_executor_t*        e,
+                                             const pcl_transport_t* transport,
+                                             pcl_transport_caps_t   caps) {
   if (!e) return PCL_ERR_INVALID;
   if (transport) {
-    e->transport     = *transport;
-    e->has_transport = 1;
+    e->transport       = *transport;
+    e->transport_caps  = caps;
+    e->has_transport   = 1;
   } else {
     memset(&e->transport, 0, sizeof(e->transport));
-    e->has_transport = 0;
+    e->transport_caps  = PCL_CAP_NONE;
+    e->has_transport   = 0;
   }
   return PCL_OK;
+}
+
+pcl_status_t pcl_executor_set_transport(pcl_executor_t*        e,
+                                        const pcl_transport_t* transport) {
+  return pcl_executor_set_transport_caps(
+      e, transport, pcl_transport_caps_from_vtable(transport));
 }
 
 const pcl_transport_t* pcl_executor_get_transport(const pcl_executor_t* e) {
@@ -751,9 +760,10 @@ const pcl_transport_t* pcl_executor_get_transport_for_peer(
   return find_named_transport(e, peer_id);
 }
 
-pcl_status_t pcl_executor_register_transport(pcl_executor_t*        e,
-                                             const char*            peer_id,
-                                             const pcl_transport_t* transport) {
+pcl_status_t pcl_executor_register_transport_caps(pcl_executor_t*        e,
+                                                  const char*            peer_id,
+                                                  const pcl_transport_t* transport,
+                                                  pcl_transport_caps_t   caps) {
   uint32_t i;
 
   if (!e || !peer_id) return PCL_ERR_INVALID;
@@ -763,6 +773,7 @@ pcl_status_t pcl_executor_register_transport(pcl_executor_t*        e,
         strcmp(e->transports[i].peer_id, peer_id) == 0) {
       if (transport) {
         e->transports[i].transport = *transport;
+        e->transports[i].caps      = caps;
       } else {
         memset(&e->transports[i], 0, sizeof(e->transports[i]));
       }
@@ -778,8 +789,101 @@ pcl_status_t pcl_executor_register_transport(pcl_executor_t*        e,
            "%s",
            peer_id);
   e->transports[e->transport_count].transport = *transport;
+  e->transports[e->transport_count].caps      = caps;
   e->transports[e->transport_count].in_use = 1;
   e->transport_count++;
+  return PCL_OK;
+}
+
+pcl_status_t pcl_executor_register_transport(pcl_executor_t*        e,
+                                             const char*            peer_id,
+                                             const pcl_transport_t* transport) {
+  return pcl_executor_register_transport_caps(
+      e, peer_id, transport, pcl_transport_caps_from_vtable(transport));
+}
+
+static const char* caps_name(pcl_transport_caps_t cap) {
+  switch (cap) {
+    case PCL_CAP_PUBSUB:     return "PUBSUB";
+    case PCL_CAP_RPC_UNARY:  return "RPC_UNARY";
+    case PCL_CAP_RPC_STREAM: return "RPC_STREAM";
+    case PCL_CAP_RPC_ACTION: return "RPC_ACTION";
+    default:                 return "NONE";
+  }
+}
+
+static pcl_status_t validate_one_transport(pcl_transport_caps_t have,
+                                           int                  found,
+                                           pcl_transport_caps_t required,
+                                           const char*          endpoint_name,
+                                           const char*          peer_label,
+                                           char*                diag,
+                                           size_t               diag_size) {
+  if (!found) {
+    if (diag && diag_size) {
+      snprintf(diag, diag_size,
+               "endpoint '%s' routes to %s but no transport is registered there",
+               endpoint_name ? endpoint_name : "?", peer_label);
+    }
+    return PCL_ERR_NOT_FOUND;
+  }
+  if (!pcl_transport_caps_supports(have, required)) {
+    if (diag && diag_size) {
+      snprintf(diag, diag_size,
+               "endpoint '%s' requires %s but %s provides caps 0x%x",
+               endpoint_name ? endpoint_name : "?", caps_name(required),
+               peer_label, (unsigned)have);
+    }
+    return PCL_ERR_STATE;
+  }
+  return PCL_OK;
+}
+
+pcl_status_t pcl_executor_validate_endpoint_route(
+    const pcl_executor_t*       e,
+    const pcl_endpoint_route_t* route,
+    char*                       diag,
+    size_t                      diag_size) {
+  pcl_transport_caps_t required;
+  uint32_t p;
+
+  if (diag && diag_size) diag[0] = '\0';
+  if (!e || !route) return PCL_ERR_INVALID;
+
+  required = pcl_endpoint_required_caps(route->endpoint_kind);
+  /* No requirement (unknown kind) or no remote leg: nothing to validate. */
+  if (required == PCL_CAP_NONE) return PCL_OK;
+  if ((route->route_mode & PCL_ROUTE_REMOTE) == 0u) return PCL_OK;
+
+  if (route->peer_count == 0u) {
+    /* Remote via the default transport. */
+    char label[80];
+    snprintf(label, sizeof(label), "the default transport");
+    return validate_one_transport(e->transport_caps, e->has_transport, required,
+                                  route->endpoint_name, label, diag, diag_size);
+  }
+
+  for (p = 0; p < route->peer_count; ++p) {
+    const char* peer_id = route->peer_ids ? route->peer_ids[p] : NULL;
+    pcl_transport_caps_t have = PCL_CAP_NONE;
+    int found = 0;
+    uint32_t i;
+    char label[96];
+    pcl_status_t rc;
+
+    for (i = 0; i < e->transport_count; ++i) {
+      if (e->transports[i].in_use && peer_id &&
+          strcmp(e->transports[i].peer_id, peer_id) == 0) {
+        have = e->transports[i].caps;
+        found = 1;
+        break;
+      }
+    }
+    snprintf(label, sizeof(label), "peer '%s'", peer_id ? peer_id : "?");
+    rc = validate_one_transport(have, found, required, route->endpoint_name,
+                                label, diag, diag_size);
+    if (rc != PCL_OK) return rc;
+  }
   return PCL_OK;
 }
 

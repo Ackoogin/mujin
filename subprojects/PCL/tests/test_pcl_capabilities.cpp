@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <string>
 
 extern "C" {
 #include "pcl/pcl_capabilities.h"
@@ -148,4 +149,113 @@ TEST(PclCapabilities, SocketPluginDeclaresPubsubUnary) {
 TEST(PclCapabilities, ShmPluginDeclaresPubsubUnaryStream) {
   EXPECT_EQ(DeclaredCaps(SHM_TRANSPORT_PLUGIN_PATH),
             PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM);
+}
+
+// -- Endpoint required caps + supports -----------------------------------
+
+TEST(PclCapabilities, EndpointRequiredCaps) {
+  EXPECT_EQ(pcl_endpoint_required_caps(PCL_ENDPOINT_PUBLISHER), PCL_CAP_PUBSUB);
+  EXPECT_EQ(pcl_endpoint_required_caps(PCL_ENDPOINT_SUBSCRIBER), PCL_CAP_PUBSUB);
+  EXPECT_EQ(pcl_endpoint_required_caps(PCL_ENDPOINT_PROVIDED), PCL_CAP_RPC_UNARY);
+  EXPECT_EQ(pcl_endpoint_required_caps(PCL_ENDPOINT_CONSUMED), PCL_CAP_RPC_UNARY);
+  EXPECT_EQ(pcl_endpoint_required_caps(PCL_ENDPOINT_STREAM_PROVIDED),
+            PCL_CAP_RPC_STREAM);
+}
+
+TEST(PclCapabilities, CapsSupports) {
+  EXPECT_TRUE(pcl_transport_caps_supports(
+      PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY, PCL_CAP_RPC_UNARY));
+  EXPECT_FALSE(pcl_transport_caps_supports(PCL_CAP_PUBSUB, PCL_CAP_RPC_UNARY));
+  EXPECT_TRUE(pcl_transport_caps_supports(PCL_CAP_NONE, PCL_CAP_NONE));
+  EXPECT_TRUE(pcl_transport_caps_supports(PCL_CAP_PUBSUB, PCL_CAP_NONE));
+}
+
+// -- Compose-time validation ---------------------------------------------
+
+namespace {
+
+pcl_endpoint_route_t RemoteRoute(const char* name, pcl_endpoint_kind_t kind,
+                                 const char* const* peers, uint32_t n) {
+  pcl_endpoint_route_t r{};
+  r.endpoint_name = name;
+  r.endpoint_kind = kind;
+  r.route_mode = PCL_ROUTE_REMOTE;
+  r.peer_ids = peers;
+  r.peer_count = n;
+  return r;
+}
+
+}  // namespace
+
+TEST(PclCapabilities, ValidateRoutePassesWhenTransportHasCap) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  pcl_transport_t vt{};  // caps are explicit; vtable content irrelevant
+  ASSERT_EQ(pcl_executor_register_transport_caps(
+                e, "grpc", &vt, PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM),
+            PCL_OK);
+
+  const char* peers[] = {"grpc"};
+  auto route = RemoteRoute("obj_service", PCL_ENDPOINT_CONSUMED, peers, 1);
+  char diag[128] = "x";
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, diag, sizeof(diag)),
+            PCL_OK);
+  EXPECT_STREQ(diag, "");
+  pcl_executor_destroy(e);
+}
+
+TEST(PclCapabilities, ValidateRouteFailsClosedOnMissingCap) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  pcl_transport_t vt{};
+  // A pub/sub-only transport cannot serve a unary-RPC endpoint.
+  ASSERT_EQ(pcl_executor_register_transport_caps(e, "udp", &vt, PCL_CAP_PUBSUB),
+            PCL_OK);
+
+  const char* peers[] = {"udp"};
+  auto route = RemoteRoute("obj_service", PCL_ENDPOINT_CONSUMED, peers, 1);
+  char diag[128] = "";
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, diag, sizeof(diag)),
+            PCL_ERR_STATE);
+  EXPECT_NE(std::string(diag).find("RPC_UNARY"), std::string::npos);
+  EXPECT_NE(std::string(diag).find("obj_service"), std::string::npos);
+  pcl_executor_destroy(e);
+}
+
+TEST(PclCapabilities, ValidateRouteFailsClosedOnMissingPeer) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const char* peers[] = {"nope"};
+  auto route = RemoteRoute("obj_service", PCL_ENDPOINT_SUBSCRIBER, peers, 1);
+  char diag[128] = "";
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, diag, sizeof(diag)),
+            PCL_ERR_NOT_FOUND);
+  EXPECT_NE(std::string(diag).find("nope"), std::string::npos);
+  pcl_executor_destroy(e);
+}
+
+TEST(PclCapabilities, ValidateLocalOnlyRouteNeedsNoTransport) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const char* peers[] = {"anything"};
+  pcl_endpoint_route_t route{};
+  route.endpoint_name = "local_ep";
+  route.endpoint_kind = PCL_ENDPOINT_CONSUMED;
+  route.route_mode = PCL_ROUTE_LOCAL;  // no remote leg
+  route.peer_ids = peers;
+  route.peer_count = 1;
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, nullptr, 0), PCL_OK);
+  pcl_executor_destroy(e);
+}
+
+TEST(PclCapabilities, ValidatePubsubEndpointOverPubsubTransport) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  pcl_transport_t vt{};
+  ASSERT_EQ(pcl_executor_register_transport_caps(e, "udp", &vt, PCL_CAP_PUBSUB),
+            PCL_OK);
+  const char* peers[] = {"udp"};
+  auto route = RemoteRoute("evidence", PCL_ENDPOINT_SUBSCRIBER, peers, 1);
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, nullptr, 0), PCL_OK);
+  pcl_executor_destroy(e);
 }

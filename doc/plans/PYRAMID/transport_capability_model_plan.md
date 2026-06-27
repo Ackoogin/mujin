@@ -254,7 +254,17 @@ dimension: the profile must carry it, and command-style endpoints should pin
    carry fail-closed stubs, so their explicit declarations correct what
    derivation would mis-report.
 3. **Compose-time validation** pass: endpoint required-capability vs routed
-   transport mask, fail closed with precise diagnostics. Add negative tests.
+   transport mask, fail closed with precise diagnostics. ✅ **Done** —
+   `pcl_endpoint_required_caps(kind)` maps endpoint kind → required cap;
+   `pcl_transport_caps_supports(have, required)`; `pcl_executor_validate_endpoint_route()`
+   checks each remote peer's recorded caps and fails closed (`PCL_ERR_NOT_FOUND`
+   for a missing peer transport, `PCL_ERR_STATE` for a missing capability) with a
+   precise `diag` string. Caps are recorded per transport: `set_transport`/
+   `register_transport` derive from the vtable, and new `*_caps` variants accept
+   the plugin's **declared** mask (authoritative for coupled plugins whose vtables
+   carry fail-closed stubs). Positive + negative tests in `test_pcl_capabilities`.
+   *Not yet wired into an automatic compose step* — it is a callable pass that the
+   manifest-routing layer (stage 5) and generated bring-up will invoke.
 4. **QoS floor** carried on endpoints + validated (start with reliability).
 5. **Manifest-driven per-endpoint routing** across multiple transport plugins;
    one mixed-middleware e2e (e.g. services/gRPC + topics/udp on one component).
