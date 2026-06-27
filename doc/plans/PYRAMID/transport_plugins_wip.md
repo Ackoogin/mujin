@@ -60,13 +60,26 @@ is a pass-through codec. Proven by `test_rclcpp_runtime_adapter` (live adapter) 
 `test_ros2_coupled_plugin_load` (ABI/load + codec). **Consumed/client side and
 production closure are open** — see §2.C.
 
-### Protobuf codec plugin — **not yet** 🔴
+### Protobuf codec plugin — **generated, registry-backed** ✅ (verified Linux `build-grpc`)
 
-No `application/protobuf` codec plugin exists (only json + flatbuffers). Protobuf
-over the generic transports (socket/shm/udp) has no registry codec; it works only
-via the direct codec and the direct gRPC transport. `test_binding_performance`
-skips the protobuf-transport rows honestly when no protobuf codec is registered.
-This is the load-bearing enabler for shim retirement — see §2.A/§2.B.
+The generator now emits a per-component `application/protobuf` codec plugin
+(`pyramid_codec_protobuf_<component>`), mirroring the json/flatbuffers plugins via
+a shared binary-codec path in `_write_codec_plugin_impl` (`wire_codec::` =
+`protobuf_codec::`). Emission is gated on `_service_protobuf_codec_available`, so
+today only **tactical_objects** (the one component with the checked-in
+local-struct↔protobuf service codec) gets a plugin; others are skipped, matching
+the facade's own protobuf gating. CMake builds the `pyramid_codec_protobuf_*`
+MODULE targets (link `pyramid_protobuf_support`), and the C++ codec-plugin test
+environment loads them, so `application/protobuf` is now a registry codec usable
+over the generic transports — exactly like socket/shm. This is the load-bearing
+enabler for shim retirement (§2.A.3–A.5).
+
+Verified: `CodecDispatchE2E.Protobuf{PubSub,CreateRequirement}RoundTrip` and the
+`ProtoBindings*` dispatch/topic protobuf round-trips now pass (7 of 9 previously
+red proto tests fixed). The 2 still-red `ContentTypeMetadata` cases fail **only**
+on a pre-existing `supportsContentType(nullptr)` assertion (the facade returns
+fail-closed `content_type && …` since commit `53b2cc3`; a stale test binary had
+masked it) — unrelated to protobuf. See §2.G.
 
 ### Transport capability model — **proposed (design only)** 🔵
 
@@ -87,18 +100,21 @@ sufficient — it yields the frozen `pyramid_<T>_c` struct, not protobuf wire by
 Make the registry own struct↔protobuf so Ada (and C++) consume gRPC identically to
 socket/shm, no shim, no JSON detour. Stages:
 
-1. **Protobuf codec backend** (`pim/cpp_codegen.py` `_write_codec_plugins` /
-   `_write_codec_plugin_impl`): per-component `application/protobuf` codec plugin
-   (`pyramid_codec_protobuf_<component>`). Messages →
-   `data_model::<mod>::protobuf_codec` `toBinary`/`fromBinary<Short>`. **Subtlety
-   (confirmed):** aliases collapse to bare scalars (`Angle=Length=Timestamp=double`,
-   `Identifier=std::string`) so `toBinary(native)` is ambiguous — the plugin must
-   build the specific `.pb` wrapper message and set its single field, so the
-   generator needs the alias field name from the index. **Arrays** (streaming
-   responses) have no protobuf array type — frame as concatenated varint-length-
-   prefixed messages (matching the gRPC stream wire in `*_grpc_transport.cpp`).
-2. **CMake**: protobuf codec-plugin targets link `pyramid_protobuf_support` +
-   include the protobuf gen dir (unlike json/flatbuffers).
+1. ✅ **Done** — **Protobuf codec backend** (`pim/cpp_codegen.py`): per-component
+   `application/protobuf` codec plugin (`pyramid_codec_protobuf_<component>`),
+   emitted by generalizing `_write_codec_plugin_impl` to a shared binary-codec
+   path (`wire_codec::` resolves to `protobuf_codec::`, header included bare since
+   it ships in the source tree). The existing `protobuf_codec::toBinary(native)` /
+   `fromBinary<Short>` already operate on native `domain_model::` structs (same
+   surface as the flatbuffers codec), so no alias/array special-casing was needed
+   for the proving contract: tactical_objects' only alias is `Identifier` (named
+   `toBinary`/`fromBinaryIdentifier`), and arrays use the codec's vector overloads.
+   The bare-scalar-alias ambiguity (`Angle=Length=Timestamp=double`) does not
+   arise as a top-level schema id in the current contracts; revisit if one appears.
+   Emission gated on `_service_protobuf_codec_available` (tactical_objects only).
+2. ✅ **Done** — **CMake**: `pyramid_codec_protobuf_*` MODULE targets link
+   `pyramid_protobuf_support` (which carries the protobuf gen include dirs +
+   libprotobuf transitively).
 3. **Ada facade**: drop the `Grpc_Transport`/shim special-branch in `ada_codegen.py`;
    route consumed gRPC through the standard PCL transport-plugin path (gRPC coupled
    plugin in client mode + protobuf codec), exactly like socket/shm.
@@ -107,12 +123,13 @@ socket/shm, no shim, no JSON detour. Stages:
 5. **Linux Ada gRPC e2e**: Ada client consumes via plugin (no shim) against a
    plugin-hosted server; `.sh` + ctest, un-gated from WIN32.
 
-### B. Protobuf codec plugin (generic transport coverage)
+### B. Protobuf codec plugin (generic transport coverage) — ✅ done
 
-Stage A.1–A.2 **is** the real fix for this long-standing gap (protobuf over
-socket/shm via the registry) and restores the protobuf-transport benchmark rows.
-Decision needed on scope — see §3. Done so far: honest benchmark skip
-(`skipIfNoProtobufCodec`).
+Stage A.1–A.2 delivered the real fix: protobuf over socket/shm via the registry.
+`CodecDispatchE2E.Protobuf*` exercises pub/sub + dispatch round-trips through the
+loaded plugin. **Remaining polish:** confirm `test_binding_performance` un-skips
+the protobuf-transport rows now that a protobuf codec registers (the
+`skipIfNoProtobufCodec` guard should now pass for tactical_objects).
 
 ### C. ROS2 coupled plugin production closure
 
@@ -173,6 +190,24 @@ staged:
 - Make proto→binding→**plugin** a separately invocable CI/CD stage
   (`scripts/build_plugins.sh` is the first step).
 
+### G. Pre-existing drift surfaced by rebuilding (not protobuf)
+
+1. **`supportsContentType(nullptr)` facade/test mismatch.** Since commit
+   `53b2cc3` the generated facade returns fail-closed `content_type && registry…`,
+   so `supportsContentType(nullptr)` is `false`; but `ProtoBindings{Provided,
+   Consumed}.ContentTypeMetadata` assert it `true`. A stale test binary masked
+   this until a full rebuild. Decide the intended nullptr semantics (default
+   codec ⇒ facade should special-case nullptr; or strict ⇒ fix the test), then
+   align facade or test. Pre-dates and is independent of the protobuf work.
+2. **Stale committed generated bindings.** The checked-in
+   `bindings/cpp/generated` + `bindings/ada/generated` lag the current
+   generators (e.g. the Ada facades regenerate with `application/grpc` +
+   `Configure_Grpc_*` under the gRPC backend; the cpp facade gains protobuf
+   support). `build-grpc` regenerates into the build dir so tests pass, but a
+   `PYRAMID_GENERATE_*_BINDINGS=OFF` delivery uses the stale tree. Needs a
+   deliberate "refresh committed bindings" pass (per backend config) — kept out
+   of the capability/protobuf commits to avoid mixing a config-policy change.
+
 ### F. Config convention alignment (D6)
 
 Standardize the server/client selector on **`role: provided|consumed`** across all
@@ -201,6 +236,12 @@ All seven are now decided; pending work in §2 follows these.
 
 ## 4. Recently closed
 
+- **Protobuf codec plugin (D1 / §2.A.1–A.2, §2.B)** (2026-06-27) — generator
+  emits `pyramid_codec_protobuf_<component>` (tactical_objects), CMake builds it,
+  C++ test env loads it. 7 of 9 previously-red proto tests now green
+  (`CodecDispatchE2E.Protobuf*` + `ProtoBindings*` protobuf round-trips); the 2
+  remaining fail only on pre-existing nullptr drift (§2.G.1). No regressions
+  (codec/capability/plugin suites 165/167; the 2 = the nullptr drift).
 - **Plugin capability audit complete** (2026-06-27) — §2.D.2: all shipped
   plugins (socket, shm, udp, gRPC coupled, ROS2 coupled) declare
   `pcl_transport_plugin_caps`; coupled declarations correct what their

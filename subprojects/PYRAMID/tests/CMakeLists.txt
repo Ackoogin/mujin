@@ -15,6 +15,7 @@ set(_pyramid_cpp_test_codec_plugin_targets)
 foreach(_pyramid_codec_target IN ITEMS
         pyramid_codec_json_tactical_objects
         pyramid_codec_flatbuffers_tactical_objects
+        pyramid_codec_protobuf_tactical_objects
         pyramid_codec_json_autonomy_backend
         pyramid_codec_flatbuffers_autonomy_backend
         pyramid_codec_json_sensor_data_interpretation

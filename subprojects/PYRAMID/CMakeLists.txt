@@ -469,6 +469,44 @@ if(PYRAMID_ENABLE_PROTOBUF)
         PUBLIC
             pyramid_protobuf_support
     )
+
+    # application/protobuf codec plugins -- one MODULE per service contract,
+    # mirroring the json/flatbuffers codec plugins. Links pyramid_protobuf_support
+    # (which carries the protobuf gen include dirs + libprotobuf transitively).
+    pyramid_glob_generated(_pyramid_generated_protobuf_codec_plugin_srcs
+        "${PYRAMID_CPP_BINDINGS_DIR}/*_protobuf_codec_plugin.cpp")
+    foreach(PYRAMID_CODEC_PLUGIN_SRC IN LISTS _pyramid_generated_protobuf_codec_plugin_srcs)
+        get_filename_component(PYRAMID_CODEC_PLUGIN_STEM
+            "${PYRAMID_CODEC_PLUGIN_SRC}" NAME_WE)
+        string(REGEX REPLACE
+            "^pyramid_services_(.+)_protobuf_codec_plugin$"
+            "pyramid_codec_protobuf_\\1"
+            PYRAMID_CODEC_PLUGIN_TARGET
+            "${PYRAMID_CODEC_PLUGIN_STEM}")
+        add_library(${PYRAMID_CODEC_PLUGIN_TARGET} MODULE
+            "${PYRAMID_CODEC_PLUGIN_SRC}")
+        add_dependencies(${PYRAMID_CODEC_PLUGIN_TARGET}
+            pyramid_cpp_bindings_codegen
+            pyramid_protobuf_codegen)
+        target_link_libraries(${PYRAMID_CODEC_PLUGIN_TARGET}
+            PRIVATE
+                pcl_core
+                pyramid_generated_codecs
+                pyramid_protobuf_support
+                nlohmann_json::nlohmann_json
+        )
+        target_include_directories(${PYRAMID_CODEC_PLUGIN_TARGET}
+            PRIVATE
+                "${PYRAMID_CPP_BINDINGS_DIR}"
+                "${PYRAMID_ROOT_DIR}/bindings/cpp/generated"
+        )
+        list(APPEND PYRAMID_CODEC_PLUGIN_TARGETS
+            ${PYRAMID_CODEC_PLUGIN_TARGET})
+    endforeach()
+    unset(_pyramid_generated_protobuf_codec_plugin_srcs)
+    unset(PYRAMID_CODEC_PLUGIN_SRC)
+    unset(PYRAMID_CODEC_PLUGIN_STEM)
+    unset(PYRAMID_CODEC_PLUGIN_TARGET)
 endif()
 
 if(PYRAMID_ENABLE_GRPC)
