@@ -249,6 +249,15 @@ static pcl_status_t handle_route_line(pcl_executor_t*          e,
     }
   }
 
+  /* Fail closed on a duplicate route rather than overwriting an existing one:
+     rollback can only clear routes this load installed, so silently clobbering a
+     pre-existing route (e.g. a programmatic default) would leave the executor
+     mutated even when the load fails. */
+  if (pcl_executor_endpoint_route_exists(e, endpoint, kind)) {
+    set_diag(diag, diag_size, "route '%s': already routed", endpoint);
+    return PCL_ERR_INVALID;
+  }
+
   rc = pcl_executor_set_endpoint_route(e, &route);
   if (rc != PCL_OK) {
     set_diag(diag, diag_size, "route '%s': set failed (rc=%d)", endpoint, (int)rc);

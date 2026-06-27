@@ -965,6 +965,13 @@ pcl_status_t pcl_executor_set_endpoint_route(pcl_executor_t*           e,
   return PCL_OK;
 }
 
+int pcl_executor_endpoint_route_exists(const pcl_executor_t* e,
+                                       const char*           endpoint_name,
+                                       pcl_endpoint_kind_t   endpoint_kind) {
+  if (!e || !endpoint_name) return 0;
+  return find_endpoint_route_entry_const(e, endpoint_name, endpoint_kind) != NULL;
+}
+
 pcl_status_t pcl_executor_clear_endpoint_route(pcl_executor_t*     e,
                                                const char*         endpoint_name,
                                                pcl_endpoint_kind_t endpoint_kind) {

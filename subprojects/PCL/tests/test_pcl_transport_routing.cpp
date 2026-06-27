@@ -197,6 +197,43 @@ TEST(PclTransportRouting, RollsBackRoutesWhenLaterLineFails) {
   pcl_executor_destroy(e);
 }
 
+// A pre-existing route (e.g. a programmatic default) must survive a failed
+// manifest load: the loader rejects a duplicate route line instead of
+// overwriting -- then losing on rollback -- the original.
+TEST(PclTransportRouting, PreservesPreExistingRouteOnDuplicate) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  // Install a default local route for object_evidence/publisher up front.
+  pcl_endpoint_route_t prior;
+  memset(&prior, 0, sizeof(prior));
+  prior.endpoint_name = "object_evidence";
+  prior.endpoint_kind = PCL_ENDPOINT_PUBLISHER;
+  prior.route_mode    = PCL_ROUTE_LOCAL;
+  ASSERT_EQ(pcl_executor_set_endpoint_route(e, &prior), PCL_OK);
+  ASSERT_EQ(e->endpoint_route_count, 1u);
+
+  // A manifest routing the same endpoint must fail closed and leave the
+  // pre-existing route untouched.
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      "route object_evidence publisher recorder\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(routing, nullptr);
+  EXPECT_NE(std::string(diag).find("already routed"), std::string::npos);
+  // The original route is still installed, unchanged.
+  ASSERT_EQ(e->endpoint_route_count, 1u);
+  EXPECT_EQ(e->endpoint_routes[0].route_mode, (uint32_t)PCL_ROUTE_LOCAL);
+
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
 TEST(PclTransportRouting, FailsClosedWhenQosFloorUnmet) {
   pcl_executor_t* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);

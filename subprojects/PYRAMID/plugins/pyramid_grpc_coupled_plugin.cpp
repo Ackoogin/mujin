@@ -333,6 +333,18 @@ PYRAMID_GRPC_PLUGIN_EXPORT pcl_transport_caps_t pcl_transport_plugin_caps(
   return PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM;
 }
 
+/// gRPC is a reliable transport (HTTP/2 over TCP: ordered, retransmitted). The
+/// loader treats a plugin with no QoS export as UNSPECIFIED, which would fail
+/// compose-time validation for any `route ... reliable` line targeting gRPC even
+/// though gRPC satisfies it -- so declare the reliable floor explicitly.
+PYRAMID_GRPC_PLUGIN_EXPORT pcl_qos_t pcl_transport_plugin_qos(
+    const char* config_json) {
+  (void)config_json;
+  pcl_qos_t qos;
+  qos.reliability = PCL_QOS_RELIABILITY_RELIABLE;
+  return qos;
+}
+
 PYRAMID_GRPC_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
     const char* config_json) {
   if (!config_json) return nullptr;

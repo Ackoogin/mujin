@@ -332,6 +332,18 @@ PYRAMID_ROS2_PLUGIN_EXPORT pcl_transport_caps_t pcl_transport_plugin_caps(
   return PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM;
 }
 
+/// The runtime adapter advertises/subscribes its ROS2 topics and service
+/// frames with reliable QoS, so declare the reliable floor. Without this export
+/// the loader reports UNSPECIFIED and any `route ... reliable` line targeting a
+/// ROS2 peer fails compose-time validation even though delivery is reliable.
+PYRAMID_ROS2_PLUGIN_EXPORT pcl_qos_t pcl_transport_plugin_qos(
+    const char* config_json) {
+  (void)config_json;
+  pcl_qos_t qos;
+  qos.reliability = PCL_QOS_RELIABILITY_RELIABLE;
+  return qos;
+}
+
 PYRAMID_ROS2_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
     const char* config_json) {
   if (!config_json) return nullptr;
