@@ -144,24 +144,44 @@ has no `--codec-plugin` support; protobuf has no built-in facade fallback).
 
 ### C. ROS2 coupled plugin production closure
 
-1. **Reproducible ament build** — the ament package expects generated support
-   under `bindings/cpp/generated/ros2/cpp`, absent in-tree; a fresh colcon build
-   fails on missing `pyramid_ros2_transport_support.cpp`. Commit the generated
-   `ros2/cpp` tree, generate it in `build_ros2_transport`, or pass
-   `${PYRAMID_CPP_BINDINGS_DIR}` into the ament package.
-2. **Plugin-loaded live E2E** — load the `.so`, call `bind_topic`/`advertise_unary`/
-   `advertise_stream`, drive traffic from a separate rclcpp node, assert the PCL
-   handler runs on the executor thread and payloads are correct.
+**Toolchain note (2026-06-27):** ROS2 Humble *is* installed here (`/opt/ros/humble`)
+and `colcon`/`gprbuild`/gRPC are all available — earlier "not buildable in this env"
+notes were wrong. The ROS2 path now builds + tests green on Linux; see Recently
+closed and `scripts/build_ros2_transport.sh`.
+
+1. ✅ **Done** (`7d52a4d`) — **Reproducible ament build.** `ros2/CMakeLists.txt`
+   no longer hard-codes the in-source generated tree: it takes
+   `PYRAMID_CPP_BINDINGS_DIR` (the host build's build-tree bindings dir), derives
+   `PYRAMID_ROS2_SUPPORT_DIR`, fails closed with a clear message if the generated
+   support is absent, and globs every generated `ros2/cpp` source so per-component
+   facades link. The `ros2_backend` per-component `ServiceBinder` emitter
+   (`_write_cpp_header`/`_impl`) was dead code — now wired into `generate_cpp`, so
+   `pyramid_components_<comp>_services_<role>_ros2_transport.{hpp,cpp}` generate.
+   `scripts/build_ros2_transport.sh` drives the whole proto→generate→colcon flow
+   with no committed generated files.
+2. ✅ **Done** (`7d52a4d`) — **Plugin-loaded live E2E.** `colcon test` green:
+   `test_ros2_coupled_plugin_load` (4: functional transport vtable through the
+   dlopen'd `.so`, declared PUBSUB|UNARY|STREAM caps, null-config fail-closed,
+   codec registered under `application/ros2`) + `test_rclcpp_runtime_adapter` (4:
+   live adapter — generated unary/stream ServiceBinder serving a real rclcpp
+   client via the PCL executor, and publish routing a PclEnvelope onto a ROS2
+   topic). 10 tests, 0 failures.
 3. **Consumed/client side** — implement `invoke_async`/`invoke_stream` for ROS2
    (required for the both-ways core contract), or explicitly document
    `application/ros2` as ingress/pub-sub only and add fail-closed tests. See §3.
-4. **Process-safe rclcpp lifecycle** — replace per-instance `owns_rclcpp` shutdown
-   with the **never-shutdown-unless-creator** rule (D7): the plugin shuts down
-   rclcpp only if it initialized it; an externally-owned context is left alone.
+   *(Open — overlaps §2.D.6.)*
+4. ✅ **Done** (`7d52a4d`) — **Process-safe rclcpp lifecycle.** The
+   never-shutdown-unless-creator rule (D7) was already in place (`owns_rclcpp`);
+   the real defect was a racy `spin()`/`cancel()` pair — `cancel()` issued before
+   `spin()` entered its wait was lost, deadlocking teardown for 60 s until a signal
+   fired `rclcpp::shutdown()`. Replaced with a cooperative `spin_once(50ms)` loop
+   gated on an atomic flag + `rclcpp::ok()`. Deterministic shutdown (60 s → 13 ms).
 5. **Lifecycle enforcement** — a generic helper/wrapper so apps can't
    `pcl_plugin_unload` without first destroying the transport context (spin thread).
+   *(Open.)*
 6. **Deployment staging** — document/runtime-check the ROS2 runtime env (sourced
    setup, type-support lib paths, package install dirs) for dlopen-only clients.
+   *(Open; `build_ros2_transport.sh` documents the build-time env.)*
 
 ### D. Transport capability model (heterogeneous middleware)
 
@@ -191,7 +211,17 @@ staged:
    recorded per transport (`*_caps` register/set variants take the declared mask;
    plain variants derive from the vtable). Positive + negative tests in
    `test_pcl_capabilities` (19/19). Callable pass; auto-wiring waits on stage 5.
-4. QoS floor carried on endpoints + validated (start with reliability).
+4. ✅ **Done** (`d2b7477`) — **QoS floor carried on endpoints + validated.** A
+   minimal ordered reliability profile (`UNSPECIFIED < BEST_EFFORT < RELIABLE`):
+   `pcl_qos_t` + `pcl_qos_satisfies(offered, floor)` (per-dimension `offered >=
+   floor`, fail-closed — an undeclared transport satisfies only an UNSPECIFIED
+   floor). `pcl_endpoint_route_t.qos_floor` (zero-init = no floor, back-compat);
+   executor records offered QoS per transport (`set/register_transport_qos`);
+   `validate_endpoint_route` checks the floor after caps with a precise diag.
+   Optional `pcl_transport_plugin_qos` symbol + `pcl_plugin_transport_qos` loader
+   accessor (mirrors caps); shipped transports declare offered reliability —
+   socket/shm RELIABLE, udp BEST_EFFORT. `test_pcl_capabilities` 28/28 (9 new).
+   *(Plugin auto-wiring of declared QoS at compose time lands with stage 5.)*
 5. Manifest-driven per-endpoint routing across multiple transport plugins; one
    mixed-middleware e2e (e.g. services/gRPC + topics/udp on one component).
 6. Close ROS2 consumed `invoke_async` (overlaps §2.C.3) so ROS2 meets the both-ways core.
@@ -313,6 +343,20 @@ All seven are now decided; pending work in §2 follows these.
 
 ## 4. Recently closed
 
+- **ROS2 ament build + live E2E + process-safe lifecycle (§2.C.1/2/4)**
+  (2026-06-27, `7d52a4d`) — colcon build+test green on Humble with no committed
+  generated files: configurable `PYRAMID_CPP_BINDINGS_DIR` into the ament package,
+  wired the previously-dead per-component `ServiceBinder` ROS2 facade emitter, and
+  fixed a 60 s spin/cancel teardown deadlock (now a `spin_once` loop on an atomic
+  flag). `colcon test` 10/10. New `scripts/build_ros2_transport.sh` drives the
+  whole flow. Remaining ROS2: consumed side (§2.C.3/§2.D.6), unload-enforcement
+  helper (§2.C.5), deployment-env doc (§2.C.6).
+- **QoS floor validated at compose time (§2.D.4)** (2026-06-27, `d2b7477`) —
+  ordered reliability profile (`pcl_qos_t`/`pcl_qos_satisfies`), `qos_floor` on
+  routes, per-transport offered QoS in the executor, validation after the caps
+  check, optional `pcl_transport_plugin_qos` symbol + loader accessor, shipped
+  transports declare reliability (socket/shm RELIABLE, udp BEST_EFFORT).
+  `test_pcl_capabilities` 28/28.
 - **Ada cross-language plugin demo green + protobuf-PIC fix** (2026-06-27, `e2921b6`)
   — the `application/protobuf` codec plugin (a shared MODULE) failed to link in any
   **non-gRPC** preset (`build-ada`, default) because the FetchContent protobuf was
