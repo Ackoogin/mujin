@@ -372,4 +372,11 @@ PYRAMID_ROS2_PLUGIN_EXPORT void pcl_ros2_transport_plugin_destroy(
   destroyContext(contextOf(transport));
 }
 
+// Standard teardown symbol so a generic caller can use pcl_plugin_unload_transport
+// to release the rclcpp node + spin thread BEFORE the .so is dlclose'd.
+PYRAMID_ROS2_PLUGIN_EXPORT void pcl_transport_plugin_teardown(
+    const pcl_transport_t* transport) {
+  destroyContext(contextOf(transport));
+}
+
 }  // extern "C"

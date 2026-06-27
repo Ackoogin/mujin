@@ -35,6 +35,16 @@ extern "C" {
 /// satisfies only an UNSPECIFIED endpoint floor (fail closed for reliability).
 #define PCL_TRANSPORT_PLUGIN_QOS_SYMBOL "pcl_transport_plugin_qos"
 
+/// \brief Optional symbol a transport plugin may export to tear down a transport
+/// instance (release the vtable's context, stop background threads).
+///
+/// Coupled plugins that stand up live resources (e.g. the ROS2 plugin's rclcpp
+/// node + spin thread) must release them *before* the library is unloaded, or
+/// dlclose() unmaps code a running thread is still in. Export this so a caller
+/// can use \ref pcl_plugin_unload_transport for the correct teardown-then-unload
+/// order. When absent (stateless plugins), unloading is safe directly.
+#define PCL_TRANSPORT_PLUGIN_TEARDOWN_SYMBOL "pcl_transport_plugin_teardown"
+
 /// \brief Function signature exported to report the transport ABI version.
 ///
 /// A transport plugin exports pcl_transport_abi_version() with this signature.
@@ -65,6 +75,12 @@ typedef pcl_transport_caps_t (*pcl_transport_plugin_caps_fn)(
 /// passed to the entry point, so a plugin whose QoS depends on configuration can
 /// report accurately.
 typedef pcl_qos_t (*pcl_transport_plugin_qos_fn)(const char* config_json);
+
+/// \brief Function signature exported to tear down a transport instance.
+///
+/// Receives the vtable returned by the plugin entry; releases its context and
+/// any background threads. After this returns the library may be safely unloaded.
+typedef void (*pcl_transport_plugin_teardown_fn)(const pcl_transport_t* vtable);
 
 #ifdef __cplusplus
 }

@@ -79,8 +79,10 @@ TEST(Ros2CoupledPluginLoad, ExposesFunctionalTransportVtable) {
   // Invalid arguments fail closed without touching the live ROS2 graph.
   EXPECT_EQ(bind_topic(nullptr, "standard.object_evidence"), PCL_ERR_INVALID);
 
-  destroy(transport);
-  pcl_plugin_unload(handle);
+  // Safe teardown: pcl_plugin_unload_transport invokes the plugin's standard
+  // teardown symbol (stopping the spin thread + releasing the context) BEFORE
+  // dlclose, so no background thread is left in unmapped code (§2.C.5).
+  EXPECT_EQ(pcl_plugin_unload_transport(handle, transport), PCL_OK);
   pcl_executor_destroy(executor);
 }
 

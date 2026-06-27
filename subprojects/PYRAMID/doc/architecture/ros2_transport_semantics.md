@@ -346,24 +346,62 @@ Implemented today:
   entry symbols. Built inside the ament package and verified by
   `test_ros2_coupled_plugin_load` for ABI/load shape and the pass-through codec.
 
+- **consumed unary client** (`invoke_async`): the transport vtable's
+  `invoke_async` slot calls `RclcppRuntimeAdapter::invokeUnary` (cached
+  `rclcpp::Client<PclService>`, bounded waits, fail-closed without a server), so
+  PCL can call a remote ROS2 unary service. Verified by
+  `ConsumedInvokeUnaryCallsRemoteRos2Service` and the load test's `invoke_async`
+  non-null assertion.
+- **reproducible fresh-tree ament build**: `ros2/CMakeLists.txt` takes
+  `PYRAMID_CPP_BINDINGS_DIR` (the host build's build-tree bindings) and globs the
+  generated `ros2/cpp` sources, so no generated files are committed;
+  `scripts/build_ros2_transport.sh` drives proto → generate → colcon.
+- **process-safe spin lifecycle**: the plugin spins via a `spin_once(50ms)` loop
+  gated on an atomic flag (no lost-`cancel()` teardown deadlock) and only shuts
+  down rclcpp if it initialised it (`owns_rclcpp`).
+- **plugin-loaded live E2E**: `test_ros2_coupled_plugin_load` drives the dlopen'd
+  `.so`'s transport vtable + codec; `test_rclcpp_runtime_adapter` moves live
+  topic/unary/stream/publish traffic through the adapter. `colcon test` green.
+
 Not yet implemented:
 
 - ROS2 action mapping
 - Ada ROS2 runtime beyond generated constants/specs
-- plugin-loaded live traffic E2E: current live rclcpp tests exercise the
-  adapter library directly, while `test_ros2_coupled_plugin_load` does not yet
-  bind valid endpoints and move topic/service/stream traffic through the loaded
-  `.so`
-- client-side generated consumed-service calls over the generic PCL transport
-  vtable (`invoke_async` / `invoke_stream`) unless ROS2 is intentionally
-  server-ingress/pub-sub only
-- process-safe rclcpp lifecycle ownership for multiple plugin instances and a
-  loader-level destroy/unload discipline
-- reproducible fresh-tree generated support inputs for the ament package
+- **consumed streaming** (`invoke_stream`) over the generic PCL transport vtable
+  (consumed unary is done; streaming via the open-stream service + frame topic
+  remains)
+- a loader-level destroy/unload discipline that prevents `pcl_plugin_unload`
+  while the spin thread is live (§2.C.5)
 - a top-level (non-ament) CMake target for the coupled plugin: because rclcpp is
   only discoverable under ament, the coupled ROS2 plugin is built via colcon
   inside the ament package (`scripts/build_ros2_transport`) rather than the
   ament-free top-level `pyramid_plugins` aggregate
+
+## Deployment / runtime environment (dlopen-only clients)
+
+A client that links only `pcl_core` and `dlopen()`s `libpyramid_ros2_coupled_plugin.so`
+still needs the ROS2 runtime present and discoverable at run time — the plugin
+bundles the adapter and typesupport, but not the rmw/DDS implementation or the
+message typesupport libraries. Before launching such a client:
+
+- **Source the ROS2 environment** (e.g. `source /opt/ros/humble/setup.bash`), or
+  otherwise put the ROS2 `lib/` on `LD_LIBRARY_PATH` and the package on
+  `AMENT_PREFIX_PATH`. Without this, plugin load fails (missing `librclcpp`,
+  `librmw_implementation`) or service/subscription creation throws
+  `invalid allocator` at runtime.
+- **Expose the package install dir** from `scripts/build_ros2_transport.sh`
+  (`build-ros2-ament/install/pyramid_ros2_transport`) on `AMENT_PREFIX_PATH` /
+  `LD_LIBRARY_PATH` so the generated `PclEnvelope`/`PclService`/`PclOpenStream`
+  typesupport `.so`s resolve.
+- **Select an rmw** if the default is unavailable (`RMW_IMPLEMENTATION`), matching
+  the one the package was built against.
+- The plugin `.so` itself is found via the path passed to
+  `pcl_plugin_load_transport`; only the ROS2 *runtime* deps come from the
+  environment above.
+
+Symptom map: `cannot open shared object librclcpp.so` → ROS2 not sourced;
+`could not create subscription: invalid allocator` → typesupport/rmw libs not on
+the runtime path (the package install dir is not on `AMENT_PREFIX_PATH`).
 
 ## AME Note
 

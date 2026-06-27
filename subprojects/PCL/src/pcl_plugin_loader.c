@@ -333,6 +333,25 @@ pcl_status_t pcl_plugin_transport_qos(pcl_plugin_handle_t* handle,
   return PCL_OK;
 }
 
+/// \brief Tear down a loaded transport, then unload its library, in that order.
+pcl_status_t pcl_plugin_unload_transport(pcl_plugin_handle_t*   handle,
+                                         const pcl_transport_t* vtable) {
+  pcl_transport_plugin_teardown_fn teardown_fn;
+
+  if (!handle) return PCL_ERR_INVALID;
+
+  /* Release the instance (stop spin threads, free context) BEFORE dlclose, so a
+     coupled plugin's background thread is never left running in unmapped code.
+     Stateless plugins simply omit the teardown symbol. */
+  teardown_fn = (pcl_transport_plugin_teardown_fn)resolve_symbol(
+      handle, PCL_TRANSPORT_PLUGIN_TEARDOWN_SYMBOL);
+  if (teardown_fn) {
+    teardown_fn(vtable);
+  }
+  close_library(handle);
+  return PCL_OK;
+}
+
 /// \brief Open an arbitrary shared library (no PCL entry point required).
 pcl_plugin_handle_t* pcl_plugin_open(const char* path) {
   return open_library(path);

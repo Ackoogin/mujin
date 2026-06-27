@@ -22,6 +22,21 @@ using LastTopicFn = const char* (*)(void);
 
 }  // namespace
 
+TEST(PclPluginLoader, UnloadTransportNullHandleFailsClosed) {
+  EXPECT_EQ(pcl_plugin_unload_transport(nullptr, nullptr), PCL_ERR_INVALID);
+}
+
+TEST(PclPluginLoader, UnloadTransportDegradesToUnloadWithoutTeardownSymbol) {
+  pcl_plugin_handle_t* handle = nullptr;
+  const pcl_transport_t* transport = nullptr;
+  ASSERT_EQ(pcl_plugin_load_transport(CAPTURE_PLUGIN_PATH, "{}", &handle,
+                                      &transport),
+            PCL_OK);
+  // The capture plugin is stateless (no PCL_TRANSPORT_PLUGIN_TEARDOWN_SYMBOL), so
+  // the safe-unload path simply unloads the library.
+  EXPECT_EQ(pcl_plugin_unload_transport(handle, transport), PCL_OK);
+}
+
 TEST(PclPluginLoader, LoadTransportPluginAndCallVtable) {
   pcl_plugin_handle_t* handle = nullptr;
   const pcl_transport_t* transport = nullptr;

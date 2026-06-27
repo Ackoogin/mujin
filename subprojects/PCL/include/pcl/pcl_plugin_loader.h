@@ -108,6 +108,22 @@ pcl_status_t pcl_plugin_transport_qos(pcl_plugin_handle_t* handle,
                                       const char*          config_json,
                                       pcl_qos_t*           out_qos);
 
+/// \brief Tear down a loaded transport instance, then unload its library.
+///
+/// Enforces the only safe order for coupled plugins that own live resources: if
+/// the plugin exports \ref PCL_TRANSPORT_PLUGIN_TEARDOWN_SYMBOL it is called with
+/// \p vtable (stopping spin threads, freeing the context) *before* the library is
+/// unloaded — so a background thread is never left executing in code that
+/// `dlclose` has unmapped. Plugins with no live state omit the symbol and this
+/// degrades to a plain unload. Prefer this over a bare \ref pcl_plugin_unload for
+/// any transport obtained via \ref pcl_plugin_load_transport.
+///
+/// \param handle Handle from \ref pcl_plugin_load_transport.
+/// \param vtable Vtable returned alongside \p handle (may be NULL if unknown).
+/// \return PCL_OK on success, PCL_ERR_INVALID if \p handle is NULL.
+pcl_status_t pcl_plugin_unload_transport(pcl_plugin_handle_t*   handle,
+                                         const pcl_transport_t* vtable);
+
 /// \brief Open an arbitrary shared library and return a plugin handle.
 ///
 /// Unlike \ref pcl_plugin_load_transport / \ref pcl_plugin_load_codec, this does

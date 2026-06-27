@@ -432,4 +432,11 @@ PYRAMID_GRPC_PLUGIN_EXPORT void pcl_grpc_transport_plugin_destroy(
   destroyContext(contextOf(transport));
 }
 
+// Standard teardown symbol so a generic caller can use pcl_plugin_unload_transport
+// to release the gRPC server/client + context BEFORE the .so is dlclose'd.
+PYRAMID_GRPC_PLUGIN_EXPORT void pcl_transport_plugin_teardown(
+    const pcl_transport_t* transport) {
+  destroyContext(contextOf(transport));
+}
+
 }  // extern "C"
