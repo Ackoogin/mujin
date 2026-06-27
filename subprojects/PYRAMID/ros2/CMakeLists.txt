@@ -18,6 +18,26 @@ if(NOT DEFINED PCL_CORE_INCLUDE_DIR)
 endif()
 file(TO_CMAKE_PATH "${PCL_CORE_INCLUDE_DIR}" PCL_CORE_INCLUDE_DIR)
 
+# Generated C++ bindings (incl. the ROS2 transport support layer) are produced at
+# build time, not committed (WIP §2.G.2). The host workspace generates them into
+# its build tree under generated/pyramid_cpp_bindings; build_ros2_transport.sh
+# passes that path as PYRAMID_CPP_BINDINGS_DIR so colcon compiles the freshly
+# generated support with no committed generated files. Fall back to the in-source
+# tree for back-compat / manual builds.
+if(NOT DEFINED PYRAMID_CPP_BINDINGS_DIR)
+    set(PYRAMID_CPP_BINDINGS_DIR
+        "${UNMANNED_ROOT}/subprojects/PYRAMID/bindings/cpp/generated")
+endif()
+file(TO_CMAKE_PATH "${PYRAMID_CPP_BINDINGS_DIR}" PYRAMID_CPP_BINDINGS_DIR)
+set(PYRAMID_ROS2_SUPPORT_DIR "${PYRAMID_CPP_BINDINGS_DIR}/ros2/cpp")
+
+if(NOT EXISTS "${PYRAMID_ROS2_SUPPORT_DIR}/pyramid_ros2_transport_support.cpp")
+    message(FATAL_ERROR
+        "Generated ROS2 transport support not found at\n  ${PYRAMID_ROS2_SUPPORT_DIR}\n"
+        "Build the main workspace with PYRAMID_ENABLE_ROS2=ON first (it generates "
+        "into the build tree), or pass -DPYRAMID_CPP_BINDINGS_DIR=<dir>.")
+endif()
+
 if(NOT DEFINED PCL_CORE_LIB)
     if(WIN32)
         set(PCL_CORE_LIB "${UNMANNED_ROOT}/build/subprojects/PCL/src/Release/pcl_core.lib")
@@ -44,15 +64,20 @@ rosidl_generate_interfaces(${PROJECT_NAME}
     "srv/PclOpenStream.srv"
 )
 
+# Compile the generic support layer plus every generated per-component facade
+# (ServiceBinder) found alongside it, so ROS2 ingress can be bound by name.
+file(GLOB PYRAMID_ROS2_SUPPORT_SRCS CONFIGURE_DEPENDS
+    "${PYRAMID_ROS2_SUPPORT_DIR}/*.cpp")
+
 add_library(${PROJECT_NAME}_lib SHARED
     src/rclcpp_runtime_adapter.cpp
-    ${UNMANNED_ROOT}/subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp/pyramid_ros2_transport_support.cpp
+    ${PYRAMID_ROS2_SUPPORT_SRCS}
 )
 set_target_properties(${PROJECT_NAME}_lib PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 target_include_directories(${PROJECT_NAME}_lib PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<BUILD_INTERFACE:${UNMANNED_ROOT}/subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp>
+    $<BUILD_INTERFACE:${PYRAMID_ROS2_SUPPORT_DIR}>
     $<INSTALL_INTERFACE:include>
 )
 
@@ -89,7 +114,7 @@ set_target_properties(pyramid_ros2_coupled_plugin PROPERTIES
 )
 target_include_directories(pyramid_ros2_coupled_plugin PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${UNMANNED_ROOT}/subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp
+    ${PYRAMID_ROS2_SUPPORT_DIR}
 )
 ament_target_dependencies(pyramid_ros2_coupled_plugin rclcpp)
 target_link_libraries(pyramid_ros2_coupled_plugin

@@ -60,13 +60,31 @@ class Ros2Backend(codec_backends.CodecBackend):
         return 'application/ros2'
 
     def generate_cpp(self, index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
-        del index
         output_dir.mkdir(parents=True, exist_ok=True)
         hpp_path = output_dir / 'pyramid_ros2_transport_support.hpp'
         cpp_path = output_dir / 'pyramid_ros2_transport_support.cpp'
         self._write_cpp_support_header(hpp_path)
         self._write_cpp_support_impl(cpp_path)
-        return [hpp_path, cpp_path]
+        generated = [hpp_path, cpp_path]
+
+        # Per-service-package transport facades: a typed ServiceBinder that wires
+        # the component's RPC ingress (unary/stream) to the executor through the
+        # generic Adapter. Mirrors the gRPC backend's per-component transport
+        # files so the ROS2 ingress can be bound by name (e.g. the live-adapter
+        # test and generated provided-facade bindRos2 path).
+        for pf in index.files:
+            if not _is_service_package(pf) or not pf.services:
+                continue
+            pkg_parts = [p for p in pf.package.split('.') if p]
+            file_base = '_'.join(pkg_parts)
+            ns = '::'.join(pkg_parts) + '::ros2_transport'
+            comp_hpp = output_dir / (file_base + '_ros2_transport.hpp')
+            comp_cpp = output_dir / (file_base + '_ros2_transport.cpp')
+            self._write_cpp_header(comp_hpp, ns, pf)
+            self._write_cpp_impl(comp_cpp, ns, file_base, pf)
+            generated.extend([comp_hpp, comp_cpp])
+
+        return generated
 
     def generate_ada(self, index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
         del index, output_dir

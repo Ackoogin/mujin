@@ -43,6 +43,7 @@ extern "C" {
 #include <rclcpp/rclcpp.hpp>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -128,6 +129,7 @@ struct Ros2TransportContext {
   std::unique_ptr<pyramid::transport::ros2::RclcppRuntimeAdapter> adapter;
   rclcpp::executors::SingleThreadedExecutor ros_executor;
   std::thread spin_thread;
+  std::atomic<bool> spinning{false};
   bool owns_rclcpp = false;
   pcl_transport_t transport{};
 };
@@ -139,6 +141,12 @@ Ros2TransportContext* contextOf(const pcl_transport_t* transport) {
 
 void stopSpin(Ros2TransportContext* ctx) {
   if (!ctx) return;
+  // Signal the spin loop to exit, then nudge the executor. We do NOT rely on
+  // cancel() alone: SingleThreadedExecutor::cancel() is racy when it runs before
+  // spin() has entered its wait (the cancel is lost and spin() blocks forever).
+  // The spin loop below uses spin_once() with a timeout and re-checks this flag,
+  // so stopping is deterministic regardless of timing.
+  ctx->spinning.store(false, std::memory_order_release);
   ctx->ros_executor.cancel();
   if (ctx->spin_thread.joinable()) {
     ctx->spin_thread.join();
@@ -289,7 +297,16 @@ PYRAMID_ROS2_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
     ctx->adapter =
         std::make_unique<pyramid::transport::ros2::RclcppRuntimeAdapter>(ctx->node);
     ctx->ros_executor.add_node(ctx->node);
-    ctx->spin_thread = std::thread([ctx]() { ctx->ros_executor.spin(); });
+    ctx->spinning.store(true, std::memory_order_release);
+    ctx->spin_thread = std::thread([ctx]() {
+      // Cooperative spin loop: spin_once() returns after the timeout even with no
+      // work, so the stop flag is observed promptly and shutdown never deadlocks
+      // on a lost cancel() (see stopSpin). Guards on rclcpp::ok() so a global
+      // shutdown also breaks the loop.
+      while (ctx->spinning.load(std::memory_order_acquire) && rclcpp::ok()) {
+        ctx->ros_executor.spin_once(std::chrono::milliseconds(50));
+      }
+    });
   } catch (...) {
     destroyContext(ctx);
     return nullptr;
