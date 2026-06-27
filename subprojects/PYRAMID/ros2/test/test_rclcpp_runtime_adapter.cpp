@@ -426,3 +426,57 @@ TEST_F(RuntimeAdapterFixture, ConsumedInvokeUnaryFailsClosedWithoutServer) {
   const auto response = client_adapter.invokeUnary(binding, request);
   EXPECT_NE(response.status, PCL_OK);
 }
+
+// Consumed streaming: invokeStream opens a remote ROS2 stream and delivers the
+// server's frames, including the terminal end_of_stream frame, on the caller
+// thread after the adapter buffers the ROS2 frame-topic messages.
+TEST_F(RuntimeAdapterFixture, ConsumedInvokeStreamCallsRemoteRos2Service) {
+  const auto binding = ros2_support::makeStreamServiceBinding("standard.stream");
+
+  adapter_->advertise(
+      binding,
+      [](const ros2_support::Envelope& req,
+         const ros2_support::StreamEmitter& emit) {
+        ros2_support::Envelope first;
+        first.content_type = req.content_type;
+        first.correlation_id = req.correlation_id;
+        first.payload.assign({'o', 'n', 'e'});
+        ASSERT_TRUE(emit(first));
+
+        ros2_support::Envelope second;
+        second.content_type = req.content_type;
+        second.correlation_id = req.correlation_id;
+        second.payload.assign({'t', 'w', 'o'});
+        ASSERT_TRUE(emit(second));
+
+        ros2_support::Envelope terminal;
+        terminal.content_type = req.content_type;
+        terminal.correlation_id = req.correlation_id;
+        terminal.end_of_stream = true;
+        terminal.status = PCL_OK;
+        ASSERT_TRUE(emit(terminal));
+      });
+
+  ros2_support::RclcppRuntimeAdapter client_adapter(client_node_);
+  ros2_support::Envelope request;
+  request.content_type = "application/ros2";
+  request.correlation_id = "consume-stream-1";
+  request.payload.assign({'g', 'o'});
+
+  std::vector<ros2_support::Envelope> frames;
+  client_adapter.invokeStream(binding, request,
+                              [&frames](const ros2_support::Envelope& frame) {
+                                frames.push_back(frame);
+                                return !frame.end_of_stream;
+                              });
+
+  ASSERT_EQ(frames.size(), 3u);
+  EXPECT_EQ(frames[0].status, PCL_OK);
+  EXPECT_EQ(frames[0].correlation_id, "consume-stream-1");
+  EXPECT_EQ(std::string(frames[0].payload.begin(), frames[0].payload.end()),
+            "one");
+  EXPECT_EQ(std::string(frames[1].payload.begin(), frames[1].payload.end()),
+            "two");
+  EXPECT_TRUE(frames[2].end_of_stream);
+  EXPECT_EQ(frames[2].status, PCL_OK);
+}

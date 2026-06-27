@@ -51,14 +51,15 @@ contract in both directions:
 the C-ABI codec registry; committed json/flatbuffers Ada codec sources removed
 from the dist tree. C++ was already registry-only.
 
-### ROS2 coupled plugin — **server-ingress real; closure gaps open** 🟡
+### ROS2 coupled plugin — **complete, both ways** ✅
 
 `pyramid_ros2_coupled_plugin` constructs a real rclcpp node + `RclcppRuntimeAdapter`
-+ spin thread; vtable implements `publish`/`subscribe`/`shutdown`; plugin-private
-symbols expose topic binding and unary/stream service advertising; `application/ros2`
-is a pass-through codec. Proven by `test_rclcpp_runtime_adapter` (live adapter) and
-`test_ros2_coupled_plugin_load` (ABI/load + codec). **Consumed/client side and
-production closure are open** — see §2.C.
++ spin thread; vtable implements `publish`/`subscribe`, consumed/client
+`invoke_async` + `invoke_stream`, and safe `shutdown`; plugin-private symbols
+expose topic binding and unary/stream service advertising; `application/ros2` is a
+pass-through codec. Proven by `test_rclcpp_runtime_adapter` (live adapter, both
+provided and consumed unary/stream paths) and `test_ros2_coupled_plugin_load`
+(ABI/load + codec). ROS2 closure items are complete — see §2.C.
 
 ### Protobuf codec plugin — **generated, registry-backed** ✅ (verified Linux `build-grpc`)
 
@@ -142,7 +143,7 @@ never register the (plugin-only) protobuf codec — configure failed `rc=-1`,
 (`matches=1`). The Win32 no-plugin variant was dropped (`test_cpp_app_client.bat`
 has no `--codec-plugin` support; protobuf has no built-in facade fallback).
 
-### C. ROS2 coupled plugin production closure
+### C. ROS2 coupled plugin production closure — ✅ done
 
 **Toolchain note (2026-06-27):** ROS2 Humble *is* installed here (`/opt/ros/humble`)
 and `colcon`/`gprbuild`/gRPC are all available — earlier "not buildable in this env"
@@ -166,14 +167,19 @@ closed and `scripts/build_ros2_transport.sh`.
    live adapter — generated unary/stream ServiceBinder serving a real rclcpp
    client via the PCL executor, and publish routing a PclEnvelope onto a ROS2
    topic). 10 tests, 0 failures.
-3. 🟡 **Unary done** (`fe0a7ec`); **stream open.** Consumed/client side for ROS2:
+3. ✅ **Done** — **Consumed/client side for ROS2.**
    `RclcppRuntimeAdapter::invokeUnary` (cached `rclcpp::Client<PclService>`,
    `async_send_request`, bounded wait serviced by the spin thread, fail-closed on
-   missing/slow server) wired to `transport.invoke_async` via the generated
-   `invokeRemoteUnary` support helper. Both-ways unary core met (D2/§2.D.6). Tests:
-   `ConsumedInvokeUnary{CallsRemoteRos2Service,FailsClosedWithoutServer}` +
-   `invoke_async` non-null in the load test. **Remaining:** consumed *streaming*
-   (`invoke_stream` over the open-stream service + frame topic).
+   missing/slow server) is wired to `transport.invoke_async` via the generated
+   `invokeRemoteUnary` support helper (`fe0a7ec`). `RclcppRuntimeAdapter::invokeStream`
+   opens the generated `PclOpenStream` service, subscribes to the reliable frame
+   topic before sending the request, buffers frames until the terminal
+   `end_of_stream` envelope, then delivers them through `transport.invoke_stream`
+   via generated `invokeRemoteStream`. Tests:
+   `ConsumedInvokeUnary{CallsRemoteRos2Service,FailsClosedWithoutServer}`,
+   `ConsumedInvokeStreamCallsRemoteRos2Service`, and `invoke_async`/`invoke_stream`
+   non-null in the load test. ROS2 now meets the both-ways unary + streaming core
+   contract (D2/§2.D.6). `build_ros2_transport.sh --skip-host --test`: 13/13.
 4. ✅ **Done** (`7d52a4d`) — **Process-safe rclcpp lifecycle.** The
    never-shutdown-unless-creator rule (D7) was already in place (`owns_rclcpp`);
    the real defect was a racy `spin()`/`cancel()` pair — `cancel()` issued before
@@ -246,8 +252,8 @@ staged:
    (8) composes a capture service + a real UDP topic from one manifest, drives real
    traffic through a routed transport, and fails closed on missing cap / unmet QoS /
    unknown peer / malformed line.
-6. ✅ **Done** (`fe0a7ec`) — ROS2 consumed `invoke_async` closed (see §2.C.3), so
-   ROS2 meets the both-ways **unary** core. (Consumed streaming still open in §2.C.3.)
+6. ✅ **Done** — ROS2 consumed `invoke_async` + `invoke_stream` closed (see
+   §2.C.3), so ROS2 meets the both-ways unary + streaming core.
 7. **Deferred (D5):** opt-in adapters (`PUBSUB over RPC_STREAM`, `RPC_UNARY over
    PUBSUB`) are *not* in v1 — stay strictly fail-closed until a concrete need.
    When added, each advertises the derived capability behind explicit config.
@@ -366,6 +372,11 @@ All seven are now decided; pending work in §2 follows these.
 
 ## 4. Recently closed
 
+- **ROS2 consumed streaming invoke_stream (§2.C.3/§2.D.6)** (2026-06-27) —
+  `RclcppRuntimeAdapter::invokeStream` + generated `invokeRemoteStream` helper +
+  plugin `transport.invoke_stream`; PCL can invoke a remote ROS2 server-streaming
+  service and receive ordered frames plus the terminal `end_of_stream` callback.
+  Host target `pyramid_ros2_transport` builds; ROS2 colcon 13/13.
 - **Manifest-driven per-endpoint transport routing (§2.D.5)** (2026-06-27,
   `27f0fbe`) — `pcl_transport_routing`: declarative heterogeneous middleware from
   one manifest, with compose-time caps + QoS validation (fail closed), executor

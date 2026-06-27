@@ -13,6 +13,8 @@
 /// Transport vtable:
 ///   - publish(topic, msg)        -> publishOutboundEnvelope (executor -> ROS2)
 ///   - subscribe(topic, type)     -> bindTopicIngress        (ROS2 -> executor)
+///   - invoke_async(service, ...) -> call remote ROS2 unary service
+///   - invoke_stream(service, ...) -> call remote ROS2 server-stream service
 ///   - shutdown()                 -> stop spinning, drop subscriptions
 ///
 /// Plugin-private entry symbols (resolved via pcl_plugin_symbol), covering the
@@ -196,6 +198,22 @@ pcl_status_t ros2InvokeAsync(void* ctx_v, const char* service_name,
       *ctx->adapter, service_name, request, callback, user_data);
 }
 
+pcl_status_t ros2InvokeStream(void* ctx_v, const char* service_name,
+                              const pcl_msg_t* request,
+                              pcl_stream_msg_fn_t callback, void* user_data,
+                              void** stream_handle) {
+  if (stream_handle) *stream_handle = nullptr;
+  auto* ctx = static_cast<Ros2TransportContext*>(ctx_v);
+  if (!ctx || !ctx->adapter || !service_name || !request || !callback) {
+    return PCL_ERR_INVALID;
+  }
+  // Consumed (client) side: PCL invokes a remote ROS2 server-streaming service.
+  // The adapter opens the stream, buffers frames from the frame topic, and the
+  // support helper delivers them through the PCL stream callback.
+  return pyramid::transport::ros2::invokeRemoteStream(
+      *ctx->adapter, service_name, request, callback, user_data);
+}
+
 void ros2Shutdown(void* ctx_v) {
   stopSpin(static_cast<Ros2TransportContext*>(ctx_v));
 }
@@ -264,12 +282,10 @@ PYRAMID_ROS2_PLUGIN_EXPORT uint32_t pcl_transport_abi_version() {
   return PCL_TRANSPORT_ABI_VERSION;
 }
 
-/// Server-ingress ROS2 transport: pub/sub via the vtable, plus unary and
-/// server-streaming service ingress via the advertise_unary/advertise_stream
-/// symbols (RPC provided side, not exposed as vtable slots, so derivation cannot
-/// see them). The consumed side (invoke_async/invoke_stream) is not yet
-/// implemented -- see WIP D2 -- but the transport can carry those patterns on
-/// the provided side.
+/// ROS2 transport: pub/sub via the vtable, server-ingress service advertising
+/// via private symbols, and consumed unary/server-streaming egress via the
+/// invoke_async/invoke_stream vtable slots. The private advertise_* symbols are
+/// not vtable slots, so explicit capability declaration remains required.
 PYRAMID_ROS2_PLUGIN_EXPORT pcl_transport_caps_t pcl_transport_plugin_caps(
     const char* config_json) {
   (void)config_json;
@@ -329,6 +345,7 @@ PYRAMID_ROS2_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
   ctx->transport.publish = ros2Publish;
   ctx->transport.subscribe = ros2Subscribe;
   ctx->transport.invoke_async = ros2InvokeAsync;
+  ctx->transport.invoke_stream = ros2InvokeStream;
   ctx->transport.shutdown = ros2Shutdown;
   ctx->transport.adapter_ctx = ctx;
   return &ctx->transport;
