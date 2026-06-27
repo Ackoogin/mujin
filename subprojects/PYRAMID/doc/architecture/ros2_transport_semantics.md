@@ -362,8 +362,11 @@ Implemented today:
   generated `ros2/cpp` sources, so no generated files are committed;
   `scripts/build_ros2_transport.sh` drives proto → generate → colcon.
 - **process-safe spin lifecycle**: the plugin spins via a `spin_once(50ms)` loop
-  gated on an atomic flag (no lost-`cancel()` teardown deadlock) and only shuts
-  down rclcpp if it initialised it (`owns_rclcpp`).
+  gated on an atomic flag (no lost-`cancel()` teardown deadlock). rclcpp
+  init/shutdown is refcounted process-wide (`acquireRclcpp`/`releaseRclcpp`), so
+  a context only shuts rclcpp down once the last plugin-owned reference is
+  released — and never if the host application initialised it — letting sibling
+  ROS2 transport instances in one process tear down independently.
 - **consumed streaming** (`invoke_stream`): the transport vtable's `invoke_stream`
   slot opens the generated `PclOpenStream` service, subscribes to the frame topic
   before sending the request, buffers frames until the terminal `end_of_stream`
@@ -395,6 +398,26 @@ Not yet implemented:
   publishes/serves `pyramid_msgs` messages instead of `PclEnvelope`.
   See `doc/plans/PYRAMID/transport_plugins.md` §1.
 - ROS2 action mapping (`RPC_ACTION`, first-class per D3; depends on native IDL)
+- **Remote-source dispatch for manifest-routed ROS2 ingress.** The generated
+  ingress helpers (`bindTopicIngress`, `bindUnaryServiceIngress`,
+  `bindStreamServiceIngress` in `pim/backends/ros2_backend.py`) post into the
+  executor as a *local* source (`pcl_executor_post_incoming` /
+  `pcl_executor_post_service_request`), and the plugin's private bind/advertise
+  symbols (`pcl_ros2_transport_plugin_{bind_topic,advertise_unary,advertise_stream}`)
+  carry no peer id. That is correct for the intra-process / single-peer use the
+  binds serve today (only `test_ros2_coupled_plugin_load` and the adapter tests
+  call them). It is **not** yet correct for a manifest *remote* route such as
+  `route standard.object_evidence subscriber ros2` or a remote `provided`
+  service: a remote-only endpoint rejects local ingress in
+  `dispatch_incoming_now` / the service lookup runs with `PCL_ROUTE_LOCAL`, so
+  routed remote ROS2 messages/requests would be dropped or miss the handler.
+  The routing loader does **not** wire endpoints to these binds yet, so the path
+  is latent rather than broken. Closing it requires: (a) threading a `peer_id`
+  through the generated bind helpers and the plugin's private bind/advertise
+  ABI symbols, (b) emitting `pcl_executor_post_remote_incoming` /
+  `pcl_executor_post_service_request_remote` for ROS2 ingress, and (c) wiring
+  the manifest routing flow to invoke the (now peer-aware) binds. Tracked from
+  PR #96 review (codex comments on routed topic/service ingress).
 - Ada ROS2 runtime beyond generated constants/specs
 - a top-level (non-ament) CMake target for the coupled plugin: because rclcpp is
   only discoverable under ament, the coupled ROS2 plugin is built via colcon
