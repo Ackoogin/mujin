@@ -147,7 +147,10 @@ TEST(ProtoBindingsConsumed, TopicNames) {
 }
 
 TEST(ProtoBindingsProvided, ContentTypeMetadata) {
-    EXPECT_TRUE(prov::supportsContentType(nullptr));
+    // nullptr is not a content type: the facade is fail-closed (no implicit
+    // default codec), matching the registry, which returns no codec for a NULL
+    // content_type. A caller must name a content type explicitly.
+    EXPECT_FALSE(prov::supportsContentType(nullptr));
     EXPECT_TRUE(prov::supportsContentType(prov::kJsonContentType));
     EXPECT_TRUE(prov::supportsContentType(prov::kFlatBuffersContentType));
     EXPECT_TRUE(prov::supportsContentType(prov::kProtobufContentType));
@@ -156,7 +159,8 @@ TEST(ProtoBindingsProvided, ContentTypeMetadata) {
 }
 
 TEST(ProtoBindingsConsumed, ContentTypeMetadata) {
-    EXPECT_TRUE(cons::supportsContentType(nullptr));
+    // nullptr is not a content type -- see ProtoBindingsProvided above.
+    EXPECT_FALSE(cons::supportsContentType(nullptr));
     EXPECT_TRUE(cons::supportsContentType(cons::kJsonContentType));
     EXPECT_TRUE(cons::supportsContentType(cons::kFlatBuffersContentType));
     EXPECT_TRUE(cons::supportsContentType(cons::kProtobufContentType));

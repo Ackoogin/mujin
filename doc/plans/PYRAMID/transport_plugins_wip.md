@@ -127,9 +127,9 @@ socket/shm, no shim, no JSON detour. Stages:
 
 Stage A.1–A.2 delivered the real fix: protobuf over socket/shm via the registry.
 `CodecDispatchE2E.Protobuf*` exercises pub/sub + dispatch round-trips through the
-loaded plugin. **Remaining polish:** confirm `test_binding_performance` un-skips
-the protobuf-transport rows now that a protobuf codec registers (the
-`skipIfNoProtobufCodec` guard should now pass for tactical_objects).
+loaded plugin, and `BindingPerformanceTest.{Local,Shmem,Socket}_Protobuf` now
+**run and pass** (previously skipped) — confirming protobuf over the generic
+transports end-to-end. The stale `skipIfNoProtobufCodec` TODO is removed.
 
 ### C. ROS2 coupled plugin production closure
 
@@ -192,13 +192,11 @@ staged:
 
 ### G. Pre-existing drift surfaced by rebuilding (not protobuf)
 
-1. **`supportsContentType(nullptr)` facade/test mismatch.** Since commit
-   `53b2cc3` the generated facade returns fail-closed `content_type && registry…`,
-   so `supportsContentType(nullptr)` is `false`; but `ProtoBindings{Provided,
-   Consumed}.ContentTypeMetadata` assert it `true`. A stale test binary masked
-   this until a full rebuild. Decide the intended nullptr semantics (default
-   codec ⇒ facade should special-case nullptr; or strict ⇒ fix the test), then
-   align facade or test. Pre-dates and is independent of the protobuf work.
+1. ✅ **Resolved.** `supportsContentType(nullptr)` is correctly `false` — the
+   facade is fail-closed and the PCL registry returns no codec for a NULL
+   content_type, so nullptr is genuinely unsupported (a caller must name a type).
+   The stale `ContentTypeMetadata` assertions (expecting `true`, masked by a
+   stale binary) were updated to `EXPECT_FALSE`. Both tests green.
 2. **Stale committed generated bindings.** The checked-in
    `bindings/cpp/generated` + `bindings/ada/generated` lag the current
    generators (e.g. the Ada facades regenerate with `application/grpc` +

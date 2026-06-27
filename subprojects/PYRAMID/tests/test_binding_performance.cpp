@@ -1122,11 +1122,11 @@ TEST_F(BindingPerformanceTest, Local_FlatBuffers) {
 #if defined(PYRAMID_HAS_PROTOBUF)
 // The generated facade resolves codecs through the codec-plugin registry, so the
 // generic transport rows (local/shmem/socket) require a registered codec for the
-// content type. Protobuf has a direct codec and a gRPC coupled transport, but no
-// standalone codec plugin yet, so skip these rows honestly (recording a skipped
-// summary entry) rather than report a misleading 0/N transport failure.
-// TODO(pyramid): add an application/protobuf codec plugin; see
-// doc/todo/PYRAMID/TODO.md.
+// content type. The application/protobuf codec plugin
+// (pyramid_codec_protobuf_<component>) now registers for components that have a
+// protobuf service codec (tactical_objects), so these rows run there. Where no
+// protobuf codec is registered, skip honestly (recording a skipped summary entry)
+// rather than report a misleading 0/N transport failure.
 static bool skipIfNoProtobufCodec(
     std::vector<PerfResult>& results, const char* label) {
   if (svc::supportsContentType("application/protobuf")) {
