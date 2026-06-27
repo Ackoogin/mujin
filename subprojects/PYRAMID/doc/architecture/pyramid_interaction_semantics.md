@@ -240,6 +240,92 @@ contract home (`Interaction.qos`), and **actions** have a reserved pattern
 (`ACTION`) so the projection has something concrete to map when the first
 production user arrives.
 
+## Direct (Non-PCL) Consumer Compatibility
+
+A first-class requirement: an endpoint that knows nothing about PCL must be
+able to use the contract **as-is** — a stock gRPC client against the `.proto`,
+or a native ROS2 node against generated `.msg`/`.srv`/`.action`. The convention
+must not break that. The two transports sit at opposite ends of "as-is".
+
+### gRPC — transparent, works as-is
+
+The annotation is plain proto3 and does **not** disturb gRPC codegen:
+
+- A custom `MethodOptions` extension is metadata on the method descriptor.
+  `protoc` and the gRPC plugins ignore options they do not consume, so
+  `protoc --grpc_out` produces the normal service stub whether or not
+  `pyramid_op` is present. The option is recoverable via descriptor reflection
+  but changes nothing about the generated interface.
+- Because pub/sub is modelled **as rpc**, a stock gRPC client gets a directly
+  usable surface with no PCL knowledge: a `PUBLISH` method is an ordinary unary
+  call, a `SUBSCRIBE` method is an ordinary server-streaming call. This is the
+  main reason to model topics as rpc rather than invent a "topic" primitive
+  (proto has none): the gRPC projection is native by construction.
+- One real constraint: to **compile** a service `.proto` that *uses* the
+  option, `protoc` needs the extension definition on its import path. So
+  `pyramid/options/pyramid.options.proto` ships as part of the delivered
+  contract package — the same dependency shape as `google/api/annotations.proto`.
+  A consumer that wants only stubs can strip options instead, but shipping the
+  one small file is cleaner. Keep the field number in the internal-use range
+  (50000–99999; `50001` is fine) so it can never collide with a
+  globally-registered extension.
+
+Net: gRPC is the easy direction — the contract is already "as-is" usable, and
+the annotation is invisible to anyone who does not look for it.
+
+### ROS2 — needs a native-IDL projection (today it does not exist)
+
+This is the harder direction and the current generation does **not** satisfy
+it. Today the only ROS2 IDL is the generic envelope — `msg/PclEnvelope`,
+`srv/PclService`, `srv/PclOpenStream` — carrying **opaque payload bytes** with a
+`content_type`. A non-PCL ROS2 node therefore cannot use the contract directly:
+it would have to understand the PCL envelope, pick the right codec, and decode
+bytes by hand. `ros2 topic echo` shows a blob, not fields.
+
+So there are two ROS2 modes, and direct interop requires the second:
+
+| Mode | Wire type | Codec | Who can consume |
+|------|-----------|-------|-----------------|
+| **Envelope** (current) | `PclEnvelope` bytes | JSON / FB / protobuf, selectable | PCL ↔ PCL over ROS2 |
+| **Native IDL** (needed) | generated `.msg`/`.srv`/`.action` | ROS2 CDR (fixed) | any ROS2 node, no PCL |
+
+Native IDL mode is a new **proto → ROS2 IDL projection**, analogous to the
+existing proto → FlatBuffers projection, emitting real interface definitions
+from the same contract:
+
+| Contract element | ROS2 native artifact |
+|------------------|----------------------|
+| proto `message` | `.msg` (typed fields) |
+| `PUBLISH` / `SUBSCRIBE` | a topic carrying the native `.msg`, at the mapped name, with QoS from `Interaction.qos` |
+| `UNARY` / void | `.srv` |
+| `SERVER_STREAM` | `.action` (or a typed frames topic) — *not* the envelope open+frames trick, which is PCL-internal |
+| `ACTION` | `.action` |
+
+Design points this raises:
+
+- **Type-system mapping is not 1:1.** proto3 `oneof` (→ discriminator + union
+  fields), `map` (→ key/value array), `optional`/wrapper types, well-known
+  types, and bounded vs unbounded arrays all need documented rules, and the
+  generator should fail the build on an unmappable construct rather than emit a
+  lossy `.msg`. This is the same class of problem already handled for
+  FlatBuffers.
+- **The two modes cannot share a topic.** Native `.msg` and `PclEnvelope` are
+  different wire types; a native node and a PCL node only interoperate if both
+  use native IDL on that interface. "Expose natively" is therefore a per-
+  interface decision. Carry it in the annotation — e.g. a transport profile or
+  `native: true` on `Interaction` (or a generator backend selection) — so the
+  contract records which interfaces are externally native vs PCL-internal.
+- **The PCL side needs a bridge** for native interfaces: native `.msg` ↔
+  `pcl_msg_t` with a CDR/ros2-native codec, with business logic still handed
+  onto the PCL executor per the existing threading rule. The envelope support
+  layer stays for PCL-to-PCL links; native IDL is an additional, parallel
+  surface, not a replacement.
+
+In short: the annotation is what *lets* both projections exist from one
+contract — gRPC reads it as ordinary rpc, ROS2-native reads `topic`/`qos`/
+`pattern` to emit idiomatic `.msg`/`.srv`/`.action`. The work item is the ROS2
+native-IDL backend; gRPC already meets the "as-is" bar.
+
 ## Status
 
 | Item | State |
@@ -250,6 +336,8 @@ production user arrives.
 | Method option (Layer 2) | not implemented |
 | `standard_topics.py` retirement | not started |
 | QoS / action projection | reserved, not implemented |
+| gRPC direct (as-is) consumption | compatible by design; annotation is transparent to `protoc`/gRPC |
+| ROS2 native IDL (`.msg`/`.srv`/`.action`) projection | not implemented (current ROS2 is envelope-only) |
 
 This is a design proposal. No generator or contract behavior changes until the
 migration steps above are taken and the Tactical Objects binding snapshot is
