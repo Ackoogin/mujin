@@ -58,14 +58,23 @@ add_dependencies(test_pcl_plugin_loader
 )
 gtest_discover_tests(test_pcl_plugin_loader DISCOVERY_MODE PRE_TEST)
 
+add_library(pcl_transport_nocaps_plugin MODULE pcl_transport_nocaps_plugin.c)
+target_link_libraries(pcl_transport_nocaps_plugin PRIVATE pcl_core)
+
 add_executable(test_pcl_capabilities test_pcl_capabilities.cpp)
 target_link_libraries(test_pcl_capabilities PRIVATE pcl_core GTest::gtest_main)
 target_compile_definitions(test_pcl_capabilities PRIVATE
     CAPTURE_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_capture_plugin>"
+    NOCAPS_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_nocaps_plugin>"
+    UDP_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_udp_plugin>"
+    SOCKET_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_socket_plugin>"
     SHM_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_shared_memory_plugin>"
 )
 add_dependencies(test_pcl_capabilities
     pcl_transport_capture_plugin
+    pcl_transport_nocaps_plugin
+    pcl_transport_udp_plugin
+    pcl_transport_socket_plugin
     pcl_transport_shared_memory_plugin
 )
 gtest_discover_tests(test_pcl_capabilities DISCOVERY_MODE PRE_TEST)

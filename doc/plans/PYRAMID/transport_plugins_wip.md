@@ -146,7 +146,13 @@ staged:
    `pcl_plugin_transport_caps()` (declared mask, else derived from NULL vtable
    slots). Covered by `test_pcl_capabilities`. Pure introspection, no behaviour
    change.
-2. Audit existing plugins against the matrix; add the caps symbol + assert in tests.
+2. 🟡 **Generic plugins done** — socket (`PUBSUB|RPC_UNARY`), shm
+   (`PUBSUB|RPC_UNARY|RPC_STREAM`), udp (`PUBSUB`) now export
+   `pcl_transport_plugin_caps`; declared matrix asserted in
+   `test_pcl_capabilities` (config-free via `pcl_plugin_open` + symbol).
+   **Remaining:** the mode-aware coupled plugins (gRPC, ROS2), whose vtables set
+   fail-closed stubs so derivation is inaccurate — caps must key off
+   `config_json` (server/client).
 3. Compose-time validation — endpoint required-capability vs routed transport mask,
    fail closed with a precise diagnostic; negative tests.
 4. QoS floor carried on endpoints + validated (start with reliability).
@@ -192,6 +198,9 @@ All seven are now decided; pending work in §2 follows these.
 
 ## 4. Recently closed
 
+- **Generic-plugin capability audit** (2026-06-27) — §2.D.2 (partial): socket,
+  shm, udp now declare `pcl_transport_plugin_caps`; matrix asserted in
+  `test_pcl_capabilities` (12/12). Coupled gRPC/ROS2 caps still to do.
 - **Transport capability declaration** (2026-06-27) — §2.D.1: `PCL_CAP_*` flags,
   `pcl_transport_caps_from_vtable`, optional `pcl_transport_plugin_caps` symbol,
   and loader accessor `pcl_plugin_transport_caps()` with NULL-slot derivation

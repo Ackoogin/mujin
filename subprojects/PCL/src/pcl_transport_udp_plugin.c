@@ -96,6 +96,13 @@ PCL_UDP_PLUGIN_EXPORT uint32_t pcl_transport_abi_version(void) {
   return PCL_TRANSPORT_ABI_VERSION;
 }
 
+/* Datagram pub/sub transport: publish + subscribe only. */
+PCL_UDP_PLUGIN_EXPORT pcl_transport_caps_t pcl_transport_plugin_caps(
+    const char* config_json) {
+  (void)config_json;
+  return PCL_CAP_PUBSUB;
+}
+
 PCL_UDP_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
     const char* config_json) {
   char                 remote_host[256];

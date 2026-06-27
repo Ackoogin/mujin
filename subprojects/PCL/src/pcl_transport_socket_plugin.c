@@ -86,6 +86,14 @@ PCL_SOCKET_PLUGIN_EXPORT uint32_t pcl_transport_abi_version(void) {
   return PCL_TRANSPORT_ABI_VERSION;
 }
 
+/* Stream-socket transport: pub/sub plus consumed unary RPC (invoke_async).
+ * No server-streaming. */
+PCL_SOCKET_PLUGIN_EXPORT pcl_transport_caps_t pcl_transport_plugin_caps(
+    const char* config_json) {
+  (void)config_json;
+  return PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY;
+}
+
 PCL_SOCKET_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
     const char* config_json) {
   char                    role[16];

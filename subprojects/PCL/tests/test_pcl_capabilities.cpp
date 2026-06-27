@@ -95,34 +95,57 @@ TEST(PclCapabilities, LoaderUsesExplicitCapsSymbol) {
 }
 
 TEST(PclCapabilities, LoaderDerivesWhenSymbolAbsent) {
-  // The shared-memory plugin does not export a caps symbol, so the loader must
-  // fall back to vtable derivation -- equal to a direct derive, and no ACTION.
-  pcl_executor_t* executor = pcl_executor_create();
-  ASSERT_NE(executor, nullptr);
-
-  char config[256];
-  std::snprintf(config, sizeof(config),
-                "{\"bus_name\":\"pcl_caps_plugin_test_bus\","
-                "\"participant_id\":\"caps_test\",\"executor\":%llu}",
-                static_cast<unsigned long long>(
-                    reinterpret_cast<std::uintptr_t>(executor)));
-
+  // The no-caps fixture plugin exports no caps symbol, so the loader must fall
+  // back to vtable derivation: publish + invoke_async => PUBSUB | RPC_UNARY.
   pcl_plugin_handle_t* handle = nullptr;
   const pcl_transport_t* transport = nullptr;
-  ASSERT_EQ(pcl_plugin_load_transport(SHM_TRANSPORT_PLUGIN_PATH, config,
+  ASSERT_EQ(pcl_plugin_load_transport(NOCAPS_TRANSPORT_PLUGIN_PATH, nullptr,
                                       &handle, &transport),
             PCL_OK);
 
   pcl_transport_caps_t caps = PCL_CAP_NONE;
-  ASSERT_EQ(pcl_plugin_transport_caps(handle, config, transport, &caps),
+  ASSERT_EQ(pcl_plugin_transport_caps(handle, nullptr, transport, &caps),
             PCL_OK);
   EXPECT_EQ(caps, pcl_transport_caps_from_vtable(transport));
+  EXPECT_EQ(caps, PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY);
   EXPECT_EQ(caps & PCL_CAP_RPC_ACTION, 0u);
 
-  auto destroy = reinterpret_cast<void (*)(const pcl_transport_t*)>(
-      pcl_plugin_symbol(handle, "pcl_shm_transport_plugin_destroy"));
-  ASSERT_NE(destroy, nullptr);
-  destroy(transport);
   pcl_plugin_unload(handle);
-  pcl_executor_destroy(executor);
+}
+
+// -- Shipped generic-plugin capability matrix (declared, config-free) ----
+//
+// The caps symbol does not require constructing a transport, so these assert
+// the declared matrix via pcl_plugin_open + the symbol directly, with no
+// per-plugin config. Each declared mask must also agree with what its honest
+// vtable would derive (asserted separately where a vtable is available).
+
+namespace {
+
+pcl_transport_caps_t DeclaredCaps(const char* path) {
+  pcl_plugin_handle_t* handle = pcl_plugin_open(path);
+  EXPECT_NE(handle, nullptr) << path;
+  if (!handle) return PCL_CAP_NONE;
+  auto caps_fn = reinterpret_cast<pcl_transport_caps_t (*)(const char*)>(
+      pcl_plugin_symbol(handle, "pcl_transport_plugin_caps"));
+  EXPECT_NE(caps_fn, nullptr) << "missing caps symbol: " << path;
+  pcl_transport_caps_t caps = caps_fn ? caps_fn(nullptr) : PCL_CAP_NONE;
+  pcl_plugin_unload(handle);
+  return caps;
+}
+
+}  // namespace
+
+TEST(PclCapabilities, UdpPluginDeclaresPubsub) {
+  EXPECT_EQ(DeclaredCaps(UDP_TRANSPORT_PLUGIN_PATH), PCL_CAP_PUBSUB);
+}
+
+TEST(PclCapabilities, SocketPluginDeclaresPubsubUnary) {
+  EXPECT_EQ(DeclaredCaps(SOCKET_TRANSPORT_PLUGIN_PATH),
+            PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY);
+}
+
+TEST(PclCapabilities, ShmPluginDeclaresPubsubUnaryStream) {
+  EXPECT_EQ(DeclaredCaps(SHM_TRANSPORT_PLUGIN_PATH),
+            PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM);
 }
