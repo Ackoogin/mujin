@@ -197,14 +197,29 @@ staged:
    content_type, so nullptr is genuinely unsupported (a caller must name a type).
    The stale `ContentTypeMetadata` assertions (expecting `true`, masked by a
    stale binary) were updated to `EXPECT_FALSE`. Both tests green.
-2. **Stale committed generated bindings.** The checked-in
-   `bindings/cpp/generated` + `bindings/ada/generated` lag the current
-   generators (e.g. the Ada facades regenerate with `application/grpc` +
-   `Configure_Grpc_*` under the gRPC backend; the cpp facade gains protobuf
-   support). `build-grpc` regenerates into the build dir so tests pass, but a
-   `PYRAMID_GENERATE_*_BINDINGS=OFF` delivery uses the stale tree. Needs a
-   deliberate "refresh committed bindings" pass (per backend config) — kept out
-   of the capability/protobuf commits to avoid mixing a config-policy change.
+2. **Generated bindings should not be in git (decided 2026-06-27).** Only
+   interface specs — the `.proto` contracts — are the recorded source of truth;
+   build-time-generated *implementations* stay out of git so the tree is
+   preset-agnostic. This is the root cause of the drift/pollution seen above:
+   the committed `bindings/{cpp,ada,...}/generated` trees differ per backend/
+   preset (e.g. Ada facades only emit `application/grpc` + `Configure_Grpc_*`
+   under the gRPC backend), so any committed copy is stale for some preset.
+
+   **Migration (medium/structural — own commit):**
+   - Make build-time generation the only source: ensure every preset that
+     consumes bindings sets `PYRAMID_GENERATE_*_BINDINGS=ON` (today `build-grpc`
+     already does; audit the others) and that `pyramid_require_generated`
+     triggers/depends on generation rather than asserting a committed tree.
+   - `git rm --cached` the generated trees (`bindings/cpp/generated`,
+     `bindings/ada/generated`, `bindings/protobuf/cpp`, `bindings/flatbuffers`,
+     generated `*.pb.*`) and add `.gitignore` entries; keep only `proto/`.
+   - Handle the delivery/dist path (`dist/plugin_deploy/*`) which currently
+     vendors generated headers — generate into the package at build/package
+     time instead.
+   - Verify across presets (`default`, `all-off`, `build-grpc`, Ada) that a
+     clean checkout builds + tests with no committed generated files.
+   This also permanently removes the recurring build-time Ada working-tree
+   pollution.
 
 ### F. Config convention alignment (D6)
 
