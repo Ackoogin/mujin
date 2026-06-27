@@ -19,11 +19,19 @@ typedef struct {
   char                   peer_id[64];
 } pcl_routing_transport_t;
 
+typedef struct {
+  char                endpoint_name[64];
+  pcl_endpoint_kind_t endpoint_kind;
+} pcl_routing_route_t;
+
 struct pcl_transport_routing_t {
   pcl_executor_t*          executor;  /* borrowed; used to unregister on destroy */
   pcl_routing_transport_t* transports;
   size_t                   count;
   size_t                   capacity;
+  pcl_routing_route_t*     routes;    /* endpoint routes installed on the executor */
+  size_t                   route_count;
+  size_t                   route_capacity;
 };
 
 static void set_diag(char* diag, size_t diag_size, const char* fmt, ...) {
@@ -66,6 +74,26 @@ static pcl_status_t routing_push(pcl_transport_routing_t* r,
   snprintf(r->transports[r->count].peer_id,
            sizeof(r->transports[r->count].peer_id), "%s", peer_id);
   r->count++;
+  return PCL_OK;
+}
+
+/* Record an endpoint route installed on the executor so it can be rolled back if
+   a later manifest line fails. */
+static pcl_status_t routing_push_route(pcl_transport_routing_t* r,
+                                       const char*              endpoint_name,
+                                       pcl_endpoint_kind_t      endpoint_kind) {
+  if (r->route_count == r->route_capacity) {
+    size_t new_cap = r->route_capacity ? r->route_capacity * 2u : 4u;
+    pcl_routing_route_t* grown = (pcl_routing_route_t*)realloc(
+        r->routes, new_cap * sizeof(*grown));
+    if (!grown) return PCL_ERR_NOMEM;
+    r->routes        = grown;
+    r->route_capacity = new_cap;
+  }
+  snprintf(r->routes[r->route_count].endpoint_name,
+           sizeof(r->routes[r->route_count].endpoint_name), "%s", endpoint_name);
+  r->routes[r->route_count].endpoint_kind = endpoint_kind;
+  r->route_count++;
   return PCL_OK;
 }
 
@@ -169,10 +197,11 @@ static pcl_status_t handle_transport_line(pcl_executor_t*          e,
   return PCL_OK;
 }
 
-static pcl_status_t handle_route_line(pcl_executor_t* e,
-                                      char*           cursor,
-                                      char*           diag,
-                                      size_t          diag_size) {
+static pcl_status_t handle_route_line(pcl_executor_t*          e,
+                                      pcl_transport_routing_t* r,
+                                      char*                    cursor,
+                                      char*                    diag,
+                                      size_t                   diag_size) {
   char* endpoint = next_token(&cursor);
   char* kind_s   = next_token(&cursor);
   char* peers_s  = next_token(&cursor);
@@ -225,6 +254,14 @@ static pcl_status_t handle_route_line(pcl_executor_t* e,
     set_diag(diag, diag_size, "route '%s': set failed (rc=%d)", endpoint, (int)rc);
     return rc;
   }
+  /* Record before validating so a validation failure (or any later line's
+     failure) still rolls this route back -- the load must leave nothing
+     installed on error. */
+  rc = routing_push_route(r, endpoint, kind);
+  if (rc != PCL_OK) {
+    pcl_executor_clear_endpoint_route(e, endpoint, kind);
+    return rc;
+  }
   /* Compose-time validation: caps + QoS floor, fail closed. */
   return pcl_executor_validate_endpoint_route(e, &route, diag, diag_size);
 }
@@ -267,7 +304,7 @@ pcl_status_t pcl_transport_routing_load(pcl_executor_t*           e,
     if (strcmp(directive, "transport") == 0) {
       rc = handle_transport_line(e, r, cursor, diag, diag_size);
     } else if (strcmp(directive, "route") == 0) {
-      rc = handle_route_line(e, cursor, diag, diag_size);
+      rc = handle_route_line(e, r, cursor, diag, diag_size);
     } else {
       set_diag(diag, diag_size, "unknown manifest directive '%s'", directive);
       rc = PCL_ERR_INVALID;
@@ -288,6 +325,17 @@ pcl_status_t pcl_transport_routing_load(pcl_executor_t*           e,
 void pcl_transport_routing_destroy(pcl_transport_routing_t* routing) {
   size_t i;
   if (!routing) return;
+  /* Roll back endpoint routes before tearing down transports, so the executor is
+     not left routing endpoints to peers whose transports are about to be
+     unloaded. */
+  if (routing->executor) {
+    for (i = 0; i < routing->route_count; ++i) {
+      pcl_executor_clear_endpoint_route(routing->executor,
+                                        routing->routes[i].endpoint_name,
+                                        routing->routes[i].endpoint_kind);
+    }
+  }
+  free(routing->routes);
   for (i = 0; i < routing->count; ++i) {
     /* Unregister from the executor BEFORE unloading the library, or the executor
        is left holding vtable function pointers into a dlclose'd .so. */

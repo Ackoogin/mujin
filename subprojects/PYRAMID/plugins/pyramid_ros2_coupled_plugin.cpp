@@ -50,6 +50,7 @@ extern "C" {
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <mutex>
 #include <new>
 #include <string>
 #include <thread>
@@ -123,6 +124,45 @@ pcl_executor_t* readExecutor(const char* config_json) {
   return reinterpret_cast<pcl_executor_t*>(static_cast<uintptr_t>(raw));
 }
 
+// -- Process-wide rclcpp ownership ----------------------------------------
+//
+// rclcpp::init()/shutdown() act on a process-global default context, so this
+// .so must NOT shut rclcpp down while sibling plugin instances are still
+// spinning (a manifest with more than one ROS2 peer loads several contexts in
+// one process). We refcount every context that needs rclcpp running and only
+// shut it down once the last one is released -- and only if we were the ones
+// who initialised it, so a context the host application brought up is left
+// untouched.
+std::mutex g_rclcpp_mutex;
+int g_rclcpp_refcount = 0;
+bool g_rclcpp_initialised_by_plugin = false;
+
+// Ensure rclcpp is running and register one reference. Returns true when rclcpp
+// is available afterwards. Must be paired with releaseRclcpp().
+bool acquireRclcpp() {
+  std::lock_guard<std::mutex> lock(g_rclcpp_mutex);
+  if (!rclcpp::ok()) {
+    rclcpp::init(0, nullptr);
+    g_rclcpp_initialised_by_plugin = true;
+  }
+  if (!rclcpp::ok()) return false;
+  ++g_rclcpp_refcount;
+  return true;
+}
+
+// Drop one reference; shut rclcpp down once the last plugin-owned reference is
+// gone (and only if this plugin initialised it).
+void releaseRclcpp() {
+  std::lock_guard<std::mutex> lock(g_rclcpp_mutex);
+  if (g_rclcpp_refcount > 0) {
+    --g_rclcpp_refcount;
+  }
+  if (g_rclcpp_refcount == 0 && g_rclcpp_initialised_by_plugin && rclcpp::ok()) {
+    rclcpp::shutdown();
+    g_rclcpp_initialised_by_plugin = false;
+  }
+}
+
 // -- Transport adapter context -------------------------------------------
 
 struct Ros2TransportContext {
@@ -132,7 +172,7 @@ struct Ros2TransportContext {
   rclcpp::executors::SingleThreadedExecutor ros_executor;
   std::thread spin_thread;
   std::atomic<bool> spinning{false};
-  bool owns_rclcpp = false;
+  bool holds_rclcpp_ref = false;  // released via releaseRclcpp() on destroy
   pcl_transport_t transport{};
 };
 
@@ -163,8 +203,8 @@ void destroyContext(Ros2TransportContext* ctx) {
   }
   ctx->adapter.reset();
   ctx->node.reset();
-  if (ctx->owns_rclcpp && rclcpp::ok()) {
-    rclcpp::shutdown();
+  if (ctx->holds_rclcpp_ref) {
+    releaseRclcpp();
   }
   delete ctx;
 }
@@ -306,21 +346,21 @@ PYRAMID_ROS2_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
   }
 
   // rclcpp must be initialised before the rclcpp executor member is constructed
-  // (its guard condition binds the default context), so init here -- ahead of
-  // allocating the context struct that owns the executor by value.
-  bool owns_rclcpp = false;
-  if (!rclcpp::ok()) {
-    rclcpp::init(0, nullptr);
-    owns_rclcpp = true;
+  // (its guard condition binds the default context), so acquire here -- ahead of
+  // allocating the context struct that owns the executor by value. The reference
+  // is process-wide refcounted so a sibling instance's teardown cannot shut
+  // rclcpp down underneath this one (see acquireRclcpp/releaseRclcpp).
+  if (!acquireRclcpp()) {
+    return nullptr;
   }
 
   auto* ctx = new (std::nothrow) Ros2TransportContext();
   if (!ctx) {
-    if (owns_rclcpp && rclcpp::ok()) rclcpp::shutdown();
+    releaseRclcpp();
     return nullptr;
   }
   ctx->executor = executor;
-  ctx->owns_rclcpp = owns_rclcpp;
+  ctx->holds_rclcpp_ref = true;
 
   try {
     ctx->node = std::make_shared<rclcpp::Node>(node_name);

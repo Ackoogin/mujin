@@ -264,6 +264,16 @@ pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
 pcl_status_t pcl_executor_set_endpoint_route(pcl_executor_t*         e,
                                              const pcl_endpoint_route_t* route);
 
+/// \brief Remove a per-endpoint route previously installed via
+///        \ref pcl_executor_set_endpoint_route.
+///
+/// Used to roll back routes when a multi-line manifest load fails partway, so a
+/// failed load leaves nothing registered. Idempotent: returns PCL_OK when no
+/// matching route is installed.
+pcl_status_t pcl_executor_clear_endpoint_route(pcl_executor_t*     e,
+                                               const char*         endpoint_name,
+                                               pcl_endpoint_kind_t endpoint_kind);
+
 /// \brief Invoke a streaming service through the configured transport.
 ///
 /// Routes the request through the transport adapter's invoke_stream function,

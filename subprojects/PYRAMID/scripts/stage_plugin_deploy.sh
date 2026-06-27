@@ -51,8 +51,10 @@ PYRAMID_LIBDIR="${BUILD_DIR}/subprojects/PYRAMID"
 PCL_SRCDIR="${BUILD_DIR}/subprojects/PCL/src"
 # The coupled ROS2 plugin is built out-of-tree via colcon (ament package), so it
 # lives under the ROS2 install tree rather than the main build dir. It is staged
-# only when that colcon build has produced it (see scripts/build_ros2_transport).
-ROS2_INSTALL_LIBDIR="${REPO_ROOT}/subprojects/PYRAMID/ros2/install/pyramid_ros2_transport/lib"
+# only when that colcon build has produced it. The path must match the
+# --install-base that scripts/build_ros2_transport.sh passes to colcon
+# (build-ros2-ament/install), or the plugin is silently never staged.
+ROS2_INSTALL_LIBDIR="${REPO_ROOT}/build-ros2-ament/install/pyramid_ros2_transport/lib"
 TRANSPORT_PLUGINS=(
   "${PCL_SRCDIR}/libpcl_transport_socket_plugin.so"
   "${PCL_SRCDIR}/libpcl_transport_shared_memory_plugin.so"

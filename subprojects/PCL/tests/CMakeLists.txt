@@ -60,6 +60,9 @@ gtest_discover_tests(test_pcl_plugin_loader DISCOVERY_MODE PRE_TEST)
 
 add_executable(test_pcl_transport_routing test_pcl_transport_routing.cpp)
 target_link_libraries(test_pcl_transport_routing PRIVATE pcl_core GTest::gtest_main)
+# Internal headers so the rollback test can assert the executor's route table is
+# empty after a failed multi-line load.
+target_include_directories(test_pcl_transport_routing PRIVATE ${PCL_ROOT_DIR}/src)
 target_compile_definitions(test_pcl_transport_routing PRIVATE
     CAPTURE_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_capture_plugin>"
     UDP_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_udp_plugin>"

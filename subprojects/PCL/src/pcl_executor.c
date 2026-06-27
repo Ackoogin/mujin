@@ -965,6 +965,25 @@ pcl_status_t pcl_executor_set_endpoint_route(pcl_executor_t*           e,
   return PCL_OK;
 }
 
+pcl_status_t pcl_executor_clear_endpoint_route(pcl_executor_t*     e,
+                                               const char*         endpoint_name,
+                                               pcl_endpoint_kind_t endpoint_kind) {
+  pcl_endpoint_route_entry_t* entry;
+  pcl_endpoint_route_entry_t* last;
+
+  if (!e || !endpoint_name) return PCL_ERR_INVALID;
+  entry = find_endpoint_route_entry(e, endpoint_name, endpoint_kind);
+  if (!entry) return PCL_OK; /* idempotent: nothing installed for this endpoint */
+
+  /* Compact the array so live entries stay contiguous in [0, count): move the
+     last live entry into the freed slot and shrink the count. */
+  last = &e->endpoint_routes[e->endpoint_route_count - 1u];
+  if (entry != last) *entry = *last;
+  memset(last, 0, sizeof(*last));
+  e->endpoint_route_count--;
+  return PCL_OK;
+}
+
 pcl_status_t pcl_executor_dispatch_incoming(pcl_executor_t*  e,
                                             const char*      topic,
                                             const pcl_msg_t* msg) {

@@ -15,6 +15,9 @@ extern "C" {
 #include <pcl/pcl_plugin_loader.h>
 #include <pcl/pcl_transport.h>
 #include <pcl/pcl_transport_routing.h>
+
+// Internal layout so the rollback test can inspect the executor's route table.
+#include "pcl_internal.h"
 }
 
 #include <unistd.h>
@@ -166,6 +169,30 @@ TEST(PclTransportRouting, FailsClosedWhenTransportLacksRequiredCap) {
             PCL_ERR_STATE);
   EXPECT_EQ(routing, nullptr);  // failed load leaves nothing registered
   EXPECT_NE(std::string(diag).find("RPC_UNARY"), std::string::npos);
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+// A manifest with an earlier valid route and a later failing line must leave
+// NOTHING installed: the route installed by the first line is rolled back so the
+// executor is not left routing an endpoint to a peer whose transport is torn
+// down on the error path.
+TEST(PclTransportRouting, RollsBackRoutesWhenLaterLineFails) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n" +
+      "route create_requirement consumed recorder\n" +  // valid: installs a route
+      "route object_evidence wobble recorder\n";         // malformed kind: fails
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(routing, nullptr);  // failed load leaves nothing registered
+  // The route installed by the first line must have been rolled back.
+  EXPECT_EQ(e->endpoint_route_count, 0u);
   std::remove(path.c_str());
   pcl_executor_destroy(e);
 }
