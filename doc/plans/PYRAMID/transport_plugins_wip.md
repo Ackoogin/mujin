@@ -185,10 +185,13 @@ staged:
 8. Actions (`RPC_ACTION`) for ROS2 — first-class `ACTION` pattern (D3), mapped
    when the first production user arrives.
 
-### E. Standalone / packaging follow-ups
+### E. Standalone / packaging follow-ups — ✅ done
 
-- Make proto→binding→**plugin** a separately invocable CI/CD stage
-  (`scripts/build_plugins.sh` is the first step).
+- proto→binding→**plugin** is a separately invocable CI/CD stage:
+  `scripts/build_plugins.sh [--grpc] [--stage]` configures with
+  `PYRAMID_GENERATE_CPP_BINDINGS=ON` and builds the `pyramid_plugins` aggregate,
+  which depends on `PYRAMID_CODEC_PLUGIN_TARGETS` — so it now also builds the
+  `pyramid_codec_protobuf_<component>` plugin under `--grpc`. Script doc lists it.
 
 ### G. Pre-existing drift surfaced by rebuilding (not protobuf)
 
