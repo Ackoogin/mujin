@@ -374,7 +374,16 @@ if(PYRAMID_ENABLE_PROTOBUF)
         set(protobuf_INSTALL OFF CACHE BOOL "" FORCE)
         set(protobuf_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
         set(protobuf_MSVC_STATIC_RUNTIME OFF CACHE BOOL "" FORCE)
+        # This static protobuf is linked into shared MODULE plugins (the
+        # application/protobuf codec plugin), so it must be PIC. Without grpc
+        # (which builds its bundled protobuf PIC) the fetched static lib is not
+        # PIC by default and the .so fails to link (R_X86_64_TPOFF32). Build it
+        # PIC; restore the prior setting afterwards so we don't perturb others.
+        set(_pyramid_saved_pic "${CMAKE_POSITION_INDEPENDENT_CODE}")
+        set(CMAKE_POSITION_INDEPENDENT_CODE ON)
         FetchContent_MakeAvailable(protobuf)
+        set(CMAKE_POSITION_INDEPENDENT_CODE "${_pyramid_saved_pic}")
+        unset(_pyramid_saved_pic)
     endif()
 
     if(TARGET libprotobuf AND NOT TARGET protobuf::libprotobuf)
