@@ -232,8 +232,20 @@ staged:
    accessor (mirrors caps); shipped transports declare offered reliability —
    socket/shm RELIABLE, udp BEST_EFFORT. `test_pcl_capabilities` 28/28 (9 new).
    *(Plugin auto-wiring of declared QoS at compose time lands with stage 5.)*
-5. Manifest-driven per-endpoint routing across multiple transport plugins; one
-   mixed-middleware e2e (e.g. services/gRPC + topics/udp on one component).
+5. ✅ **Done** (`27f0fbe`) — **Manifest-driven per-endpoint routing.** New
+   `pcl_transport_routing` module: a line-based manifest (`transport <peer>
+   <plugin> [config]` / `route <endpoint> <kind> <peers> [reliability]`) loads each
+   transport plugin (injecting the live executor pointer into its config), records
+   its declared caps + offered QoS, registers it as a named peer, then installs +
+   **validates** every endpoint route (caps + QoS floor, fail closed). The owner
+   handle unregisters each transport from the executor *before* unloading it (no
+   dangling vtable pointers). Generic plugins (udp/socket/shm) gained the standard
+   `pcl_transport_plugin_teardown` symbol so manifest unload releases their
+   executor-bound threads. **This is the auto-wiring stage** the caps (§2.D.3) and
+   QoS (§2.D.4) notes deferred to. Mixed-middleware e2e: `test_pcl_transport_routing`
+   (8) composes a capture service + a real UDP topic from one manifest, drives real
+   traffic through a routed transport, and fails closed on missing cap / unmet QoS /
+   unknown peer / malformed line.
 6. ✅ **Done** (`fe0a7ec`) — ROS2 consumed `invoke_async` closed (see §2.C.3), so
    ROS2 meets the both-ways **unary** core. (Consumed streaming still open in §2.C.3.)
 7. **Deferred (D5):** opt-in adapters (`PUBSUB over RPC_STREAM`, `RPC_UNARY over
@@ -354,6 +366,12 @@ All seven are now decided; pending work in §2 follows these.
 
 ## 4. Recently closed
 
+- **Manifest-driven per-endpoint transport routing (§2.D.5)** (2026-06-27,
+  `27f0fbe`) — `pcl_transport_routing`: declarative heterogeneous middleware from
+  one manifest, with compose-time caps + QoS validation (fail closed), executor
+  injection, real traffic through a routed transport, and unregister-before-unload
+  lifecycle. Generic plugins gained the teardown symbol. The capability model
+  (D1–D5) is now a complete vertical slice. `test_pcl_transport_routing` 8/8.
 - **Safe teardown-then-unload + ROS2 deployment doc (§2.C.5/§2.C.6)** (2026-06-27,
   `18b0e3b`) — `pcl_transport_plugin_teardown` symbol + `pcl_plugin_unload_transport`
   (teardown before dlclose, degrades to plain unload); ROS2/gRPC coupled plugins
