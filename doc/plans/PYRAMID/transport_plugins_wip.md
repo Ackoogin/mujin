@@ -131,6 +131,17 @@ loaded plugin, and `BindingPerformanceTest.{Local,Shmem,Socket}_Protobuf` now
 **run and pass** (previously skipped) — confirming protobuf over the generic
 transports end-to-end. The stale `skipIfNoProtobufCodec` TODO is removed.
 
+The full-stack **app-client** protobuf e2e is also corrected (commit `f00ad14`):
+`tobj_cpp_app_client_protobuf_e2e` ran with `--content-type application/protobuf`
+but **no** `--codec-plugin`, so `tactical_objects_app`'s `standard_bridge` could
+never register the (plugin-only) protobuf codec — configure failed `rc=-1`,
+`create_requirement` returned `-6`. Renamed to
+`tobj_cpp_app_client_protobuf_plugin_e2e`, gated on the
+`pyramid_codec_protobuf_tactical_objects` target, and now loads the codec plugin
+(mirroring the json/flatbuffers `*_plugin_e2e` variants) — full path green
+(`matches=1`). The Win32 no-plugin variant was dropped (`test_cpp_app_client.bat`
+has no `--codec-plugin` support; protobuf has no built-in facade fallback).
+
 ### C. ROS2 coupled plugin production closure
 
 1. **Reproducible ament build** — the ament package expects generated support
@@ -229,6 +240,31 @@ staged:
    This also permanently removes the recurring build-time Ada working-tree
    pollution.
 
+   **Mechanism confirmed (2026-06-27), and it is now *blocking* the Ada plugin
+   tests, not just cosmetic pollution.** GNAT/gprbuild *are* available on the
+   Linux dev box (earlier sessions assumed otherwise), so `build-grpc` detects
+   `gprbuild` and registers the Ada tests with a `pyramid_ada_build_artifacts`
+   fixture that builds `pyramid_ada_all`. But building any binding-consuming
+   target under `build-grpc` regenerates `bindings/ada/generated` **in the source
+   tree** with the gRPC backend enabled, so the committed (non-gRPC) base files
+   are overwritten: `pyramid-services-tactical_objects-consumed.adb` gains
+   `with Pyramid.Components.…Consumed.GRPC_Transport` (emitted only when `grpc` is
+   in the enabled backends — `ada_codegen.py:986`). `ada_active_find_e2e.gpr` is a
+   socket/flatbuffers project whose `Source_Dirs` deliberately exclude
+   `generated/grpc/ada`, so it then fails to compile (`file "pyramid-components.ads"
+   not found`). Because `pyramid_ada_all` builds *every* Ada e2e (socket/flatbuffers
+   `active_find` **and** the gRPC interop) from one in-tree generated set, no single
+   committed backend combination satisfies all gprs at once — and the one failing
+   sub-build fails the whole fixture, so even the Ada **plugin** tests
+   (`ada_plugin_loader_abi`, `tobj_ada_socket_json_plugin_e2e`, `ada_cpp_codec_roundtrip`)
+   never run. The committed tree builds cleanly only in a non-gRPC preset
+   (`build-ada`, flatbuffers/socket). This is why §2.G.2 is the gating prerequisite
+   for the Ada side of the demo: per-preset build-time generation into the build
+   tree (not the source tree) removes both the pollution and the cross-gpr conflict.
+   *(After diagnosing this the polluted working tree was restored via
+   `git checkout -- bindings/ada/generated` + `git clean -fd` on that path — never
+   commit a post-build Ada tree.)*
+
 ### G.3 Socket server load is blocking-by-design (testing note, not a bug)
 
 `pcl_socket_transport_create_server` calls `accept()` **synchronously** (the
@@ -277,6 +313,13 @@ All seven are now decided; pending work in §2 follows these.
 
 ## 4. Recently closed
 
+- **Protobuf app-client e2e loads the codec plugin (§2.B)** (2026-06-27, `f00ad14`)
+  — `tobj_cpp_app_client_protobuf_e2e` could never pass (plugin-only codec, no
+  `--codec-plugin`); renamed to `..._protobuf_plugin_e2e`, loads the plugin, full
+  path green. Win32 no-plugin variant dropped. This was the last real red on the
+  C++ full-plugin path; the demo suite (composition / gRPC both-ways / capabilities
+  19 / codec-swap / plugin-only fail-closed / loader / proto-bindings 42 / app-client
+  json+flatbuffers+protobuf) is **all green** under `build-grpc`.
 - **Compose-time capability validation (§2.D.3)** (2026-06-27) —
   `pcl_executor_validate_endpoint_route()` + `pcl_endpoint_required_caps` +
   `pcl_transport_caps_supports`; per-transport recorded caps (declared via new
