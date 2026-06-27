@@ -145,3 +145,4 @@ subprojects/PYRAMID/ros2_msgs/srv/
 subprojects/PYRAMID/ros2_msgs/build/
 subprojects/PYRAMID/ros2_msgs/install/
 subprojects/PYRAMID/ros2_msgs/log/
+.claude/scheduled_tasks.lock
