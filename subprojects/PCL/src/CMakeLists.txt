@@ -6,6 +6,7 @@
 # ---------------------------------------------------------------------------
 
 add_library(pcl_core STATIC
+  pcl_capabilities.c
   pcl_codec_registry.c
   pcl_container.c
   pcl_executor.c

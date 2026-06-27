@@ -2,7 +2,7 @@
 
 **This is the single living status doc** for the PYRAMID transport/codec plugin
 work: current status, pending work, and decisions to make. Last updated
-2026-06-26.
+2026-06-27.
 
 Companion docs (stable / design, not status):
 - **How it works:** [`subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md)
@@ -128,8 +128,8 @@ Decision needed on scope — see §3. Done so far: honest benchmark skip
    (required for the both-ways core contract), or explicitly document
    `application/ros2` as ingress/pub-sub only and add fail-closed tests. See §3.
 4. **Process-safe rclcpp lifecycle** — replace per-instance `owns_rclcpp` shutdown
-   with refcounting / externally-owned-context / a "never shut down rclcpp we
-   didn't create" rule.
+   with the **never-shutdown-unless-creator** rule (D7): the plugin shuts down
+   rclcpp only if it initialized it; an externally-owned context is left alone.
 5. **Lifecycle enforcement** — a generic helper/wrapper so apps can't
    `pcl_plugin_unload` without first destroying the transport context (spin thread).
 6. **Deployment staging** — document/runtime-check the ROS2 runtime env (sourced
@@ -140,8 +140,12 @@ Decision needed on scope — see §3. Done so far: honest benchmark skip
 Per [`transport_capability_model_plan.md`](transport_capability_model_plan.md),
 staged:
 
-1. Declare capabilities — `PCL_CAP_*` flags + `pcl_transport_plugin_caps` symbol;
-   loader exposes the mask (derive from NULL vtable slots when absent).
+1. ✅ **Done** — capabilities declared: `PCL_CAP_*` flags +
+   `pcl_transport_caps_from_vtable` (`pcl_capabilities.h`), optional
+   `pcl_transport_plugin_caps` symbol, loader accessor
+   `pcl_plugin_transport_caps()` (declared mask, else derived from NULL vtable
+   slots). Covered by `test_pcl_capabilities`. Pure introspection, no behaviour
+   change.
 2. Audit existing plugins against the matrix; add the caps symbol + assert in tests.
 3. Compose-time validation — endpoint required-capability vs routed transport mask,
    fail closed with a precise diagnostic; negative tests.
@@ -149,33 +153,49 @@ staged:
 5. Manifest-driven per-endpoint routing across multiple transport plugins; one
    mixed-middleware e2e (e.g. services/gRPC + topics/udp on one component).
 6. Close ROS2 consumed `invoke_async` (overlaps §2.C.3) so ROS2 meets the both-ways core.
-7. Opt-in adapters (`PUBSUB over RPC_STREAM`, `RPC_UNARY over PUBSUB`), each
-   advertising the derived capability, behind explicit config.
-8. Actions (`RPC_ACTION`) for ROS2 if/when required.
+7. **Deferred (D5):** opt-in adapters (`PUBSUB over RPC_STREAM`, `RPC_UNARY over
+   PUBSUB`) are *not* in v1 — stay strictly fail-closed until a concrete need.
+   When added, each advertises the derived capability behind explicit config.
+8. Actions (`RPC_ACTION`) for ROS2 — first-class `ACTION` pattern (D3), mapped
+   when the first production user arrives.
 
 ### E. Standalone / packaging follow-ups
 
 - Make proto→binding→**plugin** a separately invocable CI/CD stage
   (`scripts/build_plugins.sh` is the first step).
 
+### F. Config convention alignment (D6)
+
+Standardize the server/client selector on **`role: provided|consumed`** across all
+transport plugins, using the contract's provided/consumed vocabulary. Migrate the
+gRPC coupled plugin from `mode: server|client` (accept `mode` as a deprecated
+alias for one release if needed); confirm socket/shm already key off `role`; update
+configs, tests, and the plugin docs to the single convention.
+
 ---
 
-## 3. Decisions to make
+## 3. Decisions (resolved 2026-06-27)
 
-| # | Decision | Context |
-|---|----------|---------|
-| D1 | **Protobuf codec scope** — ship the per-component `application/protobuf` codec plugin (generic transport coverage + enables shim retirement), or declare protobuf "gRPC-coupled only" and keep the benchmark skip permanent? | §2.A.1 / §2.B. Leaning ship (already decided to retire the shim, which needs it). |
-| D2 | **ROS2 consumed scope** — implement `invoke_async`/`invoke_stream` for `application/ros2`, or document it ingress/pub-sub only (fail closed) for now? | §2.C.3 / §2.D.6. Both-ways core contract argues for implementing. |
-| D3 | **`RPC_ACTION`** — first-class capability/contract construct, or always composed from `RPC_STREAM` + `stream_cancel`? | Capability plan; only ROS2 needs it natively. |
-| D4 | **QoS placement** — capability bitmask, a separate profile struct, or the route manifest? | Proposal: profile struct + per-endpoint floor in the manifest. |
-| D5 | **Adapters in v1?** — ship `PUBSUB over RPC_STREAM` / `RPC_UNARY over PUBSUB` now, or stay strictly fail-closed until a concrete need? | Capability gap policy. |
-| D6 | **Config convention** — unify the server/client selector across plugins (gRPC uses `mode`, socket uses `role`). | Pick one and align all plugins. |
-| D7 | **rclcpp lifecycle policy** — refcount, externally-owned context, or never-shutdown-unless-creator? | §2.C.4. |
+All seven are now decided; pending work in §2 follows these.
+
+| # | Decision | Resolution | Drives |
+|---|----------|------------|--------|
+| D1 | Protobuf codec scope | **Ship** the per-component `application/protobuf` registry codec plugin — generic transport coverage + the load-bearing enabler for retiring the Ada gRPC shim. | §2.A.1–A.2, §2.B |
+| D2 | ROS2 consumed scope | **Implement** `invoke_async`/`invoke_stream` for `application/ros2` so it meets the both-ways core contract. | §2.C.3, §2.D.6 |
+| D3 | `RPC_ACTION` | **First-class** — adopt the `ACTION` `Pattern` value reserved in [`pyramid_interaction_semantics.md`](../../../subprojects/PYRAMID/doc/architecture/pyramid_interaction_semantics.md); not composed from `RPC_STREAM`. | §2.D.8 |
+| D4 | QoS placement | **Contract profile struct** — `Interaction.qos` in the `.proto` (per [`pyramid_interaction_semantics.md`](../../../subprojects/PYRAMID/doc/architecture/pyramid_interaction_semantics.md)); per-endpoint floor validated at compose time. | §2.D.4 |
+| D5 | Adapters in v1? | **Strictly fail-closed** — compose-time validation rejects capability mismatch with a precise diagnostic; no `PUBSUB over RPC_STREAM` / `RPC_UNARY over PUBSUB` adapters until a concrete need. | §2.D.7 |
+| D6 | Config convention | **`role: provided\|consumed`** across all plugins, using the contract's provided/consumed vocabulary; migrate gRPC's `mode: server\|client`. | §2.C, §2.D |
+| D7 | rclcpp lifecycle policy | **Never-shutdown-unless-creator** — a plugin shuts down rclcpp only if it initialized it; an externally-owned context is left alone. | §2.C.4 |
 
 ---
 
 ## 4. Recently closed
 
+- **Transport capability declaration** (2026-06-27) — §2.D.1: `PCL_CAP_*` flags,
+  `pcl_transport_caps_from_vtable`, optional `pcl_transport_plugin_caps` symbol,
+  and loader accessor `pcl_plugin_transport_caps()` with NULL-slot derivation
+  fallback. `test_pcl_capabilities` green (9/9); loader regression green (11/11).
 - **gRPC coupled plugin both-ways runtime** (2026-06-26) — see §1.
 - **Ada Linux gRPC generator blockers** (2026-06-26) — `To_Json` codec-source-free
   + portable `pcl_plugin_open`.

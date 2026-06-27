@@ -292,6 +292,25 @@ pcl_status_t pcl_plugin_load_transport(const char*             path,
   return PCL_OK;
 }
 
+/// \brief Report the interaction capabilities of a loaded transport plugin.
+pcl_status_t pcl_plugin_transport_caps(pcl_plugin_handle_t*   handle,
+                                       const char*            config_json,
+                                       const pcl_transport_t* vtable,
+                                       pcl_transport_caps_t*  out_caps) {
+  pcl_transport_plugin_caps_fn caps_fn;
+
+  if (!handle || !out_caps) return PCL_ERR_INVALID;
+
+  caps_fn = (pcl_transport_plugin_caps_fn)resolve_symbol(
+      handle, PCL_TRANSPORT_PLUGIN_CAPS_SYMBOL);
+  if (caps_fn) {
+    *out_caps = caps_fn(config_json);
+  } else {
+    *out_caps = pcl_transport_caps_from_vtable(vtable);
+  }
+  return PCL_OK;
+}
+
 /// \brief Open an arbitrary shared library (no PCL entry point required).
 pcl_plugin_handle_t* pcl_plugin_open(const char* path) {
   return open_library(path);

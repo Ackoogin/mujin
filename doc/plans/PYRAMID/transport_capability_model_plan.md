@@ -238,9 +238,13 @@ dimension: the profile must carry it, and command-style endpoints should pin
 
 ## Staged implementation plan
 
-1. **Declare capabilities.** Add `PCL_CAP_*` flags + `pcl_transport_plugin_caps`
-   symbol; loader exposes the mask (derive from NULL slots when absent). No
-   behaviour change yet — pure introspection.
+1. **Declare capabilities.** ✅ **Done** — `PCL_CAP_*` flags +
+   `pcl_transport_caps_from_vtable` in [`pcl_capabilities.h`](../../../subprojects/PCL/include/pcl/pcl_capabilities.h);
+   optional `pcl_transport_plugin_caps` symbol (`PCL_TRANSPORT_PLUGIN_CAPS_SYMBOL`)
+   in `pcl_plugin.h`; loader accessor `pcl_plugin_transport_caps()` returns the
+   declared mask or derives it from non-NULL vtable slots when the symbol is
+   absent. Covered by `test_pcl_capabilities`. Pure introspection — no behaviour
+   change.
 2. **Audit existing plugins** against the matrix; add the caps symbol to gRPC,
    ROS2, socket, shm, UDP and assert the matrix in tests.
 3. **Compose-time validation** pass: endpoint required-capability vs routed

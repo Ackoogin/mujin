@@ -72,6 +72,26 @@ pcl_status_t pcl_plugin_load_transport(const char*             path,
                                        pcl_plugin_handle_t**   out_handle,
                                        const pcl_transport_t** out_vtable);
 
+/// \brief Report the interaction capabilities of a loaded transport plugin.
+///
+/// If the plugin exports the optional \ref PCL_TRANSPORT_PLUGIN_CAPS_SYMBOL
+/// symbol, its declared mask is returned (the plugin may key the mask off
+/// \p config_json, so the same configuration string used to load it should be
+/// passed here). Otherwise the mask is conservatively derived from \p vtable via
+/// \ref pcl_transport_caps_from_vtable.
+///
+/// \param handle      Handle returned by \ref pcl_plugin_load_transport.
+/// \param config_json Configuration string (may be NULL); forwarded to the caps
+///                    symbol when present.
+/// \param vtable      Vtable returned alongside \p handle, used for derivation.
+/// \param out_caps    Receives the resolved capability mask.
+/// \return PCL_OK on success, PCL_ERR_INVALID if \p handle or \p out_caps is
+///         NULL.
+pcl_status_t pcl_plugin_transport_caps(pcl_plugin_handle_t*   handle,
+                                       const char*            config_json,
+                                       const pcl_transport_t* vtable,
+                                       pcl_transport_caps_t*  out_caps);
+
 /// \brief Open an arbitrary shared library and return a plugin handle.
 ///
 /// Unlike \ref pcl_plugin_load_transport / \ref pcl_plugin_load_codec, this does

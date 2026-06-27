@@ -7,6 +7,7 @@
 #ifndef PCL_PLUGIN_H
 #define PCL_PLUGIN_H
 
+#include "pcl_capabilities.h"
 #include "pcl_transport.h"
 
 #ifdef __cplusplus
@@ -20,6 +21,13 @@ extern "C" {
 #define PCL_TRANSPORT_ABI_VERSION_SYMBOL "pcl_transport_abi_version"
 #define PCL_TRANSPORT_PLUGIN_ENTRY_SYMBOL "pcl_transport_plugin_entry"
 
+/// \brief Optional symbol a transport plugin may export to declare its
+/// interaction capabilities (see pcl_capabilities.h).
+///
+/// When absent, the loader conservatively derives the capability mask from the
+/// returned vtable via \ref pcl_transport_caps_from_vtable.
+#define PCL_TRANSPORT_PLUGIN_CAPS_SYMBOL "pcl_transport_plugin_caps"
+
 /// \brief Function signature exported to report the transport ABI version.
 ///
 /// A transport plugin exports pcl_transport_abi_version() with this signature.
@@ -32,6 +40,15 @@ typedef uint32_t (*pcl_transport_abi_version_fn)(void);
 /// The \p config_json string is plugin-specific configuration, and the returned
 /// vtable pointer is borrowed by PCL.
 typedef const pcl_transport_t* (*pcl_transport_plugin_entry_fn)(
+    const char* config_json);
+
+/// \brief Function signature exported to declare transport capabilities.
+///
+/// A transport plugin may optionally export pcl_transport_plugin_caps() with
+/// this signature. The \p config_json string is the same plugin-specific
+/// configuration passed to the entry point, so a plugin whose capabilities
+/// depend on configuration (e.g. server vs client role) can report accurately.
+typedef pcl_transport_caps_t (*pcl_transport_plugin_caps_fn)(
     const char* config_json);
 
 #ifdef __cplusplus
