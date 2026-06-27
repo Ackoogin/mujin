@@ -313,6 +313,20 @@ All seven are now decided; pending work in §2 follows these.
 
 ## 4. Recently closed
 
+- **Ada cross-language plugin demo green + protobuf-PIC fix** (2026-06-27, `e2921b6`)
+  — the `application/protobuf` codec plugin (a shared MODULE) failed to link in any
+  **non-gRPC** preset (`build-ada`, default) because the FetchContent protobuf was
+  built static **without** PIC (`R_X86_64_TPOFF32`); gRPC's bundled protobuf is
+  already PIC, masking this in `build-grpc`. Fixed by building the fetched protobuf
+  with `CMAKE_POSITION_INDEPENDENT_CODE`. This unblocked `pyramid_plugins` →
+  `pyramid_ada_all`, so the **Ada cross-language plugin path now demos green** via
+  `build_ada.sh --regen --test` (the canonical CI invocation): `ada_plugin_loader_abi`
+  (Ada dlopens the C-ABI transport plugin), `ada_cpp_codec_roundtrip` (Ada consumes
+  the C++ codec `.so`), `ada_generated_bindings_roundtrip` — 4/4. **Note:** this is
+  the `build-ada` (json/flatbuffers, non-gRPC) preset, where the committed Ada tree
+  is consistent; the *gRPC* Ada path under `build-grpc` still needs §2.G.2 (per-preset
+  build-time generation) — that's a separate, narrower remaining item now, not a
+  blanket "Ada unbuildable here".
 - **Protobuf app-client e2e loads the codec plugin (§2.B)** (2026-06-27, `f00ad14`)
   — `tobj_cpp_app_client_protobuf_e2e` could never pass (plugin-only codec, no
   `--codec-plugin`); renamed to `..._protobuf_plugin_e2e`, loads the plugin, full
