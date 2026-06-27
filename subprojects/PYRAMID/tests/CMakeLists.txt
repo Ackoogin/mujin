@@ -584,16 +584,11 @@ if(WIN32)
                     -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
         list(APPEND _tobj_cpp_app_tests tobj_cpp_app_client_flatbuffers_e2e)
     endif()
-    if(PYRAMID_ENABLE_PROTOBUF)
-        add_test(NAME tobj_cpp_app_client_protobuf_e2e
-            COMMAND ${CMAKE_COMMAND}
-                    -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.bat
-                    -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
-                    -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
-                    -DSCRIPT_ARGS=--content-type|application/protobuf
-                    -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
-        list(APPEND _tobj_cpp_app_tests tobj_cpp_app_client_protobuf_e2e)
-    endif()
+    # No protobuf app-client test on Win32: application/protobuf is a plugin-only
+    # codec (no built-in fallback in the facade), and test_cpp_app_client.bat does
+    # not support --codec-plugin, so the app could never register the codec. The
+    # Linux variant below (tobj_cpp_app_client_protobuf_plugin_e2e) loads the
+    # generated codec plugin and provides the real coverage.
 else()
     add_test(NAME tobj_cpp_app_client_e2e
         COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
@@ -607,13 +602,21 @@ else()
                     --content-type application/flatbuffers)
         list(APPEND _tobj_cpp_app_tests tobj_cpp_app_client_flatbuffers_e2e)
     endif()
-    if(PYRAMID_ENABLE_PROTOBUF)
-        add_test(NAME tobj_cpp_app_client_protobuf_e2e
+    # application/protobuf is a plugin-only codec (no built-in fallback), so this
+    # test must load the generated codec plugin -- mirroring the json/flatbuffers
+    # *_plugin_e2e variants below.
+    if(PYRAMID_ENABLE_PROTOBUF AND TARGET pyramid_codec_protobuf_tactical_objects)
+        add_dependencies(tactical_objects_app
+            pyramid_codec_protobuf_tactical_objects)
+        add_dependencies(tactical_objects_test_client
+            pyramid_codec_protobuf_tactical_objects)
+        add_test(NAME tobj_cpp_app_client_protobuf_plugin_e2e
             COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
                     --app-bin $<TARGET_FILE:tactical_objects_app>
                     --client-bin $<TARGET_FILE:tactical_objects_test_client>
-                    --content-type application/protobuf)
-        list(APPEND _tobj_cpp_app_tests tobj_cpp_app_client_protobuf_e2e)
+                    --content-type application/protobuf
+                    --codec-plugin $<TARGET_FILE:pyramid_codec_protobuf_tactical_objects>)
+        list(APPEND _tobj_cpp_app_tests tobj_cpp_app_client_protobuf_plugin_e2e)
     endif()
     if(TARGET pyramid_codec_json_tactical_objects)
         add_dependencies(tactical_objects_app
