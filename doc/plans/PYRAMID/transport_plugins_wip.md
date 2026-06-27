@@ -224,17 +224,17 @@ staged:
    This also permanently removes the recurring build-time Ada working-tree
    pollution.
 
-### G.3 Socket transport-server dlopen teardown hang (discovered)
+### G.3 Socket server load is blocking-by-design (testing note, not a bug)
 
-Loading the **socket** plugin as a transport *server* via `pcl_plugin_load_transport`
-and then tearing it down (`pcl_socket_transport_plugin_destroy` + `pcl_plugin_unload`)
-hangs — the ephemeral-port server's accept thread does not unblock on destroy in
-the dlopen path. The direct-API server tests (`PclSocketTransport.ServerCreationAndDestroy`)
-destroy fine, so this is specific to the plugin/dlopen server lifecycle, and no
-existing test exercised it (the manifest test loads socket as a *codec*, skipped).
-A `role:provided` socket load test was dropped to avoid a hanging test; fix the
-accept-thread teardown, then restore it. Pre-dates and is independent of the D6
-selector work.
+`pcl_socket_transport_create_server` calls `accept()` **synchronously** (the
+socket transport is point-to-point, `listen(fd, 1)` + a single `client_sock`),
+so loading the socket plugin with `role:"provided"` blocks in the plugin entry
+until its one client connects. A standalone `role:provided` load test therefore
+can't return without a concurrent client (which is why the one attempted was
+dropped). This is by design, not a teardown bug. The `provided`/`consumed`
+synonyms are otherwise trivial aliases of the back-compat-tested `server`/`client`
+paths; a paired server+client synonym test could be added alongside the existing
+`PclSocketTransport.PublishServerToClientDelivered` pattern if desired.
 
 ### F. Config convention alignment (D6) — ✅ done (additive)
 
