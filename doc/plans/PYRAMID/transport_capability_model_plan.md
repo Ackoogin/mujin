@@ -246,9 +246,13 @@ dimension: the profile must carry it, and command-style endpoints should pin
    absent. Covered by `test_pcl_capabilities`. Pure introspection — no behaviour
    change.
 2. **Audit existing plugins** against the matrix; add the caps symbol to gRPC,
-   ROS2, socket, shm, UDP and assert the matrix in tests. 🟡 **Generic plugins
-   done** — socket/shm/udp declare caps, asserted in `test_pcl_capabilities`.
-   Coupled gRPC/ROS2 (mode-aware, misleading vtables) remain.
+   ROS2, socket, shm, UDP and assert the matrix in tests. ✅ **Done** — all five
+   declare caps (gRPC `RPC_UNARY|RPC_STREAM`, ROS2
+   `PUBSUB|RPC_UNARY|RPC_STREAM`, socket `PUBSUB|RPC_UNARY`, shm
+   `PUBSUB|RPC_UNARY|RPC_STREAM`, udp `PUBSUB`), asserted in
+   `test_pcl_capabilities` / the coupled-plugin load tests. The coupled vtables
+   carry fail-closed stubs, so their explicit declarations correct what
+   derivation would mis-report.
 3. **Compose-time validation** pass: endpoint required-capability vs routed
    transport mask, fail closed with precise diagnostics. Add negative tests.
 4. **QoS floor** carried on endpoints + validated (start with reliability).

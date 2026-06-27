@@ -10,9 +10,11 @@
 #include <gtest/gtest.h>
 
 extern "C" {
+#include <pcl/pcl_capabilities.h>
 #include <pcl/pcl_codec.h>
 #include <pcl/pcl_codec_registry.h>
 #include <pcl/pcl_executor.h>
+#include <pcl/pcl_plugin.h>
 #include <pcl/pcl_plugin_loader.h>
 #include <pcl/pcl_transport.h>
 }
@@ -77,6 +79,24 @@ TEST(Ros2CoupledPluginLoad, ExposesFunctionalTransportVtable) {
   destroy(transport);
   pcl_plugin_unload(handle);
   pcl_executor_destroy(executor);
+}
+
+TEST(Ros2CoupledPluginLoad, DeclaresPubsubUnaryStreamCaps) {
+  // Capabilities are declared via an exported symbol, so no rclcpp node needs
+  // to stand up. The server-ingress ROS2 transport carries pub/sub (vtable) plus
+  // unary + server-streaming service ingress (advertise_unary/advertise_stream,
+  // which are not vtable slots, so derivation alone could not see them).
+  pcl_plugin_handle_t* handle = pcl_plugin_open(PYRAMID_ROS2_COUPLED_PLUGIN_PATH);
+  ASSERT_NE(handle, nullptr);
+
+  auto caps_fn = reinterpret_cast<pcl_transport_plugin_caps_fn>(
+      pcl_plugin_symbol(handle, PCL_TRANSPORT_PLUGIN_CAPS_SYMBOL));
+  ASSERT_NE(caps_fn, nullptr);
+
+  EXPECT_EQ(caps_fn(nullptr),
+            PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM);
+
+  pcl_plugin_unload(handle);
 }
 
 TEST(Ros2CoupledPluginLoad, NullConfigFailsClosed) {

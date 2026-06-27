@@ -11,8 +11,10 @@
 #include <gtest/gtest.h>
 
 extern "C" {
+#include <pcl/pcl_capabilities.h>
 #include <pcl/pcl_codec.h>
 #include <pcl/pcl_codec_registry.h>
+#include <pcl/pcl_plugin.h>
 #include <pcl/pcl_plugin_loader.h>
 #include <pcl/pcl_transport.h>
 }
@@ -24,6 +26,28 @@ namespace {
 constexpr const char* kGrpcContentType = "application/grpc";
 
 }  // namespace
+
+TEST(GrpcCoupledPluginLoad, DeclaresUnaryStreamCapsNotPubsub) {
+  ASSERT_NE(kPyramidGrpcCoupledPlugin, nullptr);
+
+  // Capabilities are declared via an exported symbol, independent of the
+  // executor-bound transport, so this needs no running server. The gRPC plugin
+  // carries unary + server-streaming RPC but NOT PCL-native pub/sub (its
+  // publish/subscribe vtable slots are fail-closed stubs), which is exactly why
+  // vtable derivation would be wrong and the explicit symbol is required.
+  pcl_plugin_handle_t* handle = pcl_plugin_open(kPyramidGrpcCoupledPlugin);
+  ASSERT_NE(handle, nullptr);
+
+  auto caps_fn = reinterpret_cast<pcl_transport_plugin_caps_fn>(
+      pcl_plugin_symbol(handle, PCL_TRANSPORT_PLUGIN_CAPS_SYMBOL));
+  ASSERT_NE(caps_fn, nullptr);
+
+  pcl_transport_caps_t caps = caps_fn(nullptr);
+  EXPECT_EQ(caps, PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM);
+  EXPECT_EQ(caps & PCL_CAP_PUBSUB, 0u);
+
+  pcl_plugin_unload(handle);
+}
 
 TEST(GrpcCoupledPluginLoad, TransportFailsClosedWithoutExecutor) {
   ASSERT_NE(kPyramidGrpcCoupledPlugin, nullptr);

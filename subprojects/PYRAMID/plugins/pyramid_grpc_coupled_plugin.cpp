@@ -321,6 +321,18 @@ PYRAMID_GRPC_PLUGIN_EXPORT uint32_t pcl_transport_abi_version() {
   return PCL_TRANSPORT_ABI_VERSION;
 }
 
+/// gRPC transport: unary + server-streaming RPC, both directions (server mode
+/// hosts ingress, client mode invokes egress) -- the same capability set either
+/// way. It does NOT carry PCL-native topic pub/sub: the publish/subscribe vtable
+/// slots are fail-closed stubs (pub/sub over gRPC is modelled as rpc at the
+/// contract level, or would need an explicit adapter -- WIP D5, deferred), so
+/// vtable derivation would wrongly imply PUBSUB. Hence the explicit declaration.
+PYRAMID_GRPC_PLUGIN_EXPORT pcl_transport_caps_t pcl_transport_plugin_caps(
+    const char* config_json) {
+  (void)config_json;
+  return PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM;
+}
+
 PYRAMID_GRPC_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
     const char* config_json) {
   if (!config_json) return nullptr;

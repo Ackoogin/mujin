@@ -146,13 +146,16 @@ staged:
    `pcl_plugin_transport_caps()` (declared mask, else derived from NULL vtable
    slots). Covered by `test_pcl_capabilities`. Pure introspection, no behaviour
    change.
-2. 🟡 **Generic plugins done** — socket (`PUBSUB|RPC_UNARY`), shm
-   (`PUBSUB|RPC_UNARY|RPC_STREAM`), udp (`PUBSUB`) now export
-   `pcl_transport_plugin_caps`; declared matrix asserted in
-   `test_pcl_capabilities` (config-free via `pcl_plugin_open` + symbol).
-   **Remaining:** the mode-aware coupled plugins (gRPC, ROS2), whose vtables set
-   fail-closed stubs so derivation is inaccurate — caps must key off
-   `config_json` (server/client).
+2. ✅ **Done** — all shipped transport plugins now export
+   `pcl_transport_plugin_caps`: socket (`PUBSUB|RPC_UNARY`), shm
+   (`PUBSUB|RPC_UNARY|RPC_STREAM`), udp (`PUBSUB`), gRPC coupled
+   (`RPC_UNARY|RPC_STREAM`, **not** PUBSUB — its publish/subscribe slots are
+   fail-closed stubs, so derivation would wrongly imply pub/sub), ROS2 coupled
+   (`PUBSUB|RPC_UNARY|RPC_STREAM` — RPC via the advertise_* symbols, not vtable
+   slots). Asserted in `test_pcl_capabilities`, `test_grpc_coupled_plugin_load`,
+   and `test_ros2_coupled_plugin_load`. *(ROS2 assertion added but unbuilt in the
+   Linux `build-grpc` env — no ament/rclcpp toolchain here; runs under the ROS2
+   build.)*
 3. Compose-time validation — endpoint required-capability vs routed transport mask,
    fail closed with a precise diagnostic; negative tests.
 4. QoS floor carried on endpoints + validated (start with reliability).
@@ -198,9 +201,12 @@ All seven are now decided; pending work in §2 follows these.
 
 ## 4. Recently closed
 
-- **Generic-plugin capability audit** (2026-06-27) — §2.D.2 (partial): socket,
-  shm, udp now declare `pcl_transport_plugin_caps`; matrix asserted in
-  `test_pcl_capabilities` (12/12). Coupled gRPC/ROS2 caps still to do.
+- **Plugin capability audit complete** (2026-06-27) — §2.D.2: all shipped
+  plugins (socket, shm, udp, gRPC coupled, ROS2 coupled) declare
+  `pcl_transport_plugin_caps`; coupled declarations correct what their
+  fail-closed vtables would mis-derive. Asserted in `test_pcl_capabilities`
+  (12/12) + `test_grpc_coupled_plugin_load` (3/3); ROS2 assertion runs under the
+  ament build.
 - **Transport capability declaration** (2026-06-27) — §2.D.1: `PCL_CAP_*` flags,
   `pcl_transport_caps_from_vtable`, optional `pcl_transport_plugin_caps` symbol,
   and loader accessor `pcl_plugin_transport_caps()` with NULL-slot derivation

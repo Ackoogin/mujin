@@ -242,6 +242,18 @@ PYRAMID_ROS2_PLUGIN_EXPORT uint32_t pcl_transport_abi_version() {
   return PCL_TRANSPORT_ABI_VERSION;
 }
 
+/// Server-ingress ROS2 transport: pub/sub via the vtable, plus unary and
+/// server-streaming service ingress via the advertise_unary/advertise_stream
+/// symbols (RPC provided side, not exposed as vtable slots, so derivation cannot
+/// see them). The consumed side (invoke_async/invoke_stream) is not yet
+/// implemented -- see WIP D2 -- but the transport can carry those patterns on
+/// the provided side.
+PYRAMID_ROS2_PLUGIN_EXPORT pcl_transport_caps_t pcl_transport_plugin_caps(
+    const char* config_json) {
+  (void)config_json;
+  return PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM;
+}
+
 PYRAMID_ROS2_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
     const char* config_json) {
   if (!config_json) return nullptr;
