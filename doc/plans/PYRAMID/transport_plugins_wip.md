@@ -224,13 +224,33 @@ staged:
    This also permanently removes the recurring build-time Ada working-tree
    pollution.
 
-### F. Config convention alignment (D6)
+### G.3 Socket transport-server dlopen teardown hang (discovered)
 
-Standardize the server/client selector on **`role: provided|consumed`** across all
-transport plugins, using the contract's provided/consumed vocabulary. Migrate the
-gRPC coupled plugin from `mode: server|client` (accept `mode` as a deprecated
-alias for one release if needed); confirm socket/shm already key off `role`; update
-configs, tests, and the plugin docs to the single convention.
+Loading the **socket** plugin as a transport *server* via `pcl_plugin_load_transport`
+and then tearing it down (`pcl_socket_transport_plugin_destroy` + `pcl_plugin_unload`)
+hangs — the ephemeral-port server's accept thread does not unblock on destroy in
+the dlopen path. The direct-API server tests (`PclSocketTransport.ServerCreationAndDestroy`)
+destroy fine, so this is specific to the plugin/dlopen server lifecycle, and no
+existing test exercised it (the manifest test loads socket as a *codec*, skipped).
+A `role:provided` socket load test was dropped to avoid a hanging test; fix the
+accept-thread teardown, then restore it. Pre-dates and is independent of the D6
+selector work.
+
+### F. Config convention alignment (D6) — ✅ done (additive)
+
+The directional selector is unified on **`role: provided|consumed`** across the
+plugins that have one, done additively so no existing config breaks:
+- **socket**: `role` now accepts `provided`→server / `consumed`→client, with
+  `server`/`client` kept as aliases.
+- **gRPC coupled**: `role: provided|consumed` is now the directional selector
+  (`provided`→server hosting the provided service set, `consumed`→client);
+  `mode: server|client` is kept as a back-compat alias (mode wins when both are
+  given). The aggregator service-role is derived (a server hosts `provided`).
+- **shm/udp**: symmetric pub/sub — no directional selector, nothing to change.
+
+Covered by `GrpcCoupledPluginLoad.RoleConsumedSelectsClientDirection` (new) and
+the full socket/gRPC/loader back-compat suites (63/63). A socket-synonym load
+test was dropped — see §2.G.3.
 
 ---
 

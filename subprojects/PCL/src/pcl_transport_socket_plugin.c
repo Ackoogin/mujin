@@ -110,10 +110,13 @@ PCL_SOCKET_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
   executor = read_executor(config_json);
   if (!executor) return NULL;
 
-  if (strcmp(role, "server") == 0) {
+  /* Directional selector: "provided"/"consumed" is the cross-plugin convention
+   * (a server provides services; a client consumes them). "server"/"client" are
+   * accepted as back-compatible aliases. */
+  if (strcmp(role, "server") == 0 || strcmp(role, "provided") == 0) {
     socket_transport = pcl_socket_transport_create_server(
         (uint16_t)port_raw, executor);
-  } else if (strcmp(role, "client") == 0) {
+  } else if (strcmp(role, "client") == 0 || strcmp(role, "consumed") == 0) {
     pcl_socket_client_opts_t opts;
     memset(&opts, 0, sizeof(opts));
     opts.connect_timeout_ms = 3000u;

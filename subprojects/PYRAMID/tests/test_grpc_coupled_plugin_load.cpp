@@ -14,10 +14,15 @@ extern "C" {
 #include <pcl/pcl_capabilities.h>
 #include <pcl/pcl_codec.h>
 #include <pcl/pcl_codec_registry.h>
+#include <pcl/pcl_executor.h>
 #include <pcl/pcl_plugin.h>
 #include <pcl/pcl_plugin_loader.h>
 #include <pcl/pcl_transport.h>
 }
+
+#include <cstdint>
+#include <cstdio>
+#include <string>
 
 #include "pyramid_codec_plugin_test_paths.hpp"
 
@@ -26,6 +31,38 @@ namespace {
 constexpr const char* kGrpcContentType = "application/grpc";
 
 }  // namespace
+
+TEST(GrpcCoupledPluginLoad, RoleConsumedSelectsClientDirection) {
+  // The unified directional selector is role: "provided" | "consumed". A
+  // consumed role must pick the client direction (which dials lazily, no server
+  // bind) -- distinguished here by invoke_stream being wired, which only the
+  // client vtable sets. This is the role-keyed equivalent of mode:"client".
+  ASSERT_NE(kPyramidGrpcCoupledPlugin, nullptr);
+
+  pcl_executor_t* executor = pcl_executor_create();
+  ASSERT_NE(executor, nullptr);
+
+  char config[256];
+  std::snprintf(config, sizeof(config),
+                "{\"executor\":%llu,\"role\":\"consumed\","
+                "\"address\":\"127.0.0.1:50321\"}",
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(executor)));
+
+  pcl_plugin_handle_t* handle = nullptr;
+  const pcl_transport_t* transport = nullptr;
+  ASSERT_EQ(pcl_plugin_load_transport(kPyramidGrpcCoupledPlugin, config,
+                                      &handle, &transport),
+            PCL_OK);
+  ASSERT_NE(transport, nullptr);
+  EXPECT_NE(transport->invoke_stream, nullptr);  // client vtable
+
+  auto destroy = reinterpret_cast<void (*)(const pcl_transport_t*)>(
+      pcl_plugin_symbol(handle, "pcl_grpc_transport_plugin_destroy"));
+  if (destroy) destroy(transport);
+  pcl_plugin_unload(handle);
+  pcl_executor_destroy(executor);
+}
 
 TEST(GrpcCoupledPluginLoad, DeclaresUnaryStreamCapsNotPubsub) {
   ASSERT_NE(kPyramidGrpcCoupledPlugin, nullptr);

@@ -340,11 +340,29 @@ PYRAMID_GRPC_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
   pcl_executor_t* executor = readExecutor(config_json);
   if (!executor) return nullptr;
 
+  // Directional selector. The cross-plugin convention is role: "provided" (host
+  // services) | "consumed" (dial a remote). mode: "server" | "client" is a
+  // back-compatible alias; "server"/"client" are also accepted as role values.
+  // When both are present, mode wins.
+  char role[32];
+  if (!readJsonString(config_json, "role", role, sizeof(role))) {
+    role[0] = '\0';
+  }
+
   char mode[16];
   if (!readJsonString(config_json, "mode", mode, sizeof(mode)) ||
       mode[0] == '\0') {
-    std::strcpy(mode, kDefaultMode);
+    if (std::strcmp(role, "consumed") == 0 || std::strcmp(role, "client") == 0) {
+      std::strcpy(mode, "client");
+    } else if (std::strcmp(role, "provided") == 0 ||
+               std::strcmp(role, "server") == 0) {
+      std::strcpy(mode, "server");
+    } else {
+      std::strcpy(mode, kDefaultMode);
+    }
   }
+  const bool is_client = std::strcmp(mode, "client") == 0 ||
+                         std::strcmp(mode, "consumed") == 0;
 
   char address[256];
   if (!readJsonString(config_json, "address", address, sizeof(address)) ||
@@ -353,7 +371,7 @@ PYRAMID_GRPC_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
   }
 
   // -- Client (consumed) mode: dial a remote endpoint, no local server. --
-  if (std::strcmp(mode, "client") == 0) {
+  if (is_client) {
     auto* ctx = new (std::nothrow) GrpcTransportContext();
     if (!ctx) return nullptr;
     ctx->executor = executor;
@@ -376,14 +394,17 @@ PYRAMID_GRPC_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
     return nullptr;
   }
 
-  char role[32];
-  if (!readJsonString(config_json, "role", role, sizeof(role)) ||
-      role[0] == '\0') {
-    std::strcpy(role, kDefaultRole);
-  }
+  // Aggregator service role: the provided/consumed service set the server hosts.
+  // A "consumed" role routes to the client branch above, and "server"/empty are
+  // not aggregator roles, so a server's service set defaults to "provided".
+  const char* service_role =
+      (std::strcmp(role, "provided") == 0 || std::strcmp(role, "consumed") == 0)
+          ? role
+          : kDefaultRole;
 
   pyramid_grpc_plugin_server* server =
-      pyramid_grpc_plugin_server_start(component, role, address, executor);
+      pyramid_grpc_plugin_server_start(component, service_role, address,
+                                       executor);
   if (!server) return nullptr;
 
   auto* ctx = new (std::nothrow) GrpcTransportContext();
