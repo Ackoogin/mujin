@@ -97,6 +97,15 @@ PCL_SHM_PLUGIN_EXPORT pcl_transport_caps_t pcl_transport_plugin_caps(
   return PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM;
 }
 
+PCL_SHM_PLUGIN_EXPORT pcl_qos_t pcl_transport_plugin_qos(
+    const char* config_json) {
+  pcl_qos_t qos;
+  (void)config_json;
+  /* In-process shared memory: lossless hand-off. */
+  qos.reliability = PCL_QOS_RELIABILITY_RELIABLE;
+  return qos;
+}
+
 PCL_SHM_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
     const char* config_json) {
   char                           bus_name[256];

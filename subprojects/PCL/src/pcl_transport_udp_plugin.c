@@ -103,6 +103,15 @@ PCL_UDP_PLUGIN_EXPORT pcl_transport_caps_t pcl_transport_plugin_caps(
   return PCL_CAP_PUBSUB;
 }
 
+PCL_UDP_PLUGIN_EXPORT pcl_qos_t pcl_transport_plugin_qos(
+    const char* config_json) {
+  pcl_qos_t qos;
+  (void)config_json;
+  /* UDP datagrams may be dropped or reordered. */
+  qos.reliability = PCL_QOS_RELIABILITY_BEST_EFFORT;
+  return qos;
+}
+
 PCL_UDP_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
     const char* config_json) {
   char                 remote_host[256];

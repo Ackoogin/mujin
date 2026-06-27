@@ -135,6 +135,16 @@ pcl_transport_caps_t DeclaredCaps(const char* path) {
   return caps;
 }
 
+pcl_qos_reliability_t DeclaredReliability(const char* path) {
+  pcl_plugin_handle_t* handle = pcl_plugin_open(path);
+  EXPECT_NE(handle, nullptr) << path;
+  if (!handle) return PCL_QOS_RELIABILITY_UNSPECIFIED;
+  pcl_qos_t qos{PCL_QOS_RELIABILITY_UNSPECIFIED};
+  EXPECT_EQ(pcl_plugin_transport_qos(handle, nullptr, &qos), PCL_OK) << path;
+  pcl_plugin_unload(handle);
+  return qos.reliability;
+}
+
 }  // namespace
 
 TEST(PclCapabilities, UdpPluginDeclaresPubsub) {
@@ -149,6 +159,33 @@ TEST(PclCapabilities, SocketPluginDeclaresPubsubUnary) {
 TEST(PclCapabilities, ShmPluginDeclaresPubsubUnaryStream) {
   EXPECT_EQ(DeclaredCaps(SHM_TRANSPORT_PLUGIN_PATH),
             PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM);
+}
+
+// -- Shipped generic-plugin offered-QoS matrix (§2.D.4) ------------------
+
+TEST(PclCapabilities, UdpPluginOffersBestEffort) {
+  EXPECT_EQ(DeclaredReliability(UDP_TRANSPORT_PLUGIN_PATH),
+            PCL_QOS_RELIABILITY_BEST_EFFORT);
+}
+
+TEST(PclCapabilities, SocketPluginOffersReliable) {
+  EXPECT_EQ(DeclaredReliability(SOCKET_TRANSPORT_PLUGIN_PATH),
+            PCL_QOS_RELIABILITY_RELIABLE);
+}
+
+TEST(PclCapabilities, ShmPluginOffersReliable) {
+  EXPECT_EQ(DeclaredReliability(SHM_TRANSPORT_PLUGIN_PATH),
+            PCL_QOS_RELIABILITY_RELIABLE);
+}
+
+TEST(PclCapabilities, LoaderQosUnspecifiedWhenSymbolAbsent) {
+  // The codec stub plugin exports no transport QoS symbol.
+  pcl_plugin_handle_t* handle = pcl_plugin_open(SOCKET_TRANSPORT_PLUGIN_PATH);
+  ASSERT_NE(handle, nullptr);
+  pcl_qos_t qos{PCL_QOS_RELIABILITY_RELIABLE};
+  // NULL out-param fails closed.
+  EXPECT_EQ(pcl_plugin_transport_qos(handle, nullptr, nullptr), PCL_ERR_INVALID);
+  pcl_plugin_unload(handle);
 }
 
 // -- Endpoint required caps + supports -----------------------------------
@@ -256,6 +293,99 @@ TEST(PclCapabilities, ValidatePubsubEndpointOverPubsubTransport) {
             PCL_OK);
   const char* peers[] = {"udp"};
   auto route = RemoteRoute("evidence", PCL_ENDPOINT_SUBSCRIBER, peers, 1);
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, nullptr, 0), PCL_OK);
+  pcl_executor_destroy(e);
+}
+
+// -- QoS floor (§2.D.4) --------------------------------------------------
+
+TEST(PclCapabilities, QosSatisfiesIsOrderedReliability) {
+  const pcl_qos_t unspec{PCL_QOS_RELIABILITY_UNSPECIFIED};
+  const pcl_qos_t best{PCL_QOS_RELIABILITY_BEST_EFFORT};
+  const pcl_qos_t rel{PCL_QOS_RELIABILITY_RELIABLE};
+  // No floor: anything satisfies.
+  EXPECT_TRUE(pcl_qos_satisfies(unspec, unspec));
+  EXPECT_TRUE(pcl_qos_satisfies(best, unspec));
+  EXPECT_TRUE(pcl_qos_satisfies(rel, unspec));
+  // Reliable floor: only a reliable offer meets it.
+  EXPECT_TRUE(pcl_qos_satisfies(rel, rel));
+  EXPECT_FALSE(pcl_qos_satisfies(best, rel));
+  EXPECT_FALSE(pcl_qos_satisfies(unspec, rel));
+  // Best-effort floor: best-effort or reliable meets it; undeclared does not.
+  EXPECT_TRUE(pcl_qos_satisfies(best, best));
+  EXPECT_TRUE(pcl_qos_satisfies(rel, best));
+  EXPECT_FALSE(pcl_qos_satisfies(unspec, best));
+}
+
+TEST(PclCapabilities, ValidateRoutePassesWhenTransportMeetsQosFloor) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  pcl_transport_t vt{};
+  ASSERT_EQ(pcl_executor_register_transport_caps(e, "grpc", &vt,
+                                                 PCL_CAP_RPC_UNARY),
+            PCL_OK);
+  ASSERT_EQ(pcl_executor_register_transport_qos(
+                e, "grpc", pcl_qos_t{PCL_QOS_RELIABILITY_RELIABLE}),
+            PCL_OK);
+
+  const char* peers[] = {"grpc"};
+  auto route = RemoteRoute("obj_service", PCL_ENDPOINT_CONSUMED, peers, 1);
+  route.qos_floor.reliability = PCL_QOS_RELIABILITY_RELIABLE;
+  char diag[160] = "x";
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, diag, sizeof(diag)),
+            PCL_OK);
+  EXPECT_STREQ(diag, "");
+  pcl_executor_destroy(e);
+}
+
+TEST(PclCapabilities, ValidateRouteFailsClosedWhenQosFloorUnmet) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  pcl_transport_t vt{};
+  // udp carries pub/sub and is only best-effort.
+  ASSERT_EQ(pcl_executor_register_transport_caps(e, "udp", &vt, PCL_CAP_PUBSUB),
+            PCL_OK);
+  ASSERT_EQ(pcl_executor_register_transport_qos(
+                e, "udp", pcl_qos_t{PCL_QOS_RELIABILITY_BEST_EFFORT}),
+            PCL_OK);
+
+  const char* peers[] = {"udp"};
+  auto route = RemoteRoute("evidence", PCL_ENDPOINT_SUBSCRIBER, peers, 1);
+  route.qos_floor.reliability = PCL_QOS_RELIABILITY_RELIABLE;  // demand reliable
+  char diag[160] = "";
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, diag, sizeof(diag)),
+            PCL_ERR_STATE);
+  EXPECT_NE(std::string(diag).find("reliable"), std::string::npos);
+  EXPECT_NE(std::string(diag).find("best_effort"), std::string::npos);
+  pcl_executor_destroy(e);
+}
+
+TEST(PclCapabilities, ValidateRouteFailsClosedWhenQosUndeclared) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  pcl_transport_t vt{};
+  // Caps fine, but the transport never declared its reliability.
+  ASSERT_EQ(pcl_executor_register_transport_caps(e, "grpc", &vt,
+                                                 PCL_CAP_RPC_UNARY),
+            PCL_OK);
+  const char* peers[] = {"grpc"};
+  auto route = RemoteRoute("obj_service", PCL_ENDPOINT_CONSUMED, peers, 1);
+  route.qos_floor.reliability = PCL_QOS_RELIABILITY_RELIABLE;
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, nullptr, 0),
+            PCL_ERR_STATE);
+  pcl_executor_destroy(e);
+}
+
+TEST(PclCapabilities, ValidateRouteIgnoresQosWhenNoFloor) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  pcl_transport_t vt{};
+  // Undeclared QoS, but the endpoint asks for no floor: passes on caps alone.
+  ASSERT_EQ(pcl_executor_register_transport_caps(e, "udp", &vt, PCL_CAP_PUBSUB),
+            PCL_OK);
+  const char* peers[] = {"udp"};
+  auto route = RemoteRoute("evidence", PCL_ENDPOINT_SUBSCRIBER, peers, 1);
+  // route.qos_floor left zero-initialised (UNSPECIFIED).
   EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, nullptr, 0), PCL_OK);
   pcl_executor_destroy(e);
 }

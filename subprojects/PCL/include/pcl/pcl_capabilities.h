@@ -57,6 +57,21 @@ pcl_transport_caps_t pcl_endpoint_required_caps(pcl_endpoint_kind_t kind);
 int pcl_transport_caps_supports(pcl_transport_caps_t have,
                                 pcl_transport_caps_t required);
 
+/// \brief Whether the \p offered QoS meets the \p floor.
+///
+/// Reliability is ordered (UNSPECIFIED < BEST_EFFORT < RELIABLE), so this is a
+/// per-dimension `offered >= floor` check. Vacuously true when every dimension
+/// of \p floor is UNSPECIFIED (no floor). A transport that does not declare its
+/// reliability (UNSPECIFIED) therefore satisfies only an UNSPECIFIED floor --
+/// requesting reliability requires the transport to prove it offers it.
+///
+/// Returns 1 if \p offered meets \p floor, else 0.
+int pcl_qos_satisfies(pcl_qos_t offered, pcl_qos_t floor);
+
+/// \brief Human-readable name for a reliability level ("unspecified",
+/// "best_effort", "reliable").
+const char* pcl_qos_reliability_name(pcl_qos_reliability_t r);
+
 #ifdef __cplusplus
 }
 #endif

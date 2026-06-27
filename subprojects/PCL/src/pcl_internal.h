@@ -119,6 +119,7 @@ typedef struct {
   char                 peer_id[64];
   pcl_transport_t      transport;
   pcl_transport_caps_t caps;
+  pcl_qos_t            qos;   ///< QoS this transport offers (UNSPECIFIED = undeclared).
   int                  in_use;
 } pcl_registered_transport_t;
 
@@ -143,6 +144,7 @@ struct pcl_executor_t {
   pcl_transport_t  transport;
   int              has_transport;
   pcl_transport_caps_t transport_caps;
+  pcl_qos_t        transport_qos;  ///< QoS the default transport offers.
   pcl_registered_transport_t transports[PCL_MAX_TRANSPORTS];
   uint32_t                 transport_count;
   pcl_endpoint_route_entry_t endpoint_routes[PCL_MAX_ENDPOINT_ROUTES];

@@ -92,6 +92,22 @@ pcl_status_t pcl_plugin_transport_caps(pcl_plugin_handle_t*   handle,
                                        const pcl_transport_t* vtable,
                                        pcl_transport_caps_t*  out_caps);
 
+/// \brief Report the QoS a loaded transport plugin offers.
+///
+/// If the plugin exports the optional \ref PCL_TRANSPORT_PLUGIN_QOS_SYMBOL
+/// symbol, its declared QoS is returned (keyed off \p config_json, so pass the
+/// same configuration used to load it). Otherwise the offered QoS is
+/// PCL_QOS_RELIABILITY_UNSPECIFIED -- there is nothing to derive from a vtable.
+///
+/// \param handle      Handle returned by \ref pcl_plugin_load_transport.
+/// \param config_json Configuration string (may be NULL); forwarded to the QoS
+///                    symbol when present.
+/// \param out_qos     Receives the resolved offered QoS.
+/// \return PCL_OK on success, PCL_ERR_INVALID if \p handle or \p out_qos is NULL.
+pcl_status_t pcl_plugin_transport_qos(pcl_plugin_handle_t* handle,
+                                      const char*          config_json,
+                                      pcl_qos_t*           out_qos);
+
 /// \brief Open an arbitrary shared library and return a plugin handle.
 ///
 /// Unlike \ref pcl_plugin_load_transport / \ref pcl_plugin_load_codec, this does

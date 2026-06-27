@@ -170,13 +170,28 @@ pcl_status_t pcl_executor_register_transport_caps(pcl_executor_t*        e,
                                                   const pcl_transport_t* transport,
                                                   pcl_transport_caps_t   caps);
 
+/// \brief Set the QoS the default transport offers.
+///
+/// Recorded alongside the capability mask and checked at compose time against an
+/// endpoint's \c qos_floor. Defaults to PCL_QOS_RELIABILITY_UNSPECIFIED until
+/// set, so a transport must declare reliability before it can satisfy a
+/// reliable floor.
+pcl_status_t pcl_executor_set_transport_qos(pcl_executor_t* e, pcl_qos_t qos);
+
+/// \brief Set the QoS a named peer transport offers (see
+/// \ref pcl_executor_set_transport_qos). No-op if \p peer_id is unregistered.
+pcl_status_t pcl_executor_register_transport_qos(pcl_executor_t* e,
+                                                 const char*     peer_id,
+                                                 pcl_qos_t       qos);
+
 /// \brief Compose-time check that a routed transport can serve an endpoint.
 ///
 /// For each remote peer the \p route targets, verifies the registered
 /// transport's capabilities include the capability the endpoint's kind requires
-/// (\ref pcl_endpoint_required_caps). Fails closed:
+/// (\ref pcl_endpoint_required_caps) and that the transport's offered QoS meets
+/// the route's \c qos_floor (\ref pcl_qos_satisfies). Fails closed:
 /// - \ref PCL_ERR_NOT_FOUND if a targeted peer has no registered transport;
-/// - \ref PCL_ERR_STATE if a transport lacks the required capability.
+/// - \ref PCL_ERR_STATE if a transport lacks the required capability or QoS.
 ///
 /// On failure, a precise human-readable reason is written to \p diag (when
 /// non-NULL and \p diag_size > 0). Local-only routes and unrecognised endpoint

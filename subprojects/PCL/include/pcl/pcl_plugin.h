@@ -28,6 +28,13 @@ extern "C" {
 /// returned vtable via \ref pcl_transport_caps_from_vtable.
 #define PCL_TRANSPORT_PLUGIN_CAPS_SYMBOL "pcl_transport_plugin_caps"
 
+/// \brief Optional symbol a transport plugin may export to declare the QoS it
+/// offers (see pcl_capabilities.h / pcl_qos_t).
+///
+/// When absent, the offered QoS is PCL_QOS_RELIABILITY_UNSPECIFIED, which
+/// satisfies only an UNSPECIFIED endpoint floor (fail closed for reliability).
+#define PCL_TRANSPORT_PLUGIN_QOS_SYMBOL "pcl_transport_plugin_qos"
+
 /// \brief Function signature exported to report the transport ABI version.
 ///
 /// A transport plugin exports pcl_transport_abi_version() with this signature.
@@ -50,6 +57,14 @@ typedef const pcl_transport_t* (*pcl_transport_plugin_entry_fn)(
 /// depend on configuration (e.g. server vs client role) can report accurately.
 typedef pcl_transport_caps_t (*pcl_transport_plugin_caps_fn)(
     const char* config_json);
+
+/// \brief Function signature exported to declare the transport's offered QoS.
+///
+/// A transport plugin may optionally export pcl_transport_plugin_qos() with this
+/// signature. As with capabilities, \p config_json is the same configuration
+/// passed to the entry point, so a plugin whose QoS depends on configuration can
+/// report accurately.
+typedef pcl_qos_t (*pcl_transport_plugin_qos_fn)(const char* config_json);
 
 #ifdef __cplusplus
 }

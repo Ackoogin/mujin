@@ -311,6 +311,28 @@ pcl_status_t pcl_plugin_transport_caps(pcl_plugin_handle_t*   handle,
   return PCL_OK;
 }
 
+/// \brief Report the QoS a loaded transport plugin offers.
+///
+/// Reads the optional pcl_transport_plugin_qos symbol; when absent the offered
+/// QoS is PCL_QOS_RELIABILITY_UNSPECIFIED (there is nothing to derive from a
+/// vtable).
+pcl_status_t pcl_plugin_transport_qos(pcl_plugin_handle_t* handle,
+                                      const char*          config_json,
+                                      pcl_qos_t*           out_qos) {
+  pcl_transport_plugin_qos_fn qos_fn;
+
+  if (!handle || !out_qos) return PCL_ERR_INVALID;
+
+  qos_fn = (pcl_transport_plugin_qos_fn)resolve_symbol(
+      handle, PCL_TRANSPORT_PLUGIN_QOS_SYMBOL);
+  if (qos_fn) {
+    *out_qos = qos_fn(config_json);
+  } else {
+    out_qos->reliability = PCL_QOS_RELIABILITY_UNSPECIFIED;
+  }
+  return PCL_OK;
+}
+
 /// \brief Open an arbitrary shared library (no PCL entry point required).
 pcl_plugin_handle_t* pcl_plugin_open(const char* path) {
   return open_library(path);

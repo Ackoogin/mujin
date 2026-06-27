@@ -802,6 +802,27 @@ pcl_status_t pcl_executor_register_transport(pcl_executor_t*        e,
       e, peer_id, transport, pcl_transport_caps_from_vtable(transport));
 }
 
+pcl_status_t pcl_executor_set_transport_qos(pcl_executor_t* e, pcl_qos_t qos) {
+  if (!e) return PCL_ERR_INVALID;
+  e->transport_qos = qos;
+  return PCL_OK;
+}
+
+pcl_status_t pcl_executor_register_transport_qos(pcl_executor_t* e,
+                                                 const char*     peer_id,
+                                                 pcl_qos_t       qos) {
+  uint32_t i;
+  if (!e || !peer_id) return PCL_ERR_INVALID;
+  for (i = 0; i < e->transport_count; ++i) {
+    if (e->transports[i].in_use &&
+        strcmp(e->transports[i].peer_id, peer_id) == 0) {
+      e->transports[i].qos = qos;
+      return PCL_OK;
+    }
+  }
+  return PCL_ERR_NOT_FOUND;
+}
+
 static const char* caps_name(pcl_transport_caps_t cap) {
   switch (cap) {
     case PCL_CAP_PUBSUB:     return "PUBSUB";
@@ -815,6 +836,8 @@ static const char* caps_name(pcl_transport_caps_t cap) {
 static pcl_status_t validate_one_transport(pcl_transport_caps_t have,
                                            int                  found,
                                            pcl_transport_caps_t required,
+                                           pcl_qos_t            offered,
+                                           pcl_qos_t            floor,
                                            const char*          endpoint_name,
                                            const char*          peer_label,
                                            char*                diag,
@@ -833,6 +856,17 @@ static pcl_status_t validate_one_transport(pcl_transport_caps_t have,
                "endpoint '%s' requires %s but %s provides caps 0x%x",
                endpoint_name ? endpoint_name : "?", caps_name(required),
                peer_label, (unsigned)have);
+    }
+    return PCL_ERR_STATE;
+  }
+  if (!pcl_qos_satisfies(offered, floor)) {
+    if (diag && diag_size) {
+      snprintf(diag, diag_size,
+               "endpoint '%s' requires reliability '%s' but %s offers '%s'",
+               endpoint_name ? endpoint_name : "?",
+               pcl_qos_reliability_name(floor.reliability),
+               peer_label,
+               pcl_qos_reliability_name(offered.reliability));
     }
     return PCL_ERR_STATE;
   }
@@ -860,12 +894,14 @@ pcl_status_t pcl_executor_validate_endpoint_route(
     char label[80];
     snprintf(label, sizeof(label), "the default transport");
     return validate_one_transport(e->transport_caps, e->has_transport, required,
+                                  e->transport_qos, route->qos_floor,
                                   route->endpoint_name, label, diag, diag_size);
   }
 
   for (p = 0; p < route->peer_count; ++p) {
     const char* peer_id = route->peer_ids ? route->peer_ids[p] : NULL;
     pcl_transport_caps_t have = PCL_CAP_NONE;
+    pcl_qos_t offered = {PCL_QOS_RELIABILITY_UNSPECIFIED};
     int found = 0;
     uint32_t i;
     char label[96];
@@ -875,13 +911,14 @@ pcl_status_t pcl_executor_validate_endpoint_route(
       if (e->transports[i].in_use && peer_id &&
           strcmp(e->transports[i].peer_id, peer_id) == 0) {
         have = e->transports[i].caps;
+        offered = e->transports[i].qos;
         found = 1;
         break;
       }
     }
     snprintf(label, sizeof(label), "peer '%s'", peer_id ? peer_id : "?");
-    rc = validate_one_transport(have, found, required, route->endpoint_name,
-                                label, diag, diag_size);
+    rc = validate_one_transport(have, found, required, offered, route->qos_floor,
+                                route->endpoint_name, label, diag, diag_size);
     if (rc != PCL_OK) return rc;
   }
   return PCL_OK;

@@ -41,3 +41,18 @@ int pcl_transport_caps_supports(pcl_transport_caps_t have,
                                 pcl_transport_caps_t required) {
   return (have & required) == required;
 }
+
+int pcl_qos_satisfies(pcl_qos_t offered, pcl_qos_t floor) {
+  /* Reliability is ordered, so "meets the floor" is offered >= floor. Extend
+     this conjunction as further QoS dimensions are added. */
+  return (int)offered.reliability >= (int)floor.reliability;
+}
+
+const char* pcl_qos_reliability_name(pcl_qos_reliability_t r) {
+  switch (r) {
+    case PCL_QOS_RELIABILITY_BEST_EFFORT: return "best_effort";
+    case PCL_QOS_RELIABILITY_RELIABLE:    return "reliable";
+    case PCL_QOS_RELIABILITY_UNSPECIFIED:
+    default:                              return "unspecified";
+  }
+}
