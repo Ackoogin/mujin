@@ -7,6 +7,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+# Native ROS2 interface package (built first by build_ros2_transport.sh). Used by
+# the typed-wire codec round-trip test; QUIET so the package still configures if
+# pyramid_msgs is not on the prefix path.
+find_package(pyramid_msgs QUIET)
 
 if(NOT DEFINED UNMANNED_ROOT)
     get_filename_component(UNMANNED_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)

@@ -1,13 +1,16 @@
 # PYRAMID — Tracked Follow-ups
 
-Transport & codec plugin work — current status, pending work, and decisions — is
-tracked in a single WIP doc:
+The plugin binding (v1), gRPC + ROS2 coupled plugins, codec plugins (json/
+flatbuffers/protobuf), the transport capability model, and native ROS2 IDL +
+marshalling are **delivered**. Current capability and remaining work are tracked
+in a single doc:
 
-➡ **[`doc/plans/PYRAMID/transport_plugins_wip.md`](../../plans/PYRAMID/transport_plugins_wip.md)**
+➡ **[`doc/plans/PYRAMID/transport_plugins.md`](../../plans/PYRAMID/transport_plugins.md)**
 
-That doc consolidates what previously lived here (gRPC coupled plugin, ROS2 coupled
-plugin closure, protobuf codec plugin, Ada gRPC shim retirement, the transport
-capability model, and the closed codec-source-free item). Design detail lives in
-[`doc/plans/PYRAMID/transport_capability_model_plan.md`](../../plans/PYRAMID/transport_capability_model_plan.md)
-and the architecture reference
-[`subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md).
+Headline remaining item: **put the typed ROS2 codec on the live wire**
+(codec-plugin registration + typed adapter), then ROS2 actions and the deferred
+capability adapters. How the plugin system works and how to use it lives in the
+architecture reference:
+[`transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md)
+and
+[`ros2_transport_semantics.md`](../../../subprojects/PYRAMID/doc/architecture/ros2_transport_semantics.md).

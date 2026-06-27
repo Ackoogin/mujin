@@ -31,6 +31,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from proto_parser import ProtoFile, ProtoTypeIndex, camel_to_lower_snake, camel_to_snake
 import codec_backends
+from ros2_idl_codegen import generate_ros2_idl
+from ros2_marshal_codegen import generate_ros2_codec
 
 
 def _strip_service_suffix(name: str) -> str:
@@ -61,11 +63,26 @@ class Ros2Backend(codec_backends.CodecBackend):
 
     def generate_cpp(self, index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
         output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Native ROS2 IDL (.msg/.srv) generated alongside the cpp support layer,
+        # into <bindings>/ros2/idl/{msg,srv}. This is the typed, introspectable
+        # ROS2 surface that replaces the opaque PclEnvelope (see the IDL plan in
+        # doc/plans/PYRAMID/transport_plugins_wip.md). The ament interface
+        # package pyramid_msgs globs these and runs them through rosidl.
+        idl_dir = output_dir.parent / 'idl'
+        idl_files = generate_ros2_idl(index, idl_dir)
+
+        # Typed wire codec: domain_model <-> pyramid_msgs ROS2 messages + rclcpp
+        # serialisation. Header-only; compiled by the ament package against the
+        # rosidl-generated pyramid_msgs headers (rclcpp only resolves under ament).
+        codec_dir = output_dir.parent / 'codec'
+        codec_files = generate_ros2_codec(index, codec_dir)
+
         hpp_path = output_dir / 'pyramid_ros2_transport_support.hpp'
         cpp_path = output_dir / 'pyramid_ros2_transport_support.cpp'
         self._write_cpp_support_header(hpp_path)
         self._write_cpp_support_impl(cpp_path)
-        generated = [hpp_path, cpp_path]
+        generated = [hpp_path, cpp_path] + idl_files + codec_files
 
         # Per-service-package transport facades: a typed ServiceBinder that wires
         # the component's RPC ingress (unary/stream) to the executor through the

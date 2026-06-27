@@ -5,21 +5,27 @@
 PYRAMID components and clients run against the generic PCL runtime through
 **runtime-loaded plugins**. A client links only the framework (`pcl_core`) and
 the generated contract (typed facade + native↔C-struct marshalling). The
-production plugin path currently covers JSON / FlatBuffers codecs and the
+production plugin path covers JSON / FlatBuffers / Protobuf codecs and the
 socket, shared-memory, and UDP transports. gRPC is generated and runtime-tested
 as a direct C++ transport library, and its loadable coupled plugin
-(`pyramid_grpc_coupled_plugin`) is now a real runtime plugin implementing the
+(`pyramid_grpc_coupled_plugin`) is a real runtime plugin implementing the
 transport contract in both directions (server-mode ingress and client-mode
-`invoke_async`/`invoke_stream`). ROS2 has a real rclcpp-backed coupled plugin,
-but it still has production-closure gaps tracked in `doc/todo/PYRAMID/TODO.md`.
+`invoke_async`/`invoke_stream`). ROS2 has a real rclcpp-backed coupled plugin
+that is also complete both ways (pub/sub, consumed unary + streaming, safe
+lifecycle, reproducible ament build). The transport **capability model** (caps
+declaration, compose-time validation, QoS floor, manifest-driven per-endpoint
+routing) is in place. Native ROS2 IDL (`.msg`/`.srv`) and the `domain_model`↔ROS2
+marshalling/wire codec are generated and round-trip-verified; switching the live
+ROS2 transport from the pass-through envelope to that typed codec is the headline
+remaining item. Current capability and remaining work are tracked in
+`doc/plans/PYRAMID/transport_plugins.md`.
 
 This isolates churn (a wire-format or transport change ships as a new plugin, not
 a client rebuild), keeps client binaries minimal, and lets one cross-language
 codec `.so` serve both C++ and Ada over a frozen C-ABI struct boundary.
 
-See also [generated_bindings.md](generated_bindings.md),
-[pcl_pyramid_binding_generation_overview.md](pcl_pyramid_binding_generation_overview.md),
-and the v1 plan `doc/plans/PYRAMID/plugin_binding_v1_plan.md`.
+See also [generated_bindings.md](generated_bindings.md) and
+[pcl_pyramid_binding_generation_overview.md](pcl_pyramid_binding_generation_overview.md).
 
 ## Runtime composition
 
@@ -40,8 +46,8 @@ flowchart TB
   subgraph Plugins["Runtime .so plugins (composed at load time)"]
     CodecSO["CODEC .so<br/>json | flatbuffers"]
     TransSO["TRANSPORT .so<br/>socket | shm | udp"]
-    Grpc["coupled gRPC target<br/>ABI/load stub only"]
-    Ros2["coupled ROS2 target<br/>codec+transport (gated)"]
+    Grpc["coupled gRPC target<br/>both-ways (gated)"]
+    Ros2["coupled ROS2 target<br/>both-ways, envelope (gated)"]
   end
 
   Marshal -- "pyramid_&lt;T&gt;_c" --> CodecReg
@@ -108,17 +114,63 @@ These one-sided interop cases are first-class use cases, but the **bidirectional
 `PCL <-> plugin <-> PCL` path is the core contract** every transport plugin must
 satisfy.
 
-### Heterogeneous middleware capabilities
+### Heterogeneous middleware capabilities (the capability model)
 
-Middleware differ in which primitives they provide — gRPC is RPC-only, UDP/MQTT
-are pub/sub-only, ROS2/socket/shm are mixed. A plugin must declare the primitives
-it supports (`PUBSUB`, `RPC_UNARY`, `RPC_STREAM`, `RPC_ACTION`) so the framework
-can validate, at compose time, that each contract endpoint's required primitive is
-carried by its routed transport — failing closed with a precise diagnostic instead
-of a late per-call error — and so deployments can route different endpoints over
-different transports. The capability model, the per-middleware matrix, and the
-staged plan are in
-[`doc/plans/PYRAMID/transport_capability_model_plan.md`](../../../../doc/plans/PYRAMID/transport_capability_model_plan.md).
+Middleware differ in which interaction primitives they provide. The capability
+model makes that explicit so the framework can validate endpoint↔transport fit at
+compose time (fail closed, early, precise) and deployments can mix middleware
+per endpoint.
+
+**Capabilities.** A capability is a named bundle of transport-vtable slots an
+endpoint kind requires:
+
+| Capability | Endpoint kinds | Vtable slots |
+|------------|----------------|--------------|
+| `PUBSUB`     | PUBLISHER / SUBSCRIBER          | `publish` / `subscribe` |
+| `RPC_UNARY`  | PROVIDED / CONSUMED (service)   | server ingress + `respond` / `invoke_async` |
+| `RPC_STREAM` | STREAM_PROVIDED / stream consume | server stream + `stream_send`/`stream_end` / `invoke_stream` (+ `stream_cancel`) |
+| `RPC_ACTION` | (ROS2 actions; future)          | goal + feedback stream + result + cancel |
+
+Orthogonal **QoS** (reliability `UNSPECIFIED < BEST_EFFORT < RELIABLE`, ordering,
+durability, max size) is part of the profile, not a capability gate; an endpoint
+may pin a minimum (e.g. a command service must be `RELIABLE`).
+
+**Per-middleware matrix** (declared by each plugin; the test oracle):
+
+| Transport | `PUBSUB` | `RPC_UNARY` | `RPC_STREAM` | `RPC_ACTION` | Reliability | Codec |
+|-----------|:---:|:---:|:---:|:---:|---|---|
+| gRPC      | ✗ | ✓ | ✓ | ⟂ | RELIABLE | coupled (protobuf) |
+| ROS2      | ✓ | ✓ | ✓ | ✓ (native) | configurable QoS | coupled (ROS2 IDL) |
+| TCP socket| ✓ | ✓ | ✗ | ✗ | RELIABLE | decoupled |
+| shared mem| ✓ | ✓ | ✓ | ✗ | RELIABLE | decoupled |
+| UDP       | ✓ | ✗ | ✗ | ✗ | BEST_EFFORT | decoupled |
+| DDS/MQTT  | ✓ | ⟂/✗ | ✗ | ✗ | configurable | decoupled |
+
+✓ native · ⟂ via an explicit adapter (not in v1) · ✗ unsupported. A component
+whose contract has both topics and services cannot be carried by gRPC *or* UDP
+alone — it needs ROS2/socket/shm, or per-endpoint routing across two transports.
+
+**Declaration.** A plugin exports `pcl_transport_plugin_caps(config_json)` (a
+`PCL_CAP_*` bitmask) and optional `pcl_transport_plugin_qos`; the loader exposes
+them via `pcl_plugin_transport_caps()` / `_qos()`. If the symbol is absent the
+loader derives the mask from non-NULL vtable slots (declaration is authoritative,
+derivation is the fallback — coupled plugins whose vtables carry fail-closed stubs
+**must** declare).
+
+**Compose-time validation.** `pcl_executor_validate_endpoint_route()` checks each
+routed endpoint's required cap (`pcl_endpoint_required_caps`) and QoS floor against
+the routed transport's recorded caps/QoS, failing closed (`PCL_ERR_NOT_FOUND`
+missing peer, `PCL_ERR_STATE` missing cap/QoS) with a precise diagnostic like
+`endpoint "x" needs RPC_UNARY but peer "telemetry" (udp) provides {PUBSUB}`.
+
+**Mixed-middleware routing.** The `pcl_transport_routing` manifest (line-based:
+`transport <peer> <plugin> [config]` / `route <endpoint> <kind> <peers>
+[reliability]`) loads each transport plugin (injecting the executor), records its
+caps + QoS, registers it as a named peer, then installs and validates every route.
+So one component can route its services over gRPC and its telemetry topics over
+DDS/UDP. Capability *gaps* are **fail-closed by default**; opt-in adapters
+(`PUBSUB over RPC_STREAM`, `RPC_UNARY over PUBSUB`) are not in v1 and, when added,
+each advertises its derived capability behind explicit config.
 
 ## Code mechanism — ABI contracts
 
@@ -152,9 +204,10 @@ plugin reads `{"role","host","port","executor"}`; shm reads
 `{"node_name","executor"}` and stands up an rclcpp node + spin thread). Coupled
 targets are intended to be loadable twice against the same `.so` -- once via
 `pcl_plugin_load_transport`, once via `pcl_plugin_load_codec` -- presenting both
-vtables under one `content_type`. That contract is implemented structurally for
-gRPC today, but not functionally: the gRPC plugin vtables do not yet adapt the
-working `pyramid_grpc_transport` runtime. Default-plugin auto-load is
+vtables under one `content_type`. Both coupled targets implement this
+functionally: the gRPC plugin adapts the `pyramid_grpc_transport` runtime
+(server + `invoke_async`/`invoke_stream`), and the ROS2 plugin wraps the
+`RclcppRuntimeAdapter`. Default-plugin auto-load is
 config-driven: `pcl_codec_registry_load_plugins_from_manifest(registry, path)`
 loads every codec listed in a manifest (transport entries are skipped).
 
@@ -186,10 +239,10 @@ flowchart LR
 
 - Codec plugins and transport plugins are CMake `MODULE` libraries (`.so`).
 - `pyramid_grpc_transport` is built as a static library when gRPC is enabled.
-  `pyramid_grpc_coupled_plugin` is also built, but is currently a structural
-  plugin stub. A working gRPC plugin still needs a config contract, lifecycle
-  management, real `invoke_async`/server wiring, and plugin-loaded round-trip
-  tests.
+  `pyramid_grpc_coupled_plugin` (PIC MODULE) is a real both-ways plugin: a config
+  contract (`role`/`address`/aggregated component set), lifecycle (`shutdown` +
+  private destroy), real server + `invoke_async`/`invoke_stream` wiring, and
+  plugin-loaded round-trip tests (`test_grpc_coupled_plugin_e2e`).
 - Marshalling is compiled **once per data-model module** as an `OBJECT` library,
   exposed both as a standalone `pyramid_marshal_<module>.a` (for per-component
   deployment) and bundled into the aggregate `pyramid_generated_marshal.a` (the
@@ -244,6 +297,47 @@ plugin's `*_cabi_marshal.hpp` includes): `tactical_objects` → `common`,
 module (`sensors`, `radar`, …) therefore produces no diff in an unrelated
 component's deployment dir.
 
+## Using & extending the plugin system
+
+**1. Author a component/client.** Compile once against the generated typed facade;
+link only `pcl_core` + `pyramid_generated_marshal`. Call the typed
+provided/consumed APIs with native types — no `pcl_msg_t`, codec, or transport in
+the call path. Select a payload `content_type` (e.g. `application/json`) when
+configuring ports/services.
+
+**2. Configure a deployment.** Load a codec and a transport plugin at runtime. The
+directional/wiring knobs travel as one opaque `config_json` per plugin:
+
+| Plugin | Key `config_json` fields |
+|--------|--------------------------|
+| socket | `role: provided\|consumed` (aliases `server`/`client`), `host`, `port`, `executor` |
+| shared memory | `bus_name`, `participant_id`, `executor` |
+| udp | `host`, `port`, `executor` (symmetric pub/sub) |
+| gRPC coupled | `role: provided\|consumed` (alias `mode: server\|client`), `address`, aggregated component set, `executor` |
+| ROS2 coupled | `role: provided\|consumed`, `node_name`, `executor` |
+
+Codecs auto-load from a manifest (`PCL_CODEC_MANIFEST` →
+`pcl_codec_registry_load_plugins_from_manifest`); transports are passed via
+`--transport-plugin` or a `pcl_transport_routing` manifest for mixed middleware.
+`scripts/stage_plugin_deploy.sh` produces a ready per-component deploy dir.
+
+**3. Author a new plugin.** Build a CMake `MODULE` (`.so`) exporting the ABI
+symbols above:
+- **Codec:** `pcl_codec_plugin_entry(config_json) -> const pcl_codec_t*`
+  (`PCL_CODEC_ABI_VERSION == 2`). Operate on the frozen `pyramid_<T>_c` struct so
+  one `.so` serves C++ and Ada.
+- **Transport:** `pcl_transport_abi_version() == 1` +
+  `pcl_transport_plugin_entry(config_json) -> const pcl_transport_t*`. Implement
+  both directions (§ directionality). Declare `pcl_transport_plugin_caps` (+
+  `pcl_transport_plugin_qos`) so compose-time validation is accurate; export
+  `pcl_transport_plugin_teardown` if the plugin owns threads/contexts to release
+  before `dlclose`.
+
+**4. ROS2 native typing.** Generate the ROS2 IDL + wire codec
+(`PYRAMID_ENABLE_ROS2=ON`; `scripts/build_ros2_transport.sh`); see
+[ros2_transport_semantics.md](ros2_transport_semantics.md) for the canonical
+mapping and the `pyramid_msgs` interface package.
+
 ## Status
 
 | Capability | C++ | Ada |
@@ -254,12 +348,13 @@ component's deployment dir.
 | Codec config pass-through (`config_json`) | ✅ | ✅ |
 | Fail closed with no transport plugin | ✅ | ✅ |
 | Fail closed with no codec plugin (incl. scalar aliases) | ✅ | ✅ |
-| Coupled target plugin (codec+transport, one content_type) | gRPC both-ways; ROS2 partial | — |
+| Coupled target plugin (codec+transport, one content_type) | gRPC both-ways; ROS2 both-ways (envelope) | — |
+| Transport capability model (caps + compose-time validation + QoS + manifest routing) | ✅ | ✅ |
 
-**v1 is complete** (`doc/plans/PYRAMID/plugin_binding_v1_plan.md`, W1–W6): clients
-link core libs only, transport + codec are runtime plugins with uniform
-`config_json`, default-plugin manifests, per-module marshalling, and both
-languages fail closed. The **direct generated gRPC C++ transport** is built and
+**Plugin binding v1 is complete**: clients link core libs only, transport + codec
+are runtime plugins with uniform `config_json`, default-plugin manifests,
+per-module marshalling, and both languages fail closed. The **direct generated
+gRPC C++ transport** is built and
 runtime-verified on Linux (`test_grpc_transport_smoke`,
 `BindingPerformanceTest.Grpc_Tcp`); enable with `-DPYRAMID_ENABLE_GRPC=ON
 -DPYRAMID_ENABLE_PROTOBUF=ON` or `scripts/build_plugins.sh --grpc`. The
@@ -272,14 +367,21 @@ generated typed stubs. `test_grpc_coupled_plugin_e2e` proves both directions
 through the dlopen'd `.so` (PCL ↔ plugin ↔ plugin ↔ PCL).
 
 The **coupled ROS2 target plugin** (`libpyramid_ros2_coupled_plugin`, content type
-`application/ros2`) follows the same one-`.so`-two-vtables contract, but -- unlike
-the structural gRPC stub -- its transport vtable is wired to the real
-`RclcppRuntimeAdapter`. Loading it constructs an rclcpp node and background spin
-thread, and plugin-private symbols expose topic binding plus unary/stream service
-advertising. The underlying adapter has live rclcpp tests, and the plugin has an
-ABI/load + pass-through codec test. Production closure (consumed/client side,
-reproducible ament build, live E2E, process-safe lifecycle, staged deployment) is
-still open.
+`application/ros2`) follows the same one-`.so`-two-vtables contract, with its
+transport vtable wired to the real `RclcppRuntimeAdapter`. Loading it constructs
+an rclcpp node and background spin thread; the vtable implements `publish` /
+`subscribe`, consumed `invoke_async` (unary) and `invoke_stream`
+(server-streaming, via the open-stream service + frame topic), and a process-safe
+`spin_once` shutdown. Production closure is **complete**: reproducible fresh-tree
+ament build (`scripts/build_ros2_transport.sh`, no committed generated files),
+plugin-loaded live E2E (`colcon test` green), and `pcl_transport_plugin_teardown`
+unload discipline. **Native ROS2 IDL + marshalling are done**: real `.msg`/`.srv`
+(the `pyramid_msgs` package) and a `domain_model`↔`pyramid_msgs` `rclcpp` wire
+codec (`pyramid_ros2_codec.hpp`), round-trip verified for every type. The live
+ROS2 transport still carries the *pass-through envelope* (`PclEnvelope` /
+`PclService` / `PclOpenStream`); switching it to the typed codec (codec-plugin
+registration + typed adapter), plus ROS2 actions, is the remaining transport work
+— see `doc/plans/PYRAMID/transport_plugins.md`.
 
 **Architectural note — gRPC protobuf marshalling and Ada.** Ada consumes gRPC
 the same way it consumes socket/shm: the gRPC coupled plugin is loaded as the PCL
@@ -289,7 +391,6 @@ codec registry. There is no Ada-specific gRPC JSON shim in the active path.
 uses the standard generated service API with `application/protobuf` payload
 encoding.
 
-**Live status, pending work, and decisions** for all of the above (gRPC, ROS2
-closure, protobuf codec, shim retirement, the transport capability model) are
-tracked in the single WIP doc:
-[`doc/plans/PYRAMID/transport_plugins_wip.md`](../../../../doc/plans/PYRAMID/transport_plugins_wip.md).
+**Current capability and remaining transport work** (putting the typed ROS2 codec
+on the live wire, ROS2 actions, deferred capability adapters) are tracked in:
+[`doc/plans/PYRAMID/transport_plugins.md`](../../../../doc/plans/PYRAMID/transport_plugins.md).

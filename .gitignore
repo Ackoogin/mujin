@@ -136,3 +136,12 @@ subprojects/PYRAMID/bindings/protobuf/cpp/
 subprojects/PYRAMID/ros2/build/
 subprojects/PYRAMID/ros2/install/
 subprojects/PYRAMID/ros2/log/
+
+# Native ROS2 IDL generated into the pyramid_msgs interface package at configure
+# time (copied from the build-tree bindings; the .proto contracts are the source
+# of truth). Build artifacts too.
+subprojects/PYRAMID/ros2_msgs/msg/
+subprojects/PYRAMID/ros2_msgs/srv/
+subprojects/PYRAMID/ros2_msgs/build/
+subprojects/PYRAMID/ros2_msgs/install/
+subprojects/PYRAMID/ros2_msgs/log/

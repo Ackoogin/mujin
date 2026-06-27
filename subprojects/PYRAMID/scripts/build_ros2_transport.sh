@@ -97,7 +97,26 @@ source "${ROS2_SETUP}"
 set -u
 echo "[build_ros2] using ROS_DISTRO=${ROS_DISTRO:-?}"
 
-echo "=== Step 2: colcon build pyramid_ros2_transport ==="
+echo "=== Step 2a: colcon build pyramid_msgs (native ROS2 IDL) ==="
+# The interface package turns the generated proto->ROS2 IDL (<bindings>/ros2/idl)
+# into real typed messages/services via rosidl. No committed generated files: the
+# package copies the IDL in from the build tree at configure time.
+colcon build --packages-select pyramid_msgs \
+  --base-paths "${PYRAMID_ROOT}/ros2_msgs" \
+  --build-base "${AMENT_BASE}/build" \
+  --install-base "${AMENT_BASE}/install" \
+  --cmake-args \
+    "-DUNMANNED_ROOT=${REPO_ROOT}" \
+    "-DPYRAMID_MSGS_IDL_DIR=${BINDINGS_DIR}/ros2/idl"
+
+# Make the freshly built pyramid_msgs interfaces discoverable to the runtime
+# package build below.
+set +u
+# shellcheck disable=SC1091
+source "${AMENT_BASE}/install/setup.bash"
+set -u
+
+echo "=== Step 2b: colcon build pyramid_ros2_transport ==="
 colcon build --packages-select pyramid_ros2_transport \
   --base-paths "${PYRAMID_ROOT}/ros2" \
   --build-base "${AMENT_BASE}/build" \

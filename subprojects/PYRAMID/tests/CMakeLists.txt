@@ -101,6 +101,13 @@ add_test(NAME pyramid_binding_generation_dependencies
             --generator ${PYRAMID_ROOT_DIR}/pim/generate_bindings.py
             --proto-dir ${PYRAMID_ROOT_DIR}/proto)
 
+# Validates the native ROS2 IDL generator output against rosidl interface rules
+# (toolchain-free; the full rosidl build runs under the pyramid_msgs ament pkg).
+add_test(NAME pyramid_ros2_idl_generation
+    COMMAND ${PYRAMID_PYTHON}
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_ros2_idl_generation.py
+            ${PYRAMID_ROOT_DIR}/proto)
+
 add_executable(test_tobj_types ${TOBJ_TEST_DIR}/Test_Types.cpp)
 target_link_libraries(test_tobj_types PRIVATE tactical_objects GTest::gtest_main)
 gtest_discover_tests(test_tobj_types DISCOVERY_MODE PRE_TEST)

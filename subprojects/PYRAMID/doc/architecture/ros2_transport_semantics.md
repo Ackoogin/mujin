@@ -159,6 +159,12 @@ Examples:
 
 ## Envelope Model
 
+> **Current vs target.** The envelope below is the *current* ROS2 wire model: a
+> generic transport that carries opaque codec bytes. The *target* is native ROS2
+> IDL — typed `.msg`/`.srv`/`.action` generated from the `.proto` contracts — so
+> ROS2 tooling and non-PYRAMID nodes interoperate directly. See
+> `doc/plans/PYRAMID/transport_plugins.md` §1.
+
 The shared support layer carries PCL payloads inside a transport envelope with:
 
 - `content_type`
@@ -358,19 +364,38 @@ Implemented today:
 - **process-safe spin lifecycle**: the plugin spins via a `spin_once(50ms)` loop
   gated on an atomic flag (no lost-`cancel()` teardown deadlock) and only shuts
   down rclcpp if it initialised it (`owns_rclcpp`).
+- **consumed streaming** (`invoke_stream`): the transport vtable's `invoke_stream`
+  slot opens the generated `PclOpenStream` service, subscribes to the frame topic
+  before sending the request, buffers frames until the terminal `end_of_stream`
+  envelope, and delivers them through `transport.invoke_stream`. So ROS2 meets the
+  both-ways unary + streaming core contract. Verified by
+  `ConsumedInvokeStreamCallsRemoteRos2Service`.
+- **safe teardown-then-unload**: the standard optional `pcl_transport_plugin_teardown`
+  symbol + generic `pcl_plugin_unload_transport` stop the spin thread before
+  `dlclose`; the ROS2 plugin exports the alias.
 - **plugin-loaded live E2E**: `test_ros2_coupled_plugin_load` drives the dlopen'd
   `.so`'s transport vtable + codec; `test_rclcpp_runtime_adapter` moves live
   topic/unary/stream/publish traffic through the adapter. `colcon test` green.
 
 Not yet implemented:
 
-- ROS2 action mapping
+- **Native ROS2 IDL — generation done; typed wire in progress.** The transport
+  today is still a *pass-through envelope*: PCL payloads ride inside the generic
+  `PclEnvelope` / `PclService` / `PclOpenStream` types with `payload` = opaque
+  codec bytes, and `application/ros2` is a pass-through codec. This carries
+  PCL↔ROS2↔PCL but is not native, introspectable ROS2. Two layers are now
+  **done**: (1) `pim/ros2_idl_codegen.py` generates real `.msg`/`.srv` (the
+  `pyramid_msgs` ament package runs them through rosidl — 69 msg + 43 srv build
+  clean on Humble); (2) `pim/ros2_marshal_codegen.py` generates
+  `pyramid_ros2_codec.hpp`, the `domain_model` ↔ `pyramid_msgs` marshalling +
+  `rclcpp` wire codec, round-trip verified for all types
+  (`test_ros2_codec_roundtrip`, 8/8). What **remains** to make the live wire
+  typed: register `application/ros2` as a registry codec backed by `ros2_codec`
+  (codec plugin built under ament) and a typed `RclcppRuntimeAdapter` that
+  publishes/serves `pyramid_msgs` messages instead of `PclEnvelope`.
+  See `doc/plans/PYRAMID/transport_plugins.md` §1.
+- ROS2 action mapping (`RPC_ACTION`, first-class per D3; depends on native IDL)
 - Ada ROS2 runtime beyond generated constants/specs
-- **consumed streaming** (`invoke_stream`) over the generic PCL transport vtable
-  (consumed unary is done; streaming via the open-stream service + frame topic
-  remains)
-- a loader-level destroy/unload discipline that prevents `pcl_plugin_unload`
-  while the spin thread is live (§2.C.5)
 - a top-level (non-ament) CMake target for the coupled plugin: because rclcpp is
   only discoverable under ament, the coupled ROS2 plugin is built via colcon
   inside the ament package (`scripts/build_ros2_transport`) rather than the
