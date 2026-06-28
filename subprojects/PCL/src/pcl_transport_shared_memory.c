@@ -2149,8 +2149,13 @@ void pcl_shared_memory_transport_destroy(pcl_shared_memory_transport_t* ctx) {
 
   if (!ctx) return;
 
+  /* Only clear the default transport if THIS instance is the active default --
+     a manifest/plugin teardown must not wipe a default another owner installed. */
   if (ctx->executor) {
-    pcl_executor_set_transport(ctx->executor, NULL);
+    const pcl_transport_t* def = pcl_executor_get_transport(ctx->executor);
+    if (def && def->adapter_ctx == ctx) {
+      pcl_executor_set_transport(ctx->executor, NULL);
+    }
     pcl_executor_register_transport(ctx->executor, ctx->participant_id, NULL);
   }
 

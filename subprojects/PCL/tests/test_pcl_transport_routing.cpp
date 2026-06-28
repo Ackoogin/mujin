@@ -271,6 +271,44 @@ TEST(PclTransportRouting, RejectsDuplicateTransportPeer) {
   pcl_executor_destroy(e);
 }
 
+// Tearing down a manifest-owned named transport must not wipe an unrelated
+// default transport that another owner installed on the executor.
+TEST(PclTransportRouting, PreservesDefaultTransportOnNamedPeerTeardown) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  // Install an unrelated default transport (sentinel adapter_ctx, no vtable
+  // fns -- executor teardown guards on transport.shutdown).
+  int sentinel = 0;
+  pcl_transport_t def{};
+  def.adapter_ctx = &sentinel;
+  ASSERT_EQ(pcl_executor_set_transport(e, &def), PCL_OK);
+  ASSERT_NE(pcl_executor_get_transport(e), nullptr);
+
+  // Load then destroy a manifest UDP named peer.
+  const std::string body =
+      std::string("transport topic_udp ") + UDP_TRANSPORT_PLUGIN_PATH +
+      " {\"remote_host\":\"127.0.0.1\",\"remote_port\":48655}\n";
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  ASSERT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_OK)
+      << diag;
+  ASSERT_NE(routing, nullptr);
+  pcl_transport_routing_destroy(routing);
+
+  // The unrelated default transport is still installed and unchanged.
+  const pcl_transport_t* still = pcl_executor_get_transport(e);
+  ASSERT_NE(still, nullptr);
+  EXPECT_EQ(still->adapter_ctx, &sentinel);
+
+  pcl_executor_set_transport(e, nullptr);
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
 TEST(PclTransportRouting, ReusesTransportSlotsAcrossLoadDestroyCycles) {
   pcl_executor_t* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);

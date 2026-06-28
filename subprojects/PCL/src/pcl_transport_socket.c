@@ -1286,9 +1286,14 @@ void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx_opaque) {
   if (!ctx) return;
 
   /* Unregister from executor before freeing so pcl_executor_destroy does not
-     call transport.shutdown() on the already-freed ctx (use-after-free). */
+     call transport.shutdown() on the already-freed ctx (use-after-free). Only
+     clear the default transport if THIS instance is the active default -- a
+     manifest/plugin teardown must not wipe a default another owner installed. */
   if (ctx->executor) {
-    pcl_executor_set_transport(ctx->executor, NULL);
+    const pcl_transport_t* def = pcl_executor_get_transport(ctx->executor);
+    if (def && def->adapter_ctx == ctx) {
+      pcl_executor_set_transport(ctx->executor, NULL);
+    }
     pcl_executor_register_transport(ctx->executor, ctx->peer_id, NULL);
   }
 

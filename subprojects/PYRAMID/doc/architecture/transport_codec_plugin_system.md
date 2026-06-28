@@ -435,3 +435,21 @@ does not yet invoke them for an endpoint), so the gap is **latent** rather than 
 regression. Closing it spans the PCL routing layer, the generated ROS2 support
 codegen, and both coupled-plugin ABIs; deferred from PR #96 review pending a
 build/test environment for the coupled ROS2/gRPC runtime.
+
+### Known gap — capability model does not encode plugin direction/mode (deferred)
+
+`pcl_transport_caps_t` describes *interaction patterns* (`PUBSUB`, `RPC_UNARY`,
+`RPC_STREAM`, `RPC_ACTION`), not *direction*. A coupled plugin advertises the
+same caps regardless of whether it was configured as a `provided`/server or
+`consumed`/client instance, but its vtable only wires one direction live (the
+other side is a fail-closed stub). `pcl_executor_validate_endpoint_route` checks
+only the cap bits, so a route like `route create_requirement consumed svc_grpc`
+passes compose-time validation against a **server-mode** gRPC plugin even though
+that instance's `invoke_async`/`invoke_stream` are stubs (and symmetrically for a
+`provided` endpoint on a client-only instance). The capability model therefore
+cannot fail closed on a direction/mode mismatch today. Closing it needs either
+directional capability bits (e.g. provided-vs-consumed) or a route-validation
+hook that consults the plugin's `config_json` role/mode against the endpoint
+kind. This is a cross-cutting capability-model change affecting the coupled gRPC
+and ROS2 plugins; deferred from PR #96 review pending that design plus a gRPC/ROS2
+build environment.
