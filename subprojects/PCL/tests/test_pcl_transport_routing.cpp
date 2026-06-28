@@ -234,6 +234,32 @@ TEST(PclTransportRouting, PreservesPreExistingRouteOnDuplicate) {
   pcl_executor_destroy(e);
 }
 
+// Loading and destroying a manifest repeatedly on the same executor must not
+// leak named-transport slots: the unregister-on-destroy has to free the slot so
+// later cycles do not saturate PCL_MAX_TRANSPORTS and fail with PCL_ERR_NOMEM.
+TEST(PclTransportRouting, ReusesTransportSlotsAcrossLoadDestroyCycles) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n";
+  const auto path = WriteManifest(body);
+
+  for (unsigned i = 0; i < PCL_MAX_TRANSPORTS + 4u; ++i) {
+    pcl_transport_routing_t* routing = nullptr;
+    char diag[200] = "";
+    ASSERT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                         sizeof(diag)),
+              PCL_OK)
+        << "cycle " << i << ": " << diag;
+    ASSERT_NE(routing, nullptr);
+    pcl_transport_routing_destroy(routing);
+    // Destroy unregisters the transport, freeing the slot for the next cycle.
+    EXPECT_EQ(e->transport_count, 0u) << "after cycle " << i;
+  }
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
 TEST(PclTransportRouting, FailsClosedWhenQosFloorUnmet) {
   pcl_executor_t* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);

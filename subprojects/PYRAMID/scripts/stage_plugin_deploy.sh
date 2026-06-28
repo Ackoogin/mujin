@@ -173,9 +173,13 @@ for comp in "${COMPONENTS[@]}"; do
   } > "${dest}/codec_manifest.txt" || true
 
   # --- transport_manifest.txt: transport plugin path(s) for this component ----
+  # Match both the pcl_core transport plugins (socket/shm/udp) and the coupled
+  # ROS2 transport plugin, which does not follow the libpcl_transport_*_plugin
+  # naming -- otherwise a staged ROS2 deployment never lists its transport.
   {
     echo "# Transport plugins for ${comp} (pass via --transport-plugin)."
-    ( cd "${dest}/plugins" && ls -1 ./libpcl_transport_*_plugin.so 2>/dev/null \
+    ( cd "${dest}/plugins" \
+        && ls -1 ./libpcl_transport_*_plugin.so ./libpyramid_ros2_coupled_plugin.so 2>/dev/null \
         | sed "s|^\./|${dest}/plugins/|" )
   } > "${dest}/transport_manifest.txt" || true
 

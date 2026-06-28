@@ -775,7 +775,17 @@ pcl_status_t pcl_executor_register_transport_caps(pcl_executor_t*        e,
         e->transports[i].transport = *transport;
         e->transports[i].caps      = caps;
       } else {
-        memset(&e->transports[i], 0, sizeof(e->transports[i]));
+        /* Compact so the freed slot is reused: move the last live slot into
+           this one and shrink the count. Without this, repeated manifest
+           load/destroy cycles on one executor leak slots and eventually hit
+           PCL_MAX_TRANSPORTS even though nothing remains registered. Lookups
+           are by peer_id, so reordering the array is safe. */
+        uint32_t last = e->transport_count - 1u;
+        if (i != last) {
+          e->transports[i] = e->transports[last];
+        }
+        memset(&e->transports[last], 0, sizeof(e->transports[last]));
+        e->transport_count--;
       }
       return PCL_OK;
     }
