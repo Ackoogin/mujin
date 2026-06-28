@@ -1,6 +1,6 @@
 # PCL High-Level Requirements
 
-Requirements for the PYRAMID Container Library (PCL), the standard deployable component container framework for autonomous mission systems.
+Requirements for the PYRAMID Composition Library (PCL), the standard deployable component container framework for autonomous mission systems.
 
 PCL encapsulates core business logic behind a consistent lifecycle while entirely decoupling logic from external middleware (ROS2, DDS, sockets, etc.), enabling the same autonomy logic to run in resource-constrained embedded environments (bare-metal C/Ada), desktop simulations, or distributed systems over a network.
 

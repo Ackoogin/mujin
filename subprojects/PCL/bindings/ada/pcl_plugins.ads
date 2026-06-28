@@ -101,8 +101,24 @@ package Pcl_Plugins is
   pragma Import(C, Pcl_Codec_Registry_Load_Plugins_From_Env,
                 "pcl_codec_registry_load_plugins_from_env");
 
+  --  Open an arbitrary shared library (no PCL entry point required): a
+  --  portable wrapper over dlopen / LoadLibrary for libraries that export
+  --  plain C symbols (e.g. the generated gRPC C shim). Returns Null_Address
+  --  on failure. Resolve symbols with Pcl_Plugin_Symbol; release with
+  --  Pcl_Plugin_Unload.
+  function Pcl_Plugin_Open
+    (Path : Interfaces.C.Strings.chars_ptr) return System.Address;
+  pragma Import(C, Pcl_Plugin_Open, "pcl_plugin_open");
+
   procedure Pcl_Plugin_Unload(Handle : System.Address);
   pragma Import(C, Pcl_Plugin_Unload, "pcl_plugin_unload");
+
+  function Pcl_Plugin_Unload_Transport
+    (Handle : System.Address;
+     Vtable : Pcl_Bindings.Pcl_Transport_Const_Access)
+      return Pcl_Bindings.Pcl_Status;
+  pragma Import(C, Pcl_Plugin_Unload_Transport,
+                "pcl_plugin_unload_transport");
 
   function Pcl_Plugin_Symbol
     (Handle : System.Address;

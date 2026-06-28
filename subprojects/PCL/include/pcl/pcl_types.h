@@ -1,5 +1,5 @@
 /// \file pcl_types.h
-/// \brief PYRAMID Container Library core types.
+/// \brief PYRAMID Composition Library core types.
 ///
 /// All public types used across the PCL API.  Pure C, no external dependencies.
 #ifndef PCL_TYPES_H
@@ -58,6 +58,33 @@ typedef enum {
   PCL_PORT_STREAM_SERVICE  = 4,  // streaming server
 } pcl_port_type_t;
 
+// -- Transport QoS -------------------------------------------------------
+//
+// A minimal, ordered QoS profile carried alongside capabilities. An endpoint
+// may declare a QoS *floor* (the weakest profile it tolerates); a transport
+// advertises the QoS it *offers*. At compose time the framework checks the
+// offered profile meets the floor, failing closed otherwise (see
+// pcl_qos_satisfies in pcl_capabilities.h). Helpers live in pcl_capabilities.h;
+// the types are here so the transport/executor/routing API can use them without
+// a circular include.
+//
+// Reliability is the first (and currently only) dimension, deliberately ordered
+// so a numeric >= comparison expresses "meets the floor":
+//   UNSPECIFIED (0) < BEST_EFFORT (1) < RELIABLE (2).
+// A transport that does not declare its reliability is UNSPECIFIED and therefore
+// satisfies only an UNSPECIFIED floor -- asking for reliability requires the
+// transport to prove it offers it (fail closed).
+
+typedef enum {
+  PCL_QOS_RELIABILITY_UNSPECIFIED = 0,  ///< Not declared; no guarantee.
+  PCL_QOS_RELIABILITY_BEST_EFFORT = 1,  ///< Delivery may be dropped.
+  PCL_QOS_RELIABILITY_RELIABLE    = 2,  ///< Delivery is retried/guaranteed.
+} pcl_qos_reliability_t;
+
+typedef struct {
+  pcl_qos_reliability_t reliability;
+} pcl_qos_t;
+
 // -- Endpoint routing ----------------------------------------------------
 
 typedef enum {
@@ -80,7 +107,26 @@ typedef struct {
   uint32_t                  route_mode;
   const char* const*        peer_ids;
   uint32_t                  peer_count;
+  /// Weakest QoS the endpoint tolerates on its remote leg. Zero-initialised
+  /// (PCL_QOS_RELIABILITY_UNSPECIFIED) means "no floor" -- back-compatible with
+  /// callers that predate QoS. Validated at compose time against the offered
+  /// QoS of the transport(s) the endpoint routes to.
+  pcl_qos_t                 qos_floor;
 } pcl_endpoint_route_t;
+
+// -- Transport interaction capabilities ----------------------------------
+//
+// Bitmask of the interaction patterns a transport can carry. Helpers live in
+// pcl_capabilities.h; the type is here so the transport/executor API can use it
+// without a circular include.
+
+typedef uint32_t pcl_transport_caps_t;
+
+#define PCL_CAP_NONE        0x0u  ///< No interaction capability.
+#define PCL_CAP_PUBSUB      0x1u  ///< Publish/subscribe (topic).
+#define PCL_CAP_RPC_UNARY   0x2u  ///< Unary request/response RPC.
+#define PCL_CAP_RPC_STREAM  0x4u  ///< Server-streaming (or richer) RPC.
+#define PCL_CAP_RPC_ACTION  0x8u  ///< Action (goal/feedback/result).
 
 // -- Log levels ----------------------------------------------------------
 

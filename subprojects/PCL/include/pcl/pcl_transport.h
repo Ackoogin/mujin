@@ -1,5 +1,5 @@
 /// \file pcl_transport.h
-/// \brief PYRAMID Container Library transport adapter interface.
+/// \brief PYRAMID Composition Library transport adapter interface.
 ///
 /// The transport adapter connects container ports to real middleware
 /// (ROS2, DDS, sockets, shared memory, etc.).  If no adapter is set,
@@ -144,9 +144,63 @@ pcl_status_t pcl_executor_set_transport(pcl_executor_t*        e,
 ///
 /// Multiple peer transports may be registered on the same executor. Endpoint
 /// routes can then target a specific \p peer_id.
+///
+/// The transport's interaction capabilities are recorded by deriving them from
+/// the vtable (see \ref pcl_transport_caps_from_vtable). When a plugin declares
+/// capabilities explicitly (which is authoritative -- coupled plugins carry
+/// fail-closed vtable stubs), use \ref pcl_executor_register_transport_caps.
 pcl_status_t pcl_executor_register_transport(pcl_executor_t*        e,
                                              const char*            peer_id,
                                              const pcl_transport_t* transport);
+
+/// \brief Set the default transport with an explicit capability mask.
+///
+/// As \ref pcl_executor_set_transport, but records \p caps (e.g. the mask a
+/// plugin declared via pcl_transport_plugin_caps) instead of deriving it from
+/// the vtable, so compose-time validation is accurate for coupled plugins.
+pcl_status_t pcl_executor_set_transport_caps(pcl_executor_t*        e,
+                                             const pcl_transport_t* transport,
+                                             pcl_transport_caps_t   caps);
+
+/// \brief Register a named peer transport with an explicit capability mask.
+///
+/// As \ref pcl_executor_register_transport, but records \p caps explicitly.
+pcl_status_t pcl_executor_register_transport_caps(pcl_executor_t*        e,
+                                                  const char*            peer_id,
+                                                  const pcl_transport_t* transport,
+                                                  pcl_transport_caps_t   caps);
+
+/// \brief Set the QoS the default transport offers.
+///
+/// Recorded alongside the capability mask and checked at compose time against an
+/// endpoint's \c qos_floor. Defaults to PCL_QOS_RELIABILITY_UNSPECIFIED until
+/// set, so a transport must declare reliability before it can satisfy a
+/// reliable floor.
+pcl_status_t pcl_executor_set_transport_qos(pcl_executor_t* e, pcl_qos_t qos);
+
+/// \brief Set the QoS a named peer transport offers (see
+/// \ref pcl_executor_set_transport_qos). No-op if \p peer_id is unregistered.
+pcl_status_t pcl_executor_register_transport_qos(pcl_executor_t* e,
+                                                 const char*     peer_id,
+                                                 pcl_qos_t       qos);
+
+/// \brief Compose-time check that a routed transport can serve an endpoint.
+///
+/// For each remote peer the \p route targets, verifies the registered
+/// transport's capabilities include the capability the endpoint's kind requires
+/// (\ref pcl_endpoint_required_caps) and that the transport's offered QoS meets
+/// the route's \c qos_floor (\ref pcl_qos_satisfies). Fails closed:
+/// - \ref PCL_ERR_NOT_FOUND if a targeted peer has no registered transport;
+/// - \ref PCL_ERR_STATE if a transport lacks the required capability or QoS.
+///
+/// On failure, a precise human-readable reason is written to \p diag (when
+/// non-NULL and \p diag_size > 0). Local-only routes and unrecognised endpoint
+/// kinds require nothing and return \ref PCL_OK.
+pcl_status_t pcl_executor_validate_endpoint_route(
+    const pcl_executor_t*       e,
+    const pcl_endpoint_route_t* route,
+    char*                       diag,
+    size_t                      diag_size);
 
 /// \brief Get the currently configured default transport adapter.
 ///
@@ -209,6 +263,25 @@ pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
 /// concrete server port object to attach a route to.
 pcl_status_t pcl_executor_set_endpoint_route(pcl_executor_t*         e,
                                              const pcl_endpoint_route_t* route);
+
+/// \brief Report whether a route is already installed for an endpoint/kind.
+///
+/// Lets a manifest loader fail closed on a duplicate route line rather than
+/// silently overwriting (and then losing on rollback) a pre-existing route.
+/// Returns non-zero when a route exists.
+int pcl_executor_endpoint_route_exists(const pcl_executor_t* e,
+                                       const char*           endpoint_name,
+                                       pcl_endpoint_kind_t   endpoint_kind);
+
+/// \brief Remove a per-endpoint route previously installed via
+///        \ref pcl_executor_set_endpoint_route.
+///
+/// Used to roll back routes when a multi-line manifest load fails partway, so a
+/// failed load leaves nothing registered. Idempotent: returns PCL_OK when no
+/// matching route is installed.
+pcl_status_t pcl_executor_clear_endpoint_route(pcl_executor_t*     e,
+                                               const char*         endpoint_name,
+                                               pcl_endpoint_kind_t endpoint_kind);
 
 /// \brief Invoke a streaming service through the configured transport.
 ///

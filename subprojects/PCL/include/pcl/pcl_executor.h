@@ -1,5 +1,5 @@
 /// \file pcl_executor.h
-/// \brief PYRAMID Container Library executor API.
+/// \brief PYRAMID Composition Library executor API.
 ///
 /// The executor runs one or more containers on a single thread.
 /// It drives the tick loop, dispatches incoming messages to subscriber

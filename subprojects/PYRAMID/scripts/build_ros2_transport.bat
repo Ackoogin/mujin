@@ -1,6 +1,10 @@
 @echo off
 REM Build the PYRAMID ROS2 runtime transport package with colcon.
 REM
+REM This also builds the coupled ROS2 target plugin (libpyramid_ros2_coupled_plugin),
+REM a single MODULE .so exposing both a PCL transport vtable and a codec vtable under
+REM application/ros2. It is part of the ament package, so colcon builds it automatically.
+REM
 REM Usage:
 REM   build_ros2_transport.bat              -- build ROS2 package using existing pcl_core
 REM   build_ros2_transport.bat refresh-core -- rebuild pcl_core + pyramid_ros2_transport first
@@ -49,6 +53,7 @@ if errorlevel 1 goto error
 
 echo.
 echo === Build complete ===
+echo Coupled ROS2 plugin: subprojects\PYRAMID\ros2\install\pyramid_ros2_transport\lib\libpyramid_ros2_coupled_plugin.so
 exit /b 0
 
 :error

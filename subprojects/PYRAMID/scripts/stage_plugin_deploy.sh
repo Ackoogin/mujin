@@ -49,9 +49,17 @@ PCL_INC="${REPO_ROOT}/subprojects/PCL/include/pcl"
 GEN_DIR="${BUILD_DIR}/generated/pyramid_cpp_bindings"
 PYRAMID_LIBDIR="${BUILD_DIR}/subprojects/PYRAMID"
 PCL_SRCDIR="${BUILD_DIR}/subprojects/PCL/src"
+# The coupled ROS2 plugin is built out-of-tree via colcon (ament package), so it
+# lives under the ROS2 install tree rather than the main build dir. It is staged
+# only when that colcon build has produced it. The path must match the
+# --install-base that scripts/build_ros2_transport.sh passes to colcon
+# (build-ros2-ament/install), or the plugin is silently never staged.
+ROS2_INSTALL_LIBDIR="${REPO_ROOT}/build-ros2-ament/install/pyramid_ros2_transport/lib"
 TRANSPORT_PLUGINS=(
   "${PCL_SRCDIR}/libpcl_transport_socket_plugin.so"
   "${PCL_SRCDIR}/libpcl_transport_shared_memory_plugin.so"
+  "${PCL_SRCDIR}/libpcl_transport_udp_plugin.so"
+  "${ROS2_INSTALL_LIBDIR}/libpyramid_ros2_coupled_plugin.so"
 )
 
 [[ -d "${GEN_DIR}" ]]   || { echo "ERROR: generated bindings not found at ${GEN_DIR} -- build first." >&2; exit 1; }
@@ -103,7 +111,7 @@ for comp in "${COMPONENTS[@]}"; do
     if [[ -f "${tp}" ]]; then cp -f "${tp}" "${dest}/plugins/"; found_transport=1; fi
   done
   [[ ${found_transport} -eq 1 ]] || \
-    echo "   WARN: no transport plugin found (build pcl_transport_socket_plugin / pcl_transport_shared_memory_plugin)"
+    echo "   WARN: no transport plugin found (build pcl_transport_socket_plugin / pcl_transport_shared_memory_plugin / pcl_transport_udp_plugin)"
 
   # --- include/pcl: the public PCL headers a client uses ---
   cp -f "${PCL_INC}"/*.h "${PCL_INC}"/*.hpp "${dest}/include/pcl/" 2>/dev/null || true
@@ -165,9 +173,13 @@ for comp in "${COMPONENTS[@]}"; do
   } > "${dest}/codec_manifest.txt" || true
 
   # --- transport_manifest.txt: transport plugin path(s) for this component ----
+  # Match both the pcl_core transport plugins (socket/shm/udp) and the coupled
+  # ROS2 transport plugin, which does not follow the libpcl_transport_*_plugin
+  # naming -- otherwise a staged ROS2 deployment never lists its transport.
   {
     echo "# Transport plugins for ${comp} (pass via --transport-plugin)."
-    ( cd "${dest}/plugins" && ls -1 ./libpcl_transport_*_plugin.so 2>/dev/null \
+    ( cd "${dest}/plugins" \
+        && ls -1 ./libpcl_transport_*_plugin.so ./libpyramid_ros2_coupled_plugin.so 2>/dev/null \
         | sed "s|^\./|${dest}/plugins/|" )
   } > "${dest}/transport_manifest.txt" || true
 

@@ -1,5 +1,5 @@
 /// \file pcl_log.h
-/// \brief PYRAMID Container Library logging API.
+/// \brief PYRAMID Composition Library logging API.
 ///
 /// Provides a printf-style logging function with pluggable handler.
 /// Default handler writes to stderr.  A ROS2 adapter can redirect to

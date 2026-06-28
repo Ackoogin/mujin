@@ -10,6 +10,10 @@ project Ada_Tobj_Client is
   Pyramid_Gen_Lib_Name := external("PYRAMID_GEN_LIB_NAME", "pyramid_generated_flatbuffers_codec");
   Pyramid_Codecs_Lib_Dir := external("PYRAMID_CODECS_LIB_DIR", Root_Dir & "/build/subprojects/PYRAMID");
   Pyramid_Codecs_Lib_Name := external("PYRAMID_CODECS_LIB_NAME", "pyramid_generated_codecs");
+  Pyramid_Ada_Bindings_Dir :=
+    external("PYRAMID_ADA_BINDINGS_DIR", Root_Dir & "/build/generated/pyramid_ada_bindings");
+  Pyramid_Ada_Flatbuffers_Dir :=
+    external("PYRAMID_ADA_FLATBUFFERS_DIR", Pyramid_Ada_Bindings_Dir & "/flatbuffers/ada");
   Cxx_Lib_Dir := external("CXX_LIB_DIR", "/usr/lib/gcc/x86_64-linux-gnu/11");
 
   for Languages use ("Ada", "C");
@@ -17,8 +21,8 @@ project Ada_Tobj_Client is
   for Source_Dirs use
     (".",
      Root_Dir & "/subprojects/PCL/bindings/ada",
-     Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated",
-     Root_Dir & "/subprojects/PYRAMID/bindings/ada/generated/flatbuffers/ada");
+     Pyramid_Ada_Bindings_Dir,
+     Pyramid_Ada_Flatbuffers_Dir);
   for Main use ("ada_tobj_client.adb");
 
   --  Proto/Ada-gen service interface (EntityActions-aligned types + stubs)

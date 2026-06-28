@@ -102,6 +102,10 @@ static pcl_status_t udp_publish(void*            adapter_ctx,
   int      rc;
 
   if (!ctx || ctx->sock == PCL_INVALID_SOCKET || !topic || !msg) return PCL_ERR_INVALID;
+  /* A nonzero size with a null data pointer would reserve data_len bytes in the
+     packet but skip the copy below, sending uninitialized heap bytes. Reject
+     that shape (other ingress paths do the same). */
+  if (msg->size && !msg->data) return PCL_ERR_INVALID;
 
   topic_len    = (uint16_t)strlen(topic);
   type_len     = (uint16_t)(msg->type_name ? strlen(msg->type_name) : 0);
@@ -386,9 +390,14 @@ void pcl_udp_transport_destroy(pcl_udp_transport_t* ctx_opaque) {
   struct pcl_udp_transport_t* ctx = (struct pcl_udp_transport_t*)ctx_opaque;
   if (!ctx) return;
 
-  /* Unregister from executor before freeing. */
+  /* Unregister from executor before freeing. Only clear the default transport
+     if THIS instance is the active default -- a manifest/plugin teardown must
+     not wipe a default another owner installed. */
   if (ctx->executor) {
-    pcl_executor_set_transport(ctx->executor, NULL);
+    const pcl_transport_t* def = pcl_executor_get_transport(ctx->executor);
+    if (def && def->adapter_ctx == ctx) {
+      pcl_executor_set_transport(ctx->executor, NULL);
+    }
     pcl_executor_register_transport(ctx->executor, ctx->peer_id, NULL);
   }
 

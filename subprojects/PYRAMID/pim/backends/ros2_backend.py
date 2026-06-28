@@ -18,7 +18,7 @@ The selected service bindings own the service-specific ROS2 surface. C++ emits
 top-level bindRos2(...) startup hooks from cpp_codegen.py, and Ada emits
 top-level endpoint constants from ada_codegen.py. This backend remains
 registered so --backends ros2 selects that facade behavior; the generic runtime
-support layer lives under bindings/cpp/generated/ros2/cpp.
+support layer lives under ${PYRAMID_CPP_BINDINGS_DIR}/ros2/cpp.
 """
 
 from pathlib import Path
@@ -31,6 +31,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from proto_parser import ProtoFile, ProtoTypeIndex, camel_to_lower_snake, camel_to_snake
 import codec_backends
+from ros2_idl_codegen import generate_ros2_idl
+from ros2_marshal_codegen import generate_ros2_codec
 
 
 def _strip_service_suffix(name: str) -> str:
@@ -60,13 +62,46 @@ class Ros2Backend(codec_backends.CodecBackend):
         return 'application/ros2'
 
     def generate_cpp(self, index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
-        del index
         output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Native ROS2 IDL (.msg/.srv) generated alongside the cpp support layer,
+        # into <bindings>/ros2/idl/{msg,srv}. This is the typed, introspectable
+        # ROS2 surface that replaces the opaque PclEnvelope (see the IDL plan in
+        # doc/plans/PYRAMID/transport_plugins_wip.md). The ament interface
+        # package pyramid_msgs globs these and runs them through rosidl.
+        idl_dir = output_dir.parent / 'idl'
+        idl_files = generate_ros2_idl(index, idl_dir)
+
+        # Typed wire codec: domain_model <-> pyramid_msgs ROS2 messages + rclcpp
+        # serialisation. Header-only; compiled by the ament package against the
+        # rosidl-generated pyramid_msgs headers (rclcpp only resolves under ament).
+        codec_dir = output_dir.parent / 'codec'
+        codec_files = generate_ros2_codec(index, codec_dir)
+
         hpp_path = output_dir / 'pyramid_ros2_transport_support.hpp'
         cpp_path = output_dir / 'pyramid_ros2_transport_support.cpp'
         self._write_cpp_support_header(hpp_path)
         self._write_cpp_support_impl(cpp_path)
-        return [hpp_path, cpp_path]
+        generated = [hpp_path, cpp_path] + idl_files + codec_files
+
+        # Per-service-package transport facades: a typed ServiceBinder that wires
+        # the component's RPC ingress (unary/stream) to the executor through the
+        # generic Adapter. Mirrors the gRPC backend's per-component transport
+        # files so the ROS2 ingress can be bound by name (e.g. the live-adapter
+        # test and generated provided-facade bindRos2 path).
+        for pf in index.files:
+            if not _is_service_package(pf) or not pf.services:
+                continue
+            pkg_parts = [p for p in pf.package.split('.') if p]
+            file_base = '_'.join(pkg_parts)
+            ns = '::'.join(pkg_parts) + '::ros2_transport'
+            comp_hpp = output_dir / (file_base + '_ros2_transport.hpp')
+            comp_cpp = output_dir / (file_base + '_ros2_transport.cpp')
+            self._write_cpp_header(comp_hpp, ns, pf)
+            self._write_cpp_impl(comp_cpp, ns, file_base, pf)
+            generated.extend([comp_hpp, comp_cpp])
+
+        return generated
 
     def generate_ada(self, index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
         del index, output_dir
@@ -117,7 +152,20 @@ class Ros2Backend(codec_backends.CodecBackend):
             f.write('                         UnaryHandler handler) = 0;\n')
             f.write('  virtual void advertise(const StreamServiceBinding& binding,\n')
             f.write('                         StreamHandler handler) = 0;\n')
-            f.write('  virtual void publish(const TopicBinding& binding, const Envelope& envelope) = 0;\n')
+            f.write('  virtual void publish(const TopicBinding& binding, const Envelope& envelope) = 0;\n\n')
+            f.write('  // Consumed (client) side: invoke a remote ROS2 service from PCL and\n')
+            f.write('  // return its response envelope. Blocks until the response arrives\n')
+            f.write('  // (serviced by the transport spin thread).\n')
+            f.write('  virtual Envelope invokeUnary(const UnaryServiceBinding& binding,\n')
+            f.write('                               const Envelope& request) = 0;\n\n')
+            f.write('  // Consumed streaming: open a remote server-streaming service and call\n')
+            f.write('  // on_frame for each response frame (the terminal frame carries\n')
+            f.write('  // end_of_stream=true). on_frame returning false requests cancellation.\n')
+            f.write('  // Blocks until the stream completes.\n')
+            f.write('  using FrameSink = std::function<bool(const Envelope&)>;\n')
+            f.write('  virtual void invokeStream(const StreamServiceBinding& binding,\n')
+            f.write('                            const Envelope& request,\n')
+            f.write('                            const FrameSink& on_frame) = 0;\n')
             f.write('};\n\n')
             f.write('TopicBinding makeTopicBinding(std::string_view pcl_topic);\n')
             f.write('UnaryServiceBinding makeUnaryServiceBinding(std::string_view pcl_service);\n')
@@ -138,6 +186,18 @@ class Ros2Backend(codec_backends.CodecBackend):
             f.write('                             const char* pcl_service);\n')
             f.write('void bindStreamServiceIngress(Adapter& adapter, pcl_executor_t* executor,\n')
             f.write('                              const char* pcl_service);\n\n')
+            f.write('// Consumed (client) egress: PCL invokes a remote ROS2 unary service.\n')
+            f.write('// Serializes the request, calls the adapter client, and delivers the\n')
+            f.write('// response to the PCL callback. Wire this into a transport invoke_async slot.\n')
+            f.write('pcl_status_t invokeRemoteUnary(Adapter& adapter, const char* pcl_service,\n')
+            f.write('                               const pcl_msg_t* request,\n')
+            f.write('                               pcl_resp_cb_fn_t callback, void* user_data);\n\n')
+            f.write('// Consumed streaming egress: PCL invokes a remote ROS2 server-streaming\n')
+            f.write('// service; each frame is delivered to the PCL stream callback (end=true on\n')
+            f.write('// the terminal frame). Wire into a transport invoke_stream slot.\n')
+            f.write('pcl_status_t invokeRemoteStream(Adapter& adapter, const char* pcl_service,\n')
+            f.write('                                const pcl_msg_t* request,\n')
+            f.write('                                pcl_stream_msg_fn_t callback, void* user_data);\n\n')
             f.write('}  // namespace pyramid::transport::ros2\n')
 
     def _write_cpp_support_impl(self, path: Path):
@@ -353,6 +413,46 @@ class Ros2Backend(codec_backends.CodecBackend):
             f.write('                      invokeStreamOnExecutor(executor, service.c_str(), request,\n')
             f.write('                                             emit);\n')
             f.write('                    });\n')
+            f.write('}\n\n')
+            f.write('pcl_status_t invokeRemoteUnary(Adapter& adapter, const char* pcl_service,\n')
+            f.write('                               const pcl_msg_t* request,\n')
+            f.write('                               pcl_resp_cb_fn_t callback, void* user_data) {\n')
+            f.write('  if (!pcl_service || !pcl_service[0] || !request || !callback) {\n')
+            f.write('    return PCL_ERR_INVALID;\n')
+            f.write('  }\n')
+            f.write('  const Envelope response =\n')
+            f.write('      adapter.invokeUnary(makeUnaryServiceBinding(pcl_service),\n')
+            f.write('                          envelopeFromMessage(request));\n')
+            f.write('  if (response.status != PCL_OK) {\n')
+            f.write('    return response.status;\n')
+            f.write('  }\n')
+            f.write('  pcl_msg_t response_msg{};\n')
+            f.write('  response_msg.data =\n')
+            f.write('      response.payload.empty() ? nullptr : response.payload.data();\n')
+            f.write('  response_msg.size = static_cast<uint32_t>(response.payload.size());\n')
+            f.write('  response_msg.type_name =\n')
+            f.write('      response.content_type.empty() ? nullptr : response.content_type.c_str();\n')
+            f.write('  callback(&response_msg, user_data);\n')
+            f.write('  return PCL_OK;\n')
+            f.write('}\n\n')
+            f.write('pcl_status_t invokeRemoteStream(Adapter& adapter, const char* pcl_service,\n')
+            f.write('                                const pcl_msg_t* request,\n')
+            f.write('                                pcl_stream_msg_fn_t callback, void* user_data) {\n')
+            f.write('  if (!pcl_service || !pcl_service[0] || !request || !callback) {\n')
+            f.write('    return PCL_ERR_INVALID;\n')
+            f.write('  }\n')
+            f.write('  adapter.invokeStream(\n')
+            f.write('      makeStreamServiceBinding(pcl_service), envelopeFromMessage(request),\n')
+            f.write('      [callback, user_data](const Envelope& frame) {\n')
+            f.write('        pcl_msg_t msg{};\n')
+            f.write('        msg.data = frame.payload.empty() ? nullptr : frame.payload.data();\n')
+            f.write('        msg.size = static_cast<uint32_t>(frame.payload.size());\n')
+            f.write('        msg.type_name =\n')
+            f.write('            frame.content_type.empty() ? nullptr : frame.content_type.c_str();\n')
+            f.write('        callback(&msg, frame.end_of_stream, frame.status, user_data);\n')
+            f.write('        return frame.status == PCL_OK && !frame.end_of_stream;\n')
+            f.write('      });\n')
+            f.write('  return PCL_OK;\n')
             f.write('}\n\n')
             f.write('}  // namespace pyramid::transport::ros2\n')
 

@@ -1,7 +1,7 @@
 # Codec/Transport Plugin ABI Findings (incl. Ada)
 
-Status: 2026-06-24. Companion to
-[`doc/plans/PYRAMID/transport_codec_plugin_transition.md`](../../plans/PYRAMID/transport_codec_plugin_transition.md).
+Status: 2026-06-24. Companion to the plugin-system architecture reference
+[`subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md).
 Records what was implemented for Strategy A and — the focus of this note — the
 **ABI behaviour of the runtime codec plugins across the C, C++ and Ada
 boundaries**, backed by tests that are checked in.

@@ -90,6 +90,22 @@ PCL_SHM_PLUGIN_EXPORT uint32_t pcl_transport_abi_version(void) {
   return PCL_TRANSPORT_ABI_VERSION;
 }
 
+/* Shared-memory transport: pub/sub, unary RPC, and server-streaming. */
+PCL_SHM_PLUGIN_EXPORT pcl_transport_caps_t pcl_transport_plugin_caps(
+    const char* config_json) {
+  (void)config_json;
+  return PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM;
+}
+
+PCL_SHM_PLUGIN_EXPORT pcl_qos_t pcl_transport_plugin_qos(
+    const char* config_json) {
+  pcl_qos_t qos;
+  (void)config_json;
+  /* In-process shared memory: lossless hand-off. */
+  qos.reliability = PCL_QOS_RELIABILITY_RELIABLE;
+  return qos;
+}
+
 PCL_SHM_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
     const char* config_json) {
   char                           bus_name[256];
@@ -123,6 +139,15 @@ PCL_SHM_PLUGIN_EXPORT pcl_container_t* pcl_shm_transport_plugin_gateway(
 }
 
 PCL_SHM_PLUGIN_EXPORT void pcl_shm_transport_plugin_destroy(
+    const pcl_transport_t* transport) {
+  if (!transport) return;
+  pcl_shared_memory_transport_destroy(
+      (pcl_shared_memory_transport_t*)transport->adapter_ctx);
+}
+
+/* Standard teardown symbol (see pcl_plugin_unload_transport): release the
+   executor-bound shared-memory transport before the .so is unloaded. */
+PCL_SHM_PLUGIN_EXPORT void pcl_transport_plugin_teardown(
     const pcl_transport_t* transport) {
   if (!transport) return;
   pcl_shared_memory_transport_destroy(

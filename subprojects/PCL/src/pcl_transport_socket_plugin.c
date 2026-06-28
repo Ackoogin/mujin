@@ -86,6 +86,23 @@ PCL_SOCKET_PLUGIN_EXPORT uint32_t pcl_transport_abi_version(void) {
   return PCL_TRANSPORT_ABI_VERSION;
 }
 
+/* Stream-socket transport: pub/sub plus consumed unary RPC (invoke_async).
+ * No server-streaming. */
+PCL_SOCKET_PLUGIN_EXPORT pcl_transport_caps_t pcl_transport_plugin_caps(
+    const char* config_json) {
+  (void)config_json;
+  return PCL_CAP_PUBSUB | PCL_CAP_RPC_UNARY;
+}
+
+PCL_SOCKET_PLUGIN_EXPORT pcl_qos_t pcl_transport_plugin_qos(
+    const char* config_json) {
+  pcl_qos_t qos;
+  (void)config_json;
+  /* TCP: ordered, retransmitted delivery. */
+  qos.reliability = PCL_QOS_RELIABILITY_RELIABLE;
+  return qos;
+}
+
 PCL_SOCKET_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
     const char* config_json) {
   char                    role[16];
@@ -102,10 +119,13 @@ PCL_SOCKET_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
   executor = read_executor(config_json);
   if (!executor) return NULL;
 
-  if (strcmp(role, "server") == 0) {
+  /* Directional selector: "provided"/"consumed" is the cross-plugin convention
+   * (a server provides services; a client consumes them). "server"/"client" are
+   * accepted as back-compatible aliases. */
+  if (strcmp(role, "server") == 0 || strcmp(role, "provided") == 0) {
     socket_transport = pcl_socket_transport_create_server(
         (uint16_t)port_raw, executor);
-  } else if (strcmp(role, "client") == 0) {
+  } else if (strcmp(role, "client") == 0 || strcmp(role, "consumed") == 0) {
     pcl_socket_client_opts_t opts;
     memset(&opts, 0, sizeof(opts));
     opts.connect_timeout_ms = 3000u;
@@ -131,6 +151,14 @@ PCL_SOCKET_PLUGIN_EXPORT pcl_container_t* pcl_socket_transport_plugin_gateway(
 }
 
 PCL_SOCKET_PLUGIN_EXPORT void pcl_socket_transport_plugin_destroy(
+    const pcl_transport_t* transport) {
+  if (!transport) return;
+  pcl_socket_transport_destroy((pcl_socket_transport_t*)transport->adapter_ctx);
+}
+
+/* Standard teardown symbol (see pcl_plugin_unload_transport): release the
+   executor-bound socket transport before the .so is unloaded. */
+PCL_SOCKET_PLUGIN_EXPORT void pcl_transport_plugin_teardown(
     const pcl_transport_t* transport) {
   if (!transport) return;
   pcl_socket_transport_destroy((pcl_socket_transport_t*)transport->adapter_ctx);

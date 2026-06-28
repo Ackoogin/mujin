@@ -696,7 +696,7 @@ class AdaServiceGenerator:
         duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
 
         is_provided = _is_provided(parsed)
-        has_grpc = 'grpc' in self._enabled_backends
+        has_grpc = False
         has_ros2 = 'ros2' in self._enabled_backends
         sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
 
@@ -952,7 +952,7 @@ class AdaServiceGenerator:
                     type_pkgs: List[str],
                     codec_pkgs: List[str]):
         is_provided = _is_provided(parsed)
-        has_grpc = 'grpc' in self._enabled_backends
+        has_grpc = False
         sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
         duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
         cabi_bindings = _collect_cabi_message_bindings(
@@ -1935,11 +1935,9 @@ class AdaServiceGenerator:
                             f.write(f'            raise Program_Error with "gRPC channel not configured";\n')
                             f.write(f'         end if;\n')
                             f.write(f'         declare\n')
+                            rsp_schema = _short_type(rpc.rsp)
                             if rpc.streaming:
                                 elem_type = _proto_type_to_ada(rpc.rsp)
-                                elem_ser = ('"""" & To_String (Rsp (I)) & """"'
-                                            if elem_type == 'Identifier'
-                                            else 'To_Json (Rsp (I))')
                                 f.write(f'            Rsp : constant Grpc_Transport.{rpc.ada_rsp_type} :=\n')
                                 f.write(f'              Grpc_Transport.{invoke_name}\n')
                                 f.write(f'                (To_String (Grpc_Channel), Request);\n')
@@ -1949,23 +1947,52 @@ class AdaServiceGenerator:
                                 f.write(f"               if I > Rsp'First then\n")
                                 f.write(f'                  Append (Acc, ",");\n')
                                 f.write(f'               end if;\n')
-                                f.write(f'               Append (Acc, {elem_ser});\n')
+                                if elem_type == 'Identifier':
+                                    f.write(f'               Append (Acc, """" & To_String (Rsp (I)) & """");\n')
+                                else:
+                                    # Codec-source-free: render each gRPC stream item
+                                    # to JSON through the codec registry, not a
+                                    # compiled-in To_Json.
+                                    f.write(f'               declare\n')
+                                    f.write(f'                  Item_Json : Unbounded_String := Null_Unbounded_String;\n')
+                                    f.write(f'               begin\n')
+                                    f.write(f'                  if not Try_Registry_Encode\n')
+                                    f.write(f'                       (Json_Content_Type, "{rsp_schema}", Rsp (I)\'Address, Item_Json)\n')
+                                    f.write(f'                  then\n')
+                                    f.write(f'                     raise Program_Error with\n')
+                                    f.write(f'                       "codec registry encode failed for schema {rsp_schema}";\n')
+                                    f.write(f'                  end if;\n')
+                                    f.write(f'                  Append (Acc, To_String (Item_Json));\n')
+                                    f.write(f'               end;\n')
                                 f.write(f'            end loop;\n')
                                 f.write(f'            Append (Acc, "]");\n')
                                 f.write(f'            Emit_Invoke_Response\n')
                                 f.write(f'              (Callback, User_Data, To_String (Acc));\n')
-                            else:
+                            elif rpc.ada_rsp_type == 'Identifier':
                                 f.write(f'            Rsp : constant {rpc.ada_rsp_type} :=\n')
                                 f.write(f'              Grpc_Transport.{invoke_name}\n')
                                 f.write(f'                (To_String (Grpc_Channel), Request);\n')
-                                if rpc.ada_rsp_type == 'Identifier':
-                                    f.write(f'            Response_Payload : constant String :=\n')
-                                    f.write(f'              """" & To_String (Rsp) & """";\n')
-                                else:
-                                    f.write(f'            Response_Payload : constant String := To_Json (Rsp);\n')
+                                f.write(f'            Response_Payload : constant String :=\n')
+                                f.write(f'              """" & To_String (Rsp) & """";\n')
                                 f.write(f'         begin\n')
                                 f.write(f'            Emit_Invoke_Response\n')
                                 f.write(f'              (Callback, User_Data, Response_Payload);\n')
+                            else:
+                                # Codec-source-free: render the gRPC response to JSON
+                                # through the codec registry, not a compiled-in To_Json.
+                                f.write(f'            Rsp : constant {rpc.ada_rsp_type} :=\n')
+                                f.write(f'              Grpc_Transport.{invoke_name}\n')
+                                f.write(f'                (To_String (Grpc_Channel), Request);\n')
+                                f.write(f'            Rsp_Json : Unbounded_String := Null_Unbounded_String;\n')
+                                f.write(f'         begin\n')
+                                f.write(f'            if not Try_Registry_Encode\n')
+                                f.write(f'                 (Json_Content_Type, "{rsp_schema}", Rsp\'Address, Rsp_Json)\n')
+                                f.write(f'            then\n')
+                                f.write(f'               raise Program_Error with\n')
+                                f.write(f'                 "codec registry encode failed for schema {rsp_schema}";\n')
+                                f.write(f'            end if;\n')
+                                f.write(f'            Emit_Invoke_Response\n')
+                                f.write(f'              (Callback, User_Data, To_String (Rsp_Json));\n')
                             f.write(f'         end;\n')
                             f.write(f'         return;\n')
                             f.write(f'      end if;\n')
@@ -3258,7 +3285,7 @@ def main():
         if len(sys.argv) < 4:
             print('Usage: python ada_service_generator.py --types'
                   ' <data_model_dir> <output_dir>')
-            print('  e.g. --types proto/pyramid/data_model bindings/ada/generated')
+            print('  e.g. --types proto/pyramid/data_model build/generated/pyramid_ada_bindings')
             sys.exit(1)
         gen = AdaTypesGenerator(Path(sys.argv[2]))
         gen.generate(sys.argv[3])

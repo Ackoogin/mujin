@@ -50,17 +50,17 @@ the generated service binding layer.
 |------|-----|
 | Contract source | `subprojects/PYRAMID/proto/**/*.proto` |
 | Generator entry point | `subprojects/PYRAMID/pim/generate_bindings.py` |
-| Generated artifact home | `subprojects/PYRAMID/bindings/` |
 | Build-local C++ artifact home | `${binaryDir}/generated/pyramid_cpp_bindings` |
-| C++ service facade | `bindings/cpp/generated/pyramid_services_*_{provided,consumed}.{hpp,cpp}` |
-| C++ data-model types | `bindings/cpp/generated/pyramid_data_model_*_types.hpp` |
-| C++ JSON codecs | `bindings/cpp/generated/pyramid_data_model_*_codec.{hpp,cpp}` |
-| C++ FlatBuffers codecs | `bindings/cpp/generated/flatbuffers/cpp/*_flatbuffers_codec.*` |
-| C++ Protobuf codecs | data-model stubs in `bindings/cpp/generated/protobuf/cpp/*_protobuf_codec.*`; tactical service shim in `bindings/protobuf/cpp/pyramid_services_tactical_objects_protobuf_*` |
-| C++ gRPC transport | `bindings/cpp/generated/grpc/cpp/*_grpc_*` |
-| C++ ROS2 transport | `bindings/cpp/generated/ros2/cpp/*_ros2_*` |
-| Ada service facade | `bindings/ada/generated/pyramid-services-*.ads/.adb` |
-| Ada transport projections | `bindings/ada/generated/{grpc,ros2}/ada/*.ads` |
+| Build-local Ada artifact home | `${binaryDir}/generated/pyramid_ada_bindings` |
+| C++ service facade | `${PYRAMID_CPP_BINDINGS_DIR}/pyramid_services_*_{provided,consumed}.{hpp,cpp}` |
+| C++ data-model types | `${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_types.hpp` |
+| C++ JSON codecs | `${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_codec.{hpp,cpp}` |
+| C++ FlatBuffers codecs | `${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/*_flatbuffers_codec.*` |
+| C++ Protobuf codecs | data-model stubs in `${PYRAMID_CPP_BINDINGS_DIR}/protobuf/cpp/*_protobuf_codec.*`; tactical service codec support in `src/protobuf_support/` |
+| C++ gRPC transport | `${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp/*_grpc_*` |
+| C++ ROS2 transport | `${PYRAMID_CPP_BINDINGS_DIR}/ros2/cpp/*_ros2_*` |
+| Ada service facade | `${PYRAMID_ADA_BINDINGS_DIR}/pyramid-services-*.ads/.adb` |
+| Ada backend projections | `${PYRAMID_ADA_BINDINGS_DIR}/{flatbuffers,protobuf}/ada/*.ads` |
 | ROS2 mapping rules | [ros2_transport_semantics.md](ros2_transport_semantics.md) |
 | Interaction pattern conventions (pub/sub/RPC/action in `.proto`) | [pyramid_interaction_semantics.md](pyramid_interaction_semantics.md) |
 | Tactical Objects status | [generated_bindings_status.md](../../../../doc/reports/PYRAMID/generated_bindings_status.md) |
@@ -160,9 +160,10 @@ build-local generated files:
 - FlatBuffers schemas and codec sources
 - generated gRPC transport sources
 
-CMake also derives Protobuf/gRPC compiler outputs from globbed proto files, and
-still globs supporting delivered binding sources under `subprojects/PYRAMID/bindings/`
-for the Tactical Objects Protobuf shim, gRPC C shim, and ROS2 support layer.
+CMake also derives Protobuf/gRPC compiler outputs from globbed proto files.
+Non-generated Tactical Objects Protobuf support lives under
+`subprojects/PYRAMID/src/protobuf_support`; ROS2 support is generated into the
+build-local binding tree.
 
 The build graph then refreshes the local tree through the
 `pyramid_cpp_bindings_codegen` stamp target whenever proto files or generator
@@ -188,7 +189,7 @@ From the repository root:
 ```bat
 python subprojects\PYRAMID\pim\generate_bindings.py ^
   subprojects\PYRAMID\proto ^
-  subprojects\PYRAMID\bindings\cpp\generated ^
+  build\generated\pyramid_cpp_bindings ^
   --languages cpp ^
   --backends json,flatbuffers
 ```
@@ -198,9 +199,9 @@ The generator can also emit Ada and other backend projections:
 ```bat
 python subprojects\PYRAMID\pim\generate_bindings.py ^
   subprojects\PYRAMID\proto ^
-  subprojects\PYRAMID\bindings\ada\generated ^
+  build\generated\pyramid_ada_bindings ^
   --languages ada ^
-  --backends json,flatbuffers,protobuf,grpc
+  --backends json,flatbuffers,protobuf
 ```
 
 The backend registry is in:
@@ -208,11 +209,9 @@ The backend registry is in:
 - `pim/codec_backends.py`
 - `pim/backends/`
 
-Generated files are checked in for the current proving path and may also be
-materialized into build-local directories by CMake. When changing a generator,
-regenerate the affected checked-in outputs if the contract snapshot should
-change, then reconfigure/rebuild so the build-local artifacts are refreshed and
-run the binding tests listed below.
+Generated files are build artifacts materialized into build-local directories by
+CMake. When changing a generator, reconfigure/rebuild so the build-local
+artifacts are refreshed, then run the binding tests listed below.
 
 ## Content-Type Contract
 
