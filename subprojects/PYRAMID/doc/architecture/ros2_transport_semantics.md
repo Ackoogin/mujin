@@ -416,8 +416,23 @@ Not yet implemented:
   through the generated bind helpers and the plugin's private bind/advertise
   ABI symbols, (b) emitting `pcl_executor_post_remote_incoming` /
   `pcl_executor_post_service_request_remote` for ROS2 ingress, and (c) wiring
-  the manifest routing flow to invoke the (now peer-aware) binds. Tracked from
+  the manifest routing flow to invoke the (now peer-aware) binds. This is the
+  ROS2 half of a cross-cutting gap (the manifest peer id is also not threaded
+  into UDP/socket/gRPC transports); see
+  [`transport_codec_plugin_system.md`](transport_codec_plugin_system.md)
+  (§ "Known gap — manifest-routed remote ingress / peer identity"). Tracked from
   PR #96 review (codex comments on routed topic/service ingress).
+- **Staging the ROS2 plugin's shared runtime dependency.** The coupled plugin is
+  an `add_library(... MODULE)` that links the **shared**
+  `libpyramid_ros2_transport_lib.so` (`ros2/CMakeLists.txt`), so the staged
+  `.so` carries a `DT_NEEDED` on it. `scripts/stage_plugin_deploy.sh` copies only
+  `libpyramid_ros2_coupled_plugin.so`, so a deployment assembled outside the
+  colcon install tree cannot `dlopen` it (missing runtime lib). Closing this
+  means either staging `libpyramid_ros2_transport_lib.so` beside the plugin with
+  a matching `$ORIGIN` rpath / `LD_LIBRARY_PATH`, or making the MODULE
+  self-contained (statically absorbing the runtime lib). Deferred from PR #96
+  review; part of the broader "ROS2 staged deployment is not yet runnable"
+  status (the coupled plugin is colcon/ament-only today).
 - Ada ROS2 runtime beyond generated constants/specs
 - a top-level (non-ament) CMake target for the coupled plugin: because rclcpp is
   only discoverable under ament, the coupled ROS2 plugin is built via colcon

@@ -394,3 +394,44 @@ encoding.
 **Current capability and remaining transport work** (putting the typed ROS2 codec
 on the live wire, ROS2 actions, deferred capability adapters) are tracked in:
 [`doc/plans/PYRAMID/transport_plugins.md`](../../../../doc/plans/PYRAMID/transport_plugins.md).
+
+### Known gap — manifest-routed *remote* ingress / peer identity (deferred)
+
+Compose-time routing (caps + QoS + `pcl_transport_routing_load`) works, and a
+route to a named peer **validates**. The *runtime ingress* leg for a **remote**
+peer-filtered route is not yet wired end-to-end, in two linked places:
+
+1. **Peer id is not threaded from the manifest into the transport.**
+   `pcl_transport_routing.c` injects only the executor pointer into a transport's
+   `config_json`; it does not pass the manifest `peer` token. A loaded transport
+   (UDP/socket today) therefore keeps its default source id (`"default"`), and the
+   socket plugin has no manifest-peer parser. Inbound filtering
+   (`peer_is_allowed` / `source_peer_id`) then never matches the route's peer
+   list, so a route such as `route object_evidence subscriber topic_udp`
+   validates but drops all remote ingress. The fix is to thread the manifest
+   `peer` through to the transport/bind layer rather than relying on per-plugin
+   config to duplicate it.
+
+2. **Coupled-plugin ingress posts as a *local* source.** Even with a peer id
+   available, the generated/loaded server paths post inbound traffic with the
+   local APIs (`pcl_executor_post_incoming` /
+   `pcl_executor_post_service_request`). A remote-only routed endpoint rejects
+   local ingress (`dispatch_incoming_now`) or misses the service (`find_service`
+   runs `PCL_ROUTE_LOCAL`). Routed remote requests are dropped or return an
+   empty/default response. This affects:
+   - **gRPC** coupled plugin (`pyramid_grpc_coupled_plugin.cpp`): the server is
+     started with only the executor; it must dispatch via
+     `pcl_executor_post_service_request_remote` keyed by the routed peer id.
+   - **ROS2** coupled plugin: the generated `bindTopicIngress` /
+     `bindUnaryServiceIngress` / `bindStreamServiceIngress` helpers
+     (`pim/backends/ros2_backend.py`) and the private bind/advertise ABI symbols
+     must carry the peer id and use `pcl_executor_post_remote_incoming` /
+     `pcl_executor_post_service_request_remote`. See the matching item in
+     [`ros2_transport_semantics.md`](ros2_transport_semantics.md) (§ "Not yet
+     implemented").
+
+These bind/server paths are exercised only by tests today (the routing loader
+does not yet invoke them for an endpoint), so the gap is **latent** rather than a
+regression. Closing it spans the PCL routing layer, the generated ROS2 support
+codegen, and both coupled-plugin ABIs; deferred from PR #96 review pending a
+build/test environment for the coupled ROS2/gRPC runtime.
