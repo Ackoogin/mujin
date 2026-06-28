@@ -102,6 +102,10 @@ static pcl_status_t udp_publish(void*            adapter_ctx,
   int      rc;
 
   if (!ctx || ctx->sock == PCL_INVALID_SOCKET || !topic || !msg) return PCL_ERR_INVALID;
+  /* A nonzero size with a null data pointer would reserve data_len bytes in the
+     packet but skip the copy below, sending uninitialized heap bytes. Reject
+     that shape (other ingress paths do the same). */
+  if (msg->size && !msg->data) return PCL_ERR_INVALID;
 
   topic_len    = (uint16_t)strlen(topic);
   type_len     = (uint16_t)(msg->type_name ? strlen(msg->type_name) : 0);

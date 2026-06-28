@@ -237,6 +237,40 @@ TEST(PclTransportRouting, PreservesPreExistingRouteOnDuplicate) {
 // Loading and destroying a manifest repeatedly on the same executor must not
 // leak named-transport slots: the unregister-on-destroy has to free the slot so
 // later cycles do not saturate PCL_MAX_TRANSPORTS and fail with PCL_ERR_NOMEM.
+// A manifest must not overwrite (and then, on teardown, delete) a transport it
+// did not create: a duplicate peer id is rejected, leaving the original intact.
+TEST(PclTransportRouting, RejectsDuplicateTransportPeer) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  const std::string body =
+      std::string("transport recorder ") + CAPTURE_PLUGIN_PATH + "\n";
+
+  const auto path1 = WriteManifest(body);
+  pcl_transport_routing_t* routing1 = nullptr;
+  ASSERT_EQ(pcl_transport_routing_load(e, path1.c_str(), &routing1, nullptr, 0),
+            PCL_OK);
+  ASSERT_NE(routing1, nullptr);
+  ASSERT_NE(pcl_executor_get_transport_for_peer(e, "recorder"), nullptr);
+
+  // A second manifest reusing the same peer fails closed and leaves the first
+  // manifest's transport untouched.
+  const auto path2 = WriteManifest(body);
+  pcl_transport_routing_t* routing2 = nullptr;
+  char diag[200] = "";
+  EXPECT_EQ(pcl_transport_routing_load(e, path2.c_str(), &routing2, diag,
+                                       sizeof(diag)),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(routing2, nullptr);
+  EXPECT_NE(std::string(diag).find("already registered"), std::string::npos);
+  EXPECT_NE(pcl_executor_get_transport_for_peer(e, "recorder"), nullptr);
+  EXPECT_EQ(e->transport_count, 1u);
+
+  pcl_transport_routing_destroy(routing1);
+  std::remove(path1.c_str());
+  std::remove(path2.c_str());
+  pcl_executor_destroy(e);
+}
+
 TEST(PclTransportRouting, ReusesTransportSlotsAcrossLoadDestroyCycles) {
   pcl_executor_t* e = pcl_executor_create();
   ASSERT_NE(e, nullptr);

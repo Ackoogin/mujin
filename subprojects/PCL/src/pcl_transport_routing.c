@@ -168,6 +168,14 @@ static pcl_status_t handle_transport_line(pcl_executor_t*          e,
     set_diag(diag, diag_size, "transport line needs <peer_id> <plugin_path>");
     return PCL_ERR_INVALID;
   }
+  /* Fail closed on a peer already registered on the executor. Otherwise the
+     register call below would overwrite a transport this manifest did not
+     create, and teardown/rollback (which unregisters every manifest-owned peer)
+     would then delete that pre-existing transport. */
+  if (pcl_executor_get_transport_for_peer(e, peer) != NULL) {
+    set_diag(diag, diag_size, "transport '%s': peer already registered", peer);
+    return PCL_ERR_INVALID;
+  }
   raw_config = trim(cursor);          /* remainder of line = opaque plugin config */
   config = inject_executor(e, raw_config[0] ? raw_config : NULL,
                            config_buf, sizeof(config_buf));
