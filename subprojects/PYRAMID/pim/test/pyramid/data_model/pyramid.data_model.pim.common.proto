@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package pyramid.data_model.pim.common;
+
+message GenericComponent {
+  // Is this component responsible for initiating the command (per command sent)
+  bool init_request = 1;
+  int32 retry_request = 2;
+}
+

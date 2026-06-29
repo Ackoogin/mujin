@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package pyramid.components.pim_osprey.sensors.services.consumed;
+
+import "google/protobuf/empty.proto";
+import "pyramid/data_model/pyramid.data_model.generic_pim.generic.proto";
+
+// Information port 'pCapabilityEvidence' (consumed) refining Capability_Evidence
+service Capability_Evidence_Service {
+  rpc Read(google.protobuf.Empty) returns (stream pyramid.data_model.generic_pim.generic.Capabilities);
+}
+

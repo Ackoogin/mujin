@@ -30,7 +30,7 @@ from pathlib import Path
 # Ensure pim/ is on sys.path so imports resolve
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from proto_parser import parse_proto_tree, ProtoTypeIndex
+from proto_parser import parse_proto_tree, ProtoTypeIndex, ProtoMessage
 import codec_backends
 import cabi_codegen
 import cpp_codegen
@@ -48,6 +48,26 @@ def _discover_data_model_files(proto_dir: Path):
     ]
 
 
+def _discover_service_message_files(proto_dir: Path):
+    """Service protos that declare local wrapper messages (oneof request/
+    response payloads). These messages are canonically homed in their own
+    component namespace (Component-NS) and need the same struct/codec/cabi
+    treatment as data-model types. A synthetic ``Empty`` is appended where an
+    RPC uses google.protobuf.Empty so the generated facade resolves it."""
+    files = []
+    for pf in parse_proto_tree(proto_dir):
+        if '.services.' not in f'.{pf.package}.' or not pf.messages:
+            continue
+        uses_empty = any(
+            'google.protobuf.Empty' in (rpc.request_type, rpc.response_type)
+            for svc in pf.services for rpc in svc.rpcs
+        )
+        if uses_empty and not any(m.name == 'Empty' for m in pf.messages):
+            pf.messages.append(ProtoMessage(name='Empty'))
+        files.append(pf)
+    return files
+
+
 def _generate_json_cpp(proto_dir: Path, output_dir: Path,
                        enabled_backends=None) -> int:
     total = 0
@@ -63,6 +83,24 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
         cabi_codegen.CabiTypesGenerator(dm_files).generate(str(output_dir))
         cabi_codegen.CabiMarshalGenerator(dm_files).generate(str(output_dir))
         total += 2
+
+        # Service-local wrapper messages (Component-NS): emit struct + JSON
+        # codec + C-ABI types/marshal in each component's own namespace, using a
+        # combined index so wrapper field types (data-model payloads) resolve.
+        svc_files = _discover_service_message_files(proto_dir)
+        if svc_files:
+            combined = dm_files + svc_files
+            combined_index = ProtoTypeIndex(combined)
+            types_gen = cpp_codegen.CppTypesGenerator(combined)
+            cabi_types_gen = cabi_codegen.CabiTypesGenerator(combined)
+            cabi_marshal_gen = cabi_codegen.CabiMarshalGenerator(combined)
+            for spf in svc_files:
+                types_gen.write_file(spf, str(output_dir))
+                cpp_codegen.CppDataModelCodecGenerator(
+                    spf, combined_index).generate(str(output_dir))
+                cabi_types_gen.write_file(spf, str(output_dir))
+                cabi_marshal_gen.write_file(spf, str(output_dir))
+                total += 4
 
     for proto_path in sorted(proto_dir.rglob('*.proto')):
         parsed = cpp_codegen.parse_proto(proto_path)

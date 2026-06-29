@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package pyramid.data_model.pim_seaspray.sensors;
+
+import "pyramid/data_model/pyramid.data_model.common_pim_components.external_equipment.proto";
+import "pyramid/data_model/pyramid.data_model.common_pim_components.sensors.proto";
+
+message SENRadarModeChangeRequirement {
+  pyramid.data_model.common_pim_components.sensors.SENRequirement base = 1;  // Inherited from SENRequirement
+
+  pyramid.data_model.common_pim_components.external_equipment.Radar_Operational_Mode mode = 2;
+  pyramid.data_model.common_pim_components.external_equipment.Radar_Operational_Mode_Index mode_index = 3;
+}
+
+message SENRadarModeChangeRequest {
+  pyramid.data_model.common_pim_components.sensors.SENRequest base = 1;  // Inherited from SENRequest
+
+  pyramid.data_model.common_pim_components.external_equipment.Radar_Operational_Mode mode = 2;
+  pyramid.data_model.common_pim_components.external_equipment.Radar_Operational_Mode_Index mode_index = 3;
+}
+
+message Sensors {
+  pyramid.data_model.common_pim_components.sensors.Sensors base = 1;  // Inherited from Sensors
+}
+

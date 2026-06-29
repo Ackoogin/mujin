@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package pyramid.components.pim_seaspray.information_presentation.services.consumed;
+
+import "google/protobuf/empty.proto";
+import "pyramid/data_model/pyramid.data_model.base.proto";
+import "pyramid/data_model/pyramid.data_model.common.proto";
+import "pyramid/data_model/pyramid.data_model.common_pim_components.information_presentation.proto";
+import "pyramid/data_model/pyramid.data_model.generic_pim.generic.proto";
+import "pyramid/data_model/pyramid.data_model.pim_seaspray.information_presentation.proto";
+
+message IPRDependency_Service_Request {
+  oneof payload {
+    pyramid.data_model.common_pim_components.information_presentation.IPRDependencyRequest iprdependency_request = 1;
+    pyramid.data_model.pim_seaspray.information_presentation.RadarDisplaySPRDependency radar_display_sprdependency = 2;
+  }
+}
+
+// Request port 'pIPRDependency' (consumed) refining IPRDependency
+service IPRDependency_Service {
+  rpc Create(IPRDependency_Service_Request) returns (pyramid.data_model.common.Ack);
+  rpc Read(pyramid.data_model.common.Query) returns (stream pyramid.data_model.common_pim_components.information_presentation.IPRDependencyRequirement);
+  rpc Update(pyramid.data_model.common_pim_components.information_presentation.IPRDependencyRequirement) returns (pyramid.data_model.common.Ack);
+  rpc Cancel(pyramid.data_model.base.Identifier) returns (pyramid.data_model.common.Ack);
+}
+
+// Information port 'pIPRInformationDependency' (consumed) refining IPRInformationDependency
+service IPRInformationDependency_Service {
+  rpc Read(google.protobuf.Empty) returns (stream pyramid.data_model.common_pim_components.information_presentation.IPRDependencyInformation);
+}
+
+// Information port 'pCapabilityEvidence' (consumed) refining Capability_Evidence
+service Capability_Evidence_Service {
+  rpc Read(google.protobuf.Empty) returns (stream pyramid.data_model.generic_pim.generic.Capabilities);
+}
+

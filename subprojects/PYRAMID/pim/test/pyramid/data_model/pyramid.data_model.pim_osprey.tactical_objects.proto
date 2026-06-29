@@ -1,0 +1,153 @@
+syntax = "proto3";
+
+package pyramid.data_model.pim_osprey.tactical_objects;
+
+import "pyramid/data_model/pyramid.data_model.base.proto";
+import "pyramid/data_model/pyramid.data_model.common.proto";
+import "pyramid/data_model/pyramid.data_model.common_pim_components.tactical_objects.proto";
+
+enum TrkRequestCode_Type {
+  TRK_REQUEST_CODE_TYPE_UNSPECIFIED = 0;
+  TRK_REQUEST_CODE_TYPE_INITIATE = 1;
+  TRK_REQUEST_CODE_TYPE_POS_CORRECT = 2;
+  TRK_REQUEST_CODE_TYPE_DELETE = 3;
+  TRK_REQUEST_CODE_TYPE_DELETE_ALL = 4;
+  TRK_REQUEST_CODE_TYPE_ATI = 5;
+  TRK_REQUEST_CODE_TYPE_RADAR_NO_GO = 6;
+}
+
+enum TP_Crtl_Cmd_Progress {
+  TP_CRTL_CMD_PROGRESS_UNSPECIFIED = 0;
+  TP_CRTL_CMD_PROGRESS_IN_PROGRESS = 1;
+  TP_CRTL_CMD_PROGRESS_NOT_IN_PROGRESS = 2;
+}
+
+message Latitude_Type {}
+
+message SelectedUserId_Type {}
+
+message RadarTrackId_Type {}
+
+message Longitude_Type {}
+
+message TacticalItemIdentifier_Type {}
+
+message GeoPosition_Record {
+  int32 latitude = 1;
+  int32 longitude = 2;
+}
+
+message TrackControlCmd_Record {
+  TrkRequestCode_Type request_code = 1;
+  RadarTrackId_Type track_number = 2;
+  GeoPosition_Record position = 3;
+  bool create_from_reinject = 4;
+  bool delete_from_convert = 5;
+  TacticalItemIdentifier_Type track_tac_index = 6;
+  bool track_not_in_tp = 7;
+  SelectedUserId_Type requesting_user_id = 8;
+}
+
+message TkCtrlCmdToHDIRadarCreateReq_Map {
+  TrackControlCmd_Record tk_ctrl_cmd = 1;
+  pyramid.data_model.base.Identifier hdiradar_create_req_id = 2;
+}
+
+message TrackCtrlStatusMsg_Record {}
+
+// Requirement to provide references to Tactical Objects which match the specification
+message RadarCreateTrackDependency {
+  RadarCreateDependency base = 1;  // Inherited from RadarCreateDependency
+
+  optional pyramid.data_model.common_pim_components.tactical_objects.ObjectSource source = 2;
+  pyramid.data_model.common.DataPolicy policy = 3;
+  pyramid.data_model.common.Location location = 4;
+  repeated pyramid.data_model.common.BattleDimension dimension = 5;
+}
+
+message TOBCreateRadarRequirement {
+  pyramid.data_model.common_pim_components.tactical_objects.TOBRequirement base = 1;  // Inherited from TOBRequirement
+
+  pyramid.data_model.common.DataPolicy policy = 2;
+  repeated pyramid.data_model.common.BattleDimension dimension = 3;
+}
+
+message TOBCreateATIRadarRequest {
+  TOBCreateRadarRequest base = 1;  // Inherited from TOBCreateRadarRequest
+
+  pyramid.data_model.common.PolyArea area = 2;
+}
+
+message TOBCreateATIRadarRequirement {
+  TOBCreateRadarRequirement base = 1;  // Inherited from TOBCreateRadarRequirement
+
+  pyramid.data_model.common.PolyArea area = 2;
+}
+
+message TOBCreateRadarRequest {
+  pyramid.data_model.common_pim_components.tactical_objects.TOBRequest base = 1;  // Inherited from TOBRequest
+
+  pyramid.data_model.common.DataPolicy policy = 2;
+  repeated pyramid.data_model.common.BattleDimension dimension = 3;
+}
+
+message TOBCreateTrackRadarRequest {
+  TOBCreateRadarRequest base = 1;  // Inherited from TOBCreateRadarRequest
+
+  pyramid.data_model.common.Location location = 2;
+}
+
+message RadarCreateATIDependencyRequirement {
+  RadarCreateDependencyRequirement base = 1;  // Inherited from RadarCreateDependencyRequirement
+
+  pyramid.data_model.common.PolyArea area = 2;
+}
+
+message RadarCreateTrackDependencyRequirement {
+  RadarCreateDependencyRequirement base = 1;  // Inherited from RadarCreateDependencyRequirement
+
+  pyramid.data_model.common.Location location = 2;
+}
+
+message RadarCreateDependency {
+  pyramid.data_model.common_pim_components.tactical_objects.TOBDependency base = 1;  // Inherited from TOBDependency
+
+  optional pyramid.data_model.common_pim_components.tactical_objects.ObjectSource source = 2;
+  pyramid.data_model.common.DataPolicy policy = 3;
+  pyramid.data_model.common.PolyArea area = 4;
+}
+
+// Requirement to provide references to Tactical Objects which match the specification
+message RadarCreateATIDependency {
+  RadarCreateDependency base = 1;  // Inherited from RadarCreateDependency
+
+  pyramid.data_model.common.PolyArea area = 2;
+}
+
+message TOBCreateTrackRadarRequirement {
+  TOBCreateRadarRequirement base = 1;  // Inherited from TOBCreateRadarRequirement
+
+  pyramid.data_model.common.Location location = 2;
+}
+
+message RadarCreateDependencyRequirement {
+  pyramid.data_model.common_pim_components.tactical_objects.TOBDependencyRequirement base = 1;  // Inherited from TOBDependencyRequirement
+
+  optional pyramid.data_model.common_pim_components.tactical_objects.ObjectSource source = 2;
+  pyramid.data_model.common.DataPolicy policy = 3;
+  repeated pyramid.data_model.common.BattleDimension dimension = 4;
+}
+
+message TacticalObjects {
+  pyramid.data_model.common_pim_components.tactical_objects.TacticalObjects base = 1;  // Inherited from TacticalObjects
+}
+
+message TPCmdRqmtEntry {
+  TrackControlCmd_Record tp_command = 1;
+  pyramid.data_model.base.Identifier requirement = 2;
+}
+
+message TPCmdRqmtMap {
+  repeated TPCmdRqmtEntry entries = 1;
+}
+

@@ -2,10 +2,10 @@
 """
 Ada C-ABI data-model marshalling generator.
 
-Emits Ada records that mirror the generated ``pyramid_<Type>_c`` C structs
+Emits Ada records that mirror the generated package-qualified C structs
 and Ada marshalling between the generated native Ada records and those C
 structs.  Variable-length data allocated by ``To_C`` uses C ``malloc`` so the
-shared C++ ``pyramid_<Type>_c_free`` routines can release it.
+shared C++ ``<package>_<Type>_c_free`` routines can release it.
 """
 
 from pathlib import Path
@@ -18,7 +18,7 @@ from ada_codegen import (
     _ada_name,
     _ensure_parent_packages,
 )
-from cabi_codegen import CabiMember, iter_cabi_members
+from cabi_codegen import CabiMember, iter_cabi_members, _c_struct_name
 from cpp_codegen import find_scalar_wrappers
 from proto_parser import ProtoMessage, ProtoTypeIndex, parse_proto_tree
 
@@ -30,8 +30,13 @@ def _ada_cabi_pkg_for_file(pf) -> str:
     return '.'.join(ada_parts + ['Cabi'])
 
 
-def _cabi_type_name(message_name: str) -> str:
-    return f'Pyramid_{_ada_name(message_name)}_C'
+def _cabi_type_name_from_c(c_type: str) -> str:
+    stem = c_type.removesuffix('_c')
+    return _ada_name(stem) + '_C'
+
+
+def _cabi_type_name(message_name: str, package: str = '') -> str:
+    return _cabi_type_name_from_c(_c_struct_name(message_name, package))
 
 
 def _c_field_name(name: str) -> str:
@@ -46,8 +51,9 @@ def _native_type_name(message_name: str) -> str:
     return _ada_name(message_name)
 
 
-def _free_proc_name(message_name: str) -> str:
-    return 'Free_' + _ada_name(message_name)
+def _free_proc_name(message_name: str, package: str = '') -> str:
+    c_name = _c_struct_name(message_name, package).removesuffix('_c')
+    return 'Free_' + _ada_name(c_name)
 
 
 def _slice_array_name(member: CabiMember) -> str:
@@ -148,8 +154,7 @@ class AdaCabiGenerator:
         if c_type == 'pyramid_slice_t':
             return 'Pyramid_Slice_T'
         if c_type.startswith('pyramid_') and c_type.endswith('_c'):
-            short = c_type.removeprefix('pyramid_').removesuffix('_c')
-            return _cabi_type_name(short)
+            return _cabi_type_name_from_c(c_type)
         return _C_SCALAR_TO_ADA.get(c_type, 'Interfaces.C.int')
 
     def _native_field(self, member: CabiMember) -> str:
@@ -220,9 +225,12 @@ class AdaCabiGenerator:
             f.write('   pragma Convention (C, Pyramid_Slice_T);\n\n')
 
             for msg in sorted_msgs:
-                c_name = _cabi_type_name(msg.name)
+                c_name = _cabi_type_name(msg.name, pf.package)
                 f.write(f'   type {c_name} is record\n')
-                for member in self._members(msg, pf.package):
+                members = list(self._members(msg, pf.package))
+                if not members:
+                    f.write('      Padding : Interfaces.C.unsigned_char := 0;\n')
+                for member in members:
                     if member.is_repeated:
                         f.write(f'      {_c_field_name(member.name)} : Pyramid_Slice_T;\n')
                     else:
@@ -235,16 +243,16 @@ class AdaCabiGenerator:
                 f.write(f'   pragma Convention (C, {c_name});\n\n')
 
             for msg in non_alias:
-                c_name = _cabi_type_name(msg.name)
+                c_name = _cabi_type_name(msg.name, pf.package)
                 native = _native_type_name(msg.name)
-                free_name = 'pyramid_' + msg.name + '_c_free'
+                free_name = _c_struct_name(msg.name, pf.package) + '_free'
                 f.write(f'   procedure To_C\n')
                 f.write(f'     (In_Value  : {native};\n')
                 f.write(f'      Out_Value : out {c_name});\n')
                 f.write(f'   procedure From_C\n')
                 f.write(f'     (In_Value  : {c_name};\n')
                 f.write(f'      Out_Value : out {native});\n')
-                proc_name = _free_proc_name(msg.name)
+                proc_name = _free_proc_name(msg.name, pf.package)
                 f.write(f'   procedure {proc_name} (Value : access {c_name});\n')
                 f.write(f'   pragma Import (C, {proc_name}, "{free_name}");\n\n')
 
@@ -320,7 +328,7 @@ class AdaCabiGenerator:
 
     def _write_to_c(self, f, msg: ProtoMessage, current_pkg: str) -> None:
         native = _native_type_name(msg.name)
-        c_name = _cabi_type_name(msg.name)
+        c_name = _cabi_type_name(msg.name, current_pkg)
         f.write(f'   procedure To_C\n')
         f.write(f'     (In_Value  : {native};\n')
         f.write(f'      Out_Value : out {c_name})\n')
@@ -333,7 +341,7 @@ class AdaCabiGenerator:
 
     def _write_from_c(self, f, msg: ProtoMessage, current_pkg: str) -> None:
         native = _native_type_name(msg.name)
-        c_name = _cabi_type_name(msg.name)
+        c_name = _cabi_type_name(msg.name, current_pkg)
         f.write(f'   procedure From_C\n')
         f.write(f'     (In_Value  : {c_name};\n')
         f.write(f'      Out_Value : out {native})\n')

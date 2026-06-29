@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package pyramid.data_model.common_pim_components.sensor_data_interpretation;
+
+import "pyramid/data_model/pyramid.data_model.common.proto";
+import "pyramid/data_model/pyramid.data_model.generic_pim.generic.proto";
+import "pyramid/data_model/pyramid.data_model.pim.common.proto";
+
+enum InterpretationPolicy {
+  INTERPRETATION_POLICY_UNSPECIFIED = 0;
+  INTERPRETATION_POLICY_IGNORE_OBJECTS = 1;
+  INTERPRETATION_POLICY_INCLUDE_OBJECTS = 2;
+}
+
+enum InterpretationType {
+  INTERPRETATION_TYPE_UNSPECIFIED = 0;
+  // Use active Tracking to locate and provide evidence for the existence of Sea Surface Tactical Objects
+  INTERPRETATION_TYPE_LOCATE_SEA_SURFACE_OBJECTS = 1;
+}
+
+message SDIDataProvisionDependencyRequest {
+  SDIDependencyRequest base = 1;  // Inherited from SDIDependencyRequest
+}
+
+message SDIDataProcessingDependencyRequest {
+  SDIDependencyRequest base = 1;  // Inherited from SDIDependencyRequest
+}
+
+message SDIDependencyRequest {
+  pyramid.data_model.common.DependencyRequest base = 1;  // Inherited from DependencyRequest
+}
+
+message SDIRequirement {
+}
+
+message SDIRequest {
+  pyramid.data_model.common.Request base = 1;  // Inherited from Request
+}
+
+message SDIDataProcessingDependencyRequirement {
+  pyramid.data_model.common.DependencyRequirement base = 1;  // Inherited from DependencyRequirement
+}
+
+message SDIDataProvisionDependencyRequirement {
+  pyramid.data_model.common.DependencyRequirement base = 1;  // Inherited from DependencyRequirement
+}
+
+message SensorDataInterpretation {
+  pyramid.data_model.pim.common.GenericComponent base = 1;  // Inherited from GenericComponent
+  pyramid.data_model.generic_pim.generic.GenericComponent base_2 = 2;  // Inherited from GenericComponent
+}
+

@@ -1,0 +1,3 @@
+# Build artifacts produced by build_comms_test.sh / viability_check.sh
+generated/
+comms_test

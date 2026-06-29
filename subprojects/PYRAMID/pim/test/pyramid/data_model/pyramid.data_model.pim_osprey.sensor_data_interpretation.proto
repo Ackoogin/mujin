@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package pyramid.data_model.pim_osprey.sensor_data_interpretation;
+
+import "pyramid/data_model/pyramid.data_model.common.proto";
+import "pyramid/data_model/pyramid.data_model.common_pim_components.sensor_data_interpretation.proto";
+
+// Requirement to coordinate Sensor Data to support the requested specification
+message SDIRadarCreateATIRequirement {
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.SDIRequirement base = 1;  // Inherited from SDIRequirement
+
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.InterpretationPolicy policy = 2;
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.InterpretationType type = 3;
+  pyramid.data_model.common.PolyArea area = 4;
+}
+
+// Requirement to provide Tactical Object Evidence for the requested Location
+message RadarSingleTrackDataProvDependency {
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.SDIDataProvisionDependencyRequest base = 1;  // Inherited from SDIDataProvisionDependencyRequest
+
+  pyramid.data_model.common.Location location = 2;
+}
+
+message RadarSingleTrackDataProcDependencyRequirement {
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.SDIDataProvisionDependencyRequirement base = 1;  // Inherited from SDIDataProvisionDependencyRequirement
+
+  pyramid.data_model.common.Location location = 2;
+}
+
+message RadarATITrackDataProvDependencyRequirement {
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.SDIDataProvisionDependencyRequirement base = 1;  // Inherited from SDIDataProvisionDependencyRequirement
+
+  pyramid.data_model.common.PolyArea area = 2;
+}
+
+// Requirement to coordinate Sensor Data to support the requested specification
+message SDIRadarCreateTrackRequirement {
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.SDIRequirement base = 1;  // Inherited from SDIRequirement
+
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.InterpretationPolicy policy = 2;
+  pyramid.data_model.common.Location location = 3;
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.InterpretationType type = 4;
+}
+
+// Requirement to provide Tactical Object Evidence for the requested Location
+message RadarATITrackDataProvDependency {
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.SDIDataProvisionDependencyRequest base = 1;  // Inherited from SDIDataProvisionDependencyRequest
+
+  pyramid.data_model.common.PolyArea area = 2;
+}
+
+// Requirement to coordinate Sensor Data to support the requested specification
+message SDIRadarCreateRequirement {
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.SDIRequirement base = 1;  // Inherited from SDIRequirement
+
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.InterpretationPolicy policy = 2;
+  pyramid.data_model.common.Location location = 3;
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.InterpretationType type = 4;
+}
+
+// Requirement to coordinate Sensor Data to support the requested specification
+message RadarSingleTrackDataProcDependency {
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.SDIDataProcessingDependencyRequest base = 1;  // Inherited from SDIDataProcessingDependencyRequest
+
+  pyramid.data_model.common.Location location = 2;
+}
+
+message RadarAreaTrackDataProcDependencyRequirement {
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.SDIDataProvisionDependencyRequirement base = 1;  // Inherited from SDIDataProvisionDependencyRequirement
+
+  pyramid.data_model.common.PolyArea area = 2;
+}
+
+message RadarSingleTrackDataProvDependencyRequirement {
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.SDIDataProvisionDependencyRequirement base = 1;  // Inherited from SDIDataProvisionDependencyRequirement
+
+  pyramid.data_model.common.Location location = 2;
+}
+
+// Requirement to coordinate Sensor Data to support the requested specification
+message SDIRadarCreateTrackRequest {
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.SDIRequest base = 1;  // Inherited from SDIRequest
+
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.InterpretationPolicy policy = 2;
+  pyramid.data_model.common.Location location = 3;
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.InterpretationType type = 4;
+}
+
+// Requirement to coordinate Sensor Data to support the requested specification
+message RadarAreaTrackDataProcDependency {
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.SDIDataProcessingDependencyRequest base = 1;  // Inherited from SDIDataProcessingDependencyRequest
+
+  pyramid.data_model.common.PolyArea area = 2;
+}
+
+// Requirement to coordinate Sensor Data to support the requested specification
+message SDIRadarCreateATIRequest {
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.SDIRequest base = 1;  // Inherited from SDIRequest
+
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.InterpretationPolicy policy = 2;
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.InterpretationType type = 3;
+  pyramid.data_model.common.PolyArea area = 4;
+}
+
+message SensorDataInterpretation {
+  pyramid.data_model.common_pim_components.sensor_data_interpretation.SensorDataInterpretation base = 1;  // Inherited from SensorDataInterpretation
+}
+

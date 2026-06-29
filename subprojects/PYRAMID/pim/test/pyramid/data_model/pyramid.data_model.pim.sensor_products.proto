@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package pyramid.data_model.pim.sensor_products;
+
+import "pyramid/data_model/pyramid.data_model.pim.common.proto";
+
+message RADAR_SensorProducts {
+  pyramid.data_model.pim.common.GenericComponent base = 1;  // Inherited from GenericComponent
+}
+
