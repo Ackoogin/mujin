@@ -157,9 +157,11 @@ class SysMLParser:
         result = {
             'dataTypes': [],
             'enumerations': [],
-            'classes': []
+            'classes': [],
+            'connectors': [],
+            'refinements': []
         }
-        
+
         # Determine search root
         self.search_root = self.root
         if package_filter:
@@ -169,7 +171,12 @@ class SysMLParser:
                 self.search_root = self.root
             else:
                 print(f"[x] Found package '{package_filter}', restricting search")
-        
+
+        # Map class id -> stereotype ('block' | 'interfaceBlock'). Stereotype
+        # applications (e.g. <sysml:Block base_Class=...>) live outside the
+        # search root, so scan the whole document for them.
+        self._build_stereotype_map()
+
         # Find all elements with xmi:type attribute
         # Search tree for specific SysML types only
         for elem in self.search_root.iter():
@@ -192,8 +199,65 @@ class SysMLParser:
                 class_info = self._parse_class(elem)
                 if class_info:
                     result['classes'].append(class_info)
-        
+
+            # Process Connectors (port-to-port wiring / bridges)
+            elif xmi_type == 'uml:Connector':
+                conn_info = self._parse_connector(elem)
+                if conn_info:
+                    result['connectors'].append(conn_info)
+
+            # Process «Refine» / Abstraction relationships (client refines supplier).
+            # The model expresses interface refinement (e.g. a specific requirement
+            # interface -> Requirement -> RequestService) partly via these.
+            elif xmi_type == 'uml:Abstraction':
+                for refine in self._parse_refinement(elem):
+                    result['refinements'].append(refine)
+
         return result
+
+    def _parse_refinement(self, element: ET.Element) -> List[Dict[str, Any]]:
+        """Parse a uml:Abstraction into client->supplier refinement edges.
+
+        client/supplier may appear as space-separated attributes or as
+        <client xmi:idref=.../> / <supplier xmi:idref=.../> child elements.
+        """
+        clients, suppliers = [], []
+        cl = self._get_xmi_attr(element, 'client') or element.get('client')
+        sup = self._get_xmi_attr(element, 'supplier') or element.get('supplier')
+        if cl:
+            clients += cl.split()
+        if sup:
+            suppliers += sup.split()
+        for child in element:
+            tag = child.tag.rsplit('}', 1)[-1]
+            ref = child.get('{http://www.omg.org/spec/XMI/20131001}idref') or child.get('idref')
+            if not ref:
+                continue
+            if tag == 'client':
+                clients.append(ref)
+            elif tag == 'supplier':
+                suppliers.append(ref)
+        return [{'client': c, 'supplier': s} for c in clients for s in suppliers if c and s]
+
+    def _build_stereotype_map(self):
+        """Build a map of class id -> stereotype name ('block' | 'interfaceBlock').
+
+        SysML «Block»/«InterfaceBlock» stereotypes are applied via elements such
+        as <sysml:Block base_Class='<class-id>'>. The tag-local name carries the
+        stereotype; the base_Class attribute points at the stereotyped class.
+        """
+        self.stereotype_by_class = {}
+        for elem in self.root.iter():
+            tag = elem.tag.rsplit('}', 1)[-1]  # strip namespace
+            if tag == 'InterfaceBlock':
+                kind = 'interfaceBlock'
+            elif tag == 'Block':
+                kind = 'block'
+            else:
+                continue
+            base_class = elem.get('base_Class')
+            if base_class:
+                self.stereotype_by_class[base_class] = kind
     
     
     def _parse_datatype(self, element: ET.Element) -> Dict[str, Any]:
@@ -367,15 +431,20 @@ class SysMLParser:
         # Get package hierarchy
         namespace = self._get_package_path(element)
         
-        # Parse properties/attributes
+        # Parse properties/attributes and ports
         properties = []
+        ports = []
         for child in element:
             xmi_type = self._get_xmi_attr(child, 'type')
             if xmi_type == 'uml:Property':
                 prop_info = self._parse_property(child)
                 if prop_info:
                     properties.append(prop_info)
-        
+            elif xmi_type == 'uml:Port':
+                port_info = self._parse_port(child)
+                if port_info:
+                    ports.append(port_info)
+
         # Parse operations
         operations = []
         for child in element:
@@ -406,12 +475,94 @@ class SysMLParser:
             'name': name,
             'namespace': namespace,
             'isAbstract': is_abstract,
+            'stereotype': self.stereotype_by_class.get(class_id),
             'properties': properties,
+            'ports': ports,
             'operations': operations,
             'generalizes': generalizations,
             'documentation': comment
         }
-    
+
+    def _parse_port(self, element: ET.Element) -> Dict[str, Any]:
+        """Parse a UML Port (ownedAttribute with xmi:type='uml:Port').
+
+        A port is typed by an «InterfaceBlock» service interface. isConjugated
+        flags a required/consumed port (vs a provided one). Multiplicity may be
+        nested under xmi:Extension/modelExtension, so scan all descendants.
+        """
+        port_id = self._get_xmi_attr(element, 'id')
+        name = element.get('name')
+        type_ref = element.get('type')
+
+        if not name:
+            return None
+
+        is_conjugated = element.get('isConjugated', 'false') == 'true'
+        aggregation = element.get('aggregation')
+
+        # Parse multiplicity (same descendant scan as _parse_property)
+        lower = '1'
+        upper = '1'
+        for child in element.iter():
+            if child.tag.endswith('lowerValue'):
+                lower = child.get('value', '0')
+            elif child.tag.endswith('upperValue'):
+                upper_val = child.get('value', '1')
+                upper = '*' if upper_val == '*' else upper_val
+
+        return {
+            'id': port_id,
+            'name': name,
+            'typeId': type_ref,
+            'typeName': None,  # resolved in resolve_references
+            'isConjugated': is_conjugated,
+            'aggregation': aggregation,
+            'kind': None,       # resolved in resolve_references
+            'direction': 'consumed' if is_conjugated else 'provided',
+            'multiplicity': {
+                'lower': lower,
+                'upper': upper
+            }
+        }
+
+    def _parse_connector(self, element: ET.Element) -> Dict[str, Any]:
+        """Parse a UML Connector (port-to-port wiring / bridge).
+
+        Each connector has two ConnectorEnd children carrying partWithPort (the
+        participating part) and role (the port id on that part). The owner is the
+        nearest ancestor uml:Class.
+        """
+        conn_id = self._get_xmi_attr(element, 'id')
+
+        ends = []
+        for child in element:
+            if self._get_xmi_attr(child, 'type') == 'uml:ConnectorEnd':
+                ends.append({
+                    'partWithPort': child.get('partWithPort'),
+                    'role': child.get('role')
+                })
+
+        if not ends:
+            return None
+
+        # Find owning class by walking up the parent chain
+        owner_id = None
+        owner_name = None
+        current = self._get_parent(element)
+        while current is not None:
+            if self._get_xmi_attr(current, 'type') == 'uml:Class':
+                owner_id = self._get_xmi_attr(current, 'id')
+                owner_name = current.get('name')
+                break
+            current = self._get_parent(current)
+
+        return {
+            'id': conn_id,
+            'ownerId': owner_id,
+            'ownerName': owner_name,
+            'ends': ends
+        }
+
     def _parse_operation(self, element: ET.Element) -> Dict[str, Any]:
         """Parse a UML Operation (method/service operation)"""
         op_id = self._get_xmi_attr(element, 'id')
@@ -474,6 +625,34 @@ class SysMLParser:
             }
         }
     
+    def _resolve_port_kind(self, type_id, class_by_id, type_lookup, visited, refine_map=None):
+        """Classify a port by walking its type's generalization AND «Refine» chain.
+
+        Returns 'request' if it reaches RequestService, 'information' if it
+        reaches ProviderService, else None. Follows both id-based generalizations
+        (client) and Refine edges (client -> supplier); must run before
+        generalizations are rewritten to names.
+        """
+        if not type_id or type_id in visited:
+            return None
+        visited.add(type_id)
+
+        name = type_lookup.get(type_id)
+        if name == 'RequestService':
+            return 'request'
+        if name == 'ProviderService':
+            return 'information'
+
+        neighbours = list((refine_map or {}).get(type_id, []))
+        cls = class_by_id.get(type_id)
+        if cls:
+            neighbours += cls.get('generalizes', [])
+        for nxt in neighbours:
+            kind = self._resolve_port_kind(nxt, class_by_id, type_lookup, visited, refine_map)
+            if kind:
+                return kind
+        return None
+
     def resolve_references(self, model: Dict[str, Any]) -> Dict[str, Any]:
         """Resolve type references to actual type names"""
         # Build lookup tables
@@ -490,7 +669,43 @@ class SysMLParser:
         for cls in model['classes']:
             if cls['id']:
                 type_lookup[cls['id']] = cls['name']
-        
+
+        # Resolve ports and connectors before generalization ids are rewritten
+        # to names below (port-kind resolution walks id-based generalizations).
+        class_by_id = {cls['id']: cls for cls in model['classes'] if cls.get('id')}
+        port_by_id = {}
+
+        # Build the «Refine» adjacency (client -> [suppliers]) and attach a
+        # resolved `refines` list to each client class.
+        refine_map = {}
+        for ref in model.get('refinements', []):
+            client, supplier = ref.get('client'), ref.get('supplier')
+            if client and supplier:
+                refine_map.setdefault(client, []).append(supplier)
+        for cls in model['classes']:
+            suppliers = refine_map.get(cls['id'], [])
+            if suppliers:
+                cls['refines'] = list(suppliers)
+                cls['refinesNames'] = [type_lookup.get(s, s) for s in suppliers]
+
+        for cls in model['classes']:
+            for port in cls.get('ports', []):
+                type_id = port.get('typeId')
+                if type_id and type_id in type_lookup:
+                    port['typeName'] = type_lookup[type_id]
+                else:
+                    port['typeName'] = type_id
+                port['kind'] = self._resolve_port_kind(type_id, class_by_id, type_lookup, set(), refine_map)
+                if port.get('id'):
+                    port_by_id[port['id']] = port['name']
+
+        for conn in model.get('connectors', []):
+            if conn.get('ownerId') and not conn.get('ownerName'):
+                conn['ownerName'] = type_lookup.get(conn['ownerId'])
+            for end in conn.get('ends', []):
+                # role references a port id; partWithPort references a part property
+                end['roleName'] = port_by_id.get(end.get('role'))
+
         # Resolve property type references in DataTypes
         for dt in model['dataTypes']:
             for prop in dt['properties']:
@@ -501,7 +716,9 @@ class SysMLParser:
                     else:
                         prop['typeName'] = prop['type']
             
-            # Resolve generalization references
+            # Resolve generalization references (retain original ids so the
+            # generator can disambiguate same-named types by UUID).
+            dt['generalizesIds'] = list(dt['generalizes'])
             resolved_generals = []
             for gen_id in dt['generalizes']:
                 if gen_id in type_lookup:
@@ -534,7 +751,9 @@ class SysMLParser:
                     else:
                         param['typeName'] = param['type']
             
-            # Resolve generalization references
+            # Resolve generalization references (retain original ids so the
+            # generator can disambiguate same-named types by UUID).
+            cls['generalizesIds'] = list(cls['generalizes'])
             resolved_generals = []
             for gen_id in cls['generalizes']:
                 if gen_id in type_lookup:
