@@ -11,11 +11,18 @@
 #include <gtest/gtest.h>
 
 extern "C" {
+#include <pcl/pcl_capabilities.h>
 #include <pcl/pcl_codec.h>
 #include <pcl/pcl_codec_registry.h>
+#include <pcl/pcl_executor.h>
+#include <pcl/pcl_plugin.h>
 #include <pcl/pcl_plugin_loader.h>
 #include <pcl/pcl_transport.h>
 }
+
+#include <cstdint>
+#include <cstdio>
+#include <string>
 
 #include "pyramid_codec_plugin_test_paths.hpp"
 
@@ -25,26 +32,76 @@ constexpr const char* kGrpcContentType = "application/grpc";
 
 }  // namespace
 
-TEST(GrpcCoupledPluginLoad, ExposesTransportVtable) {
+TEST(GrpcCoupledPluginLoad, RoleConsumedSelectsClientDirection) {
+  // The unified directional selector is role: "provided" | "consumed". A
+  // consumed role must pick the client direction (which dials lazily, no server
+  // bind) -- distinguished here by invoke_stream being wired, which only the
+  // client vtable sets. This is the role-keyed equivalent of mode:"client".
   ASSERT_NE(kPyramidGrpcCoupledPlugin, nullptr);
+
+  pcl_executor_t* executor = pcl_executor_create();
+  ASSERT_NE(executor, nullptr);
+
+  char config[256];
+  std::snprintf(config, sizeof(config),
+                "{\"executor\":%llu,\"role\":\"consumed\","
+                "\"address\":\"127.0.0.1:50321\"}",
+                static_cast<unsigned long long>(
+                    reinterpret_cast<std::uintptr_t>(executor)));
 
   pcl_plugin_handle_t* handle = nullptr;
   const pcl_transport_t* transport = nullptr;
-  ASSERT_EQ(pcl_plugin_load_transport(kPyramidGrpcCoupledPlugin,
+  ASSERT_EQ(pcl_plugin_load_transport(kPyramidGrpcCoupledPlugin, config,
+                                      &handle, &transport),
+            PCL_OK);
+  ASSERT_NE(transport, nullptr);
+  EXPECT_NE(transport->invoke_stream, nullptr);  // client vtable
+
+  auto destroy = reinterpret_cast<void (*)(const pcl_transport_t*)>(
+      pcl_plugin_symbol(handle, "pcl_grpc_transport_plugin_destroy"));
+  if (destroy) destroy(transport);
+  pcl_plugin_unload(handle);
+  pcl_executor_destroy(executor);
+}
+
+TEST(GrpcCoupledPluginLoad, DeclaresUnaryStreamCapsNotPubsub) {
+  ASSERT_NE(kPyramidGrpcCoupledPlugin, nullptr);
+
+  // Capabilities are declared via an exported symbol, independent of the
+  // executor-bound transport, so this needs no running server. The gRPC plugin
+  // carries unary + server-streaming RPC but NOT PCL-native pub/sub (its
+  // publish/subscribe vtable slots are fail-closed stubs), which is exactly why
+  // vtable derivation would be wrong and the explicit symbol is required.
+  pcl_plugin_handle_t* handle = pcl_plugin_open(kPyramidGrpcCoupledPlugin);
+  ASSERT_NE(handle, nullptr);
+
+  auto caps_fn = reinterpret_cast<pcl_transport_plugin_caps_fn>(
+      pcl_plugin_symbol(handle, PCL_TRANSPORT_PLUGIN_CAPS_SYMBOL));
+  ASSERT_NE(caps_fn, nullptr);
+
+  pcl_transport_caps_t caps = caps_fn(nullptr);
+  EXPECT_EQ(caps, PCL_CAP_RPC_UNARY | PCL_CAP_RPC_STREAM);
+  EXPECT_EQ(caps & PCL_CAP_PUBSUB, 0u);
+
+  pcl_plugin_unload(handle);
+}
+
+TEST(GrpcCoupledPluginLoad, TransportFailsClosedWithoutExecutor) {
+  ASSERT_NE(kPyramidGrpcCoupledPlugin, nullptr);
+
+  // The transport half needs a live executor and starts a real gRPC server, so
+  // its end-to-end behaviour is covered by test_grpc_coupled_plugin_e2e. With
+  // an empty config the plugin cannot start a server: the entry point returns
+  // NULL and the loader reports PCL_ERR_STATE rather than handing back a
+  // half-initialised transport.
+  pcl_plugin_handle_t* handle = nullptr;
+  const pcl_transport_t* transport = nullptr;
+  EXPECT_EQ(pcl_plugin_load_transport(kPyramidGrpcCoupledPlugin,
                                       "{}",
                                       &handle,
                                       &transport),
-            PCL_OK);
-  ASSERT_NE(handle, nullptr);
-  ASSERT_NE(transport, nullptr);
-  // The coupled transport routes through gRPC, so the basic publish/serve
-  // entry points must be present (callable function pointers).
-  EXPECT_NE(transport->publish, nullptr);
-  EXPECT_NE(transport->serve, nullptr);
-  EXPECT_NE(transport->subscribe, nullptr);
-  EXPECT_NE(transport->invoke_async, nullptr);
-
-  pcl_plugin_unload(handle);
+            PCL_ERR_STATE);
+  EXPECT_EQ(transport, nullptr);
 }
 
 TEST(GrpcCoupledPluginLoad, RegistersCodecUnderGrpcContentType) {

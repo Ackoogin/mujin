@@ -51,7 +51,7 @@ target_include_directories(tactical_objects_component PUBLIC
 )
 target_include_directories(tactical_objects_component PRIVATE
   ${PYRAMID_CPP_BINDINGS_DIR}
-  ${PYRAMID_ROOT_DIR}/bindings/protobuf/cpp
+  ${PYRAMID_ROOT_DIR}/src/protobuf_support
 )
 target_link_libraries(tactical_objects_component PUBLIC
   tactical_objects
@@ -103,7 +103,7 @@ else()
         "inline constexpr const char* kTacticalObjectsShmTransportPlugin = nullptr;\n")
 endif()
 file(GENERATE
-    OUTPUT ${TACTICAL_OBJECTS_GENERATED_DIR}/tactical_objects_codec_plugin_paths.hpp
+    OUTPUT ${TACTICAL_OBJECTS_GENERATED_DIR}/$<CONFIG>/tactical_objects_codec_plugin_paths.hpp
     CONTENT "${_tactical_codec_paths_header}")
 
 add_executable(tactical_objects_app
@@ -144,8 +144,8 @@ endforeach()
 target_include_directories(tactical_objects_app
     PRIVATE
         ${PYRAMID_CPP_BINDINGS_DIR}
-        ${PYRAMID_ROOT_DIR}/bindings/protobuf/cpp
-        ${TACTICAL_OBJECTS_GENERATED_DIR}
+        ${PYRAMID_ROOT_DIR}/src/protobuf_support
+        ${TACTICAL_OBJECTS_GENERATED_DIR}/$<CONFIG>
 )
 
 target_compile_features(tactical_objects_app PRIVATE cxx_std_14)
@@ -167,8 +167,8 @@ endif()
 target_include_directories(tactical_objects_test_client
     PRIVATE
         ${PYRAMID_CPP_BINDINGS_DIR}
-        ${PYRAMID_ROOT_DIR}/bindings/protobuf/cpp
-        ${TACTICAL_OBJECTS_GENERATED_DIR}
+        ${PYRAMID_ROOT_DIR}/src/protobuf_support
+        ${TACTICAL_OBJECTS_GENERATED_DIR}/$<CONFIG>
 )
 
 target_compile_features(tactical_objects_test_client PRIVATE cxx_std_14)

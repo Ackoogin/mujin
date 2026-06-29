@@ -44,16 +44,24 @@ subprojects/PYRAMID/scripts/build_plugins.sh
 subprojects/PYRAMID/scripts/build_plugins.sh --grpc --stage
 ```
 
+```bat
+subprojects\PYRAMID\scripts\build_plugins.bat
+subprojects\PYRAMID\scripts\build_plugins.bat --grpc --stage
+```
+
 Options: `--build-dir DIR`, `--grpc`, `--jobs N`, `--clean`, `--stage`,
-`--stage-out DIR` (run with `--help` for details). Produces
+`--stage-out DIR` (run with `--help` for details). On Linux this produces
 `libpyramid_codec_<codec>_<component>.so`, `libpcl_transport_{socket,shared_memory}_plugin.so`,
-and (with `--grpc`) `libpyramid_grpc_coupled_plugin.so`. See
+and (with `--grpc`) `libpyramid_grpc_coupled_plugin.so`; the Windows `.bat`
+builds the MSVC equivalents (`pyramid_codec_<codec>_<component>.dll`,
+`pcl_transport_{socket,shared_memory}_plugin.dll`, `pyramid_grpc_coupled_plugin.dll`).
+See
 [`../doc/architecture/transport_codec_plugin_system.md`](../doc/architecture/transport_codec_plugin_system.md).
 
-`stage_plugin_deploy.sh` (called by `--stage`, or run standalone against an
-existing build dir) lays out per-component deployment dirs with the plugins,
-client-facing headers/sources, the minimal link libraries, and auto-load
-manifests.
+`stage_plugin_deploy.sh` / `stage_plugin_deploy.bat` (called by `--stage`, or run
+standalone against an existing build dir) lays out per-component deployment dirs
+with the plugins, client-facing headers/sources, the minimal link libraries
+(`.a` on Linux, `.lib` on Windows), and auto-load manifests.
 
 ### Ada consumers (`build_ada.sh`)
 

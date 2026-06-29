@@ -72,6 +72,69 @@ pcl_status_t pcl_plugin_load_transport(const char*             path,
                                        pcl_plugin_handle_t**   out_handle,
                                        const pcl_transport_t** out_vtable);
 
+/// \brief Report the interaction capabilities of a loaded transport plugin.
+///
+/// If the plugin exports the optional \ref PCL_TRANSPORT_PLUGIN_CAPS_SYMBOL
+/// symbol, its declared mask is returned (the plugin may key the mask off
+/// \p config_json, so the same configuration string used to load it should be
+/// passed here). Otherwise the mask is conservatively derived from \p vtable via
+/// \ref pcl_transport_caps_from_vtable.
+///
+/// \param handle      Handle returned by \ref pcl_plugin_load_transport.
+/// \param config_json Configuration string (may be NULL); forwarded to the caps
+///                    symbol when present.
+/// \param vtable      Vtable returned alongside \p handle, used for derivation.
+/// \param out_caps    Receives the resolved capability mask.
+/// \return PCL_OK on success, PCL_ERR_INVALID if \p handle or \p out_caps is
+///         NULL.
+pcl_status_t pcl_plugin_transport_caps(pcl_plugin_handle_t*   handle,
+                                       const char*            config_json,
+                                       const pcl_transport_t* vtable,
+                                       pcl_transport_caps_t*  out_caps);
+
+/// \brief Report the QoS a loaded transport plugin offers.
+///
+/// If the plugin exports the optional \ref PCL_TRANSPORT_PLUGIN_QOS_SYMBOL
+/// symbol, its declared QoS is returned (keyed off \p config_json, so pass the
+/// same configuration used to load it). Otherwise the offered QoS is
+/// PCL_QOS_RELIABILITY_UNSPECIFIED -- there is nothing to derive from a vtable.
+///
+/// \param handle      Handle returned by \ref pcl_plugin_load_transport.
+/// \param config_json Configuration string (may be NULL); forwarded to the QoS
+///                    symbol when present.
+/// \param out_qos     Receives the resolved offered QoS.
+/// \return PCL_OK on success, PCL_ERR_INVALID if \p handle or \p out_qos is NULL.
+pcl_status_t pcl_plugin_transport_qos(pcl_plugin_handle_t* handle,
+                                      const char*          config_json,
+                                      pcl_qos_t*           out_qos);
+
+/// \brief Tear down a loaded transport instance, then unload its library.
+///
+/// Enforces the only safe order for coupled plugins that own live resources: if
+/// the plugin exports \ref PCL_TRANSPORT_PLUGIN_TEARDOWN_SYMBOL it is called with
+/// \p vtable (stopping spin threads, freeing the context) *before* the library is
+/// unloaded — so a background thread is never left executing in code that
+/// `dlclose` has unmapped. Plugins with no live state omit the symbol and this
+/// degrades to a plain unload. Prefer this over a bare \ref pcl_plugin_unload for
+/// any transport obtained via \ref pcl_plugin_load_transport.
+///
+/// \param handle Handle from \ref pcl_plugin_load_transport.
+/// \param vtable Vtable returned alongside \p handle (may be NULL if unknown).
+/// \return PCL_OK on success, PCL_ERR_INVALID if \p handle is NULL.
+pcl_status_t pcl_plugin_unload_transport(pcl_plugin_handle_t*   handle,
+                                         const pcl_transport_t* vtable);
+
+/// \brief Open an arbitrary shared library and return a plugin handle.
+///
+/// Unlike \ref pcl_plugin_load_transport / \ref pcl_plugin_load_codec, this does
+/// not require any PCL entry point: it is a portable wrapper over the platform
+/// dynamic loader (dlopen / LoadLibrary) for libraries that only export plain
+/// C symbols (e.g. the generated gRPC C shim). Resolve symbols with
+/// \ref pcl_plugin_symbol and release the handle with \ref pcl_plugin_unload.
+///
+/// Returns NULL if \p path is NULL or the library cannot be opened.
+pcl_plugin_handle_t* pcl_plugin_open(const char* path);
+
 /// \brief Unload a plugin handle returned by a successful load call.
 ///
 /// NULL-safe.

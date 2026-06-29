@@ -12,7 +12,8 @@ set "BRIDGE_BIN="
 set "SOCKET_CLIENT_BIN="
 set "GRPC_SERVER_BIN="
 set "GRPC_CLIENT_BIN="
-set "GRPC_DLL_BIN="
+set "GRPC_TRANSPORT_PLUGIN="
+set "GRPC_CODEC_PLUGIN="
 for %%I in ("%~f0") do set "SCRIPT_BASE=%%~dpI"
 
 if not defined PYRAMID_ROOT (
@@ -26,7 +27,8 @@ if /i "%~1"=="--bridge-bin" (set "BRIDGE_BIN=%~2" & shift & shift & goto parse_a
 if /i "%~1"=="--socket-client-bin" (set "SOCKET_CLIENT_BIN=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--grpc-server-bin" (set "GRPC_SERVER_BIN=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--grpc-client-bin" (set "GRPC_CLIENT_BIN=%~2" & shift & shift & goto parse_args)
-if /i "%~1"=="--grpc-dll-bin" (set "GRPC_DLL_BIN=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="--grpc-transport-plugin" (set "GRPC_TRANSPORT_PLUGIN=%~2" & shift & shift & goto parse_args)
+if /i "%~1"=="--grpc-codec-plugin" (set "GRPC_CODEC_PLUGIN=%~2" & shift & shift & goto parse_args)
 shift
 goto parse_args
 :done_args
@@ -36,7 +38,8 @@ if "%BRIDGE_BIN%"=="" set "BRIDGE_BIN=%PYRAMID_ROOT%\..\..\build\subprojects\PYR
 if "%SOCKET_CLIENT_BIN%"=="" set "SOCKET_CLIENT_BIN=%PYRAMID_ROOT%\tests\ada\bin\ada_active_find_e2e.exe"
 if "%GRPC_SERVER_BIN%"=="" set "GRPC_SERVER_BIN=%PYRAMID_ROOT%\..\..\build\subprojects\PYRAMID\tests\Release\tobj_grpc_server.exe"
 if "%GRPC_CLIENT_BIN%"=="" set "GRPC_CLIENT_BIN=%PYRAMID_ROOT%\tests\ada\bin\ada_grpc_cpp_interop_e2e.exe"
-if "%GRPC_DLL_BIN%"=="" set "GRPC_DLL_BIN=%PYRAMID_ROOT%\..\..\build\subprojects\PYRAMID\tests\Release\pyramid_grpc_ada_interop_shim.dll"
+if "%GRPC_TRANSPORT_PLUGIN%"=="" set "GRPC_TRANSPORT_PLUGIN=%PYRAMID_ROOT%\..\..\build\subprojects\PYRAMID\tests\Release\pyramid_grpc_coupled_plugin.dll"
+if "%GRPC_CODEC_PLUGIN%"=="" set "GRPC_CODEC_PLUGIN=%PYRAMID_ROOT%\..\..\build\subprojects\PYRAMID\tests\Release\pyramid_codec_protobuf_tactical_objects.dll"
 
 echo === Tactical Objects Master Conformance ===
 
@@ -52,7 +55,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-call "%SCRIPT_BASE%test_ada_grpc_cpp_interop_e2e.bat" --server-bin "%GRPC_SERVER_BIN%" --client-bin "%GRPC_CLIENT_BIN%" --dll-bin "%GRPC_DLL_BIN%"
+call "%SCRIPT_BASE%test_ada_grpc_cpp_interop_e2e.bat" --server-bin "%GRPC_SERVER_BIN%" --client-bin "%GRPC_CLIENT_BIN%" --transport-plugin "%GRPC_TRANSPORT_PLUGIN%" --codec-plugin "%GRPC_CODEC_PLUGIN%"
 if errorlevel 1 (
     echo [master] FAIL: grpc/protobuf leg failed
     exit /b 1

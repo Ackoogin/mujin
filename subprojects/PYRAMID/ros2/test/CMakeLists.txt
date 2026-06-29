@@ -27,7 +27,7 @@ endif()
 ament_add_gtest(test_rclcpp_runtime_adapter test_rclcpp_runtime_adapter.cpp)
 target_include_directories(test_rclcpp_runtime_adapter PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../include
-    ${UNMANNED_ROOT}/subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp
+    ${PYRAMID_ROS2_SUPPORT_DIR}
 )
 ament_target_dependencies(test_rclcpp_runtime_adapter rclcpp)
 target_link_libraries(test_rclcpp_runtime_adapter
@@ -50,4 +50,58 @@ if(WIN32)
     set_tests_properties(test_rclcpp_runtime_adapter PROPERTIES
         ENVIRONMENT_MODIFICATION "${test_env_mods}"
     )
+endif()
+
+# Typed-wire codec round-trip test: domain_model <-> pyramid_msgs ROS2 message
+# <-> serialized bytes, via the generated pyramid_ros2_codec.hpp. Requires the
+# native interface package (pyramid_msgs) on the prefix path.
+if(pyramid_msgs_FOUND)
+    ament_add_gtest(test_ros2_codec_roundtrip test_ros2_codec_roundtrip.cpp)
+    target_include_directories(test_ros2_codec_roundtrip PRIVATE
+        ${PYRAMID_CPP_BINDINGS_DIR}               # domain_model types
+        ${PYRAMID_CPP_BINDINGS_DIR}/ros2/codec    # pyramid_ros2_codec.hpp
+        ${UNMANNED_ROOT}/subprojects/PYRAMID/core/external  # tl/optional.hpp
+    )
+    ament_target_dependencies(test_ros2_codec_roundtrip rclcpp pyramid_msgs)
+
+    if(WIN32)
+        unset(codec_test_env_mods)
+        foreach(path_entry IN LISTS pyramid_ros2_test_path_entries)
+            list(APPEND codec_test_env_mods "PATH=path_list_prepend:${path_entry}")
+        endforeach()
+        if(pyramid_ros2_test_pythonpath)
+            list(APPEND codec_test_env_mods
+                "PYTHONPATH=path_list_prepend:${pyramid_ros2_test_pythonpath}"
+            )
+        endif()
+        set_tests_properties(test_ros2_codec_roundtrip PROPERTIES
+            ENVIRONMENT_MODIFICATION "${codec_test_env_mods}"
+        )
+    endif()
+endif()
+
+# Coupled ROS2 target plugin loader test: drives the plugin through the generic
+# PCL loader (transport + codec halves under application/ros2).
+if(TARGET pyramid_ros2_coupled_plugin)
+    ament_add_gtest(test_ros2_coupled_plugin_load test_ros2_coupled_plugin_load.cpp)
+    add_dependencies(test_ros2_coupled_plugin_load pyramid_ros2_coupled_plugin)
+    target_link_libraries(test_ros2_coupled_plugin_load pcl_core_external)
+    target_compile_definitions(test_ros2_coupled_plugin_load PRIVATE
+        PYRAMID_ROS2_COUPLED_PLUGIN_PATH="$<TARGET_FILE:pyramid_ros2_coupled_plugin>"
+    )
+
+    if(WIN32)
+        unset(coupled_test_env_mods)
+        foreach(path_entry IN LISTS pyramid_ros2_test_path_entries)
+            list(APPEND coupled_test_env_mods "PATH=path_list_prepend:${path_entry}")
+        endforeach()
+        if(pyramid_ros2_test_pythonpath)
+            list(APPEND coupled_test_env_mods
+                "PYTHONPATH=path_list_prepend:${pyramid_ros2_test_pythonpath}"
+            )
+        endif()
+        set_tests_properties(test_ros2_coupled_plugin_load PROPERTIES
+            ENVIRONMENT_MODIFICATION "${coupled_test_env_mods}"
+        )
+    endif()
 endif()

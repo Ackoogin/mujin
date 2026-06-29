@@ -1,15 +1,17 @@
 # ---------------------------------------------------------------------------
-# pcl_core -- PYRAMID Container Library (pure C, zero dependencies)
+# pcl_core -- PYRAMID Composition Library (pure C, zero dependencies)
 # ---------------------------------------------------------------------------
 # Compiled as C (not C++) to guarantee ABI stability across compilers.
 # C++ header-only wrappers are in include/pcl/*.hpp.
 # ---------------------------------------------------------------------------
 
 add_library(pcl_core STATIC
+  pcl_capabilities.c
   pcl_codec_registry.c
   pcl_container.c
   pcl_executor.c
   pcl_plugin_loader.c
+  pcl_transport_routing.c
   pcl_log.c
   pcl_bridge.c
 )
@@ -93,6 +95,20 @@ if(WIN32)
 endif()
 
 set_target_properties(pcl_transport_udp PROPERTIES
+  LINKER_LANGUAGE C
+  C_STANDARD 11
+  C_STANDARD_REQUIRED ON
+  C_EXTENSIONS OFF
+)
+
+add_library(pcl_transport_udp_plugin MODULE
+  pcl_transport_udp_plugin.c
+)
+
+target_link_libraries(pcl_transport_udp_plugin
+  PRIVATE pcl_transport_udp Threads::Threads)
+
+set_target_properties(pcl_transport_udp_plugin PROPERTIES
   LINKER_LANGUAGE C
   C_STANDARD 11
   C_STANDARD_REQUIRED ON

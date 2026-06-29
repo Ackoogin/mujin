@@ -1,0 +1,372 @@
+/// \file pcl_transport_routing.c
+/// \brief Manifest-driven per-endpoint transport routing (see header).
+#include "pcl/pcl_transport_routing.h"
+
+#include "pcl/pcl_capabilities.h"
+#include "pcl/pcl_plugin_loader.h"
+#include "pcl/pcl_transport.h"
+
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define PCL_ROUTING_MAX_PEERS 8u
+
+typedef struct {
+  pcl_plugin_handle_t*   handle;
+  const pcl_transport_t* vtable;
+  char                   peer_id[64];
+} pcl_routing_transport_t;
+
+typedef struct {
+  char                endpoint_name[64];
+  pcl_endpoint_kind_t endpoint_kind;
+} pcl_routing_route_t;
+
+struct pcl_transport_routing_t {
+  pcl_executor_t*          executor;  /* borrowed; used to unregister on destroy */
+  pcl_routing_transport_t* transports;
+  size_t                   count;
+  size_t                   capacity;
+  pcl_routing_route_t*     routes;    /* endpoint routes installed on the executor */
+  size_t                   route_count;
+  size_t                   route_capacity;
+};
+
+static void set_diag(char* diag, size_t diag_size, const char* fmt, ...) {
+  va_list ap;
+  if (!diag || diag_size == 0u) return;
+  va_start(ap, fmt);
+  vsnprintf(diag, diag_size, fmt, ap);
+  va_end(ap);
+}
+
+static int kind_from_str(const char* s, pcl_endpoint_kind_t* out) {
+  if (strcmp(s, "publisher") == 0)            { *out = PCL_ENDPOINT_PUBLISHER; return 1; }
+  if (strcmp(s, "subscriber") == 0)           { *out = PCL_ENDPOINT_SUBSCRIBER; return 1; }
+  if (strcmp(s, "provided") == 0)             { *out = PCL_ENDPOINT_PROVIDED; return 1; }
+  if (strcmp(s, "consumed") == 0)             { *out = PCL_ENDPOINT_CONSUMED; return 1; }
+  if (strcmp(s, "stream_provided") == 0)      { *out = PCL_ENDPOINT_STREAM_PROVIDED; return 1; }
+  return 0;
+}
+
+static int reliability_from_str(const char* s, pcl_qos_reliability_t* out) {
+  if (strcmp(s, "best_effort") == 0) { *out = PCL_QOS_RELIABILITY_BEST_EFFORT; return 1; }
+  if (strcmp(s, "reliable") == 0)    { *out = PCL_QOS_RELIABILITY_RELIABLE; return 1; }
+  return 0;
+}
+
+static pcl_status_t routing_push(pcl_transport_routing_t* r,
+                                 pcl_plugin_handle_t*     handle,
+                                 const pcl_transport_t*   vtable,
+                                 const char*              peer_id) {
+  if (r->count == r->capacity) {
+    size_t new_cap = r->capacity ? r->capacity * 2u : 4u;
+    pcl_routing_transport_t* grown = (pcl_routing_transport_t*)realloc(
+        r->transports, new_cap * sizeof(*grown));
+    if (!grown) return PCL_ERR_NOMEM;
+    r->transports = grown;
+    r->capacity   = new_cap;
+  }
+  r->transports[r->count].handle = handle;
+  r->transports[r->count].vtable = vtable;
+  snprintf(r->transports[r->count].peer_id,
+           sizeof(r->transports[r->count].peer_id), "%s", peer_id);
+  r->count++;
+  return PCL_OK;
+}
+
+/* Record an endpoint route installed on the executor so it can be rolled back if
+   a later manifest line fails. */
+static pcl_status_t routing_push_route(pcl_transport_routing_t* r,
+                                       const char*              endpoint_name,
+                                       pcl_endpoint_kind_t      endpoint_kind) {
+  if (r->route_count == r->route_capacity) {
+    size_t new_cap = r->route_capacity ? r->route_capacity * 2u : 4u;
+    pcl_routing_route_t* grown = (pcl_routing_route_t*)realloc(
+        r->routes, new_cap * sizeof(*grown));
+    if (!grown) return PCL_ERR_NOMEM;
+    r->routes        = grown;
+    r->route_capacity = new_cap;
+  }
+  snprintf(r->routes[r->route_count].endpoint_name,
+           sizeof(r->routes[r->route_count].endpoint_name), "%s", endpoint_name);
+  r->routes[r->route_count].endpoint_kind = endpoint_kind;
+  r->route_count++;
+  return PCL_OK;
+}
+
+/* Trim leading/trailing ASCII whitespace in place; returns the start pointer. */
+static char* trim(char* s) {
+  char* end;
+  while (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n') ++s;
+  end = s + strlen(s);
+  while (end > s &&
+         (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r' || end[-1] == '\n')) {
+    *--end = '\0';
+  }
+  return s;
+}
+
+/* Pop the next whitespace-delimited token from *cursor, advancing it. Returns
+   NULL when no token remains. */
+static char* next_token(char** cursor) {
+  char* s = *cursor;
+  char* tok;
+  while (*s == ' ' || *s == '\t') ++s;
+  if (*s == '\0') { *cursor = s; return NULL; }
+  tok = s;
+  while (*s != '\0' && *s != ' ' && *s != '\t') ++s;
+  if (*s != '\0') { *s = '\0'; ++s; }
+  *cursor = s;
+  return tok;
+}
+
+/* Inject the live executor pointer into a transport's JSON config, so a static
+   manifest can wire transports that bind to the executor (the convention used by
+   the socket/udp/shm/gRPC/ROS2 plugins, which read "executor":<ptr>). Preserves
+   any author-supplied keys. */
+static const char* inject_executor(const pcl_executor_t* e, const char* config,
+                                   char* buf, size_t buf_size) {
+  const char* body = NULL;  /* everything after the opening '{', incl. '}' */
+  unsigned long long ptr = (unsigned long long)(uintptr_t)e;
+
+  if (config) {
+    const char* open = strchr(config, '{');
+    if (open) {
+      const char* p = open + 1;
+      while (*p == ' ' || *p == '\t') ++p;
+      if (*p != '}') body = open + 1;  /* non-empty object: keep its contents */
+    }
+  }
+  if (body) {
+    snprintf(buf, buf_size, "{\"executor\":%llu,%s", ptr, body);
+  } else {
+    snprintf(buf, buf_size, "{\"executor\":%llu}", ptr);
+  }
+  return buf;
+}
+
+static pcl_status_t handle_transport_line(pcl_executor_t*          e,
+                                          pcl_transport_routing_t* r,
+                                          char*                    cursor,
+                                          char*                    diag,
+                                          size_t                   diag_size) {
+  char* peer   = next_token(&cursor);
+  char* plugin = next_token(&cursor);
+  char* raw_config;
+  char  config_buf[2304];
+  const char* config;
+  pcl_plugin_handle_t* handle = NULL;
+  const pcl_transport_t* vtable = NULL;
+  pcl_transport_caps_t caps = PCL_CAP_NONE;
+  pcl_qos_t qos = {PCL_QOS_RELIABILITY_UNSPECIFIED};
+  pcl_status_t rc;
+
+  if (!peer || !plugin) {
+    set_diag(diag, diag_size, "transport line needs <peer_id> <plugin_path>");
+    return PCL_ERR_INVALID;
+  }
+  /* Fail closed on a peer already registered on the executor. Otherwise the
+     register call below would overwrite a transport this manifest did not
+     create, and teardown/rollback (which unregisters every manifest-owned peer)
+     would then delete that pre-existing transport. */
+  if (pcl_executor_get_transport_for_peer(e, peer) != NULL) {
+    set_diag(diag, diag_size, "transport '%s': peer already registered", peer);
+    return PCL_ERR_INVALID;
+  }
+  raw_config = trim(cursor);          /* remainder of line = opaque plugin config */
+  config = inject_executor(e, raw_config[0] ? raw_config : NULL,
+                           config_buf, sizeof(config_buf));
+
+  rc = pcl_plugin_load_transport(plugin, config, &handle, &vtable);
+  if (rc != PCL_OK) {
+    set_diag(diag, diag_size, "transport '%s': failed to load %s (rc=%d)",
+             peer, plugin, (int)rc);
+    return rc;
+  }
+  /* Record before registering so a later failure still tears it down. */
+  rc = routing_push(r, handle, vtable, peer);
+  if (rc != PCL_OK) {
+    pcl_plugin_unload_transport(handle, vtable);
+    return rc;
+  }
+  /* Authoritative declared caps + offered QoS (coupled plugins carry
+     fail-closed vtable stubs, so we must not derive from the vtable). */
+  pcl_plugin_transport_caps(handle, config, vtable, &caps);
+  pcl_plugin_transport_qos(handle, config, &qos);
+  rc = pcl_executor_register_transport_caps(e, peer, vtable, caps);
+  if (rc != PCL_OK) {
+    set_diag(diag, diag_size, "transport '%s': register failed (rc=%d)", peer, (int)rc);
+    return rc;
+  }
+  pcl_executor_register_transport_qos(e, peer, qos);
+  return PCL_OK;
+}
+
+static pcl_status_t handle_route_line(pcl_executor_t*          e,
+                                      pcl_transport_routing_t* r,
+                                      char*                    cursor,
+                                      char*                    diag,
+                                      size_t                   diag_size) {
+  char* endpoint = next_token(&cursor);
+  char* kind_s   = next_token(&cursor);
+  char* peers_s  = next_token(&cursor);
+  char* rel_s    = next_token(&cursor);
+  pcl_endpoint_kind_t kind;
+  const char* peer_ids[PCL_ROUTING_MAX_PEERS];
+  uint32_t peer_count = 0u;
+  pcl_endpoint_route_t route;
+  pcl_status_t rc;
+  char* p;
+
+  if (!endpoint || !kind_s || !peers_s) {
+    set_diag(diag, diag_size, "route line needs <endpoint> <kind> <peers>");
+    return PCL_ERR_INVALID;
+  }
+  if (!kind_from_str(kind_s, &kind)) {
+    set_diag(diag, diag_size, "route '%s': unknown kind '%s'", endpoint, kind_s);
+    return PCL_ERR_INVALID;
+  }
+
+  /* Split the comma-separated peer list in place. */
+  p = peers_s;
+  while (p && *p) {
+    char* comma = strchr(p, ',');
+    if (comma) *comma = '\0';
+    if (peer_count >= PCL_ROUTING_MAX_PEERS) {
+      set_diag(diag, diag_size, "route '%s': too many peers", endpoint);
+      return PCL_ERR_INVALID;
+    }
+    peer_ids[peer_count++] = p;
+    p = comma ? comma + 1 : NULL;
+  }
+
+  memset(&route, 0, sizeof(route));
+  route.endpoint_name = endpoint;
+  route.endpoint_kind = kind;
+  route.route_mode    = PCL_ROUTE_REMOTE;
+  route.peer_ids      = peer_ids;
+  route.peer_count    = peer_count;
+  if (rel_s) {
+    if (!reliability_from_str(rel_s, &route.qos_floor.reliability)) {
+      set_diag(diag, diag_size, "route '%s': unknown reliability '%s'",
+               endpoint, rel_s);
+      return PCL_ERR_INVALID;
+    }
+  }
+
+  /* Fail closed on a duplicate route rather than overwriting an existing one:
+     rollback can only clear routes this load installed, so silently clobbering a
+     pre-existing route (e.g. a programmatic default) would leave the executor
+     mutated even when the load fails. */
+  if (pcl_executor_endpoint_route_exists(e, endpoint, kind)) {
+    set_diag(diag, diag_size, "route '%s': already routed", endpoint);
+    return PCL_ERR_INVALID;
+  }
+
+  rc = pcl_executor_set_endpoint_route(e, &route);
+  if (rc != PCL_OK) {
+    set_diag(diag, diag_size, "route '%s': set failed (rc=%d)", endpoint, (int)rc);
+    return rc;
+  }
+  /* Record before validating so a validation failure (or any later line's
+     failure) still rolls this route back -- the load must leave nothing
+     installed on error. */
+  rc = routing_push_route(r, endpoint, kind);
+  if (rc != PCL_OK) {
+    pcl_executor_clear_endpoint_route(e, endpoint, kind);
+    return rc;
+  }
+  /* Compose-time validation: caps + QoS floor, fail closed. */
+  return pcl_executor_validate_endpoint_route(e, &route, diag, diag_size);
+}
+
+pcl_status_t pcl_transport_routing_load(pcl_executor_t*           e,
+                                        const char*               manifest_path,
+                                        pcl_transport_routing_t** out_routing,
+                                        char*                     diag,
+                                        size_t                    diag_size) {
+  FILE* file;
+  char  line[2048];
+  pcl_transport_routing_t* r;
+  pcl_status_t rc = PCL_OK;
+
+  if (diag && diag_size) diag[0] = '\0';
+  if (!e || !manifest_path || !out_routing) return PCL_ERR_INVALID;
+  *out_routing = NULL;
+
+  file = fopen(manifest_path, "r");
+  if (!file) {
+    set_diag(diag, diag_size, "manifest not found: %s", manifest_path);
+    return PCL_ERR_NOT_FOUND;
+  }
+
+  r = (pcl_transport_routing_t*)calloc(1u, sizeof(*r));
+  if (!r) { fclose(file); return PCL_ERR_NOMEM; }
+  r->executor = e;
+
+  while (fgets(line, (int)sizeof(line), file)) {
+    char* start = trim(line);
+    char* cursor;
+    char* directive;
+
+    if (start[0] == '\0' || start[0] == '#') continue;
+
+    cursor = start;
+    directive = next_token(&cursor);
+    if (!directive) continue;
+
+    if (strcmp(directive, "transport") == 0) {
+      rc = handle_transport_line(e, r, cursor, diag, diag_size);
+    } else if (strcmp(directive, "route") == 0) {
+      rc = handle_route_line(e, r, cursor, diag, diag_size);
+    } else {
+      set_diag(diag, diag_size, "unknown manifest directive '%s'", directive);
+      rc = PCL_ERR_INVALID;
+    }
+    if (rc != PCL_OK) break;
+  }
+
+  fclose(file);
+
+  if (rc != PCL_OK) {
+    pcl_transport_routing_destroy(r);
+    return rc;
+  }
+  *out_routing = r;
+  return PCL_OK;
+}
+
+void pcl_transport_routing_destroy(pcl_transport_routing_t* routing) {
+  size_t i;
+  if (!routing) return;
+  /* Roll back endpoint routes before tearing down transports, so the executor is
+     not left routing endpoints to peers whose transports are about to be
+     unloaded. */
+  if (routing->executor) {
+    for (i = 0; i < routing->route_count; ++i) {
+      pcl_executor_clear_endpoint_route(routing->executor,
+                                        routing->routes[i].endpoint_name,
+                                        routing->routes[i].endpoint_kind);
+    }
+  }
+  free(routing->routes);
+  for (i = 0; i < routing->count; ++i) {
+    /* Unregister from the executor BEFORE unloading the library, or the executor
+       is left holding vtable function pointers into a dlclose'd .so. */
+    if (routing->executor) {
+      pcl_executor_register_transport_caps(
+          routing->executor, routing->transports[i].peer_id, NULL, PCL_CAP_NONE);
+    }
+    pcl_plugin_unload_transport(routing->transports[i].handle,
+                                routing->transports[i].vtable);
+  }
+  free(routing->transports);
+  free(routing);
+}
+
+size_t pcl_transport_routing_transport_count(const pcl_transport_routing_t* routing) {
+  return routing ? routing->count : 0u;
+}

@@ -15,6 +15,7 @@ set(_pyramid_cpp_test_codec_plugin_targets)
 foreach(_pyramid_codec_target IN ITEMS
         pyramid_codec_json_tactical_objects
         pyramid_codec_flatbuffers_tactical_objects
+        pyramid_codec_protobuf_tactical_objects
         pyramid_codec_json_autonomy_backend
         pyramid_codec_flatbuffers_autonomy_backend
         pyramid_codec_json_sensor_data_interpretation
@@ -70,7 +71,7 @@ pyramid_append_plugin_path_constant(_pyramid_codec_paths_header
     pyramid_grpc_coupled_plugin)
 
 file(GENERATE
-    OUTPUT ${PYRAMID_TEST_GENERATED_DIR}/pyramid_codec_plugin_test_paths.hpp
+    OUTPUT ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>/pyramid_codec_plugin_test_paths.hpp
     CONTENT "${_pyramid_codec_paths_header}")
 
 add_library(pyramid_cpp_test_codec_plugins OBJECT
@@ -83,11 +84,11 @@ target_link_libraries(pyramid_cpp_test_codec_plugins PUBLIC
     pcl_core
     GTest::gtest)
 target_include_directories(pyramid_cpp_test_codec_plugins PUBLIC
-    ${PYRAMID_TEST_GENERATED_DIR})
+    ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>)
 
 if(TARGET pyramid_bridge_evidence_client)
     target_include_directories(pyramid_bridge_evidence_client PRIVATE
-        ${PYRAMID_TEST_GENERATED_DIR})
+        ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>)
     if(_pyramid_cpp_test_codec_plugin_targets)
         add_dependencies(pyramid_bridge_evidence_client
             ${_pyramid_cpp_test_codec_plugin_targets})
@@ -99,6 +100,13 @@ add_test(NAME pyramid_binding_generation_dependencies
             ${CMAKE_CURRENT_SOURCE_DIR}/test_binding_generation_dependencies.py
             --generator ${PYRAMID_ROOT_DIR}/pim/generate_bindings.py
             --proto-dir ${PYRAMID_ROOT_DIR}/proto)
+
+# Validates the native ROS2 IDL generator output against rosidl interface rules
+# (toolchain-free; the full rosidl build runs under the pyramid_msgs ament pkg).
+add_test(NAME pyramid_ros2_idl_generation
+    COMMAND ${PYRAMID_PYTHON}
+            ${CMAKE_CURRENT_SOURCE_DIR}/test_ros2_idl_generation.py
+            ${PYRAMID_ROOT_DIR}/proto)
 
 add_executable(test_tobj_types ${TOBJ_TEST_DIR}/Test_Types.cpp)
 target_link_libraries(test_tobj_types PRIVATE tactical_objects GTest::gtest_main)
@@ -350,7 +358,7 @@ if(TARGET pyramid_codec_json_tactical_objects)
     )
     target_include_directories(test_codec_plugin_swap PRIVATE
         ${PROTO_BINDINGS_DIR}
-        ${PYRAMID_TEST_GENERATED_DIR}
+        ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>
         ${PYRAMID_ROOT_DIR}/tactical_objects/include
         ${PYRAMID_ROOT_DIR}/core/include
     )
@@ -380,7 +388,7 @@ if(PYRAMID_ENABLE_FLATBUFFERS
     )
     target_include_directories(test_transport_codec_plugin_composition PRIVATE
         ${PROTO_BINDINGS_DIR}
-        ${PYRAMID_TEST_GENERATED_DIR}
+        ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>
         ${PYRAMID_ROOT_DIR}/tactical_objects/include
         ${PYRAMID_ROOT_DIR}/core/include
     )
@@ -412,7 +420,7 @@ if(TARGET pyramid_codec_json_tactical_objects
     )
     target_include_directories(test_codec_registry_bridge PRIVATE
         ${PROTO_BINDINGS_DIR}
-        ${PYRAMID_TEST_GENERATED_DIR}
+        ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>
         ${PYRAMID_ROOT_DIR}/tactical_objects/include
         ${PYRAMID_ROOT_DIR}/core/include
     )
@@ -446,7 +454,7 @@ if(PYRAMID_ENABLE_FLATBUFFERS)
     target_include_directories(tobj_shared_memory_example PRIVATE
         ${PCL_ROOT_DIR}/include
         ${PROTO_BINDINGS_DIR}
-        ${PYRAMID_TEST_GENERATED_DIR}
+        ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>
     )
     if(NOT WIN32)
         target_link_libraries(tobj_shared_memory_example PRIVATE pthread)
@@ -475,7 +483,7 @@ target_link_libraries(tobj_socket_server PRIVATE
 target_include_directories(tobj_socket_server PRIVATE
     ${PCL_ROOT_DIR}/src
     ${PROTO_BINDINGS_DIR}
-    ${PYRAMID_TEST_GENERATED_DIR}
+    ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>
 )
 if(NOT WIN32)
     target_link_libraries(tobj_socket_server PRIVATE pthread)
@@ -583,16 +591,11 @@ if(WIN32)
                     -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
         list(APPEND _tobj_cpp_app_tests tobj_cpp_app_client_flatbuffers_e2e)
     endif()
-    if(PYRAMID_ENABLE_PROTOBUF)
-        add_test(NAME tobj_cpp_app_client_protobuf_e2e
-            COMMAND ${CMAKE_COMMAND}
-                    -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.bat
-                    -DAPP_BIN=$<TARGET_FILE:tactical_objects_app>
-                    -DCLIENT_BIN=$<TARGET_FILE:tactical_objects_test_client>
-                    -DSCRIPT_ARGS=--content-type|application/protobuf
-                    -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
-        list(APPEND _tobj_cpp_app_tests tobj_cpp_app_client_protobuf_e2e)
-    endif()
+    # No protobuf app-client test on Win32: application/protobuf is a plugin-only
+    # codec (no built-in fallback in the facade), and test_cpp_app_client.bat does
+    # not support --codec-plugin, so the app could never register the codec. The
+    # Linux variant below (tobj_cpp_app_client_protobuf_plugin_e2e) loads the
+    # generated codec plugin and provides the real coverage.
 else()
     add_test(NAME tobj_cpp_app_client_e2e
         COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
@@ -606,13 +609,21 @@ else()
                     --content-type application/flatbuffers)
         list(APPEND _tobj_cpp_app_tests tobj_cpp_app_client_flatbuffers_e2e)
     endif()
-    if(PYRAMID_ENABLE_PROTOBUF)
-        add_test(NAME tobj_cpp_app_client_protobuf_e2e
+    # application/protobuf is a plugin-only codec (no built-in fallback), so this
+    # test must load the generated codec plugin -- mirroring the json/flatbuffers
+    # *_plugin_e2e variants below.
+    if(PYRAMID_ENABLE_PROTOBUF AND TARGET pyramid_codec_protobuf_tactical_objects)
+        add_dependencies(tactical_objects_app
+            pyramid_codec_protobuf_tactical_objects)
+        add_dependencies(tactical_objects_test_client
+            pyramid_codec_protobuf_tactical_objects)
+        add_test(NAME tobj_cpp_app_client_protobuf_plugin_e2e
             COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_cpp_app_client.sh
                     --app-bin $<TARGET_FILE:tactical_objects_app>
                     --client-bin $<TARGET_FILE:tactical_objects_test_client>
-                    --content-type application/protobuf)
-        list(APPEND _tobj_cpp_app_tests tobj_cpp_app_client_protobuf_e2e)
+                    --content-type application/protobuf
+                    --codec-plugin $<TARGET_FILE:pyramid_codec_protobuf_tactical_objects>)
+        list(APPEND _tobj_cpp_app_tests tobj_cpp_app_client_protobuf_plugin_e2e)
     endif()
     if(TARGET pyramid_codec_json_tactical_objects)
         add_dependencies(tactical_objects_app
@@ -668,7 +679,7 @@ if(NOT WIN32 AND TARGET pyramid_codec_json_tactical_objects)
         RESOURCE_LOCK pyramid_process_e2e)
 endif()
 
-if(WIN32 AND TARGET pyramid_grpc_transport)
+if(TARGET pyramid_grpc_transport)
     add_executable(tobj_grpc_server
         tobj_grpc_server.cpp
     )
@@ -693,7 +704,49 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         message(FATAL_ERROR "Python is required to generate Ada bindings for tests")
     endif()
     set(BINDINGS_GEN_SCRIPT ${PYRAMID_ROOT_DIR}/pim/generate_bindings.py)
-    set(ADA_GEN_OUT ${PYRAMID_ROOT_DIR}/bindings/ada/generated)
+    set(ADA_GEN_OUT ${PYRAMID_ADA_BINDINGS_DIR})
+    set(_ada_bindings_backends json)
+    if(PYRAMID_ENABLE_FLATBUFFERS)
+        list(APPEND _ada_bindings_backends flatbuffers)
+    endif()
+    if(PYRAMID_ENABLE_PROTOBUF)
+        list(APPEND _ada_bindings_backends protobuf)
+    endif()
+    if(PYRAMID_ENABLE_ROS2)
+        list(APPEND _ada_bindings_backends ros2)
+    endif()
+    list(JOIN _ada_bindings_backends "," _ada_bindings_backends_arg)
+    set(ADA_BINDINGS_STAMP "${ADA_GEN_OUT}/.pyramid_ada_bindings.stamp")
+    if(PYRAMID_GENERATE_ADA_BINDINGS)
+        add_custom_command(
+            OUTPUT "${ADA_BINDINGS_STAMP}"
+            COMMAND "${CMAKE_COMMAND}" -E rm -rf "${ADA_GEN_OUT}"
+            COMMAND "${ADA_PYTHON}"
+                    "${BINDINGS_GEN_SCRIPT}"
+                    "${PYRAMID_PROTO_ROOT}"
+                    "${ADA_GEN_OUT}"
+                    --languages ada
+                    --backends "${_ada_bindings_backends_arg}"
+            COMMAND "${CMAKE_COMMAND}" -E make_directory
+                    "${ADA_GEN_OUT}/flatbuffers/ada"
+                    "${ADA_GEN_OUT}/protobuf/ada"
+            COMMAND "${CMAKE_COMMAND}" -E touch "${ADA_BINDINGS_STAMP}"
+            DEPENDS
+                ${PYRAMID_BINDING_GENERATOR_INPUTS}
+                ${PYRAMID_PROTO_INPUTS}
+            COMMENT "Generating PYRAMID Ada bindings (${_ada_bindings_backends_arg})"
+            VERBATIM)
+        add_custom_target(pyramid_ada_bindings_codegen
+            DEPENDS "${ADA_BINDINGS_STAMP}")
+    else()
+        add_custom_target(pyramid_ada_bindings_codegen)
+    endif()
+    set(ADA_GPRBUILD_BINDINGS_ARGS
+        -XPYRAMID_ADA_BINDINGS_DIR=${ADA_GEN_OUT}
+        -XPYRAMID_ADA_FLATBUFFERS_DIR=${ADA_GEN_OUT}/flatbuffers/ada
+        -XPYRAMID_PROTOBUF_ADA_DIR=${ADA_GEN_OUT}/protobuf/ada)
+    set(_ada_gprbuild_bindings_args
+        ";-XPYRAMID_ADA_BINDINGS_DIR=${ADA_GEN_OUT};-XPYRAMID_ADA_FLATBUFFERS_DIR=${ADA_GEN_OUT}/flatbuffers/ada;-XPYRAMID_PROTOBUF_ADA_DIR=${ADA_GEN_OUT}/protobuf/ada")
     set(ADA_GNATCOLL_CORE_DIR ${PYRAMID_ROOT_DIR}/core/external/gnatcoll-core/core)
     set(ADA_GNATCOLL_MINIMAL_DIR ${PYRAMID_ROOT_DIR}/core/external/gnatcoll-core/minimal)
     set(ADA_GPR_PROJECT_DIRS
@@ -746,10 +799,10 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
             "Directory containing libpcl_core/libpcl_transport_socket for Ada gprbuild")
     endif()
 
-    # Aggregate target: a normal cmake build prepares the Ada archives and
-    # executables.  The targets below are backed by concrete file outputs, so
-    # the expensive Ada steps run only when those outputs are missing.
-    add_custom_target(pyramid_ada_all ALL
+    # Aggregate target: explicitly excluded from ALL so routine builds stay fast.
+    # Ada binaries are expensive and GNAT/gprbuild may not be installed.
+    # Build with: cmake --build --preset release --target pyramid_ada_all
+    add_custom_target(pyramid_ada_all
         COMMENT "Build all Ada test binaries and bridges")
 
     set(ADA_PCL_SHMEM_LIB_NAME "pcl_transport_shared_memory" CACHE STRING
@@ -804,7 +857,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND}
                 -DOUTPUT=${ADA_PCL_SENSOR_DEMO_EXE}
                 -DWORKING_DIRECTORY=${ADA_EXAMPLE_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args};-p;-P;${ADA_EXAMPLE_DIR}/pcl_sensor_demo.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args}${_ada_gprbuild_bindings_args};-p;-P;${ADA_EXAMPLE_DIR}/pcl_sensor_demo.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_EXAMPLE_DIR}
         DEPENDS ${ADA_PCL_SENSOR_DEMO_SOURCES}
@@ -822,7 +875,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND}
                 -DOUTPUT=${ADA_PCL_COMPONENT_TESTS_EXE}
                 -DWORKING_DIRECTORY=${ADA_TEST_SRC_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args};-p;-P;${ADA_TEST_SRC_DIR}/pcl_component_tests.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args}${_ada_gprbuild_bindings_args};-p;-P;${ADA_TEST_SRC_DIR}/pcl_component_tests.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
         DEPENDS ${ADA_PCL_COMPONENT_TESTS_SOURCES}
@@ -840,7 +893,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND}
                 -DOUTPUT=${ADA_PCL_PLUGIN_LOADER_TEST_EXE}
                 -DWORKING_DIRECTORY=${ADA_TEST_SRC_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args};-p;-P;${ADA_TEST_SRC_DIR}/test_pcl_plugin_loader.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args}${_ada_gprbuild_bindings_args};-p;-P;${ADA_TEST_SRC_DIR}/test_pcl_plugin_loader.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
         DEPENDS ${ADA_PCL_PLUGIN_LOADER_TEST_SOURCES}
@@ -860,7 +913,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND}
                 -DOUTPUT=${ADA_PYRAMID_UUID_TEST_EXE}
                 -DWORKING_DIRECTORY=${ADA_TEST_SRC_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args};-p;-P;${ADA_TEST_SRC_DIR}/test_pyramid_uuids.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args}${_ada_gprbuild_bindings_args};-p;-P;${ADA_TEST_SRC_DIR}/test_pyramid_uuids.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
         DEPENDS ${ADA_PYRAMID_UUID_TEST_SOURCES}
@@ -868,8 +921,11 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         VERBATIM)
     add_custom_target(ada_pyramid_uuid_test_build
         DEPENDS ${ADA_PYRAMID_UUID_TEST_EXE})
+    add_dependencies(ada_pyramid_uuid_test_build
+        pyramid_ada_bindings_codegen)
 
     add_dependencies(pyramid_ada_all
+        pyramid_ada_bindings_codegen
         ada_pcl_gnat_archives
         ada_pcl_sensor_demo_build
         ada_pcl_component_tests_build
@@ -909,10 +965,10 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         endif()
         set(_ada_fb_mkdir COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR})
         file(GLOB ADA_PYRAMID_GEN_CODEC_INPUTS CONFIGURE_DEPENDS
-            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_data_model_*_codec.cpp"
-            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/pyramid_data_model_*_codec.hpp"
-            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/flatbuffers/cpp/*_flatbuffers_codec.cpp"
-            "${PYRAMID_ROOT_DIR}/bindings/cpp/generated/flatbuffers/cpp/*_flatbuffers_codec.hpp")
+            "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_codec.cpp"
+            "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_codec.hpp"
+            "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/*_flatbuffers_codec.cpp"
+            "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/*_flatbuffers_codec.hpp")
 
     set(ADA_PYRAMID_GEN_ARCHIVE
         ${ADA_PYRAMID_GEN_LIB_DIR}/lib${ADA_PYRAMID_GEN_LIB_NAME}.a)
@@ -942,31 +998,9 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     add_custom_target(ada_pyramid_generated_flatbuffers_archive
         DEPENDS ${ADA_PYRAMID_GEN_ARCHIVE})
 
-    set(_ada_bindings_backends json)
-    if(PYRAMID_ENABLE_FLATBUFFERS)
-        list(APPEND _ada_bindings_backends flatbuffers)
-    endif()
-    if(PYRAMID_ENABLE_PROTOBUF)
-        list(APPEND _ada_bindings_backends protobuf)
-    endif()
-    if(PYRAMID_ENABLE_GRPC)
-        list(APPEND _ada_bindings_backends grpc)
-    endif()
-    if(PYRAMID_ENABLE_ROS2)
-        list(APPEND _ada_bindings_backends ros2)
-    endif()
-    list(JOIN _ada_bindings_backends "," _ada_bindings_backends_arg)
-
     set(ADA_GENERATED_BINDINGS_EXE
         ${ADA_TEST_SRC_DIR}/bin/test_generated_bindings${CMAKE_EXECUTABLE_SUFFIX})
-    set(_ada_generated_bindings_commands
-        COMMAND ${ADA_PYTHON}
-                ${BINDINGS_GEN_SCRIPT}
-                ${PYRAMID_PROTO_ROOT}
-                ${ADA_GEN_OUT}
-                --languages ada
-                --backends ${_ada_bindings_backends_arg}
-    )
+    set(_ada_generated_bindings_commands)
     if(PYRAMID_ENABLE_PROTOBUF)
         list(APPEND _ada_generated_bindings_commands
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -989,6 +1023,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                 ${GPRBUILD}
                 ${ADA_GPRBUILD_PROJECT_ARGS}
                 ${ADA_GPRBUILD_PLATFORM_ARGS}
+                ${ADA_GPRBUILD_BINDINGS_ARGS}
                 -p
                 -P ${ADA_TEST_SRC_DIR}/test_generated_bindings.gpr
                 -XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
@@ -996,8 +1031,6 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                 -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
                 -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
                 -XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME}
-                -XPYRAMID_PROTOBUF_ADA_DIR=${ADA_GEN_OUT}/protobuf/ada
-                -XPYRAMID_GRPC_ADA_DIR=${ADA_GEN_OUT}/grpc/ada
                 ${_ada_fb_args}
     )
     add_custom_command(
@@ -1006,6 +1039,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         DEPENDS
             ${PYRAMID_BINDING_GENERATOR_INPUTS}
             ${PYRAMID_PROTO_INPUTS}
+            pyramid_ada_bindings_codegen
             ${ADA_TEST_SRC_DIR}/test_generated_bindings.adb
             ${ADA_TEST_SRC_DIR}/test_generated_bindings.gpr
         WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
@@ -1015,6 +1049,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     add_custom_target(ada_test_generated_bindings_build
         DEPENDS ${ADA_GENERATED_BINDINGS_EXE})
     add_dependencies(ada_test_generated_bindings_build
+        pyramid_ada_bindings_codegen
         ada_pcl_gnat_archives
         ada_pyramid_generated_flatbuffers_archive
         pyramid_generated_codecs)
@@ -1039,6 +1074,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     ${GPRBUILD}
                     ${ADA_GPRBUILD_PROJECT_ARGS}
                     ${ADA_GPRBUILD_PLATFORM_ARGS}
+                    ${ADA_GPRBUILD_BINDINGS_ARGS}
                     -p
                     -P ${ADA_TEST_SRC_DIR}/test_ada_cpp_codec_roundtrip.gpr
                     -XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
@@ -1257,7 +1293,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND}
                 -DOUTPUT=${ADA_PYRAMID_BRIDGE_EXE}
                 -DWORKING_DIRECTORY=${ADA_BRIDGE_SRC_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args};-p;-P;${ADA_BRIDGE_SRC_DIR}/pyramid_bridge.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};-XPCL_UDP_LIB_NAME=${ADA_PCL_UDP_LIB_NAME};-XPCL_SHMEM_LIB_NAME=${ADA_PCL_SHMEM_LIB_NAME};${_ada_fb_args}"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args}${_ada_gprbuild_bindings_args};-p;-P;${ADA_BRIDGE_SRC_DIR}/pyramid_bridge.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};-XPCL_UDP_LIB_NAME=${ADA_PCL_UDP_LIB_NAME};-XPCL_SHMEM_LIB_NAME=${ADA_PCL_SHMEM_LIB_NAME};${_ada_fb_args}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_BRIDGE_SRC_DIR}
         DEPENDS
@@ -1311,7 +1347,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND}
                 -DOUTPUT=${ADA_TOBJ_CLIENT_EXE}
                 -DWORKING_DIRECTORY=${ADA_EXAMPLE_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args};-p;-P;${ADA_EXAMPLE_DIR}/ada_tobj_client.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};${_ada_fb_args}"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args}${_ada_gprbuild_bindings_args};-p;-P;${ADA_EXAMPLE_DIR}/ada_tobj_client.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};${_ada_fb_args}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_EXAMPLE_DIR}
         DEPENDS
@@ -1338,7 +1374,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND}
                 -DOUTPUT=${ADA_ACTIVE_FIND_E2E_EXE}
                 -DWORKING_DIRECTORY=${ADA_TEST_SRC_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args};-p;-P;${ADA_TEST_SRC_DIR}/ada_active_find_e2e.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};${_ada_fb_args}"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args}${_ada_gprbuild_bindings_args};-p;-P;${ADA_TEST_SRC_DIR}/ada_active_find_e2e.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};${_ada_fb_args}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
         DEPENDS
@@ -1366,7 +1402,8 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
 
     endif() # PYRAMID_ENABLE_FLATBUFFERS
 
-    if(WIN32 AND TARGET pyramid_grpc_transport)
+    if(TARGET pyramid_grpc_transport AND TARGET pyramid_grpc_coupled_plugin AND
+       TARGET pyramid_codec_protobuf_tactical_objects)
         set(ADA_GRPC_CPP_INTEROP_EXE
             ${ADA_TEST_SRC_DIR}/bin/ada_grpc_cpp_interop_e2e${CMAKE_EXECUTABLE_SUFFIX})
         add_custom_command(
@@ -1374,7 +1411,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
             COMMAND ${CMAKE_COMMAND}
                     -DOUTPUT=${ADA_GRPC_CPP_INTEROP_EXE}
                     -DWORKING_DIRECTORY=${ADA_TEST_SRC_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args};-p;-P;${ADA_TEST_SRC_DIR}/ada_grpc_cpp_interop_e2e.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};-XPYRAMID_GEN_LIB_DIR=${ADA_PYRAMID_GEN_LIB_DIR};-XPYRAMID_GEN_LIB_NAME=${ADA_PYRAMID_GEN_LIB_NAME};-XPYRAMID_CODECS_LIB_DIR=${CMAKE_BINARY_DIR}/subprojects/PYRAMID;-XPYRAMID_CODECS_LIB_NAME=pyramid_generated_marshal;-XPYRAMID_PROTOBUF_ADA_DIR=${ADA_GEN_OUT}/protobuf/ada;-XPYRAMID_GRPC_ADA_DIR=${ADA_GEN_OUT}/grpc/ada"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args}${_ada_gprbuild_bindings_args};-p;-P;${ADA_TEST_SRC_DIR}/ada_grpc_cpp_interop_e2e.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};-XPYRAMID_GEN_LIB_DIR=${ADA_PYRAMID_GEN_LIB_DIR};-XPYRAMID_GEN_LIB_NAME=${ADA_PYRAMID_GEN_LIB_NAME};-XPYRAMID_CODECS_LIB_DIR=${CMAKE_BINARY_DIR}/subprojects/PYRAMID;-XPYRAMID_CODECS_LIB_NAME=pyramid_generated_marshal;-XPYRAMID_PROTOBUF_ADA_DIR=${ADA_GEN_OUT}/protobuf/ada"
                     -P ${ADA_RUN_IF_MISSING}
             DEPENDS
                 ${PYRAMID_BINDING_GENERATOR_INPUTS}
@@ -1388,35 +1425,46 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         add_custom_target(ada_grpc_cpp_interop_build
             DEPENDS ${ADA_GRPC_CPP_INTEROP_EXE})
         add_dependencies(ada_grpc_cpp_interop_build
-            pyramid_grpc_c_shim
             ada_test_generated_bindings_build
             ada_pcl_gnat_archives
             ada_pyramid_generated_flatbuffers_archive)
         add_dependencies(pyramid_ada_all ada_grpc_cpp_interop_build)
 
-        add_test(NAME tobj_ada_grpc_cpp_interop_e2e
-            COMMAND ${CMAKE_COMMAND}
-                    -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_ada_grpc_cpp_interop_e2e.bat
-                    -DSERVER_BIN=$<TARGET_FILE:tobj_grpc_server>
-                    -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_grpc_cpp_interop_e2e
-                    -DSCRIPT_ARGS=--dll-bin|$<TARGET_FILE:pyramid_grpc_c_shim>|--address|auto
-                    -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+        if(WIN32)
+            add_test(NAME tobj_ada_grpc_cpp_interop_e2e
+                COMMAND ${CMAKE_COMMAND}
+                        -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_ada_grpc_cpp_interop_e2e.bat
+                        -DSERVER_BIN=$<TARGET_FILE:tobj_grpc_server>
+                        -DCLIENT_BIN=${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_grpc_cpp_interop_e2e
+                        -DSCRIPT_ARGS=--transport-plugin|$<TARGET_FILE:pyramid_grpc_coupled_plugin>|--codec-plugin|$<TARGET_FILE:pyramid_codec_protobuf_tactical_objects>|--address|auto
+                        -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+        else()
+            add_test(NAME tobj_ada_grpc_cpp_interop_e2e
+                COMMAND bash ${PYRAMID_ROOT_DIR}/scripts/test_ada_grpc_cpp_interop_e2e.sh
+                        --server-bin $<TARGET_FILE:tobj_grpc_server>
+                        --client-bin ${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_grpc_cpp_interop_e2e
+                        --transport-plugin $<TARGET_FILE:pyramid_grpc_coupled_plugin>
+                        --codec-plugin $<TARGET_FILE:pyramid_codec_protobuf_tactical_objects>
+                        --address auto)
+        endif()
         set_tests_properties(tobj_ada_grpc_cpp_interop_e2e PROPERTIES
             LABELS "cross_language;integration;grpc"
             TIMEOUT 30
             RESOURCE_LOCK pyramid_process_e2e)
         list(APPEND _pyramid_ada_tests tobj_ada_grpc_cpp_interop_e2e)
 
-        add_test(NAME tobj_master_conformance_e2e
-                    COMMAND ${CMAKE_COMMAND}
-                    -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_tobj_master_conformance.bat
-                    -DSCRIPT_ARGS=--socket-server-bin|$<TARGET_FILE:tobj_socket_server>|--bridge-bin|$<TARGET_FILE:standalone_bridge>|--socket-client-bin|${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e|--grpc-server-bin|$<TARGET_FILE:tobj_grpc_server>|--grpc-client-bin|${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_grpc_cpp_interop_e2e|--grpc-dll-bin|$<TARGET_FILE:pyramid_grpc_c_shim>
-                    -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
-        set_tests_properties(tobj_master_conformance_e2e PROPERTIES
-            LABELS "cross_language;integration;conformance;codec;grpc"
-            TIMEOUT 120
-            RESOURCE_LOCK pyramid_process_e2e)
-        list(APPEND _pyramid_ada_tests tobj_master_conformance_e2e)
+        if(WIN32)
+            add_test(NAME tobj_master_conformance_e2e
+                COMMAND ${CMAKE_COMMAND}
+                        -DSCRIPT=${PYRAMID_ROOT_DIR}/scripts/test_tobj_master_conformance.bat
+                        -DSCRIPT_ARGS=--socket-server-bin|$<TARGET_FILE:tobj_socket_server>|--bridge-bin|$<TARGET_FILE:standalone_bridge>|--socket-client-bin|${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_active_find_e2e|--grpc-server-bin|$<TARGET_FILE:tobj_grpc_server>|--grpc-client-bin|${PYRAMID_ROOT_DIR}/tests/ada/bin/ada_grpc_cpp_interop_e2e|--grpc-transport-plugin|$<TARGET_FILE:pyramid_grpc_coupled_plugin>|--grpc-codec-plugin|$<TARGET_FILE:pyramid_codec_protobuf_tactical_objects>
+                        -P ${UNMANNED_WORKSPACE_ROOT}/cmake/run_bat_test.cmake)
+            set_tests_properties(tobj_master_conformance_e2e PROPERTIES
+                LABELS "cross_language;integration;conformance;codec;grpc"
+                TIMEOUT 120
+                RESOURCE_LOCK pyramid_process_e2e)
+            list(APPEND _pyramid_ada_tests tobj_master_conformance_e2e)
+        endif()
     endif()
 
     add_test(NAME pyramid_ada_build_artifacts
@@ -1462,9 +1510,29 @@ if(TARGET pyramid_grpc_coupled_plugin)
         GTest::gtest_main
     )
     target_include_directories(test_grpc_coupled_plugin_load PRIVATE
-        ${PYRAMID_TEST_GENERATED_DIR}
+        ${PYRAMID_TEST_GENERATED_DIR}/$<CONFIG>
     )
     gtest_discover_tests(test_grpc_coupled_plugin_load DISCOVERY_MODE PRE_TEST)
+endif()
+
+if(TARGET pyramid_grpc_coupled_plugin AND TARGET pyramid_grpc_transport)
+    add_executable(test_grpc_coupled_plugin_e2e
+        test_grpc_coupled_plugin_e2e.cpp
+    )
+    add_dependencies(test_grpc_coupled_plugin_e2e pyramid_grpc_coupled_plugin)
+    target_link_libraries(test_grpc_coupled_plugin_e2e PRIVATE
+        pcl_core
+        pyramid_grpc_transport
+        pyramid_protobuf_support
+        GTest::gtest_main
+    )
+    target_include_directories(test_grpc_coupled_plugin_e2e PRIVATE
+        ${PYRAMID_TEST_GENERATED_DIR}
+        ${PROTO_BINDINGS_DIR}
+        ${PYRAMID_CPP_BINDINGS_DIR}/grpc/cpp
+        ${PYRAMID_PROTOBUF_GEN_DIR}
+    )
+    gtest_discover_tests(test_grpc_coupled_plugin_e2e DISCOVERY_MODE PRE_TEST)
 endif()
 
 if(TARGET pyramid_ros2_transport)

@@ -17,8 +17,11 @@
 #   plugins (.so):
 #     libpyramid_codec_json_<component>.so
 #     libpyramid_codec_flatbuffers_<component>.so
+#     [libpyramid_codec_protobuf_<component>.so] (with --grpc; components with a
+#                                                 protobuf service codec)
 #     libpcl_transport_socket_plugin.so
 #     libpcl_transport_shared_memory_plugin.so
+#     libpcl_transport_udp_plugin.so
 #     [libpyramid_grpc_coupled_plugin.so]   (with --grpc)
 #
 #   optionally:  stage per-component deployment dirs (stage_plugin_deploy.sh)

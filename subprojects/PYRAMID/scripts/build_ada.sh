@@ -12,9 +12,9 @@
 # Pipeline:
 #
 #   proto/**.proto
-#     |                          (--regen: generate_bindings.sh --ada -> committed Ada bindings)
+#     |                          (--regen: generate_bindings.sh --ada -> build-local Ada bindings)
 #     v
-#   bindings/ada/generated/**.{ads,adb}   (committed; compiled from source by GNAT)
+#   <build>/generated/pyramid_ada_bindings/**.{ads,adb} (compiled from source by GNAT)
 #     |                          (CMake + gprbuild; GNAT FlatBuffers archive built automatically)
 #     v
 #   Ada binaries: ada_tobj_client, ada_active_find_e2e, pyramid_bridge (Ada), ...
@@ -22,9 +22,8 @@
 #
 # Differences from the C++ chain (build_plugins.sh):
 #   - Toolchain: GNAT `gprbuild` via .gpr projects (needs gnat/gprbuild on PATH).
-#   - Ada bindings are COMMITTED and compiled from source; C++ regenerates into
-#     the build tree. Pass --regen to refresh the committed Ada bindings from the
-#     current .proto (non-destructive to the grpc/ros2/protobuf Ada subdirs).
+#   - Ada and C++ bindings regenerate into the build tree. Pass --regen to
+#     refresh the build-local Ada bindings before CMake config/build.
 #   - The Ada targets are excluded from the default build; this script builds the
 #     `pyramid_ada_all` aggregate (which also auto-builds the GNAT FlatBuffers
 #     support archive and the GNAT-compatible PCL archives).
@@ -84,9 +83,11 @@ if [[ ${CLEAN} -eq 1 ]]; then
 fi
 
 if [[ ${DO_REGEN} -eq 1 ]]; then
-  echo "[build_ada] regenerating committed Ada bindings from proto ..."
-  echo "[build_ada]   (refreshes bindings/ada/generated; review/commit the diff)"
-  "${SCRIPT_DIR}/generate_bindings.sh" --ada --backends "${BACKENDS}"
+  echo "[build_ada] regenerating build-local Ada bindings from proto ..."
+  "${SCRIPT_DIR}/generate_bindings.sh" \
+    --ada \
+    --backends "${BACKENDS}" \
+    --ada-out "${BUILD_DIR}/generated/pyramid_ada_bindings"
 fi
 
 # Lean configuration matching build_plugins.sh (PYRAMID only, FlatBuffers+JSON,

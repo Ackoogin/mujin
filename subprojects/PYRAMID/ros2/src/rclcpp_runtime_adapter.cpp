@@ -1,6 +1,10 @@
 #include "pyramid_ros2_transport/rclcpp_runtime_adapter.hpp"
 
+#include <chrono>
+#include <condition_variable>
+#include <future>
 #include <utility>
+#include <vector>
 
 namespace pyramid::transport::ros2 {
 
@@ -174,6 +178,145 @@ void RclcppRuntimeAdapter::publish(const TopicBinding& binding,
     }
   }
   publisher->publish(toRosMessage(envelope));
+}
+
+Envelope RclcppRuntimeAdapter::invokeUnary(const UnaryServiceBinding& binding,
+                                           const Envelope& request) {
+  rclcpp::Client<UnaryService>::SharedPtr client;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = unary_clients_.find(binding.ros2_service);
+    if (it == unary_clients_.end()) {
+      client = node_->create_client<UnaryService>(binding.ros2_service);
+      unary_clients_.emplace(binding.ros2_service, client);
+    } else {
+      client = it->second;
+    }
+  }
+
+  Envelope response;
+  // We are called on the PCL executor thread; the transport spin thread services
+  // the response. Bound the waits so a missing/slow server fails closed instead
+  // of hanging the caller.
+  using namespace std::chrono_literals;
+  if (!client->wait_for_service(5s)) {
+    response.status = PCL_ERR_NOT_FOUND;
+    return response;
+  }
+
+  auto req = std::make_shared<UnaryService::Request>();
+  req->content_type = request.content_type;
+  req->correlation_id = request.correlation_id;
+  req->payload.assign(request.payload.begin(), request.payload.end());
+
+  auto future = client->async_send_request(req);
+  if (future.wait_for(5s) != std::future_status::ready) {
+    response.status = PCL_ERR_TIMEOUT;
+    return response;
+  }
+  const auto result = future.get();
+  response.content_type = result->content_type;
+  response.correlation_id = result->correlation_id;
+  response.payload.assign(result->payload.begin(), result->payload.end());
+  response.status = static_cast<pcl_status_t>(result->status);
+  return response;
+}
+
+void RclcppRuntimeAdapter::invokeStream(const StreamServiceBinding& binding,
+                                        const Envelope& request,
+                                        const FrameSink& on_frame) {
+  using namespace std::chrono_literals;
+  const std::string correlation_id = ensureCorrelationId(request.correlation_id);
+
+  // Shared collection state filled by the frame subscription (spin thread).
+  struct StreamState {
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::vector<Envelope> frames;
+    bool done = false;
+  };
+  auto state = std::make_shared<StreamState>();
+
+  // The server emits all frames synchronously while handling OpenStream, with
+  // reliable QoS -- so the subscription must be matched to the publisher BEFORE
+  // we send the request, or the (history-less) frames are missed.
+  auto subscription = node_->create_subscription<EnvelopeMsg>(
+      binding.ros2_frame_topic, frameQos(),
+      [state, correlation_id](const EnvelopeMsg::SharedPtr msg) {
+        if (msg->correlation_id != correlation_id) {
+          return;
+        }
+        std::lock_guard<std::mutex> lock(state->mutex);
+        state->frames.push_back(fromRosMessage(*msg));
+        if (state->frames.back().end_of_stream) {
+          state->done = true;
+        }
+        state->cv.notify_all();
+      });
+
+  auto deliver_error = [&on_frame, &correlation_id](pcl_status_t status) {
+    Envelope terminal;
+    terminal.correlation_id = correlation_id;
+    terminal.status = status;
+    terminal.end_of_stream = true;
+    on_frame(terminal);
+  };
+
+  rclcpp::Client<OpenStreamService>::SharedPtr client;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = stream_clients_.find(binding.ros2_open_service);
+    if (it == stream_clients_.end()) {
+      client = node_->create_client<OpenStreamService>(binding.ros2_open_service);
+      stream_clients_.emplace(binding.ros2_open_service, client);
+    } else {
+      client = it->second;
+    }
+  }
+  if (!client->wait_for_service(5s)) {
+    deliver_error(PCL_ERR_NOT_FOUND);
+    return;
+  }
+
+  // Wait for the frame subscription to match the server's publisher.
+  const auto match_deadline = std::chrono::steady_clock::now() + 2s;
+  while (subscription->get_publisher_count() == 0u &&
+         std::chrono::steady_clock::now() < match_deadline) {
+    std::this_thread::sleep_for(5ms);
+  }
+
+  auto req = std::make_shared<OpenStreamService::Request>();
+  req->content_type = request.content_type;
+  req->correlation_id = correlation_id;
+  req->payload.assign(request.payload.begin(), request.payload.end());
+
+  auto future = client->async_send_request(req);
+  if (future.wait_for(5s) != std::future_status::ready) {
+    deliver_error(PCL_ERR_TIMEOUT);
+    return;
+  }
+
+  // Frames are published during the call; wait briefly for the terminal frame.
+  {
+    std::unique_lock<std::mutex> lock(state->mutex);
+    state->cv.wait_for(lock, 2s, [&state] { return state->done; });
+  }
+
+  // Deliver collected frames in order on the caller thread.
+  std::vector<Envelope> frames;
+  {
+    std::lock_guard<std::mutex> lock(state->mutex);
+    frames = std::move(state->frames);
+  }
+  if (frames.empty()) {
+    deliver_error(PCL_ERR_TIMEOUT);
+    return;
+  }
+  for (const auto& frame : frames) {
+    if (!on_frame(frame)) {
+      break;
+    }
+  }
 }
 
 }  // namespace pyramid::transport::ros2

@@ -122,15 +122,16 @@ def check_cpp(generator: Path, proto_dir: Path) -> None:
             r"bindUnaryServiceIngress",
         ],
     )
-    unexpected_ros2_files = [
-        path for path in sorted((out_dir / "ros2").rglob("*"))
-        if path.is_file() and path not in ros2_support_files
-    ]
-    if unexpected_ros2_files:
-        raise AssertionError(
-            "cpp json,ros2: unexpected generated ROS2 files "
-            + ", ".join(str(path.relative_to(out_dir)) for path in unexpected_ros2_files)
-        )
+    ros2_transport_files = sorted((out_dir / "ros2" / "cpp").glob("*_ros2_transport.*"))
+    _assert_present(
+        "cpp json,ros2 per-component transport",
+        _read(ros2_transport_files),
+        [
+            r"class\s+ServiceBinder",
+            r"ServiceBinder::bind",
+            r"bindUnaryServiceIngress",
+        ],
+    )
     shutil.rmtree(out_dir)
 
     out_dir = _case(generator, proto_dir, "cpp", "json,grpc")
@@ -232,20 +233,18 @@ def check_ada(generator: Path, proto_dir: Path) -> None:
 
     out_dir = _case(generator, proto_dir, "ada", "json,grpc")
     service_text = _read(_ada_service_files(out_dir))
-    _assert_present("ada json,grpc", service_text, [r"Grpc_Content_Type", r"Configure_Grpc"])
     _assert_absent(
         "ada json,grpc service facade",
         service_text,
-        [r"function\s+Invoke_Create_Requirement\s*\n\s*\(\s*Channel"],
+        [
+            r"Grpc_Content_Type",
+            r"Configure_Grpc",
+            r"GRPC_Transport",
+            r"function\s+Invoke_Create_Requirement\s*\n\s*\(\s*Channel",
+        ],
     )
-
-    grpc_specs = sorted((out_dir / "grpc" / "ada").glob("*-grpc_transport.ads"))
-    spec_text = _read(grpc_specs)
-    _assert_absent(
-        "ada grpc public transport specs",
-        spec_text,
-        [r"_Json", r"chars_ptr", r"Interfaces\.C\.Strings"],
-    )
+    if (out_dir / "grpc").exists():
+        raise AssertionError("ada json,grpc: generated Ada gRPC shim directory was generated")
     shutil.rmtree(out_dir)
 
 
@@ -258,10 +257,11 @@ def check_facade_tests(pyramid_root: Path) -> None:
         "ada grpc interop facade test",
         ada_text,
         [
-            r"Provided\.Configure_Grpc_Library",
-            r"Provided\.Configure_Grpc_Channel",
+            r"Pcl_Plugins\.Pcl_Plugin_Load_Codec",
+            r"Pcl_Plugins\.Pcl_Plugin_Load_Transport",
             r"Provided\.Invoke_Object_Of_Interest_Create_Requirement",
-            r"Content_Type\s*=>\s*Provided\.Grpc_Content_Type",
+            r"Content_Type\s*=>\s*Content_Type",
+            r"application/protobuf",
         ],
     )
     _assert_absent(
@@ -273,6 +273,8 @@ def check_facade_tests(pyramid_root: Path) -> None:
             r"GNATCOLL",
             r"\bLoad\b",
             r"\bLookup\b",
+            r"Configure_Grpc",
+            r"Grpc_Content_Type",
         ],
     )
 
@@ -280,7 +282,7 @@ def check_facade_tests(pyramid_root: Path) -> None:
     _assert_present(
         "ada grpc interop driver",
         script_text,
-        [r"generated service facade", r"--dll", r"--address"],
+        [r"--transport-plugin", r"--codec-plugin", r"--address"],
     )
 
 

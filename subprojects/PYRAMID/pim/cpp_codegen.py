@@ -512,7 +512,7 @@ class CppServiceGenerator:
 
         The current protobuf backend emits data-model protobuf wrappers.  The
         generated service facade, however, needs local-struct <-> protobuf
-        conversion helpers.  Those exist today as checked-in service codecs for
+        conversion helpers. Those exist today as source support for
         tactical_objects; do not emit service protobuf dispatch code for service
         packages that do not have that bridge.
         """
@@ -521,7 +521,7 @@ class CppServiceGenerator:
         for parent in [self._proto_input, *self._proto_input.parents]:
             if parent.is_file():
                 parent = parent.parent
-            candidates.append(parent / 'bindings' / 'protobuf' / 'cpp' / header)
+            candidates.append(parent / 'src' / 'protobuf_support' / header)
         return any(path.exists() for path in candidates)
 
     def _discover_data_model_proto_files(self) -> List[ProtoFile]:
@@ -733,6 +733,23 @@ class CppServiceGenerator:
                 codec_types,
             )
 
+        # Only emit a protobuf codec plugin for service packages that have the
+        # local-struct <-> protobuf bridge (the checked-in service protobuf
+        # codec). This mirrors the facade's protobuf gating in
+        # _service_protobuf_codec_available; today only tactical_objects has it.
+        if (self._has_backend('protobuf')
+                and self._service_protobuf_codec_available(cpp_base_ns)):
+            protobuf_path = output_path / (
+                file_base + '_protobuf_codec_plugin.cpp')
+            self._write_codec_plugin_impl(
+                protobuf_path,
+                file_base,
+                cpp_base_ns,
+                'protobuf',
+                'application/protobuf',
+                codec_types,
+            )
+
     def _write_codec_plugin_impl(
             self,
             path: Path,
@@ -754,9 +771,20 @@ class CppServiceGenerator:
             for _short, full_type, is_alias, _alias_cpp, _is_array in codec_types
             if not is_alias and '.' in full_type
         })
-        flatbuffers_codec_ns = cpp_base_ns + '::flatbuffers_codec'
-        flatbuffers_codec_header = (
-            'flatbuffers/cpp/' + file_base + '_flatbuffers_codec.hpp')
+        # flatbuffers and protobuf are both binary backends with the same
+        # native<->wire surface (wire_codec::toBinary(native) /
+        # fromBinary<Short>(data, size)); only the namespace and header differ.
+        if backend == 'protobuf':
+            wire_codec_ns = cpp_base_ns + '::protobuf_codec'
+            # The protobuf service bridge header ships as source support, which
+            # pyramid_protobuf_support exposes as an include dir, so it is
+            # included bare (unlike the flatbuffers codec header, which is
+            # generated into the build bindings dir under flatbuffers/cpp).
+            wire_codec_header = file_base + '_protobuf_codec.hpp'
+        else:
+            wire_codec_ns = cpp_base_ns + '::flatbuffers_codec'
+            wire_codec_header = (
+                'flatbuffers/cpp/' + file_base + '_flatbuffers_codec.hpp')
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated PCL codec plugin\n')
@@ -767,7 +795,7 @@ class CppServiceGenerator:
                     f.write(f'#include "{header}"\n')
                 f.write('#include <nlohmann/json.hpp>\n')
             else:
-                f.write(f'#include "{flatbuffers_codec_header}"\n')
+                f.write(f'#include "{wire_codec_header}"\n')
             # C-ABI marshalling: the plugin receives/returns frozen C structs and
             # marshals to/from the native type before invoking the wire codec.
             for header in cabi_marshal_headers:
@@ -792,7 +820,7 @@ class CppServiceGenerator:
             f.write('namespace {\n\n')
             f.write('namespace data_model = pyramid::domain_model;\n')
             if not is_json:
-                f.write(f'namespace flatbuffers_codec = {flatbuffers_codec_ns};\n')
+                f.write(f'namespace wire_codec = {wire_codec_ns};\n')
             f.write('\n')
             f.write('pcl_status_t assign_payload(const std::string& payload,\n')
             f.write('                            const char* content_type,\n')
@@ -862,9 +890,9 @@ class CppServiceGenerator:
                         f.write(f'                                  "{content_type}", out_msg);\n')
                     else:
                         if _alias_cpp == 'std::string':
-                            f.write('            return assign_payload(flatbuffers_codec::toBinary(native),\n')
+                            f.write('            return assign_payload(wire_codec::toBinary(native),\n')
                         else:
-                            f.write('            return assign_payload(flatbuffers_codec::toBinary(*native),\n')
+                            f.write('            return assign_payload(wire_codec::toBinary(*native),\n')
                         f.write(f'                                  "{content_type}", out_msg);\n')
                     f.write('        }\n')
                 elif is_array:
@@ -893,7 +921,7 @@ class CppServiceGenerator:
                         f.write('            return assign_payload(arr.dump(),\n')
                         f.write(f'                                  "{content_type}", out_msg);\n')
                     else:
-                        f.write('            return assign_payload(flatbuffers_codec::toBinary(native),\n')
+                        f.write('            return assign_payload(wire_codec::toBinary(native),\n')
                         f.write(f'                                  "{content_type}", out_msg);\n')
                     f.write('        }\n')
                 else:
@@ -908,7 +936,7 @@ class CppServiceGenerator:
                         f.write(f'            return assign_payload({codec_ns}::toJson(native),\n')
                         f.write(f'                                  "{content_type}", out_msg);\n')
                     else:
-                        f.write('            return assign_payload(flatbuffers_codec::toBinary(native),\n')
+                        f.write('            return assign_payload(wire_codec::toBinary(native),\n')
                         f.write(f'                                  "{content_type}", out_msg);\n')
                     f.write('        }\n')
             f.write('    } catch (...) {\n')
@@ -938,7 +966,7 @@ class CppServiceGenerator:
                     if is_json:
                         f.write(f'            native = scalar_from_json<{cpp_type}>(payload);\n')
                     else:
-                        f.write(f'            native = flatbuffers_codec::fromBinary{short}(\n')
+                        f.write(f'            native = wire_codec::fromBinary{short}(\n')
                         f.write('                msg->data, msg->size);\n')
                     if _alias_cpp == 'std::string':
                         f.write('            auto* cs = static_cast<pyramid_str_t*>(out_value);\n')
@@ -978,7 +1006,7 @@ class CppServiceGenerator:
                         f.write(f'                    item.dump(), static_cast<{cpp_type}*>(nullptr)));\n')
                         f.write('            }\n')
                     else:
-                        f.write(f'            native = flatbuffers_codec::fromBinary{short}(\n')
+                        f.write(f'            native = wire_codec::fromBinary{short}(\n')
                         f.write('                msg->data, msg->size);\n')
                     f.write('            if (native.size() > std::numeric_limits<uint32_t>::max()) {\n')
                     f.write('                return PCL_ERR_INVALID;\n')
@@ -1010,7 +1038,7 @@ class CppServiceGenerator:
                         f.write(f'            native = {codec_ns}::fromJson(\n')
                         f.write(f'                payload, static_cast<{cpp_type}*>(nullptr));\n')
                     else:
-                        f.write(f'            native = flatbuffers_codec::fromBinary{short}(\n')
+                        f.write(f'            native = wire_codec::fromBinary{short}(\n')
                         f.write('                msg->data, msg->size);\n')
                     f.write(f'            auto* cs = static_cast<{c_struct}*>(out_value);\n')
                     f.write('            pyramid::cabi::to_c(native, cs);\n')
@@ -3690,7 +3718,7 @@ def main():
         if len(sys.argv) < 4:
             print('Usage: python cpp_service_generator.py --types'
                   ' <data_model_dir> <output_dir>')
-            print('  e.g. --types proto/pyramid/data_model bindings/cpp/generated')
+            print('  e.g. --types proto/pyramid/data_model build/generated/pyramid_cpp_bindings')
             sys.exit(1)
         gen = CppTypesGenerator(Path(sys.argv[2]))
         gen.generate(sys.argv[3])
