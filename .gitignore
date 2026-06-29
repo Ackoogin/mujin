@@ -126,3 +126,7 @@ subprojects/PYRAMID/bindings/ada/lib/
 
 # Staged plugin deployment output (scripts/stage_plugin_deploy.sh)
 /dist/
+
+# Bindings
+subprojects/PYRAMID/ros2_msgs/*
+*_codec.ad*
