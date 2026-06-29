@@ -14,8 +14,13 @@ from typing import Dict, Iterator, List, Optional, Tuple
 from ada_codegen import (
     AdaTypesGenerator,
     _ADA_SCALAR_MAP,
+    _ada_array_name_for_repeated,
     _ada_field_name,
+    _ada_pkg_from_proto_pkg,
     _ada_name,
+    _ada_pkg_segment,
+    _proto_pkg_of_type,
+    _ada_cabi_pkg_from_proto_pkg,
     _ensure_parent_packages,
 )
 from cabi_codegen import CabiMember, iter_cabi_members, _c_struct_name
@@ -25,8 +30,7 @@ from proto_parser import ProtoMessage, ProtoTypeIndex, parse_proto_tree
 
 def _ada_cabi_pkg_for_file(pf) -> str:
     parts = pf.package.split('.')
-    ada_parts = ['_'.join(w.capitalize() for w in seg.split('_'))
-                 for seg in parts]
+    ada_parts = [_ada_pkg_segment(seg) for seg in parts]
     return '.'.join(ada_parts + ['Cabi'])
 
 
@@ -47,8 +51,11 @@ def _has_field_name(name: str) -> str:
     return 'Has_' + _ada_name(name)
 
 
-def _native_type_name(message_name: str) -> str:
-    return _ada_name(message_name)
+def _native_type_name(message_name: str, package: str = '') -> str:
+    name = _ada_name(message_name)
+    if package:
+        return f'{_ada_pkg_from_proto_pkg(package)}.{name}'
+    return name
 
 
 def _free_proc_name(message_name: str, package: str = '') -> str:
@@ -57,7 +64,7 @@ def _free_proc_name(message_name: str, package: str = '') -> str:
 
 
 def _slice_array_name(member: CabiMember) -> str:
-    return _ada_name(member.name) + '_Array'
+    return _ada_array_name_for_repeated(member.proto_field.type, member.name)
 
 
 _C_SCALAR_TO_ADA: Dict[str, str] = {
@@ -99,6 +106,17 @@ class AdaCabiGenerator:
     def _with_clauses_for_file(self, pf, suffix: str,
                                use_clause: bool = True) -> List[str]:
         result = []
+        seen = set()
+
+        def add(ada_pkg: str) -> None:
+            if ada_pkg in seen:
+                return
+            seen.add(ada_pkg)
+            line = f'with {ada_pkg};'
+            if use_clause:
+                line += f'  use {ada_pkg};'
+            result.append(line)
+
         for imp in pf.imports:
             if imp.startswith('google/'):
                 continue
@@ -110,11 +128,21 @@ class AdaCabiGenerator:
                         ada_pkg = AdaTypesGenerator._ada_pkg_for_file(indexed_pf)
                     else:
                         ada_pkg = _ada_cabi_pkg_for_file(indexed_pf)
-                    line = f'with {ada_pkg};'
-                    if use_clause:
-                        line += f'  use {ada_pkg};'
-                    result.append(line)
+                    add(ada_pkg)
                     break
+
+        for msg in pf.messages:
+            if msg.name in self._aliases:
+                continue
+            for member in self._members(msg, pf.package):
+                proto_pkg = _proto_pkg_of_type(member.proto_field.type)
+                if (not proto_pkg or proto_pkg == pf.package
+                        or proto_pkg.startswith('google.')):
+                    continue
+                if suffix == 'types':
+                    add(_ada_pkg_from_proto_pkg(proto_pkg))
+                else:
+                    add(_ada_cabi_pkg_from_proto_pkg(proto_pkg))
         return result
 
     def _toposort(self, messages: List[ProtoMessage]) -> List[ProtoMessage]:
@@ -157,34 +185,45 @@ class AdaCabiGenerator:
             return _cabi_type_name_from_c(c_type)
         return _C_SCALAR_TO_ADA.get(c_type, 'Interfaces.C.int')
 
-    def _native_field(self, member: CabiMember) -> str:
+    def _native_field(self, member: CabiMember,
+                      current_pkg: str = '') -> str:
         if member.is_repeated:
-            ada_type = _ada_name(member.name) + '_Array_Acc'
+            ada_type = (
+                _ada_array_name_for_repeated(
+                    member.proto_field.type, member.name) + '_Acc'
+            )
         else:
-            ada_type = self._ada_native_type(member)
+            ada_type = self._ada_native_type(member, current_pkg)
         return _ada_field_name(member.name, ada_type)
 
-    def _ada_native_type(self, member: CabiMember) -> str:
+    def _ada_native_type(self, member: CabiMember,
+                         current_pkg: str = '') -> str:
         field_type = member.proto_field.type
         short = field_type.split('.')[-1]
+        proto_pkg = _proto_pkg_of_type(field_type)
         if field_type in _ADA_SCALAR_MAP:
             return _ADA_SCALAR_MAP[field_type]
         if short in self._ada_types._aliases:
             return self._ada_types._aliases[short]
         if self._index.is_enum_type(field_type) or self._index.is_enum_type(short):
+            if proto_pkg and proto_pkg != current_pkg:
+                return f'{_ada_pkg_from_proto_pkg(proto_pkg)}.{_ada_name(short)}'
             return _ada_name(short)
         if self._index.is_message_type(field_type) or self._index.is_message_type(short):
+            if proto_pkg and proto_pkg != current_pkg:
+                return f'{_ada_pkg_from_proto_pkg(proto_pkg)}.{_ada_name(short)}'
             return _ada_name(short)
         return _ada_name(short)
 
-    def _native_has_field(self, member: CabiMember) -> Optional[str]:
+    def _native_has_field(self, member: CabiMember,
+                          current_pkg: str = '') -> Optional[str]:
         if member.is_oneof:
-            return 'Has_' + self._native_field(member)
+            return 'Has_' + self._native_field(member, current_pkg)
         if (member.proto_field.is_optional
                 and member.proto_field.type in _ADA_SCALAR_MAP
                 and _ADA_SCALAR_MAP[member.proto_field.type] not in (
                     'Unbounded_String', '')):
-            return 'Has_' + self._native_field(member)
+            return 'Has_' + self._native_field(member, current_pkg)
         return None
 
     def _enum_expr_to_c(self, expr: str) -> str:
@@ -244,7 +283,7 @@ class AdaCabiGenerator:
 
             for msg in non_alias:
                 c_name = _cabi_type_name(msg.name, pf.package)
-                native = _native_type_name(msg.name)
+                native = _native_type_name(msg.name, pf.package)
                 free_name = _c_struct_name(msg.name, pf.package) + '_free'
                 f.write(f'   procedure To_C\n')
                 f.write(f'     (In_Value  : {native};\n')
@@ -327,7 +366,7 @@ class AdaCabiGenerator:
             f.write(f'end {pkg};\n')
 
     def _write_to_c(self, f, msg: ProtoMessage, current_pkg: str) -> None:
-        native = _native_type_name(msg.name)
+        native = _native_type_name(msg.name, current_pkg)
         c_name = _cabi_type_name(msg.name, current_pkg)
         f.write(f'   procedure To_C\n')
         f.write(f'     (In_Value  : {native};\n')
@@ -336,11 +375,11 @@ class AdaCabiGenerator:
         f.write('   begin\n')
         f.write('      Out_Value := (others => <>);\n')
         for member in self._members(msg, current_pkg):
-            self._emit_to_c_member(f, member)
+            self._emit_to_c_member(f, member, current_pkg)
         f.write('   end To_C;\n\n')
 
     def _write_from_c(self, f, msg: ProtoMessage, current_pkg: str) -> None:
-        native = _native_type_name(msg.name)
+        native = _native_type_name(msg.name, current_pkg)
         c_name = _cabi_type_name(msg.name, current_pkg)
         f.write(f'   procedure From_C\n')
         f.write(f'     (In_Value  : {c_name};\n')
@@ -349,13 +388,14 @@ class AdaCabiGenerator:
         f.write('   begin\n')
         f.write('      Out_Value := (others => <>);\n')
         for member in self._members(msg, current_pkg):
-            self._emit_from_c_member(f, member)
+            self._emit_from_c_member(f, member, current_pkg)
         f.write('   end From_C;\n\n')
 
-    def _emit_to_c_member(self, f, member: CabiMember) -> None:
+    def _emit_to_c_member(self, f, member: CabiMember,
+                          current_pkg: str) -> None:
         c_name = _c_field_name(member.name)
-        native_name = self._native_field(member)
-        native_has = self._native_has_field(member)
+        native_name = self._native_field(member, current_pkg)
+        native_has = self._native_has_field(member, current_pkg)
         c_has = _has_field_name(member.name)
 
         if member.has_flag:
@@ -375,16 +415,18 @@ class AdaCabiGenerator:
             f.write(f'      Dup_Str (Out_Value.{c_name}, To_String (In_Value.{native_name}));\n')
         elif member.kind in ('enum', 'opt_enum'):
             f.write(f'      Out_Value.{c_name} := Interfaces.C.int\n')
-            f.write(f'        ({self._ada_native_type(member)}\'Pos (In_Value.{native_name}));\n')
+            f.write(f'        ({self._ada_native_type(member, current_pkg)}\'Pos (In_Value.{native_name}));\n')
         elif member.kind in ('message', 'opt_message'):
             f.write(f'      To_C (In_Value.{native_name}, Out_Value.{c_name});\n')
         elif member.is_repeated:
-            self._emit_to_c_repeated(f, member, c_name, native_name)
+            self._emit_to_c_repeated(
+                f, member, c_name, native_name, current_pkg)
 
-    def _emit_from_c_member(self, f, member: CabiMember) -> None:
+    def _emit_from_c_member(self, f, member: CabiMember,
+                            current_pkg: str) -> None:
         c_name = _c_field_name(member.name)
-        native_name = self._native_field(member)
-        native_has = self._native_has_field(member)
+        native_name = self._native_field(member, current_pkg)
+        native_has = self._native_has_field(member, current_pkg)
         c_has = _has_field_name(member.name)
 
         if native_has:
@@ -399,19 +441,20 @@ class AdaCabiGenerator:
 
         if member.kind in ('scalar', 'opt_scalar'):
             f.write(f'{indent}Out_Value.{native_name} := '
-                    f'{self._scalar_from_c_expr(member, f"In_Value.{c_name}")};\n')
+                    f'{self._scalar_from_c_expr(member, f"In_Value.{c_name}", current_pkg)};\n')
         elif member.kind in ('bool', 'opt_bool'):
             f.write(f'{indent}Out_Value.{native_name} := In_Value.{c_name} /= 0;\n')
         elif member.kind in ('string', 'opt_string'):
             f.write(f'{indent}Out_Value.{native_name} :=\n')
             f.write(f'{indent}  To_Unbounded_String (To_Ada_String (In_Value.{c_name}));\n')
         elif member.kind in ('enum', 'opt_enum'):
-            f.write(f'{indent}Out_Value.{native_name} := {self._ada_native_type(member)}\'Val\n')
+            f.write(f'{indent}Out_Value.{native_name} := {self._ada_native_type(member, current_pkg)}\'Val\n')
             f.write(f'{indent}  (Integer (In_Value.{c_name}));\n')
         elif member.kind in ('message', 'opt_message'):
             f.write(f'{indent}From_C (In_Value.{c_name}, Out_Value.{native_name});\n')
         elif member.is_repeated:
-            self._emit_from_c_repeated(f, member, c_name, native_name, indent)
+            self._emit_from_c_repeated(
+                f, member, c_name, native_name, indent, current_pkg)
 
         if member.has_flag:
             f.write('      end if;\n')
@@ -430,19 +473,22 @@ class AdaCabiGenerator:
     def _scalar_to_c_expr(self, member: CabiMember, native_expr: str) -> str:
         return f'{self._ada_c_type(member.c_type)} ({native_expr})'
 
-    def _scalar_from_c_expr(self, member: CabiMember, c_expr: str) -> str:
-        native = self._ada_native_type(member)
+    def _scalar_from_c_expr(self, member: CabiMember, c_expr: str,
+                            current_pkg: str = '') -> str:
+        native = self._ada_native_type(member, current_pkg)
         return f'{native} ({c_expr})'
 
     def _to_c_repeated_assignment(self, member: CabiMember,
-                                  arr_expr: str, native_expr: str) -> str:
+                                  arr_expr: str, native_expr: str,
+                                  current_pkg: str) -> str:
         if member.kind == 'repeated_string':
             return f'Dup_Str ({arr_expr}, To_String ({native_expr}));'
         if member.kind == 'repeated_bool':
             return f'{arr_expr} := (if {native_expr} then 1 else 0);'
         if member.kind == 'repeated_enum':
             return (f'{arr_expr} := Interfaces.C.int'
-                    f' ({self._ada_native_type(member)}\'Pos ({native_expr}));')
+                    f' ({self._ada_native_type(member, current_pkg)}'
+                    f'\'Pos ({native_expr}));')
         if member.kind == 'repeated_message':
             return f'To_C ({native_expr}, {arr_expr});'
         if member.c_type == 'double':
@@ -452,14 +498,15 @@ class AdaCabiGenerator:
         return f'{arr_expr} := {self._repeated_c_elem_type(member)} ({native_expr});'
 
     def _from_c_repeated_assignment(self, member: CabiMember,
-                                    native_expr: str, arr_expr: str) -> str:
+                                    native_expr: str, arr_expr: str,
+                                    current_pkg: str) -> str:
         if member.kind == 'repeated_string':
             return (f'{native_expr} := To_Unbounded_String'
                     f' (To_Ada_String ({arr_expr}));')
         if member.kind == 'repeated_bool':
             return f'{native_expr} := {arr_expr} /= 0;'
         if member.kind == 'repeated_enum':
-            return (f'{native_expr} := {self._ada_native_type(member)}\'Val'
+            return (f'{native_expr} := {self._ada_native_type(member, current_pkg)}\'Val'
                     f' (Integer ({arr_expr}));')
         if member.kind == 'repeated_message':
             return f'From_C ({arr_expr}, {native_expr});'
@@ -468,7 +515,8 @@ class AdaCabiGenerator:
         return f'{native_expr} := Integer ({arr_expr});'
 
     def _emit_to_c_repeated(self, f, member: CabiMember,
-                            c_name: str, native_name: str) -> None:
+                            c_name: str, native_name: str,
+                            current_pkg: str) -> None:
         elem_type = self._repeated_c_elem_type(member)
         arr_type = _slice_array_name(member) + '_C_Array'
         f.write('      declare\n')
@@ -490,7 +538,7 @@ class AdaCabiGenerator:
         f.write('            begin\n')
         f.write('               for I in 1 .. Count loop\n')
         stmt = self._to_c_repeated_assignment(
-            member, 'Arr (I)', f'In_Value.{native_name} (I)')
+            member, 'Arr (I)', f'In_Value.{native_name} (I)', current_pkg)
         f.write(f'                  {stmt}\n')
         f.write('               end loop;\n')
         f.write('            end;\n')
@@ -498,9 +546,11 @@ class AdaCabiGenerator:
         f.write('      end;\n')
 
     def _emit_from_c_repeated(self, f, member: CabiMember, c_name: str,
-                              native_name: str, indent: str) -> None:
+                              native_name: str, indent: str,
+                              current_pkg: str) -> None:
         elem_type = self._repeated_c_elem_type(member)
         arr_type = _slice_array_name(member)
+        native_arr_type = f'{_ada_pkg_from_proto_pkg(current_pkg)}.{arr_type}'
         c_arr_type = arr_type + '_C_Array'
         f.write(f'{indent}if In_Value.{c_name}.Ptr /= System.Null_Address\n')
         f.write(f'{indent}  and then In_Value.{c_name}.Len > 0\n')
@@ -514,10 +564,10 @@ class AdaCabiGenerator:
         f.write(f"{indent}      for Arr'Address use In_Value.{c_name}.Ptr;\n")
         f.write(f'{indent}      pragma Import (Ada, Arr);\n')
         f.write(f'{indent}   begin\n')
-        f.write(f'{indent}      Out_Value.{native_name} := new {arr_type} (1 .. Count);\n')
+        f.write(f'{indent}      Out_Value.{native_name} := new {native_arr_type} (1 .. Count);\n')
         f.write(f'{indent}      for I in 1 .. Count loop\n')
         stmt = self._from_c_repeated_assignment(
-            member, f'Out_Value.{native_name} (I)', 'Arr (I)')
+            member, f'Out_Value.{native_name} (I)', 'Arr (I)', current_pkg)
         f.write(f'{indent}         {stmt}\n')
         f.write(f'{indent}      end loop;\n')
         f.write(f'{indent}   end;\n')

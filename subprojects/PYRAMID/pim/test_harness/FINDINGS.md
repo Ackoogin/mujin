@@ -3,11 +3,26 @@
 **Question:** can components from the new proto set (`subprojects/PYRAMID/pim/test/`)
 communicate through the PCL/plugin runtime?
 
-**Verdict so far:** generation succeeds (48 protos → 203 messages, 13 enums, 42
-services). Four defects found. **A, B, C, and D are fixed and
-compile-verified for the C++/C-ABI plugin path.** Ada C-ABI symbols are now
-package-qualified; broader GNAT validation is blocked by pre-existing native
-Ada type-generator issues outside the C-ABI generator.
+**Verdict:** generation succeeds (48 protos → 203 messages, 13 enums, 42
+services). Four generator defects (A–D) are **fixed and verified** for the
+C++/C-ABI plugin path. The plugin comms test passes (`build_comms_test.sh` →
+`PASS (0 failure(s))`); every new-proto codec + cabi_marshal compiles; the old
+proto has no regression.
+
+**Ada:** C-ABI symbols are package-qualified, and generated native/C-ABI Ada
+data-model units compile with GNAT for **both** the old proto tree and the new
+duplicate-heavy PIM tree. Independently re-verified: the only remaining GNAT
+stop is `gnatcoll.ads not found` (a missing external library in this env) on the
+`*_types_codec` units — **old and new proto hit it identically**, so it is an
+environment dependency, not a regression or generator bug. The earlier
+"pre-existing ada_codegen.py issues" attribution was wrong: those were
+regressions from this work (reserved `generic` segment, empty records,
+array-naming, FQN resolution), now fixed in `ada_codegen.py` +
+`ada_cabi_codegen.py`.
+
+Not yet checked end-to-end: protobuf/flatbuffers/grpc/ros2 backends (already
+target Component-NS); Ada `*_types_codec`/service units (need gnatcoll /
+pcl_plugins external libs).
 
 Reproduce: `./viability_check.sh`. Comms test: `./build_comms_test.sh` (green).
 
@@ -25,8 +40,9 @@ Reproduce: `./viability_check.sh`. Comms test: `./build_comms_test.sh` (green).
    (`domain_model::pim_osprey::sensor_products::SPRRequest`). (User-confirmed.)
 3. **C-ABI symbols → qualify all uniformly.** Every generated C struct is
    package-qualified (`pyramid_data_model_common_Ack_c`). This is a cross-language
-   ABI change; the Ada generator (`ada_cabi_codegen.py`) MUST be updated to the
-   same scheme and re-validated with GNAT — **not yet done.** (User-confirmed.)
+   ABI change; the Ada generator (`ada_cabi_codegen.py`) now mirrors the same
+   scheme and has been re-validated with GNAT for generated data-model CABI/native
+   units. (User-confirmed.)
 
 ---
 
@@ -121,9 +137,10 @@ Verification:
 - `./build_comms_test.sh` passed: generated bindings, compiled 17 sources, ran
   the provider/client plugin comms test, and reported `PASS (0 failure(s))`.
 
-### Ada C-ABI qualification
+### Ada C-ABI qualification and GNAT diagnosis
 
-Fixed in `ada_cabi_codegen.py`.
+Fixed in `ada_cabi_codegen.py` and the Ada data-model portions of
+`ada_codegen.py`.
 
 - Ada CABI mirror record names now derive from the same package-qualified C ABI
   struct symbol as `cabi_codegen._c_struct_name`, e.g.
@@ -134,30 +151,64 @@ Fixed in `ada_cabi_codegen.py`.
   `pyramid_data_model_common_Ack_c_free`.
 - Empty CABI mirror records now receive a one-byte `Padding` component so GNAT
   accepts the Ada record declaration.
+- Native Ada package segments are escaped when they collide with Ada reserved
+  words; e.g. proto package segment `generic` emits Ada package segment
+  `Generic_Pkg`.
+- Empty native Ada records now receive a `Padding : Boolean := False;`
+  component so GNAT accepts empty proto messages.
+- Repeated-field native Ada array types are keyed by repeated element type, not
+  by field name. This fixes collisions such as two `element` fields with
+  different element types in `pyramid.data_model.generic_pim.generic`.
+- Native Ada and Ada CABI type/selector resolution now carry proto package
+  context. Cross-package fields and inlined base fields are emitted with the
+  declaring Ada package, preventing duplicate short names such as
+  `Generic_Component` from becoming ambiguous.
+- Ada native and CABI specs now add `with` clauses for packages referenced by
+  generated FQN field/member types, including types reached through inlined base
+  fields. Google well-known types remain excluded because they are handled as
+  scalar aliases in this generator path.
+
+Corrected diagnosis:
+
+- The earlier note that GNAT failures were "pre-existing `ada_codegen.py`
+  issues" was incorrect. Old-proto data-model native/CABI Ada still compiles
+  cleanly after this work, so these were regressions or newly surfaced
+  new-proto shapes from the package-qualified/FQN work and the duplicate-heavy
+  PIM test proto.
+- Full "compile every generated `.adb`" validation is blocked in this local
+  environment by missing external Ada dependencies, not by the fixed generator
+  data-model units: JSON codecs require `gnatcoll.ads`; generated service stubs
+  require `pcl_plugins.ads` and `pcl_bindings.ads`.
 
 GNAT validation:
 
-- Ada generation passed with
-  `python3 subprojects/PYRAMID/pim/generate_bindings.py subprojects/PYRAMID/pim/test /tmp/pim_ada_generated_fqn2 --languages ada --backends json`.
-- `gnatmake -c -I/tmp/pim_ada_generated_fqn2 /tmp/pim_ada_generated_fqn2/pyramid-data_model-base-cabi.adb`
-  passed.
-- Full GNAT validation of duplicate-heavy packages is still blocked outside the
-  allowed edit scope by pre-existing `ada_codegen.py` output issues:
-  empty native records in generated `*-types.ads` files and package segments
-  named `Generic`, which is an Ada reserved word. Sample failing commands:
-  `gnatmake -c .../pyramid-data_model-common-cabi.adb` stops in
-  `pyramid-data_model-common-types.ads`, and
-  `gnatmake -c .../pyramid-data_model-pim_osprey-sensor_products-cabi.adb`
-  additionally reports reserved-word `Generic` package references.
+- Old proto generation passed:
+  `python3 subprojects/PYRAMID/pim/generate_bindings.py subprojects/PYRAMID/proto /tmp/pyramid_old_ada_final --languages ada --backends json`.
+- Old proto GNAT data-model validation passed for every generated non-codec,
+  non-service `.adb`:
+  `for f in /tmp/pyramid_old_ada_final/*.adb; do case "$f" in *types_codec.adb|*services*) continue;; esac; gnatmake -c -I/tmp/pyramid_old_ada_final "$f" || exit 1; done`.
+- New proto generation passed:
+  `python3 subprojects/PYRAMID/pim/generate_bindings.py subprojects/PYRAMID/pim/test /tmp/pyramid_new_ada_fixed10 --languages ada --backends json`.
+- New proto GNAT data-model validation passed for every generated non-codec,
+  non-service `.adb`, including duplicate-heavy Osprey/Seaspray packages:
+  `for f in /tmp/pyramid_new_ada_fixed10/*.adb; do case "$f" in *types_codec.adb|*services*) continue;; esac; gnatmake -c -I/tmp/pyramid_new_ada_fixed10 "$f" || exit 1; done`.
+- Full generated-Ada compile boundary was checked and stops on missing external
+  libraries in this environment:
+  `gnatmake -c -I/tmp/pyramid_old_ada_final /tmp/pyramid_old_ada_final/pyramid-data_model-common-types_codec.adb`
+  and the same new-proto codec command both report `file "gnatcoll.ads" not
+  found`; compiling an old generated service reports `file "pcl_plugins.ads" not
+  found` and `file "pcl_bindings.ads" not found`.
 
 ## Remaining work checklist
 
 - [x] Defect D: FQN-aware type/base resolution in codec + cabi generators.
 - [x] Ada: apply the package-qualified C-ABI symbol scheme in
       `ada_cabi_codegen.py` (Decision 3).
+- [x] Ada: fix native/CABI GNAT regressions surfaced by duplicate-heavy PIM
+      packages and confirm old-proto data-model Ada still builds.
 - [x] Re-run `build_comms_test.sh` to green once D is fixed.
-- [ ] Fix native Ada type-generator GNAT blockers in `ada_codegen.py`, then
-      re-run full Ada CABI validation.
+- [ ] Install/provide GNATCOLL JSON and PCL Ada specs, then run a literal
+      compile of every generated Ada `.adb` including codecs and services.
 - [ ] Validate protobuf/flatbuffers/grpc/ros2 backends end-to-end (they already
       target Component-NS; not compile-checked here).
 

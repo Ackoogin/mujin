@@ -39,6 +39,7 @@ from proto_parser import (
     screaming_to_pascal, camel_to_snake, _PROTO_SCALARS,
     parse_proto as _pp_parse,
 )
+from cpp_codegen import _field_with_type, _proto_type_fqn, _resolve_message
 from standard_topics import topic_spec, topics_for_service
 
 
@@ -273,7 +274,7 @@ def _pkg_name_from_proto(proto_file: ProtoFile) -> str:
     last = parts[-1].lower()
     explicit_suffix = None
     if last in ('provided', 'consumed'):
-        explicit_suffix = parts[-1].capitalize()
+        explicit_suffix = _ada_pkg_segment(parts[-1])
         parts = parts[:-1]
 
     skip = {'pyramid', 'components', 'data_model', 'base', 'services'}
@@ -281,8 +282,7 @@ def _pkg_name_from_proto(proto_file: ProtoFile) -> str:
 
     ada_parts = ['Pyramid', 'Services']
     for p in meaningful:
-        titled = '_'.join(w.capitalize() for w in p.split('_'))
-        ada_parts.append(titled)
+        ada_parts.append(_ada_pkg_segment(p))
 
     ada_parts.append(explicit_suffix if explicit_suffix else 'Provided')
     return '.'.join(ada_parts)
@@ -329,7 +329,7 @@ def _ada_pkg_from_proto_pkg(proto_pkg: str) -> str:
       pyramid.data_model.tactical -> Pyramid.Data_Model.Tactical.Types
     """
     parts = proto_pkg.split('.')
-    ada_parts = ['_'.join(w.capitalize() for w in seg.split('_')) for seg in parts]
+    ada_parts = [_ada_pkg_segment(seg) for seg in parts]
     return '.'.join(ada_parts + ['Types'])
 
 
@@ -465,20 +465,20 @@ def _flatbuffers_codec_pkg_from_proto(proto_file: ProtoFile) -> str:
     meaningful = [p for p in parts if p.lower() not in skip]
     ada_parts = ['Pyramid', 'Services']
     for p in meaningful:
-        ada_parts.append('_'.join(w.capitalize() for w in p.split('_')))
+        ada_parts.append(_ada_pkg_segment(p))
     ada_parts.append('Flatbuffers_Codec')
     return '.'.join(ada_parts)
 
 
 def _grpc_transport_pkg_from_proto(proto_file: ProtoFile) -> str:
     """Derive the generated Ada gRPC transport package for this service proto."""
-    pkg_parts = [p.capitalize() for p in proto_file.package.split('.') if p]
+    pkg_parts = [_ada_pkg_segment(p) for p in proto_file.package.split('.') if p]
     return '.'.join(pkg_parts) + '.GRPC_Transport'
 
 
 def _ada_cabi_pkg_from_proto_pkg(proto_pkg: str) -> str:
     parts = proto_pkg.split('.')
-    ada_parts = ['_'.join(w.capitalize() for w in seg.split('_')) for seg in parts]
+    ada_parts = [_ada_pkg_segment(seg) for seg in parts]
     return '.'.join(ada_parts + ['Cabi'])
 
 
@@ -2260,6 +2260,22 @@ def _ada_name(cpp_or_proto_name: str) -> str:
     return '_'.join(w.capitalize() for w in s.split('_'))
 
 
+def _ada_array_name_for_repeated(field_type: str, field_name: str) -> str:
+    """Return the native Ada array type name for a repeated field."""
+    del field_name
+    return _ada_name(field_type.split('.')[-1]) + '_Array'
+
+
+def _ada_pkg_segment(proto_segment: str) -> str:
+    """Return a legal Ada package identifier segment for a proto package part."""
+    name = _ada_name(proto_segment)
+    if not name:
+        return 'Pkg'
+    if name.lower() in _ADA_RESERVED_WORDS:
+        return name + '_Pkg'
+    return name
+
+
 def _ada_field_name(proto_name: str, ada_type: Optional[str] = None) -> str:
     """Return a legal Ada record/component identifier for a proto field name."""
     name = _ada_name(proto_name)
@@ -2283,7 +2299,7 @@ def _common_ada_pkg(index: ProtoTypeIndex) -> str:
     common = parts[0]
     for p in parts[1:]:
         common = [a for a, b in zip(common, p) if a == b]
-    ada_parts = ['_'.join(w.capitalize() for w in seg.split('_')) for seg in common]
+    ada_parts = [_ada_pkg_segment(seg) for seg in common]
     return '_'.join(ada_parts) + '_Types'
 
 
@@ -2335,13 +2351,19 @@ class AdaTypesGenerator:
         pyramid.data_model.common -> Pyramid.Data_Model.Common.Types
         """
         parts = pf.package.split('.')
-        ada_parts = ['_'.join(w.capitalize() for w in seg.split('_'))
-                     for seg in parts]
+        ada_parts = [_ada_pkg_segment(seg) for seg in parts]
         return '.'.join(ada_parts + ['Types'])
 
     def _with_clauses_for_file(self, pf) -> List[str]:
         """Return Ada 'with Pkg; use Pkg;' lines for imports from the index."""
         result = []
+        seen = set()
+
+        def add(ada_pkg: str) -> None:
+            if ada_pkg not in seen and ada_pkg != self._ada_pkg_for_file(pf):
+                seen.add(ada_pkg)
+                result.append(f'with {ada_pkg};  use {ada_pkg};')
+
         for imp in pf.imports:
             if imp.startswith('google/'):
                 continue
@@ -2349,9 +2371,21 @@ class AdaTypesGenerator:
             imp_stem = Path(imp).stem
             for indexed_pf in self._index.files:
                 if indexed_pf.package == pkg or indexed_pf.path.stem == imp_stem:
-                    ada_pkg = self._ada_pkg_for_file(indexed_pf)
-                    result.append(f'with {ada_pkg};  use {ada_pkg};')
+                    add(self._ada_pkg_for_file(indexed_pf))
                     break
+
+        for msg in pf.messages:
+            for field, _ in self._inline_base_fields(msg, pf.package):
+                proto_pkg = _proto_pkg_of_type(field.type)
+                if (proto_pkg and proto_pkg != pf.package
+                        and not proto_pkg.startswith('google.')):
+                    add(_ada_pkg_from_proto_pkg(proto_pkg))
+            for oneof in msg.oneofs:
+                for field in oneof.fields:
+                    proto_pkg = _proto_pkg_of_type(field.type)
+                    if (proto_pkg and proto_pkg != pf.package
+                            and not proto_pkg.startswith('google.')):
+                        add(_ada_pkg_from_proto_pkg(proto_pkg))
         return result
 
     # -- internal --------------------------------------------------------------
@@ -2377,8 +2411,9 @@ class AdaTypesGenerator:
         for msg in pf.messages:
             if msg.name in alias_names:
                 continue
-            for field, fname in self._inline_base_fields(msg):
-                ada_type, arr = self._ada_field_type(field.type, field.is_repeated, fname)
+            for field, fname in self._inline_base_fields(msg, pf.package):
+                ada_type, arr = self._ada_field_type(
+                    field.type, field.is_repeated, fname, pf.package)
                 ada_fname = _ada_field_name(fname, ada_type)
                 if arr is None and ada_fname == ada_type:
                     short = field.type.split('.')[-1]
@@ -2398,32 +2433,39 @@ class AdaTypesGenerator:
                     aliases[msg.name] = _ADA_SCALAR_MAP[ft]
         return aliases
 
-    def _ada_base_type(self, field_type: str) -> str:
+    def _ada_base_type(self, field_type: str,
+                       current_pkg: str = '') -> str:
         """Resolve a proto type to its Ada element type name."""
         short = field_type.split('.')[-1]
+        proto_pkg = _proto_pkg_of_type(field_type)
         if field_type in _ADA_SCALAR_MAP:
             return _ADA_SCALAR_MAP[field_type]
         if short in self._aliases:
             return self._aliases[short]
         if self._index.is_enum_type(field_type) or self._index.is_enum_type(short):
+            if proto_pkg and proto_pkg != current_pkg:
+                return f'{_ada_pkg_from_proto_pkg(proto_pkg)}.{_ada_name(short)}'
             return _ada_name(short)
         if self._index.is_message_type(field_type) or self._index.is_message_type(short):
             if short in self._aliases:
                 return self._aliases[short]
+            if proto_pkg and proto_pkg != current_pkg:
+                return f'{_ada_pkg_from_proto_pkg(proto_pkg)}.{_ada_name(short)}'
             return _ada_name(short)
         return _ada_name(short)
 
     def _ada_field_type(self, field_type: str, repeated: bool,
-                        field_name: str) -> Tuple[str, Optional[str]]:
+                        field_name: str,
+                        current_pkg: str = '') -> Tuple[str, Optional[str]]:
         """Return (ada_type_string, array_type_name_or_None).
 
         For repeated fields the Ada type used in record components is the
         access type (``Foo_Array_Acc``) so that unconstrained arrays can
         appear inside records.
         """
-        base = self._ada_base_type(field_type)
+        base = self._ada_base_type(field_type, current_pkg)
         if repeated:
-            arr = _ada_name(field_name) + '_Array'
+            arr = _ada_array_name_for_repeated(field_type, field_name)
             return (arr + '_Acc', arr)
         return (base, None)
 
@@ -2470,19 +2512,24 @@ class AdaTypesGenerator:
             visit(m.name)
         return [by_name[n] for n in order]
 
-    def _inline_base_fields(self, msg: ProtoMessage):
+    def _inline_base_fields(self, msg: ProtoMessage,
+                            current_pkg: str = ''):
         own_names = {f.name for f in msg.fields if f.name != 'base'}
         for field in msg.fields:
             if field.name == 'base' and not field.is_repeated:
                 short = field.type.split('.')[-1]
-                base_msg = (self._index.resolve_message(field.type)
-                            or self._index.resolve_message(short))
+                base_msg, base_pkg = _resolve_message(
+                    self._index, field.type, current_pkg)
                 if base_msg and base_msg.name not in self._aliases:
                     for bf in base_msg.fields:
                         name = bf.name
                         if name in own_names:
                             name = short.lower() + '_' + name
-                        yield bf, name
+                        bf_type = (
+                            _proto_type_fqn(self._index, bf.type, base_pkg)
+                            or bf.type
+                        )
+                        yield _field_with_type(bf, bf_type), name
                     continue
             yield field, field.name
 
@@ -2498,32 +2545,40 @@ class AdaTypesGenerator:
         f.write((',\n      ').join(vals))
         f.write(');\n\n')
 
-    def _arrays_for_msg(self, msg: ProtoMessage) -> List[Tuple[str, str]]:
+    def _arrays_for_msg(self, msg: ProtoMessage,
+                        current_pkg: str) -> List[Tuple[str, str]]:
         """Return [(array_type_name, element_ada_type)] needed by this message."""
         seen: set = set()
         result = []
-        for field, fname in self._inline_base_fields(msg):
+        for field, fname in self._inline_base_fields(msg, current_pkg):
             if field.is_repeated:
-                arr = _ada_name(fname) + '_Array'
+                arr = _ada_array_name_for_repeated(field.type, fname)
                 if arr not in seen:
                     seen.add(arr)
-                    result.append((arr, self._ada_base_type(field.type)))
+                    result.append(
+                        (arr, self._ada_base_type(field.type, current_pkg)))
         for oo in msg.oneofs:
             for fld in oo.fields:
                 if fld.is_repeated:
-                    arr = _ada_name(fld.name) + '_Array'
+                    arr = _ada_array_name_for_repeated(fld.type, fld.name)
                     if arr not in seen:
                         seen.add(arr)
-                        result.append((arr, self._ada_base_type(fld.type)))
+                        result.append(
+                            (arr, self._ada_base_type(fld.type, current_pkg)))
         return result
 
     def _write_record(self, f, msg: ProtoMessage,
-                      shadow_subtypes: Optional[Dict[str, str]] = None) -> None:
+                      shadow_subtypes: Optional[Dict[str, str]] = None,
+                      current_pkg: str = '') -> None:
         ada_name = _ada_name(msg.name)
         shadow = shadow_subtypes or {}
+        regular_fields = list(self._inline_base_fields(msg, current_pkg))
         f.write(f'   type {ada_name} is record\n')
-        for field, fname in self._inline_base_fields(msg):
-            ada_type, arr = self._ada_field_type(field.type, field.is_repeated, fname)
+        if not regular_fields and not msg.oneofs:
+            f.write('      Padding : Boolean := False;\n')
+        for field, fname in regular_fields:
+            ada_type, arr = self._ada_field_type(
+                field.type, field.is_repeated, fname, current_pkg)
             ada_fname = _ada_field_name(fname, ada_type)
             if arr:
                 # Access-to-array fields default to null (no allocation)
@@ -2546,7 +2601,8 @@ class AdaTypesGenerator:
         for oo in msg.oneofs:
             f.write(f'      --  oneof {oo.name}\n')
             for fld in oo.fields:
-                ada_type, _ = self._ada_field_type(fld.type, False, fld.name)
+                ada_type, _ = self._ada_field_type(
+                    fld.type, False, fld.name, current_pkg)
                 ada_fname = _ada_field_name(fld.name, ada_type)
                 f.write(f'      Has_{ada_fname} : Boolean := False;\n')
                 dflt = self._ada_default(ada_type, fld.type)
@@ -2584,13 +2640,15 @@ class AdaTypesGenerator:
             # Array types for scalar/enum elements
             emitted_arrays: set = set()
             all_enum_names = {_ada_name(e.name) for e in self._index.all_enums()}
+            local_msg_names = {_ada_name(m.name) for m in non_alias}
             scalar_types = set(_ADA_SCALAR_MAP.values())
             for msg in sorted_msgs:
-                for arr_name, elem_type in self._arrays_for_msg(msg):
+                for arr_name, elem_type in self._arrays_for_msg(msg, pf.package):
                     if arr_name not in emitted_arrays and (
                             elem_type in scalar_types
                             or elem_type in all_enum_names
-                            or elem_type == 'Unbounded_String'):
+                            or elem_type == 'Unbounded_String'
+                            or elem_type not in local_msg_names):
                         f.write(f'   type {arr_name} is'
                                 f' array (Positive range <>) of {elem_type};\n')
                         f.write(f'   type {arr_name}_Acc is'
@@ -2609,9 +2667,10 @@ class AdaTypesGenerator:
             # Records interleaved with their array type dependencies
             for msg in sorted_msgs:
                 ada_msg_name = _ada_name(msg.name)
-                self._write_record(f, msg, shadow_subtypes)
+                self._write_record(f, msg, shadow_subtypes, pf.package)
                 for later_msg in sorted_msgs:
-                    for arr_name, elem_type in self._arrays_for_msg(later_msg):
+                    for arr_name, elem_type in self._arrays_for_msg(
+                            later_msg, pf.package):
                         if arr_name not in emitted_arrays and elem_type == ada_msg_name:
                             f.write(f'   type {arr_name} is'
                                     f' array (Positive range <>) of {elem_type};\n')
@@ -2703,14 +2762,18 @@ class AdaDataModelCodecGenerator:
         for field in msg.fields:
             if field.name == 'base' and not field.is_repeated:
                 short = field.type.split('.')[-1]
-                base_msg = (self._index.resolve_message(field.type)
-                            or self._index.resolve_message(short))
+                base_msg, base_pkg = _resolve_message(
+                    self._index, field.type, self._pf.package)
                 if base_msg and base_msg.name not in self._aliases:
                     for bf in base_msg.fields:
                         name = bf.name
                         if name in own_names:
                             name = short.lower() + '_' + name
-                        yield bf, name
+                        bf_type = (
+                            _proto_type_fqn(self._index, bf.type, base_pkg)
+                            or bf.type
+                        )
+                        yield _field_with_type(bf, bf_type), name
                     continue
             yield field, field.name
 
@@ -2814,7 +2877,7 @@ class AdaDataModelCodecGenerator:
                         field_name: str) -> Tuple[str, Optional[str]]:
         base = self._ada_base_type(field_type)
         if repeated:
-            arr = _ada_name(field_name) + '_Array'
+            arr = _ada_array_name_for_repeated(field_type, field_name)
             return (arr + '_Acc', arr)
         return (base, None)
 
@@ -2951,18 +3014,24 @@ class AdaDataModelCodecGenerator:
         """Generate working To_Json / From_Json for scalar-only records."""
         # -- To_Json --
         f.write(f'   function To_Json (Msg : {ada_n}) return String is\n')
+        if not fields:
+            f.write('      pragma Unreferenced (Msg);\n')
         f.write(f'   begin\n')
-        f.write(f'      return "{{" &\n')
-        parts = []
-        for fld in fields:
-            wire = camel_to_snake(fld.name)
-            ada_type, _ = self._ada_field_type(fld.type, fld.is_repeated, fld.name)
-            ada_fname = _ada_field_name(fld.name, ada_type)
-            expr = self._to_json_expr(fld, ada_fname)
-            parts.append(f'        """{wire}"":" & {expr}')
-        f.write(' &\n        "," &\n'.join(parts))
-        f.write(' &\n')
-        f.write(f'        "}}";\n')
+        if not fields:
+            f.write('      return "{}";\n')
+        else:
+            f.write(f'      return "{{" &\n')
+            parts = []
+            for fld in fields:
+                wire = camel_to_snake(fld.name)
+                ada_type, _ = self._ada_field_type(
+                    fld.type, fld.is_repeated, fld.name)
+                ada_fname = _ada_field_name(fld.name, ada_type)
+                expr = self._to_json_expr(fld, ada_fname)
+                parts.append(f'        """{wire}"":" & {expr}')
+            f.write(' &\n        "," &\n'.join(parts))
+            f.write(' &\n')
+            f.write(f'        "}}";\n')
         f.write(f'   end To_Json;\n\n')
 
         # -- From_Json --
@@ -3140,7 +3209,7 @@ class AdaDataModelCodecGenerator:
 
         if fld.is_repeated:
             # Repeated field -- iterate JSON array, allocate Ada array
-            arr_type = _ada_name(fld.name) + '_Array'
+            arr_type = _ada_array_name_for_repeated(fld.type, fld.name)
             elem_is_msg = (self._is_field_message(fld) and
                            short not in self._aliases)
             elem_is_enum = (self._index.is_enum_type(fld.type) or
