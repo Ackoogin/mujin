@@ -20,9 +20,14 @@ regressions from this work (reserved `generic` segment, empty records,
 array-naming, FQN resolution), now fixed in `ada_codegen.py` +
 `ada_cabi_codegen.py`.
 
-Not yet checked end-to-end: protobuf/flatbuffers/grpc/ros2 backends (already
-target Component-NS); Ada `*_types_codec`/service units (need gnatcoll /
-pcl_plugins external libs).
+**Update (full compile completed):** the gnatcoll/pcl Ada specs are in-repo, so
+*every* generated Ada unit — data model, codecs, C-ABI, and service bindings
+(incl. the wrapper messages) — now object-compiles with GNAT for both the old
+and new proto (0 failures). The other backends are validated to the extent the
+local toolchain allows: protobuf compiles end-to-end against real `protoc`
+output, flatbuffers schemas+codec headers validate via in-repo `flatc`,
+grpc/ros2 generate and target Component-NS. See the "Remaining work checklist"
+and "Ada full-compile fixes" sections below.
 
 Reproduce: `./viability_check.sh`. Comms test: `./build_comms_test.sh` (green).
 
@@ -207,10 +212,60 @@ GNAT validation:
 - [x] Ada: fix native/CABI GNAT regressions surfaced by duplicate-heavy PIM
       packages and confirm old-proto data-model Ada still builds.
 - [x] Re-run `build_comms_test.sh` to green once D is fixed.
-- [ ] Install/provide GNATCOLL JSON and PCL Ada specs, then run a literal
-      compile of every generated Ada `.adb` including codecs and services.
-- [ ] Validate protobuf/flatbuffers/grpc/ros2 backends end-to-end (they already
-      target Component-NS; not compile-checked here).
+- [x] **Literal compile of every generated Ada `.adb` including codecs and
+      services.** GNATCOLL JSON (`core/external/gnatcoll-core`) + PCL Ada specs
+      (`subprojects/PCL/bindings/ada`) are in-repo; GNAT 10.5 builds them. A
+      `gprbuild -c` against `gnatcoll_json.gpr` object-compiles **every** generated
+      unit: new PIM proto = 112 `.adb` → 244 objects, 0 failures; old proto = 18
+      `.adb`, 0 failures (no regression). See "Ada full-compile fixes" below.
+- [x] **Validate protobuf/flatbuffers/grpc/ros2 backends.** All four generate
+      cleanly (629 files) and home wrapper messages in Component-NS.
+      - **protobuf**: 45 generated codec headers compile against real `protoc`
+        `.pb.h` output + libprotobuf — end-to-end green.
+      - **flatbuffers**: 53 `.fbs` schemas validate with in-repo `flatc`; 53 C++
+        codec headers compile against the flatc-generated headers + C++ data
+        model. Fixed Defect-C in this backend (it referenced the dead flat
+        `pyramid::domain_model::X` umbrella for duplicate/wrapper types; now uses
+        the declaring sub-/Component-NS via `cpp_codegen._native_namespace_for_type`)
+        and removed a dead hardcoded tactical block. Remaining follow-up: the
+        `.cpp` JSON-bridge include/call derivation still assumes single-segment
+        data-model packages and needs the same full-namespace treatment for the
+        new nested packages (e.g. `common_pim_components.authorisation`).
+      - **grpc / ros2**: generate + target Component-NS correctly; full compile
+        needs grpc++ / rclcpp + ros2 IDL gen (absent in this env, same class as
+        the earlier gnatcoll/pcl block).
+
+## Ada full-compile fixes (new-proto codecs + services)
+
+Codecs and service bindings had never been compiled before (blocked by the
+missing gnatcoll/pcl specs), so a batch of generator defects surfaced and were
+fixed in `ada_codegen.py` (+ `generate_bindings.py`):
+
+- **Codec type collisions** — a message/enum whose Ada name equals an enclosing
+  package segment (`Authorisation`) or a predefined type (`Boolean`) resolved to
+  the wrong entity. `AdaDataModelCodecGenerator` now fully-qualifies own-package
+  types with their Types package.
+- **Codec foreign dispatch** — foreign `To_Json`/`From_Json` were resolved by
+  short name (wrong package for duplicates like `Generic_Component`). Now resolved
+  FQN-aware by the field's declaring package; `with`-deps now include oneof
+  variant field codecs (was the missing-`with`/`Append`-ambiguity cause).
+- **Codec field naming** — codec mirrored the types generator's component-name
+  rule (qualify cross-package field types so the `Val_` shadow prefix matches).
+- **Service `with Google.Protobuf.Types`** — google packages now skipped in the
+  service type-package collector.
+- **Service C-ABI symbols** — service bindings now reference the package-qualified
+  C-ABI record + free names (Decision 3) and unique pointer-conversion packages
+  (duplicate short names like `Sensor_Products` no longer collide).
+- **Ada Defect B (wrapper messages)** — `_generate_json_ada` now routes the
+  service-local oneof wrapper messages (+ synthesized `Empty`, incl. Empty-only
+  services) through native types/codec/C-ABI in their Component-NS, mirroring the
+  C++ path; the service binding withs them and binds their marshalling.
+- **`Ack` default aggregate** — `(Success => True)` → `(Success => True, others => <>)`
+  now that `Ack` carries an `Identifier`.
+- **Standard topics** — payload types are resolved against the actual data model;
+  topics whose payload is absent in this proto set (e.g. `ObjectEvidenceRequirement`)
+  are dropped, and present payloads' packages are withed. (The hardcoded
+  `standard_topics.py` catalog is a domain-coupling smell to resolve later.)
 
 ## Files
 

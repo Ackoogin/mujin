@@ -103,6 +103,18 @@ class AdaCabiGenerator:
             print(f'  Generated {pkg}')
         _ensure_parent_packages(out, generated_pkgs)
 
+    def write_file(self, pf, output_dir: str) -> None:
+        """Emit the C-ABI mirror+marshal packages for a single proto file (used
+        for service-local wrapper messages homed in their Component-NS)."""
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        pkg = _ada_cabi_pkg_for_file(pf)
+        file_base = pkg.lower().replace('.', '-')
+        self._write_spec(out / (file_base + '.ads'), pf, pkg)
+        self._write_body(out / (file_base + '.adb'), pf, pkg)
+        _ensure_parent_packages(out, [pkg])
+        print(f'  Generated {pkg}')
+
     def _with_clauses_for_file(self, pf, suffix: str,
                                use_clause: bool = True) -> List[str]:
         result = []

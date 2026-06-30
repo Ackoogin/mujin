@@ -27,18 +27,14 @@ from proto_parser import (
     ProtoTypeIndex, ProtoFile, ProtoField,
     camel_to_snake, _PROTO_SCALARS,
 )
+# Fully-qualified C++ namespace where a proto type's plain struct lives: the
+# data-model sub-namespace (pyramid::domain_model::<pkg>) or, for service-local
+# wrapper messages, their Component-NS. The local _json_codec_namespace_for_type
+# only yields a single segment for the ``data_model`` alias and cannot spell
+# duplicate or wrapper types unambiguously.
+from cpp_codegen import _native_namespace_for_type as _cpp_native_ns
 
 
-_TACTICAL_SERVICE_PACKAGES = frozenset({
-    'pyramid.components.tactical_objects.services.provided',
-    'pyramid.components.tactical_objects.services.consumed',
-})
-
-_SERVICE_FILE_BASE = 'pyramid_services_tactical_objects'
-_SERVICE_GENERATED_HEADER = _SERVICE_FILE_BASE + '_generated.h'
-_SERVICE_CODEC_NS = 'pyramid::services::tactical_objects::flatbuffers_codec'
-_SERVICE_ADA_CODEC_PKG = 'Pyramid.Services.Tactical_Objects.Flatbuffers_Codec'
-_SERVICE_ADA_CODEC_FILE = 'pyramid-services-tactical_objects-flatbuffers_codec'
 _ALIAS_FIELD_NAMES = frozenset({
     'value', 'radians', 'meters', 'meters_per_second', 'seconds',
 })
@@ -165,6 +161,22 @@ def _resolve_message(index: ProtoTypeIndex, type_name: str):
     return index.resolve_message(type_name) or index.resolve_message(type_name.split('.')[-1])
 
 
+def _full_type_for(index: ProtoTypeIndex, type_name: str) -> str:
+    """Resolve a (possibly bare) RPC type name to its fully-qualified proto name.
+
+    RPC request/response types referencing a same-package wrapper are written
+    bare in the proto; the FQN is needed so the C++ namespace resolves to the
+    declaring sub-namespace / Component-NS rather than the flat umbrella."""
+    if '.' in type_name:
+        return type_name
+    msg = _resolve_message(index, type_name)
+    if msg is not None:
+        for pf in index.files:
+            if any(m is msg for m in pf.messages):
+                return f'{pf.package}.{msg.name}' if pf.package else msg.name
+    return type_name
+
+
 def _resolve_enum(index: ProtoTypeIndex, type_name: str):
     return index.resolve_enum(type_name) or index.resolve_enum(type_name.split('.')[-1])
 
@@ -260,7 +272,7 @@ def _message_spec_from_proto(
         field_index += 1 + (1 if generated_presence else 0)
     return FlatMessageSpec(
         name=msg.name,
-        cpp_type=f'pyramid::domain_model::{msg.name}',
+        cpp_type=f'{_cpp_native_ns(full_type)}::{msg.name}',
         ada_type=camel_to_snake(msg.name),
         full_type=full_type,
         fields=fields,
@@ -276,7 +288,7 @@ def _alias_root_spec(short_name: str, full_type: str,
     table_name = f'{short_name}Value'
     return FlatMessageSpec(
         name=table_name,
-        cpp_type=f'pyramid::domain_model::{short_name}',
+        cpp_type=f'{_cpp_native_ns(full_type)}::{short_name}',
         ada_type=camel_to_snake(short_name),
         full_type=full_type,
         fields=[FlatFieldSpec(
@@ -373,7 +385,8 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
 
     stream_specs: List[FlatArraySpec] = []
     seen_arrays = set()
-    for type_name in stream_types:
+    for raw_type_name in stream_types:
+        type_name = _full_type_for(index, raw_type_name)
         short = type_name.split('.')[-1]
         if short in seen_arrays:
             continue
@@ -385,7 +398,7 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
                 holder_name=f'{short}ArrayHolder',
                 element_kind='string' if proto_scalar == 'string' else 'scalar',
                 element_type_name=_FBS_SCALAR_MAP[proto_scalar],
-                element_cpp_type=f'pyramid::domain_model::{short}',
+                element_cpp_type=f'{_cpp_native_ns(type_name)}::{short}',
                 element_ada_type=camel_to_snake(short),
                 element_full_type=type_name,
                 json_codec_ns=_json_codec_namespace_for_type(type_name),
@@ -397,7 +410,7 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
                 holder_name=f'{short}ArrayHolder',
                 element_kind='message',
                 element_type_name=short,
-                element_cpp_type=f'pyramid::domain_model::{short}',
+                element_cpp_type=f'{_cpp_native_ns(type_name)}::{short}',
                 element_ada_type=camel_to_snake(short),
                 element_full_type=type_name,
                 json_codec_ns=_json_codec_namespace_for_type(type_name),
@@ -462,10 +475,6 @@ def _flatbuffers_union_name(oneof_name: str) -> str:
 def _flatbuffers_oneof_wrapper_name(msg_name: str, oneof_name: str, field_name: str) -> str:
     field_part = ''.join(w.capitalize() for w in field_name.split('_'))
     return f'{msg_name}{_flatbuffers_union_name(oneof_name)}{field_part}Value'
-
-
-def _has_tactical_service_wire(index: ProtoTypeIndex) -> bool:
-    return any(pf.package in _TACTICAL_SERVICE_PACKAGES for pf in index.files)
 
 
 def _schema_type_for_field(field: FlatFieldSpec) -> str:
@@ -694,6 +703,25 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                 f.write(f'  items:{_schema_type_for_array(array_spec)};\n')
                 f.write('}\n\n')
 
+    @staticmethod
+    def _component_type_headers(group: ServiceCodecGroup) -> List[str]:
+        """Per-component native type headers for service-local wrapper messages.
+
+        Wrapper messages live in their Component-NS (a per-component
+        ``pyramid_components_..._types.hpp``), not the data-model umbrella, so the
+        service codec must include them. Derived from the specs' proto packages
+        -- no domain names are hardcoded."""
+        headers: set = set()
+        full_types = [m.full_type for m in group.message_specs]
+        full_types += [a.element_full_type for a in group.array_specs]
+        for ft in full_types:
+            if not ft or '.' not in ft:
+                continue
+            pkg = ft.rsplit('.', 1)[0]
+            if '.services.' in f'.{pkg}.':
+                headers.add(f'{pkg.replace(".", "_")}_types.hpp')
+        return sorted(headers)
+
     def _write_service_cpp_header(self, path: Path, group: ServiceCodecGroup):
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated service FlatBuffers codec\n')
@@ -701,6 +729,8 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write(f'// Generated from proto service closure for {group.base_package}\n')
             f.write('#pragma once\n\n')
             f.write('#include "pyramid_data_model_types.hpp"\n')
+            for hdr in self._component_type_headers(group):
+                f.write(f'#include "{hdr}"\n')
             f.write(f'#include "{group.generated_header}"\n\n')
             f.write('#include <flatbuffers/flatbuffers.h>\n')
             f.write('#include <cstddef>\n')

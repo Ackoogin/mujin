@@ -39,7 +39,11 @@ from proto_parser import (
     screaming_to_pascal, camel_to_snake, _PROTO_SCALARS,
     parse_proto as _pp_parse,
 )
-from cpp_codegen import _field_with_type, _proto_type_fqn, _resolve_message
+from cpp_codegen import (
+    _field_with_type, _proto_type_fqn, _resolve_message,
+    _package_for_proto_type,
+)
+from cabi_codegen import _c_struct_name
 from standard_topics import topic_spec, topics_for_service
 
 
@@ -369,7 +373,7 @@ def _collect_type_pkgs(proto_path: Path,
     # Step 1 -- direct packages from fully-qualified type names in the RPC signature.
     for t in rpc_types:
         pkg = _proto_pkg_of_type(t)
-        if pkg:
+        if pkg and not pkg.startswith('google.'):
             needed.add(_ada_pkg_from_proto_pkg(pkg))
 
     # Step 2 -- load proto + imports; trace each RPC message's field types too.
@@ -391,6 +395,22 @@ def _collect_type_pkgs(proto_path: Path,
 
         index = ProtoTypeIndex(loaded)
 
+        # The service's own proto may declare local wrapper messages (oneof
+        # request/response payloads, plus a synthesized Empty) that RPCs
+        # reference by bare name. Those types live in the service's Component-NS
+        # types package, so the binding must with/use it. Use the same wrapper
+        # detection (incl. Empty synthesis) as the generator so message-less
+        # Empty-only services are covered too.
+        wrapper_pf = _service_wrapper_pf(proto_path)
+        if wrapper_pf is not None:
+            needed.add(_ada_pkg_from_proto_pkg(wrapper_pf.package))
+
+        # Standard-topic payloads need their declaring package withed too, even
+        # when no RPC references them; absent payloads are filtered out.
+        _, _, topic_pkgs = _applicable_topics(
+            svc_pf, _is_provided(svc_pf), proto_path)
+        needed.update(topic_pkgs)
+
         for t in rpc_types:
             # Try FQN first, fall back to short name.
             msg = index.resolve_message(t) or index.resolve_message(t.split('.')[-1])
@@ -400,7 +420,7 @@ def _collect_type_pkgs(proto_path: Path,
                 if fld.is_scalar or fld.is_map:
                     continue
                 fld_pkg = _proto_pkg_of_type(fld.type)
-                if fld_pkg:
+                if fld_pkg and not fld_pkg.startswith('google.'):
                     needed.add(_ada_pkg_from_proto_pkg(fld_pkg))
     except Exception:
         pass  # Step-1 results are still valid.
@@ -440,6 +460,28 @@ def _collect_codec_pkgs(type_pkgs: List[str]) -> List[str]:
     return needed
 
 
+def _data_model_msg_pkgs(proto_path: Path) -> Dict[str, str]:
+    """Map each data-model message short name to its proto package.
+
+    Used to resolve standard-topic payload types (whose hardcoded FQNs target a
+    canonical catalog) against the proto set actually being generated."""
+    proto_root = _find_proto_root(proto_path)
+    if proto_root is None:
+        return {}
+    try:
+        files = [
+            pf for pf in parse_proto_tree(proto_root)
+            if pf.package.startswith('pyramid.data_model')
+        ]
+    except Exception:
+        return {}
+    result: Dict[str, str] = {}
+    for pf in files:
+        for msg in pf.messages:
+            result.setdefault(msg.name, pf.package)
+    return result
+
+
 def _topics_for_proto(
         parsed: 'ProtoFile', is_provided: bool
 ) -> Tuple[Dict[str, str], Dict[str, str]]:
@@ -449,6 +491,38 @@ def _topics_for_proto(
     recognised key fragment.  Services with no matching fragment get no topics.
     """
     return topics_for_service(parsed.package, is_provided)
+
+
+def _applicable_topics(
+        parsed: 'ProtoFile', is_provided: bool, proto_path: Path
+) -> Tuple[Dict[str, str], Dict[str, str], List[str]]:
+    """Filter standard topics to those whose payload type exists in the data
+    model being generated, and return the Ada type packages those payloads need.
+
+    Standard topics carry hardcoded payload FQNs (a canonical catalog). When a
+    proto set does not define a topic's payload message (e.g. the PIM test tree
+    has no ``ObjectEvidenceRequirement``), that topic's binding helpers cannot
+    compile, so drop it. For payloads that do resolve, return the declaring
+    package so the binding withs it even when no RPC references it directly.
+    """
+    sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
+    if not sub_topics and not pub_topics:
+        return {}, {}, []
+    msg_pkgs = _data_model_msg_pkgs(proto_path)
+    type_pkgs: set = set()
+
+    def keep(topics: Dict[str, str]) -> Dict[str, str]:
+        out: Dict[str, str] = {}
+        for key, wire in topics.items():
+            short = topic_spec(key).short_type
+            pkg = msg_pkgs.get(short)
+            if pkg is None:
+                continue  # payload type absent from this proto set -- skip topic
+            type_pkgs.add(_ada_pkg_from_proto_pkg(pkg))
+            out[key] = wire
+        return out
+
+    return keep(sub_topics), keep(pub_topics), sorted(type_pkgs)
 
 
 def _types_pkg_from_proto(proto_file: 'ProtoFile') -> str:
@@ -482,6 +556,59 @@ def _ada_cabi_pkg_from_proto_pkg(proto_pkg: str) -> str:
     return '.'.join(ada_parts + ['Cabi'])
 
 
+def _ada_cabi_type_name(message_name: str, package: str = '') -> str:
+    """Ada C-ABI mirror record name, e.g. ``Pyramid_Data_Model_Common_Ack_C``.
+
+    Mirrors ada_cabi_codegen._cabi_type_name (kept here to avoid a circular
+    import) so the service bindings reference the same package-qualified C-ABI
+    symbols the cabi generator emits (Decision 3 in the PIM handover)."""
+    return _ada_name(_c_struct_name(message_name, package).removesuffix('_c')) + '_C'
+
+
+def _service_wrapper_pf(proto_path: Path):
+    """Parse the service proto and return its ProtoFile if it declares local
+    wrapper messages (Component-NS oneof payloads), synthesizing an ``Empty``
+    message where an RPC uses ``google.protobuf.Empty`` -- mirroring
+    generate_bindings._discover_service_message_files so the marshalling
+    bindings match the wrapper types/codec/cabi actually generated."""
+    try:
+        spf = _pp_parse(proto_path)
+    except Exception:
+        return None
+    if '.services.' not in f'.{spf.package}.':
+        return None
+    uses_empty = any(
+        'google.protobuf.Empty' in (rpc.request_type, rpc.response_type)
+        for svc in spf.services for rpc in svc.rpcs
+    )
+    if uses_empty and not any(m.name == 'Empty' for m in spf.messages):
+        spf.messages.append(ProtoMessage(name='Empty'))
+    if not spf.messages:
+        return None
+    return spf
+
+
+def _binding_proto_files(proto_path: Path):
+    """Data-model proto files plus the service's own wrapper file (if any).
+
+    The wrapper messages are homed in their Component-NS and need the same
+    native/codec/C-ABI marshalling treatment as data-model types."""
+    proto_root = _find_proto_root(proto_path)
+    if proto_root is None:
+        return []
+    try:
+        files = [
+            pf for pf in parse_proto_tree(proto_root)
+            if pf.package.startswith('pyramid.data_model')
+        ]
+    except Exception:
+        return []
+    wrapper_pf = _service_wrapper_pf(proto_path)
+    if wrapper_pf is not None:
+        files.append(wrapper_pf)
+    return files
+
+
 def _collect_cabi_message_bindings(
         proto_path: Path,
         allowed_type_pkgs: List[str]) -> List[Tuple[str, str, str, str]]:
@@ -490,16 +617,8 @@ def _collect_cabi_message_bindings(
     Scalar-wrapper messages are intentionally omitted because they do not have
     generated ``pyramid_<Type>_c`` C structs.
     """
-    proto_root = _find_proto_root(proto_path)
-    if proto_root is None:
-        return []
-
-    try:
-        dm_files = [
-            pf for pf in parse_proto_tree(proto_root)
-            if pf.package.startswith('pyramid.data_model')
-        ]
-    except Exception:
+    dm_files = _binding_proto_files(proto_path)
+    if not dm_files:
         return []
 
     aliases = AdaTypesGenerator(dm_files)._find_scalar_wrappers()
@@ -514,7 +633,7 @@ def _collect_cabi_message_bindings(
                 continue
             schema = msg.name
             native = _ada_name(msg.name)
-            cabi = 'Pyramid_' + _ada_name(msg.name) + '_C'
+            cabi = _ada_cabi_type_name(msg.name, pf.package)
             result.append((schema, native, cabi, cabi_pkg))
     return result
 
@@ -530,16 +649,8 @@ def _collect_alias_schema_bindings(
     ``kind`` is ``"string"`` or ``"numeric"``; ``cabi_pkg`` is the module's Cabi
     package (used for ``Pyramid_Str_T`` / ``Dup_Str`` / ``To_Ada_String``).
     """
-    proto_root = _find_proto_root(proto_path)
-    if proto_root is None:
-        return []
-
-    try:
-        dm_files = [
-            pf for pf in parse_proto_tree(proto_root)
-            if pf.package.startswith('pyramid.data_model')
-        ]
-    except Exception:
+    dm_files = _binding_proto_files(proto_path)
+    if not dm_files:
         return []
 
     aliases = AdaTypesGenerator(dm_files)._find_scalar_wrappers()
@@ -698,7 +809,8 @@ class AdaServiceGenerator:
         is_provided = _is_provided(parsed)
         has_grpc = False
         has_ros2 = 'ros2' in self._enabled_backends
-        sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
+        sub_topics, pub_topics, _ = _applicable_topics(
+            parsed, is_provided, self._proto_input)
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'--  Auto-generated service binding specification\n')
@@ -953,7 +1065,8 @@ class AdaServiceGenerator:
                     codec_pkgs: List[str]):
         is_provided = _is_provided(parsed)
         has_grpc = False
-        sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
+        sub_topics, pub_topics, _ = _applicable_topics(
+            parsed, is_provided, self._proto_input)
         duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
         cabi_bindings = _collect_cabi_message_bindings(
             self._proto_input, type_pkgs)
@@ -966,6 +1079,25 @@ class AdaServiceGenerator:
             {pkg for _, _, _, pkg in cabi_bindings}
             | {pkg for _, _, kind, pkg in alias_bindings if kind == 'string'}
             | {pkg for _, _, _, _, pkg in array_bindings})
+
+        # Reference a data-model native type by its declaring Types package.
+        # Bare names are unsafe here: they may be hidden by a directly-visible
+        # ancestor package of the same simple name (e.g. message
+        # ``Sensor_Products`` inside ``...Sensor_Products.Provided``) or be
+        # ambiguous because several use-visible packages reuse the name (e.g.
+        # ``Generic_Component``). The Types package is derived from the binding's
+        # Cabi package, which differs only in its final segment.
+        def native_mark(native: str, cabi_pkg: str) -> str:
+            return f'{cabi_pkg.rsplit(".", 1)[0]}.Types.{native}'
+
+        # Pointer-conversion package and C free routine for a message binding,
+        # keyed off the globally-unique qualified C-ABI record name so that
+        # duplicate short names across packages do not collide.
+        def msg_ptr_pkg(cabi: str) -> str:
+            return cabi.removesuffix('_C') + '_Pointers'
+
+        def msg_free(cabi: str) -> str:
+            return 'Free_' + cabi.removesuffix('_C')
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'--  Auto-generated service binding body\n')
@@ -1019,14 +1151,15 @@ class AdaServiceGenerator:
             f.write(f'   function To_Handlers is new\n')
             f.write(f'     Ada.Unchecked_Conversion (System.Address, Service_Handlers_Access);\n')
             f.write(f'\n')
-            for schema, native, _cabi, _pkg in cabi_bindings:
-                del schema, _cabi, _pkg
-                ptr_pkg = f'{native}_Pointers'
+            for schema, native, cabi, _pkg in cabi_bindings:
+                del schema
+                ptr_pkg = msg_ptr_pkg(cabi)
                 f.write(f'   package {ptr_pkg} is new\n')
-                f.write(f'     System.Address_To_Access_Conversions ({native});\n')
+                f.write(f'     System.Address_To_Access_Conversions'
+                        f' ({native_mark(native, _pkg)});\n')
                 f.write(f'\n')
             for schema, native, _kind, _pkg in alias_bindings:
-                del schema, _pkg
+                del schema
                 # Only string aliases deref via a pointer package; numeric
                 # aliases pass the scalar address straight through. (And the
                 # native alias name, e.g. Length, can clash with use-visible
@@ -1035,7 +1168,8 @@ class AdaServiceGenerator:
                     continue
                 ptr_pkg = f'{native}_Pointers'
                 f.write(f'   package {ptr_pkg} is new\n')
-                f.write(f'     System.Address_To_Access_Conversions ({native});\n')
+                f.write(f'     System.Address_To_Access_Conversions'
+                        f' ({native_mark(native, _pkg)});\n')
                 f.write(f'\n')
 
             f.write(f'   function Handler_Address\n')
@@ -1119,7 +1253,7 @@ class AdaServiceGenerator:
             f.write(f'         return Pcl_Bindings.PCL_ERR_INVALID;\n')
             f.write(f'      end if;\n')
             for schema, native, cabi, _pkg in cabi_bindings:
-                ptr_pkg = f'{native}_Pointers'
+                ptr_pkg = msg_ptr_pkg(cabi)
                 f.write(f'      if Schema_Id = "{schema}" then\n')
                 f.write(f'         declare\n')
                 f.write(f'            Native : constant {ptr_pkg}.Object_Pointer :=\n')
@@ -1134,7 +1268,7 @@ class AdaServiceGenerator:
                 f.write(f'            To_C (Native.all, C_Value);\n')
                 f.write(f'            Status := Codec.all.Encode.all\n')
                 f.write(f"              (Codec.all.Codec_Ctx, Schema_C, C_Value'Address, Msg);\n")
-                f.write(f"            Free_{native} (C_Value'Access);\n")
+                f.write(f"            {msg_free(cabi)} (C_Value'Access);\n")
                 f.write(f'            return Status;\n')
                 f.write(f'         end;\n')
                 f.write(f'      end if;\n')
@@ -1181,7 +1315,7 @@ class AdaServiceGenerator:
             f.write(f'         return Pcl_Bindings.PCL_ERR_INVALID;\n')
             f.write(f'      end if;\n')
             for schema, native, cabi, _pkg in cabi_bindings:
-                ptr_pkg = f'{native}_Pointers'
+                ptr_pkg = msg_ptr_pkg(cabi)
                 f.write(f'      if Schema_Id = "{schema}" then\n')
                 f.write(f'         declare\n')
                 f.write(f'            Native : constant {ptr_pkg}.Object_Pointer :=\n')
@@ -1198,7 +1332,7 @@ class AdaServiceGenerator:
                 f.write(f'            if Status = Pcl_Bindings.PCL_OK then\n')
                 f.write(f'               From_C (C_Value, Native.all);\n')
                 f.write(f'            end if;\n')
-                f.write(f"            Free_{native} (C_Value'Access);\n")
+                f.write(f"            {msg_free(cabi)} (C_Value'Access);\n")
                 f.write(f'            return Status;\n')
                 f.write(f'         end;\n')
                 f.write(f'      end if;\n')
@@ -1456,7 +1590,7 @@ class AdaServiceGenerator:
                 f.write(f'                     Status := Codec.all.Encode.all\n')
                 f.write(f"                       (Codec.all.Codec_Ctx, Schema_C, Slice'Address, Msg'Access);\n")
                 f.write(f"                     for I in Values'Range loop\n")
-                f.write(f"                        Free_{native} (Values (I)'Access);\n")
+                f.write(f"                        {msg_free(cabi)} (Values (I)'Access);\n")
                 f.write(f'                     end loop;\n')
                 f.write(f'                  end;\n')
                 f.write(f'               end if;\n')
@@ -1565,7 +1699,7 @@ class AdaServiceGenerator:
                 f.write(f'      begin\n')
                 f.write(f'         for I in 1 .. Count loop\n')
                 f.write(f'            From_C (Values (I), Result (I));\n')
-                f.write(f"            Free_{native} (Values (I)'Access);\n")
+                f.write(f"            {msg_free(cabi)} (Values (I)'Access);\n")
                 f.write(f'         end loop;\n')
                 f.write(f'         C_Free (Slice.Ptr);\n')
                 f.write(f'         Slice.Ptr := System.Null_Address;\n')
@@ -1754,7 +1888,9 @@ class AdaServiceGenerator:
                         f.write(f'      Response := Null_Unbounded_String;\n')
                     elif rsp_t == 'Ack':
                         f.write(f'   begin\n')
-                        f.write(f'      Response := (Success => True);\n')
+                        # Ack carries more than Success (e.g. an Identifier),
+                        # so default any remaining components.
+                        f.write(f'      Response := (Success => True, others => <>);\n')
                     else:
                         f.write(f'      Default_Val : {rsp_t};\n')
                         f.write(f'   begin\n')
@@ -2344,6 +2480,17 @@ class AdaTypesGenerator:
             print(f'  Generated {ada_pkg}')
         _ensure_parent_packages(out, generated_pkgs)
 
+    def write_file(self, pf, output_dir: str) -> None:
+        """Emit the native types package for a single proto file (used for
+        service-local wrapper messages homed in their Component-NS)."""
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        ada_pkg = self._ada_pkg_for_file(pf)
+        file_base = ada_pkg.lower().replace('.', '-')
+        self._write_ads_for_file(out / (file_base + '.ads'), pf, ada_pkg)
+        _ensure_parent_packages(out, [ada_pkg])
+        print(f'  Generated {ada_pkg}')
+
     @staticmethod
     def _ada_pkg_for_file(pf) -> str:
         """Derive Ada package name from a proto file's package.
@@ -2712,8 +2859,14 @@ class AdaDataModelCodecGenerator:
         self._msg_to_codec: Dict[str, str] = {}
         # Build map: enum name -> codec package name (for qualified calls)
         self._enum_to_codec: Dict[str, str] = {}
+        # Build map: proto package -> codec package name. Short-name maps are
+        # ambiguous in the duplicate-heavy PIM tree (many packages reuse names
+        # like ``Generic_Component``); resolve foreign codec calls by the field's
+        # declaring proto package instead, falling back to the short-name maps.
+        self._pkg_to_codec: Dict[str, str] = {}
         for other_pf in self._index.files:
             codec_pkg = AdaTypesGenerator._ada_pkg_for_file(other_pf) + '_Codec'
+            self._pkg_to_codec[other_pf.package] = codec_pkg
             for m in other_pf.messages:
                 self._msg_to_codec[m.name] = codec_pkg
             for e in other_pf.enums:
@@ -2777,6 +2930,19 @@ class AdaDataModelCodecGenerator:
                     continue
             yield field, field.name
 
+    def _type_ref(self, ada_n: str) -> str:
+        """Return a fully-qualified reference to a message/enum type declared in
+        this codec's Types package.
+
+        Bare type names collide in several ways in the duplicate-heavy PIM tree:
+        a message whose name equals an enclosing package segment (e.g.
+        ``Authorisation`` in ``...Authorisation.Types_Codec``) resolves to the
+        parent *package*; a generated enum named ``Boolean`` is hidden by the
+        predefined ``Standard.Boolean``. Qualifying every own-package type with
+        its Types package sidesteps all of these unambiguously.
+        """
+        return f'{self._types_pkg}.{ada_n}'
+
     # ------------------------------------------------------------------ spec
 
     def _write_spec(self, path: Path) -> None:
@@ -2795,17 +2961,19 @@ class AdaDataModelCodecGenerator:
             # Enum converters
             for enum in self._pf.enums:
                 ada_n = _ada_name(enum.name)
-                f.write(f'   function To_String (V : {ada_n}) return String;\n')
-                f.write(f'   function {ada_n}_From_String (S : String) return {ada_n};\n')
+                ref = self._type_ref(ada_n)
+                f.write(f'   function To_String (V : {ref}) return String;\n')
+                f.write(f'   function {ada_n}_From_String (S : String) return {ref};\n')
             if self._pf.enums:
                 f.write('\n')
 
             # Struct codec declarations
             for msg in structs:
                 ada_n = _ada_name(msg.name)
-                f.write(f'   function To_Json (Msg : {ada_n}) return String;\n')
+                ref = self._type_ref(ada_n)
+                f.write(f'   function To_Json (Msg : {ref}) return String;\n')
                 f.write(f'   function From_Json (S : String;'
-                        f' Tag : access {ada_n}) return {ada_n};\n')
+                        f' Tag : access {ref}) return {ref};\n')
             if structs:
                 f.write('\n')
 
@@ -2813,14 +2981,26 @@ class AdaDataModelCodecGenerator:
 
     # ---------------------------------------------------------------- helpers
 
+    def _field_codec_pkg(self, fld, short_map: Dict[str, str]) -> str:
+        """FQN-aware codec package for a message/enum field.
+
+        Resolve the field's declaring proto package (current package first for
+        bare names, then a unique global match) and map it to its codec package.
+        Falls back to the short-name map when the package cannot be resolved
+        (e.g. a same-package reference the index could not pin down).
+        """
+        pkg = _package_for_proto_type(self._index, fld.type, self._pf.package)
+        if pkg and pkg in self._pkg_to_codec:
+            return self._pkg_to_codec[pkg]
+        return short_map.get(fld.type.split('.')[-1], self._ada_pkg)
+
     def _qualified_to_json(self, fld, accessor: str) -> str:
         """Return a qualified To_Json call for a nested message field.
 
         If the message type lives in a different codec package, qualify with
         that package name to avoid Ada overload ambiguity.
         """
-        short = fld.type.split('.')[-1]
-        codec_pkg = self._msg_to_codec.get(short, self._ada_pkg)
+        codec_pkg = self._field_codec_pkg(fld, self._msg_to_codec)
         if codec_pkg != self._ada_pkg:
             return f'{codec_pkg}.To_Json ({accessor})'
         return f'To_Json ({accessor})'
@@ -2831,8 +3011,7 @@ class AdaDataModelCodecGenerator:
 
     def _enum_to_json_expr(self, fld, accessor: str) -> str:
         """Return an Ada expression that emits a JSON-quoted enum value."""
-        short = fld.type.split('.')[-1]
-        enum_pkg = self._enum_to_codec.get(short, self._ada_pkg)
+        enum_pkg = self._field_codec_pkg(fld, self._enum_to_codec)
         qual = f'{enum_pkg}.' if enum_pkg != self._ada_pkg else ''
         return f'"""" & {qual}To_String ({accessor}) & """"'
 
@@ -2841,35 +3020,56 @@ class AdaDataModelCodecGenerator:
         file's messages reference (for ``with`` clauses)."""
         deps: set = set()
         alias_names = set(self._aliases.keys())
+
+        def add_field(fld) -> None:
+            short = fld.type.split('.')[-1]
+            if short in self._aliases:
+                return
+            if self._is_field_message(fld):
+                codec = self._field_codec_pkg(fld, self._msg_to_codec)
+            elif (self._index.is_enum_type(fld.type) or
+                  self._index.is_enum_type(short)):
+                codec = self._field_codec_pkg(fld, self._enum_to_codec)
+            else:
+                return
+            if codec and codec != self._ada_pkg:
+                deps.add(codec)
+
         for msg in self._pf.messages:
             if msg.name in alias_names:
                 continue
             for fld, fname in self._inline_base_fields(msg):
-                short = fld.type.split('.')[-1]
-                if short in self._aliases:
-                    continue
-                if self._is_field_message(fld):
-                    codec = self._msg_to_codec.get(short, '')
-                    if codec and codec != self._ada_pkg:
-                        deps.add(codec)
-                elif (self._index.is_enum_type(fld.type) or
-                      self._index.is_enum_type(short)):
-                    codec = self._enum_to_codec.get(short, '')
-                    if codec and codec != self._ada_pkg:
-                        deps.add(codec)
+                add_field(fld)
+            # oneof variants are separate from msg.fields and also emit foreign
+            # To_Json/From_Json calls, so their codec packages must be withed.
+            for oneof in msg.oneofs:
+                for fld in oneof.fields:
+                    add_field(fld)
         return sorted(deps)
 
     def _ada_base_type(self, field_type: str) -> str:
+        # Mirror AdaTypesGenerator._ada_base_type so that the component name
+        # decision in _ada_field_name (which adds a ``Val_`` prefix when the
+        # field name equals its type name) matches the record actually emitted
+        # by the types generator. In particular, cross-package message/enum
+        # types are package-qualified there, which keeps the bare field name
+        # from colliding with the (now qualified) type name.
+        current_pkg = self._pf.package
         short = field_type.split('.')[-1]
+        proto_pkg = _proto_pkg_of_type(field_type)
         if field_type in _ADA_SCALAR_MAP:
             return _ADA_SCALAR_MAP[field_type]
         if short in self._aliases:
             return self._aliases[short]
         if self._index.is_enum_type(field_type) or self._index.is_enum_type(short):
+            if proto_pkg and proto_pkg != current_pkg:
+                return f'{_ada_pkg_from_proto_pkg(proto_pkg)}.{_ada_name(short)}'
             return _ada_name(short)
         if self._index.is_message_type(field_type) or self._index.is_message_type(short):
             if short in self._aliases:
                 return self._aliases[short]
+            if proto_pkg and proto_pkg != current_pkg:
+                return f'{_ada_pkg_from_proto_pkg(proto_pkg)}.{_ada_name(short)}'
             return _ada_name(short)
         return _ada_name(short)
 
@@ -2959,7 +3159,7 @@ class AdaDataModelCodecGenerator:
         elif (self._index.is_enum_type(fld.type) or
               self._index.is_enum_type(short)):
             enum_ada = _ada_name(short)
-            enum_pkg = self._enum_to_codec.get(short, self._ada_pkg)
+            enum_pkg = self._field_codec_pkg(fld, self._enum_to_codec)
             qual = f'{enum_pkg}.' if enum_pkg != self._ada_pkg else ''
             f.write(f'{indent}if Has_Field (J, "{wire}") then\n')
             f.write(f'{indent}   declare\n')
@@ -3012,8 +3212,9 @@ class AdaDataModelCodecGenerator:
 
     def _write_simple_codec(self, f, ada_n: str, fields) -> None:
         """Generate working To_Json / From_Json for scalar-only records."""
+        ref = self._type_ref(ada_n)
         # -- To_Json --
-        f.write(f'   function To_Json (Msg : {ada_n}) return String is\n')
+        f.write(f'   function To_Json (Msg : {ref}) return String is\n')
         if not fields:
             f.write('      pragma Unreferenced (Msg);\n')
         f.write(f'   begin\n')
@@ -3036,11 +3237,11 @@ class AdaDataModelCodecGenerator:
 
         # -- From_Json --
         f.write(f'   function From_Json'
-                f' (S : String; Tag : access {ada_n})'
-                f' return {ada_n} is\n')
+                f' (S : String; Tag : access {ref})'
+                f' return {ref} is\n')
         f.write(f'      pragma Unreferenced (Tag);\n')
         f.write(f'      J      : constant JSON_Value := Read (S);\n')
-        f.write(f'      Result : {ada_n};\n')
+        f.write(f'      Result : {ref};\n')
         f.write(f'   begin\n')
         for fld in fields:
             wire = camel_to_snake(fld.name)
@@ -3055,6 +3256,7 @@ class AdaDataModelCodecGenerator:
     def _write_complex_codec(self, f, ada_n: str, msg, fields) -> None:
         """Generate To_Json / From_Json for records with nested messages,
         repeated fields, oneofs and aliases."""
+        ref = self._type_ref(ada_n)
 
         # Collect oneof groups from msg.oneofs (they are separate from fields)
         oneof_groups: dict = {}  # group_name -> [(fld, fname)]
@@ -3070,7 +3272,7 @@ class AdaDataModelCodecGenerator:
                 regular_fields.append((fld, fname))
 
         # ---- To_Json ----
-        f.write(f'   function To_Json (Msg : {ada_n}) return String is\n')
+        f.write(f'   function To_Json (Msg : {ref}) return String is\n')
         f.write(f'      Result : Unbounded_String := To_Unbounded_String ("{{"')
         f.write(f');\n')
         f.write(f'      First  : Boolean := True;\n')
@@ -3092,7 +3294,7 @@ class AdaDataModelCodecGenerator:
             for fld, fname in variants:
                 wire = camel_to_snake(fname)
                 oo_short = fld.type.split('.')[-1]
-                oo_ada_type = _ada_name(oo_short)
+                oo_ada_type = self._ada_base_type(fld.type)
                 ada_fname = _ada_field_name(fname, oo_ada_type)
                 has_flag = 'Has_' + ada_fname
                 # Only emit the variant that is set
@@ -3111,11 +3313,11 @@ class AdaDataModelCodecGenerator:
 
         # ---- From_Json ----
         f.write(f'   function From_Json'
-                f' (S : String; Tag : access {ada_n})'
-                f' return {ada_n} is\n')
+                f' (S : String; Tag : access {ref})'
+                f' return {ref} is\n')
         f.write(f'      pragma Unreferenced (Tag);\n')
         f.write(f'      J      : constant JSON_Value := Read (S);\n')
-        f.write(f'      Result : {ada_n};\n')
+        f.write(f'      Result : {ref};\n')
         f.write(f'   begin\n')
 
         for fld, fname in regular_fields:
@@ -3128,14 +3330,14 @@ class AdaDataModelCodecGenerator:
             for fld, fname in variants:
                 wire = camel_to_snake(fname)
                 oo_short = fld.type.split('.')[-1]
-                oo_ada_type = _ada_name(oo_short)
+                oo_ada_type = self._ada_base_type(fld.type)
                 ada_fname = _ada_field_name(fname, oo_ada_type)
                 has_flag = 'Has_' + ada_fname
                 short = fld.type.split('.')[-1]
                 f.write(f'      if Has_Field (J, "{wire}") then\n')
                 f.write(f'         Result.{has_flag} := True;\n')
                 if self._is_field_message(fld) and short not in self._aliases:
-                    qpkg = self._msg_to_codec.get(short, self._ada_pkg)
+                    qpkg = self._field_codec_pkg(fld, self._msg_to_codec)
                     qual = f'{qpkg}.' if qpkg != self._ada_pkg else ''
                     f.write(f'         declare\n')
                     f.write(f'            Sub : constant String := Write (Get (J, "{wire}"));\n')
@@ -3226,7 +3428,7 @@ class AdaDataModelCodecGenerator:
             f.write(f'               Result.{ada_fname} := new {arr_type} (1 .. Len);\n')
             f.write(f'               for I in 1 .. Len loop\n')
             if elem_is_msg:
-                qpkg = self._msg_to_codec.get(short, self._ada_pkg)
+                qpkg = self._field_codec_pkg(fld, self._msg_to_codec)
                 qual = f'{qpkg}.' if qpkg != self._ada_pkg else ''
                 f.write(f'                  declare\n')
                 f.write(f'                     Elem : constant JSON_Value := Get (Arr, I);\n')
@@ -3276,7 +3478,7 @@ class AdaDataModelCodecGenerator:
             f.write(f'      end if;\n')
         elif self._is_field_message(fld) and short not in self._aliases:
             # Nested message -- extract sub-object, serialise to string, call From_Json
-            qpkg = self._msg_to_codec.get(short, self._ada_pkg)
+            qpkg = self._field_codec_pkg(fld, self._msg_to_codec)
             qual = f'{qpkg}.' if qpkg != self._ada_pkg else ''
             f.write(f'      if Has_Field (J, "{wire}") then\n')
             f.write(f'         declare\n')
@@ -3308,9 +3510,10 @@ class AdaDataModelCodecGenerator:
             # Enum converters
             for enum in self._pf.enums:
                 ada_n = _ada_name(enum.name)
+                ref = self._type_ref(ada_n)
                 prefix = ada_n.split('_')[-1] + '_'
 
-                f.write(f'   function To_String (V : {ada_n}) return String is\n')
+                f.write(f'   function To_String (V : {ref}) return String is\n')
                 f.write(f'   begin\n')
                 f.write(f'      case V is\n')
                 for v in enum.values:
@@ -3320,7 +3523,7 @@ class AdaDataModelCodecGenerator:
                 f.write(f'      end case;\n')
                 f.write(f'   end To_String;\n\n')
 
-                f.write(f'   function {ada_n}_From_String (S : String) return {ada_n} is\n')
+                f.write(f'   function {ada_n}_From_String (S : String) return {ref} is\n')
                 f.write(f'   begin\n')
                 for v in enum.values:
                     suf = enum.suffix_of(v.name)
