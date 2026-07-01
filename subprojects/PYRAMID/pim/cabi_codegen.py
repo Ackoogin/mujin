@@ -23,6 +23,12 @@ from cpp_codegen import (
     _DATA_MODEL_TYPES_NS,
     _cpp_ns_for_proto_package,
     _cpp_ns_for_proto_type_package,
+    _field_with_type,
+    _is_proto_enum_type,
+    _is_proto_message_type,
+    _package_for_proto_type,
+    _proto_type_fqn,
+    _resolve_message,
     find_scalar_wrappers,
 )
 
@@ -59,20 +65,31 @@ def _guard_from_stem(stem: str) -> str:
     return stem.upper().replace('.', '_') + '_H'
 
 
-def _c_struct_name(message_name: str) -> str:
+def _c_struct_name(message_name: str, package: str = '') -> str:
+    # The C struct name is the cross-language ABI symbol. It is package-qualified
+    # so that messages sharing a short name across packages (e.g. SPRRequest in
+    # both common_pim_components.sensor_products and pim_osprey.sensor_products)
+    # get distinct C structs. The Ada generator mirrors this exact name.
+    # Packages already start with "pyramid", so use the package stem directly.
+    if package:
+        return f'{package.replace(".", "_")}_{message_name}_c'
     return f'pyramid_{message_name}_c'
 
 
-def _package_of_type(index: ProtoTypeIndex, name: str) -> str:
-    short = name.split('.')[-1]
-    for pf in index.files:
-        for msg in pf.messages:
-            if msg.name == short:
-                return pf.package
-        for enum in pf.enums:
-            if enum.name == short:
-                return pf.package
-    return ''
+def _pkg_of_proto_type(index: ProtoTypeIndex, field_type: str,
+                       current_pkg: str = '') -> str:
+    """Package that defines a proto type. Uses the FQN when dotted; otherwise
+    resolves by index lookup (mirroring _native_cpp_field_type) so inlined
+    cross-package base fields qualify to their true defining package, not the
+    referencing one. Falls back to the current package."""
+    if '.' in field_type and not field_type.startswith('google.'):
+        return field_type.rsplit('.', 1)[0]
+    return _package_of_type(index, field_type, current_pkg) or current_pkg
+
+
+def _package_of_type(index: ProtoTypeIndex, name: str,
+                     current_pkg: str = '') -> str:
+    return _package_for_proto_type(index, name, current_pkg)
 
 
 def _includes_for_file(index: ProtoTypeIndex, pf, suffix: str) -> List[str]:
@@ -127,19 +144,22 @@ def _inline_base_fields(
     index: ProtoTypeIndex,
     aliases: Dict[str, str],
     msg: ProtoMessage,
+    current_pkg: str,
 ) -> Iterator[Tuple[ProtoField, str, str]]:
     own_names = {f.name for f in msg.fields if f.name != 'base'}
     for field in msg.fields:
         if field.name == 'base' and not field.is_repeated:
             short = field.type.split('.')[-1]
-            base_msg = index.resolve_message(field.type) or \
-                index.resolve_message(short)
+            base_msg, base_pkg = _resolve_message(
+                index, field.type, current_pkg)
             if base_msg and base_msg.name not in aliases:
                 for bf in base_msg.fields:
                     name = bf.name
                     if name in own_names:
                         name = short.lower() + '_' + name
-                    yield bf, name, f'  /* from {base_msg.name} */'
+                    bf_type = _proto_type_fqn(index, bf.type, base_pkg) or bf.type
+                    yield (_field_with_type(bf, bf_type), name,
+                           f'  /* from {base_msg.name} */')
                 continue
         yield field, field.name, ''
 
@@ -181,14 +201,17 @@ def _native_cpp_field_type(
             base = _cpp_ns_for_proto_type_package(pkg) + '::' + short
         else:
             base = short
-    elif index.is_enum_type(field_type) or index.is_message_type(field_type):
-        pkg = _package_of_type(index, field_type)
-        if current_pkg and pkg and pkg != current_pkg:
-            base = _cpp_ns_for_proto_type_package(pkg) + '::' + field_type
-        else:
-            base = field_type
     else:
-        base = short
+        fqn = _proto_type_fqn(index, field_type, current_pkg)
+        if not (fqn and (index.is_enum_type(fqn) or index.is_message_type(fqn))):
+            base = short
+            return f'std::vector<{base}>' if repeated else base
+        pkg = fqn.rsplit('.', 1)[0]
+        resolved_short = fqn.split('.')[-1]
+        if current_pkg and pkg and pkg != current_pkg:
+            base = _cpp_ns_for_proto_type_package(pkg) + '::' + resolved_short
+        else:
+            base = resolved_short
     return f'std::vector<{base}>' if repeated else base
 
 
@@ -203,10 +226,11 @@ def c_type_for(
         return _C_SCALAR_MAP[field_type]
     if short in aliases:
         return _c_scalar_for_cpp(aliases[short])
-    if index.is_enum_type(field_type) or index.is_enum_type(short):
+    if _is_proto_enum_type(index, field_type, current_pkg):
         return 'int32_t'
-    if index.is_message_type(field_type) or index.is_message_type(short):
-        return _c_struct_name(short)
+    if _is_proto_message_type(index, field_type, current_pkg):
+        return _c_struct_name(
+            short, _pkg_of_proto_type(index, field_type, current_pkg))
     return 'int32_t'
 
 
@@ -237,7 +261,7 @@ def _classify_member(
         elif ft in _CPP_SCALAR_MAP or is_alias:
             kind = 'repeated_scalar'
             c_base = c_type_for(ft, aliases, index, current_pkg)
-        elif index.is_enum_type(ft) or index.is_enum_type(short):
+        elif _is_proto_enum_type(index, ft, current_pkg):
             kind = 'repeated_enum'
             c_base = 'int32_t'
         else:
@@ -267,9 +291,9 @@ def _classify_member(
                 kind = 'opt_bool'
             else:
                 kind = 'opt_scalar'
-        elif index.is_message_type(ft) or index.is_message_type(short):
+        elif _is_proto_message_type(index, ft, current_pkg):
             kind = 'opt_message'
-        elif index.is_enum_type(ft) or index.is_enum_type(short):
+        elif _is_proto_enum_type(index, ft, current_pkg):
             kind = 'opt_enum'
         else:
             kind = 'opt_scalar'
@@ -283,9 +307,9 @@ def _classify_member(
             kind = 'string'
         else:
             kind = 'scalar'
-    elif index.is_enum_type(ft) or index.is_enum_type(short):
+    elif _is_proto_enum_type(index, ft, current_pkg):
         kind = 'enum'
-    elif index.is_message_type(ft) or index.is_message_type(short):
+    elif _is_proto_message_type(index, ft, current_pkg):
         kind = 'message'
     else:
         kind = 'scalar'
@@ -298,7 +322,8 @@ def iter_cabi_members(
     msg: ProtoMessage,
     current_pkg: str,
 ) -> Iterator[CabiMember]:
-    for field, fname, comment in _inline_base_fields(index, aliases, msg):
+    for field, fname, comment in _inline_base_fields(
+            index, aliases, msg, current_pkg):
         member = _classify_member(
             field, fname, False, aliases, index, current_pkg)
         member.comment = comment
@@ -348,6 +373,15 @@ class CabiTypesGenerator:
             self._write_cabi_header(out / f'{stem}_cabi.h', pf)
             print(f'  Generated {pf.package.replace(".", "::")} (cabi)')
 
+    def write_file(self, pf, output_dir: str) -> None:
+        """Emit one per-file C-struct header (no umbrella) for a service file's
+        wrapper messages. Instance index must include the data model files."""
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        stem = pf.package.replace('.', '_')
+        self._write_cabi_header(out / f'{stem}_cabi.h', pf)
+        print(f'  Generated {pf.package.replace(".", "::")} (cabi)')
+
     def _write_umbrella(self, path: Path) -> None:
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('#ifndef PYRAMID_DATAMODEL_CABI_H\n')
@@ -384,19 +418,19 @@ class CabiTypesGenerator:
             f.write('#endif\n\n')
 
             for msg in _toposort(self._index, self._aliases, non_alias):
-                f.write(f'typedef struct {_c_struct_name(msg.name)} {{\n')
+                cname = _c_struct_name(msg.name, current_pkg)
+                f.write(f'typedef struct {cname} {{\n')
                 for member in iter_cabi_members(
                         self._index, self._aliases, msg, current_pkg):
                     line = _emit_c_struct_field(member)
                     if member.comment:
                         line += member.comment
                     f.write(line + '\n')
-                f.write(f'}} {_c_struct_name(msg.name)};\n\n')
+                f.write(f'}} {cname};\n\n')
 
             for msg in non_alias:
-                f.write(
-                    f'void {_c_struct_name(msg.name)}_free'
-                    f'({_c_struct_name(msg.name)}* value);\n')
+                cname = _c_struct_name(msg.name, current_pkg)
+                f.write(f'void {cname}_free({cname}* value);\n')
 
             f.write('\n#ifdef __cplusplus\n')
             f.write('}\n')
@@ -416,12 +450,17 @@ _PRIMITIVE_CPP_TYPES = frozenset({
 })
 
 
-def _qualify_native_type(cpp_type: str) -> str:
+def _qualify_native_type(cpp_type: str, current_pkg: str = '') -> str:
     inner = _strip_template_wrapper(cpp_type, 'tl::optional<')
     inner = _strip_template_wrapper(inner, 'std::vector<')
     if '::' in inner or inner in _PRIMITIVE_CPP_TYPES:
         return cpp_type
-    qualified = f'{_DATA_MODEL_TYPES_NS}::{inner}'
+    # Bare (unqualified) names denote a type in the current file's package.
+    # Qualify to that package's sub-namespace rather than the flat root, so
+    # names shared across packages (no longer flattened) resolve unambiguously.
+    ns = (_cpp_ns_for_proto_type_package(current_pkg)
+          if current_pkg else _DATA_MODEL_TYPES_NS)
+    qualified = f'{ns}::{inner}'
     if cpp_type == inner:
         return qualified
     return cpp_type.replace(inner, qualified)
@@ -447,8 +486,27 @@ class CabiMarshalGenerator:
             self._write_marshal_cpp(out / f'{stem}_cabi_marshal.cpp', pf)
             print(f'  Generated {pf.package.replace(".", "::")} (cabi marshal)')
 
-    def _native_type(self, message_name: str) -> str:
-        return f'{_DATA_MODEL_TYPES_NS}::{message_name}'
+    def write_file(self, pf, output_dir: str) -> None:
+        """Emit per-file C-ABI marshalling for one service file's wrappers."""
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        stem = pf.package.replace('.', '_')
+        self._write_marshal_hpp(out / f'{stem}_cabi_marshal.hpp', pf)
+        self._write_marshal_cpp(out / f'{stem}_cabi_marshal.cpp', pf)
+        print(f'  Generated {pf.package.replace(".", "::")} (cabi marshal)')
+
+    def _native_type(self, message_name: str, package: str = '') -> str:
+        # Reference the type through its package sub-namespace
+        # (e.g. domain_model::common::Ack). For uniquely-named types the
+        # umbrella also re-exports a flat alias, but the sub-namespace form is
+        # always valid and is unambiguous for names shared across packages.
+        if not package:
+            return f'{_DATA_MODEL_TYPES_NS}::{message_name}'
+        return f'{_cpp_ns_for_proto_package(package)}::{message_name}'
+
+    def _is_data_model_pkg(self, package: str) -> bool:
+        return (package == _DATA_MODEL_PROTO_ROOT
+                or package.startswith(_DATA_MODEL_PROTO_ROOT + '.'))
 
     def _marshal_includes_for_file(self, pf) -> Tuple[List[str], List[str]]:
         cabi_includes = _includes_for_file(self._index, pf, '_cabi.h')
@@ -466,13 +524,17 @@ class CabiMarshalGenerator:
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('#pragma once\n\n')
             f.write(f'#include "{_DATA_MODEL_TYPES_HEADER}"\n')
+            if not self._is_data_model_pkg(current_pkg):
+                # Wrapper structs live in the component types header, not the
+                # data-model umbrella.
+                f.write(f'#include "{stem}_types.hpp"\n')
             f.write(f'#include "{stem}_cabi.h"\n')
             for inc in marshal_includes:
                 f.write(inc + '\n')
             f.write('\nnamespace pyramid::cabi {\n\n')
             for msg in non_alias:
-                c_name = _c_struct_name(msg.name)
-                native = self._native_type(msg.name)
+                c_name = _c_struct_name(msg.name, current_pkg)
+                native = self._native_type(msg.name, current_pkg)
                 f.write(f'void to_c(const {native}& in, {c_name}* out);\n')
                 f.write(
                     f'void from_c(const {c_name}* in, {native}& out);\n\n')
@@ -490,6 +552,7 @@ class CabiMarshalGenerator:
             f.write('// the C struct; from_c deep-copies into native values; _free releases\n')
             f.write('// everything allocated for the C struct. One full copy per direction.\n\n')
             f.write(f'#include "{stem}_cabi_marshal.hpp"\n')
+            f.write('#include <pcl/pcl_alloc.h>\n')
             f.write('#include <cstdlib>\n')
             f.write('#include <cstring>\n')
             f.write('#include <string>\n')
@@ -502,12 +565,12 @@ class CabiMarshalGenerator:
             f.write('    return;\n')
             f.write('  }\n')
             f.write('  out.len = static_cast<uint32_t>(in.size());\n')
-            f.write('  out.ptr = static_cast<const char*>(std::malloc(out.len));\n')
+            f.write('  out.ptr = static_cast<const char*>(pcl_alloc(out.len));\n')
             f.write('  std::memcpy(const_cast<char*>(out.ptr), in.data(), out.len);\n')
             f.write('}\n\n')
             f.write('void free_str(pyramid_str_t& s) {\n')
             f.write('  if (s.ptr) {\n')
-            f.write('    std::free(const_cast<char*>(s.ptr));\n')
+            f.write('    pcl_free(const_cast<char*>(s.ptr));\n')
             f.write('    s.ptr = nullptr;\n')
             f.write('    s.len = 0;\n')
             f.write('  }\n')
@@ -523,7 +586,7 @@ class CabiMarshalGenerator:
             f.write('} // namespace pyramid::cabi\n\n')
             f.write('extern "C" {\n\n')
             for msg in non_alias:
-                c_name = _c_struct_name(msg.name)
+                c_name = _c_struct_name(msg.name, current_pkg)
                 f.write(
                     f'void {c_name}_free({c_name}* value) {{\n')
                 f.write(
@@ -553,7 +616,7 @@ class CabiMarshalGenerator:
             f.write(f'{indent}  if (count > 0) {{\n')
             f.write(
                 f'{indent}    auto* arr = static_cast<{member.c_type}*>'
-                f'(std::malloc(count * sizeof({member.c_type})));\n')
+                f'(pcl_alloc(count * sizeof({member.c_type})));\n')
             f.write(f'{indent}    for (size_t i = 0; i < count; ++i) {{\n')
             f.write(f'{indent}      arr[i] = in.{n}[i];\n')
             f.write(f'{indent}    }}\n')
@@ -568,7 +631,7 @@ class CabiMarshalGenerator:
             f.write(f'{indent}  if (count > 0) {{\n')
             f.write(
                 f'{indent}    auto* arr = static_cast<uint8_t*>'
-                f'(std::malloc(count * sizeof(uint8_t)));\n')
+                f'(pcl_alloc(count * sizeof(uint8_t)));\n')
             f.write(f'{indent}    for (size_t i = 0; i < count; ++i) {{\n')
             f.write(
                 f'{indent}      arr[i] = in.{n}[i] ? 1u : 0u;\n')
@@ -584,7 +647,7 @@ class CabiMarshalGenerator:
             f.write(f'{indent}  if (count > 0) {{\n')
             f.write(
                 f'{indent}    auto* arr = static_cast<pyramid_str_t*>'
-                f'(std::malloc(count * sizeof(pyramid_str_t)));\n')
+                f'(pcl_alloc(count * sizeof(pyramid_str_t)));\n')
             f.write(f'{indent}    for (size_t i = 0; i < count; ++i) {{\n')
             f.write(f'{indent}      dup_str(arr[i], in.{n}[i]);\n')
             f.write(f'{indent}    }}\n')
@@ -599,7 +662,7 @@ class CabiMarshalGenerator:
             f.write(f'{indent}  if (count > 0) {{\n')
             f.write(
                 f'{indent}    auto* arr = static_cast<int32_t*>'
-                f'(std::malloc(count * sizeof(int32_t)));\n')
+                f'(pcl_alloc(count * sizeof(int32_t)));\n')
             f.write(f'{indent}    for (size_t i = 0; i < count; ++i) {{\n')
             f.write(
                 f'{indent}      arr[i] = static_cast<int32_t>(in.{n}[i]);\n')
@@ -616,7 +679,7 @@ class CabiMarshalGenerator:
             f.write(f'{indent}  if (count > 0) {{\n')
             f.write(
                 f'{indent}    auto* arr = static_cast<{elem_c}*>'
-                f'(std::malloc(count * sizeof({elem_c})));\n')
+                f'(pcl_alloc(count * sizeof({elem_c})));\n')
             f.write(f'{indent}    for (size_t i = 0; i < count; ++i) {{\n')
             f.write(f'{indent}      to_c(in.{n}[i], &arr[i]);\n')
             f.write(f'{indent}    }}\n')
@@ -652,7 +715,7 @@ class CabiMarshalGenerator:
             f.write(f'{indent}}}\n')
 
     def _write_from_c_member(
-        self, f, member: CabiMember, indent: str
+        self, f, member: CabiMember, indent: str, current_pkg: str = ''
     ) -> None:
         n = member.name
         if member.kind == 'scalar':
@@ -667,7 +730,7 @@ class CabiMarshalGenerator:
             f.write(f'{indent}  out.{n}.clear();\n')
             f.write(f'{indent}}}\n')
         elif member.kind == 'enum':
-            enum_type = _qualify_native_type(member.native_cpp_type)
+            enum_type = _qualify_native_type(member.native_cpp_type, current_pkg)
             f.write(
                 f'{indent}out.{n} = static_cast<{enum_type}>(in->{n});\n')
         elif member.kind == 'message':
@@ -712,7 +775,8 @@ class CabiMarshalGenerator:
             f.write(f'{indent}}}\n')
         elif member.kind == 'repeated_enum':
             enum_elem = _qualify_native_type(
-                _strip_template_wrapper(member.native_cpp_type, 'std::vector<'))
+                _strip_template_wrapper(member.native_cpp_type, 'std::vector<'),
+                current_pkg)
             f.write(f'{indent}out.{n}.clear();\n')
             f.write(f'{indent}if (in->{n}.ptr && in->{n}.len > 0) {{\n')
             f.write(
@@ -726,7 +790,8 @@ class CabiMarshalGenerator:
             f.write(f'{indent}}}\n')
         elif member.kind == 'repeated_message':
             elem_native = _qualify_native_type(
-                _strip_template_wrapper(member.native_cpp_type, 'std::vector<'))
+                _strip_template_wrapper(member.native_cpp_type, 'std::vector<'),
+                current_pkg)
             elem_c = member.c_type
             f.write(f'{indent}out.{n}.clear();\n')
             f.write(f'{indent}if (in->{n}.ptr && in->{n}.len > 0) {{\n')
@@ -748,7 +813,8 @@ class CabiMarshalGenerator:
             elif member.kind == 'opt_enum':
                 enum_type = _qualify_native_type(
                     _strip_template_wrapper(
-                        member.native_cpp_type, 'tl::optional<'))
+                        member.native_cpp_type, 'tl::optional<'),
+                    current_pkg)
                 f.write(
                     f'{indent}  out.{n} = static_cast<{enum_type}>(in->{n});\n')
             else:
@@ -758,7 +824,8 @@ class CabiMarshalGenerator:
             f.write(f'{indent}}}\n')
         elif member.kind == 'opt_message':
             native = _qualify_native_type(
-                _strip_template_wrapper(member.native_cpp_type, 'tl::optional<'))
+                _strip_template_wrapper(member.native_cpp_type, 'tl::optional<'),
+                current_pkg)
             f.write(f'{indent}if (in->has_{n}) {{\n')
             f.write(f'{indent}  out.{n}.emplace();\n')
             f.write(f'{indent}  from_c(&in->{n}, *out.{n});\n')
@@ -778,7 +845,8 @@ class CabiMarshalGenerator:
             f.write(f'{indent}}}\n')
 
     def _write_free_member(
-        self, f, member: CabiMember, ptr: str, indent: str
+        self, f, member: CabiMember, ptr: str, indent: str,
+        current_pkg: str = ''
     ) -> None:
         n = member.name
         if member.kind == 'string':
@@ -788,8 +856,10 @@ class CabiMarshalGenerator:
             f.write(f'{indent}{ptr}->has_{n} = 0;\n')
         elif member.kind == 'message':
             short = member.proto_field.type.split('.')[-1]
+            cs = _c_struct_name(short, _pkg_of_proto_type(
+                self._index, member.proto_field.type, current_pkg))
             f.write(
-                f'{indent}{_c_struct_name(short)}_free(&{ptr}->{n});\n')
+                f'{indent}{cs}_free(&{ptr}->{n});\n')
         elif member.is_repeated:
             f.write(f'{indent}if ({ptr}->{n}.ptr) {{\n')
             if member.kind == 'repeated_string':
@@ -803,30 +873,34 @@ class CabiMarshalGenerator:
             elif member.kind == 'repeated_message':
                 elem_c = member.c_type
                 short = member.proto_field.type.split('.')[-1]
+                cs = _c_struct_name(short, _pkg_of_proto_type(
+                    self._index, member.proto_field.type, current_pkg))
                 f.write(
                     f'{indent}  auto* arr = static_cast<{elem_c}*>'
                     f'(const_cast<void*>({ptr}->{n}.ptr));\n')
                 f.write(
                     f'{indent}  for (uint32_t i = 0; i < {ptr}->{n}.len; ++i) {{\n')
                 f.write(
-                    f'{indent}    {_c_struct_name(short)}_free(&arr[i]);\n')
+                    f'{indent}    {cs}_free(&arr[i]);\n')
                 f.write(f'{indent}  }}\n')
             f.write(
-                f'{indent}  std::free(const_cast<void*>({ptr}->{n}.ptr));\n')
+                f'{indent}  pcl_free(const_cast<void*>({ptr}->{n}.ptr));\n')
             f.write(f'{indent}  {ptr}->{n}.ptr = nullptr;\n')
             f.write(f'{indent}  {ptr}->{n}.len = 0;\n')
             f.write(f'{indent}}}\n')
         elif member.kind == 'opt_message':
             f.write(f'{indent}if ({ptr}->has_{n}) {{\n')
             short = member.proto_field.type.split('.')[-1]
+            cs = _c_struct_name(short, _pkg_of_proto_type(
+                self._index, member.proto_field.type, current_pkg))
             f.write(
-                f'{indent}  {_c_struct_name(short)}_free(&{ptr}->{n});\n')
+                f'{indent}  {cs}_free(&{ptr}->{n});\n')
             f.write(f'{indent}  {ptr}->has_{n} = 0;\n')
             f.write(f'{indent}}}\n')
 
     def _write_to_c(self, f, msg: ProtoMessage, current_pkg: str) -> None:
-        c_name = _c_struct_name(msg.name)
-        native = self._native_type(msg.name)
+        c_name = _c_struct_name(msg.name, current_pkg)
+        native = self._native_type(msg.name, current_pkg)
         f.write(f'void to_c(const {native}& in, {c_name}* out) {{\n')
         f.write('  std::memset(out, 0, sizeof(*out));\n')
         for member in iter_cabi_members(
@@ -835,21 +909,21 @@ class CabiMarshalGenerator:
         f.write('}\n\n')
 
     def _write_from_c(self, f, msg: ProtoMessage, current_pkg: str) -> None:
-        c_name = _c_struct_name(msg.name)
-        native = self._native_type(msg.name)
+        c_name = _c_struct_name(msg.name, current_pkg)
+        native = self._native_type(msg.name, current_pkg)
         f.write(f'void from_c(const {c_name}* in, {native}& out) {{\n')
         for member in iter_cabi_members(
                 self._index, self._aliases, msg, current_pkg):
-            self._write_from_c_member(f, member, '  ')
+            self._write_from_c_member(f, member, '  ', current_pkg)
         f.write('}\n\n')
 
     def _write_free(self, f, msg: ProtoMessage, current_pkg: str) -> None:
-        c_name = _c_struct_name(msg.name)
+        c_name = _c_struct_name(msg.name, current_pkg)
         f.write(f'void _free_{msg.name}({c_name}* value) {{\n')
         f.write('  if (!value) {\n')
         f.write('    return;\n')
         f.write('  }\n')
         for member in iter_cabi_members(
                 self._index, self._aliases, msg, current_pkg):
-            self._write_free_member(f, member, 'value', '  ')
+            self._write_free_member(f, member, 'value', '  ', current_pkg)
         f.write('}\n\n')

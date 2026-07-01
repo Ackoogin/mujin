@@ -31,18 +31,14 @@ with Pyramid.Data_Model.Tactical.Types_Codec;  use Pyramid.Data_Model.Tactical.T
 --  Generated service bindings (validates with clauses and typed interfaces)
 with Pyramid.Services.Tactical_Objects.Provided;
 with Pyramid.Services.Tactical_Objects.Consumed;
-with Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
 with Pyramid.Services.Sensor_Data_Interpretation.Provided;
 with Pyramid.Services.Sensor_Data_Interpretation.Consumed;
-with Pyramid.Services.Sensor_Data_Interpretation.Flatbuffers_Codec;
 
 procedure Test_Generated_Bindings is
    package Prov renames Pyramid.Services.Tactical_Objects.Provided;
    package Cons renames Pyramid.Services.Tactical_Objects.Consumed;
-   package Flat renames Pyramid.Services.Tactical_Objects.Flatbuffers_Codec;
    package Sensor_Prov renames Pyramid.Services.Sensor_Data_Interpretation.Provided;
    package Sensor_Cons renames Pyramid.Services.Sensor_Data_Interpretation.Consumed;
-   package Sensor_Flat renames Pyramid.Services.Sensor_Data_Interpretation.Flatbuffers_Codec;
 
    Pass_Count : Natural := 0;
    Fail_Count : Natural := 0;
@@ -240,41 +236,7 @@ begin
              Resp_Buf /= System.Null_Address or Resp_Size = 0);
    end;
 
-   --  9. Backend flatbuffers round-trip for a proto-native payload
-   declare
-      Req : Object_Evidence_Requirement;
-   begin
-      Req.Policy := Policy_Query;
-      declare
-         Encoded : constant String := Flat.To_Binary_Object_Evidence_Requirement (Req);
-         Decoded : constant Object_Evidence_Requirement :=
-           Flat.From_Binary_Object_Evidence_Requirement (Encoded, null);
-      begin
-         Check ("Flatbuffers proto payload round-trip", Decoded.Policy = Policy_Query);
-      end;
-   end;
-
-   --  10. Dispatch round-trip — CreateRequirement over native flatbuffers
-   declare
-      use type System.Address;
-      Req_Json   : constant String := "{""policy"":""DATA_POLICY_OBTAIN""}";
-      Req_Flat   : constant String := Flat.To_Binary_Object_Interest_Requirement (Req_Json);
-      Resp_Buf   : System.Address;
-      Resp_Size  : Natural;
-   begin
-      Prov.Dispatch
-        (Handlers      => null,
-         Channel       => Prov.Ch_Object_Of_Interest_Create_Requirement,
-         Request_Buf   => Req_Flat (Req_Flat'First)'Address,
-         Request_Size  => Req_Flat'Length,
-         Content_Type  => Flat.Content_Type,
-         Response_Buf  => Resp_Buf,
-         Response_Size => Resp_Size);
-      Check ("Dispatch CreateRequirement flatbuffers returns buffer",
-             Resp_Buf /= System.Null_Address or Resp_Size = 0);
-   end;
-
-   --  11. Sensor InterpretationRequirement codec round-trip
+   --  9. Sensor InterpretationRequirement codec round-trip
    declare
       Req : Interpretation_Requirement;
    begin
@@ -290,25 +252,7 @@ begin
       end;
    end;
 
-   --  12. Sensor FlatBuffers round-trip for InterpretationRequirement
-   declare
-      Req : Interpretation_Requirement;
-   begin
-      Req.Policy := Policy_IncludeObjects;
-      Req.Type_Field := Type_LocateSeaSurfaceObjects;
-      declare
-         Encoded : constant String :=
-           Sensor_Flat.To_Binary_Interpretation_Requirement (Req);
-         Decoded : constant Interpretation_Requirement :=
-           Sensor_Flat.From_Binary_Interpretation_Requirement (Encoded, null);
-      begin
-         Check ("Sensor FlatBuffers round-trip",
-                Decoded.Policy = Policy_IncludeObjects
-                and Decoded.Type_Field = Type_LocateSeaSurfaceObjects);
-      end;
-   end;
-
-   --  13. Sensor provided dispatch routes CreateRequirement handler
+   --  10. Sensor provided dispatch routes CreateRequirement handler
    declare
       Handlers : aliased constant Sensor_Prov.Service_Handlers :=
         (On_Interpretation_Requirement_Read_Capability    => null,
@@ -332,7 +276,7 @@ begin
                = "sensor-create");
    end;
 
-   --  14. Sensor consumed bindings expose disambiguated symbols
+   --  11. Sensor consumed bindings expose disambiguated symbols
    Check ("Sensor consumed service constants are distinct",
           Sensor_Cons.Svc_Data_Provision_Dependency_Create_Requirement /=
           Sensor_Cons.Svc_Data_Processing_Dependency_Create_Requirement);

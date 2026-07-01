@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package pyramid.data_model.pim_seaspray.information_presentation;
+
+import "pyramid/data_model/pyramid.data_model.common_pim_components.information_presentation.proto";
+
+message IPRRadarDisplayRequirement {
+  pyramid.data_model.common_pim_components.information_presentation.IPRRequirement base = 1;  // Inherited from IPRRequirement
+}
+
+message RadarDisplaySPRDependency {
+  pyramid.data_model.common_pim_components.information_presentation.IPRDependencyRequest base = 1;  // Inherited from IPRDependencyRequest
+}
+
+message IPRRadarDisplayRequest {
+  pyramid.data_model.common_pim_components.information_presentation.IPRRequest base = 1;  // Inherited from IPRRequest
+}
+
+message IPRRadarDisplayInformation {}
+
+message InformationPresentation {
+  pyramid.data_model.common_pim_components.information_presentation.InformationPresentation base = 1;  // Inherited from InformationPresentation
+}
+

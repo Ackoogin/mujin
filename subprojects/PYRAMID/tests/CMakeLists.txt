@@ -28,10 +28,22 @@ endforeach()
 
 list(LENGTH _pyramid_cpp_test_codec_plugin_targets
     _pyramid_cpp_test_codec_plugin_count)
+# pcl_codec_registry_load_plugins_from_env() splits on ';' on Windows and ':'
+# elsewhere (see pcl_plugin_loader.c) -- match that here, since a Windows path
+# itself contains a ':' after the drive letter and would otherwise corrupt the
+# join. This value ends up inside a ctest ENVIRONMENT property, which is
+# itself a ';'-separated list of VAR=value entries, so a literal ';' must be
+# escaped ("\;") or ctest will split PYRAMID_CODEC_PLUGINS into bogus entries
+# and silently drop everything after the first plugin path.
+if(WIN32)
+    set(_pyramid_codec_plugin_env_sep "\\;")
+else()
+    set(_pyramid_codec_plugin_env_sep ":")
+endif()
 set(_pyramid_codec_plugin_env "")
 foreach(_pyramid_codec_target IN LISTS _pyramid_cpp_test_codec_plugin_targets)
     if(_pyramid_codec_plugin_env)
-        string(APPEND _pyramid_codec_plugin_env ":")
+        string(APPEND _pyramid_codec_plugin_env "${_pyramid_codec_plugin_env_sep}")
     endif()
     string(APPEND _pyramid_codec_plugin_env "$<TARGET_FILE:${_pyramid_codec_target}>")
 endforeach()
@@ -943,60 +955,67 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     list(APPEND _pyramid_ada_tests ada_plugin_loader_abi)
 
     if(PYRAMID_ENABLE_FLATBUFFERS)
-        set(ADA_PYRAMID_GEN_LIB_NAME "pyramid_generated_flatbuffers_codec" CACHE STRING
-            "Base library name for Ada gprbuild generated FlatBuffers codec archive")
+        # Ada depends on PCL + the C-ABI marshal layer only -- never on
+        # codec-specific (wire codec) content. Ada never calls the wire codec
+        # (toJson/fromJson/toBinary/fromBinary) directly -- it has its own
+        # independent pure-Ada JSON codec and always goes through a loaded
+        # codec plugin DLL. This archive holds only to_c/from_c/_c_free, which
+        # cross the plugin's pcl_codec_t vtable boundary; Ada's GNAT/MinGW
+        # toolchain cannot link against the MSVC-built pyramid_generated_marshal
+        # static library, hence the separate GNAT-compiled archive. (The one
+        # Ada bridge that did call the C++ wire codec directly, flatbuffers/
+        # ada/*-flatbuffers_codec.adb, is unused by every real client -- only
+        # test_generated_bindings.adb called it, and that call was removed.)
+        set(ADA_PYRAMID_CABI_LIB_NAME "pyramid_generated_cabi_marshal" CACHE STRING
+            "Base library name for the Ada gprbuild GNAT-compatible C-ABI marshal archive")
+        set(ADA_PYRAMID_CABI_LIB_DIR "${CMAKE_BINARY_DIR}/ada_gnat_pyramid_cabi" CACHE PATH
+            "Directory containing the GNAT-compatible C-ABI marshal archive")
         if(WIN32)
-            set(ADA_PYRAMID_GEN_LIB_DIR "${CMAKE_BINARY_DIR}/ada_gnat_pyramid" CACHE PATH
-                "Directory containing GNAT-compatible generated FlatBuffers codec archive")
-            set(ADA_PYRAMID_GEN_BUILD_SCRIPT "${PYRAMID_ROOT_DIR}/scripts/build_gnat_generated_flatbuffers_libs.bat")
+            set(ADA_PYRAMID_CABI_BUILD_SCRIPT "${PYRAMID_ROOT_DIR}/scripts/build_gnat_pyramid_cabi_marshal_libs.bat")
         else()
-            set(ADA_PYRAMID_GEN_LIB_DIR "${CMAKE_BINARY_DIR}/ada_gnat_pyramid" CACHE PATH
-                "Directory containing GNAT-compatible generated FlatBuffers codec archive")
-            set(ADA_PYRAMID_GEN_BUILD_SCRIPT "${PYRAMID_ROOT_DIR}/scripts/build_gnat_generated_flatbuffers_libs.sh")
+            set(ADA_PYRAMID_CABI_BUILD_SCRIPT "${PYRAMID_ROOT_DIR}/scripts/build_gnat_pyramid_cabi_marshal_libs.sh")
         endif()
-        set(_ada_fb_args
-            -XPYRAMID_GEN_LIB_DIR=${ADA_PYRAMID_GEN_LIB_DIR}
-            -XPYRAMID_GEN_LIB_NAME=${ADA_PYRAMID_GEN_LIB_NAME}
-            -XPYRAMID_CODECS_LIB_DIR=${CMAKE_BINARY_DIR}/subprojects/PYRAMID
-            -XPYRAMID_CODECS_LIB_NAME=pyramid_generated_marshal
+        set(_ada_cabi_args
+            -XPYRAMID_CABI_LIB_DIR=${ADA_PYRAMID_CABI_LIB_DIR}
+            -XPYRAMID_CABI_LIB_NAME=${ADA_PYRAMID_CABI_LIB_NAME}
         )
         if(ADA_CXX_LIB_DIR)
-            list(APPEND _ada_fb_args -XCXX_LIB_DIR=${ADA_CXX_LIB_DIR})
+            list(APPEND _ada_cabi_args -XCXX_LIB_DIR=${ADA_CXX_LIB_DIR})
         endif()
-        set(_ada_fb_mkdir COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR})
-        file(GLOB ADA_PYRAMID_GEN_CODEC_INPUTS CONFIGURE_DEPENDS
-            "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_codec.cpp"
-            "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_codec.hpp"
-            "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/*_flatbuffers_codec.cpp"
-            "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp/*_flatbuffers_codec.hpp")
+        set(_ada_cabi_mkdir COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_CABI_LIB_DIR})
+        file(GLOB ADA_PYRAMID_CABI_INPUTS CONFIGURE_DEPENDS
+            "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_cabi_marshal.cpp"
+            "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_cabi_marshal.hpp"
+            "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_components_*_cabi_marshal.cpp"
+            "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_components_*_cabi_marshal.hpp")
 
-    set(ADA_PYRAMID_GEN_ARCHIVE
-        ${ADA_PYRAMID_GEN_LIB_DIR}/lib${ADA_PYRAMID_GEN_LIB_NAME}.a)
+    set(ADA_PYRAMID_CABI_ARCHIVE
+        ${ADA_PYRAMID_CABI_LIB_DIR}/lib${ADA_PYRAMID_CABI_LIB_NAME}.a)
     if(WIN32)
         add_custom_command(
-            OUTPUT ${ADA_PYRAMID_GEN_ARCHIVE}
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR}
-            COMMAND cmd /c ${ADA_PYRAMID_GEN_BUILD_SCRIPT} ${ADA_PYRAMID_GEN_LIB_DIR} --build-dir ${CMAKE_BINARY_DIR} --config $<CONFIG>
+            OUTPUT ${ADA_PYRAMID_CABI_ARCHIVE}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_CABI_LIB_DIR}
+            COMMAND cmd /c ${ADA_PYRAMID_CABI_BUILD_SCRIPT} ${ADA_PYRAMID_CABI_LIB_DIR} --build-dir ${CMAKE_BINARY_DIR} --config $<CONFIG>
             DEPENDS
-                ${ADA_PYRAMID_GEN_BUILD_SCRIPT}
-                ${ADA_PYRAMID_GEN_CODEC_INPUTS}
-                pyramid_flatbuffers_codegen
-            COMMENT "Preparing GNAT-compatible generated FlatBuffers archive for Ada builds"
+                ${ADA_PYRAMID_CABI_BUILD_SCRIPT}
+                ${ADA_PYRAMID_CABI_INPUTS}
+                pyramid_cpp_bindings_codegen
+            COMMENT "Preparing GNAT-compatible C-ABI marshal archive for Ada builds"
             VERBATIM)
     else()
         add_custom_command(
-            OUTPUT ${ADA_PYRAMID_GEN_ARCHIVE}
-            COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_GEN_LIB_DIR}
-            COMMAND bash ${ADA_PYRAMID_GEN_BUILD_SCRIPT} ${ADA_PYRAMID_GEN_LIB_DIR} --build-dir ${CMAKE_BINARY_DIR}
+            OUTPUT ${ADA_PYRAMID_CABI_ARCHIVE}
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PYRAMID_CABI_LIB_DIR}
+            COMMAND bash ${ADA_PYRAMID_CABI_BUILD_SCRIPT} ${ADA_PYRAMID_CABI_LIB_DIR} --build-dir ${CMAKE_BINARY_DIR}
             DEPENDS
-                ${ADA_PYRAMID_GEN_BUILD_SCRIPT}
-                ${ADA_PYRAMID_GEN_CODEC_INPUTS}
-                pyramid_flatbuffers_codegen
-            COMMENT "Preparing GNAT-compatible generated FlatBuffers archive for Ada builds"
+                ${ADA_PYRAMID_CABI_BUILD_SCRIPT}
+                ${ADA_PYRAMID_CABI_INPUTS}
+                pyramid_cpp_bindings_codegen
+            COMMENT "Preparing GNAT-compatible C-ABI marshal archive for Ada builds"
             VERBATIM)
     endif()
-    add_custom_target(ada_pyramid_generated_flatbuffers_archive
-        DEPENDS ${ADA_PYRAMID_GEN_ARCHIVE})
+    add_custom_target(ada_pyramid_cabi_marshal_archive
+        DEPENDS ${ADA_PYRAMID_CABI_ARCHIVE})
 
     set(ADA_GENERATED_BINDINGS_EXE
         ${ADA_TEST_SRC_DIR}/bin/test_generated_bindings${CMAKE_EXECUTABLE_SUFFIX})
@@ -1017,7 +1036,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     list(APPEND _ada_generated_bindings_commands
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_TEST_SRC_DIR}/bin
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
-        ${_ada_fb_mkdir}
+        ${_ada_cabi_mkdir}
         COMMAND ${CMAKE_COMMAND} -E env
                 UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT}
                 ${GPRBUILD}
@@ -1031,7 +1050,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                 -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
                 -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
                 -XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME}
-                ${_ada_fb_args}
+                ${_ada_cabi_args}
     )
     add_custom_command(
         OUTPUT ${ADA_GENERATED_BINDINGS_EXE}
@@ -1051,7 +1070,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     add_dependencies(ada_test_generated_bindings_build
         pyramid_ada_bindings_codegen
         ada_pcl_gnat_archives
-        ada_pyramid_generated_flatbuffers_archive
+        ada_pyramid_cabi_marshal_archive
         pyramid_generated_codecs)
 
     add_test(NAME ada_generated_bindings_roundtrip
@@ -1066,6 +1085,15 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     if(TARGET pyramid_codec_json_tactical_objects)
         set(ADA_CPP_CODEC_ROUNDTRIP_EXE
             ${ADA_TEST_SRC_DIR}/bin/test_ada_cpp_codec_roundtrip${CMAKE_EXECUTABLE_SUFFIX})
+        # A bare -XCXX_LIB_DIR= (empty value) would override the .gpr's own
+        # fallback default with an empty string, producing a dangling "-L" in
+        # the link line that swallows the next argv token (e.g. "-lpcl_core")
+        # as its path -- silently dropping that library from the link. Only
+        # pass this when ADA_CXX_LIB_DIR actually resolved to something.
+        set(_ada_cpp_roundtrip_cxx_args "")
+        if(ADA_CXX_LIB_DIR)
+            set(_ada_cpp_roundtrip_cxx_args -XCXX_LIB_DIR=${ADA_CXX_LIB_DIR})
+        endif()
         add_custom_command(
             OUTPUT ${ADA_CPP_CODEC_ROUNDTRIP_EXE}
             COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_TEST_SRC_DIR}/bin
@@ -1081,9 +1109,9 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
                     -XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR}
                     -XPCL_LIB_DIR=${ADA_PCL_LIB_DIR}
                     -XPCL_LIB_NAME=${ADA_PCL_LIB_NAME}
-                    -XPYRAMID_CODECS_LIB_DIR=${CMAKE_BINARY_DIR}/subprojects/PYRAMID
-                    -XPYRAMID_CODECS_LIB_NAME=pyramid_generated_marshal
-                    -XCXX_LIB_DIR=${ADA_CXX_LIB_DIR}
+                    -XPYRAMID_CABI_LIB_DIR=${ADA_PYRAMID_CABI_LIB_DIR}
+                    -XPYRAMID_CABI_LIB_NAME=${ADA_PYRAMID_CABI_LIB_NAME}
+                    ${_ada_cpp_roundtrip_cxx_args}
             WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
             DEPENDS
                 ${ADA_TEST_SRC_DIR}/test_ada_cpp_codec_roundtrip.adb
@@ -1129,7 +1157,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     if(TARGET pyramid_codec_json_tactical_objects AND
        TARGET pyramid_codec_flatbuffers_tactical_objects)
         list(APPEND _ada_plugin_env
-            "PYRAMID_CODEC_PLUGINS=$<TARGET_FILE:pyramid_codec_json_tactical_objects>:$<TARGET_FILE:pyramid_codec_flatbuffers_tactical_objects>")
+            "PYRAMID_CODEC_PLUGINS=$<TARGET_FILE:pyramid_codec_json_tactical_objects>${_pyramid_codec_plugin_env_sep}$<TARGET_FILE:pyramid_codec_flatbuffers_tactical_objects>")
     elseif(TARGET pyramid_codec_json_tactical_objects)
         list(APPEND _ada_plugin_env
             "PYRAMID_CODEC_PLUGINS=$<TARGET_FILE:pyramid_codec_json_tactical_objects>")
@@ -1289,11 +1317,11 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         OUTPUT ${ADA_PYRAMID_BRIDGE_EXE}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_BRIDGE_SRC_DIR}/bin
         COMMAND ${CMAKE_COMMAND} -E make_directory ${ADA_PCL_LIB_DIR}
-        ${_ada_fb_mkdir}
+        ${_ada_cabi_mkdir}
         COMMAND ${CMAKE_COMMAND}
                 -DOUTPUT=${ADA_PYRAMID_BRIDGE_EXE}
                 -DWORKING_DIRECTORY=${ADA_BRIDGE_SRC_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args}${_ada_gprbuild_bindings_args};-p;-P;${ADA_BRIDGE_SRC_DIR}/pyramid_bridge.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};-XPCL_UDP_LIB_NAME=${ADA_PCL_UDP_LIB_NAME};-XPCL_SHMEM_LIB_NAME=${ADA_PCL_SHMEM_LIB_NAME};${_ada_fb_args}"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args}${_ada_gprbuild_bindings_args};-p;-P;${ADA_BRIDGE_SRC_DIR}/pyramid_bridge.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};-XPCL_UDP_LIB_NAME=${ADA_PCL_UDP_LIB_NAME};-XPCL_SHMEM_LIB_NAME=${ADA_PCL_SHMEM_LIB_NAME};${_ada_cabi_args}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_BRIDGE_SRC_DIR}
         DEPENDS
@@ -1308,7 +1336,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     add_dependencies(pyramid_bridge_ada_build
         ada_test_generated_bindings_build
         ada_pcl_gnat_archives
-        ada_pyramid_generated_flatbuffers_archive)
+        ada_pyramid_cabi_marshal_archive)
 
     if(WIN32)
         add_test(NAME pyramid_bridge_e2e
@@ -1347,7 +1375,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND}
                 -DOUTPUT=${ADA_TOBJ_CLIENT_EXE}
                 -DWORKING_DIRECTORY=${ADA_EXAMPLE_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args}${_ada_gprbuild_bindings_args};-p;-P;${ADA_EXAMPLE_DIR}/ada_tobj_client.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};${_ada_fb_args}"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args}${_ada_gprbuild_bindings_args};-p;-P;${ADA_EXAMPLE_DIR}/ada_tobj_client.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};${_ada_cabi_args}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_EXAMPLE_DIR}
         DEPENDS
@@ -1362,7 +1390,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     add_dependencies(ada_tobj_client_build
         ada_test_generated_bindings_build
         ada_pcl_gnat_archives
-        ada_pyramid_generated_flatbuffers_archive
+        ada_pyramid_cabi_marshal_archive
         pyramid_generated_codecs)
 
     # Ada active-find E2E client — built by cmake --build --target pyramid_ada_all
@@ -1374,7 +1402,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         COMMAND ${CMAKE_COMMAND}
                 -DOUTPUT=${ADA_ACTIVE_FIND_E2E_EXE}
                 -DWORKING_DIRECTORY=${ADA_TEST_SRC_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args}${_ada_gprbuild_bindings_args};-p;-P;${ADA_TEST_SRC_DIR}/ada_active_find_e2e.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};${_ada_fb_args}"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args}${_ada_gprbuild_bindings_args};-p;-P;${ADA_TEST_SRC_DIR}/ada_active_find_e2e.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};${_ada_cabi_args}"
                 -P ${ADA_RUN_IF_MISSING}
         WORKING_DIRECTORY ${ADA_TEST_SRC_DIR}
         DEPENDS
@@ -1391,7 +1419,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
     add_dependencies(ada_active_find_e2e_build
         ada_test_generated_bindings_build
         ada_pcl_gnat_archives
-        ada_pyramid_generated_flatbuffers_archive
+        ada_pyramid_cabi_marshal_archive
         pyramid_generated_codecs)
 
     add_dependencies(pyramid_ada_all
@@ -1411,7 +1439,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
             COMMAND ${CMAKE_COMMAND}
                     -DOUTPUT=${ADA_GRPC_CPP_INTEROP_EXE}
                     -DWORKING_DIRECTORY=${ADA_TEST_SRC_DIR}
-                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args}${_ada_gprbuild_bindings_args};-p;-P;${ADA_TEST_SRC_DIR}/ada_grpc_cpp_interop_e2e.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};-XPYRAMID_GEN_LIB_DIR=${ADA_PYRAMID_GEN_LIB_DIR};-XPYRAMID_GEN_LIB_NAME=${ADA_PYRAMID_GEN_LIB_NAME};-XPYRAMID_CODECS_LIB_DIR=${CMAKE_BINARY_DIR}/subprojects/PYRAMID;-XPYRAMID_CODECS_LIB_NAME=pyramid_generated_marshal;-XPYRAMID_PROTOBUF_ADA_DIR=${ADA_GEN_OUT}/protobuf/ada"
+                "-DRUN_COMMAND=${CMAKE_COMMAND};-E;env;UNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};${GPRBUILD}${_ada_gprbuild_project_args}${_ada_gprbuild_platform_args}${_ada_gprbuild_bindings_args};-p;-P;${ADA_TEST_SRC_DIR}/ada_grpc_cpp_interop_e2e.gpr;-q;-XUNMANNED_ROOT=${UNMANNED_WORKSPACE_ROOT};-XPCL_INCLUDE_DIR=${ADA_PCL_INCLUDE_DIR};-XPCL_LIB_DIR=${ADA_PCL_LIB_DIR};-XPCL_LIB_NAME=${ADA_PCL_LIB_NAME};-XPCL_SOCKET_LIB_NAME=${ADA_PCL_SOCKET_LIB_NAME};-XPYRAMID_CABI_LIB_DIR=${ADA_PYRAMID_CABI_LIB_DIR};-XPYRAMID_CABI_LIB_NAME=${ADA_PYRAMID_CABI_LIB_NAME};-XPYRAMID_PROTOBUF_ADA_DIR=${ADA_GEN_OUT}/protobuf/ada"
                     -P ${ADA_RUN_IF_MISSING}
             DEPENDS
                 ${PYRAMID_BINDING_GENERATOR_INPUTS}
@@ -1427,7 +1455,7 @@ if(GPRBUILD AND EXISTS "${PYRAMID_PROTO_ROOT}")
         add_dependencies(ada_grpc_cpp_interop_build
             ada_test_generated_bindings_build
             ada_pcl_gnat_archives
-            ada_pyramid_generated_flatbuffers_archive)
+            ada_pyramid_cabi_marshal_archive)
         add_dependencies(pyramid_ada_all ada_grpc_cpp_interop_build)
 
         if(WIN32)

@@ -184,13 +184,13 @@ procedure Pyramid_Bridge_Main is
    -- -- Build and push world facts to AME for a batch of entity IDs -----------
 
    procedure Free_Fact_Array is new Ada.Unchecked_Deallocation
-     (Fact_Update_Array, Fact_Update_Array_Acc);
+     (World_Fact_Update_Array, World_Fact_Update_Array_Acc);
 
    procedure Push_World_Facts
      (Ids   : Bridge_Entity_Tracker.Id_Array;
       Count : Bridge_Entity_Tracker.Pending_Index)
    is
-      Facts   : Fact_Update_Array (1 .. Count);
+      Facts   : World_Fact_Update_Array (1 .. Count);
       Update  : State_Update;
    begin
       for I in 1 .. Count loop
@@ -203,7 +203,7 @@ procedure Pyramid_Bridge_Main is
       end loop;
 
       Update.Source      := To_Unbounded_String ("pyramid_bridge");
-      Update.Fact_Update := new Fact_Update_Array'(Facts);
+      Update.Fact_Update := new World_Fact_Update_Array'(Facts);
 
       Provided_Ame.Invoke_State_Update_State
         (Executor     => Pcl_Component.Handle (Ame_Exec),

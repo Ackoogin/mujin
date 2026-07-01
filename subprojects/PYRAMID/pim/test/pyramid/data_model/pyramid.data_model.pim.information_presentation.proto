@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package pyramid.data_model.pim.information_presentation;
+
+import "pyramid/data_model/pyramid.data_model.pim.common.proto";
+
+message VisualTrackDisplay {
+  int32 battle_dimension = 1;
+  int32 identifer = 2;
+  int32 quality = 3;
+  int32 stale_state = 4;
+  int32 course = 5;
+  int32 speed = 6;
+  int32 standard_identifer = 7;
+}
+
+message RADAR_SituationDisplay_InformationPresentation {
+  pyramid.data_model.pim.common.GenericComponent base = 1;  // Inherited from GenericComponent
+}
+
+message RADAR_InformationPresentation {
+  pyramid.data_model.pim.common.GenericComponent base = 1;  // Inherited from GenericComponent
+}
+

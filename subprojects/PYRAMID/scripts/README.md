@@ -88,6 +88,40 @@ bindings (regenerated into the build tree each configure), the Ada bindings are
 committed and compiled from source, so `--regen` is opt-in. Options:
 `--build-dir DIR`, `--regen`, `--backends LIST`, `--jobs N`, `--clean`, `--test`.
 
+Ada links **only PCL + the C-ABI marshal layer** (`to_c`/`from_c`/`_c_free`),
+never codec-specific (wire codec) content — Ada has its own pure-Ada JSON
+codec and always talks to the wire through a loaded codec plugin. The
+GNAT-compatible marshal archive is built by
+`build_gnat_pyramid_cabi_marshal_libs.bat`/`.sh` (invoked automatically by the
+CMake build); its single `PYRAMID_CABI_LIB_DIR`/`PYRAMID_CABI_LIB_NAME`
+external variables are what every Ada `.gpr` project in this repo links
+against.
+
+## Offline SDK Packaging (`package_sdk.bat`/`.sh`)
+
+For downstream developers who need to build their **own** `.proto` contracts
+into runtime plugins without this monorepo and without network access (e.g. a
+firewalled deployment target), `package_sdk.bat`/`.sh` produces a
+self-contained deploy directory:
+
+```bat
+subprojects\PYRAMID\scripts\package_sdk.bat
+```
+
+```bash
+subprojects/PYRAMID/scripts/package_sdk.sh
+```
+
+This packages prebuilt PCL static libs (both MSVC `.lib` and GNAT `.a`) +
+headers, a prebuilt `flatc`, the pure-Python generator, starter `.proto`
+contracts, and a standalone CMake/GNAT project template into
+`dist/pcl_pyramid_sdk` (default; `--out` to override). Requires an already
+built `--build-dir` (default `build-flatbuffers-only`) with
+`PYRAMID_ENABLE_FLATBUFFERS=ON`, `PYRAMID_GENERATE_CPP_BINDINGS=ON` — e.g. run
+`build_plugins.bat`/`.sh` first. See
+[`../doc/architecture/sdk_packaging.md`](../doc/architecture/sdk_packaging.md)
+for the maintainer/user split and the deploy directory layout.
+
 ## Windows (GCC/gcov)
 
 Uses GCC with gcov and gcovr (same toolchain as Linux). Requires:

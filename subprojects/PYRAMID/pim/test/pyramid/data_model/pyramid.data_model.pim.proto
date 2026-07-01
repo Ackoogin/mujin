@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package pyramid.data_model.pim;
+
+import "pyramid/data_model/pyramid.data_model.pim.common.proto";
+
+message DemoComponentA {
+  pyramid.data_model.pim.common.GenericComponent base = 1;  // Inherited from GenericComponent
+}
+
+message DemoComponentB {
+  pyramid.data_model.pim.common.GenericComponent base = 1;  // Inherited from GenericComponent
+}
+

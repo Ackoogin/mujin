@@ -5,6 +5,7 @@
 #include "pcl/pcl_executor.h"
 #include "pcl/pcl_transport.h"
 #include "pcl/pcl_log.h"
+#include "pcl/pcl_alloc.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -65,7 +66,7 @@ pcl_container_t* pcl_container_create(const char*            name,
                                       void*                  user_data) {
   if (!name) return NULL;
 
-  pcl_container_t* c = (pcl_container_t*)calloc(1, sizeof(pcl_container_t));
+  pcl_container_t* c = (pcl_container_t*)pcl_calloc(1, sizeof(pcl_container_t));
   if (!c) return NULL;
 
   snprintf(c->name, sizeof(c->name), "%s", name);
@@ -93,7 +94,7 @@ void pcl_container_destroy(pcl_container_t* c) {
   if (c->executor) {
     pcl_executor_remove(c->executor, c);
   }
-  free(c);
+  pcl_free(c);
 }
 
 // -- Lifecycle transitions -----------------------------------------------
@@ -401,7 +402,7 @@ pcl_status_t pcl_service_respond(pcl_svc_context_t* ctx,
   if (ctx->transport && ctx->transport->respond) {
     pcl_status_t rc = ctx->transport->respond(
         ctx->transport->adapter_ctx, ctx, response);
-    free(ctx);
+    pcl_free(ctx);
     return rc;
   }
 
@@ -409,7 +410,7 @@ pcl_status_t pcl_service_respond(pcl_svc_context_t* ctx,
       ctx->executor->transport.respond) {
     pcl_status_t rc = ctx->executor->transport.respond(
         ctx->executor->transport.adapter_ctx, ctx, response);
-    free(ctx);
+    pcl_free(ctx);
     return rc;
   }
 
@@ -417,12 +418,12 @@ pcl_status_t pcl_service_respond(pcl_svc_context_t* ctx,
   if (ctx->callback) {
     ctx->callback(response, ctx->user_data);
   }
-  free(ctx);
+  pcl_free(ctx);
   return PCL_OK;
 }
 
 void pcl_service_context_free(pcl_svc_context_t* ctx) {
-  free(ctx);
+  pcl_free(ctx);
 }
 
 // -- Streaming service API ------------------------------------------------
@@ -490,7 +491,7 @@ pcl_status_t pcl_stream_end(pcl_stream_context_t* ctx) {
   if (ctx->transport && ctx->transport->stream_end) {
     pcl_status_t rc = ctx->transport->stream_end(
         ctx->transport->adapter_ctx, ctx->transport_ctx, PCL_OK);
-    free(ctx);
+    pcl_free(ctx);
     return rc;
   }
 
@@ -498,7 +499,7 @@ pcl_status_t pcl_stream_end(pcl_stream_context_t* ctx) {
       ctx->executor->transport.stream_end) {
     pcl_status_t rc = ctx->executor->transport.stream_end(
         ctx->executor->transport.adapter_ctx, ctx->transport_ctx, PCL_OK);
-    free(ctx);
+    pcl_free(ctx);
     return rc;
   }
 
@@ -507,7 +508,7 @@ pcl_status_t pcl_stream_end(pcl_stream_context_t* ctx) {
     pcl_msg_t empty = {0};
     ctx->callback(&empty, true, PCL_OK, ctx->user_data);
   }
-  free(ctx);
+  pcl_free(ctx);
   return PCL_OK;
 }
 
@@ -521,7 +522,7 @@ pcl_status_t pcl_stream_abort(pcl_stream_context_t* ctx, pcl_status_t error_code
   if (ctx->transport && ctx->transport->stream_end) {
     pcl_status_t rc = ctx->transport->stream_end(
         ctx->transport->adapter_ctx, ctx->transport_ctx, error_code);
-    free(ctx);
+    pcl_free(ctx);
     return rc;
   }
 
@@ -529,7 +530,7 @@ pcl_status_t pcl_stream_abort(pcl_stream_context_t* ctx, pcl_status_t error_code
       ctx->executor->transport.stream_end) {
     pcl_status_t rc = ctx->executor->transport.stream_end(
         ctx->executor->transport.adapter_ctx, ctx->transport_ctx, error_code);
-    free(ctx);
+    pcl_free(ctx);
     return rc;
   }
 
@@ -538,7 +539,7 @@ pcl_status_t pcl_stream_abort(pcl_stream_context_t* ctx, pcl_status_t error_code
     pcl_msg_t empty = {0};
     ctx->callback(&empty, true, error_code, ctx->user_data);
   }
-  free(ctx);
+  pcl_free(ctx);
   return PCL_OK;
 }
 

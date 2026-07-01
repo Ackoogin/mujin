@@ -27,10 +27,14 @@ REM The codec plugin is the single cross-language .dll (it consumes the frozen
 REM pyramid_<Type>_c C struct) and is loaded from both C++ and Ada clients.
 REM
 REM Usage:
-REM   build_plugins.bat [--build-dir DIR] [--grpc] [--jobs N] [--clean]
-REM                     [--stage] [--stage-out DIR]
+REM   build_plugins.bat [--proto-dir DIR] [--build-dir DIR] [--grpc] [--jobs N]
+REM                     [--clean] [--stage] [--stage-out DIR]
 REM
 REM Options:
+REM   --proto-dir DIR  proto IDL source tree to build  (default: PYRAMID\proto);
+REM                    e.g. subprojects\PYRAMID\pim\test for the new PIM proto set.
+REM                    Redirecting the proto set usually warrants a fresh build dir
+REM                    (use a distinct --build-dir or --clean).
 REM   --build-dir DIR  CMake build directory          (default: <repo>\build-plugins)
 REM   --grpc           also build protobuf + the coupled gRPC target plugin
 REM                    (fetches gRPC from source on first configure -- needs network)
@@ -48,6 +52,7 @@ for %%I in ("%SCRIPT_DIR%..\..\..") do set "REPO_ROOT=%%~fI"
 
 set "BUILD_DIR=%REPO_ROOT%\build-plugins"
 set "STAGE_OUT=%REPO_ROOT%\dist\plugin_deploy"
+set "PROTO_DIR="
 set "ENABLE_GRPC=0"
 set "DO_STAGE=0"
 set "CLEAN=0"
@@ -56,6 +61,7 @@ if not defined JOBS set "JOBS=4"
 
 :parse_args
 if "%~1"=="" goto done_args
+if /i "%~1"=="--proto-dir" (set "PROTO_DIR=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--build-dir" (set "BUILD_DIR=%~2" & shift & shift & goto parse_args)
 if /i "%~1"=="--grpc"      (set "ENABLE_GRPC=1" & shift & goto parse_args)
 if /i "%~1"=="--jobs"      (set "JOBS=%~2" & shift & shift & goto parse_args)
@@ -80,8 +86,21 @@ exit /b 0
 set "GRPC=off"
 if "%ENABLE_GRPC%"=="1" set "GRPC=on"
 
+REM Resolve --proto-dir to an absolute path so CMake (run from BUILD_DIR) finds it.
+if defined PROTO_DIR (
+  if not exist "%PROTO_DIR%" (
+    echo [build_plugins] proto dir not found: %PROTO_DIR%>&2
+    exit /b 2
+  )
+  for %%I in ("%PROTO_DIR%") do set "PROTO_DIR=%%~fI"
+)
+
+set "PROTO_DISP=%PROTO_DIR%"
+if not defined PROTO_DISP set "PROTO_DISP=<default: PYRAMID\proto>"
+
 echo [build_plugins] repo      : %REPO_ROOT%
 echo [build_plugins] build-dir : %BUILD_DIR%
+echo [build_plugins] proto-dir : %PROTO_DISP%
 echo [build_plugins] grpc      : %GRPC%
 echo [build_plugins] jobs      : %JOBS%
 
@@ -101,6 +120,10 @@ if "%ENABLE_GRPC%"=="1" (
   set "GRPC_ARGS=-DPYRAMID_ENABLE_PROTOBUF=OFF -DPYRAMID_ENABLE_GRPC=OFF"
 )
 
+REM Redirect the proto set (e.g. pim\test) when --proto-dir was given.
+set "PROTO_ARGS="
+if defined PROTO_DIR set "PROTO_ARGS=-DPYRAMID_PROTO_DIR=%PROTO_DIR%"
+
 echo [build_plugins] configure ...
 cmake -S "%REPO_ROOT%" -B "%BUILD_DIR%" ^
   -DCMAKE_BUILD_TYPE=Release ^
@@ -110,7 +133,8 @@ cmake -S "%REPO_ROOT%" -B "%BUILD_DIR%" ^
   -DPYRAMID_ENABLE_ROS2=OFF ^
   -DPYRAMID_ENABLE_FLATBUFFERS=ON ^
   -DPYRAMID_GENERATE_CPP_BINDINGS=ON ^
-  %GRPC_ARGS%
+  -DPYRAMID_BUILD_TESTS=OFF ^
+  %GRPC_ARGS% %PROTO_ARGS%
 if errorlevel 1 exit /b 1
 
 echo [build_plugins] build pyramid_plugins ...

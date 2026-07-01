@@ -8,6 +8,7 @@
 #include "pcl/pcl_container.h"
 #include "pcl/pcl_transport.h"
 #include "pcl/pcl_log.h"
+#include "pcl/pcl_alloc.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -110,7 +111,7 @@ static char* pcl_strdup_local(const char* src) {
   if (!src) return NULL;
 
   len = strlen(src) + 1u;
-  copy = (char*)malloc(len);
+  copy = (char*)pcl_alloc(len);
   if (!copy) return NULL;
 
   memcpy(copy, src, len);
@@ -119,11 +120,11 @@ static char* pcl_strdup_local(const char* src) {
 
 static void free_pending_msg(pcl_pending_msg_t* pending) {
   if (!pending) return;
-  free(pending->topic);
-  free(pending->type_name);
-  free(pending->source_peer_id);
-  free(pending->data);
-  free(pending);
+  pcl_free(pending->topic);
+  pcl_free(pending->type_name);
+  pcl_free(pending->source_peer_id);
+  pcl_free(pending->data);
+  pcl_free(pending);
 }
 
 static pcl_endpoint_kind_t endpoint_kind_from_port_type(pcl_port_type_t type) {
@@ -244,7 +245,7 @@ static int peer_is_allowed(const pcl_executor_t* e,
 // -- Create / destroy ----------------------------------------------------
 
 pcl_executor_t* pcl_executor_create(void) {
-  pcl_executor_t* e = (pcl_executor_t*)calloc(1, sizeof(pcl_executor_t));
+  pcl_executor_t* e = (pcl_executor_t*)pcl_calloc(1, sizeof(pcl_executor_t));
   if (!e) return NULL;
   e->container_count    = 0;
   e->has_transport      = 0;
@@ -309,9 +310,9 @@ void pcl_executor_destroy(pcl_executor_t* e) {
     pcl_mutex_unlock(&e->resp_cb_lock);
     while (node) {
       pcl_resp_cb_node_t* next = node->next;
-      free(node->data);
-      free(node->type_name);
-      free(node);
+      pcl_free(node->data);
+      pcl_free(node->type_name);
+      pcl_free(node);
       node = next;
     }
   }
@@ -326,18 +327,18 @@ void pcl_executor_destroy(pcl_executor_t* e) {
     pcl_mutex_unlock(&e->svc_req_lock);
     while (node) {
       pcl_pending_svc_req_t* next = node->next;
-      free(node->service_name);
-      free(node->type_name);
-      free(node->data);
-      free(node->source_peer_id);
-      free(node);
+      pcl_free(node->service_name);
+      pcl_free(node->type_name);
+      pcl_free(node->data);
+      pcl_free(node->source_peer_id);
+      pcl_free(node);
       node = next;
     }
   }
   pcl_mutex_destroy(&e->svc_req_lock);
   pcl_mutex_destroy(&e->incoming_lock);
   pcl_mutex_destroy(&e->containers_lock);
-  free(e);
+  pcl_free(e);
 }
 
 // -- Container management ------------------------------------------------
@@ -437,9 +438,9 @@ static uint32_t drain_resp_cb_queue(pcl_executor_t* e) {
 
     node->cb(&resp, node->user_data);
 
-    free(node->data);
-    free(node->type_name);
-    free(node);
+    pcl_free(node->data);
+    pcl_free(node->type_name);
+    pcl_free(node);
     ++drained;
   }
   return drained;
@@ -533,7 +534,7 @@ static uint32_t drain_svc_req_queue(pcl_executor_t* e) {
           : find_service(e, node->service_name,
                          PCL_ROUTE_LOCAL, NULL);
       if (port) {
-        pcl_svc_context_t* ctx = (pcl_svc_context_t*)calloc(1, sizeof(*ctx));
+        pcl_svc_context_t* ctx = (pcl_svc_context_t*)pcl_calloc(1, sizeof(*ctx));
         if (ctx) {
           pcl_msg_t    resp = {0};
           pcl_status_t rc;
@@ -546,14 +547,14 @@ static uint32_t drain_svc_req_queue(pcl_executor_t* e) {
                                  ctx, port->svc_user_data);
           if (rc == PCL_OK) {
             node->callback(&resp, node->user_data);
-            free(ctx);
+            pcl_free(ctx);
           } else if (rc == PCL_PENDING) {
             /* handler saved ctx; will fire callback via pcl_service_respond */
           } else {
             /* handler error — notify caller with empty response */
             pcl_msg_t empty = {0};
             node->callback(&empty, node->user_data);
-            free(ctx);
+            pcl_free(ctx);
           }
         } else {
           /* OOM allocating context — notify caller */
@@ -567,11 +568,11 @@ static uint32_t drain_svc_req_queue(pcl_executor_t* e) {
       }
     }
 
-    free(node->service_name);
-    free(node->type_name);
-    free(node->data);
-    free(node->source_peer_id);
-    free(node);
+    pcl_free(node->service_name);
+    pcl_free(node->type_name);
+    pcl_free(node->data);
+    pcl_free(node->source_peer_id);
+    pcl_free(node);
     ++drained;
   }
   return drained;
@@ -1193,7 +1194,7 @@ pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
     if (!port) return PCL_ERR_NOT_FOUND;
 
     // Allocate context for potential deferred response
-    ctx = (pcl_svc_context_t*)calloc(1, sizeof(*ctx));
+    ctx = (pcl_svc_context_t*)pcl_calloc(1, sizeof(*ctx));
     if (!ctx) return PCL_ERR_NOMEM;
 
     ctx->executor  = e;
@@ -1205,13 +1206,13 @@ pcl_status_t pcl_executor_invoke_async(pcl_executor_t*  e,
     if (rc == PCL_OK) {
       // Immediate response — fire callback and free context
       callback(&response, user_data);
-      free(ctx);
+      pcl_free(ctx);
     } else if (rc == PCL_PENDING) {
       // Deferred — handler saved ctx, will call pcl_service_respond later
       rc = PCL_OK;
     } else {
       // Error — free context
-      free(ctx);
+      pcl_free(ctx);
     }
     return rc;
   }
@@ -1233,7 +1234,7 @@ pcl_status_t pcl_executor_invoke_stream(pcl_executor_t*        e,
         callback, user_data, &stream_handle);
     if (rc == PCL_OK || rc == PCL_STREAMING) {
       if (out_ctx) {
-        pcl_stream_context_t* ctx = (pcl_stream_context_t*)calloc(1, sizeof(*ctx));
+        pcl_stream_context_t* ctx = (pcl_stream_context_t*)pcl_calloc(1, sizeof(*ctx));
         if (ctx) {
           ctx->executor      = e;
           ctx->callback      = callback;
@@ -1256,7 +1257,7 @@ pcl_status_t pcl_executor_invoke_stream(pcl_executor_t*        e,
     if (!port) return PCL_ERR_NOT_FOUND;
 
     // Allocate stream context
-    ctx = (pcl_stream_context_t*)calloc(1, sizeof(*ctx));
+    ctx = (pcl_stream_context_t*)pcl_calloc(1, sizeof(*ctx));
     if (!ctx) return PCL_ERR_NOMEM;
 
     ctx->executor  = e;
@@ -1271,7 +1272,7 @@ pcl_status_t pcl_executor_invoke_stream(pcl_executor_t*        e,
       return PCL_OK;
     } else {
       // Error or unexpected return — free context
-      free(ctx);
+      pcl_free(ctx);
       if (out_ctx) *out_ctx = NULL;
       return rc;
     }
@@ -1300,7 +1301,7 @@ pcl_status_t pcl_executor_post_response_msg(pcl_executor_t*  e,
 
   if (!e || !cb || !msg) return PCL_ERR_INVALID;
 
-  node = (pcl_resp_cb_node_t*)calloc(1, sizeof(*node));
+  node = (pcl_resp_cb_node_t*)pcl_calloc(1, sizeof(*node));
   if (!node) return PCL_ERR_NOMEM;
 
   node->cb        = cb;
@@ -1308,9 +1309,9 @@ pcl_status_t pcl_executor_post_response_msg(pcl_executor_t*  e,
   node->size      = msg->size;
 
   if (msg->size > 0u && msg->data) {
-    node->data = malloc(msg->size);
+    node->data = pcl_alloc(msg->size);
     if (!node->data) {
-      free(node);
+      pcl_free(node);
       return PCL_ERR_NOMEM;
     }
     memcpy(node->data, msg->data, msg->size);
@@ -1319,8 +1320,8 @@ pcl_status_t pcl_executor_post_response_msg(pcl_executor_t*  e,
   if (msg->type_name) {
     node->type_name = pcl_strdup_local(msg->type_name);
     if (!node->type_name) {
-      free(node->data);
-      free(node);
+      pcl_free(node->data);
+      pcl_free(node);
       return PCL_ERR_NOMEM;
     }
   }
@@ -1348,7 +1349,7 @@ static pcl_status_t enqueue_incoming_message(pcl_executor_t*  e,
   if (msg->size > 0u && !msg->data) return PCL_ERR_INVALID;
   if (!msg->type_name) return PCL_ERR_INVALID;
 
-  pending = (pcl_pending_msg_t*)calloc(1, sizeof(pcl_pending_msg_t));
+  pending = (pcl_pending_msg_t*)pcl_calloc(1, sizeof(pcl_pending_msg_t));
   if (!pending) return PCL_ERR_NOMEM;
 
   pending->topic = pcl_strdup_local(topic);
@@ -1365,7 +1366,7 @@ static pcl_status_t enqueue_incoming_message(pcl_executor_t*  e,
   }
 
   if (msg->size > 0u) {
-    pending->data = malloc(msg->size);
+    pending->data = pcl_alloc(msg->size);
     if (!pending->data) {
       free_pending_msg(pending);
       return PCL_ERR_NOMEM;
@@ -1414,30 +1415,30 @@ static pcl_status_t enqueue_svc_req(pcl_executor_t*  e,
 
   if (!e || !service_name || !request || !callback) return PCL_ERR_INVALID;
 
-  node = (pcl_pending_svc_req_t*)calloc(1, sizeof(*node));
+  node = (pcl_pending_svc_req_t*)pcl_calloc(1, sizeof(*node));
   if (!node) return PCL_ERR_NOMEM;
 
   node->service_name = pcl_strdup_local(service_name);
   if (!node->service_name) {
-    free(node);
+    pcl_free(node);
     return PCL_ERR_NOMEM;
   }
 
   if (request->type_name) {
     node->type_name = pcl_strdup_local(request->type_name);
     if (!node->type_name) {
-      free(node->service_name);
-      free(node);
+      pcl_free(node->service_name);
+      pcl_free(node);
       return PCL_ERR_NOMEM;
     }
   }
 
   if (request->size > 0u && request->data) {
-    node->data = malloc(request->size);
+    node->data = pcl_alloc(request->size);
     if (!node->data) {
-      free(node->service_name);
-      free(node->type_name);
-      free(node);
+      pcl_free(node->service_name);
+      pcl_free(node->type_name);
+      pcl_free(node);
       return PCL_ERR_NOMEM;
     }
     memcpy(node->data, request->data, request->size);
@@ -1449,10 +1450,10 @@ static pcl_status_t enqueue_svc_req(pcl_executor_t*  e,
   if (source_peer_id) {
     node->source_peer_id = pcl_strdup_local(source_peer_id);
     if (!node->source_peer_id) {
-      free(node->service_name);
-      free(node->type_name);
-      free(node->data);
-      free(node);
+      pcl_free(node->service_name);
+      pcl_free(node->type_name);
+      pcl_free(node->data);
+      pcl_free(node);
       return PCL_ERR_NOMEM;
     }
   }

@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package pyramid.data_model.pim_osprey.sensor_products;
+
+import "pyramid/data_model/pyramid.data_model.base.proto";
+import "pyramid/data_model/pyramid.data_model.common.proto";
+import "pyramid/data_model/pyramid.data_model.common_pim_components.sensor_products.proto";
+import "pyramid/data_model/pyramid.data_model.common_pim_components.tactical_objects.proto";
+
+message SPRRequirement {
+}
+
+// Request to process all track data from the radar relating to a particular area
+message SPRRadarProcessAreaTracksRequest {
+  SPRRequest base = 1;  // Inherited from SPRRequest
+}
+
+// Requirement for processing track data from the radar for a single location to create a single track
+message SPRRadarProcessSingleTrackRequirement {
+  SPRRequirement base = 1;  // Inherited from SPRRequirement
+}
+
+// Request to process track data from the radar for a single location to create a single track
+message SPRRadarProcessSingleTrackRequest {
+  SPRRequest base = 1;  // Inherited from SPRRequest
+}
+
+message SPRRequest {
+  pyramid.data_model.common.Request base = 1;  // Inherited from Request
+}
+
+// Standard properties of a Tactical Object
+message SPRObject {
+  pyramid.data_model.common.Entity base = 1;  // Inherited from Entity
+  pyramid.data_model.common_pim_components.sensor_products.SPRInformation base_2 = 2;  // Inherited from SPRInformation
+
+  int32 creation_time = 3;
+  optional pyramid.data_model.base.Percentage quality = 4;
+  optional pyramid.data_model.base.Angle course = 5;
+  optional pyramid.data_model.base.Speed speed = 6;
+  optional pyramid.data_model.base.Length length = 7;
+  pyramid.data_model.common.GeodeticPosition position = 8;
+  repeated pyramid.data_model.common_pim_components.tactical_objects.ObjectSource source = 9;
+}
+
+// Requirement for processing all track data from the radar relating to a particular area
+message SPRRadarProcessAreaTracksRequirement {
+  SPRRequirement base = 1;  // Inherited from SPRRequirement
+}
+
+message SPRRadarTrackInfoDep {
+  pyramid.data_model.common_pim_components.sensor_products.SPRDependencyInformation base = 1;  // Inherited from SPRDependencyInformation
+}
+
+message RADAR_SensorProducts {
+  pyramid.data_model.common_pim_components.sensor_products.Sensor_Products base = 1;  // Inherited from Sensor Products
+}
+

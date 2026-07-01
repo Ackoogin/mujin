@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package pyramid.data_model.pim.external_systems;
+
+enum TrkRequestCode_Type {
+  TRK_REQUEST_CODE_TYPE_UNSPECIFIED = 0;
+  TRK_REQUEST_CODE_TYPE_INITIATE = 1;
+  TRK_REQUEST_CODE_TYPE_POS_CORRECT = 2;
+  TRK_REQUEST_CODE_TYPE_DELETE = 3;
+  TRK_REQUEST_CODE_TYPE_DELETE_ALL = 4;
+  TRK_REQUEST_CODE_TYPE_ATI = 5;
+  TRK_REQUEST_CODE_TYPE_RADAR_NO_GO = 6;
+}
+
+message Latitude_Type {}
+
+message SelectedUserId_Type {}
+
+message RadarTrackId_Type {}
+
+message Longitude_Type {}
+
+message TacticalItemIdentifier_Type {}
+
+message GeoPosition_Record {
+  int32 latitude = 1;
+  int32 longitude = 2;
+}
+
+message TrackControlCmd_Record {
+  TrkRequestCode_Type request_code = 1;
+  RadarTrackId_Type track_number = 2;
+  GeoPosition_Record position = 3;
+  bool create_from_reinject = 4;
+  bool delete_from_convert = 5;
+  TacticalItemIdentifier_Type track_tac_index = 6;
+  bool track_not_in_tp = 7;
+  SelectedUserId_Type requesting_user_id = 8;
+}
+
+message TrackControlCmdStatus_Record {
+  TrkRequestCode_Type request_code = 1;
+  int32 progress = 2;
+}
+

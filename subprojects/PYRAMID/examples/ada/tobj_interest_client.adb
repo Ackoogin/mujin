@@ -115,14 +115,14 @@ package body Tobj_Interest_Client is
    begin
       Req.Source      := Source_Local;
       Req.Policy      := Policy;
-      Req.Dimension   := new Dimension_Array'(1 => Dimension);
+      Req.Dimension   := new Battle_Dimension_Array'(1 => Dimension);
       if Min_Lat_Rad = Max_Lat_Rad and then Min_Lon_Rad = Max_Lon_Rad then
-         Req.Has_Val_Point := True;
-         Req.Val_Point.Position.Latitude := Min_Lat_Rad;
-         Req.Val_Point.Position.Longitude := Min_Lon_Rad;
+         Req.Has_Point := True;
+         Req.Point.Position.Latitude := Min_Lat_Rad;
+         Req.Point.Position.Longitude := Min_Lon_Rad;
       else
-         Req.Has_Val_Poly_Area := True;
-         Req.Val_Poly_Area.Points := new Points_Array'
+         Req.Has_Poly_Area := True;
+         Req.Poly_Area.Points := new Geodetic_Position_Array'
            (1 => (Latitude => Min_Lat_Rad, Longitude => Min_Lon_Rad),
             2 => (Latitude => Min_Lat_Rad, Longitude => Max_Lon_Rad),
             3 => (Latitude => Max_Lat_Rad, Longitude => Max_Lon_Rad),

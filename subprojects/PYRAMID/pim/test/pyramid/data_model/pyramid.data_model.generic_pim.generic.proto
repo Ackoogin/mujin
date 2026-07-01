@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package pyramid.data_model.generic_pim.generic;
+
+import "pyramid/data_model/pyramid.data_model.base.proto";
+import "pyramid/data_model/pyramid.data_model.common.proto";
+
+message GenericComponent {
+  // Is this component responsible for initiating the command (per command sent)
+  bool init_request = 1;
+  int32 retry_request = 2;
+  RequirementQueue requirement_queue = 3;
+  RequirementList requirement_list = 4;
+  RequirementDependencyMap requirement_dependency_map = 5;
+}
+
+message RequirementQueue {
+  repeated pyramid.data_model.base.Identifier elements = 1;
+}
+
+message RequirementList {
+  repeated pyramid.data_model.common.Requirement element = 1;
+}
+
+message RequirementSolutionList {
+  repeated pyramid.data_model.common.RequirementSolution element = 1;
+}
+
+message RequirementDependencyMap {
+  repeated RequirementDependencyEntry entries = 1;
+}
+
+message RequirementDependencyEntry {
+  pyramid.data_model.base.Identifier requirement = 1;
+  pyramid.data_model.base.Identifier dependency = 2;
+}
+
+message Capabilities {
+  repeated pyramid.data_model.common.Capability capability = 1;
+}
+
+message DependencyCapabilities {
+  repeated pyramid.data_model.common.Capability capability = 1;
+}
+

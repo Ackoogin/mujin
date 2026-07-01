@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package pyramid.data_model.common_pim_components.hmi_dialogue;
+
+import "pyramid/data_model/pyramid.data_model.common.proto";
+import "pyramid/data_model/pyramid.data_model.generic_pim.generic.proto";
+
+message HDIDependencyRequest {
+  pyramid.data_model.common.DependencyRequest base = 1;  // Inherited from DependencyRequest
+}
+
+message HDIRequirement {
+}
+
+message HDIRequest {
+  pyramid.data_model.common.Request base = 1;  // Inherited from Request
+}
+
+message HDIDependencyRequirement {
+  pyramid.data_model.common.DependencyRequirement base = 1;  // Inherited from DependencyRequirement
+}
+
+message HMIDialogue {
+  pyramid.data_model.generic_pim.generic.GenericComponent base = 1;  // Inherited from GenericComponent
+}
+

@@ -402,8 +402,58 @@ class ProtobufGenerator:
             if p['name'] in seen:
                 continue
             seen.add(p['name'])
+            if not self._port_required(p):
+                continue
+            if self._port_disabled_by_structure_override(cls, p):
+                continue
             out.append(p)
         return out
+
+    def _port_required(self, port: Dict[str, Any]) -> bool:
+        """Return whether a port should be emitted based on its lower multiplicity."""
+        lower = port.get('multiplicity', {}).get('lower', '1')
+        try:
+            return int(str(lower).strip()) > 0
+        except (TypeError, ValueError):
+            return True
+
+    def _port_disabled_by_structure_override(self, cls: Dict[str, Any],
+                                             port: Dict[str, Any]) -> bool:
+        """Return true when a project structure connects this port to a lower-0 override."""
+        port_id = port.get('id')
+        if not port_id:
+            return False
+
+        project, component = self._project_component(cls.get('namespace', []))
+        if not project or not component:
+            return False
+
+        structure_ids = set()
+        disabled_roles = set()
+        for candidate in self.model.get('classes', []):
+            cand_project, cand_component = self._project_component(
+                candidate.get('namespace', []))
+            if cand_project != project or cand_component is not None:
+                continue
+            cleaned = [self._clean_segment(s) for s in candidate.get('namespace', [])]
+            if 'structure' not in cleaned:
+                continue
+            if candidate.get('id'):
+                structure_ids.add(candidate['id'])
+            for candidate_port in candidate.get('ports', []):
+                if not self._port_required(candidate_port) and candidate_port.get('id'):
+                    disabled_roles.add(candidate_port['id'])
+
+        if not structure_ids or not disabled_roles:
+            return False
+
+        for connector in self.model.get('connectors', []):
+            if connector.get('ownerId') not in structure_ids:
+                continue
+            roles = {end.get('role') for end in connector.get('ends', [])}
+            if port_id in roles and roles.intersection(disabled_roles):
+                return True
+        return False
 
     def _normalize_namespace(self, namespace: tuple) -> tuple:
         """Legacy (project, component) grouping used only by type-iteration helpers."""

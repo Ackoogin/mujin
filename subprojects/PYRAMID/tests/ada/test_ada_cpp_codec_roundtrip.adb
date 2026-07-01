@@ -19,7 +19,7 @@ procedure Test_Ada_Cpp_Codec_Roundtrip is
    use type Pcl_Plugins.Pcl_Codec_Decode_Access;
    use type Pcl_Plugins.Pcl_Codec_Encode_Access;
    use type Pcl_Plugins.Pcl_Codec_Free_Msg_Access;
-   use type Source_Array_Acc;
+   use type Object_Source_Array_Acc;
    use type System.Address;
 
    procedure Log_Line (Message : String) is
@@ -41,8 +41,8 @@ procedure Test_Ada_Cpp_Codec_Roundtrip is
    end Same;
 
    function Source_Equals
-     (Left  : Source_Array_Acc;
-      Right : Source_Array_Acc) return Boolean
+     (Left  : Object_Source_Array_Acc;
+      Right : Object_Source_Array_Acc) return Boolean
    is
    begin
       if Left = null or else Right = null then
@@ -92,8 +92,8 @@ procedure Test_Ada_Cpp_Codec_Roundtrip is
          Type_Name => Interfaces.C.Strings.Null_Ptr);
       Original : Object_Detail;
       Decoded  : Object_Detail;
-      Enc_C    : aliased Pyramid_Object_Detail_C := (others => <>);
-      Dec_C    : aliased Pyramid_Object_Detail_C := (others => <>);
+      Enc_C    : aliased Pyramid_Data_Model_Tactical_Object_Detail_C := (others => <>);
+      Dec_C    : aliased Pyramid_Data_Model_Tactical_Object_Detail_C := (others => <>);
 
       Path_C : Interfaces.C.Strings.chars_ptr :=
         Interfaces.C.Strings.New_String (Plugin_Path);
@@ -125,7 +125,7 @@ procedure Test_Ada_Cpp_Codec_Roundtrip is
       Original.Update_Time := 42.5;
       Original.Id := To_Unbounded_String ("obj-ada-cpp-001");
       Original.Entity_Source := To_Unbounded_String ("ada-cpp-roundtrip");
-      Original.Source := new Source_Array'(1 => Source_Radar,
+      Original.Source := new Object_Source_Array'(1 => Source_Radar,
                                            2 => Source_Local);
       Original.Position.Latitude := 0.8901179185171081;
       Original.Position.Longitude := -0.017453292519943295;
@@ -158,7 +158,7 @@ procedure Test_Ada_Cpp_Codec_Roundtrip is
                 (Codec.all.Codec_Ctx, Schema_C, Enc_C'Address,
                  Out_Msg'Access) = Pcl_Bindings.PCL_OK,
               "codec encode failed");
-      Free_Object_Detail (Enc_C'Access);
+      Free_Pyramid_Data_Model_Tactical_Object_Detail (Enc_C'Access);
       Assert (Out_Msg.Data /= System.Null_Address,
               "encoded message data is null");
       Assert (Out_Msg.Size > 0, "encoded message is empty");
@@ -168,7 +168,7 @@ procedure Test_Ada_Cpp_Codec_Roundtrip is
                  Dec_C'Address) = Pcl_Bindings.PCL_OK,
               "codec decode failed");
       From_C (Dec_C, Decoded);
-      Free_Object_Detail (Dec_C'Access);
+      Free_Pyramid_Data_Model_Tactical_Object_Detail (Dec_C'Access);
 
       Assert_Equal (Original, Decoded);
       Cleanup;

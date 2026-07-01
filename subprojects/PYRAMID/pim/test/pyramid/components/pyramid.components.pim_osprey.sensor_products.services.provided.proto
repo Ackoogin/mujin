@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package pyramid.components.pim_osprey.sensor_products.services.provided;
+
+import "google/protobuf/empty.proto";
+import "pyramid/data_model/pyramid.data_model.base.proto";
+import "pyramid/data_model/pyramid.data_model.common.proto";
+import "pyramid/data_model/pyramid.data_model.common_pim_components.authorisation.proto";
+import "pyramid/data_model/pyramid.data_model.common_pim_components.sensor_products.proto";
+import "pyramid/data_model/pyramid.data_model.generic_pim.generic.proto";
+import "pyramid/data_model/pyramid.data_model.pim_osprey.sensor_products.proto";
+
+message SPRInformation_Service_Information {
+  oneof payload {
+    pyramid.data_model.common_pim_components.sensor_products.SPRInformation sprinformation = 1;
+    pyramid.data_model.pim_osprey.sensor_products.SPRObject sprobject = 2;
+  }
+}
+
+// Information port 'pSPRInformation' (provided) refining SPRInformation
+service SPRInformation_Service {
+  rpc Read(google.protobuf.Empty) returns (stream SPRInformation_Service_Information);
+}
+
+message SPRRequirement_Service_Request {
+  oneof payload {
+    pyramid.data_model.common_pim_components.sensor_products.SPRRequest sprrequest = 1;
+    pyramid.data_model.pim_osprey.sensor_products.SPRRadarProcessAreaTracksRequest sprradar_process_area_tracks_request = 2;
+    pyramid.data_model.pim_osprey.sensor_products.SPRRadarProcessSingleTrackRequest sprradar_process_single_track_request = 3;
+  }
+}
+
+message SPRRequirement_Service_Requirement {
+  oneof payload {
+    pyramid.data_model.common_pim_components.sensor_products.SPRRequirement sprrequirement = 1;
+    pyramid.data_model.pim_osprey.sensor_products.SPRRadarProcessSingleTrackRequirement sprradar_process_single_track_requirement = 2;
+    pyramid.data_model.pim_osprey.sensor_products.SPRRadarProcessAreaTracksRequirement sprradar_process_area_tracks_requirement = 3;
+  }
+}
+
+// Request port 'pSPRRequirement' (provided) refining SPRRequirement
+service SPRRequirement_Service {
+  rpc Create(SPRRequirement_Service_Request) returns (pyramid.data_model.common.Ack);
+  rpc Read(pyramid.data_model.common.Query) returns (stream SPRRequirement_Service_Requirement);
+  rpc Update(SPRRequirement_Service_Requirement) returns (pyramid.data_model.common.Ack);
+  rpc Cancel(pyramid.data_model.base.Identifier) returns (pyramid.data_model.common.Ack);
+}
+
+// Information port 'pCapability' (provided) refining Capability
+service Capability_Service {
+  rpc Read(google.protobuf.Empty) returns (stream pyramid.data_model.generic_pim.generic.Capabilities);
+}
+
+message Authorisation_Dependency_Service_Request {
+  oneof payload {
+    pyramid.data_model.common.AUTDependencyRequest autdependency_request = 1;
+    pyramid.data_model.common.AUTPredecessorDependencyRequest autpredecessor_dependency_request = 2;
+    pyramid.data_model.common.AUTPositionalDependencyRequest autpositional_dependency_request = 3;
+  }
+}
+
+message Authorisation_Dependency_Service_Requirement {
+  oneof payload {
+    pyramid.data_model.common_pim_components.authorisation.AUTRequirement autrequirement = 1;
+    pyramid.data_model.common_pim_components.authorisation.AUTPredecessorRequirement autpredecessor_requirement = 2;
+    pyramid.data_model.common_pim_components.authorisation.AUTPositionalRequirement autpositional_requirement = 3;
+  }
+}
+
+// Request port 'pAuthorisationDependency' (provided) refining Authorisation_Dependency
+service Authorisation_Dependency_Service {
+  rpc Create(Authorisation_Dependency_Service_Request) returns (pyramid.data_model.common.Ack);
+  rpc Read(pyramid.data_model.common.Query) returns (stream Authorisation_Dependency_Service_Requirement);
+  rpc Update(Authorisation_Dependency_Service_Requirement) returns (pyramid.data_model.common.Ack);
+  rpc Cancel(pyramid.data_model.base.Identifier) returns (pyramid.data_model.common.Ack);
+}
+

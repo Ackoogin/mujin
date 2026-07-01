@@ -1,6 +1,10 @@
 set(PYRAMID_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}")
 
-set(PYRAMID_PROTO_DIR "${PYRAMID_ROOT_DIR}/proto")
+# Proto IDL source directory. Defaults to the canonical proto/ tree but may be
+# redirected (e.g. -DPYRAMID_PROTO_DIR=.../pim/test) so the same build pipeline
+# can target an alternative proto set.
+set(PYRAMID_PROTO_DIR "${PYRAMID_ROOT_DIR}/proto"
+    CACHE PATH "PYRAMID proto IDL source directory")
 if(EXISTS "${PYRAMID_PROTO_DIR}")
     option(PYRAMID_ENABLE_PROTOBUF "Enable protobuf codecs for PYRAMID" ON)
 else()
@@ -202,6 +206,18 @@ endif()
 
 pyramid_glob_generated(_pyramid_generated_codecs_srcs
     "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_codec.cpp")
+# Service-level JSON codecs (toJson/fromJson for the per-component service
+# request/response/requirement types) are emitted under the pyramid_components_*
+# prefix. They must land in the same aggregate the codec plugins link so the
+# service-side encode/decode symbols resolve at .dll link time -- MSVC requires
+# every symbol defined when linking a DLL, whereas a Linux .so silently defers
+# the undefined externals (which is why an omission here builds green on Linux
+# but fails LNK2019 on Windows).
+pyramid_glob_generated(_pyramid_generated_service_codecs_srcs
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_components_*_codec.cpp")
+list(APPEND _pyramid_generated_codecs_srcs
+    ${_pyramid_generated_service_codecs_srcs})
+unset(_pyramid_generated_service_codecs_srcs)
 # C-ABI marshalling (to_c/from_c/_free) for the typed-value plugin boundary.
 # Linked into both components and codec plugins so each side can marshal
 # between the native data-model types and their frozen C structs.
@@ -215,6 +231,15 @@ pyramid_glob_generated(_pyramid_generated_marshal_srcs
     "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_cabi_marshal.cpp")
 pyramid_require_generated(_pyramid_generated_marshal_srcs
     "generated PYRAMID C-ABI marshalling sources")
+
+# Service-level C-ABI marshalling (to_c/from_c for the per-component service
+# request/response/requirement types) is emitted under the pyramid_components_*
+# prefix. These are not data-model modules, so they bypass the per-module
+# deployment-library loop below and are compiled straight into the aggregate
+# pyramid_generated_marshal (which the codec plugins link transitively), so the
+# service-side marshal symbols resolve at .dll link time.
+pyramid_glob_generated(_pyramid_generated_service_marshal_srcs
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_components_*_cabi_marshal.cpp")
 
 # W6 -- per-data-model-module marshalling libraries (churn isolation).
 # Each data-model module (common, base, tactical, autonomy, sensors, ...) is
@@ -241,6 +266,11 @@ foreach(_marshal_src IN LISTS _pyramid_generated_marshal_srcs)
         POSITION_INDEPENDENT_CODE ON)
     target_include_directories(${_marshal_obj}
         PUBLIC ${PYRAMID_MARSHAL_INCLUDE_DIRS})
+    # pcl_alloc/pcl_free (pcl/pcl_alloc.h): the marshal layer's to_c()/_c_free()
+    # allocate/free C-ABI struct fields through PCL's portable heap allocator
+    # so that memory a codec plugin allocates (possibly a different C runtime
+    # on Windows) can be freed safely by any caller.
+    target_link_libraries(${_marshal_obj} PUBLIC pcl_core)
     # Standalone per-module static library for deployment staging.
     add_library(pyramid_marshal_${_marshal_module} STATIC
         $<TARGET_OBJECTS:${_marshal_obj}>)
@@ -250,13 +280,18 @@ foreach(_marshal_src IN LISTS _pyramid_generated_marshal_srcs)
 endforeach()
 unset(_pyramid_generated_marshal_srcs)
 
-# Backward-compatible aggregate static library over every module's objects.
-add_library(pyramid_generated_marshal STATIC ${_pyramid_marshal_objects})
+# Backward-compatible aggregate static library over every module's objects,
+# plus the service-level marshal sources (compiled directly here rather than as
+# per-module deployment libs).
+add_library(pyramid_generated_marshal STATIC
+    ${_pyramid_marshal_objects} ${_pyramid_generated_service_marshal_srcs})
+unset(_pyramid_generated_service_marshal_srcs)
 add_dependencies(pyramid_generated_marshal pyramid_cpp_bindings_codegen)
 set_target_properties(pyramid_generated_marshal PROPERTIES
     POSITION_INDEPENDENT_CODE ON)
 target_include_directories(pyramid_generated_marshal
     PUBLIC ${PYRAMID_MARSHAL_INCLUDE_DIRS})
+target_link_libraries(pyramid_generated_marshal PUBLIC pcl_core)
 unset(_pyramid_marshal_objects)
 
 # Wire codecs (JSON + optional FlatBuffers). Linked by the codec plugins and by
@@ -710,6 +745,18 @@ endforeach()
 unset(_pyramid_plugin_dep)
 
 add_subdirectory(core)
-add_subdirectory(tactical_objects)
-add_subdirectory(pyramid_bridge)
-add_subdirectory(tests)
+
+# Example component, bridge demo and the test suite are wired to the default
+# proto/ component set (they reference specific generated `pyramid_services_*`
+# sources by name). The runtime plugin build (pyramid_plugins) does not need
+# them, and they cannot configure against an alternative PYRAMID_PROTO_DIR, so
+# gate them behind an option that proto-agnostic builds (e.g. build_plugins.sh
+# targeting pim/test) can switch off.
+option(PYRAMID_BUILD_TESTS
+    "Build PYRAMID example component, bridge demo and tests (coupled to proto/)"
+    ON)
+if(PYRAMID_BUILD_TESTS)
+    add_subdirectory(tactical_objects)
+    add_subdirectory(pyramid_bridge)
+    add_subdirectory(tests)
+endif()

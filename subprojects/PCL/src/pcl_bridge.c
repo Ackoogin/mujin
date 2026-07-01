@@ -9,6 +9,7 @@
 #include "pcl/pcl_bridge.h"
 #include "pcl/pcl_transport.h"
 #include "pcl/pcl_log.h"
+#include "pcl/pcl_alloc.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -91,7 +92,7 @@ pcl_bridge_t* pcl_bridge_create(pcl_executor_t*  executor,
     return NULL;
   }
 
-  b = (pcl_bridge_t*)calloc(1, sizeof(pcl_bridge_t));
+  b = (pcl_bridge_t*)pcl_calloc(1, sizeof(pcl_bridge_t));
   if (!b) return NULL;
 
   b->executor  = executor;
@@ -107,7 +108,7 @@ pcl_bridge_t* pcl_bridge_create(pcl_executor_t*  executor,
 
   b->container = pcl_container_create(name, &cbs, b);
   if (!b->container) {
-    free(b);
+    pcl_free(b);
     return NULL;
   }
 
@@ -122,5 +123,5 @@ pcl_container_t* pcl_bridge_container(pcl_bridge_t* b) {
 void pcl_bridge_destroy(pcl_bridge_t* b) {
   if (!b) return;
   pcl_container_destroy(b->container);
-  free(b);
+  pcl_free(b);
 }

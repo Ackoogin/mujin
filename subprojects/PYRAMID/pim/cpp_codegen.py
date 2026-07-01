@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from proto_parser import (
-    parse_proto_tree, ProtoTypeIndex, ProtoMessage, ProtoEnum,
+    parse_proto_tree, ProtoTypeIndex, ProtoMessage, ProtoEnum, ProtoField,
     screaming_to_pascal, _PROTO_SCALARS,
 )
 from standard_topics import topic_spec, topics_for_service
@@ -411,6 +411,156 @@ def _data_model_package_for_type(full_type: str) -> str:
     return full_type.rsplit('.', 1)[0]
 
 
+def _qualified_package_for_type(full_type: str) -> str:
+    """Package of any fully-qualified proto type (data-model or component).
+
+    Unlike _data_model_package_for_type this does not restrict to the
+    pyramid.data_model root, so service-local wrapper messages (canonically
+    homed in their component package) also resolve.
+    """
+    if '.' not in full_type:
+        return ''
+    return full_type.rsplit('.', 1)[0]
+
+
+def _message_matches(index: ProtoTypeIndex,
+                     short_name: str) -> List[Tuple[str, ProtoMessage]]:
+    result = []
+    for pf in index.files:
+        for msg in pf.messages:
+            if msg.name == short_name:
+                result.append((pf.package, msg))
+    return result
+
+
+def _enum_matches(index: ProtoTypeIndex,
+                  short_name: str) -> List[Tuple[str, ProtoEnum]]:
+    result = []
+    for pf in index.files:
+        for enum in pf.enums:
+            if enum.name == short_name:
+                result.append((pf.package, enum))
+    return result
+
+
+def _resolve_message(index: ProtoTypeIndex, type_name: str,
+                     current_pkg: str = '') -> Tuple[Optional[ProtoMessage], str]:
+    """Resolve a proto message with package-aware bare-name handling.
+
+    Bare proto names are scoped to the current package first. If there is no
+    current-package match, a bare name is accepted only when it is unique in the
+    index. This keeps duplicate short names from resolving to an arbitrary
+    package.
+    """
+    if not type_name or type_name in _PROTO_SCALARS:
+        return None, ''
+    if type_name.startswith('google.'):
+        return None, ''
+    if '.' in type_name:
+        return index.resolve_message(type_name), type_name.rsplit('.', 1)[0]
+    if current_pkg:
+        fqn = f'{current_pkg}.{type_name}'
+        msg = index.resolve_message(fqn)
+        if msg is not None:
+            return msg, current_pkg
+    matches = _message_matches(index, type_name)
+    if len(matches) == 1:
+        return matches[0][1], matches[0][0]
+    return None, ''
+
+
+def _resolve_enum(index: ProtoTypeIndex, type_name: str,
+                  current_pkg: str = '') -> Tuple[Optional[ProtoEnum], str]:
+    if not type_name or type_name in _PROTO_SCALARS:
+        return None, ''
+    if type_name.startswith('google.'):
+        return None, ''
+    if '.' in type_name:
+        return index.resolve_enum(type_name), type_name.rsplit('.', 1)[0]
+    if current_pkg:
+        fqn = f'{current_pkg}.{type_name}'
+        enum = index.resolve_enum(fqn)
+        if enum is not None:
+            return enum, current_pkg
+    matches = _enum_matches(index, type_name)
+    if len(matches) == 1:
+        return matches[0][1], matches[0][0]
+    return None, ''
+
+
+def _proto_type_fqn(index: ProtoTypeIndex, type_name: str,
+                    current_pkg: str = '') -> str:
+    if not type_name or type_name in _PROTO_SCALARS:
+        return type_name
+    if type_name.startswith('google.'):
+        return type_name
+    if '.' in type_name:
+        return type_name
+    msg, pkg = _resolve_message(index, type_name, current_pkg)
+    if msg is not None and pkg:
+        return f'{pkg}.{msg.name}'
+    enum, pkg = _resolve_enum(index, type_name, current_pkg)
+    if enum is not None and pkg:
+        return f'{pkg}.{enum.name}'
+    return ''
+
+
+def _package_for_proto_type(index: ProtoTypeIndex, type_name: str,
+                            current_pkg: str = '') -> str:
+    if '.' in type_name and not type_name.startswith('google.'):
+        return type_name.rsplit('.', 1)[0]
+    fqn = _proto_type_fqn(index, type_name, current_pkg)
+    if '.' in fqn and not fqn.startswith('google.'):
+        return fqn.rsplit('.', 1)[0]
+    return ''
+
+
+def _is_proto_message_type(index: ProtoTypeIndex, type_name: str,
+                           current_pkg: str = '') -> bool:
+    fqn = _proto_type_fqn(index, type_name, current_pkg)
+    return bool(fqn and index.is_message_type(fqn))
+
+
+def _is_proto_enum_type(index: ProtoTypeIndex, type_name: str,
+                        current_pkg: str = '') -> bool:
+    fqn = _proto_type_fqn(index, type_name, current_pkg)
+    return bool(fqn and index.is_enum_type(fqn))
+
+
+def _field_with_type(field: ProtoField, field_type: str) -> ProtoField:
+    return ProtoField(
+        name=field.name,
+        type=field_type or field.type,
+        number=field.number,
+        label=field.label,
+        oneof_group=field.oneof_group,
+    )
+
+
+def _c_struct_for_type(full_type: str) -> str:
+    """Package-qualified C-ABI struct symbol for a proto type, matching
+    cabi_codegen._c_struct_name (and the Ada generator)."""
+    package = _qualified_package_for_type(full_type)
+    short = full_type.split('.')[-1]
+    if package:
+        return f'{package.replace(".", "_")}_{short}_c'
+    return f'pyramid_{short}_c'
+
+
+def _native_namespace_for_type(full_type: str) -> str:
+    """C++ namespace where the *plain struct* for a proto type is referenced.
+
+    Data-model types are referenced flat in pyramid::domain_model (the umbrella
+    header re-exports each sub-namespace into it). Service-local wrapper
+    messages live in their component's own service namespace -- the canonical
+    Component-NS home shared with the protobuf/flatbuffers/grpc/ros2 backends.
+    """
+    package = _qualified_package_for_type(full_type)
+    if not package:
+        return _DATA_MODEL_TYPES_NS
+    return _cpp_ns_for_proto_package(package)
+
+
 def _service_codec_imports(
         data_model_files: List[ProtoFile],
         all_rpcs: List[Tuple[str, ProtoRpc]],
@@ -459,14 +609,14 @@ def _service_contract_names(base_package: str) -> Tuple[str, str]:
 
 def _json_codec_namespace_for_type(full_type: str) -> str:
     """Return the generated JSON codec C++ namespace for a proto type."""
-    package = _data_model_package_for_type(full_type)
+    package = _qualified_package_for_type(full_type)
     if not package:
         return _DATA_MODEL_TYPES_NS
     return _cpp_ns_for_proto_package(package)
 
 
 def _json_codec_header_for_type(full_type: str) -> str:
-    package = _data_model_package_for_type(full_type)
+    package = _qualified_package_for_type(full_type)
     if not package:
         return ''
     return f'{package.replace(".", "_")}_codec.hpp'
@@ -488,7 +638,10 @@ def _find_proto_root(proto_input: Path) -> Optional[Path]:
     if proto_input.is_dir():
         return proto_input
     for parent in [proto_input.parent, *proto_input.parents]:
-        if parent.name.lower() == 'proto':
+        # The package tree root is conventionally a 'proto' dir, but any
+        # directory holding the 'pyramid' package root works too (e.g. the new
+        # 'pim/test' layout), so both data-model and component protos are seen.
+        if parent.name.lower() == 'proto' or (parent / 'pyramid').is_dir():
             return parent
     return proto_input.parent if proto_input.parent.exists() else None
 
@@ -639,43 +792,45 @@ class CppServiceGenerator:
         if not service_files:
             return '', '', []
 
-        index = ProtoTypeIndex([
+        dm_files = [
             pf for pf in self._discover_all_proto_files()
             if pf.package == _DATA_MODEL_PROTO_ROOT
             or pf.package.startswith(_DATA_MODEL_PROTO_ROOT + '.')
-        ])
+        ]
+        indexed_files = dm_files + [
+            pf for pf in service_files
+            if pf not in dm_files
+        ]
+        index = ProtoTypeIndex(indexed_files)
         aliases = _alias_cpp_types(index)
         file_base, cpp_base_ns = _service_contract_names(base_package)
-        root_types: List[str] = []
+        root_types: List[Tuple[str, str]] = []
 
         for pf in service_files:
             for svc in pf.services:
                 for rpc in svc.rpcs:
-                    root_types.append(rpc.request_type)
-                    root_types.append(rpc.response_type)
+                    root_types.append((rpc.request_type, pf.package))
+                    root_types.append((rpc.response_type, pf.package))
             is_provided = 'provided' in pf.package.lower()
             sub_topics, pub_topics = _topics_for_proto(pf, is_provided)
             topic_keys = list(sub_topics.keys()) + list(pub_topics.keys())
             for key in topic_keys:
-                root_types.append(topic_spec(key).full_type)
+                root_types.append((topic_spec(key).full_type, ''))
 
         result: List[Tuple[str, str, bool, str, bool]] = []
         seen_schema_ids = set()
-        for type_name in root_types:
+        for type_name, current_pkg in root_types:
             short = type_name.split('.')[-1]
             if short in seen_schema_ids:
                 continue
 
-            msg = index.resolve_message(type_name) or index.resolve_message(short)
+            msg, msg_pkg = _resolve_message(index, type_name, current_pkg)
             if msg is None and short not in aliases:
                 continue
 
             full_type = type_name
             if msg is not None and '.' not in type_name:
-                for pf in index.files:
-                    if any(m.name == msg.name for m in pf.messages):
-                        full_type = f'{pf.package}.{msg.name}'
-                        break
+                full_type = f'{msg_pkg}.{msg.name}' if msg_pkg else type_name
 
             result.append((short, full_type, short in aliases,
                            aliases.get(short, ''), False))
@@ -691,16 +846,13 @@ class CppServiceGenerator:
                     array_schema = elem_short + 'Array'
                     if array_schema in seen_schema_ids:
                         continue
-                    msg = (index.resolve_message(rpc.response_type)
-                           or index.resolve_message(elem_short))
+                    msg, msg_pkg = _resolve_message(
+                        index, rpc.response_type, pf.package)
                     if msg is None:
                         continue
                     full_type = rpc.response_type
                     if '.' not in full_type:
-                        for dm_pf in index.files:
-                            if any(m.name == msg.name for m in dm_pf.messages):
-                                full_type = f'{dm_pf.package}.{msg.name}'
-                                break
+                        full_type = f'{msg_pkg}.{msg.name}' if msg_pkg else full_type
                     result.append((array_schema, full_type, False, '', True))
                     seen_schema_ids.add(array_schema)
 
@@ -803,6 +955,7 @@ class CppServiceGenerator:
             f.write('\n')
             f.write('extern "C" {\n')
             f.write('#include <pcl/pcl_codec.h>\n')
+            f.write('#include <pcl/pcl_alloc.h>\n')
             f.write('#include "pyramid_datamodel_cabi.h"\n')
             f.write('}\n\n')
             f.write('#include <cstdlib>\n')
@@ -871,7 +1024,7 @@ class CppServiceGenerator:
             f.write('    try {\n')
             for short, full_type, is_alias, _alias_cpp, is_array in codec_types:
                 if is_alias:
-                    cpp_type = f'data_model::{short}'
+                    cpp_type = f'{_native_namespace_for_type(full_type)}::{short}'
                     f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
                     if _alias_cpp == 'std::string':
                         f.write('            const auto* cs = static_cast<const pyramid_str_t*>(value);\n')
@@ -897,8 +1050,8 @@ class CppServiceGenerator:
                     f.write('        }\n')
                 elif is_array:
                     elem_short = short[:-len('Array')]
-                    cpp_type = f'data_model::{elem_short}'
-                    c_struct = f'pyramid_{elem_short}_c'
+                    cpp_type = f'{_native_namespace_for_type(full_type)}::{elem_short}'
+                    c_struct = _c_struct_for_type(full_type)
                     codec_ns = _json_codec_namespace_for_type(full_type)
                     f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
                     f.write('            const auto* slice = static_cast<const pyramid_slice_t*>(value);\n')
@@ -925,8 +1078,8 @@ class CppServiceGenerator:
                         f.write(f'                                  "{content_type}", out_msg);\n')
                     f.write('        }\n')
                 else:
-                    cpp_type = f'data_model::{short}'
-                    c_struct = f'pyramid_{short}_c'
+                    cpp_type = f'{_native_namespace_for_type(full_type)}::{short}'
+                    c_struct = _c_struct_for_type(full_type)
                     f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
                     f.write(f'            const auto* cs = static_cast<const {c_struct}*>(value);\n')
                     f.write(f'            {cpp_type} native;\n')
@@ -960,7 +1113,7 @@ class CppServiceGenerator:
             f.write('            : std::string();\n')
             for short, full_type, is_alias, _alias_cpp, is_array in codec_types:
                 if is_alias:
-                    cpp_type = f'data_model::{short}'
+                    cpp_type = f'{_native_namespace_for_type(full_type)}::{short}'
                     f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
                     f.write(f'            {cpp_type} native;\n')
                     if is_json:
@@ -976,7 +1129,7 @@ class CppServiceGenerator:
                         f.write('                return PCL_ERR_INVALID;\n')
                         f.write('            }\n')
                         f.write('            if (!native.empty()) {\n')
-                        f.write('                void* copy = std::malloc(native.size());\n')
+                        f.write('                void* copy = pcl_alloc(native.size());\n')
                         f.write('                if (!copy) {\n')
                         f.write('                    return PCL_ERR_NOMEM;\n')
                         f.write('                }\n')
@@ -990,8 +1143,8 @@ class CppServiceGenerator:
                     f.write('        }\n')
                 elif is_array:
                     elem_short = short[:-len('Array')]
-                    cpp_type = f'data_model::{elem_short}'
-                    c_struct = f'pyramid_{elem_short}_c'
+                    cpp_type = f'{_native_namespace_for_type(full_type)}::{elem_short}'
+                    c_struct = _c_struct_for_type(full_type)
                     codec_ns = _json_codec_namespace_for_type(full_type)
                     f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
                     f.write(f'            std::vector<{cpp_type}> native;\n')
@@ -1016,7 +1169,7 @@ class CppServiceGenerator:
                     f.write('            slice->len = 0u;\n')
                     f.write('            if (!native.empty()) {\n')
                     f.write(f'                auto* values = static_cast<{c_struct}*>(\n')
-                    f.write(f'                    std::calloc(native.size(), sizeof({c_struct})));\n')
+                    f.write(f'                    pcl_alloc(native.size() * sizeof({c_struct})));\n')
                     f.write('                if (!values) {\n')
                     f.write('                    return PCL_ERR_NOMEM;\n')
                     f.write('                }\n')
@@ -1029,8 +1182,8 @@ class CppServiceGenerator:
                     f.write('            return PCL_OK;\n')
                     f.write('        }\n')
                 else:
-                    cpp_type = f'data_model::{short}'
-                    c_struct = f'pyramid_{short}_c'
+                    cpp_type = f'{_native_namespace_for_type(full_type)}::{short}'
+                    c_struct = _c_struct_for_type(full_type)
                     f.write(f'        if (std::strcmp(schema_id, "{short}") == 0) {{\n')
                     f.write(f'            {cpp_type} native;\n')
                     if is_json:
@@ -1100,14 +1253,17 @@ class CppServiceGenerator:
         duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
 
         # Collect raw type names (no BASE_TYPE_MAP) for using declarations
-        raw_types = sorted({
-            t
-            for _, rpc in all_rpcs
-            for t in (rpc.raw_req_type, rpc.raw_rsp_type)
-        } | {
-            topic_spec(key).short_type
-            for key in topic_set
-        })
+        # Map each referenced short type name to its proto FQN so the using
+        # declarations can be qualified by the type's real (sub-)namespace
+        # instead of relying on a flat re-export.
+        raw_type_fqn: Dict[str, str] = {}
+        for _, rpc in all_rpcs:
+            raw_type_fqn.setdefault(_short_type(rpc.req), rpc.req)
+            raw_type_fqn.setdefault(_short_type(rpc.rsp), rpc.rsp)
+        for key in topic_set:
+            spec = topic_spec(key)
+            raw_type_fqn.setdefault(spec.short_type, spec.full_type)
+        raw_types = sorted(raw_type_fqn)
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             # File-level comment block
@@ -1127,7 +1283,17 @@ class CppServiceGenerator:
             f.write('#pragma once\n\n')
 
             # Includes
-            f.write(f'#include "{types_header}"\n\n')
+            f.write(f'#include "{types_header}"\n')
+            # Service-local wrapper messages (and Empty) live in this contract's
+            # own component types header.
+            has_local_types = any(
+                _qualified_package_for_type(raw_type_fqn.get(t, '')) == parsed.package
+                or raw_type_fqn.get(t, '') == 'google.protobuf.Empty'
+                for t in raw_types
+            )
+            if has_local_types:
+                f.write(f'#include "{parsed.package.replace(".", "_")}_types.hpp"\n')
+            f.write('\n')
             f.write('#include <pcl/pcl_container.h>\n')
             f.write('#include <pcl/pcl_executor.h>\n')
             f.write('#include <pcl/pcl_transport.h>\n')
@@ -1224,8 +1390,16 @@ class CppServiceGenerator:
                     ' (stub behaviour).\n')
             f.write(_SEP + '\n\n')
 
+            # Data-model RPC/topic types are imported from their package
+            # sub-namespace. Service-local wrapper messages and Empty are
+            # defined in this contract's own namespace (== full_ns, supplied by
+            # the included component types header) and need no using-declaration.
             for t in raw_types:
-                f.write(f'using {types_ns}::{t};\n')
+                fqn = raw_type_fqn.get(t, '')
+                pkg = _qualified_package_for_type(fqn)
+                if (pkg == _DATA_MODEL_PROTO_ROOT
+                        or pkg.startswith(_DATA_MODEL_PROTO_ROOT + '.')):
+                    f.write(f'using {_cpp_ns_for_proto_package(pkg)}::{t};\n')
             f.write('\n')
 
             f.write('class ServiceHandler {\n')
@@ -1603,6 +1777,7 @@ class CppServiceGenerator:
             f.write('#include <pcl/pcl_container.h>\n')
             f.write('#include <pcl/pcl_executor.h>\n')
             f.write('#include <pcl/pcl_transport.h>\n')
+            f.write('#include <pcl/pcl_alloc.h>\n')
             f.write('#include "pyramid_datamodel_cabi.h"\n')
             f.write('}\n')
             f.write('\n#include <cstdlib>\n')
@@ -1708,8 +1883,8 @@ class CppServiceGenerator:
                 f.write('        return rc == PCL_OK ? 1 : -1;\n')
                 f.write('    }\n')
             for short, _full in non_alias_cabi:
-                native = f'{_DATA_MODEL_TYPES_NS}::{short}'
-                c_struct = f'pyramid_{short}_c'
+                native = f'{_native_namespace_for_type(_full)}::{short}'
+                c_struct = _c_struct_for_type(_full)
                 f.write(f'    if (std::strcmp(schema_id, "{short}") == 0) {{\n')
                 f.write(f'        {c_struct} cs;\n')
                 f.write(f'        pyramid::cabi::to_c(\n')
@@ -1721,8 +1896,8 @@ class CppServiceGenerator:
                 f.write('    }\n')
             for short, _full in array_cabi:
                 elem_short = short[:-len('Array')]
-                native = f'{_DATA_MODEL_TYPES_NS}::{elem_short}'
-                c_struct = f'pyramid_{elem_short}_c'
+                native = f'{_native_namespace_for_type(_full)}::{elem_short}'
+                c_struct = _c_struct_for_type(_full)
                 f.write(f'    if (std::strcmp(schema_id, "{short}") == 0) {{\n')
                 f.write(f'        const auto& native = *static_cast<const std::vector<{native}>*>(value);\n')
                 f.write('        if (native.size() > std::numeric_limits<uint32_t>::max()) {\n')
@@ -1766,7 +1941,7 @@ class CppServiceGenerator:
                     f.write('        }\n')
                     f.write(f'        auto* native = static_cast<{native}*>(out_value);\n')
                     f.write('        native->assign(cs.ptr ? cs.ptr : "", cs.len);\n')
-                    f.write('        std::free(const_cast<char*>(cs.ptr));\n')
+                    f.write('        pcl_free(const_cast<char*>(cs.ptr));\n')
                 else:
                     f.write('        if (c->decode(c->codec_ctx, schema_id, msg, out_value)\n')
                     f.write('                != PCL_OK) {\n')
@@ -1775,8 +1950,8 @@ class CppServiceGenerator:
                 f.write('        return 1;\n')
                 f.write('    }\n')
             for short, _full in non_alias_cabi:
-                native = f'{_DATA_MODEL_TYPES_NS}::{short}'
-                c_struct = f'pyramid_{short}_c'
+                native = f'{_native_namespace_for_type(_full)}::{short}'
+                c_struct = _c_struct_for_type(_full)
                 f.write(f'    if (std::strcmp(schema_id, "{short}") == 0) {{\n')
                 f.write(f'        {c_struct} cs;\n')
                 f.write('        std::memset(&cs, 0, sizeof(cs));\n')
@@ -1792,8 +1967,8 @@ class CppServiceGenerator:
                 f.write('    }\n')
             for short, _full in array_cabi:
                 elem_short = short[:-len('Array')]
-                native = f'{_DATA_MODEL_TYPES_NS}::{elem_short}'
-                c_struct = f'pyramid_{elem_short}_c'
+                native = f'{_native_namespace_for_type(_full)}::{elem_short}'
+                c_struct = _c_struct_for_type(_full)
                 f.write(f'    if (std::strcmp(schema_id, "{short}") == 0) {{\n')
                 f.write('        pyramid_slice_t slice;\n')
                 f.write('        std::memset(&slice, 0, sizeof(slice));\n')
@@ -1811,7 +1986,7 @@ class CppServiceGenerator:
                 f.write('            native->push_back(std::move(item));\n')
                 f.write(f'            {c_struct}_free(&values[i]);\n')
                 f.write('        }\n')
-                f.write('        std::free(values);\n')
+                f.write('        pcl_free(values);\n')
                 f.write('        return 1;\n')
                 f.write('    }\n')
             f.write('    (void)c; (void)msg; (void)out_value;\n')
@@ -3035,6 +3210,12 @@ _CPP_DEFAULTS: Dict[str, str] = {
     'bool': 'false', 'std::string': '{}',
 }
 
+# C++ field types that keep a struct a literal type (so its named constants can
+# stay constexpr). std::string and aggregate types are deliberately excluded.
+_LITERAL_CPP_TYPES: frozenset = frozenset({
+    'double', 'float', 'int32_t', 'int64_t', 'uint32_t', 'uint64_t', 'bool',
+})
+
 # Messages whose single scalar field makes them transparent wrappers.
 # Identifier is special-cased to std::string; Timestamp to double (epoch s).
 _FORCED_ALIASES: Dict[str, str] = {
@@ -3131,19 +3312,25 @@ class CppTypesGenerator:
         self._write_umbrella_hpp(umbrella)
         print(f'  Generated {self._ns} (umbrella)')
 
+    def write_file(self, pf, output_dir: str) -> None:
+        """Emit a single per-file types header (no umbrella).
+
+        Used for service-local wrapper messages, which are homed in their own
+        component namespace and must NOT be re-exported into domain_model. The
+        instance must be constructed with an index that also contains the data
+        model files so wrapper field types resolve.
+        """
+        out = Path(output_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        prefix = pf.package.replace('.', '_')
+        self._write_hpp_for_file(out / (prefix + '_types.hpp'), pf)
+        print(f'  Generated {pf.package.replace(".", "::")} (types)')
+
     # -- internal --------------------------------------------------------------
 
-    def _package_of_type(self, name: str) -> str:
-        """Return the proto package that defines a type (short name lookup)."""
-        short = name.split('.')[-1]
-        for pf in self._index.files:
-            for msg in pf.messages:
-                if msg.name == short:
-                    return pf.package
-            for enum in pf.enums:
-                if enum.name == short:
-                    return pf.package
-        return ''
+    def _package_of_type(self, name: str, current_pkg: str = '') -> str:
+        """Return the proto package that defines a type."""
+        return _package_for_proto_type(self._index, name, current_pkg)
 
     def _cpp_field_type(self, field_type: str, repeated: bool,
                          current_pkg: str = '') -> str:
@@ -3164,16 +3351,20 @@ class CppTypesGenerator:
                 base = _cpp_ns_for_proto_type_package(pkg) + '::' + short
             else:
                 base = short
-        elif (self._index.is_enum_type(field_type)
-              or self._index.is_message_type(field_type)):
-            # Short name -- look up its package for cross-package qualification
-            pkg = self._package_of_type(field_type)
-            if current_pkg and pkg and pkg != current_pkg:
-                base = _cpp_ns_for_proto_type_package(pkg) + '::' + field_type
-            else:
-                base = field_type
         else:
-            base = short
+            # Short name -- look up its package for cross-package qualification
+            fqn = _proto_type_fqn(self._index, field_type, current_pkg)
+            if fqn and (self._index.is_enum_type(fqn)
+                        or self._index.is_message_type(fqn)):
+                pkg = fqn.rsplit('.', 1)[0]
+                resolved_short = fqn.split('.')[-1]
+                if current_pkg and pkg and pkg != current_pkg:
+                    base = (_cpp_ns_for_proto_type_package(pkg)
+                            + '::' + resolved_short)
+                else:
+                    base = resolved_short
+            else:
+                base = short
         return f'std::vector<{base}>' if repeated else base
 
     def _cpp_default(self, cpp_type: str, field_type: str,
@@ -3184,9 +3375,8 @@ class CppTypesGenerator:
             return '{}'
         if cpp_type in _CPP_DEFAULTS:
             return _CPP_DEFAULTS[cpp_type]
-        if self._index.is_enum_type(field_type) or self._index.is_enum_type(short):
-            enum = (self._index.resolve_enum(field_type)
-                    or self._index.resolve_enum(short))
+        enum, enum_pkg = _resolve_enum(self._index, field_type, current_pkg)
+        if enum is not None:
             if enum and enum.values:
                 suf = enum.suffix_of(enum.values[0].name)
                 lit = screaming_to_pascal(suf) if suf else enum.values[0].name
@@ -3195,7 +3385,7 @@ class CppTypesGenerator:
                     if current_pkg and pkg != current_pkg:
                         return f'{_cpp_ns_for_proto_type_package(pkg)}::{short}::{lit}'
                 else:
-                    pkg = self._package_of_type(field_type)
+                    pkg = enum_pkg
                     if current_pkg and pkg and pkg != current_pkg:
                         return f'{_cpp_ns_for_proto_type_package(pkg)}::{field_type}::{lit}'
                 return f'{short}::{lit}'
@@ -3237,7 +3427,7 @@ class CppTypesGenerator:
             f.write(f'    {lit} = {v.number},\n')
         f.write('};\n\n')
 
-    def _inline_base_fields(self, msg: ProtoMessage):
+    def _inline_base_fields(self, msg: ProtoMessage, current_pkg: str = ''):
         """Yield (field, comment) for all non-base fields, inlining any 'base'
         fields by expanding their sub-fields directly into the parent struct.
 
@@ -3247,22 +3437,25 @@ class CppTypesGenerator:
         for field in msg.fields:
             if field.name == 'base' and not field.is_repeated:
                 short = field.type.split('.')[-1]
-                base_msg = self._index.resolve_message(field.type) or \
-                           self._index.resolve_message(short)
+                base_msg, base_pkg = _resolve_message(
+                    self._index, field.type, current_pkg)
                 if base_msg and base_msg.name not in self._aliases:
                     # inline the base's own fields with collision renaming
                     for bf in base_msg.fields:
                         name = bf.name
                         if name in own_names:
                             name = short.lower() + '_' + name
-                        yield bf, name, f'  // from {base_msg.name}'
+                        bf_type = _proto_type_fqn(
+                            self._index, bf.type, base_pkg) or bf.type
+                        yield (_field_with_type(bf, bf_type), name,
+                               f'  // from {base_msg.name}')
                     continue
             yield field, field.name, ''
 
     def _write_struct(self, f, msg: ProtoMessage,
                       current_pkg: str = '') -> None:
         f.write(f'struct {msg.name} {{\n')
-        for field, fname, comment in self._inline_base_fields(msg):
+        for field, fname, comment in self._inline_base_fields(msg, current_pkg):
             base_cpp = self._cpp_field_type(field.type, False, current_pkg)
             if field.is_repeated:
                 cpp_type = f'std::vector<{base_cpp}>'
@@ -3284,10 +3477,23 @@ class CppTypesGenerator:
                 cpp_type = self._cpp_field_type(field.type, False, current_pkg)
                 f.write(f'    tl::optional<{cpp_type}> {field.name};\n')
         f.write('};\n')
-        for const_name, init in _STRUCT_CONSTANTS.get(msg.name, []):
-            body = init[len(msg.name):] if init.startswith(msg.name) else (
-                '{ ' + init + ' }')
-            f.write('constexpr ' + msg.name + ' ' + const_name + body + ';\n')
+        struct_constants = _STRUCT_CONSTANTS.get(msg.name, [])
+        if struct_constants:
+            # A struct is a literal type only if every field is itself literal.
+            # std::string / std::vector / tl::optional / message fields all make
+            # it non-literal, so its named constants cannot be constexpr -- emit
+            # them as inline const instead (e.g. Ack gained a string identifier).
+            is_literal = not msg.oneofs and all(
+                not f.is_repeated
+                and self._cpp_field_type(f.type, False, current_pkg)
+                in _LITERAL_CPP_TYPES
+                for f in msg.all_fields()
+            )
+            qualifier = 'constexpr' if is_literal else 'inline const'
+            for const_name, init in struct_constants:
+                body = init[len(msg.name):] if init.startswith(msg.name) else (
+                    '{ ' + init + ' }')
+                f.write(qualifier + ' ' + msg.name + ' ' + const_name + body + ';\n')
         f.write('\n')
 
     def _includes_for_file(self, pf) -> List[str]:
@@ -3348,20 +3554,44 @@ class CppTypesGenerator:
             pf.package.replace('.', '_') + '_types.hpp'
             for pf in self._index.files
         )
+        # A short name shared by more than one package cannot be re-exported
+        # flat into the root (it would be ambiguous). Such types must be
+        # referenced through their package sub-namespace
+        # (e.g. domain_model::pim_osprey::sensor_products::SPRRequest); the
+        # generated structs/codecs already qualify cross-package references.
+        name_packages: Dict[str, set] = {}
+        for pf in self._index.files:
+            for msg in pf.messages:
+                name_packages.setdefault(msg.name, set()).add(pf.package)
+            for enum in pf.enums:
+                name_packages.setdefault(enum.name, set()).add(pf.package)
+        unique_names = {n for n, pkgs in name_packages.items() if len(pkgs) == 1}
+
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated umbrella types header\n')
             f.write('// Includes all data model type headers and re-exports\n')
-            f.write(f'// their contents into namespace {_DATA_MODEL_TYPES_NS}.\n')
+            f.write(f'// uniquely-named types into namespace {_DATA_MODEL_TYPES_NS}.\n')
+            f.write('// Names shared across packages are intentionally NOT flattened\n')
+            f.write('// and must be used via their package sub-namespace.\n')
             f.write('#pragma once\n\n')
             for h in per_file_headers:
                 f.write(f'#include "{h}"\n')
-            f.write('\n// Re-export all sub-namespace types into the common namespace\n')
-            f.write('// so generated bindings can use a single domain-model root.\n')
+            f.write('\n// Re-export uniquely-named sub-namespace types into the\n')
+            f.write('// common namespace so generated bindings can use a single root.\n')
             f.write(f'namespace {self._ns} {{\n')
             for pf in self._index.files:
                 ns = _cpp_ns_for_proto_package(pf.package)
-                if ns != self._ns:
-                    f.write(f'using namespace {ns};\n')
+                if ns == self._ns:
+                    continue
+                for msg in pf.messages:
+                    if msg.name in unique_names:
+                        f.write(f'using {ns}::{msg.name};\n')
+                        for const_name, _init in _STRUCT_CONSTANTS.get(
+                                msg.name, []):
+                            f.write(f'using {ns}::{const_name};\n')
+                for enum in pf.enums:
+                    if enum.name in unique_names:
+                        f.write(f'using {ns}::{enum.name};\n')
             f.write(f'}} // namespace {self._ns}\n')
 
 
@@ -3432,8 +3662,26 @@ class CppDataModelCodecGenerator:
                 for enum in self._pf.enums:
                     t = enum.name
                     fn = _lc_first(t)
-                    f.write(f'std::string toString({t} v);\n')
-                    f.write(f'{t} {fn}FromString(const std::string& s);\n')
+                    f.write(f'inline std::string toString({t} v) {{\n')
+                    f.write('    switch (v) {\n')
+                    for v in enum.values:
+                        suf = enum.suffix_of(v.name)
+                        lit = screaming_to_pascal(suf) if suf else v.name
+                        f.write(f'        case {t}::{lit}: return "{v.name}";\n')
+                    first_suf = enum.suffix_of(enum.values[0].name)
+                    first_lit = (
+                        screaming_to_pascal(first_suf)
+                        if first_suf else enum.values[0].name)
+                    f.write('    }\n')
+                    f.write(f'    return "{enum.values[0].name}";\n')
+                    f.write('}\n')
+                    f.write(f'inline {t} {fn}FromString(const std::string& s) {{\n')
+                    for v in enum.values:
+                        suf = enum.suffix_of(v.name)
+                        lit = screaming_to_pascal(suf) if suf else v.name
+                        f.write(f'    if (s == "{v.name}") return {t}::{lit};\n')
+                    f.write(f'    return {t}::{first_lit};\n')
+                    f.write('}\n')
                 f.write('\n')
 
             alias_names = set(self._aliases.keys())
@@ -3463,6 +3711,7 @@ class CppDataModelCodecGenerator:
             f.write(f'#include "{self._hpp_name}"\n\n')
             f.write('#include <nlohmann/json.hpp>\n\n')
             # Include codec headers for imported packages (for nested toJson calls)
+            included_codec_pkgs = set()
             for imp in self._pf.imports:
                 if imp.startswith('google/'):
                     continue
@@ -3471,34 +3720,32 @@ class CppDataModelCodecGenerator:
                 for indexed_pf in self._index.files:
                     if indexed_pf.package == pkg or indexed_pf.path.stem == imp_stem:
                         f.write(f'#include "{indexed_pf.package.replace(".", "_")}_codec.hpp"\n')
+                        included_codec_pkgs.add(indexed_pf.package)
                         break
+            for msg in structs:
+                codec_fields = list(self._inline_base_fields(msg, current_pkg))
+                codec_fields.extend(
+                    (field, field.name, '')
+                    for oo in msg.oneofs
+                    for field in oo.fields
+                )
+                for field, _fname, _comment in codec_fields:
+                    short = field.type.split('.')[-1]
+                    if short in self._aliases:
+                        continue
+                    if not (
+                            _is_proto_message_type(self._index, field.type,
+                                                   current_pkg)
+                            or _is_proto_enum_type(self._index, field.type,
+                                                   current_pkg)):
+                        continue
+                    pkg = _package_for_proto_type(
+                        self._index, field.type, current_pkg)
+                    if (pkg and pkg != current_pkg
+                            and pkg not in included_codec_pkgs):
+                        f.write(f'#include "{pkg.replace(".", "_")}_codec.hpp"\n')
+                        included_codec_pkgs.add(pkg)
             f.write(f'\nnamespace {self._ns} {{\n\n')
-
-            # Enum converters
-            for enum in self._pf.enums:
-                t = enum.name
-                fn = _lc_first(t)
-                f.write(f'std::string toString({t} v) {{\n')
-                f.write(f'    switch (v) {{\n')
-                for v in enum.values:
-                    suf = enum.suffix_of(v.name)
-                    lit = screaming_to_pascal(suf) if suf else v.name
-                    f.write(f'        case {t}::{lit}: return "{v.name}";\n')
-                f.write(f'    }}\n')
-                first_suf = enum.suffix_of(enum.values[0].name)
-                first_lit = screaming_to_pascal(first_suf) if first_suf else enum.values[0].name
-                f.write(f'    return "{enum.values[0].name}";\n')
-                f.write(f'}}\n\n')
-
-                f.write(f'{t} {fn}FromString(const std::string& s) {{\n')
-                for v in enum.values:
-                    suf = enum.suffix_of(v.name)
-                    lit = screaming_to_pascal(suf) if suf else v.name
-                    f.write(f'    if (s == "{v.name}") return {t}::{lit};\n')
-                first_suf = enum.suffix_of(enum.values[0].name)
-                first_lit = screaming_to_pascal(first_suf) if first_suf else enum.values[0].name
-                f.write(f'    return {t}::{first_lit};\n')
-                f.write(f'}}\n\n')
 
             # Struct codec implementations
             for msg in structs:
@@ -3507,17 +3754,9 @@ class CppDataModelCodecGenerator:
 
             f.write(f'}} // namespace {self._ns}\n')
 
-    def _package_of_type(self, name: str) -> str:
+    def _package_of_type(self, name: str, current_pkg: str = '') -> str:
         """Return the proto package that defines a type."""
-        short = name.split('.')[-1]
-        for pf in self._index.files:
-            for msg in pf.messages:
-                if msg.name == short:
-                    return pf.package
-            for enum in pf.enums:
-                if enum.name == short:
-                    return pf.package
-        return ''
+        return _package_for_proto_type(self._index, name, current_pkg)
 
     def _qualify(self, type_name: str, current_pkg: str) -> str:
         """Return qualified C++ name for type_name relative to current_pkg."""
@@ -3525,7 +3764,7 @@ class CppDataModelCodecGenerator:
         if '.' in type_name and not type_name.startswith('google.'):
             pkg = '.'.join(type_name.split('.')[:-1])
         else:
-            pkg = self._package_of_type(type_name)
+            pkg = self._package_of_type(type_name, current_pkg)
         if pkg and pkg != current_pkg:
             return _cpp_ns_for_proto_type_package(pkg) + '::' + short
         return short
@@ -3537,18 +3776,21 @@ class CppDataModelCodecGenerator:
             return _CPP_SCALAR_MAP[field.type], False, False, False
         if short in self._aliases:
             return self._aliases[short], False, False, True
-        if self._index.is_enum_type(field.type) or self._index.is_enum_type(short):
+        if _is_proto_enum_type(self._index, field.type, current_pkg):
             return self._qualify(field.type, current_pkg), False, True, False
-        if self._index.is_message_type(field.type) or self._index.is_message_type(short):
+        if _is_proto_message_type(self._index, field.type, current_pkg):
             if short in self._aliases:
                 return self._aliases[short], False, False, True
             return self._qualify(field.type, current_pkg), True, False, False
         return short, False, False, False
 
+    def _codec_ns_prefix(self, base_cpp: str) -> str:
+        return base_cpp.rsplit('::', 1)[0] + '::' if '::' in base_cpp else ''
+
     def _write_to_json(self, f, msg, current_pkg: str) -> None:
         f.write(f'std::string toJson(const {msg.name}& msg) {{\n')
         f.write('    nlohmann::json obj;\n')
-        for field, fname, _ in self._inline_base_fields(msg):
+        for field, fname, _ in self._inline_base_fields(msg, current_pkg):
             base_cpp, is_struct, is_enum, _is_alias = self._field_info(
                 field, fname, current_pkg)
             if field.is_repeated:
@@ -3561,8 +3803,9 @@ class CppDataModelCodecGenerator:
                     f.write(f'            arr.push_back('
                             f'{ns_tok if ns_tok else ""}toString(v));\n')
                 elif is_struct:
+                    ns_pre = self._codec_ns_prefix(base_cpp)
                     f.write(f'            arr.push_back('
-                            f'nlohmann::json::parse(toJson(v)));\n')
+                            f'nlohmann::json::parse({ns_pre}toJson(v)));\n')
                 else:
                     f.write(f'            arr.push_back(v);\n')
                 f.write(f'        }}\n')
@@ -3571,8 +3814,9 @@ class CppDataModelCodecGenerator:
             elif field.is_optional and base_cpp not in ('std::string',):
                 f.write(f'    if (msg.{fname}.has_value()) {{\n')
                 if is_struct:
+                    ns_pre = self._codec_ns_prefix(base_cpp)
                     f.write(f'        obj["{fname}"] = nlohmann::json::parse('
-                            f'toJson(msg.{fname}.value()));\n')
+                            f'{ns_pre}toJson(msg.{fname}.value()));\n')
                 elif is_enum:
                     f.write(f'        obj["{fname}"] = toString(msg.{fname}.value());\n')
                 else:
@@ -3580,8 +3824,9 @@ class CppDataModelCodecGenerator:
                 f.write(f'    }}\n')
             else:
                 if is_struct:
+                    ns_pre = self._codec_ns_prefix(base_cpp)
                     f.write(f'    obj["{fname}"] = nlohmann::json::parse('
-                            f'toJson(msg.{fname}));\n')
+                            f'{ns_pre}toJson(msg.{fname}));\n')
                 elif is_enum:
                     f.write(f'    obj["{fname}"] = toString(msg.{fname});\n')
                 else:
@@ -3592,8 +3837,9 @@ class CppDataModelCodecGenerator:
                     field, field.name, current_pkg)
                 f.write(f'    if (msg.{field.name}.has_value()) {{\n')
                 if is_struct:
+                    ns_pre = self._codec_ns_prefix(base_cpp)
                     f.write(f'        obj["{field.name}"] = nlohmann::json::parse('
-                            f'toJson(msg.{field.name}.value()));\n')
+                            f'{ns_pre}toJson(msg.{field.name}.value()));\n')
                 elif is_enum:
                     f.write(f'        obj["{field.name}"] = toString('
                             f'msg.{field.name}.value());\n')
@@ -3608,7 +3854,7 @@ class CppDataModelCodecGenerator:
                 f' {msg.name}* /*tag*/) {{\n')
         f.write('    auto j = nlohmann::json::parse(s);\n')
         f.write(f'    {msg.name} msg;\n')
-        for field, fname, _ in self._inline_base_fields(msg):
+        for field, fname, _ in self._inline_base_fields(msg, current_pkg):
             base_cpp, is_struct, is_enum, _is_alias = self._field_info(
                 field, fname, current_pkg)
             short_type = base_cpp.split('::')[-1]
@@ -3622,8 +3868,9 @@ class CppDataModelCodecGenerator:
                     f.write(f'            msg.{fname}.push_back('
                             f'{ns_pre}{fn_name}(v.get<std::string>()));\n')
                 elif is_struct:
+                    ns_pre = self._codec_ns_prefix(base_cpp)
                     f.write(f'            msg.{fname}.push_back('
-                            f'fromJson(v.dump(), '
+                            f'{ns_pre}fromJson(v.dump(), '
                             f'static_cast<{base_cpp}*>(nullptr)));\n')
                 else:
                     f.write(f'            msg.{fname}.push_back(v.get<{base_cpp}>());\n')
@@ -3632,7 +3879,8 @@ class CppDataModelCodecGenerator:
             elif field.is_optional and base_cpp not in ('std::string',):
                 f.write(f'    if (j.contains("{fname}")) {{\n')
                 if is_struct:
-                    f.write(f'        msg.{fname} = fromJson('
+                    ns_pre = self._codec_ns_prefix(base_cpp)
+                    f.write(f'        msg.{fname} = {ns_pre}fromJson('
                             f'j["{fname}"].dump(),'
                             f' static_cast<{base_cpp}*>(nullptr));\n')
                 elif is_enum:
@@ -3646,7 +3894,8 @@ class CppDataModelCodecGenerator:
                 f.write(f'    }}\n')
             else:
                 if is_struct:
-                    f.write(f'    if (j.contains("{fname}")) msg.{fname} = fromJson('
+                    ns_pre = self._codec_ns_prefix(base_cpp)
+                    f.write(f'    if (j.contains("{fname}")) msg.{fname} = {ns_pre}fromJson('
                             f'j["{fname}"].dump(),'
                             f' static_cast<{base_cpp}*>(nullptr));\n')
                 elif is_enum:
@@ -3668,7 +3917,8 @@ class CppDataModelCodecGenerator:
                 short_type = base_cpp.split('::')[-1]
                 f.write(f'    if (j.contains("{field.name}")) {{\n')
                 if is_struct:
-                    f.write(f'        msg.{field.name} = fromJson('
+                    ns_pre = self._codec_ns_prefix(base_cpp)
+                    f.write(f'        msg.{field.name} = {ns_pre}fromJson('
                             f'j["{field.name}"].dump(),'
                             f' static_cast<{base_cpp}*>(nullptr));\n')
                 elif is_enum:
@@ -3684,20 +3934,22 @@ class CppDataModelCodecGenerator:
         f.write('    return msg;\n')
         f.write(f'}}\n\n')
 
-    def _inline_base_fields(self, msg):
+    def _inline_base_fields(self, msg, current_pkg: str = ''):
         """Mirror CppTypesGenerator._inline_base_fields for codec use."""
         own_names = {f.name for f in msg.fields if f.name != 'base'}
         for field in msg.fields:
             if field.name == 'base' and not field.is_repeated:
                 short = field.type.split('.')[-1]
-                base_msg = (self._index.resolve_message(field.type)
-                            or self._index.resolve_message(short))
+                base_msg, base_pkg = _resolve_message(
+                    self._index, field.type, current_pkg)
                 if base_msg and base_msg.name not in self._aliases:
                     for bf in base_msg.fields:
                         name = bf.name
                         if name in own_names:
                             name = short.lower() + '_' + name
-                        yield bf, name, ''
+                        bf_type = _proto_type_fqn(
+                            self._index, bf.type, base_pkg) or bf.type
+                        yield _field_with_type(bf, bf_type), name, ''
                     continue
             yield field, field.name, ''
 

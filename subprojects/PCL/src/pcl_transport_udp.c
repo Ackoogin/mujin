@@ -11,6 +11,7 @@
 #include "pcl/pcl_transport_udp.h"
 #include "pcl/pcl_executor.h"
 #include "pcl/pcl_log.h"
+#include "pcl/pcl_alloc.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -114,7 +115,7 @@ static pcl_status_t udp_publish(void*            adapter_ctx,
 
   if (payload_size > PCL_UDP_MAX_PAYLOAD) return PCL_ERR_NOMEM;
 
-  buf = (uint8_t*)malloc(payload_size);
+  buf = (uint8_t*)pcl_alloc(payload_size);
   if (!buf) return PCL_ERR_NOMEM;
 
   off = 0;
@@ -141,7 +142,7 @@ static pcl_status_t udp_publish(void*            adapter_ctx,
                    (socklen_t)sizeof(ctx->remote_addr));
 #endif
 
-  free(buf);
+  pcl_free(buf);
   return (rc < 0) ? PCL_ERR_INVALID : PCL_OK;
 }
 
@@ -198,27 +199,27 @@ static void* udp_recv_thread_main(void* arg)
 
       if (1u + 2u + topic_len + 2u + 4u > payload_len) continue;
 
-      topic_s = (char*)malloc((size_t)topic_len + 1u);
+      topic_s = (char*)pcl_alloc((size_t)topic_len + 1u);
       if (!topic_s) continue;
       memcpy(topic_s, buf + 3, topic_len);
       topic_s[topic_len] = '\0';
 
       type_len = udp_read_u16_be(buf + 3 + topic_len);
       if (1u + 2u + topic_len + 2u + type_len + 4u > payload_len) {
-        free(topic_s);
+        pcl_free(topic_s);
         continue;
       }
 
       if (type_len > 0u) {
-        type_s = (char*)malloc((size_t)type_len + 1u);
-        if (!type_s) { free(topic_s); continue; }
+        type_s = (char*)pcl_alloc((size_t)type_len + 1u);
+        if (!type_s) { pcl_free(topic_s); continue; }
         memcpy(type_s, buf + 5 + topic_len, type_len);
         type_s[type_len] = '\0';
       }
 
       data_len = udp_read_u32_be(buf + 5 + topic_len + type_len);
       if (1u + 2u + topic_len + 2u + type_len + 4u + data_len > payload_len) {
-        free(topic_s); free(type_s);
+        pcl_free(topic_s); pcl_free(type_s);
         continue;
       }
 
@@ -229,8 +230,8 @@ static void* udp_recv_thread_main(void* arg)
 
       pcl_executor_post_remote_incoming(ctx->executor, ctx->peer_id, topic_s, &msg);
 
-      free(topic_s);
-      free(type_s);
+      pcl_free(topic_s);
+      pcl_free(type_s);
     }
   }
 
@@ -285,7 +286,7 @@ pcl_udp_transport_t* pcl_udp_transport_create(uint16_t        local_port,
   { WSADATA wsa; if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return NULL; }
 #endif
 
-  ctx = (struct pcl_udp_transport_t*)calloc(1, sizeof(*ctx));
+  ctx = (struct pcl_udp_transport_t*)pcl_calloc(1, sizeof(*ctx));
   if (!ctx) return NULL;
 
   ctx->executor   = executor;
@@ -299,13 +300,13 @@ pcl_udp_transport_t* pcl_udp_transport_create(uint16_t        local_port,
   ctx->transport.adapter_ctx  = ctx;
 
   if (udp_resolve_remote(remote_host, remote_port, &ctx->remote_addr) != 0) {
-    free(ctx);
+    pcl_free(ctx);
     return NULL;
   }
 
   ctx->sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
   if (ctx->sock == PCL_INVALID_SOCKET) {
-    free(ctx);
+    pcl_free(ctx);
     return NULL;
   }
 
@@ -318,7 +319,7 @@ pcl_udp_transport_t* pcl_udp_transport_create(uint16_t        local_port,
 
   if (bind(ctx->sock, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) != 0) {
     pcl_close_socket(ctx->sock);
-    free(ctx);
+    pcl_free(ctx);
     return NULL;
   }
 
@@ -352,13 +353,13 @@ pcl_udp_transport_t* pcl_udp_transport_create(uint16_t        local_port,
   ctx->recv_thread = CreateThread(NULL, 0, udp_recv_thread_main, ctx, 0, NULL);
   if (!ctx->recv_thread) {
     pcl_close_socket(ctx->sock);
-    free(ctx);
+    pcl_free(ctx);
     return NULL;
   }
 #else
   if (pthread_create(&ctx->recv_thread, NULL, udp_recv_thread_main, ctx) != 0) {
     pcl_close_socket(ctx->sock);
-    free(ctx);
+    pcl_free(ctx);
     return NULL;
   }
 #endif
@@ -421,5 +422,5 @@ void pcl_udp_transport_destroy(pcl_udp_transport_t* ctx_opaque) {
   }
 #endif
 
-  free(ctx);
+  pcl_free(ctx);
 }
