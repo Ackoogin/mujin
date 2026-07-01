@@ -35,6 +35,10 @@ GXX_DIR="$(dirname "$GXX_PATH")"
 
 CC="$GXX_DIR/gcc"
 AR="$GXX_DIR/ar"
+# When g++ is a ccache (or similar) shim, only the compilers are symlinked into
+# that bin dir -- ar is not -- so fall back to the toolchain ar on PATH.
+[[ -x "$CC" ]] || CC="$(command -v gcc || echo gcc)"
+[[ -x "$AR" ]] || AR="$(command -v gcc-ar || command -v ar)"
 
 echo "[ada-pcl] Compiler : $CC"
 echo "[ada-pcl] Archiver : $AR"

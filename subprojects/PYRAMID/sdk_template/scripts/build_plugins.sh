@@ -44,7 +44,7 @@ cmake --build "$BUILD_DIR" --target pyramid_sdk_plugins --parallel "$JOBS"
 
 echo
 echo "[build_plugins] produced plugins:"
-find "$BUILD_DIR" -name 'pyramid_codec_*.so' -o -name 'pyramid_codec_*.dll' 2>/dev/null | sed "s|$BUILD_DIR/|  |" || true
+find "$BUILD_DIR" \( -name '*pyramid_codec_*.so' -o -name '*pyramid_codec_*.dll' \) 2>/dev/null | sed "s|$BUILD_DIR/|  |" || true
 
 echo
 echo "[build_plugins] PASS"

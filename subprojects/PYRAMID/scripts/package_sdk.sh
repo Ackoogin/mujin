@@ -108,7 +108,7 @@ echo "[package_sdk] copying vendored header-only deps ..."
 mkdir -p "${OUT_DIR}/include/external/nlohmann" "${OUT_DIR}/include/external/tl" "${OUT_DIR}/include/external/flatbuffers"
 cp -f "${PYRAMID_ROOT}/core/external/nlohmann/"* "${OUT_DIR}/include/external/nlohmann/"
 cp -f "${PYRAMID_ROOT}/core/external/tl/"* "${OUT_DIR}/include/external/tl/"
-cp -f "${FLATBUFFERS_INCLUDE}/"* "${OUT_DIR}/include/external/flatbuffers/"
+cp -rf "${FLATBUFFERS_INCLUDE}/"* "${OUT_DIR}/include/external/flatbuffers/"
 
 echo "[package_sdk] copying prebuilt libs (static, single-config toolchain) ..."
 cp -f "${PCL_LIB}" "${OUT_DIR}/lib/linux/"

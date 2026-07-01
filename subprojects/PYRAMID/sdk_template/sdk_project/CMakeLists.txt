@@ -22,6 +22,11 @@ project(pyramid_sdk_plugins LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# The generated marshal/codec STATIC libs are linked into MODULE (.so/.dll)
+# codec plugins, so their objects must be position-independent. A no-op on
+# MSVC; required on ELF toolchains (otherwise ld rejects the shared link).
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 set(SDK_ROOT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.." CACHE PATH
     "Root of the PCL/PYRAMID offline SDK deploy directory")
 set(SDK_GENERATED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/generated" CACHE PATH
