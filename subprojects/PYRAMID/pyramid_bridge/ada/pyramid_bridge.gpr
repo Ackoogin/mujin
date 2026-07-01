@@ -7,7 +7,7 @@
 --      -XUNMANNED_ROOT=<workspace> \
 --      -XPCL_INCLUDE_DIR=<workspace>/subprojects/PCL/include \
 --      -XPCL_LIB_DIR=<build>/ada_gnat_pcl \
---      -XPYRAMID_GEN_LIB_DIR=<build>/ada_gnat_pyramid
+--      -XPYRAMID_CABI_LIB_DIR=<build>/ada_gnat_pyramid_cabi
 --
 --  Environment variables (all have sensible defaults for CI):
 --    UNMANNED_ROOT         workspace root
@@ -20,10 +20,8 @@
 --    PCL_SOCKET_LIB_NAME      (default pcl_transport_socket)
 --    PCL_UDP_LIB_NAME         (default pcl_transport_udp)
 --    PCL_SHMEM_LIB_NAME       (default pcl_transport_shared_memory)
---    PYRAMID_GEN_LIB_DIR      directory containing the generated codec archive
---    PYRAMID_GEN_LIB_NAME     (default pyramid_generated_flatbuffers_codec)
---    PYRAMID_CODECS_LIB_DIR   directory containing the generated C-ABI codec archive
---    PYRAMID_CODECS_LIB_NAME  (default pyramid_generated_codecs)
+--    PYRAMID_CABI_LIB_DIR     directory containing the generated C-ABI marshal archive
+--    PYRAMID_CABI_LIB_NAME    (default pyramid_generated_cabi_marshal)
 
 with "gnatcoll_json.gpr";
 
@@ -41,14 +39,12 @@ project Pyramid_Bridge is
                                      "pcl_transport_udp");
    Pcl_Shmem_Lib_Name   := external ("PCL_SHMEM_LIB_NAME",
                                      "pcl_transport_shared_memory");
-   Pyramid_Gen_Lib_Dir  := external ("PYRAMID_GEN_LIB_DIR",
-                                     Root_Dir & "/build/ada_gnat_pyramid");
-   Pyramid_Gen_Lib_Name := external ("PYRAMID_GEN_LIB_NAME",
-                                     "pyramid_generated_flatbuffers_codec");
-   Pyramid_Codecs_Lib_Dir := external ("PYRAMID_CODECS_LIB_DIR",
-                                        Root_Dir & "/build/subprojects/PYRAMID");
-   Pyramid_Codecs_Lib_Name := external ("PYRAMID_CODECS_LIB_NAME",
-                                         "pyramid_generated_codecs");
+   -- Ada depends on PCL + the C-ABI marshal layer only -- never on
+   -- codec-specific (wire codec) content.
+   Pyramid_Cabi_Lib_Dir  := external ("PYRAMID_CABI_LIB_DIR",
+                                     Root_Dir & "/build/ada_gnat_pyramid_cabi");
+   Pyramid_Cabi_Lib_Name := external ("PYRAMID_CABI_LIB_NAME",
+                                     "pyramid_generated_cabi_marshal");
    Pyramid_Ada_Bindings_Dir :=
      external ("PYRAMID_ADA_BINDINGS_DIR",
                                       Root_Dir & "/build/generated/pyramid_ada_bindings");
@@ -86,30 +82,26 @@ project Pyramid_Bridge is
          when "Windows_NT" =>
             for Default_Switches ("Ada") use
               ("-L" & Pcl_Lib_Dir,
-               "-L" & Pyramid_Gen_Lib_Dir,
-               "-L" & Pyramid_Codecs_Lib_Dir,
+               "-L" & Pyramid_Cabi_Lib_Dir,
                "-L" & Cxx_Lib_Dir,
                "-l" & Pcl_Lib_Name,
                "-l" & Pcl_Socket_Lib_Name,
                "-l" & Pcl_Udp_Lib_Name,
                "-l" & Pcl_Shmem_Lib_Name,
-               "-l" & Pyramid_Gen_Lib_Name,
-               "-l" & Pyramid_Codecs_Lib_Name,
+               "-l" & Pyramid_Cabi_Lib_Name,
                "-lstdc++",
                "-lws2_32",
                "-lkernel32");
          when others =>
             for Default_Switches ("Ada") use
               ("-L" & Pcl_Lib_Dir,
-               "-L" & Pyramid_Gen_Lib_Dir,
-               "-L" & Pyramid_Codecs_Lib_Dir,
+               "-L" & Pyramid_Cabi_Lib_Dir,
                "-L" & Cxx_Lib_Dir,
                "-l" & Pcl_Lib_Name,
                "-l" & Pcl_Socket_Lib_Name,
                "-l" & Pcl_Udp_Lib_Name,
                "-l" & Pcl_Shmem_Lib_Name,
-               "-l" & Pyramid_Gen_Lib_Name,
-               "-l" & Pyramid_Codecs_Lib_Name,
+               "-l" & Pyramid_Cabi_Lib_Name,
                "-lstdc++",
                "-lrt",
                "-lpthread");

@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PYRAMID_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 WORKSPACE_ROOT="$(cd "$PYRAMID_ROOT/../.." && pwd)"
 
-OUT_DIR="${1:-$WORKSPACE_ROOT/build/ada_gnat_pyramid}"
+OUT_DIR="${1:-$WORKSPACE_ROOT/build/ada_gnat_pyramid_cabi}"
 OBJ_DIR="$OUT_DIR/obj"
 FORCE_REBUILD=0
 BUILD_DIR="${PYRAMID_BUILD_DIR:-$WORKSPACE_ROOT/build}"
@@ -33,7 +33,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-LIB_NAME="pyramid_generated_flatbuffers_codec"
+LIB_NAME="pyramid_generated_cabi_marshal"
 LIB_FILE="$OUT_DIR/lib${LIB_NAME}.a"
 MANIFEST_FILE="$OUT_DIR/lib${LIB_NAME}.manifest"
 RAND_SUFFIX="${RANDOM}${RANDOM}"
@@ -45,7 +45,7 @@ TMP_MANIFEST_FILE="$OUT_DIR/lib${LIB_NAME}_${RAND_SUFFIX}.manifest"
 # mutually-compatible object/archive formats.
 GXX_PATH="$(command -v g++ 2>/dev/null || true)"
 if [[ -z "$GXX_PATH" ]]; then
-  echo "[ada-pyramid] ERROR: g++ not found in PATH" >&2
+  echo "[ada-cabi] ERROR: g++ not found in PATH" >&2
   exit 1
 fi
 GXX_DIR="$(dirname "$GXX_PATH")"
@@ -56,12 +56,12 @@ if [[ -z "$AR" ]]; then
   AR="$(command -v ar 2>/dev/null || true)"
 fi
 if [[ -z "$AR" ]]; then
-  echo "[ada-pyramid] ERROR: ar not found in PATH" >&2
+  echo "[ada-cabi] ERROR: ar not found in PATH" >&2
   exit 1
 fi
 
-echo "[ada-pyramid] Compiler : $CXX"
-echo "[ada-pyramid] Archiver : $AR"
+echo "[ada-cabi] Compiler : $CXX"
+echo "[ada-cabi] Archiver : $AR"
 
 mkdir -p "$OBJ_DIR"
 
@@ -107,7 +107,7 @@ deps=(
 shopt -u nullglob
 
 if [[ "${#sources[@]}" -eq 0 ]]; then
-  echo "[ada-pyramid] ERROR: no generated codec sources found" >&2
+  echo "[ada-cabi] ERROR: no generated C-ABI marshal sources found" >&2
   exit 1
 fi
 
@@ -136,15 +136,15 @@ elif ! cmp -s "$MANIFEST_FILE" "$TMP_MANIFEST_FILE"; then
 fi
 
 if [[ "$need_rebuild" -eq 0 ]]; then
-  echo "[ada-pyramid] GNAT FlatBuffers archive is up to date in $OUT_DIR"
+  echo "[ada-cabi] GNAT C-ABI marshal archive is up to date in $OUT_DIR"
   rm -f "$TMP_MANIFEST_FILE"
 else
-  echo "[ada-pyramid] Building GNAT-compatible generated FlatBuffers archive in $OUT_DIR"
+  echo "[ada-cabi] Building GNAT-compatible C-ABI marshal archive in $OUT_DIR"
 
   object_files=()
   for src in "${sources[@]}"; do
     obj="$OBJ_DIR/$(basename "${src%.cpp}").o"
-    echo "[ada-pyramid]   compiling $(basename "$src")"
+    echo "[ada-cabi]   compiling $(basename "$src")"
     "$CXX" "${CXXFLAGS[@]}" -c "$src" -o "$obj"
     object_files+=("$obj")
   done
@@ -163,13 +163,13 @@ fi
 # OUT_DIR so -lstdc++ resolves there.
 LIBSTDCXX="$("$CXX" -print-file-name=libstdc++.a 2>/dev/null || true)"
 if [[ -n "$LIBSTDCXX" && "$LIBSTDCXX" != "libstdc++.a" && -f "$LIBSTDCXX" ]]; then
-  echo "[ada-pyramid] Copying libstdc++ from $LIBSTDCXX to $OUT_DIR"
+  echo "[ada-cabi] Copying libstdc++ from $LIBSTDCXX to $OUT_DIR"
   cp -f "$LIBSTDCXX" "$OUT_DIR/"
   LIBSTDCXX_DIR="$(dirname "$LIBSTDCXX")"
   [[ -f "$LIBSTDCXX_DIR/libstdc++.dll.a" ]] && cp -f "$LIBSTDCXX_DIR/libstdc++.dll.a" "$OUT_DIR/" || true
 else
-  echo "[ada-pyramid] WARNING: libstdc++.a not found via '$CXX -print-file-name'; link may fail with cannot find -lstdc++"
+  echo "[ada-cabi] WARNING: libstdc++.a not found via '$CXX -print-file-name'; link may fail with cannot find -lstdc++"
 fi
 
-echo "[ada-pyramid] Ready:"
-echo "[ada-pyramid]   $LIB_FILE"
+echo "[ada-cabi] Ready:"
+echo "[ada-cabi]   $LIB_FILE"

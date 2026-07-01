@@ -6,10 +6,10 @@ project Ada_Tobj_Client is
   Pcl_Lib_Dir := external("PCL_LIB_DIR", Root_Dir & "/build/install/lib");
   Pcl_Lib_Name := external("PCL_LIB_NAME", "pcl_core");
   Pcl_Socket_Lib_Name := external("PCL_SOCKET_LIB_NAME", "pcl_transport_socket");
-  Pyramid_Gen_Lib_Dir := external("PYRAMID_GEN_LIB_DIR", Root_Dir & "/build/ada_gnat_pyramid");
-  Pyramid_Gen_Lib_Name := external("PYRAMID_GEN_LIB_NAME", "pyramid_generated_flatbuffers_codec");
-  Pyramid_Codecs_Lib_Dir := external("PYRAMID_CODECS_LIB_DIR", Root_Dir & "/build/subprojects/PYRAMID");
-  Pyramid_Codecs_Lib_Name := external("PYRAMID_CODECS_LIB_NAME", "pyramid_generated_codecs");
+  -- Ada depends on PCL + the C-ABI marshal layer only -- never on
+  -- codec-specific (wire codec) content.
+  Pyramid_Cabi_Lib_Dir := external("PYRAMID_CABI_LIB_DIR", Root_Dir & "/build/ada_gnat_pyramid_cabi");
+  Pyramid_Cabi_Lib_Name := external("PYRAMID_CABI_LIB_NAME", "pyramid_generated_cabi_marshal");
   Pyramid_Ada_Bindings_Dir :=
     external("PYRAMID_ADA_BINDINGS_DIR", Root_Dir & "/build/generated/pyramid_ada_bindings");
   Pyramid_Ada_Flatbuffers_Dir :=
@@ -47,24 +47,20 @@ project Ada_Tobj_Client is
       when "Windows_NT" =>
         for Default_Switches ("Ada") use
           ("-L" & Pcl_Lib_Dir,
-           "-L" & Pyramid_Gen_Lib_Dir,
-           "-L" & Pyramid_Codecs_Lib_Dir,
+           "-L" & Pyramid_Cabi_Lib_Dir,
            "-L" & Cxx_Lib_Dir,
            "-l" & Pcl_Lib_Name,
-           "-l" & Pyramid_Gen_Lib_Name,
-           "-l" & Pyramid_Codecs_Lib_Name,
+           "-l" & Pyramid_Cabi_Lib_Name,
            "-lstdc++",
            "-lws2_32",
            "-lkernel32");
       when others =>
         for Default_Switches ("Ada") use
           ("-L" & Pcl_Lib_Dir,
-           "-L" & Pyramid_Gen_Lib_Dir,
-           "-L" & Pyramid_Codecs_Lib_Dir,
+           "-L" & Pyramid_Cabi_Lib_Dir,
            "-L" & Cxx_Lib_Dir,
            "-l" & Pcl_Lib_Name,
-           "-l" & Pyramid_Gen_Lib_Name,
-           "-l" & Pyramid_Codecs_Lib_Name,
+           "-l" & Pyramid_Cabi_Lib_Name,
            "-lstdc++",
            "-ldl");
     end case;
