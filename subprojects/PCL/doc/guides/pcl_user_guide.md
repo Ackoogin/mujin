@@ -1,6 +1,6 @@
 # PCL User Guide
 
-This guide is the quickest way to get productive with the PYRAMID Container
+This guide is the quickest way to get productive with the PYRAMID Composition
 Library (PCL) from C, C++, or Ada.
 
 It complements the lower-level routing guide in
@@ -433,8 +433,11 @@ Provided_Tobj.Invoke_Create_Requirement
 
 Good workspace references:
 
-- C++ generated service binding example:
-  `subprojects/PYRAMID/examples/cpp/tobj_service_binding_example.cpp`
+- C++ generated service binding showcase (components, bindings, shared-memory
+  bus, single-threaded spin):
+  `subprojects/PYRAMID/examples/cpp/tobj_shared_memory_example.cpp` and the
+  authoring guide
+  `subprojects/PYRAMID/doc/architecture/cpp_component_authoring.md`
 - C++ wrapper tests:
   `subprojects/PCL/tests/test_pcl_cpp_wrappers.cpp`
 - Ada wrapper demo:

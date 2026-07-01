@@ -1,5 +1,13 @@
 # PYRAMID Binding Hard-Coupling Removal Report
 
+> **Status: historical.** The removal plan defined here was implemented by the
+> generic contract layout work. See
+> [`generic_contract_layout.md`](../../../subprojects/PYRAMID/doc/architecture/generic_contract_layout.md)
+> for the delivered design and
+> [`generic_binding_implementation_progress.md`](generic_binding_implementation_progress.md)
+> for the implementation record and the couplings still open. Keep this
+> document as analysis context, not as a work plan.
+
 ## Purpose
 
 This report identifies hard coupling in the PCL/PYRAMID binding system and

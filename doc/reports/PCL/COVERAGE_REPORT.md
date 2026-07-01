@@ -2,6 +2,12 @@
 
 Generated: 2026-05-21
 
+> **Scope note:** this snapshot predates the plugin/routing-era PCL sources
+> added in late June 2026 (`pcl_codec_registry.c`, `pcl_plugin_loader.c`,
+> `pcl_transport_routing.c`, `pcl_capabilities.c`, `pcl_alloc.c`), which are
+> not in the per-file table below. Regenerate with
+> `subprojects/PCL/scripts/coverage_pcl.{sh,bat}` for current figures.
+
 Toolchain: `gcovr 8.6` with GCC 13.3.0 (`--coverage -O0 -g -fprofile-abs-path`)
 
 Coverage artifacts:

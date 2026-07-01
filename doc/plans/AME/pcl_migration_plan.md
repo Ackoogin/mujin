@@ -67,7 +67,7 @@ ROS2 caller / devenv
 
 PYRAMID now has reusable groundwork for this mapping under:
 
-- `subprojects/PYRAMID/bindings/cpp/generated/ros2/cpp`
+- `${binaryDir}/generated/pyramid_cpp_bindings/ros2/cpp` (build-local generated ROS2 projection)
 - `subprojects/PYRAMID/ros2`
 - `subprojects/PYRAMID/doc/architecture/ros2_transport_semantics.md`
 

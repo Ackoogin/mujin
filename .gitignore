@@ -120,15 +120,6 @@ build-all-enabled/*
 build-all-off/*
 build-flatbuffers-only/*
 
-# Ada plugin/test gprbuild artifacts (Strategy A codec plugin work)
-subprojects/PYRAMID/bindings/ada/obj_json_codec_plugin/
-subprojects/PYRAMID/bindings/ada/lib/
-
-# Generated PYRAMID binding outputs are build-local.
-subprojects/PYRAMID/bindings/cpp/generated/
-subprojects/PYRAMID/bindings/ada/generated/
-subprojects/PYRAMID/bindings/protobuf/cpp/
-
 # Staged plugin deployment output (scripts/stage_plugin_deploy.sh)
 /dist/
 

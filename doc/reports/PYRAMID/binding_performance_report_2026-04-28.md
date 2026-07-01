@@ -279,7 +279,7 @@ The fix now:
 
 Relevant code:
 
-- [`subprojects/PYRAMID/bindings/protobuf/cpp/pyramid_services_tactical_objects_protobuf_codec.cpp`](../../../subprojects/PYRAMID/bindings/protobuf/cpp/pyramid_services_tactical_objects_protobuf_codec.cpp)
+- [`subprojects/PYRAMID/src/protobuf_support/pyramid_services_tactical_objects_protobuf_codec.cpp`](../../../subprojects/PYRAMID/src/protobuf_support/pyramid_services_tactical_objects_protobuf_codec.cpp)
 
 ## Verification
 

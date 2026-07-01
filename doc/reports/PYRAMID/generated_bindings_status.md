@@ -43,18 +43,18 @@ Tactical Objects is the current proving-ground component.
 
 | Codec | Content type | PCL status | Notes |
 |-------|--------------|------------|-------|
-| JSON | `application/json` | active | default path |
-| FlatBuffers | `application/flatbuffers` | active | C++ native; Ada typed API may use shim |
-| Protobuf | `application/protobuf` | partial | direct generated codec works; no runtime `application/protobuf` codec plugin for generic local/shmem/socket transports |
+| JSON | `application/json` | active | default path; runtime codec plugin available |
+| FlatBuffers | `application/flatbuffers` | active | C++ native; Ada typed API may use shim; runtime codec plugin available |
+| Protobuf | `application/protobuf` | active | direct generated codec plus runtime registry codec plugin (`pyramid_codec_protobuf_tactical_objects`); proven by `tobj_cpp_app_client_protobuf_plugin_e2e` |
 
 ### Transport projections
 
 | Transport | Status | Notes |
 |-----------|--------|-------|
 | PCL | active baseline | production proving path |
-| gRPC | partial optional projection | direct generated C++ transport works; loadable coupled plugin is ABI/load-only, not runtime-functional |
-| ROS2 | partial optional projection | generated top-level `bindRos2(...)` hooks/constants plus runtime adapter proof; coupled plugin still needs fresh-tree build and live plugin-loaded traffic proof |
-| PCL shared-memory bus | foundation active | Tactical Objects-specific projection remains incomplete |
+| gRPC | active optional projection | direct generated C++ transport works; coupled plugin is runtime-functional both ways (server ingress + client `invoke_async`/`invoke_stream`), proven by `test_grpc_coupled_plugin_e2e` |
+| ROS2 | active optional projection (envelope wire) | generated `bindRos2(...)` hooks/constants, `rclcpp` runtime adapter, coupled plugin both ways with reproducible fresh-tree ament build and plugin-loaded live E2E; typed `pyramid_msgs` wire switch still pending (see `doc/plans/PYRAMID/transport_plugins.md`) |
+| PCL shared-memory bus | active | generated Tactical Objects services run over the bus in the `tobj_shared_memory_example` showcase (provided + consumed bindings, gateway container) |
 
 ## Current Proof Matrix
 
@@ -68,13 +68,14 @@ Tactical Objects is the current proving-ground component.
 | Ada generated binding round-trip | `ada_generated_bindings_roundtrip` |
 | Ada/C++ gRPC single service facade runtime | `tobj_ada_grpc_cpp_interop_e2e`, `ada_grpc_cpp_interop_e2e.gpr` |
 | gRPC direct C++ transport runtime | `test_grpc_transport_smoke`, `BindingPerformanceTest.Grpc_Tcp` |
-| gRPC coupled plugin ABI/load shape | `test_grpc_coupled_plugin_load` only; does not prove runtime RPC functionality |
+| gRPC coupled plugin runtime (both directions, dlopen'd) | `test_grpc_coupled_plugin_e2e` |
+| Runtime codec plugins on the real app | `tobj_cpp_app_client_{json,flatbuffers,protobuf}_plugin_e2e`, `tobj_ada_active_find_app_json_plugin_e2e` |
 | Ada socket active-find JSON/FlatBuffers | `tobj_ada_active_find_e2e`, `tobj_ada_active_find_flatbuffers_e2e` |
 | Real app Ada active-find JSON/FlatBuffers | `tobj_ada_active_find_app_e2e`, `tobj_ada_active_find_app_flatbuffers_e2e` |
 | ROS2 semantic projection | `test_ros2_transport_semantics`, `tobj_ros2_facade_e2e` |
 | ROS2 rclcpp adapter runtime | `test_rclcpp_runtime_adapter` |
-| ROS2 coupled plugin ABI/load shape | `test_ros2_coupled_plugin_load`; does not yet prove live traffic through the plugin-loaded transport |
-| PCL shared-memory bus | `test_pcl_shared_memory_transport` |
+| ROS2 coupled plugin (load shape + live traffic via `colcon test`) | `test_ros2_coupled_plugin_load` |
+| PCL shared-memory bus | `test_pcl_shared_memory_transport`; Tactical Objects services over the bus in `tobj_shared_memory_example` |
 | Binding generator dependency hygiene | `pyramid_binding_generation_dependencies` |
 
 Focused v1 regression command:
@@ -122,17 +123,16 @@ Use this table in reviews:
 
 ## Current Gaps
 
-The following are still not v1-complete:
+The following are still not complete (transport-side items are tracked with
+plans in `doc/plans/PYRAMID/transport_plugins.md`):
 
-- Tactical Objects projection over the PCL shared-memory bus
-- runtime-functional gRPC coupled plugin loaded through the PCL plugin loader
-- `application/protobuf` codec plugin for generic local/shmem/socket transports,
-  unless protobuf is intentionally kept gRPC-coupled only
-- ROS2 coupled plugin production closure: reproducible ament build inputs,
-  plugin-loaded live traffic E2E, client-side RPC decision, lifecycle ownership,
-  and staged runtime dependency docs
-- Ada ROS2 runtime beyond generated top-level endpoint constants
+- typed `pyramid_msgs` ROS2 wire: the generated native IDL + marshal codec are
+  round-trip verified, but the live ROS2 transport still carries the
+  pass-through envelope
 - ROS2 action mapping for long-running / feedback-style workflows
+- staging the ROS2 coupled plugin's shared runtime dependency outside the
+  colcon install tree
+- Ada ROS2 runtime beyond generated top-level endpoint constants
 - fully Ada-native gRPC runtime without generated C/C++ shim support
 - applying the same proof level to other PYRAMID components
 
@@ -176,9 +176,9 @@ JSON shim details disappear from ordinary component code and copied examples.
    call shape. When `Content_Type => Grpc_Content_Type` is selected and the
    gRPC backend was requested at generation time, it delegates to the generated
    transport adapter, which owns C string handling, JSON/protobuf conversion,
-   shim invocation, response decoding, and error reporting. This proof uses the
-   generated gRPC transport/C shim path; it is not proof that
-   `pyramid_grpc_coupled_plugin` works as a loadable runtime plugin.
+   shim invocation, response decoding, and error reporting. The loadable
+   `pyramid_grpc_coupled_plugin` is separately proven runtime-functional in
+   both directions by `test_grpc_coupled_plugin_e2e`.
 
 6. Move interop tests to the typed surface. **Done.**
    The primary Ada/C++ gRPC E2E calls the top-level generated service procedure
@@ -196,9 +196,11 @@ JSON shim details disappear from ordinary component code and copied examples.
    checks proving C++ and Ada facades only emit selected codec/transport
    dependencies.
 
-8. Update examples and docs.
-   Make typed generated facades the copied examples. Mark shim-level APIs as
-   compatibility-only wherever they remain visible for ABI or test reasons.
+8. Update examples and docs. **Done.**
+   The copied examples are the typed service-binding facade showcase under
+   `subprojects/PYRAMID/examples/cpp/` (see
+   `subprojects/PYRAMID/doc/architecture/cpp_component_authoring.md`); shim-level
+   APIs are documented as compatibility-only where they remain visible.
 
 Completion criteria:
 
@@ -217,9 +219,9 @@ Completion criteria:
   business-call APIs.
 - Ada gRPC examples/tests exercise that top-level typed service procedure,
   with raw C ABI handling hidden in generated transport bodies.
-- The generated/static gRPC transport has runtime proof; the loadable
-  `pyramid_grpc_coupled_plugin` still needs real vtable behavior and a
-  plugin-loaded round-trip test before it can be marked functional.
+- The generated/static gRPC transport has runtime proof, and the loadable
+  `pyramid_grpc_coupled_plugin` has a plugin-loaded both-directions round-trip
+  proof (`test_grpc_coupled_plugin_e2e`).
 - Raw `_Json`, `grpc_*`, and generated-service `pcl_executor_*` calls are
   limited to generated adapters and explicit compatibility tests.
 

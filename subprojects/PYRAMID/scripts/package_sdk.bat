@@ -175,6 +175,8 @@ copy /y "%FLATC_EXE%" "%OUT_DIR%\tools\flatc.exe" >nul
 echo [package_sdk] copying generator (pim\*.py) ...
 xcopy /y /q "%PYRAMID_ROOT%\pim\*.py" "%OUT_DIR%\generator\" >nul
 xcopy /y /q "%PYRAMID_ROOT%\pim\backends\*.py" "%OUT_DIR%\generator\backends\" >nul
+mkdir "%OUT_DIR%\generator\topic_metadata" 2>nul
+xcopy /y /q "%PYRAMID_ROOT%\pim\topic_metadata\*.json" "%OUT_DIR%\generator\topic_metadata\" >nul
 
 echo [package_sdk] copying starter proto contracts ...
 xcopy /y /q /s /i "%PYRAMID_ROOT%\proto\pyramid" "%OUT_DIR%\proto\pyramid" >nul

@@ -208,4 +208,3 @@ cmake --build build-all-off --target pyramid_generated_codecs
 | Manifest-driven CMake helpers | `subprojects/PYRAMID/cmake/pyramid_manifest.cmake`, `cmake/pyramid_binding_sources.cmake`, `cmake/tests/` |
 | Tests | `subprojects/PYRAMID/tests/test_generic_*.py`, `test_binding_manifest.py`, `test_topic_metadata.py`, `test_manifest_cmake_helper.py`, `test_generic_ada.py` |
 | Implementation progress log | `doc/reports/PYRAMID/generic_binding_implementation_progress.md` |
-```

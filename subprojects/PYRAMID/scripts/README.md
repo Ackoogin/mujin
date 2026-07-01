@@ -76,16 +76,17 @@ target, and also builds `pyramid_plugins` so the `.so`s those binaries load are
 present.
 
 ```bash
-# Build the Ada binaries from the committed Ada bindings, then run the Ada tests:
+# Build the Ada binaries against the build-local Ada bindings, then run the Ada tests:
 subprojects/PYRAMID/scripts/build_ada.sh --test
 
-# Full proto -> Ada: also refresh the committed Ada bindings from .proto first:
+# Full proto -> Ada: also regenerate the build-local Ada bindings from .proto first:
 subprojects/PYRAMID/scripts/build_ada.sh --regen --test
 ```
 
-Requires a GNAT toolchain (`gnat`/`gprbuild`) on the runner. Unlike the C++
-bindings (regenerated into the build tree each configure), the Ada bindings are
-committed and compiled from source, so `--regen` is opt-in. Options:
+Requires a GNAT toolchain (`gnat`/`gprbuild`) on the runner. Like the C++
+bindings, the Ada bindings are generated build-local (default
+`${binaryDir}/generated/pyramid_ada_bindings`) and compiled from source;
+`--regen` refreshes them from `.proto` before building. Options:
 `--build-dir DIR`, `--regen`, `--backends LIST`, `--jobs N`, `--clean`, `--test`.
 
 Ada links **only PCL + the C-ABI marshal layer** (`to_c`/`from_c`/`_c_free`),
