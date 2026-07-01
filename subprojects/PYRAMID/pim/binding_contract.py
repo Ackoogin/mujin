@@ -1,0 +1,414 @@
+#!/usr/bin/env python3
+"""Neutral binding contract model and naming policies."""
+
+from __future__ import annotations
+
+import hashlib
+from dataclasses import dataclass, field
+from typing import Dict, Iterable, List, Optional, Protocol, Set, Tuple
+
+from proto_parser import (
+    ProtoEnum,
+    ProtoFile,
+    ProtoMessage,
+    ProtoRpc,
+    ProtoService,
+    ProtoTypeIndex,
+    _PROTO_SCALARS,
+)
+
+
+@dataclass(frozen=True)
+class ServiceTypeClosure:
+    """Request/response type closure for one proto service."""
+
+    service_name: str
+    package: str
+    root_types: Tuple[str, ...] = ()
+    types: Tuple[str, ...] = ()
+
+
+@dataclass
+class BindingContract:
+    """Parsed proto files classified by content, independent of package names."""
+
+    proto_files: List[ProtoFile]
+    type_modules: List[ProtoFile]
+    service_modules: List[ProtoFile]
+    wrapper_modules: List[ProtoFile]
+    service_type_closures: Dict[str, ServiceTypeClosure] = field(default_factory=dict)
+    schema_ids: Dict[str, str] = field(default_factory=dict)
+    naming_policy: "NamingPolicy" = field(default=None)
+
+
+class NamingPolicy(Protocol):
+    """Policy for mapping proto identities to generated C++ names."""
+
+    layout: str
+
+    def cpp_namespace_for_package(self, package: str) -> str:
+        ...
+
+    def cpp_type_namespace_for_package(self, package: str) -> str:
+        ...
+
+    def type_header_for_package(self, package: str) -> str:
+        ...
+
+    def codec_header_for_package(self, package: str) -> str:
+        ...
+
+    def codec_source_for_package(self, package: str) -> str:
+        ...
+
+    def umbrella_types_header(self, proto_files: Iterable[ProtoFile]) -> Optional[str]:
+        ...
+
+    def service_namespace(self, package: str) -> str:
+        ...
+
+    def service_file_prefix(self, package: str) -> str:
+        ...
+
+    def service_transport_file_prefix(self, package: str) -> str:
+        ...
+
+    def service_role(self, package: str) -> str:
+        ...
+
+    def ros2_support_file_prefix(self, package: str) -> str:
+        ...
+
+    def ros2_support_namespace(self, package: str) -> str:
+        ...
+
+    def ros2_envelope_type(self, package: str) -> str:
+        ...
+
+    def ros2_route_prefix(self, package: str) -> str:
+        ...
+
+    def grpc_plugin_aggregator_file_prefix(self, package: str) -> str:
+        ...
+
+    def grpc_plugin_symbol_prefix(self, package: str) -> str:
+        ...
+
+    def schema_id_for_type(self, full_type: str) -> str:
+        ...
+
+    def protobuf_codec_namespace(self, package: str) -> str:
+        ...
+
+    def flatbuffers_service_group_key(self, package: str) -> Optional[str]:
+        ...
+
+    def flatbuffers_service_namespace(self, package: str) -> str:
+        ...
+
+    def flatbuffers_service_file_prefix(self, package: str) -> str:
+        ...
+
+
+class PyramidCompatNamingPolicy:
+    """Naming policy that preserves the existing PYRAMID generated surface."""
+
+    layout = "pyramid"
+    data_model_proto_root = "pyramid.data_model"
+    data_model_types_namespace = "pyramid::domain_model"
+    data_model_types_header = "pyramid_data_model_types.hpp"
+
+    def cpp_namespace_for_package(self, package: str) -> str:
+        if package == self.data_model_proto_root:
+            return self.data_model_types_namespace
+        if package.startswith(self.data_model_proto_root + "."):
+            suffix = package[len(self.data_model_proto_root) + 1:]
+            return self.data_model_types_namespace + "::" + suffix.replace(".", "::")
+        return package.replace(".", "::")
+
+    def cpp_type_namespace_for_package(self, package: str) -> str:
+        return self.cpp_namespace_for_package(package)
+
+    def type_header_for_package(self, package: str) -> str:
+        return package.replace(".", "_") + "_types.hpp"
+
+    def codec_header_for_package(self, package: str) -> str:
+        return package.replace(".", "_") + "_codec.hpp"
+
+    def codec_source_for_package(self, package: str) -> str:
+        return package.replace(".", "_") + "_codec.cpp"
+
+    def umbrella_types_header(self, proto_files: Iterable[ProtoFile]) -> Optional[str]:
+        del proto_files
+        return self.data_model_types_header
+
+    def legacy_service_namespace(self, package: str) -> Tuple[str, str]:
+        parts = package.split(".")
+
+        last = parts[-1].lower()
+        suffix = None
+        if last in ("provided", "consumed"):
+            suffix = last
+            parts = parts[:-1]
+
+        skip = {"pyramid", "components", "data_model", "base", "services"}
+        meaningful = [p for p in parts if p.lower() not in skip]
+
+        ns_parts = ["pyramid", "services"] + [p.lower() for p in meaningful]
+        suffix = suffix or "provided"
+        return "::".join(ns_parts), "_".join(ns_parts + [suffix])
+
+    def service_namespace(self, package: str) -> str:
+        parts = package.split(".")
+        last = parts[-1].lower()
+        suffix = None
+        if last in ("provided", "consumed"):
+            suffix = last
+            parts = parts[:-1]
+        suffix = suffix or "provided"
+        return "::".join(parts + [suffix])
+
+    def service_file_prefix(self, package: str) -> str:
+        return self.legacy_service_namespace(package)[1]
+
+    def service_transport_file_prefix(self, package: str) -> str:
+        return package.replace(".", "_")
+
+    def service_role(self, package: str) -> str:
+        return "provided" if "provided" in package.lower() else "consumed"
+
+    def ros2_support_file_prefix(self, package: str) -> str:
+        del package
+        return "pyramid_ros2_transport_support"
+
+    def ros2_support_namespace(self, package: str) -> str:
+        del package
+        return "pyramid::transport::ros2"
+
+    def ros2_envelope_type(self, package: str) -> str:
+        del package
+        return "pyramid_ros2/PclEnvelope"
+
+    def ros2_route_prefix(self, package: str) -> str:
+        del package
+        return "pyramid"
+
+    def grpc_plugin_aggregator_file_prefix(self, package: str) -> str:
+        del package
+        return "pyramid_grpc_plugin_aggregator"
+
+    def grpc_plugin_symbol_prefix(self, package: str) -> str:
+        del package
+        return "pyramid_grpc_plugin"
+
+    def schema_id_for_type(self, full_type: str) -> str:
+        return full_type.split(".")[-1]
+
+    def protobuf_codec_namespace(self, package: str) -> str:
+        return package.replace(".", "::") + "::protobuf_codec"
+
+    def flatbuffers_service_group_key(self, package: str) -> Optional[str]:
+        if ".services." not in f".{package}.":
+            return None
+        parts = [p for p in package.split(".") if p]
+        if parts and parts[-1].lower() in ("provided", "consumed"):
+            parts = parts[:-1]
+        return ".".join(parts)
+
+    def flatbuffers_service_namespace(self, package: str) -> str:
+        parts = [p for p in package.split(".") if p]
+        skip = {"pyramid", "components", "services", "data_model", "base"}
+        meaningful = [p for p in parts if p.lower() not in skip]
+        return ".".join(["pyramid", "services"] + [p.lower() for p in meaningful])
+
+    def flatbuffers_service_file_prefix(self, package: str) -> str:
+        return self.flatbuffers_service_namespace(package).replace(".", "_")
+
+
+class GenericNamingPolicy:
+    """Naming policy that derives names directly from proto package identity."""
+
+    layout = "generic"
+
+    def cpp_namespace_for_package(self, package: str) -> str:
+        return package.replace(".", "::") if package else "proto"
+
+    def cpp_type_namespace_for_package(self, package: str) -> str:
+        return self.cpp_namespace_for_package(package)
+
+    def _package_prefix(self, package: str) -> str:
+        return package.replace(".", "_") if package else "proto"
+
+    def type_header_for_package(self, package: str) -> str:
+        return self._package_prefix(package) + "_types.hpp"
+
+    def codec_header_for_package(self, package: str) -> str:
+        return self._package_prefix(package) + "_codec.hpp"
+
+    def codec_source_for_package(self, package: str) -> str:
+        return self._package_prefix(package) + "_codec.cpp"
+
+    def umbrella_types_header(self, proto_files: Iterable[ProtoFile]) -> Optional[str]:
+        del proto_files
+        return None
+
+    def service_namespace(self, package: str) -> str:
+        return self.cpp_namespace_for_package(package)
+
+    def service_file_prefix(self, package: str) -> str:
+        return self._package_prefix(package) + "_services"
+
+    def service_transport_file_prefix(self, package: str) -> str:
+        return self.service_file_prefix(package)
+
+    def service_role(self, package: str) -> str:
+        del package
+        return "neutral"
+
+    def ros2_support_file_prefix(self, package: str) -> str:
+        return self._package_prefix(package) + "_ros2_transport_support"
+
+    def ros2_support_namespace(self, package: str) -> str:
+        return self.cpp_namespace_for_package(package) + "::transport::ros2"
+
+    def ros2_envelope_type(self, package: str) -> str:
+        return self._package_prefix(package) + "_ros2/PclEnvelope"
+
+    def ros2_route_prefix(self, package: str) -> str:
+        return self._package_prefix(package)
+
+    def grpc_plugin_aggregator_file_prefix(self, package: str) -> str:
+        return self._package_prefix(package) + "_grpc_plugin_aggregator"
+
+    def grpc_plugin_symbol_prefix(self, package: str) -> str:
+        return self._package_prefix(package) + "_grpc_plugin"
+
+    def schema_id_for_type(self, full_type: str) -> str:
+        digest = hashlib.sha256(full_type.encode("utf-8")).hexdigest()[:16]
+        return f"{full_type}@{digest}"
+
+    def protobuf_codec_namespace(self, package: str) -> str:
+        return self.cpp_namespace_for_package(package) + "::protobuf_codec"
+
+    def flatbuffers_service_group_key(self, package: str) -> Optional[str]:
+        return package if package else "proto"
+
+    def flatbuffers_service_namespace(self, package: str) -> str:
+        return package if package else "proto"
+
+    def flatbuffers_service_file_prefix(self, package: str) -> str:
+        return self.service_file_prefix(package)
+
+
+def _fully_qualified_type(
+    index: ProtoTypeIndex,
+    type_name: str,
+    current_package: str,
+) -> str:
+    if not type_name or type_name in _PROTO_SCALARS or type_name.startswith("google."):
+        return ""
+    if "." in type_name:
+        return type_name
+    current_fqn = f"{current_package}.{type_name}" if current_package else type_name
+    if index.is_message_type(current_fqn) or index.is_enum_type(current_fqn):
+        return current_fqn
+    if index.is_message_type(type_name) or index.is_enum_type(type_name):
+        return type_name
+    return ""
+
+
+def _message_by_fqn(index: ProtoTypeIndex, full_type: str) -> Optional[ProtoMessage]:
+    return index.resolve_message(full_type)
+
+
+def _field_type_closure(
+    index: ProtoTypeIndex,
+    root_type: str,
+    current_package: str,
+    seen: Set[str],
+) -> None:
+    full_type = _fully_qualified_type(index, root_type, current_package)
+    if not full_type or full_type in seen:
+        return
+    seen.add(full_type)
+
+    msg = _message_by_fqn(index, full_type)
+    if msg is None:
+        return
+    msg_package = full_type.rsplit(".", 1)[0] if "." in full_type else ""
+    for field in msg.all_fields():
+        _field_type_closure(index, field.type, msg_package, seen)
+
+
+def _service_key(package: str, service: ProtoService) -> str:
+    return f"{package}.{service.name}" if package else service.name
+
+
+def _schema_types(proto_files: Iterable[ProtoFile]) -> List[str]:
+    result: List[str] = []
+    for pf in proto_files:
+        for msg in pf.messages:
+            result.append(f"{pf.package}.{msg.name}" if pf.package else msg.name)
+        for enum in pf.enums:
+            result.append(f"{pf.package}.{enum.name}" if pf.package else enum.name)
+    return result
+
+
+def _build_service_closures(
+    proto_files: List[ProtoFile],
+) -> Dict[str, ServiceTypeClosure]:
+    index = ProtoTypeIndex(proto_files)
+    closures: Dict[str, ServiceTypeClosure] = {}
+
+    for pf in proto_files:
+        for service in pf.services:
+            roots: List[str] = []
+            closure: Set[str] = set()
+            for rpc in service.rpcs:
+                for type_name in (rpc.request_type, rpc.response_type):
+                    fqn = _fully_qualified_type(index, type_name, pf.package)
+                    if not fqn:
+                        continue
+                    roots.append(fqn)
+                    _field_type_closure(index, type_name, pf.package, closure)
+            closures[_service_key(pf.package, service)] = ServiceTypeClosure(
+                service_name=service.name,
+                package=pf.package,
+                root_types=tuple(sorted(set(roots))),
+                types=tuple(sorted(closure)),
+            )
+
+    return closures
+
+
+def naming_policy_for_layout(layout: str) -> NamingPolicy:
+    if layout == "pyramid":
+        return PyramidCompatNamingPolicy()
+    if layout == "generic":
+        return GenericNamingPolicy()
+    raise ValueError(f"unsupported contract layout: {layout}")
+
+
+def build_contract(proto_files: List[ProtoFile], layout: str) -> BindingContract:
+    """Build a neutral contract for parsed proto files."""
+
+    policy = naming_policy_for_layout(layout)
+    type_modules = [pf for pf in proto_files if pf.messages or pf.enums]
+    service_modules = [pf for pf in proto_files if pf.services]
+    wrapper_modules = [
+        pf for pf in service_modules
+        if pf.messages or pf.enums
+    ]
+    schema_ids = {
+        full_type: policy.schema_id_for_type(full_type)
+        for full_type in _schema_types(proto_files)
+    }
+    return BindingContract(
+        proto_files=list(proto_files),
+        type_modules=type_modules,
+        service_modules=service_modules,
+        wrapper_modules=wrapper_modules,
+        service_type_closures=_build_service_closures(list(proto_files)),
+        schema_ids=schema_ids,
+        naming_policy=policy,
+    )

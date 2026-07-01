@@ -15,7 +15,11 @@ For detailed binding usage and regeneration commands, see
 [generated_bindings.md](generated_bindings.md). For how the generated codecs and
 transports are loaded as runtime `.so` plugins (ABI, config pass-through, build,
 and deployment), see
-[transport_codec_plugin_system.md](transport_codec_plugin_system.md).
+[transport_codec_plugin_system.md](transport_codec_plugin_system.md). For
+generating bindings from **arbitrary (non-PYRAMID) proto contracts** — the
+`--contract-layout generic` mode, naming policies, the artifact manifest, and
+manifest-driven CMake — see
+[generic_contract_layout.md](generic_contract_layout.md).
 
 ## One Page Summary
 

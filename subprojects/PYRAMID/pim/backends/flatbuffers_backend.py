@@ -27,16 +27,18 @@ from proto_parser import (
     ProtoTypeIndex, ProtoFile, ProtoField,
     camel_to_snake, _PROTO_SCALARS,
 )
+from binding_contract import PyramidCompatNamingPolicy
 # Fully-qualified C++ namespace where a proto type's plain struct (and its JSON
 # codec) lives: the data-model sub-namespace (pyramid::domain_model::<pkg>) or,
 # for service-local wrapper messages, their Component-NS. Needed so duplicate and
 # wrapper types (and nested data-model packages) are spelled unambiguously.
 from cpp_codegen import (
-    _native_namespace_for_type as _cpp_native_ns,
     _resolve_message as _cpp_resolve_message,
     _resolve_enum as _cpp_resolve_enum,
 )
 
+
+_DEFAULT_NAMING_POLICY = PyramidCompatNamingPolicy()
 
 _ALIAS_FIELD_NAMES = frozenset({
     'value', 'radians', 'meters', 'meters_per_second', 'seconds',
@@ -56,7 +58,7 @@ class FlatFieldSpec:
     oneof: bool = False
     # Full C++ namespace of a message/enum field's declaring type (data-model
     # sub-ns or wrapper Component-NS); used when casting in the marshalling body.
-    cpp_ns: str = 'pyramid::domain_model'
+    cpp_ns: str = ''
 
 
 @dataclass
@@ -101,25 +103,21 @@ class ServiceCodecGroup:
     enum_specs: List
 
 
-def _service_group_key(package: str) -> Optional[str]:
-    if '.services.' not in f'.{package}.':
-        return None
-    parts = [p for p in package.split('.') if p]
-    if parts and parts[-1].lower() in ('provided', 'consumed'):
-        parts = parts[:-1]
-    return '.'.join(parts)
+def _service_group_key(package: str, naming_policy=None) -> Optional[str]:
+    naming = naming_policy or _DEFAULT_NAMING_POLICY
+    return naming.flatbuffers_service_group_key(package)
 
 
-def _service_group_names(base_package: str) -> Tuple[str, str, str, str, str]:
-    parts = [p for p in base_package.split('.') if p]
-    skip = {'pyramid', 'components', 'services', 'data_model', 'base'}
-    meaningful = [p for p in parts if p.lower() not in skip]
-    fbs_namespace = '.'.join(['pyramid', 'services'] + [p.lower() for p in meaningful])
+def _service_group_names(base_package: str, naming_policy=None) -> Tuple[str, str, str, str, str]:
+    naming = naming_policy or _DEFAULT_NAMING_POLICY
+    fbs_namespace = naming.flatbuffers_service_namespace(base_package)
     cpp_base_ns = fbs_namespace.replace('.', '::')
-    file_base = '_'.join(['pyramid', 'services'] + [p.lower() for p in meaningful])
-    ada_parts = ['Pyramid', 'Services']
-    for part in meaningful:
-        ada_parts.append('_'.join(w.capitalize() for w in part.split('_')))
+    file_base = naming.flatbuffers_service_file_prefix(base_package)
+    ada_parts = [
+        '_'.join(w.capitalize() for w in seg.split('_'))
+        for seg in fbs_namespace.split('.')
+        if seg
+    ]
     ada_codec_pkg = '.'.join(ada_parts + ['Flatbuffers_Codec'])
     ada_codec_file = ada_codec_pkg.lower().replace('.', '-')
     return fbs_namespace, cpp_base_ns, file_base, ada_codec_pkg, ada_codec_file
@@ -136,12 +134,15 @@ def _ada_types_pkg_for_full_type(full_type: str) -> str:
     return _ada_pkg_from_proto_pkg(proto_pkg) + '.Types'
 
 
-def _service_proto_groups(index: ProtoTypeIndex) -> List[Tuple[str, List[ProtoFile]]]:
+def _service_proto_groups(index: ProtoTypeIndex, contract=None,
+                          naming_policy=None) -> List[Tuple[str, List[ProtoFile]]]:
+    naming = naming_policy or _DEFAULT_NAMING_POLICY
+    service_files = contract.service_modules if contract is not None else index.files
     grouped: Dict[str, List[ProtoFile]] = {}
-    for pf in index.files:
+    for pf in service_files:
         if not pf.services:
             continue
-        key = _service_group_key(pf.package)
+        key = _service_group_key(pf.package, naming)
         if not key:
             continue
         grouped.setdefault(key, []).append(pf)
@@ -188,6 +189,14 @@ def _full_type_for(index: ProtoTypeIndex, type_name: str,
             if any(m is msg for m in pf.messages):
                 return f'{pf.package}.{msg.name}' if pf.package else msg.name
     return type_name
+
+
+def _cpp_type_namespace_for_type(full_type: str, naming_policy=None) -> str:
+    naming = naming_policy or _DEFAULT_NAMING_POLICY
+    package = full_type.rsplit('.', 1)[0] if '.' in full_type else ''
+    if not package and getattr(naming, 'layout', 'pyramid') == 'pyramid':
+        return naming.data_model_types_namespace
+    return naming.cpp_type_namespace_for_package(package)
 
 
 def _resolve_enum(index: ProtoTypeIndex, type_name: str):
@@ -245,15 +254,25 @@ def _message_spec_from_proto(
         index: ProtoTypeIndex,
         aliases: Dict[str, Tuple[str, str]],
         current_package: str = '',
+        naming_policy=None,
 ) -> FlatMessageSpec:
     fields: List[FlatFieldSpec] = []
     field_index = 0
     for field, name, oneof in _inline_service_fields(msg, index, aliases):
         kind, type_name, proto_scalar = _field_kind_and_type(field, index, aliases)
-        field_cpp_ns = 'pyramid::domain_model'
+        field_cpp_ns = ''
         if kind in ('message', 'enum'):
-            field_cpp_ns = _cpp_native_ns(
-                _full_type_for(index, field.type, current_package))
+            field_full_type = _full_type_for(index, field.type, current_package)
+            if (kind == 'enum'
+                    and getattr(naming_policy, 'layout', 'pyramid') != 'pyramid'):
+                enum, enum_pkg = _cpp_resolve_enum(
+                    index, field.type, current_package)
+                if enum is not None and enum_pkg:
+                    field_full_type = f'{enum_pkg}.{enum.name}'
+            field_cpp_ns = _cpp_type_namespace_for_type(
+                field_full_type,
+                naming_policy,
+            )
         string_like = _is_generated_string_like(kind, proto_scalar)
         generated_optional = bool(oneof or field.is_optional)
         generated_presence = False
@@ -279,25 +298,26 @@ def _message_spec_from_proto(
         field_index += 1 + (1 if generated_presence else 0)
     return FlatMessageSpec(
         name=msg.name,
-        cpp_type=f'{_cpp_native_ns(full_type)}::{msg.name}',
+        cpp_type=f'{_cpp_type_namespace_for_type(full_type, naming_policy)}::{msg.name}',
         ada_type=camel_to_snake(msg.name),
         full_type=full_type,
         fields=fields,
         # Full native namespace of the type's JSON codec (data-model sub-ns or
         # wrapper Component-NS); the bridge calls <ns>::fromJson/toJson.
-        json_codec_ns=_cpp_native_ns(full_type),
+        json_codec_ns=_cpp_type_namespace_for_type(full_type, naming_policy),
     )
 
 
 def _alias_root_spec(short_name: str, full_type: str,
-                     aliases: Dict[str, Tuple[str, str]]) -> FlatMessageSpec:
+                     aliases: Dict[str, Tuple[str, str]],
+                     naming_policy=None) -> FlatMessageSpec:
     proto_scalar, field_name = aliases[short_name]
     kind = 'string' if proto_scalar == 'string' else 'scalar'
     type_name = _FBS_SCALAR_MAP[proto_scalar]
     table_name = f'{short_name}Value'
     return FlatMessageSpec(
         name=table_name,
-        cpp_type=f'{_cpp_native_ns(full_type)}::{short_name}',
+        cpp_type=f'{_cpp_type_namespace_for_type(full_type, naming_policy)}::{short_name}',
         ada_type=camel_to_snake(short_name),
         full_type=full_type,
         fields=[FlatFieldSpec(
@@ -316,7 +336,10 @@ def _alias_root_spec(short_name: str, full_type: str,
     )
 
 
-def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_files: Sequence[ProtoFile]) -> ServiceCodecGroup:
+def _collect_service_group(index: ProtoTypeIndex, base_package: str,
+                           service_files: Sequence[ProtoFile],
+                           naming_policy=None) -> ServiceCodecGroup:
+    naming = naming_policy or _DEFAULT_NAMING_POLICY
     aliases = _alias_info(index)
     # Track each root/reachable type together with the package it is referenced
     # from. RPC request/response types are written bare in the proto and belong
@@ -376,7 +399,8 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
             if id(msg) in reachable_message_ids:
                 full_type = f'{pf.package}.{msg.name}' if pf.package else msg.name
                 ordered_messages.append(
-                    _message_spec_from_proto(msg, full_type, index, aliases, pf.package))
+                    _message_spec_from_proto(
+                        msg, full_type, index, aliases, pf.package, naming))
 
     spec_by_name = {spec.name: spec for spec in ordered_messages}
     remaining = list(ordered_messages)
@@ -399,7 +423,8 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
     for alias_name in sorted(root_aliases):
         alias_full_type = next(
             (t for t, _pkg in root_types if t.split('.')[-1] == alias_name), alias_name)
-        ordered_messages.append(_alias_root_spec(alias_name, alias_full_type, aliases))
+        ordered_messages.append(_alias_root_spec(
+            alias_name, alias_full_type, aliases, naming))
 
     stream_specs: List[FlatArraySpec] = []
     seen_arrays = set()
@@ -416,7 +441,7 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
                 holder_name=f'{short}ArrayHolder',
                 element_kind='string' if proto_scalar == 'string' else 'scalar',
                 element_type_name=_FBS_SCALAR_MAP[proto_scalar],
-                element_cpp_type=f'{_cpp_native_ns(type_name)}::{short}',
+                element_cpp_type=f'{_cpp_type_namespace_for_type(type_name, naming)}::{short}',
                 element_ada_type=camel_to_snake(short),
                 element_full_type=type_name,
                 json_codec_ns='base',
@@ -428,13 +453,13 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
                 holder_name=f'{short}ArrayHolder',
                 element_kind='message',
                 element_type_name=short,
-                element_cpp_type=f'{_cpp_native_ns(type_name)}::{short}',
+                element_cpp_type=f'{_cpp_type_namespace_for_type(type_name, naming)}::{short}',
                 element_ada_type=camel_to_snake(short),
                 element_full_type=type_name,
-                json_codec_ns=_cpp_native_ns(type_name),
+                json_codec_ns=_cpp_type_namespace_for_type(type_name, naming),
             ))
 
-    fbs_namespace, cpp_base_ns, file_base, ada_codec_pkg, ada_codec_file = _service_group_names(base_package)
+    fbs_namespace, cpp_base_ns, file_base, ada_codec_pkg, ada_codec_file = _service_group_names(base_package, naming)
     return ServiceCodecGroup(
         base_package=base_package,
         file_base=file_base,
@@ -516,9 +541,12 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
     def content_type(self) -> str:
         return 'application/flatbuffers'
 
-    def generate_cpp(self, index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
+    def generate_cpp(self, index: ProtoTypeIndex, output_dir: Path,
+                     naming_policy=None,
+                     contract=None) -> List[Path]:
         output_dir.mkdir(parents=True, exist_ok=True)
         generated: List[Path] = []
+        naming = naming_policy or _DEFAULT_NAMING_POLICY
 
         for pf in index.files:
             if not pf.messages and not pf.enums:
@@ -528,21 +556,21 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             file_base = '_'.join(pkg_parts)
 
             fbs_path = output_dir / (file_base + '.fbs')
-            self._write_fbs_schema(fbs_path, pf, index)
+            self._write_fbs_schema(fbs_path, pf, index, naming)
             generated.append(fbs_path)
 
             hpp_path = output_dir / (file_base + '_flatbuffers_codec.hpp')
             self._write_cpp_wrapper(hpp_path, pf)
             generated.append(hpp_path)
 
-        for base_package, files in _service_proto_groups(index):
-            group = _collect_service_group(index, base_package, files)
+        for base_package, files in _service_proto_groups(index, contract, naming):
+            group = _collect_service_group(index, base_package, files, naming)
             service_fbs = output_dir / (group.file_base + '.fbs')
             service_hpp = output_dir / (group.file_base + '_flatbuffers_codec.hpp')
             service_cpp = output_dir / (group.file_base + '_flatbuffers_codec.cpp')
             self._write_service_fbs_schema(service_fbs, group)
-            self._write_service_cpp_header(service_hpp, group)
-            self._write_service_cpp_impl(service_cpp, group)
+            self._write_service_cpp_header(service_hpp, group, naming)
+            self._write_service_cpp_impl(service_cpp, group, naming)
             generated.extend([service_fbs, service_hpp, service_cpp])
 
         return generated
@@ -574,7 +602,9 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
 
     # -- Proto-native .fbs schema generation ---------------------------------
 
-    def _write_fbs_schema(self, path: Path, pf: ProtoFile, index: ProtoTypeIndex):
+    def _write_fbs_schema(self, path: Path, pf: ProtoFile,
+                          index: ProtoTypeIndex, naming_policy=None):
+        naming = naming_policy or _DEFAULT_NAMING_POLICY
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'// Auto-generated FlatBuffers schema from {pf.path.name}\n')
             f.write('// Do not edit -- regenerate from proto source\n\n')
@@ -583,7 +613,8 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                 if not imported.endswith('.proto') or imported.startswith('google/protobuf/'):
                     continue
                 include_stem = Path(imported).stem
-                if not include_stem.startswith('pyramid.'):
+                if (getattr(naming, 'layout', 'pyramid') == 'pyramid'
+                        and not include_stem.startswith('pyramid.')):
                     include_stem = f'pyramid.{include_stem}'
                 include_base = include_stem.replace('.', '_')
                 f.write(f'include "{include_base}.fbs";\n')
@@ -722,13 +753,9 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                 f.write('}\n\n')
 
     @staticmethod
-    def _component_type_headers(group: ServiceCodecGroup) -> List[str]:
-        """Per-component native type headers for service-local wrapper messages.
-
-        Wrapper messages live in their Component-NS (a per-component
-        ``pyramid_components_..._types.hpp``), not the data-model umbrella, so the
-        service codec must include them. Derived from the specs' proto packages
-        -- no domain names are hardcoded."""
+    def _service_type_headers(group: ServiceCodecGroup, naming_policy=None) -> List[str]:
+        """Native type headers needed by a service FlatBuffers codec."""
+        naming = naming_policy or _DEFAULT_NAMING_POLICY
         headers: set = set()
         full_types = [m.full_type for m in group.message_specs]
         full_types += [a.element_full_type for a in group.array_specs]
@@ -736,18 +763,24 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             if not ft or '.' not in ft:
                 continue
             pkg = ft.rsplit('.', 1)[0]
-            if '.services.' in f'.{pkg}.':
-                headers.add(f'{pkg.replace(".", "_")}_types.hpp')
+            if (getattr(naming, 'layout', 'pyramid') == 'pyramid'
+                    and '.services.' not in f'.{pkg}.'):
+                continue
+            headers.add(naming.type_header_for_package(pkg))
         return sorted(headers)
 
-    def _write_service_cpp_header(self, path: Path, group: ServiceCodecGroup):
+    def _write_service_cpp_header(self, path: Path, group: ServiceCodecGroup,
+                                  naming_policy=None):
+        naming = naming_policy or _DEFAULT_NAMING_POLICY
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated service FlatBuffers codec\n')
             f.write(f'// Backend: flatbuffers | Namespace: {group.cpp_codec_ns}\n')
             f.write(f'// Generated from proto service closure for {group.base_package}\n')
             f.write('#pragma once\n\n')
-            f.write('#include "pyramid_data_model_types.hpp"\n')
-            for hdr in self._component_type_headers(group):
+            umbrella = naming.umbrella_types_header([])
+            if umbrella:
+                f.write(f'#include "{umbrella}"\n')
+            for hdr in self._service_type_headers(group, naming):
                 f.write(f'#include "{hdr}"\n')
             f.write(f'#include "{group.generated_header}"\n\n')
             f.write('#include <flatbuffers/flatbuffers.h>\n')
@@ -755,8 +788,9 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write('#include <string>\n')
             f.write('#include <vector>\n\n')
             f.write(f'namespace {group.cpp_codec_ns} {{\n\n')
-            f.write('namespace data_model = pyramid::domain_model;\n')
-            f.write('\n')
+            if getattr(naming, 'layout', 'pyramid') == 'pyramid':
+                f.write('namespace data_model = pyramid::domain_model;\n')
+                f.write('\n')
             f.write('static constexpr const char* kContentType = "application/flatbuffers";\n\n')
 
             for msg in group.message_specs:
@@ -776,7 +810,9 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
 
             f.write(f'}} // namespace {group.cpp_codec_ns}\n')
 
-    def _write_service_cpp_impl(self, path: Path, group: ServiceCodecGroup):
+    def _write_service_cpp_impl(self, path: Path, group: ServiceCodecGroup,
+                                naming_policy=None):
+        naming = naming_policy or _DEFAULT_NAMING_POLICY
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated service FlatBuffers codec\n')
             f.write(f'#include "{group.file_base}_flatbuffers_codec.hpp"\n\n')
@@ -790,7 +826,8 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                     continue
                 full = getattr(spec, 'full_type', '') or getattr(spec, 'element_full_type', '')
                 if '.' in full:
-                    codec_headers.add(f'{full.rsplit(".", 1)[0].replace(".", "_")}_codec.hpp')
+                    codec_headers.add(naming.codec_header_for_package(
+                        full.rsplit(".", 1)[0]))
             for codec_header in sorted(codec_headers):
                 f.write(f'#include "{codec_header}"\n')
             f.write('#include <cstdlib>\n')

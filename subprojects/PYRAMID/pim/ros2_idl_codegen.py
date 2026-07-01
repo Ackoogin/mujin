@@ -49,9 +49,11 @@ def _is_empty_type(type_name: str) -> bool:
 class Ros2IdlGenerator:
     """Generates ROS2 ``.msg`` / ``.srv`` definitions from a proto index."""
 
-    def __init__(self, index: ProtoTypeIndex):
+    def __init__(self, index: ProtoTypeIndex,
+                 service_modules: Optional[List[ProtoFile]] = None):
         self.index = index
         self.ir = DomainIR(index)
+        self.service_modules = service_modules
 
     # -- public API -----------------------------------------------------------
 
@@ -66,8 +68,10 @@ class Ros2IdlGenerator:
             written.append(self._write_enum_msg(msg_dir, enum))
         for msg in self.ir.emitted_messages():
             written.append(self._write_message_msg(msg_dir, msg))
-        for pf in self.index.files:
-            if not _is_service_package(pf):
+        service_files = (self.service_modules if self.service_modules is not None
+                         else self.index.files)
+        for pf in service_files:
+            if self.service_modules is None and not _is_service_package(pf):
                 continue
             for svc in pf.services:
                 for rpc in svc.rpcs:
@@ -174,9 +178,10 @@ class Ros2IdlGenerator:
         return [srv_path]
 
 
-def generate_ros2_idl(index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
+def generate_ros2_idl(index: ProtoTypeIndex, output_dir: Path,
+                      service_modules: Optional[List[ProtoFile]] = None) -> List[Path]:
     """Module entry point used by the binding generator and tests."""
-    return Ros2IdlGenerator(index).generate(output_dir)
+    return Ros2IdlGenerator(index, service_modules).generate(output_dir)
 
 
 def _main(argv: List[str]) -> int:

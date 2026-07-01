@@ -21,10 +21,14 @@ from proto_parser import (
     ProtoTypeIndex, ProtoFile, ProtoMessage,
     camel_to_snake,
 )
+from binding_contract import PyramidCompatNamingPolicy
 import codec_backends
 
 
-def _proto_pb_header(pf) -> str:
+_DEFAULT_NAMING_POLICY = PyramidCompatNamingPolicy()
+
+
+def _proto_pb_header(pf, proto_import_root: Path = None) -> str:
     """Return the protoc-generated ``.pb.h`` include path for a proto file.
 
     protoc derives the output filename from the proto file's path relative to
@@ -32,13 +36,22 @@ def _proto_pb_header(pf) -> str:
     ``proto/pyramid/data_model/pyramid.data_model.base.proto`` yields
     ``pyramid/data_model/pyramid.data_model.base.pb.h``.
 
-    The import root is the ``proto/`` directory (passed as ``protoc -I``), so the
-    canonical name begins at the ``pyramid`` package root. Anchor on that rather
-    than on an absolute prefix so the result is stable whether ``pf.path`` is
-    absolute or relative — keeping the proto->binding step portable across build
-    systems.
+    The import root is the directory passed as ``protoc -I``. When that root is
+    not supplied, keep the legacy PYRAMID anchor as a compatibility fallback for
+    direct backend callers.
     """
-    parts = Path(pf.path).with_suffix('.pb.h').parts
+    pb_path = Path(pf.path).with_suffix('.pb.h')
+    if proto_import_root is not None:
+        try:
+            return pb_path.relative_to(proto_import_root).as_posix()
+        except ValueError:
+            try:
+                return pb_path.resolve().relative_to(
+                    Path(proto_import_root).resolve()).as_posix()
+            except ValueError:
+                pass
+
+    parts = pb_path.parts
     if 'pyramid' in parts:
         parts = parts[parts.index('pyramid'):]
     return '/'.join(parts)
@@ -54,9 +67,12 @@ class ProtobufBackend(codec_backends.CodecBackend):
     def content_type(self) -> str:
         return 'application/protobuf'
 
-    def generate_cpp(self, index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
+    def generate_cpp(self, index: ProtoTypeIndex, output_dir: Path,
+                     naming_policy=None,
+                     proto_import_root: Path = None) -> List[Path]:
         output_dir.mkdir(parents=True, exist_ok=True)
         generated = []
+        naming = naming_policy or _DEFAULT_NAMING_POLICY
 
         for pf in index.files:
             if not pf.messages:
@@ -64,14 +80,14 @@ class ProtobufBackend(codec_backends.CodecBackend):
 
             pkg_parts = [p for p in pf.package.split('.') if p]
             file_base = '_'.join(pkg_parts)
-            ns = '::'.join(pkg_parts) + '::protobuf_codec'
+            ns = naming.protobuf_codec_namespace(pf.package)
 
             # protoc names its output after the proto FILE path (relative to the
             # proto import root), not the package, e.g.
             #   proto/pyramid/data_model/pyramid.data_model.base.proto
             #   -> pyramid/data_model/pyramid.data_model.base.pb.h
             # Mirror that here so the generated include resolves against protoc.
-            pb_header = _proto_pb_header(pf)
+            pb_header = _proto_pb_header(pf, proto_import_root)
 
             hpp_path = output_dir / (file_base + '_protobuf_codec.hpp')
             self._write_cpp_wrapper(hpp_path, ns, pb_header, pf, index)

@@ -30,9 +30,13 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from proto_parser import ProtoFile, ProtoTypeIndex, camel_to_lower_snake, camel_to_snake
+from binding_contract import PyramidCompatNamingPolicy
 import codec_backends
 from ros2_idl_codegen import generate_ros2_idl
 from ros2_marshal_codegen import generate_ros2_codec
+
+
+_DEFAULT_NAMING_POLICY = PyramidCompatNamingPolicy()
 
 
 def _strip_service_suffix(name: str) -> str:
@@ -51,6 +55,21 @@ def _is_service_package(pf: ProtoFile) -> bool:
     return '.services.' in f'.{pf.package}.'
 
 
+def _service_modules(index: ProtoTypeIndex, naming_policy, contract=None) -> List[ProtoFile]:
+    if getattr(naming_policy, 'layout', 'pyramid') == 'pyramid':
+        return [
+            pf for pf in index.files
+            if _is_service_package(pf) and pf.services
+        ]
+    if contract is not None:
+        return [pf for pf in contract.service_modules if pf.services]
+    return [pf for pf in index.files if pf.services]
+
+
+def _transport_package(service_modules: List[ProtoFile]) -> str:
+    return service_modules[0].package if service_modules else ''
+
+
 class Ros2Backend(codec_backends.CodecBackend):
 
     @property
@@ -61,8 +80,17 @@ class Ros2Backend(codec_backends.CodecBackend):
     def content_type(self) -> str:
         return 'application/ros2'
 
-    def generate_cpp(self, index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
+    def generate_cpp(self, index: ProtoTypeIndex, output_dir: Path,
+                     naming_policy=None,
+                     contract=None) -> List[Path]:
         output_dir.mkdir(parents=True, exist_ok=True)
+        naming = naming_policy or _DEFAULT_NAMING_POLICY
+        service_modules = _service_modules(index, naming, contract)
+        support_package = _transport_package(service_modules)
+        support_base = naming.ros2_support_file_prefix(support_package)
+        support_ns = naming.ros2_support_namespace(support_package)
+        envelope_type = naming.ros2_envelope_type(support_package)
+        route_prefix = naming.ros2_route_prefix(support_package)
 
         # Native ROS2 IDL (.msg/.srv) generated alongside the cpp support layer,
         # into <bindings>/ros2/idl/{msg,srv}. This is the typed, introspectable
@@ -70,18 +98,26 @@ class Ros2Backend(codec_backends.CodecBackend):
         # doc/plans/PYRAMID/transport_plugins_wip.md). The ament interface
         # package pyramid_msgs globs these and runs them through rosidl.
         idl_dir = output_dir.parent / 'idl'
-        idl_files = generate_ros2_idl(index, idl_dir)
+        idl_service_modules = (
+            service_modules
+            if getattr(naming, 'layout', 'pyramid') != 'pyramid'
+            else None
+        )
+        idl_files = generate_ros2_idl(index, idl_dir, idl_service_modules)
 
-        # Typed wire codec: domain_model <-> pyramid_msgs ROS2 messages + rclcpp
-        # serialisation. Header-only; compiled by the ament package against the
-        # rosidl-generated pyramid_msgs headers (rclcpp only resolves under ament).
-        codec_dir = output_dir.parent / 'codec'
-        codec_files = generate_ros2_codec(index, codec_dir)
+        codec_files: List[Path] = []
+        if getattr(naming, 'layout', 'pyramid') == 'pyramid':
+            # Typed wire codec: domain_model <-> pyramid_msgs ROS2 messages + rclcpp
+            # serialisation. Header-only; compiled by the ament package against the
+            # rosidl-generated pyramid_msgs headers (rclcpp only resolves under ament).
+            codec_dir = output_dir.parent / 'codec'
+            codec_files = generate_ros2_codec(index, codec_dir)
 
-        hpp_path = output_dir / 'pyramid_ros2_transport_support.hpp'
-        cpp_path = output_dir / 'pyramid_ros2_transport_support.cpp'
-        self._write_cpp_support_header(hpp_path)
-        self._write_cpp_support_impl(cpp_path)
+        hpp_path = output_dir / f'{support_base}.hpp'
+        cpp_path = output_dir / f'{support_base}.cpp'
+        self._write_cpp_support_header(hpp_path, support_ns, envelope_type)
+        self._write_cpp_support_impl(
+            cpp_path, support_base, support_ns, route_prefix)
         generated = [hpp_path, cpp_path] + idl_files + codec_files
 
         # Per-service-package transport facades: a typed ServiceBinder that wires
@@ -89,16 +125,13 @@ class Ros2Backend(codec_backends.CodecBackend):
         # generic Adapter. Mirrors the gRPC backend's per-component transport
         # files so the ROS2 ingress can be bound by name (e.g. the live-adapter
         # test and generated provided-facade bindRos2 path).
-        for pf in index.files:
-            if not _is_service_package(pf) or not pf.services:
-                continue
-            pkg_parts = [p for p in pf.package.split('.') if p]
-            file_base = '_'.join(pkg_parts)
-            ns = '::'.join(pkg_parts) + '::ros2_transport'
+        for pf in service_modules:
+            file_base = naming.service_transport_file_prefix(pf.package)
+            ns = naming.service_namespace(pf.package) + '::ros2_transport'
             comp_hpp = output_dir / (file_base + '_ros2_transport.hpp')
             comp_cpp = output_dir / (file_base + '_ros2_transport.cpp')
-            self._write_cpp_header(comp_hpp, ns, pf)
-            self._write_cpp_impl(comp_cpp, ns, file_base, pf)
+            self._write_cpp_header(comp_hpp, ns, pf, support_base, support_ns)
+            self._write_cpp_impl(comp_cpp, ns, file_base, pf, support_ns)
             generated.extend([comp_hpp, comp_cpp])
 
         return generated
@@ -107,7 +140,8 @@ class Ros2Backend(codec_backends.CodecBackend):
         del index, output_dir
         return []
 
-    def _write_cpp_support_header(self, path: Path):
+    def _write_cpp_support_header(self, path: Path, support_ns: str,
+                                  envelope_type: str):
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('#pragma once\n\n')
             f.write('#include <pcl/pcl_executor.h>\n')
@@ -116,9 +150,9 @@ class Ros2Backend(codec_backends.CodecBackend):
             f.write('#include <string>\n')
             f.write('#include <string_view>\n')
             f.write('#include <vector>\n\n')
-            f.write('namespace pyramid::transport::ros2 {\n\n')
+            f.write(f'namespace {support_ns} {{\n\n')
             f.write('inline constexpr const char* kTransportContentType = "application/ros2";\n')
-            f.write('inline constexpr const char* kEnvelopeType = "pyramid_ros2/PclEnvelope";\n\n')
+            f.write(f'inline constexpr const char* kEnvelopeType = "{envelope_type}";\n\n')
             f.write('struct Envelope {\n')
             f.write('  std::string content_type;\n')
             f.write('  std::string correlation_id;\n')
@@ -198,15 +232,16 @@ class Ros2Backend(codec_backends.CodecBackend):
             f.write('pcl_status_t invokeRemoteStream(Adapter& adapter, const char* pcl_service,\n')
             f.write('                                const pcl_msg_t* request,\n')
             f.write('                                pcl_stream_msg_fn_t callback, void* user_data);\n\n')
-            f.write('}  // namespace pyramid::transport::ros2\n')
+            f.write(f'}}  // namespace {support_ns}\n')
 
-    def _write_cpp_support_impl(self, path: Path):
+    def _write_cpp_support_impl(self, path: Path, support_base: str,
+                                support_ns: str, route_prefix: str):
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
-            f.write('#include "pyramid_ros2_transport_support.hpp"\n\n')
+            f.write(f'#include "{support_base}.hpp"\n\n')
             f.write('#include <cctype>\n')
             f.write('#include <future>\n')
             f.write('#include <stdexcept>\n\n')
-            f.write('namespace pyramid::transport::ros2 {\n\n')
+            f.write(f'namespace {support_ns} {{\n\n')
             f.write('namespace {\n\n')
             f.write('std::string sanitizeName(std::string_view value) {\n')
             f.write('  std::string out;\n')
@@ -266,14 +301,14 @@ class Ros2Backend(codec_backends.CodecBackend):
             f.write('}  // namespace\n\n')
             f.write('TopicBinding makeTopicBinding(std::string_view pcl_topic) {\n')
             f.write('  return {std::string(pcl_topic),\n')
-            f.write('          std::string("/pyramid/topic/") + sanitizeName(pcl_topic)};\n')
+            f.write(f'          std::string("/{route_prefix}/topic/") + sanitizeName(pcl_topic)}};\n')
             f.write('}\n\n')
             f.write('UnaryServiceBinding makeUnaryServiceBinding(std::string_view pcl_service) {\n')
             f.write('  return {std::string(pcl_service),\n')
-            f.write('          std::string("/pyramid/service/") + sanitizeName(pcl_service)};\n')
+            f.write(f'          std::string("/{route_prefix}/service/") + sanitizeName(pcl_service)}};\n')
             f.write('}\n\n')
             f.write('StreamServiceBinding makeStreamServiceBinding(std::string_view pcl_service) {\n')
-            f.write('  const auto base = std::string("/pyramid/stream/") + sanitizeName(pcl_service);\n')
+            f.write(f'  const auto base = std::string("/{route_prefix}/stream/") + sanitizeName(pcl_service);\n')
             f.write('  return {\n')
             f.write('      std::string(pcl_service),\n')
             f.write('      base + "/open",\n')
@@ -454,32 +489,34 @@ class Ros2Backend(codec_backends.CodecBackend):
             f.write('      });\n')
             f.write('  return PCL_OK;\n')
             f.write('}\n\n')
-            f.write('}  // namespace pyramid::transport::ros2\n')
+            f.write(f'}}  // namespace {support_ns}\n')
 
-    def _write_cpp_header(self, path: Path, ns: str, pf: ProtoFile):
+    def _write_cpp_header(self, path: Path, ns: str, pf: ProtoFile,
+                          support_base: str, support_ns: str):
         with open(path, 'w', encoding='utf-8') as f:
             f.write('// Auto-generated ROS2 transport projection -- do not edit\n')
             f.write('// Backend: ros2\n')
             f.write('#pragma once\n\n')
-            f.write('#include "pyramid_ros2_transport_support.hpp"\n\n')
+            f.write(f'#include "{support_base}.hpp"\n\n')
             f.write('#include <pcl/pcl_types.h>\n\n')
             f.write('namespace ')
             f.write(ns)
             f.write(' {\n\n')
             f.write('class ServiceBinder {\n')
             f.write(' public:\n')
-            f.write('  ServiceBinder(pyramid::transport::ros2::Adapter& adapter,\n')
+            f.write(f'  ServiceBinder({support_ns}::Adapter& adapter,\n')
             f.write('                pcl_executor_t* executor);\n')
             f.write('  void bind();\n\n')
             f.write(' private:\n')
-            f.write('  pyramid::transport::ros2::Adapter& adapter_;\n')
+            f.write(f'  {support_ns}::Adapter& adapter_;\n')
             f.write('  pcl_executor_t* executor_;\n')
             f.write('};\n\n')
             f.write('}  // namespace ')
             f.write(ns)
             f.write('\n')
 
-    def _write_cpp_impl(self, path: Path, ns: str, file_base: str, pf: ProtoFile):
+    def _write_cpp_impl(self, path: Path, ns: str, file_base: str,
+                        pf: ProtoFile, support_ns: str):
         with open(path, 'w', encoding='utf-8') as f:
             f.write('// Auto-generated ROS2 transport projection -- do not edit\n\n')
             f.write(f'#include "{file_base}_ros2_transport.hpp"\n\n')
@@ -497,7 +534,7 @@ class Ros2Backend(codec_backends.CodecBackend):
             f.write(ns)
             f.write(' {\n\n')
             f.write('ServiceBinder::ServiceBinder(\n')
-            f.write('    pyramid::transport::ros2::Adapter& adapter,\n')
+            f.write(f'    {support_ns}::Adapter& adapter,\n')
             f.write('    pcl_executor_t* executor)\n')
             f.write('    : adapter_(adapter), executor_(executor) {}\n\n')
             f.write('void ServiceBinder::bind() {\n')
@@ -507,10 +544,10 @@ class Ros2Backend(codec_backends.CodecBackend):
                 for rpc in svc.rpcs:
                     const_name = f'kSvc{svc_wire}_{rpc.name}'.replace('.', '_')
                     if rpc.server_streaming:
-                        f.write(f'  pyramid::transport::ros2::bindStreamServiceIngress('
+                        f.write(f'  {support_ns}::bindStreamServiceIngress('
                                 f'adapter_, executor_, {const_name});\n')
                     else:
-                        f.write(f'  pyramid::transport::ros2::bindUnaryServiceIngress('
+                        f.write(f'  {support_ns}::bindUnaryServiceIngress('
                                 f'adapter_, executor_, {const_name});\n')
 
             f.write('}\n\n')

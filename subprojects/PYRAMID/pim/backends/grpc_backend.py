@@ -28,10 +28,12 @@ from proto_parser import (
     ProtoTypeIndex, ProtoFile, ProtoService, ProtoRpc,
     camel_to_snake, camel_to_lower_snake, lc_first,
 )
+from binding_contract import PyramidCompatNamingPolicy
 import codec_backends
 
 
 _PYRAMID_ROOT_DIR = Path(__file__).resolve().parents[2]
+_DEFAULT_NAMING_POLICY = PyramidCompatNamingPolicy()
 
 
 # -- EntityActions operation detection ----------------------------------------
@@ -50,11 +52,13 @@ def _ada_pkg_segment(segment: str) -> str:
     return '_'.join(part.capitalize() for part in segment.split('_'))
 
 
-def _ada_type_name(type_name: str) -> str:
-    return camel_to_snake(_short_type(type_name))
+def _ada_type_name(type_name: str, naming_policy=None) -> str:
+    return camel_to_snake(_short_type(type_name, naming_policy))
 
 
-def _ada_types_pkg(type_name: str) -> str:
+def _ada_types_pkg(type_name: str, naming_policy=None) -> str:
+    if getattr(naming_policy, 'layout', 'pyramid') != 'pyramid':
+        return ''
     parts = type_name.split('.')
     if len(parts) >= 4 and parts[0] == 'pyramid' and parts[1] == 'data_model':
         domain = _ada_pkg_segment(parts[-2])
@@ -62,7 +66,9 @@ def _ada_types_pkg(type_name: str) -> str:
     return ''
 
 
-def _ada_codec_pkg(type_name: str) -> str:
+def _ada_codec_pkg(type_name: str, naming_policy=None) -> str:
+    if getattr(naming_policy, 'layout', 'pyramid') != 'pyramid':
+        return ''
     parts = type_name.split('.')
     if len(parts) >= 4 and parts[0] == 'pyramid' and parts[1] == 'data_model':
         if parts[-2] == 'base':
@@ -72,19 +78,19 @@ def _ada_codec_pkg(type_name: str) -> str:
     return ''
 
 
-def _ada_type(type_name: str) -> str:
-    pkg = _ada_types_pkg(type_name)
+def _ada_type(type_name: str, naming_policy=None) -> str:
+    pkg = _ada_types_pkg(type_name, naming_policy)
     if pkg:
-        return f'{pkg}.{_ada_type_name(type_name)}'
-    return _ada_type_name(type_name)
+        return f'{pkg}.{_ada_type_name(type_name, naming_policy)}'
+    return _ada_type_name(type_name, naming_policy)
 
 
-def _ada_array_type(type_name: str) -> str:
-    return f'{_ada_type_name(type_name)}_Array'
+def _ada_array_type(type_name: str, naming_policy=None) -> str:
+    return f'{_ada_type_name(type_name, naming_policy)}_Array'
 
 
-def _short_type(fqn: str) -> str:
-    if fqn in _BASE_TYPE_MAP:
+def _short_type(fqn: str, naming_policy=None) -> str:
+    if getattr(naming_policy, 'layout', 'pyramid') == 'pyramid' and fqn in _BASE_TYPE_MAP:
         return _BASE_TYPE_MAP[fqn]
     return fqn.split('.')[-1]
 
@@ -97,11 +103,15 @@ def _rpc_op(rpc: ProtoRpc):
     return None, rpc.name
 
 
-def _facade_namespace(package: str) -> str:
-    return '::'.join(p for p in package.split('.') if p)
+def _facade_namespace(package: str, naming_policy=None) -> str:
+    naming = naming_policy or _DEFAULT_NAMING_POLICY
+    return naming.service_namespace(package)
 
 
-def _facade_header(package: str) -> str:
+def _facade_header(package: str, naming_policy=None) -> str:
+    naming = naming_policy or _DEFAULT_NAMING_POLICY
+    if getattr(naming, 'layout', 'pyramid') != 'pyramid':
+        return naming.service_file_prefix(package) + '.hpp'
     parts = [p for p in package.split('.') if p]
     if 'components' in parts and 'services' in parts:
         comp_i = parts.index('components')
@@ -164,14 +174,55 @@ def _ada_grpc_rpc_name(service_name: str, rpc_name: str) -> str:
     return f'{_service_wire_prefix(service_name)}_{camel_to_snake(rpc_name)}'
 
 
-def _grpc_pb_header_path(pf: ProtoFile) -> str:
-    proto_path = Path(pf.path)
+def _proto_generated_header_path(
+    pf: ProtoFile,
+    suffix: str,
+    proto_import_root: Path = None,
+) -> str:
+    header_path = Path(pf.path).with_suffix(suffix)
+    if proto_import_root is not None:
+        try:
+            return header_path.relative_to(proto_import_root).as_posix()
+        except ValueError:
+            try:
+                return header_path.resolve().relative_to(
+                    Path(proto_import_root).resolve()).as_posix()
+            except ValueError:
+                pass
+
     proto_root = _PYRAMID_ROOT_DIR / 'proto'
     try:
-        proto_path = proto_path.relative_to(proto_root)
+        header_path = header_path.relative_to(proto_root)
     except ValueError:
         pass
-    return str(proto_path.with_suffix('.grpc.pb.h')).replace('\\', '/')
+    return header_path.as_posix()
+
+
+def _grpc_pb_header_path(pf: ProtoFile, proto_import_root: Path = None) -> str:
+    return _proto_generated_header_path(pf, '.grpc.pb.h', proto_import_root)
+
+
+def _pb_header_path(pf: ProtoFile, proto_import_root: Path = None) -> str:
+    return _proto_generated_header_path(pf, '.pb.h', proto_import_root)
+
+
+def _cpp_proto_type(type_name: str, package: str) -> str:
+    parts = [p for p in type_name.split('.') if p]
+    if len(parts) > 1:
+        return '::'.join(parts)
+    pkg_parts = [p for p in package.split('.') if p]
+    return '::'.join(pkg_parts + parts)
+
+
+def _service_modules(index: ProtoTypeIndex, naming_policy, contract=None) -> List[ProtoFile]:
+    del naming_policy
+    if contract is not None:
+        return [pf for pf in contract.service_modules if pf.services]
+    return [pf for pf in index.files if pf.services]
+
+
+def _transport_package(service_modules: List[ProtoFile]) -> str:
+    return service_modules[0].package if service_modules else ''
 
 
 def _ensure_parent_packages(output_dir: Path, pkg_names: List[str]) -> None:
@@ -212,38 +263,54 @@ class GrpcBackend(codec_backends.CodecBackend):
     def content_type(self) -> str:
         return 'application/grpc'
 
-    def generate_cpp(self, index: ProtoTypeIndex, output_dir: Path) -> List[Path]:
+    def generate_cpp(self, index: ProtoTypeIndex, output_dir: Path,
+                     naming_policy=None,
+                     proto_import_root: Path = None,
+                     contract=None) -> List[Path]:
         output_dir.mkdir(parents=True, exist_ok=True)
+        naming = naming_policy or _DEFAULT_NAMING_POLICY
+        service_modules = _service_modules(index, naming, contract)
+        transport_package = _transport_package(service_modules)
+        aggregator_base = naming.grpc_plugin_aggregator_file_prefix(
+            transport_package)
+        aggregator_symbol_prefix = naming.grpc_plugin_symbol_prefix(
+            transport_package)
+        is_pyramid_layout = getattr(naming, 'layout', 'pyramid') == 'pyramid'
         generated = []
         generated_c_api_support = set()
         aggregator_entries: List[dict] = []
         aggregator_rpcs: List[dict] = []
         seen_service_names: set = set()
 
-        for pf in index.files:
-            if not pf.services:
-                continue
+        for pf in service_modules:
 
             pkg_parts = [p for p in pf.package.split('.') if p]
-            file_base = '_'.join(pkg_parts)
-            facade_ns = _facade_namespace(pf.package)
+            file_base = naming.service_transport_file_prefix(pf.package)
+            facade_ns = _facade_namespace(pf.package, naming)
             ns = facade_ns + '::grpc_transport'
 
             # protoc+grpc_cpp_plugin generated header
-            grpc_header = _grpc_pb_header_path(pf)
+            grpc_header_root = None if is_pyramid_layout else proto_import_root
+            grpc_header = _grpc_pb_header_path(pf, grpc_header_root)
+            pb_header = (
+                None if is_pyramid_layout
+                else _pb_header_path(pf, grpc_header_root)
+            )
 
             hpp_path = output_dir / (file_base + '_grpc_transport.hpp')
             cpp_path = output_dir / (file_base + '_grpc_transport.cpp')
 
             self._write_cpp_header(hpp_path, ns, facade_ns, grpc_header,
-                                   _facade_header(pf.package), pf, index)
+                                   _facade_header(pf.package, naming), pf,
+                                   index, pb_header=pb_header)
             self._write_cpp_impl(cpp_path, ns, facade_ns, file_base, pf, index)
             generated.extend([hpp_path, cpp_path])
 
-            component = _component_name(pf.package)
+            component = (_component_name(pf.package) if is_pyramid_layout
+                         else naming.service_file_prefix(pf.package))
             aggregator_entries.append({
                 'component': component,
-                'role': _package_role(pf.package),
+                'role': naming.service_role(pf.package),
                 'file_base': file_base,
                 'grpc_ns': ns,
                 'services': [svc.name for svc in pf.services],
@@ -263,11 +330,11 @@ class GrpcBackend(codec_backends.CodecBackend):
                         'facade_ns': facade_ns,
                         'svc': svc.name,
                         'rpc': rpc.name,
-                        'req_cpp': '::'.join(rpc.request_type.split('.')),
-                        'rsp_cpp': '::'.join(rpc.response_type.split('.')),
+                        'req_cpp': _cpp_proto_type(rpc.request_type, pf.package),
+                        'rsp_cpp': _cpp_proto_type(rpc.response_type, pf.package),
                         'streaming': rpc.server_streaming,
                     })
-            if _has_protobuf_json_shim(component):
+            if is_pyramid_layout and _has_protobuf_json_shim(component):
                 support_base = _grpc_c_api_support_base(component)
                 if component not in generated_c_api_support:
                     support_hpp = output_dir / f'{support_base}.hpp'
@@ -287,43 +354,58 @@ class GrpcBackend(codec_backends.CodecBackend):
         # call to start/stop real gRPC servers for any configured component,
         # without re-declaring per-component generated types.
         if aggregator_entries:
-            agg_hpp = output_dir / 'pyramid_grpc_plugin_aggregator.hpp'
-            agg_cpp = output_dir / 'pyramid_grpc_plugin_aggregator.cpp'
-            self._write_cpp_plugin_aggregator_header(agg_hpp)
+            agg_hpp = output_dir / f'{aggregator_base}.hpp'
+            agg_cpp = output_dir / f'{aggregator_base}.cpp'
+            self._write_cpp_plugin_aggregator_header(
+                agg_hpp, aggregator_symbol_prefix)
             self._write_cpp_plugin_aggregator_impl(
-                agg_cpp, aggregator_entries, aggregator_rpcs)
+                agg_cpp, aggregator_entries, aggregator_rpcs,
+                aggregator_base, aggregator_symbol_prefix)
             generated.extend([agg_hpp, agg_cpp])
 
         return generated
 
     # -- Plugin aggregator -----------------------------------------------------
 
-    def _write_cpp_plugin_aggregator_header(self, path: Path):
+    def _write_cpp_plugin_aggregator_header(self, path: Path,
+                                            symbol_prefix: str):
+        server_type = f'{symbol_prefix}_server'
+        start_fn = f'{symbol_prefix}_server_start'
+        stop_fn = f'{symbol_prefix}_server_stop'
+        unary_fn = f'{symbol_prefix}_client_invoke_unary'
+        stream_fn = f'{symbol_prefix}_client_invoke_stream'
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated gRPC plugin aggregator -- do not edit\n')
             f.write('//\n')
-            f.write('// Stable C ABI used by the loadable coupled gRPC plugin\n')
-            f.write('// (pyramid_grpc_coupled_plugin) to start and stop real gRPC\n')
+            if symbol_prefix == 'pyramid_grpc_plugin':
+                f.write('// Stable C ABI used by the loadable coupled gRPC plugin\n')
+                f.write('// (pyramid_grpc_coupled_plugin) to start and stop real gRPC\n')
+            else:
+                f.write('// Stable C ABI used by a loadable coupled gRPC plugin\n')
+                f.write('// to start and stop real gRPC\n')
             f.write('// servers that route inbound RPCs to a PCL executor. The set of\n')
-            f.write('// (component, role) pairs is driven by the .proto data model.\n')
+            if symbol_prefix == 'pyramid_grpc_plugin':
+                f.write('// (component, role) pairs is driven by the .proto data model.\n')
+            else:
+                f.write('// (component, role) pairs is driven by the .proto service model.\n')
             f.write('#pragma once\n\n')
             f.write('#include <pcl/pcl_executor.h>\n\n')
             f.write('#ifdef __cplusplus\n')
             f.write('extern "C" {\n')
             f.write('#endif\n\n')
             f.write('// Opaque handle owning a running gRPC server and its services.\n')
-            f.write('typedef struct pyramid_grpc_plugin_server pyramid_grpc_plugin_server;\n\n')
+            f.write(f'typedef struct {server_type} {server_type};\n\n')
             f.write('// Start a gRPC server hosting the services of one configured\n')
             f.write('// component/role, dispatching inbound RPCs to *executor*.\n')
             f.write('// component: e.g. "tactical_objects"; role: "provided" or "consumed".\n')
             f.write('// Returns NULL if the (component, role) is unknown or startup fails.\n')
-            f.write('pyramid_grpc_plugin_server* pyramid_grpc_plugin_server_start(\n')
+            f.write(f'{server_type}* {start_fn}(\n')
             f.write('    const char* component,\n')
             f.write('    const char* role,\n')
             f.write('    const char* address,\n')
             f.write('    pcl_executor_t* executor);\n\n')
-            f.write('// Stop and free a server returned by pyramid_grpc_plugin_server_start.\n')
-            f.write('void pyramid_grpc_plugin_server_stop(pyramid_grpc_plugin_server* server);\n\n')
+            f.write(f'// Stop and free a server returned by {start_fn}.\n')
+            f.write(f'void {stop_fn}({server_type}* server);\n\n')
             f.write('// --- Consumed (client) side -------------------------------------------\n')
             f.write('// Invoke a unary gRPC service the configured proto knows about, as a\n')
             f.write('// client. *service_name* is the PCL wire name (e.g.\n')
@@ -331,7 +413,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('// serialized protobuf request. On success returns 0 and sets *out_data*\n')
             f.write('// (malloc\'d -- caller frees) / *out_size* to the serialized protobuf\n')
             f.write('// response. Returns non-zero on unknown service, parse, or RPC failure.\n')
-            f.write('int pyramid_grpc_plugin_client_invoke_unary(\n')
+            f.write(f'int {unary_fn}(\n')
             f.write('    const char* channel,\n')
             f.write('    const char* service_name,\n')
             f.write('    const void* req,\n')
@@ -341,7 +423,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('// Invoke a server-streaming gRPC service as a client, calling *on_item*\n')
             f.write('// once per serialized protobuf response item. Returns 0 on a clean\n')
             f.write('// stream finish, non-zero on unknown service / parse / RPC failure.\n')
-            f.write('int pyramid_grpc_plugin_client_invoke_stream(\n')
+            f.write(f'int {stream_fn}(\n')
             f.write('    const char* channel,\n')
             f.write('    const char* service_name,\n')
             f.write('    const void* req,\n')
@@ -353,13 +435,20 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('#endif\n')
 
     def _write_cpp_plugin_aggregator_impl(self, path: Path, entries: List[dict],
-                                          rpcs: List[dict]):
+                                          rpcs: List[dict],
+                                          aggregator_base: str,
+                                          symbol_prefix: str):
         # Deterministic ordering keeps the generated file stable.
         entries = sorted(entries, key=lambda e: (e['component'], e['role']))
         rpcs = sorted(rpcs, key=lambda r: r['service_name'])
+        server_type = f'{symbol_prefix}_server'
+        start_fn = f'{symbol_prefix}_server_start'
+        stop_fn = f'{symbol_prefix}_server_stop'
+        unary_fn = f'{symbol_prefix}_client_invoke_unary'
+        stream_fn = f'{symbol_prefix}_client_invoke_stream'
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated gRPC plugin aggregator -- do not edit\n\n')
-            f.write('#include "pyramid_grpc_plugin_aggregator.hpp"\n\n')
+            f.write(f'#include "{aggregator_base}.hpp"\n\n')
             includes = sorted({e['file_base'] + '_grpc_transport.hpp' for e in entries})
             for inc in includes:
                 f.write(f'#include "{inc}"\n')
@@ -370,7 +459,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('#include <string>\n')
             f.write('#include <utility>\n')
             f.write('#include <vector>\n\n')
-            f.write('struct pyramid_grpc_plugin_server {\n')
+            f.write(f'struct {server_type} {{\n')
             f.write('    std::vector<std::unique_ptr<grpc::Service>> services;\n')
             f.write('    std::unique_ptr<grpc::Server> server;\n')
             f.write('};\n\n')
@@ -380,7 +469,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('}\n\n')
             f.write('}  // namespace\n\n')
             f.write('extern "C" {\n\n')
-            f.write('pyramid_grpc_plugin_server* pyramid_grpc_plugin_server_start(\n')
+            f.write(f'{server_type}* {start_fn}(\n')
             f.write('    const char* component,\n')
             f.write('    const char* role,\n')
             f.write('    const char* address,\n')
@@ -388,7 +477,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('    if (!component || !role || !address || !address[0] || !executor) {\n')
             f.write('        return nullptr;\n')
             f.write('    }\n\n')
-            f.write('    auto host = std::make_unique<pyramid_grpc_plugin_server>();\n')
+            f.write(f'    auto host = std::make_unique<{server_type}>();\n')
             f.write('    grpc::ServerBuilder builder;\n')
             f.write('    builder.AddListeningPort(address, grpc::InsecureServerCredentials());\n\n')
             f.write('    bool matched = false;\n')
@@ -415,7 +504,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('    }\n')
             f.write('    return host.release();\n')
             f.write('}\n\n')
-            f.write('void pyramid_grpc_plugin_server_stop(pyramid_grpc_plugin_server* server) {\n')
+            f.write(f'void {stop_fn}({server_type}* server) {{\n')
             f.write('    if (!server) {\n')
             f.write('        return;\n')
             f.write('    }\n')
@@ -429,7 +518,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             unary_rpcs = [r for r in rpcs if not r['streaming']]
             stream_rpcs = [r for r in rpcs if r['streaming']]
 
-            f.write('int pyramid_grpc_plugin_client_invoke_unary(\n')
+            f.write(f'int {unary_fn}(\n')
             f.write('    const char* channel,\n')
             f.write('    const char* service_name,\n')
             f.write('    const void* req,\n')
@@ -474,7 +563,7 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write('    return -1;  // unknown unary service\n')
             f.write('}\n\n')
 
-            f.write('int pyramid_grpc_plugin_client_invoke_stream(\n')
+            f.write(f'int {stream_fn}(\n')
             f.write('    const char* channel,\n')
             f.write('    const char* service_name,\n')
             f.write('    const void* req,\n')
@@ -523,7 +612,8 @@ class GrpcBackend(codec_backends.CodecBackend):
 
     def _write_cpp_header(self, path: Path, ns: str, facade_ns: str,
                           grpc_header: str, facade_header: str,
-                          pf: ProtoFile, index: ProtoTypeIndex):
+                          pf: ProtoFile, index: ProtoTypeIndex,
+                          pb_header: str = None):
         pkg_parts = [p for p in pf.package.split('.') if p]
         proto_ns = '::'.join(pkg_parts)
 
@@ -537,6 +627,8 @@ class GrpcBackend(codec_backends.CodecBackend):
             f.write(f'// Requires: protoc + grpc_cpp_plugin generated code\n')
             f.write(f'// Link with: grpc++ protobuf\n')
             f.write(f'#pragma once\n\n')
+            if pb_header is not None:
+                f.write(f'#include "{pb_header}"\n')
             f.write(f'#include "{grpc_header}"\n\n')
             f.write(f'#include <grpcpp/grpcpp.h>\n')
             f.write(f'#include <pcl/pcl_executor.h>\n')
@@ -558,8 +650,8 @@ class GrpcBackend(codec_backends.CodecBackend):
                     req_t = rpc.request_type
                     rsp_t = rpc.response_type
                     # Use fully qualified proto types in the grpc method signature
-                    req_cpp = '::'.join(req_t.split('.'))
-                    rsp_cpp = '::'.join(rsp_t.split('.'))
+                    req_cpp = _cpp_proto_type(req_t, pf.package)
+                    rsp_cpp = _cpp_proto_type(rsp_t, pf.package)
 
                     if rpc.server_streaming:
                         f.write(f'    grpc::Status {rpc.name}(\n')
@@ -716,8 +808,8 @@ class GrpcBackend(codec_backends.CodecBackend):
             # gRPC method implementations
             for svc in pf.services:
                 for rpc in svc.rpcs:
-                    req_cpp = '::'.join(rpc.request_type.split('.'))
-                    rsp_cpp = '::'.join(rpc.response_type.split('.'))
+                    req_cpp = _cpp_proto_type(rpc.request_type, pf.package)
+                    rsp_cpp = _cpp_proto_type(rpc.response_type, pf.package)
                     service_name = f'{_service_wire_prefix(svc.name)}.{camel_to_lower_snake(rpc.name)}'
 
                     if rpc.server_streaming:
@@ -1040,8 +1132,8 @@ class GrpcBackend(codec_backends.CodecBackend):
                         f'{"_".join(pkg_parts)}_{svc_name}_{rpc_name}_json'
                     )
                     short_name = f'grpc_{package_role}_{svc_name}_{rpc_name}_json'
-                    req_cpp = '::' + '::'.join(rpc.request_type.split('.'))
-                    rsp_cpp = '::' + '::'.join(rpc.response_type.split('.'))
+                    req_cpp = '::' + _cpp_proto_type(rpc.request_type, pf.package)
+                    rsp_cpp = '::' + _cpp_proto_type(rpc.response_type, pf.package)
                     req_encode = f'{shim_prefix}_{_short_type(rpc.request_type)}_to_protobuf_json'
                     rsp_decode = f'{shim_prefix}_{_short_type(rpc.response_type)}_from_protobuf_json'
 

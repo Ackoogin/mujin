@@ -34,8 +34,14 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from proto_parser import (
+    parse_proto as parse_full_proto,
     parse_proto_tree, ProtoTypeIndex, ProtoMessage, ProtoEnum, ProtoField,
     screaming_to_pascal, _PROTO_SCALARS,
+)
+from binding_contract import (
+    GenericNamingPolicy,
+    NamingPolicy,
+    PyramidCompatNamingPolicy,
 )
 from standard_topics import topic_spec, topics_for_service
 
@@ -332,19 +338,15 @@ def parse_proto(proto_path: Path) -> ProtoFile:
 _DATA_MODEL_PROTO_ROOT = 'pyramid.data_model'
 _DATA_MODEL_TYPES_NS = 'pyramid::domain_model'
 _DATA_MODEL_TYPES_HEADER = 'pyramid_data_model_types.hpp'
+_DEFAULT_NAMING_POLICY = PyramidCompatNamingPolicy()
 
 
 def _cpp_ns_for_proto_package(package: str) -> str:
-    if package == _DATA_MODEL_PROTO_ROOT:
-        return _DATA_MODEL_TYPES_NS
-    if package.startswith(_DATA_MODEL_PROTO_ROOT + '.'):
-        suffix = package[len(_DATA_MODEL_PROTO_ROOT) + 1:]
-        return _DATA_MODEL_TYPES_NS + '::' + suffix.replace('.', '::')
-    return package.replace('.', '::')
+    return _DEFAULT_NAMING_POLICY.cpp_namespace_for_package(package)
 
 
 def _cpp_ns_for_proto_type_package(package: str) -> str:
-    return _cpp_ns_for_proto_package(package)
+    return _DEFAULT_NAMING_POLICY.cpp_type_namespace_for_package(package)
 
 def _legacy_service_namespace(package: str) -> Tuple[str, str]:
     """Return the legacy service namespace base and generated file prefix.
@@ -352,20 +354,7 @@ def _legacy_service_namespace(package: str) -> Tuple[str, str]:
     Keep these stable so existing generated codec file names and checked-in
     service protobuf codec headers continue to resolve.
     """
-    parts = package.split('.')
-
-    last = parts[-1].lower()
-    suffix = None
-    if last in ('provided', 'consumed'):
-        suffix = last
-        parts = parts[:-1]
-
-    skip = {'pyramid', 'components', 'data_model', 'base', 'services'}
-    meaningful = [p for p in parts if p.lower() not in skip]
-
-    ns_parts = ['pyramid', 'services'] + [p.lower() for p in meaningful]
-    suffix = suffix or 'provided'
-    return '::'.join(ns_parts), '_'.join(ns_parts + [suffix])
+    return _DEFAULT_NAMING_POLICY.legacy_service_namespace(package)
 
 
 def _namespace_from_proto(proto_file: ProtoFile) -> Tuple[str, str, str, str]:
@@ -377,16 +366,7 @@ def _namespace_from_proto(proto_file: ProtoFile) -> Tuple[str, str, str, str]:
       -> svc_base_ns: pyramid::services::tactical_objects
       -> types_ns   : pyramid::domain_model
     """
-    parts = proto_file.package.split('.')
-
-    last = parts[-1].lower()
-    suffix = None
-    if last in ('provided', 'consumed'):
-        suffix = last
-        parts = parts[:-1]
-
-    suffix = suffix or 'provided'
-    full_ns = '::'.join(parts + [suffix])
+    full_ns = _DEFAULT_NAMING_POLICY.service_namespace(proto_file.package)
     svc_base_ns, file_prefix = _legacy_service_namespace(proto_file.package)
 
     return full_ns, file_prefix, svc_base_ns, _DATA_MODEL_TYPES_NS
@@ -651,11 +631,13 @@ def _find_proto_root(proto_input: Path) -> Optional[Path]:
 class CppServiceGenerator:
     _dm_proto_cache: Dict[Path, List[ProtoFile]] = {}
 
-    def __init__(self, proto_input: str, enabled_backends=None):
+    def __init__(self, proto_input: str, enabled_backends=None,
+                 naming_policy: NamingPolicy = None):
         self._proto_input = Path(proto_input)
         self._enabled_backends = set(enabled_backends or [
             'json', 'flatbuffers', 'protobuf',
         ])
+        self._naming = naming_policy or _DEFAULT_NAMING_POLICY
 
     def _has_backend(self, name: str) -> bool:
         return name in self._enabled_backends
@@ -740,6 +722,10 @@ class CppServiceGenerator:
         return base_package, files
 
     def generate(self, output_dir: str):
+        if self._naming.layout == 'generic':
+            self._generate_generic(output_dir)
+            return
+
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
@@ -778,6 +764,147 @@ class CppServiceGenerator:
                 components_path, file_prefix, full_ns, parsed, all_rpcs)
             self._write_codec_plugins(output_path, parsed)
             print(f'  Generated {full_ns}')
+
+    def _generic_proto_files(self) -> List[Path]:
+        if self._proto_input.is_dir():
+            return list(self._proto_input.rglob('*.proto'))
+        if self._proto_input.is_file():
+            return [self._proto_input]
+        print(f'ERROR: {self._proto_input} is not a file or directory',
+              file=sys.stderr)
+        sys.exit(1)
+
+    def _generic_cpp_type(self, type_name: str, current_pkg: str,
+                          index: ProtoTypeIndex) -> str:
+        short = type_name.split('.')[-1]
+        if type_name in _CPP_SCALAR_MAP:
+            return _CPP_SCALAR_MAP[type_name]
+        if type_name == 'google.protobuf.Empty':
+            return 'Empty'
+        if '.' in type_name and not type_name.startswith('google.'):
+            pkg = type_name.rsplit('.', 1)[0]
+            if pkg != current_pkg:
+                return self._naming.cpp_type_namespace_for_package(pkg) + '::' + short
+            return short
+        fqn = _proto_type_fqn(index, type_name, current_pkg)
+        if fqn and '.' in fqn:
+            pkg = fqn.rsplit('.', 1)[0]
+            resolved_short = fqn.split('.')[-1]
+            if pkg != current_pkg:
+                return (self._naming.cpp_type_namespace_for_package(pkg)
+                        + '::' + resolved_short)
+            return resolved_short
+        return short
+
+    def _generic_rpc_symbol(self, service_name: str, rpc_name: str) -> str:
+        return _service_cpp_prefix(service_name) + rpc_name
+
+    def _generate_generic(self, output_dir: str) -> None:
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        all_files = self._discover_all_proto_files()
+        index = ProtoTypeIndex(all_files)
+
+        for proto_path in self._generic_proto_files():
+            parsed = parse_full_proto(proto_path)
+            if not parsed.services:
+                continue
+            file_prefix = self._naming.service_file_prefix(parsed.package)
+            full_ns = self._naming.service_namespace(parsed.package)
+            hpp_path = output_path / (file_prefix + '.hpp')
+            cpp_path = output_path / (file_prefix + '.cpp')
+            self._write_generic_service_header(
+                hpp_path, file_prefix, full_ns, parsed, index)
+            self._write_generic_service_impl(
+                cpp_path, file_prefix, full_ns, parsed, index)
+            print(f'  Generated {full_ns}')
+
+    def _write_generic_service_header(self, path: Path, file_prefix: str,
+                                      full_ns: str, parsed,
+                                      index: ProtoTypeIndex) -> None:
+        del file_prefix
+        codec_header = self._naming.codec_header_for_package(parsed.package)
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
+            f.write('// Auto-generated generic JSON service binding header\n')
+            f.write(f'// Generated from: {parsed.path.name}'
+                    f' by generate_bindings.py\n')
+            f.write(f'// Namespace: {full_ns}\n')
+            f.write('#pragma once\n\n')
+            f.write(f'#include "{codec_header}"\n\n')
+            f.write('#include <string>\n\n')
+            f.write(f'namespace {full_ns} {{\n\n')
+            for svc in parsed.services:
+                for rpc in svc.rpcs:
+                    const_name = 'kSvc' + self._generic_rpc_symbol(
+                        svc.name, rpc.name)
+                    wire = f'{svc.name}.{rpc.name}'
+                    f.write(f'constexpr const char* {const_name} = "{wire}";\n')
+            f.write('\n')
+            f.write('class ServiceHandler {\n')
+            f.write('public:\n')
+            f.write('    virtual ~ServiceHandler() = default;\n')
+            for svc in parsed.services:
+                f.write(f'\n    // {svc.name}\n')
+                for rpc in svc.rpcs:
+                    req_t = self._generic_cpp_type(
+                        rpc.request_type, parsed.package, index)
+                    rsp_t = self._generic_cpp_type(
+                        rpc.response_type, parsed.package, index)
+                    handler = 'handle' + self._generic_rpc_symbol(
+                        svc.name, rpc.name)
+                    f.write(f'    virtual {rsp_t}\n')
+                    f.write(f'    {handler}(const {req_t}& request);\n')
+            f.write('};\n\n')
+            f.write('std::string dispatch(ServiceHandler& handler,\n')
+            f.write('                     const std::string& service_name,\n')
+            f.write('                     const std::string& request_json);\n\n')
+            f.write(f'}} // namespace {full_ns}\n')
+
+    def _write_generic_service_impl(self, path: Path, file_prefix: str,
+                                    full_ns: str, parsed,
+                                    index: ProtoTypeIndex) -> None:
+        hpp_name = file_prefix + '.hpp'
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
+            f.write('// Auto-generated generic JSON service binding implementation\n')
+            f.write(f'// Namespace: {full_ns}\n\n')
+            f.write(f'#include "{hpp_name}"\n\n')
+            f.write(f'namespace {full_ns} {{\n\n')
+            for svc in parsed.services:
+                for rpc in svc.rpcs:
+                    req_t = self._generic_cpp_type(
+                        rpc.request_type, parsed.package, index)
+                    rsp_t = self._generic_cpp_type(
+                        rpc.response_type, parsed.package, index)
+                    handler = 'handle' + self._generic_rpc_symbol(
+                        svc.name, rpc.name)
+                    f.write(f'{rsp_t}\n')
+                    f.write(f'ServiceHandler::{handler}'
+                            f'(const {req_t}& /*request*/) {{\n')
+                    f.write('    return {};\n')
+                    f.write('}\n\n')
+            f.write('std::string dispatch(ServiceHandler& handler,\n')
+            f.write('                     const std::string& service_name,\n')
+            f.write('                     const std::string& request_json)\n')
+            f.write('{\n')
+            for svc in parsed.services:
+                for rpc in svc.rpcs:
+                    req_t = self._generic_cpp_type(
+                        rpc.request_type, parsed.package, index)
+                    rsp_t = self._generic_cpp_type(
+                        rpc.response_type, parsed.package, index)
+                    handler = 'handle' + self._generic_rpc_symbol(
+                        svc.name, rpc.name)
+                    const_name = 'kSvc' + self._generic_rpc_symbol(
+                        svc.name, rpc.name)
+                    f.write(f'    if (service_name == {const_name}) {{\n')
+                    f.write(f'        {req_t} request = fromJson(\n')
+                    f.write(f'            request_json, static_cast<{req_t}*>(nullptr));\n')
+                    f.write(f'        {rsp_t} response = handler.{handler}(request);\n')
+                    f.write('        return toJson(response);\n')
+                    f.write('    }\n')
+            f.write('    return {};\n')
+            f.write('}\n\n')
+            f.write(f'}} // namespace {full_ns}\n')
 
     def _collect_contract_codec_types(
             self, parsed: ProtoFile,
@@ -3286,11 +3413,12 @@ class CppTypesGenerator:
         gen.generate(output_dir)
     """
 
-    def __init__(self, data_model_source):
+    def __init__(self, data_model_source, naming_policy: NamingPolicy = None):
         if isinstance(data_model_source, Path):
             proto_files = parse_proto_tree(data_model_source)
         else:
             proto_files = list(data_model_source)
+        self._naming = naming_policy or _DEFAULT_NAMING_POLICY
         self._index = ProtoTypeIndex(proto_files)
         self._data_model_dir = data_model_source if isinstance(data_model_source, Path) else None
         self._ns = _common_cpp_ns(self._index)
@@ -3303,14 +3431,14 @@ class CppTypesGenerator:
         out = Path(output_dir)
         out.mkdir(parents=True, exist_ok=True)
         for pf in self._index.files:
-            prefix = pf.package.replace('.', '_')
-            hpp = out / (prefix + '_types.hpp')
+            hpp = out / self._naming.type_header_for_package(pf.package)
             self._write_hpp_for_file(hpp, pf)
             print(f'  Generated {pf.package.replace(".", "::")} (types)')
-        # Umbrella header: pyramid_data_model_types.hpp -> includes all + re-exports
-        umbrella = out / _DATA_MODEL_TYPES_HEADER
-        self._write_umbrella_hpp(umbrella)
-        print(f'  Generated {self._ns} (umbrella)')
+        umbrella_name = self._naming.umbrella_types_header(self._index.files)
+        if umbrella_name:
+            umbrella = out / umbrella_name
+            self._write_umbrella_hpp(umbrella)
+            print(f'  Generated {self._ns} (umbrella)')
 
     def write_file(self, pf, output_dir: str) -> None:
         """Emit a single per-file types header (no umbrella).
@@ -3322,8 +3450,8 @@ class CppTypesGenerator:
         """
         out = Path(output_dir)
         out.mkdir(parents=True, exist_ok=True)
-        prefix = pf.package.replace('.', '_')
-        self._write_hpp_for_file(out / (prefix + '_types.hpp'), pf)
+        self._write_hpp_for_file(
+            out / self._naming.type_header_for_package(pf.package), pf)
         print(f'  Generated {pf.package.replace(".", "::")} (types)')
 
     # -- internal --------------------------------------------------------------
@@ -3348,7 +3476,7 @@ class CppTypesGenerator:
             # Fully-qualified proto type
             pkg = '.'.join(field_type.split('.')[:-1])
             if current_pkg and pkg != current_pkg:
-                base = _cpp_ns_for_proto_type_package(pkg) + '::' + short
+                base = self._naming.cpp_type_namespace_for_package(pkg) + '::' + short
             else:
                 base = short
         else:
@@ -3359,7 +3487,7 @@ class CppTypesGenerator:
                 pkg = fqn.rsplit('.', 1)[0]
                 resolved_short = fqn.split('.')[-1]
                 if current_pkg and pkg and pkg != current_pkg:
-                    base = (_cpp_ns_for_proto_type_package(pkg)
+                    base = (self._naming.cpp_type_namespace_for_package(pkg)
                             + '::' + resolved_short)
                 else:
                     base = resolved_short
@@ -3383,11 +3511,11 @@ class CppTypesGenerator:
                 if '.' in field_type and not field_type.startswith('google.'):
                     pkg = '.'.join(field_type.split('.')[:-1])
                     if current_pkg and pkg != current_pkg:
-                        return f'{_cpp_ns_for_proto_type_package(pkg)}::{short}::{lit}'
+                        return f'{self._naming.cpp_type_namespace_for_package(pkg)}::{short}::{lit}'
                 else:
                     pkg = enum_pkg
                     if current_pkg and pkg and pkg != current_pkg:
-                        return f'{_cpp_ns_for_proto_type_package(pkg)}::{field_type}::{lit}'
+                        return f'{self._naming.cpp_type_namespace_for_package(pkg)}::{field_type}::{lit}'
                 return f'{short}::{lit}'
         return '{}'
 
@@ -3506,12 +3634,13 @@ class CppTypesGenerator:
             imp_stem = Path(imp).stem
             for indexed_pf in self._index.files:
                 if indexed_pf.package == pkg or indexed_pf.path.stem == imp_stem:
-                    result.append(f'#include "{indexed_pf.package.replace(".", "_")}_types.hpp"')
+                    result.append(
+                        f'#include "{self._naming.type_header_for_package(indexed_pf.package)}"')
                     break
         return result
 
     def _write_hpp_for_file(self, path: Path, pf) -> None:
-        ns = _cpp_ns_for_proto_package(pf.package)
+        ns = self._naming.cpp_namespace_for_package(pf.package)
         current_pkg = pf.package
         includes = self._includes_for_file(pf)
         alias_names = set(self._aliases.keys())
@@ -3551,7 +3680,7 @@ class CppTypesGenerator:
         """Umbrella header that includes all per-file headers and re-exports
         everything into the common domain-model namespace."""
         per_file_headers = sorted(
-            pf.package.replace('.', '_') + '_types.hpp'
+            self._naming.type_header_for_package(pf.package)
             for pf in self._index.files
         )
         # A short name shared by more than one package cannot be re-exported
@@ -3580,7 +3709,7 @@ class CppTypesGenerator:
             f.write('// common namespace so generated bindings can use a single root.\n')
             f.write(f'namespace {self._ns} {{\n')
             for pf in self._index.files:
-                ns = _cpp_ns_for_proto_package(pf.package)
+                ns = self._naming.cpp_namespace_for_package(pf.package)
                 if ns == self._ns:
                     continue
                 for msg in pf.messages:
@@ -3618,14 +3747,16 @@ class CppDataModelCodecGenerator:
             gen.generate(output_dir)
     """
 
-    def __init__(self, pf, index: 'ProtoTypeIndex'):
+    def __init__(self, pf, index: 'ProtoTypeIndex',
+                 naming_policy: NamingPolicy = None):
         self._pf = pf
         self._index = index
-        self._ns = _cpp_ns_for_proto_package(pf.package)
+        self._naming = naming_policy or _DEFAULT_NAMING_POLICY
+        self._ns = self._naming.cpp_namespace_for_package(pf.package)
         self._prefix = pf.package.replace('.', '_')
-        self._types_header = self._prefix + '_types.hpp'
-        self._hpp_name = self._prefix + '_codec.hpp'
-        self._cpp_name = self._prefix + '_codec.cpp'
+        self._types_header = self._naming.type_header_for_package(pf.package)
+        self._hpp_name = self._naming.codec_header_for_package(pf.package)
+        self._cpp_name = self._naming.codec_source_for_package(pf.package)
         # Build alias map (scalar wrappers) -- same logic as CppTypesGenerator
         self._aliases: Dict[str, str] = dict(_FORCED_ALIASES)
         for msg in self._index.all_messages():
@@ -3719,7 +3850,9 @@ class CppDataModelCodecGenerator:
                 imp_stem = Path(imp).stem
                 for indexed_pf in self._index.files:
                     if indexed_pf.package == pkg or indexed_pf.path.stem == imp_stem:
-                        f.write(f'#include "{indexed_pf.package.replace(".", "_")}_codec.hpp"\n')
+                        header = self._naming.codec_header_for_package(
+                            indexed_pf.package)
+                        f.write(f'#include "{header}"\n')
                         included_codec_pkgs.add(indexed_pf.package)
                         break
             for msg in structs:
@@ -3743,7 +3876,8 @@ class CppDataModelCodecGenerator:
                         self._index, field.type, current_pkg)
                     if (pkg and pkg != current_pkg
                             and pkg not in included_codec_pkgs):
-                        f.write(f'#include "{pkg.replace(".", "_")}_codec.hpp"\n')
+                        f.write(
+                            f'#include "{self._naming.codec_header_for_package(pkg)}"\n')
                         included_codec_pkgs.add(pkg)
             f.write(f'\nnamespace {self._ns} {{\n\n')
 
@@ -3766,7 +3900,7 @@ class CppDataModelCodecGenerator:
         else:
             pkg = self._package_of_type(type_name, current_pkg)
         if pkg and pkg != current_pkg:
-            return _cpp_ns_for_proto_type_package(pkg) + '::' + short
+            return self._naming.cpp_type_namespace_for_package(pkg) + '::' + short
         return short
 
     def _field_info(self, field, fname: str, current_pkg: str):

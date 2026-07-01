@@ -1,0 +1,36 @@
+{
+  "description": "PYRAMID compatibility topic metadata (Tactical Objects standard topics). This file is DATA, not code: it is the pyramid_compat topic set. Generic layouts supply their own metadata or none.",
+  "topics": [
+    {
+      "key": "entity_matches",
+      "wire_name": "standard.entity_matches",
+      "full_type": "pyramid.data_model.tactical.ObjectMatch",
+      "is_array": true
+    },
+    {
+      "key": "evidence_requirements",
+      "wire_name": "standard.evidence_requirements",
+      "full_type": "pyramid.data_model.tactical.ObjectEvidenceRequirement",
+      "is_array": false
+    },
+    {
+      "key": "object_evidence",
+      "wire_name": "standard.object_evidence",
+      "full_type": "pyramid.data_model.tactical.ObjectDetail",
+      "is_array": false
+    }
+  ],
+  "bindings": [
+    {
+      "package_match": "tactical_objects",
+      "provided": {
+        "subscribe": ["entity_matches", "evidence_requirements"],
+        "publish": []
+      },
+      "consumed": {
+        "subscribe": [],
+        "publish": ["object_evidence"]
+      }
+    }
+  ]
+}

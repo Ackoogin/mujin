@@ -24,6 +24,27 @@ For a shorter engineer-facing architecture overview of how generated PYRAMID
 bindings plug into PCL, see
 [`../doc/architecture/pcl_pyramid_binding_generation_overview.md`](../doc/architecture/pcl_pyramid_binding_generation_overview.md).
 
+## Contract Layouts (PYRAMID and generic proto)
+
+The generator supports two contract layouts via `--contract-layout`:
+
+- `pyramid` (default) — PYRAMID conventions; output is unchanged.
+- `generic` — bindings for **arbitrary `.proto` contracts** that do not use
+  PYRAMID package roots. Names derive from the proto package/service/message
+  identity; classification is by parsed content, not package strings.
+
+```bash
+# Arbitrary proto contract -> C++ (all backends) and Ada
+python generate_bindings.py my_proto/ out/ --languages cpp --backends json,flatbuffers,protobuf,grpc,ros2 --contract-layout generic
+python generate_bindings.py my_proto/ out/ --languages ada  --backends json --contract-layout generic
+```
+
+Each run also writes `binding_manifest.json` (generated artifacts by role), which
+CMake can consume via `PYRAMID_BINDING_SOURCE_MODE=manifest` instead of
+`pyramid_*` filename globs. Standard-topic data is now loaded from
+`topic_metadata/tactical_objects_topics.json` (not hardcoded). Full design:
+[`../doc/architecture/generic_contract_layout.md`](../doc/architecture/generic_contract_layout.md).
+
 ## Build-Local Generation
 
 The CMake build invokes `generate_bindings.py` during configure when

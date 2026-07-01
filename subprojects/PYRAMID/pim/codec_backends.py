@@ -15,6 +15,7 @@ is driven from the ProtoFile / ProtoTypeIndex parsed by proto_parser.py.
 """
 
 from abc import ABC, abstractmethod
+import inspect
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -69,7 +70,10 @@ def all_backends() -> Dict[str, CodecBackend]:
 
 def generate_all(index: ProtoTypeIndex, output_dir: Path,
                  languages: Optional[List[str]] = None,
-                 backends: Optional[List[str]] = None) -> Dict[str, List[Path]]:
+                 backends: Optional[List[str]] = None,
+                 naming_policy=None,
+                 proto_import_root: Optional[Path] = None,
+                 contract=None) -> Dict[str, List[Path]]:
     """Generate codec files for all (or selected) backends and languages.
 
     Args:
@@ -77,6 +81,9 @@ def generate_all(index: ProtoTypeIndex, output_dir: Path,
         output_dir: Root output directory.
         languages: List of language keys ('cpp', 'ada'). None = all.
         backends: List of backend names. None = all registered.
+        naming_policy: Optional layout naming policy for policy-aware backends.
+        proto_import_root: Optional protoc import root for path-aware backends.
+        contract: Optional neutral binding contract for contract-aware backends.
 
     Returns:
         Dict mapping backend name to list of generated file paths.
@@ -94,7 +101,14 @@ def generate_all(index: ProtoTypeIndex, output_dir: Path,
         backend_dir = output_dir / name
 
         if 'cpp' in langs:
-            generated.extend(backend.generate_cpp(index, backend_dir / 'cpp'))
+            generated.extend(_call_generate(
+                backend.generate_cpp,
+                index,
+                backend_dir / 'cpp',
+                naming_policy=naming_policy,
+                proto_import_root=proto_import_root,
+                contract=contract,
+            ))
 
         if 'ada' in langs:
             generated.extend(backend.generate_ada(index, backend_dir / 'ada'))
@@ -102,3 +116,14 @@ def generate_all(index: ProtoTypeIndex, output_dir: Path,
         result[name] = generated
 
     return result
+
+
+def _call_generate(method, index: ProtoTypeIndex, output_dir: Path, **kwargs):
+    """Call a backend generator with only the optional knobs it declares."""
+    accepted = inspect.signature(method).parameters
+    filtered = {
+        key: value
+        for key, value in kwargs.items()
+        if key in accepted
+    }
+    return method(index, output_dir, **filtered)

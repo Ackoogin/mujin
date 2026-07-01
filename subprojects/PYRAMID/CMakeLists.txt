@@ -103,6 +103,24 @@ function(pyramid_glob_generated out_var)
     set(${out_var} ${_pyramid_globbed} PARENT_SCOPE)
 endfunction()
 
+# ---- Manifest-driven binding source selection -------------------------------
+# Reusable binding infrastructure can consume the generator's
+# binding_manifest.json (artifact roles) instead of pyramid_* filename globs.
+# The default stays 'glob' so existing PYRAMID builds are byte-identical;
+# 'manifest' consumes declared roles and supports arbitrary/generic proto
+# contracts. The selection wrappers live in cmake/ so they are unit-tested in
+# isolation (see cmake/tests/, driven by tests/test_manifest_cmake_helper.py).
+include("${CMAKE_CURRENT_LIST_DIR}/cmake/pyramid_binding_sources.cmake")
+
+set(PYRAMID_BINDING_SOURCE_MODE "glob" CACHE STRING
+    "Generated binding source selection: 'glob' (legacy pyramid_* filename patterns) or 'manifest' (binding_manifest.json roles)")
+set_property(CACHE PYRAMID_BINDING_SOURCE_MODE PROPERTY STRINGS glob manifest)
+
+set(PYRAMID_BINDING_MANIFEST "${PYRAMID_CPP_BINDINGS_DIR}/binding_manifest.json")
+# The manifest is read AFTER the generator runs (below), since a clean configure
+# generates the bindings -- and the manifest -- during this configure step.
+set(_PYRAMID_MANIFEST_JSON "")
+
 function(pyramid_require_generated var_name description)
     if(NOT DEFINED ${var_name} OR "${${var_name}}" STREQUAL "")
         message(FATAL_ERROR
@@ -129,6 +147,19 @@ if(PYRAMID_GENERATE_CPP_BINDINGS)
                 --languages cpp
                 --backends "${PYRAMID_CPP_GENERATOR_BACKENDS_ARG}"
         COMMAND_ERROR_IS_FATAL ANY)
+endif()
+
+# Now that the generator has (re)written the manifest, load it for manifest mode.
+if(PYRAMID_BINDING_SOURCE_MODE STREQUAL "manifest")
+    pyramid_manifest_read(_PYRAMID_MANIFEST_JSON "${PYRAMID_BINDING_MANIFEST}")
+    if("${_PYRAMID_MANIFEST_JSON}" STREQUAL "")
+        message(STATUS
+            "PYRAMID_BINDING_SOURCE_MODE=manifest but ${PYRAMID_BINDING_MANIFEST} "
+            "is not present; falling back to filename globs.")
+    else()
+        message(STATUS "PYRAMID binding sources: manifest mode "
+            "(${PYRAMID_BINDING_MANIFEST})")
+    endif()
 endif()
 
 pyramid_glob_generated(PYRAMID_CPP_BINDING_OUTPUTS
@@ -171,8 +202,9 @@ add_library(pyramid_flatbuffers_support INTERFACE)
 if(PYRAMID_ENABLE_FLATBUFFERS)
     set(PYRAMID_FLATBUFFERS_SCHEMA_DIR "${PYRAMID_CPP_BINDINGS_DIR}/flatbuffers/cpp")
     set(PYRAMID_FLATBUFFERS_GEN_DIR "${CMAKE_BINARY_DIR}/generated/flatbuffers/cpp")
-    pyramid_glob_generated(PYRAMID_FLATBUFFERS_SCHEMAS
-        "${PYRAMID_FLATBUFFERS_SCHEMA_DIR}/pyramid_*.fbs")
+    pyramid_binding_sources(PYRAMID_FLATBUFFERS_SCHEMAS
+        ROLE flatbuffers_schemas SUFFIX .fbs
+        GLOBS "${PYRAMID_FLATBUFFERS_SCHEMA_DIR}/pyramid_*.fbs")
     pyramid_require_generated(PYRAMID_FLATBUFFERS_SCHEMAS
         "generated FlatBuffers schemas")
     set(PYRAMID_FLATBUFFERS_OUTPUTS)
@@ -204,8 +236,13 @@ target_include_directories(pyramid_flatbuffers_support
         INTERFACE PYRAMID_ENABLE_FLATBUFFERS=1)
 endif()
 
-pyramid_glob_generated(_pyramid_generated_codecs_srcs
-    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_codec.cpp")
+# Data-model + service-level JSON codecs (toJson/fromJson). In manifest mode the
+# json_codecs role already carries BOTH the data-model and the per-component
+# service codecs, so the separate component glob/append below is skipped to
+# avoid double-counting. In glob mode the two globs are combined as before.
+pyramid_binding_sources(_pyramid_generated_codecs_srcs
+    ROLE json_codecs SUFFIX _codec.cpp
+    GLOBS "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_codec.cpp")
 # Service-level JSON codecs (toJson/fromJson for the per-component service
 # request/response/requirement types) are emitted under the pyramid_components_*
 # prefix. They must land in the same aggregate the codec plugins link so the
@@ -213,11 +250,14 @@ pyramid_glob_generated(_pyramid_generated_codecs_srcs
 # every symbol defined when linking a DLL, whereas a Linux .so silently defers
 # the undefined externals (which is why an omission here builds green on Linux
 # but fails LNK2019 on Windows).
-pyramid_glob_generated(_pyramid_generated_service_codecs_srcs
-    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_components_*_codec.cpp")
-list(APPEND _pyramid_generated_codecs_srcs
-    ${_pyramid_generated_service_codecs_srcs})
-unset(_pyramid_generated_service_codecs_srcs)
+pyramid_binding_manifest_active(_pyramid_manifest_active)
+if(NOT _pyramid_manifest_active)
+    pyramid_glob_generated(_pyramid_generated_service_codecs_srcs
+        "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_components_*_codec.cpp")
+    list(APPEND _pyramid_generated_codecs_srcs
+        ${_pyramid_generated_service_codecs_srcs})
+    unset(_pyramid_generated_service_codecs_srcs)
+endif()
 # C-ABI marshalling (to_c/from_c/_free) for the typed-value plugin boundary.
 # Linked into both components and codec plugins so each side can marshal
 # between the native data-model types and their frozen C structs.

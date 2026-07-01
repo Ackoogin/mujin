@@ -24,6 +24,7 @@ Usage:
 """
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -31,6 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from proto_parser import parse_proto_tree, ProtoTypeIndex, ProtoMessage
+from binding_contract import build_contract
 import codec_backends
 import cabi_codegen
 import cpp_codegen
@@ -39,6 +41,186 @@ import ada_cabi_codegen
 
 # Importing the backends package auto-registers all backends
 import backends  # noqa: F401
+
+
+_MANIFEST_NAME = 'binding_manifest.json'
+
+
+class BindingArtifactManifest:
+    """Accumulates generated binding artifact paths by build role."""
+
+    def __init__(self, layout: str, proto_dir: Path, output_dir: Path,
+                 proto_files):
+        self._output_dir = output_dir
+        self._proto_import_root = _infer_proto_import_root(
+            proto_dir, proto_files)
+        self._data = {
+            'layout': layout,
+            'proto_import_roots': [
+                _display_path(self._proto_import_root),
+            ],
+            'proto_files': [
+                _relative_proto_path(pf.path, self._proto_import_root)
+                for pf in proto_files
+            ],
+            'types': [],
+            'json_codecs': [],
+            'cabi': [],
+            'services': [],
+            'codec_plugins': [],
+            'flatbuffers_schemas': [],
+            'protobuf_protos': [],
+            'grpc_service_protos': [],
+        }
+        self._seen = {
+            key: set()
+            for key, value in self._data.items()
+            if isinstance(value, list)
+        }
+        self._seen['codec_plugins'] = set()
+        for key in ('proto_import_roots', 'proto_files'):
+            self._seen[key].update(self._data[key])
+
+    def add_paths(self, role: str, paths) -> None:
+        for path in paths:
+            rel = self._relative_output_path(path)
+            if rel == _MANIFEST_NAME or rel in self._seen[role]:
+                continue
+            self._data[role].append(rel)
+            self._seen[role].add(rel)
+
+    def add_codec_plugins(self, paths) -> None:
+        for path in paths:
+            rel = self._relative_output_path(path)
+            if rel == _MANIFEST_NAME or rel in self._seen['codec_plugins']:
+                continue
+            self._data['codec_plugins'].append({
+                'target': Path(rel).stem,
+                'source': rel,
+                'content_type': _codec_plugin_content_type(Path(rel).name),
+            })
+            self._seen['codec_plugins'].add(rel)
+
+    def add_selected_backend_protos(self, backend_names, proto_files) -> None:
+        selected = set(backend_names)
+        rel_proto_files = [
+            _relative_proto_path(pf.path, self._proto_import_root)
+            for pf in proto_files
+        ]
+        if 'protobuf' in selected:
+            type_protos = [
+                rel
+                for rel, pf in zip(rel_proto_files, proto_files)
+                if pf.messages or pf.enums
+            ]
+            self._add_values('protobuf_protos', type_protos)
+        if 'grpc' in selected:
+            service_protos = [
+                rel
+                for rel, pf in zip(rel_proto_files, proto_files)
+                if pf.services
+            ]
+            self._add_values('grpc_service_protos', service_protos)
+
+    def record_generated(self, role: str, callback) -> None:
+        before = _output_file_snapshot(self._output_dir)
+        callback()
+        after = _output_file_snapshot(self._output_dir)
+        self.add_paths(role, _changed_output_files(before, after))
+
+    def record_service_generation(self, callback) -> None:
+        before = _output_file_snapshot(self._output_dir)
+        callback()
+        after = _output_file_snapshot(self._output_dir)
+        service_paths = []
+        plugin_paths = []
+        for path in _changed_output_files(before, after):
+            if path.name.endswith('_codec_plugin.cpp'):
+                plugin_paths.append(path)
+            else:
+                service_paths.append(path)
+        self.add_paths('services', service_paths)
+        self.add_codec_plugins(plugin_paths)
+
+    def record_backend_outputs(self, backend_name: str, paths) -> None:
+        if backend_name == 'flatbuffers':
+            self.add_paths(
+                'flatbuffers_schemas',
+                [path for path in paths if Path(path).suffix == '.fbs'],
+            )
+
+    def write(self) -> None:
+        self._output_dir.mkdir(parents=True, exist_ok=True)
+        path = self._output_dir / _MANIFEST_NAME
+        with open(path, 'w', encoding='utf-8', newline='\n') as f:
+            json.dump(self._data, f, indent=2)
+            f.write('\n')
+
+    @property
+    def proto_import_root(self) -> Path:
+        return self._proto_import_root
+
+    def _add_values(self, role: str, values) -> None:
+        for value in values:
+            if value in self._seen[role]:
+                continue
+            self._data[role].append(value)
+            self._seen[role].add(value)
+
+    def _relative_output_path(self, path) -> str:
+        path = Path(path)
+        try:
+            rel = path.relative_to(self._output_dir)
+        except ValueError:
+            rel = path
+        return rel.as_posix()
+
+
+def _display_path(path: Path) -> str:
+    try:
+        return path.resolve().relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return path.resolve().as_posix()
+
+
+def _infer_proto_import_root(proto_dir: Path, proto_files) -> Path:
+    packages = [pf.package for pf in proto_files if pf.package]
+    first_segments = {pkg.split('.')[0] for pkg in packages}
+    if len(first_segments) == 1 and proto_dir.name == next(iter(first_segments)):
+        return proto_dir.parent
+    return proto_dir
+
+
+def _relative_proto_path(path: Path, proto_import_root: Path) -> str:
+    try:
+        return path.relative_to(proto_import_root).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _output_file_snapshot(output_dir: Path):
+    if not output_dir.exists():
+        return {}
+    return {
+        path: (path.stat().st_mtime_ns, path.stat().st_size)
+        for path in output_dir.rglob('*')
+        if path.is_file() and path.name != _MANIFEST_NAME
+    }
+
+
+def _changed_output_files(before, after):
+    return sorted(
+        path for path, stat in after.items()
+        if before.get(path) != stat
+    )
+
+
+def _codec_plugin_content_type(filename: str) -> str:
+    if '_flatbuffers_' in filename:
+        return 'application/flatbuffers'
+    if '_protobuf_' in filename:
+        return 'application/protobuf'
+    return 'application/json'
 
 
 def _discover_data_model_files(proto_dir: Path):
@@ -73,19 +255,83 @@ def _discover_service_message_files(proto_dir: Path):
 
 
 def _generate_json_cpp(proto_dir: Path, output_dir: Path,
-                       enabled_backends=None) -> int:
+                       enabled_backends=None, contract_layout: str = 'pyramid',
+                       proto_files=None,
+                       manifest: BindingArtifactManifest = None,
+                       contract=None) -> int:
     total = 0
+    if contract_layout == 'generic':
+        parsed_files = list(proto_files) if proto_files is not None else parse_proto_tree(proto_dir)
+        contract = contract or build_contract(parsed_files, layout='generic')
+        policy = contract.naming_policy
+        type_files = contract.type_modules
+        if type_files:
+            gen = cpp_codegen.CppTypesGenerator(
+                type_files, naming_policy=policy)
+            if manifest:
+                manifest.record_generated(
+                    'types', lambda: gen.generate(str(output_dir)))
+            else:
+                gen.generate(str(output_dir))
+            total += 1
+            type_index = ProtoTypeIndex(type_files)
+            for pf in type_files:
+                gen = cpp_codegen.CppDataModelCodecGenerator(
+                    pf, type_index, naming_policy=policy)
+                if manifest:
+                    manifest.record_generated(
+                        'json_codecs',
+                        lambda gen=gen: gen.generate(str(output_dir)),
+                    )
+                else:
+                    gen.generate(str(output_dir))
+                total += 1
+        for pf in contract.service_modules:
+            gen = cpp_codegen.CppServiceGenerator(
+                str(pf.path),
+                enabled_backends=enabled_backends,
+                naming_policy=policy,
+            )
+            if manifest:
+                manifest.record_service_generation(
+                    lambda gen=gen: gen.generate(str(output_dir)))
+            else:
+                gen.generate(str(output_dir))
+            total += 1
+        return total
+
     dm_files = _discover_data_model_files(proto_dir)
     if dm_files:
         gen = cpp_codegen.CppTypesGenerator(dm_files)
-        gen.generate(str(output_dir))
+        if manifest:
+            manifest.record_generated(
+                'types', lambda: gen.generate(str(output_dir)))
+        else:
+            gen.generate(str(output_dir))
         total += 1
         dm_index = ProtoTypeIndex(dm_files)
         for pf in dm_files:
-            cpp_codegen.CppDataModelCodecGenerator(pf, dm_index).generate(str(output_dir))
+            gen = cpp_codegen.CppDataModelCodecGenerator(pf, dm_index)
+            if manifest:
+                manifest.record_generated(
+                    'json_codecs',
+                    lambda gen=gen: gen.generate(str(output_dir)),
+                )
+            else:
+                gen.generate(str(output_dir))
             total += 1
-        cabi_codegen.CabiTypesGenerator(dm_files).generate(str(output_dir))
-        cabi_codegen.CabiMarshalGenerator(dm_files).generate(str(output_dir))
+        gen = cabi_codegen.CabiTypesGenerator(dm_files)
+        if manifest:
+            manifest.record_generated(
+                'cabi', lambda: gen.generate(str(output_dir)))
+        else:
+            gen.generate(str(output_dir))
+        gen = cabi_codegen.CabiMarshalGenerator(dm_files)
+        if manifest:
+            manifest.record_generated(
+                'cabi', lambda: gen.generate(str(output_dir)))
+        else:
+            gen.generate(str(output_dir))
         total += 2
 
         # Service-local wrapper messages (Component-NS): emit struct + JSON
@@ -99,28 +345,83 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
             cabi_types_gen = cabi_codegen.CabiTypesGenerator(combined)
             cabi_marshal_gen = cabi_codegen.CabiMarshalGenerator(combined)
             for spf in svc_files:
-                types_gen.write_file(spf, str(output_dir))
-                cpp_codegen.CppDataModelCodecGenerator(
-                    spf, combined_index).generate(str(output_dir))
-                cabi_types_gen.write_file(spf, str(output_dir))
-                cabi_marshal_gen.write_file(spf, str(output_dir))
+                if manifest:
+                    manifest.record_generated(
+                        'types',
+                        lambda spf=spf: types_gen.write_file(
+                            spf, str(output_dir)),
+                    )
+                else:
+                    types_gen.write_file(spf, str(output_dir))
+                gen = cpp_codegen.CppDataModelCodecGenerator(
+                    spf, combined_index)
+                if manifest:
+                    manifest.record_generated(
+                        'json_codecs',
+                        lambda gen=gen: gen.generate(str(output_dir)),
+                    )
+                else:
+                    gen.generate(str(output_dir))
+                if manifest:
+                    manifest.record_generated(
+                        'cabi',
+                        lambda spf=spf: cabi_types_gen.write_file(
+                            spf, str(output_dir)),
+                    )
+                    manifest.record_generated(
+                        'cabi',
+                        lambda spf=spf: cabi_marshal_gen.write_file(
+                            spf, str(output_dir)),
+                    )
+                else:
+                    cabi_types_gen.write_file(spf, str(output_dir))
+                    cabi_marshal_gen.write_file(spf, str(output_dir))
                 total += 4
 
     for proto_path in sorted(proto_dir.rglob('*.proto')):
         parsed = cpp_codegen.parse_proto(proto_path)
         if not parsed.services or '.services.' not in f'.{parsed.package}.':
             continue
-        cpp_codegen.CppServiceGenerator(
+        gen = cpp_codegen.CppServiceGenerator(
             str(proto_path),
             enabled_backends=enabled_backends,
-        ).generate(str(output_dir))
+        )
+        if manifest:
+            manifest.record_service_generation(
+                lambda gen=gen: gen.generate(str(output_dir)))
+        else:
+            gen.generate(str(output_dir))
         total += 1
     return total
 
 
 def _generate_json_ada(proto_dir: Path, output_dir: Path,
-                       enabled_backends=None) -> int:
+                       enabled_backends=None, contract_layout: str = 'pyramid',
+                       proto_files=None, contract=None) -> int:
     total = 0
+    if contract_layout == 'generic':
+        parsed_files = (list(proto_files) if proto_files is not None
+                        else parse_proto_tree(proto_dir))
+        contract = contract or build_contract(parsed_files, layout='generic')
+        type_files = contract.type_modules
+        if type_files:
+            # Ada type/codec package names are already derived generically from
+            # the proto package (example.telemetry -> Example.Telemetry.Types),
+            # so the existing generators work for arbitrary packages.
+            ada_codegen.AdaTypesGenerator(type_files).generate(str(output_dir))
+            total += 1
+            type_index = ProtoTypeIndex(type_files)
+            for pf in type_files:
+                ada_codegen.AdaDataModelCodecGenerator(
+                    pf, type_index).generate(str(output_dir))
+                total += 1
+        for pf in contract.service_modules:
+            ada_codegen.AdaGenericServiceGenerator(
+                pf, enabled_backends=enabled_backends,
+            ).generate(str(output_dir))
+            total += 1
+        return total
+
     dm_files = _discover_data_model_files(proto_dir)
     if dm_files:
         gen = ada_codegen.AdaTypesGenerator(dm_files)
@@ -190,6 +491,12 @@ def main():
         '--list-backends', action='store_true',
         help='List all registered backends and exit',
     )
+    parser.add_argument(
+        '--contract-layout',
+        choices=('pyramid', 'generic'),
+        default='pyramid',
+        help='Binding contract layout (default: pyramid)',
+    )
 
     args = parser.parse_args()
 
@@ -213,6 +520,7 @@ def main():
     print(f'Parsing proto files from {proto_dir}...')
     proto_files = parse_proto_tree(proto_dir)
     index = ProtoTypeIndex(proto_files)
+    contract = build_contract(proto_files, layout=args.contract_layout)
 
     n_msgs = len(index.all_messages())
     n_enums = len(index.all_enums())
@@ -230,6 +538,10 @@ def main():
     print(f'Languages: {", ".join(sorted(langs))}')
     print()
 
+    manifest = BindingArtifactManifest(
+        args.contract_layout, proto_dir, output_dir, proto_files)
+    manifest.add_selected_backend_protos(backend_names, proto_files)
+
     total = 0
     remaining_backends = list(backend_names)
     if 'json' in remaining_backends:
@@ -239,12 +551,19 @@ def main():
                 proto_dir,
                 output_dir,
                 enabled_backends=backend_names,
+                contract_layout=args.contract_layout,
+                proto_files=proto_files,
+                manifest=manifest,
+                contract=contract,
             )
         if 'ada' in langs:
             total += _generate_json_ada(
                 proto_dir,
                 output_dir,
                 enabled_backends=backend_names,
+                contract_layout=args.contract_layout,
+                proto_files=proto_files,
+                contract=contract,
             )
         remaining_backends.remove('json')
 
@@ -253,13 +572,18 @@ def main():
             index, output_dir,
             languages=list(langs),
             backends=remaining_backends,
+            naming_policy=contract.naming_policy,
+            proto_import_root=manifest.proto_import_root,
+            contract=contract,
         )
         for backend_name, files in results.items():
             print(f'  {backend_name}: {len(files)} files generated')
             for fp in files:
                 print(f'    {fp}')
+            manifest.record_backend_outputs(backend_name, files)
             total += len(files)
 
+    manifest.write()
     print(f'\nDone -- {total} files generated in {output_dir}/')
 
 
