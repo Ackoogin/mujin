@@ -27,12 +27,15 @@ from proto_parser import (
     ProtoTypeIndex, ProtoFile, ProtoField,
     camel_to_snake, _PROTO_SCALARS,
 )
-# Fully-qualified C++ namespace where a proto type's plain struct lives: the
-# data-model sub-namespace (pyramid::domain_model::<pkg>) or, for service-local
-# wrapper messages, their Component-NS. The local _json_codec_namespace_for_type
-# only yields a single segment for the ``data_model`` alias and cannot spell
-# duplicate or wrapper types unambiguously.
-from cpp_codegen import _native_namespace_for_type as _cpp_native_ns
+# Fully-qualified C++ namespace where a proto type's plain struct (and its JSON
+# codec) lives: the data-model sub-namespace (pyramid::domain_model::<pkg>) or,
+# for service-local wrapper messages, their Component-NS. Needed so duplicate and
+# wrapper types (and nested data-model packages) are spelled unambiguously.
+from cpp_codegen import (
+    _native_namespace_for_type as _cpp_native_ns,
+    _resolve_message as _cpp_resolve_message,
+    _resolve_enum as _cpp_resolve_enum,
+)
 
 
 _ALIAS_FIELD_NAMES = frozenset({
@@ -51,6 +54,9 @@ class FlatFieldSpec:
     generated_optional: bool = False
     generated_presence: bool = False
     oneof: bool = False
+    # Full C++ namespace of a message/enum field's declaring type (data-model
+    # sub-ns or wrapper Component-NS); used when casting in the marshalling body.
+    cpp_ns: str = 'pyramid::domain_model'
 
 
 @dataclass
@@ -161,14 +167,21 @@ def _resolve_message(index: ProtoTypeIndex, type_name: str):
     return index.resolve_message(type_name) or index.resolve_message(type_name.split('.')[-1])
 
 
-def _full_type_for(index: ProtoTypeIndex, type_name: str) -> str:
+def _full_type_for(index: ProtoTypeIndex, type_name: str,
+                   current_package: str = '') -> str:
     """Resolve a (possibly bare) RPC type name to its fully-qualified proto name.
 
     RPC request/response types referencing a same-package wrapper are written
     bare in the proto; the FQN is needed so the C++ namespace resolves to the
-    declaring sub-namespace / Component-NS rather than the flat umbrella."""
+    declaring sub-namespace / Component-NS rather than the flat umbrella. Bare
+    names are scoped to ``current_package`` first so that duplicate wrapper short
+    names (the same wrapper defined in every component's service package) resolve
+    to the correct component instead of an arbitrary one."""
     if '.' in type_name:
         return type_name
+    msg, pkg = _cpp_resolve_message(index, type_name, current_package)
+    if msg is not None and pkg:
+        return f'{pkg}.{msg.name}'
     msg = _resolve_message(index, type_name)
     if msg is not None:
         for pf in index.files:
@@ -220,18 +233,6 @@ def _field_kind_and_type(
     return 'message', short, ''
 
 
-def _json_codec_namespace_for_type(full_type: str) -> str:
-    parts = [part for part in full_type.split('.') if part]
-    try:
-        data_model_index = parts.index('data_model')
-    except ValueError:
-        return 'common'
-    namespace_index = data_model_index + 1
-    if namespace_index >= len(parts) - 1:
-        return 'common'
-    return parts[namespace_index]
-
-
 def _is_generated_string_like(
         kind: str, proto_scalar: str,
 ) -> bool:
@@ -243,11 +244,16 @@ def _message_spec_from_proto(
         full_type: str,
         index: ProtoTypeIndex,
         aliases: Dict[str, Tuple[str, str]],
+        current_package: str = '',
 ) -> FlatMessageSpec:
     fields: List[FlatFieldSpec] = []
     field_index = 0
     for field, name, oneof in _inline_service_fields(msg, index, aliases):
         kind, type_name, proto_scalar = _field_kind_and_type(field, index, aliases)
+        field_cpp_ns = 'pyramid::domain_model'
+        if kind in ('message', 'enum'):
+            field_cpp_ns = _cpp_native_ns(
+                _full_type_for(index, field.type, current_package))
         string_like = _is_generated_string_like(kind, proto_scalar)
         generated_optional = bool(oneof or field.is_optional)
         generated_presence = False
@@ -268,6 +274,7 @@ def _message_spec_from_proto(
             generated_optional=generated_optional,
             generated_presence=generated_presence,
             oneof=oneof,
+            cpp_ns=field_cpp_ns,
         ))
         field_index += 1 + (1 if generated_presence else 0)
     return FlatMessageSpec(
@@ -276,7 +283,9 @@ def _message_spec_from_proto(
         ada_type=camel_to_snake(msg.name),
         full_type=full_type,
         fields=fields,
-        json_codec_ns=_json_codec_namespace_for_type(full_type),
+        # Full native namespace of the type's JSON codec (data-model sub-ns or
+        # wrapper Component-NS); the bridge calls <ns>::fromJson/toJson.
+        json_codec_ns=_cpp_native_ns(full_type),
     )
 
 
@@ -298,7 +307,9 @@ def _alias_root_spec(short_name: str, full_type: str,
             type_name=type_name,
             proto_scalar=proto_scalar,
         )],
-        json_codec_ns=_json_codec_namespace_for_type(full_type),
+        # Scalar-wrapper aliases have no generated codec; round-trip via nlohmann
+        # directly (the 'base' sentinel routes the bridge to that path).
+        json_codec_ns='base',
         is_alias_root=True,
         alias_scalar=proto_scalar,
         alias_field_name=field_name,
@@ -307,15 +318,20 @@ def _alias_root_spec(short_name: str, full_type: str,
 
 def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_files: Sequence[ProtoFile]) -> ServiceCodecGroup:
     aliases = _alias_info(index)
-    root_types: List[str] = []
-    stream_types: List[str] = []
+    # Track each root/reachable type together with the package it is referenced
+    # from. RPC request/response types are written bare in the proto and belong
+    # to the service file's own package; without that context a bare duplicate
+    # wrapper short name resolves to an arbitrary component (the FlatBuffers
+    # analog of the JSON/Ada FQN-dispatch fix).
+    root_types: List[Tuple[str, str]] = []
+    stream_types: List[Tuple[str, str]] = []
     for pf in service_files:
         for svc in pf.services:
             for rpc in svc.rpcs:
-                root_types.append(rpc.request_type)
-                root_types.append(rpc.response_type)
+                root_types.append((rpc.request_type, pf.package))
+                root_types.append((rpc.response_type, pf.package))
                 if rpc.server_streaming:
-                    stream_types.append(rpc.response_type)
+                    stream_types.append((rpc.response_type, pf.package))
 
     reachable_message_ids: set = set()
     reachable_enum_ids: set = set()
@@ -323,19 +339,19 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
     pending = list(root_types)
     seen_types = set()
     while pending:
-        type_name = pending.pop()
-        if type_name in seen_types:
+        type_name, cur_pkg = pending.pop()
+        if (type_name, cur_pkg) in seen_types:
             continue
-        seen_types.add(type_name)
+        seen_types.add((type_name, cur_pkg))
         short = type_name.split('.')[-1]
         if short in aliases:
             root_aliases.add(short)
             continue
-        enum = _resolve_enum(index, type_name)
+        enum, _epkg = _cpp_resolve_enum(index, type_name, cur_pkg)
         if enum:
             reachable_enum_ids.add(id(enum))
             continue
-        msg = _resolve_message(index, type_name)
+        msg, msg_pkg = _cpp_resolve_message(index, type_name, cur_pkg)
         if msg is None:
             continue
         if id(msg) in reachable_message_ids:
@@ -344,11 +360,11 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
         for field, _name, _oneof in _inline_service_fields(msg, index, aliases):
             kind, _type_name, _proto_scalar = _field_kind_and_type(field, index, aliases)
             if kind == 'enum':
-                enum = _resolve_enum(index, field.type)
+                enum, _ = _cpp_resolve_enum(index, field.type, msg_pkg)
                 if enum:
                     reachable_enum_ids.add(id(enum))
             elif kind == 'message':
-                pending.append(field.type)
+                pending.append((field.type, msg_pkg))
 
     ordered_enums = []
     ordered_messages = []
@@ -359,7 +375,8 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
         for msg in pf.messages:
             if id(msg) in reachable_message_ids:
                 full_type = f'{pf.package}.{msg.name}' if pf.package else msg.name
-                ordered_messages.append(_message_spec_from_proto(msg, full_type, index, aliases))
+                ordered_messages.append(
+                    _message_spec_from_proto(msg, full_type, index, aliases, pf.package))
 
     spec_by_name = {spec.name: spec for spec in ordered_messages}
     remaining = list(ordered_messages)
@@ -380,13 +397,14 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
             break
 
     for alias_name in sorted(root_aliases):
-        alias_full_type = next((t for t in root_types if t.split('.')[-1] == alias_name), alias_name)
+        alias_full_type = next(
+            (t for t, _pkg in root_types if t.split('.')[-1] == alias_name), alias_name)
         ordered_messages.append(_alias_root_spec(alias_name, alias_full_type, aliases))
 
     stream_specs: List[FlatArraySpec] = []
     seen_arrays = set()
-    for raw_type_name in stream_types:
-        type_name = _full_type_for(index, raw_type_name)
+    for raw_type_name, raw_pkg in stream_types:
+        type_name = _full_type_for(index, raw_type_name, raw_pkg)
         short = type_name.split('.')[-1]
         if short in seen_arrays:
             continue
@@ -401,7 +419,7 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
                 element_cpp_type=f'{_cpp_native_ns(type_name)}::{short}',
                 element_ada_type=camel_to_snake(short),
                 element_full_type=type_name,
-                json_codec_ns=_json_codec_namespace_for_type(type_name),
+                json_codec_ns='base',
                 element_proto_scalar=proto_scalar,
             ))
         else:
@@ -413,7 +431,7 @@ def _collect_service_group(index: ProtoTypeIndex, base_package: str, service_fil
                 element_cpp_type=f'{_cpp_native_ns(type_name)}::{short}',
                 element_ada_type=camel_to_snake(short),
                 element_full_type=type_name,
-                json_codec_ns=_json_codec_namespace_for_type(type_name),
+                json_codec_ns=_cpp_native_ns(type_name),
             ))
 
     fbs_namespace, cpp_base_ns, file_base, ada_codec_pkg, ada_codec_file = _service_group_names(base_package)
@@ -762,18 +780,19 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated service FlatBuffers codec\n')
             f.write(f'#include "{group.file_base}_flatbuffers_codec.hpp"\n\n')
-            codec_namespaces = {
-                spec.json_codec_ns
-                for spec in group.message_specs
-                if spec.json_codec_ns not in ('base', 'wire')
-            }
-            codec_namespaces.update(
-                spec.json_codec_ns
-                for spec in group.array_specs
-                if spec.json_codec_ns not in ('base', 'wire')
-            )
-            for codec_ns in sorted(codec_namespaces):
-                f.write(f'#include "pyramid_data_model_{codec_ns}_codec.hpp"\n')
+            # JSON codec headers for the types the bridge round-trips, keyed by
+            # the declaring proto package (handles nested data-model packages and
+            # wrapper Component-NS). Scalar-wrapper aliases ('base') need none.
+            codec_headers = set()
+            specs = list(group.message_specs) + list(group.array_specs)
+            for spec in specs:
+                if spec.json_codec_ns in ('base', 'wire'):
+                    continue
+                full = getattr(spec, 'full_type', '') or getattr(spec, 'element_full_type', '')
+                if '.' in full:
+                    codec_headers.add(f'{full.rsplit(".", 1)[0].replace(".", "_")}_codec.hpp')
+            for codec_header in sorted(codec_headers):
+                f.write(f'#include "{codec_header}"\n')
             f.write('#include <cstdlib>\n')
             f.write('#include <cstdint>\n')
             f.write('#include <cstring>\n')
@@ -874,35 +893,35 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
                         f.write(f'    out.{field.name}.reserve({member}.size());\n')
                         f.write(f'    for (const auto& item : {member}) {{\n')
                         f.write('        if (item) {\n')
-                        f.write(f'            out.{field.name}.push_back(from_fb(*item, static_cast<pyramid::domain_model::{field.type_name}*>(nullptr)));\n')
+                        f.write(f'            out.{field.name}.push_back(from_fb(*item, static_cast<{field.cpp_ns}::{field.type_name}*>(nullptr)));\n')
                         f.write('        }\n')
                         f.write('    }\n')
                     elif field.kind == 'enum':
                         f.write(f'    out.{field.name}.reserve({member}.size());\n')
                         f.write(f'    for (const auto& item : {member}) {{\n')
-                        f.write(f'        out.{field.name}.push_back(static_cast<pyramid::domain_model::{field.type_name}>(item));\n')
+                        f.write(f'        out.{field.name}.push_back(static_cast<{field.cpp_ns}::{field.type_name}>(item));\n')
                         f.write('    }\n')
                     else:
                         f.write(f'    out.{field.name} = {member};\n')
                 elif field.generated_presence:
                     f.write(f'    if (msg.has_{field.name}) {{\n')
                     if field.kind == 'enum':
-                        f.write(f'        out.{field.name} = static_cast<pyramid::domain_model::{field.type_name}>({member});\n')
+                        f.write(f'        out.{field.name} = static_cast<{field.cpp_ns}::{field.type_name}>({member});\n')
                     else:
                         f.write(f'        out.{field.name} = {member};\n')
                     f.write('    }\n')
                 elif field.generated_optional and field.kind == 'message':
                     f.write(f'    if ({member}) {{\n')
-                    f.write(f'        out.{field.name} = from_fb(*{member}, static_cast<pyramid::domain_model::{field.type_name}*>(nullptr));\n')
+                    f.write(f'        out.{field.name} = from_fb(*{member}, static_cast<{field.cpp_ns}::{field.type_name}*>(nullptr));\n')
                     f.write('    }\n')
                 elif field.generated_optional:
                     f.write(f'    if (!{member}.empty()) {{\n')
                     f.write(f'        out.{field.name} = {member};\n')
                     f.write('    }\n')
                 elif field.kind == 'message':
-                    f.write(f'    if ({member}) out.{field.name} = from_fb(*{member}, static_cast<pyramid::domain_model::{field.type_name}*>(nullptr));\n')
+                    f.write(f'    if ({member}) out.{field.name} = from_fb(*{member}, static_cast<{field.cpp_ns}::{field.type_name}*>(nullptr));\n')
                 elif field.kind == 'enum':
-                    f.write(f'    out.{field.name} = static_cast<pyramid::domain_model::{field.type_name}>({member});\n')
+                    f.write(f'    out.{field.name} = static_cast<{field.cpp_ns}::{field.type_name}>({member});\n')
                 else:
                     f.write(f'    out.{field.name} = {member};\n')
             f.write('    return out;\n')
@@ -925,11 +944,10 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             f.write(f'std::vector<{array_spec.element_cpp_type}> from_fb(const fbs::{array_spec.holder_name}T& msg) {{\n')
             f.write(f'    std::vector<{array_spec.element_cpp_type}> out{{}};\n')
             if array_spec.element_kind == 'message':
-                short = array_spec.element_cpp_type.split('::')[-1]
                 f.write('    out.reserve(msg.items.size());\n')
                 f.write('    for (const auto& item : msg.items) {\n')
                 f.write('        if (item) {\n')
-                f.write(f'            out.push_back(from_fb(*item, static_cast<pyramid::domain_model::{short}*>(nullptr)));\n')
+                f.write(f'            out.push_back(from_fb(*item, static_cast<{array_spec.element_cpp_type}*>(nullptr)));\n')
                 f.write('        }\n')
                 f.write('    }\n')
             else:
@@ -973,7 +991,9 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             return f'nlohmann::json({expr}).dump()'
         if json_ns == 'wire':
             return f'{group.cpp_base_ns}::json_codec::toJson({expr})'
-        return f'pyramid::domain_model::{json_ns}::toJson({expr})'
+        # json_ns is the type's full JSON-codec namespace (data-model sub-ns or
+        # wrapper Component-NS).
+        return f'{json_ns}::toJson({expr})'
 
     def _cpp_json_decode_expr(self, group: ServiceCodecGroup, json_ns: str, cpp_type: str, expr: str) -> str:
         if json_ns == 'base':
@@ -982,7 +1002,7 @@ class FlatBuffersBackend(codec_backends.CodecBackend):
             short = cpp_type.split('::')[-1]
             snake = short[0].lower() + short[1:]
             return f'{group.cpp_base_ns}::json_codec::{snake}FromJson({expr})'
-        return f'pyramid::domain_model::{json_ns}::fromJson({expr}, static_cast<{cpp_type}*>(nullptr))'
+        return f'{json_ns}::fromJson({expr}, static_cast<{cpp_type}*>(nullptr))'
 
     def _emit_service_cpp_json_bridge_exports(self, f, group: ServiceCodecGroup):
         f.write('\nextern "C" {\n\n')

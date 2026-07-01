@@ -1,6 +1,10 @@
 set(PYRAMID_ROOT_DIR "${CMAKE_CURRENT_LIST_DIR}")
 
-set(PYRAMID_PROTO_DIR "${PYRAMID_ROOT_DIR}/proto")
+# Proto IDL source directory. Defaults to the canonical proto/ tree but may be
+# redirected (e.g. -DPYRAMID_PROTO_DIR=.../pim/test) so the same build pipeline
+# can target an alternative proto set.
+set(PYRAMID_PROTO_DIR "${PYRAMID_ROOT_DIR}/proto"
+    CACHE PATH "PYRAMID proto IDL source directory")
 if(EXISTS "${PYRAMID_PROTO_DIR}")
     option(PYRAMID_ENABLE_PROTOBUF "Enable protobuf codecs for PYRAMID" ON)
 else()
@@ -710,6 +714,18 @@ endforeach()
 unset(_pyramid_plugin_dep)
 
 add_subdirectory(core)
-add_subdirectory(tactical_objects)
-add_subdirectory(pyramid_bridge)
-add_subdirectory(tests)
+
+# Example component, bridge demo and the test suite are wired to the default
+# proto/ component set (they reference specific generated `pyramid_services_*`
+# sources by name). The runtime plugin build (pyramid_plugins) does not need
+# them, and they cannot configure against an alternative PYRAMID_PROTO_DIR, so
+# gate them behind an option that proto-agnostic builds (e.g. build_plugins.sh
+# targeting pim/test) can switch off.
+option(PYRAMID_BUILD_TESTS
+    "Build PYRAMID example component, bridge demo and tests (coupled to proto/)"
+    ON)
+if(PYRAMID_BUILD_TESTS)
+    add_subdirectory(tactical_objects)
+    add_subdirectory(pyramid_bridge)
+    add_subdirectory(tests)
+endif()

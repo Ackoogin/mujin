@@ -6,31 +6,7 @@ import "google/protobuf/empty.proto";
 import "pyramid/data_model/pyramid.data_model.base.proto";
 import "pyramid/data_model/pyramid.data_model.common.proto";
 import "pyramid/data_model/pyramid.data_model.common_pim_components.authorisation.proto";
-import "pyramid/data_model/pyramid.data_model.common_pim_components.hmi_dialogue.proto";
 import "pyramid/data_model/pyramid.data_model.generic_pim.generic.proto";
-import "pyramid/data_model/pyramid.data_model.pim_seaspray.hmi_dialogue.proto";
-
-message HDIRequirement_Service_Request {
-  oneof payload {
-    pyramid.data_model.common_pim_components.hmi_dialogue.HDIRequest hdirequest = 1;
-    pyramid.data_model.pim_seaspray.hmi_dialogue.HDIRadarModeChangeRequest hdiradar_mode_change_request = 2;
-  }
-}
-
-message HDIRequirement_Service_Requirement {
-  oneof payload {
-    pyramid.data_model.common_pim_components.hmi_dialogue.HDIRequirement hdirequirement = 1;
-    pyramid.data_model.pim_seaspray.hmi_dialogue.HDIRadarModeChangeRequirement hdiradar_mode_change_requirement = 2;
-  }
-}
-
-// Request port 'pHDIRequirement' (provided) refining HDIRequirement
-service HDIRequirement_Service {
-  rpc Create(HDIRequirement_Service_Request) returns (pyramid.data_model.common.Ack);
-  rpc Read(pyramid.data_model.common.Query) returns (stream HDIRequirement_Service_Requirement);
-  rpc Update(HDIRequirement_Service_Requirement) returns (pyramid.data_model.common.Ack);
-  rpc Cancel(pyramid.data_model.base.Identifier) returns (pyramid.data_model.common.Ack);
-}
 
 // Information port 'pCapability' (provided) refining Capability
 service Capability_Service {

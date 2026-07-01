@@ -6,13 +6,7 @@ import "google/protobuf/empty.proto";
 import "pyramid/data_model/pyramid.data_model.base.proto";
 import "pyramid/data_model/pyramid.data_model.common.proto";
 import "pyramid/data_model/pyramid.data_model.common_pim_components.authorisation.proto";
-import "pyramid/data_model/pyramid.data_model.common_pim_components.tactical_objects.proto";
 import "pyramid/data_model/pyramid.data_model.generic_pim.generic.proto";
-
-// Information port 'pMatchingObjects' (provided) refining Matching_Objects
-service Matching_Objects_Service {
-  rpc Read(google.protobuf.Empty) returns (stream pyramid.data_model.common_pim_components.tactical_objects.ObjectMatch);
-}
 
 // Information port 'pCapability' (provided) refining Capability
 service Capability_Service {
