@@ -1134,6 +1134,14 @@ class AdaServiceGenerator:
             f.write(f'   function To_Address is new\n')
             f.write(f'     Ada.Unchecked_Conversion (Interfaces.C.Strings.chars_ptr, System.Address);\n')
             f.write(f'\n')
+            f.write(f'   --  A codec plugin Decode call may allocate this string on a different\n')
+            f.write(f'   --  C runtime than this Ada binary (e.g. an MSVC-built plugin DLL vs.\n')
+            f.write(f'   --  a GNAT/MinGW executable). Free it through pcl_free, the PCL portable\n')
+            f.write(f'   --  allocator, instead of Interfaces.C.Strings.Free (which resolves to\n')
+            f.write(f'   --  this binary linked C runtime and would corrupt a foreign heap).\n')
+            f.write(f'   procedure Pcl_Free (Ptr : System.Address);\n')
+            f.write(f'   pragma Import (C, Pcl_Free, "pcl_free");\n')
+            f.write(f'\n')
             f.write(f'   function Pcl_Codec_Registry_Get_At\n')
             f.write(f'     (Registry     : System.Address;\n')
             f.write(f'      Content_Type : Interfaces.C.Strings.chars_ptr;\n')
@@ -1143,8 +1151,13 @@ class AdaServiceGenerator:
             f.write(f'                  "pcl_codec_registry_get_at");\n')
             f.write(f'\n')
             if array_bindings:
+                # C_Free only ever releases Slice.Ptr, an array a codec plugin
+                # allocated in its own Decode call -- possibly a different C
+                # runtime than this Ada binary (e.g. an MSVC-built plugin DLL
+                # vs. a GNAT/MinGW executable) -- so it must go through
+                # pcl_free, PCL's portable allocator, not plain free().
                 f.write(f'   procedure C_Free (Ptr : System.Address);\n')
-                f.write(f'   pragma Import (C, C_Free, "free");\n')
+                f.write(f'   pragma Import (C, C_Free, "pcl_free");\n')
                 f.write(f'\n')
             f.write(f'   type Service_Handlers_Access is access constant Service_Handlers;\n')
             f.write(f'\n')
@@ -1363,7 +1376,7 @@ class AdaServiceGenerator:
                     f.write(f'               end if;\n')
                     f.write(f'            end if;\n')
                     f.write(f'            if C_Value.Ptr /= Interfaces.C.Strings.Null_Ptr then\n')
-                    f.write(f'               Interfaces.C.Strings.Free (C_Value.Ptr);\n')
+                    f.write(f'               Pcl_Free (To_Address (C_Value.Ptr));\n')
                     f.write(f'            end if;\n')
                     f.write(f'            return Status;\n')
                     f.write(f'         end;\n')

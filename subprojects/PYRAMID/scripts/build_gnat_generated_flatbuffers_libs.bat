@@ -61,23 +61,22 @@ if "%FORCE_REBUILD%"=="1" (
   del /f /q "%OBJ_DIR%\*.o" >nul 2>&1
 )
 
-set "GEN_DIR=%PYRAMID_ROOT%\bindings\cpp\generated"
-set "GEN_FB_DIR=%GEN_DIR%\flatbuffers\cpp"
-set "BUILD_FB_DIR=%BUILD_DIR%\generated\flatbuffers\cpp"
-set "FLATBUFFERS_INCLUDE=%BUILD_DIR%\_deps\flatbuffers-src\include"
-set "NLOHMANN_INCLUDE=%PYRAMID_ROOT%\core\external"
+:: NOTE on scope: this archive exists only so Ada can build/tear down the
+:: C-ABI structs that cross a codec plugin's pcl_codec_t vtable (to_c/from_c/
+:: _c_free, from *_cabi_marshal.cpp). Ada never calls the wire-codec functions
+:: (toJson/fromJson/toBinary/fromBinary) directly -- it has its own
+:: independent, pure-Ada JSON codec (pyramid-data_model-*-types_codec.ads),
+:: and all actual wire encode/decode goes through a loaded codec plugin DLL.
+:: The Ada flatbuffers\ada\*-flatbuffers_codec.adb bridge (the one thing that
+:: did call into the C++ wire codec, for a JSON<->FlatBuffers round-trip) is
+:: unused by every real client -- only test_generated_bindings.adb called it,
+:: and that call has been removed -- so the wire-codec sources are
+:: deliberately not compiled here.
+set "GEN_DIR=%BUILD_DIR%\generated\pyramid_cpp_bindings"
+set "CORE_EXTERNAL_INCLUDE=%PYRAMID_ROOT%\core\external"
+set "PCL_INCLUDE=%PYRAMID_ROOT%\..\PCL\include"
 
-if not exist "%BUILD_FB_DIR%" (
-  where cmake >nul 2>&1
-  if errorlevel 1 (
-    echo [ada-pyramid] ERROR: missing flatc-generated headers and cmake not available
-    exit /b 1
-  )
-  echo [ada-pyramid] Refreshing flatc-generated headers...
-  cmake --build "%BUILD_DIR%" --config %BUILD_CONFIG% --target pyramid_flatbuffers_codegen -j4 || exit /b 1
-)
-
-set "CXXFLAGS=-std=c++17 -O2 -I%GEN_DIR% -I%GEN_FB_DIR% -I%BUILD_FB_DIR% -I%FLATBUFFERS_INCLUDE% -I%NLOHMANN_INCLUDE%"
+set "CXXFLAGS=-std=c++17 -O2 -I%GEN_DIR% -I%CORE_EXTERNAL_INCLUDE% -I%PCL_INCLUDE%"
 
 if exist "%TMP_MANIFEST_FILE%" del /f /q "%TMP_MANIFEST_FILE%" >nul 2>&1
 >"%TMP_MANIFEST_FILE%" echo CXX=!CXX!
@@ -85,7 +84,7 @@ if exist "%TMP_MANIFEST_FILE%" del /f /q "%TMP_MANIFEST_FILE%" >nul 2>&1
 >>"%TMP_MANIFEST_FILE%" echo CXXFLAGS=%CXXFLAGS%
 
 set "SOURCE_FILES="
-for %%F in ("%GEN_DIR%\pyramid_data_model_*_codec.cpp" "%GEN_FB_DIR%\*_flatbuffers_codec.cpp" "%GEN_DIR%\pyramid_data_model_*_codec.hpp" "%GEN_FB_DIR%\*_flatbuffers_codec.hpp" "%BUILD_FB_DIR%\*_generated.h") do (
+for %%F in ("%GEN_DIR%\pyramid_data_model_*_cabi_marshal.cpp" "%GEN_DIR%\pyramid_components_*_cabi_marshal.cpp" "%GEN_DIR%\pyramid_data_model_*_cabi_marshal.hpp" "%GEN_DIR%\pyramid_components_*_cabi_marshal.hpp") do (
   if exist "%%~fF" (
     >>"%TMP_MANIFEST_FILE%" echo %%~fF^|%%~zF^|%%~tF
     if /i "%%~xF"==".cpp" set SOURCE_FILES=!SOURCE_FILES! "%%~fF"

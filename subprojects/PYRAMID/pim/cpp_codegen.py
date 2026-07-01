@@ -791,12 +791,6 @@ class CppServiceGenerator:
             return '', '', []
         if not service_files:
             return '', '', []
-        service_files = [
-            pf for pf in service_files
-            if pf.package == parsed.package
-        ]
-        if not service_files:
-            return '', '', []
 
         dm_files = [
             pf for pf in self._discover_all_proto_files()
@@ -961,6 +955,7 @@ class CppServiceGenerator:
             f.write('\n')
             f.write('extern "C" {\n')
             f.write('#include <pcl/pcl_codec.h>\n')
+            f.write('#include <pcl/pcl_alloc.h>\n')
             f.write('#include "pyramid_datamodel_cabi.h"\n')
             f.write('}\n\n')
             f.write('#include <cstdlib>\n')
@@ -1134,7 +1129,7 @@ class CppServiceGenerator:
                         f.write('                return PCL_ERR_INVALID;\n')
                         f.write('            }\n')
                         f.write('            if (!native.empty()) {\n')
-                        f.write('                void* copy = std::malloc(native.size());\n')
+                        f.write('                void* copy = pcl_alloc(native.size());\n')
                         f.write('                if (!copy) {\n')
                         f.write('                    return PCL_ERR_NOMEM;\n')
                         f.write('                }\n')
@@ -1174,7 +1169,7 @@ class CppServiceGenerator:
                     f.write('            slice->len = 0u;\n')
                     f.write('            if (!native.empty()) {\n')
                     f.write(f'                auto* values = static_cast<{c_struct}*>(\n')
-                    f.write(f'                    std::calloc(native.size(), sizeof({c_struct})));\n')
+                    f.write(f'                    pcl_alloc(native.size() * sizeof({c_struct})));\n')
                     f.write('                if (!values) {\n')
                     f.write('                    return PCL_ERR_NOMEM;\n')
                     f.write('                }\n')
@@ -1782,6 +1777,7 @@ class CppServiceGenerator:
             f.write('#include <pcl/pcl_container.h>\n')
             f.write('#include <pcl/pcl_executor.h>\n')
             f.write('#include <pcl/pcl_transport.h>\n')
+            f.write('#include <pcl/pcl_alloc.h>\n')
             f.write('#include "pyramid_datamodel_cabi.h"\n')
             f.write('}\n')
             f.write('\n#include <cstdlib>\n')
@@ -1945,7 +1941,7 @@ class CppServiceGenerator:
                     f.write('        }\n')
                     f.write(f'        auto* native = static_cast<{native}*>(out_value);\n')
                     f.write('        native->assign(cs.ptr ? cs.ptr : "", cs.len);\n')
-                    f.write('        std::free(const_cast<char*>(cs.ptr));\n')
+                    f.write('        pcl_free(const_cast<char*>(cs.ptr));\n')
                 else:
                     f.write('        if (c->decode(c->codec_ctx, schema_id, msg, out_value)\n')
                     f.write('                != PCL_OK) {\n')
@@ -1990,7 +1986,7 @@ class CppServiceGenerator:
                 f.write('            native->push_back(std::move(item));\n')
                 f.write(f'            {c_struct}_free(&values[i]);\n')
                 f.write('        }\n')
-                f.write('        std::free(values);\n')
+                f.write('        pcl_free(values);\n')
                 f.write('        return 1;\n')
                 f.write('    }\n')
             f.write('    (void)c; (void)msg; (void)out_value;\n')

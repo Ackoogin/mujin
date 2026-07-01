@@ -266,6 +266,11 @@ foreach(_marshal_src IN LISTS _pyramid_generated_marshal_srcs)
         POSITION_INDEPENDENT_CODE ON)
     target_include_directories(${_marshal_obj}
         PUBLIC ${PYRAMID_MARSHAL_INCLUDE_DIRS})
+    # pcl_alloc/pcl_free (pcl/pcl_alloc.h): the marshal layer's to_c()/_c_free()
+    # allocate/free C-ABI struct fields through PCL's portable heap allocator
+    # so that memory a codec plugin allocates (possibly a different C runtime
+    # on Windows) can be freed safely by any caller.
+    target_link_libraries(${_marshal_obj} PUBLIC pcl_core)
     # Standalone per-module static library for deployment staging.
     add_library(pyramid_marshal_${_marshal_module} STATIC
         $<TARGET_OBJECTS:${_marshal_obj}>)
@@ -286,6 +291,7 @@ set_target_properties(pyramid_generated_marshal PROPERTIES
     POSITION_INDEPENDENT_CODE ON)
 target_include_directories(pyramid_generated_marshal
     PUBLIC ${PYRAMID_MARSHAL_INCLUDE_DIRS})
+target_link_libraries(pyramid_generated_marshal PUBLIC pcl_core)
 unset(_pyramid_marshal_objects)
 
 # Wire codecs (JSON + optional FlatBuffers). Linked by the codec plugins and by

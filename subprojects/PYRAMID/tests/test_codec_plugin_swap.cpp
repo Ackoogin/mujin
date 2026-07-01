@@ -122,25 +122,25 @@ std::string roundTripObjectDetail(const char* plugin_path,
   // Encode crosses the C-ABI typed-value boundary: marshal the native value
   // into its frozen C struct, hand that to the plugin, then free it.
   pcl_msg_t msg{};
-  pyramid_ObjectDetail_c enc_cs;
+  pyramid_data_model_tactical_ObjectDetail_c enc_cs;
   pyramid::cabi::to_c(ev, &enc_cs);
   EXPECT_EQ(loaded.codec->encode(
                 loaded.codec->codec_ctx, "ObjectDetail", &enc_cs, &msg),
             PCL_OK);
-  pyramid_ObjectDetail_c_free(&enc_cs);
+  pyramid_data_model_tactical_ObjectDetail_c_free(&enc_cs);
   EXPECT_NE(msg.data, nullptr);
   const std::string bytes(static_cast<const char*>(msg.data), msg.size);
 
   // Decode is symmetric: the plugin fills a C struct (plugin-allocated), which
   // we marshal back into the native value and then free.
   types::ObjectDetail roundtripped{};
-  pyramid_ObjectDetail_c dec_cs;
+  pyramid_data_model_tactical_ObjectDetail_c dec_cs;
   std::memset(&dec_cs, 0, sizeof(dec_cs));
   EXPECT_EQ(loaded.codec->decode(
                 loaded.codec->codec_ctx, "ObjectDetail", &msg, &dec_cs),
             PCL_OK);
   pyramid::cabi::from_c(&dec_cs, roundtripped);
-  pyramid_ObjectDetail_c_free(&dec_cs);
+  pyramid_data_model_tactical_ObjectDetail_c_free(&dec_cs);
   if (decoded) {
     *decoded = roundtripped;
   }
@@ -188,12 +188,12 @@ TEST(CodecPluginSwap, LoadedJsonCodecMatchesStaticToJson) {
   ASSERT_NE(loaded.codec, nullptr);
 
   pcl_msg_t msg{};
-  pyramid_ObjectDetail_c enc_cs;
+  pyramid_data_model_tactical_ObjectDetail_c enc_cs;
   pyramid::cabi::to_c(ev, &enc_cs);
   ASSERT_EQ(loaded.codec->encode(
                 loaded.codec->codec_ctx, "ObjectDetail", &enc_cs, &msg),
             PCL_OK);
-  pyramid_ObjectDetail_c_free(&enc_cs);
+  pyramid_data_model_tactical_ObjectDetail_c_free(&enc_cs);
   ASSERT_NE(msg.data, nullptr);
 
   const std::string plugin_bytes(static_cast<const char*>(msg.data), msg.size);

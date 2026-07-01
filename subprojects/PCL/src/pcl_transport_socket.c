@@ -14,6 +14,7 @@
 #include "pcl/pcl_executor.h"
 #include "pcl/pcl_container.h"
 #include "pcl/pcl_log.h"
+#include "pcl/pcl_alloc.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -365,12 +366,12 @@ static pcl_status_t enqueue_outbound_frame(struct pcl_socket_transport_t* ctx,
                                            uint32_t                       size) {
   pcl_outbound_frame_t* f;
 
-  f = (pcl_outbound_frame_t*)malloc(sizeof(*f));
+  f = (pcl_outbound_frame_t*)pcl_alloc(sizeof(*f));
   if (!f) return PCL_ERR_NOMEM;
 
-  f->data = (uint8_t*)malloc(size);
+  f->data = (uint8_t*)pcl_alloc(size);
   if (!f->data) {
-    free(f);
+    pcl_free(f);
     return PCL_ERR_NOMEM;
   }
   memcpy(f->data, data, size);
@@ -439,8 +440,8 @@ static void* send_thread_main(void* arg)
     if (ctx->client_sock != PCL_INVALID_SOCKET) {
       send_all(ctx->client_sock, f->data, f->size);
     }
-    free(f->data);
-    free(f);
+    pcl_free(f->data);
+    pcl_free(f);
   }
 
 #ifdef _WIN32
@@ -473,7 +474,7 @@ static pcl_status_t socket_publish(void*            adapter_ctx,
 
   /* frame: [4:payload_size][1:type=PUBLISH][2:topic_len][topic]
             [2:type_len][type_name][4:data_len][data] */
-  frame = (uint8_t*)malloc(4u + payload_size);
+  frame = (uint8_t*)pcl_alloc(4u + payload_size);
   if (!frame) return PCL_ERR_NOMEM;
 
   off = 0;
@@ -492,7 +493,7 @@ static pcl_status_t socket_publish(void*            adapter_ctx,
   }
 
   rc = enqueue_outbound_frame(ctx, frame, (uint32_t)(4u + payload_size));
-  free(frame);
+  pcl_free(frame);
   return rc;
 }
 
@@ -571,7 +572,7 @@ static void gateway_sub_cb(pcl_container_t* c,
   /* frame: [4:payload_size][1:type=SVC_RESP][4:seq_id]
             [2:type_len][type_name][4:resp_size][resp_data] */
   payload_size = 1u + 4u + 2u + resp_type_len + 4u + resp.size;
-  frame = (uint8_t*)malloc(4u + payload_size);
+  frame = (uint8_t*)pcl_alloc(4u + payload_size);
   if (!frame) return;
 
   off = 0;
@@ -589,7 +590,7 @@ static void gateway_sub_cb(pcl_container_t* c,
   }
 
   enqueue_outbound_frame(ctx, frame, 4u + payload_size);
-  free(frame);
+  pcl_free(frame);
 }
 
 // -- Transport vtable: subscribe / shutdown -------------------------------
@@ -630,11 +631,11 @@ static void* recv_thread_main(void* arg)
     payload_len = read_u32_be(len_buf);
     if (payload_len == 0u || payload_len > PCL_SOCKET_MAX_PAYLOAD) break;
 
-    payload = (uint8_t*)malloc(payload_len);
+    payload = (uint8_t*)pcl_alloc(payload_len);
     if (!payload) break;
 
     if (recv_all(ctx->client_sock, payload, payload_len) != 0) {
-      free(payload);
+      pcl_free(payload);
       break;
     }
 
@@ -646,23 +647,23 @@ static void* recv_thread_main(void* arg)
       char*    type_s;
       pcl_msg_t msg;
 
-      if (payload_len < 1u + 2u + 2u + 4u) { free(payload); continue; }
+      if (payload_len < 1u + 2u + 2u + 4u) { pcl_free(payload); continue; }
 
       topic_len = read_u16_be(payload + 1);
-      if (1u + 2u + topic_len + 2u + 4u > payload_len) { free(payload); continue; }
+      if (1u + 2u + topic_len + 2u + 4u > payload_len) { pcl_free(payload); continue; }
 
-      topic_s = (char*)malloc(topic_len + 1u);
-      if (!topic_s) { free(payload); continue; }
+      topic_s = (char*)pcl_alloc(topic_len + 1u);
+      if (!topic_s) { pcl_free(payload); continue; }
       memcpy(topic_s, payload + 3, topic_len);
       topic_s[topic_len] = '\0';
 
       type_len = read_u16_be(payload + 3 + topic_len);
       if (1u + 2u + topic_len + 2u + type_len + 4u > payload_len) {
-        free(topic_s); free(payload); continue;
+        pcl_free(topic_s); pcl_free(payload); continue;
       }
 
-      type_s = (char*)malloc(type_len + 1u);
-      if (!type_s) { free(topic_s); free(payload); continue; }
+      type_s = (char*)pcl_alloc(type_len + 1u);
+      if (!type_s) { pcl_free(topic_s); pcl_free(payload); continue; }
       memcpy(type_s, payload + 5 + topic_len, type_len);
       type_s[type_len] = '\0';
 
@@ -675,9 +676,9 @@ static void* recv_thread_main(void* arg)
 
       pcl_executor_post_remote_incoming(ctx->executor, ctx->peer_id, topic_s, &msg);
 
-      free(topic_s);
-      free(type_s);
-      free(payload);
+      pcl_free(topic_s);
+      pcl_free(type_s);
+      pcl_free(payload);
 
     } else if (payload[0] == PCL_SOCKET_MSG_SVC_REQ && ctx->is_server) {
       /* [0x01][4:seq_id][2:svc_len][svc_name][2:type_len][type_name][4:req_len][req_data]
@@ -688,14 +689,14 @@ static void* recv_thread_main(void* arg)
         uint16_t  svc_len  = read_u16_be(payload + 5);
         uint16_t  type_len = 0u;
         uint32_t  fwd_len = payload_len - 1u;
-        uint8_t*  fwd     = (uint8_t*)malloc(fwd_len);
+        uint8_t*  fwd     = (uint8_t*)pcl_alloc(fwd_len);
         char*     type_s   = NULL;
 
         if (payload_len >= 1u + 4u + 2u + svc_len + 2u) {
           type_len = read_u16_be(payload + 7u + svc_len);
           if (payload_len >= 1u + 4u + 2u + svc_len + 2u + type_len + 4u &&
               type_len > 0u) {
-            type_s = (char*)malloc((size_t)type_len + 1u);
+            type_s = (char*)pcl_alloc((size_t)type_len + 1u);
             if (type_s) {
               memcpy(type_s, payload + 9u + svc_len, type_len);
               type_s[type_len] = '\0';
@@ -712,11 +713,11 @@ static void* recv_thread_main(void* arg)
           svc_msg.size      = fwd_len;
           svc_msg.type_name = type_s ? type_s : "pcl_socket_service_request";
           pcl_executor_post_incoming(ctx->executor, PCL_SOCKET_TOPIC_SVC_REQ, &svc_msg);
-          free(fwd);
+          pcl_free(fwd);
         }
-        free(type_s);
+        pcl_free(type_s);
       }
-      free(payload);
+      pcl_free(payload);
 
     } else if (payload[0] == PCL_SOCKET_MSG_SVC_RESP && !ctx->is_server) {
       /* [0x02][4:seq_id][2:type_len][type_name][4:resp_len][resp_data]
@@ -732,7 +733,7 @@ static void* recv_thread_main(void* arg)
         pcl_svc_pending_t** pp;
 
         if (payload_len < 1u + 4u + 2u + type_len + 4u) {
-          free(payload);
+          pcl_free(payload);
           continue;
         }
         resp_size = read_u32_be(payload + 7u + type_len);
@@ -741,9 +742,9 @@ static void* recv_thread_main(void* arg)
                         ? (const void*)(payload + 11u + type_len)
                         : NULL;
         if (type_len > 0u) {
-          type_s = (char*)malloc((size_t)type_len + 1u);
+          type_s = (char*)pcl_alloc((size_t)type_len + 1u);
           if (!type_s) {
-            free(payload);
+            pcl_free(payload);
             continue;
           }
           memcpy(type_s, type_data, type_len);
@@ -778,14 +779,14 @@ static void* recv_thread_main(void* arg)
                                          pending->cb,
                                          pending->user_data,
                                          &resp_msg);
-          free(pending);
+          pcl_free(pending);
         }
-        free(type_s);
+        pcl_free(type_s);
       }
-      free(payload);
+      pcl_free(payload);
 
     } else {
-      free(payload);
+      pcl_free(payload);
     }
   }
 
@@ -934,13 +935,13 @@ pcl_socket_transport_t* pcl_socket_transport_create_server_ex(
   { WSADATA wsa; if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return NULL; }
 #endif
 
-  ctx = (struct pcl_socket_transport_t*)calloc(1, sizeof(*ctx));
+  ctx = (struct pcl_socket_transport_t*)pcl_calloc(1, sizeof(*ctx));
   if (!ctx) return NULL;
 
   ctx->is_server = 1;
   ctx->port      = port;
   if (!socket_transport_create_common(ctx, executor)) {
-    free(ctx);
+    pcl_free(ctx);
     return NULL;
   }
 
@@ -1045,14 +1046,14 @@ pcl_socket_transport_t* pcl_socket_transport_create_client_ex(
   { WSADATA wsa; if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0) return NULL; }
 #endif
 
-  ctx = (struct pcl_socket_transport_t*)calloc(1, sizeof(*ctx));
+  ctx = (struct pcl_socket_transport_t*)pcl_calloc(1, sizeof(*ctx));
   if (!ctx) return NULL;
 
   ctx->is_server = 0;
   ctx->port      = port;
   snprintf(ctx->host, sizeof(ctx->host), "%s", host);
   if (!socket_transport_create_common(ctx, executor)) {
-    free(ctx);
+    pcl_free(ctx);
     return NULL;
   }
 
@@ -1191,7 +1192,7 @@ pcl_status_t pcl_socket_transport_invoke_remote_async(
   if (ctx->is_server)                                  return PCL_ERR_INVALID;
   if (ctx->client_sock == PCL_INVALID_SOCKET)          return PCL_ERR_INVALID;
 
-  pending = (pcl_svc_pending_t*)malloc(sizeof(*pending));
+  pending = (pcl_svc_pending_t*)pcl_alloc(sizeof(*pending));
   if (!pending) return PCL_ERR_NOMEM;
 
   svc_len      = (uint16_t)strlen(service_name);
@@ -1200,15 +1201,15 @@ pcl_status_t pcl_socket_transport_invoke_remote_async(
   payload_size = 1u + 4u + 2u + svc_len + 2u + req_type_len + 4u + req_len;
 
   if (payload_size > PCL_SOCKET_MAX_PAYLOAD) {
-    free(pending);
+    pcl_free(pending);
     return PCL_ERR_NOMEM;
   }
 
   /* frame: [4:payload_size][1:type=SVC_REQ][4:seq_id][2:svc_len][svc_name]
             [2:type_len][type_name][4:req_len][req_data] */
-  frame = (uint8_t*)malloc(4u + payload_size);
+  frame = (uint8_t*)pcl_alloc(4u + payload_size);
   if (!frame) {
-    free(pending);
+    pcl_free(pending);
     return PCL_ERR_NOMEM;
   }
 
@@ -1251,7 +1252,7 @@ pcl_status_t pcl_socket_transport_invoke_remote_async(
   }
 
   rc = enqueue_outbound_frame(ctx, frame, (uint32_t)(4u + payload_size));
-  free(frame);
+  pcl_free(frame);
 
   if (rc != PCL_OK) {
     /* Remove pending record since frame was not enqueued */
@@ -1265,7 +1266,7 @@ pcl_status_t pcl_socket_transport_invoke_remote_async(
       if ((*pp)->seq_id == seq_id) {
         pcl_svc_pending_t* dead = *pp;
         *pp = dead->next;
-        free(dead);
+        pcl_free(dead);
         break;
       }
     }
@@ -1359,8 +1360,8 @@ void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx_opaque) {
     pcl_outbound_frame_t* f = ctx->send_head;
     while (f) {
       pcl_outbound_frame_t* next = f->next;
-      free(f->data);
-      free(f);
+      pcl_free(f->data);
+      pcl_free(f);
       f = next;
     }
   }
@@ -1370,7 +1371,7 @@ void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx_opaque) {
     pcl_svc_pending_t* p = ctx->pending_head;
     while (p) {
       pcl_svc_pending_t* next = p->next;
-      free(p);
+      pcl_free(p);
       p = next;
     }
   }
@@ -1386,5 +1387,5 @@ void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx_opaque) {
     ctx->gateway = NULL;
   }
 
-  free(ctx);
+  pcl_free(ctx);
 }

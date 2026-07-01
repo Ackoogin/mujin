@@ -1,6 +1,7 @@
 /// \file pcl_plugin_loader.c
 /// \brief Runtime loader for PCL transport and codec plugins.
 #include "pcl/pcl_plugin_loader.h"
+#include "pcl/pcl_alloc.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -38,7 +39,7 @@ static int retain_codec_plugin(pcl_plugin_handle_t* handle) {
   next_capacity = pcl_resident_codec_plugin_capacity == 0
       ? 8u
       : pcl_resident_codec_plugin_capacity * 2u;
-  next = (pcl_plugin_handle_t**)realloc(
+  next = (pcl_plugin_handle_t**)pcl_realloc(
       pcl_resident_codec_plugins, next_capacity * sizeof(*next));
   if (!next) return 0;
 
@@ -59,7 +60,7 @@ static void close_library(pcl_plugin_handle_t* handle) {
     dlclose(handle->library);
   }
 #endif
-  free(handle);
+  pcl_free(handle);
 }
 
 static pcl_plugin_handle_t* open_library(const char* path) {
@@ -67,7 +68,7 @@ static pcl_plugin_handle_t* open_library(const char* path) {
 
   if (!path) return NULL;
 
-  handle = (pcl_plugin_handle_t*)calloc(1, sizeof(pcl_plugin_handle_t));
+  handle = (pcl_plugin_handle_t*)pcl_calloc(1, sizeof(pcl_plugin_handle_t));
   if (!handle) return NULL;
 
 #ifdef _WIN32
@@ -76,7 +77,7 @@ static pcl_plugin_handle_t* open_library(const char* path) {
   handle->library = dlopen(path, RTLD_NOW | RTLD_LOCAL);
 #endif
   if (!handle->library) {
-    free(handle);
+    pcl_free(handle);
     return NULL;
   }
 
@@ -177,7 +178,7 @@ pcl_status_t pcl_codec_registry_load_plugins_from_env(
   value = getenv(env_var);
   if (!value || value[0] == '\0') return PCL_OK;
 
-  copy = (char*)malloc(strlen(value) + 1u);
+  copy = (char*)pcl_alloc(strlen(value) + 1u);
   if (!copy) return PCL_ERR_NOMEM;
   strcpy(copy, value);
 
@@ -190,7 +191,7 @@ pcl_status_t pcl_codec_registry_load_plugins_from_env(
       status = pcl_codec_registry_load_plugins_from_paths(
           registry, (const char* const*)&token_start, 1u);
       if (status != PCL_OK) {
-        free(copy);
+        pcl_free(copy);
         return status;
       }
       if (saved == '\0') break;
@@ -199,7 +200,7 @@ pcl_status_t pcl_codec_registry_load_plugins_from_env(
     ++cursor;
   }
 
-  free(copy);
+  pcl_free(copy);
   return PCL_OK;
 }
 

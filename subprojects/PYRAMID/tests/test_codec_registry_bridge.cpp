@@ -125,21 +125,21 @@ TEST(CodecRegistryBridge, TwoComponentCodecPluginsCoexistAndDispatchBySchema) {
   od.creation_time = 3.0;
 
   const std::string od_bytes =
-      encodeViaBridge<pyramid_ObjectDetail_c>(
+      encodeViaBridge<pyramid_data_model_tactical_ObjectDetail_c>(
           registry, "application/json", "ObjectDetail", od,
-          [](const types::ObjectDetail& v, pyramid_ObjectDetail_c* cs) {
+          [](const types::ObjectDetail& v, pyramid_data_model_tactical_ObjectDetail_c* cs) {
             pyramid::cabi::to_c(v, cs);
           },
-          [](pyramid_ObjectDetail_c* cs) { pyramid_ObjectDetail_c_free(cs); });
+          [](pyramid_data_model_tactical_ObjectDetail_c* cs) { pyramid_data_model_tactical_ObjectDetail_c_free(cs); });
   ASSERT_FALSE(od_bytes.empty());
 
   types::ObjectDetail od_rt{};
-  ASSERT_TRUE(decodeViaBridge<pyramid_ObjectDetail_c>(
+  ASSERT_TRUE(decodeViaBridge<pyramid_data_model_tactical_ObjectDetail_c>(
       registry, "application/json", "ObjectDetail", od_bytes, &od_rt,
-      [](const pyramid_ObjectDetail_c* cs, types::ObjectDetail& v) {
+      [](const pyramid_data_model_tactical_ObjectDetail_c* cs, types::ObjectDetail& v) {
         pyramid::cabi::from_c(cs, v);
       },
-      [](pyramid_ObjectDetail_c* cs) { pyramid_ObjectDetail_c_free(cs); }));
+      [](pyramid_data_model_tactical_ObjectDetail_c* cs) { pyramid_data_model_tactical_ObjectDetail_c_free(cs); }));
   EXPECT_EQ(od_rt.id, "obj-7");
   EXPECT_EQ(od_rt.identity, types::StandardIdentity::Hostile);
   EXPECT_EQ(od_rt.dimension, types::BattleDimension::Air);
@@ -151,21 +151,21 @@ TEST(CodecRegistryBridge, TwoComponentCodecPluginsCoexistAndDispatchBySchema) {
   cap.supports_replanning = true;
 
   const std::string cap_bytes =
-      encodeViaBridge<pyramid_Capabilities_c>(
+      encodeViaBridge<pyramid_data_model_autonomy_Capabilities_c>(
           registry, "application/json", "Capabilities", cap,
-          [](const types::Capabilities& v, pyramid_Capabilities_c* cs) {
+          [](const types::Capabilities& v, pyramid_data_model_autonomy_Capabilities_c* cs) {
             pyramid::cabi::to_c(v, cs);
           },
-          [](pyramid_Capabilities_c* cs) { pyramid_Capabilities_c_free(cs); });
+          [](pyramid_data_model_autonomy_Capabilities_c* cs) { pyramid_data_model_autonomy_Capabilities_c_free(cs); });
   ASSERT_FALSE(cap_bytes.empty());
 
   types::Capabilities cap_rt{};
-  ASSERT_TRUE(decodeViaBridge<pyramid_Capabilities_c>(
+  ASSERT_TRUE(decodeViaBridge<pyramid_data_model_autonomy_Capabilities_c>(
       registry, "application/json", "Capabilities", cap_bytes, &cap_rt,
-      [](const pyramid_Capabilities_c* cs, types::Capabilities& v) {
+      [](const pyramid_data_model_autonomy_Capabilities_c* cs, types::Capabilities& v) {
         pyramid::cabi::from_c(cs, v);
       },
-      [](pyramid_Capabilities_c* cs) { pyramid_Capabilities_c_free(cs); }));
+      [](pyramid_data_model_autonomy_Capabilities_c* cs) { pyramid_data_model_autonomy_Capabilities_c_free(cs); }));
   EXPECT_EQ(cap_rt.backend_id, "ame-1");
   EXPECT_TRUE(cap_rt.supports_planning_requirements);
   EXPECT_TRUE(cap_rt.supports_replanning);

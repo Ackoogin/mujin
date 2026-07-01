@@ -15,6 +15,7 @@
 #include "pcl_internal.h"
 #include "pcl/pcl_container.h"
 #include "pcl/pcl_executor.h"
+#include "pcl/pcl_alloc.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -716,7 +717,7 @@ static pcl_status_t pcl_shm_pending_remove(pcl_shared_memory_transport_t* ctx,
       *pp = node->next;
       if (callback) *callback = node->callback;
       if (user_data) *user_data = node->user_data;
-      free(node);
+      pcl_free(node);
       pcl_shm_pending_lock_release(ctx);
       return PCL_OK;
     }
@@ -736,7 +737,7 @@ static void pcl_shm_pending_clear(pcl_shared_memory_transport_t* ctx) {
 
   while (node) {
     pcl_shm_pending_request_t* next = node->next;
-    free(node);
+    pcl_free(node);
     node = next;
   }
 }
@@ -777,7 +778,7 @@ static pcl_status_t pcl_shm_pending_stream_remove(
       *pp = node->next;
       if (callback)  *callback  = node->callback;
       if (user_data) *user_data = node->user_data;
-      free(node);
+      pcl_free(node);
       pcl_shm_pending_lock_release(ctx);
       return PCL_OK;
     }
@@ -803,7 +804,7 @@ static void pcl_shm_pending_stream_clear(pcl_shared_memory_transport_t* ctx) {
       pcl_msg_t empty = {0};
       node->callback(&empty, true, PCL_ERR_CANCELLED, node->user_data);
     }
-    free(node);
+    pcl_free(node);
     node = next;
   }
 }
@@ -871,7 +872,7 @@ static void pcl_shm_active_streams_abort(pcl_shared_memory_transport_t* ctx) {
       node->stream_ctx->transport     = NULL;
       node->stream_ctx->transport_ctx = NULL;
     }
-    free(node);
+    pcl_free(node);
     node = next;
   }
 }
@@ -910,7 +911,7 @@ static void pcl_shm_stream_trampoline_cb(const pcl_msg_t* msg, void* user_data) 
   if (tr->callback) {
     tr->callback(delivered, tr->end != 0, tr->status, tr->user_data);
   }
-  free(tr);
+  pcl_free(tr);
 }
 
 static pcl_status_t pcl_shm_pending_stream_complete(
@@ -929,7 +930,7 @@ static pcl_status_t pcl_shm_pending_stream_complete(
     return PCL_ERR_NOT_FOUND;
   }
 
-  tr = (pcl_shm_stream_trampoline_t*)calloc(1, sizeof(*tr));
+  tr = (pcl_shm_stream_trampoline_t*)pcl_calloc(1, sizeof(*tr));
   if (!tr) return PCL_ERR_NOMEM;
   tr->callback = callback;
   tr->user_data = user_data;
@@ -940,7 +941,7 @@ static pcl_status_t pcl_shm_pending_stream_complete(
   rc = pcl_executor_post_response_msg(ctx->executor,
                                       pcl_shm_stream_trampoline_cb,
                                       tr, &empty);
-  if (rc != PCL_OK) free(tr);
+  if (rc != PCL_OK) pcl_free(tr);
   return rc;
 }
 
@@ -1162,7 +1163,7 @@ static pcl_status_t pcl_shm_respond(void*              adapter_ctx,
   if (!target) return PCL_ERR_INVALID;
 
   rc = pcl_shm_send_response(ctx, target, response);
-  free(target);
+  pcl_free(target);
   svc_ctx->transport_ctx = NULL;
   return rc;
 }
@@ -1185,7 +1186,7 @@ static pcl_status_t pcl_shm_invoke_async(void*            adapter_ctx,
   if (request->size > 0u && !request->data) return PCL_ERR_INVALID;
   if (request->size > PCL_SHM_MAX_PAYLOAD) return PCL_ERR_NOMEM;
 
-  pending = (pcl_shm_pending_request_t*)calloc(1, sizeof(*pending));
+  pending = (pcl_shm_pending_request_t*)pcl_calloc(1, sizeof(*pending));
   if (!pending) return PCL_ERR_NOMEM;
 
   pcl_shm_pending_lock_acquire(ctx);
@@ -1258,7 +1259,7 @@ static pcl_status_t pcl_shm_invoke_stream(void*               adapter_ctx,
   if (request->size > 0u && !request->data) return PCL_ERR_INVALID;
   if (request->size > PCL_SHM_MAX_PAYLOAD) return PCL_ERR_NOMEM;
 
-  pending = (pcl_shm_pending_stream_t*)calloc(1, sizeof(*pending));
+  pending = (pcl_shm_pending_stream_t*)pcl_calloc(1, sizeof(*pending));
   if (!pending) return PCL_ERR_NOMEM;
 
   pcl_shm_pending_lock_acquire(ctx);
@@ -1312,7 +1313,7 @@ static pcl_status_t pcl_shm_invoke_stream(void*               adapter_ctx,
   }
 
   if (stream_handle) {
-    handle = (pcl_shm_stream_client_handle_t*)calloc(1, sizeof(*handle));
+    handle = (pcl_shm_stream_client_handle_t*)pcl_calloc(1, sizeof(*handle));
     if (handle) {
       handle->owner  = ctx;
       handle->seq_id = seq_id;
@@ -1389,7 +1390,7 @@ static pcl_status_t pcl_shm_stream_end(void*        adapter_ctx,
   rc = pcl_shm_stream_send_frame(ctx, target,
                                  PCL_SHM_FRAME_STREAM_END, NULL,
                                  status);
-  free(target);
+  pcl_free(target);
   return rc;
 }
 
@@ -1474,20 +1475,20 @@ static void pcl_shm_gateway_sub_cb(pcl_container_t* c,
 
   service_len = pcl_shm_read_u16_be(p); p += 2u;
   if ((size_t)(end - p) < service_len + 2u) return;
-  service_name = (char*)malloc((size_t)service_len + 1u);
+  service_name = (char*)pcl_alloc((size_t)service_len + 1u);
   if (!service_name) return;
   memcpy(service_name, p, service_len);
   service_name[service_len] = '\0';     p += service_len;
 
   type_len = pcl_shm_read_u16_be(p);    p += 2u;
   if ((size_t)(end - p) < type_len + 4u) {
-    free(service_name);
+    pcl_free(service_name);
     return;
   }
   if (type_len > 0u) {
-    request_type = (char*)malloc((size_t)type_len + 1u);
+    request_type = (char*)pcl_alloc((size_t)type_len + 1u);
     if (!request_type) {
-      free(service_name);
+      pcl_free(service_name);
       return;
     }
     memcpy(request_type, p, type_len);
@@ -1497,33 +1498,33 @@ static void pcl_shm_gateway_sub_cb(pcl_container_t* c,
 
   req_len = pcl_shm_read_u32_be(p);     p += 4u;
   if ((size_t)(end - p) < req_len) {
-    free(request_type);
-    free(service_name);
+    pcl_free(request_type);
+    pcl_free(service_name);
     return;
   }
 
   service_port = pcl_shm_find_remote_service(ctx->executor, service_name, source_id);
   if (!service_port) {
     memset(&empty_response, 0, sizeof(empty_response));
-    target = (pcl_shm_response_target_t*)calloc(1, sizeof(*target));
+    target = (pcl_shm_response_target_t*)pcl_calloc(1, sizeof(*target));
     if (target) {
       target->seq_id = seq_id;
       snprintf(target->requester_id, sizeof(target->requester_id), "%s", source_id);
       pcl_shm_send_response(ctx, target, &empty_response);
-      free(target);
+      pcl_free(target);
     }
-    free(request_type);
-    free(service_name);
+    pcl_free(request_type);
+    pcl_free(service_name);
     return;
   }
 
-  svc_ctx = (pcl_svc_context_t*)calloc(1, sizeof(*svc_ctx));
-  target = (pcl_shm_response_target_t*)calloc(1, sizeof(*target));
+  svc_ctx = (pcl_svc_context_t*)pcl_calloc(1, sizeof(*svc_ctx));
+  target = (pcl_shm_response_target_t*)pcl_calloc(1, sizeof(*target));
   if (!svc_ctx || !target) {
-    free(svc_ctx);
-    free(target);
-    free(request_type);
-    free(service_name);
+    pcl_free(svc_ctx);
+    pcl_free(target);
+    pcl_free(request_type);
+    pcl_free(service_name);
     return;
   }
 
@@ -1548,17 +1549,17 @@ static void pcl_shm_gateway_sub_cb(pcl_container_t* c,
                                  service_port->svc_user_data);
   if (rc == PCL_OK) {
     pcl_shm_send_response(ctx, target, &response);
-    free(target);
-    free(svc_ctx);
+    pcl_free(target);
+    pcl_free(svc_ctx);
   } else if (rc != PCL_PENDING) {
     memset(&empty_response, 0, sizeof(empty_response));
     pcl_shm_send_response(ctx, target, &empty_response);
-    free(target);
-    free(svc_ctx);
+    pcl_free(target);
+    pcl_free(svc_ctx);
   }
 
-  free(request_type);
-  free(service_name);
+  pcl_free(request_type);
+  pcl_free(service_name);
 }
 
 static void pcl_shm_gateway_stream_sub_cb(pcl_container_t* c,
@@ -1597,20 +1598,20 @@ static void pcl_shm_gateway_stream_sub_cb(pcl_container_t* c,
 
   service_len = pcl_shm_read_u16_be(p); p += 2u;
   if ((size_t)(end - p) < service_len + 2u) return;
-  service_name = (char*)malloc((size_t)service_len + 1u);
+  service_name = (char*)pcl_alloc((size_t)service_len + 1u);
   if (!service_name) return;
   memcpy(service_name, p, service_len);
   service_name[service_len] = '\0';     p += service_len;
 
   type_len = pcl_shm_read_u16_be(p);    p += 2u;
   if ((size_t)(end - p) < type_len + 4u) {
-    free(service_name);
+    pcl_free(service_name);
     return;
   }
   if (type_len > 0u) {
-    request_type = (char*)malloc((size_t)type_len + 1u);
+    request_type = (char*)pcl_alloc((size_t)type_len + 1u);
     if (!request_type) {
-      free(service_name);
+      pcl_free(service_name);
       return;
     }
     memcpy(request_type, p, type_len);
@@ -1620,8 +1621,8 @@ static void pcl_shm_gateway_stream_sub_cb(pcl_container_t* c,
 
   req_len = pcl_shm_read_u32_be(p);     p += 4u;
   if ((size_t)(end - p) < req_len) {
-    free(request_type);
-    free(service_name);
+    pcl_free(request_type);
+    pcl_free(service_name);
     return;
   }
 
@@ -1637,18 +1638,18 @@ static void pcl_shm_gateway_stream_sub_cb(pcl_container_t* c,
     pcl_shm_stream_send_frame(ctx, &end_target,
                               PCL_SHM_FRAME_STREAM_END, NULL,
                               PCL_ERR_NOT_FOUND);
-    free(request_type);
-    free(service_name);
+    pcl_free(request_type);
+    pcl_free(service_name);
     return;
   }
 
-  target = (pcl_shm_stream_send_target_t*)calloc(1, sizeof(*target));
-  stream_ctx = (pcl_stream_context_t*)calloc(1, sizeof(*stream_ctx));
+  target = (pcl_shm_stream_send_target_t*)pcl_calloc(1, sizeof(*target));
+  stream_ctx = (pcl_stream_context_t*)pcl_calloc(1, sizeof(*stream_ctx));
   if (!target || !stream_ctx) {
-    free(target);
-    free(stream_ctx);
-    free(request_type);
-    free(service_name);
+    pcl_free(target);
+    pcl_free(stream_ctx);
+    pcl_free(request_type);
+    pcl_free(service_name);
     return;
   }
   target->owner      = ctx;
@@ -1679,12 +1680,12 @@ static void pcl_shm_gateway_stream_sub_cb(pcl_container_t* c,
     pcl_shm_stream_send_frame(ctx, target,
                               PCL_SHM_FRAME_STREAM_END, NULL,
                               rc == PCL_OK ? PCL_OK : rc);
-    free(target);
-    free(stream_ctx);
+    pcl_free(target);
+    pcl_free(stream_ctx);
   }
 
-  free(request_type);
-  free(service_name);
+  pcl_free(request_type);
+  pcl_free(service_name);
 }
 
 static pcl_status_t pcl_shm_gateway_on_configure(pcl_container_t* c, void* ud) {
@@ -1761,7 +1762,7 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
     type_len = (uint16_t)raw_type_len;
     payload_size = 4u + 2u + source_len + 2u + service_len +
                    2u + type_len + 4u + frame->data_size;
-    payload = (uint8_t*)malloc(payload_size);
+    payload = (uint8_t*)pcl_alloc(payload_size);
 
     if (!payload) return PCL_ERR_NOMEM;
     pcl_shm_write_u32_be(payload + off, frame->seq_id);      off += 4u;
@@ -1782,7 +1783,7 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
                                            frame->source_id,
                                            PCL_SHM_INTERNAL_TOPIC_SVC_REQ,
                                            &msg);
-    free(payload);
+    pcl_free(payload);
     return rc;
   }
 
@@ -1829,7 +1830,7 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
     type_len = (uint16_t)raw_type_len;
     payload_size = 4u + 2u + source_len + 2u + service_len +
                    2u + type_len + 4u + frame->data_size;
-    payload = (uint8_t*)malloc(payload_size);
+    payload = (uint8_t*)pcl_alloc(payload_size);
     if (!payload) return PCL_ERR_NOMEM;
     pcl_shm_write_u32_be(payload + off, frame->seq_id);      off += 4u;
     pcl_shm_write_u16_be(payload + off, source_len);         off += 2u;
@@ -1849,7 +1850,7 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
                                            frame->source_id,
                                            PCL_SHM_INTERNAL_TOPIC_STREAM_REQ,
                                            &msg);
-    free(payload);
+    pcl_free(payload);
     return rc;
   }
 
@@ -1875,7 +1876,7 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
                                       &callback, &user_data) != PCL_OK) {
       return PCL_ERR_NOT_FOUND;
     }
-    tr = (pcl_shm_stream_trampoline_t*)calloc(1, sizeof(*tr));
+    tr = (pcl_shm_stream_trampoline_t*)pcl_calloc(1, sizeof(*tr));
     if (!tr) return PCL_ERR_NOMEM;
     tr->callback = callback;
     tr->user_data = user_data;
@@ -1904,7 +1905,7 @@ static pcl_status_t pcl_shm_handle_frame(pcl_shared_memory_transport_t* ctx,
                                       &callback, &user_data) != PCL_OK) {
       return PCL_ERR_NOT_FOUND;
     }
-    tr = (pcl_shm_stream_trampoline_t*)calloc(1, sizeof(*tr));
+    tr = (pcl_shm_stream_trampoline_t*)pcl_calloc(1, sizeof(*tr));
     if (!tr) return PCL_ERR_NOMEM;
     tr->callback = callback;
     tr->user_data = user_data;
@@ -1978,7 +1979,7 @@ pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
     return NULL;
   }
 
-  ctx = (pcl_shared_memory_transport_t*)calloc(1, sizeof(*ctx));
+  ctx = (pcl_shared_memory_transport_t*)pcl_calloc(1, sizeof(*ctx));
   if (!ctx) return NULL;
 
   snprintf(ctx->bus_name, sizeof(ctx->bus_name), "%s", bus_name);
@@ -1994,14 +1995,14 @@ pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
   if (rc != PCL_OK) {
     pcl_shm_platform_close(ctx, 0);
     pcl_shm_pending_lock_destroy(ctx);
-    free(ctx);
+    pcl_free(ctx);
     return NULL;
   }
 
   if (pcl_shm_bus_lock(ctx) != PCL_OK) {
     pcl_shm_platform_close(ctx, 0);
     pcl_shm_pending_lock_destroy(ctx);
-    free(ctx);
+    pcl_free(ctx);
     return NULL;
   }
 
@@ -2017,7 +2018,7 @@ pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
       pcl_shm_bus_unlock(ctx);
       pcl_shm_platform_close(ctx, 0);
       pcl_shm_pending_lock_destroy(ctx);
-      free(ctx);
+      pcl_free(ctx);
       return NULL;
     }
   }
@@ -2041,7 +2042,7 @@ pcl_shared_memory_transport_t* pcl_shared_memory_transport_create(
   if (ctx->slot_index >= PCL_SHM_MAX_PARTICIPANTS) {
     pcl_shm_platform_close(ctx, 0);
     pcl_shm_pending_lock_destroy(ctx);
-    free(ctx);
+    pcl_free(ctx);
     return NULL;
   }
 
@@ -2201,5 +2202,5 @@ void pcl_shared_memory_transport_destroy(pcl_shared_memory_transport_t* ctx) {
   pcl_shm_pending_stream_clear(ctx);
   pcl_shm_platform_close(ctx, unlink_objects);
   pcl_shm_pending_lock_destroy(ctx);
-  free(ctx);
+  pcl_free(ctx);
 }

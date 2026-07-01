@@ -552,6 +552,7 @@ class CabiMarshalGenerator:
             f.write('// the C struct; from_c deep-copies into native values; _free releases\n')
             f.write('// everything allocated for the C struct. One full copy per direction.\n\n')
             f.write(f'#include "{stem}_cabi_marshal.hpp"\n')
+            f.write('#include <pcl/pcl_alloc.h>\n')
             f.write('#include <cstdlib>\n')
             f.write('#include <cstring>\n')
             f.write('#include <string>\n')
@@ -564,12 +565,12 @@ class CabiMarshalGenerator:
             f.write('    return;\n')
             f.write('  }\n')
             f.write('  out.len = static_cast<uint32_t>(in.size());\n')
-            f.write('  out.ptr = static_cast<const char*>(std::malloc(out.len));\n')
+            f.write('  out.ptr = static_cast<const char*>(pcl_alloc(out.len));\n')
             f.write('  std::memcpy(const_cast<char*>(out.ptr), in.data(), out.len);\n')
             f.write('}\n\n')
             f.write('void free_str(pyramid_str_t& s) {\n')
             f.write('  if (s.ptr) {\n')
-            f.write('    std::free(const_cast<char*>(s.ptr));\n')
+            f.write('    pcl_free(const_cast<char*>(s.ptr));\n')
             f.write('    s.ptr = nullptr;\n')
             f.write('    s.len = 0;\n')
             f.write('  }\n')
@@ -615,7 +616,7 @@ class CabiMarshalGenerator:
             f.write(f'{indent}  if (count > 0) {{\n')
             f.write(
                 f'{indent}    auto* arr = static_cast<{member.c_type}*>'
-                f'(std::malloc(count * sizeof({member.c_type})));\n')
+                f'(pcl_alloc(count * sizeof({member.c_type})));\n')
             f.write(f'{indent}    for (size_t i = 0; i < count; ++i) {{\n')
             f.write(f'{indent}      arr[i] = in.{n}[i];\n')
             f.write(f'{indent}    }}\n')
@@ -630,7 +631,7 @@ class CabiMarshalGenerator:
             f.write(f'{indent}  if (count > 0) {{\n')
             f.write(
                 f'{indent}    auto* arr = static_cast<uint8_t*>'
-                f'(std::malloc(count * sizeof(uint8_t)));\n')
+                f'(pcl_alloc(count * sizeof(uint8_t)));\n')
             f.write(f'{indent}    for (size_t i = 0; i < count; ++i) {{\n')
             f.write(
                 f'{indent}      arr[i] = in.{n}[i] ? 1u : 0u;\n')
@@ -646,7 +647,7 @@ class CabiMarshalGenerator:
             f.write(f'{indent}  if (count > 0) {{\n')
             f.write(
                 f'{indent}    auto* arr = static_cast<pyramid_str_t*>'
-                f'(std::malloc(count * sizeof(pyramid_str_t)));\n')
+                f'(pcl_alloc(count * sizeof(pyramid_str_t)));\n')
             f.write(f'{indent}    for (size_t i = 0; i < count; ++i) {{\n')
             f.write(f'{indent}      dup_str(arr[i], in.{n}[i]);\n')
             f.write(f'{indent}    }}\n')
@@ -661,7 +662,7 @@ class CabiMarshalGenerator:
             f.write(f'{indent}  if (count > 0) {{\n')
             f.write(
                 f'{indent}    auto* arr = static_cast<int32_t*>'
-                f'(std::malloc(count * sizeof(int32_t)));\n')
+                f'(pcl_alloc(count * sizeof(int32_t)));\n')
             f.write(f'{indent}    for (size_t i = 0; i < count; ++i) {{\n')
             f.write(
                 f'{indent}      arr[i] = static_cast<int32_t>(in.{n}[i]);\n')
@@ -678,7 +679,7 @@ class CabiMarshalGenerator:
             f.write(f'{indent}  if (count > 0) {{\n')
             f.write(
                 f'{indent}    auto* arr = static_cast<{elem_c}*>'
-                f'(std::malloc(count * sizeof({elem_c})));\n')
+                f'(pcl_alloc(count * sizeof({elem_c})));\n')
             f.write(f'{indent}    for (size_t i = 0; i < count; ++i) {{\n')
             f.write(f'{indent}      to_c(in.{n}[i], &arr[i]);\n')
             f.write(f'{indent}    }}\n')
@@ -883,7 +884,7 @@ class CabiMarshalGenerator:
                     f'{indent}    {cs}_free(&arr[i]);\n')
                 f.write(f'{indent}  }}\n')
             f.write(
-                f'{indent}  std::free(const_cast<void*>({ptr}->{n}.ptr));\n')
+                f'{indent}  pcl_free(const_cast<void*>({ptr}->{n}.ptr));\n')
             f.write(f'{indent}  {ptr}->{n}.ptr = nullptr;\n')
             f.write(f'{indent}  {ptr}->{n}.len = 0;\n')
             f.write(f'{indent}}}\n')

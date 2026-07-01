@@ -54,8 +54,13 @@ echo "[ada-pcl] Building GNAT-compatible PCL archives in $OUT_DIR"
 
 CFLAGS=(-std=c11 -O2 -I"$ROOT_DIR/include" -I"$ROOT_DIR/src")
 
+"$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_alloc.c"                   -o "$OBJ_DIR/pcl_alloc.o"
+"$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_capabilities.c"            -o "$OBJ_DIR/pcl_capabilities.o"
+"$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_codec_registry.c"          -o "$OBJ_DIR/pcl_codec_registry.o"
 "$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_container.c"               -o "$OBJ_DIR/pcl_container.o"
 "$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_executor.c"                -o "$OBJ_DIR/pcl_executor.o"
+"$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_plugin_loader.c"           -o "$OBJ_DIR/pcl_plugin_loader.o"
+"$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_transport_routing.c"       -o "$OBJ_DIR/pcl_transport_routing.o"
 "$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_log.c"                     -o "$OBJ_DIR/pcl_log.o"
 "$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_bridge.c"                  -o "$OBJ_DIR/pcl_bridge.o"
 "$CC" "${CFLAGS[@]}" -c "$ROOT_DIR/src/pcl_transport_socket.c"        -o "$OBJ_DIR/pcl_transport_socket.o"
@@ -65,8 +70,13 @@ CFLAGS=(-std=c11 -O2 -I"$ROOT_DIR/include" -I"$ROOT_DIR/src")
 rm -f "$CORE_TMP" "$SOCKET_TMP" "$UDP_TMP" "$SHMEM_TMP"
 
 "$AR" rcs "$CORE_TMP" \
+  "$OBJ_DIR/pcl_alloc.o" \
+  "$OBJ_DIR/pcl_capabilities.o" \
+  "$OBJ_DIR/pcl_codec_registry.o" \
   "$OBJ_DIR/pcl_container.o" \
   "$OBJ_DIR/pcl_executor.o" \
+  "$OBJ_DIR/pcl_plugin_loader.o" \
+  "$OBJ_DIR/pcl_transport_routing.o" \
   "$OBJ_DIR/pcl_log.o" \
   "$OBJ_DIR/pcl_bridge.o"
 

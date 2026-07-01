@@ -20,25 +20,45 @@ extern "C" {
 #include "pcl_internal.h"
 }
 
-#include <unistd.h>
+#ifdef _WIN32
+#  define WIN32_LEAN_AND_MEAN
+#  include <windows.h>
+#else
+#  include <unistd.h>
+#endif
 
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <string>
 
 namespace {
 
-// Write a manifest to a unique temp path and return it.
-std::string WriteManifest(const std::string& body) {
+// Generate a unique temp file path (the file itself need not exist yet).
+std::string UniqueTempPath() {
+#ifdef _WIN32
+  char temp_dir[MAX_PATH];
+  char file_name[MAX_PATH];
+  GetTempPathA(MAX_PATH, temp_dir);
+  GetTempFileNameA(temp_dir, "pcr", 0, file_name);
+  return file_name;
+#else
   char path[] = "/tmp/pcl_routing_XXXXXX";
   int fd = mkstemp(path);
   EXPECT_NE(fd, -1);
-  if (fd != -1) {
-    EXPECT_EQ(write(fd, body.data(), body.size()),
-              static_cast<ssize_t>(body.size()));
-    close(fd);
-  }
+  if (fd != -1) close(fd);
   return std::string(path);
+#endif
+}
+
+// Write a manifest to a unique temp path and return it.
+std::string WriteManifest(const std::string& body) {
+  const std::string path = UniqueTempPath();
+  std::ofstream out(path, std::ios::binary | std::ios::trunc);
+  EXPECT_TRUE(out.good());
+  out.write(body.data(), static_cast<std::streamsize>(body.size()));
+  out.close();
+  return path;
 }
 
 using CountFn = uint32_t (*)();

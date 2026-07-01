@@ -72,43 +72,37 @@ if [[ "$FORCE_REBUILD" == "--force" ]]; then
         "$OBJ_DIR"/*.o
 fi
 
+# NOTE on scope: this archive exists only so Ada can build/tear down the
+# C-ABI structs that cross a codec plugin's pcl_codec_t vtable (to_c/from_c/
+# _c_free, from *_cabi_marshal.cpp). Ada never calls the wire-codec functions
+# (toJson/fromJson/toBinary/fromBinary) directly -- it has its own independent,
+# pure-Ada JSON codec (pyramid-data_model-*-types_codec.ads), and all actual
+# wire encode/decode goes through a loaded codec plugin DLL. The Ada
+# flatbuffers/ada/*-flatbuffers_codec.adb bridge (the one thing that did call
+# into the C++ wire codec, for a JSON<->FlatBuffers round-trip) is unused by
+# every real client -- only test_generated_bindings.adb called it, and that
+# call has been removed -- so the wire-codec sources are deliberately not
+# compiled here.
 GEN_DIR="$BUILD_DIR/generated/pyramid_cpp_bindings"
-GEN_FB_DIR="$GEN_DIR/flatbuffers/cpp"
-BUILD_FB_DIR="$BUILD_DIR/generated/flatbuffers/cpp"
-FLATBUFFERS_INCLUDE="$BUILD_DIR/_deps/flatbuffers-src/include"
-NLOHMANN_INCLUDE="${NLOHMANN_JSON_INCLUDE:-$BUILD_DIR/_deps/nlohmann_json-src/include}"
-if [[ ! -d "$NLOHMANN_INCLUDE" ]]; then
-  NLOHMANN_INCLUDE="$PYRAMID_ROOT/core/external"
-fi
-
-if [[ ! -d "$BUILD_FB_DIR" ]]; then
-  if ! command -v cmake >/dev/null 2>&1; then
-    echo "[ada-pyramid] ERROR: missing flatc-generated headers and cmake not available" >&2
-    exit 1
-  fi
-  echo "[ada-pyramid] Refreshing flatc-generated headers..."
-  cmake --build "$BUILD_DIR" --config Release --target pyramid_flatbuffers_codegen -j4
-fi
+PCL_INCLUDE="$PYRAMID_ROOT/../PCL/include"
+CORE_EXTERNAL_INCLUDE="$PYRAMID_ROOT/core/external"
 
 CXXFLAGS=(
   -std=c++17 -O2
   -I"$GEN_DIR"
-  -I"$GEN_FB_DIR"
-  -I"$BUILD_FB_DIR"
-  -I"$FLATBUFFERS_INCLUDE"
-  -I"$NLOHMANN_INCLUDE"
+  -I"$CORE_EXTERNAL_INCLUDE"
+  -I"$PCL_INCLUDE"
 )
 
 shopt -s nullglob
 sources=(
-  "$GEN_DIR"/pyramid_data_model_*_codec.cpp
-  "$GEN_FB_DIR"/*_flatbuffers_codec.cpp
+  "$GEN_DIR"/pyramid_data_model_*_cabi_marshal.cpp
+  "$GEN_DIR"/pyramid_components_*_cabi_marshal.cpp
 )
 deps=(
   "${sources[@]}"
-  "$GEN_DIR"/pyramid_data_model_*_codec.hpp
-  "$GEN_FB_DIR"/*_flatbuffers_codec.hpp
-  "$BUILD_FB_DIR"/*_generated.h
+  "$GEN_DIR"/pyramid_data_model_*_cabi_marshal.hpp
+  "$GEN_DIR"/pyramid_components_*_cabi_marshal.hpp
 )
 shopt -u nullglob
 

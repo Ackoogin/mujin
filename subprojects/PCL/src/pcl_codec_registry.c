@@ -1,6 +1,7 @@
 /// \file pcl_codec_registry.c
 /// \brief PCL codec registry implementation.
 #include "pcl/pcl_codec_registry.h"
+#include "pcl/pcl_alloc.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -66,7 +67,7 @@ static pcl_status_t reserve_codec_slots(pcl_codec_registry_t* registry,
   }
 
   next_size = (size_t)next_capacity * sizeof(*registry->codecs);
-  next_codecs = (const pcl_codec_t**)realloc(registry->codecs, next_size);
+  next_codecs = (const pcl_codec_t**)pcl_realloc(registry->codecs, next_size);
   if (!next_codecs) return PCL_ERR_NOMEM;
 
   registry->codecs = next_codecs;
@@ -75,13 +76,13 @@ static pcl_status_t reserve_codec_slots(pcl_codec_registry_t* registry,
 }
 
 pcl_codec_registry_t* pcl_codec_registry_create(void) {
-  return (pcl_codec_registry_t*)calloc(1, sizeof(pcl_codec_registry_t));
+  return (pcl_codec_registry_t*)pcl_calloc(1, sizeof(pcl_codec_registry_t));
 }
 
 void pcl_codec_registry_destroy(pcl_codec_registry_t* registry) {
   if (!registry) return;
-  free(registry->codecs);
-  free(registry);
+  pcl_free(registry->codecs);
+  pcl_free(registry);
 }
 
 pcl_codec_registry_t* pcl_codec_registry_default(void) {

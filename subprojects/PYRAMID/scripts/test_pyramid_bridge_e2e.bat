@@ -93,6 +93,40 @@ if not exist "%BRIDGE_BIN%" (
     exit /b 0
 )
 
+REM Plugin-only clients (tactical_objects_app, ame_backend_stub,
+REM pyramid_bridge_evidence_client, pyramid_bridge_main) fail closed without a
+REM registered codec: discover the codec plugin DLLs next to the C++ binaries
+REM and thread them through PYRAMID_CODEC_PLUGINS (";"-separated on Windows)
+REM unless the caller already set it. Derive the plugin directory from
+REM APP_BIN's own path (...\subprojects\PYRAMID\tactical_objects\<Config>\
+REM tactical_objects_app.exe -> ...\subprojects\PYRAMID\<Config>) rather than
+REM BUILD_DIR/BUILD_CONFIG, which are not reliably set by the ctest driver.
+if not defined PYRAMID_CODEC_PLUGINS (
+    for %%F in ("%APP_BIN%") do set "_APP_DIR=%%~dpF"
+    for %%D in ("!_APP_DIR!.") do set "_APP_CONFIG=%%~nxD"
+    for %%D in ("!_APP_DIR!..\..") do set "_PYRAMID_BUILD_DIR=%%~fD"
+    set "PLUGIN_DIR=!_PYRAMID_BUILD_DIR!\!_APP_CONFIG!"
+    set "_CODEC_PLUGINS="
+    for %%P in (
+        pyramid_codec_json_tactical_objects.dll
+        pyramid_codec_flatbuffers_tactical_objects.dll
+        pyramid_codec_json_autonomy_backend.dll
+        pyramid_codec_flatbuffers_autonomy_backend.dll
+        pyramid_codec_json_sensor_data_interpretation.dll
+        pyramid_codec_flatbuffers_sensor_data_interpretation.dll
+    ) do (
+        if exist "!PLUGIN_DIR!\%%P" (
+            if defined _CODEC_PLUGINS (
+                set "_CODEC_PLUGINS=!_CODEC_PLUGINS!;!PLUGIN_DIR!\%%P"
+            ) else (
+                set "_CODEC_PLUGINS=!PLUGIN_DIR!\%%P"
+            )
+        )
+    )
+    set "PYRAMID_CODEC_PLUGINS=!_CODEC_PLUGINS!"
+)
+echo [driver] PYRAMID_CODEC_PLUGINS=%PYRAMID_CODEC_PLUGINS%
+
 set "PORT_FILE=%TEMP%\tobj_bridge_e2e_%RANDOM%.tmp"
 set "RC_FILE=%TEMP%\stub_rc_%RANDOM%.txt"
 set "STUB_WRAPPER=%TEMP%\run_stub_%RANDOM%.bat"

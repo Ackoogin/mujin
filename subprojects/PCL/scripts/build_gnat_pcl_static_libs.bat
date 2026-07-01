@@ -63,8 +63,13 @@ echo [ada-pcl] Building GNAT-compatible PCL archives in "%OUT_DIR%"
 
 set "CFLAGS=-std=c11 -O2 -I%ROOT_DIR%\include -I%ROOT_DIR%\src"
 
+"!CC!" %CFLAGS% -c "%ROOT_DIR%\src\pcl_alloc.c"                   -o "%OBJ_DIR%\pcl_alloc.o"                   || exit /b 1
+"!CC!" %CFLAGS% -c "%ROOT_DIR%\src\pcl_capabilities.c"            -o "%OBJ_DIR%\pcl_capabilities.o"            || exit /b 1
+"!CC!" %CFLAGS% -c "%ROOT_DIR%\src\pcl_codec_registry.c"          -o "%OBJ_DIR%\pcl_codec_registry.o"          || exit /b 1
 "!CC!" %CFLAGS% -c "%ROOT_DIR%\src\pcl_container.c"               -o "%OBJ_DIR%\pcl_container.o"               || exit /b 1
 "!CC!" %CFLAGS% -c "%ROOT_DIR%\src\pcl_executor.c"                -o "%OBJ_DIR%\pcl_executor.o"                || exit /b 1
+"!CC!" %CFLAGS% -c "%ROOT_DIR%\src\pcl_plugin_loader.c"           -o "%OBJ_DIR%\pcl_plugin_loader.o"           || exit /b 1
+"!CC!" %CFLAGS% -c "%ROOT_DIR%\src\pcl_transport_routing.c"       -o "%OBJ_DIR%\pcl_transport_routing.o"       || exit /b 1
 "!CC!" %CFLAGS% -c "%ROOT_DIR%\src\pcl_log.c"                     -o "%OBJ_DIR%\pcl_log.o"                     || exit /b 1
 "!CC!" %CFLAGS% -c "%ROOT_DIR%\src\pcl_bridge.c"                  -o "%OBJ_DIR%\pcl_bridge.o"                  || exit /b 1
 "!CC!" %CFLAGS% -c "%ROOT_DIR%\src\pcl_transport_socket.c"        -o "%OBJ_DIR%\pcl_transport_socket.o"        || exit /b 1
@@ -76,7 +81,7 @@ if exist "%SOCKET_TMP%" del /f /q "%SOCKET_TMP%" >nul 2>&1
 if exist "%UDP_TMP%"    del /f /q "%UDP_TMP%"    >nul 2>&1
 if exist "%SHMEM_TMP%"  del /f /q "%SHMEM_TMP%"  >nul 2>&1
 
-"!AR!" rcs "%CORE_TMP%"   "%OBJ_DIR%\pcl_container.o" "%OBJ_DIR%\pcl_executor.o" "%OBJ_DIR%\pcl_log.o" "%OBJ_DIR%\pcl_bridge.o" || exit /b 1
+"!AR!" rcs "%CORE_TMP%"   "%OBJ_DIR%\pcl_alloc.o" "%OBJ_DIR%\pcl_capabilities.o" "%OBJ_DIR%\pcl_codec_registry.o" "%OBJ_DIR%\pcl_container.o" "%OBJ_DIR%\pcl_executor.o" "%OBJ_DIR%\pcl_plugin_loader.o" "%OBJ_DIR%\pcl_transport_routing.o" "%OBJ_DIR%\pcl_log.o" "%OBJ_DIR%\pcl_bridge.o" || exit /b 1
 "!AR!" rcs "%SOCKET_TMP%" "%OBJ_DIR%\pcl_transport_socket.o"        || exit /b 1
 "!AR!" rcs "%UDP_TMP%"    "%OBJ_DIR%\pcl_transport_udp.o"           || exit /b 1
 "!AR!" rcs "%SHMEM_TMP%"  "%OBJ_DIR%\pcl_transport_shared_memory.o" || exit /b 1
