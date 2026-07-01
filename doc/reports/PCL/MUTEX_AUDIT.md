@@ -10,7 +10,10 @@ Generated: 2026-05-21
 Scope: `subprojects/PCL/src/pcl_executor.c`, `pcl_transport_socket.c`,
 `pcl_transport_shared_memory.c`, `pcl_transport_template.c`,
 `pcl_transport_udp.c`. `pcl_container.c`, `pcl_bridge.c`, `pcl_log.c`,
-`pcl_transport_apos.c` use no synchronisation primitives of their own.
+`pcl_transport_apos.c` -- and the later plugin/routing-era sources
+`pcl_codec_registry.c`, `pcl_plugin_loader.c`, `pcl_transport_routing.c`,
+`pcl_capabilities.c`, `pcl_alloc.c` -- use no synchronisation primitives of
+their own.
 
 ## Inventory
 

@@ -491,10 +491,10 @@ reuse the same UI panels once PYRAMID service transport is selected.
 
 | Component | Path |
 |-----------|------|
-| AME data model proto | `subprojects/PYRAMID/proto/pyramid/data_model/autonomy.proto` |
-| AME provided services proto | `subprojects/PYRAMID/proto/pyramid/components/autonomy_backend/services/provided.proto` |
-| Common data model proto | `subprojects/PYRAMID/proto/pyramid/data_model/common.proto` |
-| Tactical Objects data model proto | `subprojects/PYRAMID/proto/pyramid/data_model/tactical.proto` |
-| Tactical Objects provided proto | `subprojects/PYRAMID/proto/pyramid/components/tactical_objects/services/provided.proto` |
-| Tactical Objects consumed proto | `subprojects/PYRAMID/proto/pyramid/components/tactical_objects/services/consumed.proto` |
+| AME data model proto | `subprojects/PYRAMID/proto/pyramid/data_model/pyramid.data_model.autonomy.proto` |
+| AME provided services proto | `subprojects/PYRAMID/proto/pyramid/components/pyramid.components.autonomy_backend.services.provided.proto` |
+| Common data model proto | `subprojects/PYRAMID/proto/pyramid/data_model/pyramid.data_model.common.proto` |
+| Tactical Objects data model proto | `subprojects/PYRAMID/proto/pyramid/data_model/pyramid.data_model.tactical.proto` |
+| Tactical Objects provided proto | `subprojects/PYRAMID/proto/pyramid/components/pyramid.components.tactical_objects.services.provided.proto` |
+| Tactical Objects consumed proto | `subprojects/PYRAMID/proto/pyramid/components/pyramid.components.tactical_objects.services.consumed.proto` |
 | PYRAMID responsibilities | `subprojects/PYRAMID/doc/architecture/PYRAMID_COMPONENT_RESPONSIBILITIES.md` |
