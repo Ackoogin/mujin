@@ -31,6 +31,27 @@ and "Ada full-compile fixes" sections below.
 
 Reproduce: `./viability_check.sh`. Comms test: `./build_comms_test.sh` (green).
 
+**Windows parity (validated).** The harness now ships `.bat` equivalents that
+drive MSVC (`cl`) via an auto-located VS dev environment (`_msvc_env.bat`):
+`viability_check.bat`, `build_comms_test.bat`, `build_plugin_load_test.bat`.
+All three are green on Windows against the new proto set. The full runtime
+plugin build (`scripts/build_plugins.bat`, all 16 codec + 3 transport plugin
+DLLs) is also green after a CMake fix — the service-level codec/marshal TUs
+(`pyramid_components_*`) were not globbed into `pyramid_generated_{codecs,marshal}`,
+so MSVC failed to resolve the service `toJson`/`to_c` symbols at DLL link time
+(a Linux `.so` silently defers undefined symbols, hiding the omission).
+
+**No-relink plugin use + passed-through config (new demonstration).**
+`plugin_load_test.cpp` (built by `build_plugin_load_test.{sh,bat}`) proves the
+plugin boundary holds with no relink: the codec plugin is built as a standalone
+shared library, and the client/provider binary is compiled with **no wire codec
+of its own** (component-side only: native types, C-ABI marshal, service facade,
+`pcl_core`). At runtime it obtains the JSON codec purely by loading the prebuilt
+DLL/.so via `pcl_plugin_load_codec()`, threading a `config_json` string through
+the loader to the plugin (observable via the loaded codec's non-NULL
+`codec_ctx`), then drives the full request/response round-trip through the
+loaded codec. Green on both Linux and Windows.
+
 ---
 
 ## Decisions taken (for handover)
@@ -271,6 +292,9 @@ fixed in `ada_codegen.py` (+ `generate_bindings.py`):
 
 | File | Purpose |
 |------|---------|
-| `viability_check.sh` | Regenerate + syntax-check a facade |
-| `components_comms_test.cpp` | Provider + client over PCL with the JSON codec plugin registered; passes once D is fixed |
-| `build_comms_test.sh` | Generates bindings, compiles the sensor_products closure + plugin against libpcl_core, runs the test |
+| `viability_check.sh` / `.bat` | Regenerate + syntax-check a facade (g++ / MSVC) |
+| `components_comms_test.cpp` | Provider + client over PCL with the JSON codec plugin **compiled in** (static); passes once D is fixed |
+| `build_comms_test.sh` / `.bat` | Generates bindings, compiles the sensor_products closure + plugin against pcl_core, runs the static comms test |
+| `plugin_load_test.cpp` | Provider + client that load a **prebuilt** codec plugin at runtime (no relink) and pass config through the loader |
+| `build_plugin_load_test.sh` / `.bat` | Builds the codec plugin as a standalone shared lib + the codec-free test, runs the no-relink demonstration |
+| `_msvc_env.bat` | Helper: enter a VS x64 dev environment (vswhere/vcvars) for the `.bat` scripts |

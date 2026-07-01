@@ -206,6 +206,18 @@ endif()
 
 pyramid_glob_generated(_pyramid_generated_codecs_srcs
     "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_codec.cpp")
+# Service-level JSON codecs (toJson/fromJson for the per-component service
+# request/response/requirement types) are emitted under the pyramid_components_*
+# prefix. They must land in the same aggregate the codec plugins link so the
+# service-side encode/decode symbols resolve at .dll link time -- MSVC requires
+# every symbol defined when linking a DLL, whereas a Linux .so silently defers
+# the undefined externals (which is why an omission here builds green on Linux
+# but fails LNK2019 on Windows).
+pyramid_glob_generated(_pyramid_generated_service_codecs_srcs
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_components_*_codec.cpp")
+list(APPEND _pyramid_generated_codecs_srcs
+    ${_pyramid_generated_service_codecs_srcs})
+unset(_pyramid_generated_service_codecs_srcs)
 # C-ABI marshalling (to_c/from_c/_free) for the typed-value plugin boundary.
 # Linked into both components and codec plugins so each side can marshal
 # between the native data-model types and their frozen C structs.
@@ -219,6 +231,15 @@ pyramid_glob_generated(_pyramid_generated_marshal_srcs
     "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_data_model_*_cabi_marshal.cpp")
 pyramid_require_generated(_pyramid_generated_marshal_srcs
     "generated PYRAMID C-ABI marshalling sources")
+
+# Service-level C-ABI marshalling (to_c/from_c for the per-component service
+# request/response/requirement types) is emitted under the pyramid_components_*
+# prefix. These are not data-model modules, so they bypass the per-module
+# deployment-library loop below and are compiled straight into the aggregate
+# pyramid_generated_marshal (which the codec plugins link transitively), so the
+# service-side marshal symbols resolve at .dll link time.
+pyramid_glob_generated(_pyramid_generated_service_marshal_srcs
+    "${PYRAMID_CPP_BINDINGS_DIR}/pyramid_components_*_cabi_marshal.cpp")
 
 # W6 -- per-data-model-module marshalling libraries (churn isolation).
 # Each data-model module (common, base, tactical, autonomy, sensors, ...) is
@@ -254,8 +275,12 @@ foreach(_marshal_src IN LISTS _pyramid_generated_marshal_srcs)
 endforeach()
 unset(_pyramid_generated_marshal_srcs)
 
-# Backward-compatible aggregate static library over every module's objects.
-add_library(pyramid_generated_marshal STATIC ${_pyramid_marshal_objects})
+# Backward-compatible aggregate static library over every module's objects,
+# plus the service-level marshal sources (compiled directly here rather than as
+# per-module deployment libs).
+add_library(pyramid_generated_marshal STATIC
+    ${_pyramid_marshal_objects} ${_pyramid_generated_service_marshal_srcs})
+unset(_pyramid_generated_service_marshal_srcs)
 add_dependencies(pyramid_generated_marshal pyramid_cpp_bindings_codegen)
 set_target_properties(pyramid_generated_marshal PROPERTIES
     POSITION_INDEPENDENT_CODE ON)
