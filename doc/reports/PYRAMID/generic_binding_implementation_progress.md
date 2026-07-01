@@ -30,7 +30,8 @@ added). Test coverage lives in `subprojects/PYRAMID/tests/test_generic_*.py`,
 ## Remaining Open Items
 
 Carried forward from the hard-coupling sweep; these are the still-open
-dispositions:
+dispositions. Actionable follow-up plans for them live in
+[`doc/plans/PYRAMID/architecture_cleanup_plan.md`](../../plans/PYRAMID/architecture_cleanup_plan.md).
 
 | Item | Location | Problem | Disposition |
 |------|----------|---------|-------------|

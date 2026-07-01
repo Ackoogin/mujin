@@ -45,7 +45,6 @@ subprojects\PYRAMID\scripts\generate_bindings.bat
 | `core/` | PYRAMID shared runtime layer |
 | `proto/` | Data-model and component service contracts |
 | `pim/` | Binding/code generation tooling (plus the upstream SysML/MBSE import tools) |
-| `bindings/` | Legacy generated-output location (empty; bindings are generated build-local, see its README) |
 | `plugins/` | Coupled gRPC/ROS2 transport plugin sources |
 | `src/protobuf_support/` | Checked-in Tactical Objects protobuf codec support |
 | `examples/` | Hand-written Ada and C++ example apps/support code |

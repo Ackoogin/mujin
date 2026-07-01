@@ -14,3 +14,8 @@ architecture reference:
 [`transport_codec_plugin_system.md`](../../../subprojects/PYRAMID/doc/architecture/transport_codec_plugin_system.md)
 and
 [`ros2_transport_semantics.md`](../../../subprojects/PYRAMID/doc/architecture/ros2_transport_semantics.md).
+
+Structural/code-organisation follow-ups (generator parser consolidation,
+monolith split, `src/protobuf_support` retirement, manifest-CMake completion,
+compat-policy confinement) are planned in
+[`doc/plans/PYRAMID/architecture_cleanup_plan.md`](../../plans/PYRAMID/architecture_cleanup_plan.md).
