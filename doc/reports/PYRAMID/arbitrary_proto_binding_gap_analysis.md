@@ -1,5 +1,13 @@
 # PCL/PYRAMID Arbitrary Proto Binding Gap Analysis
 
+> **Status: historical.** The gaps identified here were closed by the generic
+> contract layout work (`--contract-layout generic`). See
+> [`generic_contract_layout.md`](../../../subprojects/PYRAMID/doc/architecture/generic_contract_layout.md)
+> for the delivered design and
+> [`generic_binding_implementation_progress.md`](generic_binding_implementation_progress.md)
+> for the implementation record and remaining open items. Keep this document
+> as analysis context, not as a work plan.
+
 ## Purpose
 
 This report assesses what is needed for the PCL/PYRAMID binding system to

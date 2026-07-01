@@ -6,6 +6,11 @@ The PYRAMID Composition Library (PCL) provides a standard component container fo
 
 PCL uses a **hybrid architecture**: a pure-C ABI core for maximum portability (Ada, C, C++, Rust), with an optional header-only C++ wrapper for ergonomic authoring. Transport adapters (ROS2, DDS, sockets, shared memory) are pluggable -- your component code never depends on middleware.
 
+The API listings in this document are abridged to show the design shape. The
+headers under `subprojects/PCL/include/pcl/` are the authoritative API
+reference; day-to-day usage is covered in
+[`../guides/pcl_user_guide.md`](../guides/pcl_user_guide.md).
+
 ---
 
 ## 2. Design Principles
@@ -63,18 +68,25 @@ extern "C" {
 #endif
 
 /* Opaque handles */
-typedef struct pcl_executor_t  pcl_executor_t;
-typedef struct pcl_container_t pcl_container_t;
-typedef struct pcl_port_t      pcl_port_t;
+typedef struct pcl_executor_t       pcl_executor_t;
+typedef struct pcl_container_t      pcl_container_t;
+typedef struct pcl_port_t           pcl_port_t;
+typedef struct pcl_svc_context_t    pcl_svc_context_t;    /* deferred responses */
+typedef struct pcl_stream_context_t pcl_stream_context_t; /* streaming services */
 
 /* Return codes */
 typedef enum {
-    PCL_OK             = 0,
-    PCL_ERR_INVALID    = -1,
-    PCL_ERR_STATE      = -2,   /* wrong lifecycle state for this operation */
-    PCL_ERR_TIMEOUT    = -3,
-    PCL_ERR_CALLBACK   = -4,   /* user callback returned error */
-    PCL_ERR_NOMEM      = -5,
+    PCL_OK              =  0,
+    PCL_PENDING         =  1,   /* operation deferred (service responds later) */
+    PCL_STREAMING       =  2,   /* stream opened, more data coming */
+    PCL_ERR_INVALID     = -1,
+    PCL_ERR_STATE       = -2,   /* wrong lifecycle state for this operation */
+    PCL_ERR_TIMEOUT     = -3,
+    PCL_ERR_CALLBACK    = -4,   /* user callback returned error */
+    PCL_ERR_NOMEM       = -5,
+    PCL_ERR_NOT_FOUND   = -6,   /* parameter key / port name not found */
+    PCL_ERR_PORT_CLOSED = -7,   /* port not available (container inactive) */
+    PCL_ERR_CANCELLED   = -8,   /* stream cancelled by peer */
 } pcl_status_t;
 
 /* Lifecycle states */
@@ -144,17 +156,18 @@ double       pcl_container_get_param_f64(const pcl_container_t* c,
 ```c
 /* Port types */
 typedef enum {
-    PCL_PORT_PUBLISHER   = 0,
-    PCL_PORT_SUBSCRIBER  = 1,
-    PCL_PORT_SERVICE     = 2,   /* request-reply server */
-    PCL_PORT_CLIENT      = 3,   /* request-reply client */
+    PCL_PORT_PUBLISHER      = 0,
+    PCL_PORT_SUBSCRIBER     = 1,
+    PCL_PORT_SERVICE        = 2,   /* request-reply server */
+    PCL_PORT_CLIENT         = 3,   /* request-reply client */
+    PCL_PORT_STREAM_SERVICE = 4,   /* streaming server */
 } pcl_port_type_t;
 
 /* Message buffer -- user owns the data, container borrows it */
 typedef struct {
     const void*  data;
     uint32_t     size;
-    const char*  type_name;      /* e.g. "SensorReading", "StatusResponse" */
+    const char*  type_name;      /* e.g. "SensorReading", "application/json" */
 } pcl_msg_t;
 
 /* Subscriber callback -- called on executor thread */
@@ -162,11 +175,21 @@ typedef void (*pcl_sub_callback_t)(pcl_container_t* c,
                                     const pcl_msg_t* msg,
                                     void* user_data);
 
-/* Service handler -- called on executor thread, must fill response */
-typedef pcl_status_t (*pcl_service_handler_t)(pcl_container_t* c,
-                                               const pcl_msg_t* request,
-                                               pcl_msg_t* response,
-                                               void* user_data);
+/* Service handler -- called on executor thread.  Either fill the response
+ * and return PCL_OK (immediate), or save ctx and return PCL_PENDING, then
+ * complete later with pcl_service_respond(ctx, &response). */
+typedef pcl_status_t (*pcl_service_handler_t)(pcl_container_t*   c,
+                                               const pcl_msg_t*   request,
+                                               pcl_msg_t*         response,
+                                               pcl_svc_context_t* ctx,
+                                               void*              user_data);
+
+/* Streaming service handler -- save stream_ctx, return PCL_STREAMING, then
+ * emit frames with pcl_stream_send() and finish with pcl_stream_end(). */
+typedef pcl_status_t (*pcl_stream_handler_t)(pcl_container_t*      c,
+                                              const pcl_msg_t*      request,
+                                              pcl_stream_context_t* stream_ctx,
+                                              void*                 user_data);
 
 /* Create ports (must be called during on_configure) */
 pcl_port_t* pcl_container_add_publisher(pcl_container_t* c,
@@ -182,9 +205,28 @@ pcl_port_t* pcl_container_add_service(pcl_container_t* c,
                                        const char* type_name,
                                        pcl_service_handler_t handler,
                                        void* user_data);
+pcl_port_t* pcl_container_add_stream_service(pcl_container_t* c,
+                                              const char* service_name,
+                                              const char* type_name,
+                                              pcl_stream_handler_t handler,
+                                              void* user_data);
+
+/* Local/remote routing policy for a concrete port (see the peer/transport
+ * configuration guide) */
+pcl_status_t pcl_port_set_route(pcl_port_t* port, uint32_t route_mode,
+                                const char* const* peer_ids,
+                                uint32_t peer_count);
 
 /* Publish (from on_tick or service handler) */
 pcl_status_t pcl_port_publish(pcl_port_t* port, const pcl_msg_t* msg);
+
+/* Async client-side service invocation (routes through the executor's
+ * transport, or intra-process dispatch when none is set) */
+pcl_status_t pcl_container_invoke_async(pcl_container_t* c,
+                                        const char*      service_name,
+                                        const pcl_msg_t* request,
+                                        pcl_resp_cb_fn_t callback,
+                                        void*            user_data);
 ```
 
 ### 4.5 Executor
@@ -210,13 +252,21 @@ pcl_status_t pcl_executor_post_incoming(pcl_executor_t* e,
 /* Request shutdown (thread-safe, can be called from signal handler) */
 void pcl_executor_request_shutdown(pcl_executor_t* e);
 
-/* Logging -- integrates with transport adapter (e.g. ROS2 RCLCPP_INFO) */
-void pcl_log(pcl_container_t* c, int level, const char* fmt, ...);
+/* Logging -- routed through a process-wide pluggable handler (pcl_log.h),
+ * so a deployment can forward to e.g. ROS2 RCLCPP_INFO */
+void pcl_log(const pcl_container_t* c, pcl_log_level_t level,
+             const char* fmt, ...);
 
 #ifdef __cplusplus
 }
 #endif
 ```
+
+The executor additionally provides `pcl_executor_remove`, graceful shutdown
+with timeout (`pcl_executor_shutdown_graceful`), thread-safe service-request
+and response posting, direct service invocation helpers, and streaming
+invocation (`pcl_executor_invoke_stream`) -- see `pcl_executor.h` and
+`pcl_transport.h`.
 
 ---
 
@@ -288,31 +338,36 @@ Container Port --pcl_msg_t--> Transport Adapter --> Wire
 
 ### 6.1 Adapter Interface
 
-Implement a transport adapter by filling in four function pointers:
+A transport adapter is a vtable of function pointers (`pcl_transport_t` in
+`pcl_transport.h`). Only the operations the transport supports need to be
+implemented; unsupported slots stay NULL and the framework fails closed. The
+full contract covers:
+
+| Slot | Direction | Purpose |
+|------|-----------|---------|
+| `publish` | egress | Send a published message to the wire |
+| `subscribe` | setup | Begin listening on a topic; deliver via `pcl_executor_post_incoming` (I/O thread) or `pcl_executor_dispatch_incoming` (executor thread) |
+| `serve` | ingress | Dispatch a wire service request to the container's handler |
+| `invoke_async` | egress | Client-side unary service call; response callback fires on the executor thread |
+| `respond` | egress | Send a deferred (`PCL_PENDING`) service response |
+| `invoke_stream` / `stream_send` / `stream_end` / `stream_cancel` | both | Client- and server-side streaming service support |
+| `shutdown` | teardown | Release adapter resources |
 
 ```c
-typedef struct {
-    /* Called when container publishes -- adapter sends to wire */
-    pcl_status_t (*publish)(void* adapter_ctx, const char* topic,
-                            const pcl_msg_t* msg);
-
-    /* Called to register a subscription on the adapter side */
-    pcl_status_t (*subscribe)(void* adapter_ctx, const char* topic,
-                               const char* type_name);
-
-    /* Service routing */
-    pcl_status_t (*serve)(void* adapter_ctx, const char* service_name,
-                          const pcl_msg_t* request, pcl_msg_t* response);
-
-    /* Cleanup */
-    void (*shutdown)(void* adapter_ctx);
-
-    void* adapter_ctx;
-} pcl_transport_t;
-
 pcl_status_t pcl_executor_set_transport(pcl_executor_t* e,
                                          const pcl_transport_t* transport);
 ```
+
+Multiple named peer transports can also be registered on one executor
+(`pcl_executor_register_transport`), each with declared interaction
+capabilities and offered QoS that are validated against endpoint routes at
+compose time (`pcl_executor_validate_endpoint_route`, fail closed). See
+`pcl_transport.h`, `pcl_capabilities.h`, and the
+[peer/transport configuration guide](../guides/peer_transport_configuration.md).
+
+Transports can also be built as runtime-loaded plugins (`pcl_plugin.h`,
+`pcl_plugin_loader.h`); the socket, UDP, and shared-memory transports ship
+both as static libraries and as loadable plugins.
 
 ### 6.2 ROS2 Adapter Example
 
@@ -379,29 +434,16 @@ All callbacks execute on the **single executor thread** -- no mutexes needed in 
 
 ## 8. Serialization
 
-Ports exchange `pcl_msg_t` -- a pointer, size, and type name string. PCL is **format-agnostic**: the `data` field is an opaque byte buffer. Each transport adapter knows how to route bytes on the wire.
+Ports exchange `pcl_msg_t` -- a pointer, size, and type name string. PCL is **format-agnostic**: the `data` field is an opaque byte buffer, and `type_name` conventionally carries a content type such as `application/json`, `application/flatbuffers`, or `application/protobuf`. Each transport adapter knows how to route bytes on the wire; it never interprets the payload.
 
 For **intra-process** communication (no transport adapter set), messages are passed by pointer with zero-copy semantics.
 
-For **cross-process** or **cross-network** communication, you can optionally use POD structs with layout descriptors to enable automatic serialization by the transport adapter:
+For **cross-process** or **cross-network** communication, payload encode/decode belongs to a codec layer above PCL. Two mechanisms exist:
 
-```c
-typedef struct {
-    uint64_t version;
-    double   value;
-    bool     valid;
-} SensorReading;
+- **Generated bindings** (PYRAMID): typed facades generated from `.proto` contracts own encode/decode and hand PCL opaque buffers. See `subprojects/PYRAMID/doc/architecture/generated_bindings.md`.
+- **Runtime codec plugins**: codecs can be registered per content type in the PCL codec registry (`pcl_codec.h`, `pcl_codec_registry.h`) and loaded as shared-library plugins (`pcl_plugin_loader.h`), so a client binary links no wire-format code. With no codec registered for a content type, encode/decode fails closed.
 
-/* Layout descriptor for transport adapters */
-static const pcl_field_desc_t SensorReading_fields[] = {
-    { "version", PCL_TYPE_U64,  offsetof(SensorReading, version) },
-    { "value",   PCL_TYPE_F64,  offsetof(SensorReading, value) },
-    { "valid",   PCL_TYPE_BOOL, offsetof(SensorReading, valid) },
-    { NULL, 0, 0 }
-};
-```
-
-This keeps the core minimal while supporting zero-copy intra-process and automatic serialization for common message types.
+This keeps the core minimal while supporting zero-copy intra-process messaging and pluggable serialization everywhere else.
 
 ---
 
@@ -509,24 +551,17 @@ int main(void) {
 
 ## 11. Writing a Component (Ada)
 
-The pure-C ABI enables direct Ada bindings with no C++ dependency:
+The pure-C ABI enables direct Ada bindings with no C++ dependency. The
+canonical Ada binding lives in `subprojects/PCL/bindings/ada/`:
 
-```ada
-procedure On_Configure(Self : System.Address; User_Data : System.Address)
-  return Interfaces.C.int
-  with Convention => C;
+- `Pcl_Bindings` -- thin import layer over the public C ABI
+- `Pcl_Component` -- tagged OO wrapper for components, executors, ports, and routing
+- `Pcl_Transports` -- socket, UDP, and shared-memory transport helpers
+- `Pcl_Content_Types` / `Pcl_Typed_Ports` -- content-type constants and typed-port generics
 
-Callbacks : aliased pcl_callbacks_t := (
-  on_configure  => On_Configure'Access,
-  on_activate   => On_Activate'Access,
-  on_tick       => On_Tick'Access,
-  others        => null
-);
-Container : pcl_container_t_Access :=
-    pcl_container_create("sensor", Callbacks'Access, User_Data'Address);
-```
-
-See `subprojects/PYRAMID/examples/ada/pcl_bindings.ads` for the full Ada binding specification.
+See the [PCL user guide](../guides/pcl_user_guide.md) section 5 for a worked
+Ada component example, and `subprojects/PYRAMID/examples/ada/pcl_sensor_demo.adb`
+for a runnable demo.
 
 ---
 

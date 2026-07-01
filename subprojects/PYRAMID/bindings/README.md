@@ -53,9 +53,9 @@ a narrowly scoped binding test.
 
 ## Examples And Tests
 
-- `examples/` contains hand-written sample applications and reusable example
-  support code.
-- `tests/` contains test harnesses and conformance checks.
+- `../examples/` contains hand-written sample applications and reusable
+  example support code.
+- `../tests/` contains test harnesses and conformance checks.
 - Generated binding files belong in the build tree, even when they are first
   introduced to support an example.
 

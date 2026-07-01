@@ -285,84 +285,37 @@ and handler behavior.
 
 ### Worked C++ Component Example
 
-The compiled example under `subprojects/PYRAMID/examples/cpp/` is the current
-reference for a user-provided C++ service implementation.
+The compiled showcase under `subprojects/PYRAMID/examples/cpp/` is the current
+reference for a user-provided C++ service implementation. It uses the
+higher-level **service-binding facade** (`ProvidedHandler`, `ProvidedService`,
+`ConsumedService`) generated alongside the low-level surface, which owns the
+`pcl_msg_t` callback boilerplate the older example-local registry used to
+carry. See [cpp_component_authoring.md](cpp_component_authoring.md) for the
+full authoring guide.
 
-It demonstrates:
+The showcase pieces are:
 
-- `tobj_service_binding_handler.*`: a user subclass of
-  `prov::ServiceHandler`
-- a provider component registering
-  `object_of_interest.create_requirement`,
-  `object_of_interest.read_requirement`, and
-  `object_of_interest.delete_requirement`
-- `tobj_service_client_component.*`: typed generated client calls in this order:
-  `create_requirement -> read_requirement -> delete_requirement`
-- `tobj_generated_service_registry.*`: a small C++ bridge from PCL
-  `addService(...)` callbacks to generated `dispatch(...)`
-- two separate PCL executors joined by `pcl_transport_shared_memory`
-- the shared-memory gateway container required on the service-provider side
+- `tobj_interest_store.{hpp,cpp}` — typed business logic
+  (`ProvidedHandler` subclass)
+- `tactical_objects_component.hpp` — hand-written `pcl::Component` composing
+  one `ProvidedService` binding plus the store
+- `hmi_client_component.hpp` — hand-written `pcl::Component` composing one
+  `ConsumedService` binding with typed async accessors
+- `tobj_shared_memory_example.cpp` — shared-memory bus bring-up, component
+  wiring, single-threaded `spinOnce` loop, demonstration sequence (including
+  the shared-memory gateway container on the service-provider side)
 
-There is no generated C++ equivalent of the Ada `Register_Services` helper at
-the moment. The standard C++ pieces are:
-
-- generated `ServiceHandler`
-- generated `dispatch(...)`
-- generated typed `invoke*` and response `decode*` helpers
-- PCL `Component::addService(...)`
-
-The example-local `GeneratedServiceRegistry` exists to keep the remaining
-`pcl_msg_t` callback boilerplate in one place. If the generator grows a C++
-`registerServices(...)` helper later, this is the layer it should replace.
-
-Build and run the example through the FlatBuffers-only preset:
+Build and run it through the FlatBuffers-only preset:
 
 ```bat
 cmake --preset flatbuffers-only
-cmake --build --preset flatbuffers-only-release --target tobj_service_binding_example
-ctest --test-dir build-flatbuffers-only -R tobj_service_binding_example --output-on-failure
+cmake --build --preset flatbuffers-only-release --target tobj_shared_memory_example
+ctest --test-dir build-flatbuffers-only -R tobj_shared_memory_example --output-on-failure
 ```
 
-If the preset build directory contains an old cache from another source path,
-use a fresh binary directory while retaining the preset variables:
-
-```sh
-cmake --preset flatbuffers-only -B /tmp/unmanned-flatbuffers-only
-cmake --build /tmp/unmanned-flatbuffers-only --target tobj_service_binding_example
-ctest --test-dir /tmp/unmanned-flatbuffers-only -R tobj_service_binding_example --output-on-failure
-```
-
-Provider-side registration follows this shape:
-
-```cpp
-GeneratedServiceRegistry services(*this, handler, configured_content_type);
-
-services.addRemote(
-    prov::kSvcObjectOfInterestCreateRequirement,
-    prov::ServiceChannel::ObjectOfInterestCreateRequirement,
-    "client");
-```
-
-Inside that registry, the dispatch callback calls the generated service
-binding. Component logic should not decode payloads itself:
-
-```cpp
-prov::dispatch(handler,
-               prov::ServiceChannel::ObjectOfInterestCreateRequirement,
-               request->data,
-               request->size,
-               request->type_name,
-               &response_buf,
-               &response_size);
-```
-
-Client-side calls stay typed:
-
-```cpp
-prov::invokeObjectOfInterestCreateRequirement(
-    executor, request, response_callback, user_data, nullptr,
-    configured_content_type);
-```
+When dropping below the facade (custom transports, framework code), the
+low-level pattern is: dispatch raw ingress through generated `dispatch(...)`
+and invoke with typed `invoke*` helpers, as shown earlier in this section.
 
 ## C++ Topic Usage
 

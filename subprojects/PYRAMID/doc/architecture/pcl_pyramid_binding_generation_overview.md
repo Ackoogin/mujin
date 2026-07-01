@@ -247,9 +247,10 @@ compile generated sources. With the default monorepo settings,
 
 The generated directory is controlled by `PYRAMID_CPP_BINDINGS_DIR`. CMake then
 globs that directory for generated service facades, data-model codecs,
-FlatBuffers schemas/codecs, and generated gRPC transport projections. It also
-globs supporting delivered generated sources under `subprojects/PYRAMID/bindings/`
-for the Tactical Objects Protobuf shim, gRPC C shim, and ROS2 support layer.
+FlatBuffers schemas/codecs, and generated gRPC/ROS2 transport projections
+(or, with `PYRAMID_BINDING_SOURCE_MODE=manifest`, selects sources from the
+generated `binding_manifest.json`). The checked-in Tactical Objects Protobuf
+codec support lives under `subprojects/PYRAMID/src/protobuf_support/`.
 The `pyramid_cpp_bindings_codegen` target owns the build-time refresh and
 reruns the generator when proto or generator inputs change.
 
@@ -352,5 +353,5 @@ ctest --test-dir build -C Release -R "(ProtoBindings|CodecDispatch|TacticalObjec
 | Generator parser/index | `subprojects/PYRAMID/pim/proto_parser.py` |
 | Language emitters | `subprojects/PYRAMID/pim/cpp_codegen.py`, `subprojects/PYRAMID/pim/ada_codegen.py` |
 | Backend registry | `subprojects/PYRAMID/pim/codec_backends.py`, `subprojects/PYRAMID/pim/backends/` |
-| Generated outputs | `subprojects/PYRAMID/bindings/` |
+| Generated outputs | `${binaryDir}/generated/pyramid_cpp_bindings`, `${binaryDir}/generated/pyramid_ada_bindings` (build-local) |
 | Detailed binding guide | `subprojects/PYRAMID/doc/architecture/generated_bindings.md` |

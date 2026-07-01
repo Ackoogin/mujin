@@ -425,8 +425,11 @@ graph TB
 
 ## 10. Transport Adapter Vtable
 
-The transport adapter is a simple vtable of four function pointers. Implementing a
-new transport binding requires only filling in this struct.
+The transport adapter is a vtable of function pointers (`pcl_transport.h`).
+Implementing a new transport binding means filling in the slots the transport
+supports; unsupported slots stay NULL and the framework fails closed. Pub/sub
+needs only `publish`/`subscribe`; unary services add `serve`, `invoke_async`,
+and `respond`; streaming services add the four `*stream*` slots.
 
 ```mermaid
 classDiagram
@@ -435,6 +438,12 @@ classDiagram
     +publish(ctx, topic, msg) pcl_status_t
     +subscribe(ctx, topic, type_name) pcl_status_t
     +serve(ctx, service, request, response) pcl_status_t
+    +invoke_async(ctx, service, request, cb, ud) pcl_status_t
+    +respond(ctx, svc_ctx, response) pcl_status_t
+    +invoke_stream(ctx, service, request, cb, ud, handle) pcl_status_t
+    +stream_send(ctx, handle, msg) pcl_status_t
+    +stream_end(ctx, handle, status) pcl_status_t
+    +stream_cancel(ctx, handle) pcl_status_t
     +shutdown(ctx) void
   }
 
@@ -515,10 +524,12 @@ sequenceDiagram
 
 | Concept | Implementation |
 |---------|----------------|
-| PCL C API | `include/pcl/pcl_container.h`, `src/pcl/pcl_container.c` |
-| C++ wrapper | `include/pcl/component.hpp` |
-| AME components using PCL | `include/ame/world_model_component.h`, `include/ame/planner_component.h` |
-| ROS2 node wrappers | `ros2/src/nodes/world_model_node.cpp`, `ros2/src/nodes/planner_node.cpp` |
-| In-process ROS2 example | `ros2/src/apps/combined_main.cpp` -- all nodes share one executor, zero-copy |
+| PCL C API | `subprojects/PCL/include/pcl/pcl_container.h`, `subprojects/PCL/src/pcl_container.c` |
+| Transport adapter API | `subprojects/PCL/include/pcl/pcl_transport.h` |
+| C++ wrapper | `subprojects/PCL/include/pcl/component.hpp`, `executor.hpp` |
+| Ada binding | `subprojects/PCL/bindings/ada/` |
+| AME components using PCL | `subprojects/AME/include/ame/world_model_component.h`, `planner_component.h` |
+| ROS2 node wrappers | `subprojects/AME/ros2/src/nodes/world_model_node.cpp`, `planner_node.cpp` |
+| In-process ROS2 example | `subprojects/AME/ros2/src/apps/combined_main.cpp` -- all nodes share one executor, zero-copy |
 | ROS2 integration docs | `subprojects/AME/doc/architecture/06-ros2.md` |
 

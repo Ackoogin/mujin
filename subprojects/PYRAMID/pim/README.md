@@ -2,6 +2,23 @@
 
 This directory contains the PYRAMID platform-independent model tools: proto parsing, generated C++/Ada bindings, JSON/FlatBuffers/Protobuf/gRPC/ROS2 backends, and a SysML XMI parser for importing logical data models.
 
+Two independent toolchains live here:
+
+- **The binding generator** (active pipeline): `generate_bindings.py`,
+  `proto_parser.py`, `binding_contract.py`, `cpp_codegen.py`, `ada_codegen.py`,
+  `cabi_codegen.py`, `ada_cabi_codegen.py`, `ros2_idl_codegen.py`,
+  `ros2_marshal_codegen.py`, `standard_topics.py`, `codec_backends.py`, and
+  `backends/`. Input is `.proto`; output is generated bindings.
+- **The upstream MBSE/SysML import tools** (standalone, run manually):
+  `sysml_parser.py` (XMI → JSON), `proto_generator.py` (JSON → `.proto`),
+  `ada_type_generator.py`, and `contract_resolver.py`. `test.json` is a sample
+  parsed-model output, and `pyramid-middleware.ads`/`.adb` is a legacy Ada
+  middleware binding template from this chain. None of these are imported by
+  the binding generator.
+
+`test/` holds the duplicate-heavy PIM proto fixture tree and `test_harness/`
+its viability/comms test scripts (see `test_harness/FINDINGS.md`).
+
 The primary entry point for the current generated-binding pipeline is:
 
 ```bash

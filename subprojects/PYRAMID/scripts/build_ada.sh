@@ -34,7 +34,7 @@
 #
 # Options:
 #   --build-dir DIR  CMake build directory       (default: <repo>/build-ada)
-#   --regen          refresh committed Ada bindings from proto before building
+#   --regen          regenerate build-local Ada bindings from proto before building
 #   --backends LIST  backends for --regen         (default: json,flatbuffers)
 #   --jobs N         parallel build jobs          (default: nproc)
 #   --clean          delete the build dir before configuring

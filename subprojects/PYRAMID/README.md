@@ -44,14 +44,20 @@ subprojects\PYRAMID\scripts\generate_bindings.bat
 |------|----------|
 | `core/` | PYRAMID shared runtime layer |
 | `proto/` | Data-model and component service contracts |
-| `pim/` | Binding/code generation tooling |
-| `bindings/` | Checked-in generated C++/Ada bindings plus Protobuf, gRPC, and ROS2 projections |
+| `pim/` | Binding/code generation tooling (plus the upstream SysML/MBSE import tools) |
+| `bindings/` | Legacy generated-output location (empty; bindings are generated build-local, see its README) |
+| `plugins/` | Coupled gRPC/ROS2 transport plugin sources |
+| `src/protobuf_support/` | Checked-in Tactical Objects protobuf codec support |
 | `examples/` | Hand-written Ada and C++ example apps/support code |
 | `tactical_objects/` | Tactical Objects runtime, component, app, and local README |
 | `tests/` | Generated binding, transport, and Tactical Objects tests |
-| `ros2/` | ROS2 transport adapter package |
-| `scripts/` | Binding generation, coverage, and interop test helpers |
-| `doc/architecture/` | Generated-binding, ROS2 transport, and responsibility docs |
+| `ros2/` | ROS2 transport adapter (ament package) |
+| `ros2_msgs/` | Generated `pyramid_msgs` interface package build |
+| `pyramid_bridge/` | Ada/C++ bridge applications |
+| `sdk_template/` | Offline SDK project template (see `doc/architecture/sdk_packaging.md`) |
+| `cmake/` | Manifest-driven binding-source CMake helpers and their tests |
+| `scripts/` | Binding generation, plugin build, SDK packaging, coverage, and interop test helpers |
+| `doc/architecture/` | Generated-binding, plugin, ROS2 transport, and responsibility docs |
 | `doc/requirements/` | PYRAMID-owned requirements |
 
 ## Documentation

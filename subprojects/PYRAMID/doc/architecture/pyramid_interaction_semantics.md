@@ -19,16 +19,18 @@ Today the contract carries only **half** of the interaction surface:
   classified purely by signature: the `stream` keyword on the request/response
   sets `client_streaming` / `server_streaming`. Unary vs server-streaming is
   therefore already a *signature convention* derived from `.proto`.
-- **Pub/sub is not in the contract.** Topics live in a hand-maintained Python
-  side-table, `pim/standard_topics.py`. `topics_for_service()` decides a
-  component's topics by substring-matching the package name
-  (`if 'tactical_objects' not in pkg_lower: return {}, {}`). The generator reads
-  pub/sub topics from that table, never from the `.proto`.
+- **Pub/sub is not in the contract.** Topics live in a hand-maintained
+  side-table loaded by `pim/standard_topics.py`. The module itself is now
+  data-driven (the Tactical Objects topic set lives in
+  `pim/topic_metadata/tactical_objects_topics.json`, matched by declared
+  `package_match` metadata rather than hardcoded package branching), but the
+  generator still reads pub/sub topics from that metadata file, never from the
+  `.proto`.
 
 The consequence: transport projections faithfully reproduce whatever the
 contract says, but the contract is **silent on topics**. So the heterogeneous
 middleware mapping (the value of the ROS2 work) is driven for pub/sub by a
-Python lookup table that must be edited per component, out of band from the
+JSON lookup table that must be edited per component, out of band from the
 contract it is supposed to project.
 
 ```mermaid
@@ -218,7 +220,7 @@ redundant and is removed. Migration in order:
 4. **Delete `standard_topics.py`** and its imports in `cpp_codegen.py` /
    `ada_codegen.py` once the generated output matches the pre-migration
    snapshot.
-5. **Regenerate and diff.** The checked-in bindings for the proving path
+5. **Regenerate and diff.** The generated bindings for the proving path
    (Tactical Objects) must be unchanged; that diff is the migration's
    correctness proof.
 
@@ -273,21 +275,24 @@ The annotation is plain proto3 and does **not** disturb gRPC codegen:
 Net: gRPC is the easy direction — the contract is already "as-is" usable, and
 the annotation is invisible to anyone who does not look for it.
 
-### ROS2 — needs a native-IDL projection (today it does not exist)
+### ROS2 — needs a native-IDL projection (generated, but not yet on the live wire)
 
-This is the harder direction and the current generation does **not** satisfy
-it. Today the only ROS2 IDL is the generic envelope — `msg/PclEnvelope`,
-`srv/PclService`, `srv/PclOpenStream` — carrying **opaque payload bytes** with a
-`content_type`. A non-PCL ROS2 node therefore cannot use the contract directly:
-it would have to understand the PCL envelope, pick the right codec, and decode
-bytes by hand. `ros2 topic echo` shows a blob, not fields.
+This is the harder direction. The native-IDL projection now **exists as
+generated artifacts**: `pim/ros2_idl_codegen.py` emits real `.msg`/`.srv`
+(the `pyramid_msgs` ament package) and `pim/ros2_marshal_codegen.py` emits the
+`domain_model` ↔ `pyramid_msgs` marshalling + `rclcpp` wire codec, round-trip
+verified. What the **live transport** carries, however, is still the generic
+envelope — `msg/PclEnvelope`, `srv/PclService`, `srv/PclOpenStream` — with
+**opaque payload bytes** and a `content_type`. A non-PCL ROS2 node therefore
+still cannot use the contract directly today: `ros2 topic echo` shows a blob,
+not fields.
 
 So there are two ROS2 modes, and direct interop requires the second:
 
 | Mode | Wire type | Codec | Who can consume |
 |------|-----------|-------|-----------------|
-| **Envelope** (current) | `PclEnvelope` bytes | JSON / FB / protobuf, selectable | PCL ↔ PCL over ROS2 |
-| **Native IDL** (needed) | generated `.msg`/`.srv`/`.action` | ROS2 CDR (fixed) | any ROS2 node, no PCL |
+| **Envelope** (current live wire) | `PclEnvelope` bytes | JSON / FB / protobuf, selectable | PCL ↔ PCL over ROS2 |
+| **Native IDL** (generated; wire switch pending) | generated `.msg`/`.srv`/`.action` | ROS2 CDR (fixed) | any ROS2 node, no PCL |
 
 Native IDL mode is a new **proto → ROS2 IDL projection**, analogous to the
 existing proto → FlatBuffers projection, emitting real interface definitions
@@ -334,10 +339,10 @@ native-IDL backend; gRPC already meets the "as-is" bar.
 | Streaming inference (Layer 1, RPC subset) | already implemented in `proto_parser.py` |
 | Topic inference (Layer 1, pub/sub) | not implemented |
 | Method option (Layer 2) | not implemented |
-| `standard_topics.py` retirement | not started |
+| `standard_topics.py` retirement | metadata now data-driven (JSON side-table); retirement into the contract not started |
 | QoS / action projection | reserved, not implemented |
 | gRPC direct (as-is) consumption | compatible by design; annotation is transparent to `protoc`/gRPC |
-| ROS2 native IDL (`.msg`/`.srv`/`.action`) projection | not implemented (current ROS2 is envelope-only) |
+| ROS2 native IDL (`.msg`/`.srv`) projection | generated + round-trip verified (`pyramid_msgs`, `pyramid_ros2_codec.hpp`); live wire still envelope-only, `.action` not generated |
 
 This is a design proposal. No generator or contract behavior changes until the
 migration steps above are taken and the Tactical Objects binding snapshot is
