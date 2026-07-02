@@ -11,6 +11,29 @@ It is the design reference for the contract convention; the parser
 ([generated_bindings.md](generated_bindings.md),
 [ros2_transport_semantics.md](ros2_transport_semantics.md)) implement it.
 
+> **Update (2026-07).** Two developments postdate the original proposal and
+> change how it is applied:
+>
+> 1. **The MBSE-generated contract tree** (`pim/test/`, emitted by
+>    `pim/mbse/proto_generator.py`) has a strict *port grammar*: every
+>    service is either a Request port (`Create`/`Read`/`Update`/`Cancel`,
+>    fixed shapes) or an Information port (`Read(Empty) → stream T`, sole
+>    rpc). Within that grammar the patterns this doc annotates by hand are
+>    **derivable mechanically**, and the Layer-2 options below are stamped
+>    by the MBSE generator rather than authored. The signature-ambiguity
+>    rules in this doc apply to *free-form* (hand-written) services only.
+> 2. **The transport/codec plugin system** landed
+>    ([transport_codec_plugin_system.md](transport_codec_plugin_system.md)):
+>    capability-model validation (`PUBSUB`/`RPC_UNARY`/…), per-endpoint
+>    routing manifests, and plugin QoS profiles. Contract QoS (below) is
+>    *intent*; plugin QoS is *capability*; compose-time validation
+>    reconciles them.
+>
+> The current plan of record for pub/sub generation — including topic
+> naming, correlated request/requirement topic pairs, and the migration of
+> this doc's proposals onto the new tree — is
+> [doc/plans/PYRAMID/pubsub_contract_generation_plan.md](../../../../doc/plans/PYRAMID/pubsub_contract_generation_plan.md).
+
 ## The Problem
 
 Today the contract carries only **half** of the interaction surface:
@@ -81,13 +104,18 @@ service protos, so no new dependency is required for the convention itself.
 
 ### Layer 2 — method option (the source of truth)
 
-Pure signature inference is ambiguous in exactly two places, both live in the
-current contract:
+Pure *per-method* signature inference is ambiguous in exactly two places,
+both live in the current contract:
 
 - `rpc Foo(T) returns (Empty)` — a **publish**, or a **void unary command**
   (e.g. a delete that does not ack)? Identical shapes.
 - `rpc Sub(Empty) returns (stream T)` — a **subscribe**, or a
   **server-streaming RPC** that happens to take no argument? Identical shapes.
+
+(In the MBSE port grammar the second case is *not* ambiguous: a service whose
+sole rpc is `Read(Empty) → stream T` is the canonical Information port, and
+the classifier resolves it at service scope. The ambiguity — and the
+option-required rule below — applies to free-form services.)
 
 So a proto custom option is the authoritative layer. It is the proto-idiomatic
 mechanism (same pattern as `google.api.http` and gRPC's own method options),
@@ -149,7 +177,10 @@ resolve the wrong way.
 | Subscribe | `Empty` | `stream T` | recommended (`SUBSCRIBE` + `topic`) | yes | topic name from option |
 | Action | goal | feedback + result | **yes** (`ACTION`) | n/a | ROS2 action mapping |
 
-Worked examples:
+Worked examples (illustrative, legacy/free-form style — `Tactical_Objects_Topics`
+is not an existing service; in the MBSE tree, topic-bearing methods are never
+hand-authored, the options are stamped onto the port services at generation
+time):
 
 ```proto
 service Object_Of_Interest_Service {
@@ -199,7 +230,16 @@ and reads as point-to-point. Two rules keep the contract honest:
   the `SUBSCRIBE` shape, so the element type stays the canonical data-model
   message and the generator keeps emitting the vector payload helper.
 
-## Migration: Retire `standard_topics.py`
+## Migration: Retire `standard_topics.py` (legacy tree only)
+
+This migration applies to the **legacy hand-written tree** (the Tactical
+Objects contract). The MBSE-generated tree never uses the side-table: its
+topics are stamped as options at generation time (see the plan of record).
+Note also that the side-table's substring `package_match` is known to leak
+into other trees (`"tactical_objects"` matches
+`pim_osprey.tactical_objects`, stamping legacy wire names into new-tree
+bindings) — scoping the side-table to the legacy layout is part of the
+plan's Phase 2, independent of full retirement.
 
 Once topics are expressed in the contract, the Python side-table becomes
 redundant and is removed. Migration in order:
@@ -335,15 +375,17 @@ native-IDL backend; gRPC already meets the "as-is" bar.
 
 | Item | State |
 |------|-------|
-| Convention defined (this doc) | proposed |
+| Convention defined (this doc) | proposed; superseded in part by the port-grammar plan (see Update note at top) |
 | Streaming inference (Layer 1, RPC subset) | already implemented in `proto_parser.py` |
-| Topic inference (Layer 1, pub/sub) | not implemented |
-| Method option (Layer 2) | not implemented |
-| `standard_topics.py` retirement | metadata now data-driven (JSON side-table); retirement into the contract not started |
-| QoS / action projection | reserved, not implemented |
+| Topic inference (Layer 1, pub/sub) | not implemented; for the MBSE tree, planned as a port-grammar classifier rather than per-method inference |
+| Method option (Layer 2) | not implemented; planned as MBSE-stamped (machine-written), not hand-authored |
+| `standard_topics.py` retirement | metadata data-driven (JSON side-table); known cross-tree substring leak; scoping + retirement planned (plan Phase 2/5) |
+| QoS / action projection | reserved; QoS reconciliation with plugin QoS profiles defined in the plan |
 | gRPC direct (as-is) consumption | compatible by design; annotation is transparent to `protoc`/gRPC |
 | ROS2 native IDL (`.msg`/`.srv`) projection | generated + round-trip verified (`pyramid_msgs`, `pyramid_ros2_codec.hpp`); live wire still envelope-only, `.action` not generated |
 
-This is a design proposal. No generator or contract behavior changes until the
-migration steps above are taken and the Tactical Objects binding snapshot is
-shown unchanged.
+This doc remains the reference for the *convention*; sequencing and the
+concrete implementation now live in
+[doc/plans/PYRAMID/pubsub_contract_generation_plan.md](../../../../doc/plans/PYRAMID/pubsub_contract_generation_plan.md).
+No generator or contract behavior changes until the plan's phases run and the
+Tactical Objects binding snapshot is shown unchanged.

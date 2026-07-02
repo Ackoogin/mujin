@@ -8,6 +8,10 @@ contract system, and (2) how A-GRA's planning/actions interface could work with
 AME.
 
 **Date:** 2026-07-02 (interface-volume deep dive added same day)
+**Companion:** [`a_gra_e2e_worked_example.md`](a_gra_e2e_worked_example.md) —
+message-level worked example (planning → routing + EO/PO sensor control) with
+sequence diagrams, PYR-RESP conformance matrix, and a service-over-pub/sub
+alignment analysis for the PCL/PYRAMID bindings.
 **Inputs reviewed:** `A-GRA_MessageDefinitions_v5_0_a.xsd` (155,020 lines, 8.6 MB),
 `A-GRA_SecurityMarkings_v5_0_a.xsd` (5,472 lines), ASK 5.0a Start Here Guide
 (public release, 21 APR 2026), and the eight interface-volume PDFs from the
@@ -401,6 +405,11 @@ Representative sequence (DCA vignette from the OV-1):
 6. Bingo fuel → contingency goal; `ActionCancelCommand` on the CAP action →
    drain-mode stop of the run, run record retained for MD.
 
+A fully message-identified version of this shape (FIND_SEARCH tasking →
+Routes/VI route lifecycle → PO/EO sensor control → track report, plus the
+approval-gated replan variant) is worked through in
+[`a_gra_e2e_worked_example.md`](a_gra_e2e_worked_example.md).
+
 ### 5.3 Genuine gaps (where AME needs new capability, not just translation)
 
 1. **Approval/consent state machine — including inside the replan loop.**
@@ -480,6 +489,14 @@ Representative sequence (DCA vignette from the OV-1):
   Data-1/Command-2/... classification would make conformance sequences
   explicit and machine-checkable, mirroring the A-GRA compliance-harness
   approach in our own test suite.
+- **Service-over-pub/sub mechanism.** A-GRA reconstructs the entire
+  request/response surface as correlated topic pairs (command + `*Status`
+  correlated by ID, topic name == message name, one generic payload wrapper,
+  `ObjectState` for CRUD) with no RPC anywhere — a proven pattern for
+  projecting EntityActions onto pure pub/sub transports. Analysed in detail,
+  with a concrete phased plan for pub/sub generation from the new-shape
+  proto contracts, in
+  [`doc/plans/PYRAMID/pubsub_contract_generation_plan.md`](../../plans/PYRAMID/pubsub_contract_generation_plan.md).
 
 ---
 
@@ -780,6 +797,7 @@ contract. Phases 3–4 are where genuinely new capability lives.
 
 ## 9. References
 
+- Worked E2E example (companion doc): [`a_gra_e2e_worked_example.md`](a_gra_e2e_worked_example.md)
 - A-GRA repository: https://github.com/open-arsenal/a-gra (Schema/, Documentation/, ASK 5.0a Start Here Guide); local copy at `doc/research/AME/a-gra-main/`
 - USAF A-GRA/CCA reporting: [The Aviationist](https://theaviationist.com/2026/02/14/usaf-integrates-a-gra-architecture-mission-autonomy-ccas/), [ExecutiveGov](https://www.executivegov.com/articles/air-force-a-gra-cca-open-architecture)
 - In-repo: `subprojects/PYRAMID/proto/pyramid/data_model/pyramid.data_model.autonomy.proto`,

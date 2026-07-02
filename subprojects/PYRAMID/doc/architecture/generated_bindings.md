@@ -353,7 +353,7 @@ call stack. If a caller is publishing through a path that needs stable storage,
 use the explicit `encode*` helper and keep the `std::string` alive in the
 owning component.
 
-## Standard Tactical Topics
+## Standard Tactical Topics (legacy compatibility set)
 
 | Topic | Direction in provided package | Payload |
 |-------|-------------------------------|---------|
@@ -363,6 +363,16 @@ owning component.
 
 The generated helpers live in both provided and consumed namespaces where the
 topic is relevant, so components can use one facade consistently.
+
+This topic set is the **only** one defined today, and it comes from a JSON
+side-table (`pim/topic_metadata/tactical_objects_topics.json` via
+`pim/standard_topics.py`), not from the proto contract. It is a frozen
+compatibility set: do not add new topics to it. Its substring-based
+`package_match` is known to leak into other proto trees (e.g.
+`pim_osprey.tactical_objects` bindings currently receive these legacy wire
+names). Contract-derived topic generation — which also scopes/retires this
+side-table — is planned in
+[doc/plans/PYRAMID/pubsub_contract_generation_plan.md](../../../../doc/plans/PYRAMID/pubsub_contract_generation_plan.md).
 
 ## Codec Backends
 

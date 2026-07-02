@@ -162,8 +162,14 @@ it:
 Note: pub/sub topic generation is only *partially* realised (mostly wire-name
 constants and some subscribe/publish scaffolding in the pyramid facades). The
 5a change **relocated** that existing partial support into data and removed the
-domain branching; it did not complete or extend pub/sub codegen. The JSON file
-is the seam a fuller, explicit topic-declaration feature would build on.
+domain branching; it did not complete or extend pub/sub codegen. The fuller
+topic feature is now planned to derive topics from the **contract** (MBSE-
+stamped interaction options + a port-grammar classifier), not from this JSON
+file, which becomes a frozen legacy compat set — see
+[doc/plans/PYRAMID/pubsub_contract_generation_plan.md](../../../../doc/plans/PYRAMID/pubsub_contract_generation_plan.md).
+Caveat while it remains the pyramid-layout default: its substring
+`package_match` also matches new-tree packages like
+`pim_osprey.tactical_objects`, leaking legacy wire names into those bindings.
 
 ## Backward-Compatibility Guarantee
 
