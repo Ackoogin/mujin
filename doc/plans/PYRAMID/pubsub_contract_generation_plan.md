@@ -359,8 +359,10 @@ artefacts is a standing requirement throughout.
 
 ### Progress ledger — 2026-07-02
 
-Phases 0-3 have been implemented using the recommended **C1 + A,
-layered** option.
+Phases 0-5 have been implemented using the recommended **C1 + A,
+layered** option. Phases 0-3 were committed as
+`7e97368` (`Implement PYRAMID pubsub contract phases 0-3`); Phases 4-5 are
+the follow-on transport-projection and cleanup pass.
 
 - **Phase 0 complete:** `pyramid.options.pyramid_op` is present in both
   proto import roots; the parser captures `Interaction{pattern, topic,
@@ -384,6 +386,23 @@ layered** option.
   a `cancel` variant on the request topic; the comms harness exercises an
   Information topic and a correlated Request/Requirement pair, including
   Cancel, over JSON and FlatBuffers.
+- **Phase 4 complete:** binding manifests now include
+  contract-derived endpoint requirements (`endpoint_name`, kind,
+  capability, reliability floor, QoS). Generated C++ topic constants now
+  include `kTopic*Qos`, and the ROS2 support layer carries that QoS into
+  `TopicBinding` so `/pyramid/topic/<wire-name>` bindings can select ROS2
+  reliable vs best-effort profiles from the contract. A new harness derives
+  a PCL routing manifest from `binding_manifest.json` and validates a mixed
+  route: one `RPC_UNARY` consumed service over an RPC peer, plus a
+  correlated request/requirement topic pair over a PUBSUB-only peer.
+- **Phase 5 complete:** `standard_topics.py` remains as frozen legacy
+  compatibility rather than being deleted. The evidence is the Phase-2
+  byte-identical legacy diff: keeping the side-table scoped to the legacy
+  compat layout preserves existing output while forbidding new consumers.
+  `generated_bindings.md` and `pyramid_interaction_semantics.md` have been
+  updated to reflect the implemented status, and the comms harness now
+  includes explicit sequence checks: request -> at least one requirement
+  transition, and cancel -> another requirement transition.
 
 Verification evidence from the implementation pass:
 
@@ -398,6 +417,8 @@ Verification evidence from the implementation pass:
 - `bash subprojects/PYRAMID/pim/test_harness/build_plugin_load_test.sh`
   passed. The script lacks an executable bit in this checkout, so it was
   invoked via `bash`.
+- `bash subprojects/PYRAMID/pim/test_harness/build_contract_routing_test.sh`
+  passed: `contract_routing_validation=pass transports=2`.
 - Legacy binding regeneration using HEAD vs current generators passed
   `diff -ru --exclude=binding_manifest.json`.
 - Generated Ada object compilation passed with `gnatgcc -c -gnat2020` for

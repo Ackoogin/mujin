@@ -79,8 +79,12 @@ void RclcppRuntimeAdapter::clearCancelled(
   cancelled_streams_.erase(correlation_id);
 }
 
-rclcpp::QoS RclcppRuntimeAdapter::topicQos() const {
-  return rclcpp::QoS(rclcpp::KeepLast(10)).reliable();
+rclcpp::QoS RclcppRuntimeAdapter::topicQos(pcl_qos_t qos) const {
+  auto profile = rclcpp::QoS(rclcpp::KeepLast(10));
+  if (qos.reliability == PCL_QOS_RELIABILITY_BEST_EFFORT) {
+    return profile.best_effort();
+  }
+  return profile.reliable();
 }
 
 rclcpp::QoS RclcppRuntimeAdapter::frameQos() const {
@@ -90,7 +94,7 @@ rclcpp::QoS RclcppRuntimeAdapter::frameQos() const {
 void RclcppRuntimeAdapter::subscribe(const TopicBinding& binding,
                                      TopicHandler handler) {
   auto subscription = node_->create_subscription<EnvelopeMsg>(
-      binding.ros2_topic, topicQos(),
+      binding.ros2_topic, topicQos(binding.qos),
       [handler = std::move(handler)](const EnvelopeMsg::SharedPtr msg) {
         handler(fromRosMessage(*msg));
       });
@@ -121,7 +125,8 @@ void RclcppRuntimeAdapter::advertise(const StreamServiceBinding& binding,
   }
 
   auto cancel_subscription = node_->create_subscription<EnvelopeMsg>(
-      binding.ros2_cancel_topic, topicQos(),
+      binding.ros2_cancel_topic,
+      topicQos({PCL_QOS_RELIABILITY_RELIABLE}),
       [this](const EnvelopeMsg::SharedPtr msg) {
         if (msg->correlation_id.empty()) {
           return;
@@ -171,7 +176,8 @@ void RclcppRuntimeAdapter::publish(const TopicBinding& binding,
     const auto it = envelope_publishers_.find(binding.ros2_topic);
     if (it == envelope_publishers_.end()) {
       publisher =
-          node_->create_publisher<EnvelopeMsg>(binding.ros2_topic, topicQos());
+          node_->create_publisher<EnvelopeMsg>(
+              binding.ros2_topic, topicQos(binding.qos));
       envelope_publishers_.emplace(binding.ros2_topic, publisher);
     } else {
       publisher = it->second;

@@ -241,8 +241,12 @@ into other trees (`"tactical_objects"` matches
 bindings) — scoping the side-table to the legacy layout is part of the
 plan's Phase 2, independent of full retirement.
 
-Once topics are expressed in the contract, the Python side-table becomes
-redundant and is removed. Migration in order:
+Once topics are expressed in the legacy contract, the Python side-table becomes
+redundant and can be removed. The 2026-07 implementation chose the conservative
+Phase-5 decision for now: keep the side-table as **frozen legacy
+compatibility** and forbid new consumers, because the legacy Tactical Objects
+bindings regenerate byte-identically while the MBSE tree already derives topics
+from stamped options. Migration to full deletion remains available in order:
 
 1. **Add the options proto** (`pyramid/options/pyramid.options.proto`) and parse
    method options. The current rpc regex in `proto_parser.py` stops at the
@@ -377,10 +381,10 @@ native-IDL backend; gRPC already meets the "as-is" bar.
 |------|-------|
 | Convention defined (this doc) | proposed; superseded in part by the port-grammar plan (see Update note at top) |
 | Streaming inference (Layer 1, RPC subset) | already implemented in `proto_parser.py` |
-| Topic inference (Layer 1, pub/sub) | not implemented; for the MBSE tree, planned as a port-grammar classifier rather than per-method inference |
-| Method option (Layer 2) | not implemented; planned as MBSE-stamped (machine-written), not hand-authored |
-| `standard_topics.py` retirement | metadata data-driven (JSON side-table); known cross-tree substring leak; scoping + retirement planned (plan Phase 2/5) |
-| QoS / action projection | reserved; QoS reconciliation with plugin QoS profiles defined in the plan |
+| Topic inference (Layer 1, pub/sub) | implemented as the MBSE port-grammar classifier fallback |
+| Method option (Layer 2) | implemented for `pyramid.options.pyramid_op`; MBSE stamps options mechanically |
+| `standard_topics.py` retirement | scoped to frozen legacy compat only; new-tree substring leak closed; full deletion deferred |
+| QoS / action projection | QoS reliability floors are emitted in binding manifests and generated C++ topic constants; actions remain reserved |
 | gRPC direct (as-is) consumption | compatible by design; annotation is transparent to `protoc`/gRPC |
 | ROS2 native IDL (`.msg`/`.srv`) projection | generated + round-trip verified (`pyramid_msgs`, `pyramid_ros2_codec.hpp`); live wire still envelope-only, `.action` not generated |
 

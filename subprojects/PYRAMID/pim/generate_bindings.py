@@ -71,6 +71,7 @@ class BindingArtifactManifest:
             'cabi': [],
             'services': [],
             'topics': [],
+            'endpoint_requirements': [],
             'codec_plugins': [],
             'flatbuffers_schemas': [],
             'protobuf_protos': [],
@@ -143,6 +144,32 @@ class BindingArtifactManifest:
         self._data['topics'] = entries
         self._seen['topics'] = {
             f"{entry['service']}:{entry['rpc']}:{entry['direction']}:{entry['wire_name']}"
+            for entry in entries
+        }
+
+    def add_endpoint_requirements(self, contract) -> None:
+        entries = []
+        for req in contract.endpoint_requirements:
+            entry = {
+                'endpoint_name': req.endpoint_name,
+                'kind': req.kind,
+                'capability': req.capability,
+                'reliability': req.reliability,
+                'source': req.source,
+                'qos': req.qos,
+            }
+            if req.service_name:
+                entry['service_name'] = req.service_name
+            if req.rpc_name:
+                entry['rpc_name'] = req.rpc_name
+            if req.topic_key:
+                entry['topic_key'] = req.topic_key
+            if req.topic_wire_name:
+                entry['topic_wire_name'] = req.topic_wire_name
+            entries.append(entry)
+        self._data['endpoint_requirements'] = entries
+        self._seen['endpoint_requirements'] = {
+            f"{entry['source']}:{entry['endpoint_name']}:{entry['kind']}"
             for entry in entries
         }
 
@@ -578,6 +605,7 @@ def main():
         args.contract_layout, proto_dir, output_dir, proto_files)
     manifest.add_selected_backend_protos(backend_names, proto_files)
     manifest.add_contract_topics(contract)
+    manifest.add_endpoint_requirements(contract)
 
     total = 0
     remaining_backends = list(backend_names)

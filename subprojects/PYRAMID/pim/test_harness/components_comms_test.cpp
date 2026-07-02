@@ -128,6 +128,7 @@ struct TopicConsumerState {
     pcl_port_t* request_pub = nullptr;
     bool information_seen = false;
     bool requirement_seen = false;
+    unsigned requirement_count = 0;
 };
 
 void publish_requirement_transition(TopicProviderState* state) {
@@ -168,6 +169,9 @@ void on_requirement_topic(pcl_container_t*, const pcl_msg_t* msg, void* ud) {
     state->requirement_seen =
         prov::decodePimOspreySprRequirementRequirement(msg, &payload)
         && static_cast<bool>(payload.sprrequirement);
+    if (state->requirement_seen) {
+        ++state->requirement_count;
+    }
 }
 
 pcl_status_t provider_topics_on_configure(pcl_container_t* c, void* ud) {
@@ -245,8 +249,11 @@ void run_topic_roundtrip(const char* content_type) {
     check(provider_state.request_seen, "provider observed request topic");
     check(consumer_state.requirement_seen,
           "consumer observed requirement transition");
+    check(consumer_state.requirement_count >= 1,
+          "conformance: request followed by requirement transition");
 
     consumer_state.requirement_seen = false;
+    const unsigned before_cancel_requirements = consumer_state.requirement_count;
     prov::SPRRequirement_Service_Request cancel_request;
     cancel_request.cancel = std::string("cancel-spr-001");
     check(prov::publishPimOspreySprRequirementRequest(
@@ -255,6 +262,8 @@ void run_topic_roundtrip(const char* content_type) {
     check(provider_state.cancel_seen, "provider observed cancel topic payload");
     check(consumer_state.requirement_seen,
           "consumer observed post-cancel requirement transition");
+    check(consumer_state.requirement_count > before_cancel_requirements,
+          "conformance: cancel followed by requirement transition");
 
     pcl_executor_destroy(exec);
     pcl_container_destroy(provider);

@@ -121,6 +121,15 @@ def _topic_key_to_phrase(key: str) -> str:
     return '-'.join(words)
 
 
+def _cpp_qos_reliability_expr(spec: BindingTopic) -> str:
+    floor = spec.reliability_floor
+    if floor == 'reliable':
+        return 'PCL_QOS_RELIABILITY_RELIABLE'
+    if floor == 'best_effort':
+        return 'PCL_QOS_RELIABILITY_BEST_EFFORT'
+    return 'PCL_QOS_RELIABILITY_UNSPECIFIED'
+
+
 def topic_spec(key: str):
     return _CONTRACT_TOPIC_SPECS.get(key) or _standard_topic_spec(key)
 
@@ -1516,6 +1525,17 @@ class CppServiceGenerator:
                     else:
                         f.write(f'constexpr const char* {cname} = "{wire}";\n')
                 f.write('\n')
+                qos_keys = [
+                    key for key in topic_set
+                    if hasattr(topic_spec(key), 'reliability_floor')
+                ]
+                if qos_keys:
+                    for key in qos_keys:
+                        pascal = _snake_to_pascal(key)
+                        spec = topic_spec(key)
+                        f.write(f'inline constexpr pcl_qos_t kTopic{pascal}Qos = '
+                                f'{{{_cpp_qos_reliability_expr(spec)}}};\n')
+                    f.write('\n')
 
             # ---- ServiceChannel enum -----------------------------------------
             f.write(_SEP + '\n')
@@ -1803,8 +1823,13 @@ class CppServiceGenerator:
                 if sub_topics:
                     for key in sub_topics:
                         cname = f'kTopic{_snake_to_pascal(key)}'
-                        f.write('    pyramid::transport::ros2::bindTopicIngress'
-                                f'(adapter, executor, {cname});\n')
+                        if hasattr(topic_spec(key), 'reliability_floor'):
+                            qname = f'kTopic{_snake_to_pascal(key)}Qos'
+                            f.write('    pyramid::transport::ros2::bindTopicIngress'
+                                    f'(adapter, executor, {cname}, {qname});\n')
+                        else:
+                            f.write('    pyramid::transport::ros2::bindTopicIngress'
+                                    f'(adapter, executor, {cname});\n')
                 for svc in parsed.services:
                     for rpc in svc.rpcs:
                         bind_func = ('bindStreamServiceIngress'

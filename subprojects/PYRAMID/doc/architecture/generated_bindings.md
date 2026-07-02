@@ -319,8 +319,13 @@ and invoke with typed `invoke*` helpers, as shown earlier in this section.
 
 ## C++ Topic Usage
 
-The generated service binding exposes typed topic helpers for every standard
-topic visible to that service package.
+The generated service binding exposes typed topic helpers for every topic
+visible to that service package. For MBSE-generated contracts these topics come
+from `pyramid.options.pyramid_op` method options stamped by the MBSE proto
+generator, with the port-grammar classifier retained as the fallback for older
+or hand-written contracts. Generated manifests also record the corresponding
+endpoint requirements (`endpoint_name`, endpoint kind, capability, QoS floor) so
+transport routing can be validated from the contract.
 
 For Tactical Objects provided bindings:
 
@@ -364,15 +369,14 @@ owning component.
 The generated helpers live in both provided and consumed namespaces where the
 topic is relevant, so components can use one facade consistently.
 
-This topic set is the **only** one defined today, and it comes from a JSON
-side-table (`pim/topic_metadata/tactical_objects_topics.json` via
-`pim/standard_topics.py`), not from the proto contract. It is a frozen
-compatibility set: do not add new topics to it. Its substring-based
-`package_match` is known to leak into other proto trees (e.g.
-`pim_osprey.tactical_objects` bindings currently receive these legacy wire
-names). Contract-derived topic generation — which also scopes/retires this
-side-table — is planned in
-[doc/plans/PYRAMID/pubsub_contract_generation_plan.md](../../../../doc/plans/PYRAMID/pubsub_contract_generation_plan.md).
+This topic set comes from a JSON side-table
+(`pim/topic_metadata/tactical_objects_topics.json` via
+`pim/standard_topics.py`) and is now explicitly **frozen legacy
+compatibility**: do not add new topics to it and do not use it for new
+contract trees. The generators consult it only for the legacy
+`pyramid.components.<component>.services.<provided|consumed>` compatibility
+layout; MBSE/new-tree bindings use contract-derived topics, so the former
+substring leak into `pim_osprey.tactical_objects` output is closed.
 
 ## Codec Backends
 

@@ -65,6 +65,26 @@ class BindingTopic:
         suffix = camel_to_lower_snake(self.short_type)
         return f"{suffix}_array" if self.is_array else suffix
 
+    @property
+    def reliability_floor(self) -> str:
+        return _qos_reliability_floor(self.qos)
+
+
+@dataclass(frozen=True)
+class EndpointRequirement:
+    """One routeable endpoint requirement derived from the proto contract."""
+
+    endpoint_name: str
+    kind: str
+    capability: str
+    reliability: str
+    source: str
+    service_name: str = ""
+    rpc_name: str = ""
+    topic_key: str = ""
+    topic_wire_name: str = ""
+    qos: Dict[str, object] = field(default_factory=dict)
+
 
 @dataclass
 class BindingContract:
@@ -76,6 +96,7 @@ class BindingContract:
     wrapper_modules: List[ProtoFile]
     service_type_closures: Dict[str, ServiceTypeClosure] = field(default_factory=dict)
     service_topics: Dict[str, Tuple[BindingTopic, ...]] = field(default_factory=dict)
+    endpoint_requirements: Tuple[EndpointRequirement, ...] = ()
     schema_ids: Dict[str, str] = field(default_factory=dict)
     naming_policy: "NamingPolicy" = field(default=None)
 
@@ -405,6 +426,14 @@ def _service_interface_snake(service_name: str) -> str:
     return camel_to_lower_snake(name)
 
 
+def _service_wire_prefix(service_name: str) -> str:
+    return _service_interface_snake(service_name)
+
+
+def _rpc_wire_suffix(rpc_name: str) -> str:
+    return camel_to_lower_snake(rpc_name)
+
+
 def _topic_for_role(package: str, service_name: str, role: str) -> str:
     return ".".join((
         _project_from_service_package(package),
@@ -415,6 +444,15 @@ def _topic_for_role(package: str, service_name: str, role: str) -> str:
 
 def _topic_key(wire_name: str) -> str:
     return wire_name.replace(".", "_").replace("-", "_")
+
+
+def _qos_reliability_floor(qos: Dict[str, object]) -> str:
+    value = str(qos.get("reliability", "")).upper()
+    if value == "RELIABLE":
+        return "reliable"
+    if value == "BEST_EFFORT":
+        return "best_effort"
+    return "unspecified"
 
 
 def _fqn_for_rpc_type(type_name: str, package: str) -> str:
@@ -523,6 +561,87 @@ def _schema_types(proto_files: Iterable[ProtoFile]) -> List[str]:
     return result
 
 
+def _rpc_wire_name(service: ProtoService, rpc: ProtoRpc) -> str:
+    return f"{_service_wire_prefix(service.name)}.{_rpc_wire_suffix(rpc.name)}"
+
+
+def _service_endpoint_kind(package: str, rpc: ProtoRpc) -> str:
+    role = _service_role(package)
+    if role == "provided" and rpc.server_streaming:
+        return "stream_provided"
+    return role
+
+
+def _service_endpoint_capability(kind: str) -> str:
+    if kind in ("publisher", "subscriber"):
+        return "PUBSUB"
+    if kind == "stream_provided":
+        return "RPC_STREAM"
+    return "RPC_UNARY"
+
+
+def _build_endpoint_requirements(
+    service_modules: Iterable[ProtoFile],
+) -> Tuple[EndpointRequirement, ...]:
+    requirements: List[EndpointRequirement] = []
+    seen: Set[Tuple[str, str, str]] = set()
+
+    def add(req: EndpointRequirement) -> None:
+        key = (req.endpoint_name, req.kind, req.source)
+        if key in seen:
+            return
+        seen.add(key)
+        requirements.append(req)
+
+    for pf in service_modules:
+        for service in pf.services:
+            for rpc in service.rpcs:
+                kind = _service_endpoint_kind(pf.package, rpc)
+                add(EndpointRequirement(
+                    endpoint_name=_rpc_wire_name(service, rpc),
+                    kind=kind,
+                    capability=_service_endpoint_capability(kind),
+                    reliability=_qos_reliability_floor(rpc.qos),
+                    source="service",
+                    service_name=service.name,
+                    rpc_name=rpc.name,
+                    qos=dict(rpc.qos),
+                ))
+
+            sub_topics, pub_topics = topics_for_proto_service(pf, service)
+            for topic in sub_topics.values():
+                add(EndpointRequirement(
+                    endpoint_name=topic.wire_name,
+                    kind="subscriber",
+                    capability="PUBSUB",
+                    reliability=topic.reliability_floor,
+                    source="topic",
+                    service_name=service.name,
+                    rpc_name=topic.rpc_name,
+                    topic_key=topic.key,
+                    topic_wire_name=topic.wire_name,
+                    qos=dict(topic.qos),
+                ))
+            for topic in pub_topics.values():
+                add(EndpointRequirement(
+                    endpoint_name=topic.wire_name,
+                    kind="publisher",
+                    capability="PUBSUB",
+                    reliability=topic.reliability_floor,
+                    source="topic",
+                    service_name=service.name,
+                    rpc_name=topic.rpc_name,
+                    topic_key=topic.key,
+                    topic_wire_name=topic.wire_name,
+                    qos=dict(topic.qos),
+                ))
+
+    return tuple(sorted(
+        requirements,
+        key=lambda r: (r.source, r.endpoint_name, r.kind, r.service_name, r.rpc_name),
+    ))
+
+
 def _build_service_closures(
     proto_files: List[ProtoFile],
 ) -> Dict[str, ServiceTypeClosure]:
@@ -588,6 +707,7 @@ def build_contract(proto_files: List[ProtoFile], layout: str) -> BindingContract
         wrapper_modules=wrapper_modules,
         service_type_closures=_build_service_closures(list(proto_files)),
         service_topics=service_topics,
+        endpoint_requirements=_build_endpoint_requirements(service_modules),
         schema_ids=schema_ids,
         naming_policy=policy,
     )

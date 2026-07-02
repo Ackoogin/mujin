@@ -1,4 +1,4 @@
-"""Data-driven standard-topic metadata.
+"""Frozen legacy standard-topic metadata.
 
 Topic wire names, payload types, and service bindings are NOT hard-coded here.
 They are loaded from an explicit JSON metadata file (see ``topic_metadata/``).
@@ -9,6 +9,10 @@ For backward compatibility the module-level default metadata is the PYRAMID
 compatibility set (Tactical Objects standard topics). Callers that want no
 topics -- e.g. arbitrary/generic proto layouts -- use ``EMPTY_METADATA`` or an
 explicit ``TopicMetadata`` of their own.
+
+New MBSE/generated contract trees derive topics from ``pyramid.options`` method
+options, with the port-grammar classifier as fallback. Do not add new topic sets
+to this module; it remains only for frozen legacy compatibility.
 """
 
 from __future__ import annotations

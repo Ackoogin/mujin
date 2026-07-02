@@ -54,7 +54,7 @@ class RclcppRuntimeAdapter final : public Adapter {
   bool isCancelled(const std::string& correlation_id) const;
   void clearCancelled(const std::string& correlation_id);
 
-  rclcpp::QoS topicQos() const;
+  rclcpp::QoS topicQos(pcl_qos_t qos) const;
   rclcpp::QoS frameQos() const;
 
   rclcpp::Node::SharedPtr node_;
