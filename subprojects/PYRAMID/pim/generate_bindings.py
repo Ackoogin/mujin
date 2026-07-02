@@ -44,6 +44,9 @@ import backends  # noqa: F401
 
 
 _MANIFEST_NAME = 'binding_manifest.json'
+_BINDING_EXCLUDED_PACKAGES = {
+    'pyramid.options',
+}
 
 
 class BindingArtifactManifest:
@@ -67,6 +70,7 @@ class BindingArtifactManifest:
             'json_codecs': [],
             'cabi': [],
             'services': [],
+            'topics': [],
             'codec_plugins': [],
             'flatbuffers_schemas': [],
             'protobuf_protos': [],
@@ -121,6 +125,26 @@ class BindingArtifactManifest:
                 if pf.services
             ]
             self._add_values('grpc_service_protos', service_protos)
+
+    def add_contract_topics(self, contract) -> None:
+        entries = []
+        for service_key, topics in sorted(contract.service_topics.items()):
+            for topic in topics:
+                entries.append({
+                    'service': service_key,
+                    'rpc': topic.rpc_name,
+                    'direction': topic.direction,
+                    'pattern': topic.pattern,
+                    'key': topic.key,
+                    'wire_name': topic.wire_name,
+                    'payload_type': topic.full_type,
+                    'qos': topic.qos,
+                })
+        self._data['topics'] = entries
+        self._seen['topics'] = {
+            f"{entry['service']}:{entry['rpc']}:{entry['direction']}:{entry['wire_name']}"
+            for entry in entries
+        }
 
     def record_generated(self, role: str, callback) -> None:
         before = _output_file_snapshot(self._output_dir)
@@ -226,7 +250,7 @@ def _codec_plugin_content_type(filename: str) -> str:
 def _discover_data_model_files(proto_dir: Path):
     return [
         pf for pf in parse_proto_tree(proto_dir)
-        if pf.package.startswith('pyramid.data_model')
+        if _is_binding_proto(pf) and pf.package.startswith('pyramid.data_model')
     ]
 
 
@@ -238,6 +262,8 @@ def _discover_service_message_files(proto_dir: Path):
     RPC uses google.protobuf.Empty so the generated facade resolves it."""
     files = []
     for pf in parse_proto_tree(proto_dir):
+        if not _is_binding_proto(pf):
+            continue
         if '.services.' not in f'.{pf.package}.':
             continue
         uses_empty = any(
@@ -252,6 +278,15 @@ def _discover_service_message_files(proto_dir: Path):
             continue
         files.append(pf)
     return files
+
+
+def _is_binding_proto(pf) -> bool:
+    """True for application contract protos that should produce bindings.
+
+    Compiler-extension protos such as pyramid.options are parsed so method
+    options can be captured, but they are not part of the generated SDK surface.
+    """
+    return pf.package not in _BINDING_EXCLUDED_PACKAGES
 
 
 def _generate_json_cpp(proto_dir: Path, output_dir: Path,
@@ -518,7 +553,8 @@ def main():
 
     # Parse all proto files
     print(f'Parsing proto files from {proto_dir}...')
-    proto_files = parse_proto_tree(proto_dir)
+    parsed_proto_files = parse_proto_tree(proto_dir)
+    proto_files = [pf for pf in parsed_proto_files if _is_binding_proto(pf)]
     index = ProtoTypeIndex(proto_files)
     contract = build_contract(proto_files, layout=args.contract_layout)
 
@@ -541,6 +577,7 @@ def main():
     manifest = BindingArtifactManifest(
         args.contract_layout, proto_dir, output_dir, proto_files)
     manifest.add_selected_backend_protos(backend_names, proto_files)
+    manifest.add_contract_topics(contract)
 
     total = 0
     remaining_backends = list(backend_names)

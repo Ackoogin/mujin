@@ -15,6 +15,7 @@ from proto_parser import (
     ProtoService,
     ProtoTypeIndex,
     _PROTO_SCALARS,
+    camel_to_lower_snake,
 )
 
 
@@ -28,6 +29,43 @@ class ServiceTypeClosure:
     types: Tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class BindingTopic:
+    """One resolved pub/sub topic from parsed contract options or port grammar."""
+
+    key: str
+    wire_name: str
+    full_type: str
+    direction: str
+    pattern: str
+    service_name: str
+    rpc_name: str
+    qos: Dict[str, object] = field(default_factory=dict)
+    is_array: bool = False
+
+    @property
+    def short_type(self) -> str:
+        return self.full_type.split(".")[-1]
+
+    @property
+    def cpp_payload_type(self) -> str:
+        if self.is_array:
+            return f"std::vector<{self.short_type}>"
+        return self.short_type
+
+    @property
+    def ada_payload_type(self) -> str:
+        base = camel_to_lower_snake(self.short_type).title().replace("_", "_")
+        if self.is_array:
+            return f"{base}_Array"
+        return base
+
+    @property
+    def flatbuffers_suffix(self) -> str:
+        suffix = camel_to_lower_snake(self.short_type)
+        return f"{suffix}_array" if self.is_array else suffix
+
+
 @dataclass
 class BindingContract:
     """Parsed proto files classified by content, independent of package names."""
@@ -37,6 +75,7 @@ class BindingContract:
     service_modules: List[ProtoFile]
     wrapper_modules: List[ProtoFile]
     service_type_closures: Dict[str, ServiceTypeClosure] = field(default_factory=dict)
+    service_topics: Dict[str, Tuple[BindingTopic, ...]] = field(default_factory=dict)
     schema_ids: Dict[str, str] = field(default_factory=dict)
     naming_policy: "NamingPolicy" = field(default=None)
 
@@ -344,6 +383,136 @@ def _service_key(package: str, service: ProtoService) -> str:
     return f"{package}.{service.name}" if package else service.name
 
 
+def _service_role(package: str) -> str:
+    return "provided" if package.lower().endswith(".provided") else "consumed"
+
+
+def _project_from_service_package(package: str) -> str:
+    parts = package.split(".")
+    try:
+        idx = parts.index("components")
+    except ValueError:
+        return "model"
+    if idx + 1 < len(parts):
+        return parts[idx + 1]
+    return "model"
+
+
+def _service_interface_snake(service_name: str) -> str:
+    name = service_name
+    if name.endswith("_Service"):
+        name = name[:-len("_Service")]
+    return camel_to_lower_snake(name)
+
+
+def _topic_for_role(package: str, service_name: str, role: str) -> str:
+    return ".".join((
+        _project_from_service_package(package),
+        _service_interface_snake(service_name),
+        role,
+    ))
+
+
+def _topic_key(wire_name: str) -> str:
+    return wire_name.replace(".", "_").replace("-", "_")
+
+
+def _fqn_for_rpc_type(type_name: str, package: str) -> str:
+    if (not type_name or type_name in _PROTO_SCALARS
+            or type_name.startswith("google.")):
+        return type_name
+    if "." in type_name:
+        return type_name
+    return f"{package}.{type_name}" if package else type_name
+
+
+def _topic_from_rpc(
+    pf: ProtoFile,
+    service: ProtoService,
+    rpc: ProtoRpc,
+    wire_name: str,
+    pattern: str,
+) -> BindingTopic:
+    payload_type = rpc.response_type if rpc.server_streaming else rpc.request_type
+    direction = "publish" if pattern == "PUBLISH" else "subscribe"
+    return BindingTopic(
+        key=_topic_key(wire_name),
+        wire_name=wire_name,
+        full_type=_fqn_for_rpc_type(payload_type, pf.package),
+        direction=direction,
+        pattern=pattern,
+        service_name=service.name,
+        rpc_name=rpc.name,
+        qos=dict(rpc.qos),
+    )
+
+
+def topics_for_proto_service(
+    pf: ProtoFile,
+    service: ProtoService,
+) -> Tuple[Dict[str, BindingTopic], Dict[str, BindingTopic]]:
+    """Return resolved (subscribe, publish) topics for one service."""
+
+    subscribe: Dict[str, BindingTopic] = {}
+    publish: Dict[str, BindingTopic] = {}
+
+    def add(topic: BindingTopic) -> None:
+        target = publish if topic.direction == "publish" else subscribe
+        target.setdefault(topic.key, topic)
+
+    option_rpcs = [
+        rpc for rpc in service.rpcs
+        if rpc.topic and rpc.pattern in ("PUBLISH", "SUBSCRIBE")
+    ]
+    if option_rpcs:
+        for rpc in option_rpcs:
+            add(_topic_from_rpc(pf, service, rpc, rpc.topic or "", rpc.pattern or ""))
+        return subscribe, publish
+
+    role = _service_role(pf.package)
+    if service.port_kind == "information":
+        rpc = service.rpcs[0]
+        pattern = "PUBLISH" if role == "provided" else "SUBSCRIBE"
+        add(_topic_from_rpc(
+            pf, service, rpc,
+            _topic_for_role(pf.package, service.name, "information"),
+            pattern,
+        ))
+        return subscribe, publish
+
+    if service.port_kind != "request":
+        return subscribe, publish
+
+    request_pattern = "SUBSCRIBE" if role == "provided" else "PUBLISH"
+    requirement_pattern = "PUBLISH" if role == "provided" else "SUBSCRIBE"
+    for rpc in service.rpcs:
+        if rpc.name in ("Create", "Update", "Cancel"):
+            add(_topic_from_rpc(
+                pf, service, rpc,
+                _topic_for_role(pf.package, service.name, "request"),
+                request_pattern,
+            ))
+        elif rpc.name == "Read":
+            add(_topic_from_rpc(
+                pf, service, rpc,
+                _topic_for_role(pf.package, service.name, "requirement"),
+                requirement_pattern,
+            ))
+    return subscribe, publish
+
+
+def topics_for_proto_file(
+    pf: ProtoFile,
+) -> Tuple[Dict[str, BindingTopic], Dict[str, BindingTopic]]:
+    subscribe: Dict[str, BindingTopic] = {}
+    publish: Dict[str, BindingTopic] = {}
+    for service in pf.services:
+        svc_sub, svc_pub = topics_for_proto_service(pf, service)
+        subscribe.update(svc_sub)
+        publish.update(svc_pub)
+    return subscribe, publish
+
+
 def _schema_types(proto_files: Iterable[ProtoFile]) -> List[str]:
     result: List[str] = []
     for pf in proto_files:
@@ -403,12 +572,22 @@ def build_contract(proto_files: List[ProtoFile], layout: str) -> BindingContract
         full_type: policy.schema_id_for_type(full_type)
         for full_type in _schema_types(proto_files)
     }
+    service_topics = {}
+    for pf in service_modules:
+        for service in pf.services:
+            sub_topics, pub_topics = topics_for_proto_service(pf, service)
+            topics = tuple(sorted(
+                [*sub_topics.values(), *pub_topics.values()],
+                key=lambda topic: (topic.wire_name, topic.direction),
+            ))
+            service_topics[_service_key(pf.package, service)] = topics
     return BindingContract(
         proto_files=list(proto_files),
         type_modules=type_modules,
         service_modules=service_modules,
         wrapper_modules=wrapper_modules,
         service_type_closures=_build_service_closures(list(proto_files)),
+        service_topics=service_topics,
         schema_ids=schema_ids,
         naming_policy=policy,
     )

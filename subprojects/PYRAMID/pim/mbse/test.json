@@ -4421,6 +4421,32 @@
             "lower": "0",
             "upper": "1"
           }
+        },
+        {
+          "id": "_pyramid_pubsub_acceptance_state_property",
+          "name": "acceptance",
+          "type": "_pyramid_pubsub_acceptance_state_enum",
+          "typeName": "AcceptanceState",
+          "visibility": "public",
+          "flow_direction": null,
+          "documentation": "Acceptance state for pub/sub request acknowledgement.",
+          "multiplicity": {
+            "lower": "1",
+            "upper": "1"
+          }
+        },
+        {
+          "id": "_pyramid_pubsub_acceptance_reason_property",
+          "name": "acceptance_reason",
+          "type": "String",
+          "typeName": "String",
+          "visibility": "public",
+          "flow_direction": null,
+          "documentation": "Reason supplied when a request is rejected.",
+          "multiplicity": {
+            "lower": "0",
+            "upper": "1"
+          }
         }
       ],
       "generalizes": [
@@ -5636,6 +5662,27 @@
           "id": "_2024x_3_468013e_1776056905492_39933_78",
           "name": "Failed",
           "documentation": null
+        }
+      ]
+    },
+    {
+      "id": "_pyramid_pubsub_acceptance_state_enum",
+      "name": "AcceptanceState",
+      "namespace": [
+        "0. Generic PIM",
+        "1. Data Model",
+        "1. Common"
+      ],
+      "literals": [
+        {
+          "id": "_pyramid_pubsub_acceptance_received_literal",
+          "name": "Received",
+          "documentation": "The request object has been received for processing."
+        },
+        {
+          "id": "_pyramid_pubsub_acceptance_rejected_literal",
+          "name": "Rejected",
+          "documentation": "The request object was rejected before execution."
         }
       ]
     },

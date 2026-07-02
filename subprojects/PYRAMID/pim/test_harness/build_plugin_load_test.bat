@@ -52,7 +52,7 @@ echo == using pcl_core: %LIBPCL% ==
 
 set INC=/I"%GEN%" /I"%PYRAMID%\..\PCL\include" /I"%PYRAMID%\core\external"
 
-set PKGS=pyramid_data_model_base pyramid_data_model_common pyramid_data_model_generic_pim_generic pyramid_data_model_common_pim_components_authorisation pyramid_data_model_common_pim_components_sensor_products pyramid_data_model_pim_osprey_sensor_products pyramid_components_pim_osprey_sensor_products_services_provided
+set PKGS=pyramid_data_model_base pyramid_data_model_common pyramid_data_model_generic_pim_generic pyramid_data_model_common_pim_components_authorisation pyramid_data_model_common_pim_components_sensor_products pyramid_data_model_pim_osprey_sensor_products pyramid_components_pim_osprey_sensor_products_services_consumed pyramid_components_pim_osprey_sensor_products_services_provided
 
 REM --- 1) the codec plugin as a standalone DLL (wire codec + marshal) ---
 set PLUGSRCS="%GEN%\pyramid_services_pim_osprey_sensor_products_json_codec_plugin.cpp"
@@ -60,6 +60,7 @@ for %%P in (%PKGS%) do (
   if exist "%GEN%\%%P_codec.cpp"        set PLUGSRCS=!PLUGSRCS! "%GEN%\%%P_codec.cpp"
   if exist "%GEN%\%%P_cabi_marshal.cpp" set PLUGSRCS=!PLUGSRCS! "%GEN%\%%P_cabi_marshal.cpp"
 )
+set PLUGSRCS=!PLUGSRCS! "%PYRAMID%\..\PCL\src\pcl_alloc.c"
 echo == building codec plugin DLL ==
 cl /nologo /std:c++17 /EHsc /MD /LD %INC% !PLUGSRCS! /Fe:"%PLUGIN_DLL%" /Fo"%GEN%\\"
 if errorlevel 1 exit /b 1

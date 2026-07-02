@@ -39,16 +39,18 @@ from proto_parser import (
     screaming_to_pascal, _PROTO_SCALARS,
 )
 from binding_contract import (
+    BindingTopic,
     GenericNamingPolicy,
     NamingPolicy,
     PyramidCompatNamingPolicy,
+    topics_for_proto_file,
 )
-from standard_topics import topic_spec, topics_for_service
+from standard_topics import topic_spec as _standard_topic_spec, topics_for_service
 
 
 # -- EntityActions operation set -----------------------------------------------
 
-OP_PREFIXES = ['Create', 'Read', 'Update', 'Delete']
+OP_PREFIXES = ['Create', 'Read', 'Update', 'Delete', 'Cancel']
 
 # Base-type short names from pyramid.data_model.base.* and common.*
 BASE_TYPE_MAP = {
@@ -68,6 +70,7 @@ _SEP = '// ' + '-' * 75
 # Generated code accepts content_type as a parameter so components can
 # configure per-port codecs at pcl_container_add_* time.
 _DEFAULT_CONTENT_TYPE = 'application/json'
+_CONTRACT_TOPIC_SPECS: Dict[str, BindingTopic] = {}
 
 _ALIAS_FIELD_NAMES = frozenset({
     'value', 'radians', 'meters', 'meters_per_second', 'seconds',
@@ -116,6 +119,10 @@ def _topic_key_to_phrase(key: str) -> str:
     words = key.split('_')
     words[-1] = _singularize(words[-1])
     return '-'.join(words)
+
+
+def topic_spec(key: str):
+    return _CONTRACT_TOPIC_SPECS.get(key) or _standard_topic_spec(key)
 
 
 def _short_type(full_type: str) -> str:
@@ -302,35 +309,30 @@ class ProtoService:
 
 
 class ProtoFile:
-    def __init__(self, package: str, services: List[ProtoService]):
+    def __init__(self, package: str, services: List[ProtoService],
+                 full_proto=None):
         self.package = package
         self.services = services
+        self.full_proto = full_proto
 
 
 def parse_proto(proto_path: Path) -> ProtoFile:
-    text = _strip_comments(proto_path.read_text(encoding='utf-8'))
-
-    pkg_match = re.search(r'\bpackage\s+([\w.]+)\s*;', text)
-    package = pkg_match.group(1) if pkg_match else ''
+    full = parse_full_proto(proto_path)
+    package = full.package
 
     services: List[ProtoService] = []
-    for svc_match in re.finditer(r'\bservice\s+(\w+)\s*\{([^}]*)\}', text, re.DOTALL):
-        svc_name = svc_match.group(1)
-        svc_body = svc_match.group(2)
-
+    for svc in full.services:
         rpcs: List[ProtoRpc] = []
-        for rpc_match in re.finditer(
-                r'\brpc\s+(\w+)\s*\(\s*([\w.]+)\s*\)\s*returns\s*\(\s*(stream\s+)?([\w.]+)\s*\)',
-                svc_body):
-            rpc_name = rpc_match.group(1)
-            req_type = rpc_match.group(2)
-            streaming = bool(rpc_match.group(3))
-            rsp_type = rpc_match.group(4)
-            rpcs.append(ProtoRpc(rpc_name, req_type, rsp_type, streaming))
+        for rpc in svc.rpcs:
+            rpcs.append(ProtoRpc(
+                rpc.name,
+                rpc.request_type,
+                rpc.response_type,
+                rpc.server_streaming,
+            ))
+        services.append(ProtoService(svc.name, rpcs))
 
-        services.append(ProtoService(svc_name, rpcs))
-
-    return ProtoFile(package, services)
+    return ProtoFile(package, services, full)
 
 
 # -- C++ namespace / file name derivation -------------------------------------
@@ -379,8 +381,33 @@ def _is_provided(proto_file: ProtoFile) -> bool:
 def _topics_for_proto(
         parsed: 'ProtoFile', is_provided: bool
 ) -> Tuple[Dict[str, str], Dict[str, str]]:
-    """Return (sub_topics, pub_topics) for the service, based on its package."""
+    """Return (sub_topics, pub_topics), preferring contract-derived topics."""
+    full = getattr(parsed, 'full_proto', None)
+    if full is None and hasattr(parsed, 'path'):
+        full = parsed
+    if full is not None:
+        sub_specs, pub_specs = topics_for_proto_file(full)
+        if sub_specs or pub_specs:
+            _CONTRACT_TOPIC_SPECS.update(sub_specs)
+            _CONTRACT_TOPIC_SPECS.update(pub_specs)
+            return (
+                {key: spec.wire_name for key, spec in sub_specs.items()},
+                {key: spec.wire_name for key, spec in pub_specs.items()},
+            )
+    if not _is_pyramid_compat_service_package(parsed.package):
+        return {}, {}
     return topics_for_service(parsed.package, is_provided)
+
+
+def _is_pyramid_compat_service_package(package: str) -> bool:
+    parts = [p for p in package.split('.') if p]
+    return (
+        len(parts) == 5
+        and parts[0] == 'pyramid'
+        and parts[1] == 'components'
+        and parts[3] == 'services'
+        and parts[4] in ('provided', 'consumed')
+    )
 
 
 def _data_model_package_for_type(full_type: str) -> str:

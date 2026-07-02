@@ -13,6 +13,14 @@ enum Progress {
   PROGRESS_FAILED = 5;
 }
 
+enum AcceptanceState {
+  ACCEPTANCE_STATE_UNSPECIFIED = 0;
+  // The request object has been received for processing.
+  ACCEPTANCE_STATE_RECEIVED = 1;
+  // The request object was rejected before execution.
+  ACCEPTANCE_STATE_REJECTED = 2;
+}
+
 enum StandardIdentity {
   STANDARD_IDENTITY_UNSPECIFIED = 0;
   STANDARD_IDENTITY_UNKNOWN = 1;
@@ -59,6 +67,10 @@ message Achievement {
 
   Progress status = 2;
   optional pyramid.data_model.base.Percentage quality = 3;
+  // Acceptance state for pub/sub request acknowledgement.
+  AcceptanceState acceptance = 4;
+  // Reason supplied when a request is rejected.
+  optional string acceptance_reason = 5;
 }
 
 // Base representation of a Requirement to be requested from Component services.

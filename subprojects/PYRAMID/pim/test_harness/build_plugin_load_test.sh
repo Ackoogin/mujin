@@ -30,8 +30,14 @@ rm -rf "$gen"; mkdir -p "$gen"
 python3 "$pyramid/pim/generate_bindings.py" "$pyramid/pim/test" "$gen" \
     --languages cpp --backends json >/dev/null
 
-libpcl="$(find "$root/build" -name libpcl_core.a | head -1)"
-[ -n "$libpcl" ] || { echo "libpcl_core.a not found under build/"; exit 2; }
+libpcl=""
+for candidate in $(find "$root" -path '*/libpcl_core.a' -type f | sort); do
+  if nm -g "$candidate" 2>/dev/null | grep -q ' T pcl_alloc$'; then
+    libpcl="$candidate"
+    break
+  fi
+done
+[ -n "$libpcl" ] || { echo "libpcl_core.a with pcl_alloc not found under build*/"; exit 2; }
 
 inc=(-I"$gen" -I"$pyramid/../PCL/include" -I"$pyramid/core/external")
 
@@ -42,6 +48,7 @@ pkgs=(
   pyramid_data_model_common_pim_components_authorisation
   pyramid_data_model_common_pim_components_sensor_products
   pyramid_data_model_pim_osprey_sensor_products
+  pyramid_components_pim_osprey_sensor_products_services_consumed
   pyramid_components_pim_osprey_sensor_products_services_provided
 )
 
@@ -52,6 +59,10 @@ for p in "${pkgs[@]}"; do
     [ -f "$gen/$p$suffix" ] && plug+=("$gen/$p$suffix")
   done
 done
+pcl_alloc_obj="$gen/pcl_alloc.o"
+cc -std=c11 -fPIC -I"$pyramid/../PCL/include" \
+  -c "$pyramid/../PCL/src/pcl_alloc.c" -o "$pcl_alloc_obj"
+plug+=("$pcl_alloc_obj")
 echo "== building codec plugin .so ($(echo "${plug[@]}" | wc -w) sources) =="
 g++ -std=c++17 -fPIC -shared "${inc[@]}" "${plug[@]}" -o "$plugin_so"
 

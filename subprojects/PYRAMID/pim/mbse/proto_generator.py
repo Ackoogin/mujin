@@ -5,6 +5,7 @@ Transforms parsed SysML JSON model to Protocol Buffer (.proto) files
 """
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Dict, List, Any, Set, Optional
@@ -213,6 +214,8 @@ class ProtobufGenerator:
             imports.append('import "google/protobuf/timestamp.proto";')
         if 'google.protobuf.Empty' in body:
             imports.append('import "google/protobuf/empty.proto";')
+        if 'pyramid.options.pyramid_op' in body:
+            imports.append('import "pyramid/options/pyramid.options.proto";')
         pkg_imports = set()
         for m in re.finditer(r'(pyramid(?:\.[a-z_][a-z0-9_]*)+)\.[A-Z][A-Za-z0-9_]*', body):
             pkg = m.group(1)
@@ -1297,30 +1300,61 @@ class ProtobufGenerator:
         """Make a valid protobuf identifier from a (possibly spaced) name."""
         return ''.join(ch if (ch.isalnum() or ch == '_') else '_' for ch in name)
 
+    def _project_from_service_package(self, package_name: str) -> str:
+        parts = package_name.split('.')
+        try:
+            idx = parts.index('components')
+        except ValueError:
+            return 'model'
+        if idx + 1 < len(parts):
+            return parts[idx + 1]
+        return 'model'
+
+    def _interaction_topic(self, current_package: str, svc_name: str,
+                           role: str) -> str:
+        iface = svc_name[:-len('_Service')] if svc_name.endswith('_Service') else svc_name
+        snake = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', iface)
+        snake = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', snake).lower()
+        return f'{self._project_from_service_package(current_package)}.{snake}.{role}'
+
+    def _write_interaction_option(self, f, current_package: str, svc_name: str,
+                                  role: str, pattern: str) -> None:
+        topic = self._interaction_topic(current_package, svc_name, role)
+        f.write(' {\n')
+        f.write('    option (pyramid.options.pyramid_op) = {\n')
+        f.write(f'      pattern: {pattern}\n')
+        f.write(f'      topic: "{topic}"\n')
+        f.write('      qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }\n')
+        f.write('    };\n')
+        f.write('  }')
+
     def _payload_message(self, f, wrapper_name: str, payload_ref: Optional[str],
-                         current_package: str) -> str:
+                         current_package: str,
+                         extra_fields: Optional[List[tuple]] = None) -> str:
         """Return the message type to use for a payload, writing a oneof wrapper if it has variants.
 
         If the payload type has multiple concrete variants (refined subclasses),
         emit a wrapper message with a `oneof` over them and return its name.
         Otherwise return the qualified payload type directly (or Empty if absent).
         """
-        if not payload_ref:
+        extra_fields = extra_fields or []
+        if not payload_ref and not extra_fields:
             return 'google.protobuf.Empty'
 
         base_name = self._type_name(payload_ref)
         variants = []
-        if not self._is_abstract(payload_ref):
+        if payload_ref and not self._is_abstract(payload_ref):
             variants.append(base_name)
-        for child in self._concrete_descendants(payload_ref):
-            if child != base_name:
-                variants.append(child)
+        if payload_ref:
+            for child in self._concrete_descendants(payload_ref):
+                if child != base_name:
+                    variants.append(child)
         variants = list(dict.fromkeys(variants))  # de-dup, preserve order
 
         # Keep only common + this project's variants (drop other projects').
         variants = self._filter_variants_by_project(variants, current_package)
 
-        if len(variants) <= 1:
+        if len(variants) <= 1 and not extra_fields:
             return self._get_qualified_type(payload_ref, current_package)
 
         # Service files reference data packages one-way, so expanding the oneof
@@ -1332,6 +1366,9 @@ class ProtobufGenerator:
         for variant in variants:
             q = self._get_qualified_type(variant, current_package)
             f.write(f'    {q} {self._to_snake_case(variant)} = {field_num};\n')
+            field_num += 1
+        for field_type, field_name in extra_fields:
+            f.write(f'    {field_type} {field_name} = {field_num};\n')
             field_num += 1
         f.write(f'  }}\n')
         f.write('}\n\n')
@@ -1371,25 +1408,44 @@ class ProtobufGenerator:
             ack = self._get_qualified_type('Ack', current_package)
             query = self._get_qualified_type('Query', current_package)
             identifier = self._get_qualified_type('Identifier', current_package)
+            request_pattern = 'SUBSCRIBE' if direction == 'provided' else 'PUBLISH'
+            requirement_pattern = 'PUBLISH' if direction == 'provided' else 'SUBSCRIBE'
             req_msg = self._payload_message(f, f'{svc_name}_Request',
-                                            payloads.get('request'), current_package)
+                                            payloads.get('request'), current_package,
+                                            extra_fields=[(identifier, 'cancel')])
             reqmt_msg = self._payload_message(f, f'{svc_name}_Requirement',
                                               payloads.get('requirement'), current_package)
             f.write(f"// Request port '{port['name']}' ({direction}) refining {iface_name}\n")
             f.write(f'service {svc_name} {{\n')
-            f.write(f'  rpc Create({req_msg}) returns ({ack});\n')
-            f.write(f'  rpc Read({query}) returns (stream {reqmt_msg});\n')
-            f.write(f'  rpc Update({reqmt_msg}) returns ({ack});\n')
-            f.write(f'  rpc Cancel({identifier}) returns ({ack});\n')
+            f.write(f'  rpc Create({req_msg}) returns ({ack})')
+            self._write_interaction_option(
+                f, current_package, svc_name, 'request', request_pattern)
+            f.write('\n')
+            f.write(f'  rpc Read({query}) returns (stream {reqmt_msg})')
+            self._write_interaction_option(
+                f, current_package, svc_name, 'requirement', requirement_pattern)
+            f.write('\n')
+            f.write(f'  rpc Update({reqmt_msg}) returns ({ack})')
+            self._write_interaction_option(
+                f, current_package, svc_name, 'request', request_pattern)
+            f.write('\n')
+            f.write(f'  rpc Cancel({identifier}) returns ({ack})')
+            self._write_interaction_option(
+                f, current_package, svc_name, 'request', request_pattern)
+            f.write('\n')
             f.write('}\n')
             return True
 
         # information
+        information_pattern = 'PUBLISH' if direction == 'provided' else 'SUBSCRIBE'
         info_msg = self._payload_message(f, f'{svc_name}_Information',
                                          payloads.get('information'), current_package)
         f.write(f"// Information port '{port['name']}' ({direction}) refining {iface_name}\n")
         f.write(f'service {svc_name} {{\n')
-        f.write(f'  rpc Read(google.protobuf.Empty) returns (stream {info_msg});\n')
+        f.write(f'  rpc Read(google.protobuf.Empty) returns (stream {info_msg})')
+        self._write_interaction_option(
+            f, current_package, svc_name, 'information', information_pattern)
+        f.write('\n')
         f.write('}\n')
         return True
 

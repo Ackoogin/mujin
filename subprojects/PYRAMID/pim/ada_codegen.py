@@ -39,17 +39,19 @@ from proto_parser import (
     screaming_to_pascal, camel_to_snake, _PROTO_SCALARS,
     parse_proto as _pp_parse,
 )
+from binding_contract import BindingTopic, topics_for_proto_file
 from cpp_codegen import (
     _field_with_type, _proto_type_fqn, _resolve_message,
     _package_for_proto_type,
 )
 from cabi_codegen import _c_struct_name
-from standard_topics import topic_spec, topics_for_service
+from standard_topics import topic_spec as _standard_topic_spec, topics_for_service
 
 
 # -- EntityActions operation set -----------------------------------------------
 
-OP_PREFIXES = ['Create', 'Read', 'Update', 'Delete']
+OP_PREFIXES = ['Create', 'Read', 'Update', 'Delete', 'Cancel']
+_CONTRACT_TOPIC_SPECS: Dict[str, BindingTopic] = {}
 
 # Base-type short names from pyramid.data_model.base.* and common.*
 BASE_TYPE_MAP = {
@@ -95,6 +97,10 @@ def _short_type(full_type: str) -> str:
     if full_type in BASE_TYPE_MAP:
         return BASE_TYPE_MAP[full_type]
     return full_type.split('.')[-1]
+
+
+def topic_spec(key: str):
+    return _CONTRACT_TOPIC_SPECS.get(key) or _standard_topic_spec(key)
 
 
 def _proto_type_to_ada(full_type: str) -> str:
@@ -239,35 +245,30 @@ class ProtoService:
 
 
 class ProtoFile:
-    def __init__(self, package: str, services: List[ProtoService]):
+    def __init__(self, package: str, services: List[ProtoService],
+                 full_proto=None):
         self.package = package
         self.services = services
+        self.full_proto = full_proto
 
 
 def parse_proto(proto_path: Path) -> ProtoFile:
-    text = _strip_comments(proto_path.read_text(encoding='utf-8'))
-
-    pkg_match = re.search(r'\bpackage\s+([\w.]+)\s*;', text)
-    package = pkg_match.group(1) if pkg_match else ''
+    full = _pp_parse(proto_path)
+    package = full.package
 
     services: List[ProtoService] = []
-    for svc_match in re.finditer(r'\bservice\s+(\w+)\s*\{([^}]*)\}', text, re.DOTALL):
-        svc_name = svc_match.group(1)
-        svc_body = svc_match.group(2)
-
+    for svc in full.services:
         rpcs: List[ProtoRpc] = []
-        for rpc_match in re.finditer(
-                r'\brpc\s+(\w+)\s*\(\s*([\w.]+)\s*\)\s*returns\s*\(\s*(stream\s+)?([\w.]+)\s*\)',
-                svc_body):
-            rpc_name = rpc_match.group(1)
-            req_type = rpc_match.group(2)
-            streaming = bool(rpc_match.group(3))
-            rsp_type = rpc_match.group(4)
-            rpcs.append(ProtoRpc(rpc_name, req_type, rsp_type, streaming))
+        for rpc in svc.rpcs:
+            rpcs.append(ProtoRpc(
+                rpc.name,
+                rpc.request_type,
+                rpc.response_type,
+                rpc.server_streaming,
+            ))
+        services.append(ProtoService(svc.name, rpcs))
 
-        services.append(ProtoService(svc_name, rpcs))
-
-    return ProtoFile(package, services)
+    return ProtoFile(package, services, full)
 
 
 # -- Ada package name derivation -----------------------------------------------
@@ -505,7 +506,32 @@ def _topics_for_proto(
     Topics are only generated for services whose proto package contains a
     recognised key fragment.  Services with no matching fragment get no topics.
     """
+    full = getattr(parsed, 'full_proto', None)
+    if full is None and hasattr(parsed, 'path'):
+        full = parsed
+    if full is not None:
+        sub_specs, pub_specs = topics_for_proto_file(full)
+        if sub_specs or pub_specs:
+            _CONTRACT_TOPIC_SPECS.update(sub_specs)
+            _CONTRACT_TOPIC_SPECS.update(pub_specs)
+            return (
+                {key: spec.wire_name for key, spec in sub_specs.items()},
+                {key: spec.wire_name for key, spec in pub_specs.items()},
+            )
+    if not _is_pyramid_compat_service_package(parsed.package):
+        return {}, {}
     return topics_for_service(parsed.package, is_provided)
+
+
+def _is_pyramid_compat_service_package(package: str) -> bool:
+    parts = [p for p in package.split('.') if p]
+    return (
+        len(parts) == 5
+        and parts[0] == 'pyramid'
+        and parts[1] == 'components'
+        and parts[3] == 'services'
+        and parts[4] in ('provided', 'consumed')
+    )
 
 
 def _applicable_topics(

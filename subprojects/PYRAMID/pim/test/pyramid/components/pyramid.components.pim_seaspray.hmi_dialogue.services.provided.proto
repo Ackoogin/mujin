@@ -3,6 +3,7 @@ syntax = "proto3";
 package pyramid.components.pim_seaspray.hmi_dialogue.services.provided;
 
 import "google/protobuf/empty.proto";
+import "pyramid/options/pyramid.options.proto";
 import "pyramid/data_model/pyramid.data_model.base.proto";
 import "pyramid/data_model/pyramid.data_model.common.proto";
 import "pyramid/data_model/pyramid.data_model.common_pim_components.authorisation.proto";
@@ -10,7 +11,13 @@ import "pyramid/data_model/pyramid.data_model.generic_pim.generic.proto";
 
 // Information port 'pCapability' (provided) refining Capability
 service Capability_Service {
-  rpc Read(google.protobuf.Empty) returns (stream pyramid.data_model.generic_pim.generic.Capabilities);
+  rpc Read(google.protobuf.Empty) returns (stream pyramid.data_model.generic_pim.generic.Capabilities) {
+    option (pyramid.options.pyramid_op) = {
+      pattern: PUBLISH
+      topic: "pim_seaspray.capability.information"
+      qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
+    };
+  }
 }
 
 message Authorisation_Dependency_Service_Request {
@@ -18,6 +25,7 @@ message Authorisation_Dependency_Service_Request {
     pyramid.data_model.common.AUTDependencyRequest autdependency_request = 1;
     pyramid.data_model.common.AUTPredecessorDependencyRequest autpredecessor_dependency_request = 2;
     pyramid.data_model.common.AUTPositionalDependencyRequest autpositional_dependency_request = 3;
+    pyramid.data_model.base.Identifier cancel = 4;
   }
 }
 
@@ -31,9 +39,33 @@ message Authorisation_Dependency_Service_Requirement {
 
 // Request port 'pAuthorisationDependency' (provided) refining Authorisation_Dependency
 service Authorisation_Dependency_Service {
-  rpc Create(Authorisation_Dependency_Service_Request) returns (pyramid.data_model.common.Ack);
-  rpc Read(pyramid.data_model.common.Query) returns (stream Authorisation_Dependency_Service_Requirement);
-  rpc Update(Authorisation_Dependency_Service_Requirement) returns (pyramid.data_model.common.Ack);
-  rpc Cancel(pyramid.data_model.base.Identifier) returns (pyramid.data_model.common.Ack);
+  rpc Create(Authorisation_Dependency_Service_Request) returns (pyramid.data_model.common.Ack) {
+    option (pyramid.options.pyramid_op) = {
+      pattern: SUBSCRIBE
+      topic: "pim_seaspray.authorisation_dependency.request"
+      qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
+    };
+  }
+  rpc Read(pyramid.data_model.common.Query) returns (stream Authorisation_Dependency_Service_Requirement) {
+    option (pyramid.options.pyramid_op) = {
+      pattern: PUBLISH
+      topic: "pim_seaspray.authorisation_dependency.requirement"
+      qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
+    };
+  }
+  rpc Update(Authorisation_Dependency_Service_Requirement) returns (pyramid.data_model.common.Ack) {
+    option (pyramid.options.pyramid_op) = {
+      pattern: SUBSCRIBE
+      topic: "pim_seaspray.authorisation_dependency.request"
+      qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
+    };
+  }
+  rpc Cancel(pyramid.data_model.base.Identifier) returns (pyramid.data_model.common.Ack) {
+    option (pyramid.options.pyramid_op) = {
+      pattern: SUBSCRIBE
+      topic: "pim_seaspray.authorisation_dependency.request"
+      qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
+    };
+  }
 }
 

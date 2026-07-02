@@ -3,6 +3,7 @@ syntax = "proto3";
 package pyramid.components.pim_seaspray.sensor_products.services.consumed;
 
 import "google/protobuf/empty.proto";
+import "pyramid/options/pyramid.options.proto";
 import "pyramid/data_model/pyramid.data_model.common_pim_components.sensor_products.proto";
 import "pyramid/data_model/pyramid.data_model.generic_pim.generic.proto";
 import "pyramid/data_model/pyramid.data_model.pim_seaspray.sensor_products.proto";
@@ -16,11 +17,23 @@ message SPRMeasuredInformation_Service_Information {
 
 // Information port 'pSPRMeasuredInformation' (consumed) refining SPRMeasuredInformation
 service SPRMeasuredInformation_Service {
-  rpc Read(google.protobuf.Empty) returns (stream SPRMeasuredInformation_Service_Information);
+  rpc Read(google.protobuf.Empty) returns (stream SPRMeasuredInformation_Service_Information) {
+    option (pyramid.options.pyramid_op) = {
+      pattern: SUBSCRIBE
+      topic: "pim_seaspray.spr_measured_information.information"
+      qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
+    };
+  }
 }
 
 // Information port 'pCapabilityEvidence' (consumed) refining Capability_Evidence
 service Capability_Evidence_Service {
-  rpc Read(google.protobuf.Empty) returns (stream pyramid.data_model.generic_pim.generic.Capabilities);
+  rpc Read(google.protobuf.Empty) returns (stream pyramid.data_model.generic_pim.generic.Capabilities) {
+    option (pyramid.options.pyramid_op) = {
+      pattern: SUBSCRIBE
+      topic: "pim_seaspray.capability_evidence.information"
+      qos: { reliability: RELIABLE durability: VOLATILE depth: 10 }
+    };
+  }
 }
 

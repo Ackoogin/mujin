@@ -357,6 +357,67 @@ Proving path: `pim/test/` end to end, alongside the untouched legacy tree.
 Each phase has a hard acceptance gate; diff-stability of regenerated
 artefacts is a standing requirement throughout.
 
+### Progress ledger — 2026-07-02
+
+Phases 0-3 have been implemented using the recommended **C1 + A,
+layered** option.
+
+- **Phase 0 complete:** `pyramid.options.pyramid_op` is present in both
+  proto import roots; the parser captures `Interaction{pattern, topic,
+  qos}` into `ProtoRpc`; the service-shape classifier is present and
+  advisory. Legacy parsing was compared against the HEAD parser with the
+  new advisory fields stripped: `legacy_parse_identical=1`, 13 files,
+  16 services.
+- **Phase 1 complete:** the MBSE proto generator stamps options on every
+  generated port RPC. Topics follow §5.1, including acronym-safe interface
+  splitting (`SPRRequirement` -> `spr_requirement`), with default QoS
+  `RELIABLE`, `VOLATILE`, `depth=10`.
+- **Phase 2 complete:** binding generation resolves topics from contract
+  options first, falls back to the port grammar for unannotated contracts,
+  and consults `standard_topics.py` only for the legacy compat service
+  layout. New-tree manifests record 58 contract-derived topics. Legacy
+  bindings regenerate byte-identically, excluding only the manifest's new
+  topic records; the `kTopicEntityMatches` leak is absent from
+  `pim_osprey.tactical_objects`.
+- **Phase 3 complete:** `Achievement` now carries an acceptance layer
+  (`RECEIVED` / `REJECTED` plus optional reason); request wrappers include
+  a `cancel` variant on the request topic; the comms harness exercises an
+  Information topic and a correlated Request/Requirement pair, including
+  Cancel, over JSON and FlatBuffers.
+
+Verification evidence from the implementation pass:
+
+- `python3 -m unittest subprojects/PYRAMID/pim/test_proto_parser.py`
+  passed.
+- `python3 subprojects/PYRAMID/pim/mbse/proto_generator.py
+  subprojects/PYRAMID/pim/mbse/test.json subprojects/PYRAMID/pim/test`
+  was drift-free against the current generated proto tree.
+- `subprojects/PYRAMID/pim/test_harness/viability_check.sh` passed.
+- `subprojects/PYRAMID/pim/test_harness/build_comms_test.sh` passed,
+  including JSON and FlatBuffers topic round-trips.
+- `bash subprojects/PYRAMID/pim/test_harness/build_plugin_load_test.sh`
+  passed. The script lacks an executable bit in this checkout, so it was
+  invoked via `bash`.
+- Legacy binding regeneration using HEAD vs current generators passed
+  `diff -ru --exclude=binding_manifest.json`.
+- Generated Ada object compilation passed with `gnatgcc -c -gnat2020` for
+  both trees: new tree 112/112 `.adb`, legacy tree 18/18 `.adb`.
+
+Implementation notes carried forward:
+
+- `pyramid.options` is parsed as compiler-extension metadata but excluded
+  from generated SDK artifact surfaces; otherwise non-application
+  descriptor-extension schemas are projected into ROS2/codec backends.
+- FlatBuffers codec plugins currently require the generated JSON codec
+  closure as a bridge for wrapper conversion. This is acceptable for the
+  Phase 3 proof, but it should be revisited before treating binary codecs
+  as fully independent plugin artifacts.
+- Windows `.bat` parity has been authored for the updated comms and
+  plugin-load scripts, but was not run in the Linux implementation
+  environment.
+- Generated binding output remained out of git; committed artifacts are
+  source generators, proto specs, tests, harness scripts, and docs.
+
 ### Phase 0 — options proto + parser (enabler)
 
 - Add `pyramid/options/pyramid.options.proto` (`Interaction`: `pattern`,

@@ -117,6 +117,9 @@ class ProtoRpc:
     response_type: str
     server_streaming: bool = False
     client_streaming: bool = False
+    pattern: Optional[str] = None
+    topic: Optional[str] = None
+    qos: Dict[str, object] = field(default_factory=dict)
 
 
 @dataclass
@@ -124,6 +127,7 @@ class ProtoService:
     """A proto service definition."""
     name: str
     rpcs: List[ProtoRpc] = field(default_factory=list)
+    port_kind: Optional[str] = None
 
 
 @dataclass
@@ -282,6 +286,98 @@ def _remove_nested_blocks(text: str, keyword: str) -> str:
     return ''.join(result)
 
 
+def _short_type(type_name: str) -> str:
+    return type_name.split('.')[-1] if type_name else ''
+
+
+def _is_type(type_name: str, short_name: str) -> bool:
+    return _short_type(type_name) == short_name
+
+
+def _parse_interaction_option(body: str) -> tuple:
+    """Parse a pyramid.options.Interaction method option body.
+
+    The proto parser is intentionally lightweight, so this extracts the small
+    option shape used by the generator rather than implementing full proto
+    option grammar.
+    """
+    option_match = re.search(
+        r'\boption\s+\(pyramid\.options\.pyramid_op\)\s*=\s*\{',
+        body,
+    )
+    if not option_match:
+        return None, None, {}
+
+    option_body, _ = _find_block(body, option_match.end() - 1)
+    pattern = None
+    topic = None
+    qos: Dict[str, object] = {}
+
+    pattern_match = re.search(r'\bpattern\s*:\s*(\w+)', option_body)
+    if pattern_match:
+        pattern = pattern_match.group(1)
+
+    topic_match = re.search(r'\btopic\s*:\s*"([^"]*)"', option_body)
+    if topic_match:
+        topic = topic_match.group(1)
+
+    qos_match = re.search(r'\bqos\s*:\s*\{', option_body)
+    if qos_match:
+        qos_body, _ = _find_block(option_body, qos_match.end() - 1)
+        for key in ('reliability', 'durability'):
+            match = re.search(rf'\b{key}\s*:\s*(\w+)', qos_body)
+            if match:
+                qos[key] = match.group(1)
+        depth_match = re.search(r'\bdepth\s*:\s*(\d+)', qos_body)
+        if depth_match:
+            qos['depth'] = int(depth_match.group(1))
+
+    return pattern, topic, qos
+
+
+def classify_port_service(service: ProtoService) -> Optional[str]:
+    """Classify an MBSE port-grammar service shape.
+
+    This is advisory Layer-1 metadata. Layer-2 method options remain
+    authoritative wherever they are present.
+    """
+    rpcs = service.rpcs
+    if len(rpcs) == 1:
+        rpc = rpcs[0]
+        if (rpc.name == 'Read'
+                and not rpc.client_streaming
+                and rpc.server_streaming
+                and rpc.request_type == 'google.protobuf.Empty'):
+            return 'information'
+        return None
+
+    if len(rpcs) != 4 or [rpc.name for rpc in rpcs] != [
+            'Create', 'Read', 'Update', 'Cancel']:
+        return None
+
+    create, read, update, cancel = rpcs
+    ack_responses = (
+        _is_type(create.response_type, 'Ack')
+        and _is_type(update.response_type, 'Ack')
+        and _is_type(cancel.response_type, 'Ack')
+    )
+    if not ack_responses:
+        return None
+    if any(rpc.client_streaming for rpc in rpcs):
+        return None
+    if create.server_streaming or update.server_streaming or cancel.server_streaming:
+        return None
+    if not read.server_streaming:
+        return None
+    if not _is_type(read.request_type, 'Query'):
+        return None
+    if update.request_type != read.response_type:
+        return None
+    if not _is_type(cancel.request_type, 'Identifier'):
+        return None
+    return 'request'
+
+
 def parse_proto(path: Path) -> ProtoFile:
     """Parse a single .proto file into a ProtoFile model."""
     raw = path.read_text(encoding='utf-8')
@@ -332,13 +428,24 @@ def parse_proto(path: Path) -> ProtoFile:
         for rm in re.finditer(
                 r'\brpc\s+(\w+)\s*\(\s*(stream\s+)?([\w.]+)\s*\)\s*returns\s*\(\s*(stream\s+)?([\w.]+)\s*\)',
                 block_body):
+            rpc_body = ''
+            pos = rm.end()
+            while pos < len(block_body) and block_body[pos].isspace():
+                pos += 1
+            if pos < len(block_body) and block_body[pos] == '{':
+                rpc_body, _ = _find_block(block_body, pos)
+            pattern, topic, qos = _parse_interaction_option(rpc_body)
             svc.rpcs.append(ProtoRpc(
                 name=rm.group(1),
                 request_type=rm.group(3),
                 response_type=rm.group(5),
                 client_streaming=bool(rm.group(2)),
                 server_streaming=bool(rm.group(4)),
+                pattern=pattern,
+                topic=topic,
+                qos=qos,
             ))
+        svc.port_kind = classify_port_service(svc)
         pf.services.append(svc)
 
     return pf
