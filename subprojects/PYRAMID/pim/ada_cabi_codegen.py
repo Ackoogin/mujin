@@ -11,8 +11,7 @@ shared C++ ``<package>_<Type>_c_free`` routines can release it.
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, Tuple
 
-from ada_codegen import (
-    AdaTypesGenerator,
+from ada.naming import (
     _ADA_SCALAR_MAP,
     _ada_array_name_for_repeated,
     _ada_field_name,
@@ -23,8 +22,9 @@ from ada_codegen import (
     _ada_cabi_pkg_from_proto_pkg,
     _ensure_parent_packages,
 )
+from ada.types_gen import AdaTypesGenerator
 from cabi_codegen import CabiMember, iter_cabi_members, _c_struct_name
-from cpp_codegen import find_scalar_wrappers
+from cpp.types_gen import find_scalar_wrappers
 from proto_parser import ProtoMessage, ProtoTypeIndex, parse_proto_tree
 
 

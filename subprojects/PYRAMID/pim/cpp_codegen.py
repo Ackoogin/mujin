@@ -28,103 +28,43 @@ Usage:
     python cpp_service_generator.py <proto_dir/>  <output_dir>
 """
 
-# This module is now a re-export shim: the implementation lives in the
-# pim/cpp/ package (generator refactor plan, phase 3).  Importers should
-# migrate to the new module paths; this surface is kept one release for
-# SDK consumers (tests/test_codegen_export_surface.py pins it).
+# Re-export shim: the implementation lives in the pim/cpp/ package
+# (generator refactor plan, phases 3+5).  This module now carries only the
+# externally consumed surface (pinned by tests/test_codegen_export_surface.py)
+# and is kept one release for SDK consumers; new code should import from
+# cpp.* / proto_resolve / proto_parser directly.
 
 import sys
 from pathlib import Path
 
 from proto_parser import (  # noqa: F401
     parse_proto,
-    parse_proto_tree, ProtoTypeIndex, ProtoMessage, ProtoEnum, ProtoField,
-    ProtoFile, ProtoRpc, ProtoService,
-    screaming_to_pascal, _PROTO_SCALARS,
-    camel_to_snake as _camel_to_snake,
-    camel_to_lower_snake as _camel_to_lower_snake,
-    snake_to_pascal as _snake_to_pascal,
-    lc_first as _lc_first,
+    parse_proto_tree,
+    ProtoTypeIndex,
 )
 from proto_resolve import (  # noqa: F401
     _DATA_MODEL_PROTO_ROOT,
-    _data_model_package_for_type,
-    _enum_matches,
     _field_with_type,
     _is_proto_enum_type,
     _is_proto_message_type,
-    _message_matches,
     _package_for_proto_type,
     _proto_type_fqn,
-    _qualified_package_for_type,
     _resolve_enum,
     _resolve_message,
 )
 from cpp.naming import (  # noqa: F401
-    OP_PREFIXES,
-    BASE_TYPE_MAP,
-    _SEP,
-    _DEFAULT_CONTENT_TYPE,
-    _ALIAS_FIELD_NAMES,
     _CPP_SCALAR_MAP,
-    _CPP_DEFAULTS,
-    _LITERAL_CPP_TYPES,
-    _FORCED_ALIASES,
-    _UNIT_FIELD_NAMES,
-    _STRUCT_CONSTANTS,
-    _singularize,
-    _topic_key_to_phrase,
-    _cpp_qos_reliability_expr,
-    _short_type,
-    _mapped_type,
-    _service_wire_prefix,
-    _service_cpp_prefix,
-    _duplicate_rpc_names,
-    _rpc_symbol_base,
-    _rpc_handler_name,
-    _rpc_enum_value,
-    _rpc_service_const,
-    _rpc_invoke_func,
-    _rpc_decode_response_func,
-    _rpc_stream_handler_name,
-    _rpc_encode_stream_frame_func,
-    _rpc_decode_stream_frame_func,
-    _rpc_send_stream_frame_func,
-    _rpc_invoke_stream_func,
-    _rpc_op,
-    _crud_rpcs,
-    _rpc_wire_name,
-    _cpp_req_type,
-    _cpp_rsp_type,
-    _DATA_MODEL_TYPES_NS,
     _DATA_MODEL_TYPES_HEADER,
-    _DEFAULT_NAMING_POLICY,
+    _DATA_MODEL_TYPES_NS,
     _cpp_ns_for_proto_package,
     _cpp_ns_for_proto_type_package,
-    _legacy_service_namespace,
-    _namespace_from_proto,
-    _is_provided,
-    _c_struct_for_type,
-    _native_namespace_for_type,
-    _service_codec_imports,
-    _service_group_key,
-    _service_contract_names,
-    _json_codec_namespace_for_type,
-    _json_codec_header_for_type,
-    _alias_cpp_types,
-    _find_proto_root,
 )
 from cpp.types_gen import (  # noqa: F401
-    find_scalar_wrappers,
-    _common_cpp_ns,
     CppTypesGenerator,
+    find_scalar_wrappers,
 )
-from cpp.json_codec_gen import (  # noqa: F401
-    _CPP_INTEGRAL_SCALARS,
-    CppDataModelCodecGenerator,
-)
+from cpp.json_codec_gen import CppDataModelCodecGenerator  # noqa: F401
 from cpp.service_gen import CppServiceGenerator  # noqa: F401
-
 
 
 def main():

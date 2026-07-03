@@ -29,86 +29,35 @@ Usage:
     python ada_service_generator.py <proto_dir/>  <output_dir>
 """
 
-# This module is now a re-export shim: the implementation lives in the
-# pim/ada/ package (generator refactor plan, phase 4).  Importers should
-# migrate to the new module paths; this surface is kept one release for
-# SDK consumers (tests/test_codegen_export_surface.py pins it).
+# Re-export shim: the implementation lives in the pim/ada/ package
+# (generator refactor plan, phases 4+5).  This module now carries only the
+# externally consumed surface (pinned by tests/test_codegen_export_surface.py)
+# and is kept one release for SDK consumers; new code should import from
+# ada.* / proto_resolve / proto_parser directly.
 
 import sys
 from pathlib import Path
 
 from proto_parser import (  # noqa: F401
-    parse_proto_tree, ProtoTypeIndex, ProtoMessage, ProtoEnum,
-    ProtoFile, ProtoRpc, ProtoService,
-    screaming_to_pascal, camel_to_snake, _PROTO_SCALARS,
     parse_proto,
-    camel_to_snake as _camel_to_snake,
-    camel_to_lower_snake as _camel_to_lower_snake,
+    parse_proto_tree,
+    ProtoTypeIndex,
 )
 from ada.naming import (  # noqa: F401
-    OP_PREFIXES,
-    BASE_TYPE_MAP,
-    _short_type,
-    _proto_type_to_ada,
-    _service_wire_prefix,
-    _service_ada_prefix,
-    _duplicate_rpc_names,
-    _rpc_ada_base,
-    _rpc_ada_handler,
-    _rpc_ada_channel,
-    _rpc_ada_invoke_name,
-    _rpc_ada_decode_response_name,
-    _rpc_ada_svc_const,
-    _rpc_ada_handler_field,
-    _rpc_ada_callback_name,
-    _rpc_op,
-    _crud_rpcs,
-    _rpc_wire_name,
-    _ada_req_type,
-    _ada_rsp_type,
-    _pkg_name_from_proto,
-    _generic_pkg_name_from_proto,
-    _is_provided,
-    _DATA_MODEL_TYPES_PKGS,
-    _DATA_MODEL_TYPES_PKG,
-    _DM_CODEC_PKG_FOR_TYPE_PKG,
-    _proto_pkg_of_type,
-    _ada_pkg_from_proto_pkg,
-    _find_proto_root,
-    _collect_type_pkgs,
-    _collect_codec_pkgs,
-    _data_model_msg_pkgs,
-    _applicable_topics,
-    _types_pkg_from_proto,
-    _flatbuffers_codec_pkg_from_proto,
-    _grpc_transport_pkg_from_proto,
-    _ada_cabi_pkg_from_proto_pkg,
-    _ada_cabi_type_name,
-    _service_wrapper_pf,
-    _binding_proto_files,
-    _collect_array_schema_bindings,
-    _flatbuffers_func_suffix_for_type,
-    _flatbuffers_func_suffix_for_stream,
-    _ensure_parent_packages,
     _ADA_SCALAR_MAP,
-    _ADA_DEFAULTS,
-    _ADA_UNIT_FIELD_NAMES,
-    _ADA_RESERVED_WORDS,
-    _ada_name,
     _ada_array_name_for_repeated,
-    _ada_pkg_segment,
+    _ada_cabi_pkg_from_proto_pkg,
     _ada_field_name,
-    _common_ada_pkg,
+    _ada_name,
+    _ada_pkg_from_proto_pkg,
+    _ada_pkg_segment,
+    _ensure_parent_packages,
+    _proto_pkg_of_type,
 )
 from ada.generic_service_gen import AdaGenericServiceGenerator  # noqa: F401
 from ada.service_gen import AdaServiceGenerator  # noqa: F401
-from ada.service_body_gen import (  # noqa: F401
-    _collect_cabi_message_bindings,
-    _collect_alias_schema_bindings,
-)
-from ada.types_gen import AdaTypesGenerator, _common_ada_pkg  # noqa: F401
+from ada.types_gen import AdaTypesGenerator  # noqa: F401
 from ada.codec_gen import AdaDataModelCodecGenerator  # noqa: F401
-
 
 
 def main():

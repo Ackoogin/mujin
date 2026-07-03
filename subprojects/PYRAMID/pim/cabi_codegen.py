@@ -16,20 +16,22 @@ from proto_parser import (
     ProtoTypeIndex,
     parse_proto_tree,
 )
-from cpp_codegen import (
+from cpp.naming import (
     _CPP_SCALAR_MAP,
-    _DATA_MODEL_PROTO_ROOT,
     _DATA_MODEL_TYPES_HEADER,
     _DATA_MODEL_TYPES_NS,
     _cpp_ns_for_proto_package,
     _cpp_ns_for_proto_type_package,
+)
+from cpp.types_gen import find_scalar_wrappers
+from proto_resolve import (
+    _DATA_MODEL_PROTO_ROOT,
     _field_with_type,
     _is_proto_enum_type,
     _is_proto_message_type,
     _package_for_proto_type,
     _proto_type_fqn,
     _resolve_message,
-    find_scalar_wrappers,
 )
 
 _CABI_UMBRELLA = 'pyramid_datamodel_cabi.h'

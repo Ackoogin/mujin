@@ -39,11 +39,11 @@ from proto_parser import (  # noqa: E402
     ProtoTypeIndex,
     camel_to_lower_snake,
 )
-from cpp_codegen import (  # noqa: E402
-    find_scalar_wrappers,
+from cpp.naming import (  # noqa: E402
     _CPP_SCALAR_MAP,
     _cpp_ns_for_proto_type_package,
 )
+from cpp.types_gen import find_scalar_wrappers  # noqa: E402
 
 _PROTO_SCALARS = frozenset(_CPP_SCALAR_MAP.keys())
 

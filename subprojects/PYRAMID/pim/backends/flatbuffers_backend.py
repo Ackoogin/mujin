@@ -32,7 +32,7 @@ from binding_contract import PyramidCompatNamingPolicy
 # codec) lives: the data-model sub-namespace (pyramid::domain_model::<pkg>) or,
 # for service-local wrapper messages, their Component-NS. Needed so duplicate and
 # wrapper types (and nested data-model packages) are spelled unambiguously.
-from cpp_codegen import (
+from proto_resolve import (
     _resolve_message as _cpp_resolve_message,
     _resolve_enum as _cpp_resolve_enum,
 )

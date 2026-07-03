@@ -26,9 +26,11 @@ from pathlib import Path
 PYRAMID_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PYRAMID_ROOT / 'pim'))
 
-import cpp_codegen  # noqa: E402
-import ada_codegen  # noqa: E402
 import proto_parser  # noqa: E402
+from ada import naming as ada_naming  # noqa: E402
+from cpp import json_codec_gen as cpp_json_codec_gen  # noqa: E402
+from cpp import naming as cpp_naming  # noqa: E402
+from cpp import service_header_gen as cpp_header_gen  # noqa: E402
 import standard_topics  # noqa: E402
 from binding_contract import topics_for_proto_file  # noqa: E402
 from proto_parser import parse_proto_tree  # noqa: E402
@@ -55,12 +57,11 @@ def _contract_payload_names() -> set[str]:
 
 def test_merged_helpers_are_the_proto_parser_ones():
     # The codegen-local names must be aliases, not copies.
-    assert cpp_codegen._camel_to_snake is proto_parser.camel_to_snake
-    assert cpp_codegen._camel_to_lower_snake is proto_parser.camel_to_lower_snake
-    assert cpp_codegen._snake_to_pascal is proto_parser.snake_to_pascal
-    assert cpp_codegen._lc_first is proto_parser.lc_first
-    assert ada_codegen._camel_to_snake is proto_parser.camel_to_snake
-    assert ada_codegen._camel_to_lower_snake is proto_parser.camel_to_lower_snake
+    assert cpp_naming._camel_to_lower_snake is proto_parser.camel_to_lower_snake
+    assert cpp_header_gen._snake_to_pascal is proto_parser.snake_to_pascal
+    assert cpp_json_codec_gen._lc_first is proto_parser.lc_first
+    assert ada_naming._camel_to_snake is proto_parser.camel_to_snake
+    assert ada_naming._camel_to_lower_snake is proto_parser.camel_to_lower_snake
 
 
 def test_variants_agree_on_catalog_payload_names():

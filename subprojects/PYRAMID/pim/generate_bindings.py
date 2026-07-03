@@ -31,13 +31,20 @@ from pathlib import Path
 # Ensure pim/ is on sys.path so imports resolve
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from proto_parser import parse_proto_tree, ProtoTypeIndex, ProtoMessage
+from proto_parser import (
+    parse_proto, parse_proto_tree, ProtoTypeIndex, ProtoMessage,
+)
 from binding_contract import TopicSpecResolver, build_contract
 import codec_backends
 import cabi_codegen
-import cpp_codegen
-import ada_codegen
 import ada_cabi_codegen
+from ada import codec_gen as ada_codec_gen
+from ada import generic_service_gen as ada_generic_service_gen
+from ada import service_gen as ada_service_gen
+from ada import types_gen as ada_types_gen
+from cpp import json_codec_gen as cpp_json_codec_gen
+from cpp import service_gen as cpp_service_gen
+from cpp import types_gen as cpp_types_gen
 
 # Importing the backends package auto-registers all backends
 import backends  # noqa: F401
@@ -331,7 +338,7 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
         policy = contract.naming_policy
         type_files = contract.type_modules
         if type_files:
-            gen = cpp_codegen.CppTypesGenerator(
+            gen = cpp_types_gen.CppTypesGenerator(
                 type_files, naming_policy=policy)
             if manifest:
                 manifest.record_generated(
@@ -341,7 +348,7 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
             total += 1
             type_index = ProtoTypeIndex(type_files)
             for pf in type_files:
-                gen = cpp_codegen.CppDataModelCodecGenerator(
+                gen = cpp_json_codec_gen.CppDataModelCodecGenerator(
                     pf, type_index, naming_policy=policy)
                 if manifest:
                     manifest.record_generated(
@@ -352,7 +359,7 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
                     gen.generate(str(output_dir))
                 total += 1
         for pf in contract.service_modules:
-            gen = cpp_codegen.CppServiceGenerator(
+            gen = cpp_service_gen.CppServiceGenerator(
                 str(pf.path),
                 enabled_backends=enabled_backends,
                 naming_policy=policy,
@@ -368,7 +375,7 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
 
     dm_files = _discover_data_model_files(proto_dir)
     if dm_files:
-        gen = cpp_codegen.CppTypesGenerator(dm_files)
+        gen = cpp_types_gen.CppTypesGenerator(dm_files)
         if manifest:
             manifest.record_generated(
                 'types', lambda: gen.generate(str(output_dir)))
@@ -377,7 +384,7 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
         total += 1
         dm_index = ProtoTypeIndex(dm_files)
         for pf in dm_files:
-            gen = cpp_codegen.CppDataModelCodecGenerator(pf, dm_index)
+            gen = cpp_json_codec_gen.CppDataModelCodecGenerator(pf, dm_index)
             if manifest:
                 manifest.record_generated(
                     'json_codecs',
@@ -407,7 +414,7 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
         if svc_files:
             combined = dm_files + svc_files
             combined_index = ProtoTypeIndex(combined)
-            types_gen = cpp_codegen.CppTypesGenerator(combined)
+            types_gen = cpp_types_gen.CppTypesGenerator(combined)
             cabi_types_gen = cabi_codegen.CabiTypesGenerator(combined)
             cabi_marshal_gen = cabi_codegen.CabiMarshalGenerator(combined)
             for spf in svc_files:
@@ -419,7 +426,7 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
                     )
                 else:
                     types_gen.write_file(spf, str(output_dir))
-                gen = cpp_codegen.CppDataModelCodecGenerator(
+                gen = cpp_json_codec_gen.CppDataModelCodecGenerator(
                     spf, combined_index)
                 if manifest:
                     manifest.record_generated(
@@ -445,10 +452,10 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
                 total += 4
 
     for proto_path in sorted(proto_dir.rglob('*.proto')):
-        parsed = cpp_codegen.parse_proto(proto_path)
+        parsed = parse_proto(proto_path)
         if not parsed.services or '.services.' not in f'.{parsed.package}.':
             continue
-        gen = cpp_codegen.CppServiceGenerator(
+        gen = cpp_service_gen.CppServiceGenerator(
             str(proto_path),
             enabled_backends=enabled_backends,
             topic_resolver=topic_resolver,
@@ -477,15 +484,15 @@ def _generate_json_ada(proto_dir: Path, output_dir: Path,
             # Ada type/codec package names are already derived generically from
             # the proto package (example.telemetry -> Example.Telemetry.Types),
             # so the existing generators work for arbitrary packages.
-            ada_codegen.AdaTypesGenerator(type_files).generate(str(output_dir))
+            ada_types_gen.AdaTypesGenerator(type_files).generate(str(output_dir))
             total += 1
             type_index = ProtoTypeIndex(type_files)
             for pf in type_files:
-                ada_codegen.AdaDataModelCodecGenerator(
+                ada_codec_gen.AdaDataModelCodecGenerator(
                     pf, type_index).generate(str(output_dir))
                 total += 1
         for pf in contract.service_modules:
-            ada_codegen.AdaGenericServiceGenerator(
+            ada_generic_service_gen.AdaGenericServiceGenerator(
                 pf, enabled_backends=enabled_backends,
             ).generate(str(output_dir))
             total += 1
@@ -493,14 +500,14 @@ def _generate_json_ada(proto_dir: Path, output_dir: Path,
 
     dm_files = _discover_data_model_files(proto_dir)
     if dm_files:
-        gen = ada_codegen.AdaTypesGenerator(dm_files)
+        gen = ada_types_gen.AdaTypesGenerator(dm_files)
         gen.generate(str(output_dir))
         total += 1
         ada_cabi_codegen.AdaCabiGenerator(dm_files).generate(str(output_dir))
         total += 1
         dm_index = ProtoTypeIndex(dm_files)
         for pf in dm_files:
-            ada_codegen.AdaDataModelCodecGenerator(pf, dm_index).generate(str(output_dir))
+            ada_codec_gen.AdaDataModelCodecGenerator(pf, dm_index).generate(str(output_dir))
             total += 1
 
         # Service-local wrapper messages (Component-NS): emit native types +
@@ -511,20 +518,20 @@ def _generate_json_ada(proto_dir: Path, output_dir: Path,
         if svc_files:
             combined = dm_files + svc_files
             combined_index = ProtoTypeIndex(combined)
-            types_gen = ada_codegen.AdaTypesGenerator(combined)
+            types_gen = ada_types_gen.AdaTypesGenerator(combined)
             cabi_gen = ada_cabi_codegen.AdaCabiGenerator(combined)
             for spf in svc_files:
                 types_gen.write_file(spf, str(output_dir))
-                ada_codegen.AdaDataModelCodecGenerator(
+                ada_codec_gen.AdaDataModelCodecGenerator(
                     spf, combined_index).generate(str(output_dir))
                 cabi_gen.write_file(spf, str(output_dir))
                 total += 3
 
     for proto_path in sorted(proto_dir.rglob('*.proto')):
-        parsed = ada_codegen.parse_proto(proto_path)
+        parsed = parse_proto(proto_path)
         if not parsed.services or '.services.' not in f'.{parsed.package}.':
             continue
-        ada_codegen.AdaServiceGenerator(
+        ada_service_gen.AdaServiceGenerator(
             str(proto_path),
             enabled_backends=enabled_backends,
             topic_resolver=topic_resolver,
