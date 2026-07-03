@@ -1,9 +1,12 @@
 # Build artifacts produced by the build_*.sh / build_*.bat harness scripts
 generated/
+generated_routing/
 comms_test
 comms_test.exe
 plugin_load_test
 plugin_load_test.exe
+contract_routing_validation
+contract_routing_validation.exe
 # Standalone codec plugin built by build_plugin_load_test.{sh,bat}
 libosprey_sensor_products_json_codec.so
 osprey_sensor_products_json_codec.dll
