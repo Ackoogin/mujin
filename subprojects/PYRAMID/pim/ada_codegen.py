@@ -36,11 +36,12 @@ from typing import Dict, List, Optional, Tuple
 
 from proto_parser import (
     parse_proto_tree, ProtoTypeIndex, ProtoMessage, ProtoEnum,
+    ProtoFile, ProtoRpc, ProtoService,
     screaming_to_pascal, camel_to_snake, _PROTO_SCALARS,
-    parse_proto as _pp_parse,
+    parse_proto,
 )
 from binding_contract import BindingTopic, topics_for_proto_file
-from cpp_codegen import (
+from proto_resolve import (
     _field_with_type, _proto_type_fqn, _resolve_message,
     _package_for_proto_type,
 )
@@ -177,98 +178,33 @@ def _rpc_ada_callback_name(svc_name: str, rpc: 'ProtoRpc',
     return f'Service_{_rpc_ada_base(svc_name, rpc, duplicate_rpc_names)}'
 
 
-class ProtoRpc:
-    """One rpc entry extracted from a proto service block."""
-
-    def __init__(self, name: str, req: str, rsp: str, streaming: bool):
-        self.name = name
-        self.req = req
-        self.rsp = rsp
-        self.streaming = streaming
-
-        self.op: Optional[str] = None
-        self.entity: Optional[str] = None
-        for prefix in OP_PREFIXES:
-            if name.startswith(prefix):
-                self.op = prefix
-                self.entity = name[len(prefix):]
-                break
-
-    @property
-    def ada_handler(self) -> str:
-        return f'Handle_{self.op}_{_camel_to_snake(self.entity)}'
-
-    @property
-    def ada_channel(self) -> str:
-        return f'Ch_{self.op}_{_camel_to_snake(self.entity)}'
-
-    @property
-    def ada_req_type(self) -> str:
-        return _proto_type_to_ada(self.req)
-
-    @property
-    def ada_rsp_type(self) -> str:
-        base = _proto_type_to_ada(self.rsp)
-        if self.streaming:
-            return f'{base}_Array'
-        return base
-
-    @property
-    def wire_name(self) -> str:
-        """create_requirement (rpc part of wire name)."""
-        return _camel_to_lower_snake(self.name)
-
-    @property
-    def ada_invoke_name(self) -> str:
-        """Invoke_Create_Requirement."""
-        return f'Invoke_{_camel_to_snake(self.name)}'
-
-    @property
-    def ada_decode_response_name(self) -> str:
-        """Decode_Create_Requirement_Response."""
-        return f'Decode_{_camel_to_snake(self.name)}_Response'
-
-    @property
-    def ada_svc_const(self) -> str:
-        """Svc_Create_Requirement."""
-        return f'Svc_{_camel_to_snake(self.name)}'
+def _rpc_op(rpc: ProtoRpc) -> Optional[str]:
+    """EntityActions CRUD operation prefix of an rpc, or None if non-CRUD."""
+    for prefix in OP_PREFIXES:
+        if rpc.name.startswith(prefix):
+            return prefix
+    return None
 
 
-class ProtoService:
-    def __init__(self, name: str, rpcs: List[ProtoRpc]):
-        self.name = name
-        self.rpcs = [r for r in rpcs if r.op is not None]
-
-    @property
-    def wire_prefix(self) -> str:
-        return _service_wire_prefix(self.name)
+def _crud_rpcs(svc: ProtoService) -> List[ProtoRpc]:
+    """The CRUD-named rpcs of a service (the EntityActions binding surface)."""
+    return [r for r in svc.rpcs if _rpc_op(r) is not None]
 
 
-class ProtoFile:
-    def __init__(self, package: str, services: List[ProtoService],
-                 full_proto=None):
-        self.package = package
-        self.services = services
-        self.full_proto = full_proto
+def _rpc_wire_name(rpc: ProtoRpc) -> str:
+    """create_requirement (rpc part of wire name)."""
+    return _camel_to_lower_snake(rpc.name)
 
 
-def parse_proto(proto_path: Path) -> ProtoFile:
-    full = _pp_parse(proto_path)
-    package = full.package
+def _ada_req_type(rpc: ProtoRpc) -> str:
+    return _proto_type_to_ada(rpc.request_type)
 
-    services: List[ProtoService] = []
-    for svc in full.services:
-        rpcs: List[ProtoRpc] = []
-        for rpc in svc.rpcs:
-            rpcs.append(ProtoRpc(
-                rpc.name,
-                rpc.request_type,
-                rpc.response_type,
-                rpc.server_streaming,
-            ))
-        services.append(ProtoService(svc.name, rpcs))
 
-    return ProtoFile(package, services, full)
+def _ada_rsp_type(rpc: ProtoRpc) -> str:
+    base = _proto_type_to_ada(rpc.response_type)
+    if rpc.server_streaming:
+        return f'{base}_Array'
+    return base
 
 
 # -- Ada package name derivation -----------------------------------------------
@@ -384,7 +320,7 @@ def _collect_type_pkgs(proto_path: Path,
     (in _DATA_MODEL_TYPES_PKGS order), then any additional packages sorted.
     """
     needed: set = set()
-    rpc_types = {rpc.req for _, rpc in all_rpcs} | {rpc.rsp for _, rpc in all_rpcs}
+    rpc_types = {rpc.request_type for _, rpc in all_rpcs} | {rpc.response_type for _, rpc in all_rpcs}
 
     # Step 1 -- direct packages from fully-qualified type names in the RPC signature.
     for t in rpc_types:
@@ -394,7 +330,7 @@ def _collect_type_pkgs(proto_path: Path,
 
     # Step 2 -- load proto + imports; trace each RPC message's field types too.
     try:
-        svc_pf = _pp_parse(proto_path)
+        svc_pf = parse_proto(proto_path)
         loaded = [svc_pf]
 
         proto_root = _find_proto_root(proto_path)
@@ -405,7 +341,7 @@ def _collect_type_pkgs(proto_path: Path,
                 imp_path = proto_root / imp
                 if imp_path.exists():
                     try:
-                        loaded.append(_pp_parse(imp_path))
+                        loaded.append(parse_proto(imp_path))
                     except Exception:
                         pass
 
@@ -506,18 +442,14 @@ def _topics_for_proto(
     Topics are only generated for services whose proto package contains a
     recognised key fragment.  Services with no matching fragment get no topics.
     """
-    full = getattr(parsed, 'full_proto', None)
-    if full is None and hasattr(parsed, 'path'):
-        full = parsed
-    if full is not None:
-        sub_specs, pub_specs = topics_for_proto_file(full)
-        if sub_specs or pub_specs:
-            _CONTRACT_TOPIC_SPECS.update(sub_specs)
-            _CONTRACT_TOPIC_SPECS.update(pub_specs)
-            return (
-                {key: spec.wire_name for key, spec in sub_specs.items()},
-                {key: spec.wire_name for key, spec in pub_specs.items()},
-            )
+    sub_specs, pub_specs = topics_for_proto_file(parsed)
+    if sub_specs or pub_specs:
+        _CONTRACT_TOPIC_SPECS.update(sub_specs)
+        _CONTRACT_TOPIC_SPECS.update(pub_specs)
+        return (
+            {key: spec.wire_name for key, spec in sub_specs.items()},
+            {key: spec.wire_name for key, spec in pub_specs.items()},
+        )
     if not _is_pyramid_compat_service_package(parsed.package):
         return {}, {}
     return topics_for_service(parsed.package, is_provided)
@@ -613,7 +545,7 @@ def _service_wrapper_pf(proto_path: Path):
     generate_bindings._discover_service_message_files so the marshalling
     bindings match the wrapper types/codec/cabi actually generated."""
     try:
-        spf = _pp_parse(proto_path)
+        spf = parse_proto(proto_path)
     except Exception:
         return None
     if '.services.' not in f'.{spf.package}.':
@@ -742,8 +674,8 @@ def _collect_array_schema_bindings(
             add(spec.short_type)
 
     for _svc_name, rpc in all_rpcs:
-        if rpc.streaming:
-            add(_short_type(rpc.rsp))
+        if rpc.server_streaming:
+            add(_short_type(rpc.response_type))
 
     return result
 
@@ -886,7 +818,7 @@ class AdaServiceGenerator:
             parsed = parse_proto(pf)
             all_rpcs: List[Tuple[str, ProtoRpc]] = []
             for svc in parsed.services:
-                for rpc in svc.rpcs:
+                for rpc in _crud_rpcs(svc):
                     all_rpcs.append((svc.name, rpc))
 
             if not all_rpcs:
@@ -914,8 +846,8 @@ class AdaServiceGenerator:
                     all_rpcs: List[Tuple[str, ProtoRpc]],
                     type_pkgs: List[str]):
         entity_types_for_arrays = sorted({
-            _proto_type_to_ada(_short_type(rpc.rsp))
-            for _, rpc in all_rpcs if rpc.streaming
+            _proto_type_to_ada(_short_type(rpc.response_type))
+            for _, rpc in all_rpcs if rpc.server_streaming
         })
         duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
 
@@ -982,11 +914,11 @@ class AdaServiceGenerator:
             f.write(f'\n')
 
             for svc in parsed.services:
-                prefix = svc.wire_prefix
-                for rpc in svc.rpcs:
+                prefix = _service_wire_prefix(svc.name)
+                for rpc in _crud_rpcs(svc):
                     const_name = _rpc_ada_svc_const(
                         svc.name, rpc, duplicate_rpc_names)
-                    wire_name = f'{prefix}.{rpc.wire_name}'
+                    wire_name = f'{prefix}.{_rpc_wire_name(rpc)}'
                     f.write(f'   {const_name} : constant String :=\n')
                     f.write(f'     "{wire_name}";\n')
             f.write('\n')
@@ -1014,11 +946,11 @@ class AdaServiceGenerator:
                     if svc_name.endswith('_Service'):
                         svc_name = svc_name[:-len('_Service')]
                     svc_const_prefix = _camel_to_snake(svc_name)
-                    for rpc in svc.rpcs:
+                    for rpc in _crud_rpcs(svc):
                         rpc_name = _camel_to_snake(rpc.name)
                         base_name = f'{svc_const_prefix}_{rpc_name}'
-                        if rpc.streaming:
-                            base = f'/pyramid/stream/{svc.wire_prefix}/{rpc.wire_name}'
+                        if rpc.server_streaming:
+                            base = f'/pyramid/stream/{_service_wire_prefix(svc.name)}/{_rpc_wire_name(rpc)}'
                             f.write(f'   {base_name}_Open_Service : constant String :=\n')
                             f.write(f'     "{base}/open";\n')
                             f.write(f'   {base_name}_Frame_Topic : constant String :=\n')
@@ -1026,7 +958,7 @@ class AdaServiceGenerator:
                             f.write(f'   {base_name}_Cancel_Topic : constant String :=\n')
                             f.write(f'     "{base}/cancel";\n')
                         else:
-                            endpoint = f'/pyramid/service/{svc.wire_prefix}/{rpc.wire_name}'
+                            endpoint = f'/pyramid/service/{_service_wire_prefix(svc.name)}/{_rpc_wire_name(rpc)}'
                             f.write(f'   {base_name}_Service : constant String :=\n')
                             f.write(f'     "{endpoint}";\n')
                         f.write(f'\n')
@@ -1061,12 +993,12 @@ class AdaServiceGenerator:
                     f.write(f'   --  {svc_name}\n')
                     current_svc = svc_name
 
-                req_t = rpc.ada_req_type
-                rsp_t = rpc.ada_rsp_type
+                req_t = _ada_req_type(rpc)
+                rsp_t = _ada_rsp_type(rpc)
                 handler_name = _rpc_ada_handler(
                     svc_name, rpc, duplicate_rpc_names)
 
-                if rpc.streaming:
+                if rpc.server_streaming:
                     f.write(f'   type {handler_name}_Access is access function\n')
                     f.write(f'     (Request : {req_t}) return {rsp_t};\n')
                 else:
@@ -1122,19 +1054,19 @@ class AdaServiceGenerator:
 
             if is_provided:
                 for svc in parsed.services:
-                    for rpc in svc.rpcs:
+                    for rpc in _crud_rpcs(svc):
                         decode_name = _rpc_ada_decode_response_name(
                             svc.name, rpc, duplicate_rpc_names)
                         invoke_name = _rpc_ada_invoke_name(
                             svc.name, rpc, duplicate_rpc_names)
                         f.write(f'   function {decode_name}\n')
                         f.write(f'     (Msg : access constant Pcl_Bindings.Pcl_Msg)\n')
-                        f.write(f'      return {rpc.ada_rsp_type};\n')
+                        f.write(f'      return {_ada_rsp_type(rpc)};\n')
                         f.write(f'\n')
                         f.write(f'   --  Invoke via executor transport (transport-agnostic).\n')
                         f.write(f'   procedure {invoke_name}\n')
                         f.write(f'     (Executor  : Pcl_Bindings.Pcl_Executor_Access;\n')
-                        f.write(f'      Request   : {rpc.ada_req_type};\n')
+                        f.write(f'      Request   : {_ada_req_type(rpc)};\n')
                         f.write(f'      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
                         f.write(f'      User_Data : System.Address := System.Null_Address;\n')
                         f.write(f'      Content_Type : String := "application/json");\n')
@@ -1966,18 +1898,18 @@ class AdaServiceGenerator:
 
             if is_provided:
                 for svc_name, rpc in all_rpcs:
-                    rsp_short = _short_type(rpc.rsp)
+                    rsp_short = _short_type(rpc.response_type)
                     rsp_fb_suffix = (
-                        _flatbuffers_func_suffix_for_stream(rpc.rsp)
-                        if rpc.streaming else
-                        _flatbuffers_func_suffix_for_type(rpc.rsp)
+                        _flatbuffers_func_suffix_for_stream(rpc.response_type)
+                        if rpc.server_streaming else
+                        _flatbuffers_func_suffix_for_type(rpc.response_type)
                     )
                     write_payload_decode_function(
                         _rpc_ada_decode_response_name(
                             svc_name, rpc, duplicate_rpc_names),
-                        rpc.ada_rsp_type,
+                        _ada_rsp_type(rpc),
                         rsp_short,
-                        rpc.streaming,
+                        rpc.server_streaming,
                         rsp_fb_suffix,
                         rsp_short)
 
@@ -1988,12 +1920,12 @@ class AdaServiceGenerator:
                     f.write(f'   --  -- {svc_name} ------------------------------------\n')
                     current_svc = svc_name
 
-                req_t = rpc.ada_req_type
-                rsp_t = rpc.ada_rsp_type
+                req_t = _ada_req_type(rpc)
+                rsp_t = _ada_rsp_type(rpc)
                 handler_name = _rpc_ada_handler(
                     svc_name, rpc, duplicate_rpc_names)
 
-                if rpc.streaming:
+                if rpc.server_streaming:
                     f.write(f'   function Default_{handler_name}\n')
                     f.write(f'     (Request : {req_t}) return {rsp_t}\n')
                     f.write(f'   is\n')
@@ -2151,15 +2083,15 @@ class AdaServiceGenerator:
             # Invoke helpers (provided services) -- typed, serialize internally
             if is_provided:
                 for svc in parsed.services:
-                    for rpc in svc.rpcs:
+                    for rpc in _crud_rpcs(svc):
                         invoke_name = _rpc_ada_invoke_name(
                             svc.name, rpc, duplicate_rpc_names)
                         service_const = _rpc_ada_svc_const(
                             svc.name, rpc, duplicate_rpc_names)
-                        req_fb_suffix = _flatbuffers_func_suffix_for_type(rpc.req)
+                        req_fb_suffix = _flatbuffers_func_suffix_for_type(rpc.request_type)
                         f.write(f'   procedure {invoke_name}\n')
                         f.write(f'     (Executor  : Pcl_Bindings.Pcl_Executor_Access;\n')
-                        f.write(f'      Request   : {rpc.ada_req_type};\n')
+                        f.write(f'      Request   : {_ada_req_type(rpc)};\n')
                         f.write(f'      Callback  : Pcl_Bindings.Pcl_Resp_Cb_Access;\n')
                         f.write(f'      User_Data : System.Address := System.Null_Address;\n')
                         f.write(f'      Content_Type : String := "application/json")\n')
@@ -2174,13 +2106,13 @@ class AdaServiceGenerator:
                             f.write(f'            return "";\n')
                             f.write(f'         end if;\n')
                         f.write(f'         if Try_Registry_Encode\n')
-                        f.write(f'           (Content_Type, "{_short_type(rpc.req)}", Request\'Address,\n')
+                        f.write(f'           (Content_Type, "{_short_type(rpc.request_type)}", Request\'Address,\n')
                         f.write(f'            Registry_Payload)\n')
                         f.write(f'         then\n')
                         f.write(f'            return To_String (Registry_Payload);\n')
                         f.write(f'         end if;\n')
                         f.write(f'         raise Program_Error with\n')
-                        f.write(f'           "codec registry encode failed for schema {_short_type(rpc.req)}";\n')
+                        f.write(f'           "codec registry encode failed for schema {_short_type(rpc.request_type)}";\n')
                         f.write(f'      end Build_Payload;\n')
                         f.write(f'      Payload : constant String := Build_Payload;\n')
                         f.write(f'      Req_C  : Interfaces.C.Strings.chars_ptr := Interfaces.C.Strings.Null_Ptr;\n')
@@ -2197,10 +2129,10 @@ class AdaServiceGenerator:
                             f.write(f'            raise Program_Error with "gRPC channel not configured";\n')
                             f.write(f'         end if;\n')
                             f.write(f'         declare\n')
-                            rsp_schema = _short_type(rpc.rsp)
-                            if rpc.streaming:
-                                elem_type = _proto_type_to_ada(rpc.rsp)
-                                f.write(f'            Rsp : constant Grpc_Transport.{rpc.ada_rsp_type} :=\n')
+                            rsp_schema = _short_type(rpc.response_type)
+                            if rpc.server_streaming:
+                                elem_type = _proto_type_to_ada(rpc.response_type)
+                                f.write(f'            Rsp : constant Grpc_Transport.{_ada_rsp_type(rpc)} :=\n')
                                 f.write(f'              Grpc_Transport.{invoke_name}\n')
                                 f.write(f'                (To_String (Grpc_Channel), Request);\n')
                                 f.write(f'            Acc : Unbounded_String := To_Unbounded_String ("[");\n')
@@ -2230,8 +2162,8 @@ class AdaServiceGenerator:
                                 f.write(f'            Append (Acc, "]");\n')
                                 f.write(f'            Emit_Invoke_Response\n')
                                 f.write(f'              (Callback, User_Data, To_String (Acc));\n')
-                            elif rpc.ada_rsp_type == 'Identifier':
-                                f.write(f'            Rsp : constant {rpc.ada_rsp_type} :=\n')
+                            elif _ada_rsp_type(rpc) == 'Identifier':
+                                f.write(f'            Rsp : constant {_ada_rsp_type(rpc)} :=\n')
                                 f.write(f'              Grpc_Transport.{invoke_name}\n')
                                 f.write(f'                (To_String (Grpc_Channel), Request);\n')
                                 f.write(f'            Response_Payload : constant String :=\n')
@@ -2242,7 +2174,7 @@ class AdaServiceGenerator:
                             else:
                                 # Codec-source-free: render the gRPC response to JSON
                                 # through the codec registry, not a compiled-in To_Json.
-                                f.write(f'            Rsp : constant {rpc.ada_rsp_type} :=\n')
+                                f.write(f'            Rsp : constant {_ada_rsp_type(rpc)} :=\n')
                                 f.write(f'              Grpc_Transport.{invoke_name}\n')
                                 f.write(f'                (To_String (Grpc_Channel), Request);\n')
                                 f.write(f'            Rsp_Json : Unbounded_String := Null_Unbounded_String;\n')
@@ -2392,19 +2324,19 @@ class AdaServiceGenerator:
             f.write(f'      case Channel is\n')
 
             for svc_name, rpc in all_rpcs:
-                req_t = rpc.ada_req_type
-                rsp_t = rpc.ada_rsp_type
+                req_t = _ada_req_type(rpc)
+                rsp_t = _ada_rsp_type(rpc)
                 handler_fn = _rpc_ada_handler(
                     svc_name, rpc, duplicate_rpc_names)
                 handler_field = _rpc_ada_handler_field(
                     svc_name, rpc, duplicate_rpc_names)
                 channel_name = _rpc_ada_channel(
                     svc_name, rpc, duplicate_rpc_names)
-                req_fb_suffix = _flatbuffers_func_suffix_for_type(rpc.req)
+                req_fb_suffix = _flatbuffers_func_suffix_for_type(rpc.request_type)
                 rsp_fb_suffix = (
-                    _flatbuffers_func_suffix_for_stream(rpc.rsp)
-                    if rpc.streaming else
-                    _flatbuffers_func_suffix_for_type(rpc.rsp)
+                    _flatbuffers_func_suffix_for_stream(rpc.response_type)
+                    if rpc.server_streaming else
+                    _flatbuffers_func_suffix_for_type(rpc.response_type)
                 )
                 f.write(f'         when {channel_name} =>\n')
                 f.write(f'            declare\n')
@@ -2414,17 +2346,17 @@ class AdaServiceGenerator:
                 f.write(f'                  Require_Codec (Content_Type);  --  fail closed if no plugin\n')
                 f.write(f'                  if Try_Registry_Decode_Raw\n')
                 f.write(f'                    (Content_Type, Request_Buf, Request_Size,\n')
-                f.write(f'                     "{_short_type(rpc.req)}", Result\'Address)\n')
+                f.write(f'                     "{_short_type(rpc.request_type)}", Result\'Address)\n')
                 f.write(f'                  then\n')
                 f.write(f'                     return Result;\n')
                 f.write(f'                  end if;\n')
                 f.write(f'\n')
                 f.write(f'                  raise Program_Error with\n')
-                f.write(f'                    "codec registry decode failed for schema {_short_type(rpc.req)}";\n')
+                f.write(f'                    "codec registry decode failed for schema {_short_type(rpc.request_type)}";\n')
                 f.write(f'               end Decode_Request;\n')
                 f.write(f'               Req : constant {req_t} := Decode_Request;\n')
 
-                if rpc.streaming:
+                if rpc.server_streaming:
                     # Streaming: handler is a function returning unconstrained array
                     f.write(f'               Rsp : constant {rsp_t} :=\n')
                     f.write(f'                 (if Handlers /= null and then Handlers.{handler_field} /= null\n')
@@ -2440,7 +2372,7 @@ class AdaServiceGenerator:
                     f.write(f'                    (Content_Type, Rsp, Wire_Response)\n')
                     f.write(f'                  then\n')
                     f.write(f'                     raise Program_Error with\n')
-                    f.write(f'                       "codec registry encode failed for schema {_short_type(rpc.rsp)}Array";\n')
+                    f.write(f'                       "codec registry encode failed for schema {_short_type(rpc.response_type)}Array";\n')
                     f.write(f'                  end if;\n')
                     f.write(f'                  Copy_To_Buf\n')
                     f.write(f'                    (To_String (Wire_Response),\n')
@@ -2460,11 +2392,11 @@ class AdaServiceGenerator:
                     # Serialise response and copy to buffer
                     f.write(f'               Require_Codec (Content_Type);  --  fail closed if no plugin\n')
                     f.write(f'               if not Try_Registry_Encode\n')
-                    f.write(f'                 (Content_Type, "{_short_type(rpc.rsp)}", Rsp\'Address,\n')
+                    f.write(f'                 (Content_Type, "{_short_type(rpc.response_type)}", Rsp\'Address,\n')
                     f.write(f'                  Wire_Response)\n')
                     f.write(f'               then\n')
                     f.write(f'                  raise Program_Error with\n')
-                    f.write(f'                    "codec registry encode failed for schema {_short_type(rpc.rsp)}";\n')
+                    f.write(f'                    "codec registry encode failed for schema {_short_type(rpc.response_type)}";\n')
                     f.write(f'               end if;\n')
                     f.write(f'               Copy_To_Buf\n')
                     f.write(f'                 (To_String (Wire_Response),\n')

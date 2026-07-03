@@ -34,9 +34,24 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from proto_parser import (
-    parse_proto as parse_full_proto,
+    parse_proto,
     parse_proto_tree, ProtoTypeIndex, ProtoMessage, ProtoEnum, ProtoField,
+    ProtoFile, ProtoRpc, ProtoService,
     screaming_to_pascal, _PROTO_SCALARS,
+)
+from proto_resolve import (
+    _DATA_MODEL_PROTO_ROOT,
+    _data_model_package_for_type,
+    _enum_matches,
+    _field_with_type,
+    _is_proto_enum_type,
+    _is_proto_message_type,
+    _message_matches,
+    _package_for_proto_type,
+    _proto_type_fqn,
+    _qualified_package_for_type,
+    _resolve_enum,
+    _resolve_message,
 )
 from binding_contract import (
     BindingTopic,
@@ -234,119 +249,39 @@ def _rpc_invoke_stream_func(svc_name: str, rpc: 'ProtoRpc',
 
 # -- Proto model ---------------------------------------------------------------
 
-class ProtoRpc:
-    """One rpc entry extracted from a proto service block."""
-
-    def __init__(self, name: str, req: str, rsp: str, streaming: bool):
-        self.name = name
-        self.req = req
-        self.rsp = rsp
-        self.streaming = streaming
-
-        self.op: Optional[str] = None
-        self.entity: Optional[str] = None
-        for prefix in OP_PREFIXES:
-            if name.startswith(prefix):
-                self.op = prefix
-                self.entity = name[len(prefix):]
-                break
-
-    # -- C++ naming ------------------------------------------------------------
-
-    @property
-    def cpp_handler(self) -> str:
-        """handleCreateRequirement."""
-        return f'handle{self.name}'
-
-    @property
-    def cpp_enum_value(self) -> str:
-        """CreateRequirement (ServiceChannel enum value)."""
-        return self.name
-
-    @property
-    def cpp_svc_const(self) -> str:
-        """kSvcCreateRequirement."""
-        return f'kSvc{self.name}'
-
-    @property
-    def cpp_invoke_func(self) -> str:
-        """invokeCreateRequirement."""
-        return f'invoke{self.name}'
-
-    @property
-    def cpp_decode_response_func(self) -> str:
-        """decodeCreateRequirementResponse."""
-        return f'decode{self.name}Response'
-
-    @property
-    def cpp_req_type(self) -> str:
-        """C++ request type after BASE_TYPE_MAP mapping."""
-        return _mapped_type(self.req)
-
-    @property
-    def cpp_rsp_type(self) -> str:
-        """C++ response type: std::vector<X> for streaming, X otherwise."""
-        base = _mapped_type(self.rsp)
-        if self.streaming:
-            return f'std::vector<{base}>'
-        return base
-
-    @property
-    def wire_name(self) -> str:
-        """create_requirement (rpc wire-name segment)."""
-        return _camel_to_lower_snake(self.name)
-
-    @property
-    def raw_req_type(self) -> str:
-        """Raw request type name (no BASE_TYPE_MAP), for using declarations."""
-        return _short_type(self.req)
-
-    @property
-    def raw_rsp_type(self) -> str:
-        """Raw response type name (no BASE_TYPE_MAP), for using declarations."""
-        return _short_type(self.rsp)
+def _rpc_op(rpc: ProtoRpc) -> Optional[str]:
+    """EntityActions CRUD operation prefix of an rpc, or None if non-CRUD."""
+    for prefix in OP_PREFIXES:
+        if rpc.name.startswith(prefix):
+            return prefix
+    return None
 
 
-class ProtoService:
-    def __init__(self, name: str, rpcs: List[ProtoRpc]):
-        self.name = name
-        self.rpcs = [r for r in rpcs if r.op is not None]
-
-    @property
-    def wire_prefix(self) -> str:
-        return _service_wire_prefix(self.name)
+def _crud_rpcs(svc: ProtoService) -> List[ProtoRpc]:
+    """The CRUD-named rpcs of a service (the EntityActions binding surface)."""
+    return [r for r in svc.rpcs if _rpc_op(r) is not None]
 
 
-class ProtoFile:
-    def __init__(self, package: str, services: List[ProtoService],
-                 full_proto=None):
-        self.package = package
-        self.services = services
-        self.full_proto = full_proto
+def _rpc_wire_name(rpc: ProtoRpc) -> str:
+    """create_requirement (rpc wire-name segment)."""
+    return _camel_to_lower_snake(rpc.name)
 
 
-def parse_proto(proto_path: Path) -> ProtoFile:
-    full = parse_full_proto(proto_path)
-    package = full.package
+def _cpp_req_type(rpc: ProtoRpc) -> str:
+    """C++ request type after BASE_TYPE_MAP mapping."""
+    return _mapped_type(rpc.request_type)
 
-    services: List[ProtoService] = []
-    for svc in full.services:
-        rpcs: List[ProtoRpc] = []
-        for rpc in svc.rpcs:
-            rpcs.append(ProtoRpc(
-                rpc.name,
-                rpc.request_type,
-                rpc.response_type,
-                rpc.server_streaming,
-            ))
-        services.append(ProtoService(svc.name, rpcs))
 
-    return ProtoFile(package, services, full)
+def _cpp_rsp_type(rpc: ProtoRpc) -> str:
+    """C++ response type: std::vector<X> for streaming, X otherwise."""
+    base = _mapped_type(rpc.response_type)
+    if rpc.server_streaming:
+        return f'std::vector<{base}>'
+    return base
 
 
 # -- C++ namespace / file name derivation -------------------------------------
 
-_DATA_MODEL_PROTO_ROOT = 'pyramid.data_model'
 _DATA_MODEL_TYPES_NS = 'pyramid::domain_model'
 _DATA_MODEL_TYPES_HEADER = 'pyramid_data_model_types.hpp'
 _DEFAULT_NAMING_POLICY = PyramidCompatNamingPolicy()
@@ -391,18 +326,14 @@ def _topics_for_proto(
         parsed: 'ProtoFile', is_provided: bool
 ) -> Tuple[Dict[str, str], Dict[str, str]]:
     """Return (sub_topics, pub_topics), preferring contract-derived topics."""
-    full = getattr(parsed, 'full_proto', None)
-    if full is None and hasattr(parsed, 'path'):
-        full = parsed
-    if full is not None:
-        sub_specs, pub_specs = topics_for_proto_file(full)
-        if sub_specs or pub_specs:
-            _CONTRACT_TOPIC_SPECS.update(sub_specs)
-            _CONTRACT_TOPIC_SPECS.update(pub_specs)
-            return (
-                {key: spec.wire_name for key, spec in sub_specs.items()},
-                {key: spec.wire_name for key, spec in pub_specs.items()},
-            )
+    sub_specs, pub_specs = topics_for_proto_file(parsed)
+    if sub_specs or pub_specs:
+        _CONTRACT_TOPIC_SPECS.update(sub_specs)
+        _CONTRACT_TOPIC_SPECS.update(pub_specs)
+        return (
+            {key: spec.wire_name for key, spec in sub_specs.items()},
+            {key: spec.wire_name for key, spec in pub_specs.items()},
+        )
     if not _is_pyramid_compat_service_package(parsed.package):
         return {}, {}
     return topics_for_service(parsed.package, is_provided)
@@ -416,140 +347,6 @@ def _is_pyramid_compat_service_package(package: str) -> bool:
         and parts[1] == 'components'
         and parts[3] == 'services'
         and parts[4] in ('provided', 'consumed')
-    )
-
-
-def _data_model_package_for_type(full_type: str) -> str:
-    if not full_type.startswith(_DATA_MODEL_PROTO_ROOT + '.'):
-        return ''
-    if '.' not in full_type:
-        return ''
-    return full_type.rsplit('.', 1)[0]
-
-
-def _qualified_package_for_type(full_type: str) -> str:
-    """Package of any fully-qualified proto type (data-model or component).
-
-    Unlike _data_model_package_for_type this does not restrict to the
-    pyramid.data_model root, so service-local wrapper messages (canonically
-    homed in their component package) also resolve.
-    """
-    if '.' not in full_type:
-        return ''
-    return full_type.rsplit('.', 1)[0]
-
-
-def _message_matches(index: ProtoTypeIndex,
-                     short_name: str) -> List[Tuple[str, ProtoMessage]]:
-    result = []
-    for pf in index.files:
-        for msg in pf.messages:
-            if msg.name == short_name:
-                result.append((pf.package, msg))
-    return result
-
-
-def _enum_matches(index: ProtoTypeIndex,
-                  short_name: str) -> List[Tuple[str, ProtoEnum]]:
-    result = []
-    for pf in index.files:
-        for enum in pf.enums:
-            if enum.name == short_name:
-                result.append((pf.package, enum))
-    return result
-
-
-def _resolve_message(index: ProtoTypeIndex, type_name: str,
-                     current_pkg: str = '') -> Tuple[Optional[ProtoMessage], str]:
-    """Resolve a proto message with package-aware bare-name handling.
-
-    Bare proto names are scoped to the current package first. If there is no
-    current-package match, a bare name is accepted only when it is unique in the
-    index. This keeps duplicate short names from resolving to an arbitrary
-    package.
-    """
-    if not type_name or type_name in _PROTO_SCALARS:
-        return None, ''
-    if type_name.startswith('google.'):
-        return None, ''
-    if '.' in type_name:
-        return index.resolve_message(type_name), type_name.rsplit('.', 1)[0]
-    if current_pkg:
-        fqn = f'{current_pkg}.{type_name}'
-        msg = index.resolve_message(fqn)
-        if msg is not None:
-            return msg, current_pkg
-    matches = _message_matches(index, type_name)
-    if len(matches) == 1:
-        return matches[0][1], matches[0][0]
-    return None, ''
-
-
-def _resolve_enum(index: ProtoTypeIndex, type_name: str,
-                  current_pkg: str = '') -> Tuple[Optional[ProtoEnum], str]:
-    if not type_name or type_name in _PROTO_SCALARS:
-        return None, ''
-    if type_name.startswith('google.'):
-        return None, ''
-    if '.' in type_name:
-        return index.resolve_enum(type_name), type_name.rsplit('.', 1)[0]
-    if current_pkg:
-        fqn = f'{current_pkg}.{type_name}'
-        enum = index.resolve_enum(fqn)
-        if enum is not None:
-            return enum, current_pkg
-    matches = _enum_matches(index, type_name)
-    if len(matches) == 1:
-        return matches[0][1], matches[0][0]
-    return None, ''
-
-
-def _proto_type_fqn(index: ProtoTypeIndex, type_name: str,
-                    current_pkg: str = '') -> str:
-    if not type_name or type_name in _PROTO_SCALARS:
-        return type_name
-    if type_name.startswith('google.'):
-        return type_name
-    if '.' in type_name:
-        return type_name
-    msg, pkg = _resolve_message(index, type_name, current_pkg)
-    if msg is not None and pkg:
-        return f'{pkg}.{msg.name}'
-    enum, pkg = _resolve_enum(index, type_name, current_pkg)
-    if enum is not None and pkg:
-        return f'{pkg}.{enum.name}'
-    return ''
-
-
-def _package_for_proto_type(index: ProtoTypeIndex, type_name: str,
-                            current_pkg: str = '') -> str:
-    if '.' in type_name and not type_name.startswith('google.'):
-        return type_name.rsplit('.', 1)[0]
-    fqn = _proto_type_fqn(index, type_name, current_pkg)
-    if '.' in fqn and not fqn.startswith('google.'):
-        return fqn.rsplit('.', 1)[0]
-    return ''
-
-
-def _is_proto_message_type(index: ProtoTypeIndex, type_name: str,
-                           current_pkg: str = '') -> bool:
-    fqn = _proto_type_fqn(index, type_name, current_pkg)
-    return bool(fqn and index.is_message_type(fqn))
-
-
-def _is_proto_enum_type(index: ProtoTypeIndex, type_name: str,
-                        current_pkg: str = '') -> bool:
-    fqn = _proto_type_fqn(index, type_name, current_pkg)
-    return bool(fqn and index.is_enum_type(fqn))
-
-
-def _field_with_type(field: ProtoField, field_type: str) -> ProtoField:
-    return ProtoField(
-        name=field.name,
-        type=field_type or field.type,
-        number=field.number,
-        label=field.label,
-        oneof_group=field.oneof_group,
     )
 
 
@@ -589,7 +386,7 @@ def _service_codec_imports(
     packages_with_messages.discard('pyramid.data_model.base')
     needed_packages = set()
     for _svc_name, rpc in all_rpcs:
-        for full_type in (rpc.req, rpc.rsp):
+        for full_type in (rpc.request_type, rpc.response_type):
             package = _data_model_package_for_type(full_type)
             if package in packages_with_messages:
                 needed_packages.add(package)
@@ -779,7 +576,7 @@ class CppServiceGenerator:
             parsed = parse_proto(pf)
             all_rpcs: List[Tuple[str, ProtoRpc]] = []
             for svc in parsed.services:
-                for rpc in svc.rpcs:
+                for rpc in _crud_rpcs(svc):
                     all_rpcs.append((svc.name, rpc))
 
             if not all_rpcs:
@@ -842,7 +639,7 @@ class CppServiceGenerator:
         index = ProtoTypeIndex(all_files)
 
         for proto_path in self._generic_proto_files():
-            parsed = parse_full_proto(proto_path)
+            parsed = parse_proto(proto_path)
             if not parsed.services:
                 continue
             file_prefix = self._naming.service_file_prefix(parsed.package)
@@ -1002,8 +799,7 @@ class CppServiceGenerator:
         for pf in service_files:
             for svc in pf.services:
                 for rpc in svc.rpcs:
-                    if not (getattr(rpc, 'streaming', False)
-                            or getattr(rpc, 'server_streaming', False)):
+                    if not rpc.server_streaming:
                         continue
                     elem_short = rpc.response_type.split('.')[-1]
                     array_schema = elem_short + 'Array'
@@ -1421,8 +1217,8 @@ class CppServiceGenerator:
         # instead of relying on a flat re-export.
         raw_type_fqn: Dict[str, str] = {}
         for _, rpc in all_rpcs:
-            raw_type_fqn.setdefault(_short_type(rpc.req), rpc.req)
-            raw_type_fqn.setdefault(_short_type(rpc.rsp), rpc.rsp)
+            raw_type_fqn.setdefault(_short_type(rpc.request_type), rpc.request_type)
+            raw_type_fqn.setdefault(_short_type(rpc.response_type), rpc.response_type)
         for key in topic_set:
             spec = topic_spec(key)
             raw_type_fqn.setdefault(spec.short_type, spec.full_type)
@@ -1493,13 +1289,13 @@ class CppServiceGenerator:
             const_names = [
                 _rpc_service_const(svc.name, rpc, duplicate_rpc_names)
                 for svc in parsed.services
-                for rpc in svc.rpcs
+                for rpc in _crud_rpcs(svc)
             ]
             max_const = max((len(n) for n in const_names), default=0)
 
             for svc in parsed.services:
-                for rpc in svc.rpcs:
-                    wire = f'{svc.wire_prefix}.{rpc.wire_name}'
+                for rpc in _crud_rpcs(svc):
+                    wire = f'{_service_wire_prefix(svc.name)}.{_rpc_wire_name(rpc)}'
                     service_const = _rpc_service_const(
                         svc.name, rpc, duplicate_rpc_names)
                     pad = max_const - len(service_const)
@@ -1585,12 +1381,12 @@ class CppServiceGenerator:
                 if svc_name != current_svc:
                     f.write(f'\n    // {svc_name}\n')
                     current_svc = svc_name
-                f.write(f'    virtual {rpc.cpp_rsp_type}\n')
+                f.write(f'    virtual {_cpp_rsp_type(rpc)}\n')
                 handler_name = _rpc_handler_name(
                     svc_name, rpc, duplicate_rpc_names)
                 f.write(
-                    f'    {handler_name}(const {rpc.cpp_req_type}& request);\n')
-                if rpc.streaming:
+                    f'    {handler_name}(const {_cpp_req_type(rpc)}& request);\n')
+                if rpc.server_streaming:
                     stream_name = _rpc_stream_handler_name(
                         svc_name, rpc, duplicate_rpc_names)
                     f.write('\n')
@@ -1599,7 +1395,7 @@ class CppServiceGenerator:
                     f.write('    /// Override this for true server streaming. Store stream_context,\n')
                     f.write('    /// return PCL_STREAMING, then emit frames with send*StreamFrame().\n')
                     f.write('    virtual pcl_status_t\n')
-                    f.write(f'    {stream_name}(const {rpc.cpp_req_type}& request,\n')
+                    f.write(f'    {stream_name}(const {_cpp_req_type(rpc)}& request,\n')
                     f.write('    ' + ' ' * len(stream_name)
                             + ' pcl_stream_context_t* stream_context,\n')
                     f.write('    ' + ' ' * len(stream_name)
@@ -1690,9 +1486,9 @@ class CppServiceGenerator:
 
             # Typed invoke helpers
             for svc in parsed.services:
-                for rpc in svc.rpcs:
-                    wire_full = f'{svc.wire_prefix}.{rpc.wire_name}'
-                    rsp_decl_t = rpc.cpp_rsp_type
+                for rpc in _crud_rpcs(svc):
+                    wire_full = f'{_service_wire_prefix(svc.name)}.{_rpc_wire_name(rpc)}'
+                    rsp_decl_t = _cpp_rsp_type(rpc)
                     decode_func = _rpc_decode_response_func(
                         svc.name, rpc, duplicate_rpc_names)
                     invoke_func = _rpc_invoke_func(
@@ -1703,8 +1499,8 @@ class CppServiceGenerator:
                     f.write(f'bool {decode_func}'
                             f'(const pcl_msg_t* msg,\n')
                     f.write(f'{decode_sp}{rsp_decl_t}* out);\n\n')
-                    if rpc.streaming:
-                        frame_t = rpc.cpp_rsp_type[len('std::vector<'):-1]
+                    if rpc.server_streaming:
+                        frame_t = _cpp_rsp_type(rpc)[len('std::vector<'):-1]
                         encode_frame = _rpc_encode_stream_frame_func(
                             svc.name, rpc, duplicate_rpc_names)
                         decode_frame = _rpc_decode_stream_frame_func(
@@ -1730,7 +1526,7 @@ class CppServiceGenerator:
                         f.write(f'{sp}const {frame_t}& payload,\n')
                         f.write(f'{sp}const char*        content_type'
                                 f' = "{_DEFAULT_CONTENT_TYPE}");\n\n')
-                    req_decl_t = rpc.cpp_req_type
+                    req_decl_t = _cpp_req_type(rpc)
                     col = 13 + len(invoke_func) + 1
                     sp = ' ' * col
                     f.write(f'/// \\brief Invoke {wire_full}'
@@ -1762,7 +1558,7 @@ class CppServiceGenerator:
                             f' = "{_DEFAULT_CONTENT_TYPE}",\n')
                     f.write(f'{sp}const pcl_endpoint_route_t* route'
                             f' = nullptr);\n\n')
-                    if rpc.streaming:
+                    if rpc.server_streaming:
                         invoke_stream = _rpc_invoke_stream_func(
                             svc.name, rpc, duplicate_rpc_names)
                         col = 13 + len(invoke_stream) + 1
@@ -1831,9 +1627,9 @@ class CppServiceGenerator:
                             f.write('    pyramid::transport::ros2::bindTopicIngress'
                                     f'(adapter, executor, {cname});\n')
                 for svc in parsed.services:
-                    for rpc in svc.rpcs:
+                    for rpc in _crud_rpcs(svc):
                         bind_func = ('bindStreamServiceIngress'
-                                     if rpc.streaming
+                                     if rpc.server_streaming
                                      else 'bindUnaryServiceIngress')
                         service_const = _rpc_service_const(
                             svc.name, rpc, duplicate_rpc_names)
@@ -1985,8 +1781,8 @@ class CppServiceGenerator:
             f.write(_SEP + '\n\n')
 
             for svc_name, rpc in all_rpcs:
-                rsp_t = rpc.cpp_rsp_type
-                req_t = rpc.cpp_req_type
+                rsp_t = _cpp_rsp_type(rpc)
+                req_t = _cpp_req_type(rpc)
                 handler_name = _rpc_handler_name(
                     svc_name, rpc, duplicate_rpc_names)
 
@@ -2001,7 +1797,7 @@ class CppServiceGenerator:
 
                 f.write('}\n\n')
 
-                if rpc.streaming:
+                if rpc.server_streaming:
                     stream_name = _rpc_stream_handler_name(
                         svc_name, rpc, duplicate_rpc_names)
                     f.write('pcl_status_t\n')
@@ -2339,9 +2135,9 @@ class CppServiceGenerator:
             f.write('// Typed response decode wrappers\n')
             f.write(_SEP + '\n\n')
             for svc in parsed.services:
-                for rpc in svc.rpcs:
-                    rsp_decl_t = rpc.cpp_rsp_type
-                    rsp_raw_t = rpc.raw_rsp_type
+                for rpc in _crud_rpcs(svc):
+                    rsp_decl_t = _cpp_rsp_type(rpc)
+                    rsp_raw_t = _short_type(rpc.response_type)
                     decode_func = _rpc_decode_response_func(
                         svc.name, rpc, duplicate_rpc_names)
                     col = len(f'bool {decode_func}(')
@@ -2353,15 +2149,15 @@ class CppServiceGenerator:
                     f.write('    if (!msg || !msg->data || msg->size == 0 || !out) {\n')
                     f.write('        return false;\n')
                     f.write('    }\n')
-                    if rpc.streaming:
+                    if rpc.server_streaming:
                         f.write(f'    {{ int r = pyramid_try_registry_decode(msg, "{rsp_raw_t}Array", out); if (r == 1) return true; }}\n')
                     else:
                         f.write(f'    {{ int r = pyramid_try_registry_decode(msg, "{rsp_raw_t}", out); if (r == 1) return true; }}\n')
                     f.write('    return false;\n')
                     f.write('}\n\n')
 
-                    if rpc.streaming:
-                        frame_t = rpc.cpp_rsp_type[len('std::vector<'):-1]
+                    if rpc.server_streaming:
+                        frame_t = _cpp_rsp_type(rpc)[len('std::vector<'):-1]
                         encode_frame = _rpc_encode_stream_frame_func(
                             svc.name, rpc, duplicate_rpc_names)
                         decode_frame = _rpc_decode_stream_frame_func(
@@ -2378,7 +2174,7 @@ class CppServiceGenerator:
                         f.write('    if (!out) {\n')
                         f.write('        return false;\n')
                         f.write('    }\n')
-                        f.write(f'    {{ int r = pyramid_try_registry_encode(content_type, "{rpc.raw_rsp_type}", &payload, out); if (r == 1) return true; }}\n')
+                        f.write(f'    {{ int r = pyramid_try_registry_encode(content_type, "{_short_type(rpc.response_type)}", &payload, out); if (r == 1) return true; }}\n')
                         f.write('    return false;\n')
                         f.write('}\n\n')
 
@@ -2390,7 +2186,7 @@ class CppServiceGenerator:
                         f.write('    if (!msg || !msg->data || msg->size == 0 || !out) {\n')
                         f.write('        return false;\n')
                         f.write('    }\n')
-                        f.write(f'    {{ int r = pyramid_try_registry_decode(msg, "{rpc.raw_rsp_type}", out); if (r == 1) return true; }}\n')
+                        f.write(f'    {{ int r = pyramid_try_registry_decode(msg, "{_short_type(rpc.response_type)}", out); if (r == 1) return true; }}\n')
                         f.write('    return false;\n')
                         f.write('}\n\n')
 
@@ -2417,8 +2213,8 @@ class CppServiceGenerator:
             f.write('// Typed invoke wrappers \u2014 serialise and dispatch via executor transport\n')
             f.write(_SEP + '\n\n')
             for svc in parsed.services:
-                for rpc in svc.rpcs:
-                    req_decl_t = rpc.cpp_req_type
+                for rpc in _crud_rpcs(svc):
+                    req_decl_t = _cpp_req_type(rpc)
                     invoke_func = _rpc_invoke_func(
                         svc.name, rpc, duplicate_rpc_names)
                     service_const = _rpc_service_const(
@@ -2438,7 +2234,7 @@ class CppServiceGenerator:
                     f.write(f'{sp}const char*       content_type)\n')
                     f.write('{\n')
                     f.write('    std::string payload;\n')
-                    f.write(f'    if (pyramid_try_registry_encode(content_type, "{rpc.raw_req_type}", &request, &payload) != 1) {{\n')
+                    f.write(f'    if (pyramid_try_registry_encode(content_type, "{_short_type(rpc.request_type)}", &request, &payload) != 1) {{\n')
                     f.write('        return PCL_ERR_NOT_FOUND;\n')
                     f.write('    }\n')
                     f.write('    return invoke_async(executor,'
@@ -2457,7 +2253,7 @@ class CppServiceGenerator:
                             '(executor, request, ignore_async_response,\n')
                     f.write('                         nullptr, route, content_type);\n')
                     f.write('}\n\n')
-                    if rpc.streaming:
+                    if rpc.server_streaming:
                         invoke_stream = _rpc_invoke_stream_func(
                             svc.name, rpc, duplicate_rpc_names)
                         col = 13 + len(invoke_stream) + 1
@@ -2476,7 +2272,7 @@ class CppServiceGenerator:
                         f.write(f'{sp}const char*       content_type)\n')
                         f.write('{\n')
                         f.write('    std::string payload;\n')
-                        f.write(f'    if (pyramid_try_registry_encode(content_type, "{rpc.raw_req_type}", &request, &payload) != 1) {{\n')
+                        f.write(f'    if (pyramid_try_registry_encode(content_type, "{_short_type(rpc.request_type)}", &request, &payload) != 1) {{\n')
                         f.write('        return PCL_ERR_NOT_FOUND;\n')
                         f.write('    }\n')
                         f.write('    if (route) {\n')
@@ -2589,21 +2385,21 @@ class CppServiceGenerator:
                 enum_val = _rpc_enum_value(svc_name, rpc, duplicate_rpc_names)
                 handler_fn = _rpc_handler_name(
                     svc_name, rpc, duplicate_rpc_names)
-                req_t = rpc.cpp_req_type
-                rsp_t = rpc.cpp_rsp_type
+                req_t = _cpp_req_type(rpc)
+                rsp_t = _cpp_rsp_type(rpc)
 
                 f.write(f'    case ServiceChannel::{enum_val}: {{\n')
                 f.write(f'        {req_t} req;\n')
-                f.write(f'        if (pyramid_try_registry_decode(&req_msg, "{rpc.raw_req_type}", &req) != 1) {{\n')
+                f.write(f'        if (pyramid_try_registry_decode(&req_msg, "{_short_type(rpc.request_type)}", &req) != 1) {{\n')
                 f.write('            break;\n')
                 f.write('        }\n')
                 f.write(f'        auto rsp = handler.{handler_fn}(req);\n')
                 if rsp_t.startswith('std::vector<'):
-                    f.write(f'        if (pyramid_try_registry_encode(content_type, "{rpc.raw_rsp_type}Array", &rsp, &rsp_payload) != 1) {{\n')
+                    f.write(f'        if (pyramid_try_registry_encode(content_type, "{_short_type(rpc.response_type)}Array", &rsp, &rsp_payload) != 1) {{\n')
                     f.write('            break;\n')
                     f.write('        }\n')
                 else:
-                    f.write(f'        if (pyramid_try_registry_encode(content_type, "{rpc.raw_rsp_type}", &rsp, &rsp_payload) != 1) {{\n')
+                    f.write(f'        if (pyramid_try_registry_encode(content_type, "{_short_type(rpc.response_type)}", &rsp, &rsp_payload) != 1) {{\n')
                     f.write('            break;\n')
                     f.write('        }\n')
                 f.write('        break;\n')
@@ -2647,15 +2443,15 @@ class CppServiceGenerator:
             f.write('    switch (channel) {\n')
 
             for svc_name, rpc in all_rpcs:
-                if not rpc.streaming:
+                if not rpc.server_streaming:
                     continue
                 enum_val = _rpc_enum_value(svc_name, rpc, duplicate_rpc_names)
                 stream_fn = _rpc_stream_handler_name(
                     svc_name, rpc, duplicate_rpc_names)
-                req_t = rpc.cpp_req_type
+                req_t = _cpp_req_type(rpc)
                 f.write(f'    case ServiceChannel::{enum_val}: {{\n')
                 f.write(f'        {req_t} req;\n')
-                f.write(f'        if (pyramid_try_registry_decode(&req_msg, "{rpc.raw_req_type}", &req) != 1) {{\n')
+                f.write(f'        if (pyramid_try_registry_decode(&req_msg, "{_short_type(rpc.request_type)}", &req) != 1) {{\n')
                 f.write('            return PCL_ERR_NOT_FOUND;\n')
                 f.write('        }\n')
                 f.write(f'        return handler.{stream_fn}(req, stream_context, content_type);\n')
@@ -2835,17 +2631,17 @@ class CppServiceGenerator:
                     f.write(f'\n    // {svc_name}\n')
                     current_svc = svc_name
                 on_name = 'on' + _rpc_symbol_base(svc_name, rpc, duplicate_rpc_names)
-                if rpc.streaming:
-                    frame_t = rpc.cpp_rsp_type[len('std::vector<'):-1]
+                if rpc.server_streaming:
+                    frame_t = _cpp_rsp_type(rpc)[len('std::vector<'):-1]
                     f.write('    virtual void\n')
-                    f.write(f'    {on_name}(const {rpc.cpp_req_type}& /*request*/,\n')
+                    f.write(f'    {on_name}(const {_cpp_req_type(rpc)}& /*request*/,\n')
                     f.write(f'        StreamWriter<{frame_t}> writer) {{\n')
                     f.write('        // Default: empty stream. Override to emit frames + end.\n')
                     f.write('        writer.end();\n')
                     f.write('    }\n')
                 else:
-                    f.write(f'    virtual {rpc.cpp_rsp_type}\n')
-                    f.write(f'    {on_name}(const {rpc.cpp_req_type}& /*request*/) {{\n')
+                    f.write(f'    virtual {_cpp_rsp_type(rpc)}\n')
+                    f.write(f'    {on_name}(const {_cpp_req_type(rpc)}& /*request*/) {{\n')
                     f.write('        return {};\n')
                     f.write('    }\n')
             f.write('};\n\n')
@@ -2901,7 +2697,7 @@ class CppServiceGenerator:
                     svc_name, rpc, duplicate_rpc_names)
                 enum_val = _rpc_enum_value(
                     svc_name, rpc, duplicate_rpc_names)
-                if rpc.streaming:
+                if rpc.server_streaming:
                     f.write(f'        if (!addStreamBinding({svc_const}, ServiceChannel::{enum_val})) return PCL_ERR_NOMEM;\n')
                 else:
                     f.write(f'        if (!addUnaryBinding({svc_const}, ServiceChannel::{enum_val})) return PCL_ERR_NOMEM;\n')
@@ -2932,8 +2728,8 @@ class CppServiceGenerator:
                 on_name = 'on' + _rpc_symbol_base(svc_name, rpc, duplicate_rpc_names)
                 handler_name = _rpc_handler_name(
                     svc_name, rpc, duplicate_rpc_names)
-                if rpc.streaming:
-                    frame_t = rpc.cpp_rsp_type[len('std::vector<'):-1]
+                if rpc.server_streaming:
+                    frame_t = _cpp_rsp_type(rpc)[len('std::vector<'):-1]
                     send_frame = _rpc_send_stream_frame_func(
                         svc_name, rpc, duplicate_rpc_names)
                     stream_name = _rpc_stream_handler_name(
@@ -2944,8 +2740,8 @@ class CppServiceGenerator:
                     # the accumulated vector. The codec dispatcher still
                     # exercises this when the wire-level invoke arrives via
                     # the unary path (e.g. legacy clients).
-                    f.write(f'        {rpc.cpp_rsp_type}\n')
-                    f.write(f'        {handler_name}(const {rpc.cpp_req_type}& request) override {{\n')
+                    f.write(f'        {_cpp_rsp_type(rpc)}\n')
+                    f.write(f'        {handler_name}(const {_cpp_req_type(rpc)}& request) override {{\n')
                     f.write(f'            std::vector<{frame_t}> collected;\n')
                     f.write(f'            auto writer = StreamWriter<{frame_t}>::collecting(&collected);\n')
                     f.write(f'            owner_->handler_->{on_name}(request, std::move(writer));\n')
@@ -2956,7 +2752,7 @@ class CppServiceGenerator:
                     # PCL stream context. The user owns end(); if they drop
                     # the writer without ending, the destructor aborts.
                     f.write('        pcl_status_t\n')
-                    f.write(f'        {stream_name}(const {rpc.cpp_req_type}& request,\n')
+                    f.write(f'        {stream_name}(const {_cpp_req_type(rpc)}& request,\n')
                     f.write('                                    pcl_stream_context_t* stream_context,\n')
                     f.write('                                    const char* content_type) override {\n')
                     f.write(f'            StreamWriter<{frame_t}> writer{{\n')
@@ -2968,8 +2764,8 @@ class CppServiceGenerator:
                     f.write('            return PCL_STREAMING;\n')
                     f.write('        }\n')
                 else:
-                    f.write(f'        {rpc.cpp_rsp_type}\n')
-                    f.write(f'        {handler_name}(const {rpc.cpp_req_type}& request) override {{\n')
+                    f.write(f'        {_cpp_rsp_type(rpc)}\n')
+                    f.write(f'        {handler_name}(const {_cpp_req_type(rpc)}& request) override {{\n')
                     f.write(f'            return owner_->handler_->{on_name}(request);\n')
                     f.write('        }\n')
             f.write('    private:\n')
@@ -3195,9 +2991,9 @@ class CppServiceGenerator:
                 async_name = _lc_first(base) + 'Async'
                 invoke_fn = _rpc_invoke_func(
                     svc_name, rpc, duplicate_rpc_names)
-                req_t = rpc.cpp_req_type
-                if rpc.streaming:
-                    frame_t = rpc.cpp_rsp_type[len('std::vector<'):-1]
+                req_t = _cpp_req_type(rpc)
+                if rpc.server_streaming:
+                    frame_t = _cpp_rsp_type(rpc)[len('std::vector<'):-1]
                     invoke_stream = _rpc_invoke_stream_func(
                         svc_name, rpc, duplicate_rpc_names)
                     decode_frame = _rpc_decode_stream_frame_func(
@@ -3237,7 +3033,7 @@ class CppServiceGenerator:
                     f.write('        }};\n')
                     f.write('    }\n\n')
                 else:
-                    rsp_t = rpc.cpp_rsp_type
+                    rsp_t = _cpp_rsp_type(rpc)
                     decode_resp = _rpc_decode_response_func(
                         svc_name, rpc, duplicate_rpc_names)
                     f.write(f'    std::future<Result<{rsp_t}>>\n')
