@@ -176,6 +176,7 @@ echo [package_sdk] copying generator (pim\*.py) ...
 xcopy /y /q "%PYRAMID_ROOT%\pim\*.py" "%OUT_DIR%\generator\" >nul
 xcopy /y /q "%PYRAMID_ROOT%\pim\backends\*.py" "%OUT_DIR%\generator\backends\" >nul
 xcopy /y /q "%PYRAMID_ROOT%\pim\cpp\*.py" "%OUT_DIR%\generator\cpp\" >nul
+xcopy /y /q "%PYRAMID_ROOT%\pim\ada\*.py" "%OUT_DIR%\generator\ada\" >nul
 mkdir "%OUT_DIR%\generator\topic_metadata" 2>nul
 xcopy /y /q "%PYRAMID_ROOT%\pim\topic_metadata\*.json" "%OUT_DIR%\generator\topic_metadata\" >nul
 

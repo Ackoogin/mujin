@@ -133,6 +133,8 @@ cp -f "${PYRAMID_ROOT}"/pim/*.py "${OUT_DIR}/generator/"
 cp -f "${PYRAMID_ROOT}"/pim/backends/*.py "${OUT_DIR}/generator/backends/"
 mkdir -p "${OUT_DIR}/generator/cpp"
 cp -f "${PYRAMID_ROOT}"/pim/cpp/*.py "${OUT_DIR}/generator/cpp/"
+mkdir -p "${OUT_DIR}/generator/ada"
+cp -f "${PYRAMID_ROOT}"/pim/ada/*.py "${OUT_DIR}/generator/ada/"
 mkdir -p "${OUT_DIR}/generator/topic_metadata"
 cp -f "${PYRAMID_ROOT}"/pim/topic_metadata/*.json "${OUT_DIR}/generator/topic_metadata/"
 
