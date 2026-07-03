@@ -7,6 +7,29 @@ tree after the pub/sub contract work (`7e97368`, `2aa1d63`).
 
 **Date:** 2026-07-03
 
+## Status: EXECUTED 2026-07-03 (phases 0-5, commits 3fb876f..14d3b23)
+
+All phases landed with byte-identical generation on both reference trees
+and the full end-of-plan gate green (pytest, harness scripts, SDK smoke).
+Follow-ups discovered during execution:
+
+- **Pre-existing generator nondeterminism** (fixed in phase 0): both
+  types-generator `_toposort`s iterated dep sets unsorted, so struct order
+  varied per process under hash randomisation.
+- **Pre-existing Ada gap, not fixed here**: consumed-side generic-layout
+  facades whose service has no consumed types package get no parent
+  package stub (e.g. `pyramid-components-pim_osprey-sensors-services-
+  consumed.ads` is withed but never emitted); 3 of 174 generic-tree units
+  fail the `gnatgcc -c -gnat2020` object-compile because of it.
+- **`ada/service_body_gen.py`** keeps `_write_body` as one large emitter
+  method (~1.3k lines): splitting inside it means threading the output
+  stream and dozens of locals.
+- **Windows parity**: `package_sdk.bat` was updated alongside `.sh`, but
+  the packaged-SDK smoke has only been run on Linux.
+- The `cpp_codegen.py` / `ada_codegen.py` shims carry only the externally
+  consumed surface (pinned by `tests/test_codegen_export_surface.py`);
+  scheduled for deletion after one SDK release.
+
 ## Current state (post-pubsub baseline)
 
 | File | Lines | Top-level structure |
