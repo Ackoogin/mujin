@@ -131,6 +131,8 @@ chmod +x "${OUT_DIR}/tools/flatc"
 echo "[package_sdk] copying generator (pim/*.py) ..."
 cp -f "${PYRAMID_ROOT}"/pim/*.py "${OUT_DIR}/generator/"
 cp -f "${PYRAMID_ROOT}"/pim/backends/*.py "${OUT_DIR}/generator/backends/"
+mkdir -p "${OUT_DIR}/generator/cpp"
+cp -f "${PYRAMID_ROOT}"/pim/cpp/*.py "${OUT_DIR}/generator/cpp/"
 mkdir -p "${OUT_DIR}/generator/topic_metadata"
 cp -f "${PYRAMID_ROOT}"/pim/topic_metadata/*.json "${OUT_DIR}/generator/topic_metadata/"
 
