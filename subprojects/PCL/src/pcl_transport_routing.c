@@ -189,8 +189,11 @@ static pcl_status_t handle_transport_line(pcl_executor_t*          e,
   /* Record before registering so a later failure still tears it down. */
   rc = routing_push(r, handle, vtable, peer);
   if (rc != PCL_OK) {
+    // GCOVR_EXCL_START: routing_push fails only on heap exhaustion, which is
+    // not injectable through this path.
     pcl_plugin_unload_transport(handle, vtable);
     return rc;
+    // GCOVR_EXCL_STOP
   }
   /* Authoritative declared caps + offered QoS (coupled plugins carry
      fail-closed vtable stubs, so we must not derive from the vtable). */
@@ -276,8 +279,11 @@ static pcl_status_t handle_route_line(pcl_executor_t*          e,
      installed on error. */
   rc = routing_push_route(r, endpoint, kind);
   if (rc != PCL_OK) {
+    // GCOVR_EXCL_START: routing_push_route fails only on heap exhaustion,
+    // which is not injectable through this path.
     pcl_executor_clear_endpoint_route(e, endpoint, kind);
     return rc;
+    // GCOVR_EXCL_STOP
   }
   /* Compose-time validation: caps + QoS floor, fail closed. */
   return pcl_executor_validate_endpoint_route(e, &route, diag, diag_size);

@@ -214,15 +214,19 @@ void sendMessageNonBlocking(int            iLVC,
 
   msg = (apos_message_t*)calloc(1u, sizeof(*msg));
   if (!msg) {
+    // GCOVR_EXCL_START: heap exhaustion is not injectable through this path.
     if (pStatus) *pStatus = RS_ERROR;
     return;
+    // GCOVR_EXCL_STOP
   }
   if (iDataSize > 0) {
     msg->data = (unsigned char*)malloc((size_t)iDataSize);
     if (!msg->data) {
+      // GCOVR_EXCL_START: heap exhaustion is not injectable through this path.
       free(msg);
       if (pStatus) *pStatus = RS_ERROR;
       return;
+      // GCOVR_EXCL_STOP
     }
     memcpy(msg->data, pucData, (size_t)iDataSize);
   }
@@ -231,11 +235,14 @@ void sendMessageNonBlocking(int            iLVC,
   apos_lock();
   ch = apos_find_channel_locked(iLVC, 1);
   if (!ch) {
+    // GCOVR_EXCL_START: channel creation only fails on heap exhaustion,
+    // which is not injectable through this path.
     apos_unlock();
     free(msg->data);
     free(msg);
     if (pStatus) *pStatus = RS_ERROR;
     return;
+    // GCOVR_EXCL_STOP
   }
   if (ch->tail) {
     ch->tail->next = msg;

@@ -738,3 +738,302 @@ TEST(PclTransportTemplate_Conformance, MultiplePublishesPreserveOrder) {
   }
   restore_logs();
 }
+
+// ---------------------------------------------------------------------------
+// Additional scaffold edge cases (statement-coverage driven)
+// ---------------------------------------------------------------------------
+
+///< REQ_PCL_295: subscribe is a wire-agnostic no-op in the scaffold.
+TEST(PclTransportTemplate, SubscribeVtableIsNoOp) {
+  LoopbackPair pair;
+  const pcl_transport_t* vt = pcl_transport_template_get_transport(pair.tpl_a);
+  ASSERT_NE(vt, nullptr);
+  ASSERT_NE(vt->subscribe, nullptr);
+  EXPECT_EQ(vt->subscribe(vt->adapter_ctx, "some/topic", "SomeType"), PCL_OK);
+}
+
+///< REQ_PCL_286: re-setting the same peer id is idempotent (alias already
+///< tracked).
+TEST(PclTransportTemplate, SetPeerIdSameValueIsIdempotent) {
+  LoopbackPair pair;
+  EXPECT_EQ(pcl_transport_template_set_peer_id(pair.tpl_a, "node_b"), PCL_OK);
+  EXPECT_EQ(pcl_transport_template_set_peer_id(pair.tpl_a, "node_b"), PCL_OK);
+}
+
+namespace {
+
+extern "C" pcl_status_t failing_send(void* ud, const pcl_template_frame_t* f) {
+  auto* count = static_cast<std::atomic<int>*>(ud);
+  (void)f;
+  count->fetch_add(1);
+  return PCL_ERR_STATE;
+}
+
+extern "C" pcl_status_t idle_recv(void* ud, pcl_template_frame_t* out,
+                                  uint32_t timeout_ms) {
+  (void)ud; (void)out;
+  std::this_thread::sleep_for(std::chrono::milliseconds(
+      std::min<uint32_t>(timeout_ms, 5u)));
+  return PCL_ERR_TIMEOUT;
+}
+
+extern "C" pcl_status_t broken_recv(void* ud, pcl_template_frame_t* out,
+                                    uint32_t timeout_ms) {
+  auto* count = static_cast<std::atomic<int>*>(ud);
+  (void)out; (void)timeout_ms;
+  count->fetch_add(1);
+  // Permanently broken wire stack: a hard error, not a timeout.  Slow the
+  // retry loop down so the test does not busy-spin.
+  std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  return PCL_ERR_STATE;
+}
+
+}  // namespace
+
+///< REQ_PCL_292: a failing send hook drops the frame (with a warning) and the
+///< send thread keeps servicing later frames.
+TEST(PclTransportTemplate, SendHookFailureDropsFrame) {
+  silence_logs();
+  std::atomic<int> send_attempts{0};
+
+  pcl_executor_t* exec = pcl_executor_create();
+  ASSERT_NE(exec, nullptr);
+
+  pcl_template_io_hooks_t hooks = {};
+  hooks.user_data     = &send_attempts;
+  hooks.send_blocking = &failing_send;
+  hooks.recv_blocking = &idle_recv;
+
+  pcl_transport_template_t* tpl = pcl_transport_template_create(&hooks, exec);
+  ASSERT_NE(tpl, nullptr);
+
+  const pcl_transport_t* vt = pcl_transport_template_get_transport(tpl);
+  pcl_msg_t msg = {};
+  msg.data = "x";
+  msg.size = 1u;
+  msg.type_name = "T";
+  EXPECT_EQ(vt->publish(vt->adapter_ctx, "topic/a", &msg), PCL_OK);
+  EXPECT_EQ(vt->publish(vt->adapter_ctx, "topic/b", &msg), PCL_OK);
+
+  // Both frames reach the failing hook (dropped, not wedged).
+  for (int i = 0; i < 200 && send_attempts.load() < 2; ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  EXPECT_GE(send_attempts.load(), 2);
+
+  pcl_transport_template_destroy(tpl);
+  pcl_executor_destroy(exec);
+  restore_logs();
+}
+
+///< REQ_PCL_293: a hard recv_blocking failure logs and retries; destroy still
+///< tears the transport down cleanly.
+TEST(PclTransportTemplate, RecvHookHardFailureRetriesUntilDestroy) {
+  silence_logs();
+  std::atomic<int> recv_attempts{0};
+
+  pcl_executor_t* exec = pcl_executor_create();
+  ASSERT_NE(exec, nullptr);
+
+  pcl_template_io_hooks_t hooks = {};
+  hooks.user_data     = &recv_attempts;
+  hooks.send_blocking = &failing_send;  // unused
+  hooks.recv_blocking = &broken_recv;
+
+  pcl_transport_template_t* tpl = pcl_transport_template_create(&hooks, exec);
+  ASSERT_NE(tpl, nullptr);
+
+  for (int i = 0; i < 200 && recv_attempts.load() < 3; ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  EXPECT_GE(recv_attempts.load(), 3);
+
+  pcl_transport_template_destroy(tpl);
+  pcl_executor_destroy(exec);
+  restore_logs();
+}
+
+///< REQ_PCL_294: inbound frames with an unknown kind, or an SVC_RESP whose
+///< seq id matches no pending request, are ignored without crashing.
+TEST(PclTransportTemplate, MalformedInboundFramesIgnored) {
+  silence_logs();
+  LoopbackPair pair;
+
+  // Frame with a nonsense kind.
+  {
+    OwnedFrame f;
+    f.kind = static_cast<pcl_template_frame_kind_t>(0x7eadbeef);
+    f.seq_id = 1u;
+    f.topic = OwnedFrame::dup("junk");
+    std::lock_guard<std::mutex> lk(pair.ab.mu);
+    pair.ab.queue.emplace_back(std::move(f));
+    pair.ab.cv.notify_all();
+  }
+  // SVC_RESP nobody is waiting for.
+  {
+    OwnedFrame f;
+    f.kind = PCL_TEMPLATE_FRAME_SVC_RESP;
+    f.seq_id = 0x12345u;
+    std::lock_guard<std::mutex> lk(pair.ab.mu);
+    pair.ab.queue.emplace_back(std::move(f));
+    pair.ab.cv.notify_all();
+  }
+  // SVC_REQ with no service name: the dispatch post is rejected and the
+  // per-request slot is reclaimed.
+  {
+    OwnedFrame f;
+    f.kind = PCL_TEMPLATE_FRAME_SVC_REQ;
+    f.seq_id = 7u;
+    f.service_name = nullptr;
+    std::lock_guard<std::mutex> lk(pair.ab.mu);
+    pair.ab.queue.emplace_back(std::move(f));
+    pair.ab.cv.notify_all();
+  }
+
+  // Give the recv thread time to consume all three frames.
+  for (int i = 0; i < 200 && pair.b_end.recv_count.load() < 3; ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  EXPECT_GE(pair.b_end.recv_count.load(), 3);
+  restore_logs();
+}
+
+namespace {
+
+struct GatedSend {
+  std::mutex mu;
+  std::condition_variable cv;
+  bool release = false;
+  std::atomic<int> entered{0};
+};
+
+extern "C" pcl_status_t gated_send(void* ud, const pcl_template_frame_t* f) {
+  auto* gate = static_cast<GatedSend*>(ud);
+  (void)f;
+  gate->entered.fetch_add(1);
+  // Hold the send thread long enough for destroy() to raise the stop flag
+  // while frames are still queued behind this one.
+  std::unique_lock<std::mutex> lk(gate->mu);
+  gate->cv.wait_for(lk, std::chrono::milliseconds(300),
+                    [&] { return gate->release; });
+  return PCL_OK;
+}
+
+}  // namespace
+
+///< REQ_PCL_290: frames queued behind a slow send hook accumulate in FIFO
+///< order and destroy() drains the backlog without leaking.
+TEST(PclTransportTemplate, DestroyDrainsQueuedFramesBehindSlowSend) {
+  silence_logs();
+  GatedSend gate;
+
+  pcl_executor_t* exec = pcl_executor_create();
+  ASSERT_NE(exec, nullptr);
+
+  pcl_template_io_hooks_t hooks = {};
+  hooks.user_data     = &gate;
+  hooks.send_blocking = &gated_send;
+  hooks.recv_blocking = &idle_recv;
+
+  pcl_transport_template_t* tpl = pcl_transport_template_create(&hooks, exec);
+  ASSERT_NE(tpl, nullptr);
+
+  const pcl_transport_t* vt = pcl_transport_template_get_transport(tpl);
+  pcl_msg_t msg = {};
+  msg.data = "y";
+  msg.size = 1u;
+  msg.type_name = "T";
+
+  // First publish occupies the send hook; the rest stack up in the queue.
+  EXPECT_EQ(vt->publish(vt->adapter_ctx, "t/0", &msg), PCL_OK);
+  for (int i = 0; i < 100 && gate.entered.load() < 1; ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  EXPECT_EQ(vt->publish(vt->adapter_ctx, "t/1", &msg), PCL_OK);
+  EXPECT_EQ(vt->publish(vt->adapter_ctx, "t/2", &msg), PCL_OK);
+
+  // Destroy while the hook still holds the first frame: the stop flag is
+  // observed with frames queued, so the abort path and the exit drain both
+  // run instead of the normal send loop.
+  pcl_transport_template_destroy(tpl);
+  pcl_executor_destroy(exec);
+  restore_logs();
+}
+
+///< REQ_PCL_290: once the vtable shutdown has stopped the send thread,
+///< publish and invoke_async fail with PCL_ERR_STATE and a pending async
+///< entry is rolled back rather than orphaned.
+TEST(PclTransportTemplate, PublishAndInvokeFailAfterVtableShutdown) {
+  LoopbackPair pair;
+  const pcl_transport_t* vt = pcl_transport_template_get_transport(pair.tpl_a);
+  ASSERT_NE(vt->shutdown, nullptr);
+  vt->shutdown(vt->adapter_ctx);
+
+  pcl_msg_t msg = {};
+  msg.data = "z";
+  msg.size = 1u;
+  msg.type_name = "T";
+  EXPECT_EQ(vt->publish(vt->adapter_ctx, "topic", &msg), PCL_ERR_STATE);
+
+  ASSERT_NE(vt->invoke_async, nullptr);
+  auto cb = [](const pcl_msg_t*, void*) {};
+  EXPECT_EQ(vt->invoke_async(vt->adapter_ctx, "svc", &msg, cb, nullptr),
+            PCL_ERR_STATE);
+}
+
+///< REQ_PCL_288: destroying a transport that *is* the executor's default
+///< transport clears the default slot.
+TEST(PclTransportTemplate, DestroyClearsDefaultTransportWhenSelf) {
+  std::atomic<int> send_attempts{0};
+  pcl_executor_t* exec = pcl_executor_create();
+  ASSERT_NE(exec, nullptr);
+
+  pcl_template_io_hooks_t hooks = {};
+  hooks.user_data     = &send_attempts;
+  hooks.send_blocking = &failing_send;
+  hooks.recv_blocking = &idle_recv;
+
+  pcl_transport_template_t* tpl = pcl_transport_template_create(&hooks, exec);
+  ASSERT_NE(tpl, nullptr);
+  ASSERT_EQ(pcl_executor_set_transport(
+                exec, pcl_transport_template_get_transport(tpl)),
+            PCL_OK);
+
+  pcl_transport_template_destroy(tpl);
+  EXPECT_EQ(pcl_executor_get_transport(exec), nullptr);
+  pcl_executor_destroy(exec);
+}
+
+///< REQ_PCL_290: destroying a transport with un-responded async requests
+///< drains and frees the pending correlation entries.
+TEST(PclTransportTemplate, DestroyFreesUnansweredPendingRequests) {
+  silence_logs();
+  std::atomic<int> send_attempts{0};
+
+  pcl_executor_t* exec = pcl_executor_create();
+  ASSERT_NE(exec, nullptr);
+
+  pcl_template_io_hooks_t hooks = {};
+  hooks.user_data     = &send_attempts;
+  hooks.send_blocking = &failing_send;  // request leaves, response never comes
+  hooks.recv_blocking = &idle_recv;
+
+  pcl_transport_template_t* tpl = pcl_transport_template_create(&hooks, exec);
+  ASSERT_NE(tpl, nullptr);
+
+  const pcl_transport_t* vt = pcl_transport_template_get_transport(tpl);
+  pcl_msg_t req = {};
+  req.data = "q";
+  req.size = 1u;
+  req.type_name = "T";
+  auto cb = [](const pcl_msg_t*, void*) {};
+  EXPECT_EQ(vt->invoke_async(vt->adapter_ctx, "svc/one", &req, cb, nullptr),
+            PCL_OK);
+  EXPECT_EQ(vt->invoke_async(vt->adapter_ctx, "svc/two", &req, cb, nullptr),
+            PCL_OK);
+
+  // Destroy with both requests still pending: the drain frees the entries.
+  pcl_transport_template_destroy(tpl);
+  pcl_executor_destroy(exec);
+  restore_logs();
+}

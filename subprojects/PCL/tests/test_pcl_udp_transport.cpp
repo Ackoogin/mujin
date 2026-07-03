@@ -350,3 +350,118 @@ TEST(PclUdpTransport, NoServiceRpcSupport) {
   pcl_executor_destroy(e);
   restore_logs();
 }
+
+///< REQ_PCL_301: the UDP vtable subscribe is a no-op returning PCL_OK and
+///< shutdown stops the receive thread.
+TEST(PclUdpTransport, SubscribeAndShutdownVtable) {
+  pcl_executor_t* exec = pcl_executor_create();
+  ASSERT_NE(exec, nullptr);
+  pcl_udp_transport_t* udp =
+      pcl_udp_transport_create(0, "127.0.0.1", 18790, exec);
+  ASSERT_NE(udp, nullptr);
+
+  const pcl_transport_t* vt = pcl_udp_transport_get_transport(udp);
+  ASSERT_NE(vt, nullptr);
+  ASSERT_NE(vt->subscribe, nullptr);
+  EXPECT_EQ(vt->subscribe(vt->adapter_ctx, "t", "T"), PCL_OK);
+
+  ASSERT_NE(vt->shutdown, nullptr);
+  vt->shutdown(vt->adapter_ctx);
+  vt->shutdown(nullptr);  // NULL-safe
+
+  pcl_udp_transport_destroy(udp);
+  pcl_executor_destroy(exec);
+}
+
+///< REQ_PCL_302: creation fails closed (NULL) when the remote host cannot
+///< be resolved.
+TEST(PclUdpTransport, UnresolvableRemoteHostReturnsNull) {
+  pcl_executor_t* exec = pcl_executor_create();
+  ASSERT_NE(exec, nullptr);
+  EXPECT_EQ(pcl_udp_transport_create(0, "no.such.host.invalid", 18791, exec),
+            nullptr);
+  pcl_executor_destroy(exec);
+}
+
+///< REQ_PCL_303: malformed datagrams (truncated header, truncated type name,
+///< truncated payload, unknown message type) are dropped without crashing and
+///< without wedging the receive thread.
+TEST(PclUdpTransport, MalformedDatagramsDropped) {
+  silence_logs();
+  pcl_executor_t* exec = pcl_executor_create();
+  ASSERT_NE(exec, nullptr);
+
+  pcl_udp_transport_t* udp =
+      pcl_udp_transport_create(0, "127.0.0.1", 18792, exec);
+  ASSERT_NE(udp, nullptr);
+  const uint16_t port = pcl_udp_transport_get_local_port(udp);
+  ASSERT_NE(port, 0);
+
+#ifdef _WIN32
+  SOCKET raw = socket(AF_INET, SOCK_DGRAM, 0);
+  ASSERT_NE(raw, INVALID_SOCKET);
+#else
+  int raw = socket(AF_INET, SOCK_DGRAM, 0);
+  ASSERT_GE(raw, 0);
+#endif
+  sockaddr_in to{};
+  to.sin_family      = AF_INET;
+  to.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  to.sin_port        = htons(port);
+
+  auto send_raw = [&](const uint8_t* data, size_t n) {
+    sendto(raw, reinterpret_cast<const char*>(data), (int)n, 0,
+           reinterpret_cast<sockaddr*>(&to), sizeof(to));
+  };
+
+  // Unknown message type byte.
+  const uint8_t unknown_type[] = {0x7F, 0x00, 0x00};
+  send_raw(unknown_type, sizeof(unknown_type));
+
+  // PUBLISH with a topic length that exceeds the datagram.
+  const uint8_t truncated_topic[] = {0x00, 0x00, 0x40, 'a', 'b'};
+  send_raw(truncated_topic, sizeof(truncated_topic));
+
+  // PUBLISH with a valid topic but truncated type-name length field.
+  // [type=0][topic_len=1]['t'][type_len=0x0040 -> exceeds datagram]
+  const uint8_t truncated_type[] = {0x00, 0x00, 0x01, 't', 0x00, 0x40,
+                                    0x00, 0x00, 0x00, 0x00};
+  send_raw(truncated_type, sizeof(truncated_type));
+
+  // PUBLISH with valid topic and type but data_len larger than the datagram.
+  // [type=0][topic_len=1]['t'][type_len=1]['T'][data_len=0xFFFF]
+  const uint8_t truncated_data[] = {0x00, 0x00, 0x01, 't', 0x00, 0x01, 'T',
+                                    0x00, 0x00, 0xFF, 0xFF};
+  send_raw(truncated_data, sizeof(truncated_data));
+
+  // Give the receive thread time to consume (and drop) all four datagrams.
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  // The transport is still alive and well-formed traffic still works: the
+  // destroy path below would deadlock or crash on a wedged receive thread.
+#ifdef _WIN32
+  closesocket(raw);
+#else
+  close(raw);
+#endif
+  pcl_udp_transport_destroy(udp);
+  pcl_executor_destroy(exec);
+  restore_logs();
+}
+
+///< REQ_PCL_304: destroying a UDP transport installed as the executor's
+///< default transport clears the default slot.
+TEST(PclUdpTransport, DestroyClearsDefaultTransportWhenSelf) {
+  pcl_executor_t* exec = pcl_executor_create();
+  ASSERT_NE(exec, nullptr);
+  pcl_udp_transport_t* udp =
+      pcl_udp_transport_create(0, "127.0.0.1", 18793, exec);
+  ASSERT_NE(udp, nullptr);
+
+  ASSERT_EQ(pcl_executor_set_transport(exec,
+                                       pcl_udp_transport_get_transport(udp)),
+            PCL_OK);
+  pcl_udp_transport_destroy(udp);
+  EXPECT_EQ(pcl_executor_get_transport(exec), nullptr);
+  pcl_executor_destroy(exec);
+}

@@ -52,6 +52,16 @@ Bridges are managed containers that subscribe, transform, and re-dispatch on the
 
 **Why**: Standardizes the common pattern of adapting between component interfaces.
 
+### D8 - Runtime Composition via Plugins and Manifests
+Transports and codecs are loadable at runtime through a versioned C plugin ABI, and a deployment manifest maps each endpoint to a named transport. Deployment topology is data, not code.
+
+**Why**: The same component binary must compose with different middleware (sockets, shared memory, UDP, gRPC, ROS2) per deployment without relinking.
+
+### D9 - Fail-Closed Compose-Time Validation
+Every remote endpoint route is validated at compose time against the routed transport's declared interaction capabilities and QoS. Anything unprovable (missing capability, undeclared reliability, unknown peer, malformed manifest) is rejected before the system runs, with a precise diagnostic, and nothing is left partially installed.
+
+**Why**: Configuration errors in safety-relevant deployments must surface at startup, never as silent misbehaviour in flight.
+
 ---
 
 ## Detailed Requirements
@@ -447,6 +457,103 @@ PCL shall expose a public C ABI for configuring endpoint locality and peer selec
 
 **Rationale**: Local-vs-remote deployment choices should be expressible through stable runtime configuration APIs, not by rewriting transport glue.
 
+## Codecs
+
+### PCL.058 - Codec Abstraction
+PCL shall define a format-agnostic codec vtable (`pcl_codec_t`) carrying an ABI version, a content-type string, and `encode`/`decode`/`free_msg` function pointers, so payload serialization is pluggable without coupling `pcl_core` to any format.
+
+**Rationale**: PCL treats payloads as opaque bytes (see Exclusions); codecs adapt typed values at the boundary without violating D1.
+
+### PCL.059 - Codec Registry
+PCL shall provide a codec registry mapping content-type strings to borrowed codec vtables: registration shall reject NULL arguments (`PCL_ERR_INVALID`), ABI-version mismatches and duplicate vtable pointers (`PCL_ERR_STATE`); multiple codecs may share a content type, with lookup returning the first registered and indexed iteration returning them in registration order; the registry shall expose count and clear operations and a lazily created, process-stable default registry.
+
+**Rationale**: A bridge process spanning several components must host their codec plugins side by side and select among them at dispatch time.
+
+## Transport Capabilities and QoS
+
+### PCL.060 - Transport Capability Declaration
+Each transport shall have an interaction-capability mask (pub/sub, unary RPC, streaming RPC, action RPC). A plugin may declare its mask explicitly via the optional caps symbol; when absent, the mask shall be conservatively derived from the non-NULL vtable slots. The action capability shall never be derived (it has no vtable slot). A NULL vtable or handle shall yield no capabilities (fail closed).
+
+**Rationale**: Compose-time validation (D9) needs an authoritative statement of what a transport can carry.
+
+### PCL.061 - Endpoint Capability Requirements
+Each endpoint kind shall map to the transport capability it requires: publisher/subscriber to pub/sub, provided/consumed to unary RPC, stream-provided to streaming RPC. Unrecognised kinds shall impose no requirement.
+
+**Rationale**: Deterministic mapping from interface shape to required transport behaviour.
+
+### PCL.062 - QoS Declaration and Floor Semantics
+Transports may declare an offered QoS (reliability: unspecified < best-effort < reliable); endpoints may declare a QoS floor. An offer shall satisfy a floor only when every declared dimension is greater than or equal to the floor; an undeclared (unspecified) offer shall fail any declared floor.
+
+**Rationale**: Reliability must be proven by the transport, not assumed by the deployment.
+
+### PCL.063 - Compose-Time Route Validation
+The executor shall validate an endpoint route against the capability mask and offered QoS of each transport it routes to -- named peers or the default transport slot -- failing closed with `PCL_ERR_NOT_FOUND` for unknown/absent transports and `PCL_ERR_STATE` for missing capabilities or unmet QoS floors, and emitting a human-readable diagnostic naming the endpoint and the deficiency.
+
+**Rationale**: D9 -- misconfiguration must be caught before traffic flows.
+
+## Plugin ABI and Loader
+
+### PCL.064 - Transport Plugin ABI
+Transport plugins shall export a versioned ABI: a mandatory ABI-version symbol and entry-point symbol (returning a borrowed transport vtable for an opaque JSON configuration string), plus optional capability, QoS, and teardown symbols. The ABI version constant shall gate loading.
+
+**Rationale**: D8 -- a stable, versioned C contract lets independently built middleware adapters load into any PCL process.
+
+### PCL.065 - Plugin Loader Fail-Closed Behaviour
+The plugin loader shall fail closed when a plugin cannot be trusted: missing file or missing mandatory symbols (`PCL_ERR_NOT_FOUND`), ABI-version mismatch or a NULL vtable/codec from the entry point (`PCL_ERR_STATE`). On any failure the library shall be unloaded and nothing registered. The loader shall also expose a portable raw open/symbol/unload wrapper over the platform dynamic loader.
+
+**Rationale**: A half-loaded or ABI-incompatible plugin must never be reachable from live traffic.
+
+### PCL.066 - Codec Plugin Batch Loading
+The loader shall load codec plugins individually (registering the codec and returning an owned handle) and in batches from a path array, a path-list environment variable, or a manifest file (blank lines and `#` comments ignored). Batch loading shall skip entries that are missing or are not codec plugins, and successfully loaded plugins shall remain resident while their codecs are registered.
+
+**Rationale**: Deployments enumerate codecs as data; one bad path must not abort the rest of the composition.
+
+### PCL.067 - Safe Teardown-Then-Unload
+`pcl_plugin_unload_transport()` shall invoke the plugin's teardown symbol (releasing live resources and stopping background threads) before unloading the library, and shall degrade to a plain unload when the symbol is absent. NULL handles shall be rejected with `PCL_ERR_INVALID`.
+
+**Rationale**: Unloading a library while its threads still execute in it is undefined behaviour; the safe order must be enforced centrally.
+
+### PCL.068 - Reference Transport Plugins
+The socket, UDP, and shared-memory transports shall each ship as loadable plugins that construct their transport from an opaque JSON configuration (role, addressing, and the owning executor), fail closed (NULL) on missing or invalid configuration, declare accurate capabilities and QoS, and export teardown (and, for the socket server, gateway access) symbols.
+
+**Rationale**: D8 -- the reference transports must be composable purely through the plugin ABI.
+
+## Manifest-Driven Endpoint Routing
+
+### PCL.069 - Routing Manifest
+PCL shall load a line-based routing manifest with `transport <peer_id> <plugin_path> [config...]` and `route <endpoint> <kind> <peers>[ <reliability>]` directives (blank lines and `#` comments ignored): standing up each transport plugin, registering it as a named peer with its declared capabilities and QoS, installing each endpoint route, and validating every route at compose time. An empty or comment-only manifest shall succeed with an empty routing handle; the handle shall own the loaded plugins and report how many transports it loaded.
+
+**Rationale**: D8 -- one manifest composes heterogeneous middleware per deployment.
+
+### PCL.070 - Routing Atomicity and Fail-Closed Diagnostics
+A failed manifest load shall leave nothing installed: transports already stood up shall be torn down (via safe teardown-then-unload), installed routes cleared, and a precise diagnostic written. The load shall fail closed on malformed lines, unknown directives or kinds or reliability tokens, oversized peer lists, unknown peers, duplicate transport peers, and routes duplicating an existing route; destroying a routing handle shall preserve unrelated transports (including an unrelated default transport) and free its executor transport slots for reuse.
+
+**Rationale**: D9 -- partial composition after a failed load is worse than no composition.
+
+## Transport Template and Conformance
+
+### PCL.071 - Transport Template Scaffold
+PCL shall provide a transport template implementing the standard transport threading model (dedicated send and receive worker threads, non-blocking vtable calls, cross-thread ingress via the executor) around engineer-supplied blocking I/O hooks (`send_blocking`, `recv_blocking`, optional `open`/`close`/`wake`). Creation shall fail closed on missing mandatory hooks or a failed `open`; send-hook failures shall drop the frame (logged) without wedging the send thread; hard receive failures shall log and retry until destroy; frames with unknown kinds or unmatched response sequence ids shall be ignored; after shutdown, publish and async invocation shall fail with `PCL_ERR_STATE` and pending entries shall be reclaimed; destroy shall drain queued frames, honour every peer alias the transport was known by, and clear the executor's default slot only when it points at this transport.
+
+**Rationale**: Every concrete transport re-implements the same threading skeleton; centralizing it makes new adapters small and uniformly correct (D2, D5).
+
+### PCL.072 - Transport Conformance Suite
+PCL shall provide a reusable transport conformance suite (vtable shape, publish round trip, service round trip, publish ordering) that every transport adapter implementation shall pass.
+
+**Rationale**: A common behavioural bar keeps transport semantics interchangeable (D3).
+
+### PCL.073 - APOS LVC Transport
+PCL shall provide a transport over APOS Local Virtual Channels, built on the transport template, that frames PCL messages onto raw APOS payloads with 16-bit string-length limits enforced at encode time and malformed or truncated inbound APOS messages dropped without disrupting the receive loop. Creation shall fail closed without an executor. The bundled APOS stub shall implement the blocking and non-blocking send/receive, multi-channel wait, timeout, delay-callback, and process-setup semantics of the APOS binding.
+
+**Rationale**: Bare-metal ASAAC/APOS targets are a primary deployment environment (D1, D3).
+
+## Portable Allocator
+
+### PCL.074 - Portable Allocator
+PCL shall provide `pcl_alloc`/`pcl_calloc`/`pcl_realloc`/`pcl_free` routing through a single CRT-independent process heap on Windows (plain malloc/free elsewhere), rejecting zero-size and arithmetically overflowing requests with NULL, zeroing calloc'd memory, preserving contents across realloc growth, treating realloc of NULL as alloc and realloc to zero as free, and accepting `pcl_free(NULL)` as a no-op. All variable-length fields crossing the C ABI shall be allocated and freed through this pair.
+
+**Rationale**: Buffers cross DLL/EXE boundaries between different C runtimes (MSVC plugins vs GNAT/MinGW executables); a mismatched allocator pair corrupts the heap (D1, D4).
+
 ---
 
 ## Design Decision Traceability
@@ -522,3 +629,20 @@ PCL shall expose a public C ABI for configuring endpoint locality and peer selec
 | `PCL.054` | `D3` |
 | `PCL.055` | `D3` |
 | `PCL.056` | `D3`, `D4` |
+| `PCL.058` | `D1`, `D3`, `D8` |
+| `PCL.059` | `D8` |
+| `PCL.060` | `D8`, `D9` |
+| `PCL.061` | `D9` |
+| `PCL.062` | `D9` |
+| `PCL.063` | `D9` |
+| `PCL.064` | `D8` |
+| `PCL.065` | `D8`, `D9` |
+| `PCL.066` | `D8` |
+| `PCL.067` | `D5`, `D8` |
+| `PCL.068` | `D3`, `D8` |
+| `PCL.069` | `D8` |
+| `PCL.070` | `D9` |
+| `PCL.071` | `D2`, `D3`, `D5` |
+| `PCL.072` | `D3` |
+| `PCL.073` | `D1`, `D3` |
+| `PCL.074` | `D1`, `D4` |

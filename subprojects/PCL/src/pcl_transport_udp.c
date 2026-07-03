@@ -306,8 +306,10 @@ pcl_udp_transport_t* pcl_udp_transport_create(uint16_t        local_port,
 
   ctx->sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
   if (ctx->sock == PCL_INVALID_SOCKET) {
+    // GCOVR_EXCL_START: socket() fails only on fd/kernel exhaustion.
     pcl_free(ctx);
     return NULL;
+    // GCOVR_EXCL_STOP
   }
 
   setsockopt(ctx->sock, SOL_SOCKET, SO_REUSEADDR, (const char*)&opt, sizeof(opt));
@@ -318,9 +320,12 @@ pcl_udp_transport_t* pcl_udp_transport_create(uint16_t        local_port,
   bind_addr.sin_port        = htons(local_port);
 
   if (bind(ctx->sock, (struct sockaddr*)&bind_addr, sizeof(bind_addr)) != 0) {
+    // GCOVR_EXCL_START: with SO_REUSEADDR set, binding fails only on
+    // platform-specific port conflicts that cannot be forced portably.
     pcl_close_socket(ctx->sock);
     pcl_free(ctx);
     return NULL;
+    // GCOVR_EXCL_STOP
   }
 
   if (local_port == 0) {
@@ -358,9 +363,12 @@ pcl_udp_transport_t* pcl_udp_transport_create(uint16_t        local_port,
   }
 #else
   if (pthread_create(&ctx->recv_thread, NULL, udp_recv_thread_main, ctx) != 0) {
+    // GCOVR_EXCL_START: thread creation fails only on kernel resource
+    // exhaustion, not injectable in normal testing.
     pcl_close_socket(ctx->sock);
     pcl_free(ctx);
     return NULL;
+    // GCOVR_EXCL_STOP
   }
 #endif
 

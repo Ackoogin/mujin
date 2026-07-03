@@ -1,5 +1,9 @@
 include(GoogleTest)
 
+add_executable(test_pcl_alloc test_pcl_alloc.cpp)
+target_link_libraries(test_pcl_alloc PRIVATE pcl_core GTest::gtest_main)
+gtest_discover_tests(test_pcl_alloc DISCOVERY_MODE PRE_TEST)
+
 add_executable(test_pcl_lifecycle test_pcl_lifecycle.cpp)
 target_link_libraries(test_pcl_lifecycle PRIVATE pcl_core GTest::gtest_main)
 gtest_discover_tests(test_pcl_lifecycle DISCOVERY_MODE PRE_TEST)
@@ -47,6 +51,8 @@ target_compile_definitions(test_pcl_plugin_loader PRIVATE
     SOCKET_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_socket_plugin>"
     SHM_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_shared_memory_plugin>"
     UDP_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_udp_plugin>"
+    WRONGABI_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_wrongabi_plugin>"
+    NOENTRY_TRANSPORT_PLUGIN_PATH="$<TARGET_FILE:pcl_transport_noentry_plugin>"
 )
 add_dependencies(test_pcl_plugin_loader
     pcl_transport_capture_plugin
@@ -55,6 +61,8 @@ add_dependencies(test_pcl_plugin_loader
     pcl_transport_socket_plugin
     pcl_transport_shared_memory_plugin
     pcl_transport_udp_plugin
+    pcl_transport_wrongabi_plugin
+    pcl_transport_noentry_plugin
 )
 gtest_discover_tests(test_pcl_plugin_loader DISCOVERY_MODE PRE_TEST)
 
@@ -75,6 +83,12 @@ gtest_discover_tests(test_pcl_transport_routing DISCOVERY_MODE PRE_TEST)
 
 add_library(pcl_transport_nocaps_plugin MODULE pcl_transport_nocaps_plugin.c)
 target_link_libraries(pcl_transport_nocaps_plugin PRIVATE pcl_core)
+
+add_library(pcl_transport_wrongabi_plugin MODULE pcl_transport_wrongabi_plugin.c)
+target_link_libraries(pcl_transport_wrongabi_plugin PRIVATE pcl_core)
+
+add_library(pcl_transport_noentry_plugin MODULE pcl_transport_noentry_plugin.c)
+target_link_libraries(pcl_transport_noentry_plugin PRIVATE pcl_core)
 
 add_executable(test_pcl_capabilities test_pcl_capabilities.cpp)
 target_link_libraries(test_pcl_capabilities PRIVATE pcl_core GTest::gtest_main)

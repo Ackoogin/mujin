@@ -587,3 +587,33 @@ TEST(PclCppIntegration, ComponentLifecycleViaExecutor) {
   exec.shutdownGraceful(2000);
   EXPECT_EQ(comp.state(), PCL_STATE_FINALIZED);
 }
+
+///< REQ_PCL_217: Component default virtual callbacks are OK no-ops, so a
+///< subclass overriding nothing completes the full lifecycle and ticks.
+///< PCL.048.
+TEST(PclCppComponent, DefaultCallbacksAreOkNoOps) {
+  // Overrides nothing: every lifecycle hook uses the base-class default.
+  class BareComponent : public pcl::Component {
+  public:
+    explicit BareComponent(const char* name) : Component(name) {}
+  };
+
+  pcl::Executor exec;
+  BareComponent comp("bare");
+
+  comp.setTickRateHz(1000.0);
+  EXPECT_EQ(comp.configure(), PCL_OK);
+  EXPECT_EQ(comp.activate(), PCL_OK);
+  exec.add(comp);
+
+  // Default on_tick returns PCL_OK: spinning must not fail or wedge.
+  for (int i = 0; i < 10; ++i) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(3));
+    exec.spinOnce(0);
+  }
+
+  EXPECT_EQ(comp.deactivate(), PCL_OK);
+  EXPECT_EQ(comp.cleanup(), PCL_OK);
+  EXPECT_EQ(comp.shutdown(), PCL_OK);
+  EXPECT_EQ(comp.state(), PCL_STATE_FINALIZED);
+}

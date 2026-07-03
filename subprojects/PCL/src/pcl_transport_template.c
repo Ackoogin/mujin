@@ -278,9 +278,13 @@ static pcl_status_t tpl_send_enqueue(struct pcl_transport_template_t* ctx,
                                      pcl_template_outbound_t*         frame) {
   tpl_lock(ctx);
   if (ctx->send_stop) {
+    // GCOVR_EXCL_START: callers re-check send_stop before enqueuing; this
+    // guard only fires when shutdown lands in the window between that check
+    // and taking the lock.
     tpl_unlock(ctx);
     tpl_outbound_free(frame);
     return PCL_ERR_STATE;
+    // GCOVR_EXCL_STOP
   }
   if (ctx->send_tail) {
     ctx->send_tail->next = frame;
@@ -398,7 +402,7 @@ static void tpl_svc_response_cb(const pcl_msg_t* resp, void* user_data) {
       out.size      = resp->size;
       out.type_name = resp->type_name ? resp->type_name : slot->type_name;
     } else {
-      out.type_name = slot->type_name;
+      out.type_name = slot->type_name;  // GCOVR_EXCL_LINE: the executor always delivers a (possibly empty) response message, never NULL
     }
 
     frame = tpl_outbound_clone(PCL_TEMPLATE_FRAME_SVC_RESP, slot->seq_id,
@@ -445,7 +449,7 @@ static void* tpl_send_thread_main(void* arg)
       // Woken with empty queue → must be a stop signal.  Drain any
       // late arrivals (none expected, but cheap to cover) and exit.
       if (ctx->send_stop) break;
-      continue;
+      continue;  // GCOVR_EXCL_LINE: requires a spurious condvar wakeup with neither work nor a stop flag
     }
 
     /* Abort if stop was signalled while we were dequeuing.  This avoids
@@ -588,8 +592,12 @@ static void* tpl_recv_thread_main(void* arg)
                                                      &req,
                                                      tpl_svc_response_cb,
                                                      slot) != PCL_OK) {
+          // GCOVR_EXCL_START: all arguments are validated by this point, so
+          // the post fails only on heap exhaustion (deep copies), which is
+          // not injectable through this path.
           free(slot->type_name);
           free(slot);
+          // GCOVR_EXCL_STOP
         }
       }
     } else if (in.kind == PCL_TEMPLATE_FRAME_SVC_RESP) {
@@ -685,8 +693,10 @@ static pcl_status_t tpl_invoke_async(void*            adapter_ctx,
   frame = tpl_outbound_clone(PCL_TEMPLATE_FRAME_SVC_REQ, entry->seq_id,
                              NULL, service_name, request);
   if (!frame) {
+    // GCOVR_EXCL_START: heap exhaustion is not injectable through this path.
     free(entry);
     return PCL_ERR_NOMEM;
+    // GCOVR_EXCL_STOP
   }
 
   /* Insert pending entry BEFORE enqueuing the frame so an absurdly fast
@@ -697,10 +707,13 @@ static pcl_status_t tpl_invoke_async(void*            adapter_ctx,
   {
     pcl_status_t rc = tpl_send_enqueue(ctx, frame);
     if (rc != PCL_OK) {
+      // GCOVR_EXCL_START: only reachable when shutdown lands between the
+      // send_stop check at the top of this function and the enqueue.
       pcl_template_pending_t* taken = tpl_pending_take(ctx, entry->seq_id);
       if (taken) free(taken);
       /* tpl_send_enqueue already freed `frame` on the error path. */
       return rc;
+      // GCOVR_EXCL_STOP
     }
   }
   return PCL_OK;
@@ -783,6 +796,8 @@ pcl_transport_template_t* pcl_transport_template_create(
     return NULL;
   }
 #else
+  // GCOVR_EXCL_START: mutex/condvar initialization failures require kernel
+  // resource exhaustion, which is not injectable in normal testing.
   if (pthread_mutex_init(&ctx->send_lock, NULL) != 0) {
     free(ctx);
     return NULL;
@@ -798,6 +813,7 @@ pcl_transport_template_t* pcl_transport_template_create(
     free(ctx);
     return NULL;
   }
+  // GCOVR_EXCL_STOP
 #endif
 
   // TODO(engineer): hooks.open is your chance to dial the socket,
@@ -848,6 +864,8 @@ pcl_transport_template_t* pcl_transport_template_create(
     return NULL;
   }
 #else
+  // GCOVR_EXCL_START: worker-thread creation failures require kernel resource
+  // exhaustion, which is not injectable in normal testing.
   if (pthread_create(&ctx->send_thread, NULL, tpl_send_thread_main, ctx) != 0) {
     if (ctx->hooks.close) ctx->hooks.close(ctx->hooks.user_data);
     pthread_cond_destroy(&ctx->send_cond);
@@ -867,6 +885,7 @@ pcl_transport_template_t* pcl_transport_template_create(
     free(ctx);
     return NULL;
   }
+  // GCOVR_EXCL_STOP
 #endif
 
   /* Pre-seed the alias list with the implicit default so destroy()
@@ -874,11 +893,13 @@ pcl_transport_template_t* pcl_transport_template_create(
    * Done after thread creation so the error-cleanup paths above don't
    * need to deal with the alias list. */
   if (tpl_alias_remember(ctx, "default") != PCL_OK) {
+    // GCOVR_EXCL_START: heap exhaustion is not injectable through this path.
     /* OOM on the alias seed: the transport was never returned to the
      * caller so it was never registered in the executor.  destroy()
      * will stop the threads, call close, and free cleanly. */
     pcl_transport_template_destroy(ctx);
     return NULL;
+    // GCOVR_EXCL_STOP
   }
 
   return ctx;
@@ -904,7 +925,7 @@ pcl_status_t pcl_transport_template_set_peer_id(
    * truncated value is what actually matches the executor's slot. */
   rc = tpl_alias_remember_locked(ctx, ctx->peer_id);
   if (rc != PCL_OK) {
-    memcpy(ctx->peer_id, old_id, sizeof(ctx->peer_id));
+    memcpy(ctx->peer_id, old_id, sizeof(ctx->peer_id));  // GCOVR_EXCL_LINE: alias tracking fails only on heap exhaustion, not injectable here
   }
   tpl_pending_unlock(ctx);
   return rc;

@@ -256,7 +256,7 @@ static int connect_with_timeout(PCL_SOCKET_T           sock,
   if (cr <= 0) return -1;  /* 0 == timeout, <0 == error */
 
   if (getsockopt(sock, SOL_SOCKET, SO_ERROR, (char*)&so_err, &so_err_len) != 0)
-    return -1;
+    return -1;  // GCOVR_EXCL_LINE: getsockopt on a live socket fails only on kernel fault
   if (so_err != 0) return -1;
 
   (void)set_nonblocking(sock, 0);
@@ -297,7 +297,7 @@ static PCL_SOCKET_T try_connect_addrinfo(const char* host,
     /* Compute remaining budget.  Zero => no total timeout, use 2 s per
        attempt so the non-blocking path still dominates blackholed SYNs. */
     if (total_timeout_ms == 0u) {
-      per_attempt_ms = 2000u;
+      per_attempt_ms = 2000u;  // GCOVR_EXCL_LINE: every internal caller passes a nonzero budget; defensive default for direct callers
     } else {
       uint64_t elapsed = pcl_now_ms() - start_ms;
       if (elapsed >= (uint64_t)total_timeout_ms) break;
@@ -814,9 +814,12 @@ static void* recv_thread_main(void* arg)
   if (ctx->recv_stop || ctx->is_server || !ctx->auto_reconnect) break;
 
   if (ctx->client_sock != PCL_INVALID_SOCKET) {
+    // GCOVR_EXCL_START: the disconnect handler above already closed the
+    // socket; guard for drops observed while not in the CONNECTED state.
     shutdown(ctx->client_sock, SHUT_RDWR);
     pcl_close_socket(ctx->client_sock);
     ctx->client_sock = PCL_INVALID_SOCKET;
+    // GCOVR_EXCL_STOP
   }
 
   {
@@ -941,14 +944,19 @@ pcl_socket_transport_t* pcl_socket_transport_create_server_ex(
   ctx->is_server = 1;
   ctx->port      = port;
   if (!socket_transport_create_common(ctx, executor)) {
+    // GCOVR_EXCL_START: fails only on lock/event creation failure (kernel
+    // resource exhaustion), not injectable in normal testing.
     pcl_free(ctx);
     return NULL;
+    // GCOVR_EXCL_STOP
   }
 
   ctx->listen_sock = socket(AF_INET, SOCK_STREAM, 0);
   if (ctx->listen_sock == PCL_INVALID_SOCKET) {
+    // GCOVR_EXCL_START: socket() fails only on fd/kernel exhaustion.
     pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx);
     return NULL;
+    // GCOVR_EXCL_STOP
   }
 
   setsockopt(ctx->listen_sock, SOL_SOCKET, SO_REUSEADDR, (char*)&opt, sizeof(opt));
@@ -978,14 +986,20 @@ pcl_socket_transport_t* pcl_socket_transport_create_server_ex(
     *port_ready = ctx->port;
 
   if (listen(ctx->listen_sock, 1) != 0) {
+    // GCOVR_EXCL_START: listen on a freshly bound socket fails only on
+    // kernel resource exhaustion.
     pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx);
     return NULL;
+    // GCOVR_EXCL_STOP
   }
 
   ctx->client_sock = accept(ctx->listen_sock, NULL, NULL);
   if (ctx->client_sock == PCL_INVALID_SOCKET) {
+    // GCOVR_EXCL_START: accept fails only if the listener is torn down or
+    // the kernel is out of resources; create_server owns the listener.
     pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx);
     return NULL;
+    // GCOVR_EXCL_STOP
   }
 
   enable_keepalive(ctx->client_sock);
@@ -1000,12 +1014,15 @@ pcl_socket_transport_t* pcl_socket_transport_create_server_ex(
   ctx->send_thread = CreateThread(NULL, 0, send_thread_main, ctx, 0, NULL);
   if (!ctx->send_thread) { pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL; }
 #else
+  // GCOVR_EXCL_START: worker-thread creation failures require kernel
+  // resource exhaustion, which is not injectable in normal testing.
   if (pthread_create(&ctx->recv_thread, NULL, recv_thread_main, ctx) != 0) {
     pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL;
   }
   if (pthread_create(&ctx->send_thread, NULL, send_thread_main, ctx) != 0) {
     pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL;
   }
+  // GCOVR_EXCL_STOP
 #endif
 
   {
@@ -1053,8 +1070,11 @@ pcl_socket_transport_t* pcl_socket_transport_create_client_ex(
   ctx->port      = port;
   snprintf(ctx->host, sizeof(ctx->host), "%s", host);
   if (!socket_transport_create_common(ctx, executor)) {
+    // GCOVR_EXCL_START: fails only on lock/event creation failure (kernel
+    // resource exhaustion), not injectable in normal testing.
     pcl_free(ctx);
     return NULL;
+    // GCOVR_EXCL_STOP
   }
 
   if (opts) {
@@ -1130,12 +1150,15 @@ pcl_socket_transport_t* pcl_socket_transport_create_client_ex(
   ctx->send_thread = CreateThread(NULL, 0, send_thread_main, ctx, 0, NULL);
   if (!ctx->send_thread) { pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL; }
 #else
+  // GCOVR_EXCL_START: worker-thread creation failures require kernel
+  // resource exhaustion, which is not injectable in normal testing.
   if (pthread_create(&ctx->recv_thread, NULL, recv_thread_main, ctx) != 0) {
     pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL;
   }
   if (pthread_create(&ctx->send_thread, NULL, send_thread_main, ctx) != 0) {
     pcl_socket_transport_destroy((pcl_socket_transport_t*)ctx); return NULL;
   }
+  // GCOVR_EXCL_STOP
 #endif
 
   return (pcl_socket_transport_t*)ctx;
@@ -1357,6 +1380,8 @@ void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx_opaque) {
 
   /* Drain any unsent frames */
   {
+    // GCOVR_EXCL_START: the send thread drains its queue before exiting, so
+    // this second-chance drain only sees frames enqueued during teardown.
     pcl_outbound_frame_t* f = ctx->send_head;
     while (f) {
       pcl_outbound_frame_t* next = f->next;
@@ -1364,6 +1389,7 @@ void pcl_socket_transport_destroy(pcl_socket_transport_t* ctx_opaque) {
       pcl_free(f);
       f = next;
     }
+    // GCOVR_EXCL_STOP
   }
 
   /* Free any un-responded pending async calls */

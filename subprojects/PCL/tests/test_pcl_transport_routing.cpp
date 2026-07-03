@@ -399,3 +399,131 @@ TEST(PclTransportRouting, FailsClosedOnMalformedLine) {
   std::remove(path.c_str());
   pcl_executor_destroy(e);
 }
+
+///< REQ_PCL_275: every malformed manifest shape fails closed with a precise
+///< diagnostic: short transport line, missing plugin file, short route line,
+///< peer-list overflow, unknown reliability, unknown directive.
+TEST(PclTransportRouting, FailsClosedOnEachMalformedManifestShape) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  struct Case {
+    const char* manifest;
+    pcl_status_t expected;
+    const char* diag_contains;
+  };
+  const Case cases[] = {
+      // transport line with a peer id but no plugin path.
+      {"transport lonely_peer\n", PCL_ERR_INVALID, "transport line needs"},
+      // transport plugin path that does not exist.
+      {"transport ghost /no/such/plugin.so\n", PCL_ERR_NOT_FOUND,
+       "failed to load"},
+      // route line missing its peer list.
+      {"route object_evidence publisher\n", PCL_ERR_INVALID,
+       "route line needs"},
+      // route line with an unknown reliability token.
+      {"route object_evidence publisher peer_a sometimes\n", PCL_ERR_INVALID,
+       "unknown reliability"},
+      // unknown directive.
+      {"teleport object_evidence\n", PCL_ERR_INVALID,
+       "unknown manifest directive"},
+  };
+
+  for (const Case& c : cases) {
+    const auto path = WriteManifest(c.manifest);
+    pcl_transport_routing_t* routing = nullptr;
+    char diag[200] = "";
+    EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                         sizeof(diag)),
+              c.expected)
+        << c.manifest;
+    EXPECT_NE(std::string(diag).find(c.diag_contains), std::string::npos)
+        << "diag was: " << diag;
+    EXPECT_EQ(routing, nullptr);
+    std::remove(path.c_str());
+  }
+
+  // Peer list longer than PCL_ROUTING_MAX_PEERS.
+  {
+    std::string peers = "p0";
+    for (int i = 1; i < 40; ++i) peers += ",p" + std::to_string(i);
+    const auto path =
+        WriteManifest("route object_evidence publisher " + peers + "\n");
+    pcl_transport_routing_t* routing = nullptr;
+    char diag[200] = "";
+    EXPECT_EQ(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                         sizeof(diag)),
+              PCL_ERR_INVALID);
+    EXPECT_NE(std::string(diag).find("too many peers"), std::string::npos);
+    std::remove(path.c_str());
+  }
+
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_275: transport_count is NULL-safe and destroy(NULL) is a no-op.
+TEST(PclTransportRouting, NullHandleAccessorsAreSafe) {
+  EXPECT_EQ(pcl_transport_routing_transport_count(nullptr), 0u);
+  pcl_transport_routing_destroy(nullptr);
+
+  // Bad arguments to load fail closed.
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  pcl_transport_routing_t* routing = nullptr;
+  EXPECT_EQ(pcl_transport_routing_load(nullptr, "m.txt", &routing, nullptr, 0),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_transport_routing_load(e, nullptr, &routing, nullptr, 0),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_transport_routing_load(e, "m.txt", nullptr, nullptr, 0),
+            PCL_ERR_INVALID);
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_275: exhausting the executor's fixed transport table fails the
+///< manifest load closed with a register diagnostic and rolls everything back.
+TEST(PclTransportRouting, FailsClosedWhenExecutorTransportSlotsExhausted) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  // PCL_MAX_TRANSPORTS is 16: seventeen manifest transports overflow it.
+  std::string body;
+  for (int i = 0; i < 17; ++i) {
+    body += "transport peer_" + std::to_string(i) + " " + CAPTURE_PLUGIN_PATH +
+            "\n";
+  }
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_NE(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_OK);
+  EXPECT_NE(std::string(diag).find("register failed"), std::string::npos);
+  EXPECT_EQ(routing, nullptr);
+  // Rollback: every slot the failed load registered is free again.
+  EXPECT_EQ(pcl_executor_get_transport_for_peer(e, "peer_0"), nullptr);
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}
+
+///< REQ_PCL_275: exhausting the executor's endpoint-route table fails the
+///< manifest route line closed with a set diagnostic.
+TEST(PclTransportRouting, FailsClosedWhenRouteTableExhausted) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  // PCL_MAX_ENDPOINT_ROUTES is 128: one transport plus 129 routes overflows.
+  std::string body = std::string("transport rec ") + CAPTURE_PLUGIN_PATH + "\n";
+  for (int i = 0; i < 129; ++i) {
+    body += "route ep_" + std::to_string(i) + " publisher rec\n";
+  }
+  const auto path = WriteManifest(body);
+  pcl_transport_routing_t* routing = nullptr;
+  char diag[200] = "";
+  EXPECT_NE(pcl_transport_routing_load(e, path.c_str(), &routing, diag,
+                                       sizeof(diag)),
+            PCL_OK);
+  EXPECT_NE(std::string(diag).find("set failed"), std::string::npos);
+  EXPECT_EQ(routing, nullptr);
+  std::remove(path.c_str());
+  pcl_executor_destroy(e);
+}

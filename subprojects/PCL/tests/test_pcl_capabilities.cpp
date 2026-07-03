@@ -389,3 +389,97 @@ TEST(PclCapabilities, ValidateRouteIgnoresQosWhenNoFloor) {
   EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, nullptr, 0), PCL_OK);
   pcl_executor_destroy(e);
 }
+
+TEST(PclCapabilities, EndpointRequiredCapsUnknownKindIsNone) {
+  // An unrecognised endpoint kind imposes no capability requirement.
+  EXPECT_EQ(pcl_endpoint_required_caps(static_cast<pcl_endpoint_kind_t>(0x7fff)),
+            PCL_CAP_NONE);
+}
+
+TEST(PclCapabilities, QosReliabilityNames) {
+  EXPECT_STREQ(pcl_qos_reliability_name(PCL_QOS_RELIABILITY_BEST_EFFORT),
+               "best_effort");
+  EXPECT_STREQ(pcl_qos_reliability_name(PCL_QOS_RELIABILITY_RELIABLE),
+               "reliable");
+  EXPECT_STREQ(pcl_qos_reliability_name(PCL_QOS_RELIABILITY_UNSPECIFIED),
+               "unspecified");
+  EXPECT_STREQ(
+      pcl_qos_reliability_name(static_cast<pcl_qos_reliability_t>(0x7fff)),
+      "unspecified");
+}
+
+TEST(PclCapabilities, SetTransportQosOnDefaultTransport) {
+  EXPECT_EQ(pcl_executor_set_transport_qos(
+                nullptr, pcl_qos_t{PCL_QOS_RELIABILITY_RELIABLE}),
+            PCL_ERR_INVALID);
+
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  EXPECT_EQ(pcl_executor_set_transport_qos(
+                e, pcl_qos_t{PCL_QOS_RELIABILITY_RELIABLE}),
+            PCL_OK);
+  pcl_executor_destroy(e);
+}
+
+TEST(PclCapabilities, RegisterTransportQosUnknownPeerNotFound) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  EXPECT_EQ(pcl_executor_register_transport_qos(
+                nullptr, "x", pcl_qos_t{PCL_QOS_RELIABILITY_RELIABLE}),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_register_transport_qos(
+                e, nullptr, pcl_qos_t{PCL_QOS_RELIABILITY_RELIABLE}),
+            PCL_ERR_INVALID);
+  EXPECT_EQ(pcl_executor_register_transport_qos(
+                e, "never_registered", pcl_qos_t{PCL_QOS_RELIABILITY_RELIABLE}),
+            PCL_ERR_NOT_FOUND);
+  pcl_executor_destroy(e);
+}
+
+TEST(PclCapabilities, ValidateRouteAgainstDefaultTransport) {
+  // A remote route with no named peers validates against the executor's
+  // default transport slot.
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+
+  // No default transport at all: fail closed, diag names the default slot.
+  auto route = RemoteRoute("evidence", PCL_ENDPOINT_SUBSCRIBER, nullptr, 0);
+  char diag[160] = "";
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, diag, sizeof(diag)),
+            PCL_ERR_NOT_FOUND);
+  EXPECT_NE(std::string(diag).find("default transport"), std::string::npos);
+
+  // Default transport with pub/sub: subscriber routes pass.
+  pcl_transport_t vt{};
+  vt.publish = [](void*, const char*, const pcl_msg_t*) { return PCL_OK; };
+  ASSERT_EQ(pcl_executor_set_transport(e, &vt), PCL_OK);
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, diag, sizeof(diag)),
+            PCL_OK);
+
+  // A stream-provided endpoint fails closed against the pub/sub-only default
+  // transport, and the diag names the missing RPC_STREAM capability.
+  auto stream_route =
+      RemoteRoute("tiles", PCL_ENDPOINT_STREAM_PROVIDED, nullptr, 0);
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &stream_route, diag,
+                                                 sizeof(diag)),
+            PCL_ERR_STATE);
+  EXPECT_NE(std::string(diag).find("RPC_STREAM"), std::string::npos);
+  pcl_executor_destroy(e);
+}
+
+TEST(PclCapabilities, ValidatePublisherRouteFailsClosedWithoutPubsubCap) {
+  pcl_executor_t* e = pcl_executor_create();
+  ASSERT_NE(e, nullptr);
+  pcl_transport_t vt{};
+  // A unary-RPC-only transport cannot carry a publisher endpoint.
+  ASSERT_EQ(pcl_executor_register_transport_caps(e, "grpc", &vt,
+                                                 PCL_CAP_RPC_UNARY),
+            PCL_OK);
+  const char* peers[] = {"grpc"};
+  auto route = RemoteRoute("evidence", PCL_ENDPOINT_PUBLISHER, peers, 1);
+  char diag[160] = "";
+  EXPECT_EQ(pcl_executor_validate_endpoint_route(e, &route, diag, sizeof(diag)),
+            PCL_ERR_STATE);
+  EXPECT_NE(std::string(diag).find("PUBSUB"), std::string::npos);
+  pcl_executor_destroy(e);
+}
