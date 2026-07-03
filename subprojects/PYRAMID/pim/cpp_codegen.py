@@ -38,6 +38,10 @@ from proto_parser import (
     parse_proto_tree, ProtoTypeIndex, ProtoMessage, ProtoEnum, ProtoField,
     ProtoFile, ProtoRpc, ProtoService,
     screaming_to_pascal, _PROTO_SCALARS,
+    camel_to_snake as _camel_to_snake,
+    camel_to_lower_snake as _camel_to_lower_snake,
+    snake_to_pascal as _snake_to_pascal,
+    lc_first as _lc_first,
 )
 from proto_resolve import (
     _DATA_MODEL_PROTO_ROOT,
@@ -58,9 +62,8 @@ from binding_contract import (
     GenericNamingPolicy,
     NamingPolicy,
     PyramidCompatNamingPolicy,
-    topics_for_proto_file,
+    TopicSpecResolver,
 )
-from standard_topics import topic_spec as _standard_topic_spec, topics_for_service
 
 
 # -- EntityActions operation set -----------------------------------------------
@@ -85,7 +88,6 @@ _SEP = '// ' + '-' * 75
 # Generated code accepts content_type as a parameter so components can
 # configure per-port codecs at pcl_container_add_* time.
 _DEFAULT_CONTENT_TYPE = 'application/json'
-_CONTRACT_TOPIC_SPECS: Dict[str, BindingTopic] = {}
 
 _ALIAS_FIELD_NAMES = frozenset({
     'value', 'radians', 'meters', 'meters_per_second', 'seconds',
@@ -93,30 +95,6 @@ _ALIAS_FIELD_NAMES = frozenset({
 })
 
 # -- Proto parser --------------------------------------------------------------
-
-def _strip_comments(text: str) -> str:
-    """Remove // line comments and /* */ block comments."""
-    text = re.sub(r'//[^\n]*', '', text)
-    text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
-    return text
-
-
-def _camel_to_snake(name: str) -> str:
-    """TacticalObject -> Tactical_Object (Ada identifier style)."""
-    s = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', name)
-    s = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s)
-    return s
-
-
-def _camel_to_lower_snake(name: str) -> str:
-    """ObjectOfInterest -> object_of_interest (wire-format style)."""
-    return _camel_to_snake(name).lower()
-
-
-def _snake_to_pascal(name: str) -> str:
-    """entity_matches -> EntityMatches."""
-    return ''.join(w.capitalize() for w in name.split('_'))
-
 
 def _singularize(word: str) -> str:
     """Naive singularization: matches->match, requirements->requirement."""
@@ -143,10 +121,6 @@ def _cpp_qos_reliability_expr(spec: BindingTopic) -> str:
     if floor == 'best_effort':
         return 'PCL_QOS_RELIABILITY_BEST_EFFORT'
     return 'PCL_QOS_RELIABILITY_UNSPECIFIED'
-
-
-def topic_spec(key: str):
-    return _CONTRACT_TOPIC_SPECS.get(key) or _standard_topic_spec(key)
 
 
 def _short_type(full_type: str) -> str:
@@ -322,34 +296,6 @@ def _is_provided(proto_file: ProtoFile) -> bool:
     return 'provided' in proto_file.package.lower()
 
 
-def _topics_for_proto(
-        parsed: 'ProtoFile', is_provided: bool
-) -> Tuple[Dict[str, str], Dict[str, str]]:
-    """Return (sub_topics, pub_topics), preferring contract-derived topics."""
-    sub_specs, pub_specs = topics_for_proto_file(parsed)
-    if sub_specs or pub_specs:
-        _CONTRACT_TOPIC_SPECS.update(sub_specs)
-        _CONTRACT_TOPIC_SPECS.update(pub_specs)
-        return (
-            {key: spec.wire_name for key, spec in sub_specs.items()},
-            {key: spec.wire_name for key, spec in pub_specs.items()},
-        )
-    if not _is_pyramid_compat_service_package(parsed.package):
-        return {}, {}
-    return topics_for_service(parsed.package, is_provided)
-
-
-def _is_pyramid_compat_service_package(package: str) -> bool:
-    parts = [p for p in package.split('.') if p]
-    return (
-        len(parts) == 5
-        and parts[0] == 'pyramid'
-        and parts[1] == 'components'
-        and parts[3] == 'services'
-        and parts[4] in ('provided', 'consumed')
-    )
-
-
 def _c_struct_for_type(full_type: str) -> str:
     """Package-qualified C-ABI struct symbol for a proto type, matching
     cabi_codegen._c_struct_name (and the Ada generator)."""
@@ -378,6 +324,7 @@ def _service_codec_imports(
         data_model_files: List[ProtoFile],
         all_rpcs: List[Tuple[str, ProtoRpc]],
         topic_keys: List[str],
+        topics: TopicSpecResolver,
 ) -> List[Tuple[str, str]]:
     packages_with_messages = {
         pf.package for pf in data_model_files
@@ -391,7 +338,7 @@ def _service_codec_imports(
             if package in packages_with_messages:
                 needed_packages.add(package)
     for key in topic_keys:
-        package = _data_model_package_for_type(topic_spec(key).full_type)
+        package = _data_model_package_for_type(topics.spec(key).full_type)
         if package in packages_with_messages:
             needed_packages.add(package)
     return [
@@ -465,12 +412,14 @@ class CppServiceGenerator:
     _dm_proto_cache: Dict[Path, List[ProtoFile]] = {}
 
     def __init__(self, proto_input: str, enabled_backends=None,
-                 naming_policy: NamingPolicy = None):
+                 naming_policy: NamingPolicy = None,
+                 topic_resolver: TopicSpecResolver = None):
         self._proto_input = Path(proto_input)
         self._enabled_backends = set(enabled_backends or [
             'json', 'flatbuffers', 'protobuf',
         ])
         self._naming = naming_policy or _DEFAULT_NAMING_POLICY
+        self._topics = topic_resolver or TopicSpecResolver()
 
     def _has_backend(self, name: str) -> bool:
         return name in self._enabled_backends
@@ -772,10 +721,10 @@ class CppServiceGenerator:
                     root_types.append((rpc.request_type, pf.package))
                     root_types.append((rpc.response_type, pf.package))
             is_provided = 'provided' in pf.package.lower()
-            sub_topics, pub_topics = _topics_for_proto(pf, is_provided)
+            sub_topics, pub_topics = self._topics.topics_for_proto(pf, is_provided)
             topic_keys = list(sub_topics.keys()) + list(pub_topics.keys())
             for key in topic_keys:
-                root_types.append((topic_spec(key).full_type, ''))
+                root_types.append((self._topics.spec(key).full_type, ''))
 
         result: List[Tuple[str, str, bool, str, bool]] = []
         seen_schema_ids = set()
@@ -1205,7 +1154,7 @@ class CppServiceGenerator:
         legacy_svc_base_ns, _legacy_prefix = _legacy_service_namespace(parsed.package)
         legacy_role = parsed.package.split('.')[-1] if parsed.package else 'provided'
         legacy_full_ns = legacy_svc_base_ns + '::' + legacy_role
-        sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
+        sub_topics, pub_topics = self._topics.topics_for_proto(parsed, is_provided)
         all_topics = dict(sub_topics)
         all_topics.update(pub_topics)
         topic_set = all_topics
@@ -1220,7 +1169,7 @@ class CppServiceGenerator:
             raw_type_fqn.setdefault(_short_type(rpc.request_type), rpc.request_type)
             raw_type_fqn.setdefault(_short_type(rpc.response_type), rpc.response_type)
         for key in topic_set:
-            spec = topic_spec(key)
+            spec = self._topics.spec(key)
             raw_type_fqn.setdefault(spec.short_type, spec.full_type)
         raw_types = sorted(raw_type_fqn)
 
@@ -1323,12 +1272,12 @@ class CppServiceGenerator:
                 f.write('\n')
                 qos_keys = [
                     key for key in topic_set
-                    if hasattr(topic_spec(key), 'reliability_floor')
+                    if self._topics.spec(key).has_qos
                 ]
                 if qos_keys:
                     for key in qos_keys:
                         pascal = _snake_to_pascal(key)
-                        spec = topic_spec(key)
+                        spec = self._topics.spec(key)
                         f.write(f'inline constexpr pcl_qos_t kTopic{pascal}Qos = '
                                 f'{{{_cpp_qos_reliability_expr(spec)}}};\n')
                     f.write('\n')
@@ -1448,7 +1397,7 @@ class CppServiceGenerator:
                 cname = f'kTopic{pascal}'
                 col = 13 + len(fname) + 1
                 sp = ' ' * col
-                spec = topic_spec(key)
+                spec = self._topics.spec(key)
                 wire_decl_t = spec.cpp_payload_type
                 f.write(f'/// \\brief Publish a typed message on'
                         f' {cname}.\n')
@@ -1619,7 +1568,7 @@ class CppServiceGenerator:
                 if sub_topics:
                     for key in sub_topics:
                         cname = f'kTopic{_snake_to_pascal(key)}'
-                        if hasattr(topic_spec(key), 'reliability_floor'):
+                        if self._topics.spec(key).has_qos:
                             qname = f'kTopic{_snake_to_pascal(key)}Qos'
                             f.write('    pyramid::transport::ros2::bindTopicIngress'
                                     f'(adapter, executor, {cname}, {qname});\n')
@@ -1705,7 +1654,7 @@ class CppServiceGenerator:
         flatbuffers_codec_header = 'flatbuffers/cpp/' + '_'.join(svc_base_ns.split('::')) + '_flatbuffers_codec.hpp'
         protobuf_codec_ns = svc_base_ns + '::protobuf_codec'
         protobuf_codec_header = '_'.join(svc_base_ns.split('::')) + '_protobuf_codec.hpp'
-        sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
+        sub_topics, pub_topics = self._topics.topics_for_proto(parsed, is_provided)
         all_topics = dict(sub_topics)
         all_topics.update(pub_topics)
         topic_set = all_topics
@@ -1717,6 +1666,7 @@ class CppServiceGenerator:
             data_model_files,
             all_rpcs,
             list(topic_set.keys()),
+            self._topics,
         )
         dm_codec_nss = [ns for ns, _header in codec_imports]
         dm_codec_headers = [header for _ns, header in codec_imports]
@@ -2301,7 +2251,7 @@ class CppServiceGenerator:
                     fname = f'publish{pascal}'
                     decode_name = f'decode{pascal}'
                     encode_name = f'encode{pascal}'
-                    spec = topic_spec(key)
+                    spec = self._topics.spec(key)
                     col = len(f'bool {encode_name}(')
                     sp = ' ' * col
                     f.write(f'bool {encode_name}(const {spec.cpp_payload_type}& payload,\n')
@@ -2481,7 +2431,7 @@ class CppServiceGenerator:
         duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
         hpp_name = file_prefix + '.hpp'
         is_provided = _is_provided(parsed)
-        sub_topics, _pub_topics = _topics_for_proto(parsed, is_provided)
+        sub_topics, _pub_topics = self._topics.topics_for_proto(parsed, is_provided)
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated component facade for the service binding.\n')
@@ -2969,7 +2919,7 @@ class CppServiceGenerator:
                 fname = f'subscribe{pascal}'
                 trampoline = f'trampoline{pascal}'
                 decode_name = f'decode{pascal}'
-                payload_t = topic_spec(key).cpp_payload_type
+                payload_t = self._topics.spec(key).cpp_payload_type
                 f.write(f'    pcl_port_t* {fname}(\n')
                 f.write(f'        std::function<void(const {payload_t}&)> on_message) {{\n')
                 f.write('        auto callback =\n')
@@ -3090,7 +3040,7 @@ class CppServiceGenerator:
                 pascal = _snake_to_pascal(key)
                 trampoline = f'trampoline{pascal}'
                 decode_name = f'decode{pascal}'
-                payload_t = topic_spec(key).cpp_payload_type
+                payload_t = self._topics.spec(key).cpp_payload_type
                 f.write(f'    static void {trampoline}(pcl_container_t*,\n')
                 f.write('                           const pcl_msg_t* msg,\n')
                 f.write('                           void* user_data) {\n')
@@ -3156,13 +3106,6 @@ class CppServiceGenerator:
             f.write('}\n\n')
 
             f.write(f'}} // namespace {full_ns}\n')
-
-
-def _lc_first(s: str) -> str:
-    """Lowercase first character: CreateRequirementRequest -> createRequirementRequest."""
-    if not s:
-        return s
-    return s[0].lower() + s[1:]
 
 
 # ---------------------------------------------------------------------------

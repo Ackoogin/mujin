@@ -39,20 +39,20 @@ from proto_parser import (
     ProtoFile, ProtoRpc, ProtoService,
     screaming_to_pascal, camel_to_snake, _PROTO_SCALARS,
     parse_proto,
+    camel_to_snake as _camel_to_snake,
+    camel_to_lower_snake as _camel_to_lower_snake,
 )
-from binding_contract import BindingTopic, topics_for_proto_file
+from binding_contract import BindingTopic, TopicSpecResolver
 from proto_resolve import (
     _field_with_type, _proto_type_fqn, _resolve_message,
     _package_for_proto_type,
 )
 from cabi_codegen import _c_struct_name
-from standard_topics import topic_spec as _standard_topic_spec, topics_for_service
 
 
 # -- EntityActions operation set -----------------------------------------------
 
 OP_PREFIXES = ['Create', 'Read', 'Update', 'Delete', 'Cancel']
-_CONTRACT_TOPIC_SPECS: Dict[str, BindingTopic] = {}
 
 # Base-type short names from pyramid.data_model.base.* and common.*
 BASE_TYPE_MAP = {
@@ -74,34 +74,11 @@ BASE_TYPE_MAP = {
 
 # -- Proto parser --------------------------------------------------------------
 
-def _strip_comments(text: str) -> str:
-    """Remove // line comments and /* */ block comments."""
-    text = re.sub(r'//[^\n]*', '', text)
-    text = re.sub(r'/\*.*?\*/', '', text, flags=re.DOTALL)
-    return text
-
-
-def _camel_to_snake(name: str) -> str:
-    """TacticalObject -> Tactical_Object  (Ada identifier style)."""
-    s = re.sub(r'([A-Z]+)([A-Z][a-z])', r'\1_\2', name)
-    s = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s)
-    return s
-
-
-def _camel_to_lower_snake(name: str) -> str:
-    """ObjectOfInterest -> object_of_interest (wire-format style)."""
-    return _camel_to_snake(name).lower()
-
-
 def _short_type(full_type: str) -> str:
     """pyramid.data_model.base.Identifier -> Identifier."""
     if full_type in BASE_TYPE_MAP:
         return BASE_TYPE_MAP[full_type]
     return full_type.split('.')[-1]
-
-
-def topic_spec(key: str):
-    return _CONTRACT_TOPIC_SPECS.get(key) or _standard_topic_spec(key)
 
 
 def _proto_type_to_ada(full_type: str) -> str:
@@ -305,7 +282,8 @@ def _find_proto_root(proto_path: Path) -> Optional[Path]:
 
 
 def _collect_type_pkgs(proto_path: Path,
-                       all_rpcs: List[Tuple[str, 'ProtoRpc']]) -> List[str]:
+                       all_rpcs: List[Tuple[str, 'ProtoRpc']],
+                       resolver: TopicSpecResolver) -> List[str]:
     """Return all Ada type packages required by the service binding.
 
     Traces two layers:
@@ -360,7 +338,7 @@ def _collect_type_pkgs(proto_path: Path,
         # Standard-topic payloads need their declaring package withed too, even
         # when no RPC references them; absent payloads are filtered out.
         _, _, topic_pkgs = _applicable_topics(
-            svc_pf, _is_provided(svc_pf), proto_path)
+            svc_pf, _is_provided(svc_pf), proto_path, resolver)
         needed.update(topic_pkgs)
 
         for t in rpc_types:
@@ -434,40 +412,9 @@ def _data_model_msg_pkgs(proto_path: Path) -> Dict[str, str]:
     return result
 
 
-def _topics_for_proto(
-        parsed: 'ProtoFile', is_provided: bool
-) -> Tuple[Dict[str, str], Dict[str, str]]:
-    """Return (sub_topics, pub_topics) for the service, based on its proto package.
-
-    Topics are only generated for services whose proto package contains a
-    recognised key fragment.  Services with no matching fragment get no topics.
-    """
-    sub_specs, pub_specs = topics_for_proto_file(parsed)
-    if sub_specs or pub_specs:
-        _CONTRACT_TOPIC_SPECS.update(sub_specs)
-        _CONTRACT_TOPIC_SPECS.update(pub_specs)
-        return (
-            {key: spec.wire_name for key, spec in sub_specs.items()},
-            {key: spec.wire_name for key, spec in pub_specs.items()},
-        )
-    if not _is_pyramid_compat_service_package(parsed.package):
-        return {}, {}
-    return topics_for_service(parsed.package, is_provided)
-
-
-def _is_pyramid_compat_service_package(package: str) -> bool:
-    parts = [p for p in package.split('.') if p]
-    return (
-        len(parts) == 5
-        and parts[0] == 'pyramid'
-        and parts[1] == 'components'
-        and parts[3] == 'services'
-        and parts[4] in ('provided', 'consumed')
-    )
-
-
 def _applicable_topics(
-        parsed: 'ProtoFile', is_provided: bool, proto_path: Path
+        parsed: 'ProtoFile', is_provided: bool, proto_path: Path,
+        resolver: TopicSpecResolver,
 ) -> Tuple[Dict[str, str], Dict[str, str], List[str]]:
     """Filter standard topics to those whose payload type exists in the data
     model being generated, and return the Ada type packages those payloads need.
@@ -478,7 +425,7 @@ def _applicable_topics(
     compile, so drop it. For payloads that do resolve, return the declaring
     package so the binding withs it even when no RPC references it directly.
     """
-    sub_topics, pub_topics = _topics_for_proto(parsed, is_provided)
+    sub_topics, pub_topics = resolver.topics_for_proto(parsed, is_provided)
     if not sub_topics and not pub_topics:
         return {}, {}, []
     msg_pkgs = _data_model_msg_pkgs(proto_path)
@@ -487,7 +434,7 @@ def _applicable_topics(
     def keep(topics: Dict[str, str]) -> Dict[str, str]:
         out: Dict[str, str] = {}
         for key, wire in topics.items():
-            short = topic_spec(key).short_type
+            short = resolver.spec(key).short_type
             pkg = msg_pkgs.get(short)
             if pkg is None:
                 continue  # payload type absent from this proto set -- skip topic
@@ -645,7 +592,8 @@ def _collect_array_schema_bindings(
         cabi_bindings: List[Tuple[str, str, str, str]],
         all_rpcs: List[Tuple[str, 'ProtoRpc']],
         sub_topics: Dict[str, str],
-        pub_topics: Dict[str, str]) -> List[Tuple[str, str, str, str, str]]:
+        pub_topics: Dict[str, str],
+        resolver: TopicSpecResolver) -> List[Tuple[str, str, str, str, str]]:
     """Return array payload bindings used by this facade.
 
     Each tuple is (array_schema_id, ada_array_type, ada_element_type,
@@ -669,7 +617,7 @@ def _collect_array_schema_bindings(
         seen.add(short_type)
 
     for key in list(sub_topics.keys()) + list(pub_topics.keys()):
-        spec = topic_spec(key)
+        spec = resolver.spec(key)
         if spec.is_array:
             add(spec.short_type)
 
@@ -796,9 +744,11 @@ class AdaGenericServiceGenerator:
 
 class AdaServiceGenerator:
 
-    def __init__(self, proto_input: str, enabled_backends=None):
+    def __init__(self, proto_input: str, enabled_backends=None,
+                 topic_resolver: TopicSpecResolver = None):
         self._proto_input = Path(proto_input)
         self._enabled_backends = set(enabled_backends or ['json'])
+        self._topics = topic_resolver or TopicSpecResolver()
 
     def generate(self, output_dir: str):
         output_path = Path(output_dir)
@@ -825,7 +775,7 @@ class AdaServiceGenerator:
                 continue
 
             # Compute needed type/codec packages once for both spec and body.
-            type_pkgs  = _collect_type_pkgs(pf, all_rpcs)
+            type_pkgs  = _collect_type_pkgs(pf, all_rpcs, self._topics)
             codec_pkgs = _collect_codec_pkgs(type_pkgs)
 
             pkg_name = _pkg_name_from_proto(parsed)
@@ -855,7 +805,7 @@ class AdaServiceGenerator:
         has_grpc = False
         has_ros2 = 'ros2' in self._enabled_backends
         sub_topics, pub_topics, _ = _applicable_topics(
-            parsed, is_provided, self._proto_input)
+            parsed, is_provided, self._proto_input, self._topics)
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'--  Auto-generated service binding specification\n')
@@ -1040,7 +990,7 @@ class AdaServiceGenerator:
             for key in all_topics:
                 decode_name = 'Decode_' + '_'.join(
                     w.capitalize() for w in key.split('_'))
-                spec = topic_spec(key)
+                spec = self._topics.spec(key)
                 f.write(f'   function {decode_name}\n')
                 f.write(f'     (Msg : access constant Pcl_Bindings.Pcl_Msg)\n')
                 f.write(f'      return {spec.ada_payload_type};\n')
@@ -1076,7 +1026,7 @@ class AdaServiceGenerator:
             for key in pub_topics:
                 ada_name = 'Publish_' + '_'.join(
                     w.capitalize() for w in key.split('_'))
-                spec = topic_spec(key)
+                spec = self._topics.spec(key)
                 f.write(f'   procedure {ada_name}\n')
                 f.write(f'     (Exec    : Pcl_Bindings.Pcl_Executor_Access;\n')
                 f.write(f'      Payload : {spec.ada_payload_type};\n')
@@ -1111,14 +1061,14 @@ class AdaServiceGenerator:
         is_provided = _is_provided(parsed)
         has_grpc = False
         sub_topics, pub_topics, _ = _applicable_topics(
-            parsed, is_provided, self._proto_input)
+            parsed, is_provided, self._proto_input, self._topics)
         duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
         cabi_bindings = _collect_cabi_message_bindings(
             self._proto_input, type_pkgs)
         alias_bindings = _collect_alias_schema_bindings(
             self._proto_input, type_pkgs)
         array_bindings = _collect_array_schema_bindings(
-            cabi_bindings, all_rpcs, sub_topics, pub_topics)
+            cabi_bindings, all_rpcs, sub_topics, pub_topics, self._topics)
         # String aliases need their module Cabi package (Pyramid_Str_T/Dup_Str).
         cabi_pkgs = sorted(
             {pkg for _, _, _, pkg in cabi_bindings}
@@ -1885,7 +1835,7 @@ class AdaServiceGenerator:
             all_topics = dict(sub_topics)
             all_topics.update(pub_topics)
             for key in all_topics:
-                spec = topic_spec(key)
+                spec = self._topics.spec(key)
                 func_name = 'Decode_' + '_'.join(
                     w.capitalize() for w in key.split('_'))
                 write_payload_decode_function(
@@ -2218,7 +2168,7 @@ class AdaServiceGenerator:
                     w.capitalize() for w in key.split('_'))
                 const_name = 'Topic_' + '_'.join(
                     w.capitalize() for w in key.split('_'))
-                spec = topic_spec(key)
+                spec = self._topics.spec(key)
                 f.write(f'   procedure {ada_name}\n')
                 f.write(f'     (Exec    : Pcl_Bindings.Pcl_Executor_Access;\n')
                 f.write(f'      Payload : {spec.ada_payload_type};\n')

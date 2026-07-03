@@ -32,7 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from proto_parser import parse_proto_tree, ProtoTypeIndex, ProtoMessage
-from binding_contract import build_contract
+from binding_contract import TopicSpecResolver, build_contract
 import codec_backends
 import cabi_codegen
 import cpp_codegen
@@ -322,6 +322,9 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
                        manifest: BindingArtifactManifest = None,
                        contract=None) -> int:
     total = 0
+    # One topic-spec resolver per generation run, shared by every service
+    # generator in the run (mirrors the pre-refactor module-global cache).
+    topic_resolver = TopicSpecResolver()
     if contract_layout == 'generic':
         parsed_files = list(proto_files) if proto_files is not None else parse_proto_tree(proto_dir)
         contract = contract or build_contract(parsed_files, layout='generic')
@@ -353,6 +356,7 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
                 str(pf.path),
                 enabled_backends=enabled_backends,
                 naming_policy=policy,
+                topic_resolver=topic_resolver,
             )
             if manifest:
                 manifest.record_service_generation(
@@ -447,6 +451,7 @@ def _generate_json_cpp(proto_dir: Path, output_dir: Path,
         gen = cpp_codegen.CppServiceGenerator(
             str(proto_path),
             enabled_backends=enabled_backends,
+            topic_resolver=topic_resolver,
         )
         if manifest:
             manifest.record_service_generation(
@@ -461,6 +466,8 @@ def _generate_json_ada(proto_dir: Path, output_dir: Path,
                        enabled_backends=None, contract_layout: str = 'pyramid',
                        proto_files=None, contract=None) -> int:
     total = 0
+    # One topic-spec resolver per generation run (see _generate_json_cpp).
+    topic_resolver = TopicSpecResolver()
     if contract_layout == 'generic':
         parsed_files = (list(proto_files) if proto_files is not None
                         else parse_proto_tree(proto_dir))
@@ -520,6 +527,7 @@ def _generate_json_ada(proto_dir: Path, output_dir: Path,
         ada_codegen.AdaServiceGenerator(
             str(proto_path),
             enabled_backends=enabled_backends,
+            topic_resolver=topic_resolver,
         ).generate(str(output_dir))
         total += 1
     return total

@@ -17,6 +17,7 @@ from proto_parser import (
     _PROTO_SCALARS,
     camel_to_lower_snake,
 )
+import standard_topics
 
 
 @dataclass(frozen=True)
@@ -42,6 +43,10 @@ class BindingTopic:
     rpc_name: str
     qos: Dict[str, object] = field(default_factory=dict)
     is_array: bool = False
+
+    # Contract-derived topics carry QoS constraints; the legacy
+    # standard_topics.TopicSpec side table does not (has_qos = False there).
+    has_qos = True
 
     @property
     def short_type(self) -> str:
@@ -711,3 +716,62 @@ def build_contract(proto_files: List[ProtoFile], layout: str) -> BindingContract
         schema_ids=schema_ids,
         naming_policy=policy,
     )
+
+
+# -- Per-run topic-spec resolution ---------------------------------------------
+
+def is_pyramid_compat_service_package(package: str) -> bool:
+    """pyramid.components.<name>.services.{provided,consumed} package shape."""
+    parts = [p for p in package.split('.') if p]
+    return (
+        len(parts) == 5
+        and parts[0] == 'pyramid'
+        and parts[1] == 'components'
+        and parts[3] == 'services'
+        and parts[4] in ('provided', 'consumed')
+    )
+
+
+class TopicSpecResolver:
+    """Topic-key -> spec resolution for one generation run.
+
+    Owns the contract-derived topic specs recorded while proto files are
+    scanned (previously a module-global dict in each codegen), falling back
+    to the legacy standard-topics side table for catalog topics that predate
+    contract-derived ones.  Construct one per generation run and pass it to
+    the generator classes so no state leaks between runs.
+    """
+
+    def __init__(self, metadata=None):
+        # metadata: optional standard_topics.TopicMetadata overriding the
+        # module default for the legacy fallback.
+        self._contract_specs: Dict[str, BindingTopic] = {}
+        self._metadata = metadata
+
+    def spec(self, key: str):
+        """Resolve a topic key: contract-derived first, then legacy catalog."""
+        found = self._contract_specs.get(key)
+        if found is not None:
+            return found
+        return standard_topics.topic_spec(key, self._metadata)
+
+    def topics_for_proto(self, parsed: ProtoFile,
+                         is_provided: bool) -> Tuple[Dict[str, str], Dict[str, str]]:
+        """Return (sub_topics, pub_topics) wire-name maps for a service proto.
+
+        Prefers contract-derived topics (recording their specs for later
+        spec() lookups); falls back to the legacy standard-topics catalog for
+        PYRAMID-compat service packages.
+        """
+        sub_specs, pub_specs = topics_for_proto_file(parsed)
+        if sub_specs or pub_specs:
+            self._contract_specs.update(sub_specs)
+            self._contract_specs.update(pub_specs)
+            return (
+                {key: spec.wire_name for key, spec in sub_specs.items()},
+                {key: spec.wire_name for key, spec in pub_specs.items()},
+            )
+        if not is_pyramid_compat_service_package(parsed.package):
+            return {}, {}
+        return standard_topics.topics_for_service(
+            parsed.package, is_provided, self._metadata)

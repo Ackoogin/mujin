@@ -28,6 +28,13 @@ _COMPAT_METADATA_PATH = _METADATA_DIR / 'tactical_objects_topics.json'
 
 
 def _camel_to_snake(name: str) -> str:
+    # NOTE: diverges from proto_parser.camel_to_lower_snake on acronym runs
+    # ('ABCDef' -> 'abcdef' here vs 'abc_def') and on underscored names
+    # ('State_Service' -> 'state__service' vs 'state_service').  Deliberately
+    # NOT merged: this variant only ever sees the legacy catalog payload
+    # names (where the two agree); contract-derived BindingTopic names go
+    # through the regex variant and many would change spelling under this
+    # one.  tests/test_casing_helpers.py pins both facts.
     out = []
     for i, ch in enumerate(name):
         if ch.isupper() and i > 0 and (not name[i - 1].isupper()):
@@ -42,6 +49,10 @@ class TopicSpec:
     wire_name: str
     full_type: str
     is_array: bool = False
+
+    # Legacy catalog topics carry no QoS constraints (contract-derived
+    # binding_contract.BindingTopic sets has_qos = True).
+    has_qos = False
 
     @property
     def short_type(self) -> str:
