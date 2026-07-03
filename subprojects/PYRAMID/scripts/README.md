@@ -119,7 +119,34 @@ contracts, and a standalone CMake/GNAT project template into
 `dist/pcl_pyramid_sdk` (default; `--out` to override). Requires an already
 built `--build-dir` (default `build-flatbuffers-only`) with
 `PYRAMID_ENABLE_FLATBUFFERS=ON`, `PYRAMID_GENERATE_CPP_BINDINGS=ON` — e.g. run
-`build_plugins.bat`/`.sh` first. See
+`build_plugins.bat`/`.sh` first.
+
+Recommended release flow:
+
+```bat
+cmake --preset flatbuffers-only
+cmake --build --preset flatbuffers-only-release --parallel %NUMBER_OF_PROCESSORS%
+subprojects\PYRAMID\scripts\build_plugins.bat --build-dir build-flatbuffers-only
+subprojects\PYRAMID\scripts\package_sdk.bat --build-dir build-flatbuffers-only --clean
+cd dist\pcl_pyramid_sdk
+scripts\generate_bindings.bat
+scripts\build_plugins.bat --smoke-tests
+```
+
+```bash
+cmake --preset flatbuffers-only
+cmake --build --preset flatbuffers-only-release --parallel "$(nproc)"
+subprojects/PYRAMID/scripts/build_plugins.sh --build-dir build-flatbuffers-only
+subprojects/PYRAMID/scripts/package_sdk.sh --build-dir build-flatbuffers-only --clean
+cd dist/pcl_pyramid_sdk
+scripts/generate_bindings.sh
+scripts/build_plugins.sh --smoke-tests
+```
+
+The final `--smoke-tests` step builds small standalone SDK test apps and runs
+CTest tests named `sdk_*`, proving that the generated codec plugins load and
+that the bundled starter tactical_objects facade fails closed without a loaded
+codec. See
 [`../doc/architecture/sdk_packaging.md`](../doc/architecture/sdk_packaging.md)
 for the maintainer/user split and the deploy directory layout.
 

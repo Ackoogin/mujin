@@ -5,7 +5,7 @@
 # parent monorepo). Run scripts/generate_bindings.sh first.
 #
 # Usage:
-#   build_plugins.sh [--build-dir DIR] [--config Release|Debug] [--clean] [--jobs N]
+#   build_plugins.sh [--build-dir DIR] [--config Release|Debug] [--clean] [--jobs N] [--smoke-tests]
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,6 +14,7 @@ SDK_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BUILD_DIR="$SDK_ROOT/build"
 CONFIG="Release"
 CLEAN=0
+RUN_SMOKE_TESTS=0
 JOBS="$( (command -v nproc >/dev/null && nproc) || echo 4)"
 
 while [[ $# -gt 0 ]]; do
@@ -22,6 +23,7 @@ while [[ $# -gt 0 ]]; do
     --config)    CONFIG="$2"; shift 2 ;;
     --clean)     CLEAN=1; shift ;;
     --jobs)      JOBS="$2"; shift 2 ;;
+    --smoke-tests) RUN_SMOKE_TESTS=1; shift ;;
     *) echo "[build_plugins] unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -41,6 +43,14 @@ cmake -S "$SDK_ROOT/sdk_project" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE="$CONFIG"
 
 echo "[build_plugins] build ..."
 cmake --build "$BUILD_DIR" --target pyramid_sdk_plugins --parallel "$JOBS"
+
+if [[ "$RUN_SMOKE_TESTS" -eq 1 ]]; then
+  echo "[build_plugins] build smoke tests ..."
+  cmake --build "$BUILD_DIR" --target pyramid_sdk_smoke_tests --parallel "$JOBS"
+
+  echo "[build_plugins] run smoke tests ..."
+  ctest --test-dir "$BUILD_DIR" --output-on-failure -C "$CONFIG" -R '^sdk_'
+fi
 
 echo
 echo "[build_plugins] produced plugins:"

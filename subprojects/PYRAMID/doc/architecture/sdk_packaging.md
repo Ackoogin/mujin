@@ -17,7 +17,7 @@ the runtime concepts this builds on.
 | Role | Runs | Produces |
 |------|------|----------|
 | Maintainer | `package_sdk.bat`/`.sh`, inside this repo, against an already-built `build-flatbuffers-only`-style build dir | A deploy directory (default `dist/pcl_pyramid_sdk`) |
-| Downstream user | `scripts/generate_bindings` -> `scripts/build_plugins` (-> `scripts/build_ada`), inside the deploy directory only | Codec plugin `.dll`/`.so` (and optionally an Ada codec archive) built from their own `proto/` tree |
+| Downstream user | `scripts/generate_bindings` -> `scripts/build_plugins` (optionally `--smoke-tests`, then `scripts/build_ada`), inside the deploy directory only | Codec plugin `.dll`/`.so`, smoke-test executables, and optionally an Ada codec archive built from their own `proto/` tree |
 
 Everything the maintainer step needs (source, FetchContent-resolved
 dependencies) stays behind; everything the user step needs travels in the
@@ -57,7 +57,9 @@ everything needed to build them offline:
   marshal/codec/plugin sources and builds the codec plugin `.dll`s against
   the imported `pcl_core` static lib. It mirrors the shape of
   `subprojects/PYRAMID/CMakeLists.txt`'s codec-plugin section at a much
-  smaller scale.
+  smaller scale. It also defines no-framework smoke-test executables and a
+  `pyramid_sdk_smoke_tests` target so the packaged SDK can prove it can load
+  the generated plugins without depending on GoogleTest or the monorepo.
 - `gnat/pyramid_sdk_ada.gpr` -- a source-contributor GNAT project (no
   `Main`) that a downstream Ada client project `with`s, exposing PCL's Ada
   bindings and the generated Ada sources, and linking the GNAT-compatible
@@ -92,11 +94,43 @@ pcl_pyramid_sdk/
   tools/flatc(.exe)              prebuilt FlatBuffers schema compiler
   generator/                     pim/*.py generator (pure Python)
   proto/pyramid/                 starter .proto contracts to edit/extend
-  sdk_project/                   standalone CMake project (C++ codec plugins)
+  sdk_project/                   standalone CMake project (C++ codec plugins + smoke tests)
   gnat/                          standalone GNAT project (Ada C-ABI archive + bindings)
   scripts/                       generate_bindings, build_plugins, build_ada
   MANIFEST.txt                   full file listing
 ```
+
+## Maintainer packaging flow
+
+1. Configure and build a FlatBuffers-capable repo build, normally via
+   `cmake --preset flatbuffers-only` and
+   `cmake --build --preset flatbuffers-only-release`.
+2. Build the plugin artifacts package_sdk needs:
+   `subprojects/PYRAMID/scripts/build_plugins.bat --build-dir build-flatbuffers-only`
+   or the `.sh` equivalent. This produces PCL, `flatc`, transport plugins, and
+   generated-code dependent codec plugin artifacts in the expected build tree.
+3. For Ada-capable SDKs, build GNAT-compatible PCL archives explicitly with
+   `subprojects/PCL/scripts/build_gnat_pcl_static_libs.* build-flatbuffers-only/ada_gnat_pcl`.
+   `package_sdk` can attempt this automatically, but the explicit step makes a
+   missing GNAT/GCC toolchain visible before packaging.
+4. Run `subprojects/PYRAMID/scripts/package_sdk.* --build-dir build-flatbuffers-only --clean`
+   with `--out <dir>` when the default `dist/pcl_pyramid_sdk` is not desired.
+5. Check `<out>/MANIFEST.txt` and run the downstream verification flow from the
+   packaged directory before release.
+
+## Downstream verification flow
+
+Inside the packaged SDK, run `scripts/generate_bindings.*` followed by
+`scripts/build_plugins.* --smoke-tests`. The `--smoke-tests` flag builds the
+normal codec plugins, builds `pyramid_sdk_smoke_tests`, and runs CTest tests
+whose names start with `sdk_`.
+
+The generic smoke app loads every generated codec plugin and verifies the codec
+registry receives JSON and, when FlatBuffers plugins were built, FlatBuffers
+codecs. With the bundled starter contracts, a second smoke app also compiles
+the tactical_objects consumed facade and verifies it fails closed when no codec
+is registered. That second app is guarded by CMake so custom downstream proto
+sets that omit tactical_objects can still use the generic plugin-load smoke.
 
 ## Key files
 
@@ -104,6 +138,7 @@ pcl_pyramid_sdk/
 |------|-------|
 | Maintainer packaging script | `subprojects/PYRAMID/scripts/package_sdk.bat`, `.sh` |
 | SDK project template (copied verbatim into the deploy dir) | `subprojects/PYRAMID/sdk_template/` |
+| SDK smoke-test sources | `subprojects/PYRAMID/sdk_template/sdk_project/smoke_tests/` |
 | C-ABI marshal archive build (both monorepo and SDK copies) | `subprojects/PYRAMID/scripts/build_gnat_pyramid_cabi_marshal_libs.bat`, `.sh` |
 | PCL GNAT static libs | `subprojects/PCL/scripts/build_gnat_pcl_static_libs.bat`, `.sh` |
 | Existing per-component plugin staging (different problem, see above) | `subprojects/PYRAMID/scripts/stage_plugin_deploy.bat`, `.sh` |

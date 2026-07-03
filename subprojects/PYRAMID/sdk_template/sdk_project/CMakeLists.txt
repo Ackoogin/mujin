@@ -166,6 +166,7 @@ endif()
 # Codec plugins: one MODULE (.dll) per component, per enabled codec
 # ---------------------------------------------------------------------------
 set(PYRAMID_SDK_PLUGIN_TARGETS)
+set(PYRAMID_SDK_HAS_FLATBUFFERS_PLUGINS FALSE)
 
 file(GLOB _sdk_json_plugin_srcs CONFIGURE_DEPENDS
     "${SDK_GENERATED_DIR}/*_json_codec_plugin.cpp")
@@ -193,6 +194,7 @@ if(PYRAMID_SDK_ENABLE_FLATBUFFERS)
         target_include_directories(${_target} PRIVATE
             "${SDK_GENERATED_DIR}" "${SDK_FLATBUFFERS_SCHEMA_DIR}")
         list(APPEND PYRAMID_SDK_PLUGIN_TARGETS ${_target})
+        set(PYRAMID_SDK_HAS_FLATBUFFERS_PLUGINS TRUE)
     endforeach()
 endif()
 
@@ -205,4 +207,74 @@ endif()
 
 add_custom_target(pyramid_sdk_plugins ALL DEPENDS ${PYRAMID_SDK_PLUGIN_TARGETS})
 
+# ---------------------------------------------------------------------------
+# SDK smoke tests: small executable checks with no external test framework
+# ---------------------------------------------------------------------------
+enable_testing()
+
+list(LENGTH PYRAMID_SDK_PLUGIN_TARGETS _pyramid_sdk_plugin_target_count)
+set(_pyramid_sdk_smoke_paths_header
+    "#pragma once\n\n#include <array>\n\n")
+string(APPEND _pyramid_sdk_smoke_paths_header
+    "inline constexpr std::array<const char*, ${_pyramid_sdk_plugin_target_count}> "
+    "kPyramidSdkCodecPluginPaths = {{\n")
+foreach(_target IN LISTS PYRAMID_SDK_PLUGIN_TARGETS)
+    string(APPEND _pyramid_sdk_smoke_paths_header
+        "    \"$<TARGET_FILE:${_target}>\",\n")
+endforeach()
+string(APPEND _pyramid_sdk_smoke_paths_header "}};\n\n")
+if(PYRAMID_SDK_HAS_FLATBUFFERS_PLUGINS)
+    string(APPEND _pyramid_sdk_smoke_paths_header
+        "inline constexpr bool kPyramidSdkExpectFlatbuffers = true;\n")
+else()
+    string(APPEND _pyramid_sdk_smoke_paths_header
+        "inline constexpr bool kPyramidSdkExpectFlatbuffers = false;\n")
+endif()
+
+set(PYRAMID_SDK_SMOKE_GENERATED_DIR
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/smoke/$<CONFIG>")
+file(GENERATE
+    OUTPUT "${PYRAMID_SDK_SMOKE_GENERATED_DIR}/pyramid_sdk_smoke_plugin_paths.hpp"
+    CONTENT "${_pyramid_sdk_smoke_paths_header}")
+
+add_executable(sdk_codec_plugin_load_smoke
+    smoke_tests/sdk_codec_plugin_load_smoke.cpp)
+add_dependencies(sdk_codec_plugin_load_smoke ${PYRAMID_SDK_PLUGIN_TARGETS})
+target_link_libraries(sdk_codec_plugin_load_smoke PRIVATE pcl_core)
+target_include_directories(sdk_codec_plugin_load_smoke PRIVATE
+    "${PYRAMID_SDK_SMOKE_GENERATED_DIR}")
+add_test(NAME sdk_codec_plugin_load_smoke
+    COMMAND sdk_codec_plugin_load_smoke)
+
+set(PYRAMID_SDK_SMOKE_TARGETS sdk_codec_plugin_load_smoke)
+
+set(_pyramid_sdk_tobj_consumed_src
+    "${SDK_GENERATED_DIR}/pyramid_services_tactical_objects_consumed.cpp")
+set(_pyramid_sdk_tobj_consumed_header
+    "${SDK_GENERATED_DIR}/pyramid_services_tactical_objects_consumed.hpp")
+if(EXISTS "${_pyramid_sdk_tobj_consumed_src}"
+        AND EXISTS "${_pyramid_sdk_tobj_consumed_header}")
+    add_executable(sdk_tactical_objects_fail_closed_smoke
+        smoke_tests/sdk_tactical_objects_fail_closed_smoke.cpp
+        "${_pyramid_sdk_tobj_consumed_src}")
+    target_link_libraries(sdk_tactical_objects_fail_closed_smoke PRIVATE
+        pyramid_generated_codecs
+        pyramid_generated_marshal
+        pcl_core)
+    target_include_directories(sdk_tactical_objects_fail_closed_smoke PRIVATE
+        "${SDK_GENERATED_DIR}")
+    add_test(NAME sdk_tactical_objects_fail_closed_smoke
+        COMMAND sdk_tactical_objects_fail_closed_smoke)
+    list(APPEND PYRAMID_SDK_SMOKE_TARGETS
+        sdk_tactical_objects_fail_closed_smoke)
+else()
+    message(STATUS
+        "PYRAMID SDK: tactical_objects starter facade not found; skipping "
+        "starter-contract fail-closed smoke test.")
+endif()
+
+add_custom_target(pyramid_sdk_smoke_tests
+    DEPENDS ${PYRAMID_SDK_SMOKE_TARGETS})
+
 message(STATUS "PYRAMID SDK: codec plugin targets: ${PYRAMID_SDK_PLUGIN_TARGETS}")
+message(STATUS "PYRAMID SDK: smoke test targets: ${PYRAMID_SDK_SMOKE_TARGETS}")

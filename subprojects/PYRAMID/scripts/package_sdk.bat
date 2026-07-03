@@ -190,7 +190,8 @@ xcopy /y /q /s /i "%PYRAMID_ROOT%\core\external\gnatcoll-core" "%OUT_DIR%\gnat\e
 
 echo [package_sdk] copying SDK project template (CMake + GNAT + scripts + README) ...
 xcopy /y /q /i "%SDK_TEMPLATE%\README.md" "%OUT_DIR%\" >nul
-xcopy /y /q /i "%SDK_TEMPLATE%\sdk_project\CMakeLists.txt" "%OUT_DIR%\sdk_project\" >nul
+if exist "%OUT_DIR%\sdk_project" rmdir /s /q "%OUT_DIR%\sdk_project"
+xcopy /y /q /s /i "%SDK_TEMPLATE%\sdk_project" "%OUT_DIR%\sdk_project" >nul
 xcopy /y /q /i "%SDK_TEMPLATE%\gnat\pyramid_sdk_ada.gpr" "%OUT_DIR%\gnat\" >nul
 xcopy /y /q /i "%SDK_TEMPLATE%\gnat\build_gnat_pyramid_cabi_marshal_libs.bat" "%OUT_DIR%\gnat\" >nul
 xcopy /y /q /i "%SDK_TEMPLATE%\gnat\build_gnat_pyramid_cabi_marshal_libs.sh"  "%OUT_DIR%\gnat\" >nul
