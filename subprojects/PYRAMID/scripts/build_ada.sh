@@ -100,7 +100,10 @@ cmake \
   -DUNMANNED_BUILD_AME=OFF \
   -DAME_FOXGLOVE=OFF \
   -DPYRAMID_ENABLE_ROS2=OFF \
-  -DPYRAMID_ENABLE_FLATBUFFERS=ON
+  -DPYRAMID_ENABLE_FLATBUFFERS=ON \
+  -DPYRAMID_GENERATE_CPP_BINDINGS=ON \
+  -DPYRAMID_GENERATE_ADA_BINDINGS=ON \
+  -DPYRAMID_BUILD_TESTS=ON
 
 # pyramid_plugins  -> the codec/transport .so the Ada binaries load at run time
 # pyramid_ada_all  -> the Ada binaries (auto-builds the GNAT FlatBuffers archive

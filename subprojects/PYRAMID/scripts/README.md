@@ -83,6 +83,14 @@ subprojects/PYRAMID/scripts/build_ada.sh --test
 subprojects/PYRAMID/scripts/build_ada.sh --regen --test
 ```
 
+```bat
+REM Build the Ada binaries against the build-local Ada bindings, then run the Ada tests:
+subprojects\PYRAMID\scripts\build_ada.bat --test
+
+REM Full proto -> Ada: also regenerate the build-local Ada bindings from .proto first:
+subprojects\PYRAMID\scripts\build_ada.bat --regen --test
+```
+
 Requires a GNAT toolchain (`gnat`/`gprbuild`) on the runner. Like the C++
 bindings, the Ada bindings are generated build-local (default
 `${binaryDir}/generated/pyramid_ada_bindings`) and compiled from source;
