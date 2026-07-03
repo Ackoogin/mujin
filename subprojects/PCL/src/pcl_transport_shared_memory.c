@@ -203,7 +203,18 @@ static void pcl_shm_sleep_ms(uint32_t ms) {
 
 static uint64_t pcl_shm_now_ms(void) {
 #ifdef _WIN32
-  return (uint64_t)GetTickCount64();
+  typedef ULONGLONG (WINAPI *pcl_get_tick_count64_fn)(void);
+  HMODULE kernel32 = GetModuleHandleA("kernel32.dll");
+
+  if (kernel32 != NULL) {
+    pcl_get_tick_count64_fn get_tick_count64 =
+      (pcl_get_tick_count64_fn)GetProcAddress(kernel32, "GetTickCount64");
+    if (get_tick_count64 != NULL) {
+      return (uint64_t)get_tick_count64();
+    }
+  }
+
+  return (uint64_t)GetTickCount();
 #else
   struct timespec ts;
   if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
