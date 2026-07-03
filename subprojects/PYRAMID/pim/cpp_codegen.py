@@ -3591,7 +3591,8 @@ class CppTypesGenerator:
             if name in visited:
                 return
             visited.add(name)
-            for dep in deps.get(name, set()):
+            # Sorted so output order is independent of hash randomisation.
+            for dep in sorted(deps.get(name, ())):
                 visit(dep)
             order.append(name)
 
