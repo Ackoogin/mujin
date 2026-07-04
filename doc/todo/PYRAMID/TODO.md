@@ -62,7 +62,7 @@ behind explicit triggers.
 | 2 | ~~B3 Ada FlatBuffers codec misses reserved-word rename~~ **✅ done 2026-07-04** | S |
 | 3 | ~~B2 Close out FlatBuffers JSON-bridge nested packages~~ **✅ done 2026-07-04** | S |
 | 4 | ~~A1 Package-neutral ROS2 marshal codegen~~ **✅ done 2026-07-04** | M |
-| 5 | A2 `application/ros2` registry codec plugin | M |
+| 5 | ~~A2 `application/ros2` registry codec plugin~~ **✅ done 2026-07-04 (ament build unverified in-sandbox)** | M |
 | 6 | A3 Typed `RclcppRuntimeAdapter` on the live wire | M/L |
 | 7 | A4 Plain-rclcpp interop proof | S |
 | 8 | C1 Retire `src/protobuf_support/` | S/M |
@@ -215,6 +215,27 @@ wire switch so A2/A3 do not land on a domain-coupled generator.
   with zero `pyramid` tokens; pyramid `pyramid_msgs` output unchanged.
 
 ### A2. Back the existing `application/ros2` registration with the typed codec
+
+**✅ Done 2026-07-04 (generation + structural; live ament build unverified).**
+Added a `ros2` branch to the codec-plugin emitter (`pim/cpp/codec_plugin_gen.py`),
+reusing the binary-backend path with content-type `application/ros2` and the
+A1 naming-policy accessors (`ros2_codec_namespace` → `pyramid::ros2_codec`,
+`ros2_codec_header` → `pyramid_ros2_codec.hpp`); emitted into `ros2/cpp/` as
+`*_ros2_codec_plugin.cpp`. Extended `pim/ros2_marshal_codegen.py` with
+varint-framed `toBinary(vector)` / `fromBinary{Msg}Array` helpers (purely
+additive) for the streaming/array schema types. `generate_bindings.py` maps
+`_ros2_` plugin files to `application/ros2` in the manifest. Wired the ament
+`ros2/CMakeLists.txt` to build each `*_ros2_codec_plugin.cpp` as a `MODULE`
+against `rclcpp`/`pyramid_msgs`/`pcl_core_external`; excluded these plugins from
+both the ament support-lib glob and the top-level `pyramid_ros2_transport` glob
+(they only build inside ament). Coupled-plugin passthrough remains the envelope
+fallback. Added `tests/test_ros2_codec_plugin_generation.py` (emission,
+disabled-backend absence, ament wiring, top-level exclusion). Existing
+`test_plugin_only_fail_closed` binary still passes; non-ros2 codec-plugin output
+byte-identical (7 files).
+**Residual:** a real ament/colcon/rclcpp build + registry-load of the typed
+codec could not run in-sandbox — needs a Humble environment to close out (shared
+with A3/A4).
 
 The content type and codec-vtable registration already exist in the coupled
 plugin as a passthrough envelope codec.

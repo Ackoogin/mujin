@@ -33,6 +33,7 @@ if(NOT DEFINED PYRAMID_CPP_BINDINGS_DIR)
 endif()
 file(TO_CMAKE_PATH "${PYRAMID_CPP_BINDINGS_DIR}" PYRAMID_CPP_BINDINGS_DIR)
 set(PYRAMID_ROS2_SUPPORT_DIR "${PYRAMID_CPP_BINDINGS_DIR}/ros2/cpp")
+set(PYRAMID_ROS2_CODEC_DIR "${PYRAMID_CPP_BINDINGS_DIR}/ros2/codec")
 
 if(NOT EXISTS "${PYRAMID_ROS2_SUPPORT_DIR}/pyramid_ros2_transport_support.cpp")
     message(FATAL_ERROR
@@ -71,6 +72,12 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 # (ServiceBinder) found alongside it, so ROS2 ingress can be bound by name.
 file(GLOB PYRAMID_ROS2_SUPPORT_SRCS CONFIGURE_DEPENDS
     "${PYRAMID_ROS2_SUPPORT_DIR}/*.cpp")
+file(GLOB PYRAMID_ROS2_CODEC_PLUGIN_SRCS CONFIGURE_DEPENDS
+    "${PYRAMID_ROS2_SUPPORT_DIR}/*_ros2_codec_plugin.cpp")
+list(FILTER PYRAMID_ROS2_SUPPORT_SRCS EXCLUDE REGEX
+    "_ros2_codec_plugin\\.cpp$")
+file(GLOB PYRAMID_GENERATED_CABI_MARSHAL_SRCS CONFIGURE_DEPENDS
+    "${PYRAMID_CPP_BINDINGS_DIR}/*_cabi_marshal.cpp")
 
 add_library(${PROJECT_NAME}_lib SHARED
     src/rclcpp_runtime_adapter.cpp
@@ -130,6 +137,65 @@ install(TARGETS pyramid_ros2_coupled_plugin
     LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )
+
+# ---------------------------------------------------------------------------
+# Generated typed application/ros2 codec plugins
+# ---------------------------------------------------------------------------
+# These plugins include the generated rclcpp-backed pyramid_ros2_codec.hpp and
+# therefore build only inside the ament package, where pyramid_msgs and rclcpp
+# are available. The coupled plugin remains the passthrough envelope fallback.
+# ---------------------------------------------------------------------------
+if(PYRAMID_ROS2_CODEC_PLUGIN_SRCS)
+    if(NOT pyramid_msgs_FOUND)
+        message(FATAL_ERROR
+            "Generated ROS2 codec plugins require pyramid_msgs. Build and source "
+            "the pyramid_msgs ament package before pyramid_ros2_transport.")
+    endif()
+    if(NOT PYRAMID_GENERATED_CABI_MARSHAL_SRCS)
+        message(FATAL_ERROR
+            "Generated ROS2 codec plugins require C-ABI marshal sources under "
+            "${PYRAMID_CPP_BINDINGS_DIR}.")
+    endif()
+
+    set(PYRAMID_ROS2_CODEC_PLUGIN_TARGETS)
+    foreach(PYRAMID_ROS2_CODEC_PLUGIN_SRC IN LISTS PYRAMID_ROS2_CODEC_PLUGIN_SRCS)
+        get_filename_component(PYRAMID_ROS2_CODEC_PLUGIN_STEM
+            "${PYRAMID_ROS2_CODEC_PLUGIN_SRC}" NAME_WE)
+        string(REGEX REPLACE
+            "^pyramid_services_(.+)_ros2_codec_plugin$"
+            "pyramid_codec_ros2_\\1"
+            PYRAMID_ROS2_CODEC_PLUGIN_TARGET
+            "${PYRAMID_ROS2_CODEC_PLUGIN_STEM}")
+        add_library(${PYRAMID_ROS2_CODEC_PLUGIN_TARGET} MODULE
+            "${PYRAMID_ROS2_CODEC_PLUGIN_SRC}"
+            ${PYRAMID_GENERATED_CABI_MARSHAL_SRCS}
+        )
+        set_target_properties(${PYRAMID_ROS2_CODEC_PLUGIN_TARGET} PROPERTIES
+            WINDOWS_EXPORT_ALL_SYMBOLS ON
+            CXX_VISIBILITY_PRESET hidden
+        )
+        target_include_directories(${PYRAMID_ROS2_CODEC_PLUGIN_TARGET} PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${PYRAMID_CPP_BINDINGS_DIR}
+            ${PYRAMID_ROS2_SUPPORT_DIR}
+            ${PYRAMID_ROS2_CODEC_DIR}
+        )
+        ament_target_dependencies(${PYRAMID_ROS2_CODEC_PLUGIN_TARGET}
+            rclcpp
+            pyramid_msgs
+        )
+        target_link_libraries(${PYRAMID_ROS2_CODEC_PLUGIN_TARGET}
+            pcl_core_external
+        )
+        list(APPEND PYRAMID_ROS2_CODEC_PLUGIN_TARGETS
+            ${PYRAMID_ROS2_CODEC_PLUGIN_TARGET})
+    endforeach()
+
+    install(TARGETS ${PYRAMID_ROS2_CODEC_PLUGIN_TARGETS}
+        LIBRARY DESTINATION lib
+        RUNTIME DESTINATION bin
+    )
+endif()
 
 if(BUILD_TESTING)
     find_package(ament_cmake_gtest REQUIRED)

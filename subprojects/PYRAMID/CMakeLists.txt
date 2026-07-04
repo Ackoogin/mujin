@@ -748,6 +748,8 @@ if(PYRAMID_ENABLE_ROS2)
         "${PYRAMID_CPP_BINDINGS_DIR}/ros2/cpp")
     pyramid_glob_generated(PYRAMID_ROS2_TRANSPORT_SRCS
         "${PYRAMID_ROS2_SUPPORT_DIR}/*.cpp")
+    list(FILTER PYRAMID_ROS2_TRANSPORT_SRCS EXCLUDE REGEX
+        "_ros2_codec_plugin\\.cpp$")
     pyramid_require_generated(PYRAMID_ROS2_TRANSPORT_SRCS
         "generated PYRAMID ROS2 transport sources")
     add_library(pyramid_ros2_transport STATIC ${PYRAMID_ROS2_TRANSPORT_SRCS})

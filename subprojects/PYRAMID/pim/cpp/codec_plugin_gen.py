@@ -16,6 +16,7 @@ from .naming import (
     _json_codec_namespace_for_type,
     _json_codec_header_for_type,
     _alias_cpp_types,
+    _service_group_key,
 )
 
 
@@ -144,6 +145,20 @@ class CodecPluginEmitterMixin:
                 codec_types,
             )
 
+        if self._has_backend('ros2'):
+            codec_package = _service_group_key(parsed.package) or parsed.package
+            ros2_path = output_path / 'ros2' / 'cpp' / (
+                file_base + '_ros2_codec_plugin.cpp')
+            self._write_codec_plugin_impl(
+                ros2_path,
+                file_base,
+                cpp_base_ns,
+                'ros2',
+                'application/ros2',
+                codec_types,
+                codec_package=codec_package,
+            )
+
     def _write_codec_plugin_impl(
             self,
             path: Path,
@@ -152,6 +167,7 @@ class CodecPluginEmitterMixin:
             backend: str,
             content_type: str,
             codec_types: List[Tuple[str, str, bool, str]],
+            codec_package: str = '',
     ) -> None:
         is_json = backend == 'json'
         json_headers = sorted({
@@ -165,7 +181,7 @@ class CodecPluginEmitterMixin:
             for _short, full_type, is_alias, _alias_cpp, _is_array in codec_types
             if not is_alias and '.' in full_type
         })
-        # flatbuffers and protobuf are both binary backends with the same
+        # flatbuffers, protobuf, and ros2 are binary backends with the same
         # native<->wire surface (wire_codec::toBinary(native) /
         # fromBinary<Short>(data, size)); only the namespace and header differ.
         if backend == 'protobuf':
@@ -175,11 +191,15 @@ class CodecPluginEmitterMixin:
             # included bare (unlike the flatbuffers codec header, which is
             # generated into the build bindings dir under flatbuffers/cpp).
             wire_codec_header = file_base + '_protobuf_codec.hpp'
+        elif backend == 'ros2':
+            wire_codec_ns = self._naming.ros2_codec_namespace(codec_package)
+            wire_codec_header = self._naming.ros2_codec_header(codec_package)
         else:
             wire_codec_ns = cpp_base_ns + '::flatbuffers_codec'
             wire_codec_header = (
                 'flatbuffers/cpp/' + file_base + '_flatbuffers_codec.hpp')
 
+        path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated PCL codec plugin\n')
             f.write(f'// Backend: {backend} | Content-Type: {content_type}\n\n')
@@ -476,4 +496,3 @@ class CodecPluginEmitterMixin:
             f.write('    return &k_codec;\n')
             f.write('}\n\n')
             f.write('} // extern "C"\n')
-

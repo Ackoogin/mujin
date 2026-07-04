@@ -278,6 +278,8 @@ def _codec_plugin_content_type(filename: str) -> str:
         return 'application/flatbuffers'
     if '_protobuf_' in filename:
         return 'application/protobuf'
+    if '_ros2_' in filename:
+        return 'application/ros2'
     return 'application/json'
 
 
