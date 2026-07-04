@@ -51,7 +51,6 @@
 #define PCL_SHM_MAX_ID 64u
 #define PCL_SHM_MAX_OBJECT_NAME 256u
 #define PCL_SHM_MAX_PAYLOAD 16384u
-#define PCL_SHM_MAX_BACKPRESSURE_TOPICS 16u
 #define PCL_SHM_DISCOVERY_RETRIES 20u
 #define PCL_SHM_POLL_MS 1u
 
@@ -114,12 +113,6 @@ typedef struct {
   char     requester_id[PCL_SHM_MAX_ID];
 } pcl_shm_response_target_t;
 
-typedef struct {
-  uint32_t timeout_ms;
-  int      in_use;
-  char     topic[PCL_SHM_MAX_NAME];
-} pcl_shm_backpressure_policy_t;
-
 /* Stream send target shared with pcl_stream_context_t::transport_ctx. The
  * server-side stream handler uses this to address frames + end back to the
  * original requester via the bus. The owning transport links each live
@@ -168,7 +161,6 @@ typedef struct pcl_shared_memory_transport_t {
   pcl_shm_pending_request_t* pending_head;
   pcl_shm_pending_stream_t*  pending_stream_head;
   pcl_shm_stream_send_target_t* active_stream_targets;
-  pcl_shm_backpressure_policy_t backpressure[PCL_SHM_MAX_BACKPRESSURE_TOPICS];
 #ifdef _WIN32
   HANDLE                     mapping_handle;
   HANDLE                     lock_handle;
@@ -198,29 +190,6 @@ static void pcl_shm_sleep_ms(uint32_t ms) {
   req.tv_nsec = (long)((ms % 1000u) * 1000000u);
   while (nanosleep(&req, &req) == -1 && errno == EINTR) {
   }
-#endif
-}
-
-static uint64_t pcl_shm_now_ms(void) {
-#ifdef _WIN32
-  typedef ULONGLONG (WINAPI *pcl_get_tick_count64_fn)(void);
-  HMODULE kernel32 = GetModuleHandleA("kernel32.dll");
-
-  if (kernel32 != NULL) {
-    pcl_get_tick_count64_fn get_tick_count64 =
-      (pcl_get_tick_count64_fn)GetProcAddress(kernel32, "GetTickCount64");
-    if (get_tick_count64 != NULL) {
-      return (uint64_t)get_tick_count64();
-    }
-  }
-
-  return (uint64_t)GetTickCount();
-#else
-  struct timespec ts;
-  if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
-    return 0u;  // GCOVR_EXCL_LINE: CLOCK_MONOTONIC cannot fail on supported platforms
-  }
-  return ((uint64_t)ts.tv_sec * 1000u) + ((uint64_t)ts.tv_nsec / 1000000u);
 #endif
 }
 
@@ -258,27 +227,6 @@ static size_t pcl_shm_strnlen(const char* src, size_t max_len) {
 
 static void pcl_shm_pending_lock_acquire(pcl_shared_memory_transport_t* ctx);
 static void pcl_shm_pending_lock_release(pcl_shared_memory_transport_t* ctx);
-
-static uint32_t pcl_shm_backpressure_timeout_ms(
-    pcl_shared_memory_transport_t* ctx,
-    const char*                    topic) {
-  uint32_t i;
-  uint32_t timeout_ms = 0u;
-
-  if (!ctx || !topic) return 0u;
-
-  pcl_shm_pending_lock_acquire(ctx);
-  for (i = 0u; i < PCL_SHM_MAX_BACKPRESSURE_TOPICS; ++i) {
-    if (ctx->backpressure[i].in_use &&
-        strcmp(ctx->backpressure[i].topic, topic) == 0) {
-      timeout_ms = ctx->backpressure[i].timeout_ms;
-      break;
-    }
-  }
-  pcl_shm_pending_lock_release(ctx);
-
-  return timeout_ms;
-}
 
 static void pcl_shm_build_object_name(const char* prefix,
                                       const char* bus_name,
@@ -1123,36 +1071,16 @@ static pcl_status_t pcl_shm_publish(void*            adapter_ctx,
   pcl_shared_memory_transport_t* ctx =
       (pcl_shared_memory_transport_t*)adapter_ctx;
   uint32_t delivered_count = 0u;
-  uint32_t timeout_ms;
-  uint64_t deadline_ms = 0u;
+  pcl_status_t rc;
 
   if (!ctx || !topic || !msg || !msg->type_name) return PCL_ERR_INVALID;
   if (msg->size > 0u && !msg->data) return PCL_ERR_INVALID;
   if (msg->size > PCL_SHM_MAX_PAYLOAD) return PCL_ERR_NOMEM;
 
-  timeout_ms = pcl_shm_backpressure_timeout_ms(ctx, topic);
-  if (timeout_ms > 0u) {
-    deadline_ms = pcl_shm_now_ms() + (uint64_t)timeout_ms;
-  }
-
-  for (;;) {
-    pcl_status_t rc;
-
-    if (pcl_shm_bus_lock(ctx) != PCL_OK) return PCL_ERR_STATE;
-    rc = pcl_shm_publish_once_locked(ctx, topic, msg, &delivered_count);
-    pcl_shm_bus_unlock(ctx);
-
-    if (rc == PCL_OK || rc == PCL_ERR_NOT_FOUND) {
-      return rc;
-    }
-    if (rc != PCL_ERR_NOMEM || timeout_ms == 0u) {
-      return rc;
-    }
-    if (pcl_shm_now_ms() >= deadline_ms) {
-      return PCL_ERR_TIMEOUT;  // GCOVR_EXCL_LINE: expiry needs a peer that stays stalled past the deadline; each participant's drain thread makes that nondeterministic in-process
-    }
-    pcl_shm_sleep_ms(PCL_SHM_POLL_MS);
-  }
+  if (pcl_shm_bus_lock(ctx) != PCL_OK) return PCL_ERR_STATE;
+  rc = pcl_shm_publish_once_locked(ctx, topic, msg, &delivered_count);
+  pcl_shm_bus_unlock(ctx);
+  return rc;
 }
 
 static pcl_status_t pcl_shm_subscribe(void*       adapter_ctx,
@@ -2175,49 +2103,11 @@ pcl_status_t pcl_shared_memory_transport_set_topic_backpressure(
     pcl_shared_memory_transport_t* ctx,
     const char*                    topic,
     uint32_t                       timeout_ms) {
-  uint32_t i;
-  uint32_t free_index = PCL_SHM_MAX_BACKPRESSURE_TOPICS;
-
   if (!ctx || !topic || !topic[0]) return PCL_ERR_INVALID;
   if (pcl_shm_strnlen(topic, PCL_SHM_MAX_NAME) == PCL_SHM_MAX_NAME) {
     return PCL_ERR_INVALID;
   }
-
-  pcl_shm_pending_lock_acquire(ctx);
-  for (i = 0u; i < PCL_SHM_MAX_BACKPRESSURE_TOPICS; ++i) {
-    if (ctx->backpressure[i].in_use &&
-        strcmp(ctx->backpressure[i].topic, topic) == 0) {
-      if (timeout_ms == 0u) {
-        memset(&ctx->backpressure[i], 0, sizeof(ctx->backpressure[i]));
-      } else {
-        ctx->backpressure[i].timeout_ms = timeout_ms;
-      }
-      pcl_shm_pending_lock_release(ctx);
-      return PCL_OK;
-    }
-    if (!ctx->backpressure[i].in_use &&
-        free_index == PCL_SHM_MAX_BACKPRESSURE_TOPICS) {
-      free_index = i;
-    }
-  }
-
-  if (timeout_ms == 0u) {
-    pcl_shm_pending_lock_release(ctx);
-    return PCL_OK;
-  }
-  if (free_index == PCL_SHM_MAX_BACKPRESSURE_TOPICS) {
-    pcl_shm_pending_lock_release(ctx);
-    return PCL_ERR_NOMEM;
-  }
-
-  ctx->backpressure[free_index].in_use = 1;
-  ctx->backpressure[free_index].timeout_ms = timeout_ms;
-  snprintf(ctx->backpressure[free_index].topic,
-           sizeof(ctx->backpressure[free_index].topic),
-           "%s",
-           topic);
-  pcl_shm_pending_lock_release(ctx);
-  return PCL_OK;
+  return (timeout_ms == 0u) ? PCL_OK : PCL_ERR_INVALID;
 }
 
 void pcl_shared_memory_transport_destroy(pcl_shared_memory_transport_t* ctx) {

@@ -1,6 +1,7 @@
 # PCL Plugin Threading Model Report
 
-Status: 2026-07-04.  Updated after the UDP transport egress fix.
+Status: 2026-07-04.  Updated after the UDP egress fix and shared-memory
+backpressure hardening.
 
 This report records the threading-model review for PCL transports and PYRAMID
 runtime plugins.  It focuses on the rule that PCL component business logic runs
@@ -45,7 +46,7 @@ The non-conforming paths are:
 
 | Area | Issue | Primary files |
 |------|-------|---------------|
-| Shared-memory transport | default publish is fail-fast, but configured topic backpressure sleeps on the caller thread; service and stream invoke paths poll discovery; bus lock waits indefinitely. | `subprojects/PCL/src/pcl_transport_shared_memory.c`, `subprojects/PCL/include/pcl/pcl_transport_shared_memory.h` |
+| Shared-memory transport | executor-facing calls still take the bus lock synchronously; service and stream invoke paths poll discovery. | `subprojects/PCL/src/pcl_transport_shared_memory.c`, `subprojects/PCL/include/pcl/pcl_transport_shared_memory.h` |
 | ROS2 coupled plugin | consumed unary/stream calls synchronously wait on ROS2 services and stream completion from the executor call path. | `subprojects/PYRAMID/plugins/pyramid_ros2_coupled_plugin.cpp`, `subprojects/PYRAMID/ros2/src/rclcpp_runtime_adapter.cpp`, `subprojects/PYRAMID/pim/backends/ros2_backend.py` |
 | gRPC coupled plugin | consumed unary/stream calls invoke blocking generated gRPC clients from the executor call path and call callbacks before returning. | `subprojects/PYRAMID/plugins/pyramid_grpc_coupled_plugin.cpp`, `subprojects/PYRAMID/pim/backends/grpc_backend.py` |
 
@@ -54,6 +55,7 @@ Resolved paths:
 | Area | Resolution | Verification |
 |------|------------|--------------|
 | UDP transport | `publish` now formats the datagram and enqueues it to a transport-owned send thread; only that worker calls `sendto`.  Shutdown stops egress and future publishes fail with `PCL_ERR_STATE`. | Built `test_pcl_udp_transport`; ran `ctest --test-dir build -C Release -R "PclUdpTransport\\." --output-on-failure` |
+| Shared-memory topic backpressure | non-zero topic backpressure configuration is rejected with `PCL_ERR_INVALID`; zero-timeout clearing remains a compatibility no-op.  Publish keeps fail-fast all-or-nothing behavior when a target mailbox has no capacity, rather than sleeping on the executor thread. | Built `test_pcl_shared_memory_transport`; ran `ctest --test-dir build -C Release -R "PclSharedMemoryTransport\\." --output-on-failure` |
 
 ## Fix plan
 
@@ -104,13 +106,17 @@ Convert UDP from inline `sendto` to queued sending.
 
 Shared memory should not block the executor even though the medium is local.
 
+- Completed: blocking topic backpressure was removed from the executor-facing
+  publish path.  Non-zero backpressure configuration now fails with
+  `PCL_ERR_INVALID`; zero-timeout clearing remains accepted for compatibility.
 - Replace the indefinite bus lock with a non-blocking or bounded try-lock path
-  for executor-facing calls.  If the bus is busy and no worker queue is used,
-  return a fail-fast status.
-- Remove executor-thread sleeps from publish backpressure.  Either:
-  - make backpressure a worker-owned queued operation, or
-  - deprecate blocking backpressure for executor-facing publish and keep only
-    fail-fast all-or-nothing behavior.
+  only if normal peer polling cannot race it.  A direct try-lock on the shared
+  bus is not sufficient because the receive thread legitimately holds the lock
+  during local service/subscription synchronization.
+- Preferred remaining fix: move shared-memory publish, service invoke, stream
+  open, stream frame, and cancel operations into a transport-owned egress queue.
+  The worker can block on the bus lock and discovery while the executor only
+  copies payloads and enqueues work.
 - Move service/stream provider discovery retries to a worker queue, or change
   executor-facing `invoke_async`/`invoke_stream` to fail fast when no provider is
   visible immediately.
@@ -236,8 +242,8 @@ Expected tests:
    the first passing examples.
 2. Add failing coverage for UDP inline `sendto`.
 3. Implement the UDP send worker and make the UDP tests pass.
-4. Decide the shared-memory policy: fail-fast only on executor calls, or queued
-   worker-owned backpressure.  Add tests for the chosen policy and update docs.
+4. Complete shared-memory by adding a worker-owned egress queue for the
+   remaining bus-lock and discovery waits.
 5. Add test doubles for ROS2/gRPC adapters that can block deterministically
    without requiring network timing.
 6. Refactor ROS2 and gRPC coupled plugins around worker queues.
