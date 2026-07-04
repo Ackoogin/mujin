@@ -2,14 +2,16 @@
 
 #include <chrono>
 #include <condition_variable>
+#include <cstring>
 #include <future>
 #include <utility>
 #include <vector>
 
 namespace pyramid::transport::ros2 {
 
-RclcppRuntimeAdapter::RclcppRuntimeAdapter(const rclcpp::Node::SharedPtr& node)
-    : node_(node) {}
+RclcppRuntimeAdapter::RclcppRuntimeAdapter(const rclcpp::Node::SharedPtr& node,
+                                           Options options)
+    : node_(node), options_(options) {}
 
 Envelope RclcppRuntimeAdapter::fromRosMessage(const EnvelopeMsg& msg) {
   Envelope envelope;
@@ -29,6 +31,26 @@ RclcppRuntimeAdapter::EnvelopeMsg RclcppRuntimeAdapter::toRosMessage(
   msg.payload.assign(envelope.payload.begin(), envelope.payload.end());
   msg.end_of_stream = envelope.end_of_stream;
   msg.status = static_cast<int32_t>(envelope.status);
+  return msg;
+}
+
+Envelope RclcppRuntimeAdapter::fromSerializedMessage(
+    const rclcpp::SerializedMessage& msg) {
+  Envelope envelope;
+  envelope.content_type = kTransportContentType;
+  const auto& rcl = msg.get_rcl_serialized_message();
+  envelope.payload.assign(rcl.buffer, rcl.buffer + rcl.buffer_length);
+  return envelope;
+}
+
+rclcpp::SerializedMessage RclcppRuntimeAdapter::toSerializedMessage(
+    const Envelope& envelope) {
+  rclcpp::SerializedMessage msg(envelope.payload.size());
+  auto& rcl = msg.get_rcl_serialized_message();
+  if (!envelope.payload.empty()) {
+    std::memcpy(rcl.buffer, envelope.payload.data(), envelope.payload.size());
+  }
+  rcl.buffer_length = envelope.payload.size();
   return msg;
 }
 
@@ -56,6 +78,17 @@ Envelope RclcppRuntimeAdapter::fromRosRequest(
   envelope.correlation_id = request.correlation_id;
   envelope.payload.assign(request.payload.begin(), request.payload.end());
   return envelope;
+}
+
+bool RclcppRuntimeAdapter::useTypedTopicWire(
+    const TopicBinding& binding) const {
+  return !options_.use_envelope_wire && !binding.ros2_message_type.empty();
+}
+
+bool RclcppRuntimeAdapter::useTypedTopicWire(
+    const TopicBinding& binding, const Envelope& envelope) const {
+  return useTypedTopicWire(binding) &&
+         envelope.content_type == kTransportContentType;
 }
 
 std::string RclcppRuntimeAdapter::ensureCorrelationId(
@@ -93,6 +126,17 @@ rclcpp::QoS RclcppRuntimeAdapter::frameQos() const {
 
 void RclcppRuntimeAdapter::subscribe(const TopicBinding& binding,
                                      TopicHandler handler) {
+  if (useTypedTopicWire(binding)) {
+    auto subscription = node_->create_generic_subscription(
+        binding.ros2_topic, binding.ros2_message_type, topicQos(binding.qos),
+        [handler = std::move(handler)](
+            std::shared_ptr<rclcpp::SerializedMessage> msg) {
+          handler(fromSerializedMessage(*msg));
+        });
+    subscriptions_.push_back(subscription);
+    return;
+  }
+
   auto subscription = node_->create_subscription<EnvelopeMsg>(
       binding.ros2_topic, topicQos(binding.qos),
       [handler = std::move(handler)](const EnvelopeMsg::SharedPtr msg) {
@@ -170,6 +214,25 @@ void RclcppRuntimeAdapter::advertise(const StreamServiceBinding& binding,
 
 void RclcppRuntimeAdapter::publish(const TopicBinding& binding,
                                    const Envelope& envelope) {
+  if (useTypedTopicWire(binding, envelope)) {
+    rclcpp::GenericPublisher::SharedPtr publisher;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      const auto key = binding.ros2_topic + "|" + binding.ros2_message_type;
+      const auto it = typed_publishers_.find(key);
+      if (it == typed_publishers_.end()) {
+        publisher = node_->create_generic_publisher(
+            binding.ros2_topic, binding.ros2_message_type,
+            topicQos(binding.qos));
+        typed_publishers_.emplace(key, publisher);
+      } else {
+        publisher = it->second;
+      }
+    }
+    publisher->publish(toSerializedMessage(envelope));
+    return;
+  }
+
   rclcpp::Publisher<EnvelopeMsg>::SharedPtr publisher;
   {
     std::lock_guard<std::mutex> lock(mutex_);

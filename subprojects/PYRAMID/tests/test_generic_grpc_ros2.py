@@ -208,6 +208,9 @@ def test_pyramid_ros2_output_keeps_legacy_names_and_symbols(
     support = (
         out_dir / "ros2" / "cpp" / "pyramid_ros2_transport_support.hpp"
     ).read_text(encoding="utf-8")
+    support_impl = (
+        out_dir / "ros2" / "cpp" / "pyramid_ros2_transport_support.cpp"
+    ).read_text(encoding="utf-8")
     facade = (
         out_dir / "ros2" / "cpp" /
         "pyramid_components_tactical_objects_services_provided_ros2_transport.hpp"
@@ -215,6 +218,9 @@ def test_pyramid_ros2_output_keeps_legacy_names_and_symbols(
 
     assert "namespace pyramid::transport::ros2" in support
     assert 'kEnvelopeType = "pyramid_ros2/PclEnvelope"' in support
+    assert "std::string ros2_message_type;" in support
+    assert '"standard.object_evidence"' in support_impl
+    assert '"pyramid_msgs/msg/ObjectDetail"' in support_impl
     assert '#include "pyramid_ros2_transport_support.hpp"' in facade
     assert "pyramid::transport::ros2::Adapter" in facade
 

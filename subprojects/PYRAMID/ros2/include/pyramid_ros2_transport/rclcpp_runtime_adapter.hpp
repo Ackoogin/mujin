@@ -19,7 +19,12 @@ namespace pyramid::transport::ros2 {
 
 class RclcppRuntimeAdapter final : public Adapter {
  public:
-  explicit RclcppRuntimeAdapter(const rclcpp::Node::SharedPtr& node);
+  struct Options {
+    bool use_envelope_wire = false;
+  };
+
+  explicit RclcppRuntimeAdapter(const rclcpp::Node::SharedPtr& node,
+                                Options options = {});
 
   void subscribe(const TopicBinding& binding, TopicHandler handler) override;
   void advertise(const UnaryServiceBinding& binding,
@@ -45,10 +50,16 @@ class RclcppRuntimeAdapter final : public Adapter {
 
   static Envelope fromRosMessage(const EnvelopeMsg& msg);
   static EnvelopeMsg toRosMessage(const Envelope& envelope);
+  static Envelope fromSerializedMessage(const rclcpp::SerializedMessage& msg);
+  static rclcpp::SerializedMessage toSerializedMessage(const Envelope& envelope);
   static Envelope fromRosRequest(const UnaryService::Request& request);
   static void toRosResponse(const Envelope& envelope,
                             UnaryService::Response& response);
   static Envelope fromRosRequest(const OpenStreamService::Request& request);
+
+  bool useTypedTopicWire(const TopicBinding& binding) const;
+  bool useTypedTopicWire(const TopicBinding& binding,
+                         const Envelope& envelope) const;
 
   std::string ensureCorrelationId(const std::string& requested_id);
   bool isCancelled(const std::string& correlation_id) const;
@@ -58,11 +69,14 @@ class RclcppRuntimeAdapter final : public Adapter {
   rclcpp::QoS frameQos() const;
 
   rclcpp::Node::SharedPtr node_;
+  Options options_;
 
   mutable std::mutex mutex_;
   std::unordered_map<std::string,
                      rclcpp::Publisher<EnvelopeMsg>::SharedPtr>
       envelope_publishers_;
+  std::unordered_map<std::string, rclcpp::GenericPublisher::SharedPtr>
+      typed_publishers_;
   std::vector<rclcpp::SubscriptionBase::SharedPtr> subscriptions_;
   std::vector<rclcpp::ServiceBase::SharedPtr> services_;
   std::unordered_map<std::string, rclcpp::Client<UnaryService>::SharedPtr>

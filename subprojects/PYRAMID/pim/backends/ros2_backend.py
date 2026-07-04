@@ -33,7 +33,9 @@ from proto_parser import ProtoFile, ProtoTypeIndex, camel_to_lower_snake, camel_
 from binding_contract import PyramidCompatNamingPolicy
 import codec_backends
 from ros2_idl_codegen import generate_ros2_idl
+from ros2_ir import pascal
 from ros2_marshal_codegen import generate_ros2_codec
+from binding_contract import TopicSpecResolver
 
 
 _DEFAULT_NAMING_POLICY = PyramidCompatNamingPolicy()
@@ -91,6 +93,8 @@ class Ros2Backend(codec_backends.CodecBackend):
         support_ns = naming.ros2_support_namespace(support_package)
         envelope_type = naming.ros2_envelope_type(support_package)
         route_prefix = naming.ros2_route_prefix(support_package)
+        msg_package = naming.ros2_message_package(support_package)
+        topic_types = self._topic_message_types(service_modules, msg_package)
 
         # Native ROS2 IDL (.msg/.srv) generated alongside the cpp support layer,
         # into <bindings>/ros2/idl/{msg,srv}. This is the typed, introspectable
@@ -116,7 +120,7 @@ class Ros2Backend(codec_backends.CodecBackend):
         cpp_path = output_dir / f'{support_base}.cpp'
         self._write_cpp_support_header(hpp_path, support_ns, envelope_type)
         self._write_cpp_support_impl(
-            cpp_path, support_base, support_ns, route_prefix)
+            cpp_path, support_base, support_ns, route_prefix, topic_types)
         generated = [hpp_path, cpp_path] + idl_files + codec_files
 
         # Per-service-package transport facades: a typed ServiceBinder that wires
@@ -163,6 +167,7 @@ class Ros2Backend(codec_backends.CodecBackend):
             f.write('  std::string pcl_topic;\n')
             f.write('  std::string ros2_topic;\n')
             f.write('  pcl_qos_t qos = {PCL_QOS_RELIABILITY_UNSPECIFIED};\n')
+            f.write('  std::string ros2_message_type;\n')
             f.write('};\n\n')
             f.write('struct UnaryServiceBinding {\n')
             f.write('  std::string pcl_service;\n')
@@ -238,8 +243,26 @@ class Ros2Backend(codec_backends.CodecBackend):
             f.write('                                pcl_stream_msg_fn_t callback, void* user_data);\n\n')
             f.write(f'}}  // namespace {support_ns}\n')
 
+    def _topic_message_types(self, service_modules: List[ProtoFile],
+                             msg_package: str) -> List[tuple]:
+        resolver = TopicSpecResolver()
+        topic_types = {}
+        for pf in service_modules:
+            is_provided = 'provided' in pf.package.lower()
+            sub_topics, pub_topics = resolver.topics_for_proto(pf, is_provided)
+            for key in sorted({*sub_topics.keys(), *pub_topics.keys()}):
+                spec = resolver.spec(key)
+                # The current application/ros2 array codec frames individual
+                # ROS2 messages; there is no generated array wrapper .msg yet.
+                if getattr(spec, 'is_array', False):
+                    continue
+                short = spec.full_type.split('.')[-1]
+                topic_types[spec.wire_name] = f'{msg_package}/msg/{pascal(short)}'
+        return sorted(topic_types.items())
+
     def _write_cpp_support_impl(self, path: Path, support_base: str,
-                                support_ns: str, route_prefix: str):
+                                support_ns: str, route_prefix: str,
+                                topic_types: List[tuple]):
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write(f'#include "{support_base}.hpp"\n\n')
             f.write('#include <cctype>\n')
@@ -303,10 +326,18 @@ class Ros2Backend(codec_backends.CodecBackend):
             f.write('  state->promise.set_value(std::move(envelope));\n')
             f.write('}\n\n')
             f.write('}  // namespace\n\n')
+            f.write('const char* ros2MessageTypeForTopic(std::string_view pcl_topic) {\n')
+            for wire_name, ros2_type in topic_types:
+                f.write(f'  if (pcl_topic == "{wire_name}") {{\n')
+                f.write(f'    return "{ros2_type}";\n')
+                f.write('  }\n')
+            f.write('  return "";\n')
+            f.write('}\n\n')
             f.write('TopicBinding makeTopicBinding(std::string_view pcl_topic, pcl_qos_t qos) {\n')
             f.write('  return {std::string(pcl_topic),\n')
             f.write(f'          std::string("/{route_prefix}/topic/") + sanitizeName(pcl_topic),\n')
-            f.write('          qos};\n')
+            f.write('          qos,\n')
+            f.write('          ros2MessageTypeForTopic(pcl_topic)};\n')
             f.write('}\n\n')
             f.write('UnaryServiceBinding makeUnaryServiceBinding(std::string_view pcl_service) {\n')
             f.write('  return {std::string(pcl_service),\n')

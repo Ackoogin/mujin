@@ -179,6 +179,9 @@ if(PYRAMID_ROS2_CODEC_PLUGIN_SRCS)
             ${PYRAMID_CPP_BINDINGS_DIR}
             ${PYRAMID_ROS2_SUPPORT_DIR}
             ${PYRAMID_ROS2_CODEC_DIR}
+            # tl/optional.hpp (header-only) used by the generated data-model types
+            ${UNMANNED_ROOT}/subprojects/PYRAMID/core/external
+            ${PCL_CORE_INCLUDE_DIR}
         )
         ament_target_dependencies(${PYRAMID_ROS2_CODEC_PLUGIN_TARGET}
             rclcpp

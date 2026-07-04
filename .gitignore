@@ -144,3 +144,8 @@ subprojects/PYRAMID/ros2_msgs/log/
 
 
 doc/research/AME/a-gra-main/*
+.codex_tmp/*
+
+# colcon (ROS2 ament) build logs
+/log/
+subprojects/PYRAMID/log/

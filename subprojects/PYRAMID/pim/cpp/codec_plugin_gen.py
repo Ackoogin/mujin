@@ -147,17 +147,25 @@ class CodecPluginEmitterMixin:
 
         if self._has_backend('ros2'):
             codec_package = _service_group_key(parsed.package) or parsed.package
-            ros2_path = output_path / 'ros2' / 'cpp' / (
-                file_base + '_ros2_codec_plugin.cpp')
-            self._write_codec_plugin_impl(
-                ros2_path,
-                file_base,
-                cpp_base_ns,
-                'ros2',
-                'application/ros2',
-                codec_types,
-                codec_package=codec_package,
-            )
+            # The typed ROS2 codec (pyramid_ros2_codec.hpp) only marshals emitted
+            # message types; scalar-wrapper aliases (e.g. Identifier -> std::string)
+            # have no pyramid_msgs .msg and are excluded from its toBinary/
+            # fromBinary surface. Drop alias schema types here so the generated
+            # plugin does not reference non-existent overloads (those payloads
+            # fall back to the envelope wire). is_alias is tuple element [2].
+            ros2_codec_types = [t for t in codec_types if not t[2]]
+            if ros2_codec_types:
+                ros2_path = output_path / 'ros2' / 'cpp' / (
+                    file_base + '_ros2_codec_plugin.cpp')
+                self._write_codec_plugin_impl(
+                    ros2_path,
+                    file_base,
+                    cpp_base_ns,
+                    'ros2',
+                    'application/ros2',
+                    ros2_codec_types,
+                    codec_package=codec_package,
+                )
 
     def _write_codec_plugin_impl(
             self,

@@ -29,7 +29,7 @@ target_include_directories(test_rclcpp_runtime_adapter PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../include
     ${PYRAMID_ROS2_SUPPORT_DIR}
 )
-ament_target_dependencies(test_rclcpp_runtime_adapter rclcpp)
+ament_target_dependencies(test_rclcpp_runtime_adapter rclcpp pyramid_msgs)
 target_link_libraries(test_rclcpp_runtime_adapter
     ${PROJECT_NAME}_lib
     pcl_core_external

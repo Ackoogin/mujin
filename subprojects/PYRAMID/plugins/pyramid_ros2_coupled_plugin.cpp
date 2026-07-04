@@ -116,6 +116,25 @@ bool readJsonU64(const char* json, const char* key, uint64_t* out) {
   return true;
 }
 
+bool readJsonBool(const char* json, const char* key, bool default_value) {
+  const char* p = findJsonValue(json, key);
+  if (!p) return default_value;
+  if (std::strncmp(p, "true", 4U) == 0) return true;
+  if (std::strncmp(p, "false", 5U) == 0) return false;
+  if (*p == '"') {
+    ++p;
+    if (std::strncmp(p, "true", 4U) == 0 ||
+        std::strncmp(p, "envelope", 8U) == 0) {
+      return true;
+    }
+    if (std::strncmp(p, "false", 5U) == 0 ||
+        std::strncmp(p, "typed", 5U) == 0) {
+      return false;
+    }
+  }
+  return default_value;
+}
+
 pcl_executor_t* readExecutor(const char* config_json) {
   uint64_t raw = 0U;
   if (!readJsonU64(config_json, "executor", &raw) || raw == 0U) {
@@ -376,8 +395,14 @@ PYRAMID_ROS2_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
 
   try {
     ctx->node = std::make_shared<rclcpp::Node>(node_name);
+    pyramid::transport::ros2::RclcppRuntimeAdapter::Options adapter_options;
+    adapter_options.use_envelope_wire =
+        readJsonBool(config_json, "use_envelope_wire", false) ||
+        readJsonBool(config_json, "envelope_wire", false) ||
+        readJsonBool(config_json, "wire_mode", false);
     ctx->adapter =
-        std::make_unique<pyramid::transport::ros2::RclcppRuntimeAdapter>(ctx->node);
+        std::make_unique<pyramid::transport::ros2::RclcppRuntimeAdapter>(
+            ctx->node, adapter_options);
     ctx->ros_executor.add_node(ctx->node);
     ctx->spinning.store(true, std::memory_order_release);
     ctx->spin_thread = std::thread([ctx]() {

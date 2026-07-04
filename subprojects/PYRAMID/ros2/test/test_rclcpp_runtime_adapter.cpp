@@ -8,6 +8,7 @@
 #include "pyramid_ros2_transport/rclcpp_runtime_adapter.hpp"
 #include "pyramid_ros2_transport/srv/pcl_open_stream.hpp"
 #include "pyramid_ros2_transport/srv/pcl_service.hpp"
+#include "pyramid_msgs/msg/object_detail.hpp"
 
 #include <pcl/pcl_container.h>
 #include <pcl/pcl_executor.h>
@@ -27,6 +28,7 @@ namespace provided_ros2 =
 namespace ros2_support = pyramid::transport::ros2;
 namespace ros2_msg = pyramid_ros2_transport::msg;
 namespace ros2_srv = pyramid_ros2_transport::srv;
+namespace typed_msg = pyramid_msgs::msg;
 
 namespace {
 
@@ -64,6 +66,29 @@ void appendVarint32(std::vector<unsigned char>& out, uint32_t value) {
     value >>= 7U;
   }
   out.push_back(static_cast<unsigned char>(value));
+}
+
+template <class MsgT>
+std::vector<unsigned char> serializeTypedMessage(const MsgT& msg) {
+  rclcpp::Serialization<MsgT> serializer;
+  rclcpp::SerializedMessage serialized;
+  serializer.serialize_message(&msg, &serialized);
+  const auto& rcl = serialized.get_rcl_serialized_message();
+  return {rcl.buffer, rcl.buffer + rcl.buffer_length};
+}
+
+template <class MsgT>
+MsgT deserializeTypedMessage(const std::vector<unsigned char>& payload) {
+  rclcpp::SerializedMessage serialized(payload.size());
+  auto& rcl = serialized.get_rcl_serialized_message();
+  if (!payload.empty()) {
+    std::memcpy(rcl.buffer, payload.data(), payload.size());
+  }
+  rcl.buffer_length = payload.size();
+  rclcpp::Serialization<MsgT> serializer;
+  MsgT msg;
+  serializer.deserialize_message(&serialized, &msg);
+  return msg;
 }
 
 bool waitUntil(const std::function<bool()>& predicate, int timeout_ms = 2000) {
@@ -249,20 +274,27 @@ TEST_F(RuntimeAdapterFixture, TopicIngressRunsSubscriberOnPclExecutorThread) {
 
   ros2_support::bindTopicIngress(*adapter_, executor_, kTopicObjectEvidence);
   const auto binding = ros2_support::makeTopicBinding(kTopicObjectEvidence);
+  ASSERT_EQ(binding.ros2_message_type, "pyramid_msgs/msg/ObjectDetail");
 
   auto publisher =
-      client_node_->create_publisher<ros2_msg::PclEnvelope>(binding.ros2_topic, 10);
-  ros2_msg::PclEnvelope msg;
-  msg.content_type = "application/protobuf";
-  msg.payload.assign({'h', 'e', 'l', 'l', 'o'});
+      client_node_->create_publisher<typed_msg::ObjectDetail>(
+          binding.ros2_topic, 10);
+  typed_msg::ObjectDetail msg;
+  msg.id = "typed-evidence-1";
+  msg.entity_source = "sensor-a";
   publisher->publish(msg);
 
   ASSERT_TRUE(waitUntil([&] { return state.called.load(); }));
   {
     std::lock_guard<std::mutex> lock(state.mutex);
     EXPECT_EQ(state.thread_id, pcl_thread_id_);
-    EXPECT_EQ(state.payload, "hello");
-    EXPECT_EQ(state.type_name, "application/protobuf");
+    const auto payload = std::vector<unsigned char>(
+        state.payload.begin(), state.payload.end());
+    const auto decoded = deserializeTypedMessage<typed_msg::ObjectDetail>(
+        payload);
+    EXPECT_EQ(decoded.id, "typed-evidence-1");
+    EXPECT_EQ(decoded.entity_source, "sensor-a");
+    EXPECT_EQ(state.type_name, "application/ros2");
   }
 
   stopPclExecutor();
@@ -359,7 +391,39 @@ TEST_F(RuntimeAdapterFixture, StreamBindingPublishesFramesForRos2Client) {
   stopPclExecutor();
 }
 
-TEST_F(RuntimeAdapterFixture, PublishRoutesPclEnvelopeOntoRos2Topic) {
+TEST_F(RuntimeAdapterFixture, PublishRoutesTypedMessageOntoRos2Topic) {
+  const auto binding = ros2_support::makeTopicBinding(kTopicObjectEvidence);
+
+  std::promise<typed_msg::ObjectDetail> received;
+  auto future = received.get_future();
+  auto subscription = client_node_->create_subscription<typed_msg::ObjectDetail>(
+      binding.ros2_topic, 10,
+      [&received](const typed_msg::ObjectDetail::SharedPtr msg) {
+        received.set_value(*msg);
+      });
+
+  typed_msg::ObjectDetail typed;
+  typed.id = "typed-out-7";
+  typed.entity_source = "adapter";
+
+  ros2_support::Envelope envelope;
+  envelope.content_type = "application/ros2";
+  envelope.correlation_id = "pub-7";
+  envelope.payload = serializeTypedMessage(typed);
+  adapter_->publish(binding, envelope);
+
+  ASSERT_EQ(future.wait_for(std::chrono::seconds(2)), std::future_status::ready);
+  const auto msg = future.get();
+  EXPECT_EQ(msg.id, "typed-out-7");
+  EXPECT_EQ(msg.entity_source, "adapter");
+
+  (void)subscription;
+}
+
+TEST_F(RuntimeAdapterFixture, EnvelopeFallbackPublishesPclEnvelopeOntoRos2Topic) {
+  ros2_support::RclcppRuntimeAdapter::Options options;
+  options.use_envelope_wire = true;
+  ros2_support::RclcppRuntimeAdapter envelope_adapter(server_node_, options);
   const auto binding = ros2_support::makeTopicBinding(kTopicObjectEvidence);
 
   std::promise<ros2_msg::PclEnvelope> received;
@@ -374,7 +438,7 @@ TEST_F(RuntimeAdapterFixture, PublishRoutesPclEnvelopeOntoRos2Topic) {
   envelope.content_type = "application/protobuf";
   envelope.correlation_id = "pub-7";
   envelope.payload.assign({'o', 'u', 't'});
-  adapter_->publish(binding, envelope);
+  envelope_adapter.publish(binding, envelope);
 
   ASSERT_EQ(future.wait_for(std::chrono::seconds(2)), std::future_status::ready);
   const auto msg = future.get();

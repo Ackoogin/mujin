@@ -62,8 +62,8 @@ behind explicit triggers.
 | 2 | ~~B3 Ada FlatBuffers codec misses reserved-word rename~~ **✅ done 2026-07-04** | S |
 | 3 | ~~B2 Close out FlatBuffers JSON-bridge nested packages~~ **✅ done 2026-07-04** | S |
 | 4 | ~~A1 Package-neutral ROS2 marshal codegen~~ **✅ done 2026-07-04** | M |
-| 5 | ~~A2 `application/ros2` registry codec plugin~~ **✅ done 2026-07-04 (ament build unverified in-sandbox)** | M |
-| 6 | A3 Typed `RclcppRuntimeAdapter` on the live wire | M/L |
+| 5 | ~~A2 `application/ros2` registry codec plugin~~ **✅ done 2026-07-04 (ament build verified via A3)** | M |
+| 6 | ~~A3 Typed `RclcppRuntimeAdapter` on the live wire~~ **✅ done 2026-07-04 (live ROS2 build + tests)** | M/L |
 | 7 | A4 Plain-rclcpp interop proof | S |
 | 8 | C1 Retire `src/protobuf_support/` | S/M |
 | 9 | C2 Manifest-driven CMake completion + default flip | M |
@@ -233,9 +233,12 @@ fallback. Added `tests/test_ros2_codec_plugin_generation.py` (emission,
 disabled-backend absence, ament wiring, top-level exclusion). Existing
 `test_plugin_only_fail_closed` binary still passes; non-ros2 codec-plugin output
 byte-identical (7 files).
-**Residual:** a real ament/colcon/rclcpp build + registry-load of the typed
-codec could not run in-sandbox — needs a Humble environment to close out (shared
-with A3/A4).
+**Residual CLOSED 2026-07-04** via the A3 live build at `D:\Dev\ros2-windows`:
+the ament/colcon build surfaced and fixed two defects (missing
+`tl/optional`/PCL include paths on the plugin targets; alias-type
+`toBinary`/`fromBinary` calls the ros2 codec doesn't emit). Typed codec plugins
+now build and load in the ament package; `test_ros2_coupled_plugin_load`
+`RegistersCodecUnderRos2ContentType` green. See A3.
 
 The content type and codec-vtable registration already exist in the coupled
 plugin as a passthrough envelope codec.
@@ -251,6 +254,30 @@ plugin as a passthrough envelope codec.
   ament build; fail-closed behaviour preserved when absent.
 
 ### A3. Switch `RclcppRuntimeAdapter` to typed messages
+
+**✅ Done 2026-07-04 — verified against the live ROS2 stack at
+`D:\Dev\ros2-windows`.** The adapter now publishes/subscribes typed
+`pyramid_msgs` messages via `rclcpp::GenericPublisher`/`create_generic_subscription`
+keyed by `TopicBinding::ros2_message_type` (populated by a generated
+`ros2MessageTypeForTopic()` lookup in the ros2 support impl); QoS from
+`topicQos(binding.qos)`. Envelope wire is selectable via
+`RclcppRuntimeAdapter::Options{use_envelope_wire}` (default = typed). Array
+topics fall back to the envelope wire (no array `.msg` wrapper yet). The Windows
+`build_ros2_transport.bat` gained the missing `pyramid_msgs` colcon step (Step
+2a, out-of-source `AMENT_BASE`) — also closing part of C5.
+
+**This build also verified A2's ament residual** (fixed two defects the live
+build exposed): (1) the typed codec plugin MODULE targets lacked the
+`core/external` (`tl/optional.hpp`) + PCL include paths (`ros2/CMakeLists.txt`);
+(2) the ros2 codec plugin emitter generated `toBinary`/`fromBinary` for
+scalar-wrapper alias types (e.g. `Identifier`) that the typed ros2 codec does
+not emit — now filtered in `pim/cpp/codec_plugin_gen.py` (those payloads use the
+envelope fallback). Live result: `pyramid_msgs` + `pyramid_ros2_transport` +
+typed codec plugins build clean; **ROS2 gtests 20/20 pass** across
+`test_rclcpp_runtime_adapter` (incl. `PublishRoutesTypedMessageOntoRos2Topic`
+and `EnvelopeFallbackPublishesPclEnvelopeOntoRos2Topic`),
+`test_ros2_codec_roundtrip`, `test_ros2_coupled_plugin_load`. pytest 40 passed;
+non-ros2 output byte-identical.
 
 The adapter exists and works — over `PclEnvelope`.
 
