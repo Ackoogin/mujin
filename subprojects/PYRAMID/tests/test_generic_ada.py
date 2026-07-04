@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -13,8 +14,12 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PYRAMID_ROOT = REPO_ROOT / "subprojects" / "PYRAMID"
 GENERATOR = PYRAMID_ROOT / "pim" / "generate_bindings.py"
-GNATCOLL_SRC = (
+GNATCOLL_CORE_SRC = (
     PYRAMID_ROOT / "core" / "external" / "gnatcoll-core" / "core" / "src"
+)
+GNATCOLL_OS_SRC = GNATCOLL_CORE_SRC / "os"
+GNATCOLL_MINIMAL_SRC = (
+    PYRAMID_ROOT / "core" / "external" / "gnatcoll-core" / "minimal" / "src"
 )
 GENERIC_CONSUMED_PARENT_STUBS = {
     "pyramid-components-pim_osprey-sensors-services-consumed.ads":
@@ -31,7 +36,12 @@ GENERIC_CONSUMED_CHILD_SERVICES = [
 ]
 
 
-def _run(proto_dir: Path, out_dir: Path, *extra: str) -> None:
+def _run(
+    proto_dir: Path,
+    out_dir: Path,
+    *extra: str,
+    backends: str = "json",
+) -> None:
     subprocess.run(
         [
             sys.executable,
@@ -41,7 +51,7 @@ def _run(proto_dir: Path, out_dir: Path, *extra: str) -> None:
             "--languages",
             "ada",
             "--backends",
-            "json",
+            backends,
             *extra,
         ],
         check=True,
@@ -49,6 +59,50 @@ def _run(proto_dir: Path, out_dir: Path, *extra: str) -> None:
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
+
+
+def _write_google_empty_stubs(out_dir: Path) -> None:
+    # The PIM fixture references google.protobuf.Empty but does not generate
+    # google.protobuf types; provide the minimal external specs needed to
+    # object-compile generated children and catch missing parents.
+    (out_dir / "google.ads").write_text(
+        "package Google is\nend Google;\n",
+        encoding="utf-8",
+    )
+    (out_dir / "google-protobuf.ads").write_text(
+        "package Google.Protobuf is\nend Google.Protobuf;\n",
+        encoding="utf-8",
+    )
+    (out_dir / "google-protobuf-types.ads").write_text(
+        "package Google.Protobuf.Types is\n"
+        "   type Empty is null record;\n"
+        "end Google.Protobuf.Types;\n",
+        encoding="utf-8",
+    )
+
+
+def _write_parent_stubs(out_dir: Path, pkg_names: list[str]) -> None:
+    for pkg_name in pkg_names:
+        parts = pkg_name.split(".")
+        for index in range(1, len(parts)):
+            ancestor = ".".join(parts[:index])
+            path = out_dir / (ancestor.lower().replace(".", "-") + ".ads")
+            if path.exists():
+                continue
+            path.write_text(
+                f"package {ancestor} is\nend {ancestor};\n",
+                encoding="utf-8",
+            )
+
+
+def _package_name_from_spec(path: Path) -> str:
+    match = re.search(
+        r"^package\s+([A-Za-z][A-Za-z0-9_.]*)\s+is",
+        path.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    assert match is not None, path
+    return match.group(1)
 
 
 def test_generic_ada_types_and_codec_for_arbitrary_package(tmp_path: Path) -> None:
@@ -102,6 +156,28 @@ def test_generic_ada_emits_consumed_parent_stubs_for_child_services(
         assert f"end {package_name};" in text
 
 
+def test_generic_flatbuffers_ada_escapes_reserved_package_segments(
+    tmp_path: Path,
+) -> None:
+    out_dir = tmp_path / "out"
+    _run(
+        PYRAMID_ROOT / "pim" / "test",
+        out_dir,
+        "--contract-layout",
+        "generic",
+        backends="json,flatbuffers",
+    )
+
+    ada_dir = out_dir / "flatbuffers" / "ada"
+    text = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in sorted(ada_dir.glob("*-flatbuffers_codec.*"))
+    )
+
+    assert "Generic_Pim.Generic." not in text
+    assert "Generic_Pim.Generic_Pkg." in text
+
+
 @pytest.mark.skipif(
     (shutil.which("gnatgcc") or shutil.which("gcc")) is None,
     reason="GNAT gcc driver not available",
@@ -111,24 +187,7 @@ def test_generic_ada_consumed_child_services_object_compile(
 ) -> None:
     out_dir = tmp_path / "out"
     _run(PYRAMID_ROOT / "pim" / "test", out_dir, "--contract-layout", "generic")
-
-    # The PIM fixture references google.protobuf.Empty but does not generate
-    # google.protobuf types; provide the minimal external specs needed to
-    # object-compile the generated service children and catch missing parents.
-    (out_dir / "google.ads").write_text(
-        "package Google is\nend Google;\n",
-        encoding="utf-8",
-    )
-    (out_dir / "google-protobuf.ads").write_text(
-        "package Google.Protobuf is\nend Google.Protobuf;\n",
-        encoding="utf-8",
-    )
-    (out_dir / "google-protobuf-types.ads").write_text(
-        "package Google.Protobuf.Types is\n"
-        "   type Empty is null record;\n"
-        "end Google.Protobuf.Types;\n",
-        encoding="utf-8",
-    )
+    _write_google_empty_stubs(out_dir)
 
     compiler = shutil.which("gnatgcc") or shutil.which("gcc")
     for file_name in GENERIC_CONSUMED_CHILD_SERVICES:
@@ -149,7 +208,63 @@ def test_generic_ada_consumed_child_services_object_compile(
 
 
 @pytest.mark.skipif(
-    shutil.which("gnatmake") is None or not GNATCOLL_SRC.is_dir(),
+    (shutil.which("gnatgcc") or shutil.which("gcc")) is None
+    or not GNATCOLL_CORE_SRC.is_dir()
+    or not GNATCOLL_OS_SRC.is_dir()
+    or not GNATCOLL_MINIMAL_SRC.is_dir(),
+    reason="GNAT gcc driver or in-tree GNATCOLL not available",
+)
+def test_generic_ada_flatbuffers_service_codecs_object_compile(
+    tmp_path: Path,
+) -> None:
+    out_dir = tmp_path / "out"
+    _run(
+        PYRAMID_ROOT / "pim" / "test",
+        out_dir,
+        "--contract-layout",
+        "generic",
+        backends="json,flatbuffers",
+    )
+    _write_google_empty_stubs(out_dir)
+
+    compiler = shutil.which("gnatgcc") or shutil.which("gcc")
+    codec_bodies = sorted(
+        (out_dir / "flatbuffers" / "ada").glob("*-flatbuffers_codec.adb")
+    )
+    assert codec_bodies
+    _write_parent_stubs(
+        out_dir,
+        [
+            _package_name_from_spec(path.with_suffix(".ads"))
+            for path in codec_bodies
+        ],
+    )
+    for path in codec_bodies:
+        result = subprocess.run(
+            [
+                compiler,
+                "-c",
+                "-gnat2020",
+                "-I.",
+                "-Iflatbuffers/ada",
+                f"-I{GNATCOLL_MINIMAL_SRC}",
+                f"-I{GNATCOLL_CORE_SRC}",
+                f"-I{GNATCOLL_OS_SRC}",
+                path.relative_to(out_dir).as_posix(),
+            ],
+            cwd=out_dir,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+        assert result.returncode == 0, result.stdout
+
+
+@pytest.mark.skipif(
+    shutil.which("gnatmake") is None
+    or not GNATCOLL_CORE_SRC.is_dir()
+    or not GNATCOLL_OS_SRC.is_dir()
+    or not GNATCOLL_MINIMAL_SRC.is_dir(),
     reason="gnatmake or in-tree GNATCOLL not available",
 )
 def test_generic_ada_compiles_under_gnat(tmp_path: Path) -> None:
@@ -177,7 +292,9 @@ def test_generic_ada_compiles_under_gnat(tmp_path: Path) -> None:
             "-gnatc",
             "-gnat2012",
             "-I.",
-            f"-I{GNATCOLL_SRC}",
+            f"-I{GNATCOLL_MINIMAL_SRC}",
+            f"-I{GNATCOLL_CORE_SRC}",
+            f"-I{GNATCOLL_OS_SRC}",
             "example-telemetry-services.ads",
             "example-telemetry-types_codec.ads",
         ],

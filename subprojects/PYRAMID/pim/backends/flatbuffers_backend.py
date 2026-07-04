@@ -23,6 +23,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import codec_backends
+from ada.naming import _ada_pkg_segment
 from proto_parser import (
     ProtoTypeIndex, ProtoFile, ProtoField,
     camel_to_snake, _PROTO_SCALARS,
@@ -113,11 +114,7 @@ def _service_group_names(base_package: str, naming_policy=None) -> Tuple[str, st
     fbs_namespace = naming.flatbuffers_service_namespace(base_package)
     cpp_base_ns = fbs_namespace.replace('.', '::')
     file_base = naming.flatbuffers_service_file_prefix(base_package)
-    ada_parts = [
-        '_'.join(w.capitalize() for w in seg.split('_'))
-        for seg in fbs_namespace.split('.')
-        if seg
-    ]
+    ada_parts = [_ada_pkg_segment(seg) for seg in fbs_namespace.split('.') if seg]
     ada_codec_pkg = '.'.join(ada_parts + ['Flatbuffers_Codec'])
     ada_codec_file = ada_codec_pkg.lower().replace('.', '-')
     return fbs_namespace, cpp_base_ns, file_base, ada_codec_pkg, ada_codec_file
@@ -125,7 +122,7 @@ def _service_group_names(base_package: str, naming_policy=None) -> Tuple[str, st
 
 def _ada_pkg_from_proto_pkg(proto_pkg: str) -> str:
     parts = [p for p in proto_pkg.split('.') if p]
-    ada_parts = ['_'.join(w.capitalize() for w in seg.split('_')) for seg in parts]
+    ada_parts = [_ada_pkg_segment(seg) for seg in parts]
     return '.'.join(ada_parts)
 
 

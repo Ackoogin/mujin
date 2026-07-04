@@ -59,7 +59,7 @@ behind explicit triggers.
 | Order | Item | Size |
 |-------|------|------|
 | 1 | ~~B1 Ada consumed-side parent package stub~~ **✅ done 2026-07-04** | S |
-| 2 | B3 Ada FlatBuffers codec misses reserved-word rename | S |
+| 2 | ~~B3 Ada FlatBuffers codec misses reserved-word rename~~ **✅ done 2026-07-04** | S |
 | 3 | B2 Close out FlatBuffers JSON-bridge nested packages | S |
 | 4 | A1 Package-neutral ROS2 marshal codegen | M |
 | 5 | A2 `application/ros2` registry codec plugin | M |
@@ -123,6 +123,16 @@ re-run against this case.
   compile; pyramid output unchanged.
 
 ### B3. Ada FlatBuffers codec skips the reserved-word package rename (new, found 2026-07-04)
+
+**✅ Done 2026-07-04.** Routed the FlatBuffers backend's two inline Ada
+package-segment helpers (`_service_group_names`, `_ada_pkg_from_proto_pkg` in
+`pim/backends/flatbuffers_backend.py`) through
+`pim/ada/naming.py`'s `_ada_pkg_segment`, so reserved segments like `generic`
+escape to `Generic_Pkg` matching the core generators. Added
+`test_generic_flatbuffers_ada_escapes_reserved_package_segments` (no bare
+`Generic_Pim.Generic.` refs) and extended the object-compile gate with
+`test_generic_ada_flatbuffers_service_codecs_object_compile`. FB Ada
+object-compile: failing → 8/8 pass; pyramid output byte-identical.
 
 The core Ada generators escape Ada reserved words in package segments
 (`generic` → `Generic_Pkg`, via `_ada_pkg_segment` /
