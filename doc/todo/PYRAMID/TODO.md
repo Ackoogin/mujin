@@ -58,7 +58,7 @@ behind explicit triggers.
 
 | Order | Item | Size |
 |-------|------|------|
-| 1 | B1 Ada consumed-side parent package stub | S |
+| 1 | ~~B1 Ada consumed-side parent package stub~~ **✅ done 2026-07-04** | S |
 | 2 | B3 Ada FlatBuffers codec misses reserved-word rename | S |
 | 3 | B2 Close out FlatBuffers JSON-bridge nested packages | S |
 | 4 | A1 Package-neutral ROS2 marshal codegen | M |
@@ -80,6 +80,16 @@ parallel whenever there is slack. C4 is time-gated, C5 environment-gated.
 ## WS-B — Known defects (do first)
 
 ### B1. Ada consumed-side generic-layout parent package stub missing
+
+**✅ Done 2026-07-04.** Root cause: the generic-layout service generator
+(`pim/ada/generic_service_gen.py`, `AdaGenericServiceGenerator.generate`) never
+called `_ensure_parent_packages` for the child `…-consumed-services` facade it
+emits, so the `…-consumed.ads` parent stub was skipped whenever no consumed
+*types* package existed. Fix: emit parent stubs for each generated generic
+service package. Added `tests/test_generic_ada.py` regression coverage for the
+three previously-missing stubs plus a GNAT object-compile gate for the consumed
+child services. Failing trio object-compile 0/3 → 3/3; pyramid Ada output
+byte-identical (75/75 source files).
 
 Recorded in `generator_refactor_plan.md` follow-ups; **re-verified 2026-07-04**
 by regenerating the generic tree — exactly three parent packages are withed

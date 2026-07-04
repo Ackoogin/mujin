@@ -13,6 +13,7 @@ from .naming import (
     _proto_pkg_of_type,
     _ada_pkg_from_proto_pkg,
     _ada_name,
+    _ensure_parent_packages,
 )
 
 
@@ -85,6 +86,6 @@ class AdaGenericServiceGenerator:
                 f.write(f'      On_{base} : Handle_{base} := null;\n')
             f.write('   end record;\n')
             f.write(f'\nend {pkg};\n')
+        _ensure_parent_packages(out, [pkg])
         print(f'  Generated {pkg}')
-
 
