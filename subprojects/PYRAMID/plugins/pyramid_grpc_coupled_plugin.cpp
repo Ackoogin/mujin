@@ -57,11 +57,18 @@ extern "C" {
 #include "pyramid_grpc_plugin_aggregator.hpp"
 
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
+#include <memory>
+#include <mutex>
 #include <new>
 #include <string>
+#include <thread>
+#include <utility>
+#include <vector>
 
 #if defined(_WIN32)
 #  define PYRAMID_GRPC_PLUGIN_EXPORT __declspec(dllexport)
@@ -137,11 +144,30 @@ pcl_executor_t* readExecutor(const char* config_json) {
 
 // -- Transport adapter context -------------------------------------------
 
+enum class GrpcWorkKind {
+  Unary,
+  Stream,
+};
+
+struct GrpcWorkItem {
+  GrpcWorkKind kind = GrpcWorkKind::Unary;
+  std::string service_name;
+  std::vector<unsigned char> request;
+  pcl_resp_cb_fn_t response_callback = nullptr;
+  pcl_stream_msg_fn_t stream_callback = nullptr;
+  void* user_data = nullptr;
+};
+
 struct GrpcTransportContext {
   pcl_executor_t* executor = nullptr;
   pyramid_grpc_plugin_server* server = nullptr;  // server (provided) mode only
   std::string channel;                            // client (consumed) mode only
   bool is_client = false;
+  std::mutex client_mutex;
+  std::condition_variable client_cv;
+  std::deque<GrpcWorkItem> client_queue;
+  std::thread client_worker;
+  bool client_stop = false;
   pcl_transport_t transport{};
 };
 
@@ -156,8 +182,78 @@ void stopServer(GrpcTransportContext* ctx) {
   ctx->server = nullptr;
 }
 
+struct StreamTrampoline {
+  GrpcTransportContext* ctx;
+  pcl_stream_msg_fn_t callback;
+  void* user_data;
+};
+
+struct StreamEvent {
+  pcl_stream_msg_fn_t callback;
+  void* user_data;
+  bool end;
+  pcl_status_t status;
+};
+
+void streamEventCallback(const pcl_msg_t* msg, void* user_data) {
+  std::unique_ptr<StreamEvent> event(static_cast<StreamEvent*>(user_data));
+  if (!event || !event->callback) return;
+  event->callback(msg, event->end, event->status, event->user_data);
+}
+
+pcl_status_t postStreamEvent(GrpcTransportContext* ctx,
+                             pcl_stream_msg_fn_t callback,
+                             void* user_data,
+                             const pcl_msg_t* msg,
+                             bool end,
+                             pcl_status_t status) {
+  if (!ctx || !ctx->executor || !callback) return PCL_ERR_INVALID;
+
+  auto event = std::unique_ptr<StreamEvent>(new (std::nothrow) StreamEvent());
+  if (!event) return PCL_ERR_NOMEM;
+  event->callback = callback;
+  event->user_data = user_data;
+  event->end = end;
+  event->status = status;
+
+  pcl_msg_t empty{};
+  const pcl_msg_t* queued_msg = msg ? msg : &empty;
+  const pcl_status_t rc = pcl_executor_post_response_msg(
+      ctx->executor, streamEventCallback, event.get(), queued_msg);
+  if (rc == PCL_OK) {
+    event.release();
+  }
+  return rc;
+}
+
+void grpcStreamOnItem(const void* data, unsigned size, void* user);
+void grpcClientWorkerMain(GrpcTransportContext* ctx);
+
+bool startClientWorker(GrpcTransportContext* ctx) {
+  if (!ctx) return false;
+  try {
+    ctx->client_worker = std::thread(grpcClientWorkerMain, ctx);
+  } catch (...) {
+    return false;
+  }
+  return true;
+}
+
+void stopClientWorker(GrpcTransportContext* ctx) {
+  if (!ctx) return;
+  {
+    std::lock_guard<std::mutex> lock(ctx->client_mutex);
+    ctx->client_stop = true;
+  }
+  ctx->client_cv.notify_all();
+  if (ctx->client_worker.joinable()) {
+    ctx->client_worker.join();
+  }
+}
+
 void destroyContext(GrpcTransportContext* ctx) {
   if (!ctx) return;
+  stopClientWorker(ctx);
   stopServer(ctx);
   delete ctx;
 }
@@ -186,16 +282,93 @@ pcl_status_t grpcInvokeAsync(void*, const char*, const pcl_msg_t*,
 }
 
 void grpcShutdown(void* ctx_v) {
-  stopServer(static_cast<GrpcTransportContext*>(ctx_v));
+  auto* ctx = static_cast<GrpcTransportContext*>(ctx_v);
+  stopClientWorker(ctx);
+  stopServer(ctx);
 }
 
 // -- Client (consumed) vtable: invoke remote gRPC services -----------------
 //
 // In client mode the plugin dials a remote gRPC endpoint and routes a
 // component's consumed-service calls through the generated typed stubs (the
-// aggregator's client dispatch). invoke_async/invoke_stream are called on the
-// executor thread and complete synchronously, firing the callback before
-// returning -- which the PCL transport contract explicitly permits.
+// aggregator's client dispatch). The executor-facing vtable only copies and
+// queues outbound work; the worker owns blocking gRPC calls and posts
+// completions back to the PCL executor.
+
+pcl_status_t enqueueClientWork(GrpcTransportContext* ctx, GrpcWorkItem item) {
+  if (!ctx) return PCL_ERR_INVALID;
+  {
+    std::lock_guard<std::mutex> lock(ctx->client_mutex);
+    if (ctx->client_stop || !ctx->client_worker.joinable()) {
+      return PCL_ERR_STATE;
+    }
+    try {
+      ctx->client_queue.push_back(std::move(item));
+    } catch (...) {
+      return PCL_ERR_NOMEM;
+    }
+  }
+  ctx->client_cv.notify_one();
+  return PCL_OK;
+}
+
+void grpcClientWorkerMain(GrpcTransportContext* ctx) {
+  for (;;) {
+    GrpcWorkItem item;
+    {
+      std::unique_lock<std::mutex> lock(ctx->client_mutex);
+      ctx->client_cv.wait(lock, [ctx] {
+        return ctx->client_stop || !ctx->client_queue.empty();
+      });
+      if (ctx->client_queue.empty()) {
+        if (ctx->client_stop) break;
+        continue;
+      }
+      item = std::move(ctx->client_queue.front());
+      ctx->client_queue.pop_front();
+    }
+
+    const void* request_data =
+        item.request.empty() ? nullptr : item.request.data();
+    const unsigned request_size =
+        static_cast<unsigned>(item.request.size());
+
+    if (item.kind == GrpcWorkKind::Unary) {
+      void* out = nullptr;
+      unsigned out_size = 0U;
+      const int rc = pyramid_grpc_plugin_client_invoke_unary(
+          ctx->channel.c_str(), item.service_name.c_str(), request_data,
+          request_size, &out, &out_size);
+
+      pcl_msg_t resp{};
+      resp.type_name = "application/protobuf";
+      if (rc == 0) {
+        resp.data = out;
+        resp.size = out_size;
+      }
+      (void)pcl_executor_post_response_msg(ctx->executor,
+                                           item.response_callback,
+                                           item.user_data,
+                                           &resp);
+      std::free(out);
+      continue;
+    }
+
+    StreamTrampoline trampoline{ctx, item.stream_callback, item.user_data};
+    const int rc = pyramid_grpc_plugin_client_invoke_stream(
+        ctx->channel.c_str(), item.service_name.c_str(), request_data,
+        request_size, grpcStreamOnItem, &trampoline);
+
+    pcl_msg_t terminal{};
+    terminal.type_name = "application/protobuf";
+    (void)postStreamEvent(ctx,
+                          item.stream_callback,
+                          item.user_data,
+                          &terminal,
+                          true,
+                          rc == 0 ? PCL_OK : PCL_ERR_NOT_FOUND);
+  }
+}
 
 pcl_status_t grpcClientInvokeAsync(void*            ctx_v,
                                    const char*      service_name,
@@ -206,27 +379,23 @@ pcl_status_t grpcClientInvokeAsync(void*            ctx_v,
   if (!ctx || ctx->channel.empty() || !service_name || !request || !callback) {
     return PCL_ERR_INVALID;
   }
-  void* out = nullptr;
-  unsigned out_size = 0U;
-  const int rc = pyramid_grpc_plugin_client_invoke_unary(
-      ctx->channel.c_str(), service_name, request->data, request->size, &out,
-      &out_size);
-  if (rc != 0) {
-    return PCL_ERR_NOT_FOUND;
-  }
-  pcl_msg_t resp{};
-  resp.data = out;
-  resp.size = out_size;
-  resp.type_name = "application/protobuf";
-  callback(&resp, user_data);
-  std::free(out);
-  return PCL_OK;
-}
+  if (request->size > 0U && !request->data) return PCL_ERR_INVALID;
 
-struct StreamTrampoline {
-  pcl_stream_msg_fn_t callback;
-  void*               user_data;
-};
+  GrpcWorkItem item;
+  item.kind = GrpcWorkKind::Unary;
+  item.service_name = service_name;
+  item.response_callback = callback;
+  item.user_data = user_data;
+  try {
+    if (request->size > 0U) {
+      const auto* begin = static_cast<const unsigned char*>(request->data);
+      item.request.assign(begin, begin + request->size);
+    }
+  } catch (...) {
+    return PCL_ERR_NOMEM;
+  }
+  return enqueueClientWork(ctx, std::move(item));
+}
 
 void grpcStreamOnItem(const void* data, unsigned size, void* user) {
   auto* t = static_cast<StreamTrampoline*>(user);
@@ -234,7 +403,7 @@ void grpcStreamOnItem(const void* data, unsigned size, void* user) {
   msg.data = data;
   msg.size = size;
   msg.type_name = "application/protobuf";
-  t->callback(&msg, false, PCL_OK, t->user_data);
+  (void)postStreamEvent(t->ctx, t->callback, t->user_data, &msg, false, PCL_OK);
 }
 
 pcl_status_t grpcClientInvokeStream(void*               ctx_v,
@@ -248,13 +417,22 @@ pcl_status_t grpcClientInvokeStream(void*               ctx_v,
   if (!ctx || ctx->channel.empty() || !service_name || !request || !callback) {
     return PCL_ERR_INVALID;
   }
-  StreamTrampoline trampoline{callback, user_data};
-  const int rc = pyramid_grpc_plugin_client_invoke_stream(
-      ctx->channel.c_str(), service_name, request->data, request->size,
-      grpcStreamOnItem, &trampoline);
-  // Signal end-of-stream (end=true) with the terminal status.
-  callback(nullptr, true, rc == 0 ? PCL_OK : PCL_ERR_NOT_FOUND, user_data);
-  return PCL_OK;
+  if (request->size > 0U && !request->data) return PCL_ERR_INVALID;
+
+  GrpcWorkItem item;
+  item.kind = GrpcWorkKind::Stream;
+  item.service_name = service_name;
+  item.stream_callback = callback;
+  item.user_data = user_data;
+  try {
+    if (request->size > 0U) {
+      const auto* begin = static_cast<const unsigned char*>(request->data);
+      item.request.assign(begin, begin + request->size);
+    }
+  } catch (...) {
+    return PCL_ERR_NOMEM;
+  }
+  return enqueueClientWork(ctx, std::move(item));
 }
 
 // -- Codec vtable: passthrough envelope codec for application/grpc --------
@@ -396,6 +574,10 @@ PYRAMID_GRPC_PLUGIN_EXPORT const pcl_transport_t* pcl_transport_plugin_entry(
     ctx->transport.invoke_stream = grpcClientInvokeStream;
     ctx->transport.shutdown = grpcShutdown;
     ctx->transport.adapter_ctx = ctx;
+    if (!startClientWorker(ctx)) {
+      delete ctx;
+      return nullptr;
+    }
     return &ctx->transport;
   }
 

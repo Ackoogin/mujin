@@ -48,7 +48,7 @@ The non-conforming paths are:
 |------|-------|---------------|
 | Shared-memory transport | executor-facing calls still take the bus lock synchronously; service and stream invoke paths poll discovery. | `subprojects/PCL/src/pcl_transport_shared_memory.c`, `subprojects/PCL/include/pcl/pcl_transport_shared_memory.h` |
 | ROS2 coupled plugin | consumed unary/stream calls synchronously wait on ROS2 services and stream completion from the executor call path. | `subprojects/PYRAMID/plugins/pyramid_ros2_coupled_plugin.cpp`, `subprojects/PYRAMID/ros2/src/rclcpp_runtime_adapter.cpp`, `subprojects/PYRAMID/pim/backends/ros2_backend.py` |
-| gRPC coupled plugin | consumed unary/stream calls invoke blocking generated gRPC clients from the executor call path and call callbacks before returning. | `subprojects/PYRAMID/plugins/pyramid_grpc_coupled_plugin.cpp`, `subprojects/PYRAMID/pim/backends/grpc_backend.py` |
+| gRPC coupled plugin | client worker shutdown still waits for an in-flight blocking generated gRPC call to return; add bounded/cancellable RPC support before treating plugin unload as fully conformant under a wedged peer. | `subprojects/PYRAMID/plugins/pyramid_grpc_coupled_plugin.cpp`, `subprojects/PYRAMID/pim/backends/grpc_backend.py` |
 
 Resolved paths:
 
@@ -56,6 +56,7 @@ Resolved paths:
 |------|------------|--------------|
 | UDP transport | `publish` now formats the datagram and enqueues it to a transport-owned send thread; only that worker calls `sendto`.  Shutdown stops egress and future publishes fail with `PCL_ERR_STATE`. | Built `test_pcl_udp_transport`; ran `ctest --test-dir build -C Release -R "PclUdpTransport\\." --output-on-failure` |
 | Shared-memory topic backpressure | non-zero topic backpressure configuration is rejected with `PCL_ERR_INVALID`; zero-timeout clearing remains a compatibility no-op.  Publish keeps fail-fast all-or-nothing behavior when a target mailbox has no capacity, rather than sleeping on the executor thread. | Built `test_pcl_shared_memory_transport`; ran `ctest --test-dir build -C Release -R "PclSharedMemoryTransport\\." --output-on-failure` |
+| gRPC consumed egress | client-mode `invoke_async` and `invoke_stream` now copy requests into a plugin-owned worker queue and return promptly.  The worker owns blocking generated gRPC calls and posts unary/stream callbacks back through the PCL executor response queue. | Built `pyramid_grpc_coupled_plugin` in `build-all-enabled`; built and ran `ctest --test-dir build-all-enabled -C Release -R "GrpcCoupledPlugin" --output-on-failure`.  `test_grpc_coupled_plugin_e2e` did not build in this tree because generated `pyramid_codec_plugin_test_paths.hpp` is missing. |
 
 ## Fix plan
 
@@ -146,18 +147,20 @@ Make the ROS2 transport vtable queue work into plugin-owned workers.
 Make the gRPC consumed-side vtable asynchronous from the executor's point of
 view.
 
-- Add a client work queue and worker thread(s) to `GrpcTransportContext`.
-- Change `grpcClientInvokeAsync` to allocate pending state, copy request bytes,
-  enqueue unary work, and return `PCL_OK`.
-- The worker calls `pyramid_grpc_plugin_client_invoke_unary`, wraps the returned
-  bytes in a `pcl_msg_t`, and posts completion with
+- Completed: `GrpcTransportContext` owns a client work queue and worker thread.
+- Completed: `grpcClientInvokeAsync` copies request bytes, enqueues unary work,
+  and returns without invoking the callback inline.
+- Completed: the worker calls `pyramid_grpc_plugin_client_invoke_unary`, wraps
+  the returned bytes in a `pcl_msg_t`, and posts completion with
   `pcl_executor_post_response_msg`.
-- Change `grpcClientInvokeStream` to enqueue stream work.  The worker reads the
+- Completed: `grpcClientInvokeStream` enqueues stream work; the worker reads the
   blocking gRPC stream and posts each item/terminal event to the executor.
 - Generated server ingress may continue to block gRPC handler threads while it
   waits for executor service completion, because those are not executor
   threads.  Add bounded timeout/failure behavior so a stopped executor does not
   strand gRPC server threads indefinitely.
+- Remaining: add deadlines/cancellation to generated client calls so plugin
+  teardown does not wait indefinitely on a wedged peer.
 
 ## Conformance tests
 
@@ -246,7 +249,8 @@ Expected tests:
    remaining bus-lock and discovery waits.
 5. Add test doubles for ROS2/gRPC adapters that can block deterministically
    without requiring network timing.
-6. Refactor ROS2 and gRPC coupled plugins around worker queues.
+6. Refactor the ROS2 coupled plugin around worker queues and add gRPC
+   cancellation/deadline support for unload safety.
 7. Run the plugin E2E matrix again:
    - `test_pcl_udp_transport`
    - `test_pcl_shared_memory_transport`
