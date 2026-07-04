@@ -40,6 +40,21 @@ No network access is required at any step.
 
 ## Maintainer: create a distribution
 
+**One command** (inside the full monorepo, from a VS developer command prompt):
+
+```bat
+subprojects\PYRAMID\scripts\create_sdk.bat --verify
+```
+```bash
+subprojects/PYRAMID/scripts/create_sdk.sh --verify
+```
+
+That runs the whole flow below end-to-end — configure, build, plugins, optional
+Ada libs, package into `dist\pcl_pyramid_sdk`, and (`--verify`) build + smoke-test
+the packaged SDK. Run `create_sdk.bat --help` for options (`--out`, `--config`,
+`--no-ada`, `--skip-build`, `--build-dir`). The numbered steps below are the same
+flow spelled out for when you need to run or debug a single stage.
+
 Run these steps inside the full monorepo before handing the SDK directory to a
 downstream user.
 
@@ -96,6 +111,20 @@ monorepo.
 
 ## Downstream: verify the distribution
 
+**One command** (from a VS developer command prompt, in the SDK root):
+
+```bat
+scripts\build_sdk.bat
+```
+```bash
+scripts/build_sdk.sh
+```
+
+That generates bindings from `proto\`, builds the C++ codec plugins, and runs the
+smoke tests — the whole verify flow end-to-end. Add `--ada` to also build the Ada
+archive, `--no-smoke` for the plain "build my contracts" path, or `--help` for all
+options. The numbered steps below are the same flow spelled out stage by stage.
+
 Before replacing the starter contracts, run the bundled contracts through the
 same offline workflow the user will use later:
 
@@ -133,6 +162,9 @@ does not define tactical_objects, the generic codec plugin load smoke test still
 runs.
 
 ## Downstream: build your contracts
+
+**One command** after editing `proto/`: `scripts\build_sdk.bat --no-smoke`
+(add `--ada` for the Ada archive). The numbered steps below break out each stage.
 
 1. Edit/extend the contracts under `proto/` (or leave them as-is to try the
    starter set).

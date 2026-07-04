@@ -96,7 +96,7 @@ if defined PROTO_DIR (
 )
 
 set "PROTO_DISP=%PROTO_DIR%"
-if not defined PROTO_DISP set "PROTO_DISP=<default: PYRAMID\proto>"
+if not defined PROTO_DISP set "PROTO_DISP=(default: PYRAMID\proto)"
 
 echo [build_plugins] repo      : %REPO_ROOT%
 echo [build_plugins] build-dir : %BUILD_DIR%
