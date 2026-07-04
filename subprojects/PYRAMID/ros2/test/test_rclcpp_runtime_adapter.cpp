@@ -420,6 +420,80 @@ TEST_F(RuntimeAdapterFixture, PublishRoutesTypedMessageOntoRos2Topic) {
   (void)subscription;
 }
 
+// A4 interop proof: a plain rclcpp peer that speaks ONLY the generated
+// pyramid_msgs typed IDL (no PYRAMID adapter/runtime API -- just rclcpp
+// create_publisher/create_subscription over pyramid_msgs::msg::ObjectDetail)
+// round-trips a message against the PYRAMID component over the standard ROS2
+// typed wire, in both directions, correlated by id.
+TEST_F(RuntimeAdapterFixture, PlainRclcppPeerRoundTripsGeneratedTypedIdl) {
+  TopicState state;
+  pcl_callbacks_t callbacks{};
+  callbacks.on_configure = onConfigureTopic;
+  startPclExecutor(callbacks, &state, "ros2_interop_runtime");
+
+  ros2_support::bindTopicIngress(*adapter_, executor_, kTopicObjectEvidence);
+  const auto binding = ros2_support::makeTopicBinding(kTopicObjectEvidence);
+  ASSERT_EQ(binding.ros2_message_type, "pyramid_msgs/msg/ObjectDetail");
+
+  // The peer subscribes for the component's typed reply. It filters on the
+  // reply marker so it ignores the echo of its own outbound publish on the
+  // shared topic.
+  std::promise<typed_msg::ObjectDetail> reply;
+  auto reply_future = reply.get_future();
+  std::atomic<bool> reply_seen{false};
+  auto reply_sub = client_node_->create_subscription<typed_msg::ObjectDetail>(
+      binding.ros2_topic, 10,
+      [&](const typed_msg::ObjectDetail::SharedPtr msg) {
+        if (msg->entity_source == "pyramid-component" &&
+            !reply_seen.exchange(true)) {
+          reply.set_value(*msg);
+        }
+      });
+
+  // Leg A (external peer -> PYRAMID): a plain rclcpp publisher emits the
+  // generated typed message; the adapter's ingress subscription deserializes
+  // it and hands it to the PCL executor thread.
+  auto peer_pub = client_node_->create_publisher<typed_msg::ObjectDetail>(
+      binding.ros2_topic, 10);
+  typed_msg::ObjectDetail outbound;
+  outbound.id = "interop-roundtrip-1";
+  outbound.entity_source = "external-peer";
+  peer_pub->publish(outbound);
+
+  ASSERT_TRUE(waitUntil([&] { return state.called.load(); }));
+  typed_msg::ObjectDetail ingress_decoded;
+  {
+    std::lock_guard<std::mutex> lock(state.mutex);
+    ingress_decoded = deserializeTypedMessage<typed_msg::ObjectDetail>(
+        std::vector<unsigned char>(state.payload.begin(), state.payload.end()));
+    EXPECT_EQ(state.type_name, "application/ros2");
+  }
+  EXPECT_EQ(ingress_decoded.id, "interop-roundtrip-1");
+  EXPECT_EQ(ingress_decoded.entity_source, "external-peer");
+
+  // Leg B (PYRAMID -> external peer): the component replies with a typed
+  // message (correlated by id) onto the same wire; the plain peer receives it
+  // decoded as the generated type -- proving the wire carries no
+  // PYRAMID-specific framing.
+  typed_msg::ObjectDetail reply_msg;
+  reply_msg.id = ingress_decoded.id;
+  reply_msg.entity_source = "pyramid-component";
+  ros2_support::Envelope reply_env;
+  reply_env.content_type = "application/ros2";
+  reply_env.correlation_id = "interop-1";
+  reply_env.payload = serializeTypedMessage(reply_msg);
+  adapter_->publish(binding, reply_env);
+
+  ASSERT_EQ(reply_future.wait_for(std::chrono::seconds(2)),
+            std::future_status::ready);
+  const auto received = reply_future.get();
+  EXPECT_EQ(received.id, "interop-roundtrip-1");
+  EXPECT_EQ(received.entity_source, "pyramid-component");
+
+  (void)reply_sub;
+  stopPclExecutor();
+}
+
 TEST_F(RuntimeAdapterFixture, EnvelopeFallbackPublishesPclEnvelopeOntoRos2Topic) {
   ros2_support::RclcppRuntimeAdapter::Options options;
   options.use_envelope_wire = true;

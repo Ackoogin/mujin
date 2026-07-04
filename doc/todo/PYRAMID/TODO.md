@@ -64,7 +64,7 @@ behind explicit triggers.
 | 4 | ~~A1 Package-neutral ROS2 marshal codegen~~ **✅ done 2026-07-04** | M |
 | 5 | ~~A2 `application/ros2` registry codec plugin~~ **✅ done 2026-07-04 (ament build verified via A3)** | M |
 | 6 | ~~A3 Typed `RclcppRuntimeAdapter` on the live wire~~ **✅ done 2026-07-04 (live ROS2 build + tests)** | M/L |
-| 7 | A4 Plain-rclcpp interop proof | S |
+| 7 | ~~A4 Plain-rclcpp interop proof~~ **✅ done 2026-07-04 (live Humble, 9/9)** | S |
 | 8 | ~~C1 Retire `src/protobuf_support/`~~ **✅ done 2026-07-04 (generated per-service, live MSVC build)** | S/M |
 | 9 | C2 Manifest-driven CMake completion + default flip | M |
 | 10 | ~~C3 Domain literals behind the compat policy + source guard~~ **✅ done 2026-07-04** | M |
@@ -296,6 +296,18 @@ The adapter exists and works — over `PclEnvelope`.
   generated IDL against a PYRAMID component; add to the harness.
 - **Accept:** round-trip green on Humble; documented in
   `ros2_transport_semantics.md`.
+
+**✅ Done 2026-07-04.** Added `PlainRclcppPeerRoundTripsGeneratedTypedIdl` to
+`test_rclcpp_runtime_adapter`: a plain `rclcpp` peer that touches **no**
+`RclcppRuntimeAdapter`/PYRAMID API — only `create_publisher`/`create_subscription`
+over the generated `pyramid_msgs::msg::ObjectDetail` — round-trips a typed
+message against the PYRAMID component in both directions (peer → adapter ingress
+→ PCL executor, correlated by id; then component → adapter publish → peer),
+proving the wire is standard typed ROS2 with no PYRAMID framing. Verified live on
+`D:\Dev\ros2-windows` (Humble): adapter suite **9/9**, all three ROS2 suites
+green (9 + 8 + 4, 0 failures). Documented in `ros2_transport_semantics.md`
+("typed `pyramid_msgs` wire + plain-rclcpp interop proof"). **This closes
+WS-A.**
 
 ---
 

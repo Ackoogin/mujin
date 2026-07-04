@@ -339,6 +339,19 @@ Implemented today:
   service ingress
 - standalone `rclcpp` runtime proof for pub/sub, unary service, streaming
   service, and outbound publish
+- **typed `pyramid_msgs` wire (default) + plain-rclcpp interop proof.** The
+  `RclcppRuntimeAdapter` publishes/subscribes native `pyramid_msgs` typed
+  messages via `rclcpp` generic pub/sub keyed by
+  `TopicBinding::ros2_message_type` (the opaque envelope wire stays selectable
+  via `RclcppRuntimeAdapter::Options::use_envelope_wire`). A plain `rclcpp`
+  peer that links only the generated `pyramid_msgs` IDL — no `RclcppRuntimeAdapter`
+  or other PYRAMID API, just `create_publisher`/`create_subscription` over
+  `pyramid_msgs::msg::ObjectDetail` — round-trips a typed message against the
+  PYRAMID component in both directions (peer → adapter ingress → PCL executor,
+  then component → adapter publish → peer), proving the wire carries standard
+  ROS2 typed messages with no PYRAMID-specific framing. Verified by
+  `PlainRclcppPeerRoundTripsGeneratedTypedIdl` (`test_rclcpp_runtime_adapter`,
+  9/9 on Humble).
 - runtime cancel subscription support for stream correlation IDs
 - executor-thread assertion for the business-logic path
 - coupled ROS2 target plugin (`libpyramid_ros2_coupled_plugin`, content type
@@ -382,21 +395,15 @@ Implemented today:
 
 Not yet implemented:
 
-- **Native ROS2 IDL — generation done; typed wire in progress.** The transport
-  today is still a *pass-through envelope*: PCL payloads ride inside the generic
-  `PclEnvelope` / `PclService` / `PclOpenStream` types with `payload` = opaque
-  codec bytes, and `application/ros2` is a pass-through codec. This carries
-  PCL↔ROS2↔PCL but is not native, introspectable ROS2. Two layers are now
-  **done**: (1) `pim/ros2_idl_codegen.py` generates real `.msg`/`.srv` (the
-  `pyramid_msgs` ament package runs them through rosidl — 69 msg + 43 srv build
-  clean on Humble); (2) `pim/ros2_marshal_codegen.py` generates
-  `pyramid_ros2_codec.hpp`, the `domain_model` ↔ `pyramid_msgs` marshalling +
-  `rclcpp` wire codec, round-trip verified for all types
-  (`test_ros2_codec_roundtrip`, 8/8). What **remains** to make the live wire
-  typed: register `application/ros2` as a registry codec backed by `ros2_codec`
-  (codec plugin built under ament) and a typed `RclcppRuntimeAdapter` that
-  publishes/serves `pyramid_msgs` messages instead of `PclEnvelope`.
-  See `doc/plans/PYRAMID/transport_plugins.md` §1.
+- ~~**Native ROS2 IDL + typed wire.**~~ **Done (A1–A4).** `.msg`/`.srv` via
+  `pim/ros2_idl_codegen.py` (the `pyramid_msgs` ament package — 69 msg + 43 srv
+  build clean on Humble); `domain_model` ↔ `pyramid_msgs` marshalling + `rclcpp`
+  wire codec via `pim/ros2_marshal_codegen.py` (`test_ros2_codec_roundtrip`, 8/8);
+  `application/ros2` registered as a registry codec plugin built under ament; a
+  typed `RclcppRuntimeAdapter` that publishes/serves `pyramid_msgs` messages
+  instead of `PclEnvelope` (envelope wire still selectable); and a plain-rclcpp
+  interop proof. See "Implemented today" above and
+  `doc/plans/PYRAMID/transport_plugins.md` §1.
 - ROS2 action mapping (`RPC_ACTION`, first-class per D3; depends on native IDL)
 - **Remote-source dispatch for manifest-routed ROS2 ingress.** The generated
   ingress helpers (`bindTopicIngress`, `bindUnaryServiceIngress`,
