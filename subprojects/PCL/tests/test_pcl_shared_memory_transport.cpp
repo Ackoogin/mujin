@@ -547,18 +547,26 @@ TEST(PclSharedMemoryTransport, PublishFanoutIsAtomicWhenAnyMailboxIsFull) {
   restore_logs();
 }
 
-///< REQ_PCL_212: shared-memory executor-facing publish remains non-blocking;
-///< legacy blocking backpressure configuration is rejected.
-TEST(PclSharedMemoryTransport, TopicBackpressureRejectedForExecutorSafety) {
+///< REQ_PCL_212: shared-memory topic backpressure is worker-owned; configured
+///< publishes enqueue promptly instead of synchronously reporting delivery.
+TEST(PclSharedMemoryTransport, TopicBackpressureQueuesOnEgressWorker) {
   silence_logs();
 
   const std::string bus = unique_token("backpressure_bus");
   BusNode alpha;
   ASSERT_TRUE(alpha.create(bus.c_str(), "alpha"));
+  ASSERT_TRUE(alpha.attach_transport());
 
   EXPECT_EQ(pcl_shared_memory_transport_set_topic_backpressure(
-                alpha.transport, "pressure/topic", 500),
-            PCL_ERR_INVALID);
+                alpha.transport, "pressure/topic", 250u),
+            PCL_OK);
+
+  const auto start = std::chrono::steady_clock::now();
+  EXPECT_EQ(publish_text(alpha, "pressure/topic", "PressureMsg", "queued"),
+            PCL_OK);
+  const auto elapsed = std::chrono::steady_clock::now() - start;
+  EXPECT_LT(std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count(),
+            50);
 
   EXPECT_EQ(pcl_shared_memory_transport_set_topic_backpressure(
                 alpha.transport, "pressure/topic", 0),
@@ -1336,20 +1344,22 @@ TEST(PclSharedMemoryTransport, SubscribeAndShutdownVtableAreNoOps) {
   restore_logs();
 }
 
-///< REQ_PCL_212: legacy backpressure accepts zero-timeout clears for
-///< compatibility and rejects non-zero waits.
+///< REQ_PCL_212: backpressure policies can be updated in place, cleared with
+///< a zero timeout (including for topics never configured), and the fixed
+///< policy table rejects overflow with PCL_ERR_NOMEM.
 TEST(PclSharedMemoryTransport, TopicBackpressureConfigLifecycle) {
   silence_logs();
   const std::string bus = unique_token("bp_bus");
   BusNode alpha;
   ASSERT_TRUE(alpha.create(bus.c_str(), "alpha"));
 
+  // New policy, then in-place timeout update, then clear.
   EXPECT_EQ(pcl_shared_memory_transport_set_topic_backpressure(
                 alpha.transport, "cmd/topic", 50u),
-            PCL_ERR_INVALID);
+            PCL_OK);
   EXPECT_EQ(pcl_shared_memory_transport_set_topic_backpressure(
                 alpha.transport, "cmd/topic", 75u),
-            PCL_ERR_INVALID);
+            PCL_OK);
   EXPECT_EQ(pcl_shared_memory_transport_set_topic_backpressure(
                 alpha.transport, "cmd/topic", 0u),
             PCL_OK);
@@ -1358,9 +1368,17 @@ TEST(PclSharedMemoryTransport, TopicBackpressureConfigLifecycle) {
                 alpha.transport, "never/configured", 0u),
             PCL_OK);
 
+  // Fill every policy slot; one more distinct topic must fail closed.
+  for (unsigned i = 0; i < 16u; ++i) {
+    char topic[32];
+    std::snprintf(topic, sizeof(topic), "bp/topic_%u", i);
+    EXPECT_EQ(pcl_shared_memory_transport_set_topic_backpressure(
+                  alpha.transport, topic, 10u),
+              PCL_OK);
+  }
   EXPECT_EQ(pcl_shared_memory_transport_set_topic_backpressure(
                 alpha.transport, "bp/one_too_many", 10u),
-            PCL_ERR_INVALID);
+            PCL_ERR_NOMEM);
 
   alpha.destroy();
   restore_logs();
@@ -1775,9 +1793,9 @@ TEST(PclSharedMemoryTransport, ParticipantSlotsExhausted) {
   restore_logs();
 }
 
-///< REQ_PCL_212: rejected legacy backpressure configuration does not alter
-///< normal publish behavior.
-TEST(PclSharedMemoryTransport, RejectedBackpressureDoesNotChangePublishPath) {
+///< REQ_PCL_212: clearing a backpressure policy restores the normal fail-fast
+///< publish path.
+TEST(PclSharedMemoryTransport, ClearedBackpressureRestoresFailFastPublish) {
   silence_logs();
   const std::string bus = unique_token("bpwait_bus");
   BusNode sender;
@@ -1785,7 +1803,10 @@ TEST(PclSharedMemoryTransport, RejectedBackpressureDoesNotChangePublishPath) {
 
   ASSERT_EQ(pcl_shared_memory_transport_set_topic_backpressure(
                 sender.transport, "bp/pressured", 500u),
-            PCL_ERR_INVALID);
+            PCL_OK);
+  ASSERT_EQ(pcl_shared_memory_transport_set_topic_backpressure(
+                sender.transport, "bp/pressured", 0u),
+            PCL_OK);
 
   const pcl_transport_t* vt =
       pcl_shared_memory_transport_get_transport(sender.transport);

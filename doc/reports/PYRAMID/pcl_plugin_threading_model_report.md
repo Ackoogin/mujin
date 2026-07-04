@@ -1,7 +1,7 @@
 # PCL Plugin Threading Model Report
 
 Status: 2026-07-04.  Updated after the UDP egress fix and shared-memory
-backpressure hardening.
+worker-owned backpressure fix.
 
 This report records the threading-model review for PCL transports and PYRAMID
 runtime plugins.  It focuses on the rule that PCL component business logic runs
@@ -46,7 +46,7 @@ The non-conforming paths are:
 
 | Area | Issue | Primary files |
 |------|-------|---------------|
-| Shared-memory transport | executor-facing calls still take the bus lock synchronously; service and stream invoke paths poll discovery. | `subprojects/PCL/src/pcl_transport_shared_memory.c`, `subprojects/PCL/include/pcl/pcl_transport_shared_memory.h` |
+| Shared-memory transport | non-backpressured publish, service invoke, stream invoke, stream send/end/cancel, and respond still take the bus lock synchronously; service and stream invoke paths poll discovery. | `subprojects/PCL/src/pcl_transport_shared_memory.c`, `subprojects/PCL/include/pcl/pcl_transport_shared_memory.h` |
 | ROS2 coupled plugin | consumed unary/stream calls synchronously wait on ROS2 services and stream completion from the executor call path. | `subprojects/PYRAMID/plugins/pyramid_ros2_coupled_plugin.cpp`, `subprojects/PYRAMID/ros2/src/rclcpp_runtime_adapter.cpp`, `subprojects/PYRAMID/pim/backends/ros2_backend.py` |
 | gRPC coupled plugin | client worker shutdown still waits for an in-flight blocking generated gRPC call to return; add bounded/cancellable RPC support before treating plugin unload as fully conformant under a wedged peer. | `subprojects/PYRAMID/plugins/pyramid_grpc_coupled_plugin.cpp`, `subprojects/PYRAMID/pim/backends/grpc_backend.py` |
 
@@ -55,7 +55,7 @@ Resolved paths:
 | Area | Resolution | Verification |
 |------|------------|--------------|
 | UDP transport | `publish` now formats the datagram and enqueues it to a transport-owned send thread; only that worker calls `sendto`.  Shutdown stops egress and future publishes fail with `PCL_ERR_STATE`. | Built `test_pcl_udp_transport`; ran `ctest --test-dir build -C Release -R "PclUdpTransport\\." --output-on-failure` |
-| Shared-memory topic backpressure | non-zero topic backpressure configuration is rejected with `PCL_ERR_INVALID`; zero-timeout clearing remains a compatibility no-op.  Publish keeps fail-fast all-or-nothing behavior when a target mailbox has no capacity, rather than sleeping on the executor thread. | Built `test_pcl_shared_memory_transport`; ran `ctest --test-dir build -C Release -R "PclSharedMemoryTransport\\." --output-on-failure` |
+| Shared-memory topic backpressure | non-zero topic backpressure configuration is accepted again, but configured publishes copy into a transport-owned egress queue and return promptly.  The egress worker owns the mailbox-capacity wait/retry loop and preserves all-or-nothing fan-out.  Clearing a policy restores the default fail-fast publish path. | Built `test_pcl_shared_memory_transport`; ran `ctest --test-dir build -C Release -R "PclSharedMemoryTransport\\." --output-on-failure` |
 | gRPC consumed egress | client-mode `invoke_async` and `invoke_stream` now copy requests into a plugin-owned worker queue and return promptly.  The worker owns blocking generated gRPC calls and posts unary/stream callbacks back through the PCL executor response queue. | Built `pyramid_grpc_coupled_plugin` in `build-all-enabled`; built and ran `ctest --test-dir build-all-enabled -C Release -R "GrpcCoupledPlugin" --output-on-failure`.  `test_grpc_coupled_plugin_e2e` did not build in this tree because generated `pyramid_codec_plugin_test_paths.hpp` is missing. |
 
 ## Fix plan
@@ -107,9 +107,10 @@ Convert UDP from inline `sendto` to queued sending.
 
 Shared memory should not block the executor even though the medium is local.
 
-- Completed: blocking topic backpressure was removed from the executor-facing
-  publish path.  Non-zero backpressure configuration now fails with
-  `PCL_ERR_INVALID`; zero-timeout clearing remains accepted for compatibility.
+- Completed: topic backpressure was moved off the executor-facing publish path.
+  Non-zero backpressure configuration now queues configured publishes to a
+  transport-owned egress worker; the worker owns the bounded mailbox-capacity
+  wait/retry loop.  Zero-timeout clearing restores the default fail-fast path.
 - Replace the indefinite bus lock with a non-blocking or bounded try-lock path
   only if normal peer polling cannot race it.  A direct try-lock on the shared
   bus is not sufficient because the receive thread legitimately holds the lock
