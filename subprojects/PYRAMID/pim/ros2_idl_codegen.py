@@ -189,8 +189,9 @@ def _main(argv: List[str]) -> int:
         print('Usage: python ros2_idl_codegen.py <proto_dir> <out_dir>',
               file=sys.stderr)
         return 2
-    from proto_parser import parse_proto_tree  # noqa: E402
-    index = ProtoTypeIndex(parse_proto_tree(Path(argv[1])))
+    from proto_parser import parse_proto_tree, is_binding_proto  # noqa: E402
+    index = ProtoTypeIndex(
+        [pf for pf in parse_proto_tree(Path(argv[1])) if is_binding_proto(pf)])
     written = generate_ros2_idl(index, Path(argv[2]))
     print(f'Wrote {len(written)} ROS2 IDL files to {argv[2]}')
     return 0

@@ -157,6 +157,19 @@ class ProtoFile:
         return None
 
 
+# Compiler-extension packages (custom option definitions). Parsed so method
+# options can be captured, but never part of the generated SDK surface — every
+# ProtoTypeIndex handed to a binding/IDL generator must exclude them.
+BINDING_EXCLUDED_PACKAGES = frozenset({
+    'pyramid.options',
+})
+
+
+def is_binding_proto(pf: 'ProtoFile') -> bool:
+    """True for application contract protos that should produce bindings."""
+    return pf.package not in BINDING_EXCLUDED_PACKAGES
+
+
 # -- Proto scalar types -------------------------------------------------------
 
 _PROTO_SCALARS = frozenset({

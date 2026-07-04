@@ -20,7 +20,9 @@ from pathlib import Path
 PIM = Path(__file__).resolve().parents[1] / "pim"
 sys.path.insert(0, str(PIM))
 
-from proto_parser import parse_proto_tree, ProtoTypeIndex  # noqa: E402
+from proto_parser import (  # noqa: E402
+    parse_proto_tree, ProtoTypeIndex, is_binding_proto,
+)
 from ros2_idl_codegen import generate_ros2_idl, IDL_EXTERNAL_DEPENDENCIES  # noqa: E402
 
 # rosidl interface names: CamelCase, start uppercase, alnum only.
@@ -69,7 +71,10 @@ def _parse_idl_line(line: str):
 def main(argv: list[str]) -> int:
     proto_dir = Path(argv[1]) if len(argv) > 1 else (
         Path(__file__).resolve().parents[1] / "proto")
-    index = ProtoTypeIndex(parse_proto_tree(proto_dir))
+    # Mirror the production index: generate_bindings.py excludes
+    # compiler-extension protos (pyramid.options) before any generator runs.
+    index = ProtoTypeIndex(
+        [pf for pf in parse_proto_tree(proto_dir) if is_binding_proto(pf)])
 
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp)
@@ -134,6 +139,11 @@ def main(argv: list[str]) -> int:
         for alias in ("Identifier", "Angle", "Length", "Timestamp", "Percentage"):
             _check(not (out / "msg" / f"{alias}.msg").exists(),
                    f"{alias}.msg should not be emitted (it is a scalar alias)")
+        # Compiler-extension option types must NOT be emitted as ROS2 types.
+        for opt_type in ("Interaction", "Qos"):
+            _check(not (out / "msg" / f"{opt_type}.msg").exists(),
+                   f"{opt_type}.msg should not be emitted (pyramid.options is "
+                   "not part of the SDK surface)")
 
         query = (out / "msg" / "Query.msg").read_text(encoding="utf-8")
         _check("string[] id" in query, "Query.msg missing repeated string id (Identifier collapsed)")

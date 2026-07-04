@@ -34,6 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from proto_parser import (
     parse_proto, parse_proto_tree, ProtoTypeIndex, ProtoMessage,
+    is_binding_proto,
 )
 from binding_contract import TopicSpecResolver, build_contract
 import codec_backends
@@ -52,9 +53,6 @@ import backends  # noqa: F401
 
 
 _MANIFEST_NAME = 'binding_manifest.json'
-_BINDING_EXCLUDED_PACKAGES = {
-    'pyramid.options',
-}
 
 
 class BindingArtifactManifest:
@@ -382,13 +380,10 @@ def _discover_service_message_files(proto_dir: Path):
     return files
 
 
-def _is_binding_proto(pf) -> bool:
-    """True for application contract protos that should produce bindings.
-
-    Compiler-extension protos such as pyramid.options are parsed so method
-    options can be captured, but they are not part of the generated SDK surface.
-    """
-    return pf.package not in _BINDING_EXCLUDED_PACKAGES
+# Exclusion of compiler-extension protos (pyramid.options) lives in
+# proto_parser.is_binding_proto so standalone generator entry points and tests
+# apply the same filter.
+_is_binding_proto = is_binding_proto
 
 
 def _generate_json_cpp(proto_dir: Path, output_dir: Path,
