@@ -305,8 +305,9 @@ provided/consumed APIs with native types — no `pcl_msg_t`, codec, or transport
 the call path. Select a payload `content_type` (e.g. `application/json`) when
 configuring ports/services.
 
-**2. Configure a deployment.** Load a codec and a transport plugin at runtime. The
-directional/wiring knobs travel as one opaque `config_json` per plugin:
+**2. Configure a deployment.** Load a codec and, for remote peers, a transport
+plugin at runtime. The directional/wiring knobs travel as one opaque
+`config_json` per plugin:
 
 | Plugin | Key `config_json` fields |
 |--------|--------------------------|
@@ -315,6 +316,15 @@ directional/wiring knobs travel as one opaque `config_json` per plugin:
 | udp | `host`, `port`, `executor` (symmetric pub/sub) |
 | gRPC coupled | `role: provided\|consumed` (alias `mode: server\|client`), `address`, aggregated component set, `executor` |
 | ROS2 coupled | `role: provided\|consumed`, `node_name`, `executor` |
+
+Local in-process communication is the no-plugin case. Generated C++ facades use
+the same opaque JSON convention for endpoint route selection:
+`{"transport":"local"}` routes generated services/topics through the local
+executor only, while `{"transport":"remote"}` or
+`{"transport":"remote","peer":"peer_id"}` selects an already-installed default
+or named transport. Generated Ada facades expose the same route selection through
+`Transport_Config`, `Configure_Consumed_Transport`, and
+`Configure_Publisher_Transport`.
 
 Codecs auto-load from a manifest (`PCL_CODEC_MANIFEST` →
 `pcl_codec_registry_load_plugins_from_manifest`); transports are passed via

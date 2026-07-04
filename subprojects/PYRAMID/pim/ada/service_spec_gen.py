@@ -228,7 +228,8 @@ class SpecEmitterMixin:
                 f.write(f'     (Container : Pcl_Bindings.Pcl_Container_Access;\n')
                 f.write(f'      Callback  : Pcl_Bindings.Pcl_Sub_Callback_Access;\n')
                 f.write(f'      User_Data : System.Address := System.Null_Address;\n')
-                f.write(f'      Content_Type : String := "application/json");\n')
+                f.write(f'      Content_Type : String := "application/json";\n')
+                f.write(f'      Transport_Config : String := "");\n')
                 f.write(f'\n')
 
             # Topic decode helpers so component callbacks do not branch on
@@ -245,7 +246,18 @@ class SpecEmitterMixin:
             f.write(f'   procedure Register_Services\n')
             f.write(f'     (Container : Pcl_Bindings.Pcl_Container_Access;\n')
             f.write(f'      Handlers  : access constant Service_Handlers := null;\n')
-            f.write(f'      Content_Type : String := "application/json");\n')
+            f.write(f'      Content_Type : String := "application/json";\n')
+            f.write(f'      Transport_Config : String := "");\n')
+            f.write(f'\n')
+
+            f.write(f'   procedure Configure_Consumed_Transport\n')
+            f.write(f'     (Executor    : Pcl_Bindings.Pcl_Executor_Access;\n')
+            f.write(f'      Config_Json : String);\n')
+            f.write(f'\n')
+
+            f.write(f'   procedure Configure_Publisher_Transport\n')
+            f.write(f'     (Executor    : Pcl_Bindings.Pcl_Executor_Access;\n')
+            f.write(f'      Config_Json : String);\n')
             f.write(f'\n')
 
             if is_provided:

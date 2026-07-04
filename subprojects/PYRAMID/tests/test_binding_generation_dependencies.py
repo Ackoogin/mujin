@@ -48,7 +48,7 @@ def _read(files: list[Path]) -> str:
 def _cpp_service_files(out_dir: Path) -> list[Path]:
     return sorted(out_dir.glob("pyramid_services_*.hpp")) + sorted(
         out_dir.glob("pyramid_services_*.cpp")
-    )
+    ) + sorted(out_dir.glob("pyramid_services_*_components.hpp"))
 
 
 def _ada_service_files(out_dir: Path) -> list[Path]:
@@ -95,6 +95,18 @@ def check_cpp(generator: Path, proto_dir: Path) -> None:
     )
     if (out_dir / "grpc").exists() or (out_dir / "ros2").exists():
         raise AssertionError("cpp json: unselected transport directory was generated")
+    _assert_present(
+        "cpp json local facade",
+        text,
+        [
+            r"routeAllLocal",
+            r"configureTransport",
+            r"configurePubSubTransport",
+            r"addObjectEvidencePublisher",
+            r"subscribeObjectEvidence",
+            r'"transport":"local"',
+        ],
+    )
     shutil.rmtree(out_dir)
 
     out_dir = _case(generator, proto_dir, "cpp", "json,ros2")
@@ -218,6 +230,18 @@ def check_ada(generator: Path, proto_dir: Path) -> None:
     )
     if (out_dir / "grpc").exists() or (out_dir / "ros2").exists():
         raise AssertionError("ada json: unselected transport directory was generated")
+    _assert_present(
+        "ada json local facade",
+        text,
+        [
+            r"Transport_Config\s*:\s*String\s*:=\s*\"\"",
+            r"Configure_Consumed_Transport",
+            r"Configure_Publisher_Transport",
+            r"Apply_Port_Config",
+            r"Apply_Endpoint_Config",
+            r"PCL_ROUTE_LOCAL",
+        ],
+    )
     shutil.rmtree(out_dir)
 
     out_dir = _case(generator, proto_dir, "ada", "json,ros2")

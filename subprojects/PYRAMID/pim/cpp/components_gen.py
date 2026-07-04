@@ -50,7 +50,9 @@ class ComponentsFacadeEmitterMixin:
         duplicate_rpc_names = _duplicate_rpc_names(all_rpcs)
         hpp_name = file_prefix + '.hpp'
         is_provided = _is_provided(parsed)
-        sub_topics, _pub_topics = self._topics.topics_for_proto(parsed, is_provided)
+        sub_topics, pub_topics = self._topics.topics_for_proto(parsed, is_provided)
+        all_topics = dict(sub_topics)
+        all_topics.update(pub_topics)
 
         with open(path, 'w', encoding='utf-8', newline='\n') as f:
             f.write('// Auto-generated component facade for the service binding.\n')
@@ -273,6 +275,15 @@ class ComponentsFacadeEmitterMixin:
             f.write('        return PCL_OK;\n')
             f.write('    }\n\n')
 
+            f.write('    /// \\brief Restrict every advertised service to local callers only.\n')
+            f.write('    pcl_status_t routeAllLocal() {\n')
+            f.write('        for (const auto& port : ports_) {\n')
+            f.write('            const pcl_status_t rc = port.routeLocal();\n')
+            f.write('            if (rc != PCL_OK) return rc;\n')
+            f.write('        }\n')
+            f.write('        return PCL_OK;\n')
+            f.write('    }\n\n')
+
             f.write('    /// \\brief Restrict every advertised service to a single peer.\n')
             f.write('    pcl_status_t routeAllRemote(std::string_view peer_id) {\n')
             f.write('        for (const auto& port : ports_) {\n')
@@ -282,10 +293,47 @@ class ComponentsFacadeEmitterMixin:
             f.write('        return PCL_OK;\n')
             f.write('    }\n\n')
 
+            f.write('    /// \\brief Configure service exposure from an opaque JSON route config.\n')
+            f.write('    ///\n')
+            f.write('    /// Supported shapes are {"transport":"local"} and\n')
+            f.write('    /// {"transport":"remote","peer":"peer_id"}. "route" may be used\n')
+            f.write('    /// instead of "transport"; "peer_id" may be used instead of "peer".\n')
+            f.write('    pcl_status_t configureTransport(std::string_view config_json) {\n')
+            f.write('        const auto transport = configValue(config_json, "transport");\n')
+            f.write('        const auto route = transport.empty()\n')
+            f.write('            ? configValue(config_json, "route")\n')
+            f.write('            : transport;\n')
+            f.write('        if (route.empty() || route == "local") {\n')
+            f.write('            return routeAllLocal();\n')
+            f.write('        }\n')
+            f.write('        if (route == "remote") {\n')
+            f.write('            auto peer = configValue(config_json, "peer");\n')
+            f.write('            if (peer.empty()) peer = configValue(config_json, "peer_id");\n')
+            f.write('            if (peer.empty()) return PCL_ERR_INVALID;\n')
+            f.write('            return routeAllRemote(peer);\n')
+            f.write('        }\n')
+            f.write('        return PCL_ERR_INVALID;\n')
+            f.write('    }\n\n')
+
             f.write('private:\n')
             f.write('    static ProvidedHandler& requireHandler(ProvidedHandler* h) {\n')
             f.write('        if (!h) throw std::invalid_argument("ProvidedHandler must not be null");\n')
             f.write('        return *h;\n')
+            f.write('    }\n\n')
+
+            f.write('    static std::string configValue(std::string_view json,\n')
+            f.write('                                   std::string_view key) {\n')
+            f.write('        const std::string quoted_key = "\\"" + std::string(key) + "\\"";\n')
+            f.write('        const auto key_pos = json.find(quoted_key);\n')
+            f.write('        if (key_pos == std::string_view::npos) return {};\n')
+            f.write("        const auto colon = json.find(':', key_pos + quoted_key.size());\n")
+            f.write('        if (colon == std::string_view::npos) return {};\n')
+            f.write("        const auto first_quote = json.find('\"', colon + 1u);\n")
+            f.write('        if (first_quote == std::string_view::npos) return {};\n')
+            f.write("        const auto second_quote = json.find('\"', first_quote + 1u);\n")
+            f.write('        if (second_quote == std::string_view::npos) return {};\n')
+            f.write('        return std::string(json.substr(first_quote + 1u,\n')
+            f.write('                                       second_quote - first_quote - 1u));\n')
             f.write('    }\n\n')
             f.write('    // Adapter that satisfies the existing ServiceHandler ABI by\n')
             f.write('    // forwarding typed requests to the user-supplied ProvidedHandler.\n')
@@ -524,6 +572,7 @@ class ComponentsFacadeEmitterMixin:
             f.write('        return PCL_OK;\n')
             f.write('    }\n\n')
 
+            f.write('    /// \\brief Route every consumed endpoint to local providers only.\n')
             f.write('    pcl_status_t routeAllLocal() {\n')
             for svc_name, rpc in all_rpcs:
                 svc_const = _rpc_service_const(
@@ -533,7 +582,29 @@ class ComponentsFacadeEmitterMixin:
             f.write('        return PCL_OK;\n')
             f.write('    }\n\n')
 
-            for key in sub_topics:
+            f.write('    /// \\brief Configure consumed service routes from opaque JSON.\n')
+            f.write('    ///\n')
+            f.write('    /// Supported shapes are {"transport":"local"},\n')
+            f.write('    /// {"transport":"remote"}, and\n')
+            f.write('    /// {"transport":"remote","peer":"peer_id"}. "route" may be used\n')
+            f.write('    /// instead of "transport"; "peer_id" may be used instead of "peer".\n')
+            f.write('    pcl_status_t configureTransport(std::string_view config_json) {\n')
+            f.write('        const auto transport = configValue(config_json, "transport");\n')
+            f.write('        const auto route = transport.empty()\n')
+            f.write('            ? configValue(config_json, "route")\n')
+            f.write('            : transport;\n')
+            f.write('        if (route.empty() || route == "local") {\n')
+            f.write('            return routeAllLocal();\n')
+            f.write('        }\n')
+            f.write('        if (route == "remote") {\n')
+            f.write('            auto peer = configValue(config_json, "peer");\n')
+            f.write('            if (peer.empty()) peer = configValue(config_json, "peer_id");\n')
+            f.write('            return peer.empty() ? routeAllRemote() : routeAllRemote(peer);\n')
+            f.write('        }\n')
+            f.write('        return PCL_ERR_INVALID;\n')
+            f.write('    }\n\n')
+
+            for key in all_topics:
                 pascal = _snake_to_pascal(key)
                 fname = f'subscribe{pascal}'
                 trampoline = f'trampoline{pascal}'
@@ -551,9 +622,89 @@ class ComponentsFacadeEmitterMixin:
                 f.write('                callback.get(), content_type_.c_str());\n')
                 f.write('        if (!port) {\n')
                 f.write('            topic_callbacks_.pop_back();\n')
+                f.write('        } else {\n')
+                f.write('            topic_subscriptions_.push_back(\n')
+                f.write('                pcl::Port{port, content_type_});\n')
                 f.write('        }\n')
                 f.write('        return port;\n')
                 f.write('    }\n\n')
+
+            for key in all_topics:
+                pascal = _snake_to_pascal(key)
+                add_name = f'add{pascal}Publisher'
+                publish_name = f'publish{pascal}'
+                helper_name = f'::{full_ns}::{publish_name}'
+                topic_const = f'kTopic{pascal}'
+                port_member = f'pub_{key}_'
+                spec = self._topics.spec(key)
+                f.write(f'    pcl_status_t {add_name}() {{\n')
+                f.write(f'        {port_member} = host_->addPublisher(\n')
+                f.write(f'            {topic_const}, content_type_.c_str());\n')
+                f.write(f'        return {port_member} ? PCL_OK : PCL_ERR_NOMEM;\n')
+                f.write('    }\n\n')
+                f.write(f'    pcl_status_t {publish_name}(\n')
+                f.write(f'        const {spec.cpp_payload_type}& payload) {{\n')
+                f.write(f'        return {helper_name}(\n')
+                f.write(f'            {port_member}.handle(), payload, content_type_.c_str());\n')
+                f.write('    }\n\n')
+                f.write(f'    pcl_status_t {publish_name}(\n')
+                f.write('        const std::string& payload) {\n')
+                f.write(f'        return {helper_name}(\n')
+                f.write(f'            {port_member}.handle(), payload, content_type_.c_str());\n')
+                f.write('    }\n\n')
+
+            f.write('    pcl_status_t routeAllPublishersLocal() {\n')
+            for key in all_topics:
+                f.write(f'        if ({f"pub_{key}_"}) {{\n')
+                f.write(f'            if (auto rc = {f"pub_{key}_"}.routeLocal(); rc != PCL_OK) return rc;\n')
+                f.write('        }\n')
+            f.write('        return PCL_OK;\n')
+            f.write('    }\n\n')
+
+            f.write('    pcl_status_t routeAllPublishersRemote(std::string_view peer_id) {\n')
+            for key in all_topics:
+                f.write(f'        if ({f"pub_{key}_"}) {{\n')
+                f.write(f'            if (auto rc = {f"pub_{key}_"}.routeRemote(peer_id); rc != PCL_OK) return rc;\n')
+                f.write('        }\n')
+            f.write('        return PCL_OK;\n')
+            f.write('    }\n\n')
+
+            f.write('    pcl_status_t routeAllSubscribersLocal() {\n')
+            f.write('        for (const auto& port : topic_subscriptions_) {\n')
+            f.write('            if (auto rc = port.routeLocal(); rc != PCL_OK) return rc;\n')
+            f.write('        }\n')
+            f.write('        return PCL_OK;\n')
+            f.write('    }\n\n')
+
+            f.write('    pcl_status_t routeAllSubscribersRemote(std::string_view peer_id) {\n')
+            f.write('        for (const auto& port : topic_subscriptions_) {\n')
+            f.write('            if (auto rc = port.routeRemote(peer_id); rc != PCL_OK) return rc;\n')
+            f.write('        }\n')
+            f.write('        return PCL_OK;\n')
+            f.write('    }\n\n')
+
+            f.write('    /// \\brief Configure generated topic ports from opaque JSON.\n')
+            f.write('    ///\n')
+            f.write('    /// Supported shapes match configureTransport(). Publishers and\n')
+            f.write('    /// subscribers that have not been created yet are ignored.\n')
+            f.write('    pcl_status_t configurePubSubTransport(std::string_view config_json) {\n')
+            f.write('        const auto transport = configValue(config_json, "transport");\n')
+            f.write('        const auto route = transport.empty()\n')
+            f.write('            ? configValue(config_json, "route")\n')
+            f.write('            : transport;\n')
+            f.write('        if (route.empty() || route == "local") {\n')
+            f.write('            if (auto rc = routeAllPublishersLocal(); rc != PCL_OK) return rc;\n')
+            f.write('            return routeAllSubscribersLocal();\n')
+            f.write('        }\n')
+            f.write('        if (route == "remote") {\n')
+            f.write('            auto peer = configValue(config_json, "peer");\n')
+            f.write('            if (peer.empty()) peer = configValue(config_json, "peer_id");\n')
+            f.write('            if (peer.empty()) return PCL_ERR_INVALID;\n')
+            f.write('            if (auto rc = routeAllPublishersRemote(peer); rc != PCL_OK) return rc;\n')
+            f.write('            return routeAllSubscribersRemote(peer);\n')
+            f.write('        }\n')
+            f.write('        return PCL_ERR_INVALID;\n')
+            f.write('    }\n\n')
 
             for svc_name, rpc in all_rpcs:
                 base = _rpc_symbol_base(svc_name, rpc, duplicate_rpc_names)
@@ -629,6 +780,21 @@ class ComponentsFacadeEmitterMixin:
 
             # State templates -------------------------------------------------
             f.write('private:\n')
+            f.write('    static std::string configValue(std::string_view json,\n')
+            f.write('                                   std::string_view key) {\n')
+            f.write('        const std::string quoted_key = "\\"" + std::string(key) + "\\"";\n')
+            f.write('        const auto key_pos = json.find(quoted_key);\n')
+            f.write('        if (key_pos == std::string_view::npos) return {};\n')
+            f.write("        const auto colon = json.find(':', key_pos + quoted_key.size());\n")
+            f.write('        if (colon == std::string_view::npos) return {};\n')
+            f.write("        const auto first_quote = json.find('\"', colon + 1u);\n")
+            f.write('        if (first_quote == std::string_view::npos) return {};\n')
+            f.write("        const auto second_quote = json.find('\"', first_quote + 1u);\n")
+            f.write('        if (second_quote == std::string_view::npos) return {};\n')
+            f.write('        return std::string(json.substr(first_quote + 1u,\n')
+            f.write('                                       second_quote - first_quote - 1u));\n')
+            f.write('    }\n\n')
+
             f.write('    template <class T>\n')
             f.write('    struct UnaryState {\n')
             f.write('        std::promise<Result<T>>                       promise;\n')
@@ -655,7 +821,7 @@ class ComponentsFacadeEmitterMixin:
             f.write('    struct StreamPushHolderT { std::shared_ptr<StreamPushState<T>> state; };\n')
             f.write('    template <class T> using StreamPushHolder = StreamPushHolderT<T>;\n\n')
 
-            for key in sub_topics:
+            for key in all_topics:
                 pascal = _snake_to_pascal(key)
                 trampoline = f'trampoline{pascal}'
                 decode_name = f'decode{pascal}'
@@ -676,8 +842,11 @@ class ComponentsFacadeEmitterMixin:
             f.write('    pcl::Component* host_     = nullptr;\n')
             f.write('    pcl::Executor*  executor_ = nullptr;\n')
             f.write('    std::string     content_type_;\n')
-            if sub_topics:
+            if all_topics:
                 f.write('    std::vector<std::shared_ptr<void>> topic_callbacks_;\n')
+            f.write('    std::vector<pcl::Port> topic_subscriptions_;\n')
+            for key in all_topics:
+                f.write(f'    pcl::Port pub_{key}_;\n')
             f.write('};\n\n')
 
             # Template member-fn definitions outside the class --------------

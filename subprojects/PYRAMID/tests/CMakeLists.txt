@@ -146,6 +146,7 @@ gtest_discover_tests(test_tobj_correlation DISCOVERY_MODE PRE_TEST)
 
 add_executable(test_pcl_generated_component_stream_handle
     test_pcl_generated_component_stream_handle.cpp
+    ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_consumed.cpp
     ${PROTO_BINDINGS_DIR}/pyramid_services_tactical_objects_provided.cpp
 )
 add_dependencies(test_pcl_generated_component_stream_handle
