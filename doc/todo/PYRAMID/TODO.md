@@ -60,7 +60,7 @@ behind explicit triggers.
 |-------|------|------|
 | 1 | ~~B1 Ada consumed-side parent package stub~~ **✅ done 2026-07-04** | S |
 | 2 | ~~B3 Ada FlatBuffers codec misses reserved-word rename~~ **✅ done 2026-07-04** | S |
-| 3 | B2 Close out FlatBuffers JSON-bridge nested packages | S |
+| 3 | ~~B2 Close out FlatBuffers JSON-bridge nested packages~~ **✅ done 2026-07-04** | S |
 | 4 | A1 Package-neutral ROS2 marshal codegen | M |
 | 5 | A2 `application/ros2` registry codec plugin | M |
 | 6 | A3 Typed `RclcppRuntimeAdapter` on the live wire | M/L |
@@ -106,6 +106,16 @@ by children but never emitted: `pim_osprey.sensors`,
   byte-identical.
 
 ### B2. Close out: FlatBuffers `.cpp` JSON-bridge for nested packages
+
+**✅ Done 2026-07-04.** Confirmed no generator change was needed — the fix was
+already in place. Added
+`test_pim_flatbuffers_json_bridge_uses_full_namespace_for_nested_data_model`
+to `tests/test_generic_flatbuffers_protobuf.py` locking the nested
+`common_pim_components.authorisation` full-namespace include/toJson/fromJson
+(and asserting the truncated single-segment form is absent); re-ran the
+`pim/test` FlatBuffers compile gate (`build_comms_test.bat`) — generation,
+flatc, nested-codec compile, link, and JSON/FlatBuffers round-trip all pass;
+marked the FINDINGS.md follow-up CLOSED.
 
 Carried from `pim/test_harness/FINDINGS.md` and cleanup plan item 7 as
 "assumes single-segment packages" — **that appears already fixed** (verified

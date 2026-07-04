@@ -204,3 +204,33 @@ def test_pyramid_flatbuffers_and_protobuf_outputs_keep_legacy_names(
     assert "namespace pyramid.services.tactical_objects;" in tactical_fbs
     assert '#include "pyramid/data_model/pyramid.data_model.base.pb.h"' in base_pb
     assert "namespace pyramid::data_model::base::protobuf_codec" in base_pb
+
+
+def test_pim_flatbuffers_json_bridge_uses_full_namespace_for_nested_data_model(
+    tmp_path: Path,
+) -> None:
+    proto_dir = PYRAMID_ROOT / "pim" / "test"
+    out_dir = tmp_path / "out"
+
+    _run_generator(proto_dir, out_dir, "flatbuffers", layout="pyramid")
+
+    bridge_cpp = (
+        out_dir / "flatbuffers" / "cpp" /
+        "pyramid_services_pim_osprey_sensor_products_flatbuffers_codec.cpp"
+    )
+    assert bridge_cpp.exists()
+    text = bridge_cpp.read_text(encoding="utf-8")
+
+    nested_namespace = (
+        "pyramid::domain_model::common_pim_components::authorisation"
+    )
+    assert (
+        '#include "pyramid_data_model_common_pim_components_authorisation_codec.hpp"'
+        in text
+    )
+    assert '#include "pyramid_data_model_common_pim_components_codec.hpp"' not in text
+    assert f"{nested_namespace}::fromJson" in text
+    assert f"{nested_namespace}::toJson" in text
+    assert f"static_cast<{nested_namespace}::AUTRequirement*>(nullptr)" in text
+    assert "pyramid::domain_model::common_pim_components::fromJson" not in text
+    assert "pyramid::domain_model::common_pim_components::toJson" not in text

@@ -51,13 +51,14 @@ Reproduce: `./viability_check.sh` (or `.bat`); comms test:
 
 ## Remaining follow-ups
 
-- **FlatBuffers `.cpp` JSON-bridge include/call derivation** for nested
-  data-model packages appears resolved (verified 2026-07-04: the bridge
-  derives includes and calls via `_cpp_type_namespace_for_type`, and the
-  generated output for `common_pim_components.authorisation` carries the
-  full-namespace include and calls). Close-out — a nested-package fixture
-  test and a compile-gate re-run — is tracked as item B2 in
-  `doc/todo/PYRAMID/TODO.md`.
+- **CLOSED: FlatBuffers `.cpp` JSON-bridge include/call derivation** for
+  nested data-model packages is resolved. Verified 2026-07-04: the bridge
+  derives includes and calls via `_cpp_type_namespace_for_type`, generated
+  output for `common_pim_components.authorisation` carries the full-namespace
+  include and calls, and
+  `subprojects/PYRAMID/tests/test_generic_flatbuffers_protobuf.py::test_pim_flatbuffers_json_bridge_uses_full_namespace_for_nested_data_model`
+  locks the nested-package fixture evidence. The `pim/test` FlatBuffers compile
+  gate was re-run for item B2 in `doc/todo/PYRAMID/TODO.md`.
 - **Ada FlatBuffers codec skips the reserved-word package rename**
   (found 2026-07-04): generated `flatbuffers/ada/*-flatbuffers_codec` units
   reference `Pyramid.Data_Model.Generic_Pim.Generic.Types` (illegal Ada;
